@@ -1,0 +1,27 @@
+{
+  "name": "glantri-app",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@10.6.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "lint": "turbo lint",
+    "test": "turbo test",
+    "db:up": "docker compose up -d postgres",
+    "db:down": "docker compose down",
+    "db:generate": "pnpm --filter @glantri/database db:generate"
+  },
+  "devDependencies": {
+    "@types/node": "^22.14.0",
+    "eslint": "^9.39.4",
+    "prettier": "^3.8.1",
+    "tsx": "^4.19.0",
+    "turbo": "^2.8.15",
+    "typescript": "^5.9.3",
+    "vitest": "^2.1.0"
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "name": "@glantri/config",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./index.ts",
+    "./eslint": "./eslint.base.cjs",
+    "./prettier": "./prettier.base.cjs",
+    "./tsconfig": "./tsconfig.package.json",
+    "./vitest": "./vitest.base.ts"
+  },
+  "scripts": {
+    "build": "echo 'config package has no build output'",
+    "lint": "echo 'config lint placeholder'",
+    "test": "echo 'config test placeholder'"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.0",
+    "vitest": "^2.1.0"
+  }
+}
