@@ -2,16 +2,27 @@
   "name": "@glantri/database",
   "version": "0.1.0",
   "private": true,
-  "main": "src/client.ts",
-  "types": "src/client.ts",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint .",
-    "test": "vitest run",
+    "test": "vitest run --passWithNoTests",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev"
   },
   "dependencies": {
+    "@glantri/auth": "workspace:*",
+    "@glantri/domain": "workspace:*",
+    "@glantri/rules-engine": "workspace:*",
+    "@glantri/shared": "workspace:*",
     "@prisma/client": "^6.6.0"
   },
   "devDependencies": {

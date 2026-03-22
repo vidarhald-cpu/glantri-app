@@ -1,9 +1,9 @@
 export interface CalculateDBInput {
-  agility: number;
+  dex: number;
   shieldBonus: number;
   situationalModifier?: number;
 }
 
 export function calculateDB(input: CalculateDBInput): number {
-  return input.agility + input.shieldBonus + (input.situationalModifier ?? 0);
+  return input.dex + input.shieldBonus + (input.situationalModifier ?? 0);
 }

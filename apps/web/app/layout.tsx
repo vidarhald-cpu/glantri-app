@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
 export const metadata: Metadata = {
-  title: "Glantri App",
-  description: "Full-stack RPG app monorepo starter"
+  title: "Glantri",
+  description: "Web-first RPG app scaffold with offline-first architecture"
 };
 
 type RootLayoutProps = {
@@ -13,7 +13,7 @@ type RootLayoutProps = {
 export default function RootLayout({ children }: RootLayoutProps) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body style={{ margin: 0, fontFamily: "system-ui, sans-serif" }}>{children}</body>
     </html>
   );
 }

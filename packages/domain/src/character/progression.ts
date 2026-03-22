@@ -1,0 +1,50 @@
+import { z } from "zod";
+
+const chargenModeSchema = z.enum(["standard"]);
+const skillCategorySchema = z.enum(["ordinary", "secondary"]);
+
+export const characterSkillGroupSchema = z.object({
+  groupId: z.string().min(1),
+  grantedRanks: z.number().int().nonnegative().default(0),
+  primaryRanks: z.number().int().nonnegative().default(0),
+  ranks: z.number().int().nonnegative().default(0),
+  gms: z.number().int().default(0)
+});
+
+export const characterSkillSchema = z.object({
+  category: skillCategorySchema.default("ordinary"),
+  grantedRanks: z.number().int().nonnegative().default(0),
+  groupId: z.string().min(1),
+  primaryRanks: z.number().int().nonnegative().default(0),
+  secondaryRanks: z.number().int().nonnegative().default(0),
+  skillId: z.string().min(1),
+  ranks: z.number().int().nonnegative().default(0),
+  level: z.number().int().default(0)
+});
+
+export const characterSpecializationSchema = z.object({
+  specializationId: z.string().min(1),
+  skillId: z.string().min(1),
+  secondaryRanks: z.number().int().nonnegative().default(0),
+  ranks: z.number().int().nonnegative().default(0),
+  level: z.number().int().default(0)
+});
+
+export const characterProgressionSchema = z.object({
+  chargenMode: chargenModeSchema.default("standard"),
+  primaryPoolSpent: z.number().int().nonnegative().default(0),
+  primaryPoolTotal: z.number().int().nonnegative().default(12),
+  secondaryPoolSpent: z.number().int().nonnegative().default(0),
+  secondaryPoolTotal: z.number().int().nonnegative().default(6),
+  level: z.number().int().positive().default(1),
+  skillGroups: z.array(characterSkillGroupSchema).default([]),
+  skills: z.array(characterSkillSchema).default([]),
+  specializations: z.array(characterSpecializationSchema).default([]),
+  educationPoints: z.number().int().nonnegative().default(0)
+});
+
+export type CharacterSkillGroup = z.infer<typeof characterSkillGroupSchema>;
+export type CharacterSkill = z.infer<typeof characterSkillSchema>;
+export type CharacterSpecialization = z.infer<typeof characterSpecializationSchema>;
+export type CharacterProgression = z.infer<typeof characterProgressionSchema>;
+export type ChargenMode = z.infer<typeof chargenModeSchema>;

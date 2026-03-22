@@ -1,9 +1,11 @@
+.turbo
 node_modules
 .pnpm-store
 .next
 dist
 build
 coverage
+*.tsbuildinfo
 .env
 .env.local
 .DS_Store

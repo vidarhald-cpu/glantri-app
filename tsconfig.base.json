@@ -13,6 +13,9 @@
     "isolatedModules": true,
     "baseUrl": ".",
     "paths": {
+      "@glantri/auth/*": ["packages/auth/src/*"],
+      "@glantri/content/*": ["packages/content/src/*"],
+      "@glantri/domain/*": ["packages/domain/src/*"],
       "@glantri/shared/*": ["packages/shared/src/*"],
       "@glantri/schemas/*": ["packages/schemas/src/*"],
       "@glantri/rules-engine/*": ["packages/rules-engine/src/*"],

@@ -8,19 +8,24 @@
   },
   "scripts": {
     "dev": "turbo dev",
-    "build": "turbo build",
-    "lint": "turbo lint",
-    "test": "turbo test",
+    "build": "turbo build --force",
+    "typecheck": "turbo typecheck --force",
+    "lint": "turbo lint --force",
+    "test": "turbo test --force",
     "db:up": "docker compose up -d postgres",
     "db:down": "docker compose down",
     "db:generate": "pnpm --filter @glantri/database db:generate"
   },
   "devDependencies": {
+    "@next/eslint-plugin-next": "^15.2.4",
+    "@eslint/js": "^9.39.1",
     "@types/node": "^22.14.0",
     "eslint": "^9.39.4",
+    "globals": "^15.15.0",
     "prettier": "^3.8.1",
     "tsx": "^4.19.0",
     "turbo": "^2.8.15",
+    "typescript-eslint": "^8.46.3",
     "typescript": "^5.9.3",
     "vitest": "^2.1.0"
   }

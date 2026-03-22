@@ -1,8 +1,17 @@
-async function main() {
-  console.log("Workbook import placeholder");
+import { loadCanonicalContent } from "@glantri/content";
+
+export async function runImportWorkbook() {
+  const content = await loadCanonicalContent();
+  console.log("Workbook import placeholder", {
+    professions: content.professions.length,
+    skills: content.skills.length,
+    skillGroups: content.skillGroups.length
+  });
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exit(1);
-});
+if (require.main === module) {
+  runImportWorkbook().catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });
+}

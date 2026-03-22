@@ -14,12 +14,15 @@
         "coverage/**"
       ]
     },
+    "typecheck": {
+      "dependsOn": ["^build", "^typecheck"]
+    },
     "lint": {
       "dependsOn": ["^lint"]
     },
     "test": {
       "dependsOn": ["^test"],
-      "outputs": ["coverage/**"]
+      "outputs": []
     },
     "db:generate": {
       "cache": false

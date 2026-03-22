@@ -11,9 +11,10 @@
     "./vitest": "./vitest.base.ts"
   },
   "scripts": {
-    "build": "echo 'config package has no build output'",
-    "lint": "echo 'config lint placeholder'",
-    "test": "echo 'config test placeholder'"
+    "build": "mkdir -p dist && cp eslint.base.cjs prettier.base.cjs vitest.base.ts tsconfig.package.json dist/",
+    "typecheck": "tsc -p tsconfig.package.json --noEmit",
+    "lint": "eslint .",
+    "test": "vitest run --passWithNoTests"
   },
   "devDependencies": {
     "typescript": "^5.8.0",
