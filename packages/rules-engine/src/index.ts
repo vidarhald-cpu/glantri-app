@@ -17,5 +17,6 @@ export * from "./skills/calculateGms";
 export * from "./skills/calculateGroupLevel";
 export * from "./skills/calculateSkillLevel";
 export * from "./skills/calculateSpecializationLevel";
+export * from "./skills/selectBestSkillGroupContribution";
 export * from "./stats/calculateAdjustedStats";
 export * from "./validation/validateCharacterBuild";

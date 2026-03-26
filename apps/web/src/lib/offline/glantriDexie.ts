@@ -41,6 +41,9 @@ export interface CachedContentRecord {
 
 export interface LocalCharacterRecord {
   build: CharacterBuild;
+  creatorDisplayName?: string;
+  creatorEmail?: string;
+  creatorId?: string;
   createdAt: string;
   finalizedAt: string;
   id: string;
@@ -83,6 +86,15 @@ export class GlantriDexie extends Dexie {
     });
 
     this.version(4).stores({
+      cachedContent: "key, updatedAt",
+      characterDrafts: "id, characterId, syncStatus, updatedAt",
+      chargenSessions: "id, updatedAt",
+      encounters: "id, status, updatedAt, title",
+      localCharacters: "id, syncStatus, finalizedAt, updatedAt",
+      syncQueue: "id, status, updatedAt, entityId"
+    });
+
+    this.version(5).stores({
       cachedContent: "key, updatedAt",
       characterDrafts: "id, characterId, syncStatus, updatedAt",
       chargenSessions: "id, updatedAt",

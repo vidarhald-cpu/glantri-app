@@ -4,6 +4,9 @@ import { localDb, type LocalCharacterRecord } from "../glantriDexie";
 
 export interface SaveLocalCharacterInput {
   build: CharacterBuild;
+  creatorDisplayName?: string;
+  creatorEmail?: string;
+  creatorId?: string;
   createdAt?: string;
   finalizedAt?: string;
   syncStatus?: LocalCharacterRecord["syncStatus"];
@@ -50,6 +53,9 @@ export class LocalCharacterRepository {
         ...build,
         name: normalizeCharacterName(build.name)
       },
+      creatorDisplayName: input.creatorDisplayName ?? existing?.creatorDisplayName,
+      creatorEmail: input.creatorEmail ?? existing?.creatorEmail,
+      creatorId: input.creatorId ?? existing?.creatorId,
       createdAt: input.createdAt ?? existing?.createdAt ?? now,
       finalizedAt: input.finalizedAt ?? existing?.finalizedAt ?? now,
       id: input.build.id,

@@ -7,6 +7,7 @@ export const characterSkillGroupSchema = z.object({
   groupId: z.string().min(1),
   grantedRanks: z.number().int().nonnegative().default(0),
   primaryRanks: z.number().int().nonnegative().default(0),
+  secondaryRanks: z.number().int().nonnegative().default(0),
   ranks: z.number().int().nonnegative().default(0),
   gms: z.number().int().default(0)
 });
@@ -33,9 +34,9 @@ export const characterSpecializationSchema = z.object({
 export const characterProgressionSchema = z.object({
   chargenMode: chargenModeSchema.default("standard"),
   primaryPoolSpent: z.number().int().nonnegative().default(0),
-  primaryPoolTotal: z.number().int().nonnegative().default(12),
+  primaryPoolTotal: z.number().int().nonnegative().default(60),
   secondaryPoolSpent: z.number().int().nonnegative().default(0),
-  secondaryPoolTotal: z.number().int().nonnegative().default(6),
+  secondaryPoolTotal: z.number().int().nonnegative().default(0),
   level: z.number().int().positive().default(1),
   skillGroups: z.array(characterSkillGroupSchema).default([]),
   skills: z.array(characterSkillSchema).default([]),

@@ -11,10 +11,11 @@ import type {
   SkillSpecialization,
   SocietyLevelAccess
 } from "@glantri/domain";
+import { getSkillGroupIds } from "@glantri/domain";
 
-import { calculateEducation } from "../education/calculateEducation";
 import { calculateGroupLevel } from "../skills/calculateGroupLevel";
 import { calculateSpecializationLevel } from "../skills/calculateSpecializationLevel";
+import { selectBestSkillGroupContribution } from "../skills/selectBestSkillGroupContribution";
 import {
   buildChargenDraftView,
   getPrimaryPurchaseCostForGroup,
@@ -72,17 +73,6 @@ export interface SpendAdvancementPointResult {
   warnings: string[];
 }
 
-function getProfessionById(
-  content: CanonicalContentShape,
-  professionId: string | undefined
-): ProfessionDefinition | undefined {
-  if (!professionId) {
-    return undefined;
-  }
-
-  return content.professions.find((profession) => profession.id === professionId);
-}
-
 function getSkillById(
   content: CanonicalContentShape,
   skillId: string
@@ -107,6 +97,7 @@ function createEmptyGroup(groupId: string): CharacterSkillGroup {
     grantedRanks: 0,
     groupId,
     primaryRanks: 0,
+    secondaryRanks: 0,
     ranks: 0
   };
 }
@@ -115,7 +106,7 @@ function createEmptySkill(skill: SkillDefinition): CharacterSkill {
   return {
     category: skill.category,
     grantedRanks: 0,
-    groupId: skill.groupId,
+    groupId: getSkillGroupIds(skill)[0],
     level: 0,
     primaryRanks: 0,
     ranks: 0,
@@ -183,39 +174,53 @@ function ensureSpecializationExists(
   return created;
 }
 
-function buildEducation(input: {
-  build: CharacterBuild;
-  content: CanonicalContentShape;
-}): ReturnType<typeof calculateEducation> {
-  return calculateEducation({
-    profession: getProfessionById(input.content, input.build.professionId) ?? null,
-    progression: input.build.progression,
-    profile: input.build.profile,
-    skills: input.content.skills,
-    society:
-      input.build.societyLevel !== undefined
-        ? input.content.societyLevels.find(
-            (society) =>
-              society.societyLevel === input.build.societyLevel &&
-              (input.build.societyId === undefined || society.societyId === input.build.societyId)
-          )
-        : undefined,
-    societyLevel: input.build.societyLevel
-  });
-}
-
 function getGroupLevel(input: {
   build: CharacterBuild;
   content: CanonicalContentShape;
   group: CharacterSkillGroup;
 }): number {
-  const education = buildEducation(input);
-
   return calculateGroupLevel({
-    educationBonus: education.theoreticalSkillCount,
     gms: input.group.gms,
     ranks: input.group.ranks
   });
+}
+
+function getSkillGroupDefinition(
+  content: CanonicalContentShape,
+  groupId: string
+): SkillGroupDefinition | undefined {
+  return content.skillGroups.find((group) => group.id === groupId);
+}
+
+function getBestPurchasedParentGroup(
+  content: CanonicalContentShape,
+  progression: CharacterProgression,
+  skillDefinition: SkillDefinition
+): CharacterSkillGroup | undefined {
+  const groupIds = new Set(getSkillGroupIds(skillDefinition));
+  const candidates = progression.skillGroups
+    .filter((group) => group.ranks > 0 && groupIds.has(group.groupId))
+    .map((group) => {
+      const definition = getSkillGroupDefinition(content, group.groupId);
+
+      return {
+        group,
+        contribution: {
+          groupId: group.groupId,
+          groupLevel: calculateGroupLevel({
+            gms: group.gms,
+            ranks: group.ranks
+          }),
+          name: definition?.name ?? group.groupId,
+          sortOrder: definition?.sortOrder ?? Number.MAX_SAFE_INTEGER
+        }
+      };
+    });
+  const best = selectBestSkillGroupContribution(
+    candidates.map((candidate) => candidate.contribution)
+  );
+
+  return candidates.find((candidate) => candidate.contribution.groupId === best?.groupId)?.group;
 }
 
 export function getAdvancementPurchaseCostForSkill(
@@ -272,7 +277,7 @@ export function reviewCharacterAdvancement(
       continue;
     }
 
-    const parentGroup = progression.skillGroups.find((group) => group.groupId === definition.groupId);
+    const parentGroup = getBestPurchasedParentGroup(input.content, progression, definition);
 
     if (!parentGroup || parentGroup.ranks < 1) {
       errors.add(`${definition.name} requires the parent group to exist.`);
@@ -321,8 +326,10 @@ export function reviewCharacterAdvancement(
       continue;
     }
 
-    const parentGroup = progression.skillGroups.find(
-      (group) => group.groupId === parentSkillDefinition.groupId
+    const parentGroup = getBestPurchasedParentGroup(
+      input.content,
+      progression,
+      parentSkillDefinition
     );
 
     if (!parentGroup) {
@@ -370,7 +377,7 @@ export function spendAdvancementPoint(
 
     const group = ensureGroupExists(progression, input.targetId);
     group.primaryRanks += 1;
-    group.ranks = group.grantedRanks + group.primaryRanks;
+    group.ranks = group.grantedRanks + group.primaryRanks + group.secondaryRanks;
     build.progression = normalizeChargenProgression(progression);
 
     return {
@@ -393,9 +400,7 @@ export function spendAdvancementPoint(
       };
     }
 
-    const parentGroup = progression.skillGroups.find(
-      (group) => group.groupId === skillDefinition.groupId
-    );
+    const parentGroup = getBestPurchasedParentGroup(input.content, progression, skillDefinition);
 
     if (!parentGroup || parentGroup.ranks < 1) {
       return {
@@ -481,9 +486,7 @@ export function spendAdvancementPoint(
     };
   }
 
-  const parentGroup = progression.skillGroups.find(
-    (group) => group.groupId === parentSkillDefinition.groupId
-  );
+  const parentGroup = getBestPurchasedParentGroup(input.content, progression, parentSkillDefinition);
 
   if (!parentGroup) {
     return {
@@ -563,7 +566,7 @@ export function getEffectiveSpecializationNumber(input: {
   );
   const parentSkillDefinition = getSkillById(input.content, specializationDefinition.skillId);
   const parentGroup = parentSkillDefinition
-    ? input.build.progression.skillGroups.find((group) => group.groupId === parentSkillDefinition.groupId)
+    ? getBestPurchasedParentGroup(input.content, input.build.progression, parentSkillDefinition)
     : undefined;
 
   if (!specialization || !parentGroup) {

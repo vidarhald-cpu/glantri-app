@@ -260,7 +260,6 @@ export default function CharacterSheet({ id }: CharacterSheetProps) {
             <div key={group.groupId} style={{ borderTop: "1px solid #e7e2d7", paddingTop: "0.75rem" }}>
               <strong>{group.name}</strong>
               <div>Group level: {group.groupLevel}</div>
-              <div>Granted ranks: {group.grantedRanks}</div>
               <div>Primary ranks: {group.primaryRanks}</div>
               <div>GMs: {group.gms}</div>
             </div>

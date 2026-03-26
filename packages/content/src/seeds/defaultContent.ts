@@ -27,6 +27,7 @@ export const defaultCanonicalContent = validateCanonicalContent({
     {
       id: "melee",
       groupId: "martial",
+      groupIds: ["martial"],
       name: "Melee",
       description: "Armed close combat.",
       linkedStats: ["str", "dex"],
@@ -39,6 +40,7 @@ export const defaultCanonicalContent = validateCanonicalContent({
     {
       id: "etiquette",
       groupId: "social",
+      groupIds: ["social"],
       name: "Etiquette",
       description: "Customs, manners, and social navigation.",
       linkedStats: ["cha", "int"],
@@ -51,6 +53,7 @@ export const defaultCanonicalContent = validateCanonicalContent({
     {
       id: "lore",
       groupId: "scholarly",
+      groupIds: ["scholarly"],
       name: "Lore",
       description: "Study and recall of written knowledge.",
       linkedStats: ["int", "int"],
@@ -63,6 +66,7 @@ export const defaultCanonicalContent = validateCanonicalContent({
     {
       id: "literacy",
       groupId: "scholarly",
+      groupIds: ["scholarly"],
       name: "Literacy",
       description: "Reading and writing.",
       linkedStats: ["int", "int"],
@@ -75,6 +79,7 @@ export const defaultCanonicalContent = validateCanonicalContent({
     {
       id: "appraisal",
       groupId: "social",
+      groupIds: ["social"],
       name: "Appraisal",
       description: "Estimating quality and value.",
       linkedStats: ["int", "int"],
@@ -133,7 +138,7 @@ export const defaultCanonicalContent = validateCanonicalContent({
       professionId: "soldier",
       grantType: "group",
       skillGroupId: "martial",
-      ranks: 1,
+      ranks: 0,
       isCore: true
     },
     {
@@ -144,17 +149,10 @@ export const defaultCanonicalContent = validateCanonicalContent({
       isCore: false
     },
     {
-      professionId: "soldier",
-      grantType: "ordinary-skill",
-      skillId: "melee",
-      ranks: 2,
-      isCore: true
-    },
-    {
       professionId: "merchant",
       grantType: "group",
       skillGroupId: "social",
-      ranks: 1,
+      ranks: 0,
       isCore: true
     },
     {
@@ -169,28 +167,14 @@ export const defaultCanonicalContent = validateCanonicalContent({
       grantType: "group",
       skillGroupId: "scholarly",
       // REVIEW_FLAG: Merchant currently has a scholarly-group foothold to make the demo specialization/secondary-pool path reachable. Revisit this after broader content and profession balancing so the final content model is not shaped by demo-path constraints.
-      ranks: 1,
+      ranks: 0,
       isCore: false
-    },
-    {
-      professionId: "merchant",
-      grantType: "ordinary-skill",
-      skillId: "etiquette",
-      ranks: 2,
-      isCore: true
-    },
-    {
-      professionId: "merchant",
-      grantType: "secondary-skill",
-      skillId: "appraisal",
-      ranks: 2,
-      isCore: true
     },
     {
       professionId: "scribe",
       grantType: "group",
       skillGroupId: "scholarly",
-      ranks: 1,
+      ranks: 0,
       isCore: true
     },
     {
@@ -199,20 +183,6 @@ export const defaultCanonicalContent = validateCanonicalContent({
       skillGroupId: "social",
       ranks: 0,
       isCore: false
-    },
-    {
-      professionId: "scribe",
-      grantType: "ordinary-skill",
-      skillId: "lore",
-      ranks: 2,
-      isCore: true
-    },
-    {
-      professionId: "scribe",
-      grantType: "secondary-skill",
-      skillId: "literacy",
-      ranks: 2,
-      isCore: true
     }
   ],
   societyLevels: [
@@ -225,6 +195,7 @@ export const defaultCanonicalContent = validateCanonicalContent({
       socialClass: "Bønder",
       professionIds: ["soldier"],
       skillGroupIds: ["martial"],
+      skillIds: [],
       notes: "Only available society at present."
     },
     {
@@ -236,6 +207,7 @@ export const defaultCanonicalContent = validateCanonicalContent({
       socialClass: "Håndverkere",
       professionIds: ["soldier", "merchant"],
       skillGroupIds: ["martial", "social"],
+      skillIds: [],
       notes: "Craft and trade paths open up."
     },
     {
@@ -247,6 +219,7 @@ export const defaultCanonicalContent = validateCanonicalContent({
       socialClass: "Storbønder",
       professionIds: ["soldier", "merchant", "scribe"],
       skillGroupIds: ["martial", "social", "scholarly"],
+      skillIds: [],
       notes: "Higher-status education and scholarly access broaden."
     },
     {
@@ -258,6 +231,7 @@ export const defaultCanonicalContent = validateCanonicalContent({
       socialClass: "Adelen",
       professionIds: ["soldier", "merchant", "scribe"],
       skillGroupIds: ["martial", "social", "scholarly"],
+      skillIds: [],
       notes: "Highest-status Scandian band."
     }
   ]
