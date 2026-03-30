@@ -1,0 +1,12 @@
+Normalization pass 2 (2026-03-30)
+
+Changes made
+- Replaced broad 'two_handed_weapons' with:
+  - two_handed_edged
+  - two_handed_concussion_axe
+- This aligns the combat attack-skill structure more closely with the Themistogenes combat categories.
+
+Remaining next steps
+- Reconcile remaining combat names directly against spreadsheet/source wording.
+- Backfill verbatimDescription from source text.
+- Review placeholder style rows before production import.

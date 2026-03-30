@@ -1,0 +1,22 @@
+Normalization pass 5 (2026-03-30)
+
+Review findings
+- Corrected obviously weak first-pass family mappings: Bounty Hunter, Torturer, Watchman.
+- Reviewed Bodyguard and Caravan Guard and kept them in Soldier.
+
+Profession package completion added for:
+- Bureaucrat
+- Cavalry
+- Military Officer
+- Sailor
+- Spy
+- Thief
+- Actor
+- Priest
+- Merchant
+- Healer
+- Watchman
+- Bodyguard
+- Caravan Guard
+- Bounty Hunter
+- Torturer

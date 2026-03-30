@@ -1,0 +1,5 @@
+Final completion pass (2026-03-30)
+
+Completed remaining high-value source occupations and performed a final consistency cleanup on profession_subtypes.
+This pack should now be treated as a strong reviewable content-design import draft.
+Remaining work is primarily canonical/source-polish rather than missing structure.

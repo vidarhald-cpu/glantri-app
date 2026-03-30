@@ -1,0 +1,10 @@
+Normalization pass 6 (2026-03-30)
+
+Profession package completion added for remaining high-value occupations in these clusters:
+- civil office
+- court / noble
+- religious / mystical
+- urban criminal / coercive / security
+- field / infantry martial roles
+
+This pass also corrected or refined family placement for several edge cases.

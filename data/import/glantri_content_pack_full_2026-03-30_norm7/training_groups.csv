@@ -1,0 +1,37 @@
+trainingGroupId,name,shortDescription,skillIds,notes
+literate_foundation,Literate Foundation,"Basic literate education for scribes, scholars, clerks, and formal learners.","[""literacy"", ""language"", ""history""]",
+civic_learning,Civic Learning,"Formal literate office, law, and rhetorical culture.","[""law"", ""bureaucratic_writing"", ""rhetorical_composition""]",
+sacred_learning,Sacred Learning,"Priestly, doctrinal, and ritual-intellectual training.","[""theology"", ""history"", ""ritual_interpretation""]",
+mercantile_practice,Mercantile Practice,"Practical trade, bargaining, and valuation training.","[""bargaining"", ""trading"", ""appraisal""]",Source group: Operations.
+commercial_administration,Commercial Administration,Record-heavy office and mercantile administration training.,"[""bookkeeping"", ""administration"", ""bureaucratic_writing""]",Source group: Operations.
+courtly_formation,Courtly Formation,"Basic training in elite manners, rank, and ceremonial conduct.","[""etiquette"", ""heraldry"", ""courtly_protocol""]",
+political_acumen,Political Acumen,"Reading people, factions, and elite social situations.","[""intrigue"", ""insight"", ""social_perception""]",Source group: Empathy / Etiquette / Operations overlap.
+healing_practice,Healing Practice,Practical organized healing and immediate care.,"[""medicine"", ""first_aid"", ""nursing""]",Source group: Medicine.
+herb_and_remedy_craft,Herb and Remedy Craft,"Plant, remedy, and poison-related healing knowledge.","[""herb_lore"", ""pharmacy"", ""poison_lore""]",Source group: Medicine / Alchemy overlap.
+maritime_crew_training,Maritime Crew Training,Basic sailor and working seamanship training.,"[""sailing"", ""ropework"", ""boat_handling""]",Source group: Seamanship.
+maritime_navigation,Maritime Navigation,Advanced maritime route-finding.,"[""navigation"", ""sailing"", ""measurement""]",Source group: Seamanship.
+animal_husbandry,Animal Husbandry,"Practical stock, herd, and animal-working training.","[""animal_care"", ""herding"", ""animal_training""]",Source group: Animal Handling.
+mounted_service,Mounted Service,Riding and mounted practical service training.,"[""riding"", ""animal_training"", ""animal_care""]",Source group: Animal Handling.
+transport_and_caravan_work,Transport and Caravan Work,Overland freight and movement.,"[""teamstering"", ""animal_care"", ""trading""]",
+covert_entry,Covert Entry,"Burglary, stealth entry, and covert access skills.","[""stealth"", ""hide"", ""lockpicking"", ""search""]",Source group: Security / Stealth overlap.
+street_theft,Street Theft,Urban theft and covert carry.,"[""pickpocket"", ""conceal_object"", ""stealth""]",Source group: Sleight of Hand / Stealth overlap.
+trap_and_intrusion_work,Trap and Intrusion Work,Technical intrusion and trap-handling.,"[""search"", ""trap_handling"", ""lockpicking""]",Source group: Security.
+fieldcraft_stealth,Fieldcraft Stealth,"Rural stealth, concealment, and ambush skills.","[""stealth"", ""hide"", ""camouflage""]",Source group: Stealth.
+athletic_conditioning,Athletic Conditioning,General movement and body-control training.,"[""climb"", ""run"", ""jump"", ""balance""]",Source group: Athletics.
+social_reading,Social Reading,Interpersonal judgment and emotional awareness.,"[""insight"", ""detect_lies"", ""social_perception""]",
+performance_basics,Performance Basics,Broad entertainer and expressive performance package.,"[""singing"", ""dancing"", ""storytelling"", ""music""]",Source group: Performance.
+formal_performance,Formal Performance,"Elite, staged, or formal speaking/performance training.","[""acting"", ""recitation"", ""oratory""]",Source group: Performance.
+mental_discipline,Mental Discipline,Trained inner control and focus.,"[""concentration"", ""memory"", ""self_control"", ""meditation""]","Formation group, not always a default profession core. Source group: Meta-Cognition."
+technical_measurement,Technical Measurement,"Practical technical, surveying, and measurement training.","[""measurement"", ""mathematics"", ""surveying""]",Source group: Engineering / Physical Science overlap.
+learned_natural_inquiry,Learned Natural Inquiry,Advanced scientific and scholarly investigation.,"[""mathematics"", ""astronomy"", ""natural_philosophy"", ""alchemy""]",Advanced learned group.
+omen_and_ritual_practice,Omen and Ritual Practice,Practical divinatory and ritual-interpretive training.,"[""divination"", ""omen_reading"", ""ritual_interpretation""]",
+basic_melee_training,Basic Melee Training,One melee attack skill plus Dodge and Parry.,"[""dodge"", ""parry""]",Choose one melee attack skill in addition to the listed skills.
+advanced_melee_training,Advanced Melee Training,Two related melee attack skills plus Dodge and Parry.,"[""dodge"", ""parry""]",Choose two related melee attack skills in addition to the listed skills.
+basic_missile_training,Basic Missile Training,One missile attack skill plus Dodge and Perception.,"[""dodge"", ""perception""]",Choose one missile attack skill in addition to the listed skills.
+advanced_missile_training,Advanced Missile Training,Broader trained ranged-combat package.,"[""dodge"", ""perception""]",Choose one main missile skill and one secondary missile or fallback skill in addition to the listed skills.
+defensive_soldiering,Defensive Soldiering,Defensive discipline and line-fighting package.,"[""parry"", ""dodge"", ""formation_fighting""]",
+mounted_warrior_training,Mounted Warrior Training,Proper mounted combat package.,"[""riding"", ""lance"", ""one_handed_edged"", ""dodge"", ""parry""]",Proper cavalry package.
+field_soldiering,Field Soldiering,Practical field-combat adaptation package.,"[""dodge"", ""perception"", ""battlefield_awareness""]",Choose one attack skill in addition to the listed skills.
+veteran_soldiering,Veteran Soldiering,Hardened battlefield survival and veteran composure package.,"[""combat_experience"", ""battlefield_awareness"", ""perception""]","Veteran-facing, not novice-facing."
+officer_training,Officer Training,Battlefield leadership and control package.,"[""tactics"", ""captaincy"", ""perception""]",
+veteran_leadership,Veteran Leadership,Seasoned military command under pressure.,"[""captaincy"", ""combat_experience"", ""tactics""]",

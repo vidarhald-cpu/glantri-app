@@ -1,0 +1,10 @@
+Normalization pass 1 (2026-03-30)
+
+Changes made
+- Added missing skill rows: surveying, mechanics.
+- These were already referenced by Engineer / Builder and Technical Measurement.
+
+Outstanding normalization decisions
+- Consider splitting 2-handed Weapons into 2-handed Edged and 2-handed Concussion / Axe to align more closely with the Themistogenes combat structure.
+- Backfill verbatimDescription from source sheets and PDFs.
+- Reconcile any remaining placeholder style rows (gladiatorial_style, regional_martial_style) before import into production content.

@@ -1,0 +1,10 @@
+Normalization pass 3 (2026-03-30)
+
+Changes made
+- Reconciled combat-facing display names more closely to the Themistogenes Skills sheet.
+- Added partial verbatimDescription backfill where the sheet supplies exact source labels.
+- Added source-stat notes for a first set of combat and command-related skills.
+
+Important limitation
+- The Themistogenes sheet provides skill names and stat columns, but not full prose descriptions.
+- verbatimDescription is therefore only partially backfilled at this stage.

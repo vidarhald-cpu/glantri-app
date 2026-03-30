@@ -1,0 +1,11 @@
+Normalization pass 4 (2026-03-30)
+
+Changes made
+- Reconciled society type rows against the Professions.xlsx / Civilizations sheet.
+- Added source-linked notes to training groups based on the Professions.xlsx / Skill groups sheet.
+- Expanded profession_subtypes from the Future professions sheet with source-listed occupation names.
+- Filled verbatimDescription for new subtype rows with the exact source occupation label.
+
+Important limitation
+- Most added subtype rows are source-listed placeholders and still need manual skill-package completion.
+- Family assignment for newly added source occupations is a first-pass heuristic mapping.
