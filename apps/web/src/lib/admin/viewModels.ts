@@ -1,0 +1,1204 @@
+import type { CanonicalContent } from "@glantri/content";
+import { getSkillGroupIds } from "@glantri/domain";
+import { resolveEffectiveProfessionPackage } from "@glantri/rules-engine";
+
+export interface SkillAdminRow {
+  characteristics: string;
+  dependencies: string[];
+  groupNames: string[];
+  id: string;
+  name: string;
+  secondaryOf: string;
+  shortDescription: string;
+  skillType: string;
+  societyLevel: number;
+  sortOrder: number;
+  specializationOf: string;
+  theoretical: boolean;
+}
+
+export interface SkillMatrixRow {
+  allowsSpecializations: boolean;
+  dependencies: string[];
+  dependedOnBy: string[];
+  dependentCount: number;
+  groupNames: string[];
+  hasSpecializations: boolean;
+  id: string;
+  literacyRequirement: string;
+  longestDependencyChain: string[];
+  name: string;
+  secondaryOf: string;
+  shortDescription: string;
+  skillType: string;
+  societyLevel: number;
+  sortOrder: number;
+  specializationOf: string;
+}
+
+export type AuditSeverity = "blocking" | "info" | "warning";
+
+export interface SkillAuditIssue {
+  category: string;
+  detail: string;
+  id: string;
+  relatedSkills: string[];
+  severity: AuditSeverity;
+  skillId: string;
+  skillName: string;
+}
+
+export interface SkillGroupAdminRow {
+  allowedProfessions: string[];
+  id: string;
+  includedSkills: string[];
+  name: string;
+  notes: string;
+  sortOrder: number;
+}
+
+export interface ProfessionAdminRow {
+  allowedSocietyEntries: string[];
+  description: string;
+  directSkillExceptions: string[];
+  directlyGrantedSkills: string[];
+  grantedSkillGroups: string[];
+  id: string;
+  name: string;
+  notes: string;
+  reachableGroupSkills: string[];
+  totalReachableSkills: number;
+}
+
+export interface ProfessionMatrixRow {
+  allowedSocietyEntries: string[];
+  description: string;
+  directSkillExceptions: string[];
+  directSkillOverrideCount: number;
+  directlyGrantedSkills: string[];
+  duplicateDirectSkills: string[];
+  grantedSkillGroups: string[];
+  hasDirectSkillExceptions: boolean;
+  id: string;
+  name: string;
+  notes: string;
+  reachBand: "broad" | "medium" | "narrow";
+  reachableGroupSkills: string[];
+  reachableSecondarySkills: string[];
+  reachableSkills: string[];
+  reachableSpecializationLinkedSkills: string[];
+  totalReachableSkills: number;
+}
+
+export interface ProfessionAuditIssue {
+  category: string;
+  detail: string;
+  id: string;
+  relatedEntries: string[];
+  severity: AuditSeverity;
+  professionId: string;
+  professionName: string;
+}
+
+export interface SocietyAdminRow {
+  baseEducation: string;
+  directOnlySkills: string[];
+  directSkillGroups: string[];
+  directSkills: string[];
+  dieRange: string;
+  effectiveProfessionSkills: string[];
+  id: string;
+  notes: string;
+  reachableProfessions: string[];
+  society: string;
+  societyClassName: string;
+  societyLevel: number;
+  totalEffectiveReachableSkills: number;
+}
+
+export interface SocietyMatrixRow {
+  baseEducation: string;
+  directGroupOverrideCount: number;
+  directOnlySkills: string[];
+  directSkillGroups: string[];
+  directSkillOverrideCount: number;
+  directSkills: string[];
+  dieRange: string;
+  effectiveProfessionSkills: string[];
+  hasDirectOverrides: boolean;
+  id: string;
+  notes: string;
+  professionDerivedReachCount: number;
+  reachableProfessions: string[];
+  reachBand: "broad" | "medium" | "narrow";
+  society: string;
+  societyClassName: string;
+  societyLevel: number;
+  totalEffectiveReachableSkills: number;
+}
+
+export interface SocietyAuditIssue {
+  category: string;
+  detail: string;
+  id: string;
+  relatedEntries: string[];
+  severity: AuditSeverity;
+  societyRowId: string;
+  societyRowName: string;
+}
+
+export interface ProfessionAccessRow {
+  id: string;
+  name: string;
+  societyEntries: string[];
+  skillGroups: string[];
+  skills: string[];
+}
+
+export interface SocietyAccessRow {
+  id: string;
+  professions: string[];
+  skillGroups: string[];
+  skills: string[];
+  societyEntry: string;
+}
+
+export interface AdminOverviewStats {
+  professionCount: number;
+  skillCount: number;
+  skillGroupCount: number;
+  societyEntryCount: number;
+}
+
+function uniqueSorted(values: string[]): string[] {
+  return [...new Set(values)].sort((left, right) => left.localeCompare(right));
+}
+
+function joinDisplayName(name: string, suffix?: string): string {
+  return suffix ? `${name} (${suffix})` : name;
+}
+
+function formatSocietyEntryLabel(societyName: string, level: number, socialClass: string): string {
+  return `${societyName} L${level} - ${socialClass}`;
+}
+
+function formatCharacteristicList(characteristics: string[]): string {
+  return characteristics.map((characteristic) => characteristic.toUpperCase()).join(", ");
+}
+
+function getDieRange(level: number): string {
+  switch (level) {
+    case 1:
+      return "1-10";
+    case 2:
+      return "11-15";
+    case 3:
+      return "16-18";
+    case 4:
+      return "19-20";
+    default:
+      return "Custom";
+  }
+}
+
+function getAuditSeverityRank(severity: AuditSeverity): number {
+  if (severity === "blocking") {
+    return 0;
+  }
+
+  if (severity === "warning") {
+    return 1;
+  }
+
+  return 2;
+}
+
+function buildSkillMaps(content: CanonicalContent) {
+  const skillGroupsById = new Map(content.skillGroups.map((group) => [group.id, group]));
+  const skillsById = new Map(content.skills.map((skill) => [skill.id, skill]));
+  const professionsById = new Map(content.professions.map((profession) => [profession.id, profession]));
+  const societiesById = new Map(
+    content.societyLevels.map((societyLevel) => [
+      societyLevel.societyId,
+      societyLevel.societyName
+    ])
+  );
+
+  return {
+    professionsById,
+    skillGroupsById,
+    skillsById,
+    societiesById
+  };
+}
+
+function createEmptyArrayMap(): Map<string, string[]> {
+  return new Map<string, string[]>();
+}
+
+function appendArrayMapValue(map: Map<string, string[]>, key: string, value: string): void {
+  const existing = map.get(key);
+
+  if (existing) {
+    existing.push(value);
+    return;
+  }
+
+  map.set(key, [value]);
+}
+
+function buildSkillRelationshipContext(content: CanonicalContent) {
+  const { skillGroupsById, skillsById } = buildSkillMaps(content);
+  const dependedOnByIds = createEmptyArrayMap();
+  const specializationChildIds = createEmptyArrayMap();
+  const directSpecializationsBySkillId = createEmptyArrayMap();
+
+  for (const skill of content.skills) {
+    for (const dependencySkillId of skill.dependencySkillIds) {
+      appendArrayMapValue(dependedOnByIds, dependencySkillId, skill.id);
+    }
+
+    if (skill.specializationOfSkillId) {
+      appendArrayMapValue(specializationChildIds, skill.specializationOfSkillId, skill.id);
+    }
+  }
+
+  for (const specialization of content.specializations) {
+    appendArrayMapValue(directSpecializationsBySkillId, specialization.skillId, specialization.name);
+  }
+
+  const chainMemo = new Map<string, string[]>();
+
+  function getLongestDependencyChain(skillId: string): string[] {
+    const cached = chainMemo.get(skillId);
+
+    if (cached) {
+      return cached;
+    }
+
+    const skill = skillsById.get(skillId);
+
+    if (!skill || skill.dependencySkillIds.length === 0) {
+      const terminalChain = [skillId];
+
+      chainMemo.set(skillId, terminalChain);
+      return terminalChain;
+    }
+
+    let longestChain = [skillId];
+
+    for (const dependencySkillId of skill.dependencySkillIds) {
+      const candidateChain = [skillId, ...getLongestDependencyChain(dependencySkillId)];
+
+      if (candidateChain.length > longestChain.length) {
+        longestChain = candidateChain;
+      }
+    }
+
+    chainMemo.set(skillId, longestChain);
+    return longestChain;
+  }
+
+  function getSkillName(skillId: string): string {
+    return skillsById.get(skillId)?.name ?? skillId;
+  }
+
+  return {
+    directSpecializationsBySkillId,
+    dependedOnByIds,
+    getLongestDependencyChain,
+    getSkillName,
+    skillGroupsById,
+    skillsById,
+    specializationChildIds
+  };
+}
+
+export function buildAdminOverviewStats(content: CanonicalContent): AdminOverviewStats {
+  return {
+    professionCount: content.professions.length,
+    skillCount: content.skills.length,
+    skillGroupCount: content.skillGroups.length,
+    societyEntryCount: content.societyLevels.length
+  };
+}
+
+export function buildSkillAdminRows(content: CanonicalContent): SkillAdminRow[] {
+  const { skillGroupsById, skillsById } = buildSkillMaps(content);
+
+  return [...content.skills]
+    .sort((left, right) => left.sortOrder - right.sortOrder || left.name.localeCompare(right.name))
+    .map((skill) => {
+      const groupIds = getSkillGroupIds(skill);
+
+      return {
+        characteristics: formatCharacteristicList(skill.linkedStats),
+        dependencies: uniqueSorted(
+          skill.dependencySkillIds.map(
+            (dependencySkillId) => skillsById.get(dependencySkillId)?.name ?? dependencySkillId
+          )
+        ),
+        groupNames: groupIds.map((groupId) => skillGroupsById.get(groupId)?.name ?? groupId),
+        id: skill.id,
+        name: skill.name,
+        secondaryOf: skill.secondaryOfSkillId
+          ? skillsById.get(skill.secondaryOfSkillId)?.name ?? skill.secondaryOfSkillId
+          : "",
+        shortDescription: skill.shortDescription ?? "",
+        skillType: skill.category,
+        societyLevel: skill.societyLevel,
+        sortOrder: skill.sortOrder,
+        specializationOf: skill.specializationOfSkillId
+          ? skillsById.get(skill.specializationOfSkillId)?.name ?? skill.specializationOfSkillId
+          : "",
+        theoretical: skill.isTheoretical
+      };
+    });
+}
+
+export function buildSkillMatrixRows(content: CanonicalContent): SkillMatrixRow[] {
+  const relationshipContext = buildSkillRelationshipContext(content);
+
+  return [...content.skills]
+    .sort((left, right) => left.sortOrder - right.sortOrder || left.name.localeCompare(right.name))
+    .map((skill) => {
+      const groupIds = getSkillGroupIds(skill);
+      const dependencyNames = uniqueSorted(
+        skill.dependencySkillIds.map(relationshipContext.getSkillName)
+      );
+      const dependedOnByNames = uniqueSorted(
+        (relationshipContext.dependedOnByIds.get(skill.id) ?? []).map(relationshipContext.getSkillName)
+      );
+      const hasSpecializations =
+        (relationshipContext.directSpecializationsBySkillId.get(skill.id)?.length ?? 0) > 0 ||
+        (relationshipContext.specializationChildIds.get(skill.id)?.length ?? 0) > 0;
+
+      return {
+        allowsSpecializations: skill.allowsSpecializations,
+        dependencies: dependencyNames,
+        dependedOnBy: dependedOnByNames,
+        dependentCount: dependedOnByNames.length,
+        groupNames: groupIds.map(
+          (groupId) => relationshipContext.skillGroupsById.get(groupId)?.name ?? groupId
+        ),
+        hasSpecializations,
+        id: skill.id,
+        literacyRequirement: skill.requiresLiteracy,
+        longestDependencyChain: relationshipContext
+          .getLongestDependencyChain(skill.id)
+          .map(relationshipContext.getSkillName),
+        name: skill.name,
+        secondaryOf: skill.secondaryOfSkillId
+          ? relationshipContext.getSkillName(skill.secondaryOfSkillId)
+          : "",
+        shortDescription: skill.shortDescription ?? "",
+        skillType: skill.category,
+        societyLevel: skill.societyLevel,
+        sortOrder: skill.sortOrder,
+        specializationOf: skill.specializationOfSkillId
+          ? relationshipContext.getSkillName(skill.specializationOfSkillId)
+          : ""
+      };
+    });
+}
+
+export function buildSkillAuditIssues(content: CanonicalContent): SkillAuditIssue[] {
+  const relationshipContext = buildSkillRelationshipContext(content);
+  const issues: SkillAuditIssue[] = [];
+
+  for (const skill of content.skills) {
+    const groupIds = getSkillGroupIds(skill);
+    const dependedOnBy = relationshipContext.dependedOnByIds.get(skill.id) ?? [];
+    const structuralRelationshipCount =
+      skill.dependencySkillIds.length +
+      dependedOnBy.length +
+      (skill.secondaryOfSkillId ? 1 : 0) +
+      (skill.specializationOfSkillId ? 1 : 0) +
+      (relationshipContext.specializationChildIds.get(skill.id)?.length ?? 0) +
+      (relationshipContext.directSpecializationsBySkillId.get(skill.id)?.length ?? 0);
+
+    if (groupIds.length === 0 && structuralRelationshipCount === 0) {
+      issues.push({
+        category: "Orphaned skill",
+        detail: "This skill has no group membership and no structural relationship hooks.",
+        id: `orphaned:${skill.id}`,
+        relatedSkills: [],
+        severity: "warning",
+        skillId: skill.id,
+        skillName: skill.name
+      });
+    } else if (structuralRelationshipCount === 0) {
+      issues.push({
+        category: "Structurally isolated",
+        detail: "This skill is grouped, but nothing depends on it and it has no other structural links.",
+        id: `isolated:${skill.id}`,
+        relatedSkills: [],
+        severity: "info",
+        skillId: skill.id,
+        skillName: skill.name
+      });
+    }
+
+    if (!skill.shortDescription?.trim()) {
+      issues.push({
+        category: "Missing short description",
+        detail: "Add short list copy so this skill reads well in matrix, profession, and society review views.",
+        id: `missing-short-description:${skill.id}`,
+        relatedSkills: [],
+        severity: "info",
+        skillId: skill.id,
+        skillName: skill.name
+      });
+    }
+
+    if (dependedOnBy.length >= 3) {
+      issues.push({
+        category: "Many dependents",
+        detail: `This skill is a prerequisite hub for ${dependedOnBy.length} other skills.`,
+        id: `many-dependents:${skill.id}`,
+        relatedSkills: uniqueSorted(dependedOnBy.map(relationshipContext.getSkillName)),
+        severity: "info",
+        skillId: skill.id,
+        skillName: skill.name
+      });
+    }
+
+    const longestChain = relationshipContext.getLongestDependencyChain(skill.id);
+
+    if (longestChain.length >= 4) {
+      issues.push({
+        category: "Long dependency chain",
+        detail: `Dependency chain length ${longestChain.length - 1}: ${longestChain
+          .map(relationshipContext.getSkillName)
+          .join(" -> ")}.`,
+        id: `long-chain:${skill.id}`,
+        relatedSkills: longestChain.slice(1).map(relationshipContext.getSkillName),
+        severity: "warning",
+        skillId: skill.id,
+        skillName: skill.name
+      });
+    }
+
+    if (skill.specializationOfSkillId) {
+      const parentSkill = relationshipContext.skillsById.get(skill.specializationOfSkillId);
+
+      if (!parentSkill) {
+        issues.push({
+          category: "Specialization parent missing",
+          detail: "This specialization-linked skill points at a parent skill that does not exist.",
+          id: `missing-specialization-parent:${skill.id}`,
+          relatedSkills: [skill.specializationOfSkillId],
+          severity: "blocking",
+          skillId: skill.id,
+          skillName: skill.name
+        });
+      } else if (!parentSkill.allowsSpecializations) {
+        issues.push({
+          category: "Specialization parent mismatch",
+          detail: `Parent skill "${parentSkill.name}" does not currently allow specializations.`,
+          id: `specialization-parent-mismatch:${skill.id}`,
+          relatedSkills: [parentSkill.name],
+          severity: "blocking",
+          skillId: skill.id,
+          skillName: skill.name
+        });
+      }
+
+      if (parentSkill && skill.societyLevel < parentSkill.societyLevel) {
+        issues.push({
+          category: "Society level mismatch",
+          detail: `This skill is available at society level ${skill.societyLevel}, earlier than specialization parent "${parentSkill.name}" at level ${parentSkill.societyLevel}.`,
+          id: `specialization-level-mismatch:${skill.id}`,
+          relatedSkills: [parentSkill.name],
+          severity: "warning",
+          skillId: skill.id,
+          skillName: skill.name
+        });
+      }
+    }
+
+    if (skill.secondaryOfSkillId) {
+      const parentSkill = relationshipContext.skillsById.get(skill.secondaryOfSkillId);
+
+      if (parentSkill && skill.societyLevel < parentSkill.societyLevel) {
+        issues.push({
+          category: "Society level mismatch",
+          detail: `This skill is available at society level ${skill.societyLevel}, earlier than related secondary parent "${parentSkill.name}" at level ${parentSkill.societyLevel}.`,
+          id: `secondary-level-mismatch:${skill.id}`,
+          relatedSkills: [parentSkill.name],
+          severity: "warning",
+          skillId: skill.id,
+          skillName: skill.name
+        });
+      }
+    }
+
+    const higherLevelDependencies = skill.dependencySkillIds
+      .map((dependencySkillId) => relationshipContext.skillsById.get(dependencySkillId))
+      .filter(
+        (dependencySkill): dependencySkill is NonNullable<typeof dependencySkill> =>
+          Boolean(dependencySkill && dependencySkill.societyLevel > skill.societyLevel)
+      );
+
+    if (higherLevelDependencies.length > 0) {
+      issues.push({
+        category: "Society level mismatch",
+        detail: `This skill is available earlier than dependency skill(s): ${higherLevelDependencies
+          .map((dependencySkill) => `${dependencySkill.name} (L${dependencySkill.societyLevel})`)
+          .join(", ")}.`,
+        id: `dependency-level-mismatch:${skill.id}`,
+        relatedSkills: higherLevelDependencies.map((dependencySkill) => dependencySkill.name),
+        severity: "warning",
+        skillId: skill.id,
+        skillName: skill.name
+      });
+    }
+  }
+
+  return issues.sort(
+    (left, right) =>
+      getAuditSeverityRank(left.severity) - getAuditSeverityRank(right.severity) ||
+      left.category.localeCompare(right.category) ||
+      left.skillName.localeCompare(right.skillName)
+  );
+}
+
+function buildProfessionRelationshipContext(content: CanonicalContent) {
+  const skillContext = buildSkillRelationshipContext(content);
+  const groupSkillIdsByGroupId = new Map<string, string[]>();
+  const societyEntriesByProfessionId = createEmptyArrayMap();
+
+  for (const skill of content.skills) {
+    for (const groupId of getSkillGroupIds(skill)) {
+      appendArrayMapValue(groupSkillIdsByGroupId, groupId, skill.id);
+    }
+  }
+
+  for (const societyLevel of content.societyLevels) {
+    const label = formatSocietyEntryLabel(
+      societyLevel.societyName,
+      societyLevel.societyLevel,
+      societyLevel.socialClass
+    );
+
+    for (const professionId of societyLevel.professionIds) {
+      appendArrayMapValue(societyEntriesByProfessionId, professionId, label);
+    }
+  }
+
+  function skillHasSpecializationLinks(skillId: string): boolean {
+    const skill = skillContext.skillsById.get(skillId);
+
+    if (!skill) {
+      return false;
+    }
+
+    return (
+      skill.allowsSpecializations ||
+      Boolean(skill.specializationOfSkillId) ||
+      (skillContext.directSpecializationsBySkillId.get(skillId)?.length ?? 0) > 0 ||
+      (skillContext.specializationChildIds.get(skillId)?.length ?? 0) > 0
+    );
+  }
+
+  return {
+    ...skillContext,
+    groupSkillIdsByGroupId,
+    skillHasSpecializationLinks,
+    societyEntriesByProfessionId
+  };
+}
+
+function resolveProfessionGrantPackage(
+  content: CanonicalContent,
+  professionId: string
+) {
+  const professionPackage = resolveEffectiveProfessionPackage({
+    content,
+    subtypeId: professionId
+  });
+  const grantedSkillGroupIds = uniqueSorted([
+    ...professionPackage.core.finalEffectiveGroupIds,
+    ...professionPackage.favored.finalEffectiveGroupIds
+  ]);
+  const groupReachableSkillIds = uniqueSorted([
+    ...professionPackage.core.reachableSkillIdsThroughGroups,
+    ...professionPackage.favored.reachableSkillIdsThroughGroups
+  ]);
+  const directSkillIds = uniqueSorted([
+    ...professionPackage.core.finalEffectiveSkillIds,
+    ...professionPackage.favored.finalEffectiveSkillIds
+  ]);
+  const reachableSkillIds = uniqueSorted([
+    ...professionPackage.core.finalEffectiveReachableSkillIds,
+    ...professionPackage.favored.finalEffectiveReachableSkillIds
+  ]);
+
+  return {
+    directSkillIds,
+    grantedSkillGroupIds,
+    groupReachableSkillIds,
+    reachableSkillIds
+  };
+}
+
+function buildProfessionMatrixRowsInternal(content: CanonicalContent): Array<
+  Omit<ProfessionMatrixRow, "reachBand">
+> {
+  const professionContext = buildProfessionRelationshipContext(content);
+
+  return [...content.professions]
+    .sort((left, right) => left.name.localeCompare(right.name))
+    .map((profession) => {
+      const { directSkillIds, grantedSkillGroupIds, groupReachableSkillIds, reachableSkillIds } =
+        resolveProfessionGrantPackage(content, profession.id);
+      const directSkillsById = new Map(
+        directSkillIds.map((skillId) => [skillId, professionContext.skillsById.get(skillId)])
+      );
+      const directlyGrantedSkills = directSkillIds.map((skillId) => {
+        const skill = directSkillsById.get(skillId);
+
+        return joinDisplayName(
+          skill?.name ?? skillId,
+          skill?.category === "secondary" ? "secondary" : "ordinary"
+        );
+      });
+      const duplicateDirectSkills = directSkillIds
+        .filter((skillId) => groupReachableSkillIds.includes(skillId))
+        .map((skillId) => professionContext.getSkillName(skillId));
+      const directSkillExceptions = directSkillIds
+        .filter((skillId) => !groupReachableSkillIds.includes(skillId))
+        .map((skillId) => professionContext.getSkillName(skillId));
+      const reachableSkills = reachableSkillIds.map((skillId) => professionContext.getSkillName(skillId));
+      const reachableSecondarySkills = reachableSkillIds
+        .filter((skillId) => professionContext.skillsById.get(skillId)?.category === "secondary")
+        .map((skillId) => professionContext.getSkillName(skillId));
+      const reachableSpecializationLinkedSkills = reachableSkillIds
+        .filter((skillId) => professionContext.skillHasSpecializationLinks(skillId))
+        .map((skillId) => professionContext.getSkillName(skillId));
+
+      return {
+        allowedSocietyEntries: uniqueSorted(
+          professionContext.societyEntriesByProfessionId.get(profession.id) ?? []
+        ),
+        description: profession.description ?? "",
+        directSkillExceptions: uniqueSorted(directSkillExceptions),
+        directSkillOverrideCount: directSkillExceptions.length,
+        directlyGrantedSkills: uniqueSorted(directlyGrantedSkills),
+        duplicateDirectSkills: uniqueSorted(duplicateDirectSkills),
+        grantedSkillGroups: uniqueSorted(
+          grantedSkillGroupIds.map(
+            (groupId) => professionContext.skillGroupsById.get(groupId)?.name ?? groupId
+          )
+        ),
+        hasDirectSkillExceptions: directSkillExceptions.length > 0,
+        id: profession.id,
+        name: profession.name,
+        notes: "",
+        reachableGroupSkills: uniqueSorted(
+          groupReachableSkillIds.map((skillId) => professionContext.getSkillName(skillId))
+        ),
+        reachableSecondarySkills: uniqueSorted(reachableSecondarySkills),
+        reachableSkills: uniqueSorted(reachableSkills),
+        reachableSpecializationLinkedSkills: uniqueSorted(reachableSpecializationLinkedSkills),
+        totalReachableSkills: reachableSkillIds.length
+      };
+    });
+}
+
+function applyProfessionReachBands(
+  rows: Array<Omit<ProfessionMatrixRow, "reachBand">>
+): ProfessionMatrixRow[] {
+  const averageReach =
+    rows.length === 0 ? 0 : rows.reduce((sum, row) => sum + row.totalReachableSkills, 0) / rows.length;
+  const narrowThreshold = Math.max(1, Math.floor(averageReach / 2));
+  const broadThreshold = Math.max(4, Math.ceil(averageReach * 1.5));
+
+  return rows.map((row) => ({
+    ...row,
+    reachBand:
+      row.totalReachableSkills <= narrowThreshold
+        ? "narrow"
+        : row.totalReachableSkills >= broadThreshold
+          ? "broad"
+          : "medium"
+  }));
+}
+
+export function buildProfessionMatrixRows(content: CanonicalContent): ProfessionMatrixRow[] {
+  return applyProfessionReachBands(buildProfessionMatrixRowsInternal(content));
+}
+
+export function buildProfessionAuditIssues(content: CanonicalContent): ProfessionAuditIssue[] {
+  const professionRows = buildProfessionMatrixRows(content);
+  const issues: ProfessionAuditIssue[] = [];
+
+  for (const profession of professionRows) {
+    if (profession.grantedSkillGroups.length === 0 && profession.directlyGrantedSkills.length === 0) {
+      issues.push({
+        category: "No grants",
+        detail: "This profession grants neither skill groups nor direct skills.",
+        id: `no-grants:${profession.id}`,
+        relatedEntries: [],
+        severity: "blocking",
+        professionId: profession.id,
+        professionName: profession.name
+      });
+    }
+
+    if (profession.duplicateDirectSkills.length > 0) {
+      issues.push({
+        category: "Duplicate direct skills",
+        detail: "These direct skill grants are already reachable through granted groups.",
+        id: `duplicate-direct-skills:${profession.id}`,
+        relatedEntries: profession.duplicateDirectSkills,
+        severity: "warning",
+        professionId: profession.id,
+        professionName: profession.name
+      });
+    }
+
+    if (profession.reachBand === "broad") {
+      issues.push({
+        category: "Broad skill reach",
+        detail: `This profession reaches ${profession.totalReachableSkills} skills, which is broad relative to the current profession set.`,
+        id: `broad-reach:${profession.id}`,
+        relatedEntries: profession.grantedSkillGroups,
+        severity: "info",
+        professionId: profession.id,
+        professionName: profession.name
+      });
+    }
+
+    if (profession.reachBand === "narrow") {
+      issues.push({
+        category: "Narrow skill reach",
+        detail: `This profession reaches only ${profession.totalReachableSkills} skill${profession.totalReachableSkills === 1 ? "" : "s"}.`,
+        id: `narrow-reach:${profession.id}`,
+        relatedEntries: profession.grantedSkillGroups,
+        severity: "info",
+        professionId: profession.id,
+        professionName: profession.name
+      });
+    }
+
+    if (!profession.description.trim()) {
+      issues.push({
+        category: "Missing description",
+        detail: "Add profession description text so downstream society and chargen views can explain this package clearly.",
+        id: `missing-description:${profession.id}`,
+        relatedEntries: [],
+        severity: "info",
+        professionId: profession.id,
+        professionName: profession.name
+      });
+    }
+
+    if (profession.allowedSocietyEntries.length === 0) {
+      issues.push({
+        category: "Missing society access",
+        detail: "This profession is not currently available from any society/class row.",
+        id: `missing-society-access:${profession.id}`,
+        relatedEntries: [],
+        severity: "warning",
+        professionId: profession.id,
+        professionName: profession.name
+      });
+    }
+  }
+
+  return issues.sort(
+    (left, right) =>
+      getAuditSeverityRank(left.severity) - getAuditSeverityRank(right.severity) ||
+      left.category.localeCompare(right.category) ||
+      left.professionName.localeCompare(right.professionName)
+  );
+}
+
+function buildSocietyMatrixRowsInternal(content: CanonicalContent): Array<
+  Omit<SocietyMatrixRow, "reachBand">
+> {
+  const societySkillContext = buildSkillRelationshipContext(content);
+  const professionContext = buildProfessionRelationshipContext(content);
+  const { professionsById, skillGroupsById, societiesById } = buildSkillMaps(content);
+
+  return [...content.societyLevels]
+    .sort(
+      (left, right) =>
+        left.societyName.localeCompare(right.societyName) ||
+        left.societyLevel - right.societyLevel
+    )
+    .map((societyLevel) => {
+      const reachableProfessionIds = uniqueSorted(societyLevel.professionIds);
+      const professionDerivedSkillIds = uniqueSorted(
+        reachableProfessionIds.flatMap(
+          (professionId) => resolveProfessionGrantPackage(content, professionId).reachableSkillIds
+        )
+      );
+      const directSkillGroupIds = uniqueSorted(societyLevel.skillGroupIds);
+      const directGroupSkillIds = uniqueSorted(
+        directSkillGroupIds.flatMap(
+          (groupId) => professionContext.groupSkillIdsByGroupId.get(groupId) ?? []
+        )
+      );
+      const directSkillIds = uniqueSorted(societyLevel.skillIds);
+      const directAddedSkillIds = uniqueSorted([...directGroupSkillIds, ...directSkillIds]);
+      const totalEffectiveSkillIds = uniqueSorted([
+        ...professionDerivedSkillIds,
+        ...directAddedSkillIds
+      ]);
+      const directOnlySkillIds = totalEffectiveSkillIds.filter(
+        (skillId) => !professionDerivedSkillIds.includes(skillId)
+      );
+
+      return {
+        baseEducation:
+          societyLevel.baseEducation === undefined ? "" : String(societyLevel.baseEducation),
+        directGroupOverrideCount: directSkillGroupIds.length,
+        directOnlySkills: uniqueSorted(
+          directOnlySkillIds.map((skillId) => societySkillContext.getSkillName(skillId))
+        ),
+        directSkillGroups: uniqueSorted(
+          directSkillGroupIds.map((groupId) => skillGroupsById.get(groupId)?.name ?? groupId)
+        ),
+        directSkillOverrideCount: directSkillIds.length,
+        directSkills: uniqueSorted(
+          directSkillIds.map((skillId) => societySkillContext.getSkillName(skillId))
+        ),
+        dieRange: getDieRange(societyLevel.societyLevel),
+        effectiveProfessionSkills: uniqueSorted(
+          professionDerivedSkillIds.map((skillId) => societySkillContext.getSkillName(skillId))
+        ),
+        hasDirectOverrides: directSkillGroupIds.length > 0 || directSkillIds.length > 0,
+        id: `${societyLevel.societyId}:${societyLevel.societyLevel}`,
+        notes: societyLevel.notes ?? "",
+        professionDerivedReachCount: professionDerivedSkillIds.length,
+        reachableProfessions: uniqueSorted(
+          reachableProfessionIds.map(
+            (professionId) => professionsById.get(professionId)?.name ?? professionId
+          )
+        ),
+        society: societiesById.get(societyLevel.societyId) ?? societyLevel.societyId,
+        societyClassName: societyLevel.socialClass,
+        societyLevel: societyLevel.societyLevel,
+        totalEffectiveReachableSkills: totalEffectiveSkillIds.length
+      };
+    });
+}
+
+function applySocietyReachBands(
+  rows: Array<Omit<SocietyMatrixRow, "reachBand">>
+): SocietyMatrixRow[] {
+  const averageReach =
+    rows.length === 0
+      ? 0
+      : rows.reduce((sum, row) => sum + row.totalEffectiveReachableSkills, 0) / rows.length;
+  const narrowThreshold = Math.max(1, Math.floor(averageReach / 2));
+  const broadThreshold = Math.max(4, Math.ceil(averageReach * 1.5));
+
+  return rows.map((row) => ({
+    ...row,
+    reachBand:
+      row.totalEffectiveReachableSkills <= narrowThreshold
+        ? "narrow"
+        : row.totalEffectiveReachableSkills >= broadThreshold
+          ? "broad"
+          : "medium"
+  }));
+}
+
+export function buildSocietyMatrixRows(content: CanonicalContent): SocietyMatrixRow[] {
+  return applySocietyReachBands(buildSocietyMatrixRowsInternal(content));
+}
+
+export function buildSocietyAuditIssues(content: CanonicalContent): SocietyAuditIssue[] {
+  const rows = buildSocietyMatrixRows(content);
+  const professionContext = buildProfessionRelationshipContext(content);
+  const { professionsById, skillGroupsById } = buildSkillMaps(content);
+  const issues: SocietyAuditIssue[] = [];
+
+  for (const row of rows) {
+    const societyLevel = content.societyLevels.find(
+      (candidate) => `${candidate.societyId}:${candidate.societyLevel}` === row.id
+    );
+
+    if (!societyLevel) {
+      continue;
+    }
+
+    const reachableProfessionIds = uniqueSorted(societyLevel.professionIds);
+    const professionDerivedSkillIds = uniqueSorted(
+      reachableProfessionIds.flatMap(
+        (professionId) => resolveProfessionGrantPackage(content, professionId).reachableSkillIds
+      )
+    );
+    const duplicateDirectSkillNames = uniqueSorted(
+      societyLevel.skillIds
+        .filter((skillId) => professionDerivedSkillIds.includes(skillId))
+        .map((skillId) => professionContext.getSkillName(skillId))
+    );
+    const duplicateDirectGroupNames = uniqueSorted(
+      societyLevel.skillGroupIds
+        .filter((groupId) => {
+          const groupSkillIds = professionContext.groupSkillIdsByGroupId.get(groupId) ?? [];
+          return (
+            groupSkillIds.length > 0 &&
+            groupSkillIds.every((skillId) => professionDerivedSkillIds.includes(skillId))
+          );
+        })
+        .map((groupId) => skillGroupsById.get(groupId)?.name ?? groupId)
+    );
+
+    if (reachableProfessionIds.length === 0 && societyLevel.skillGroupIds.length === 0 && societyLevel.skillIds.length === 0) {
+      issues.push({
+        category: "No access grants",
+        detail: "This society row grants no professions, no direct groups, and no direct skills.",
+        id: `no-access:${row.id}`,
+        relatedEntries: [],
+        severity: "blocking",
+        societyRowId: row.id,
+        societyRowName: `${row.society} L${row.societyLevel} - ${row.societyClassName}`
+      });
+    }
+
+    if (duplicateDirectSkillNames.length > 0) {
+      issues.push({
+        category: "Duplicate direct skills",
+        detail: "These direct society skills are already reachable through this row's professions.",
+        id: `duplicate-direct-skills:${row.id}`,
+        relatedEntries: duplicateDirectSkillNames,
+        severity: "warning",
+        societyRowId: row.id,
+        societyRowName: `${row.society} L${row.societyLevel} - ${row.societyClassName}`
+      });
+    }
+
+    if (duplicateDirectGroupNames.length > 0) {
+      issues.push({
+        category: "Duplicate direct groups",
+        detail: "These direct society skill groups are already fully covered by profession-derived reach.",
+        id: `duplicate-direct-groups:${row.id}`,
+        relatedEntries: duplicateDirectGroupNames,
+        severity: "warning",
+        societyRowId: row.id,
+        societyRowName: `${row.society} L${row.societyLevel} - ${row.societyClassName}`
+      });
+    }
+
+    if (row.reachBand === "broad") {
+      issues.push({
+        category: "Broad total reach",
+        detail: `This row reaches ${row.totalEffectiveReachableSkills} skills, which is broad relative to the current society set.`,
+        id: `broad-reach:${row.id}`,
+        relatedEntries: row.reachableProfessions,
+        severity: "info",
+        societyRowId: row.id,
+        societyRowName: `${row.society} L${row.societyLevel} - ${row.societyClassName}`
+      });
+    }
+
+    if (row.reachBand === "narrow") {
+      issues.push({
+        category: "Narrow total reach",
+        detail: `This row reaches only ${row.totalEffectiveReachableSkills} skill${row.totalEffectiveReachableSkills === 1 ? "" : "s"}.`,
+        id: `narrow-reach:${row.id}`,
+        relatedEntries: row.reachableProfessions,
+        severity: "info",
+        societyRowId: row.id,
+        societyRowName: `${row.society} L${row.societyLevel} - ${row.societyClassName}`
+      });
+    }
+
+    if (!row.baseEducation && row.totalEffectiveReachableSkills >= 6) {
+      issues.push({
+        category: "Education metadata mismatch",
+        detail: "This row has broad reach but no base education value set.",
+        id: `missing-education:${row.id}`,
+        relatedEntries: [],
+        severity: "warning",
+        societyRowId: row.id,
+        societyRowName: `${row.society} L${row.societyLevel} - ${row.societyClassName}`
+      });
+    }
+  }
+
+  const rowsBySociety = new Map<string, SocietyMatrixRow[]>();
+
+  for (const row of rows) {
+    const existing = rowsBySociety.get(row.society);
+
+    if (existing) {
+      existing.push(row);
+      continue;
+    }
+
+    rowsBySociety.set(row.society, [row]);
+  }
+
+  for (const [societyName, societyRows] of rowsBySociety) {
+    const sortedRows = societyRows
+      .slice()
+      .sort((left, right) => left.societyLevel - right.societyLevel);
+
+    for (let index = 1; index < sortedRows.length; index += 1) {
+      const previous = sortedRows[index - 1];
+      const current = sortedRows[index];
+      const previousLevel = content.societyLevels.find((row) => `${row.societyId}:${row.societyLevel}` === previous.id);
+      const currentLevel = content.societyLevels.find((row) => `${row.societyId}:${row.societyLevel}` === current.id);
+
+      if (!previousLevel || !currentLevel) {
+        continue;
+      }
+
+      const missingProfessions = previousLevel.professionIds.filter(
+        (professionId) => !currentLevel.professionIds.includes(professionId)
+      );
+
+      if (missingProfessions.length > 0) {
+        issues.push({
+          category: "Inconsistent profession progression",
+          detail: `Higher level ${current.societyLevel} removes profession access from lower level ${previous.societyLevel}.`,
+          id: `profession-regression:${current.id}`,
+          relatedEntries: missingProfessions.map(
+            (professionId) => professionsById.get(professionId)?.name ?? professionId
+          ),
+          severity: "warning",
+          societyRowId: current.id,
+          societyRowName: `${current.society} L${current.societyLevel} - ${current.societyClassName}`
+        });
+      }
+
+      const previousEducation = previous.baseEducation.length > 0 ? Number(previous.baseEducation) : undefined;
+      const currentEducation = current.baseEducation.length > 0 ? Number(current.baseEducation) : undefined;
+
+      if (
+        previousEducation !== undefined &&
+        currentEducation !== undefined &&
+        currentEducation < previousEducation
+      ) {
+        issues.push({
+          category: "Education regression",
+          detail: `Base education drops from ${previousEducation} at level ${previous.societyLevel} to ${currentEducation} at level ${current.societyLevel}.`,
+          id: `education-regression:${current.id}`,
+          relatedEntries: [societyName],
+          severity: "warning",
+          societyRowId: current.id,
+          societyRowName: `${current.society} L${current.societyLevel} - ${current.societyClassName}`
+        });
+      }
+
+      if (current.totalEffectiveReachableSkills < previous.totalEffectiveReachableSkills) {
+        issues.push({
+          category: "Reach regression",
+          detail: `Higher level ${current.societyLevel} has narrower total reach (${current.totalEffectiveReachableSkills}) than level ${previous.societyLevel} (${previous.totalEffectiveReachableSkills}).`,
+          id: `reach-regression:${current.id}`,
+          relatedEntries: [societyName],
+          severity: "warning",
+          societyRowId: current.id,
+          societyRowName: `${current.society} L${current.societyLevel} - ${current.societyClassName}`
+        });
+      }
+    }
+  }
+
+  return issues.sort(
+    (left, right) =>
+      getAuditSeverityRank(left.severity) - getAuditSeverityRank(right.severity) ||
+      left.category.localeCompare(right.category) ||
+      left.societyRowName.localeCompare(right.societyRowName)
+  );
+}
+
+export function buildSkillGroupAdminRows(content: CanonicalContent): SkillGroupAdminRow[] {
+  return [...content.skillGroups]
+    .sort((left, right) => left.sortOrder - right.sortOrder || left.name.localeCompare(right.name))
+    .map((group) => {
+      const includedSkills = content.skills
+        .filter((skill) => getSkillGroupIds(skill).includes(group.id))
+        .sort((left, right) => left.sortOrder - right.sortOrder || left.name.localeCompare(right.name))
+        .map((skill) => skill.name);
+      const allowedProfessions = content.professionSkills
+        .filter((professionSkill) => professionSkill.skillGroupId === group.id)
+        .map((professionSkill) => {
+          const profession = content.professions.find(
+            (candidate) => candidate.id === professionSkill.professionId
+          );
+
+          return profession?.name;
+        })
+        .filter((name): name is string => Boolean(name))
+        .sort((left, right) => left.localeCompare(right));
+
+      return {
+        allowedProfessions: uniqueSorted(allowedProfessions),
+        id: group.id,
+        includedSkills,
+        name: group.name,
+        notes: group.description ?? "",
+        sortOrder: group.sortOrder
+      };
+    });
+}
+
+export function buildProfessionAdminRows(content: CanonicalContent): ProfessionAdminRow[] {
+  return buildProfessionMatrixRows(content).map((profession) => ({
+    allowedSocietyEntries: profession.allowedSocietyEntries,
+    description: profession.description,
+    directSkillExceptions: profession.directSkillExceptions,
+    directlyGrantedSkills: profession.directlyGrantedSkills,
+    grantedSkillGroups: profession.grantedSkillGroups,
+    id: profession.id,
+    name: profession.name,
+    notes: profession.notes,
+    reachableGroupSkills: profession.reachableGroupSkills,
+    totalReachableSkills: profession.totalReachableSkills
+  }));
+}
+
+export function buildSocietyAdminRows(content: CanonicalContent): SocietyAdminRow[] {
+  return buildSocietyMatrixRows(content).map((societyRow) => ({
+    baseEducation: societyRow.baseEducation,
+    directOnlySkills: societyRow.directOnlySkills,
+    directSkillGroups: societyRow.directSkillGroups,
+    directSkills: societyRow.directSkills,
+    dieRange: societyRow.dieRange,
+    effectiveProfessionSkills: societyRow.effectiveProfessionSkills,
+    id: societyRow.id,
+    notes: societyRow.notes,
+    reachableProfessions: societyRow.reachableProfessions,
+    society: societyRow.society,
+    societyClassName: societyRow.societyClassName,
+    societyLevel: societyRow.societyLevel,
+    totalEffectiveReachableSkills: societyRow.totalEffectiveReachableSkills
+  }));
+}
+
+export function buildProfessionAccessRows(content: CanonicalContent): ProfessionAccessRow[] {
+  const professionRows = buildProfessionAdminRows(content);
+
+  return professionRows.map((profession) => ({
+    id: profession.id,
+    name: profession.name,
+    societyEntries: profession.allowedSocietyEntries,
+    skillGroups: profession.grantedSkillGroups,
+    skills: uniqueSorted(
+      profession.reachableGroupSkills.concat(profession.directlyGrantedSkills)
+    )
+  }));
+}
+
+export function buildSocietyAccessRows(content: CanonicalContent): SocietyAccessRow[] {
+  return buildSocietyAdminRows(content).map((societyRow) => ({
+    id: societyRow.id,
+    professions: societyRow.reachableProfessions,
+    skillGroups: societyRow.directSkillGroups,
+    skills: uniqueSorted(
+      societyRow.effectiveProfessionSkills.concat(societyRow.directOnlySkills)
+    ),
+    societyEntry: formatSocietyEntryLabel(
+      societyRow.society,
+      societyRow.societyLevel,
+      societyRow.societyClassName
+    )
+  }));
+}

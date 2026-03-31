@@ -10,6 +10,7 @@ import type {
   EncounterParticipantDeclaration,
   EncounterPosition,
   EncounterSession,
+  ProfessionFamilyDefinition,
   ProfessionDefinition,
   ProfessionSkillMap,
   SkillDefinition,
@@ -23,6 +24,7 @@ import { encounterSessionSchema } from "@glantri/domain";
 import { buildCharacterSheetSummary, type CharacterSheetSummary } from "../sheets/buildCharacterSheetSummary";
 
 interface CanonicalContentShape {
+  professionFamilies: ProfessionFamilyDefinition[];
   professions: ProfessionDefinition[];
   professionSkills: ProfessionSkillMap[];
   skillGroups: SkillGroupDefinition[];

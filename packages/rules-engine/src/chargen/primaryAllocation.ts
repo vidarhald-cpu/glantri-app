@@ -7,6 +7,7 @@ import type {
   ChargenMode,
   GlantriCharacteristicKey,
   ProfessionDefinition,
+  ProfessionFamilyDefinition,
   ProfessionSkillMap,
   RolledCharacterProfile,
   SkillDefinition,
@@ -17,8 +18,10 @@ import type {
 import { getSkillGroupIds } from "@glantri/domain";
 
 import { calculateEducation, type EducationBreakdown } from "../education/calculateEducation";
+import { resolveEffectiveProfessionPackage } from "../professions/resolveEffectiveProfessionPackage";
 import { calculateGroupLevel } from "../skills/calculateGroupLevel";
 import { calculateSpecializationLevel } from "../skills/calculateSpecializationLevel";
+import { evaluateSkillSelection } from "../skills/evaluateSkillSelection";
 import { selectBestSkillGroupContribution } from "../skills/selectBestSkillGroupContribution";
 
 const GROUP_POINT_COST = 4;
@@ -32,6 +35,7 @@ const ORDINARY_POOL_TOTAL = 60;
 const LITERACY_SKILL_ID = "literacy";
 
 interface CanonicalContentShape {
+  professionFamilies: ProfessionFamilyDefinition[];
   professionSkills: ProfessionSkillMap[];
   professions: ProfessionDefinition[];
   skillGroups: SkillGroupDefinition[];
@@ -128,6 +132,7 @@ export interface ChargenDraftView {
 
 export type ChargenSkillAccessSource =
   | "profession-group"
+  | "profession-skill"
   | "society-skill";
 
 export interface ChargenSkillAccessSummary {
@@ -293,22 +298,14 @@ function getProfessionById(
   return content.professions.find((profession) => profession.id === professionId);
 }
 
-function getProfessionGrants(
+function resolveProfessionPackageInternal(
   content: CanonicalContentShape,
   professionId: string
-): ProfessionSkillMap[] {
-  return content.professionSkills.filter((item) => item.professionId === professionId);
-}
-
-function getProfessionGroupIdsInternal(
-  content: CanonicalContentShape,
-  professionId: string
-): string[] {
-  return [...new Set(
-    getProfessionGrants(content, professionId)
-      .filter((item) => item.grantType === "group" && item.skillGroupId)
-      .map((item) => item.skillGroupId as string)
-  )];
+) {
+  return resolveEffectiveProfessionPackage({
+    content,
+    subtypeId: professionId
+  });
 }
 
 function getAllowedSkillGroupIdsInternal(
@@ -323,7 +320,11 @@ function getAllowedSkillGroupIdsInternal(
     return [];
   }
 
-  const professionGroupIds = new Set(getProfessionGroupIdsInternal(content, professionId));
+  const professionPackage = resolveProfessionPackageInternal(content, professionId);
+  const professionGroupIds = new Set([
+    ...professionPackage.core.finalEffectiveGroupIds,
+    ...professionPackage.favored.finalEffectiveGroupIds
+  ]);
 
   return society.skillGroupIds.filter((groupId) => professionGroupIds.has(groupId));
 }
@@ -341,6 +342,11 @@ function buildChargenSkillAccessSummaryInternal(input: {
     input.societyLevel
   );
   const normalGroupIdSet = new Set(normalSkillGroupIds);
+  const professionPackage = resolveProfessionPackageInternal(input.content, input.professionId);
+  const professionDirectSkillIds = new Set([
+    ...professionPackage.core.finalEffectiveSkillIds,
+    ...professionPackage.favored.finalEffectiveSkillIds
+  ]);
   const societySkillIds =
     getSocietyAccess(input.content, input.societyLevel, input.societyId)?.skillIds ?? [];
   const skillSources = new Map<string, Set<ChargenSkillAccessSource>>();
@@ -358,6 +364,12 @@ function buildChargenSkillAccessSummaryInternal(input: {
   for (const skillId of societySkillIds) {
     const sources = skillSources.get(skillId) ?? new Set<ChargenSkillAccessSource>();
     sources.add("society-skill");
+    skillSources.set(skillId, sources);
+  }
+
+  for (const skillId of professionDirectSkillIds) {
+    const sources = skillSources.get(skillId) ?? new Set<ChargenSkillAccessSource>();
+    sources.add("profession-skill");
     skillSources.set(skillId, sources);
   }
 
@@ -590,6 +602,13 @@ function getReadableErrors(errors: Iterable<string>): string[] {
   return [...new Set(errors)];
 }
 
+function getEvaluationMessages(input: {
+  advisories: { message: string }[];
+  warnings: { message: string }[];
+}): string[] {
+  return [...input.warnings, ...input.advisories].map((item) => item.message);
+}
+
 export function getOrdinaryPoolTotal(): number {
   return ORDINARY_POOL_TOTAL;
 }
@@ -721,27 +740,23 @@ export function allocateChargenPoint(input: AllocateChargenPointInput): SpendPoi
   }
 
   const normalAccess = access.normalSkillIds.includes(skillDefinition.id);
+  const dependencyEvaluation = evaluateSkillSelection({
+    content: input.content,
+    progression,
+    target: {
+      skill: skillDefinition,
+      targetType: "skill"
+    }
+  });
 
-  const literacyPresent = hasLiteracy(progression);
+  warnings.push(...getEvaluationMessages(dependencyEvaluation));
 
-  if (
-    skillDefinition.id !== LITERACY_SKILL_ID &&
-    skillDefinition.requiresLiteracy === "required" &&
-    !literacyPresent
-  ) {
+  if (!dependencyEvaluation.isAllowed) {
     return {
-      error: "Literacy is required before this skill can be purchased.",
+      error: dependencyEvaluation.blockingReasons[0]?.message ?? "Skill purchase is blocked.",
       progression,
       warnings
     };
-  }
-
-  if (
-    skillDefinition.id !== LITERACY_SKILL_ID &&
-    skillDefinition.requiresLiteracy === "recommended" &&
-    !literacyPresent
-  ) {
-    warnings.push("Literacy is recommended for this skill, but the purchase is allowed.");
   }
 
   const pool = chooseChargenPool({
@@ -843,26 +858,23 @@ export function spendPrimaryPoint(input: SpendPrimaryPointInput): SpendPointResu
     };
   }
 
-  const literacyPresent = hasLiteracy(progression);
+  const dependencyEvaluation = evaluateSkillSelection({
+    content: input.content,
+    progression,
+    target: {
+      skill: skillDefinition,
+      targetType: "skill"
+    }
+  });
 
-  if (
-    skillDefinition.id !== LITERACY_SKILL_ID &&
-    skillDefinition.requiresLiteracy === "required" &&
-    !literacyPresent
-  ) {
+  warnings.push(...getEvaluationMessages(dependencyEvaluation));
+
+  if (!dependencyEvaluation.isAllowed) {
     return {
-      error: "Literacy is required before this skill can be purchased.",
+      error: dependencyEvaluation.blockingReasons[0]?.message ?? "Skill purchase is blocked.",
       progression,
       warnings
     };
-  }
-
-  if (
-    skillDefinition.id !== LITERACY_SKILL_ID &&
-    skillDefinition.requiresLiteracy === "recommended" &&
-    !literacyPresent
-  ) {
-    warnings.push("Literacy is recommended for this skill, but the purchase is allowed.");
   }
 
   const skill = ensureSkillExists(progression, skillDefinition);
@@ -1282,6 +1294,91 @@ export function removeChargenPoint(
   };
 }
 
+export function removeSecondaryPoint(input: SpendSecondaryPointInput): SpendPointResult {
+  const progression = recalculateProgression(structuredClone(input.progression));
+  const warnings: string[] = [];
+
+  if (input.targetType === "skill") {
+    const skillDefinition = getSkillById(input.content, input.targetId);
+
+    if (!skillDefinition) {
+      return {
+        error: "Skill definition not found.",
+        progression,
+        warnings
+      };
+    }
+
+    const skill = progression.skills.find((item) => item.skillId === input.targetId);
+
+    if (!skill || skill.secondaryRanks < 1) {
+      return {
+        error: "No flexible-point skill purchase to remove.",
+        progression,
+        warnings
+      };
+    }
+
+    const error = getChargenSkillRemovalError({
+      content: input.content,
+      progression,
+      skillDefinition
+    });
+
+    if (error) {
+      return {
+        error,
+        progression,
+        warnings
+      };
+    }
+
+    skill.secondaryRanks -= 1;
+    skill.ranks = skill.grantedRanks + skill.primaryRanks + skill.secondaryRanks;
+    const refundedCost = getSkillSpendCost(skillDefinition, skill.ranks > 0);
+    progression.secondaryPoolSpent = Math.max(0, progression.secondaryPoolSpent - refundedCost);
+
+    return {
+      progression: cleanupProgression(progression),
+      spentCost: refundedCost,
+      warnings
+    };
+  }
+
+  const specializationDefinition = getSpecializationById(input.content, input.targetId);
+
+  if (!specializationDefinition) {
+    return {
+      error: "Specialization definition not found.",
+      progression,
+      warnings
+    };
+  }
+
+  const specialization = progression.specializations.find(
+    (item) => item.specializationId === specializationDefinition.id
+  );
+
+  if (!specialization || specialization.secondaryRanks < 1) {
+    return {
+      error: "No specialization purchase to remove.",
+      progression,
+      warnings
+    };
+  }
+
+  specialization.secondaryRanks -= 1;
+  specialization.ranks = specialization.secondaryRanks;
+  const refundedCost = getSpecializationSpendCost(specialization.ranks > 0);
+  progression.secondaryPoolSpent = Math.max(0, progression.secondaryPoolSpent - refundedCost);
+
+  return {
+    progression: cleanupProgression(progression),
+    spentCost: refundedCost,
+    warnings
+  };
+}
+
 export function spendSecondaryPoint(input: SpendSecondaryPointInput): SpendPointResult {
   const progression = recalculateProgression(structuredClone(input.progression));
   const allowedGroupIds = getAllowedSecondaryGroupIdsInternal(
@@ -1314,26 +1411,23 @@ export function spendSecondaryPoint(input: SpendSecondaryPointInput): SpendPoint
       };
     }
 
-    const literacyPresent = hasLiteracy(progression);
+    const dependencyEvaluation = evaluateSkillSelection({
+      content: input.content,
+      progression,
+      target: {
+        skill: skillDefinition,
+        targetType: "skill"
+      }
+    });
 
-    if (
-      skillDefinition.id !== LITERACY_SKILL_ID &&
-      skillDefinition.requiresLiteracy === "required" &&
-      !literacyPresent
-    ) {
+    warnings.push(...getEvaluationMessages(dependencyEvaluation));
+
+    if (!dependencyEvaluation.isAllowed) {
       return {
-        error: "Literacy is required before this skill can be purchased.",
+        error: dependencyEvaluation.blockingReasons[0]?.message ?? "Skill purchase is blocked.",
         progression,
         warnings
       };
-    }
-
-    if (
-      skillDefinition.id !== LITERACY_SKILL_ID &&
-      skillDefinition.requiresLiteracy === "recommended" &&
-      !literacyPresent
-    ) {
-      warnings.push("Literacy is recommended for this skill, but the purchase is allowed.");
     }
 
     const skill = ensureSkillExists(progression, skillDefinition);
@@ -1368,11 +1462,32 @@ export function spendSecondaryPoint(input: SpendSecondaryPointInput): SpendPoint
     };
   }
 
+  const specializationEvaluation = evaluateSkillSelection({
+    content: input.content,
+    progression,
+    target: {
+      specialization: specializationDefinition,
+      targetType: "specialization"
+    }
+  });
+
+  warnings.push(...getEvaluationMessages(specializationEvaluation));
+
+  if (!specializationEvaluation.isAllowed) {
+    return {
+      error:
+        specializationEvaluation.blockingReasons[0]?.message ??
+        "Specialization purchase is blocked.",
+      progression,
+      warnings
+    };
+  }
+
   const parentSkillDefinition = getSkillById(input.content, specializationDefinition.skillId);
 
-  if (!parentSkillDefinition || !parentSkillDefinition.allowsSpecializations) {
+  if (!parentSkillDefinition) {
     return {
-      error: "That specialization is not available for purchase.",
+      error: "Specialization definition not found.",
       progression,
       warnings
     };
@@ -1395,31 +1510,6 @@ export function spendSecondaryPoint(input: SpendSecondaryPointInput): SpendPoint
   if (!parentGroup) {
     return {
       error: "Acquire the parent group before purchasing a specialization.",
-      progression,
-      warnings
-    };
-  }
-
-  const parentSkill = progression.skills.find(
-    (skill) => skill.skillId === specializationDefinition.skillId && skill.ranks > 0
-  );
-
-  if (!parentSkill) {
-    return {
-      error: "Acquire the parent skill before purchasing a specialization.",
-      progression,
-      warnings
-    };
-  }
-
-  const parentGroupLevel = calculateGroupLevel({
-    gms: parentGroup.gms,
-    ranks: parentGroup.ranks
-  });
-
-  if (parentGroupLevel < specializationDefinition.minimumGroupLevel) {
-    return {
-      error: "Group level 11 or higher is required before acquiring a specialization.",
       progression,
       warnings
     };
@@ -1644,7 +1734,6 @@ export function reviewChargenDraft(
 
   const errorSet = new Set<string>();
   const warningSet = new Set<string>();
-  const literacyPresent = hasLiteracy(progression);
 
   if (!input.profile) {
     errorSet.add("Select a rolled profile before finalizing.");
@@ -1684,22 +1773,21 @@ export function reviewChargenDraft(
       errorSet.add(`${definition.name} is not valid for ordinary-pool spending in this build.`);
     }
 
-    if (
-      definition.id !== LITERACY_SKILL_ID &&
-      definition.requiresLiteracy === "required" &&
-      skill.ranks > 0 &&
-      !literacyPresent
-    ) {
-      errorSet.add(`${definition.name} requires Literacy before finalization.`);
+    const dependencyEvaluation = evaluateSkillSelection({
+      content: input.content,
+      progression,
+      target: {
+        skill: definition,
+        targetType: "skill"
+      }
+    });
+
+    for (const reason of dependencyEvaluation.blockingReasons) {
+      errorSet.add(reason.message);
     }
 
-    if (
-      definition.id !== LITERACY_SKILL_ID &&
-      definition.requiresLiteracy === "recommended" &&
-      skill.ranks > 0 &&
-      !literacyPresent
-    ) {
-      warningSet.add(`${definition.name} recommends Literacy.`);
+    for (const message of getEvaluationMessages(dependencyEvaluation)) {
+      warningSet.add(message);
     }
   }
 
@@ -1711,50 +1799,22 @@ export function reviewChargenDraft(
       continue;
     }
 
-    const parentSkillDefinition = getSkillById(input.content, definition.skillId);
+    const specializationEvaluation = evaluateSkillSelection({
+      content: input.content,
+      progression,
+      target: {
+        specialization: definition,
+        targetType: "specialization"
+      }
+    });
 
-    if (!parentSkillDefinition || !parentSkillDefinition.allowsSpecializations) {
-      errorSet.add(`${definition.name} does not have a valid parent skill.`);
-      continue;
+    for (const reason of specializationEvaluation.blockingReasons) {
+      errorSet.add(reason.message);
     }
 
-    const parentSkill = progression.skills.find(
-      (skill) => skill.skillId === definition.skillId && skill.ranks > 0
-    );
-
-    if (!parentSkill) {
-      errorSet.add(`${definition.name} requires the parent skill to be present.`);
+    for (const message of getEvaluationMessages(specializationEvaluation)) {
+      warningSet.add(message);
     }
-
-    const parentGroup = selectBestSkillGroupContribution(
-      getSkillDefinitionGroupIds(parentSkillDefinition)
-        .map((groupId) => {
-          const group = draftView.groups.find((candidate) => candidate.groupId === groupId);
-          const definition = getSkillGroupDefinition(input.content, groupId);
-
-          if (!group) {
-            return null;
-          }
-
-          return {
-            groupId,
-            groupLevel: group.groupLevel,
-            name: group.name,
-            sortOrder: definition?.sortOrder ?? Number.MAX_SAFE_INTEGER
-          };
-        })
-        .filter(isDefined)
-    );
-
-    if (!parentGroup) {
-      errorSet.add(`${definition.name} requires the parent group to exist.`);
-      continue;
-    }
-
-    if (parentGroup.groupLevel < definition.minimumGroupLevel) {
-      errorSet.add(`${definition.name} requires group level ${definition.minimumGroupLevel} or higher.`);
-    }
-
   }
 
   return {

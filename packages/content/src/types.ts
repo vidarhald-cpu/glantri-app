@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import {
+  professionFamilyDefinitionSchema,
   professionDefinitionSchema,
   professionSkillMapSchema,
   skillDefinitionSchema,
@@ -13,6 +14,7 @@ export const canonicalContentSchema = z.object({
   skillGroups: z.array(skillGroupDefinitionSchema).default([]),
   skills: z.array(skillDefinitionSchema).default([]),
   specializations: z.array(skillSpecializationSchema).default([]),
+  professionFamilies: z.array(professionFamilyDefinitionSchema).default([]),
   professions: z.array(professionDefinitionSchema).default([]),
   professionSkills: z.array(professionSkillMapSchema).default([]),
   societyLevels: z.array(societyLevelAccessSchema).default([])

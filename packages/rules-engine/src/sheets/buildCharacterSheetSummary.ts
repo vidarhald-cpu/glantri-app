@@ -1,5 +1,6 @@
 import type {
   CharacterBuild,
+  ProfessionFamilyDefinition,
   ProfessionDefinition,
   ProfessionSkillMap,
   SkillDefinition,
@@ -17,6 +18,7 @@ import {
 import { calculateAdjustedStats } from "../stats/calculateAdjustedStats";
 
 interface CanonicalContentShape {
+  professionFamilies: ProfessionFamilyDefinition[];
   professions: ProfessionDefinition[];
   professionSkills: ProfessionSkillMap[];
   skillGroups: SkillGroupDefinition[];

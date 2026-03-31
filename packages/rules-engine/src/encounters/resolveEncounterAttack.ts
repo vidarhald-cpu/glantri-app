@@ -3,6 +3,7 @@ import type {
   EncounterAttackResolution,
   EncounterParticipant,
   EncounterSession,
+  ProfessionFamilyDefinition,
   ProfessionDefinition,
   ProfessionSkillMap,
   SkillDefinition,
@@ -17,6 +18,7 @@ import { buildCharacterSheetSummary } from "../sheets/buildCharacterSheetSummary
 import { validateEncounterParticipantDeclaration } from "./manageEncounterSession";
 
 interface CanonicalContentShape {
+  professionFamilies: ProfessionFamilyDefinition[];
   professions: ProfessionDefinition[];
   professionSkills: ProfessionSkillMap[];
   skillGroups: SkillGroupDefinition[];

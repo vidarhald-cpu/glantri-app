@@ -4,6 +4,7 @@ import type {
   CharacterSkill,
   CharacterSkillGroup,
   CharacterSpecialization,
+  ProfessionFamilyDefinition,
   ProfessionDefinition,
   ProfessionSkillMap,
   SkillDefinition,
@@ -29,6 +30,7 @@ import {
 const LITERACY_SKILL_ID = "literacy";
 
 interface CanonicalContentShape {
+  professionFamilies: ProfessionFamilyDefinition[];
   professions: ProfessionDefinition[];
   professionSkills: ProfessionSkillMap[];
   skillGroups: SkillGroupDefinition[];

@@ -1,4 +1,4 @@
-import type { AuthUser } from "@glantri/auth";
+import { hasRole, type AuthUser } from "@glantri/auth";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 
 import { AuthService } from "@glantri/database";
@@ -33,7 +33,7 @@ export function applyLocalCors(app: FastifyInstance): void {
     if (requestOrigin === allowedOrigin) {
       reply.header("access-control-allow-origin", allowedOrigin);
       reply.header("access-control-allow-credentials", "true");
-      reply.header("access-control-allow-methods", "GET,POST,OPTIONS");
+      reply.header("access-control-allow-methods", "GET,POST,PUT,OPTIONS");
       reply.header("access-control-allow-headers", "content-type");
       reply.header("vary", "origin");
     }
@@ -97,6 +97,27 @@ export async function requireAuthenticatedUser(
   if (!user) {
     await reply.code(401).send({
       error: "Authentication required."
+    });
+    return null;
+  }
+
+  return user;
+}
+
+export async function requireAdminUser(
+  request: FastifyRequest,
+  reply: FastifyReply,
+  authService = new AuthService()
+): Promise<AuthUser | null> {
+  const user = await requireAuthenticatedUser(request, reply, authService);
+
+  if (!user) {
+    return null;
+  }
+
+  if (!hasRole(user.roles, "admin")) {
+    await reply.code(403).send({
+      error: "Admin role required."
     });
     return null;
   }

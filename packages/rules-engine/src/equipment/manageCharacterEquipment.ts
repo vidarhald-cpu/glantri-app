@@ -3,6 +3,7 @@ import type {
   CharacterEquipmentItem,
   EquipmentItemType,
   EquipmentSlot,
+  ProfessionFamilyDefinition,
   ProfessionDefinition,
   ProfessionSkillMap,
   SkillDefinition,
@@ -19,6 +20,7 @@ import { calculateParryValue } from "../calculators/parry/calculateParryValue";
 import { buildChargenDraftView } from "../chargen/primaryAllocation";
 
 interface CanonicalContentShape {
+  professionFamilies: ProfessionFamilyDefinition[];
   professions: ProfessionDefinition[];
   professionSkills: ProfessionSkillMap[];
   skillGroups: SkillGroupDefinition[];

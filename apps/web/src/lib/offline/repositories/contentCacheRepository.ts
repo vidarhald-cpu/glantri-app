@@ -1,4 +1,5 @@
 import type { CanonicalContent } from "@glantri/content";
+import type { CachedContentRecord } from "../glantriDexie";
 
 import { localDb } from "../glantriDexie";
 
@@ -12,7 +13,11 @@ export class ContentCacheRepository {
     });
   }
 
-  async get(key: string) {
+  async get(key: string): Promise<CachedContentRecord | undefined> {
     return localDb.cachedContent.get(key);
+  }
+
+  async delete(key: string): Promise<void> {
+    await localDb.cachedContent.delete(key);
   }
 }
