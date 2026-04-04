@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useRouter } from "next/navigation";
 
 import {
   defaultCanonicalContent,
@@ -26,9 +27,6 @@ import {
   evaluateSkillSelection,
   finalizeChargenDraft,
   generateProfiles,
-  getFlexiblePoolTotal,
-  getOrdinaryPoolTotal,
-  normalizeChargenProgression,
   removeChargenPoint,
   removeSecondaryPoint,
   resolveEffectiveProfessionPackage,
@@ -44,8 +42,15 @@ import type { LocalCharacterRecord } from "../../../src/lib/offline/glantriDexie
 import {
   filterProfessionBrowseItems,
   filterSpecializationBrowseItems,
+  formatDependencyOwnershipSummary,
+  groupRowsBySkillType,
   getSkillAccessSourceLabels,
+  getPlayerFacingSkillBucket,
+  getPlayerFacingSkillBucketDefinitions,
+  mergeSkillBrowseRowsBySkillId,
   matchesSkillBrowseFilters,
+  type PlayerFacingSkillBucketDefinition,
+  type SkillBrowseTypeFilter,
   type ProfessionBrowseItem,
   type SkillVisibilityFilter
 } from "../../../src/lib/chargen/chargenBrowse";
@@ -61,8 +66,6 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4
 const chargenSessionRepository = new ChargenSessionRepository();
 const contentCacheRepository = new ContentCacheRepository();
 const localCharacterRepository = new LocalCharacterRepository();
-
-const rolledProfiles = generateProfiles({});
 const UNIVERSAL_SOCIAL_BANDS = [1, 2, 3, 4] as const;
 
 interface ContentResponse {
@@ -83,11 +86,15 @@ interface SocietyOption {
 interface ProfessionBrowseCard extends ProfessionBrowseItem {
   coreGroupNames: string[];
   coreReachableSkillNames: string[];
+  favoredDirectOnlySkillNames: string[];
   favoredGroupNames: string[];
   favoredReachableSkillNames: string[];
   familyDescription?: string;
+  hasLiteracyFoundation: boolean;
+  literacyGatedReachableSkillCount: number;
   normalAccessGroupNames: string[];
   profession: ProfessionDefinition;
+  subtypeName: string;
   summary: {
     totalEffectiveCoreReachableSkills: number;
     totalEffectiveFavoredReachableSkills: number;
@@ -95,7 +102,11 @@ interface ProfessionBrowseCard extends ProfessionBrowseItem {
 }
 
 interface RuleStatusItem {
+  code?: string;
+  currentLevel?: number;
   message: string;
+  requiredLevel?: number;
+  skillId?: string;
   tone: RuleStatusTone;
 }
 
@@ -105,6 +116,12 @@ interface SkillBrowseRow {
   metrics: SkillAllocationMetrics;
   skill: SkillDefinition;
   sourceLabels: string[];
+}
+
+interface PlayerFacingNormalAccessSection {
+  definition: PlayerFacingSkillBucketDefinition;
+  directRows: SkillBrowseRow[];
+  groups: CanonicalContent["skillGroups"];
 }
 
 function getRowActionFeedbackKey(targetId: string, targetType: RowActionTargetType): string {
@@ -237,6 +254,24 @@ function formatPreviewList(values: string[]): string {
   return values.length > 0 ? values.join(", ") : "None";
 }
 
+function formatSocietyBandLabels(society: SocietyOption): string {
+  return [1, 2, 3, 4]
+    .map((band) => {
+      const access = society.socialBands[band as SocialBand];
+      return access ? `${band}: ${access.socialClass}` : null;
+    })
+    .filter((value) => value !== null)
+    .join(" • ");
+}
+
+function getSkillTierLabel(skill: Pick<SkillDefinition, "category">): string {
+  return skill.category === "ordinary" ? "Primary" : "Secondary";
+}
+
+function getSkillTierTone(skill: Pick<SkillDefinition, "category">): CSSProperties {
+  return skill.category === "ordinary" ? getBadgeStyle() : getBadgeStyle({ muted: true });
+}
+
 function getRuleStatusColor(tone: RuleStatusTone): string {
   switch (tone) {
     case "blocked":
@@ -260,21 +295,51 @@ function getBadgeStyle(input?: { muted?: boolean }): CSSProperties {
 }
 
 function getRuleStatusItems(input: {
-  advisories: { message: string }[];
-  blockingReasons: { message: string }[];
-  warnings: { message: string }[];
+  advisories: {
+    code?: string;
+    currentLevel?: number;
+    message: string;
+    requiredLevel?: number;
+    skillId?: string;
+  }[];
+  blockingReasons: {
+    code?: string;
+    currentLevel?: number;
+    message: string;
+    requiredLevel?: number;
+    skillId?: string;
+  }[];
+  warnings: {
+    code?: string;
+    currentLevel?: number;
+    message: string;
+    requiredLevel?: number;
+    skillId?: string;
+  }[];
 }): RuleStatusItem[] {
   return [
     ...input.blockingReasons.map((reason) => ({
+      code: reason.code,
+      currentLevel: reason.currentLevel,
       message: reason.message,
+      requiredLevel: reason.requiredLevel,
+      skillId: reason.skillId,
       tone: "blocked" as const
     })),
     ...input.warnings.map((warning) => ({
+      code: warning.code,
+      currentLevel: warning.currentLevel,
       message: warning.message,
+      requiredLevel: warning.requiredLevel,
+      skillId: warning.skillId,
       tone: "warning" as const
     })),
     ...input.advisories.map((advisory) => ({
+      code: advisory.code,
+      currentLevel: advisory.currentLevel,
       message: advisory.message,
+      requiredLevel: advisory.requiredLevel,
+      skillId: advisory.skillId,
       tone: "advisory" as const
     }))
   ];
@@ -449,27 +514,34 @@ function getSkillAllocationMetrics(input: {
 }
 
 export default function ChargenWizard() {
+  const router = useRouter();
   const [characterName, setCharacterName] = useState("");
   const [content, setContent] = useState<CanonicalContent>(defaultCanonicalContent);
   const [currentUser, setCurrentUser] = useState<AuthUser | null>();
   const [feedback, setFeedback] = useState<string[]>([]);
+  const [hasStartedChargen, setHasStartedChargen] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const [progression, setProgression] = useState<CharacterProgression>(createChargenProgression());
   const [rowActionFeedback, setRowActionFeedback] = useState<Record<string, string>>({});
+  const [rolledProfiles, setRolledProfiles] = useState<RolledCharacterProfile[]>([]);
   const [savedCharacters, setSavedCharacters] = useState<LocalCharacterRecord[]>([]);
   const [selectedProfileId, setSelectedProfileId] = useState<string>();
   const [selectedSocietyId, setSelectedSocietyId] = useState<string>();
   const [selectedProfessionId, setSelectedProfessionId] = useState<string>();
   const [showRolledProfileOptions, setShowRolledProfileOptions] = useState(true);
+  const [showSocietyChooser, setShowSocietyChooser] = useState(true);
+  const [showProfessionChooser, setShowProfessionChooser] = useState(true);
   const [expandedProfessionId, setExpandedProfessionId] = useState<string>();
   const [professionFamilyFilter, setProfessionFamilyFilter] = useState("all");
   const [professionSearch, setProfessionSearch] = useState("");
-  const [expandedSkillGroups, setExpandedSkillGroups] = useState<string[]>([]);
+  const [expandedAllocationSections, setExpandedAllocationSections] = useState<string[]>([]);
+  const [expandedSkillDetails, setExpandedSkillDetails] = useState<string[]>([]);
   const [showOtherSkills, setShowOtherSkills] = useState(false);
   const [showSpecializations, setShowSpecializations] = useState(false);
   const [skillVisibilityFilter, setSkillVisibilityFilter] =
     useState<SkillVisibilityFilter>("all");
   const [skillSearch, setSkillSearch] = useState("");
+  const [skillTypeFilter, setSkillTypeFilter] = useState<SkillBrowseTypeFilter>("all");
   const [specializationSearch, setSpecializationSearch] = useState("");
   const [showAllSpecializations, setShowAllSpecializations] = useState(false);
 
@@ -503,9 +575,8 @@ export default function ChargenWizard() {
   const selectedSocietyBand = selectedSociety ? selectedSocialBand : undefined;
   const availableProfessions = getAllowedProfessions(content.professions, selectedSocietyAccess);
   const selectedProfession = availableProfessions.find((item) => item.id === selectedProfessionId);
-  const ordinaryPoolTotal = getOrdinaryPoolTotal();
-  const flexiblePoolTotal = getFlexiblePoolTotal(selectedProfile);
   const sortedSkillGroups = sortSkillGroups(content.skillGroups);
+  const playerFacingSkillBucketDefinitions = getPlayerFacingSkillBucketDefinitions();
   const availableProfessionCards: ProfessionBrowseCard[] = [...availableProfessions]
     .map((profession) => {
       const professionAccess =
@@ -521,6 +592,20 @@ export default function ChargenWizard() {
         content,
         subtypeId: profession.id
       });
+      const coreReachableSkills = professionPackage.core.finalEffectiveReachableSkillIds
+        .map((skillId) => content.skills.find((skill) => skill.id === skillId))
+        .filter((skill): skill is SkillDefinition => skill !== undefined);
+      const favoredReachableSkills = professionPackage.favored.finalEffectiveReachableSkillIds
+        .map((skillId) => content.skills.find((skill) => skill.id === skillId))
+        .filter((skill): skill is SkillDefinition => skill !== undefined);
+      const literacyGatedReachableSkillCount = [
+        ...coreReachableSkills,
+        ...favoredReachableSkills
+      ].filter((skill) => skill.requiresLiteracy !== "no").length;
+      const hasLiteracyFoundation =
+        professionPackage.core.finalEffectiveReachableSkillIds.includes("literacy") ||
+        professionPackage.favored.finalEffectiveReachableSkillIds.includes("literacy") ||
+        literacyGatedReachableSkillCount > 0;
 
       return {
         coreGroupNames: professionPackage.core.finalEffectiveGroupIds.map(
@@ -531,6 +616,9 @@ export default function ChargenWizard() {
         ),
         description: profession.description,
         familyDescription: professionPackage.family.description,
+        favoredDirectOnlySkillNames: professionPackage.favored.directOnlySkillIds.map(
+          (skillId) => content.skills.find((skill) => skill.id === skillId)?.name ?? skillId
+        ),
         familyName: professionPackage.family.name,
         favoredGroupNames: professionPackage.favored.finalEffectiveGroupIds.map(
           (groupId) => content.skillGroups.find((group) => group.id === groupId)?.name ?? groupId
@@ -538,13 +626,17 @@ export default function ChargenWizard() {
         favoredReachableSkillNames: professionPackage.favored.finalEffectiveReachableSkillIds.map(
           (skillId) => content.skills.find((skill) => skill.id === skillId)?.name ?? skillId
         ),
+        hasLiteracyFoundation,
         id: profession.id,
+        literacyGatedReachableSkillCount,
         name: profession.name,
         normalAccessGroupNames: sortedSkillGroups
           .filter((group) => professionAccess?.normalSkillGroupIds.includes(group.id))
           .map((group) => group.name),
         profession,
         summary: professionPackage.summary
+        ,
+        subtypeName: profession.name
       };
     })
     .sort((left, right) => {
@@ -563,6 +655,9 @@ export default function ChargenWizard() {
     search: professionSearch
   });
   const activeProfessionPreviewId = expandedProfessionId ?? selectedProfessionId;
+  const selectedProfessionCard = availableProfessionCards.find(
+    (profession) => profession.id === selectedProfessionId
+  );
   const skillAllocationContext =
     selectedProfessionId && selectedSocietyId && selectedSocietyBand !== undefined
       ? {
@@ -627,7 +722,11 @@ export default function ChargenWizard() {
     )
   );
   const otherSkills = sortSkills(
-    content.skills.filter((skill) => skillDisplayGroupIds.get(skill.id) === undefined)
+    content.skills.filter(
+      (skill) =>
+        skillDisplayGroupIds.get(skill.id) === undefined &&
+        !skillAccess.normalSkillIds.includes(skill.id)
+    )
   );
   const skillRowsById = new Map<string, SkillBrowseRow>(
     sortSkills(content.skills).map((skill) => {
@@ -658,18 +757,9 @@ export default function ChargenWizard() {
       ];
     })
   );
-  const visibleAdditionalAllowedSkillRows = additionalAllowedSkills
+  const additionalAllowedSkillRows = additionalAllowedSkills
     .map((skill) => skillRowsById.get(skill.id))
-    .filter((row): row is SkillBrowseRow => row !== undefined)
-    .filter((row) =>
-      matchesSkillBrowseFilters({
-        isAllowed: row.evaluation.isAllowed,
-        isOwned: row.metrics.totalXp > 0,
-        name: row.skill.name,
-        search: skillSearch,
-        visibilityFilter: skillVisibilityFilter
-      })
-    );
+    .filter((row): row is SkillBrowseRow => row !== undefined);
   const visibleOtherSkillRows = otherSkills
     .map((skill) => skillRowsById.get(skill.id))
     .filter((row): row is SkillBrowseRow => row !== undefined)
@@ -679,11 +769,59 @@ export default function ChargenWizard() {
         isOwned: row.metrics.totalXp > 0,
         name: row.skill.name,
         search: skillSearch,
+        skillType: getPlayerFacingSkillBucket(row.skill),
+        skillTypeFilter,
         visibilityFilter: skillVisibilityFilter
       })
     );
-  const skillFilterActive =
-    skillSearch.trim().length > 0 || skillVisibilityFilter !== "all";
+  const otherSkillFilterActive =
+    skillSearch.trim().length > 0 ||
+    skillVisibilityFilter !== "all" ||
+    skillTypeFilter !== "all";
+  const otherSkillTypeOptions = playerFacingSkillBucketDefinitions.filter(
+    (definition) =>
+      definition.id !== "special-access" &&
+      otherSkills.some((skill) => getPlayerFacingSkillBucket(skill) === definition.id)
+  );
+  const normalAccessSections: PlayerFacingNormalAccessSection[] = playerFacingSkillBucketDefinitions
+    .map((definition) => ({
+      definition,
+      directRows: mergeSkillBrowseRowsBySkillId(
+        additionalAllowedSkillRows.filter(
+          (row) =>
+            getPlayerFacingSkillBucket(row.skill, {
+              preferDirectProfession:
+                skillAccess.skillSources[row.skill.id]?.includes("profession-skill") ?? false
+            }) === definition.id
+        )
+      ),
+      groups: normalSkillGroups.filter(
+        (group) =>
+          getPlayerFacingSkillBucket(
+            {
+              id: group.id,
+              groupId: group.id,
+              groupIds: [group.id]
+            },
+            {
+              preferDirectProfession: false
+            }
+          ) === definition.id
+      )
+    }))
+    .filter((section) => section.directRows.length > 0 || section.groups.length > 0);
+  const coreProfessionSections = normalAccessSections.filter(
+    (section) => section.definition.id !== "special-access"
+  );
+  const specialAccessSection =
+    normalAccessSections.find((section) => section.definition.id === "special-access") ?? null;
+  const defaultExpandedAllocationSections = useMemo(
+    () => [
+      ...(coreProfessionSections.length > 0 ? ["core-profession-skills"] : []),
+      ...(specialAccessSection ? ["special-access"] : [])
+    ],
+    [coreProfessionSections.length, Boolean(specialAccessSection)]
+  );
   const playerSkillTableRows = sortSkills(content.skills)
     .map((skill) => {
       const skillMetrics = getSkillAllocationMetrics({
@@ -700,6 +838,7 @@ export default function ChargenWizard() {
       return {
         avgStats: skillMetrics.avgStats,
         literacyWarning: skillMetrics.literacyWarning,
+        skillType: getPlayerFacingSkillBucket(skill),
         skillGroupXp: skillMetrics.groupXp,
         skillId: skill.id,
         skillName: skill.name,
@@ -710,13 +849,19 @@ export default function ChargenWizard() {
       };
     })
     .filter((skill): skill is NonNullable<typeof skill> => skill !== null);
+  const groupedPlayerSkillTableRows = groupRowsBySkillType(playerSkillTableRows);
   const specializationRows = [...content.specializations]
     .sort((left, right) => left.sortOrder - right.sortOrder)
     .map((specialization) => {
       const parentSkill = content.skills.find((skill) => skill.id === specialization.skillId);
-      const purchasedParentSkill = progression.skills.find(
-        (skill) => skill.skillId === specialization.skillId
-      );
+      const parentMetrics = parentSkill
+        ? getSkillAllocationMetrics({
+            content,
+            draftView,
+            profile: selectedProfile,
+            skill: parentSkill
+          })
+        : undefined;
       const specializationView = draftView.specializations.find(
         (item) => item.specializationId === specialization.id
       );
@@ -731,7 +876,7 @@ export default function ChargenWizard() {
 
       return {
         evaluation,
-        parentSkillLevel: purchasedParentSkill?.ranks ?? 0,
+        parentSkillLevel: parentMetrics?.totalXp ?? 0,
         parentSkillName: parentSkill?.name ?? specialization.skillId,
         secondaryRanks: specializationView?.secondaryRanks ?? 0,
         specialization,
@@ -751,9 +896,8 @@ export default function ChargenWizard() {
     let cancelled = false;
 
     async function hydrate() {
-      const [cachedContent, savedDraft, existingCharacters, sessionUser] = await Promise.all([
+      const [cachedContent, existingCharacters, sessionUser] = await Promise.all([
         contentCacheRepository.get(CONTENT_CACHE_KEY),
-        chargenSessionRepository.get(SESSION_ID),
         localCharacterRepository.list(),
         getCurrentSessionUser().catch(() => null)
       ]);
@@ -772,32 +916,6 @@ export default function ChargenWizard() {
 
       setSavedCharacters(existingCharacters);
       setCurrentUser(sessionUser);
-
-      if (savedDraft) {
-        setSelectedProfileId(savedDraft.selectedProfile?.id);
-        setShowRolledProfileOptions(!savedDraft.selectedProfile?.id);
-        setSelectedProfessionId(savedDraft.selectedProfessionId);
-        setSelectedSocietyId(savedDraft.selectedSocietyId);
-
-        const normalized = normalizeChargenProgression(savedDraft.progression);
-        const hasSavedAllocation =
-          normalized.primaryPoolSpent > 0 ||
-          normalized.secondaryPoolSpent > 0 ||
-          normalized.skillGroups.length > 0 ||
-          normalized.skills.length > 0 ||
-          normalized.specializations.length > 0;
-
-        if (savedDraft.selectedProfessionId && !hasSavedAllocation) {
-          setProgression(
-            applyProfessionGrants({
-              content: startingContent,
-              professionId: savedDraft.selectedProfessionId
-            })
-          );
-        } else {
-          setProgression(normalized);
-        }
-      }
 
       setHydrated(true);
 
@@ -839,6 +957,7 @@ export default function ChargenWizard() {
 
     if (societies.length === 1) {
       setSelectedSocietyId(societies[0].id);
+      setShowSocietyChooser(false);
     }
   }, [selectedSocietyId, societies]);
 
@@ -849,6 +968,7 @@ export default function ChargenWizard() {
 
     if (availableProfessions.length === 1) {
       setSelectedProfessionId(availableProfessions[0].id);
+      setShowProfessionChooser(false);
       setProgression(
         applyProfessionGrants({
           content,
@@ -865,7 +985,7 @@ export default function ChargenWizard() {
   ]);
 
   useEffect(() => {
-    if (!hydrated) {
+    if (!hydrated || !hasStartedChargen) {
       return;
     }
 
@@ -889,10 +1009,10 @@ export default function ChargenWizard() {
   }, [availableProfessions, expandedProfessionId]);
 
   useEffect(() => {
-    setExpandedSkillGroups([]);
+    setExpandedAllocationSections(defaultExpandedAllocationSections);
     setShowOtherSkills(false);
     setShowSpecializations(false);
-  }, [selectedProfessionId]);
+  }, [defaultExpandedAllocationSections, selectedProfessionId]);
 
   useEffect(() => {
     if (!hydrated) {
@@ -913,6 +1033,7 @@ export default function ChargenWizard() {
         console.error(error);
       });
   }, [
+    hasStartedChargen,
     hydrated,
     progression,
     selectedProfessionId,
@@ -924,14 +1045,18 @@ export default function ChargenWizard() {
 
   function handleSocietyChange(societyId: string) {
     setSelectedSocietyId(societyId);
+    setShowSocietyChooser(false);
     setSelectedProfessionId(undefined);
+    setShowProfessionChooser(true);
     setProgression(createChargenProgression());
     setRowActionFeedback({});
+    setExpandedSkillDetails([]);
     setFeedback(["Changing society resets profession access and point allocation."]);
   }
 
   function handleProfessionChange(professionId: string) {
     setSelectedProfessionId(professionId);
+    setShowProfessionChooser(false);
     setExpandedProfessionId(professionId);
     setProgression(
       applyProfessionGrants({
@@ -940,6 +1065,7 @@ export default function ChargenWizard() {
       })
     );
     setRowActionFeedback({});
+    setExpandedSkillDetails([]);
     setFeedback(["Profession access loaded. Skill allocation, education, and review are ready."]);
   }
 
@@ -947,11 +1073,19 @@ export default function ChargenWizard() {
     setExpandedProfessionId((current) => (current === professionId ? undefined : professionId));
   }
 
-  function toggleSkillGroup(groupId: string) {
-    setExpandedSkillGroups((current) =>
-      current.includes(groupId)
-        ? current.filter((candidate) => candidate !== groupId)
-        : [...current, groupId]
+  function toggleSkillDetails(skillId: string) {
+    setExpandedSkillDetails((current) =>
+      current.includes(skillId)
+        ? current.filter((candidate) => candidate !== skillId)
+        : [...current, skillId]
+    );
+  }
+
+  function toggleAllocationSection(sectionId: string) {
+    setExpandedAllocationSections((current) =>
+      current.includes(sectionId)
+        ? current.filter((candidate) => candidate !== sectionId)
+        : [...current, sectionId]
     );
   }
 
@@ -959,6 +1093,33 @@ export default function ChargenWizard() {
     setSelectedProfileId(profileId);
     setShowRolledProfileOptions(false);
     setRowActionFeedback({});
+  }
+
+  async function handleStartChargen() {
+    await chargenSessionRepository.delete(SESSION_ID);
+
+    setHasStartedChargen(true);
+    setRolledProfiles(generateProfiles({}));
+    setCharacterName("");
+    setFeedback([]);
+    setProgression(createChargenProgression());
+    setRowActionFeedback({});
+    setSelectedProfileId(undefined);
+    setSelectedProfessionId(undefined);
+    setSelectedSocietyId(undefined);
+    setShowRolledProfileOptions(true);
+    setShowSocietyChooser(true);
+    setShowProfessionChooser(true);
+    setExpandedProfessionId(undefined);
+    setExpandedAllocationSections([]);
+    setExpandedSkillDetails([]);
+    setShowOtherSkills(false);
+    setShowSpecializations(false);
+    setSkillVisibilityFilter("all");
+    setSkillSearch("");
+    setSkillTypeFilter("all");
+    setSpecializationSearch("");
+    setShowAllSpecializations(false);
   }
 
   function handleAllocate(targetId: string, targetType: "group" | "skill") {
@@ -1127,6 +1288,213 @@ export default function ChargenWizard() {
     ]);
   }
 
+  function renderSkillRowsTable(input: {
+    emptyMessage: string;
+    rows: SkillBrowseRow[];
+    showOutsideNormalAccessBadge?: boolean;
+    showTypeBadge?: boolean;
+  }) {
+    return (
+      <div
+        style={{
+          border: "1px solid #e7e2d7",
+          borderRadius: 10,
+          overflowX: "auto"
+        }}
+      >
+        <div
+          style={{
+            borderBottom: "1px solid #e7e2d7",
+            color: "#5e5a50",
+            display: "grid",
+            fontSize: "0.8rem",
+            gap: "0.75rem",
+            gridTemplateColumns:
+              "minmax(180px, 2fr) repeat(4, minmax(72px, 84px)) minmax(150px, 1fr)",
+            padding: "0.75rem 1rem"
+          }}
+        >
+          <strong>Skill</strong>
+          <strong>Group XP</strong>
+          <strong>Ordinary</strong>
+          <strong>Flexible</strong>
+          <strong>Total XP</strong>
+          <strong>Actions</strong>
+        </div>
+
+        {input.rows.length > 0 ? (
+          input.rows.map((row) => {
+            const ruleStatusItems = getRuleStatusItems(row.evaluation);
+            const rowFeedback = rowActionFeedback[getRowActionFeedbackKey(row.skill.id, "skill")];
+            const skillType = getPlayerFacingSkillBucket(row.skill);
+            const skillTypeLabel =
+              playerFacingSkillBucketDefinitions.find((definition) => definition.id === skillType)
+                ?.label ?? skillType;
+            const isDetailOpen = expandedSkillDetails.includes(row.skill.id);
+            const dependencySummaries = row.skill.dependencies.map((dependency) => {
+              const dependencyRow = skillRowsById.get(dependency.skillId);
+              const dependencySkill = content.skills.find((skill) => skill.id === dependency.skillId);
+
+              return {
+                dependency,
+                dependencyName: dependencySkill?.name ?? dependency.skillId,
+                dependencyRow
+              };
+            });
+
+            return (
+              <div
+                key={row.skill.id}
+                style={{
+                  borderTop: "1px solid #f0eadf",
+                  display: "grid",
+                  gap: "0.35rem",
+                  padding: "0.75rem 1rem"
+                }}
+              >
+                <div
+                  style={{
+                    alignItems: "center",
+                    display: "grid",
+                    gap: "0.75rem",
+                    gridTemplateColumns:
+                      "minmax(180px, 2fr) repeat(4, minmax(72px, 84px)) minmax(150px, 1fr)"
+                  }}
+                >
+                  <div style={{ display: "grid", gap: "0.35rem" }}>
+                    <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+                      <span>{row.skill.name}</span>
+                      <span style={getSkillTierTone(row.skill)}>{getSkillTierLabel(row.skill)}</span>
+                      {row.skill.id === "literacy" && selectedProfessionCard?.hasLiteracyFoundation ? (
+                        <span style={getBadgeStyle()}>Foundation skill</span>
+                      ) : null}
+                    </div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "0.35rem" }}>
+                      {input.showTypeBadge ? (
+                        <span key={`${row.skill.id}-${skillType}`} style={getBadgeStyle({ muted: true })}>
+                          {skillTypeLabel}
+                        </span>
+                      ) : null}
+                      {input.showOutsideNormalAccessBadge ? (
+                        <span style={getBadgeStyle({ muted: true })}>Outside normal access</span>
+                      ) : null}
+                      <button onClick={() => toggleSkillDetails(row.skill.id)} type="button">
+                        {isDetailOpen ? "Hide details" : "Details"}
+                      </button>
+                    </div>
+                  </div>
+                  <div>{row.metrics.groupXp}</div>
+                  <div>{row.metrics.ordinaryXp}</div>
+                  <div>{row.metrics.flexibleXp}</div>
+                  <div>{row.metrics.totalXp}</div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+                    <button
+                      aria-label={`Add ${row.skill.name}`}
+                      disabled={!skillAllocationContext || !row.evaluation.isAllowed}
+                      onClick={() => handleAllocate(row.skill.id, "skill")}
+                      type="button"
+                    >
+                      +
+                    </button>
+                    <button
+                      aria-label={`Remove ${row.skill.name}`}
+                      disabled={!skillAllocationContext}
+                      onClick={() => handleRemoveAllocation(row.skill.id, "skill")}
+                      type="button"
+                    >
+                      -
+                    </button>
+                  </div>
+                </div>
+                {ruleStatusItems.map((status) => (
+                  <div
+                    key={`${row.skill.id}-${status.tone}-${status.message}`}
+                    role="status"
+                    style={{
+                      color: getRuleStatusColor(status.tone),
+                      fontSize: "0.85rem"
+                    }}
+                  >
+                    {status.message}
+                  </div>
+                ))}
+                {isDetailOpen ? (
+                  <div
+                    style={{
+                      background: "#f6f5ef",
+                      border: "1px solid #e7e2d7",
+                      borderRadius: 8,
+                      display: "grid",
+                      gap: "0.5rem",
+                      padding: "0.75rem"
+                    }}
+                  >
+                    <div style={{ color: "#4a4f45", fontSize: "0.9rem" }}>
+                      {row.skill.shortDescription ?? row.skill.description ?? "No short description yet."}
+                    </div>
+                    {row.skill.description &&
+                    row.skill.description !== row.skill.shortDescription ? (
+                      <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
+                        {row.skill.description}
+                      </div>
+                    ) : null}
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+                      <span style={getBadgeStyle({ muted: true })}>
+                        Direct ranks {row.metrics.skillXp}
+                      </span>
+                      <span style={getBadgeStyle({ muted: true })}>
+                        Group-derived value {row.metrics.groupXp}
+                      </span>
+                      <span style={getBadgeStyle({ muted: true })}>
+                        Effective total {row.metrics.totalXp}
+                      </span>
+                    </div>
+                    <div style={{ color: "#5e5a50", fontSize: "0.82rem" }}>
+                      Access:{" "}
+                      {row.sourceLabels.length > 0
+                        ? row.sourceLabels.join(", ")
+                        : input.showOutsideNormalAccessBadge
+                          ? "Outside normal access"
+                          : "Current section access"}
+                    </div>
+                    {dependencySummaries.length > 0 ? (
+                      <div style={{ display: "grid", gap: "0.25rem" }}>
+                        <strong style={{ fontSize: "0.85rem" }}>Prerequisites and support</strong>
+                        {dependencySummaries.map(({ dependency, dependencyName, dependencyRow }) => (
+                          <div key={`${row.skill.id}-${dependency.skillId}`} style={{ fontSize: "0.82rem" }}>
+                            {`${dependency.strength}. ${formatDependencyOwnershipSummary({
+                              dependencyName,
+                              directSkillLevel: dependencyRow?.metrics.skillXp ?? 0,
+                              effectiveSkillLevel: dependencyRow?.metrics.totalXp ?? 0
+                            })}`}
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+                    {row.skill.requiresLiteracy !== "no" ? (
+                      <div style={{ color: "#5e5a50", fontSize: "0.82rem" }}>
+                        {row.skill.requiresLiteracy === "required"
+                          ? "Literacy is functionally required for full use of this skill."
+                          : "Literacy is recommended for fuller use of this skill."}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+                {rowFeedback ? (
+                  <div role="status" style={{ color: "#7a4b00", fontSize: "0.85rem" }}>
+                    {rowFeedback}
+                  </div>
+                ) : null}
+              </div>
+            );
+          })
+        ) : (
+          <div style={{ padding: "1rem" }}>{input.emptyMessage}</div>
+        )}
+      </div>
+    );
+  }
+
   async function handleFinalize() {
     if (!selectedSocietyId || selectedSocialBand === undefined) {
       return;
@@ -1155,19 +1523,7 @@ export default function ChargenWizard() {
       creatorId: currentUser?.id
     });
     await chargenSessionRepository.delete(SESSION_ID);
-
-    setSavedCharacters(await localCharacterRepository.list());
-    setCharacterName("");
-    setSelectedProfileId(undefined);
-    setSelectedProfessionId(undefined);
-    setSelectedSocietyId(societies.length === 1 ? societies[0].id : undefined);
-    setShowRolledProfileOptions(true);
-    setProgression(createChargenProgression());
-    setRowActionFeedback({});
-    setFeedback([
-      `Saved local character record: ${result.build.name}.`,
-      ...result.warnings
-    ]);
+    router.push("/characters");
   }
 
   return (
@@ -1192,8 +1548,48 @@ export default function ChargenWizard() {
         </div>
       ) : null}
 
+      {!hasStartedChargen ? (
+        <section
+          style={{
+            background: "#fbfaf5",
+            border: "1px solid #d9ddd8",
+            borderRadius: 12,
+            display: "grid",
+            gap: "0.75rem",
+            padding: "1rem"
+          }}
+        >
+          <div style={{ fontSize: "0.95rem" }}>
+            Start a new character by rolling the full set of stats.
+          </div>
+          <div>
+            <button onClick={() => void handleStartChargen()} type="button">
+              Roll all dice
+            </button>
+          </div>
+        </section>
+      ) : null}
+
+      {hasStartedChargen ? (
+        <>
+
       <section style={{ display: "grid", gap: "0.75rem" }}>
-        <h2 style={{ margin: 0 }}>1. Pick a rolled profile</h2>
+        <div
+          style={{
+            alignItems: "center",
+            display: "flex",
+            gap: "0.75rem",
+            justifyContent: "space-between"
+          }}
+        >
+          <h2 style={{ margin: 0 }}>1. Stats</h2>
+          <button
+            onClick={() => setShowRolledProfileOptions((current) => !current)}
+            type="button"
+          >
+            {showRolledProfileOptions ? "Collapse stats" : "Expand stats"}
+          </button>
+        </div>
         {selectedProfile && !showRolledProfileOptions ? (
           <div
             style={{
@@ -1215,7 +1611,7 @@ export default function ChargenWizard() {
             >
               <strong>{selectedProfile.label}</strong>
               <button onClick={() => setShowRolledProfileOptions(true)} type="button">
-                Change roll
+                Expand stats
               </button>
             </div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: "1rem" }}>
@@ -1224,7 +1620,7 @@ export default function ChargenWizard() {
               <div>Social band {formatProfileSocialBand(selectedProfile)}</div>
             </div>
           </div>
-        ) : (
+        ) : showRolledProfileOptions ? (
           <div style={{ display: "grid", gap: "0.75rem" }}>
             {sortedRolledProfiles.map(({ profile, summary }) => {
               return (
@@ -1287,6 +1683,18 @@ export default function ChargenWizard() {
               );
             })}
           </div>
+        ) : (
+          <div
+            style={{
+              background: "#f6f5ef",
+              border: "1px solid #d9ddd8",
+              borderRadius: 12,
+              color: "#5e5a50",
+              padding: "1rem"
+            }}
+          >
+            Expand stats to review the rolled profiles.
+          </div>
         )}
       </section>
 
@@ -1296,44 +1704,93 @@ export default function ChargenWizard() {
           Choose the society used for this character. Society determines the class labels and later
           skill, education, and profession access.
         </div>
-        <div style={{ display: "grid", gap: "0.75rem" }}>
-          {societies.map((society) => (
-            <label
-              key={society.id}
+        {selectedSociety && !showSocietyChooser ? (
+          <div
+            style={{
+              background: "#f6f5ef",
+              border: "1px solid #d9ddd8",
+              borderRadius: 12,
+              display: "grid",
+              gap: "0.75rem",
+              padding: "1rem"
+            }}
+          >
+            <div
               style={{
-                border: "1px solid #d9ddd8",
-                borderRadius: 12,
-                cursor: selectedProfile ? "pointer" : "not-allowed",
-                padding: "1rem"
+                alignItems: "start",
+                display: "grid",
+                gap: "0.75rem",
+                gridTemplateColumns: "minmax(0, 1fr) auto"
               }}
             >
-              <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-                <input
-                  checked={selectedSocietyId === society.id}
-                  disabled={!selectedProfile}
-                  name="society"
-                  onChange={() => handleSocietyChange(society.id)}
-                  type="radio"
-                />
-                <strong>{society.name}</strong>
+              <div style={{ display: "grid", gap: "0.35rem" }}>
+                <strong>{selectedSociety.name}</strong>
+                <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
+                  {selectedSociety.notes ?? "Selected society for social class and access."}
+                </div>
               </div>
-              <div style={{ marginTop: "0.5rem" }}>
-                Band labels:{" "}
-                {[1, 2, 3, 4]
-                  .map((band) => {
-                    const access = society.socialBands[band as SocialBand];
-                    return access ? `${band}: ${access.socialClass}` : null;
-                  })
-                  .filter((value) => value !== null)
-                  .join(" • ")}
-              </div>
-              {societies.length === 1 ? (
-                <div style={{ marginTop: "0.25rem" }}>Only available society at present.</div>
+              <button
+                disabled={!selectedProfile}
+                onClick={() => setShowSocietyChooser(true)}
+                type="button"
+              >
+                Change society
+              </button>
+            </div>
+            <div style={{ display: "grid", gap: "0.35rem", fontSize: "0.9rem" }}>
+              <div>Band labels: {formatSocietyBandLabels(selectedSociety)}</div>
+              {selectedSociety.notes ? (
+                <div>Historical reference: {selectedSociety.notes}</div>
               ) : null}
-              {society.notes ? <div style={{ marginTop: "0.25rem" }}>{society.notes}</div> : null}
-            </label>
-          ))}
-        </div>
+              {societies.length === 1 ? <div>Only available society at present.</div> : null}
+            </div>
+          </div>
+        ) : (
+          <div style={{ display: "grid", gap: "0.75rem" }}>
+            {selectedSociety ? (
+              <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                <button
+                  disabled={!selectedProfile}
+                  onClick={() => setShowSocietyChooser(false)}
+                  type="button"
+                >
+                  Collapse selected summary
+                </button>
+              </div>
+            ) : null}
+            {societies.map((society) => (
+              <label
+                key={society.id}
+                style={{
+                  border: "1px solid #d9ddd8",
+                  borderRadius: 12,
+                  cursor: selectedProfile ? "pointer" : "not-allowed",
+                  padding: "1rem"
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                  <input
+                    checked={selectedSocietyId === society.id}
+                    disabled={!selectedProfile}
+                    name="society"
+                    onChange={() => handleSocietyChange(society.id)}
+                    type="radio"
+                  />
+                  <strong>{society.name}</strong>
+                </div>
+                <div style={{ marginTop: "0.5rem" }}>
+                  Band labels: {formatSocietyBandLabels(society)}
+                </div>
+                {societies.length === 1 ? (
+                  <div style={{ marginTop: "0.25rem" }}>Only available society at present.</div>
+                ) : null}
+                {society.notes ? (
+                  <div style={{ marginTop: "0.25rem" }}>{society.notes}</div>
+                ) : null}
+              </label>
+            ))}
+          </div>
+        )}
       </section>
 
       <section
@@ -1385,182 +1842,275 @@ export default function ChargenWizard() {
       >
         <h2 style={{ margin: 0 }}>4. Choose profession</h2>
         <div style={{ fontSize: "0.95rem" }}>
-          Filter the list first, then open one profession to inspect its package. The favored
-          package is a preview of likely reach, not a direct grant by itself.
+          Pick a profession subtype, then review the included profession packages. Favored package
+          preview shows likely reach, not a direct grant by itself.
         </div>
         <div style={{ display: "grid", gap: "0.75rem" }}>
           {availableProfessions.length > 0 ? (
             <>
-              <div
-                style={{
-                  alignItems: "end",
-                  background: "#f6f5ef",
-                  border: "1px solid #d9ddd8",
-                  borderRadius: 12,
-                  display: "grid",
-                  gap: "0.75rem",
-                  gridTemplateColumns: "minmax(220px, 1fr) minmax(220px, 280px)",
-                  padding: "1rem"
-                }}
-              >
-                <label style={{ display: "grid", gap: "0.35rem" }}>
-                  <span>Search professions</span>
-                  <input
-                    onChange={(event) => setProfessionSearch(event.target.value)}
-                    placeholder="Search by subtype, family, or notes"
-                    type="search"
-                    value={professionSearch}
-                  />
-                </label>
-                <label style={{ display: "grid", gap: "0.35rem" }}>
-                  <span>Family</span>
-                  <select
-                    onChange={(event) => setProfessionFamilyFilter(event.target.value)}
-                    value={professionFamilyFilter}
+              {selectedProfessionCard && !showProfessionChooser ? (
+                <section
+                  style={{
+                    background: "#f6f5ef",
+                    border: "1px solid #d9ddd8",
+                    borderRadius: 12,
+                    display: "grid",
+                    gap: "0.75rem",
+                    padding: "1rem"
+                  }}
+                >
+                  <div
+                    style={{
+                      alignItems: "start",
+                      display: "grid",
+                      gap: "0.75rem",
+                      gridTemplateColumns: "minmax(0, 1fr) auto"
+                    }}
                   >
-                    <option value="all">All families</option>
-                    {professionFamilyOptions.map((familyName) => (
-                      <option key={familyName} value={familyName}>
-                        {familyName}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-
-              {visibleProfessionCards.length > 0 ? (
-                visibleProfessionCards.map((profession) => {
-                  const isExpanded = activeProfessionPreviewId === profession.id;
-
-                  return (
-                    <section
-                      key={profession.id}
-                      style={{
-                        background: selectedProfessionId === profession.id ? "#fbfaf5" : "#fff",
-                        border: "1px solid #d9ddd8",
-                        borderRadius: 12,
-                        display: "grid",
-                        gap: "0.75rem",
-                        padding: "1rem"
-                      }}
-                    >
-                      <div
-                        style={{
-                          alignItems: "start",
-                          display: "grid",
-                          gap: "0.75rem",
-                          gridTemplateColumns: "minmax(0, 1fr) auto"
-                        }}
-                      >
-                        <div style={{ display: "grid", gap: "0.45rem" }}>
-                          <label
-                            style={{
-                              alignItems: "center",
-                              cursor: selectedSociety ? "pointer" : "not-allowed",
-                              display: "flex",
-                              flexWrap: "wrap",
-                              gap: "0.75rem"
-                            }}
-                          >
-                            <input
-                              checked={selectedProfessionId === profession.id}
-                              disabled={!selectedSociety}
-                              name="profession"
-                              onChange={() => handleProfessionChange(profession.id)}
-                              type="radio"
-                            />
-                            <strong>{profession.name}</strong>
-                            <span style={getBadgeStyle()}>{profession.familyName}</span>
-                            {selectedProfessionId === profession.id ? (
-                              <span style={getBadgeStyle()}>Selected</span>
-                            ) : null}
-                          </label>
-                          <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
-                            {profession.description ?? profession.familyDescription ?? "No notes yet."}
-                          </div>
-                          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
-                            <span style={getBadgeStyle({ muted: true })}>
-                              Core reach {profession.summary.totalEffectiveCoreReachableSkills}
-                            </span>
-                            <span style={getBadgeStyle({ muted: true })}>
-                              Favored reach {profession.summary.totalEffectiveFavoredReachableSkills}
-                            </span>
-                            <span style={getBadgeStyle({ muted: true })}>
-                              Normal groups {profession.normalAccessGroupNames.length}
-                            </span>
-                          </div>
-                        </div>
-
-                        <button
-                          onClick={() => toggleProfessionPreview(profession.id)}
-                          type="button"
-                        >
-                          {isExpanded ? "Hide details" : "Preview"}
-                        </button>
+                    <div style={{ display: "grid", gap: "0.35rem" }}>
+                      <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+                        <strong>{selectedProfessionCard.subtypeName}</strong>
+                        <span style={getBadgeStyle()}>{selectedProfessionCard.familyName}</span>
                       </div>
+                      <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
+                        {selectedProfessionCard.description ??
+                          selectedProfessionCard.familyDescription ??
+                          "No notes yet."}
+                      </div>
+                    </div>
+                    <button onClick={() => setShowProfessionChooser(true)} type="button">
+                      Change profession
+                    </button>
+                  </div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+                    <span style={getBadgeStyle({ muted: true })}>
+                      Core reach {selectedProfessionCard.summary.totalEffectiveCoreReachableSkills}
+                    </span>
+                    <span style={getBadgeStyle({ muted: true })}>
+                      Favored reach {selectedProfessionCard.summary.totalEffectiveFavoredReachableSkills}
+                    </span>
+                    <span style={getBadgeStyle({ muted: true })}>
+                      Included training packages {selectedProfessionCard.normalAccessGroupNames.length}
+                    </span>
+                    {selectedProfessionCard.hasLiteracyFoundation ? (
+                      <span style={getBadgeStyle()}>Literacy matters here</span>
+                    ) : null}
+                  </div>
+                  <div style={{ display: "grid", gap: "0.35rem", fontSize: "0.9rem" }}>
+                    <div>
+                      Included training packages:{" "}
+                      {formatPreviewList(selectedProfessionCard.normalAccessGroupNames)}
+                    </div>
+                    <div>
+                      Favored direct skills worth watching:{" "}
+                      {formatPreviewList(selectedProfessionCard.favoredDirectOnlySkillNames)}
+                    </div>
+                    {selectedProfessionCard.hasLiteracyFoundation ? (
+                      <div>
+                        Literacy foundation: this profession path reaches{" "}
+                        {selectedProfessionCard.literacyGatedReachableSkillCount} literacy-linked
+                        skill
+                        {selectedProfessionCard.literacyGatedReachableSkillCount === 1 ? "" : "s"}.
+                      </div>
+                    ) : null}
+                  </div>
+                </section>
+              ) : (
+                <>
+                  <div
+                    style={{
+                      alignItems: "end",
+                      background: "#f6f5ef",
+                      border: "1px solid #d9ddd8",
+                      borderRadius: 12,
+                      display: "grid",
+                      gap: "0.75rem",
+                      gridTemplateColumns: "minmax(220px, 1fr) minmax(220px, 280px)",
+                      padding: "1rem"
+                    }}
+                  >
+                    <label style={{ display: "grid", gap: "0.35rem" }}>
+                      <span>Search professions</span>
+                      <input
+                        onChange={(event) => setProfessionSearch(event.target.value)}
+                        placeholder="Search by subtype, family, or notes"
+                        type="search"
+                        value={professionSearch}
+                      />
+                    </label>
+                    <label style={{ display: "grid", gap: "0.35rem" }}>
+                      <span>Family</span>
+                      <select
+                        onChange={(event) => setProfessionFamilyFilter(event.target.value)}
+                        value={professionFamilyFilter}
+                      >
+                        <option value="all">All families</option>
+                        {professionFamilyOptions.map((familyName) => (
+                          <option key={familyName} value={familyName}>
+                            {familyName}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
 
-                      {isExpanded ? (
-                        <div
+                  {visibleProfessionCards.length > 0 ? (
+                    visibleProfessionCards.map((profession) => {
+                      const isExpanded = activeProfessionPreviewId === profession.id;
+
+                      return (
+                        <section
+                          key={profession.id}
                           style={{
-                            background: "#f6f5ef",
-                            border: "1px solid #e7e2d7",
-                            borderRadius: 10,
+                            background: selectedProfessionId === profession.id ? "#fbfaf5" : "#fff",
+                            border: "1px solid #d9ddd8",
+                            borderRadius: 12,
                             display: "grid",
                             gap: "0.75rem",
                             padding: "1rem"
                           }}
                         >
-                          <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
-                            Core package feeds the profession’s main training package. Favored
-                            package shows useful follow-on reach, but it does not automatically make
-                            every favored skill directly selectable in the allocation table.
+                          <div
+                            style={{
+                              alignItems: "start",
+                              display: "grid",
+                              gap: "0.75rem",
+                              gridTemplateColumns: "minmax(0, 1fr) auto"
+                            }}
+                          >
+                            <div style={{ display: "grid", gap: "0.45rem" }}>
+                              <label
+                                style={{
+                                  alignItems: "center",
+                                  cursor: selectedSociety ? "pointer" : "not-allowed",
+                                  display: "flex",
+                                  flexWrap: "wrap",
+                                  gap: "0.75rem"
+                                }}
+                              >
+                                <input
+                                  checked={selectedProfessionId === profession.id}
+                                  disabled={!selectedSociety}
+                                  name="profession"
+                                  onChange={() => handleProfessionChange(profession.id)}
+                                  type="radio"
+                                />
+                                <strong>{profession.subtypeName}</strong>
+                                <span style={getBadgeStyle()}>{profession.familyName}</span>
+                                {selectedProfessionId === profession.id ? (
+                                  <span style={getBadgeStyle()}>Selected</span>
+                                ) : null}
+                              </label>
+                              <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
+                                {profession.description ?? profession.familyDescription ?? "No notes yet."}
+                              </div>
+                              <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+                                <span style={getBadgeStyle({ muted: true })}>
+                                  Core reach {profession.summary.totalEffectiveCoreReachableSkills}
+                                </span>
+                                <span style={getBadgeStyle({ muted: true })}>
+                                  Favored reach {profession.summary.totalEffectiveFavoredReachableSkills}
+                                </span>
+                                <span style={getBadgeStyle({ muted: true })}>
+                                  Included training packages {profession.normalAccessGroupNames.length}
+                                </span>
+                                {profession.hasLiteracyFoundation ? (
+                                  <span style={getBadgeStyle()}>Literacy matters here</span>
+                                ) : null}
+                              </div>
+                            </div>
+
+                            <button
+                              onClick={() => toggleProfessionPreview(profession.id)}
+                              type="button"
+                            >
+                              {isExpanded ? "Hide details" : "Preview"}
+                            </button>
                           </div>
-                          <div style={{ display: "grid", gap: "0.35rem" }}>
-                            <div style={{ alignItems: "center", display: "flex", gap: "0.5rem" }}>
-                              <strong>Core package</strong>
-                              <span style={getBadgeStyle()}>Profession grant</span>
+
+                          {isExpanded ? (
+                            <div
+                              style={{
+                                background: "#f6f5ef",
+                                border: "1px solid #e7e2d7",
+                                borderRadius: 10,
+                                display: "grid",
+                                gap: "0.75rem",
+                                padding: "1rem"
+                              }}
+                            >
+                              <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
+                                Skill areas organize the allocation view. Inside each area, you may
+                                have included training packages, and those packages open into the
+                                actual skills you can raise.
+                              </div>
+                              <div style={{ display: "grid", gap: "0.35rem" }}>
+                                <div style={{ alignItems: "center", display: "flex", gap: "0.5rem" }}>
+                                  <strong>Included profession package</strong>
+                                  <span style={getBadgeStyle()}>Direct grant</span>
+                                </div>
+                                <div>
+                                  Included training packages: {formatPreviewList(profession.coreGroupNames)}
+                                </div>
+                                <div>
+                                  Actual reachable skills (
+                                  {profession.summary.totalEffectiveCoreReachableSkills}):{" "}
+                                  {formatPreviewList(profession.coreReachableSkillNames)}
+                                </div>
+                              </div>
+                              <div style={{ display: "grid", gap: "0.35rem" }}>
+                                <div style={{ alignItems: "center", display: "flex", gap: "0.5rem" }}>
+                                  <strong>Favored package preview</strong>
+                                  <span style={getBadgeStyle({ muted: true })}>Preview only</span>
+                                </div>
+                                <div>
+                                  Included training packages: {formatPreviewList(profession.favoredGroupNames)}
+                                </div>
+                                <div>
+                                  Actual reachable skills (
+                                  {profession.summary.totalEffectiveFavoredReachableSkills}):{" "}
+                                  {formatPreviewList(profession.favoredReachableSkillNames)}
+                                </div>
+                              </div>
+                              <div style={{ display: "grid", gap: "0.35rem" }}>
+                                <div style={{ alignItems: "center", display: "flex", gap: "0.5rem" }}>
+                                  <strong>Normal-access skill areas in this society</strong>
+                                  <span style={getBadgeStyle({ muted: true })}>Allocation view</span>
+                                </div>
+                                <div>
+                                  Buckets include: {formatPreviewList(profession.normalAccessGroupNames)}
+                                </div>
+                              </div>
+                              {profession.hasLiteracyFoundation ? (
+                                <div style={{ display: "grid", gap: "0.35rem" }}>
+                                  <div style={{ alignItems: "center", display: "flex", gap: "0.5rem" }}>
+                                    <strong>Literacy foundation</strong>
+                                    <span style={getBadgeStyle()}>Important</span>
+                                  </div>
+                                  <div>
+                                    This profession path reaches {profession.literacyGatedReachableSkillCount} literacy-linked skill
+                                    {profession.literacyGatedReachableSkillCount === 1 ? "" : "s"}.
+                                  </div>
+                                </div>
+                              ) : null}
                             </div>
-                            <div>Groups: {formatPreviewList(profession.coreGroupNames)}</div>
-                            <div>
-                              Reachable skills ({profession.summary.totalEffectiveCoreReachableSkills}
-                              ): {formatPreviewList(profession.coreReachableSkillNames)}
-                            </div>
-                          </div>
-                          <div style={{ display: "grid", gap: "0.35rem" }}>
-                            <div style={{ alignItems: "center", display: "flex", gap: "0.5rem" }}>
-                              <strong>Favored package</strong>
-                              <span style={getBadgeStyle({ muted: true })}>Preview only</span>
-                            </div>
-                            <div>Groups: {formatPreviewList(profession.favoredGroupNames)}</div>
-                            <div>
-                              Reachable skills (
-                              {profession.summary.totalEffectiveFavoredReachableSkills}):{" "}
-                              {formatPreviewList(profession.favoredReachableSkillNames)}
-                            </div>
-                          </div>
-                          <div style={{ display: "grid", gap: "0.35rem" }}>
-                            <div style={{ alignItems: "center", display: "flex", gap: "0.5rem" }}>
-                              <strong>Current normal access in this society</strong>
-                              <span style={getBadgeStyle({ muted: true })}>Chargen selectors</span>
-                            </div>
-                            <div>Groups: {formatPreviewList(profession.normalAccessGroupNames)}</div>
-                          </div>
-                        </div>
-                      ) : null}
-                    </section>
-                  );
-                })
-              ) : (
-                <div
-                  style={{
-                    background: "#f6f5ef",
-                    border: "1px solid #d9ddd8",
-                    borderRadius: 12,
-                    padding: "1rem"
-                  }}
-                >
-                  No professions match the current family filter and search text.
-                </div>
+                          ) : null}
+                        </section>
+                      );
+                    })
+                  ) : (
+                    <div
+                      style={{
+                        background: "#f6f5ef",
+                        border: "1px solid #d9ddd8",
+                        borderRadius: 12,
+                        padding: "1rem"
+                      }}
+                    >
+                      No professions match the current family filter and search text.
+                    </div>
+                  )}
+                </>
               )}
             </>
           ) : (
@@ -1585,6 +2135,42 @@ export default function ChargenWizard() {
           opacity: selectedProfession ? 1 : 0.6
         }}
       >
+        <div style={{ display: "grid", gap: "1rem" }}>
+          <div
+            style={{
+              background: "rgba(246, 245, 239, 0.96)",
+              border: "1px solid #d9ddd8",
+              borderRadius: 12,
+              display: "grid",
+              gap: "0.75rem",
+              gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+              padding: "0.75rem 1rem",
+              position: "sticky",
+              top: 0,
+              zIndex: 4
+            }}
+          >
+            <div style={{ display: "grid", gap: "0.15rem" }}>
+              <strong style={{ fontSize: "0.9rem" }}>Ordinary</strong>
+              <div style={{ fontSize: "0.9rem" }}>
+                Spent {progression.primaryPoolSpent} / Remaining {draftView.primaryPoolAvailable}
+              </div>
+            </div>
+            <div style={{ display: "grid", gap: "0.15rem" }}>
+              <strong style={{ fontSize: "0.9rem" }}>Flexible</strong>
+              <div style={{ fontSize: "0.9rem" }}>
+                Spent {progression.secondaryPoolSpent} / Remaining {draftView.secondaryPoolAvailable}
+              </div>
+            </div>
+          </div>
+
+          <section
+            style={{
+              display: "grid",
+              gap: "0.75rem",
+              opacity: selectedProfession ? 1 : 0.6
+            }}
+          >
         <h2 style={{ margin: 0 }}>5. Skill allocation</h2>
         <div style={{ fontSize: "0.95rem" }}>
           Normal access is what you can buy directly with ordinary points. Favored package preview
@@ -1605,7 +2191,12 @@ export default function ChargenWizard() {
           <div style={{ display: "grid", gap: "0.35rem" }}>
             <strong>Normal access</strong>
             <div>Society: {selectedSociety?.name ?? "Not selected"}</div>
-            <div>Social status: {selectedSocietyAccess?.socialClass ?? "Not selected"}</div>
+            <div>
+              Social status:{" "}
+              {selectedSocietyAccess && selectedSocietyBand !== undefined
+                ? `${selectedSocietyAccess.socialClass} (Band ${selectedSocietyBand})`
+                : "Not selected"}
+            </div>
             <div>Profession: {selectedProfession?.name ?? "Not selected"}</div>
           </div>
           <div style={{ display: "grid", gap: "0.35rem" }}>
@@ -1622,503 +2213,296 @@ export default function ChargenWizard() {
                 ? additionalAllowedSkills.map((skill) => skill.name).join(", ")
                 : "None"}
             </div>
+            {selectedProfessionCard?.hasLiteracyFoundation ? (
+              <div>
+                Foundation note: Literacy is important for this profession path and unlocks several
+                learned skills.
+              </div>
+            ) : null}
             <div>Other skills are still visible below, but they require flexible points.</div>
-            <div>
-              Social band:{" "}
-              {selectedSocietyBand !== undefined
-                ? `${selectedSocietyBand} (${getBandRangeLabel(selectedSocietyBand)})`
-                : "Not selected"}
-            </div>
           </div>
         </div>
 
         <div
           style={{
-            alignItems: "end",
             background: "#f6f5ef",
             border: "1px solid #d9ddd8",
             borderRadius: 12,
-            display: "grid",
-            gap: "0.75rem",
-            gridTemplateColumns: "minmax(220px, 1fr) minmax(180px, 220px)",
+            color: "#5e5a50",
             padding: "1rem"
           }}
         >
-          <label style={{ display: "grid", gap: "0.35rem" }}>
-            <span>Search skills</span>
-            <input
-              className="other-skill-search-input"
-              onChange={(event) => setSkillSearch(event.target.value)}
-              placeholder="Search by skill name"
-              type="search"
-              value={skillSearch}
-            />
-          </label>
-          <label style={{ display: "grid", gap: "0.35rem" }}>
-            <span>Show</span>
-            <select
-              onChange={(event) =>
-                setSkillVisibilityFilter(event.target.value as SkillVisibilityFilter)
-              }
-              value={skillVisibilityFilter}
-            >
-              <option value="all">All visible skills</option>
-              <option value="purchasable">Purchasable now</option>
-              <option value="owned">Owned</option>
-              <option value="blocked">Blocked</option>
-            </select>
-          </label>
-        </div>
-
-        <div
-          style={{
-            display: "grid",
-            gap: "1rem",
-            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))"
-          }}
-        >
-          <div>
-            <div
-              style={{
-                background: "#f6f5ef",
-                border: "1px solid #d9ddd8",
-                borderRadius: 12,
-                display: "grid",
-                gap: "0.35rem",
-                padding: "1rem"
-              }}
-            >
-              <strong>Ordinary</strong>
-              <div>Total: {ordinaryPoolTotal}</div>
-              <div>Spent: {progression.primaryPoolSpent}</div>
-              <div>Remaining: {draftView.primaryPoolAvailable}</div>
-            </div>
-          </div>
-          <div>
-            <div
-              style={{
-                background: "#f6f5ef",
-                border: "1px solid #d9ddd8",
-                borderRadius: 12,
-                display: "grid",
-                gap: "0.35rem",
-                padding: "1rem"
-              }}
-            >
-              <strong>Flexible</strong>
-              <div>Total: {flexiblePoolTotal}</div>
-              <div>Spent: {progression.secondaryPoolSpent}</div>
-              <div>Remaining: {draftView.secondaryPoolAvailable}</div>
-            </div>
-          </div>
+          Normal-access skills are grouped below into broader skill areas. Detailed search and
+          filtering live in “Other skills,” where the list is largest.
         </div>
 
         <div style={{ display: "grid", gap: "1rem" }}>
-          {normalSkillGroups.map((group) => {
-            const groupView = draftView.groups.find((item) => item.groupId === group.id);
-            const addPreview = skillAllocationContext
-              ? allocateChargenPoint({
-                  ...skillAllocationContext,
-                  targetId: group.id,
-                  targetType: "group"
-                })
-              : undefined;
-            const groupSkillRows = sortSkills(
-              content.skills.filter((skill) => skillDisplayGroupIds.get(skill.id) === group.id)
-            )
-              .map((skill) => skillRowsById.get(skill.id))
-              .filter((row): row is SkillBrowseRow => row !== undefined);
-            const visibleSkillRows = groupSkillRows.filter((row) =>
-              matchesSkillBrowseFilters({
-                isAllowed: row.evaluation.isAllowed,
-                isOwned: row.metrics.totalXp > 0,
-                name: row.skill.name,
-                search: skillSearch,
-                visibilityFilter: skillVisibilityFilter
-              })
-            );
-            const hasOwnedContent =
-              (groupView?.totalRanks ?? 0) > 0 ||
-              groupSkillRows.some((row) => row.metrics.totalXp > 0);
-            const isExpanded =
-              expandedSkillGroups.includes(group.id) ||
-              hasOwnedContent ||
-              (skillFilterActive && visibleSkillRows.length > 0);
-
-            if (skillFilterActive && visibleSkillRows.length === 0 && !hasOwnedContent) {
-              return null;
-            }
-
-            return (
-              <section
-                key={group.id}
-                style={{
-                  background: "#fbfaf5",
-                  border: "1px solid #d9ddd8",
-                  borderRadius: 12,
-                  display: "grid",
-                  gap: "0.75rem",
-                  padding: "1rem"
-                }}
-              >
-                <div
-                  style={{
-                    alignItems: "start",
-                    display: "grid",
-                    gap: "0.75rem",
-                    gridTemplateColumns: "minmax(0, 1fr) auto"
-                  }}
-                >
-                  <div style={{ display: "grid", gap: "0.2rem" }}>
-                    <strong>Skill group: {group.name}</strong>
-                    <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
-                      {visibleSkillRows.length} visible skill{visibleSkillRows.length === 1 ? "" : "s"}
-                      {hasOwnedContent ? " • currently invested" : ""}
-                    </div>
-                  </div>
-                  <div
-                    style={{
-                      alignItems: "center",
-                      display: "flex",
-                      flexWrap: "wrap",
-                      gap: "0.5rem",
-                      justifyContent: "flex-end"
-                    }}
-                  >
-                    <button onClick={() => toggleSkillGroup(group.id)} type="button">
-                      {isExpanded ? "Collapse" : "Expand"}
-                    </button>
-                    <button
-                      disabled={!skillAllocationContext}
-                      onClick={() => handleAllocate(group.id, "group")}
-                      type="button"
-                    >
-                      Buy / raise skill group
-                    </button>
-                    <button
-                      disabled={!skillAllocationContext}
-                      onClick={() => handleRemoveAllocation(group.id, "group")}
-                      type="button"
-                    >
-                      -1 skill group
-                    </button>
-                  </div>
-                </div>
-
-                <div
-                  style={{
-                    display: "grid",
-                    gap: "0.5rem",
-                    gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))"
-                  }}
-                >
-                  <div>
-                    <div style={{ fontSize: "0.85rem" }}>Ordinary spent</div>
-                    <strong>{groupView?.primaryRanks ?? 0}</strong>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: "0.85rem" }}>Flexible spent</div>
-                    <strong>{groupView?.secondaryRanks ?? 0}</strong>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: "0.85rem" }}>Current total</div>
-                    <strong>{groupView?.totalRanks ?? 0}</strong>
-                  </div>
-                </div>
-
-                {addPreview?.spentCost ? <div>Next purchase cost: {addPreview.spentCost}</div> : null}
-
-                {isExpanded ? (
-                  <div
-                    style={{
-                      border: "1px solid #e7e2d7",
-                      borderRadius: 10,
-                      overflowX: "auto"
-                    }}
-                  >
-                    <div
-                      style={{
-                        borderBottom: "1px solid #e7e2d7",
-                        color: "#5e5a50",
-                        display: "grid",
-                        fontSize: "0.8rem",
-                        gap: "0.75rem",
-                        gridTemplateColumns:
-                          "minmax(180px, 2fr) repeat(4, minmax(72px, 84px)) minmax(150px, 1fr)",
-                        padding: "0.75rem 1rem"
-                      }}
-                    >
-                      <strong>Skill</strong>
-                      <strong>Group XP</strong>
-                      <strong>Ordinary</strong>
-                      <strong>Flexible</strong>
-                      <strong>Total XP</strong>
-                      <strong>Actions</strong>
-                    </div>
-
-                    {visibleSkillRows.length > 0 ? (
-                      visibleSkillRows.map((row) => {
-                        const ruleStatusItems = getRuleStatusItems(row.evaluation);
-                        const rowFeedback =
-                          rowActionFeedback[getRowActionFeedbackKey(row.skill.id, "skill")];
-
-                        return (
-                          <div
-                            key={row.skill.id}
-                            style={{
-                              borderTop: "1px solid #f0eadf",
-                              display: "grid",
-                              gap: "0.35rem",
-                              padding: "0.75rem 1rem"
-                            }}
-                          >
-                            <div
-                              style={{
-                                alignItems: "center",
-                                display: "grid",
-                                gap: "0.75rem",
-                                gridTemplateColumns:
-                                  "minmax(180px, 2fr) repeat(4, minmax(72px, 84px)) minmax(150px, 1fr)"
-                              }}
-                            >
-                              <div style={{ display: "grid", gap: "0.35rem" }}>
-                                <div>{row.skill.name}</div>
-                                <div style={{ display: "flex", flexWrap: "wrap", gap: "0.35rem" }}>
-                                  {row.sourceLabels.map((label) => (
-                                    <span key={`${row.skill.id}-${label}`} style={getBadgeStyle()}>
-                                      {label}
-                                    </span>
-                                  ))}
-                                </div>
-                              </div>
-                              <div>{row.metrics.groupXp}</div>
-                              <div>{row.metrics.ordinaryXp}</div>
-                              <div>{row.metrics.flexibleXp}</div>
-                              <div>{row.metrics.totalXp}</div>
-                              <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
-                                <button
-                                  aria-label={`Add ${row.skill.name}`}
-                                  disabled={!skillAllocationContext || !row.evaluation.isAllowed}
-                                  onClick={() => handleAllocate(row.skill.id, "skill")}
-                                  type="button"
-                                >
-                                  +
-                                </button>
-                                <button
-                                  aria-label={`Remove ${row.skill.name}`}
-                                  disabled={!skillAllocationContext}
-                                  onClick={() => handleRemoveAllocation(row.skill.id, "skill")}
-                                  type="button"
-                                >
-                                  -
-                                </button>
-                              </div>
-                            </div>
-                            {ruleStatusItems.map((status) => (
-                              <div
-                                key={`${row.skill.id}-${status.tone}-${status.message}`}
-                                role="status"
-                                style={{
-                                  color: getRuleStatusColor(status.tone),
-                                  fontSize: "0.85rem"
-                                }}
-                              >
-                                {status.message}
-                              </div>
-                            ))}
-                            {rowFeedback ? (
-                              <div
-                                role="status"
-                                style={{ color: "#7a4b00", fontSize: "0.85rem" }}
-                              >
-                                {rowFeedback}
-                              </div>
-                            ) : null}
-                          </div>
-                        );
-                      })
-                    ) : (
-                      <div style={{ padding: "1rem" }}>
-                        No skills in this group match the current search or filter.
-                      </div>
-                    )}
-                  </div>
-                ) : null}
-              </section>
-            );
-          })}
-        </div>
-
-        <section
-          style={{
-            background: "#fbfaf5",
-            border: "1px solid #d9ddd8",
-            borderRadius: 12,
-            display: "grid",
-            gap: "0.75rem",
-            padding: "1rem"
-          }}
-        >
-          <div style={{ display: "grid", gap: "0.75rem" }}>
-            <div
+          {coreProfessionSections.length > 0 ? (
+            <section
               style={{
-                alignItems: "start",
+                background: "#fbfaf5",
+                border: "1px solid #d9ddd8",
+                borderRadius: 12,
                 display: "grid",
-                gap: "0.75rem",
-                gridTemplateColumns: "minmax(0, 1fr) auto"
-              }}
-            >
-              <div style={{ display: "grid", gap: "0.3rem" }}>
-                <strong>Other and ungrouped skills</strong>
-                <div style={{ fontSize: "0.9rem" }}>
-                  This section stays collapsed by default. It includes true other skills plus any
-                  direct normal-access skills that do not sit inside one of your normal-access groups.
-                </div>
-                <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
-                  {visibleAdditionalAllowedSkillRows.length} direct normal-access skill
-                  {visibleAdditionalAllowedSkillRows.length === 1 ? "" : "s"} visible •{" "}
-                  {visibleOtherSkillRows.length} other skill
-                  {visibleOtherSkillRows.length === 1 ? "" : "s"} visible
-                </div>
-              </div>
-              <button onClick={() => setShowOtherSkills((current) => !current)} type="button">
-                {showOtherSkills || (skillFilterActive && visibleOtherSkillRows.length > 0)
-                  ? "Collapse"
-                  : "Expand"}
-              </button>
-            </div>
-          </div>
-
-          {showOtherSkills || (skillFilterActive && visibleOtherSkillRows.length > 0) ? (
-            <div
-              style={{
-                border: "1px solid #e7e2d7",
-                borderRadius: 10,
-                overflowX: "auto"
+                gap: "1rem",
+                padding: "1rem"
               }}
             >
               <div
                 style={{
-                  borderBottom: "1px solid #e7e2d7",
-                  color: "#5e5a50",
+                  alignItems: "start",
                   display: "grid",
-                  fontSize: "0.8rem",
                   gap: "0.75rem",
-                  gridTemplateColumns:
-                    "minmax(180px, 2fr) repeat(4, minmax(72px, 84px)) minmax(150px, 1fr)",
-                  padding: "0.75rem 1rem"
+                  gridTemplateColumns: "minmax(0, 1fr) auto"
                 }}
               >
-                <strong>Skill</strong>
-                <strong>Group XP</strong>
-                <strong>Ordinary</strong>
-                <strong>Flexible</strong>
-                <strong>Total XP</strong>
-                <strong>Actions</strong>
+                <div style={{ display: "grid", gap: "0.25rem" }}>
+                  <div style={{ alignItems: "center", display: "flex", gap: "0.5rem" }}>
+                    <strong>Core profession skills</strong>
+                  </div>
+                  <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
+                    Main profession-linked skills and included training packages for ordinary-point spending.
+                  </div>
+                  <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
+                    {coreProfessionSections.reduce((sum, section) => sum + section.groups.length, 0)} training package
+                    {coreProfessionSections.reduce((sum, section) => sum + section.groups.length, 0) === 1 ? "" : "s"} •{" "}
+                    {coreProfessionSections.reduce(
+                      (sum, section) =>
+                        sum +
+                        section.directRows.length +
+                        section.groups.reduce((groupSum, group) => {
+                          const groupSkillRows = content.skills.filter(
+                            (skill) => skillDisplayGroupIds.get(skill.id) === group.id
+                          );
+
+                          return groupSum + groupSkillRows.length;
+                        }, 0),
+                      0
+                    )}{" "}
+                    skill
+                    {coreProfessionSections.reduce(
+                      (sum, section) =>
+                        sum +
+                        section.directRows.length +
+                        section.groups.reduce((groupSum, group) => {
+                          const groupSkillRows = content.skills.filter(
+                            (skill) => skillDisplayGroupIds.get(skill.id) === group.id
+                          );
+
+                          return groupSum + groupSkillRows.length;
+                        }, 0),
+                      0
+                    ) === 1
+                      ? ""
+                      : "s"}
+                  </div>
+                </div>
+                <button onClick={() => toggleAllocationSection("core-profession-skills")} type="button">
+                  {expandedAllocationSections.includes("core-profession-skills") ? "Collapse" : "Expand"}
+                </button>
               </div>
 
-              {[...visibleAdditionalAllowedSkillRows, ...visibleOtherSkillRows].map((row) => {
-                const ruleStatusItems = getRuleStatusItems(row.evaluation);
-                const rowFeedback =
-                  rowActionFeedback[getRowActionFeedbackKey(row.skill.id, "skill")];
-
-                return (
-                  <div
-                    key={row.skill.id}
-                    style={{
-                      borderTop: "1px solid #f0eadf",
-                      display: "grid",
-                      gap: "0.35rem",
-                      padding: "0.75rem 1rem"
-                    }}
-                  >
-                    <div
+              {expandedAllocationSections.includes("core-profession-skills") ? (
+                <div style={{ display: "grid", gap: "1rem" }}>
+                  {coreProfessionSections.map((section) => (
+                    <section
+                      key={section.definition.id}
                       style={{
-                        alignItems: "center",
+                        background: "#fff",
+                        border: "1px solid #e7e2d7",
+                        borderRadius: 10,
                         display: "grid",
                         gap: "0.75rem",
-                        gridTemplateColumns:
-                          "minmax(180px, 2fr) repeat(4, minmax(72px, 84px)) minmax(150px, 1fr)"
+                        padding: "1rem"
                       }}
                     >
-                      <div style={{ display: "grid", gap: "0.35rem" }}>
-                        <div>{row.skill.name}</div>
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: "0.35rem" }}>
-                          {row.sourceLabels.length > 0 ? (
-                            row.sourceLabels.map((label) => (
-                              <span key={`${row.skill.id}-${label}`} style={getBadgeStyle()}>
-                                {label}
-                              </span>
-                            ))
-                          ) : (
-                            <span style={getBadgeStyle({ muted: true })}>Outside normal access</span>
-                          )}
+                      <div style={{ display: "grid", gap: "0.25rem" }}>
+                        <strong>{section.definition.label}</strong>
+                        <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
+                          {section.definition.description}
                         </div>
                       </div>
-                      <div>{row.metrics.groupXp}</div>
-                      <div>{row.metrics.ordinaryXp}</div>
-                      <div>{row.metrics.flexibleXp}</div>
-                      <div>{row.metrics.totalXp}</div>
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
-                        <button
-                          aria-label={`Add ${row.skill.name}`}
-                          disabled={!skillAllocationContext || !row.evaluation.isAllowed}
-                          onClick={() => handleAllocate(row.skill.id, "skill")}
-                          type="button"
-                        >
-                          +
-                        </button>
-                        <button
-                          aria-label={`Remove ${row.skill.name}`}
-                          disabled={!skillAllocationContext}
-                          onClick={() => handleRemoveAllocation(row.skill.id, "skill")}
-                          type="button"
-                        >
-                          -
-                        </button>
-                      </div>
-                    </div>
-                    {ruleStatusItems.map((status) => (
-                      <div
-                        key={`${row.skill.id}-${status.tone}-${status.message}`}
-                        role="status"
-                        style={{
-                          color: getRuleStatusColor(status.tone),
-                          fontSize: "0.85rem"
-                        }}
-                      >
-                        {status.message}
-                      </div>
-                    ))}
-                    {rowFeedback ? (
-                      <div role="status" style={{ color: "#7a4b00", fontSize: "0.85rem" }}>
-                        {rowFeedback}
-                      </div>
-                    ) : null}
-                  </div>
-                );
-              })}
 
-              {visibleAdditionalAllowedSkillRows.length === 0 && visibleOtherSkillRows.length === 0 ? (
-                <div style={{ padding: "1rem" }}>
-                  No other or ungrouped skills match the current search or filter.
+                      {section.groups.map((group) => {
+                        const groupView = draftView.groups.find((item) => item.groupId === group.id);
+                        const addPreview = skillAllocationContext
+                          ? allocateChargenPoint({
+                              ...skillAllocationContext,
+                              targetId: group.id,
+                              targetType: "group"
+                            })
+                          : undefined;
+                        const groupSkillRows = sortSkills(
+                          content.skills.filter((skill) => skillDisplayGroupIds.get(skill.id) === group.id)
+                        )
+                          .map((skill) => skillRowsById.get(skill.id))
+                          .filter((row): row is SkillBrowseRow => row !== undefined);
+                        const visibleSkillRows = mergeSkillBrowseRowsBySkillId(groupSkillRows);
+                        const hasOwnedContent =
+                          (groupView?.totalRanks ?? 0) > 0 ||
+                          visibleSkillRows.some((row) => row.metrics.totalXp > 0);
+
+                        return (
+                          <section
+                            key={group.id}
+                            style={{
+                              background: "#fbfaf5",
+                              border: "1px solid #e7e2d7",
+                              borderRadius: 10,
+                              display: "grid",
+                              gap: "0.75rem",
+                              padding: "1rem"
+                            }}
+                          >
+                            <div
+                              style={{
+                                alignItems: "start",
+                                display: "grid",
+                                gap: "0.75rem",
+                                gridTemplateColumns: "minmax(0, 1fr) auto"
+                              }}
+                            >
+                              <div style={{ display: "grid", gap: "0.2rem" }}>
+                                <strong>{group.name}</strong>
+                                <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
+                                  Included training package • {visibleSkillRows.length} actual skill
+                                  {visibleSkillRows.length === 1 ? "" : "s"}
+                                  {hasOwnedContent ? " • currently invested" : ""}
+                                </div>
+                              </div>
+                              <div
+                                style={{
+                                  alignItems: "center",
+                                  display: "flex",
+                                  flexWrap: "wrap",
+                                  gap: "0.5rem",
+                                  justifyContent: "flex-end"
+                                }}
+                              >
+                                <button
+                                  disabled={!skillAllocationContext}
+                                  onClick={() => handleAllocate(group.id, "group")}
+                                  type="button"
+                                >
+                                  Buy / raise skill group
+                                </button>
+                                <button
+                                  disabled={!skillAllocationContext}
+                                  onClick={() => handleRemoveAllocation(group.id, "group")}
+                                  type="button"
+                                >
+                                  -1 skill group
+                                </button>
+                              </div>
+                            </div>
+
+                            <div
+                              style={{
+                                display: "grid",
+                                gap: "0.5rem",
+                                gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))"
+                              }}
+                            >
+                              <div>
+                                <div style={{ fontSize: "0.85rem" }}>Ordinary spent</div>
+                                <strong>{groupView?.primaryRanks ?? 0}</strong>
+                              </div>
+                              <div>
+                                <div style={{ fontSize: "0.85rem" }}>Flexible spent</div>
+                                <strong>{groupView?.secondaryRanks ?? 0}</strong>
+                              </div>
+                              <div>
+                                <div style={{ fontSize: "0.85rem" }}>Current total</div>
+                                <strong>{groupView?.totalRanks ?? 0}</strong>
+                              </div>
+                            </div>
+
+                            {addPreview?.spentCost ? (
+                              <div>Next purchase cost: {addPreview.spentCost}</div>
+                            ) : null}
+
+                            {renderSkillRowsTable({
+                              emptyMessage: "No skills in this group are currently available.",
+                              rows: visibleSkillRows
+                            })}
+                          </section>
+                        );
+                      })}
+
+                      {section.directRows.length > 0 ? (
+                        <div style={{ display: "grid", gap: "0.5rem" }}>
+                          <div style={{ alignItems: "center", display: "flex", gap: "0.5rem" }}>
+                            <strong>Direct skills in this area</strong>
+                            <span style={getBadgeStyle({ muted: true })}>No separate included package</span>
+                          </div>
+                          {renderSkillRowsTable({
+                            emptyMessage: "No direct normal-access skills in this area.",
+                            rows: section.directRows
+                          })}
+                        </div>
+                      ) : null}
+                    </section>
+                  ))}
                 </div>
               ) : null}
-            </div>
+            </section>
           ) : null}
-        </section>
-      </section>
 
-      <section
-        style={{
-          background: "#fbfaf5",
-          border: "1px solid #d9ddd8",
-          borderRadius: 12,
-          display: "grid",
-          gap: "1rem",
-          padding: "1rem"
-        }}
-      >
+          {specialAccessSection ? (
+            <section
+              style={{
+                background: "#fbfaf5",
+                border: "1px solid #d9ddd8",
+                borderRadius: 12,
+                display: "grid",
+                gap: "1rem",
+                padding: "1rem"
+              }}
+            >
+              <div
+                style={{
+                  alignItems: "start",
+                  display: "grid",
+                  gap: "0.75rem",
+                  gridTemplateColumns: "minmax(0, 1fr) auto"
+                }}
+              >
+                <div style={{ display: "grid", gap: "0.25rem" }}>
+                  <strong>Special access</strong>
+                  <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
+                    Profession-linked skills available directly, outside the main included packages.
+                  </div>
+                  <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
+                    {specialAccessSection.directRows.length} skill
+                    {specialAccessSection.directRows.length === 1 ? "" : "s"}
+                  </div>
+                </div>
+                <button onClick={() => toggleAllocationSection("special-access")} type="button">
+                  {expandedAllocationSections.includes("special-access") ? "Collapse" : "Expand"}
+                </button>
+              </div>
+
+              {expandedAllocationSections.includes("special-access")
+                ? renderSkillRowsTable({
+                    emptyMessage: "No direct profession-linked skills are currently available.",
+                    rows: specialAccessSection.directRows
+                  })
+                : null}
+            </section>
+          ) : null}
+        </div>
+          </section>
+
+          <section
+            style={{
+              background: "#fbfaf5",
+              border: "1px solid #d9ddd8",
+              borderRadius: 12,
+              display: "grid",
+              gap: "1rem",
+              padding: "1rem"
+            }}
+          >
         <h2 style={{ margin: 0 }}>6. Specializations</h2>
 
         <div style={{ fontSize: "0.95rem" }}>
@@ -2224,7 +2608,12 @@ export default function ChargenWizard() {
                         "minmax(180px, 2fr) minmax(160px, 1.6fr) repeat(2, minmax(88px, 104px)) minmax(150px, 1fr)"
                     }}
                   >
-                    <div>{row.specialization.name}</div>
+                    <div style={{ display: "grid", gap: "0.25rem" }}>
+                      <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+                        <span>{row.specialization.name}</span>
+                        <span style={getBadgeStyle({ muted: true })}>Specialization</span>
+                      </div>
+                    </div>
                     <div>
                       <div>{row.parentSkillName}</div>
                       <div style={{ color: "#5e5a50", fontSize: "0.8rem" }}>
@@ -2280,6 +2669,110 @@ export default function ChargenWizard() {
             ) : null}
           </div>
         ) : null}
+          </section>
+
+          <section
+            style={{
+              background: "#fbfaf5",
+              border: "1px solid #d9ddd8",
+              borderRadius: 12,
+              display: "grid",
+              gap: "0.75rem",
+              padding: "1rem"
+            }}
+          >
+        <h2 style={{ margin: 0 }}>7. Other skills</h2>
+        <div style={{ display: "grid", gap: "0.75rem" }}>
+            <div
+              style={{
+                alignItems: "start",
+                display: "grid",
+                gap: "0.75rem",
+                gridTemplateColumns: "minmax(0, 1fr) auto"
+              }}
+            >
+              <div style={{ display: "grid", gap: "0.3rem" }}>
+                <div style={{ fontSize: "0.9rem" }}>Other skills use flexible points</div>
+                <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
+                  {visibleOtherSkillRows.length} other skill
+                  {visibleOtherSkillRows.length === 1 ? "" : "s"} visible
+                </div>
+              </div>
+              <button onClick={() => setShowOtherSkills((current) => !current)} type="button">
+                {showOtherSkills || (otherSkillFilterActive && visibleOtherSkillRows.length > 0)
+                  ? "Collapse"
+                  : "Expand"}
+              </button>
+            </div>
+        </div>
+
+        {showOtherSkills || (otherSkillFilterActive && visibleOtherSkillRows.length > 0) ? (
+          <div style={{ display: "grid", gap: "0.75rem" }}>
+            <div
+              style={{
+                alignItems: "end",
+                background: "#f6f5ef",
+                border: "1px solid #d9ddd8",
+                borderRadius: 12,
+                display: "grid",
+                gap: "0.75rem",
+                gridTemplateColumns:
+                  "minmax(220px, 1fr) minmax(180px, 220px) minmax(180px, 240px)",
+                padding: "1rem"
+              }}
+            >
+              <label style={{ display: "grid", gap: "0.35rem" }}>
+                <span>Search skills</span>
+                <input
+                  className="other-skill-search-input"
+                  onChange={(event) => setSkillSearch(event.target.value)}
+                  placeholder="Search by skill name"
+                  type="search"
+                  value={skillSearch}
+                />
+              </label>
+              <label style={{ display: "grid", gap: "0.35rem" }}>
+                <span>Show</span>
+                <select
+                  onChange={(event) =>
+                    setSkillVisibilityFilter(event.target.value as SkillVisibilityFilter)
+                  }
+                  value={skillVisibilityFilter}
+                >
+                  <option value="all">All visible skills</option>
+                  <option value="purchasable">Purchasable now</option>
+                  <option value="owned">Owned</option>
+                  <option value="blocked">Blocked</option>
+                </select>
+              </label>
+              <label style={{ display: "grid", gap: "0.35rem" }}>
+                <span>Skill type</span>
+                <select
+                  onChange={(event) =>
+                    setSkillTypeFilter(event.target.value as SkillBrowseTypeFilter)
+                  }
+                  value={skillTypeFilter}
+                >
+                  <option value="all">All types</option>
+                  {otherSkillTypeOptions.map((definition) => (
+                    <option key={definition.id} value={definition.id}>
+                      {definition.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            {renderSkillRowsTable({
+              emptyMessage: "No other skills match the current search or filter.",
+              rows: visibleOtherSkillRows,
+              showOutsideNormalAccessBadge: true,
+              showTypeBadge: true
+            })}
+          </div>
+        ) : null}
+          </section>
+        </div>
       </section>
 
       <section
@@ -2292,62 +2785,87 @@ export default function ChargenWizard() {
           padding: "1rem"
         }}
       >
-        <h2 style={{ margin: 0 }}>7. Skills table</h2>
+        <h2 style={{ margin: 0 }}>8. Skills table</h2>
 
-        {playerSkillTableRows.length > 0 ? (
+        {groupedPlayerSkillTableRows.length > 0 ? (
           <div
-            style={{
-              border: "1px solid #e7e2d7",
-              borderRadius: 10,
-              overflowX: "auto"
-            }}
+            style={{ display: "grid", gap: "1rem" }}
           >
-            <div
-              style={{
-                borderBottom: "1px solid #e7e2d7",
-                color: "#5e5a50",
-                display: "grid",
-                fontSize: "0.8rem",
-                gap: "0.75rem",
-                gridTemplateColumns:
-                  "minmax(180px, 2fr) minmax(120px, 1.2fr) repeat(5, minmax(72px, 88px))",
-                padding: "0.75rem 1rem"
-              }}
-            >
-              <strong>Skill</strong>
-              <strong>Stats</strong>
-              <strong>Avg stats</strong>
-              <strong>Skill group XP</strong>
-              <strong>Skill XP</strong>
-              <strong>Total XP</strong>
-              <strong>Total skill level</strong>
-            </div>
-
-            {playerSkillTableRows.map((skill) => (
-              <div
-                key={skill.skillId}
+            {groupedPlayerSkillTableRows.map((group) => (
+              <section
+                key={group.bucketId}
                 style={{
-                  borderTop: "1px solid #f0eadf",
-                  display: "grid",
-                  gap: "0.75rem",
-                  gridTemplateColumns:
-                    "minmax(180px, 2fr) minmax(120px, 1.2fr) repeat(5, minmax(72px, 88px))",
-                  padding: "0.75rem 1rem"
+                  border: "1px solid #e7e2d7",
+                  borderRadius: 10,
+                  overflowX: "auto"
                 }}
               >
-                <div>
-                  <div>{skill.skillName}</div>
-                  {skill.literacyWarning ? (
-                    <div style={{ color: "#5e5a50", fontSize: "0.8rem" }}>{skill.literacyWarning}</div>
-                  ) : null}
+                <div
+                  style={{
+                    alignItems: "center",
+                    background: "#f6f5ef",
+                    borderBottom: "1px solid #e7e2d7",
+                    display: "flex",
+                    gap: "0.5rem",
+                    justifyContent: "space-between",
+                    padding: "0.75rem 1rem"
+                  }}
+                >
+                  <strong>{group.label}</strong>
+                  <span style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
+                    {group.rows.length} skill{group.rows.length === 1 ? "" : "s"}
+                  </span>
                 </div>
-                <div>{skill.stats}</div>
-                <div>{skill.avgStats}</div>
-                <div>{skill.skillGroupXp}</div>
-                <div>{skill.skillXp}</div>
-                <div>{skill.totalXp}</div>
-                <div>{skill.totalSkillLevel}</div>
-              </div>
+                <div
+                  style={{
+                    borderBottom: "1px solid #e7e2d7",
+                    color: "#5e5a50",
+                    display: "grid",
+                    fontSize: "0.8rem",
+                    gap: "0.75rem",
+                    gridTemplateColumns:
+                      "minmax(180px, 2fr) minmax(120px, 1.2fr) repeat(5, minmax(72px, 88px))",
+                    padding: "0.75rem 1rem"
+                  }}
+                >
+                  <strong>Skill</strong>
+                  <strong>Stats</strong>
+                  <strong>Avg stats</strong>
+                  <strong>Skill group XP</strong>
+                  <strong>Skill XP</strong>
+                  <strong>Total XP</strong>
+                  <strong>Total skill level</strong>
+                </div>
+
+                {group.rows.map((skill) => (
+                  <div
+                    key={skill.skillId}
+                    style={{
+                      borderTop: "1px solid #f0eadf",
+                      display: "grid",
+                      gap: "0.75rem",
+                      gridTemplateColumns:
+                        "minmax(180px, 2fr) minmax(120px, 1.2fr) repeat(5, minmax(72px, 88px))",
+                      padding: "0.75rem 1rem"
+                    }}
+                  >
+                    <div>
+                      <div>{skill.skillName}</div>
+                      {skill.literacyWarning ? (
+                        <div style={{ color: "#5e5a50", fontSize: "0.8rem" }}>
+                          {skill.literacyWarning}
+                        </div>
+                      ) : null}
+                    </div>
+                    <div>{skill.stats}</div>
+                    <div>{skill.avgStats}</div>
+                    <div>{skill.skillGroupXp}</div>
+                    <div>{skill.skillXp}</div>
+                    <div>{skill.totalXp}</div>
+                    <div>{skill.totalSkillLevel}</div>
+                  </div>
+                ))}
+              </section>
             ))}
           </div>
         ) : (
@@ -2365,7 +2883,7 @@ export default function ChargenWizard() {
           padding: "1rem"
         }}
       >
-        <h2 style={{ margin: 0 }}>8. Review summary</h2>
+        <h2 style={{ margin: 0 }}>9. Review summary</h2>
 
         <div
           style={{
@@ -2434,7 +2952,7 @@ export default function ChargenWizard() {
           padding: "1rem"
         }}
       >
-        <h2 style={{ margin: 0 }}>9. Finalize character</h2>
+        <h2 style={{ margin: 0 }}>10. Finalize character</h2>
         <div style={{ fontSize: "0.95rem" }}>
           Confirm the name and create the local character record. The signed-in player is stored as
           the creator for attribution.
@@ -2488,7 +3006,7 @@ export default function ChargenWizard() {
           padding: "1rem"
         }}
       >
-        <h2 style={{ margin: 0 }}>10. Saved local characters</h2>
+        <h2 style={{ margin: 0 }}>11. Saved local characters</h2>
         {savedCharacters.length > 0 ? (
           savedCharacters.map((character) => (
             <div
@@ -2531,6 +3049,8 @@ export default function ChargenWizard() {
           opacity: 1;
         }
       `}</style>
+        </>
+      ) : null}
     </section>
   );
 }
