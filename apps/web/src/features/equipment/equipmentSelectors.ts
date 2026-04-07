@@ -59,6 +59,15 @@ export function getCharacterGearItems(
   );
 }
 
+export function getCharacterValuableItems(
+  state: EquipmentFeatureState,
+  characterId: string,
+): EquipmentItem[] {
+  return getCharacterEquipmentItems(state, characterId).filter(
+    (item) => item.category === "valuables",
+  );
+}
+
 export function getCharacterLocations(
   state: EquipmentFeatureState,
   characterId: string,
@@ -93,7 +102,10 @@ export function getInventoryRows(
 
     rows.push({
       itemId: item.id,
-      displayName: item.displayName ?? template.name,
+      displayName:
+        item.quantity > 1
+          ? `${item.displayName ?? template.name} x${item.quantity}`
+          : (item.displayName ?? template.name),
       templateName: template.name,
       category: item.category,
       locationName: location?.name ?? "Unknown",
@@ -207,6 +219,38 @@ export function getEncounterAccessibleGearItems(
     const location = state.locationsById[item.storageAssignment.locationId];
     return location ? isEncounterAccessible(location) : false;
   });
+}
+
+export function getEncounterAccessibleValuableItems(
+  state: EquipmentFeatureState,
+  characterId: string,
+): EquipmentItem[] {
+  return getCharacterValuableItems(state, characterId).filter((item) => {
+    if (isStoredCarryMode(item.storageAssignment.carryMode)) {
+      return false;
+    }
+
+    if (isPersonalCarryMode(item.storageAssignment.carryMode)) {
+      return true;
+    }
+
+    const location = state.locationsById[item.storageAssignment.locationId];
+    return location ? isEncounterAccessible(location) : false;
+  });
+}
+
+export function getEncounterAccessibleCoinQuantity(
+  state: EquipmentFeatureState,
+  characterId: string,
+): number {
+  return getEncounterAccessibleValuableItems(state, characterId).reduce(
+    (total, item) => {
+      const template = getEquipmentTemplateById(state, item.templateId);
+      const isCoins = template?.subtype === "coins";
+      return isCoins ? total + item.quantity : total;
+    },
+    0,
+  );
 }
 
 export function getPersonalEncumbranceTotal(

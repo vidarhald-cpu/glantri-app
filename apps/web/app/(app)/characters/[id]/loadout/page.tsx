@@ -10,11 +10,14 @@ import {
 
 import {
   getCharacterGearItems,
+  getCharacterValuableItems,
   getCharacterArmorItems,
   getBackpackItems,
   getCharacterShieldItems,
   getCharacterWeaponItems,
+  getEncounterAccessibleCoinQuantity,
   getEncounterAccessibleGearItems,
+  getEncounterAccessibleValuableItems,
   getEquipmentTemplateById,
   getLoadoutEquipment,
   getMountEncumbranceTotal,
@@ -152,6 +155,9 @@ export default function CharacterLoadoutPage({ params }: CharacterLoadoutPagePro
   const backpackCount = getBackpackItems(state, id).length;
   const gearCount = getCharacterGearItems(state, id).length;
   const encounterAccessibleGearCount = getEncounterAccessibleGearItems(state, id).length;
+  const valuablesCount = getCharacterValuableItems(state, id).length;
+  const encounterAccessibleValuablesCount = getEncounterAccessibleValuableItems(state, id).length;
+  const carriedCoinQuantity = getEncounterAccessibleCoinQuantity(state, id);
   const storedCount = getStoredItems(state, id).length;
   const weaponOptions = useMemo(
     () => buildSelectableItemOptions({ items: getCharacterWeaponItems(state, id), state }),
@@ -315,6 +321,9 @@ export default function CharacterLoadoutPage({ params }: CharacterLoadoutPagePro
         <SummaryCard label="Mount encumbrance total" value={mountEncumbrance} />
         <SummaryCard label="Gear item count" value={gearCount} />
         <SummaryCard label="Encounter-accessible gear" value={encounterAccessibleGearCount} />
+        <SummaryCard label="Valuables item count" value={valuablesCount} />
+        <SummaryCard label="Encounter-accessible valuables" value={encounterAccessibleValuablesCount} />
+        <SummaryCard label="Carried coin quantity" value={carriedCoinQuantity} />
         <SummaryCard label="Backpack item count" value={backpackCount} />
         <SummaryCard label="Stored item count" value={storedCount} />
       </div>
