@@ -179,6 +179,23 @@ export async function createCharacterStorageLocationOnServer(input: {
   return payload.state;
 }
 
+export async function bootstrapSampleCharacterEquipmentOnServer(input: {
+  characterId: string;
+  overwrite?: boolean;
+}): Promise<EquipmentFeatureState> {
+  const payload = await sendJson<EquipmentStateResponse>(
+    `/characters/${input.characterId}/equipment/bootstrap-sample`,
+    {
+      body: JSON.stringify({
+        overwrite: input.overwrite ?? false
+      }),
+      method: "POST"
+    }
+  );
+
+  return payload.state;
+}
+
 async function updateCharacterLoadoutOnServer(input: {
   characterId: string;
   itemId: string | null;

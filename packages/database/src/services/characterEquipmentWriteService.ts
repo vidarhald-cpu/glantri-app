@@ -304,14 +304,29 @@ export class CharacterEquipmentWriteService {
     });
   }
 
-  async bootstrapSampleCharacterEquipment(characterId: string): Promise<void> {
+  async bootstrapSampleCharacterEquipment(
+    characterId: string,
+    options?: {
+      overwrite?: boolean;
+    },
+  ): Promise<void> {
     const sampleModule = await import(
       "@glantri/test-scenarios/equipment/sampleCharacterEquipment"
     );
 
     const snapshot = await this.ensureCharacterEquipmentInitialized(characterId);
-    if (snapshot.items.length > 0) {
-      return;
+    const hasCustomLocations = snapshot.locations.some(
+      (location) => !location.type.endsWith("_system"),
+    );
+
+    if ((snapshot.items.length > 0 || hasCustomLocations) && !options?.overwrite) {
+      throw new Error(
+        "Sample equipment bootstrap is only available for an empty equipment state.",
+      );
+    }
+
+    if (options?.overwrite) {
+      throw new Error("Sample equipment overwrite is not supported yet.");
     }
 
     for (const location of sampleModule.sampleLocations.filter(

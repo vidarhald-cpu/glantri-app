@@ -12,6 +12,7 @@ import {
 } from "../../../../../src/features/equipment/equipmentSelectors";
 import type { EquipmentFeatureState } from "../../../../../src/features/equipment/types";
 import {
+  bootstrapSampleCharacterEquipmentOnServer,
   createCharacterStorageLocationOnServer,
   loadCharacterEquipmentState,
   moveCharacterEquipmentItemOnServer
@@ -39,6 +40,8 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
   const [locationType, setLocationType] = useState<StorageLocationType>("home");
   const [locationError, setLocationError] = useState<string>();
   const [rowErrors, setRowErrors] = useState<Record<string, string>>({});
+  const [bootstrapError, setBootstrapError] = useState<string>();
+  const [bootstrapping, setBootstrapping] = useState(false);
   const rows = useMemo(() => (state ? getInventoryRows(state, id) : []), [state, id]);
   const locations = useMemo(() => (state ? getCharacterLocations(state, id) : []), [state, id]);
   const groupedItems = useMemo(() => (state ? getItemsGroupedByLocation(state, id) : []), [state, id]);
@@ -142,6 +145,27 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
         error instanceof Error ? error.message : "Unable to create location.";
       console.warn(message);
       setLocationError(message);
+    }
+  }
+
+  async function handleBootstrapSampleEquipment() {
+    setBootstrapping(true);
+    setBootstrapError(undefined);
+
+    try {
+      const nextState = await bootstrapSampleCharacterEquipmentOnServer({
+        characterId: id
+      });
+      setState(nextState);
+      setRowErrors({});
+      setLocationError(undefined);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Unable to bootstrap sample equipment.";
+      console.warn(message);
+      setBootstrapError(message);
+    } finally {
+      setBootstrapping(false);
     }
   }
 
@@ -338,10 +362,29 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
             background: "#f6f5ef",
             border: "1px solid #d9ddd8",
             borderRadius: 12,
+            display: "grid",
+            gap: "0.75rem",
             padding: "1rem"
           }}
         >
-          No equipment is currently available for this character.
+          <div style={{ display: "grid", gap: "0.25rem" }}>
+            <strong>No equipment is currently available for this character.</strong>
+            <div style={{ color: "#5e5a50" }}>
+              For development and testing, you can explicitly import the sample equipment set.
+            </div>
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
+            <button
+              disabled={bootstrapping}
+              onClick={() => void handleBootstrapSampleEquipment()}
+              type="button"
+            >
+              {bootstrapping ? "Importing sample equipment..." : "Import sample equipment"}
+            </button>
+          </div>
+          {bootstrapError ? (
+            <div style={{ color: "#8b3a1a", fontSize: "0.9rem" }}>{bootstrapError}</div>
+          ) : null}
         </div>
       ) : null}
     </section>

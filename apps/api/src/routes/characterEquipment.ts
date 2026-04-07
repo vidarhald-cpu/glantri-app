@@ -83,6 +83,26 @@ function parseNullableItemIdBody(body: unknown): { itemId: string | null } {
   };
 }
 
+function parseBootstrapSampleBody(body: unknown): { overwrite: boolean } {
+  if (body == null) {
+    return { overwrite: false };
+  }
+
+  if (typeof body !== "object") {
+    throw new Error("Bootstrap payload must be an object.");
+  }
+
+  const overwrite = "overwrite" in body ? body.overwrite : undefined;
+
+  if (overwrite !== undefined && typeof overwrite !== "boolean") {
+    throw new Error("overwrite must be a boolean when provided.");
+  }
+
+  return {
+    overwrite: overwrite ?? false
+  };
+}
+
 async function requireOwnedCharacter(
   ownerId: string,
   characterId: string
@@ -191,6 +211,44 @@ export const characterEquipmentRoutes: FastifyPluginAsync = async (app) => {
       const body = parseCreateLocationBody(request.body);
       await requireOwnedCharacter(user.id, id);
       await equipmentWriteService.createCharacterStorageLocation(id, body.name, body.type);
+
+      return {
+        state: toEquipmentFeatureState(
+          await equipmentReadModelService.getCharacterEquipmentState(id)
+        )
+      };
+    } catch (error) {
+      if (error instanceof Error && error.message === "Character not found.") {
+        return reply.code(404).send({
+          error: error.message
+        });
+      }
+
+      if (error instanceof Error) {
+        return reply.code(400).send({
+          error: error.message
+        });
+      }
+
+      throw error;
+    }
+  });
+
+  app.post("/:id/equipment/bootstrap-sample", async (request, reply) => {
+    const user = await requireAuthenticatedUser(request, reply);
+
+    if (!user) {
+      return;
+    }
+
+    const id = parseCharacterId(request.params);
+
+    try {
+      const body = parseBootstrapSampleBody(request.body);
+      await requireOwnedCharacter(user.id, id);
+      await equipmentWriteService.bootstrapSampleCharacterEquipment(id, {
+        overwrite: body.overwrite
+      });
 
       return {
         state: toEquipmentFeatureState(
