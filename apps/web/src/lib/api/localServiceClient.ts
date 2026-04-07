@@ -179,6 +179,84 @@ export async function createCharacterStorageLocationOnServer(input: {
   return payload.state;
 }
 
+async function updateCharacterLoadoutOnServer(input: {
+  characterId: string;
+  itemId: string | null;
+  path:
+    | "worn-armor"
+    | "ready-shield"
+    | "active-primary-weapon"
+    | "active-secondary-weapon"
+    | "active-missile-weapon";
+}): Promise<EquipmentFeatureState> {
+  const payload = await sendJson<EquipmentStateResponse>(
+    `/characters/${input.characterId}/equipment/loadout/${input.path}`,
+    {
+      body: JSON.stringify({
+        itemId: input.itemId
+      }),
+      method: "POST"
+    }
+  );
+
+  return payload.state;
+}
+
+export async function setCharacterWornArmorOnServer(input: {
+  characterId: string;
+  itemId: string | null;
+}): Promise<EquipmentFeatureState> {
+  return updateCharacterLoadoutOnServer({
+    characterId: input.characterId,
+    itemId: input.itemId,
+    path: "worn-armor"
+  });
+}
+
+export async function setCharacterReadyShieldOnServer(input: {
+  characterId: string;
+  itemId: string | null;
+}): Promise<EquipmentFeatureState> {
+  return updateCharacterLoadoutOnServer({
+    characterId: input.characterId,
+    itemId: input.itemId,
+    path: "ready-shield"
+  });
+}
+
+export async function setCharacterActivePrimaryWeaponOnServer(input: {
+  characterId: string;
+  itemId: string | null;
+}): Promise<EquipmentFeatureState> {
+  return updateCharacterLoadoutOnServer({
+    characterId: input.characterId,
+    itemId: input.itemId,
+    path: "active-primary-weapon"
+  });
+}
+
+export async function setCharacterActiveSecondaryWeaponOnServer(input: {
+  characterId: string;
+  itemId: string | null;
+}): Promise<EquipmentFeatureState> {
+  return updateCharacterLoadoutOnServer({
+    characterId: input.characterId,
+    itemId: input.itemId,
+    path: "active-secondary-weapon"
+  });
+}
+
+export async function setCharacterActiveMissileWeaponOnServer(input: {
+  characterId: string;
+  itemId: string | null;
+}): Promise<EquipmentFeatureState> {
+  return updateCharacterLoadoutOnServer({
+    characterId: input.characterId,
+    itemId: input.itemId,
+    path: "active-missile-weapon"
+  });
+}
+
 export async function loadAdminCanonicalContentFromServer(): Promise<
   AdminContentGetResponse<CanonicalContent>
 > {

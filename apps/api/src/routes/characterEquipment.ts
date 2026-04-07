@@ -3,7 +3,8 @@ import type { FastifyPluginAsync } from "fastify";
 import {
   CharacterEquipmentReadModelService,
   CharacterEquipmentWriteService,
-  CharacterService
+  CharacterService,
+  type ActiveWeaponSlot
 } from "@glantri/database";
 import { CarryModeSchema, StorageLocationTypeSchema } from "@glantri/domain/equipment";
 
@@ -63,6 +64,22 @@ function parseCreateLocationBody(body: unknown) {
   return {
     name,
     type: StorageLocationTypeSchema.parse(type)
+  };
+}
+
+function parseNullableItemIdBody(body: unknown): { itemId: string | null } {
+  if (!body || typeof body !== "object") {
+    throw new Error("Loadout payload is required.");
+  }
+
+  const itemId = "itemId" in body ? body.itemId : undefined;
+
+  if (itemId !== null && itemId !== undefined && typeof itemId !== "string") {
+    throw new Error("itemId must be a string or null.");
+  }
+
+  return {
+    itemId: typeof itemId === "string" && itemId.length === 0 ? null : (itemId ?? null)
   };
 }
 
@@ -196,4 +213,106 @@ export const characterEquipmentRoutes: FastifyPluginAsync = async (app) => {
       throw error;
     }
   });
+
+  app.post("/:id/equipment/loadout/worn-armor", async (request, reply) => {
+    const user = await requireAuthenticatedUser(request, reply);
+
+    if (!user) {
+      return;
+    }
+
+    const id = parseCharacterId(request.params);
+
+    try {
+      const body = parseNullableItemIdBody(request.body);
+      await requireOwnedCharacter(user.id, id);
+      await equipmentWriteService.setCharacterWornArmor(id, body.itemId);
+
+      return {
+        state: toEquipmentFeatureState(
+          await equipmentReadModelService.getCharacterEquipmentState(id)
+        )
+      };
+    } catch (error) {
+      if (error instanceof Error && error.message === "Character not found.") {
+        return reply.code(404).send({ error: error.message });
+      }
+
+      if (error instanceof Error) {
+        return reply.code(400).send({ error: error.message });
+      }
+
+      throw error;
+    }
+  });
+
+  app.post("/:id/equipment/loadout/ready-shield", async (request, reply) => {
+    const user = await requireAuthenticatedUser(request, reply);
+
+    if (!user) {
+      return;
+    }
+
+    const id = parseCharacterId(request.params);
+
+    try {
+      const body = parseNullableItemIdBody(request.body);
+      await requireOwnedCharacter(user.id, id);
+      await equipmentWriteService.setCharacterReadyShield(id, body.itemId);
+
+      return {
+        state: toEquipmentFeatureState(
+          await equipmentReadModelService.getCharacterEquipmentState(id)
+        )
+      };
+    } catch (error) {
+      if (error instanceof Error && error.message === "Character not found.") {
+        return reply.code(404).send({ error: error.message });
+      }
+
+      if (error instanceof Error) {
+        return reply.code(400).send({ error: error.message });
+      }
+
+      throw error;
+    }
+  });
+
+  async function registerWeaponSlotRoute(path: string, slot: ActiveWeaponSlot) {
+    app.post(path, async (request, reply) => {
+      const user = await requireAuthenticatedUser(request, reply);
+
+      if (!user) {
+        return;
+      }
+
+      const id = parseCharacterId(request.params);
+
+      try {
+        const body = parseNullableItemIdBody(request.body);
+        await requireOwnedCharacter(user.id, id);
+        await equipmentWriteService.setCharacterActiveWeapon(id, slot, body.itemId);
+
+        return {
+          state: toEquipmentFeatureState(
+            await equipmentReadModelService.getCharacterEquipmentState(id)
+          )
+        };
+      } catch (error) {
+        if (error instanceof Error && error.message === "Character not found.") {
+          return reply.code(404).send({ error: error.message });
+        }
+
+        if (error instanceof Error) {
+          return reply.code(400).send({ error: error.message });
+        }
+
+        throw error;
+      }
+    });
+  }
+
+  await registerWeaponSlotRoute("/:id/equipment/loadout/active-primary-weapon", "primary");
+  await registerWeaponSlotRoute("/:id/equipment/loadout/active-secondary-weapon", "secondary");
+  await registerWeaponSlotRoute("/:id/equipment/loadout/active-missile-weapon", "missile");
 };

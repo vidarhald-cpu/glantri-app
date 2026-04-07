@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { use, useMemo, useState } from "react";
+import { use, useEffect, useMemo, useState } from "react";
 import {
   getAccessTier,
   isStoredCarryMode,
@@ -24,15 +24,15 @@ import {
   getPersonalEncumbranceTotal,
   getStoredItems
 } from "../../../../../src/features/equipment/equipmentSelectors";
-import {
-  setActiveMissileWeapon,
-  setActivePrimaryWeapon,
-  setActiveSecondaryWeapon,
-  setReadyShield,
-  setWornArmor
-} from "../../../../../src/features/equipment/equipmentActions";
-import { equipmentInitialState } from "../../../../../src/features/equipment/equipmentStore";
 import type { EquipmentFeatureState } from "../../../../../src/features/equipment/types";
+import {
+  loadCharacterEquipmentState,
+  setCharacterActiveMissileWeaponOnServer,
+  setCharacterActivePrimaryWeaponOnServer,
+  setCharacterActiveSecondaryWeaponOnServer,
+  setCharacterReadyShieldOnServer,
+  setCharacterWornArmorOnServer
+} from "../../../../../src/lib/api/localServiceClient";
 
 interface CharacterLoadoutPageProps {
   params: Promise<{
@@ -141,7 +141,9 @@ function buildSelectableItemOptions(input: {
 
 export default function CharacterLoadoutPage({ params }: CharacterLoadoutPageProps) {
   const { id } = use(params);
-  const [state, setState] = useState<EquipmentFeatureState>(equipmentInitialState);
+  const [state, setState] = useState<EquipmentFeatureState | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [pageError, setPageError] = useState<string>();
   const [errors, setErrors] = useState<Record<"armor" | "primary" | "secondary" | "missile" | "shield", string | undefined>>({
     armor: undefined,
     missile: undefined,
@@ -149,44 +151,96 @@ export default function CharacterLoadoutPage({ params }: CharacterLoadoutPagePro
     secondary: undefined,
     shield: undefined
   });
-  const loadout = getLoadoutEquipment(state, id);
-  const personalEncumbrance = getPersonalEncumbranceTotal(state, id);
-  const mountEncumbrance = getMountEncumbranceTotal(state, id);
-  const backpackCount = getBackpackItems(state, id).length;
-  const gearCount = getCharacterGearItems(state, id).length;
-  const encounterAccessibleGearCount = getEncounterAccessibleGearItems(state, id).length;
-  const valuablesCount = getCharacterValuableItems(state, id).length;
-  const encounterAccessibleValuablesCount = getEncounterAccessibleValuableItems(state, id).length;
-  const carriedCoinQuantity = getEncounterAccessibleCoinQuantity(state, id);
-  const storedCount = getStoredItems(state, id).length;
+  const loadout = useMemo(() => (state ? getLoadoutEquipment(state, id) : {}), [state, id]);
+  const personalEncumbrance = useMemo(
+    () => (state ? getPersonalEncumbranceTotal(state, id) : 0),
+    [state, id]
+  );
+  const mountEncumbrance = useMemo(
+    () => (state ? getMountEncumbranceTotal(state, id) : 0),
+    [state, id]
+  );
+  const backpackCount = useMemo(() => (state ? getBackpackItems(state, id).length : 0), [state, id]);
+  const gearCount = useMemo(() => (state ? getCharacterGearItems(state, id).length : 0), [state, id]);
+  const encounterAccessibleGearCount = useMemo(
+    () => (state ? getEncounterAccessibleGearItems(state, id).length : 0),
+    [state, id]
+  );
+  const valuablesCount = useMemo(
+    () => (state ? getCharacterValuableItems(state, id).length : 0),
+    [state, id]
+  );
+  const encounterAccessibleValuablesCount = useMemo(
+    () => (state ? getEncounterAccessibleValuableItems(state, id).length : 0),
+    [state, id]
+  );
+  const carriedCoinQuantity = useMemo(
+    () => (state ? getEncounterAccessibleCoinQuantity(state, id) : 0),
+    [state, id]
+  );
+  const storedCount = useMemo(() => (state ? getStoredItems(state, id).length : 0), [state, id]);
   const weaponOptions = useMemo(
-    () => buildSelectableItemOptions({ items: getCharacterWeaponItems(state, id), state }),
+    () => (state ? buildSelectableItemOptions({ items: getCharacterWeaponItems(state, id), state }) : []),
     [state, id]
   );
   const armorOptions = useMemo(
-    () => buildSelectableItemOptions({ items: getCharacterArmorItems(state, id), state }),
+    () => (state ? buildSelectableItemOptions({ items: getCharacterArmorItems(state, id), state }) : []),
     [state, id]
   );
   const shieldOptions = useMemo(
-    () => buildSelectableItemOptions({ items: getCharacterShieldItems(state, id), state }),
+    () => (state ? buildSelectableItemOptions({ items: getCharacterShieldItems(state, id), state }) : []),
     [state, id]
   );
 
-  function applySelection(input: {
+  useEffect(() => {
+    let cancelled = false;
+
+    loadCharacterEquipmentState(id)
+      .then((nextState) => {
+        if (cancelled) {
+          return;
+        }
+
+        setState(nextState);
+        setPageError(undefined);
+      })
+      .catch((error) => {
+        if (cancelled) {
+          return;
+        }
+
+        setPageError(error instanceof Error ? error.message : "Unable to load loadout.");
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
+
+  async function applySelection(input: {
     itemId: string | null;
     kind: "armor" | "primary" | "secondary" | "missile" | "shield";
   }) {
+    if (!state) {
+      return;
+    }
+
     try {
       const nextState =
         input.kind === "armor"
-          ? setWornArmor(state, id, input.itemId)
+          ? await setCharacterWornArmorOnServer({ characterId: id, itemId: input.itemId })
           : input.kind === "shield"
-          ? setReadyShield(state, id, input.itemId)
+          ? await setCharacterReadyShieldOnServer({ characterId: id, itemId: input.itemId })
           : input.kind === "primary"
-          ? setActivePrimaryWeapon(state, id, input.itemId)
+          ? await setCharacterActivePrimaryWeaponOnServer({ characterId: id, itemId: input.itemId })
           : input.kind === "secondary"
-            ? setActiveSecondaryWeapon(state, id, input.itemId)
-            : setActiveMissileWeapon(state, id, input.itemId);
+            ? await setCharacterActiveSecondaryWeaponOnServer({ characterId: id, itemId: input.itemId })
+            : await setCharacterActiveMissileWeaponOnServer({ characterId: id, itemId: input.itemId });
 
       setState(nextState);
       setErrors((current) => ({
@@ -216,7 +270,34 @@ export default function CharacterLoadoutPage({ params }: CharacterLoadoutPagePro
         </div>
       </div>
 
-      <div
+      {loading ? (
+        <div
+          style={{
+            background: "#f6f5ef",
+            border: "1px solid #d9ddd8",
+            borderRadius: 12,
+            padding: "1rem"
+          }}
+        >
+          Loading loadout...
+        </div>
+      ) : null}
+
+      {pageError ? (
+        <div
+          style={{
+            background: "#fdf0ea",
+            border: "1px solid #e4b9a7",
+            borderRadius: 12,
+            color: "#8b3a1a",
+            padding: "1rem"
+          }}
+        >
+          {pageError}
+        </div>
+      ) : null}
+
+      {!loading && !pageError ? <div
         style={{
           display: "grid",
           gap: "0.75rem",
@@ -226,41 +307,41 @@ export default function CharacterLoadoutPage({ params }: CharacterLoadoutPagePro
         <WeaponControl
           error={errors.armor}
           label="Worn armor"
-          onChange={(itemId) => applySelection({ itemId, kind: "armor" })}
+          onChange={(itemId) => void applySelection({ itemId, kind: "armor" })}
           options={armorOptions}
-          value={loadout.armor?.id ?? ""}
+          value={"armor" in loadout ? loadout.armor?.id ?? "" : ""}
         />
         <WeaponControl
           error={errors.shield}
           label="Ready shield"
-          onChange={(itemId) => applySelection({ itemId, kind: "shield" })}
+          onChange={(itemId) => void applySelection({ itemId, kind: "shield" })}
           options={shieldOptions}
-          value={loadout.shield?.id ?? ""}
+          value={"shield" in loadout ? loadout.shield?.id ?? "" : ""}
         />
         <WeaponControl
           error={errors.primary}
           label="Active primary weapon"
-          onChange={(itemId) => applySelection({ itemId, kind: "primary" })}
+          onChange={(itemId) => void applySelection({ itemId, kind: "primary" })}
           options={weaponOptions}
-          value={loadout.primary?.id ?? ""}
+          value={"primary" in loadout ? loadout.primary?.id ?? "" : ""}
         />
         <WeaponControl
           error={errors.secondary}
           label="Active secondary weapon"
-          onChange={(itemId) => applySelection({ itemId, kind: "secondary" })}
+          onChange={(itemId) => void applySelection({ itemId, kind: "secondary" })}
           options={weaponOptions}
-          value={loadout.secondary?.id ?? ""}
+          value={"secondary" in loadout ? loadout.secondary?.id ?? "" : ""}
         />
         <WeaponControl
           error={errors.missile}
           label="Active missile weapon"
-          onChange={(itemId) => applySelection({ itemId, kind: "missile" })}
+          onChange={(itemId) => void applySelection({ itemId, kind: "missile" })}
           options={weaponOptions}
-          value={loadout.missile?.id ?? ""}
+          value={"missile" in loadout ? loadout.missile?.id ?? "" : ""}
         />
-      </div>
+      </div> : null}
 
-      <div
+      {!loading && !pageError ? <div
         style={{
           display: "grid",
           gap: "0.75rem",
@@ -270,9 +351,9 @@ export default function CharacterLoadoutPage({ params }: CharacterLoadoutPagePro
         <SummaryCard
           label="Worn armor"
           value={getItemName({
-            displayName: loadout.armor?.displayName,
-            templateId: loadout.armor?.templateId,
-            templateName: loadout.armor
+            displayName: "armor" in loadout ? loadout.armor?.displayName : undefined,
+            templateId: "armor" in loadout ? loadout.armor?.templateId : undefined,
+            templateName: state && "armor" in loadout && loadout.armor
               ? getEquipmentTemplateById(state, loadout.armor.templateId)?.name
               : undefined
           })}
@@ -280,9 +361,9 @@ export default function CharacterLoadoutPage({ params }: CharacterLoadoutPagePro
         <SummaryCard
           label="Ready shield"
           value={getItemName({
-            displayName: loadout.shield?.displayName,
-            templateId: loadout.shield?.templateId,
-            templateName: loadout.shield
+            displayName: "shield" in loadout ? loadout.shield?.displayName : undefined,
+            templateId: "shield" in loadout ? loadout.shield?.templateId : undefined,
+            templateName: state && "shield" in loadout && loadout.shield
               ? getEquipmentTemplateById(state, loadout.shield.templateId)?.name
               : undefined
           })}
@@ -290,9 +371,9 @@ export default function CharacterLoadoutPage({ params }: CharacterLoadoutPagePro
         <SummaryCard
           label="Active primary weapon"
           value={getItemName({
-            displayName: loadout.primary?.displayName,
-            templateId: loadout.primary?.templateId,
-            templateName: loadout.primary
+            displayName: "primary" in loadout ? loadout.primary?.displayName : undefined,
+            templateId: "primary" in loadout ? loadout.primary?.templateId : undefined,
+            templateName: state && "primary" in loadout && loadout.primary
               ? getEquipmentTemplateById(state, loadout.primary.templateId)?.name
               : undefined
           })}
@@ -300,9 +381,9 @@ export default function CharacterLoadoutPage({ params }: CharacterLoadoutPagePro
         <SummaryCard
           label="Active secondary weapon"
           value={getItemName({
-            displayName: loadout.secondary?.displayName,
-            templateId: loadout.secondary?.templateId,
-            templateName: loadout.secondary
+            displayName: "secondary" in loadout ? loadout.secondary?.displayName : undefined,
+            templateId: "secondary" in loadout ? loadout.secondary?.templateId : undefined,
+            templateName: state && "secondary" in loadout && loadout.secondary
               ? getEquipmentTemplateById(state, loadout.secondary.templateId)?.name
               : undefined
           })}
@@ -310,9 +391,9 @@ export default function CharacterLoadoutPage({ params }: CharacterLoadoutPagePro
         <SummaryCard
           label="Active missile weapon"
           value={getItemName({
-            displayName: loadout.missile?.displayName,
-            templateId: loadout.missile?.templateId,
-            templateName: loadout.missile
+            displayName: "missile" in loadout ? loadout.missile?.displayName : undefined,
+            templateId: "missile" in loadout ? loadout.missile?.templateId : undefined,
+            templateName: state && "missile" in loadout && loadout.missile
               ? getEquipmentTemplateById(state, loadout.missile.templateId)?.name
               : undefined
           })}
@@ -326,12 +407,12 @@ export default function CharacterLoadoutPage({ params }: CharacterLoadoutPagePro
         <SummaryCard label="Carried coin quantity" value={carriedCoinQuantity} />
         <SummaryCard label="Backpack item count" value={backpackCount} />
         <SummaryCard label="Stored item count" value={storedCount} />
-      </div>
+      </div> : null}
 
-      <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
+      {!loading && !pageError ? <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
         Selectable armor, shields, and weapons exclude stored, broken, and lost items. Backpack
         items remain selectable for this slice and are marked as slower access when listed.
-      </div>
+      </div> : null}
     </section>
   );
 }
