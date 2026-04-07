@@ -72,6 +72,7 @@ export default function CharacterSheet({ id }: CharacterSheetProps) {
         <Link href="/characters">Back to characters</Link>
         <Link href={`/characters/${record.id}`}>Open details</Link>
         <Link href={`/characters/${record.id}/equipment`}>Equipment</Link>
+        <Link href={`/characters/${record.id}/loadout`}>Loadout</Link>
         <Link href={`/characters/${record.id}/advance`}>Advance character</Link>
       </div>
 
