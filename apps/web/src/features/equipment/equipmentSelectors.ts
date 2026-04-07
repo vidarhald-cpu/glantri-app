@@ -3,8 +3,8 @@ import {
   getEffectiveEncumbrance,
   type CharacterLoadout,
   type EquipmentItem,
+  type EquipmentTemplate,
   type StorageLocation,
-  type WeaponTemplate,
 } from "@glantri/domain/equipment";
 import type { EquipmentFeatureState, InventoryRow } from "./types";
 
@@ -26,6 +26,24 @@ export function getCharacterWeaponItems(
   );
 }
 
+export function getCharacterShieldItems(
+  state: EquipmentFeatureState,
+  characterId: string,
+): EquipmentItem[] {
+  return getCharacterEquipmentItems(state, characterId).filter(
+    (item) => item.category === "shield",
+  );
+}
+
+export function getCharacterArmorItems(
+  state: EquipmentFeatureState,
+  characterId: string,
+): EquipmentItem[] {
+  return getCharacterEquipmentItems(state, characterId).filter(
+    (item) => item.category === "armor",
+  );
+}
+
 export function getCharacterLocations(
   state: EquipmentFeatureState,
   characterId: string,
@@ -35,11 +53,11 @@ export function getCharacterLocations(
   );
 }
 
-export function getWeaponTemplateById(
+export function getEquipmentTemplateById(
   state: EquipmentFeatureState,
   templateId: string,
-): WeaponTemplate | undefined {
-  return state.templates.weaponsById[templateId];
+): EquipmentTemplate | undefined {
+  return state.templates.templatesById[templateId];
 }
 
 export function getInventoryRows(
@@ -50,7 +68,7 @@ export function getInventoryRows(
   const rows: InventoryRow[] = [];
 
   for (const item of items) {
-    const template = state.templates.weaponsById[item.templateId];
+    const template = getEquipmentTemplateById(state, item.templateId);
     if (!template) {
       continue;
     }
@@ -130,7 +148,7 @@ export function getPersonalEncumbranceTotal(
   characterId: string,
 ): number {
   return getCharacterEquipmentItems(state, characterId).reduce((total, item) => {
-    const template = state.templates.weaponsById[item.templateId];
+    const template = getEquipmentTemplateById(state, item.templateId);
     if (!template) {
       return total;
     }
@@ -146,7 +164,7 @@ export function getMountEncumbranceTotal(
   return getCharacterEquipmentItems(state, characterId)
     .filter((item) => item.carryMode === "mount")
     .reduce((total, item) => {
-      const template = state.templates.weaponsById[item.templateId];
+      const template = getEquipmentTemplateById(state, item.templateId);
       if (!template) {
         return total;
       }
@@ -162,10 +180,12 @@ export function getActiveLoadout(
   return state.activeLoadoutByCharacterId[characterId];
 }
 
-export function getLoadoutWeapons(
+export function getLoadoutEquipment(
   state: EquipmentFeatureState,
   characterId: string,
 ): {
+  armor?: EquipmentItem;
+  shield?: EquipmentItem;
   primary?: EquipmentItem;
   secondary?: EquipmentItem;
   missile?: EquipmentItem;
@@ -177,6 +197,12 @@ export function getLoadoutWeapons(
   }
 
   return {
+    armor: loadout.activeArmorItemId
+      ? state.itemsById[loadout.activeArmorItemId]
+      : undefined,
+    shield: loadout.activeShieldItemId
+      ? state.itemsById[loadout.activeShieldItemId]
+      : undefined,
     primary: loadout.activePrimaryWeaponItemId
       ? state.itemsById[loadout.activePrimaryWeaponItemId]
       : undefined,

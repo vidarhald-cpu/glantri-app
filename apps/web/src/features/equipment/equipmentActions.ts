@@ -10,7 +10,7 @@ import type { EquipmentFeatureState } from "./types";
 function cloneState(state: EquipmentFeatureState): EquipmentFeatureState {
   return {
     templates: {
-      weaponsById: { ...state.templates.weaponsById },
+      templatesById: { ...state.templates.templatesById },
     },
     itemsById: { ...state.itemsById },
     locationsById: { ...state.locationsById },
@@ -127,5 +127,27 @@ export function setActiveMissileWeapon(
   return updateLoadout(state, characterId, (loadout) => ({
     ...loadout,
     activeMissileWeaponItemId: itemId,
+  }));
+}
+
+export function setActiveShield(
+  state: EquipmentFeatureState,
+  characterId: string,
+  itemId: string | null,
+): EquipmentFeatureState {
+  return updateLoadout(state, characterId, (loadout) => ({
+    ...loadout,
+    activeShieldItemId: itemId,
+  }));
+}
+
+export function setActiveArmor(
+  state: EquipmentFeatureState,
+  characterId: string,
+  itemId: string | null,
+): EquipmentFeatureState {
+  return updateLoadout(state, characterId, (loadout) => ({
+    ...loadout,
+    activeArmorItemId: itemId,
   }));
 }
