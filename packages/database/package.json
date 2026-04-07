@@ -24,6 +24,7 @@
     "@glantri/domain": "workspace:*",
     "@glantri/rules-engine": "workspace:*",
     "@glantri/shared": "workspace:*",
+    "@glantri/test-scenarios": "workspace:*",
     "@prisma/client": "^6.6.0"
   },
   "devDependencies": {

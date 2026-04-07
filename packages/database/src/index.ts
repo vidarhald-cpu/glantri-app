@@ -6,3 +6,4 @@ export * from "./repositories/contentRepository";
 export * from "./services/authService";
 export * from "./services/characterService";
 export * from "./services/characterEquipmentReadModelService";
+export * from "./services/characterEquipmentWriteService";
