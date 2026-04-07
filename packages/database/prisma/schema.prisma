@@ -7,15 +7,79 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum EquipmentCategory {
+  weapon
+  shield
+  armor
+  gear
+  valuables
+}
+
+enum CarryMode {
+  equipped
+  on_person
+  backpack
+  mount
+  stored
+}
+
+enum StorageLocationType {
+  equipped_system
+  person_system
+  backpack_system
+  mount_system
+  home
+  camp
+  boat
+  wagon
+  cache
+  building
+  other
+}
+
+enum MaterialType {
+  steel
+  bronze
+  wood
+  leather
+  cloth
+  bone
+  stone
+  silver
+  gold
+  other
+}
+
+enum QualityType {
+  standard
+  extraordinary
+}
+
+enum SpecificityType {
+  generic
+  specific
+}
+
+enum ItemConditionState {
+  intact
+  worn
+  damaged
+  broken
+  lost
+}
+
 model Character {
-  id        String   @id @default(cuid())
-  name      String
-  level     Int      @default(1)
-  build     Json
-  ownerId   String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  owner     User?    @relation(fields: [ownerId], references: [id])
+  id               String                    @id @default(cuid())
+  name             String
+  level            Int                       @default(1)
+  build            Json
+  ownerId          String?
+  createdAt        DateTime                  @default(now())
+  updatedAt        DateTime                  @updatedAt
+  owner            User?                     @relation(fields: [ownerId], references: [id])
+  equipmentItems   CharacterEquipmentItem[]
+  storageLocations CharacterStorageLocation[]
+  loadouts         CharacterLoadout[]
 }
 
 model Weapon {
@@ -79,4 +143,74 @@ model CanonicalContentSnapshot {
   revision  Int
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model CharacterEquipmentItem {
+  id                    String             @id
+  characterId           String
+  templateId            String
+  category              EquipmentCategory
+  displayName           String?
+  specificityType       SpecificityType
+  quantity              Int
+  isStackable           Boolean
+  material              MaterialType
+  quality               QualityType
+  locationId            String
+  carryMode             CarryMode
+  conditionState        ItemConditionState
+  durabilityCurrent     Int?
+  durabilityMax         Int?
+  encumbranceOverride   Float?
+  valueOverride         Float?
+  specialPropertiesJson Json?
+  notes                 String?
+  isEquipped            Boolean?
+  isFavorite            Boolean?
+  acquiredFrom          String?
+  statusTagsJson        Json?
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+  character             Character          @relation(fields: [characterId], references: [id], onDelete: Cascade)
+
+  @@index([characterId])
+  @@index([characterId, locationId])
+}
+
+model CharacterStorageLocation {
+  id                      String              @id
+  characterId             String
+  name                    String
+  type                    StorageLocationType
+  parentLocationId        String?
+  isMobile                Boolean
+  isAccessibleInEncounter Boolean
+  notes                   String?
+  createdAt               DateTime            @default(now())
+  updatedAt               DateTime            @updatedAt
+  character               Character           @relation(fields: [characterId], references: [id], onDelete: Cascade)
+
+  @@index([characterId])
+  @@unique([characterId, name])
+}
+
+model CharacterLoadout {
+  id                        String      @id
+  characterId               String
+  name                      String
+  isActive                  Boolean
+  wornArmorItemId           String?
+  readyShieldItemId         String?
+  activePrimaryWeaponItemId String?
+  activeSecondaryWeaponItemId String?
+  activeMissileWeaponItemId String?
+  activeAmmoItemIds         String[]
+  quickAccessItemIdsJson    Json
+  notes                     String?
+  createdAt                 DateTime    @default(now())
+  updatedAt                 DateTime    @updatedAt
+  character                 Character   @relation(fields: [characterId], references: [id], onDelete: Cascade)
+
+  @@index([characterId])
+  @@index([characterId, isActive])
 }

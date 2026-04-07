@@ -20,6 +20,7 @@
   },
   "dependencies": {
     "@glantri/auth": "workspace:*",
+    "@glantri/content": "workspace:*",
     "@glantri/domain": "workspace:*",
     "@glantri/rules-engine": "workspace:*",
     "@glantri/shared": "workspace:*",

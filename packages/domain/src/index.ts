@@ -4,4 +4,5 @@ export * from "./character/profiles";
 export * from "./character/progression";
 export * from "./content/skills";
 export * from "./encounter/session";
+export * from "./equipment";
 export * from "./profession/professions";
