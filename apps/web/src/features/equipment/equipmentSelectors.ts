@@ -47,33 +47,33 @@ export function getInventoryRows(
   characterId: string,
 ): InventoryRow[] {
   const items = getCharacterEquipmentItems(state, characterId);
+  const rows: InventoryRow[] = [];
 
-  return items
-    .map((item) => {
-      const template = state.templates.weaponsById[item.templateId];
-      if (!template) {
-        return null;
-      }
+  for (const item of items) {
+    const template = state.templates.weaponsById[item.templateId];
+    if (!template) {
+      continue;
+    }
 
-      const location = state.locationsById[item.locationId];
-      const effectiveEncumbrance = getEffectiveEncumbrance(item, template);
+    const location = state.locationsById[item.locationId];
+    const effectiveEncumbrance = getEffectiveEncumbrance(item, template);
 
-      return {
-        itemId: item.id,
-        displayName: item.displayName ?? template.name,
-        templateName: template.name,
-        category: item.category,
-        locationName: location?.name ?? "Unknown",
-        carryMode: item.carryMode,
-        material: item.material,
-        quality: item.quality,
-        conditionState: item.conditionState,
-        effectiveEncumbrance,
-        accessTier: getAccessTier(item.carryMode),
-      } satisfies InventoryRow;
-    })
-    .filter((row): row is InventoryRow => row !== null)
-    .sort((a, b) => {
+    rows.push({
+      itemId: item.id,
+      displayName: item.displayName ?? template.name,
+      templateName: template.name,
+      category: item.category,
+      locationName: location?.name ?? "Unknown",
+      carryMode: item.carryMode,
+      material: item.material,
+      quality: item.quality,
+      conditionState: item.conditionState,
+      effectiveEncumbrance,
+      accessTier: getAccessTier(item.carryMode),
+    });
+  }
+
+  return rows.sort((a, b) => {
       if (a.locationName !== b.locationName) {
         return a.locationName.localeCompare(b.locationName);
       }
