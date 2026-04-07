@@ -1,6 +1,6 @@
-import type { EquipmentTemplate } from "@glantri/domain/equipment";
+import type { ArmorTemplate } from "@glantri/domain/equipment";
 
-export const armorTemplates: EquipmentTemplate[] = [
+export const armorTemplates: ArmorTemplate[] = [
   {
     id: "armor-template-leather-jerkin",
     category: "armor",
@@ -11,6 +11,8 @@ export const armorTemplates: EquipmentTemplate[] = [
     defaultMaterial: "leather",
     baseEncumbrance: 12,
     baseValue: null,
+    armorRating: 1,
+    mobilityPenalty: 0,
     rulesNotes: "Light torso protection for travel and skirmish work.",
     roleplayNotes: null
   },
@@ -24,6 +26,8 @@ export const armorTemplates: EquipmentTemplate[] = [
     defaultMaterial: "steel",
     baseEncumbrance: 24,
     baseValue: null,
+    armorRating: 3,
+    mobilityPenalty: 1,
     rulesNotes: "Heavier armor offering broader battlefield protection.",
     roleplayNotes: null
   }

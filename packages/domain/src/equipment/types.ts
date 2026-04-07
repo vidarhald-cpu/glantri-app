@@ -69,7 +69,7 @@ export type WeaponHandlingClass =
   | "polearm"
   | "other";
 
-export interface EquipmentTemplate {
+export interface EquipmentTemplateBase {
   id: string;
   category: EquipmentCategory;
   name: string;
@@ -92,7 +92,7 @@ export interface WeaponDurabilityProfile {
   notes?: string | null;
 }
 
-export interface WeaponTemplate extends EquipmentTemplate {
+export interface WeaponTemplate extends EquipmentTemplateBase {
   category: "weapon";
   weaponClass: string;
   weaponSkill: string;
@@ -114,6 +114,33 @@ export interface WeaponTemplate extends EquipmentTemplate {
   defensiveValue?: number | null;
   durabilityProfile?: WeaponDurabilityProfile | null;
 }
+
+export interface ShieldTemplate extends EquipmentTemplateBase {
+  category: "shield";
+  shieldBonus?: number | null;
+  defensiveValue?: number | null;
+}
+
+export interface ArmorTemplate extends EquipmentTemplateBase {
+  category: "armor";
+  armorRating?: number | null;
+  mobilityPenalty?: number | null;
+}
+
+export interface GearTemplate extends EquipmentTemplateBase {
+  category: "gear";
+}
+
+export interface ValuableTemplate extends EquipmentTemplateBase {
+  category: "valuables";
+}
+
+export type EquipmentTemplate =
+  | WeaponTemplate
+  | ShieldTemplate
+  | ArmorTemplate
+  | GearTemplate
+  | ValuableTemplate;
 
 export interface EquipmentSpecialProperties {
   magicEffects?: string[];

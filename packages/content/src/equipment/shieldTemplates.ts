@@ -1,6 +1,6 @@
-import type { EquipmentTemplate } from "@glantri/domain/equipment";
+import type { ShieldTemplate } from "@glantri/domain/equipment";
 
-export const shieldTemplates: EquipmentTemplate[] = [
+export const shieldTemplates: ShieldTemplate[] = [
   {
     id: "shield-template-buckler",
     category: "shield",
@@ -11,6 +11,8 @@ export const shieldTemplates: EquipmentTemplate[] = [
     defaultMaterial: "wood",
     baseEncumbrance: 4,
     baseValue: null,
+    shieldBonus: 1,
+    defensiveValue: 1,
     rulesNotes: "Small shield for quick parrying.",
     roleplayNotes: null
   },
@@ -24,6 +26,8 @@ export const shieldTemplates: EquipmentTemplate[] = [
     defaultMaterial: "wood",
     baseEncumbrance: 7,
     baseValue: null,
+    shieldBonus: 2,
+    defensiveValue: 2,
     rulesNotes: "Common field shield with solid coverage.",
     roleplayNotes: null
   }

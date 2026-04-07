@@ -95,6 +95,8 @@ export const EquipmentTemplateSchema = z.object({
   roleplayNotes: z.string().nullable().optional(),
 });
 
+export const EquipmentTemplateBaseSchema = EquipmentTemplateSchema;
+
 export const WeaponDurabilityProfileSchema = z.object({
   maxDurabilityDefault: z.number().int().positive(),
   breakThreshold: z.number().int().nonnegative(),
@@ -126,6 +128,34 @@ export const WeaponTemplateSchema = EquipmentTemplateSchema.extend({
   defensiveValue: z.number().nullable().optional(),
   durabilityProfile: WeaponDurabilityProfileSchema.nullable().optional(),
 });
+
+export const ShieldTemplateSchema = EquipmentTemplateSchema.extend({
+  category: z.literal("shield"),
+  shieldBonus: z.number().nullable().optional(),
+  defensiveValue: z.number().nullable().optional(),
+});
+
+export const ArmorTemplateSchema = EquipmentTemplateSchema.extend({
+  category: z.literal("armor"),
+  armorRating: z.number().nullable().optional(),
+  mobilityPenalty: z.number().nullable().optional(),
+});
+
+export const GearTemplateSchema = EquipmentTemplateSchema.extend({
+  category: z.literal("gear"),
+});
+
+export const ValuableTemplateSchema = EquipmentTemplateSchema.extend({
+  category: z.literal("valuables"),
+});
+
+export const AnyEquipmentTemplateSchema = z.discriminatedUnion("category", [
+  WeaponTemplateSchema,
+  ShieldTemplateSchema,
+  ArmorTemplateSchema,
+  GearTemplateSchema,
+  ValuableTemplateSchema,
+]);
 
 export const EquipmentItemSchema = z.object({
   id: z.string(),
@@ -180,7 +210,12 @@ export const CharacterLoadoutSchema = z.object({
 });
 
 export type EquipmentTemplateInput = z.input<typeof EquipmentTemplateSchema>;
+export type EquipmentTemplateBaseInput = z.input<typeof EquipmentTemplateBaseSchema>;
 export type WeaponTemplateInput = z.input<typeof WeaponTemplateSchema>;
+export type ShieldTemplateInput = z.input<typeof ShieldTemplateSchema>;
+export type ArmorTemplateInput = z.input<typeof ArmorTemplateSchema>;
+export type GearTemplateInput = z.input<typeof GearTemplateSchema>;
+export type ValuableTemplateInput = z.input<typeof ValuableTemplateSchema>;
 export type EquipmentItemInput = z.input<typeof EquipmentItemSchema>;
 export type StorageLocationInput = z.input<typeof StorageLocationSchema>;
 export type CharacterLoadoutInput = z.input<typeof CharacterLoadoutSchema>;
