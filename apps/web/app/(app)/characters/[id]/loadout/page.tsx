@@ -9,10 +9,12 @@ import {
 } from "@glantri/domain/equipment";
 
 import {
+  getCharacterGearItems,
   getCharacterArmorItems,
   getBackpackItems,
   getCharacterShieldItems,
   getCharacterWeaponItems,
+  getEncounterAccessibleGearItems,
   getEquipmentTemplateById,
   getLoadoutEquipment,
   getMountEncumbranceTotal,
@@ -148,6 +150,8 @@ export default function CharacterLoadoutPage({ params }: CharacterLoadoutPagePro
   const personalEncumbrance = getPersonalEncumbranceTotal(state, id);
   const mountEncumbrance = getMountEncumbranceTotal(state, id);
   const backpackCount = getBackpackItems(state, id).length;
+  const gearCount = getCharacterGearItems(state, id).length;
+  const encounterAccessibleGearCount = getEncounterAccessibleGearItems(state, id).length;
   const storedCount = getStoredItems(state, id).length;
   const weaponOptions = useMemo(
     () => buildSelectableItemOptions({ items: getCharacterWeaponItems(state, id), state }),
@@ -309,6 +313,8 @@ export default function CharacterLoadoutPage({ params }: CharacterLoadoutPagePro
         />
         <SummaryCard label="Personal encumbrance total" value={personalEncumbrance} />
         <SummaryCard label="Mount encumbrance total" value={mountEncumbrance} />
+        <SummaryCard label="Gear item count" value={gearCount} />
+        <SummaryCard label="Encounter-accessible gear" value={encounterAccessibleGearCount} />
         <SummaryCard label="Backpack item count" value={backpackCount} />
         <SummaryCard label="Stored item count" value={storedCount} />
       </div>

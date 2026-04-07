@@ -1,4 +1,6 @@
 import {
+  isEncounterAccessible,
+  isPersonalCarryMode,
   getAccessTier,
   getEffectiveEncumbrance,
   getLocationSortOrder,
@@ -45,6 +47,15 @@ export function getCharacterArmorItems(
 ): EquipmentItem[] {
   return getCharacterEquipmentItems(state, characterId).filter(
     (item) => item.category === "armor",
+  );
+}
+
+export function getCharacterGearItems(
+  state: EquipmentFeatureState,
+  characterId: string,
+): EquipmentItem[] {
+  return getCharacterEquipmentItems(state, characterId).filter(
+    (item) => item.category === "gear",
   );
 }
 
@@ -178,6 +189,24 @@ export function getStoredItems(
   return getCharacterEquipmentItems(state, characterId).filter(
     (item) => isStoredCarryMode(item.storageAssignment.carryMode),
   );
+}
+
+export function getEncounterAccessibleGearItems(
+  state: EquipmentFeatureState,
+  characterId: string,
+): EquipmentItem[] {
+  return getCharacterGearItems(state, characterId).filter((item) => {
+    if (isStoredCarryMode(item.storageAssignment.carryMode)) {
+      return false;
+    }
+
+    if (isPersonalCarryMode(item.storageAssignment.carryMode)) {
+      return true;
+    }
+
+    const location = state.locationsById[item.storageAssignment.locationId];
+    return location ? isEncounterAccessible(location) : false;
+  });
 }
 
 export function getPersonalEncumbranceTotal(

@@ -1,0 +1,60 @@
+import type { GearTemplate } from "@glantri/domain/equipment";
+
+export const gearTemplates: GearTemplate[] = [
+  {
+    id: "gear-template-rope",
+    category: "gear",
+    name: "Rope",
+    subtype: "utility",
+    tags: ["gear", "utility", "travel"],
+    specificityTypeDefault: "generic",
+    defaultMaterial: "cloth",
+    baseEncumbrance: 4,
+    baseValue: null,
+    rulesNotes: "Useful for climbing, tying, and hauling.",
+    roleplayNotes: null,
+  },
+  {
+    id: "gear-template-lantern",
+    category: "gear",
+    name: "Lantern",
+    subtype: "light-source",
+    tags: ["gear", "light", "travel"],
+    specificityTypeDefault: "generic",
+    defaultMaterial: "bronze",
+    baseEncumbrance: 3,
+    baseValue: null,
+    rulesNotes: "Common travel lantern for low-light work.",
+    roleplayNotes: null,
+  },
+  {
+    id: "gear-template-bedroll",
+    category: "gear",
+    name: "Bedroll",
+    subtype: "camping",
+    tags: ["gear", "camp", "travel"],
+    specificityTypeDefault: "generic",
+    defaultMaterial: "cloth",
+    baseEncumbrance: 5,
+    baseValue: null,
+    rulesNotes: "Simple bedding for camps and roadside sleep.",
+    roleplayNotes: null,
+  },
+  {
+    id: "gear-template-waterskin",
+    category: "gear",
+    name: "Waterskin",
+    subtype: "container",
+    tags: ["gear", "travel", "container"],
+    specificityTypeDefault: "generic",
+    defaultMaterial: "leather",
+    baseEncumbrance: 2,
+    baseValue: null,
+    rulesNotes: "Personal water container for daily travel.",
+    roleplayNotes: null,
+  },
+];
+
+export const gearTemplatesById = Object.fromEntries(
+  gearTemplates.map((template) => [template.id, template]),
+);
