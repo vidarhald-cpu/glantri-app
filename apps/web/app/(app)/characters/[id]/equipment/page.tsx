@@ -1,11 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { use, useMemo, useState } from "react";
-import {
-  validateEquipmentItem,
-  type StorageLocationType
-} from "@glantri/domain/equipment";
+import { use, useEffect, useMemo, useState } from "react";
+import { type StorageLocationType } from "@glantri/domain/equipment";
 
 import {
   getCharacterLocations,
@@ -13,12 +10,12 @@ import {
   getInventoryRows,
   getItemsGroupedByLocation
 } from "../../../../../src/features/equipment/equipmentSelectors";
-import {
-  createCustomLocation,
-  moveItem
-} from "../../../../../src/features/equipment/equipmentActions";
-import { equipmentInitialState } from "../../../../../src/features/equipment/equipmentStore";
 import type { EquipmentFeatureState } from "../../../../../src/features/equipment/types";
+import {
+  createCharacterStorageLocationOnServer,
+  loadCharacterEquipmentState,
+  moveCharacterEquipmentItemOnServer
+} from "../../../../../src/lib/api/localServiceClient";
 
 interface CharacterEquipmentPageProps {
   params: Promise<{
@@ -35,21 +32,57 @@ function formatLabel(value: string): string {
 
 export default function CharacterEquipmentPage({ params }: CharacterEquipmentPageProps) {
   const { id } = use(params);
-  const [state, setState] = useState<EquipmentFeatureState>(equipmentInitialState);
+  const [state, setState] = useState<EquipmentFeatureState | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [pageError, setPageError] = useState<string>();
   const [locationName, setLocationName] = useState("");
   const [locationType, setLocationType] = useState<StorageLocationType>("home");
   const [locationError, setLocationError] = useState<string>();
   const [rowErrors, setRowErrors] = useState<Record<string, string>>({});
-  const rows = getInventoryRows(state, id);
-  const locations = getCharacterLocations(state, id);
-  const groupedItems = useMemo(() => getItemsGroupedByLocation(state, id), [state, id]);
+  const rows = useMemo(() => (state ? getInventoryRows(state, id) : []), [state, id]);
+  const locations = useMemo(() => (state ? getCharacterLocations(state, id) : []), [state, id]);
+  const groupedItems = useMemo(() => (state ? getItemsGroupedByLocation(state, id) : []), [state, id]);
   const rowsByItemId = useMemo(
     () => new Map(rows.map((row) => [row.itemId, row])),
     [rows]
   );
-  const moveOptions = useMemo(() => getInventoryMoveOptions(state, id), [state, id]);
+  const moveOptions = useMemo(() => (state ? getInventoryMoveOptions(state, id) : []), [state, id]);
 
-  function handleMove(itemId: string, value: string) {
+  useEffect(() => {
+    let cancelled = false;
+
+    loadCharacterEquipmentState(id)
+      .then((nextState) => {
+        if (cancelled) {
+          return;
+        }
+
+        setState(nextState);
+        setPageError(undefined);
+      })
+      .catch((error) => {
+        if (cancelled) {
+          return;
+        }
+
+        setPageError(error instanceof Error ? error.message : "Unable to load equipment.");
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
+
+  async function handleMove(itemId: string, value: string) {
+    if (!state) {
+      return;
+    }
+
     const item = state.itemsById[itemId];
     if (!item) {
       return;
@@ -58,24 +91,12 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
     const [locationId, carryMode] = value.split("::");
 
     try {
-      const nextState = moveItem(
-        state,
+      const nextState = await moveCharacterEquipmentItemOnServer({
+        carryMode: carryMode as typeof item.storageAssignment.carryMode,
+        characterId: id,
         itemId,
-        locationId,
-        carryMode as typeof item.storageAssignment.carryMode
-      );
-      const nextItem = nextState.itemsById[itemId];
-      const validationErrors = validateEquipmentItem(nextItem);
-
-      if (validationErrors.length > 0) {
-        console.warn(`Unable to move item ${itemId}: ${validationErrors.join("; ")}`);
-        setRowErrors((current) => ({
-          ...current,
-          [itemId]: validationErrors[0]
-        }));
-        return;
-      }
-
+        locationId
+      });
       setState(nextState);
       setRowErrors((current) => {
         const next = { ...current };
@@ -92,7 +113,7 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
     }
   }
 
-  function handleCreateLocation() {
+  async function handleCreateLocation() {
     const trimmedName = locationName.trim();
 
     if (trimmedName.length === 0) {
@@ -108,7 +129,11 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
     }
 
     try {
-      const nextState = createCustomLocation(state, id, trimmedName, locationType);
+      const nextState = await createCharacterStorageLocationOnServer({
+        characterId: id,
+        name: trimmedName,
+        type: locationType
+      });
       setState(nextState);
       setLocationName("");
       setLocationError(undefined);
@@ -190,7 +215,34 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
         ) : null}
       </section>
 
-      {rows.length > 0 ? (
+      {loading ? (
+        <div
+          style={{
+            background: "#f6f5ef",
+            border: "1px solid #d9ddd8",
+            borderRadius: 12,
+            padding: "1rem"
+          }}
+        >
+          Loading equipment...
+        </div>
+      ) : null}
+
+      {pageError ? (
+        <div
+          style={{
+            background: "#fdf0ea",
+            border: "1px solid #e4b9a7",
+            borderRadius: 12,
+            color: "#8b3a1a",
+            padding: "1rem"
+          }}
+        >
+          {pageError}
+        </div>
+      ) : null}
+
+      {!loading && !pageError && rows.length > 0 ? (
         <div style={{ display: "grid", gap: "1rem" }}>
           {groupedItems.map((group) => {
             const groupRows = group.items
@@ -255,8 +307,8 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
                             <div style={{ display: "grid", gap: "0.35rem" }}>
                               <select
                                 aria-label={`Move ${row.displayName}`}
-                                onChange={(event) => handleMove(row.itemId, event.target.value)}
-                                value={`${state.itemsById[row.itemId]?.storageAssignment.locationId ?? ""}::${state.itemsById[row.itemId]?.storageAssignment.carryMode ?? ""}`}
+                                onChange={(event) => void handleMove(row.itemId, event.target.value)}
+                                value={`${state?.itemsById[row.itemId]?.storageAssignment.locationId ?? ""}::${state?.itemsById[row.itemId]?.storageAssignment.carryMode ?? ""}`}
                               >
                                 {moveOptions.map((option) => (
                                   <option key={option.value} value={option.value}>
@@ -280,7 +332,7 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
             );
           })}
         </div>
-      ) : (
+      ) : !loading && !pageError ? (
         <div
           style={{
             background: "#f6f5ef",
@@ -291,7 +343,7 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
         >
           No equipment is currently available for this character.
         </div>
-      )}
+      ) : null}
     </section>
   );
 }

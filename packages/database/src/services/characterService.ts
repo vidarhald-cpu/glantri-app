@@ -40,4 +40,8 @@ export class CharacterService {
   async listCharacters(ownerId: string): Promise<CharacterRecord[]> {
     return this.repository.listByOwner(ownerId);
   }
+
+  async getOwnedCharacter(ownerId: string, characterId: string): Promise<CharacterRecord | null> {
+    return this.repository.findOwnedById(ownerId, characterId);
+  }
 }

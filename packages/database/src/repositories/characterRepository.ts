@@ -21,6 +21,7 @@ export interface CreateCharacterRecordInput {
 }
 
 export interface CharacterRepository {
+  findOwnedById(ownerId: string, id: string): Promise<CharacterRecord | null>;
   saveOwned(input: CreateCharacterRecordInput): Promise<CharacterRecord>;
   listByOwner(ownerId: string): Promise<CharacterRecord[]>;
 }
@@ -47,6 +48,16 @@ function mapCharacterRecord(character: {
 
 export function createPrismaCharacterRepository(): CharacterRepository {
   return {
+    async findOwnedById(ownerId, id) {
+      const character = await prisma.character.findFirst({
+        where: {
+          id,
+          ownerId
+        }
+      });
+
+      return character ? mapCharacterRecord(character) : null;
+    },
     async saveOwned(input) {
       const existing = await prisma.character.findUnique({
         where: {

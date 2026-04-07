@@ -1,12 +1,14 @@
 import type { AuthUser, CredentialLoginInput, CredentialRegisterInput } from "@glantri/auth";
 import type { CanonicalContent } from "@glantri/content";
 import type { CharacterBuild } from "@glantri/domain";
+import type { CarryMode, StorageLocationType } from "@glantri/domain/equipment";
 import type {
   AdminContentConflictResponse,
   AdminContentGetResponse,
   AdminContentPutRequest,
   AdminContentPutResponse
 } from "@glantri/shared";
+import type { EquipmentFeatureState } from "../../features/equipment/types";
 
 export interface ServerCharacterRecord {
   build: CharacterBuild;
@@ -21,6 +23,10 @@ export interface ServerCharacterRecord {
 export interface ApiErrorPayload {
   error?: string;
   issues?: string[];
+}
+
+export interface EquipmentStateResponse {
+  state: EquipmentFeatureState;
 }
 
 export class ApiRequestError extends Error {
@@ -121,6 +127,56 @@ export async function loadMyServerCharacters(): Promise<ServerCharacterRecord[]>
   });
 
   return payload.characters;
+}
+
+export async function loadCharacterEquipmentState(
+  characterId: string
+): Promise<EquipmentFeatureState> {
+  const payload = await sendJson<EquipmentStateResponse>(`/characters/${characterId}/equipment`, {
+    method: "GET"
+  });
+
+  return payload.state;
+}
+
+export async function moveCharacterEquipmentItemOnServer(input: {
+  carryMode: CarryMode;
+  characterId: string;
+  itemId: string;
+  locationId: string;
+}): Promise<EquipmentFeatureState> {
+  const payload = await sendJson<EquipmentStateResponse>(
+    `/characters/${input.characterId}/equipment/move`,
+    {
+      body: JSON.stringify({
+        carryMode: input.carryMode,
+        itemId: input.itemId,
+        locationId: input.locationId
+      }),
+      method: "POST"
+    }
+  );
+
+  return payload.state;
+}
+
+export async function createCharacterStorageLocationOnServer(input: {
+  characterId: string;
+  name: string;
+  type: StorageLocationType;
+}): Promise<EquipmentFeatureState> {
+  const payload = await sendJson<EquipmentStateResponse>(
+    `/characters/${input.characterId}/equipment/locations`,
+    {
+      body: JSON.stringify({
+        name: input.name,
+        type: input.type
+      }),
+      method: "POST"
+    }
+  );
+
+  return payload.state;
 }
 
 export async function loadAdminCanonicalContentFromServer(): Promise<
