@@ -38,8 +38,10 @@ export function moveItem(
 
   next.itemsById[itemId] = {
     ...item,
-    locationId,
-    carryMode,
+    storageAssignment: {
+      locationId,
+      carryMode,
+    },
     isEquipped: carryMode === "equipped",
   };
 

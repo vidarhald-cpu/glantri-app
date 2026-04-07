@@ -151,6 +151,11 @@ export interface EquipmentSpecialProperties {
   customNotes?: string | null;
 }
 
+export interface ItemStorageAssignment {
+  locationId: string;
+  carryMode: CarryMode;
+}
+
 export interface EquipmentItem {
   id: string;
   characterId: string;
@@ -162,8 +167,7 @@ export interface EquipmentItem {
   isStackable: boolean;
   material: MaterialType;
   quality: QualityType;
-  locationId: string;
-  carryMode: CarryMode;
+  storageAssignment: ItemStorageAssignment;
   conditionState: ItemConditionState;
   durabilityCurrent?: number | null;
   durabilityMax?: number | null;
@@ -171,7 +175,7 @@ export interface EquipmentItem {
   valueOverride?: number | null;
   specialProperties?: EquipmentSpecialProperties | null;
   notes?: string | null;
-  isEquipped: boolean;
+  isEquipped?: boolean | null;
   isFavorite?: boolean | null;
   acquiredFrom?: string | null;
   statusTags?: string[] | null;

@@ -51,7 +51,7 @@ export function getEffectiveEncumbrance(
     template.baseEncumbrance *
     getMaterialFactor(item.material) *
     getQualityFactor(item.quality) *
-    getCarryFactor(item.carryMode)
+    getCarryFactor(item.storageAssignment.carryMode)
   );
 }
 

@@ -114,7 +114,12 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
     const [locationId, carryMode] = value.split("::");
 
     try {
-      const nextState = moveItem(state, itemId, locationId, carryMode as typeof item.carryMode);
+      const nextState = moveItem(
+        state,
+        itemId,
+        locationId,
+        carryMode as typeof item.storageAssignment.carryMode
+      );
       const nextItem = nextState.itemsById[itemId];
       const validationErrors = validateEquipmentItem(nextItem);
 
@@ -307,7 +312,7 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
                               <select
                                 aria-label={`Move ${row.displayName}`}
                                 onChange={(event) => handleMove(row.itemId, event.target.value)}
-                                value={`${state.itemsById[row.itemId]?.locationId ?? ""}::${state.itemsById[row.itemId]?.carryMode ?? ""}`}
+                                value={`${state.itemsById[row.itemId]?.storageAssignment.locationId ?? ""}::${state.itemsById[row.itemId]?.storageAssignment.carryMode ?? ""}`}
                               >
                                 {moveOptions.map((option) => (
                                   <option key={option.value} value={option.value}>

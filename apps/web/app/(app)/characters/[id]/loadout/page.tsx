@@ -101,10 +101,12 @@ function WeaponControl(input: {
 
 function buildSelectableItemOptions(input: {
   items: Array<{
-    carryMode: string;
     conditionState: string;
     displayName?: string | null;
     id: string;
+    storageAssignment: {
+      carryMode: string;
+    };
     templateId: string;
   }>;
   state: EquipmentFeatureState;
@@ -112,7 +114,7 @@ function buildSelectableItemOptions(input: {
   return input.items
     .filter(
       (item) =>
-        item.carryMode !== "stored" &&
+        item.storageAssignment.carryMode !== "stored" &&
         item.conditionState !== "broken" &&
         item.conditionState !== "lost"
     )
@@ -122,7 +124,7 @@ function buildSelectableItemOptions(input: {
         displayName: item.displayName,
         templateId: item.templateId,
         templateName: getEquipmentTemplateById(input.state, item.templateId)?.name
-      })}${item.carryMode === "backpack" ? " (Backpack / slow)" : ""}`
+      })}${item.storageAssignment.carryMode === "backpack" ? " (Backpack / slow)" : ""}`
     }))
     .sort((left, right) => left.label.localeCompare(right.label));
 }

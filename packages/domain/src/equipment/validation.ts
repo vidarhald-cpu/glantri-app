@@ -14,23 +14,32 @@ export function validateEquipmentItem(item: EquipmentItem): string[] {
     errors.push("templateId is required");
   }
 
-  if (!item.locationId) {
-    errors.push("locationId is required");
+  if (!item.storageAssignment.locationId) {
+    errors.push("storageAssignment.locationId is required");
   }
 
   if (item.quantity <= 0) {
     errors.push("quantity must be greater than zero");
   }
 
-  if (item.isEquipped && item.carryMode !== "equipped") {
-    errors.push("equipped items must use carryMode 'equipped'");
+  if (
+    item.isEquipped != null &&
+    item.isEquipped !== (item.storageAssignment.carryMode === "equipped")
+  ) {
+    errors.push("isEquipped must match storageAssignment.carryMode");
   }
 
-  if (item.conditionState === "broken" && item.isEquipped) {
+  if (
+    item.conditionState === "broken" &&
+    item.storageAssignment.carryMode === "equipped"
+  ) {
     errors.push("broken items cannot be equipped");
   }
 
-  if (item.conditionState === "lost" && item.carryMode !== "stored") {
+  if (
+    item.conditionState === "lost" &&
+    item.storageAssignment.carryMode !== "stored"
+  ) {
     errors.push("lost items cannot remain in an active carry mode");
   }
 
@@ -95,7 +104,7 @@ export function validateLoadout(
       continue;
     }
 
-    if (item.carryMode === "stored") {
+    if (item.storageAssignment.carryMode === "stored") {
       errors.push(`Stored item cannot be part of active loadout: ${itemId}`);
     }
 
@@ -125,7 +134,7 @@ export function validateLoadout(
       continue;
     }
 
-    if (item.carryMode === "stored") {
+    if (item.storageAssignment.carryMode === "stored") {
       errors.push(`Stored item cannot be part of active loadout: ${itemId}`);
     }
 

@@ -81,6 +81,11 @@ export const EquipmentSpecialPropertiesSchema = z.object({
   customNotes: z.string().nullable().optional(),
 });
 
+export const ItemStorageAssignmentSchema = z.object({
+  locationId: z.string(),
+  carryMode: CarryModeSchema,
+});
+
 export const EquipmentTemplateSchema = z.object({
   id: z.string(),
   category: EquipmentCategorySchema,
@@ -168,8 +173,7 @@ export const EquipmentItemSchema = z.object({
   isStackable: z.boolean(),
   material: MaterialTypeSchema,
   quality: QualityTypeSchema,
-  locationId: z.string(),
-  carryMode: CarryModeSchema,
+  storageAssignment: ItemStorageAssignmentSchema,
   conditionState: ItemConditionStateSchema,
   durabilityCurrent: z.number().int().nonnegative().nullable().optional(),
   durabilityMax: z.number().int().positive().nullable().optional(),
@@ -177,7 +181,7 @@ export const EquipmentItemSchema = z.object({
   valueOverride: z.number().nonnegative().nullable().optional(),
   specialProperties: EquipmentSpecialPropertiesSchema.nullable().optional(),
   notes: z.string().nullable().optional(),
-  isEquipped: z.boolean(),
+  isEquipped: z.boolean().nullable().optional(),
   isFavorite: z.boolean().nullable().optional(),
   acquiredFrom: z.string().nullable().optional(),
   statusTags: z.array(z.string()).nullable().optional(),
@@ -216,6 +220,7 @@ export type ShieldTemplateInput = z.input<typeof ShieldTemplateSchema>;
 export type ArmorTemplateInput = z.input<typeof ArmorTemplateSchema>;
 export type GearTemplateInput = z.input<typeof GearTemplateSchema>;
 export type ValuableTemplateInput = z.input<typeof ValuableTemplateSchema>;
+export type ItemStorageAssignmentInput = z.input<typeof ItemStorageAssignmentSchema>;
 export type EquipmentItemInput = z.input<typeof EquipmentItemSchema>;
 export type StorageLocationInput = z.input<typeof StorageLocationSchema>;
 export type CharacterLoadoutInput = z.input<typeof CharacterLoadoutSchema>;

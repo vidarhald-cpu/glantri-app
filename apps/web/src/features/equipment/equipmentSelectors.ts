@@ -73,7 +73,7 @@ export function getInventoryRows(
       continue;
     }
 
-    const location = state.locationsById[item.locationId];
+    const location = state.locationsById[item.storageAssignment.locationId];
     const effectiveEncumbrance = getEffectiveEncumbrance(item, template);
 
     rows.push({
@@ -82,12 +82,12 @@ export function getInventoryRows(
       templateName: template.name,
       category: item.category,
       locationName: location?.name ?? "Unknown",
-      carryMode: item.carryMode,
+      carryMode: item.storageAssignment.carryMode,
       material: item.material,
       quality: item.quality,
       conditionState: item.conditionState,
       effectiveEncumbrance,
-      accessTier: getAccessTier(item.carryMode),
+      accessTier: getAccessTier(item.storageAssignment.carryMode),
     });
   }
 
@@ -110,7 +110,7 @@ export function getItemsGroupedByLocation(
     .map((location) => ({
       location,
       items: items
-        .filter((item) => item.locationId === location.id)
+        .filter((item) => item.storageAssignment.locationId === location.id)
         .sort((a, b) => a.id.localeCompare(b.id)),
     }))
     .filter((entry) => entry.items.length > 0);
@@ -121,7 +121,7 @@ export function getEquippedItems(
   characterId: string,
 ): EquipmentItem[] {
   return getCharacterEquipmentItems(state, characterId).filter(
-    (item) => item.carryMode === "equipped",
+    (item) => item.storageAssignment.carryMode === "equipped",
   );
 }
 
@@ -130,7 +130,7 @@ export function getBackpackItems(
   characterId: string,
 ): EquipmentItem[] {
   return getCharacterEquipmentItems(state, characterId).filter(
-    (item) => item.carryMode === "backpack",
+    (item) => item.storageAssignment.carryMode === "backpack",
   );
 }
 
@@ -139,7 +139,7 @@ export function getStoredItems(
   characterId: string,
 ): EquipmentItem[] {
   return getCharacterEquipmentItems(state, characterId).filter(
-    (item) => item.carryMode === "stored",
+    (item) => item.storageAssignment.carryMode === "stored",
   );
 }
 
@@ -162,7 +162,7 @@ export function getMountEncumbranceTotal(
   characterId: string,
 ): number {
   return getCharacterEquipmentItems(state, characterId)
-    .filter((item) => item.carryMode === "mount")
+    .filter((item) => item.storageAssignment.carryMode === "mount")
     .reduce((total, item) => {
       const template = getEquipmentTemplateById(state, item.templateId);
       if (!template) {
