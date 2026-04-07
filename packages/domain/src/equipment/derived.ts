@@ -3,9 +3,87 @@ import type {
   CarryMode,
   EquipmentItem,
   EquipmentTemplate,
+  ItemStorageAssignment,
   MaterialType,
   QualityType,
+  StorageLocation,
+  StorageLocationType,
 } from "./types";
+
+const SYSTEM_LOCATION_TYPES: StorageLocationType[] = [
+  "equipped_system",
+  "person_system",
+  "backpack_system",
+  "mount_system",
+];
+
+export function isSystemLocation(
+  location: Pick<StorageLocation, "type">,
+): boolean {
+  return SYSTEM_LOCATION_TYPES.includes(location.type);
+}
+
+export function isRemoteStorage(
+  location: Pick<StorageLocation, "type" | "isAccessibleInEncounter">,
+): boolean {
+  return !isSystemLocation(location) && !location.isAccessibleInEncounter;
+}
+
+export function isEncounterAccessible(
+  location: Pick<StorageLocation, "isAccessibleInEncounter">,
+): boolean {
+  return location.isAccessibleInEncounter;
+}
+
+export function isPersonalCarryMode(carryMode: CarryMode): boolean {
+  return (
+    carryMode === "equipped" ||
+    carryMode === "on_person" ||
+    carryMode === "backpack"
+  );
+}
+
+export function isStoredCarryMode(carryMode: CarryMode): boolean {
+  return carryMode === "stored";
+}
+
+export function isReadyCarryMode(carryMode: CarryMode): boolean {
+  return carryMode === "equipped" || carryMode === "on_person";
+}
+
+export function getLocationSortOrder(
+  location: Pick<StorageLocation, "type">,
+): number {
+  switch (location.type) {
+    case "equipped_system":
+      return 0;
+    case "person_system":
+      return 1;
+    case "backpack_system":
+      return 2;
+    case "mount_system":
+      return 3;
+    default:
+      return 4;
+  }
+}
+
+export function getStorageAssignmentForLocation(
+  location: Pick<StorageLocation, "id" | "type">,
+): ItemStorageAssignment {
+  switch (location.type) {
+    case "equipped_system":
+      return { carryMode: "equipped", locationId: location.id };
+    case "person_system":
+      return { carryMode: "on_person", locationId: location.id };
+    case "backpack_system":
+      return { carryMode: "backpack", locationId: location.id };
+    case "mount_system":
+      return { carryMode: "mount", locationId: location.id };
+    default:
+      return { carryMode: "stored", locationId: location.id };
+  }
+}
 
 export function getMaterialFactor(material: MaterialType): number {
   switch (material) {
@@ -30,12 +108,9 @@ export function getCarryFactor(carryMode: CarryMode): number {
     case "backpack":
       return 0.75;
     case "mount":
-    case "stored":
       return 0.0;
-    case "equipped":
-    case "on_person":
     default:
-      return 1.0;
+      return isStoredCarryMode(carryMode) ? 0.0 : 1.0;
   }
 }
 
@@ -56,31 +131,28 @@ export function getEffectiveEncumbrance(
 }
 
 export function getAccessTier(carryMode: CarryMode): AccessTier {
+  if (isReadyCarryMode(carryMode)) {
+    return carryMode === "equipped" ? "immediate" : "fast";
+  }
+
   switch (carryMode) {
-    case "equipped":
-      return "immediate";
-    case "on_person":
-      return "fast";
     case "backpack":
       return "slow";
     case "mount":
       return "situational";
-    case "stored":
     default:
       return "unavailable";
   }
 }
 
 export function getRetrievalRounds(carryMode: CarryMode): number | null {
+  if (isReadyCarryMode(carryMode)) {
+    return carryMode === "equipped" ? 0 : 1;
+  }
+
   switch (carryMode) {
-    case "equipped":
-      return 0;
-    case "on_person":
-      return 1;
     case "backpack":
       return 10;
-    case "mount":
-    case "stored":
     default:
       return null;
   }

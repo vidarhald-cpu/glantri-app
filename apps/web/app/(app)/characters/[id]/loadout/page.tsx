@@ -2,6 +2,11 @@
 
 import Link from "next/link";
 import { use, useMemo, useState } from "react";
+import {
+  getAccessTier,
+  isStoredCarryMode,
+  type CarryMode
+} from "@glantri/domain/equipment";
 
 import {
   getCharacterArmorItems,
@@ -105,7 +110,7 @@ function buildSelectableItemOptions(input: {
     displayName?: string | null;
     id: string;
     storageAssignment: {
-      carryMode: string;
+      carryMode: CarryMode;
     };
     templateId: string;
   }>;
@@ -114,7 +119,7 @@ function buildSelectableItemOptions(input: {
   return input.items
     .filter(
       (item) =>
-        item.storageAssignment.carryMode !== "stored" &&
+        !isStoredCarryMode(item.storageAssignment.carryMode) &&
         item.conditionState !== "broken" &&
         item.conditionState !== "lost"
     )
@@ -124,7 +129,7 @@ function buildSelectableItemOptions(input: {
         displayName: item.displayName,
         templateId: item.templateId,
         templateName: getEquipmentTemplateById(input.state, item.templateId)?.name
-      })}${item.storageAssignment.carryMode === "backpack" ? " (Backpack / slow)" : ""}`
+      })}${getAccessTier(item.storageAssignment.carryMode) === "slow" ? " (Backpack / slow)" : ""}`
     }))
     .sort((left, right) => left.label.localeCompare(right.label));
 }

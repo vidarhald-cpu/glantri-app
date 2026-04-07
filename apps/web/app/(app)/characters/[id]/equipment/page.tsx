@@ -9,6 +9,7 @@ import {
 
 import {
   getCharacterLocations,
+  getInventoryMoveOptions,
   getInventoryRows,
   getItemsGroupedByLocation
 } from "../../../../../src/features/equipment/equipmentSelectors";
@@ -32,36 +33,6 @@ function formatLabel(value: string): string {
     .join(" ");
 }
 
-function getMoveTarget(input: { locationId: string; type: string }) {
-  switch (input.type) {
-    case "equipped_system":
-      return { carryMode: "equipped" as const, label: "Equipped", locationId: input.locationId };
-    case "person_system":
-      return { carryMode: "on_person" as const, label: "On person", locationId: input.locationId };
-    case "backpack_system":
-      return { carryMode: "backpack" as const, label: "Backpack", locationId: input.locationId };
-    case "mount_system":
-      return { carryMode: "mount" as const, label: "Mount", locationId: input.locationId };
-    default:
-      return { carryMode: "stored" as const, label: null, locationId: input.locationId };
-  }
-}
-
-function getLocationSortOrder(type: string): number {
-  switch (type) {
-    case "equipped_system":
-      return 0;
-    case "person_system":
-      return 1;
-    case "backpack_system":
-      return 2;
-    case "mount_system":
-      return 3;
-    default:
-      return 4;
-  }
-}
-
 export default function CharacterEquipmentPage({ params }: CharacterEquipmentPageProps) {
   const { id } = use(params);
   const [state, setState] = useState<EquipmentFeatureState>(equipmentInitialState);
@@ -71,39 +42,12 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
   const [rowErrors, setRowErrors] = useState<Record<string, string>>({});
   const rows = getInventoryRows(state, id);
   const locations = getCharacterLocations(state, id);
-  const groupedItems = useMemo(
-    () =>
-      getItemsGroupedByLocation(state, id).sort((left, right) => {
-        const orderDifference =
-          getLocationSortOrder(left.location.type) - getLocationSortOrder(right.location.type);
-
-        if (orderDifference !== 0) {
-          return orderDifference;
-        }
-
-        return left.location.name.localeCompare(right.location.name);
-      }),
-    [state, id]
-  );
+  const groupedItems = useMemo(() => getItemsGroupedByLocation(state, id), [state, id]);
   const rowsByItemId = useMemo(
     () => new Map(rows.map((row) => [row.itemId, row])),
     [rows]
   );
-  const moveOptions = useMemo(
-    () =>
-      locations
-        .map((location) => {
-          const target = getMoveTarget({ locationId: location.id, type: location.type });
-          return {
-            carryMode: target.carryMode,
-            label: target.label ?? location.name,
-            locationId: location.id,
-            value: `${location.id}::${target.carryMode}`
-          };
-        })
-        .sort((left, right) => left.label.localeCompare(right.label)),
-    [locations]
-  );
+  const moveOptions = useMemo(() => getInventoryMoveOptions(state, id), [state, id]);
 
   function handleMove(itemId: string, value: string) {
     const item = state.itemsById[itemId];

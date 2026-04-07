@@ -2,6 +2,7 @@ import type {
   CharacterLoadout,
   EquipmentItem,
 } from "./types";
+import { isStoredCarryMode } from "./derived";
 
 export function validateEquipmentItem(item: EquipmentItem): string[] {
   const errors: string[] = [];
@@ -104,7 +105,7 @@ export function validateLoadout(
       continue;
     }
 
-    if (item.storageAssignment.carryMode === "stored") {
+    if (isStoredCarryMode(item.storageAssignment.carryMode)) {
       errors.push(`Stored item cannot be part of active loadout: ${itemId}`);
     }
 
@@ -134,7 +135,7 @@ export function validateLoadout(
       continue;
     }
 
-    if (item.storageAssignment.carryMode === "stored") {
+    if (isStoredCarryMode(item.storageAssignment.carryMode)) {
       errors.push(`Stored item cannot be part of active loadout: ${itemId}`);
     }
 

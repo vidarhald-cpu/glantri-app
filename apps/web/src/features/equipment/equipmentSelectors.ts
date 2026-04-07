@@ -1,7 +1,11 @@
 import {
   getAccessTier,
   getEffectiveEncumbrance,
+  getLocationSortOrder,
+  getStorageAssignmentForLocation,
+  isStoredCarryMode,
   type CharacterLoadout,
+  type CarryMode,
   type EquipmentItem,
   type EquipmentTemplate,
   type StorageLocation,
@@ -113,7 +117,40 @@ export function getItemsGroupedByLocation(
         .filter((item) => item.storageAssignment.locationId === location.id)
         .sort((a, b) => a.id.localeCompare(b.id)),
     }))
-    .filter((entry) => entry.items.length > 0);
+    .filter((entry) => entry.items.length > 0)
+    .sort((left, right) => {
+      const orderDifference =
+        getLocationSortOrder(left.location) - getLocationSortOrder(right.location);
+
+      if (orderDifference !== 0) {
+        return orderDifference;
+      }
+
+      return left.location.name.localeCompare(right.location.name);
+    });
+}
+
+export function getInventoryMoveOptions(
+  state: EquipmentFeatureState,
+  characterId: string,
+): Array<{
+  carryMode: CarryMode;
+  label: string;
+  locationId: string;
+  value: string;
+}> {
+  return getCharacterLocations(state, characterId)
+    .map((location) => {
+      const storageAssignment = getStorageAssignmentForLocation(location);
+
+      return {
+        carryMode: storageAssignment.carryMode,
+        label: location.name,
+        locationId: location.id,
+        value: `${location.id}::${storageAssignment.carryMode}`,
+      };
+    })
+    .sort((left, right) => left.label.localeCompare(right.label));
 }
 
 export function getEquippedItems(
@@ -139,7 +176,7 @@ export function getStoredItems(
   characterId: string,
 ): EquipmentItem[] {
   return getCharacterEquipmentItems(state, characterId).filter(
-    (item) => item.storageAssignment.carryMode === "stored",
+    (item) => isStoredCarryMode(item.storageAssignment.carryMode),
   );
 }
 
