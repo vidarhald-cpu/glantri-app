@@ -2,14 +2,20 @@
 
 import Link from "next/link";
 import { use, useMemo, useState } from "react";
-import { validateEquipmentItem } from "@glantri/domain/equipment";
+import {
+  validateEquipmentItem,
+  type StorageLocationType
+} from "@glantri/domain/equipment";
 
 import {
   getCharacterLocations,
   getInventoryRows,
   getItemsGroupedByLocation
 } from "../../../../../src/features/equipment/equipmentSelectors";
-import { moveItem } from "../../../../../src/features/equipment/equipmentActions";
+import {
+  createCustomLocation,
+  moveItem
+} from "../../../../../src/features/equipment/equipmentActions";
 import { equipmentInitialState } from "../../../../../src/features/equipment/equipmentStore";
 import type { EquipmentFeatureState } from "../../../../../src/features/equipment/types";
 
@@ -59,6 +65,9 @@ function getLocationSortOrder(type: string): number {
 export default function CharacterEquipmentPage({ params }: CharacterEquipmentPageProps) {
   const { id } = use(params);
   const [state, setState] = useState<EquipmentFeatureState>(equipmentInitialState);
+  const [locationName, setLocationName] = useState("");
+  const [locationType, setLocationType] = useState<StorageLocationType>("home");
+  const [locationError, setLocationError] = useState<string>();
   const [rowErrors, setRowErrors] = useState<Record<string, string>>({});
   const rows = getInventoryRows(state, id);
   const locations = getCharacterLocations(state, id);
@@ -134,6 +143,34 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
     }
   }
 
+  function handleCreateLocation() {
+    const trimmedName = locationName.trim();
+
+    if (trimmedName.length === 0) {
+      setLocationError("Location name is required.");
+      return;
+    }
+
+    if (
+      locations.some((location) => location.name.toLowerCase() === trimmedName.toLowerCase())
+    ) {
+      setLocationError("A location with that name already exists.");
+      return;
+    }
+
+    try {
+      const nextState = createCustomLocation(state, id, trimmedName, locationType);
+      setState(nextState);
+      setLocationName("");
+      setLocationError(undefined);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Unable to create location.";
+      console.warn(message);
+      setLocationError(message);
+    }
+  }
+
   return (
     <section style={{ display: "grid", gap: "1rem", maxWidth: 1080 }}>
       <div style={{ display: "grid", gap: "0.35rem" }}>
@@ -146,6 +183,63 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
           <Link href={`/characters/${id}/loadout`}>Open loadout</Link>
         </div>
       </div>
+
+      <section
+        style={{
+          background: "#f6f5ef",
+          border: "1px solid #d9ddd8",
+          borderRadius: 12,
+          display: "grid",
+          gap: "0.75rem",
+          padding: "1rem"
+        }}
+      >
+        <div style={{ display: "grid", gap: "0.2rem" }}>
+          <strong>Add storage location</strong>
+          <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
+            New locations become available in the move controls immediately.
+          </div>
+        </div>
+        <div
+          style={{
+            alignItems: "end",
+            display: "grid",
+            gap: "0.75rem",
+            gridTemplateColumns: "minmax(220px, 1fr) minmax(180px, 220px) auto"
+          }}
+        >
+          <label style={{ display: "grid", gap: "0.35rem" }}>
+            <span>Location name</span>
+            <input
+              onChange={(event) => setLocationName(event.target.value)}
+              placeholder="For example: Town house"
+              type="text"
+              value={locationName}
+            />
+          </label>
+          <label style={{ display: "grid", gap: "0.35rem" }}>
+            <span>Location type</span>
+            <select
+              onChange={(event) => setLocationType(event.target.value as StorageLocationType)}
+              value={locationType}
+            >
+              <option value="home">Home</option>
+              <option value="camp">Camp</option>
+              <option value="boat">Boat</option>
+              <option value="wagon">Wagon</option>
+              <option value="cache">Cache</option>
+              <option value="building">Building</option>
+              <option value="other">Other</option>
+            </select>
+          </label>
+          <button onClick={handleCreateLocation} type="button">
+            Add location
+          </button>
+        </div>
+        {locationError ? (
+          <div style={{ color: "#8b3a1a", fontSize: "0.85rem" }}>{locationError}</div>
+        ) : null}
+      </section>
 
       {rows.length > 0 ? (
         <div style={{ display: "grid", gap: "1rem" }}>
