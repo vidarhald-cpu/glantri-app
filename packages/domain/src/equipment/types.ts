@@ -193,8 +193,8 @@ export interface CharacterLoadout {
   characterId: string;
   name: string;
   isActive: boolean;
-  activeArmorItemId?: string | null;
-  activeShieldItemId?: string | null;
+  wornArmorItemId?: string | null;
+  readyShieldItemId?: string | null;
   activePrimaryWeaponItemId?: string | null;
   activeSecondaryWeaponItemId?: string | null;
   activeMissileWeaponItemId?: string | null;

@@ -130,15 +130,34 @@ export function setActiveMissileWeapon(
   }));
 }
 
-export function setActiveShield(
+export function setReadyShield(
   state: EquipmentFeatureState,
   characterId: string,
   itemId: string | null,
 ): EquipmentFeatureState {
   return updateLoadout(state, characterId, (loadout) => ({
     ...loadout,
-    activeShieldItemId: itemId,
+    readyShieldItemId: itemId,
   }));
+}
+
+export function setWornArmor(
+  state: EquipmentFeatureState,
+  characterId: string,
+  itemId: string | null,
+): EquipmentFeatureState {
+  return updateLoadout(state, characterId, (loadout) => ({
+    ...loadout,
+    wornArmorItemId: itemId,
+  }));
+}
+
+export function setActiveShield(
+  state: EquipmentFeatureState,
+  characterId: string,
+  itemId: string | null,
+): EquipmentFeatureState {
+  return setReadyShield(state, characterId, itemId);
 }
 
 export function setActiveArmor(
@@ -146,8 +165,5 @@ export function setActiveArmor(
   characterId: string,
   itemId: string | null,
 ): EquipmentFeatureState {
-  return updateLoadout(state, characterId, (loadout) => ({
-    ...loadout,
-    activeArmorItemId: itemId,
-  }));
+  return setWornArmor(state, characterId, itemId);
 }

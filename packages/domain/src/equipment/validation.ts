@@ -55,17 +55,69 @@ export function validateLoadout(
 ): string[] {
   const errors: string[] = [];
 
-  const referencedItemIds = [
-    loadout.activeArmorItemId,
-    loadout.activeShieldItemId,
-    loadout.activePrimaryWeaponItemId,
-    loadout.activeSecondaryWeaponItemId,
-    loadout.activeMissileWeaponItemId,
+  const slotEntries = [
+    {
+      category: "armor",
+      itemId: loadout.wornArmorItemId,
+      label: "wornArmorItemId",
+    },
+    {
+      category: "shield",
+      itemId: loadout.readyShieldItemId,
+      label: "readyShieldItemId",
+    },
+    {
+      category: "weapon",
+      itemId: loadout.activePrimaryWeaponItemId,
+      label: "activePrimaryWeaponItemId",
+    },
+    {
+      category: "weapon",
+      itemId: loadout.activeSecondaryWeaponItemId,
+      label: "activeSecondaryWeaponItemId",
+    },
+    {
+      category: "weapon",
+      itemId: loadout.activeMissileWeaponItemId,
+      label: "activeMissileWeaponItemId",
+    },
+  ] as const;
+
+  for (const { category, itemId, label } of slotEntries) {
+    if (!itemId) {
+      continue;
+    }
+
+    const item = ctx.itemsById[itemId];
+
+    if (!item) {
+      errors.push(`Referenced item not found: ${itemId}`);
+      continue;
+    }
+
+    if (item.carryMode === "stored") {
+      errors.push(`Stored item cannot be part of active loadout: ${itemId}`);
+    }
+
+    if (item.conditionState === "broken" || item.conditionState === "lost") {
+      errors.push(
+        `Broken or lost item cannot be part of active loadout: ${itemId}`,
+      );
+    }
+
+    if (item.category !== category) {
+      errors.push(
+        `${label} must reference a ${category} item: ${itemId}`,
+      );
+    }
+  }
+
+  const ancillaryItemIds = [
     ...loadout.activeAmmoItemIds,
     ...loadout.quickAccessItemIds,
-  ].filter(Boolean) as string[];
+  ];
 
-  for (const itemId of referencedItemIds) {
+  for (const itemId of ancillaryItemIds) {
     const item = ctx.itemsById[itemId];
 
     if (!item) {

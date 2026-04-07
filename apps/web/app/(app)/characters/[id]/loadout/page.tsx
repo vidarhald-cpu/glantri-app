@@ -15,11 +15,11 @@ import {
   getStoredItems
 } from "../../../../../src/features/equipment/equipmentSelectors";
 import {
-  setActiveArmor,
   setActiveMissileWeapon,
   setActivePrimaryWeapon,
   setActiveSecondaryWeapon,
-  setActiveShield
+  setReadyShield,
+  setWornArmor
 } from "../../../../../src/features/equipment/equipmentActions";
 import { equipmentInitialState } from "../../../../../src/features/equipment/equipmentStore";
 import type { EquipmentFeatureState } from "../../../../../src/features/equipment/types";
@@ -162,9 +162,9 @@ export default function CharacterLoadoutPage({ params }: CharacterLoadoutPagePro
     try {
       const nextState =
         input.kind === "armor"
-          ? setActiveArmor(state, id, input.itemId)
+          ? setWornArmor(state, id, input.itemId)
           : input.kind === "shield"
-          ? setActiveShield(state, id, input.itemId)
+          ? setReadyShield(state, id, input.itemId)
           : input.kind === "primary"
           ? setActivePrimaryWeapon(state, id, input.itemId)
           : input.kind === "secondary"
@@ -208,14 +208,14 @@ export default function CharacterLoadoutPage({ params }: CharacterLoadoutPagePro
       >
         <WeaponControl
           error={errors.armor}
-          label="Active armor"
+          label="Worn armor"
           onChange={(itemId) => applySelection({ itemId, kind: "armor" })}
           options={armorOptions}
           value={loadout.armor?.id ?? ""}
         />
         <WeaponControl
           error={errors.shield}
-          label="Active shield"
+          label="Ready shield"
           onChange={(itemId) => applySelection({ itemId, kind: "shield" })}
           options={shieldOptions}
           value={loadout.shield?.id ?? ""}
@@ -251,7 +251,7 @@ export default function CharacterLoadoutPage({ params }: CharacterLoadoutPagePro
         }}
       >
         <SummaryCard
-          label="Active armor"
+          label="Worn armor"
           value={getItemName({
             displayName: loadout.armor?.displayName,
             templateId: loadout.armor?.templateId,
@@ -261,7 +261,7 @@ export default function CharacterLoadoutPage({ params }: CharacterLoadoutPagePro
           })}
         />
         <SummaryCard
-          label="Active shield"
+          label="Ready shield"
           value={getItemName({
             displayName: loadout.shield?.displayName,
             templateId: loadout.shield?.templateId,

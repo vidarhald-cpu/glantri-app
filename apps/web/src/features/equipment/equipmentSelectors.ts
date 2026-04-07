@@ -180,6 +180,28 @@ export function getActiveLoadout(
   return state.activeLoadoutByCharacterId[characterId];
 }
 
+export function getWornArmor(
+  state: EquipmentFeatureState,
+  characterId: string,
+): EquipmentItem | undefined {
+  const loadout = getActiveLoadout(state, characterId);
+
+  return loadout?.wornArmorItemId
+    ? state.itemsById[loadout.wornArmorItemId]
+    : undefined;
+}
+
+export function getReadyShield(
+  state: EquipmentFeatureState,
+  characterId: string,
+): EquipmentItem | undefined {
+  const loadout = getActiveLoadout(state, characterId);
+
+  return loadout?.readyShieldItemId
+    ? state.itemsById[loadout.readyShieldItemId]
+    : undefined;
+}
+
 export function getLoadoutEquipment(
   state: EquipmentFeatureState,
   characterId: string,
@@ -197,12 +219,8 @@ export function getLoadoutEquipment(
   }
 
   return {
-    armor: loadout.activeArmorItemId
-      ? state.itemsById[loadout.activeArmorItemId]
-      : undefined,
-    shield: loadout.activeShieldItemId
-      ? state.itemsById[loadout.activeShieldItemId]
-      : undefined,
+    armor: getWornArmor(state, characterId),
+    shield: getReadyShield(state, characterId),
     primary: loadout.activePrimaryWeaponItemId
       ? state.itemsById[loadout.activePrimaryWeaponItemId]
       : undefined,
