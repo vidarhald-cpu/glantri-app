@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { use, useEffect, useMemo, useState } from "react";
+import { Fragment, use, useEffect, useMemo, useState } from "react";
 import {
   type CarryMode,
   type ItemConditionState,
@@ -94,6 +94,7 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
   const [addQuality, setAddQuality] = useState<QualityType>("standard");
   const [addDisplayName, setAddDisplayName] = useState("");
   const [quantityDrafts, setQuantityDrafts] = useState<Record<string, string>>({});
+  const [expandedItemIds, setExpandedItemIds] = useState<Record<string, boolean>>({});
   const [metadataDrafts, setMetadataDrafts] = useState<
     Record<
       string,
@@ -462,6 +463,10 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
         delete next[itemId];
         return next;
       });
+      setExpandedItemIds((current) => ({
+        ...current,
+        [itemId]: false
+      }));
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to update item details.";
       console.warn(message);
@@ -470,6 +475,13 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
         [itemId]: message
       }));
     }
+  }
+
+  function toggleExpandedItem(itemId: string) {
+    setExpandedItemIds((current) => ({
+      ...current,
+      [itemId]: !current[itemId]
+    }));
   }
 
   return (
@@ -795,168 +807,201 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
                           </thead>
                           <tbody>
                             {groupRows.map((row) => (
-                              <tr key={row.itemId}>
-                                <td style={tableCellStyle}>
-                                  <div style={{ display: "grid", gap: "0.2rem" }}>
-                                    <strong>{row.templateName}</strong>
-                                    <span style={{ color: "#5e5a50", fontSize: "0.8rem" }}>
-                                      {formatLabel(row.category)}
-                                    </span>
-                                  </div>
-                                </td>
-                                <td style={tableCellStyle}>
-                                  {row.displayName ? (
+                              <Fragment key={row.itemId}>
+                                <tr>
+                                  <td style={tableCellStyle}>
                                     <div style={{ display: "grid", gap: "0.2rem" }}>
-                                      <span>{row.displayName}</span>
-                                      {state?.itemsById[row.itemId]?.isFavorite ? (
-                                        <span style={{ color: "#5e5a50", fontSize: "0.8rem" }}>
-                                          Favorite
-                                        </span>
-                                      ) : null}
+                                      <strong>{row.templateName}</strong>
+                                      <span style={{ color: "#5e5a50", fontSize: "0.8rem" }}>
+                                        {formatLabel(row.category)}
+                                      </span>
                                     </div>
-                                  ) : (
-                                    <span style={{ color: "#8a8478" }}>None</span>
-                                  )}
-                                </td>
-                                <td style={tableCellStyle}>{formatLabel(row.carryMode)}</td>
-                                <td style={tableCellStyle}>{formatLabel(row.material)}</td>
-                                <td style={tableCellStyle}>{formatLabel(row.quality)}</td>
-                                <td style={tableCellStyle}>{formatLabel(row.conditionState)}</td>
-                                <td style={tableCellStyle}>
-                                  {state?.itemsById[row.itemId]?.isStackable ? (
-                                    <div style={{ display: "grid", gap: "0.35rem", maxWidth: 120 }}>
-                                      <input
-                                        min={1}
-                                        onChange={(event) =>
-                                          setQuantityDrafts((current) => ({
-                                            ...current,
-                                            [row.itemId]: event.target.value
-                                          }))
-                                        }
-                                        step={1}
-                                        type="number"
-                                        value={quantityDrafts[row.itemId] ?? String(state?.itemsById[row.itemId]?.quantity ?? 1)}
-                                      />
-                                      <button
-                                        onClick={() => void handleUpdateQuantity(row.itemId)}
-                                        type="button"
-                                      >
-                                        Save qty
-                                      </button>
-                                    </div>
-                                  ) : (
-                                    state?.itemsById[row.itemId]?.quantity ?? 1
-                                  )}
-                                </td>
-                                <td style={tableCellStyle}>{row.effectiveEncumbrance}</td>
-                                <td style={tableCellStyle}>{formatLabel(row.accessTier)}</td>
-                                <td style={tableCellStyle}>
-                                  <div style={{ display: "grid", gap: "0.5rem", maxWidth: 220 }}>
-                                    <select
-                                      aria-label={`Move ${row.displayName ?? row.templateName}`}
-                                      onChange={(event) => void handleMove(row.itemId, event.target.value)}
-                                      value={`${state?.itemsById[row.itemId]?.storageAssignment.locationId ?? ""}::${state?.itemsById[row.itemId]?.storageAssignment.carryMode ?? ""}`}
-                                    >
-                                      {moveOptions.map((option) => (
-                                        <option key={option.value} value={option.value}>
-                                          {option.label}
-                                        </option>
-                                      ))}
-                                    </select>
-                                    <button onClick={() => void handleRemoveItem(row.itemId)} type="button">
-                                      Remove item
-                                    </button>
-                                    <label style={{ display: "grid", gap: "0.25rem" }}>
-                                      <span style={{ fontSize: "0.8rem" }}>Display name</span>
-                                      <input
-                                        onChange={(event) =>
-                                          setMetadataDrafts((current) => ({
-                                            ...current,
-                                            [row.itemId]: {
-                                              ...current[row.itemId],
-                                              displayName: event.target.value
-                                            }
-                                          }))
-                                        }
-                                        placeholder="Optional"
-                                        type="text"
-                                        value={metadataDrafts[row.itemId]?.displayName ?? ""}
-                                      />
-                                    </label>
-                                    <label style={{ display: "grid", gap: "0.25rem" }}>
-                                      <span style={{ fontSize: "0.8rem" }}>Condition</span>
+                                  </td>
+                                  <td style={tableCellStyle}>
+                                    {row.displayName ? (
+                                      <div style={{ display: "grid", gap: "0.2rem" }}>
+                                        <span>{row.displayName}</span>
+                                        {state?.itemsById[row.itemId]?.isFavorite ? (
+                                          <span style={{ color: "#5e5a50", fontSize: "0.8rem" }}>
+                                            Favorite
+                                          </span>
+                                        ) : null}
+                                      </div>
+                                    ) : (
+                                      <span style={{ color: "#8a8478" }}>None</span>
+                                    )}
+                                  </td>
+                                  <td style={tableCellStyle}>{formatLabel(row.carryMode)}</td>
+                                  <td style={tableCellStyle}>{formatLabel(row.material)}</td>
+                                  <td style={tableCellStyle}>{formatLabel(row.quality)}</td>
+                                  <td style={tableCellStyle}>{formatLabel(row.conditionState)}</td>
+                                  <td style={tableCellStyle}>
+                                    {state?.itemsById[row.itemId]?.isStackable ? (
+                                      <div style={{ display: "grid", gap: "0.35rem", maxWidth: 120 }}>
+                                        <input
+                                          min={1}
+                                          onChange={(event) =>
+                                            setQuantityDrafts((current) => ({
+                                              ...current,
+                                              [row.itemId]: event.target.value
+                                            }))
+                                          }
+                                          step={1}
+                                          type="number"
+                                          value={quantityDrafts[row.itemId] ?? String(state?.itemsById[row.itemId]?.quantity ?? 1)}
+                                        />
+                                        <button
+                                          onClick={() => void handleUpdateQuantity(row.itemId)}
+                                          type="button"
+                                        >
+                                          Save qty
+                                        </button>
+                                      </div>
+                                    ) : (
+                                      state?.itemsById[row.itemId]?.quantity ?? 1
+                                    )}
+                                  </td>
+                                  <td style={tableCellStyle}>{row.effectiveEncumbrance}</td>
+                                  <td style={tableCellStyle}>{formatLabel(row.accessTier)}</td>
+                                  <td style={tableCellStyle}>
+                                    <div style={{ display: "grid", gap: "0.5rem", maxWidth: 220 }}>
                                       <select
-                                        onChange={(event) =>
-                                          setMetadataDrafts((current) => ({
-                                            ...current,
-                                            [row.itemId]: {
-                                              ...current[row.itemId],
-                                              conditionState: event.target.value as ItemConditionState
-                                            }
-                                          }))
-                                        }
-                                        value={metadataDrafts[row.itemId]?.conditionState ?? row.conditionState}
+                                        aria-label={`Move ${row.displayName ?? row.templateName}`}
+                                        onChange={(event) => void handleMove(row.itemId, event.target.value)}
+                                        value={`${state?.itemsById[row.itemId]?.storageAssignment.locationId ?? ""}::${state?.itemsById[row.itemId]?.storageAssignment.carryMode ?? ""}`}
                                       >
-                                        {conditionOptions.map((condition) => (
-                                          <option key={condition} value={condition}>
-                                            {formatLabel(condition)}
+                                        {moveOptions.map((option) => (
+                                          <option key={option.value} value={option.value}>
+                                            {option.label}
                                           </option>
                                         ))}
                                       </select>
-                                    </label>
-                                    <label style={{ display: "grid", gap: "0.25rem" }}>
-                                      <span style={{ fontSize: "0.8rem" }}>Notes</span>
-                                      <textarea
-                                        onChange={(event) =>
-                                          setMetadataDrafts((current) => ({
-                                            ...current,
-                                            [row.itemId]: {
-                                              ...current[row.itemId],
-                                              notes: event.target.value
-                                            }
-                                          }))
-                                        }
-                                        rows={3}
-                                        value={metadataDrafts[row.itemId]?.notes ?? ""}
-                                      />
-                                    </label>
-                                    <label
+                                      <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+                                        <button
+                                          onClick={() => toggleExpandedItem(row.itemId)}
+                                          type="button"
+                                        >
+                                          {expandedItemIds[row.itemId] ? "Close" : "Edit"}
+                                        </button>
+                                        <button onClick={() => void handleRemoveItem(row.itemId)} type="button">
+                                          Remove item
+                                        </button>
+                                      </div>
+                                      {rowErrors[row.itemId] ? (
+                                        <div style={{ color: "#8b3a1a", fontSize: "0.8rem" }}>
+                                          {rowErrors[row.itemId]}
+                                        </div>
+                                      ) : null}
+                                    </div>
+                                  </td>
+                                </tr>
+                                {expandedItemIds[row.itemId] ? (
+                                  <tr>
+                                    <td
+                                      colSpan={10}
                                       style={{
-                                        alignItems: "center",
-                                        display: "flex",
-                                        gap: "0.5rem",
-                                        fontSize: "0.85rem"
+                                        ...tableCellStyle,
+                                        background: "#f8f4ea"
                                       }}
                                     >
-                                      <input
-                                        checked={metadataDrafts[row.itemId]?.isFavorite ?? false}
-                                        onChange={(event) =>
-                                          setMetadataDrafts((current) => ({
-                                            ...current,
-                                            [row.itemId]: {
-                                              ...current[row.itemId],
-                                              isFavorite: event.target.checked
+                                      <div
+                                        style={{
+                                          display: "grid",
+                                          gap: "0.75rem",
+                                          gridTemplateColumns:
+                                            "minmax(180px, 220px) minmax(160px, 180px) minmax(220px, 1fr) auto"
+                                        }}
+                                      >
+                                        <label style={{ display: "grid", gap: "0.25rem" }}>
+                                          <span style={{ fontSize: "0.8rem" }}>Display name</span>
+                                          <input
+                                            onChange={(event) =>
+                                              setMetadataDrafts((current) => ({
+                                                ...current,
+                                                [row.itemId]: {
+                                                  ...current[row.itemId],
+                                                  displayName: event.target.value
+                                                }
+                                              }))
                                             }
-                                          }))
-                                        }
-                                        type="checkbox"
-                                      />
-                                      Favorite
-                                    </label>
-                                    <button
-                                      onClick={() => void handleUpdateMetadata(row.itemId)}
-                                      type="button"
-                                    >
-                                      Save details
-                                    </button>
-                                    {rowErrors[row.itemId] ? (
-                                      <div style={{ color: "#8b3a1a", fontSize: "0.8rem" }}>
-                                        {rowErrors[row.itemId]}
+                                            placeholder="Optional"
+                                            type="text"
+                                            value={metadataDrafts[row.itemId]?.displayName ?? ""}
+                                          />
+                                        </label>
+                                        <label style={{ display: "grid", gap: "0.25rem" }}>
+                                          <span style={{ fontSize: "0.8rem" }}>Condition</span>
+                                          <select
+                                            onChange={(event) =>
+                                              setMetadataDrafts((current) => ({
+                                                ...current,
+                                                [row.itemId]: {
+                                                  ...current[row.itemId],
+                                                  conditionState: event.target.value as ItemConditionState
+                                                }
+                                              }))
+                                            }
+                                            value={metadataDrafts[row.itemId]?.conditionState ?? row.conditionState}
+                                          >
+                                            {conditionOptions.map((condition) => (
+                                              <option key={condition} value={condition}>
+                                                {formatLabel(condition)}
+                                              </option>
+                                            ))}
+                                          </select>
+                                        </label>
+                                        <label style={{ display: "grid", gap: "0.25rem" }}>
+                                          <span style={{ fontSize: "0.8rem" }}>Notes</span>
+                                          <textarea
+                                            onChange={(event) =>
+                                              setMetadataDrafts((current) => ({
+                                                ...current,
+                                                [row.itemId]: {
+                                                  ...current[row.itemId],
+                                                  notes: event.target.value
+                                                }
+                                              }))
+                                            }
+                                            rows={3}
+                                            value={metadataDrafts[row.itemId]?.notes ?? ""}
+                                          />
+                                        </label>
+                                        <div style={{ display: "grid", alignContent: "start", gap: "0.75rem" }}>
+                                          <label
+                                            style={{
+                                              alignItems: "center",
+                                              display: "flex",
+                                              gap: "0.5rem",
+                                              fontSize: "0.85rem"
+                                            }}
+                                          >
+                                            <input
+                                              checked={metadataDrafts[row.itemId]?.isFavorite ?? false}
+                                              onChange={(event) =>
+                                                setMetadataDrafts((current) => ({
+                                                  ...current,
+                                                  [row.itemId]: {
+                                                    ...current[row.itemId],
+                                                    isFavorite: event.target.checked
+                                                  }
+                                                }))
+                                              }
+                                              type="checkbox"
+                                            />
+                                            Favorite
+                                          </label>
+                                          <button
+                                            onClick={() => void handleUpdateMetadata(row.itemId)}
+                                            type="button"
+                                          >
+                                            Save details
+                                          </button>
+                                        </div>
                                       </div>
-                                    ) : null}
-                                  </div>
-                                </td>
-                              </tr>
+                                    </td>
+                                  </tr>
+                                ) : null}
+                              </Fragment>
                             ))}
                           </tbody>
                         </table>
