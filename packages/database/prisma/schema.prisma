@@ -37,6 +37,11 @@ enum StorageLocationType {
   other
 }
 
+enum LocationAvailabilityClass {
+  with_you
+  elsewhere
+}
+
 enum MaterialType {
   steel
   bronze
@@ -182,6 +187,7 @@ model CharacterStorageLocation {
   characterId             String
   name                    String
   type                    StorageLocationType
+  availabilityClass       LocationAvailabilityClass
   parentLocationId        String?
   isMobile                Boolean
   isAccessibleInEncounter Boolean

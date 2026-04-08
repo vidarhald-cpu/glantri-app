@@ -1,6 +1,7 @@
 import type {
   CarryMode,
   CharacterLoadout,
+  LocationAvailabilityClass,
   StorageLocation,
   StorageLocationType,
 } from "@glantri/domain/equipment";
@@ -53,6 +54,7 @@ export function createCustomLocation(
   characterId: string,
   name: string,
   type: StorageLocationType,
+  availabilityClass: LocationAvailabilityClass = "elsewhere",
 ): EquipmentFeatureState {
   const id = `${characterId}:loc-${name
     .trim()
@@ -67,9 +69,10 @@ export function createCustomLocation(
     characterId,
     name: name.trim(),
     type,
+    availabilityClass,
     parentLocationId: null,
-    isMobile: false,
-    isAccessibleInEncounter: false,
+    isMobile: availabilityClass === "with_you",
+    isAccessibleInEncounter: availabilityClass === "with_you",
     notes: null,
   };
 

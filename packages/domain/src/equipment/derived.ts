@@ -4,6 +4,7 @@ import type {
   EquipmentItem,
   EquipmentTemplate,
   ItemStorageAssignment,
+  LocationAvailabilityClass,
   MaterialType,
   QualityType,
   StorageLocation,
@@ -23,10 +24,22 @@ export function isSystemLocation(
   return SYSTEM_LOCATION_TYPES.includes(location.type);
 }
 
-export function isRemoteStorage(
-  location: Pick<StorageLocation, "type" | "isAccessibleInEncounter">,
+export function isWithYouLocation(
+  location: Pick<StorageLocation, "availabilityClass">,
 ): boolean {
-  return !isSystemLocation(location) && !location.isAccessibleInEncounter;
+  return location.availabilityClass === "with_you";
+}
+
+export function isElsewhereLocation(
+  location: Pick<StorageLocation, "availabilityClass">,
+): boolean {
+  return location.availabilityClass === "elsewhere";
+}
+
+export function isRemoteStorage(
+  location: Pick<StorageLocation, "availabilityClass" | "type" | "isAccessibleInEncounter">,
+): boolean {
+  return isElsewhereLocation(location) || (!isSystemLocation(location) && !location.isAccessibleInEncounter);
 }
 
 export function isEncounterAccessible(
@@ -52,6 +65,16 @@ export function isReadyCarryMode(carryMode: CarryMode): boolean {
 }
 
 export function getLocationSortOrder(
+  location: Pick<StorageLocation, "availabilityClass" | "type">,
+): number {
+  if (location.availabilityClass === "elsewhere") {
+    return 100 + getLocationSortOrderWithinAvailability(location);
+  }
+
+  return getLocationSortOrderWithinAvailability(location);
+}
+
+function getLocationSortOrderWithinAvailability(
   location: Pick<StorageLocation, "type">,
 ): number {
   switch (location.type) {
@@ -66,6 +89,12 @@ export function getLocationSortOrder(
     default:
       return 4;
   }
+}
+
+export function getLocationAvailabilitySortOrder(
+  availabilityClass: LocationAvailabilityClass,
+): number {
+  return availabilityClass === "with_you" ? 0 : 1;
 }
 
 export function getStorageAssignmentForLocation(
@@ -144,6 +173,21 @@ export function getAccessTier(carryMode: CarryMode): AccessTier {
     default:
       return "unavailable";
   }
+}
+
+export function getItemAccessTier(
+  carryMode: CarryMode,
+  location?: Pick<StorageLocation, "availabilityClass">,
+): AccessTier {
+  if (!isStoredCarryMode(carryMode)) {
+    return getAccessTier(carryMode);
+  }
+
+  if (location && isWithYouLocation(location)) {
+    return "situational";
+  }
+
+  return "unavailable";
 }
 
 export function getRetrievalRounds(carryMode: CarryMode): number | null {

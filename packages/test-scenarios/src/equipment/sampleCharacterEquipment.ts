@@ -14,6 +14,7 @@ export const sampleLocations: StorageLocation[] = [
     characterId: sampleCharacterId,
     name: "Home",
     type: "home",
+    availabilityClass: "elsewhere",
     parentLocationId: null,
     isMobile: false,
     isAccessibleInEncounter: false,

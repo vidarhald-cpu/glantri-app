@@ -52,6 +52,10 @@ export type StorageLocationType =
   | "building"
   | "other";
 
+export type LocationAvailabilityClass =
+  | "with_you"
+  | "elsewhere";
+
 export type AccessTier =
   | "immediate"
   | "fast"
@@ -186,6 +190,7 @@ export interface StorageLocation {
   characterId: string;
   name: string;
   type: StorageLocationType;
+  availabilityClass: LocationAvailabilityClass;
   parentLocationId?: string | null;
   isMobile: boolean;
   isAccessibleInEncounter: boolean;

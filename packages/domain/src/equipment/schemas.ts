@@ -61,6 +61,11 @@ export const StorageLocationTypeSchema = z.enum([
   "other",
 ]);
 
+export const LocationAvailabilityClassSchema = z.enum([
+  "with_you",
+  "elsewhere",
+]);
+
 export const WeaponHandlingClassSchema = z.enum([
   "one_handed",
   "two_handed",
@@ -192,6 +197,7 @@ export const StorageLocationSchema = z.object({
   characterId: z.string(),
   name: z.string(),
   type: StorageLocationTypeSchema,
+  availabilityClass: LocationAvailabilityClassSchema,
   parentLocationId: z.string().nullable().optional(),
   isMobile: z.boolean(),
   isAccessibleInEncounter: z.boolean(),

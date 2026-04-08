@@ -105,6 +105,7 @@ function mapEquipmentItem(record: {
 }
 
 function mapStorageLocation(record: {
+  availabilityClass?: string | null;
   characterId: string;
   id: string;
   isAccessibleInEncounter: boolean;
@@ -114,7 +115,12 @@ function mapStorageLocation(record: {
   parentLocationId: string | null;
   type: string;
 }): StorageLocation {
+  const availabilityClass =
+    record.availabilityClass ??
+    (record.type.endsWith("_system") ? "with_you" : "elsewhere");
+
   return StorageLocationSchema.parse({
+    availabilityClass,
     characterId: record.characterId,
     id: record.id,
     isAccessibleInEncounter: record.isAccessibleInEncounter,
@@ -158,8 +164,10 @@ function mapLoadout(record: {
 
 export interface CharacterEquipmentRepository {
   createCharacterStorageLocation(location: StorageLocation): Promise<StorageLocation>;
+  removeCharacterStorageLocation(characterId: string, locationId: string): Promise<void>;
   createCharacterEquipmentItem(item: EquipmentItem): Promise<EquipmentItem>;
   updateCharacterEquipmentItem(item: EquipmentItem): Promise<EquipmentItem>;
+  removeCharacterEquipmentItem(characterId: string, itemId: string): Promise<void>;
   moveCharacterEquipmentItem(
     characterId: string,
     itemId: string,
@@ -182,6 +190,7 @@ export function createPrismaCharacterEquipmentRepository(): CharacterEquipmentRe
     async createCharacterStorageLocation(location) {
       const created = await prisma.characterStorageLocation.create({
         data: {
+          availabilityClass: location.availabilityClass,
           characterId: location.characterId,
           id: location.id,
           isAccessibleInEncounter: location.isAccessibleInEncounter,
@@ -190,10 +199,22 @@ export function createPrismaCharacterEquipmentRepository(): CharacterEquipmentRe
           notes: location.notes ?? null,
           parentLocationId: location.parentLocationId ?? null,
           type: location.type,
-        },
+        } as Prisma.CharacterStorageLocationUncheckedCreateInput,
       });
 
       return mapStorageLocation(created);
+    },
+    async removeCharacterStorageLocation(characterId, locationId) {
+      const result = await prisma.characterStorageLocation.deleteMany({
+        where: {
+          characterId,
+          id: locationId,
+        },
+      });
+
+      if (result.count === 0) {
+        throw new Error("Storage location not found for character.");
+      }
     },
     async createCharacterEquipmentItem(item) {
       const created = await prisma.characterEquipmentItem.create({
@@ -257,6 +278,18 @@ export function createPrismaCharacterEquipmentRepository(): CharacterEquipmentRe
       });
 
       return mapEquipmentItem(updated);
+    },
+    async removeCharacterEquipmentItem(characterId, itemId) {
+      const result = await prisma.characterEquipmentItem.deleteMany({
+        where: {
+          characterId,
+          id: itemId,
+        },
+      });
+
+      if (result.count === 0) {
+        throw new Error("Equipment item not found for character.");
+      }
     },
     async moveCharacterEquipmentItem(characterId, itemId, storageAssignment) {
       const result = await prisma.characterEquipmentItem.updateMany({
@@ -329,6 +362,7 @@ export function createPrismaCharacterEquipmentRepository(): CharacterEquipmentRe
         defaults.map((location) =>
           prisma.characterStorageLocation.upsert({
             create: {
+              availabilityClass: location.availabilityClass,
               characterId: location.characterId,
               id: location.id,
               isAccessibleInEncounter: location.isAccessibleInEncounter,
@@ -337,15 +371,16 @@ export function createPrismaCharacterEquipmentRepository(): CharacterEquipmentRe
               notes: location.notes ?? null,
               parentLocationId: location.parentLocationId ?? null,
               type: location.type,
-            },
+            } as Prisma.CharacterStorageLocationUncheckedCreateInput,
             update: {
+              availabilityClass: location.availabilityClass,
               isAccessibleInEncounter: location.isAccessibleInEncounter,
               isMobile: location.isMobile,
               name: location.name,
               notes: location.notes ?? null,
               parentLocationId: location.parentLocationId ?? null,
               type: location.type,
-            },
+            } as Prisma.CharacterStorageLocationUncheckedUpdateInput,
             where: {
               id: location.id,
             },

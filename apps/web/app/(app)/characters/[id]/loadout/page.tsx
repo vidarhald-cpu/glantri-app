@@ -4,7 +4,7 @@ import Link from "next/link";
 import { use, useEffect, useMemo, useState } from "react";
 import {
   getAccessTier,
-  isStoredCarryMode,
+  isWithYouLocation,
   type CarryMode
 } from "@glantri/domain/equipment";
 
@@ -22,7 +22,8 @@ import {
   getLoadoutEquipment,
   getMountEncumbranceTotal,
   getPersonalEncumbranceTotal,
-  getStoredItems
+  getStoredItems,
+  getWithYouItems
 } from "../../../../../src/features/equipment/equipmentSelectors";
 import type { EquipmentFeatureState } from "../../../../../src/features/equipment/types";
 import {
@@ -124,7 +125,6 @@ function buildSelectableItemOptions(input: {
   return input.items
     .filter(
       (item) =>
-        !isStoredCarryMode(item.storageAssignment.carryMode) &&
         item.conditionState !== "broken" &&
         item.conditionState !== "lost"
     )
@@ -179,16 +179,44 @@ export default function CharacterLoadoutPage({ params }: CharacterLoadoutPagePro
     [state, id]
   );
   const storedCount = useMemo(() => (state ? getStoredItems(state, id).length : 0), [state, id]);
+  const withYouCount = useMemo(() => (state ? getWithYouItems(state, id).length : 0), [state, id]);
   const weaponOptions = useMemo(
-    () => (state ? buildSelectableItemOptions({ items: getCharacterWeaponItems(state, id), state }) : []),
+    () =>
+      state
+        ? buildSelectableItemOptions({
+            items: getCharacterWeaponItems(state, id).filter((item) => {
+              const location = state.locationsById[item.storageAssignment.locationId];
+              return location ? isWithYouLocation(location) : false;
+            }),
+            state
+          })
+        : [],
     [state, id]
   );
   const armorOptions = useMemo(
-    () => (state ? buildSelectableItemOptions({ items: getCharacterArmorItems(state, id), state }) : []),
+    () =>
+      state
+        ? buildSelectableItemOptions({
+            items: getCharacterArmorItems(state, id).filter((item) => {
+              const location = state.locationsById[item.storageAssignment.locationId];
+              return location ? isWithYouLocation(location) : false;
+            }),
+            state
+          })
+        : [],
     [state, id]
   );
   const shieldOptions = useMemo(
-    () => (state ? buildSelectableItemOptions({ items: getCharacterShieldItems(state, id), state }) : []),
+    () =>
+      state
+        ? buildSelectableItemOptions({
+            items: getCharacterShieldItems(state, id).filter((item) => {
+              const location = state.locationsById[item.storageAssignment.locationId];
+              return location ? isWithYouLocation(location) : false;
+            }),
+            state
+          })
+        : [],
     [state, id]
   );
 
@@ -407,11 +435,12 @@ export default function CharacterLoadoutPage({ params }: CharacterLoadoutPagePro
         <SummaryCard label="Carried coin quantity" value={carriedCoinQuantity} />
         <SummaryCard label="Backpack item count" value={backpackCount} />
         <SummaryCard label="Stored item count" value={storedCount} />
+        <SummaryCard label="With-you item count" value={withYouCount} />
       </div> : null}
 
       {!loading && !pageError ? <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
-        Selectable armor, shields, and weapons exclude stored, broken, and lost items. Backpack
-        items remain selectable for this slice and are marked as slower access when listed.
+        Loadout options are drawn from items currently with you. Choosing a different item swaps it
+        into active use and stows the previous one back into the source location when possible.
       </div> : null}
     </section>
   );
