@@ -73,6 +73,7 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
   const profession = contentState.professions.find(
     (item) => item.id === record.build.professionId
   );
+  const hasPersistedServerCharacter = record.syncStatus === "synced";
   const detailView = buildChargenDraftView({
     content: contentState,
     professionId: record.build.professionId,
@@ -137,8 +138,12 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
       <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
         <Link href="/characters">Back to characters</Link>
         <Link href={`/characters/${record.id}/sheet`}>Character sheet</Link>
-        <Link href={`/characters/${record.id}/equipment`}>Equipment</Link>
-        <Link href={`/characters/${record.id}/loadout`}>Loadout</Link>
+        {hasPersistedServerCharacter ? (
+          <Link href={`/characters/${record.id}/equipment`}>Equipment</Link>
+        ) : null}
+        {hasPersistedServerCharacter ? (
+          <Link href={`/characters/${record.id}/loadout`}>Loadout</Link>
+        ) : null}
         <Link href={`/characters/${record.id}/resume`}>Resume character</Link>
         <Link href={`/characters/${record.id}/advance`}>Advance character</Link>
       </div>
@@ -175,6 +180,11 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
         </div>
         {feedback ? <div>{feedback}</div> : null}
         <div>Storage status: {record.syncStatus}</div>
+        {!hasPersistedServerCharacter ? (
+          <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
+            Save this character to the server before opening persisted Equipment or Loadout.
+          </div>
+        ) : null}
       </section>
 
       <section style={{ display: "grid", gap: "0.75rem" }}>

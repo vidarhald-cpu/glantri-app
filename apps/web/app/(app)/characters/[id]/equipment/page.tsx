@@ -2,7 +2,12 @@
 
 import Link from "next/link";
 import { use, useEffect, useMemo, useState } from "react";
-import { type StorageLocationType } from "@glantri/domain/equipment";
+import {
+  type CarryMode,
+  type MaterialType,
+  type QualityType,
+  type StorageLocationType
+} from "@glantri/domain/equipment";
 
 import {
   getCharacterLocations,
@@ -12,10 +17,13 @@ import {
 } from "../../../../../src/features/equipment/equipmentSelectors";
 import type { EquipmentFeatureState } from "../../../../../src/features/equipment/types";
 import {
+  addCharacterEquipmentItemOnServer,
   bootstrapSampleCharacterEquipmentOnServer,
   createCharacterStorageLocationOnServer,
   loadCharacterEquipmentState,
-  moveCharacterEquipmentItemOnServer
+  moveCharacterEquipmentItemOnServer,
+  removeCharacterEquipmentItemOnServer,
+  updateCharacterEquipmentQuantityOnServer
 } from "../../../../../src/lib/api/localServiceClient";
 
 interface CharacterEquipmentPageProps {
@@ -31,6 +39,21 @@ function formatLabel(value: string): string {
     .join(" ");
 }
 
+const materialOptions: MaterialType[] = [
+  "steel",
+  "bronze",
+  "wood",
+  "leather",
+  "cloth",
+  "bone",
+  "stone",
+  "silver",
+  "gold",
+  "other"
+];
+
+const qualityOptions: QualityType[] = ["standard", "extraordinary"];
+
 export default function CharacterEquipmentPage({ params }: CharacterEquipmentPageProps) {
   const { id } = use(params);
   const [state, setState] = useState<EquipmentFeatureState | null>(null);
@@ -42,6 +65,15 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
   const [rowErrors, setRowErrors] = useState<Record<string, string>>({});
   const [bootstrapError, setBootstrapError] = useState<string>();
   const [bootstrapping, setBootstrapping] = useState(false);
+  const [addItemError, setAddItemError] = useState<string>();
+  const [addingItem, setAddingItem] = useState(false);
+  const [addTemplateId, setAddTemplateId] = useState("");
+  const [addLocationValue, setAddLocationValue] = useState("");
+  const [addQuantity, setAddQuantity] = useState("1");
+  const [addMaterial, setAddMaterial] = useState<MaterialType>("steel");
+  const [addQuality, setAddQuality] = useState<QualityType>("standard");
+  const [addDisplayName, setAddDisplayName] = useState("");
+  const [quantityDrafts, setQuantityDrafts] = useState<Record<string, string>>({});
   const rows = useMemo(() => (state ? getInventoryRows(state, id) : []), [state, id]);
   const locations = useMemo(() => (state ? getCharacterLocations(state, id) : []), [state, id]);
   const groupedItems = useMemo(() => (state ? getItemsGroupedByLocation(state, id) : []), [state, id]);
@@ -50,6 +82,18 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
     [rows]
   );
   const moveOptions = useMemo(() => (state ? getInventoryMoveOptions(state, id) : []), [state, id]);
+  const templateOptions = useMemo(
+    () =>
+      state
+        ? Object.values(state.templates.templatesById).sort((left, right) =>
+            left.name.localeCompare(right.name)
+          )
+        : [],
+    [state]
+  );
+  const selectedTemplate =
+    addTemplateId && state ? state.templates.templatesById[addTemplateId] ?? null : null;
+  const selectedTemplateIsStackable = selectedTemplate?.category === "valuables";
 
   useEffect(() => {
     let cancelled = false;
@@ -68,7 +112,12 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
           return;
         }
 
-        setPageError(error instanceof Error ? error.message : "Unable to load equipment.");
+        const message = error instanceof Error ? error.message : "Unable to load equipment.";
+        setPageError(
+          message === "Character not found."
+            ? "Character not found. This equipment page only works for characters that have been saved to the server."
+            : message
+        );
       })
       .finally(() => {
         if (!cancelled) {
@@ -80,6 +129,52 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
       cancelled = true;
     };
   }, [id]);
+
+  useEffect(() => {
+    if (templateOptions.length === 0) {
+      return;
+    }
+
+    if (!addTemplateId || !state?.templates.templatesById[addTemplateId]) {
+      const firstTemplate = templateOptions[0];
+      setAddTemplateId(firstTemplate.id);
+      setAddMaterial(firstTemplate.defaultMaterial);
+      setAddQuality("standard");
+    }
+  }, [addTemplateId, state, templateOptions]);
+
+  useEffect(() => {
+    if (moveOptions.length === 0) {
+      return;
+    }
+
+    if (!addLocationValue || !moveOptions.some((option) => option.value === addLocationValue)) {
+      setAddLocationValue(moveOptions[0].value);
+    }
+  }, [addLocationValue, moveOptions]);
+
+  useEffect(() => {
+    if (!selectedTemplate) {
+      return;
+    }
+
+    setAddMaterial(selectedTemplate.defaultMaterial);
+    setAddQuantity((current) => (selectedTemplate.category === "valuables" ? current : "1"));
+  }, [selectedTemplate?.id]);
+
+  useEffect(() => {
+    if (!state) {
+      return;
+    }
+
+    setQuantityDrafts(
+      Object.fromEntries(
+        Object.values(state.itemsById)
+          .filter((item) => item.isStackable)
+          .map((item) => [item.id, String(item.quantity)])
+      )
+    );
+  }, [state]);
 
   async function handleMove(itemId: string, value: string) {
     if (!state) {
@@ -169,6 +264,115 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
     }
   }
 
+  async function handleAddItem() {
+    if (!state) {
+      return;
+    }
+
+    if (!addTemplateId) {
+      setAddItemError("Choose an item template.");
+      return;
+    }
+
+    if (!addLocationValue) {
+      setAddItemError("Choose an initial location.");
+      return;
+    }
+
+    const quantity = Number(addQuantity);
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      setAddItemError("Quantity must be greater than zero.");
+      return;
+    }
+
+    if (!selectedTemplateIsStackable && quantity !== 1) {
+      setAddItemError("Only stackable items can have quantity greater than one.");
+      return;
+    }
+
+    const [initialLocationId, initialCarryMode] = addLocationValue.split("::");
+
+    setAddingItem(true);
+    setAddItemError(undefined);
+
+    try {
+      const nextState = await addCharacterEquipmentItemOnServer({
+        characterId: id,
+        displayName: addDisplayName.trim() || null,
+        initialCarryMode: initialCarryMode as CarryMode,
+        initialLocationId,
+        material: addMaterial,
+        quality: addQuality,
+        quantity,
+        templateId: addTemplateId
+      });
+      setState(nextState);
+      setAddDisplayName("");
+      setAddQuantity(selectedTemplateIsStackable ? "1" : "1");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to add item.";
+      console.warn(message);
+      setAddItemError(message);
+    } finally {
+      setAddingItem(false);
+    }
+  }
+
+  async function handleRemoveItem(itemId: string) {
+    try {
+      const nextState = await removeCharacterEquipmentItemOnServer({
+        characterId: id,
+        itemId
+      });
+      setState(nextState);
+      setRowErrors((current) => {
+        const next = { ...current };
+        delete next[itemId];
+        return next;
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to remove item.";
+      console.warn(message);
+      setRowErrors((current) => ({
+        ...current,
+        [itemId]: message
+      }));
+    }
+  }
+
+  async function handleUpdateQuantity(itemId: string) {
+    const quantity = Number(quantityDrafts[itemId]);
+
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      setRowErrors((current) => ({
+        ...current,
+        [itemId]: "Quantity must be greater than zero."
+      }));
+      return;
+    }
+
+    try {
+      const nextState = await updateCharacterEquipmentQuantityOnServer({
+        characterId: id,
+        itemId,
+        quantity
+      });
+      setState(nextState);
+      setRowErrors((current) => {
+        const next = { ...current };
+        delete next[itemId];
+        return next;
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to update quantity.";
+      console.warn(message);
+      setRowErrors((current) => ({
+        ...current,
+        [itemId]: message
+      }));
+    }
+  }
+
   return (
     <section style={{ display: "grid", gap: "1rem", maxWidth: 1080 }}>
       <div style={{ display: "grid", gap: "0.35rem" }}>
@@ -181,6 +385,117 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
           <Link href={`/characters/${id}/loadout`}>Open loadout</Link>
         </div>
       </div>
+
+      {!loading && !pageError && state ? (
+        <section
+          style={{
+            background: "#f6f5ef",
+            border: "1px solid #d9ddd8",
+            borderRadius: 12,
+            display: "grid",
+            gap: "0.75rem",
+            padding: "1rem"
+          }}
+        >
+          <div style={{ display: "grid", gap: "0.2rem" }}>
+            <strong>Add item</strong>
+            <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
+              Create a persisted inventory item from an existing equipment template.
+            </div>
+          </div>
+          <div
+            style={{
+              alignItems: "end",
+              display: "grid",
+              gap: "0.75rem",
+              gridTemplateColumns: "minmax(180px, 1.2fr) minmax(180px, 1fr) 120px 140px 140px minmax(180px, 1fr) auto"
+            }}
+          >
+            <label style={{ display: "grid", gap: "0.35rem" }}>
+              <span>Template</span>
+              <select
+                onChange={(event) => setAddTemplateId(event.target.value)}
+                value={addTemplateId}
+              >
+                {templateOptions.map((template) => (
+                  <option key={template.id} value={template.id}>
+                    {template.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label style={{ display: "grid", gap: "0.35rem" }}>
+              <span>Initial location</span>
+              <select
+                onChange={(event) => setAddLocationValue(event.target.value)}
+                value={addLocationValue}
+              >
+                {moveOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label style={{ display: "grid", gap: "0.35rem" }}>
+              <span>Quantity</span>
+              <input
+                min={1}
+                onChange={(event) => setAddQuantity(event.target.value)}
+                step={1}
+                type="number"
+                value={addQuantity}
+              />
+            </label>
+            <label style={{ display: "grid", gap: "0.35rem" }}>
+              <span>Material</span>
+              <select
+                onChange={(event) => setAddMaterial(event.target.value as MaterialType)}
+                value={addMaterial}
+              >
+                {materialOptions.map((material) => (
+                  <option key={material} value={material}>
+                    {formatLabel(material)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label style={{ display: "grid", gap: "0.35rem" }}>
+              <span>Quality</span>
+              <select
+                onChange={(event) => setAddQuality(event.target.value as QualityType)}
+                value={addQuality}
+              >
+                {qualityOptions.map((quality) => (
+                  <option key={quality} value={quality}>
+                    {formatLabel(quality)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label style={{ display: "grid", gap: "0.35rem" }}>
+              <span>Display name</span>
+              <input
+                onChange={(event) => setAddDisplayName(event.target.value)}
+                placeholder="Optional"
+                type="text"
+                value={addDisplayName}
+              />
+            </label>
+            <button disabled={addingItem} onClick={() => void handleAddItem()} type="button">
+              {addingItem ? "Adding..." : "Add item"}
+            </button>
+          </div>
+          <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
+            {selectedTemplateIsStackable
+              ? "This template supports stack quantities."
+              : "Non-stackable templates must stay at quantity 1."}
+          </div>
+          {addItemError ? (
+            <div style={{ color: "#8b3a1a", fontSize: "0.85rem" }}>{addItemError}</div>
+          ) : null}
+        </section>
+      ) : null}
 
       <section
         style={{
@@ -312,9 +627,10 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
                         <th style={tableHeaderStyle}>Material</th>
                         <th style={tableHeaderStyle}>Quality</th>
                         <th style={tableHeaderStyle}>Condition</th>
+                        <th style={tableHeaderStyle}>Quantity</th>
                         <th style={tableHeaderStyle}>Effective encumbrance</th>
                         <th style={tableHeaderStyle}>Access tier</th>
-                        <th style={tableHeaderStyle}>Move</th>
+                        <th style={tableHeaderStyle}>Actions</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -325,10 +641,36 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
                           <td style={tableCellStyle}>{formatLabel(row.material)}</td>
                           <td style={tableCellStyle}>{formatLabel(row.quality)}</td>
                           <td style={tableCellStyle}>{formatLabel(row.conditionState)}</td>
+                          <td style={tableCellStyle}>
+                            {state?.itemsById[row.itemId]?.isStackable ? (
+                              <div style={{ display: "grid", gap: "0.35rem", maxWidth: 120 }}>
+                                <input
+                                  min={1}
+                                  onChange={(event) =>
+                                    setQuantityDrafts((current) => ({
+                                      ...current,
+                                      [row.itemId]: event.target.value
+                                    }))
+                                  }
+                                  step={1}
+                                  type="number"
+                                  value={quantityDrafts[row.itemId] ?? String(state?.itemsById[row.itemId]?.quantity ?? 1)}
+                                />
+                                <button
+                                  onClick={() => void handleUpdateQuantity(row.itemId)}
+                                  type="button"
+                                >
+                                  Save qty
+                                </button>
+                              </div>
+                            ) : (
+                              state?.itemsById[row.itemId]?.quantity ?? 1
+                            )}
+                          </td>
                           <td style={tableCellStyle}>{row.effectiveEncumbrance}</td>
                           <td style={tableCellStyle}>{formatLabel(row.accessTier)}</td>
                           <td style={tableCellStyle}>
-                            <div style={{ display: "grid", gap: "0.35rem" }}>
+                            <div style={{ display: "grid", gap: "0.5rem", maxWidth: 180 }}>
                               <select
                                 aria-label={`Move ${row.displayName}`}
                                 onChange={(event) => void handleMove(row.itemId, event.target.value)}
@@ -340,6 +682,9 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
                                   </option>
                                 ))}
                               </select>
+                              <button onClick={() => void handleRemoveItem(row.itemId)} type="button">
+                                Remove item
+                              </button>
                               {rowErrors[row.itemId] ? (
                                 <div style={{ color: "#8b3a1a", fontSize: "0.8rem" }}>
                                   {rowErrors[row.itemId]}
