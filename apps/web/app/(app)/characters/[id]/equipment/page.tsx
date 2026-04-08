@@ -4,6 +4,8 @@ import Link from "next/link";
 import { use, useEffect, useMemo, useState } from "react";
 import {
   type CarryMode,
+  type ItemConditionState,
+  type LocationAvailabilityClass,
   type MaterialType,
   type QualityType,
   type StorageLocationType
@@ -13,7 +15,7 @@ import {
   getCharacterLocations,
   getInventoryMoveOptions,
   getInventoryRows,
-  getItemsGroupedByLocation
+  getItemsGroupedByAvailability
 } from "../../../../../src/features/equipment/equipmentSelectors";
 import type { EquipmentFeatureState } from "../../../../../src/features/equipment/types";
 import {
@@ -22,7 +24,9 @@ import {
   createCharacterStorageLocationOnServer,
   loadCharacterEquipmentState,
   moveCharacterEquipmentItemOnServer,
+  removeCharacterStorageLocationOnServer,
   removeCharacterEquipmentItemOnServer,
+  updateCharacterEquipmentMetadataOnServer,
   updateCharacterEquipmentQuantityOnServer
 } from "../../../../../src/lib/api/localServiceClient";
 
@@ -53,6 +57,20 @@ const materialOptions: MaterialType[] = [
 ];
 
 const qualityOptions: QualityType[] = ["standard", "extraordinary"];
+const conditionOptions: ItemConditionState[] = [
+  "intact",
+  "worn",
+  "damaged",
+  "broken",
+  "lost"
+];
+const availabilityOptions: Array<{
+  label: string;
+  value: LocationAvailabilityClass;
+}> = [
+  { label: "With you", value: "with_you" },
+  { label: "Elsewhere", value: "elsewhere" }
+];
 
 export default function CharacterEquipmentPage({ params }: CharacterEquipmentPageProps) {
   const { id } = use(params);
@@ -61,6 +79,8 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
   const [pageError, setPageError] = useState<string>();
   const [locationName, setLocationName] = useState("");
   const [locationType, setLocationType] = useState<StorageLocationType>("home");
+  const [locationAvailabilityClass, setLocationAvailabilityClass] =
+    useState<LocationAvailabilityClass>("elsewhere");
   const [locationError, setLocationError] = useState<string>();
   const [rowErrors, setRowErrors] = useState<Record<string, string>>({});
   const [bootstrapError, setBootstrapError] = useState<string>();
@@ -74,9 +94,24 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
   const [addQuality, setAddQuality] = useState<QualityType>("standard");
   const [addDisplayName, setAddDisplayName] = useState("");
   const [quantityDrafts, setQuantityDrafts] = useState<Record<string, string>>({});
+  const [metadataDrafts, setMetadataDrafts] = useState<
+    Record<
+      string,
+      {
+        conditionState: ItemConditionState;
+        displayName: string;
+        isFavorite: boolean;
+        notes: string;
+      }
+    >
+  >({});
   const rows = useMemo(() => (state ? getInventoryRows(state, id) : []), [state, id]);
   const locations = useMemo(() => (state ? getCharacterLocations(state, id) : []), [state, id]);
-  const groupedItems = useMemo(() => (state ? getItemsGroupedByLocation(state, id) : []), [state, id]);
+  const groupedSections = useMemo(
+    () => (state ? getItemsGroupedByAvailability(state, id) : []),
+    [state, id]
+  );
+  const hasVisibleLocationGroups = groupedSections.some((section) => section.groups.length > 0);
   const rowsByItemId = useMemo(
     () => new Map(rows.map((row) => [row.itemId, row])),
     [rows]
@@ -174,6 +209,20 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
           .map((item) => [item.id, String(item.quantity)])
       )
     );
+
+    setMetadataDrafts(
+      Object.fromEntries(
+        Object.values(state.itemsById).map((item) => [
+          item.id,
+          {
+            conditionState: item.conditionState,
+            displayName: item.displayName ?? "",
+            isFavorite: item.isFavorite ?? false,
+            notes: item.notes ?? ""
+          }
+        ])
+      )
+    );
   }, [state]);
 
   async function handleMove(itemId: string, value: string) {
@@ -228,16 +277,34 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
 
     try {
       const nextState = await createCharacterStorageLocationOnServer({
+        availabilityClass: locationAvailabilityClass,
         characterId: id,
         name: trimmedName,
         type: locationType
       });
       setState(nextState);
       setLocationName("");
+      setLocationAvailabilityClass("elsewhere");
       setLocationError(undefined);
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Unable to create location.";
+      console.warn(message);
+      setLocationError(message);
+    }
+  }
+
+  async function handleRemoveLocation(locationId: string) {
+    try {
+      const nextState = await removeCharacterStorageLocationOnServer({
+        characterId: id,
+        locationId
+      });
+      setState(nextState);
+      setLocationError(undefined);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Unable to remove location.";
       console.warn(message);
       setLocationError(message);
     }
@@ -365,6 +432,38 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to update quantity.";
+      console.warn(message);
+      setRowErrors((current) => ({
+        ...current,
+        [itemId]: message
+      }));
+    }
+  }
+
+  async function handleUpdateMetadata(itemId: string) {
+    const draft = metadataDrafts[itemId];
+
+    if (!draft) {
+      return;
+    }
+
+    try {
+      const nextState = await updateCharacterEquipmentMetadataOnServer({
+        characterId: id,
+        conditionState: draft.conditionState,
+        displayName: draft.displayName,
+        isFavorite: draft.isFavorite,
+        itemId,
+        notes: draft.notes
+      });
+      setState(nextState);
+      setRowErrors((current) => {
+        const next = { ...current };
+        delete next[itemId];
+        return next;
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to update item details.";
       console.warn(message);
       setRowErrors((current) => ({
         ...current,
@@ -518,7 +617,8 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
             alignItems: "end",
             display: "grid",
             gap: "0.75rem",
-            gridTemplateColumns: "minmax(220px, 1fr) minmax(180px, 220px) auto"
+            gridTemplateColumns:
+              "minmax(220px, 1fr) minmax(180px, 220px) minmax(180px, 220px) auto"
           }}
         >
           <label style={{ display: "grid", gap: "0.35rem" }}>
@@ -529,6 +629,21 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
               type="text"
               value={locationName}
             />
+          </label>
+          <label style={{ display: "grid", gap: "0.35rem" }}>
+            <span>Location group</span>
+            <select
+              onChange={(event) =>
+                setLocationAvailabilityClass(event.target.value as LocationAvailabilityClass)
+              }
+              value={locationAvailabilityClass}
+            >
+              {availabilityOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
           </label>
           <label style={{ display: "grid", gap: "0.35rem" }}>
             <span>Location type</span>
@@ -581,125 +696,281 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
         </div>
       ) : null}
 
-      {!loading && !pageError && rows.length > 0 ? (
+      {!loading && !pageError && hasVisibleLocationGroups ? (
         <div style={{ display: "grid", gap: "1rem" }}>
-          {groupedItems.map((group) => {
-            const groupRows = group.items
-              .map((item) => rowsByItemId.get(item.id))
-              .filter((row): row is NonNullable<typeof row> => row !== undefined);
-            const groupEncumbrance = groupRows.reduce(
-              (total, row) => total + row.effectiveEncumbrance,
-              0
-            );
-
-            return (
-              <section
-                key={group.location.id}
-                style={{
-                  background: "#fbfaf5",
-                  border: "1px solid #d9ddd8",
-                  borderRadius: 12,
-                  display: "grid",
-                  gap: "0.75rem",
-                  padding: "1rem"
-                }}
-              >
-                <div style={{ display: "grid", gap: "0.2rem" }}>
-                  <strong>{group.location.name}</strong>
-                  <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
-                    {groupRows.length} item{groupRows.length === 1 ? "" : "s"} • Total encumbrance{" "}
-                    {groupEncumbrance}
-                  </div>
+          {groupedSections.map((section) => (
+            <section
+              key={section.availabilityClass}
+              style={{
+                background: "#fbfaf5",
+                border: "1px solid #d9ddd8",
+                borderRadius: 12,
+                display: "grid",
+                gap: "1rem",
+                padding: "1rem"
+              }}
+            >
+              <div style={{ display: "grid", gap: "0.2rem" }}>
+                <h2 style={{ margin: 0 }}>
+                  {section.availabilityClass === "with_you" ? "With you" : "Elsewhere"}
+                </h2>
+                <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
+                  {section.availabilityClass === "with_you"
+                    ? "Items currently travelling with the character."
+                    : "Items stored away from the character."}
                 </div>
+              </div>
 
-                <div
-                  style={{
-                    border: "1px solid #d9ddd8",
-                    borderRadius: 10,
-                    overflowX: "auto"
-                  }}
-                >
-                  <table style={{ borderCollapse: "collapse", minWidth: 980, width: "100%" }}>
-                    <thead style={{ background: "#f6f5ef" }}>
-                      <tr>
-                        <th style={tableHeaderStyle}>Item</th>
-                        <th style={tableHeaderStyle}>Carry mode</th>
-                        <th style={tableHeaderStyle}>Material</th>
-                        <th style={tableHeaderStyle}>Quality</th>
-                        <th style={tableHeaderStyle}>Condition</th>
-                        <th style={tableHeaderStyle}>Quantity</th>
-                        <th style={tableHeaderStyle}>Effective encumbrance</th>
-                        <th style={tableHeaderStyle}>Access tier</th>
-                        <th style={tableHeaderStyle}>Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {groupRows.map((row) => (
-                        <tr key={row.itemId}>
-                          <td style={tableCellStyle}>{row.displayName}</td>
-                          <td style={tableCellStyle}>{formatLabel(row.carryMode)}</td>
-                          <td style={tableCellStyle}>{formatLabel(row.material)}</td>
-                          <td style={tableCellStyle}>{formatLabel(row.quality)}</td>
-                          <td style={tableCellStyle}>{formatLabel(row.conditionState)}</td>
-                          <td style={tableCellStyle}>
-                            {state?.itemsById[row.itemId]?.isStackable ? (
-                              <div style={{ display: "grid", gap: "0.35rem", maxWidth: 120 }}>
-                                <input
-                                  min={1}
-                                  onChange={(event) =>
-                                    setQuantityDrafts((current) => ({
-                                      ...current,
-                                      [row.itemId]: event.target.value
-                                    }))
-                                  }
-                                  step={1}
-                                  type="number"
-                                  value={quantityDrafts[row.itemId] ?? String(state?.itemsById[row.itemId]?.quantity ?? 1)}
-                                />
-                                <button
-                                  onClick={() => void handleUpdateQuantity(row.itemId)}
-                                  type="button"
-                                >
-                                  Save qty
-                                </button>
-                              </div>
-                            ) : (
-                              state?.itemsById[row.itemId]?.quantity ?? 1
-                            )}
-                          </td>
-                          <td style={tableCellStyle}>{row.effectiveEncumbrance}</td>
-                          <td style={tableCellStyle}>{formatLabel(row.accessTier)}</td>
-                          <td style={tableCellStyle}>
-                            <div style={{ display: "grid", gap: "0.5rem", maxWidth: 180 }}>
-                              <select
-                                aria-label={`Move ${row.displayName}`}
-                                onChange={(event) => void handleMove(row.itemId, event.target.value)}
-                                value={`${state?.itemsById[row.itemId]?.storageAssignment.locationId ?? ""}::${state?.itemsById[row.itemId]?.storageAssignment.carryMode ?? ""}`}
-                              >
-                                {moveOptions.map((option) => (
-                                  <option key={option.value} value={option.value}>
-                                    {option.label}
-                                  </option>
-                                ))}
-                              </select>
-                              <button onClick={() => void handleRemoveItem(row.itemId)} type="button">
-                                Remove item
-                              </button>
-                              {rowErrors[row.itemId] ? (
-                                <div style={{ color: "#8b3a1a", fontSize: "0.8rem" }}>
-                                  {rowErrors[row.itemId]}
-                                </div>
-                              ) : null}
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </section>
-            );
-          })}
+              {section.groups.map((group) => {
+                const groupRows = group.items
+                  .map((item) => rowsByItemId.get(item.id))
+                  .filter((row): row is NonNullable<typeof row> => row !== undefined);
+                const groupEncumbrance = groupRows.reduce(
+                  (total, row) => total + row.effectiveEncumbrance,
+                  0
+                );
+                const canDeleteLocation =
+                  !group.location.type.endsWith("_system") && groupRows.length === 0;
+
+                return (
+                  <section
+                    key={group.location.id}
+                    style={{
+                      background: "#fffdf8",
+                      border: "1px solid #d9ddd8",
+                      borderRadius: 12,
+                      display: "grid",
+                      gap: "0.75rem",
+                      padding: "1rem"
+                    }}
+                  >
+                    <div
+                      style={{
+                        alignItems: "start",
+                        display: "flex",
+                        flexWrap: "wrap",
+                        gap: "0.75rem",
+                        justifyContent: "space-between"
+                      }}
+                    >
+                      <div style={{ display: "grid", gap: "0.2rem" }}>
+                        <strong>{group.location.name}</strong>
+                        <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
+                          {groupRows.length} item{groupRows.length === 1 ? "" : "s"} • Total encumbrance{" "}
+                          {groupEncumbrance}
+                        </div>
+                      </div>
+                      {canDeleteLocation ? (
+                        <button
+                          onClick={() => void handleRemoveLocation(group.location.id)}
+                          type="button"
+                        >
+                          Delete location
+                        </button>
+                      ) : null}
+                    </div>
+
+                    {groupRows.length > 0 ? (
+                      <div
+                        style={{
+                          border: "1px solid #d9ddd8",
+                          borderRadius: 10,
+                          overflowX: "auto"
+                        }}
+                      >
+                        <table style={{ borderCollapse: "collapse", minWidth: 980, width: "100%" }}>
+                          <thead style={{ background: "#f6f5ef" }}>
+                            <tr>
+                              <th style={tableHeaderStyle}>Type</th>
+                              <th style={tableHeaderStyle}>Display name</th>
+                              <th style={tableHeaderStyle}>Carry mode</th>
+                              <th style={tableHeaderStyle}>Material</th>
+                              <th style={tableHeaderStyle}>Quality</th>
+                              <th style={tableHeaderStyle}>Condition</th>
+                              <th style={tableHeaderStyle}>Quantity</th>
+                              <th style={tableHeaderStyle}>Effective encumbrance</th>
+                              <th style={tableHeaderStyle}>Access tier</th>
+                              <th style={tableHeaderStyle}>Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {groupRows.map((row) => (
+                              <tr key={row.itemId}>
+                                <td style={tableCellStyle}>
+                                  <div style={{ display: "grid", gap: "0.2rem" }}>
+                                    <strong>{row.templateName}</strong>
+                                    <span style={{ color: "#5e5a50", fontSize: "0.8rem" }}>
+                                      {formatLabel(row.category)}
+                                    </span>
+                                  </div>
+                                </td>
+                                <td style={tableCellStyle}>
+                                  {row.displayName ? (
+                                    <div style={{ display: "grid", gap: "0.2rem" }}>
+                                      <span>{row.displayName}</span>
+                                      {state?.itemsById[row.itemId]?.isFavorite ? (
+                                        <span style={{ color: "#5e5a50", fontSize: "0.8rem" }}>
+                                          Favorite
+                                        </span>
+                                      ) : null}
+                                    </div>
+                                  ) : (
+                                    <span style={{ color: "#8a8478" }}>None</span>
+                                  )}
+                                </td>
+                                <td style={tableCellStyle}>{formatLabel(row.carryMode)}</td>
+                                <td style={tableCellStyle}>{formatLabel(row.material)}</td>
+                                <td style={tableCellStyle}>{formatLabel(row.quality)}</td>
+                                <td style={tableCellStyle}>{formatLabel(row.conditionState)}</td>
+                                <td style={tableCellStyle}>
+                                  {state?.itemsById[row.itemId]?.isStackable ? (
+                                    <div style={{ display: "grid", gap: "0.35rem", maxWidth: 120 }}>
+                                      <input
+                                        min={1}
+                                        onChange={(event) =>
+                                          setQuantityDrafts((current) => ({
+                                            ...current,
+                                            [row.itemId]: event.target.value
+                                          }))
+                                        }
+                                        step={1}
+                                        type="number"
+                                        value={quantityDrafts[row.itemId] ?? String(state?.itemsById[row.itemId]?.quantity ?? 1)}
+                                      />
+                                      <button
+                                        onClick={() => void handleUpdateQuantity(row.itemId)}
+                                        type="button"
+                                      >
+                                        Save qty
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    state?.itemsById[row.itemId]?.quantity ?? 1
+                                  )}
+                                </td>
+                                <td style={tableCellStyle}>{row.effectiveEncumbrance}</td>
+                                <td style={tableCellStyle}>{formatLabel(row.accessTier)}</td>
+                                <td style={tableCellStyle}>
+                                  <div style={{ display: "grid", gap: "0.5rem", maxWidth: 220 }}>
+                                    <select
+                                      aria-label={`Move ${row.displayName ?? row.templateName}`}
+                                      onChange={(event) => void handleMove(row.itemId, event.target.value)}
+                                      value={`${state?.itemsById[row.itemId]?.storageAssignment.locationId ?? ""}::${state?.itemsById[row.itemId]?.storageAssignment.carryMode ?? ""}`}
+                                    >
+                                      {moveOptions.map((option) => (
+                                        <option key={option.value} value={option.value}>
+                                          {option.label}
+                                        </option>
+                                      ))}
+                                    </select>
+                                    <button onClick={() => void handleRemoveItem(row.itemId)} type="button">
+                                      Remove item
+                                    </button>
+                                    <label style={{ display: "grid", gap: "0.25rem" }}>
+                                      <span style={{ fontSize: "0.8rem" }}>Display name</span>
+                                      <input
+                                        onChange={(event) =>
+                                          setMetadataDrafts((current) => ({
+                                            ...current,
+                                            [row.itemId]: {
+                                              ...current[row.itemId],
+                                              displayName: event.target.value
+                                            }
+                                          }))
+                                        }
+                                        placeholder="Optional"
+                                        type="text"
+                                        value={metadataDrafts[row.itemId]?.displayName ?? ""}
+                                      />
+                                    </label>
+                                    <label style={{ display: "grid", gap: "0.25rem" }}>
+                                      <span style={{ fontSize: "0.8rem" }}>Condition</span>
+                                      <select
+                                        onChange={(event) =>
+                                          setMetadataDrafts((current) => ({
+                                            ...current,
+                                            [row.itemId]: {
+                                              ...current[row.itemId],
+                                              conditionState: event.target.value as ItemConditionState
+                                            }
+                                          }))
+                                        }
+                                        value={metadataDrafts[row.itemId]?.conditionState ?? row.conditionState}
+                                      >
+                                        {conditionOptions.map((condition) => (
+                                          <option key={condition} value={condition}>
+                                            {formatLabel(condition)}
+                                          </option>
+                                        ))}
+                                      </select>
+                                    </label>
+                                    <label style={{ display: "grid", gap: "0.25rem" }}>
+                                      <span style={{ fontSize: "0.8rem" }}>Notes</span>
+                                      <textarea
+                                        onChange={(event) =>
+                                          setMetadataDrafts((current) => ({
+                                            ...current,
+                                            [row.itemId]: {
+                                              ...current[row.itemId],
+                                              notes: event.target.value
+                                            }
+                                          }))
+                                        }
+                                        rows={3}
+                                        value={metadataDrafts[row.itemId]?.notes ?? ""}
+                                      />
+                                    </label>
+                                    <label
+                                      style={{
+                                        alignItems: "center",
+                                        display: "flex",
+                                        gap: "0.5rem",
+                                        fontSize: "0.85rem"
+                                      }}
+                                    >
+                                      <input
+                                        checked={metadataDrafts[row.itemId]?.isFavorite ?? false}
+                                        onChange={(event) =>
+                                          setMetadataDrafts((current) => ({
+                                            ...current,
+                                            [row.itemId]: {
+                                              ...current[row.itemId],
+                                              isFavorite: event.target.checked
+                                            }
+                                          }))
+                                        }
+                                        type="checkbox"
+                                      />
+                                      Favorite
+                                    </label>
+                                    <button
+                                      onClick={() => void handleUpdateMetadata(row.itemId)}
+                                      type="button"
+                                    >
+                                      Save details
+                                    </button>
+                                    {rowErrors[row.itemId] ? (
+                                      <div style={{ color: "#8b3a1a", fontSize: "0.8rem" }}>
+                                        {rowErrors[row.itemId]}
+                                      </div>
+                                    ) : null}
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
+                        No items in this location.
+                      </div>
+                    )}
+                  </section>
+                );
+              })}
+            </section>
+          ))}
         </div>
       ) : !loading && !pageError ? (
         <div

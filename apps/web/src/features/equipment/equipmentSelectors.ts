@@ -1,7 +1,9 @@
 import {
+  isWithYouLocation,
+  getItemAccessTier,
+  getLocationAvailabilitySortOrder,
   isEncounterAccessible,
   isPersonalCarryMode,
-  getAccessTier,
   getEffectiveEncumbrance,
   getLocationSortOrder,
   getStorageAssignmentForLocation,
@@ -102,10 +104,7 @@ export function getInventoryRows(
 
     rows.push({
       itemId: item.id,
-      displayName:
-        item.quantity > 1
-          ? `${item.displayName ?? template.name} x${item.quantity}`
-          : (item.displayName ?? template.name),
+      displayName: item.displayName ?? null,
       templateName: template.name,
       category: item.category,
       locationName: location?.name ?? "Unknown",
@@ -114,7 +113,7 @@ export function getInventoryRows(
       quality: item.quality,
       conditionState: item.conditionState,
       effectiveEncumbrance,
-      accessTier: getAccessTier(item.storageAssignment.carryMode),
+      accessTier: getItemAccessTier(item.storageAssignment.carryMode, location),
     });
   }
 
@@ -122,8 +121,30 @@ export function getInventoryRows(
       if (a.locationName !== b.locationName) {
         return a.locationName.localeCompare(b.locationName);
       }
-      return a.displayName.localeCompare(b.displayName);
+      if (a.templateName !== b.templateName) {
+        return a.templateName.localeCompare(b.templateName);
+      }
+
+      return (a.displayName ?? "").localeCompare(b.displayName ?? "");
     });
+}
+
+export function getWithYouLocations(
+  state: EquipmentFeatureState,
+  characterId: string,
+): StorageLocation[] {
+  return getCharacterLocations(state, characterId).filter((location) =>
+    isWithYouLocation(location),
+  );
+}
+
+export function getElsewhereLocations(
+  state: EquipmentFeatureState,
+  characterId: string,
+): StorageLocation[] {
+  return getCharacterLocations(state, characterId).filter(
+    (location) => !isWithYouLocation(location),
+  );
 }
 
 export function getItemsGroupedByLocation(
@@ -153,6 +174,51 @@ export function getItemsGroupedByLocation(
     });
 }
 
+export function getItemsGroupedByAvailability(
+  state: EquipmentFeatureState,
+  characterId: string,
+): Array<{
+  availabilityClass: "with_you" | "elsewhere";
+  groups: Array<{ location: StorageLocation; items: EquipmentItem[] }>;
+}> {
+  const locations = getCharacterLocations(state, characterId);
+  const items = getCharacterEquipmentItems(state, characterId);
+
+  return ["with_you", "elsewhere"].map((availabilityClass) => ({
+    availabilityClass,
+    groups: locations
+      .filter((location) => location.availabilityClass === availabilityClass)
+      .map((location) => ({
+        location,
+        items: items
+          .filter((item) => item.storageAssignment.locationId === location.id)
+          .sort((a, b) => a.id.localeCompare(b.id)),
+      }))
+      .filter((entry) => entry.items.length > 0 || !entry.location.type.endsWith("_system"))
+      .sort((left, right) => {
+        const availabilityDifference =
+          getLocationAvailabilitySortOrder(left.location.availabilityClass) -
+          getLocationAvailabilitySortOrder(right.location.availabilityClass);
+
+        if (availabilityDifference !== 0) {
+          return availabilityDifference;
+        }
+
+        const orderDifference =
+          getLocationSortOrder(left.location) - getLocationSortOrder(right.location);
+
+        if (orderDifference !== 0) {
+          return orderDifference;
+        }
+
+        return left.location.name.localeCompare(right.location.name);
+      }),
+  })) as Array<{
+    availabilityClass: "with_you" | "elsewhere";
+    groups: Array<{ location: StorageLocation; items: EquipmentItem[] }>;
+  }>;
+}
+
 export function getInventoryMoveOptions(
   state: EquipmentFeatureState,
   characterId: string,
@@ -168,12 +234,24 @@ export function getInventoryMoveOptions(
 
       return {
         carryMode: storageAssignment.carryMode,
-        label: location.name,
+        label: `${location.availabilityClass === "with_you" ? "With you" : "Elsewhere"}: ${location.name}`,
         locationId: location.id,
         value: `${location.id}::${storageAssignment.carryMode}`,
       };
     })
     .sort((left, right) => left.label.localeCompare(right.label));
+}
+
+export function getWithYouItems(
+  state: EquipmentFeatureState,
+  characterId: string,
+): EquipmentItem[] {
+  const locationsById = state.locationsById;
+
+  return getCharacterEquipmentItems(state, characterId).filter((item) => {
+    const location = locationsById[item.storageAssignment.locationId];
+    return location ? isWithYouLocation(location) : false;
+  });
 }
 
 export function getEquippedItems(

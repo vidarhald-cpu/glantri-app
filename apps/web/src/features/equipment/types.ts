@@ -3,16 +3,16 @@ import type {
   CarryMode,
   CharacterLoadout,
   EquipmentItem,
+  EquipmentTemplate,
   ItemConditionState,
   MaterialType,
   StorageLocation,
-  WeaponTemplate,
   QualityType,
 } from "@glantri/domain/equipment";
 
 export interface EquipmentFeatureState {
   templates: {
-    weaponsById: Record<string, WeaponTemplate>;
+    templatesById: Record<string, EquipmentTemplate>;
   };
   itemsById: Record<string, EquipmentItem>;
   locationsById: Record<string, StorageLocation>;
@@ -21,7 +21,7 @@ export interface EquipmentFeatureState {
 
 export interface InventoryRow {
   itemId: string;
-  displayName: string;
+  displayName: string | null;
   templateName: string;
   category: string;
   locationName: string;

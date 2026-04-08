@@ -6,7 +6,14 @@ import {
   CharacterService,
   type ActiveWeaponSlot
 } from "@glantri/database";
-import { CarryModeSchema, StorageLocationTypeSchema } from "@glantri/domain/equipment";
+import {
+  CarryModeSchema,
+  ItemConditionStateSchema,
+  LocationAvailabilityClassSchema,
+  MaterialTypeSchema,
+  QualityTypeSchema,
+  StorageLocationTypeSchema
+} from "@glantri/domain/equipment";
 
 import { requireAuthenticatedUser } from "../lib/sessionAuth";
 
@@ -56,15 +63,31 @@ function parseCreateLocationBody(body: unknown) {
 
   const name = "name" in body ? body.name : undefined;
   const type = "type" in body ? body.type : undefined;
+  const availabilityClass = "availabilityClass" in body ? body.availabilityClass : undefined;
 
   if (typeof name !== "string" || name.trim().length === 0) {
     throw new Error("Location name is required.");
   }
 
   return {
+    availabilityClass: LocationAvailabilityClassSchema.parse(availabilityClass),
     name,
     type: StorageLocationTypeSchema.parse(type)
   };
+}
+
+function parseDeleteLocationBody(body: unknown): { locationId: string } {
+  if (!body || typeof body !== "object") {
+    throw new Error("Delete location payload is required.");
+  }
+
+  const locationId = "locationId" in body ? body.locationId : undefined;
+
+  if (typeof locationId !== "string" || locationId.length === 0) {
+    throw new Error("locationId is required.");
+  }
+
+  return { locationId };
 }
 
 function parseNullableItemIdBody(body: unknown): { itemId: string | null } {
@@ -100,6 +123,121 @@ function parseBootstrapSampleBody(body: unknown): { overwrite: boolean } {
 
   return {
     overwrite: overwrite ?? false
+  };
+}
+
+function parseAddItemBody(body: unknown) {
+  if (!body || typeof body !== "object") {
+    throw new Error("Add item payload is required.");
+  }
+
+  const templateId = "templateId" in body ? body.templateId : undefined;
+  const quantity = "quantity" in body ? body.quantity : undefined;
+  const initialLocationId = "initialLocationId" in body ? body.initialLocationId : undefined;
+  const initialCarryMode = "initialCarryMode" in body ? body.initialCarryMode : undefined;
+  const material = "material" in body ? body.material : undefined;
+  const quality = "quality" in body ? body.quality : undefined;
+  const displayName = "displayName" in body ? body.displayName : undefined;
+  const notes = "notes" in body ? body.notes : undefined;
+
+  if (typeof templateId !== "string" || templateId.length === 0) {
+    throw new Error("templateId is required.");
+  }
+
+  if (typeof initialLocationId !== "string" || initialLocationId.length === 0) {
+    throw new Error("initialLocationId is required.");
+  }
+
+  if (typeof quantity !== "number" || !Number.isFinite(quantity)) {
+    throw new Error("quantity must be a number.");
+  }
+
+  if (displayName !== undefined && displayName !== null && typeof displayName !== "string") {
+    throw new Error("displayName must be a string when provided.");
+  }
+
+  if (notes !== undefined && notes !== null && typeof notes !== "string") {
+    throw new Error("notes must be a string when provided.");
+  }
+
+  return {
+    displayName: displayName ?? null,
+    initialCarryMode: CarryModeSchema.parse(initialCarryMode),
+    initialLocationId,
+    material: material == null ? undefined : MaterialTypeSchema.parse(material),
+    notes: notes ?? null,
+    quality: quality == null ? undefined : QualityTypeSchema.parse(quality),
+    quantity,
+    templateId
+  };
+}
+
+function parseRemoveItemBody(body: unknown): { itemId: string } {
+  if (!body || typeof body !== "object") {
+    throw new Error("Remove item payload is required.");
+  }
+
+  const itemId = "itemId" in body ? body.itemId : undefined;
+
+  if (typeof itemId !== "string" || itemId.length === 0) {
+    throw new Error("itemId is required.");
+  }
+
+  return { itemId };
+}
+
+function parseUpdateQuantityBody(body: unknown): { itemId: string; quantity: number } {
+  if (!body || typeof body !== "object") {
+    throw new Error("Quantity payload is required.");
+  }
+
+  const itemId = "itemId" in body ? body.itemId : undefined;
+  const quantity = "quantity" in body ? body.quantity : undefined;
+
+  if (typeof itemId !== "string" || itemId.length === 0) {
+    throw new Error("itemId is required.");
+  }
+
+  if (typeof quantity !== "number" || !Number.isFinite(quantity)) {
+    throw new Error("quantity must be a number.");
+  }
+
+  return { itemId, quantity };
+}
+
+function parseUpdateMetadataBody(body: unknown) {
+  if (!body || typeof body !== "object") {
+    throw new Error("Metadata payload is required.");
+  }
+
+  const itemId = "itemId" in body ? body.itemId : undefined;
+  const displayName = "displayName" in body ? body.displayName : undefined;
+  const conditionState = "conditionState" in body ? body.conditionState : undefined;
+  const notes = "notes" in body ? body.notes : undefined;
+  const isFavorite = "isFavorite" in body ? body.isFavorite : undefined;
+
+  if (typeof itemId !== "string" || itemId.length === 0) {
+    throw new Error("itemId is required.");
+  }
+
+  if (displayName !== undefined && displayName !== null && typeof displayName !== "string") {
+    throw new Error("displayName must be a string when provided.");
+  }
+
+  if (notes !== undefined && notes !== null && typeof notes !== "string") {
+    throw new Error("notes must be a string when provided.");
+  }
+
+  if (isFavorite !== undefined && isFavorite !== null && typeof isFavorite !== "boolean") {
+    throw new Error("isFavorite must be a boolean when provided.");
+  }
+
+  return {
+    conditionState: ItemConditionStateSchema.parse(conditionState),
+    displayName: displayName ?? null,
+    isFavorite: isFavorite ?? null,
+    itemId,
+    notes: notes ?? null
   };
 }
 
@@ -210,7 +348,48 @@ export const characterEquipmentRoutes: FastifyPluginAsync = async (app) => {
     try {
       const body = parseCreateLocationBody(request.body);
       await requireOwnedCharacter(user.id, id);
-      await equipmentWriteService.createCharacterStorageLocation(id, body.name, body.type);
+      await equipmentWriteService.createCharacterStorageLocation(
+        id,
+        body.name,
+        body.type,
+        body.availabilityClass
+      );
+
+      return {
+        state: toEquipmentFeatureState(
+          await equipmentReadModelService.getCharacterEquipmentState(id)
+        )
+      };
+    } catch (error) {
+      if (error instanceof Error && error.message === "Character not found.") {
+        return reply.code(404).send({
+          error: error.message
+        });
+      }
+
+      if (error instanceof Error) {
+        return reply.code(400).send({
+          error: error.message
+        });
+      }
+
+      throw error;
+    }
+  });
+
+  app.post("/:id/equipment/locations/remove", async (request, reply) => {
+    const user = await requireAuthenticatedUser(request, reply);
+
+    if (!user) {
+      return;
+    }
+
+    const id = parseCharacterId(request.params);
+
+    try {
+      const body = parseDeleteLocationBody(request.body);
+      await requireOwnedCharacter(user.id, id);
+      await equipmentWriteService.removeCharacterStorageLocation(id, body.locationId);
 
       return {
         state: toEquipmentFeatureState(
@@ -248,6 +427,155 @@ export const characterEquipmentRoutes: FastifyPluginAsync = async (app) => {
       await requireOwnedCharacter(user.id, id);
       await equipmentWriteService.bootstrapSampleCharacterEquipment(id, {
         overwrite: body.overwrite
+      });
+
+      return {
+        state: toEquipmentFeatureState(
+          await equipmentReadModelService.getCharacterEquipmentState(id)
+        )
+      };
+    } catch (error) {
+      if (error instanceof Error && error.message === "Character not found.") {
+        return reply.code(404).send({
+          error: error.message
+        });
+      }
+
+      if (error instanceof Error) {
+        return reply.code(400).send({
+          error: error.message
+        });
+      }
+
+      throw error;
+    }
+  });
+
+  app.post("/:id/equipment/items", async (request, reply) => {
+    const user = await requireAuthenticatedUser(request, reply);
+
+    if (!user) {
+      return;
+    }
+
+    const id = parseCharacterId(request.params);
+
+    try {
+      const body = parseAddItemBody(request.body);
+      await requireOwnedCharacter(user.id, id);
+      await equipmentWriteService.addCharacterEquipmentItem(id, body);
+
+      return {
+        state: toEquipmentFeatureState(
+          await equipmentReadModelService.getCharacterEquipmentState(id)
+        )
+      };
+    } catch (error) {
+      if (error instanceof Error && error.message === "Character not found.") {
+        return reply.code(404).send({
+          error: error.message
+        });
+      }
+
+      if (error instanceof Error) {
+        return reply.code(400).send({
+          error: error.message
+        });
+      }
+
+      throw error;
+    }
+  });
+
+  app.post("/:id/equipment/items/remove", async (request, reply) => {
+    const user = await requireAuthenticatedUser(request, reply);
+
+    if (!user) {
+      return;
+    }
+
+    const id = parseCharacterId(request.params);
+
+    try {
+      const body = parseRemoveItemBody(request.body);
+      await requireOwnedCharacter(user.id, id);
+      await equipmentWriteService.removeCharacterEquipmentItem(id, body.itemId);
+
+      return {
+        state: toEquipmentFeatureState(
+          await equipmentReadModelService.getCharacterEquipmentState(id)
+        )
+      };
+    } catch (error) {
+      if (error instanceof Error && error.message === "Character not found.") {
+        return reply.code(404).send({
+          error: error.message
+        });
+      }
+
+      if (error instanceof Error) {
+        return reply.code(400).send({
+          error: error.message
+        });
+      }
+
+      throw error;
+    }
+  });
+
+  app.post("/:id/equipment/items/quantity", async (request, reply) => {
+    const user = await requireAuthenticatedUser(request, reply);
+
+    if (!user) {
+      return;
+    }
+
+    const id = parseCharacterId(request.params);
+
+    try {
+      const body = parseUpdateQuantityBody(request.body);
+      await requireOwnedCharacter(user.id, id);
+      await equipmentWriteService.updateCharacterEquipmentQuantity(id, body.itemId, body.quantity);
+
+      return {
+        state: toEquipmentFeatureState(
+          await equipmentReadModelService.getCharacterEquipmentState(id)
+        )
+      };
+    } catch (error) {
+      if (error instanceof Error && error.message === "Character not found.") {
+        return reply.code(404).send({
+          error: error.message
+        });
+      }
+
+      if (error instanceof Error) {
+        return reply.code(400).send({
+          error: error.message
+        });
+      }
+
+      throw error;
+    }
+  });
+
+  app.post("/:id/equipment/items/metadata", async (request, reply) => {
+    const user = await requireAuthenticatedUser(request, reply);
+
+    if (!user) {
+      return;
+    }
+
+    const id = parseCharacterId(request.params);
+
+    try {
+      const body = parseUpdateMetadataBody(request.body);
+      await requireOwnedCharacter(user.id, id);
+      await equipmentWriteService.updateCharacterEquipmentMetadata(id, body.itemId, {
+        conditionState: body.conditionState,
+        displayName: body.displayName,
+        isFavorite: body.isFavorite,
+        notes: body.notes
       });
 
       return {
