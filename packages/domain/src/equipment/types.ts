@@ -129,6 +129,20 @@ export interface ImportedWeaponSourceMetadata {
   rawRow: Record<string, string>;
 }
 
+export interface WeaponAttackModeManualOverride {
+  modeId: string;
+  fields: string[];
+  note?: string | null;
+}
+
+export interface WeaponTemplateManualEnrichment {
+  source: string;
+  notes?: string[] | null;
+  attackModeOverrides?: WeaponAttackModeManualOverride[] | null;
+  resolvedImportWarnings?: string[] | null;
+  unresolvedImportWarnings?: string[] | null;
+}
+
 export interface WeaponTemplate extends EquipmentTemplateBase {
   category: "weapon";
   weaponClass: string;
@@ -154,6 +168,7 @@ export interface WeaponTemplate extends EquipmentTemplateBase {
   ammoEncumbranceRaw?: string | null;
   sourceMetadata?: ImportedWeaponSourceMetadata | null;
   importWarnings?: string[] | null;
+  manualEnrichment?: WeaponTemplateManualEnrichment | null;
   durabilityProfile?: WeaponDurabilityProfile | null;
 }
 

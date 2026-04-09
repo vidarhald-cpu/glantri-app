@@ -151,6 +151,20 @@ export const ImportedWeaponSourceMetadataSchema = z.object({
   rawRow: z.record(z.string()),
 });
 
+export const WeaponAttackModeManualOverrideSchema = z.object({
+  modeId: z.string(),
+  fields: z.array(z.string()),
+  note: z.string().nullable().optional(),
+});
+
+export const WeaponTemplateManualEnrichmentSchema = z.object({
+  source: z.string(),
+  notes: z.array(z.string()).nullable().optional(),
+  attackModeOverrides: z.array(WeaponAttackModeManualOverrideSchema).nullable().optional(),
+  resolvedImportWarnings: z.array(z.string()).nullable().optional(),
+  unresolvedImportWarnings: z.array(z.string()).nullable().optional(),
+});
+
 export const WeaponTemplateSchema = EquipmentTemplateSchema.extend({
   category: z.literal("weapon"),
   weaponClass: z.string(),
@@ -176,6 +190,7 @@ export const WeaponTemplateSchema = EquipmentTemplateSchema.extend({
   ammoEncumbranceRaw: z.string().nullable().optional(),
   sourceMetadata: ImportedWeaponSourceMetadataSchema.nullable().optional(),
   importWarnings: z.array(z.string()).nullable().optional(),
+  manualEnrichment: WeaponTemplateManualEnrichmentSchema.nullable().optional(),
   durabilityProfile: WeaponDurabilityProfileSchema.nullable().optional(),
 });
 

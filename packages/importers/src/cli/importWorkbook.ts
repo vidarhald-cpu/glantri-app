@@ -1,10 +1,21 @@
+import {
+  applyThemistogenesWeaponEnrichments,
+  buildThemistogenesWeaponEnrichmentReport,
+} from "@glantri/content";
+
 import { importThemistogenesWeapons } from "../themistogenes/importWeapons";
 
 export async function runImportWorkbook() {
   const result = importThemistogenesWeapons();
+  const enrichedTemplates = applyThemistogenesWeaponEnrichments(result.templates);
+  const enrichmentReport = buildThemistogenesWeaponEnrichmentReport(
+    result.templates,
+    enrichedTemplates,
+  );
   console.log(
     JSON.stringify(
       {
+        enrichmentReport,
         importedWeaponCount: result.report.importedWeaponCount,
         skippedRows: result.report.skippedRows,
         sourceSheets: result.report.sourceSheets,
