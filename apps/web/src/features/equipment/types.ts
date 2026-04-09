@@ -8,7 +8,7 @@ import type {
   MaterialType,
   StorageLocation,
   QualityType,
-} from "@glantri/domain/equipment";
+} from "@glantri/domain";
 
 export interface EquipmentFeatureState {
   templates: {

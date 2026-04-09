@@ -13,7 +13,7 @@ import {
   type EquipmentItem,
   type EquipmentTemplate,
   type StorageLocation,
-} from "@glantri/domain/equipment";
+} from "@glantri/domain";
 import type { EquipmentFeatureState, InventoryRow } from "./types";
 
 export function getCharacterEquipmentItems(
