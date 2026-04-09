@@ -114,10 +114,33 @@ export interface WeaponAttackMode {
   obRaw?: string | null;
   dmb?: number | null;
   dmbRaw?: string | null;
+  dmbFormula?: WeaponDamageModifierFormula | null;
   crit?: string | null;
   armorModifier?: string | null;
   provenance: WeaponAttackModeProvenance;
   notes?: string | null;
+}
+
+export interface WeaponDamageModifierFormula {
+  kind: "numeric" | "dice" | "special" | "unresolved";
+  raw: string;
+  numericValue?: number | null;
+  diceCount?: number | null;
+  diceSides?: number | null;
+  flatModifier?: number | null;
+  textModifier?: string | null;
+  specialValue?: string | null;
+  note?: string | null;
+}
+
+export interface WeaponEncumbranceFormula {
+  kind: "numeric" | "ammo_linked" | "special" | "unresolved";
+  raw: string;
+  numericValue?: number | null;
+  baseValue?: number | null;
+  ammoValue?: number | null;
+  specialValue?: string | null;
+  note?: string | null;
 }
 
 export interface ImportedWeaponSourceMetadata {
@@ -143,6 +166,22 @@ export interface WeaponTemplateManualEnrichment {
   unresolvedImportWarnings?: string[] | null;
 }
 
+export interface WeaponFormulaNormalizationEntry {
+  fieldPath: string;
+  kind: "dmb" | "encumbrance" | "ammo_encumbrance";
+  raw: string;
+  normalizedAs: string;
+  note?: string | null;
+}
+
+export interface WeaponTemplateFormulaNormalization {
+  source: string;
+  normalizedFields?: WeaponFormulaNormalizationEntry[] | null;
+  resolvedImportWarnings?: string[] | null;
+  unresolvedImportWarnings?: string[] | null;
+  notes?: string[] | null;
+}
+
 export interface WeaponTemplate extends EquipmentTemplateBase {
   category: "weapon";
   weaponClass: string;
@@ -164,11 +203,14 @@ export interface WeaponTemplate extends EquipmentTemplateBase {
   crit2?: string | null;
   secondCrit?: string | null;
   defensiveValue?: number | null;
+  baseEncumbranceFormula?: WeaponEncumbranceFormula | null;
   ammoEncumbrance?: number | null;
   ammoEncumbranceRaw?: string | null;
+  ammoEncumbranceFormula?: WeaponEncumbranceFormula | null;
   sourceMetadata?: ImportedWeaponSourceMetadata | null;
   importWarnings?: string[] | null;
   manualEnrichment?: WeaponTemplateManualEnrichment | null;
+  formulaNormalization?: WeaponTemplateFormulaNormalization | null;
   durabilityProfile?: WeaponDurabilityProfile | null;
 }
 

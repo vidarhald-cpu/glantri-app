@@ -1,6 +1,8 @@
 import {
   applyThemistogenesWeaponEnrichments,
   buildThemistogenesWeaponEnrichmentReport,
+  applyThemistogenesWeaponFormulaNormalization,
+  buildThemistogenesWeaponFormulaNormalizationReport,
 } from "@glantri/content";
 
 import { importThemistogenesWeapons } from "../themistogenes/importWeapons";
@@ -8,14 +10,20 @@ import { importThemistogenesWeapons } from "../themistogenes/importWeapons";
 export async function runImportWorkbook() {
   const result = importThemistogenesWeapons();
   const enrichedTemplates = applyThemistogenesWeaponEnrichments(result.templates);
+  const normalizedTemplates = applyThemistogenesWeaponFormulaNormalization(enrichedTemplates);
   const enrichmentReport = buildThemistogenesWeaponEnrichmentReport(
     result.templates,
     enrichedTemplates,
+  );
+  const formulaNormalizationReport = buildThemistogenesWeaponFormulaNormalizationReport(
+    enrichedTemplates,
+    normalizedTemplates,
   );
   console.log(
     JSON.stringify(
       {
         enrichmentReport,
+        formulaNormalizationReport,
         importedWeaponCount: result.report.importedWeaponCount,
         skippedRows: result.report.skippedRows,
         sourceSheets: result.report.sourceSheets,

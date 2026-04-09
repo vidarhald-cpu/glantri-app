@@ -3,6 +3,7 @@ export * from "./gearTemplates";
 export * from "./valuableTemplates";
 export * from "./importedWeaponTemplates";
 export * from "./themistogenesWeaponEnrichments";
+export * from "./themistogenesWeaponFormulaNormalization";
 export * from "./weaponTemplates";
 export * from "./shieldTemplates";
 export * from "./systemLocations";

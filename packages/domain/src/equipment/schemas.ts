@@ -136,10 +136,31 @@ export const WeaponAttackModeSchema = z.object({
   obRaw: z.string().nullable().optional(),
   dmb: z.number().nullable().optional(),
   dmbRaw: z.string().nullable().optional(),
+  dmbFormula: z.object({
+    kind: z.enum(["numeric", "dice", "special", "unresolved"]),
+    raw: z.string(),
+    numericValue: z.number().nullable().optional(),
+    diceCount: z.number().int().positive().nullable().optional(),
+    diceSides: z.number().int().positive().nullable().optional(),
+    flatModifier: z.number().nullable().optional(),
+    textModifier: z.string().nullable().optional(),
+    specialValue: z.string().nullable().optional(),
+    note: z.string().nullable().optional(),
+  }).nullable().optional(),
   crit: z.string().nullable().optional(),
   armorModifier: z.string().nullable().optional(),
   provenance: WeaponAttackModeProvenanceSchema,
   notes: z.string().nullable().optional(),
+});
+
+export const WeaponEncumbranceFormulaSchema = z.object({
+  kind: z.enum(["numeric", "ammo_linked", "special", "unresolved"]),
+  raw: z.string(),
+  numericValue: z.number().nullable().optional(),
+  baseValue: z.number().nonnegative().nullable().optional(),
+  ammoValue: z.number().nonnegative().nullable().optional(),
+  specialValue: z.string().nullable().optional(),
+  note: z.string().nullable().optional(),
 });
 
 export const ImportedWeaponSourceMetadataSchema = z.object({
@@ -165,6 +186,22 @@ export const WeaponTemplateManualEnrichmentSchema = z.object({
   unresolvedImportWarnings: z.array(z.string()).nullable().optional(),
 });
 
+export const WeaponFormulaNormalizationEntrySchema = z.object({
+  fieldPath: z.string(),
+  kind: z.enum(["dmb", "encumbrance", "ammo_encumbrance"]),
+  raw: z.string(),
+  normalizedAs: z.string(),
+  note: z.string().nullable().optional(),
+});
+
+export const WeaponTemplateFormulaNormalizationSchema = z.object({
+  source: z.string(),
+  normalizedFields: z.array(WeaponFormulaNormalizationEntrySchema).nullable().optional(),
+  resolvedImportWarnings: z.array(z.string()).nullable().optional(),
+  unresolvedImportWarnings: z.array(z.string()).nullable().optional(),
+  notes: z.array(z.string()).nullable().optional(),
+});
+
 export const WeaponTemplateSchema = EquipmentTemplateSchema.extend({
   category: z.literal("weapon"),
   weaponClass: z.string(),
@@ -186,11 +223,14 @@ export const WeaponTemplateSchema = EquipmentTemplateSchema.extend({
   crit2: z.string().nullable().optional(),
   secondCrit: z.string().nullable().optional(),
   defensiveValue: z.number().nullable().optional(),
+  baseEncumbranceFormula: WeaponEncumbranceFormulaSchema.nullable().optional(),
   ammoEncumbrance: z.number().nullable().optional(),
   ammoEncumbranceRaw: z.string().nullable().optional(),
+  ammoEncumbranceFormula: WeaponEncumbranceFormulaSchema.nullable().optional(),
   sourceMetadata: ImportedWeaponSourceMetadataSchema.nullable().optional(),
   importWarnings: z.array(z.string()).nullable().optional(),
   manualEnrichment: WeaponTemplateManualEnrichmentSchema.nullable().optional(),
+  formulaNormalization: WeaponTemplateFormulaNormalizationSchema.nullable().optional(),
   durabilityProfile: WeaponDurabilityProfileSchema.nullable().optional(),
 });
 
