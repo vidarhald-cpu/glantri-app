@@ -77,6 +77,18 @@ export const WeaponHandlingClassSchema = z.enum([
   "other",
 ]);
 
+export const WeaponDamageClassSchema = z.enum([
+  "blunt",
+  "edged",
+  "pointed",
+]);
+
+export const WeaponAttackModeProvenanceSchema = z.enum([
+  "imported",
+  "manual",
+  "derived",
+]);
+
 export const EquipmentSpecialPropertiesSchema = z.object({
   magicEffects: z.array(z.string()).optional(),
   damageEffects: z.array(z.string()).optional(),
@@ -116,11 +128,35 @@ export const WeaponDurabilityProfileSchema = z.object({
   notes: z.string().nullable().optional(),
 });
 
+export const WeaponAttackModeSchema = z.object({
+  id: z.string(),
+  label: z.string().nullable().optional(),
+  damageClass: WeaponDamageClassSchema.nullable().optional(),
+  ob: z.number().nullable().optional(),
+  obRaw: z.string().nullable().optional(),
+  dmb: z.number().nullable().optional(),
+  dmbRaw: z.string().nullable().optional(),
+  crit: z.string().nullable().optional(),
+  armorModifier: z.string().nullable().optional(),
+  provenance: WeaponAttackModeProvenanceSchema,
+  notes: z.string().nullable().optional(),
+});
+
+export const ImportedWeaponSourceMetadataSchema = z.object({
+  workbook: z.string(),
+  sheet: z.string(),
+  row: z.number().int().positive(),
+  sourceRange: z.string(),
+  sourceColumns: z.record(z.string()),
+  rawRow: z.record(z.string()),
+});
+
 export const WeaponTemplateSchema = EquipmentTemplateSchema.extend({
   category: z.literal("weapon"),
   weaponClass: z.string(),
   weaponSkill: z.string(),
   handlingClass: WeaponHandlingClassSchema,
+  attackModes: z.array(WeaponAttackModeSchema).nullable().optional(),
   primaryAttackType: z.string().nullable().optional(),
   secondaryAttackType: z.string().nullable().optional(),
   ob1: z.number().nullable().optional(),
@@ -136,6 +172,10 @@ export const WeaponTemplateSchema = EquipmentTemplateSchema.extend({
   crit2: z.string().nullable().optional(),
   secondCrit: z.string().nullable().optional(),
   defensiveValue: z.number().nullable().optional(),
+  ammoEncumbrance: z.number().nullable().optional(),
+  ammoEncumbranceRaw: z.string().nullable().optional(),
+  sourceMetadata: ImportedWeaponSourceMetadataSchema.nullable().optional(),
+  importWarnings: z.array(z.string()).nullable().optional(),
   durabilityProfile: WeaponDurabilityProfileSchema.nullable().optional(),
 });
 

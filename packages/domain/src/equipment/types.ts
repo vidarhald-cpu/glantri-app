@@ -73,6 +73,16 @@ export type WeaponHandlingClass =
   | "polearm"
   | "other";
 
+export type WeaponDamageClass =
+  | "blunt"
+  | "edged"
+  | "pointed";
+
+export type WeaponAttackModeProvenance =
+  | "imported"
+  | "manual"
+  | "derived";
+
 export interface EquipmentTemplateBase {
   id: string;
   category: EquipmentCategory;
@@ -96,11 +106,35 @@ export interface WeaponDurabilityProfile {
   notes?: string | null;
 }
 
+export interface WeaponAttackMode {
+  id: string;
+  label?: string | null;
+  damageClass?: WeaponDamageClass | null;
+  ob?: number | null;
+  obRaw?: string | null;
+  dmb?: number | null;
+  dmbRaw?: string | null;
+  crit?: string | null;
+  armorModifier?: string | null;
+  provenance: WeaponAttackModeProvenance;
+  notes?: string | null;
+}
+
+export interface ImportedWeaponSourceMetadata {
+  workbook: string;
+  sheet: string;
+  row: number;
+  sourceRange: string;
+  sourceColumns: Record<string, string>;
+  rawRow: Record<string, string>;
+}
+
 export interface WeaponTemplate extends EquipmentTemplateBase {
   category: "weapon";
   weaponClass: string;
   weaponSkill: string;
   handlingClass: WeaponHandlingClass;
+  attackModes?: WeaponAttackMode[] | null;
   primaryAttackType?: string | null;
   secondaryAttackType?: string | null;
   ob1?: number | null;
@@ -116,6 +150,10 @@ export interface WeaponTemplate extends EquipmentTemplateBase {
   crit2?: string | null;
   secondCrit?: string | null;
   defensiveValue?: number | null;
+  ammoEncumbrance?: number | null;
+  ammoEncumbranceRaw?: string | null;
+  sourceMetadata?: ImportedWeaponSourceMetadata | null;
+  importWarnings?: string[] | null;
   durabilityProfile?: WeaponDurabilityProfile | null;
 }
 
