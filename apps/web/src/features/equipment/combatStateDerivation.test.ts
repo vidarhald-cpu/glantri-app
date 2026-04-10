@@ -7,10 +7,11 @@ import type {
   StorageLocation,
 } from "@glantri/domain";
 import type { CombatAllocationState } from "../../../../../packages/rules-engine/src/combat/combatAllocationState";
+import { createCombatSession } from "../../../../../packages/rules-engine/src/combat/combatSessionState";
 
 import { equipmentTemplates } from "../../../../../packages/content/src/equipment";
 import type { EquipmentFeatureState } from "./types";
-import { deriveCombatStateSnapshot } from "./combatStateDerivation";
+import { deriveCombatStateSnapshot, getActorCombatState } from "./combatStateDerivation";
 
 const sampleCharacterId = "char-themistogenes";
 
@@ -342,5 +343,38 @@ describe("combatStateDerivation", () => {
     expect(snapshot.defenseSummary).toContain("Parry 16");
     expect(snapshot.movementModifierSummary).toContain("situational");
     expect(snapshot.perceptionSummary).toContain("Current perception modifier -2");
+  });
+
+  it("reuses session actor allocation to derive actor combat state without duplicating logic", () => {
+    const session = createCombatSession([
+      {
+        actorId: "actor-longsword",
+        characterId: sampleCharacterId,
+        allocation: createAllocationInputs({
+          defensePosture: "parry",
+          parry: {
+            allocatedOb: 15,
+            source: "primary",
+          },
+          situationalModifiers: {
+            attack: 2,
+            defense: 1,
+            movement: -1,
+            perception: -2,
+          },
+        }),
+      },
+    ]);
+
+    const snapshot = getActorCombatState(session, "actor-longsword", {
+      equipmentState: cloneState(),
+      characterStats: sampleCharacterInputs,
+    });
+
+    expect(snapshot).not.toBeNull();
+    expect(snapshot?.weaponRows[0]?.ob1).toBe(41);
+    expect(snapshot?.weaponRows[0]?.db).toBe(14);
+    expect(snapshot?.weaponRows[0]?.parry).toBe(16);
+    expect(snapshot?.readinessSummary).toContain("Posture Parry");
   });
 });

@@ -4,6 +4,7 @@ export * from "./chargen/primaryAllocation";
 export * from "./chargen/selectProfile";
 export * from "./chargen/summarizeRolledProfile";
 export * from "./combat/combatAllocationState";
+export * from "./combat/combatSessionState";
 export * from "./combat/composeDefenseValues";
 export * from "./calculators/ob/calculateBaseOB";
 export * from "./calculators/db/calculateDB";

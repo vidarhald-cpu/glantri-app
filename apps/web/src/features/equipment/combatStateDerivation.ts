@@ -20,6 +20,7 @@ import {
   type CombatAllocationState,
   type CombatParrySource,
 } from "../../../../../packages/rules-engine/src/combat/combatAllocationState";
+import type { CombatSessionState } from "../../../../../packages/rules-engine/src/combat/combatSessionState";
 import {
   composeCombatDefenseValues,
   usesCombatParrySource,
@@ -100,6 +101,11 @@ export interface DerivedCombatStateSnapshot {
   primaryNotes: string;
   secondaryNotes: string;
   missileNotes: string;
+}
+
+export interface ActorCombatStateInputs {
+  characterStats?: CombatStateCharacterInputs;
+  equipmentState: EquipmentFeatureState;
 }
 
 export type CombatStateAllocationInputs = CombatAllocationState;
@@ -833,4 +839,23 @@ export function deriveCombatStateSnapshot(
     secondaryNotes: formatWeaponNotes(secondaryWeaponTemplate),
     missileNotes: formatWeaponNotes(missileWeaponTemplate),
   };
+}
+
+export function getActorCombatState(
+  session: CombatSessionState,
+  actorId: string,
+  inputs: ActorCombatStateInputs,
+): DerivedCombatStateSnapshot | null {
+  const actor = session.actors.find((candidate) => candidate.actorId === actorId);
+
+  if (!actor?.characterId) {
+    return null;
+  }
+
+  return deriveCombatStateSnapshot(
+    inputs.equipmentState,
+    actor.characterId,
+    inputs.characterStats,
+    actor.allocation,
+  );
 }
