@@ -2,6 +2,7 @@ import type { ArmorTemplate } from "@glantri/domain";
 
 import { getLoadoutEquipment, getEquipmentTemplateById } from "./equipmentSelectors";
 import {
+  type CombatStateCharacterInputs,
   deriveCombatStateSnapshot,
   type DerivedCombatValue,
 } from "./combatStateDerivation";
@@ -58,8 +59,9 @@ function getWeaponModeValue(value: DerivedCombatValue | null | undefined): Comba
 export function buildCombatStatePanelModel(
   state: EquipmentFeatureState,
   characterId: string,
+  characterInputs?: CombatStateCharacterInputs,
 ): CombatStatePanelModel {
-  const snapshot = deriveCombatStateSnapshot(state, characterId);
+  const snapshot = deriveCombatStateSnapshot(state, characterId, characterInputs);
   const loadout = getLoadoutEquipment(state, characterId);
   const armorItem = "armor" in loadout ? loadout.armor : undefined;
   const armorTemplate = armorItem
@@ -129,7 +131,7 @@ export function buildCombatStatePanelModel(
   const weaponModeTable: CombatStateTableModel = {
     title: "Weapons and Defense",
     description:
-      "Weapon mode values now derive from the imported attack-mode catalog and current loadout selection. Formula DMB stays explicit, and only the currently exact defensive pieces are surfaced.",
+      "Weapon mode values derive from the imported attack-mode catalog, current loadout selection, and available live character inputs. Formula DMB stays explicit, and values that still depend on deeper allocation or situational rules remain clearly interim.",
     columns: [
       "Mode",
       "Current item",
@@ -206,7 +208,7 @@ export function buildCombatStatePanelModel(
   return {
     title: "Combat State Panel",
     description:
-      "Structured read-only combat snapshot of the current persisted fighting state, using imported weapon modes and current loadout selections while keeping unresolved rules explicit.",
+      "Structured read-only combat snapshot of the current persisted fighting state, using imported weapon modes, current loadout selections, and live character inputs where the combat rules document marks them as safely derivable.",
     currentUseRows,
     armorProtectionRows,
     armorProtectionTable,

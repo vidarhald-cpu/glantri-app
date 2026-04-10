@@ -9,6 +9,12 @@ import {
   type WeaponDamageModifierFormula,
   type WeaponTemplate,
 } from "@glantri/domain";
+import {
+  calculateBaseOB,
+  calculateDB,
+  calculateParryValue,
+  type CharacterSheetSummary,
+} from "@glantri/rules-engine";
 
 import {
   getBackpackItems,
@@ -26,6 +32,13 @@ import {
 import type { EquipmentFeatureState } from "./types";
 
 export type DerivedCombatValue = string | number;
+
+export interface CombatStateCharacterInputs {
+  dexterity: number | null;
+  parrySkill: number | null;
+  brawlingSkill: number | null;
+  skillTotalsByName: Record<string, number>;
+}
 
 export interface DerivedCombatWeaponRow {
   slotLabel: string;
@@ -77,6 +90,24 @@ export interface DerivedCombatStateSnapshot {
   primaryNotes: string;
   secondaryNotes: string;
   missileNotes: string;
+}
+
+const BRAWLING_SKILL_NAME = "Brawling";
+const PARRY_SKILL_NAME = "Parry";
+
+export function buildCombatStateCharacterInputs(
+  sheet: CharacterSheetSummary,
+): CombatStateCharacterInputs {
+  const skillTotalsByName = Object.fromEntries(
+    sheet.draftView.skills.map((skill) => [skill.name, skill.totalSkill]),
+  );
+
+  return {
+    dexterity: sheet.adjustedStats.dex ?? null,
+    parrySkill: skillTotalsByName[PARRY_SKILL_NAME] ?? null,
+    brawlingSkill: skillTotalsByName[BRAWLING_SKILL_NAME] ?? null,
+    skillTotalsByName,
+  };
 }
 
 function formatLabel(value: string): string {
@@ -209,6 +240,91 @@ function formatDmbFormula(formula: WeaponDamageModifierFormula | null | undefine
     case "unresolved":
       return `${formula.raw} (unresolved)`;
   }
+}
+
+function formatInterimNumber(value: number, reason: string): string {
+  return `${value} (${reason})`;
+}
+
+function getWeaponSkillTotal(
+  template: WeaponTemplate | null,
+  characterInputs: CombatStateCharacterInputs | undefined,
+): number | null {
+  if (!template?.weaponSkill || !characterInputs) {
+    return null;
+  }
+
+  return characterInputs.skillTotalsByName[template.weaponSkill] ?? null;
+}
+
+function getDerivedObValue(input: {
+  characterInputs?: CombatStateCharacterInputs;
+  mode: WeaponAttackMode | null;
+  template: WeaponTemplate | null;
+}): DerivedCombatValue {
+  if (!input.mode) {
+    return "—";
+  }
+
+  const skillTotal = getWeaponSkillTotal(input.template, input.characterInputs);
+  if (skillTotal == null) {
+    return input.mode.ob ?? "—";
+  }
+
+  return calculateBaseOB({
+    skill: skillTotal,
+    weaponBonus: input.mode.ob ?? 0,
+  });
+}
+
+function getCurrentDbValue(input: {
+  characterInputs?: CombatStateCharacterInputs;
+  shieldBonus: number;
+}): DerivedCombatValue {
+  if (!input.characterInputs || input.characterInputs.dexterity == null) {
+    return input.shieldBonus > 0 ? input.shieldBonus : "—";
+  }
+
+  return calculateDB({
+    dex: input.characterInputs.dexterity,
+    shieldBonus: input.shieldBonus,
+  });
+}
+
+function getDmValue(input: {
+  shieldDefensiveValue: number;
+  template: WeaponTemplate | null;
+}): DerivedCombatValue {
+  const weaponDefensiveValue = input.template?.defensiveValue ?? 0;
+  const totalDefensiveValue = weaponDefensiveValue + input.shieldDefensiveValue;
+
+  return totalDefensiveValue > 0 ? totalDefensiveValue : "—";
+}
+
+function getParryValue(input: {
+  characterInputs?: CombatStateCharacterInputs;
+  mode: WeaponAttackMode | null;
+  template: WeaponTemplate | null;
+}): DerivedCombatValue {
+  if (!input.template) {
+    return "—";
+  }
+
+  const skillTotal = getWeaponSkillTotal(input.template, input.characterInputs);
+  if (skillTotal == null) {
+    return input.template.parry ?? "—";
+  }
+
+  const allocatedOb = calculateBaseOB({
+    skill: skillTotal,
+    weaponBonus: input.mode?.ob ?? 0,
+  });
+  const parryTotal = calculateParryValue({
+    allocatedOb,
+    parryModifier: input.template.parry ?? 0,
+  });
+
+  return formatInterimNumber(parryTotal, "allocation pending");
 }
 
 function getDmbValue(mode: WeaponAttackMode | null): DerivedCombatValue {
@@ -356,6 +472,7 @@ function getProtectionCoverageLabel(armorTemplate: ArmorTemplate | null): string
 }
 
 function buildWeaponRow(input: {
+  characterInputs?: CombatStateCharacterInputs;
   slotLabel: string;
   item: EquipmentItem | undefined;
   secondaryTemplate?: WeaponTemplate | null;
@@ -370,37 +487,69 @@ function buildWeaponRow(input: {
     input.shieldTemplate,
     input.secondaryTemplate ?? null,
   );
-  const dbValue = shieldUsable ? input.shieldTemplate?.shieldBonus ?? "—" : "—";
-  const dmValue = input.template?.defensiveValue ?? "—";
+  const shieldBonus = shieldUsable ? input.shieldTemplate?.shieldBonus ?? 0 : 0;
+  const shieldDefensiveValue = shieldUsable ? input.shieldTemplate?.defensiveValue ?? 0 : 0;
+  const dbValue = shieldUsable
+    ? getCurrentDbValue({
+        characterInputs: input.characterInputs,
+        shieldBonus,
+      })
+    : "—";
+  const dmValue = getDmValue({
+    shieldDefensiveValue,
+    template: input.template,
+  });
   const notes = input.template ? formatWeaponNotes(input.template) : "Not equipped";
 
   return {
     slotLabel: input.slotLabel,
     currentItemLabel: input.template ? getItemLabel(input.state, input.item) : "None",
     initiative: input.template?.initiative ?? "—",
-    ob1: mode1?.ob ?? "—",
+    ob1: getDerivedObValue({
+      characterInputs: input.characterInputs,
+      mode: mode1,
+      template: input.template,
+    }),
     dmb1: getDmbValue(mode1),
     attack1: getAttackLabel(mode1),
     crit1: mode1?.crit ?? "—",
-    ob2: mode2?.ob ?? "—",
+    ob2: getDerivedObValue({
+      characterInputs: input.characterInputs,
+      mode: mode2,
+      template: input.template,
+    }),
     dmb2: getDmbValue(mode2),
     attack2: getAttackLabel(mode2),
     crit2: mode2?.crit ?? "—",
     db: dbValue,
     dm: dmValue,
-    parry: input.template?.parry ?? "—",
+    parry: getParryValue({
+      characterInputs: input.characterInputs,
+      mode: mode1,
+      template: input.template,
+    }),
     notes,
   };
 }
 
 function buildUnarmedRow(input: {
+  characterInputs?: CombatStateCharacterInputs;
   shieldTemplate: ShieldTemplate | null;
 }): DerivedCombatWeaponRow {
+  const dbValue = input.shieldTemplate
+    ? getCurrentDbValue({
+        characterInputs: input.characterInputs,
+        shieldBonus: input.shieldTemplate.shieldBonus ?? 0,
+      })
+    : "—";
+  const dmValue = input.shieldTemplate?.defensiveValue ?? "—";
+  const brawlingOb = input.characterInputs?.brawlingSkill ?? null;
+
   return {
     slotLabel: "Unarmed / brawling",
     currentItemLabel: "Unarmed baseline",
     initiative: "Interim",
-    ob1: "Interim",
+    ob1: brawlingOb ?? "Interim",
     dmb1: "Interim",
     attack1: "Strike / grapple baseline",
     crit1: "—",
@@ -408,13 +557,16 @@ function buildUnarmedRow(input: {
     dmb2: "—",
     attack2: "—",
     crit2: "—",
-    db: input.shieldTemplate?.shieldBonus ?? "—",
-    dm: input.shieldTemplate?.defensiveValue ?? "—",
-    parry: "Interim",
+    db: dbValue,
+    dm: dmValue,
+    parry:
+      input.characterInputs?.parrySkill != null
+        ? formatInterimNumber(input.characterInputs.parrySkill, "weapon allocation pending")
+        : "Interim",
     notes:
       input.shieldTemplate
-        ? `Shield DB ${input.shieldTemplate.shieldBonus} and shield defensive ${input.shieldTemplate.defensiveValue ?? "—"} are exact; unarmed strike values remain interim.`
-        : "Unarmed fallback stays visible, but strike/grapple numbers remain interim until brawling rules are encoded.",
+        ? `Shield DB ${input.shieldTemplate.shieldBonus} and shield defensive ${input.shieldTemplate.defensiveValue ?? "—"} are exact; brawling OB uses the live Brawling skill when available, while strike damage remains interim.`
+        : "Unarmed fallback stays visible; brawling OB uses the live Brawling skill when available, while strike/grapple damage remains interim.",
   };
 }
 
@@ -459,28 +611,44 @@ function getPerceptionSummary(input: {
 }
 
 function getDefenseSummary(input: {
+  characterInputs?: CombatStateCharacterInputs;
   primaryTemplate: WeaponTemplate | null;
+  shieldUsable: boolean;
   shieldTemplate: ShieldTemplate | null;
 }): string {
   const notes: string[] = [];
 
-  if (input.shieldTemplate) {
-    notes.push(`Shield DB ${input.shieldTemplate.shieldBonus}`);
+  if (input.shieldTemplate && input.shieldUsable) {
+    const dbValue = getCurrentDbValue({
+      characterInputs: input.characterInputs,
+      shieldBonus: input.shieldTemplate.shieldBonus ?? 0,
+    });
+    notes.push(`DB ${dbValue}`);
   }
 
-  if (input.primaryTemplate?.defensiveValue != null) {
-    notes.push(`Primary DM ${input.primaryTemplate.defensiveValue}`);
+  const dmValue = getDmValue({
+    shieldDefensiveValue:
+      input.shieldTemplate && input.shieldUsable ? input.shieldTemplate.defensiveValue ?? 0 : 0,
+    template: input.primaryTemplate,
+  });
+  if (dmValue !== "—") {
+    notes.push(`DM ${dmValue}`);
   }
 
-  if (input.primaryTemplate?.parry != null) {
-    notes.push(`Primary parry ${input.primaryTemplate.parry}`);
+  const parryValue = getParryValue({
+    characterInputs: input.characterInputs,
+    mode: getAttackMode(input.primaryTemplate, "mode-1"),
+    template: input.primaryTemplate,
+  });
+  if (parryValue !== "—") {
+    notes.push(`Parry ${parryValue}`);
   }
 
   if (notes.length === 0) {
     return "No exact current defensive stack is available yet.";
   }
 
-  return `${notes.join(" | ")}; full DB/DM stacking remains interim.`;
+  return `${notes.join(" | ")}; full situational stacking still remains interim.`;
 }
 
 function getLoadNotes(input: {
@@ -508,6 +676,7 @@ function getLoadNotes(input: {
 export function deriveCombatStateSnapshot(
   state: EquipmentFeatureState,
   characterId: string,
+  characterInputs?: CombatStateCharacterInputs,
 ): DerivedCombatStateSnapshot {
   const loadout = getLoadoutEquipment(state, characterId);
   const personalEncumbrance = getPersonalEncumbranceTotal(state, characterId);
@@ -550,6 +719,11 @@ export function deriveCombatStateSnapshot(
     secondaryTemplate: secondaryWeaponTemplate,
     shieldTemplate,
   });
+  const shieldUsableWithPrimary = canUseReadyShieldWithWeapon(
+    primaryWeaponTemplate,
+    shieldTemplate,
+    secondaryWeaponTemplate,
+  );
 
   return {
     gripSummary,
@@ -565,7 +739,9 @@ export function deriveCombatStateSnapshot(
       withYouCount,
     }),
     defenseSummary: getDefenseSummary({
+      characterInputs,
       primaryTemplate: primaryWeaponTemplate,
+      shieldUsable: shieldUsableWithPrimary,
       shieldTemplate,
     }),
     loadNotes: getLoadNotes({
@@ -600,6 +776,7 @@ export function deriveCombatStateSnapshot(
     armorCoverageType: getProtectionCoverageLabel(armorTemplate),
     weaponRows: [
       buildWeaponRow({
+        characterInputs,
         slotLabel: "Primary weapon",
         item: primaryItem,
         secondaryTemplate: secondaryWeaponTemplate,
@@ -608,6 +785,7 @@ export function deriveCombatStateSnapshot(
         template: primaryWeaponTemplate,
       }),
       buildWeaponRow({
+        characterInputs,
         slotLabel: "Secondary weapon",
         item: secondaryItem,
         shieldTemplate,
@@ -615,6 +793,7 @@ export function deriveCombatStateSnapshot(
         template: secondaryWeaponTemplate,
       }),
       buildWeaponRow({
+        characterInputs,
         slotLabel: "Missile weapon",
         item: missileItem,
         shieldTemplate: null,
@@ -622,6 +801,7 @@ export function deriveCombatStateSnapshot(
         template: missileWeaponTemplate,
       }),
       buildUnarmedRow({
+        characterInputs,
         shieldTemplate,
       }),
     ],

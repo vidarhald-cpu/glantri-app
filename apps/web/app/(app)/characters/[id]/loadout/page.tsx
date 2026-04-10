@@ -3,9 +3,11 @@
 import Link from "next/link";
 import { use, useEffect, useMemo, useState } from "react";
 import { getAccessTier, isWithYouLocation, type CarryMode } from "@glantri/domain/equipment";
+import { buildCharacterSheetSummary } from "@glantri/rules-engine";
 
 import { CombatStatePanel } from "../../../../../src/features/equipment/components/CombatStatePanel";
 import { buildCombatStatePanelModel } from "../../../../../src/features/equipment/combatStatePanel";
+import { buildCombatStateCharacterInputs } from "../../../../../src/features/equipment/combatStateDerivation";
 import {
   getCharacterArmorItems,
   getCharacterShieldItems,
@@ -22,6 +24,7 @@ import {
   setCharacterReadyShieldOnServer,
   setCharacterWornArmorOnServer,
 } from "../../../../../src/lib/api/localServiceClient";
+import { loadLocalCharacterContext } from "../../../../../src/lib/characters/loadLocalCharacterContext";
 
 interface CharacterLoadoutPageProps {
   params: Promise<{
@@ -126,6 +129,9 @@ function buildSelectableItemOptions(input: {
 export default function CharacterLoadoutPage({ params }: CharacterLoadoutPageProps) {
   const { id } = use(params);
   const [state, setState] = useState<EquipmentFeatureState | null>(null);
+  const [characterContext, setCharacterContext] = useState<
+    Awaited<ReturnType<typeof loadLocalCharacterContext>> | null
+  >(null);
   const [loading, setLoading] = useState(true);
   const [pageError, setPageError] = useState<string>();
   const [errors, setErrors] = useState<
@@ -137,6 +143,19 @@ export default function CharacterLoadoutPage({ params }: CharacterLoadoutPagePro
     secondary: undefined,
     shield: undefined,
   });
+
+  const characterCombatInputs = useMemo(() => {
+    if (!characterContext?.content || !characterContext.record) {
+      return undefined;
+    }
+
+    return buildCombatStateCharacterInputs(
+      buildCharacterSheetSummary({
+        build: characterContext.record.build,
+        content: characterContext.content,
+      }),
+    );
+  }, [characterContext]);
 
   const loadout = useMemo(() => (state ? getLoadoutEquipment(state, id) : {}), [state, id]);
   const weaponOptions = useMemo(
@@ -179,20 +198,21 @@ export default function CharacterLoadoutPage({ params }: CharacterLoadoutPagePro
     [state, id]
   );
   const combatStatePanelModel = useMemo(
-    () => (state ? buildCombatStatePanelModel(state, id) : null),
-    [state, id]
+    () => (state ? buildCombatStatePanelModel(state, id, characterCombatInputs) : null),
+    [characterCombatInputs, state, id]
   );
 
   useEffect(() => {
     let cancelled = false;
 
-    loadCharacterEquipmentState(id)
-      .then((nextState) => {
+    Promise.all([loadCharacterEquipmentState(id), loadLocalCharacterContext(id)])
+      .then(([nextState, nextCharacterContext]) => {
         if (cancelled) {
           return;
         }
 
         setState(nextState);
+        setCharacterContext(nextCharacterContext);
         setPageError(undefined);
       })
       .catch((error) => {

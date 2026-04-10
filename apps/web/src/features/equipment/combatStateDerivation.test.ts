@@ -201,6 +201,17 @@ const sampleActiveLoadout: CharacterLoadout = {
   notes: null,
 };
 
+const sampleCharacterInputs = {
+  dexterity: 11,
+  parrySkill: 12,
+  brawlingSkill: 18,
+  skillTotalsByName: {
+    "1-h edged": 37,
+    Brawling: 18,
+    Parry: 12,
+  },
+} as const;
+
 function cloneState(): EquipmentFeatureState {
   return {
     templates: {
@@ -216,7 +227,11 @@ function cloneState(): EquipmentFeatureState {
 
 describe("combatStateDerivation", () => {
   it("derives current one-handed plus shield combat rows from the persisted loadout", () => {
-    const snapshot = deriveCombatStateSnapshot(cloneState(), "char-themistogenes");
+    const snapshot = deriveCombatStateSnapshot(
+      cloneState(),
+      "char-themistogenes",
+      sampleCharacterInputs,
+    );
     const primaryRow = snapshot.weaponRows[0];
     const unarmedRow = snapshot.weaponRows[3];
 
@@ -227,22 +242,25 @@ describe("combatStateDerivation", () => {
       slotLabel: "Primary weapon",
       currentItemLabel: "Long sword",
       initiative: 0,
-      ob1: 2,
+      ob1: 39,
       dmb1: 5,
       attack1: "Slash (Edged)",
       crit1: "FS",
-      ob2: 1,
+      ob2: 38,
       dmb2: 3,
       attack2: "Thrust (Pointed)",
       crit2: "EP",
-      db: 2,
-      dm: 1,
-      parry: 0,
+      db: 13,
+      dm: 3,
+      parry: "39 (allocation pending)",
     });
     expect(primaryRow.notes).toContain("Thrust Pointed | AM C");
-    expect(unarmedRow.db).toBe(2);
-    expect(snapshot.defenseSummary).toContain("Shield DB 2");
-    expect(snapshot.defenseSummary).toContain("Primary DM 1");
+    expect(unarmedRow.ob1).toBe(18);
+    expect(unarmedRow.db).toBe(13);
+    expect(unarmedRow.parry).toBe("12 (weapon allocation pending)");
+    expect(snapshot.defenseSummary).toContain("DB 13");
+    expect(snapshot.defenseSummary).toContain("DM 3");
+    expect(snapshot.defenseSummary).toContain("Parry 39 (allocation pending)");
   });
 
   it("surfaces formula-based missile DMB and special encumbrance notes without faking precision", () => {
