@@ -2,12 +2,18 @@
 
 import Link from "next/link";
 import { use, useEffect, useMemo, useState } from "react";
+import type { EncounterDefensePosture } from "@glantri/domain";
 import { getAccessTier, isWithYouLocation, type CarryMode } from "@glantri/domain/equipment";
 import { buildCharacterSheetSummary } from "@glantri/rules-engine";
 
 import { CombatStatePanel } from "../../../../../src/features/equipment/components/CombatStatePanel";
 import { buildCombatStatePanelModel } from "../../../../../src/features/equipment/combatStatePanel";
-import { buildCombatStateCharacterInputs } from "../../../../../src/features/equipment/combatStateDerivation";
+import {
+  buildCombatStateCharacterInputs,
+  defaultCombatStateAllocationInputs,
+  type CombatStateAllocationInputs,
+  type CombatStateParrySource,
+} from "../../../../../src/features/equipment/combatStateDerivation";
 import {
   getCharacterArmorItems,
   getCharacterShieldItems,
@@ -101,6 +107,64 @@ function WeaponControl(input: {
   );
 }
 
+function NumberControl(input: {
+  label: string;
+  onChange: (value: number) => void;
+  value: number;
+}) {
+  return (
+    <label
+      style={{
+        background: "#f6f5ef",
+        border: "1px solid #d9ddd8",
+        borderRadius: 12,
+        display: "grid",
+        gap: "0.35rem",
+        padding: "1rem"
+      }}
+    >
+      <span>{input.label}</span>
+      <input
+        onChange={(event) => input.onChange(Number(event.target.value) || 0)}
+        type="number"
+        value={input.value}
+      />
+    </label>
+  );
+}
+
+const defensePostureOptions: Array<{ label: string; value: EncounterDefensePosture }> = [
+  { label: "None", value: "none" },
+  { label: "Guard", value: "guard" },
+  { label: "Parry", value: "parry" },
+  { label: "Shield defense", value: "shield" },
+  { label: "Full defense", value: "full-defense" },
+];
+
+function getParrySourceOptions(loadout: ReturnType<typeof getLoadoutEquipment>): Array<{
+  label: string;
+  value: CombatStateParrySource;
+}> {
+  const options: Array<{ label: string; value: CombatStateParrySource }> = [
+    { label: "None", value: "none" },
+    { label: "Unarmed", value: "unarmed" },
+  ];
+
+  if ("primary" in loadout && loadout.primary) {
+    options.push({ label: "Primary weapon", value: "primary" });
+  }
+
+  if ("secondary" in loadout && loadout.secondary) {
+    options.push({ label: "Secondary weapon", value: "secondary" });
+  }
+
+  if ("shield" in loadout && loadout.shield) {
+    options.push({ label: "Shield", value: "shield" });
+  }
+
+  return options;
+}
+
 function buildSelectableItemOptions(input: {
   items: Array<{
     conditionState: string;
@@ -134,6 +198,9 @@ export default function CharacterLoadoutPage({ params }: CharacterLoadoutPagePro
   >(null);
   const [loading, setLoading] = useState(true);
   const [pageError, setPageError] = useState<string>();
+  const [combatAllocationInputs, setCombatAllocationInputs] = useState<CombatStateAllocationInputs>(
+    defaultCombatStateAllocationInputs
+  );
   const [errors, setErrors] = useState<
     Record<"armor" | "primary" | "secondary" | "missile" | "shield", string | undefined>
   >({
@@ -198,9 +265,13 @@ export default function CharacterLoadoutPage({ params }: CharacterLoadoutPagePro
     [state, id]
   );
   const combatStatePanelModel = useMemo(
-    () => (state ? buildCombatStatePanelModel(state, id, characterCombatInputs) : null),
-    [characterCombatInputs, state, id]
+    () =>
+      state
+        ? buildCombatStatePanelModel(state, id, characterCombatInputs, combatAllocationInputs)
+        : null,
+    [characterCombatInputs, combatAllocationInputs, state, id]
   );
+  const parrySourceOptions = useMemo(() => getParrySourceOptions(loadout), [loadout]);
 
   useEffect(() => {
     let cancelled = false;
@@ -371,6 +442,113 @@ export default function CharacterLoadoutPage({ params }: CharacterLoadoutPagePro
             gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))"
           }}
         >
+          <WeaponControl
+            label="Defense posture"
+            onChange={(value) =>
+              setCombatAllocationInputs((current) => ({
+                ...current,
+                defensePosture: (value ?? "none") as EncounterDefensePosture,
+              }))
+            }
+            options={defensePostureOptions.map((option) => ({
+              id: option.value,
+              label: option.label,
+            }))}
+            value={combatAllocationInputs.defensePosture}
+          />
+          <WeaponControl
+            label="Parry source"
+            onChange={(value) =>
+              setCombatAllocationInputs((current) => ({
+                ...current,
+                parry: {
+                  ...current.parry,
+                  source: (value ?? "none") as CombatStateParrySource,
+                },
+              }))
+            }
+            options={parrySourceOptions.map((option) => ({
+              id: option.value,
+              label: option.label,
+            }))}
+            value={combatAllocationInputs.parry.source}
+          />
+          <NumberControl
+            label="Parry allocation"
+            onChange={(value) =>
+              setCombatAllocationInputs((current) => ({
+                ...current,
+                parry: {
+                  ...current.parry,
+                  allocatedOb: value,
+                },
+              }))
+            }
+            value={combatAllocationInputs.parry.allocatedOb ?? 0}
+          />
+          <NumberControl
+            label="Attack modifier"
+            onChange={(value) =>
+              setCombatAllocationInputs((current) => ({
+                ...current,
+                situationalModifiers: {
+                  ...current.situationalModifiers,
+                  attack: value,
+                },
+              }))
+            }
+            value={combatAllocationInputs.situationalModifiers.attack}
+          />
+          <NumberControl
+            label="Defense modifier"
+            onChange={(value) =>
+              setCombatAllocationInputs((current) => ({
+                ...current,
+                situationalModifiers: {
+                  ...current.situationalModifiers,
+                  defense: value,
+                },
+              }))
+            }
+            value={combatAllocationInputs.situationalModifiers.defense}
+          />
+          <NumberControl
+            label="Movement modifier"
+            onChange={(value) =>
+              setCombatAllocationInputs((current) => ({
+                ...current,
+                situationalModifiers: {
+                  ...current.situationalModifiers,
+                  movement: value,
+                },
+              }))
+            }
+            value={combatAllocationInputs.situationalModifiers.movement}
+          />
+          <NumberControl
+            label="Perception modifier"
+            onChange={(value) =>
+              setCombatAllocationInputs((current) => ({
+                ...current,
+                situationalModifiers: {
+                  ...current.situationalModifiers,
+                  perception: value,
+                },
+              }))
+            }
+            value={combatAllocationInputs.situationalModifiers.perception}
+          />
+        </div>
+      ) : null}
+
+      {!loading && !pageError ? (
+        <div
+          style={{
+            display: "grid",
+            gap: "0.75rem",
+            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))"
+          }}
+        >
           <SummaryCard
             label="Worn armor"
             value={getItemName({
@@ -473,7 +651,8 @@ export default function CharacterLoadoutPage({ params }: CharacterLoadoutPagePro
         <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
           Loadout options are drawn from items currently with you. Choosing a different item swaps
           it into active use and stows the previous one back into the source location when
-          possible.
+          possible. Combat posture and situational controls on this page are temporary live inputs
+          for derivation only and are not yet persisted.
         </div>
       ) : null}
 

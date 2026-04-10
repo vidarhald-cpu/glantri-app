@@ -9,7 +9,10 @@ import type {
 
 import { equipmentTemplates } from "../../../../../packages/content/src/equipment";
 import type { EquipmentFeatureState } from "./types";
-import { deriveCombatStateSnapshot } from "./combatStateDerivation";
+import {
+  deriveCombatStateSnapshot,
+  type CombatStateAllocationInputs,
+} from "./combatStateDerivation";
 
 const sampleCharacterId = "char-themistogenes";
 
@@ -212,6 +215,25 @@ const sampleCharacterInputs = {
   },
 } as const;
 
+function createAllocationInputs(input?: Partial<CombatStateAllocationInputs>): CombatStateAllocationInputs {
+  return {
+    defensePosture: "none",
+    ...input,
+    parry: {
+      allocatedOb: null,
+      source: "none",
+      ...input?.parry,
+    },
+    situationalModifiers: {
+      attack: 0,
+      defense: 0,
+      movement: 0,
+      perception: 0,
+      ...input?.situationalModifiers,
+    },
+  };
+}
+
 function cloneState(): EquipmentFeatureState {
   return {
     templates: {
@@ -289,5 +311,38 @@ describe("combatStateDerivation", () => {
     expect(missileRow.db).toBe("—");
     expect(missileRow.notes).toContain("Source encumbrance 20+20 is ammo-linked");
     expect(snapshot.loadNotes).toContain("Source encumbrance 20+20 is ammo-linked");
+  });
+
+  it("uses explicit combat allocation inputs for parry posture and situation modifiers", () => {
+    const snapshot = deriveCombatStateSnapshot(
+      cloneState(),
+      sampleCharacterId,
+      sampleCharacterInputs,
+      createAllocationInputs({
+        defensePosture: "parry",
+        parry: {
+          allocatedOb: 15,
+          source: "primary",
+        },
+        situationalModifiers: {
+          attack: 2,
+          defense: 1,
+          movement: -1,
+          perception: -2,
+        },
+      }),
+    );
+
+    const primaryRow = snapshot.weaponRows[0];
+
+    expect(primaryRow.ob1).toBe(41);
+    expect(primaryRow.db).toBe(14);
+    expect(primaryRow.parry).toBe(16);
+    expect(snapshot.readinessSummary).toContain("Posture Parry");
+    expect(snapshot.defenseSummary).toContain("Posture Parry");
+    expect(snapshot.defenseSummary).toContain("DB 14");
+    expect(snapshot.defenseSummary).toContain("Parry 16");
+    expect(snapshot.movementModifierSummary).toContain("situational");
+    expect(snapshot.perceptionSummary).toContain("Current perception modifier -2");
   });
 });

@@ -2,6 +2,7 @@ import type { ArmorTemplate } from "@glantri/domain";
 
 import { getLoadoutEquipment, getEquipmentTemplateById } from "./equipmentSelectors";
 import {
+  type CombatStateAllocationInputs,
   type CombatStateCharacterInputs,
   deriveCombatStateSnapshot,
   type DerivedCombatValue,
@@ -60,8 +61,9 @@ export function buildCombatStatePanelModel(
   state: EquipmentFeatureState,
   characterId: string,
   characterInputs?: CombatStateCharacterInputs,
+  allocationInputs?: CombatStateAllocationInputs,
 ): CombatStatePanelModel {
-  const snapshot = deriveCombatStateSnapshot(state, characterId, characterInputs);
+  const snapshot = deriveCombatStateSnapshot(state, characterId, characterInputs, allocationInputs);
   const loadout = getLoadoutEquipment(state, characterId);
   const armorItem = "armor" in loadout ? loadout.armor : undefined;
   const armorTemplate = armorItem
@@ -180,6 +182,7 @@ export function buildCombatStatePanelModel(
   ];
 
   const capabilityRows: CombatStateDetailRow[] = [
+    { label: "Readiness", value: snapshot.readinessSummary },
     { label: "Personal encumbrance", value: snapshot.personalEncumbrance },
     { label: "Mount encumbrance", value: snapshot.mountEncumbrance },
     { label: "Movement", value: snapshot.movementSummary },
