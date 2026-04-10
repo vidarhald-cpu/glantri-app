@@ -5,14 +5,16 @@ import { use, useEffect, useMemo, useState } from "react";
 import type { EncounterDefensePosture } from "@glantri/domain";
 import { getAccessTier, isWithYouLocation, type CarryMode } from "@glantri/domain/equipment";
 import { buildCharacterSheetSummary } from "@glantri/rules-engine";
+import {
+  defaultCombatAllocationState,
+  type CombatAllocationState,
+  type CombatParrySource,
+} from "../../../../../../../packages/rules-engine/src/combat/combatAllocationState";
 
 import { CombatStatePanel } from "../../../../../src/features/equipment/components/CombatStatePanel";
 import { buildCombatStatePanelModel } from "../../../../../src/features/equipment/combatStatePanel";
 import {
   buildCombatStateCharacterInputs,
-  defaultCombatStateAllocationInputs,
-  type CombatStateAllocationInputs,
-  type CombatStateParrySource,
 } from "../../../../../src/features/equipment/combatStateDerivation";
 import {
   getCharacterArmorItems,
@@ -143,9 +145,9 @@ const defensePostureOptions: Array<{ label: string; value: EncounterDefensePostu
 
 function getParrySourceOptions(loadout: ReturnType<typeof getLoadoutEquipment>): Array<{
   label: string;
-  value: CombatStateParrySource;
+  value: CombatParrySource;
 }> {
-  const options: Array<{ label: string; value: CombatStateParrySource }> = [
+  const options: Array<{ label: string; value: CombatParrySource }> = [
     { label: "None", value: "none" },
     { label: "Unarmed", value: "unarmed" },
   ];
@@ -198,8 +200,8 @@ export default function CharacterLoadoutPage({ params }: CharacterLoadoutPagePro
   >(null);
   const [loading, setLoading] = useState(true);
   const [pageError, setPageError] = useState<string>();
-  const [combatAllocationInputs, setCombatAllocationInputs] = useState<CombatStateAllocationInputs>(
-    defaultCombatStateAllocationInputs
+  const [combatAllocationInputs, setCombatAllocationInputs] = useState<CombatAllocationState>(
+    defaultCombatAllocationState
   );
   const [errors, setErrors] = useState<
     Record<"armor" | "primary" | "secondary" | "missile" | "shield", string | undefined>
@@ -463,7 +465,7 @@ export default function CharacterLoadoutPage({ params }: CharacterLoadoutPagePro
                 ...current,
                 parry: {
                   ...current.parry,
-                  source: (value ?? "none") as CombatStateParrySource,
+                  source: (value ?? "none") as CombatParrySource,
                 },
               }))
             }

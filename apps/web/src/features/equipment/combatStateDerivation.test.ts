@@ -6,13 +6,11 @@ import type {
   EquipmentTemplate,
   StorageLocation,
 } from "@glantri/domain";
+import type { CombatAllocationState } from "../../../../../packages/rules-engine/src/combat/combatAllocationState";
 
 import { equipmentTemplates } from "../../../../../packages/content/src/equipment";
 import type { EquipmentFeatureState } from "./types";
-import {
-  deriveCombatStateSnapshot,
-  type CombatStateAllocationInputs,
-} from "./combatStateDerivation";
+import { deriveCombatStateSnapshot } from "./combatStateDerivation";
 
 const sampleCharacterId = "char-themistogenes";
 
@@ -215,7 +213,7 @@ const sampleCharacterInputs = {
   },
 } as const;
 
-function createAllocationInputs(input?: Partial<CombatStateAllocationInputs>): CombatStateAllocationInputs {
+function createAllocationInputs(input?: Partial<CombatAllocationState>): CombatAllocationState {
   return {
     defensePosture: "none",
     ...input,

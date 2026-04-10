@@ -1,8 +1,8 @@
 import type { ArmorTemplate } from "@glantri/domain";
+import type { CombatAllocationState } from "../../../../../packages/rules-engine/src/combat/combatAllocationState";
 
 import { getLoadoutEquipment, getEquipmentTemplateById } from "./equipmentSelectors";
 import {
-  type CombatStateAllocationInputs,
   type CombatStateCharacterInputs,
   deriveCombatStateSnapshot,
   type DerivedCombatValue,
@@ -61,7 +61,7 @@ export function buildCombatStatePanelModel(
   state: EquipmentFeatureState,
   characterId: string,
   characterInputs?: CombatStateCharacterInputs,
-  allocationInputs?: CombatStateAllocationInputs,
+  allocationInputs?: CombatAllocationState,
 ): CombatStatePanelModel {
   const snapshot = deriveCombatStateSnapshot(state, characterId, characterInputs, allocationInputs);
   const loadout = getLoadoutEquipment(state, characterId);
