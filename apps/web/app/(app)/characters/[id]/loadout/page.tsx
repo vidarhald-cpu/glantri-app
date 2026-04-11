@@ -353,13 +353,15 @@ export default function CharacterLoadoutPage({ params }: CharacterLoadoutPagePro
   return (
     <section style={{ display: "grid", gap: "1rem", maxWidth: 900 }}>
       <div style={{ display: "grid", gap: "0.35rem" }}>
-        <h1 style={{ margin: 0 }}>Loadout</h1>
+        <h1 style={{ margin: 0 }}>Equip items</h1>
         <div style={{ color: "#5e5a50" }}>
           Active carry snapshot for character <code>{id}</code>.
         </div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
-          <Link href={`/characters/${id}`}>Back to character</Link>
-          <Link href={`/characters/${id}/equipment`}>Open equipment</Link>
+          <Link href="/characters">Characters</Link>
+          <Link href={`/characters/${id}`}>Character sheet</Link>
+          <Link href={`/characters/${id}/equipment`}>Inventory</Link>
+          <Link href={`/characters/${id}/advance`}>Advance Character</Link>
         </div>
       </div>
 

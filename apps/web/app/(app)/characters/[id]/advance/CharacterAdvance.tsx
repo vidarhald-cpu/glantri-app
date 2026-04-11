@@ -18,10 +18,7 @@ import type {
   LocalCharacterRecord
 } from "../../../../../src/lib/offline/glantriDexie";
 import { CharacterDraftRepository } from "../../../../../src/lib/offline/repositories/characterDraftRepository";
-import {
-  LocalCharacterRepository,
-  UNNAMED_CHARACTER_PLACEHOLDER
-} from "../../../../../src/lib/offline/repositories/localCharacterRepository";
+import { LocalCharacterRepository } from "../../../../../src/lib/offline/repositories/localCharacterRepository";
 
 interface CharacterAdvanceProps {
   id: string;
@@ -29,10 +26,6 @@ interface CharacterAdvanceProps {
 
 const characterDraftRepository = new CharacterDraftRepository();
 const localCharacterRepository = new LocalCharacterRepository();
-
-function getCharacterName(record: LocalCharacterRecord): string {
-  return record.build.name.trim() || UNNAMED_CHARACTER_PLACEHOLDER;
-}
 
 function sortByName<T extends { name: string; sortOrder?: number }>(left: T, right: T): number {
   const leftOrder = left.sortOrder ?? 0;
@@ -248,7 +241,7 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
     return (
       <section style={{ display: "grid", gap: "1rem", maxWidth: 720 }}>
         <h1 style={{ margin: 0 }}>Character not found</h1>
-        <Link href="/characters">Back to characters</Link>
+        <Link href="/characters">Characters</Link>
       </section>
     );
   }
@@ -262,13 +255,14 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
   return (
     <section style={{ display: "grid", gap: "1rem", maxWidth: 1040 }}>
       <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
-        <Link href="/characters">Back to characters</Link>
-        <Link href={`/characters/${record.id}`}>Open details</Link>
-        <Link href={`/characters/${record.id}/resume`}>Resume view</Link>
+        <Link href="/characters">Characters</Link>
+        <Link href={`/characters/${record.id}`}>Character sheet</Link>
+        <Link href={`/characters/${record.id}/equipment`}>Inventory</Link>
+        <Link href={`/characters/${record.id}/loadout`}>Equip items</Link>
       </div>
 
       <div>
-        <h1 style={{ marginBottom: "0.5rem" }}>Advance {getCharacterName(record)}</h1>
+        <h1 style={{ marginBottom: "0.5rem" }}>Advance Character</h1>
         <p style={{ margin: 0 }}>
           This works on a local-first advancement draft. Save locally to update the Dexie record,
           or push explicitly to the local service when ready.

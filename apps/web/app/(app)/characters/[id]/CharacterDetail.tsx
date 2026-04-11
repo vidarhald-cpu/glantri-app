@@ -200,7 +200,7 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
     return (
       <section style={{ display: "grid", gap: "1rem", maxWidth: 720 }}>
         <h1 style={{ margin: 0 }}>Character not found</h1>
-        <Link href="/characters">Back to characters</Link>
+        <Link href="/characters">Characters</Link>
       </section>
     );
   }
@@ -219,15 +219,14 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
   return (
     <section style={{ display: "grid", gap: "1rem", maxWidth: 1180 }}>
       <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
-        <Link href="/characters">Back to characters</Link>
+        <Link href="/characters">Characters</Link>
         {hasPersistedServerCharacter ? (
-          <Link href={`/characters/${record.id}/equipment`}>Equipment</Link>
+          <Link href={`/characters/${record.id}/equipment`}>Inventory</Link>
         ) : null}
         {hasPersistedServerCharacter ? (
-          <Link href={`/characters/${record.id}/loadout`}>Loadout</Link>
+          <Link href={`/characters/${record.id}/loadout`}>Equip items</Link>
         ) : null}
-        <Link href={`/characters/${record.id}/resume`}>Resume character</Link>
-        <Link href={`/characters/${record.id}/advance`}>Advance character</Link>
+        <Link href={`/characters/${record.id}/advance`}>Advance Character</Link>
       </div>
 
       <div>
@@ -266,9 +265,7 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
                   <td style={{ padding: "0.6rem 0.75rem 0.6rem 0" }}>{row.label}</td>
                   <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>{row.originalValue}</td>
                   <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>{row.currentValue}</td>
-                  <td style={{ padding: "0.6rem 0", textAlign: "right" }}>
-                    {row.gmValue === null ? "—" : row.gmValue}
-                  </td>
+                  <td style={{ padding: "0.6rem 0", textAlign: "right" }}>{row.gmValue}</td>
                 </tr>
               ))}
               <tr style={{ borderBottom: "1px solid #eee8dc" }}>

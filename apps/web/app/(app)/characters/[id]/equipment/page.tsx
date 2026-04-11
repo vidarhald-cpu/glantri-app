@@ -487,13 +487,15 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
   return (
     <section style={{ display: "grid", gap: "1rem", maxWidth: 1080 }}>
       <div style={{ display: "grid", gap: "0.35rem" }}>
-        <h1 style={{ margin: 0 }}>Equipment</h1>
+        <h1 style={{ margin: 0 }}>Inventory</h1>
         <div style={{ color: "#5e5a50" }}>
           Inventory snapshot for character <code>{id}</code>.
         </div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
-          <Link href={`/characters/${id}`}>Back to character</Link>
-          <Link href={`/characters/${id}/loadout`}>Open loadout</Link>
+          <Link href="/characters">Characters</Link>
+          <Link href={`/characters/${id}`}>Character sheet</Link>
+          <Link href={`/characters/${id}/loadout`}>Equip items</Link>
+          <Link href={`/characters/${id}/advance`}>Advance Character</Link>
         </div>
       </div>
 

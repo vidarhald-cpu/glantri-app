@@ -61,7 +61,7 @@ export default function CharactersBrowser() {
       <div>
         <h1 style={{ marginBottom: "0.5rem" }}>Characters</h1>
         <p style={{ margin: 0 }}>
-          Finalized characters are stored locally first and can be reopened later for detail review
+          Finalized characters are stored locally first and can be reopened later for character sheet review
           or future progression work.
         </p>
       </div>
@@ -95,8 +95,10 @@ export default function CharactersBrowser() {
               <div>Finalized: {record.finalizedAt}</div>
               <div>Storage status: {record.syncStatus}</div>
               <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
-                <Link href={`/characters/${record.id}`}>Open details</Link>
-                <Link href={`/characters/${record.id}/resume`}>Resume character</Link>
+                <Link href={`/characters/${record.id}`}>Character sheet</Link>
+                <Link href={`/characters/${record.id}/equipment`}>Inventory</Link>
+                <Link href={`/characters/${record.id}/loadout`}>Equip items</Link>
+                <Link href={`/characters/${record.id}/advance`}>Advance Character</Link>
               </div>
             </div>
           ))}

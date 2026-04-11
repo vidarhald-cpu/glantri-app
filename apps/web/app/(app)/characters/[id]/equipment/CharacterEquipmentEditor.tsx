@@ -23,10 +23,7 @@ import type {
   LocalCharacterRecord
 } from "../../../../../src/lib/offline/glantriDexie";
 import { CharacterDraftRepository } from "../../../../../src/lib/offline/repositories/characterDraftRepository";
-import {
-  LocalCharacterRepository,
-  UNNAMED_CHARACTER_PLACEHOLDER
-} from "../../../../../src/lib/offline/repositories/localCharacterRepository";
+import { LocalCharacterRepository } from "../../../../../src/lib/offline/repositories/localCharacterRepository";
 
 interface CharacterEquipmentEditorProps {
   id: string;
@@ -47,10 +44,6 @@ interface EquipmentFormState {
 
 const characterDraftRepository = new CharacterDraftRepository();
 const localCharacterRepository = new LocalCharacterRepository();
-
-function getCharacterName(record: LocalCharacterRecord): string {
-  return record.build.name.trim() || UNNAMED_CHARACTER_PLACEHOLDER;
-}
 
 function getDefaultSlot(itemType: EquipmentItemType): EquipmentSlot {
   switch (itemType) {
@@ -348,7 +341,7 @@ export default function CharacterEquipmentEditor({ id }: CharacterEquipmentEdito
     return (
       <section style={{ display: "grid", gap: "1rem", maxWidth: 720 }}>
         <h1 style={{ margin: 0 }}>Character not found</h1>
-        <Link href="/characters">Back to characters</Link>
+        <Link href="/characters">Characters</Link>
       </section>
     );
   }
@@ -356,13 +349,15 @@ export default function CharacterEquipmentEditor({ id }: CharacterEquipmentEdito
   return (
     <section style={{ display: "grid", gap: "1rem", maxWidth: 980 }}>
       <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
-        <Link href="/characters">Back to characters</Link>
-        <Link href={`/characters/${record.id}`}>Open details</Link>
-        <Link href={`/characters/${record.id}/sheet`}>Character sheet</Link>
+        <Link href="/characters">Characters</Link>
+        <Link href={`/characters/${record.id}`}>Character sheet</Link>
+        <Link href={`/characters/${record.id}/equipment`}>Inventory</Link>
+        <Link href={`/characters/${record.id}/loadout`}>Equip items</Link>
+        <Link href={`/characters/${record.id}/advance`}>Advance Character</Link>
       </div>
 
       <div>
-        <h1 style={{ marginBottom: "0.5rem" }}>Equipment for {getCharacterName(record)}</h1>
+        <h1 style={{ marginBottom: "0.5rem" }}>Inventory</h1>
         <p style={{ margin: 0 }}>
           This edits the local-first character draft. Save locally to apply the loadout to the
           saved character, or push explicitly to the local service when ready.
