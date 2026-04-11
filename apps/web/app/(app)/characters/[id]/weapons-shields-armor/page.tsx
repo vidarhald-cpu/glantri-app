@@ -6,7 +6,6 @@ import type {
   EquipmentItem,
   EquipmentTemplate,
   ShieldTemplate,
-  WeaponAttackMode,
   WeaponTemplate
 } from "@glantri/domain";
 import { getEffectiveEncumbrance } from "@glantri/domain/equipment";
@@ -17,6 +16,11 @@ import {
   getCharacterWeaponItems,
   getEquipmentTemplateById
 } from "../../../../../src/features/equipment/equipmentSelectors";
+import {
+  formatNonMeleeModes,
+  formatOptionalDisplayValue,
+  getCanonicalMeleeModeDisplay
+} from "../../../../../src/features/equipment/meleeWeaponDisplay";
 import type { EquipmentFeatureState } from "../../../../../src/features/equipment/types";
 import { loadCharacterEquipmentState } from "../../../../../src/lib/api/localServiceClient";
 import { loadLocalCharacterContext } from "../../../../../src/lib/characters/loadLocalCharacterContext";
@@ -43,15 +47,6 @@ interface ArmorRow {
   template: ArmorTemplate;
 }
 
-type CanonicalMeleeModeSlot = "slash" | "strike" | "thrust";
-
-interface CanonicalMeleeModeDisplay {
-  armorModifier: string;
-  crit: string;
-  dmb: string;
-  ob: string;
-}
-
 function getCharacterName(name: string | undefined): string {
   return name?.trim() || UNNAMED_CHARACTER_PLACEHOLDER;
 }
@@ -70,92 +65,6 @@ function asArmorTemplate(template: EquipmentTemplate | undefined): ArmorTemplate
 
 function getItemName(item: EquipmentItem, template: EquipmentTemplate): string {
   return item.displayName ?? template.name;
-}
-
-function formatOptional(value: number | string | null | undefined): string {
-  return value === null || value === undefined || value === "" ? "—" : String(value);
-}
-
-function formatDmb(mode: WeaponAttackMode): string {
-  if (mode.dmb !== null && mode.dmb !== undefined) {
-    return String(mode.dmb);
-  }
-
-  if (mode.dmbFormula) {
-    return mode.dmbFormula.raw;
-  }
-
-  return "—";
-}
-
-function getCanonicalMeleeModeSlot(label: string | null | undefined): CanonicalMeleeModeSlot | null {
-  switch (label?.trim().toLowerCase()) {
-    case "slash":
-      return "slash";
-    case "strike":
-      return "strike";
-    case "thrust":
-      return "thrust";
-    default:
-      return null;
-  }
-}
-
-function getEmptyMeleeModeDisplay(): CanonicalMeleeModeDisplay {
-  return {
-    armorModifier: "—",
-    crit: "—",
-    dmb: "—",
-    ob: "—"
-  };
-}
-
-function getCanonicalMeleeModeDisplay(
-  attackModes: WeaponAttackMode[] | null | undefined
-): Record<CanonicalMeleeModeSlot, CanonicalMeleeModeDisplay> {
-  const result: Record<CanonicalMeleeModeSlot, CanonicalMeleeModeDisplay> = {
-    slash: getEmptyMeleeModeDisplay(),
-    strike: getEmptyMeleeModeDisplay(),
-    thrust: getEmptyMeleeModeDisplay()
-  };
-
-  for (const mode of attackModes ?? []) {
-    const slot = getCanonicalMeleeModeSlot(mode.label);
-    if (!slot) {
-      continue;
-    }
-
-    result[slot] = {
-      armorModifier: formatOptional(mode.armorModifier),
-      crit: formatOptional(mode.crit),
-      dmb: formatDmb(mode),
-      ob: formatOptional(mode.ob)
-    };
-  }
-
-  return result;
-}
-
-function formatNonMeleeModes(attackModes: WeaponAttackMode[] | null | undefined): string {
-  const otherModes = (attackModes ?? []).filter((mode) => getCanonicalMeleeModeSlot(mode.label) === null);
-
-  if (otherModes.length === 0) {
-    return "—";
-  }
-
-  return otherModes
-    .map((mode) => {
-      const parts = [
-        mode.label ?? mode.id,
-        mode.ob !== null && mode.ob !== undefined ? `OB ${mode.ob}` : null,
-        formatDmb(mode) !== "—" ? `DMB ${formatDmb(mode)}` : null,
-        mode.crit ? `Crit ${mode.crit}` : null,
-        mode.armorModifier ? `Armor ${mode.armorModifier}` : null
-      ].filter(Boolean);
-
-      return parts.join(" | ");
-    })
-    .join("; ");
 }
 
 function TableShell(input: {
@@ -368,12 +277,12 @@ export default function WeaponsShieldsArmorPage({ params }: WeaponsShieldsArmorP
             meleeModes.thrust.crit,
             meleeModes.thrust.armorModifier,
             formatNonMeleeModes(template.attackModes),
-            formatOptional(template.parry),
-            formatOptional(template.initiative),
-            formatOptional(template.defensiveValue),
-            formatOptional(template.range),
+            formatOptionalDisplayValue(template.parry),
+            formatOptionalDisplayValue(template.initiative),
+            formatOptionalDisplayValue(template.defensiveValue),
+            formatOptionalDisplayValue(template.range),
             String(getEffectiveEncumbrance(item, template)),
-            formatOptional(item.valueOverride ?? template.baseValue),
+            formatOptionalDisplayValue(item.valueOverride ?? template.baseValue),
             item.material,
             item.quality,
             item.conditionState,
@@ -402,10 +311,10 @@ export default function WeaponsShieldsArmorPage({ params }: WeaponsShieldsArmorP
         rows={shieldRows.map(({ item, template }) => [
           getItemName(item, template),
           template.name,
-          formatOptional(template.shieldBonus),
-          formatOptional(template.defensiveValue),
+          formatOptionalDisplayValue(template.shieldBonus),
+          formatOptionalDisplayValue(template.defensiveValue),
           String(getEffectiveEncumbrance(item, template)),
-          formatOptional(item.valueOverride ?? template.baseValue),
+          formatOptionalDisplayValue(item.valueOverride ?? template.baseValue),
           item.material,
           item.quality,
           item.conditionState,
@@ -434,11 +343,11 @@ export default function WeaponsShieldsArmorPage({ params }: WeaponsShieldsArmorP
         rows={armorRows.map(({ item, template }) => [
           getItemName(item, template),
           template.name,
-          formatOptional(template.subtype),
-          formatOptional(template.armorRating),
-          formatOptional(template.mobilityPenalty),
+          formatOptionalDisplayValue(template.subtype),
+          formatOptionalDisplayValue(template.armorRating),
+          formatOptionalDisplayValue(template.mobilityPenalty),
           String(getEffectiveEncumbrance(item, template)),
-          formatOptional(item.valueOverride ?? template.baseValue),
+          formatOptionalDisplayValue(item.valueOverride ?? template.baseValue),
           item.material,
           item.quality,
           item.conditionState,

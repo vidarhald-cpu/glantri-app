@@ -50,6 +50,11 @@ export const adminNavItems: AdminNavItem[] = [
     description: "Read relationship views across professions and society rows.",
     href: "/admin/access",
     label: "Access"
+  },
+  {
+    description: "Inspect the system melee weapon catalog with split mode columns.",
+    href: "/admin/melee-weapons",
+    label: "Melee weapons"
   }
 ];
 
