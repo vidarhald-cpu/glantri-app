@@ -32,6 +32,10 @@ function formatLabel(value: string): string {
     .join(" ");
 }
 
+function formatEncumbrance(value: number): string {
+  return value.toFixed(1);
+}
+
 function TableShell(input: {
   columns: string[];
   emptyLabel: string;
@@ -131,7 +135,7 @@ export default function MeleeWeaponsAdminPage() {
           formatOptionalDisplayValue(template.initiative),
           formatOptionalDisplayValue(template.defensiveValue),
           formatOptionalDisplayValue(template.range),
-          String(
+          formatEncumbrance(
             getTemplateEncumbranceForDisplay({
               material,
               quality,
@@ -152,7 +156,7 @@ export default function MeleeWeaponsAdminPage() {
       <AdminPageIntro
         eyebrow="Admin / Melee weapons"
         title="Melee weapons"
-        summary="Read-only catalog view of system melee weapon templates using the same split Slash, Strike, and Thrust display slots as the character-facing weapon page."
+        summary="Read-only catalog view of system melee weapon templates."
         actions={
           <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
             <label style={{ display: "grid", gap: "0.25rem", minWidth: 160 }}>
