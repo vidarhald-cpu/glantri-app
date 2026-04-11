@@ -279,7 +279,7 @@ describe("combatStateDerivation", () => {
     expect(primaryRow).toMatchObject({
       slotLabel: "Primary weapon",
       currentItemLabel: "Long sword",
-      initiative: 0,
+      initiative: 2,
       ob1: 14,
       dmb1: 9,
       attack1: "Slash (Edged)",
@@ -308,6 +308,7 @@ describe("combatStateDerivation", () => {
     expect(punchRow).toMatchObject({
       slotLabel: "Punch",
       currentItemLabel: "Punch",
+      initiative: -1,
       attack1: "Strike (Blunt)",
       crit1: "AC",
       armorMod1: "A",
@@ -315,6 +316,7 @@ describe("combatStateDerivation", () => {
     expect(kickRow).toMatchObject({
       slotLabel: "Kick",
       currentItemLabel: "Kick",
+      initiative: -1,
       attack1: "Strike (Blunt)",
       crit1: "AC",
       armorMod1: "A",
@@ -480,5 +482,17 @@ describe("combatStateDerivation", () => {
       ob1: 14,
       dmb1: 4,
     });
+  });
+
+  it("uses workbook-faithful melee initiative for equipped weapons and brawling rows", () => {
+    const snapshot = deriveCombatStateSnapshot(
+      cloneState(),
+      sampleCharacterId,
+      sampleCharacterInputs,
+    );
+
+    expect(getRowBySlotLabel(snapshot, "Primary weapon")?.initiative).toBe(2);
+    expect(getRowBySlotLabel(snapshot, "Punch")?.initiative).toBe(-1);
+    expect(getRowBySlotLabel(snapshot, "Kick")?.initiative).toBe(-1);
   });
 });

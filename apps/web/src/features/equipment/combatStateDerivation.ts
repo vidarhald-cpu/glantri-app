@@ -28,6 +28,7 @@ import {
 } from "../../../../../packages/rules-engine/src/combat/composeDefenseValues";
 import {
   calculateWorkbookMeleeDmb,
+  calculateWorkbookMeleeInitiative,
   calculateWorkbookMeleeOb,
 } from "../../../../../packages/rules-engine/src/combat/workbookCombatMath";
 
@@ -460,6 +461,38 @@ function canUseWorkbookMeleeCalculation(template: WeaponTemplate | null): boolea
   return template.handlingClass !== "missile" && template.handlingClass !== "thrown";
 }
 
+function getDerivedInitiativeValue(input: {
+  characterInputs?: CombatStateCharacterInputs;
+  template: WeaponTemplate | null;
+}): DerivedCombatValue {
+  if (!input.template) {
+    return "—";
+  }
+
+  const skillXp = getWeaponSkillXp(input.template, input.characterInputs);
+  const dexterityGm = input.characterInputs?.dexterityGm ?? null;
+
+  if (
+    canUseWorkbookMeleeCalculation(input.template) &&
+    skillXp != null &&
+    dexterityGm != null &&
+    input.template.initiative != null
+  ) {
+    const workbookInitiative = calculateWorkbookMeleeInitiative({
+      dexterityGm,
+      gameModifier: 0,
+      skillXp,
+      weaponInitiative: input.template.initiative,
+    });
+
+    if (workbookInitiative) {
+      return workbookInitiative.finalInitiative;
+    }
+  }
+
+  return input.template.initiative ?? "—";
+}
+
 function getDerivedObValue(input: {
   allocationInputs: CombatStateAllocationInputs;
   armorTemplate: ArmorTemplate | null;
@@ -769,7 +802,10 @@ function buildWeaponRow(input: {
         : input.template
           ? getItemLabel(input.state, input.item)
           : "None",
-    initiative: input.template?.initiative ?? "—",
+    initiative: getDerivedInitiativeValue({
+      characterInputs: input.characterInputs,
+      template: input.template,
+    }),
     ob1: getDerivedObValue({
       allocationInputs: input.allocationInputs,
       armorTemplate: input.armorTemplate,

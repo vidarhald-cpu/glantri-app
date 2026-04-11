@@ -54,6 +54,33 @@ const WORKBOOK_PERCENTAGE_ADJUSTMENT_TABLE: Record<number, Record<number, number
 };
 
 const WORKBOOK_REFERENCE_WEAPON_OB = 3;
+const WORKBOOK_SKILL_INITIATIVE_MODIFIERS: Record<number, number> = {
+  1: -5,
+  2: -4,
+  3: -4,
+  4: -3,
+  5: -3,
+  6: -2,
+  7: -2,
+  8: -1,
+  9: -1,
+  10: 0,
+  11: 0,
+  12: 0,
+  13: 1,
+  14: 1,
+  15: 2,
+  16: 2,
+  17: 3,
+  18: 3,
+  19: 4,
+  20: 4,
+  21: 5,
+  22: 5,
+  23: 6,
+  24: 6,
+  25: 7,
+};
 
 export interface WorkbookMeleeObInput {
   armorActivityModifier?: number | null;
@@ -79,6 +106,20 @@ export interface WorkbookMeleeDmbResult {
   rawDmb: number;
   referenceOb: number;
   workbookOb: WorkbookMeleeObResult;
+}
+
+export interface WorkbookMeleeInitiativeInput {
+  dexterityGm: number;
+  gameModifier?: number | null;
+  skillXp: number;
+  weaponInitiative: number;
+}
+
+export interface WorkbookMeleeInitiativeResult {
+  baseInitiative: number;
+  finalInitiative: number;
+  gameModifier: number;
+  skillModifier: number;
 }
 
 export function getWorkbookCappedStrengthObModifier(strengthGm: number): number {
@@ -159,5 +200,35 @@ export function calculateWorkbookMeleeDmb(
     rawDmb,
     referenceOb,
     workbookOb,
+  };
+}
+
+export function lookupWorkbookSkillInitiativeModifier(skillXp: number): number | null {
+  if (!Number.isInteger(skillXp)) {
+    return null;
+  }
+
+  return WORKBOOK_SKILL_INITIATIVE_MODIFIERS[skillXp] ?? null;
+}
+
+export function calculateWorkbookMeleeInitiative(
+  input: WorkbookMeleeInitiativeInput,
+): WorkbookMeleeInitiativeResult | null {
+  const skillModifier = lookupWorkbookSkillInitiativeModifier(input.skillXp);
+
+  if (skillModifier == null) {
+    return null;
+  }
+
+  const baseInitiative = input.dexterityGm + input.weaponInitiative + skillModifier;
+  const gameModifier = input.gameModifier ?? 0;
+  const initiativeAdjustment =
+    gameModifier > 2 || gameModifier < -2 ? Math.floor(gameModifier / 2) : 0;
+
+  return {
+    baseInitiative,
+    finalInitiative: baseInitiative + initiativeAdjustment,
+    gameModifier,
+    skillModifier,
   };
 }

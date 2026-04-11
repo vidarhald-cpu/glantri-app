@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import {
   calculateWorkbookMeleeDmb,
+  calculateWorkbookMeleeInitiative,
   calculateWorkbookMeleeOb,
   getWorkbookStatGm,
+  lookupWorkbookSkillInitiativeModifier,
 } from "./workbookCombatMath";
 
 describe("workbookCombatMath", () => {
@@ -68,5 +70,43 @@ describe("workbookCombatMath", () => {
     expect(getWorkbookStatGm(17)).toBe(3);
     expect(getWorkbookStatGm(11)).toBe(0);
     expect(getWorkbookStatGm(null)).toBeNull();
+  });
+
+  it("matches the workbook's melee initiative formula for weapon and brawling rows", () => {
+    expect(
+      calculateWorkbookMeleeInitiative({
+        dexterityGm: 3,
+        gameModifier: 0,
+        skillXp: 15,
+        weaponInitiative: 1,
+      }),
+    ).toMatchObject({
+      baseInitiative: 6,
+      finalInitiative: 6,
+      gameModifier: 0,
+      skillModifier: 2,
+    });
+
+    expect(
+      calculateWorkbookMeleeInitiative({
+        dexterityGm: 0,
+        gameModifier: 0,
+        skillXp: 9,
+        weaponInitiative: 0,
+      }),
+    ).toMatchObject({
+      baseInitiative: -1,
+      finalInitiative: -1,
+      gameModifier: 0,
+      skillModifier: -1,
+    });
+  });
+
+  it("looks up the workbook skill initiative modifier table faithfully", () => {
+    expect(lookupWorkbookSkillInitiativeModifier(1)).toBe(-5);
+    expect(lookupWorkbookSkillInitiativeModifier(9)).toBe(-1);
+    expect(lookupWorkbookSkillInitiativeModifier(15)).toBe(2);
+    expect(lookupWorkbookSkillInitiativeModifier(25)).toBe(7);
+    expect(lookupWorkbookSkillInitiativeModifier(26)).toBeNull();
   });
 });
