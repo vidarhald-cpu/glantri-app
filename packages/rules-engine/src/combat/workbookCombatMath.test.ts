@@ -81,10 +81,10 @@ describe("workbookCombatMath", () => {
         weaponInitiative: 1,
       }),
     ).toMatchObject({
-      baseInitiative: 6,
-      finalInitiative: 6,
+      baseInitiative: 5,
+      finalInitiative: 5,
       gameModifier: 0,
-      skillModifier: 2,
+      skillModifier: 1,
     });
 
     expect(
@@ -95,18 +95,38 @@ describe("workbookCombatMath", () => {
         weaponInitiative: 0,
       }),
     ).toMatchObject({
-      baseInitiative: -1,
-      finalInitiative: -1,
+      baseInitiative: 0,
+      finalInitiative: 0,
       gameModifier: 0,
-      skillModifier: -1,
+      skillModifier: 0,
     });
   });
 
   it("looks up the workbook skill initiative modifier table faithfully", () => {
-    expect(lookupWorkbookSkillInitiativeModifier(1)).toBe(-5);
-    expect(lookupWorkbookSkillInitiativeModifier(9)).toBe(-1);
-    expect(lookupWorkbookSkillInitiativeModifier(15)).toBe(2);
-    expect(lookupWorkbookSkillInitiativeModifier(25)).toBe(7);
-    expect(lookupWorkbookSkillInitiativeModifier(26)).toBeNull();
+    expect(lookupWorkbookSkillInitiativeModifier(0)).toBe(0);
+    expect(lookupWorkbookSkillInitiativeModifier(6)).toBe(0);
+    expect(lookupWorkbookSkillInitiativeModifier(10)).toBe(0);
+    expect(lookupWorkbookSkillInitiativeModifier(11)).toBe(1);
+    expect(lookupWorkbookSkillInitiativeModifier(15)).toBe(1);
+    expect(lookupWorkbookSkillInitiativeModifier(16)).toBe(2);
+    expect(lookupWorkbookSkillInitiativeModifier(20)).toBe(2);
+    expect(lookupWorkbookSkillInitiativeModifier(31)).toBe(5);
+    expect(lookupWorkbookSkillInitiativeModifier(32)).toBeNull();
+  });
+
+  it("returns initiative 1 for dex gm 1, skill 6, weapon initiative 0", () => {
+    expect(
+      calculateWorkbookMeleeInitiative({
+        dexterityGm: 1,
+        gameModifier: 0,
+        skillXp: 6,
+        weaponInitiative: 0,
+      }),
+    ).toMatchObject({
+      baseInitiative: 1,
+      finalInitiative: 1,
+      gameModifier: 0,
+      skillModifier: 0,
+    });
   });
 });

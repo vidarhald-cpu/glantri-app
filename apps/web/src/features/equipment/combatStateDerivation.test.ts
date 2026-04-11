@@ -279,7 +279,7 @@ describe("combatStateDerivation", () => {
     expect(primaryRow).toMatchObject({
       slotLabel: "Primary weapon",
       currentItemLabel: "Long sword",
-      initiative: 2,
+      initiative: 1,
       ob1: 14,
       dmb1: 9,
       attack1: "Slash (Edged)",
@@ -308,7 +308,7 @@ describe("combatStateDerivation", () => {
     expect(punchRow).toMatchObject({
       slotLabel: "Punch",
       currentItemLabel: "Punch",
-      initiative: -1,
+      initiative: 0,
       attack1: "Strike (Blunt)",
       crit1: "AC",
       armorMod1: "A",
@@ -316,7 +316,7 @@ describe("combatStateDerivation", () => {
     expect(kickRow).toMatchObject({
       slotLabel: "Kick",
       currentItemLabel: "Kick",
-      initiative: -1,
+      initiative: 0,
       attack1: "Strike (Blunt)",
       crit1: "AC",
       armorMod1: "A",
@@ -491,9 +491,9 @@ describe("combatStateDerivation", () => {
       sampleCharacterInputs,
     );
 
-    expect(getRowBySlotLabel(snapshot, "Primary weapon")?.initiative).toBe(2);
-    expect(getRowBySlotLabel(snapshot, "Punch")?.initiative).toBe(-1);
-    expect(getRowBySlotLabel(snapshot, "Kick")?.initiative).toBe(-1);
+    expect(getRowBySlotLabel(snapshot, "Primary weapon")?.initiative).toBe(1);
+    expect(getRowBySlotLabel(snapshot, "Punch")?.initiative).toBe(0);
+    expect(getRowBySlotLabel(snapshot, "Kick")?.initiative).toBe(0);
   });
 
   it("uses workbook-equivalent total skill XP rather than direct specific ranks for initiative lookup", () => {
@@ -574,7 +574,24 @@ describe("combatStateDerivation", () => {
     );
 
     expect(inputs.combatSkillXpByName["1-h edged"]).toBe(6);
-    expect(getRowBySlotLabel(snapshot, "Primary weapon")?.initiative).toBe(-1);
+    expect(getRowBySlotLabel(snapshot, "Primary weapon")?.initiative).toBe(1);
+  });
+
+  it("gives longsword, punch, and kick initiative 1 for dex gm 1 and combat skill xp 6", () => {
+    const snapshot = deriveCombatStateSnapshot(cloneState(), sampleCharacterId, {
+      ...sampleCharacterInputs,
+      dexterity: 13,
+      dexterityGm: 1,
+      combatSkillXpByName: {
+        ...sampleCharacterInputs.combatSkillXpByName,
+        "1-h edged": 6,
+        Brawling: 6,
+      },
+    });
+
+    expect(getRowBySlotLabel(snapshot, "Primary weapon")?.initiative).toBe(1);
+    expect(getRowBySlotLabel(snapshot, "Punch")?.initiative).toBe(1);
+    expect(getRowBySlotLabel(snapshot, "Kick")?.initiative).toBe(1);
   });
 
   it("uses workbook-equivalent total skill XP for non-workbook OB fallback paths", () => {

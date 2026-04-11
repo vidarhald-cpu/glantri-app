@@ -54,34 +54,6 @@ const WORKBOOK_PERCENTAGE_ADJUSTMENT_TABLE: Record<number, Record<number, number
 };
 
 const WORKBOOK_REFERENCE_WEAPON_OB = 3;
-const WORKBOOK_SKILL_INITIATIVE_MODIFIERS: Record<number, number> = {
-  1: -5,
-  2: -4,
-  3: -4,
-  4: -3,
-  5: -3,
-  6: -2,
-  7: -2,
-  8: -1,
-  9: -1,
-  10: 0,
-  11: 0,
-  12: 0,
-  13: 1,
-  14: 1,
-  15: 2,
-  16: 2,
-  17: 3,
-  18: 3,
-  19: 4,
-  20: 4,
-  21: 5,
-  22: 5,
-  23: 6,
-  24: 6,
-  25: 7,
-};
-
 export interface WorkbookMeleeObInput {
   armorActivityModifier?: number | null;
   dexterityGm: number;
@@ -208,7 +180,18 @@ export function lookupWorkbookSkillInitiativeModifier(skillXp: number): number |
     return null;
   }
 
-  return WORKBOOK_SKILL_INITIATIVE_MODIFIERS[skillXp] ?? null;
+  // Workbook source: Themistogenes 1.07.xlsx -> Skill mod!A3:B34
+  // 0..10 => 0, then the modifier increases by 1 for each five-point band:
+  // 11..15 => 1, 16..20 => 2, ... , 31 => 5.
+  if (skillXp < 0 || skillXp > 31) {
+    return null;
+  }
+
+  if (skillXp <= 10) {
+    return 0;
+  }
+
+  return Math.floor((skillXp - 6) / 5);
 }
 
 export function calculateWorkbookMeleeInitiative(
