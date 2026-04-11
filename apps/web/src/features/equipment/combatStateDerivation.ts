@@ -52,10 +52,11 @@ export type DerivedCombatValue = string | number;
 export interface CombatStateCharacterInputs {
   dexterityGm: number | null;
   dexterity: number | null;
-  parrySkill: number | null;
-  brawlingSkill: number | null;
-  skillXpByName: Record<string, number>;
-  skillTotalsByName: Record<string, number>;
+  // Canonical workbook-equivalent total skill XP used by combat calculations.
+  // This is effectiveSkillNumber: best group contribution + direct skill ranks.
+  combatSkillXpByName: Record<string, number>;
+  parryCombatSkillXp: number | null;
+  brawlingCombatSkillXp: number | null;
   strengthGm: number | null;
   strength: number | null;
 }
@@ -274,28 +275,21 @@ const KICK_TEMPLATE: WeaponTemplate = {
 export function buildCombatStateCharacterInputs(
   sheet: CharacterSheetSummary,
 ): CombatStateCharacterInputs {
-  const skillXpByName = Object.fromEntries(
+  const combatSkillXpByName = Object.fromEntries(
     sheet.draftView.skills.map((skill) => [
       skill.name,
-      // Workbook initiative uses Character sheet entry -> Weapon skills -> XP,
-      // which matches the chargen draft's effective skill number
-      // (group contribution + direct skill XP), not the direct specific ranks alone.
       skill.effectiveSkillNumber,
     ]),
-  );
-  const skillTotalsByName = Object.fromEntries(
-    sheet.draftView.skills.map((skill) => [skill.name, skill.totalSkill]),
   );
   const strength = sheet.adjustedStats.str ?? null;
   const dexterity = sheet.adjustedStats.dex ?? null;
 
   return {
+    brawlingCombatSkillXp: combatSkillXpByName[BRAWLING_SKILL_NAME] ?? null,
+    combatSkillXpByName,
     dexterity,
     dexterityGm: getWorkbookStatGm(dexterity),
-    parrySkill: skillTotalsByName[PARRY_SKILL_NAME] ?? null,
-    brawlingSkill: skillTotalsByName[BRAWLING_SKILL_NAME] ?? null,
-    skillXpByName,
-    skillTotalsByName,
+    parryCombatSkillXp: combatSkillXpByName[PARRY_SKILL_NAME] ?? null,
     strength,
     strengthGm: getWorkbookStatGm(strength),
   };
@@ -437,17 +431,6 @@ function formatSignedModifier(value: number): string {
   return value > 0 ? `+${value}` : `${value}`;
 }
 
-function getWeaponSkillTotal(
-  template: WeaponTemplate | null,
-  characterInputs: CombatStateCharacterInputs | undefined,
-): number | null {
-  if (!template?.weaponSkill || !characterInputs) {
-    return null;
-  }
-
-  return characterInputs.skillTotalsByName[template.weaponSkill] ?? null;
-}
-
 function getWeaponSkillXp(
   template: WeaponTemplate | null,
   characterInputs: CombatStateCharacterInputs | undefined,
@@ -456,7 +439,7 @@ function getWeaponSkillXp(
     return null;
   }
 
-  return characterInputs.skillXpByName[template.weaponSkill] ?? null;
+  return characterInputs.combatSkillXpByName[template.weaponSkill] ?? null;
 }
 
 function canUseWorkbookMeleeCalculation(template: WeaponTemplate | null): boolean {
@@ -533,13 +516,12 @@ function getDerivedObValue(input: {
     }
   }
 
-  const skillTotal = getWeaponSkillTotal(input.template, input.characterInputs);
-  if (skillTotal == null) {
+  if (skillXp == null) {
     return input.mode.ob ?? "—";
   }
 
   return calculateBaseOB({
-    skill: skillTotal,
+    skill: skillXp,
     weaponBonus: input.mode.ob ?? 0,
     situationalModifier: input.allocationInputs.situationalModifiers.attack,
   });

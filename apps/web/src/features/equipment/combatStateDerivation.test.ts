@@ -211,17 +211,12 @@ const sampleActiveLoadout: CharacterLoadout = {
 const sampleCharacterInputs = {
   dexterityGm: 0,
   dexterity: 11,
-  parrySkill: 12,
-  brawlingSkill: 18,
-  skillXpByName: {
+  parryCombatSkillXp: 13,
+  brawlingCombatSkillXp: 9,
+  combatSkillXpByName: {
     "1-h edged": 15,
     Brawling: 9,
     Parry: 13,
-  },
-  skillTotalsByName: {
-    "1-h edged": 37,
-    Brawling: 18,
-    Parry: 12,
   },
   strengthGm: 3,
   strength: 17,
@@ -501,7 +496,7 @@ describe("combatStateDerivation", () => {
     expect(getRowBySlotLabel(snapshot, "Kick")?.initiative).toBe(-1);
   });
 
-  it("uses workbook weapon-skill XP rather than direct specific ranks for initiative lookup", () => {
+  it("uses workbook-equivalent total skill XP rather than direct specific ranks for initiative lookup", () => {
     const sheetSummary = {
       adjustedStats: {
         dex: 13,
@@ -571,14 +566,41 @@ describe("combatStateDerivation", () => {
         ...sampleCharacterInputs,
         dexterity: 13,
         dexterityGm: 1,
-        skillXpByName: {
-          ...sampleCharacterInputs.skillXpByName,
-          "1-h edged": inputs.skillXpByName["1-h edged"],
+        combatSkillXpByName: {
+          ...sampleCharacterInputs.combatSkillXpByName,
+          "1-h edged": inputs.combatSkillXpByName["1-h edged"],
         },
       },
     );
 
-    expect(inputs.skillXpByName["1-h edged"]).toBe(6);
+    expect(inputs.combatSkillXpByName["1-h edged"]).toBe(6);
     expect(getRowBySlotLabel(snapshot, "Primary weapon")?.initiative).toBe(-1);
+  });
+
+  it("uses workbook-equivalent total skill XP for non-workbook OB fallback paths", () => {
+    const state = cloneState();
+
+    state.itemsById["weapon-item-longsword-1"].storageAssignment = {
+      carryMode: "on_person",
+      locationId: "char-themistogenes:loc-person",
+    };
+    state.itemsById["weapon-item-longsword-1"].isEquipped = false;
+    state.activeLoadoutByCharacterId["char-themistogenes"] = {
+      ...state.activeLoadoutByCharacterId["char-themistogenes"],
+      readyShieldItemId: null,
+      activePrimaryWeaponItemId: null,
+      activeMissileWeaponItemId: "weapon-item-longsword-1",
+    };
+    state.itemsById["weapon-item-longsword-1"].templateId = "weapon-template-bow";
+
+    const snapshot = deriveCombatStateSnapshot(state, sampleCharacterId, {
+      ...sampleCharacterInputs,
+      combatSkillXpByName: {
+        ...sampleCharacterInputs.combatSkillXpByName,
+        Bow: 6,
+      },
+    });
+
+    expect(getRowBySlotLabel(snapshot, "Missile weapon")?.ob1).toBe(9);
   });
 });

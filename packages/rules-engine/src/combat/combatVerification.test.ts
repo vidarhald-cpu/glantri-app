@@ -231,15 +231,15 @@ const combatVerificationCases: CombatVerificationCase[] = [
       Parry: 12
     },
     expected: {
-      ob: 19,
+      ob: 11,
       db: 11,
       dm: "—",
       dmb: 0,
-      parry: "19 (allocation pending)",
+      parry: "11 (allocation pending)",
       encumbrance: 0
     },
     notes:
-      "Workbook Weapon1 row 40 Punch is now surfaced as a workbook-backed virtual brawling row through the standard weapon derivation path."
+      "Workbook Weapon1 row 40 Punch is surfaced through the standard melee workbook path, using Brawling effectiveSkillNumber as the combat XP input."
   },
   {
     name: "Ballista ammo-linked encumbrance",
@@ -312,10 +312,9 @@ function buildCharacterInputs(
   return {
     dexterityGm: 0,
     dexterity: 11,
-    parrySkill: skills.Parry ?? null,
-    brawlingSkill: skills.Brawling ?? null,
-    skillXpByName: skillXp ?? {},
-    skillTotalsByName: skills,
+    parryCombatSkillXp: (skillXp ?? {}).Parry ?? skills.Parry ?? null,
+    brawlingCombatSkillXp: (skillXp ?? {}).Brawling ?? skills.Brawling ?? null,
+    combatSkillXpByName: skillXp ?? skills,
     strengthGm: Math.trunc((strength - 11) / 2),
     strength
   };

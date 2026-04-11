@@ -96,6 +96,9 @@ export interface ChargenGroupView {
 export interface ChargenSkillView {
   category: "ordinary" | "secondary";
   contributingGroupId?: string;
+  // Canonical workbook-equivalent combat skill XP. This is the full skill XP
+  // used by combat math, combining the best contributing group with direct
+  // skill ranks, before any linked-stat average is added.
   effectiveSkillNumber: number;
   groupId: string;
   groupIds: string[];
@@ -109,6 +112,10 @@ export interface ChargenSkillView {
   skillId: string;
   specificSkillLevel: number;
   totalSkill: number;
+}
+
+export function getCombatSkillXp(skill: Pick<ChargenSkillView, "effectiveSkillNumber">): number {
+  return skill.effectiveSkillNumber;
 }
 
 export interface ChargenSpecializationView {

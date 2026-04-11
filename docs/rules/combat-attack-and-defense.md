@@ -87,6 +87,16 @@ Current policy:
 
 ### OB Structure And Components
 
+### Combat Skill XP Input
+
+- Combat calculations use total skill XP only.
+- The canonical combat skill XP value is `effectiveSkillNumber`.
+- `effectiveSkillNumber` is the workbook-equivalent skill input because it combines:
+  - best contributing skill-group XP
+  - direct skill XP
+- Combat math must not use only `specificSkillLevel`, only group level, or other partial skill fragments.
+- `totalSkill` remains useful for read-only character-sheet display because it adds linked-stat average, but it is not the canonical workbook combat-XP input.
+
 Current project direction:
 
 - Full future offensive derivation should be mode-specific.

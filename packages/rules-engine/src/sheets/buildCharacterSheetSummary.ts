@@ -29,6 +29,8 @@ interface CanonicalContentShape {
 
 export interface CharacterSheetCombatSkillSummary {
   baseOb: number;
+  // Canonical workbook-equivalent combat skill XP propagated from chargen.
+  // This is the skill value combat math should consume before linked stats.
   effectiveSkillNumber: number;
   name: string;
   parryValue: number;

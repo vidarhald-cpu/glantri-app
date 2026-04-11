@@ -2,6 +2,8 @@
 
 ## OB
 
+Combat uses the workbook-equivalent total skill XP input. In app terms, that is `effectiveSkillNumber` from the chargen skill view, not `specificSkillLevel` alone and not `totalSkill`.
+
 For melee attacks, use the `Calculations` sheet formula: `ROUND(skill XP / 2, 0) + 1 + MAX(min(Str GM, 4), Dex GM)`, then combine weapon OB with armor `AA. mod`, look up the matching `Prosent` adjustment, and add or subtract that adjustment by the sign of the combined modifier.
 
 ## DMB
