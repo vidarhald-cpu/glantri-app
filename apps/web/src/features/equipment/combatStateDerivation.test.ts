@@ -204,14 +204,22 @@ const sampleActiveLoadout: CharacterLoadout = {
 };
 
 const sampleCharacterInputs = {
+  dexterityGm: 0,
   dexterity: 11,
   parrySkill: 12,
   brawlingSkill: 18,
+  skillXpByName: {
+    "1-h edged": 15,
+    Brawling: 9,
+    Parry: 13,
+  },
   skillTotalsByName: {
     "1-h edged": 37,
     Brawling: 18,
     Parry: 12,
   },
+  strengthGm: 3,
+  strength: 17,
 } as const;
 
 function createAllocationInputs(input?: Partial<CombatAllocationState>): CombatAllocationState {
@@ -263,17 +271,17 @@ describe("combatStateDerivation", () => {
       slotLabel: "Primary weapon",
       currentItemLabel: "Long sword",
       initiative: 0,
-      ob1: 39,
-      dmb1: 5,
+      ob1: 14,
+      dmb1: 9,
       attack1: "Slash (Edged)",
       crit1: "FS",
-      ob2: 38,
-      dmb2: 3,
+      ob2: 13,
+      dmb2: 7,
       attack2: "Thrust (Pointed)",
       crit2: "EP",
       db: 13,
       dm: 3,
-      parry: "39 (allocation pending)",
+      parry: "14 (allocation pending)",
     });
     expect(primaryRow.notes).toContain("Thrust Pointed | AM C");
     expect(unarmedRow.ob1).toBe(18);
@@ -281,7 +289,7 @@ describe("combatStateDerivation", () => {
     expect(unarmedRow.parry).toBe("12 (weapon allocation pending)");
     expect(snapshot.defenseSummary).toContain("DB 13");
     expect(snapshot.defenseSummary).toContain("DM 3");
-    expect(snapshot.defenseSummary).toContain("Parry 39 (allocation pending)");
+    expect(snapshot.defenseSummary).toContain("Parry 14 (allocation pending)");
   });
 
   it("surfaces formula-based missile DMB and special encumbrance notes without faking precision", () => {
@@ -334,7 +342,7 @@ describe("combatStateDerivation", () => {
 
     const primaryRow = snapshot.weaponRows[0];
 
-    expect(primaryRow.ob1).toBe(41);
+    expect(primaryRow.ob1).toBe(16);
     expect(primaryRow.db).toBe(14);
     expect(primaryRow.parry).toBe(16);
     expect(snapshot.readinessSummary).toContain("Posture Parry");
@@ -372,7 +380,7 @@ describe("combatStateDerivation", () => {
     });
 
     expect(snapshot).not.toBeNull();
-    expect(snapshot?.weaponRows[0]?.ob1).toBe(41);
+    expect(snapshot?.weaponRows[0]?.ob1).toBe(16);
     expect(snapshot?.weaponRows[0]?.db).toBe(14);
     expect(snapshot?.weaponRows[0]?.parry).toBe(16);
     expect(snapshot?.readinessSummary).toContain("Posture Parry");

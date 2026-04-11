@@ -12,6 +12,7 @@ import {
 import {
   calculateBaseOB,
   type CharacterSheetSummary,
+  getWorkbookStatGm,
 } from "@glantri/rules-engine";
 import {
   defaultCombatAllocationState,
@@ -25,6 +26,10 @@ import {
   composeCombatDefenseValues,
   usesCombatParrySource,
 } from "../../../../../packages/rules-engine/src/combat/composeDefenseValues";
+import {
+  calculateWorkbookMeleeDmb,
+  calculateWorkbookMeleeOb,
+} from "../../../../../packages/rules-engine/src/combat/workbookCombatMath";
 
 import {
   getBackpackItems,
@@ -44,10 +49,14 @@ import type { EquipmentFeatureState } from "./types";
 export type DerivedCombatValue = string | number;
 
 export interface CombatStateCharacterInputs {
+  dexterityGm: number | null;
   dexterity: number | null;
   parrySkill: number | null;
   brawlingSkill: number | null;
+  skillXpByName: Record<string, number>;
   skillTotalsByName: Record<string, number>;
+  strengthGm: number | null;
+  strength: number | null;
 }
 
 export interface DerivedCombatWeaponRow {
@@ -118,15 +127,24 @@ const PARRY_SKILL_NAME = "Parry";
 export function buildCombatStateCharacterInputs(
   sheet: CharacterSheetSummary,
 ): CombatStateCharacterInputs {
+  const skillXpByName = Object.fromEntries(
+    sheet.draftView.skills.map((skill) => [skill.name, skill.effectiveSkillNumber]),
+  );
   const skillTotalsByName = Object.fromEntries(
     sheet.draftView.skills.map((skill) => [skill.name, skill.totalSkill]),
   );
+  const strength = sheet.adjustedStats.str ?? null;
+  const dexterity = sheet.adjustedStats.dex ?? null;
 
   return {
-    dexterity: sheet.adjustedStats.dex ?? null,
+    dexterity,
+    dexterityGm: getWorkbookStatGm(dexterity),
     parrySkill: skillTotalsByName[PARRY_SKILL_NAME] ?? null,
     brawlingSkill: skillTotalsByName[BRAWLING_SKILL_NAME] ?? null,
+    skillXpByName,
     skillTotalsByName,
+    strength,
+    strengthGm: getWorkbookStatGm(strength),
   };
 }
 
@@ -281,14 +299,57 @@ function getWeaponSkillTotal(
   return characterInputs.skillTotalsByName[template.weaponSkill] ?? null;
 }
 
+function getWeaponSkillXp(
+  template: WeaponTemplate | null,
+  characterInputs: CombatStateCharacterInputs | undefined,
+): number | null {
+  if (!template?.weaponSkill || !characterInputs) {
+    return null;
+  }
+
+  return characterInputs.skillXpByName[template.weaponSkill] ?? null;
+}
+
+function canUseWorkbookMeleeCalculation(template: WeaponTemplate | null): boolean {
+  if (!template) {
+    return false;
+  }
+
+  return template.handlingClass !== "missile" && template.handlingClass !== "thrown";
+}
+
 function getDerivedObValue(input: {
   allocationInputs: CombatStateAllocationInputs;
+  armorTemplate: ArmorTemplate | null;
   characterInputs?: CombatStateCharacterInputs;
   mode: WeaponAttackMode | null;
   template: WeaponTemplate | null;
 }): DerivedCombatValue {
   if (!input.mode) {
     return "—";
+  }
+
+  const skillXp = getWeaponSkillXp(input.template, input.characterInputs);
+  const strengthGm = input.characterInputs?.strengthGm ?? null;
+  const dexterityGm = input.characterInputs?.dexterityGm ?? null;
+  if (
+    canUseWorkbookMeleeCalculation(input.template) &&
+    skillXp != null &&
+    strengthGm != null &&
+    dexterityGm != null &&
+    input.mode.ob != null
+  ) {
+    const workbookOb = calculateWorkbookMeleeOb({
+      armorActivityModifier: input.armorTemplate?.armorActivityModifier ?? 0,
+      dexterityGm,
+      skillXp,
+      strengthGm,
+      weaponOb: input.mode.ob,
+    });
+
+    if (workbookOb) {
+      return workbookOb.finalOb + input.allocationInputs.situationalModifiers.attack;
+    }
   }
 
   const skillTotal = getWeaponSkillTotal(input.template, input.characterInputs);
@@ -305,6 +366,7 @@ function getDerivedObValue(input: {
 
 function getAvailableObForParry(input: {
   allocationInputs: CombatStateAllocationInputs;
+  armorTemplate: ArmorTemplate | null;
   characterInputs?: CombatStateCharacterInputs;
   mode: WeaponAttackMode | null;
   template: WeaponTemplate | null;
@@ -331,6 +393,44 @@ function getDmbValue(mode: WeaponAttackMode | null): DerivedCombatValue {
   }
 
   return "—";
+}
+
+function getDerivedDmbValue(input: {
+  armorTemplate: ArmorTemplate | null;
+  characterInputs?: CombatStateCharacterInputs;
+  mode: WeaponAttackMode | null;
+  template: WeaponTemplate | null;
+}): DerivedCombatValue {
+  if (!input.mode) {
+    return "—";
+  }
+
+  const skillXp = getWeaponSkillXp(input.template, input.characterInputs);
+  const strengthGm = input.characterInputs?.strengthGm ?? null;
+  const dexterityGm = input.characterInputs?.dexterityGm ?? null;
+  if (
+    canUseWorkbookMeleeCalculation(input.template) &&
+    skillXp != null &&
+    strengthGm != null &&
+    dexterityGm != null &&
+    input.mode.ob != null &&
+    input.mode.dmb != null
+  ) {
+    const workbookDmb = calculateWorkbookMeleeDmb({
+      armorActivityModifier: input.armorTemplate?.armorActivityModifier ?? 0,
+      dexterityGm,
+      skillXp,
+      strengthGm,
+      weaponDmb: input.mode.dmb,
+      weaponOb: input.mode.ob,
+    });
+
+    if (workbookDmb) {
+      return workbookDmb.finalDmb;
+    }
+  }
+
+  return getDmbValue(input.mode);
 }
 
 function getAttackLabel(mode: WeaponAttackMode | null): DerivedCombatValue {
@@ -459,6 +559,7 @@ function getProtectionCoverageLabel(armorTemplate: ArmorTemplate | null): string
 
 function buildWeaponRow(input: {
   allocationInputs: CombatStateAllocationInputs;
+  armorTemplate: ArmorTemplate | null;
   characterInputs?: CombatStateCharacterInputs;
   slotLabel: string;
   item: EquipmentItem | undefined;
@@ -479,6 +580,7 @@ function buildWeaponRow(input: {
   const shieldDefensiveValue = shieldUsable ? input.shieldTemplate?.defensiveValue ?? 0 : 0;
   const availableOb = getAvailableObForParry({
     allocationInputs: input.allocationInputs,
+    armorTemplate: input.armorTemplate,
     characterInputs: input.characterInputs,
     mode: mode1,
     template: input.template,
@@ -505,20 +607,32 @@ function buildWeaponRow(input: {
     initiative: input.template?.initiative ?? "—",
     ob1: getDerivedObValue({
       allocationInputs: input.allocationInputs,
+      armorTemplate: input.armorTemplate,
       characterInputs: input.characterInputs,
       mode: mode1,
       template: input.template,
     }),
-    dmb1: getDmbValue(mode1),
+    dmb1: getDerivedDmbValue({
+      armorTemplate: input.armorTemplate,
+      characterInputs: input.characterInputs,
+      mode: mode1,
+      template: input.template,
+    }),
     attack1: getAttackLabel(mode1),
     crit1: mode1?.crit ?? "—",
     ob2: getDerivedObValue({
       allocationInputs: input.allocationInputs,
+      armorTemplate: input.armorTemplate,
       characterInputs: input.characterInputs,
       mode: mode2,
       template: input.template,
     }),
-    dmb2: getDmbValue(mode2),
+    dmb2: getDerivedDmbValue({
+      armorTemplate: input.armorTemplate,
+      characterInputs: input.characterInputs,
+      mode: mode2,
+      template: input.template,
+    }),
     attack2: getAttackLabel(mode2),
     crit2: mode2?.crit ?? "—",
     db: defenseValues.db,
@@ -738,6 +852,7 @@ export function deriveCombatStateSnapshot(
   const weaponRows = [
     buildWeaponRow({
       allocationInputs: resolvedAllocationInputs,
+      armorTemplate,
       characterInputs,
       parrySource: "primary",
       slotLabel: "Primary weapon",
@@ -749,6 +864,7 @@ export function deriveCombatStateSnapshot(
     }),
     buildWeaponRow({
       allocationInputs: resolvedAllocationInputs,
+      armorTemplate,
       characterInputs,
       parrySource: "secondary",
       slotLabel: "Secondary weapon",
@@ -759,6 +875,7 @@ export function deriveCombatStateSnapshot(
     }),
     buildWeaponRow({
       allocationInputs: resolvedAllocationInputs,
+      armorTemplate,
       characterInputs,
       parrySource: "none",
       slotLabel: "Missile weapon",

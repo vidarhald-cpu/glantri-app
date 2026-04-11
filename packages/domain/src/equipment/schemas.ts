@@ -254,6 +254,7 @@ export const ArmorTemplateSchema = EquipmentTemplateSchema.extend({
   category: z.literal("armor"),
   armorRating: z.number().nullable().optional(),
   mobilityPenalty: z.number().nullable().optional(),
+  armorActivityModifier: z.number().nullable().optional(),
 });
 
 export const GearTemplateSchema = EquipmentTemplateSchema.extend({

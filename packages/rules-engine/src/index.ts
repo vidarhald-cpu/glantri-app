@@ -6,6 +6,7 @@ export * from "./chargen/summarizeRolledProfile";
 export * from "./combat/combatAllocationState";
 export * from "./combat/combatSessionState";
 export * from "./combat/composeDefenseValues";
+export * from "./combat/workbookCombatMath";
 export * from "./calculators/ob/calculateBaseOB";
 export * from "./calculators/db/calculateDB";
 export * from "./calculators/parry/calculateParryValue";

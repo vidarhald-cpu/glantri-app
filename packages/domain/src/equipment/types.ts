@@ -233,6 +233,7 @@ export interface ArmorTemplate extends EquipmentTemplateBase {
   category: "armor";
   armorRating?: number | null;
   mobilityPenalty?: number | null;
+  armorActivityModifier?: number | null;
 }
 
 export interface GearTemplate extends EquipmentTemplateBase {

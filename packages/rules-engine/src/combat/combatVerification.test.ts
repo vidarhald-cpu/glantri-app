@@ -42,7 +42,9 @@ interface CombatVerificationCase {
   };
   name: string;
   notes: string;
+  skillXp?: Record<string, number>;
   skills: Record<string, number>;
+  strength?: number;
 }
 
 const verificationCharacterId = "char-combat-verification";
@@ -108,36 +110,75 @@ const combatVerificationCases: CombatVerificationCase[] = [
       Parry: 12
     },
     expected: {
-      ob: 39,
+      ob: 14,
       db: 13,
       dm: 3,
-      dmb: 5,
-      parry: "39 (allocation pending)",
+      dmb: 9,
+      parry: "14 (allocation pending)",
       encumbrance: 15
     },
     notes:
-      "Workbook Weapon1 row 10 long sword values plus round shield DB/DM and Dex 11 in current implementation."
+      "Workbook-faithful melee OB/DMB with Long sword mode-1, using skill XP 15 and Str GM 3 while keeping current shield DB/DM behavior.",
+    skillXp: {
+      "1-h edged": 15,
+      Brawling: 9,
+      Parry: 13
+    },
+    strength: 17
   },
   {
-    name: "Great sword two-handed",
+    name: "Hand axe strike",
     actorSlot: "primary",
     loadout: {
-      primaryWeaponTemplateId: "weapon-template-great-sword"
+      primaryWeaponTemplateId: "weapon-template-hand-axe"
     },
     skills: {
-      "2-h edged": 42,
+      "1-h conc./axe": 28,
       Brawling: 18,
       Parry: 12
     },
     expected: {
-      ob: 44,
+      ob: 13,
       db: 11,
-      dm: 2,
-      dmb: 8,
-      parry: "46 (allocation pending)",
-      encumbrance: 10
+      dm: 1,
+      dmb: 10,
+      parry: "10 (allocation pending)",
+      encumbrance: 7
     },
-    notes: "Workbook Weapon1 row 22 great sword values with no shield contribution."
+    notes: "Workbook-faithful strike-main conc./axe case using Hand axe mode-1 with skill XP 15 and Str GM 3.",
+    skillXp: {
+      "1-h conc./axe": 15,
+      Brawling: 9,
+      Parry: 13
+    },
+    strength: 17
+  },
+  {
+    name: "2-h Spear thrust",
+    actorSlot: "primary",
+    loadout: {
+      primaryWeaponTemplateId: "weapon-template-spear"
+    },
+    skills: {
+      Polearms: 28,
+      Brawling: 18,
+      Parry: 12
+    },
+    expected: {
+      ob: 16,
+      db: 11,
+      dm: 1,
+      dmb: 9,
+      parry: "17 (allocation pending)",
+      encumbrance: 8
+    },
+    notes: "Workbook-faithful thrust-main polearm case using 2-h Spear mode-1 with skill XP 15 and Str GM 3.",
+    skillXp: {
+      Polearms: 15,
+      Brawling: 9,
+      Parry: 13
+    },
+    strength: 17
   },
   {
     name: "Short bow missile",
@@ -263,12 +304,20 @@ function createItem(input: {
   };
 }
 
-function buildCharacterInputs(skills: Record<string, number>): CharacterInputs {
+function buildCharacterInputs(
+  skills: Record<string, number>,
+  skillXp?: Record<string, number>,
+  strength = 11,
+): CharacterInputs {
   return {
+    dexterityGm: 0,
     dexterity: 11,
     parrySkill: skills.Parry ?? null,
     brawlingSkill: skills.Brawling ?? null,
-    skillTotalsByName: skills
+    skillXpByName: skillXp ?? {},
+    skillTotalsByName: skills,
+    strengthGm: Math.trunc((strength - 11) / 2),
+    strength
   };
 }
 
@@ -391,7 +440,7 @@ describe("combat verification against Themistogenes spreadsheet", () => {
       const snapshot = deriveCombatStateSnapshot(
         buildEquipmentState(testCase),
         verificationCharacterId,
-        buildCharacterInputs(testCase.skills),
+        buildCharacterInputs(testCase.skills, testCase.skillXp, testCase.strength),
         testCase.allocation ?? defaultCombatAllocationState
       );
       const actual = extractActualValues(testCase, snapshot);
@@ -415,7 +464,7 @@ describe("combat verification against Themistogenes spreadsheet", () => {
     const snapshot = deriveCombatStateSnapshot(
       buildEquipmentState(testCase),
       verificationCharacterId,
-      buildCharacterInputs(testCase.skills),
+      buildCharacterInputs(testCase.skills, testCase.skillXp, testCase.strength),
       testCase.allocation ?? defaultCombatAllocationState
     );
     const actual = extractActualValues(testCase, snapshot);
