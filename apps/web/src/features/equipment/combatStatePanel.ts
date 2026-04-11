@@ -153,7 +153,7 @@ export function buildCombatStatePanelModel(
       "Parry",
     ],
     rows: snapshot.weaponRows.map((row) => [
-      row.slotLabel,
+      row.modeLabel,
       row.currentItemLabel,
       getWeaponModeValue(row.initiative),
       getWeaponModeValue(row.attack1),

@@ -270,7 +270,8 @@ describe("combatStateDerivation", () => {
     );
     const primaryRow = getRowBySlotLabel(snapshot, "Primary weapon");
     const shieldRow = getRowBySlotLabel(snapshot, "Shield");
-    const unarmedRow = getRowBySlotLabel(snapshot, "Unarmed / brawling");
+    const punchRow = getRowBySlotLabel(snapshot, "Punch");
+    const kickRow = getRowBySlotLabel(snapshot, "Kick");
 
     expect(snapshot.gripSummary).toBe("One-handed + shield");
     expect(snapshot.wornArmorLabel).toBe("Leather Jerkin");
@@ -303,13 +304,26 @@ describe("combatStateDerivation", () => {
       dm: 2,
       parry: "—",
     });
-    expect(unarmedRow?.ob1).toBe(18);
-    expect(unarmedRow?.db).toBe(13);
-    expect(unarmedRow?.parry).toBe("12 (weapon allocation pending)");
+    expect(getRowBySlotLabel(snapshot, "Unarmed / brawling")).toBeUndefined();
+    expect(punchRow).toMatchObject({
+      slotLabel: "Punch",
+      currentItemLabel: "Punch",
+      attack1: "Strike (Blunt)",
+      crit1: "AC",
+      armorMod1: "A",
+    });
+    expect(kickRow).toMatchObject({
+      slotLabel: "Kick",
+      currentItemLabel: "Kick",
+      attack1: "Strike (Blunt)",
+      crit1: "AC",
+      armorMod1: "A",
+    });
     expect(getRowBySlotLabel(snapshot, "Secondary weapon")).toBeUndefined();
     expect(snapshot.defenseSummary).toContain("DB 13");
     expect(snapshot.defenseSummary).toContain("DM 3");
     expect(snapshot.defenseSummary).toContain("Parry 14 (allocation pending)");
+    expect(snapshot.unarmedSummary).toContain("Punch and Kick");
   });
 
   it("derives the displayed secondary melee DMB from the secondary mode values", () => {

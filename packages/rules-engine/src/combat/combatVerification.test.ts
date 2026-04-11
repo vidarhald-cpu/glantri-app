@@ -231,15 +231,15 @@ const combatVerificationCases: CombatVerificationCase[] = [
       Parry: 12
     },
     expected: {
-      ob: 18,
+      ob: 19,
       db: 11,
       dm: "—",
-      dmb: "Interim",
-      parry: "12 (weapon allocation pending)",
+      dmb: 0,
+      parry: "19 (allocation pending)",
       encumbrance: 0
     },
     notes:
-      "Workbook Weapon1 contains Punch/Kick/Garotte rows, but the current app exposes an interim unarmed baseline rather than imported brawling templates."
+      "Workbook Weapon1 row 40 Punch is now surfaced as a workbook-backed virtual brawling row through the standard weapon derivation path."
   },
   {
     name: "Ballista ammo-linked encumbrance",
@@ -401,7 +401,7 @@ function extractActualValues(
       ? candidate.slotLabel === "Primary weapon"
       : testCase.actorSlot === "missile"
         ? candidate.slotLabel === "Missile weapon"
-        : candidate.slotLabel === "Unarmed / brawling"
+        : candidate.slotLabel === "Punch"
   );
 
   return {

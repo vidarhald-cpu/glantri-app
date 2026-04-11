@@ -61,6 +61,7 @@ export interface CombatStateCharacterInputs {
 
 export interface DerivedCombatWeaponRow {
   slotLabel: string;
+  modeLabel: string;
   currentItemLabel: string;
   initiative: DerivedCombatValue;
   ob1: DerivedCombatValue;
@@ -125,6 +126,149 @@ export const defaultCombatStateAllocationInputs = defaultCombatAllocationState;
 
 const BRAWLING_SKILL_NAME = "Brawling";
 const PARRY_SKILL_NAME = "Parry";
+
+const PUNCH_TEMPLATE: WeaponTemplate = {
+  id: "virtual-weapon-template-punch",
+  category: "weapon",
+  name: "Punch",
+  subtype: "brawling",
+  tags: ["brawling", "melee", "virtual-workbook"],
+  specificityTypeDefault: "generic",
+  defaultMaterial: "other",
+  baseEncumbrance: 0,
+  baseValue: null,
+  rulesNotes: "Workbook-backed virtual combat row from Themistogenes Weapon1.",
+  roleplayNotes: null,
+  weaponClass: "brawling",
+  weaponSkill: BRAWLING_SKILL_NAME,
+  handlingClass: "one_handed",
+  attackModes: [
+    {
+      id: "mode-1",
+      label: "Strike",
+      damageClass: "blunt",
+      ob: 1,
+      obRaw: "1.0",
+      dmb: 0,
+      dmbRaw: "0.0",
+      crit: "AC",
+      armorModifier: "A",
+      provenance: "imported",
+      notes: null,
+    },
+  ],
+  primeAttackType: "Strike",
+  primaryAttackType: "Strike",
+  secondaryAttackType: null,
+  ob1: 1,
+  dmb1: 0,
+  ob2: null,
+  dmb2: null,
+  parry: 0,
+  initiative: 0,
+  range: "1.0",
+  armorMod1: "A",
+  armorMod2: null,
+  crit1: "AC",
+  crit2: null,
+  secondCrit: null,
+  defensiveValue: 0,
+  ammoEncumbrance: null,
+  ammoEncumbranceRaw: null,
+  sourceMetadata: {
+    workbook: "Themistogenes 1.07.xlsx",
+    sheet: "Weapon1",
+    row: 40,
+    sourceRange: "Weapon1!A40:Q40",
+    sourceColumns: {
+      name: "A",
+      skill: "B",
+      primaryAttackLabel: "C",
+      ob1: "D",
+      dmb1: "E",
+      ob2: "F",
+      dmb2: "G",
+      parry: "H",
+      initiative: "I",
+      range: "J",
+      armorMod1: "K",
+      armorMod2: "L",
+      crit1: "M",
+      crit2: "N",
+      encumbrance: "O",
+      defensiveValue: "P",
+      secondCrit: "Q",
+    },
+    rawRow: {
+      A: "Punch",
+      B: "Brawling",
+      C: "Strike",
+      D: "1.0",
+      E: "0.0",
+      F: "",
+      G: "",
+      H: "0.0",
+      I: "0.0",
+      J: "1.0",
+      K: "A",
+      L: "",
+      M: "AC",
+      N: "",
+      O: "0.0",
+      P: "0.0",
+    },
+  },
+  importWarnings: null,
+  durabilityProfile: null,
+};
+
+const KICK_TEMPLATE: WeaponTemplate = {
+  ...PUNCH_TEMPLATE,
+  id: "virtual-weapon-template-kick",
+  name: "Kick",
+  attackModes: [
+    {
+      id: "mode-1",
+      label: "Strike",
+      damageClass: "blunt",
+      ob: 0,
+      obRaw: "0.0",
+      dmb: 2,
+      dmbRaw: "2.0",
+      crit: "AC",
+      armorModifier: "A",
+      provenance: "imported",
+      notes: null,
+    },
+  ],
+  ob1: 0,
+  dmb1: 2,
+  sourceMetadata: {
+    workbook: "Themistogenes 1.07.xlsx",
+    sheet: "Weapon1",
+    row: 41,
+    sourceRange: "Weapon1!A41:Q41",
+    sourceColumns: PUNCH_TEMPLATE.sourceMetadata!.sourceColumns,
+    rawRow: {
+      A: "Kick",
+      B: "Brawling",
+      C: "Strike",
+      D: "0.0",
+      E: "2.0",
+      F: "",
+      G: "",
+      H: "0.0",
+      I: "0.0",
+      J: "1.0",
+      K: "A",
+      L: "",
+      M: "AC",
+      N: "",
+      O: "0.0",
+      P: "0.0",
+    },
+  },
+};
 
 export function buildCombatStateCharacterInputs(
   sheet: CharacterSheetSummary,
@@ -280,10 +424,6 @@ function formatDmbFormula(formula: WeaponDamageModifierFormula | null | undefine
     case "unresolved":
       return `${formula.raw} (unresolved)`;
   }
-}
-
-function formatInterimNumber(value: number, reason: string): string {
-  return `${value} (${reason})`;
 }
 
 function formatSignedModifier(value: number): string {
@@ -563,6 +703,19 @@ function getProtectionCoverageLabel(armorTemplate: ArmorTemplate | null): string
   return armorTemplate.subtype ? formatLabel(armorTemplate.subtype) : armorTemplate.name;
 }
 
+function getCombatRowModeLabel(slotLabel: string): string {
+  switch (slotLabel) {
+    case "Primary weapon":
+      return "Primary";
+    case "Secondary weapon":
+      return "Secondary";
+    case "Missile weapon":
+      return "Missile";
+    default:
+      return slotLabel;
+  }
+}
+
 function buildWeaponRow(input: {
   allocationInputs: CombatStateAllocationInputs;
   armorTemplate: ArmorTemplate | null;
@@ -609,7 +762,13 @@ function buildWeaponRow(input: {
 
   return {
     slotLabel: input.slotLabel,
-    currentItemLabel: input.template ? getItemLabel(input.state, input.item) : "None",
+    modeLabel: getCombatRowModeLabel(input.slotLabel),
+    currentItemLabel:
+      input.template && !input.item
+        ? input.template.name
+        : input.template
+          ? getItemLabel(input.state, input.item)
+          : "None",
     initiative: input.template?.initiative ?? "—",
     ob1: getDerivedObValue({
       allocationInputs: input.allocationInputs,
@@ -650,53 +809,25 @@ function buildWeaponRow(input: {
   };
 }
 
-function buildUnarmedRow(input: {
+function buildBrawlingRow(input: {
   allocationInputs: CombatStateAllocationInputs;
+  armorTemplate: ArmorTemplate | null;
   characterInputs?: CombatStateCharacterInputs;
   shieldTemplate: ShieldTemplate | null;
+  state: EquipmentFeatureState;
+  template: WeaponTemplate;
 }): DerivedCombatWeaponRow {
-  const brawlingOb = input.characterInputs?.brawlingSkill ?? null;
-  const defenseValues = composeCombatDefenseValues({
-    allocationState: input.allocationInputs,
-    availableOb: brawlingOb,
-    canUseShield: input.shieldTemplate != null,
-    dexterity: input.characterInputs?.dexterity ?? null,
-    shieldBonus: input.shieldTemplate?.shieldBonus ?? 0,
-    shieldDefensiveValue: input.shieldTemplate?.defensiveValue ?? 0,
-    usesSelectedParrySource:
-      usesCombatParrySource(input.allocationInputs.parry.source, "unarmed") ||
-      usesCombatParrySource(input.allocationInputs.parry.source, "shield"),
-    weaponDefensiveValue: 0,
-    weaponParryModifier: null,
+  return buildWeaponRow({
+    allocationInputs: input.allocationInputs,
+    armorTemplate: input.armorTemplate,
+    characterInputs: input.characterInputs,
+    slotLabel: input.template.name,
+    item: undefined,
+    parrySource: "unarmed",
+    shieldTemplate: input.shieldTemplate,
+    state: input.state,
+    template: input.template,
   });
-
-  return {
-    slotLabel: "Unarmed / brawling",
-    currentItemLabel: "Unarmed baseline",
-    initiative: "Interim",
-    ob1: brawlingOb ?? "Interim",
-    dmb1: "Interim",
-    attack1: "Strike / grapple baseline",
-    crit1: "—",
-    armorMod1: "—",
-    ob2: "—",
-    dmb2: "—",
-    attack2: "—",
-    crit2: "—",
-    armorMod2: "—",
-    db: defenseValues.db,
-    dm: defenseValues.dm,
-    parry:
-      defenseValues.parry === "—" && input.characterInputs?.parrySkill != null
-        ? formatInterimNumber(input.characterInputs.parrySkill, "weapon allocation pending")
-        : defenseValues.parry === "—"
-          ? "Interim"
-          : defenseValues.parry,
-    notes:
-      input.shieldTemplate
-        ? `Shield DB ${input.shieldTemplate.shieldBonus} and shield defensive ${input.shieldTemplate.defensiveValue ?? "—"} are exact; brawling OB uses the live Brawling skill when available, while strike damage remains interim.`
-        : "Unarmed fallback stays visible; brawling OB uses the live Brawling skill when available, while strike/grapple damage remains interim.",
-  };
 }
 
 function buildShieldRow(input: {
@@ -723,6 +854,7 @@ function buildShieldRow(input: {
 
   return {
     slotLabel: "Shield",
+    modeLabel: "Shield",
     currentItemLabel: getItemLabel(input.state, input.item),
     initiative: "—",
     attack1: "—",
@@ -962,10 +1094,24 @@ export function deriveCombatStateSnapshot(
   );
 
   weaponRows.push(
-    buildUnarmedRow({
+    buildBrawlingRow({
       allocationInputs: resolvedAllocationInputs,
+      armorTemplate,
       characterInputs,
       shieldTemplate,
+      state,
+      template: PUNCH_TEMPLATE,
+    }),
+  );
+
+  weaponRows.push(
+    buildBrawlingRow({
+      allocationInputs: resolvedAllocationInputs,
+      armorTemplate,
+      characterInputs,
+      shieldTemplate,
+      state,
+      template: KICK_TEMPLATE,
     }),
   );
 
@@ -1022,8 +1168,8 @@ export function deriveCombatStateSnapshot(
     activeMissileLabel: getItemLabel(state, missileItem),
     unarmedSummary:
       shieldTemplate
-        ? "Unarmed fallback remains available; shield defensive values are exact, strike/grapple values remain interim."
-        : "Unarmed fallback remains available; strike/grapple values remain interim.",
+        ? "Punch and Kick remain available; shield defensive values are exact where current rules support them."
+        : "Punch and Kick remain available as workbook-backed brawling rows.",
     armorRating: armorTemplate?.armorRating ?? "Unarmored",
     armorMobilityPenalty: armorTemplate?.mobilityPenalty ?? "—",
     shieldBonus: shieldTemplate?.shieldBonus ?? "No ready shield",
