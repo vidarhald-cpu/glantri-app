@@ -177,6 +177,34 @@ const combatActionOptions = [
   { label: "Hold", value: "hold" },
 ] as const;
 
+function isBowOrTwoHandedTemplate(templateId: string | null, state: EquipmentFeatureState): boolean {
+  if (!templateId) {
+    return false;
+  }
+
+  const template = getEquipmentTemplateById(state, templateId);
+  return (
+    template?.category === "weapon" &&
+    (template.handlingClass === "two_handed" ||
+      template.weaponClass === "bow" ||
+      template.tags.includes("bow"))
+  );
+}
+
+function isDedicatedThrownTemplate(templateId: string | null, state: EquipmentFeatureState): boolean {
+  if (!templateId) {
+    return false;
+  }
+
+  const template = getEquipmentTemplateById(state, templateId);
+  return (
+    template?.category === "weapon" &&
+    (template.handlingClass === "thrown" ||
+      template.weaponSkill.toLowerCase().includes("throw") ||
+      template.tags.includes("thrown"))
+  );
+}
+
 function getParrySourceOptions(loadout: ReturnType<typeof getLoadoutEquipment>): Array<{
   label: string;
   value: CombatParrySource;
@@ -187,11 +215,11 @@ function getParrySourceOptions(loadout: ReturnType<typeof getLoadoutEquipment>):
   ];
 
   if ("primary" in loadout && loadout.primary) {
-    options.push({ label: "Primary weapon", value: "primary" });
+    options.push({ label: "Primary", value: "primary" });
   }
 
   if ("secondary" in loadout && loadout.secondary) {
-    options.push({ label: "Secondary weapon", value: "secondary" });
+    options.push({ label: "Secondary", value: "secondary" });
   }
 
   if ("shield" in loadout && loadout.shield) {
@@ -226,6 +254,61 @@ function buildSelectableItemOptions(input: {
     .sort((left, right) => left.label.localeCompare(right.label));
 }
 
+function buildThrowingWeaponOptions(input: {
+  loadout: ReturnType<typeof getLoadoutEquipment>;
+  state: EquipmentFeatureState;
+  weaponOptions: Array<{ id: string; label: string }>;
+}): Array<{ id: string; label: string }> {
+  const options = new Map<string, string>();
+
+  const addOption = (itemId: string | null | undefined, prefix?: string) => {
+    if (!itemId) {
+      return;
+    }
+
+    const item = input.state.itemsById[itemId];
+    if (!item || item.category !== "weapon") {
+      return;
+    }
+
+    const matchingOption = input.weaponOptions.find((option) => option.id === itemId);
+    const baseLabel =
+      matchingOption?.label ??
+      getItemName({
+        displayName: item.displayName,
+        templateId: item.templateId,
+        templateName: getEquipmentTemplateById(input.state, item.templateId)?.name,
+      });
+
+    options.set(itemId, prefix ? `${prefix}: ${baseLabel}` : baseLabel);
+  };
+
+  if ("primary" in input.loadout && input.loadout.primary) {
+    addOption(input.loadout.primary.id, "Current primary");
+  }
+
+  if ("secondary" in input.loadout && input.loadout.secondary) {
+    addOption(input.loadout.secondary.id, "Current secondary");
+  }
+
+  if ("missile" in input.loadout && input.loadout.missile) {
+    addOption(input.loadout.missile.id, "Current missile");
+  }
+
+  for (const option of input.weaponOptions) {
+    const item = input.state.itemsById[option.id];
+    if (!item || !isDedicatedThrownTemplate(item.templateId, input.state)) {
+      continue;
+    }
+
+    options.set(option.id, option.label);
+  }
+
+  return Array.from(options, ([id, label]) => ({ id, label })).sort((left, right) =>
+    left.label.localeCompare(right.label),
+  );
+}
+
 export default function CharacterLoadoutPage({ params }: CharacterLoadoutPageProps) {
   const { id } = use(params);
   const [state, setState] = useState<EquipmentFeatureState | null>(null);
@@ -238,6 +321,7 @@ export default function CharacterLoadoutPage({ params }: CharacterLoadoutPagePro
     defaultCombatAllocationState
   );
   const [combatAction, setCombatAction] = useState<(typeof combatActionOptions)[number]["value"]>("none");
+  const [throwingWeaponItemId, setThrowingWeaponItemId] = useState<string>("");
   const [errors, setErrors] = useState<
     Record<"armor" | "primary" | "secondary" | "missile" | "shield", string | undefined>
   >({
@@ -309,6 +393,17 @@ export default function CharacterLoadoutPage({ params }: CharacterLoadoutPagePro
     [characterCombatInputs, combatAllocationInputs, state, id]
   );
   const parrySourceOptions = useMemo(() => getParrySourceOptions(loadout), [loadout]);
+  const throwingWeaponOptions = useMemo(
+    () =>
+      state
+        ? buildThrowingWeaponOptions({
+            loadout,
+            state,
+            weaponOptions,
+          })
+        : [],
+    [loadout, state, weaponOptions]
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -341,6 +436,27 @@ export default function CharacterLoadoutPage({ params }: CharacterLoadoutPagePro
     };
   }, [id]);
 
+  useEffect(() => {
+    if (!throwingWeaponItemId || !state) {
+      return;
+    }
+
+    const armedIds = new Set([
+      "primary" in loadout ? loadout.primary?.id ?? null : null,
+      "secondary" in loadout ? loadout.secondary?.id ?? null : null,
+      "missile" in loadout ? loadout.missile?.id ?? null : null,
+    ].filter((value): value is string => Boolean(value)));
+
+    const selectedItem = state.itemsById[throwingWeaponItemId];
+    const isDedicatedThrown =
+      selectedItem?.category === "weapon" &&
+      isDedicatedThrownTemplate(selectedItem.templateId, state);
+
+    if (isDedicatedThrown && !armedIds.has(throwingWeaponItemId)) {
+      setThrowingWeaponItemId("");
+    }
+  }, [loadout, state, throwingWeaponItemId]);
+
   async function applySelection(input: {
     itemId: string | null;
     kind: "armor" | "primary" | "secondary" | "missile" | "shield";
@@ -350,25 +466,100 @@ export default function CharacterLoadoutPage({ params }: CharacterLoadoutPagePro
     }
 
     try {
-      const nextState =
-        input.kind === "armor"
-          ? await setCharacterWornArmorOnServer({ characterId: id, itemId: input.itemId })
-          : input.kind === "shield"
-            ? await setCharacterReadyShieldOnServer({ characterId: id, itemId: input.itemId })
-            : input.kind === "primary"
-              ? await setCharacterActivePrimaryWeaponOnServer({
-                  characterId: id,
-                  itemId: input.itemId,
-                })
-              : input.kind === "secondary"
-                ? await setCharacterActiveSecondaryWeaponOnServer({
-                    characterId: id,
-                    itemId: input.itemId,
-                  })
-                : await setCharacterActiveMissileWeaponOnServer({
-                    characterId: id,
-                    itemId: input.itemId,
-                  });
+      const currentLoadout = state.activeLoadoutByCharacterId[id];
+      const nextSelection = {
+        armor: currentLoadout?.wornArmorItemId ?? null,
+        shield: currentLoadout?.readyShieldItemId ?? null,
+        primary: currentLoadout?.activePrimaryWeaponItemId ?? null,
+        secondary: currentLoadout?.activeSecondaryWeaponItemId ?? null,
+        missile: currentLoadout?.activeMissileWeaponItemId ?? null,
+      };
+
+      nextSelection[input.kind] = input.itemId;
+
+      if (input.kind === "shield" && input.itemId) {
+        nextSelection.secondary = null;
+      }
+
+      if (input.kind === "secondary" && input.itemId) {
+        nextSelection.shield = null;
+      }
+
+      const selectedWeaponTemplateId =
+        input.kind === "primary" || input.kind === "secondary" || input.kind === "missile"
+          ? state.itemsById[input.itemId ?? ""]?.templateId ?? null
+          : null;
+
+      if (
+        (input.kind === "primary" || input.kind === "secondary") &&
+        selectedWeaponTemplateId &&
+        isBowOrTwoHandedTemplate(selectedWeaponTemplateId, state)
+      ) {
+        if (input.kind === "primary") {
+          nextSelection.secondary = null;
+        }
+        if (input.kind === "secondary") {
+          nextSelection.primary = null;
+        }
+        nextSelection.shield = null;
+      }
+
+      if (
+        input.itemId &&
+        (input.kind === "shield" || input.kind === "secondary")
+      ) {
+        const currentPrimaryTemplateId = state.itemsById[nextSelection.primary ?? ""]?.templateId ?? null;
+        if (currentPrimaryTemplateId && isBowOrTwoHandedTemplate(currentPrimaryTemplateId, state)) {
+          nextSelection.primary = null;
+        }
+      }
+
+      const operations: Array<() => Promise<EquipmentFeatureState>> = [];
+
+      const queueOperation = (
+        kind: "armor" | "primary" | "secondary" | "missile" | "shield",
+        itemId: string | null,
+      ) => {
+        const currentValue = currentLoadout
+          ? kind === "armor"
+            ? currentLoadout.wornArmorItemId ?? null
+            : kind === "shield"
+              ? currentLoadout.readyShieldItemId ?? null
+              : kind === "primary"
+                ? currentLoadout.activePrimaryWeaponItemId ?? null
+                : kind === "secondary"
+                  ? currentLoadout.activeSecondaryWeaponItemId ?? null
+                  : currentLoadout.activeMissileWeaponItemId ?? null
+          : null;
+
+        if (currentValue === itemId) {
+          return;
+        }
+
+        operations.push(() =>
+          kind === "armor"
+            ? setCharacterWornArmorOnServer({ characterId: id, itemId })
+            : kind === "shield"
+              ? setCharacterReadyShieldOnServer({ characterId: id, itemId })
+              : kind === "primary"
+                ? setCharacterActivePrimaryWeaponOnServer({ characterId: id, itemId })
+                : kind === "secondary"
+                  ? setCharacterActiveSecondaryWeaponOnServer({ characterId: id, itemId })
+                  : setCharacterActiveMissileWeaponOnServer({ characterId: id, itemId }),
+        );
+      };
+
+      queueOperation("secondary", nextSelection.secondary);
+      queueOperation("shield", nextSelection.shield);
+      queueOperation("primary", nextSelection.primary);
+      queueOperation("armor", nextSelection.armor);
+      queueOperation("missile", nextSelection.missile);
+
+      let nextState = state;
+
+      for (const operation of operations) {
+        nextState = await operation();
+      }
 
       setState(nextState);
       setErrors((current) => ({
@@ -464,6 +655,12 @@ export default function CharacterLoadoutPage({ params }: CharacterLoadoutPagePro
               options={weaponOptions}
               value={"missile" in loadout ? loadout.missile?.id ?? "" : ""}
             />
+            <WeaponControl
+              label="Throwing weapon"
+              onChange={(itemId) => setThrowingWeaponItemId(itemId ?? "")}
+              options={throwingWeaponOptions}
+              value={throwingWeaponItemId}
+            />
           </div>
         </ControlSection>
       ) : null}
@@ -535,9 +732,11 @@ export default function CharacterLoadoutPage({ params }: CharacterLoadoutPagePro
         <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
           Loadout options are drawn from items currently with you. Choosing a different item swaps
           it into active use and stows the previous one back into the source location when
-          possible. Combat posture and parry inputs on this page are temporary live inputs for
-          derivation only and are not yet persisted. Combat action is currently a UI placeholder
-          and does not drive combat behavior yet.
+          possible. Shield and second-hand choices toggle each other out, and bow or two-handed
+          primary/secondary choices clear conflicting off-hand use. Combat posture and parry
+          inputs on this page are temporary live inputs for derivation only and are not yet
+          persisted. Combat action and Throwing weapon are currently UI placeholders and do not
+          drive combat behavior yet.
         </div>
       ) : null}
 
