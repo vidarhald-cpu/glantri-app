@@ -1,5 +1,6 @@
 import type {
   AccessTier,
+  CanonicalMeleeMode,
   CarryMode,
   EquipmentItem,
   EquipmentTemplate,
@@ -9,6 +10,7 @@ import type {
   QualityType,
   StorageLocation,
   StorageLocationType,
+  WeaponAttackMode,
 } from "./types";
 
 const SYSTEM_LOCATION_TYPES: StorageLocationType[] = [
@@ -173,6 +175,70 @@ export function getAccessTier(carryMode: CarryMode): AccessTier {
     default:
       return "unavailable";
   }
+}
+
+export function getCanonicalMeleeModeFromAttackLabel(
+  label: string | null | undefined,
+): CanonicalMeleeMode | null {
+  switch (label?.trim().toLowerCase()) {
+    case "slash":
+      return "slash";
+    case "strike":
+    case "crush":
+      return "strike";
+    case "thrust":
+    case "puncture":
+      return "thrust";
+    default:
+      return null;
+  }
+}
+
+export function getCanonicalMeleeModeFromCrit(
+  crit: string | null | undefined,
+): CanonicalMeleeMode | null {
+  const normalized = crit?.trim().toUpperCase();
+  if (!normalized) {
+    return null;
+  }
+
+  const familyLetter = /^[A-Z]([SCP])/.exec(normalized)?.[1] ?? null;
+
+  switch (familyLetter) {
+    case "S":
+      return "slash";
+    case "C":
+      return "strike";
+    case "P":
+      return "thrust";
+    default:
+      return null;
+  }
+}
+
+export function getCanonicalMeleeModeLabel(
+  mode: CanonicalMeleeMode | null | undefined,
+): string | null {
+  switch (mode) {
+    case "slash":
+      return "Slash";
+    case "strike":
+      return "Strike";
+    case "thrust":
+      return "Thrust";
+    default:
+      return null;
+  }
+}
+
+export function getCanonicalMeleeModeForAttackMode(
+  mode: Pick<WeaponAttackMode, "canonicalMeleeMode" | "label" | "crit">,
+): CanonicalMeleeMode | null {
+  return (
+    mode.canonicalMeleeMode ??
+    getCanonicalMeleeModeFromAttackLabel(mode.label) ??
+    getCanonicalMeleeModeFromCrit(mode.crit)
+  );
 }
 
 export function getItemAccessTier(

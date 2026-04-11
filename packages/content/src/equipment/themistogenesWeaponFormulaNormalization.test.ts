@@ -85,14 +85,15 @@ describe("themistogenes weapon formula normalization", () => {
     expect(report).toEqual({
       totalTemplates: 58,
       templatesWithFormulaNormalization: 14,
-      rawWarningCount: 16,
+      rawWarningCount: 17,
       resolvedWarningCount: 15,
-      unresolvedWarningCount: 1,
+      unresolvedWarningCount: 2,
       resolvedWarningCategories: {
         non_numeric_dmb_preserved_raw: 14,
         non_numeric_encumbrance_compat: 1,
       },
       unresolvedWarningCategories: {
+        other: 1,
         non_numeric_dmb_preserved_raw: 1,
       },
     });

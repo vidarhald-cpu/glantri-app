@@ -83,6 +83,12 @@ export const WeaponDamageClassSchema = z.enum([
   "pointed",
 ]);
 
+export const CanonicalMeleeModeSchema = z.enum([
+  "slash",
+  "strike",
+  "thrust",
+]);
+
 export const WeaponAttackModeProvenanceSchema = z.enum([
   "imported",
   "manual",
@@ -131,6 +137,8 @@ export const WeaponDurabilityProfileSchema = z.object({
 export const WeaponAttackModeSchema = z.object({
   id: z.string(),
   label: z.string().nullable().optional(),
+  canonicalMeleeMode: CanonicalMeleeModeSchema.nullable().optional(),
+  isPrimaryAttack: z.boolean().nullable().optional(),
   damageClass: WeaponDamageClassSchema.nullable().optional(),
   ob: z.number().nullable().optional(),
   obRaw: z.string().nullable().optional(),
@@ -148,6 +156,7 @@ export const WeaponAttackModeSchema = z.object({
     note: z.string().nullable().optional(),
   }).nullable().optional(),
   crit: z.string().nullable().optional(),
+  secondCrit: z.string().nullable().optional(),
   armorModifier: z.string().nullable().optional(),
   provenance: WeaponAttackModeProvenanceSchema,
   notes: z.string().nullable().optional(),

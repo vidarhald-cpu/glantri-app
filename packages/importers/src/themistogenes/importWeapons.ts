@@ -1,7 +1,17 @@
 import { execFileSync } from "node:child_process";
 import * as path from "node:path";
 
-import type { WeaponAttackMode, WeaponDamageClass, WeaponHandlingClass, WeaponTemplate } from "@glantri/domain/equipment";
+import {
+  getCanonicalMeleeModeFromAttackLabel,
+  getCanonicalMeleeModeFromCrit,
+  getCanonicalMeleeModeLabel,
+} from "@glantri/domain";
+import type {
+  WeaponAttackMode,
+  WeaponDamageClass,
+  WeaponHandlingClass,
+  WeaponTemplate,
+} from "@glantri/domain/equipment";
 
 const THEMISTOGENES_WORKBOOK_PATH = path.resolve(
   __dirname,
@@ -355,12 +365,15 @@ function buildTags(input: {
 
 function buildAttackMode(input: {
   armorModifier: string | undefined;
+  canonicalMeleeMode?: WeaponAttackMode["canonicalMeleeMode"];
   crit: string | undefined;
   dmb: string | undefined;
   id: string;
+  isPrimaryAttack?: boolean | null;
   label: string | null;
   rowWarnings: string[];
   sheet: string;
+  secondCrit?: string | null;
   weaponName: string;
   ob: string | undefined;
 }): WeaponAttackMode | null {
@@ -403,12 +416,15 @@ function buildAttackMode(input: {
   return {
     id: input.id,
     label: input.label,
+    canonicalMeleeMode: input.canonicalMeleeMode ?? null,
+    isPrimaryAttack: input.isPrimaryAttack ?? null,
     damageClass,
     ob: parseNumber(input.ob),
     obRaw: input.ob?.trim() ? input.ob : null,
     dmb: numericDmb,
     dmbRaw: input.dmb?.trim() ? input.dmb : null,
     crit: input.crit?.trim() ? input.crit : null,
+    secondCrit: input.secondCrit ?? null,
     armorModifier: input.armorModifier?.trim() ? input.armorModifier : null,
     provenance: "imported",
     notes: null,
@@ -424,26 +440,41 @@ function buildWeaponTemplate(input: {
   const name = input.row.A.trim();
   const skill = input.row.B.trim();
   const rowWarnings: string[] = [];
+  const primaryAttackType = input.sheet === "Weapon1" ? input.row.C?.trim() || null : null;
+  const primaryModeFamily = getCanonicalMeleeModeFromAttackLabel(primaryAttackType);
+  const secondaryModeFamily =
+    input.sheet === "Weapon1"
+      ? getCanonicalMeleeModeFromCrit(input.row.N?.trim() || null)
+      : null;
+  const secondCrit = input.sheet === "Weapon1" ? input.row.Q?.trim() || null : null;
 
   const mode1 = buildAttackMode({
     armorModifier: input.row[input.sheet === "Weapon1" ? "K" : "H"],
+    canonicalMeleeMode:
+      input.sheet === "Weapon1"
+        ? primaryModeFamily ?? getCanonicalMeleeModeFromCrit(input.row.M?.trim() || null)
+        : null,
     crit: input.row[input.sheet === "Weapon1" ? "M" : "I"],
     dmb: input.row[input.sheet === "Weapon1" ? "E" : "D"],
     id: "mode-1",
+    isPrimaryAttack: input.sheet === "Weapon1" ? true : null,
     label: input.sheet === "Weapon1" ? input.row.C?.trim() || null : null,
     ob: input.row[input.sheet === "Weapon1" ? "D" : "C"],
     rowWarnings,
     sheet: input.sheet,
+    secondCrit,
     weaponName: name,
   });
   const mode2 =
     input.sheet === "Weapon1"
       ? buildAttackMode({
           armorModifier: input.row.L,
-          crit: input.row.N || input.row.Q,
+          canonicalMeleeMode: secondaryModeFamily,
+          crit: input.row.N,
           dmb: input.row.G,
           id: "mode-2",
-          label: null,
+          isPrimaryAttack: false,
+          label: getCanonicalMeleeModeLabel(secondaryModeFamily),
           ob: input.row.F,
           rowWarnings,
           sheet: input.sheet,
@@ -473,7 +504,6 @@ function buildWeaponTemplate(input: {
     rowWarnings.push(`${name}: parry '${parrySource}' could not be parsed as a number.`);
   }
 
-  const primaryAttackType = input.sheet === "Weapon1" ? input.row.C?.trim() || null : null;
   const secondaryAttackType = mode2 ? mode2.label ?? null : null;
   const handlingClass = deriveHandlingClass({
     name,
@@ -520,7 +550,7 @@ function buildWeaponTemplate(input: {
     armorMod2: mode2?.armorModifier ?? null,
     crit1: mode1?.crit ?? null,
     crit2: input.sheet === "Weapon1" ? input.row.N?.trim() || null : null,
-    secondCrit: input.sheet === "Weapon1" ? input.row.Q?.trim() || null : null,
+    secondCrit,
     defensiveValue: parseNumber(input.row.P),
     ammoEncumbrance,
     ammoEncumbranceRaw,

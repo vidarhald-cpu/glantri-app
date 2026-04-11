@@ -78,6 +78,11 @@ export type WeaponDamageClass =
   | "edged"
   | "pointed";
 
+export type CanonicalMeleeMode =
+  | "slash"
+  | "strike"
+  | "thrust";
+
 export type WeaponAttackModeProvenance =
   | "imported"
   | "manual"
@@ -109,6 +114,8 @@ export interface WeaponDurabilityProfile {
 export interface WeaponAttackMode {
   id: string;
   label?: string | null;
+  canonicalMeleeMode?: CanonicalMeleeMode | null;
+  isPrimaryAttack?: boolean | null;
   damageClass?: WeaponDamageClass | null;
   ob?: number | null;
   obRaw?: string | null;
@@ -116,6 +123,7 @@ export interface WeaponAttackMode {
   dmbRaw?: string | null;
   dmbFormula?: WeaponDamageModifierFormula | null;
   crit?: string | null;
+  secondCrit?: string | null;
   armorModifier?: string | null;
   provenance: WeaponAttackModeProvenance;
   notes?: string | null;

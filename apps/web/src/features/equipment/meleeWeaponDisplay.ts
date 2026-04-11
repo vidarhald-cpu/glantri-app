@@ -5,7 +5,10 @@ import type {
   WeaponAttackMode,
   WeaponTemplate
 } from "@glantri/domain";
-import { getEffectiveEncumbrance } from "@glantri/domain/equipment";
+import {
+  getCanonicalMeleeModeForAttackMode,
+  getEffectiveEncumbrance
+} from "@glantri/domain";
 
 export type CanonicalMeleeModeSlot = "slash" | "strike" | "thrust";
 
@@ -66,7 +69,7 @@ export function getCanonicalMeleeModeDisplay(
   };
 
   for (const mode of attackModes ?? []) {
-    const slot = getCanonicalMeleeModeSlot(mode.label);
+    const slot = getCanonicalMeleeModeForAttackMode(mode);
     if (!slot) {
       continue;
     }
@@ -86,7 +89,7 @@ export function formatNonMeleeModes(
   attackModes: WeaponAttackMode[] | null | undefined
 ): string {
   const otherModes = (attackModes ?? []).filter(
-    (mode) => getCanonicalMeleeModeSlot(mode.label) === null
+    (mode) => getCanonicalMeleeModeForAttackMode(mode) === null
   );
 
   if (otherModes.length === 0) {
@@ -113,7 +116,7 @@ export function isMeleeWeaponTemplate(template: WeaponTemplate): boolean {
     return false;
   }
 
-  return (template.attackModes ?? []).some((mode) => getCanonicalMeleeModeSlot(mode.label) !== null);
+  return (template.attackModes ?? []).some((mode) => getCanonicalMeleeModeForAttackMode(mode) !== null);
 }
 
 export function getTemplateEncumbranceForDisplay(input: {

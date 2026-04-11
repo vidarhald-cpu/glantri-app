@@ -3,6 +3,11 @@ import type {
   WeaponTemplate,
   WeaponTemplateManualEnrichment,
 } from "@glantri/domain/equipment";
+import {
+  getCanonicalMeleeModeFromAttackLabel,
+  getCanonicalMeleeModeFromCrit,
+  getCanonicalMeleeModeLabel,
+} from "@glantri/domain";
 
 export interface WeaponAttackModeEnrichment {
   label?: string | null;
@@ -30,43 +35,6 @@ function fromIds(
 ): Record<string, WeaponTemplateEnrichment> {
   return Object.fromEntries(ids.map((id) => [id, enrichment]));
 }
-
-const slashMode2Ids = [
-  "weapon-template-knife",
-  "weapon-template-short-sword",
-  "weapon-template-dirk",
-  "weapon-template-rapier",
-  "weapon-template-fencing-sword",
-  "weapon-template-main-gauche",
-  "weapon-template-swordbreaker",
-];
-
-const thrustMode2Ids = [
-  "weapon-template-dagger",
-  "weapon-template-falchion",
-  "weapon-template-broad-sword",
-  "weapon-template-cutlass",
-  "weapon-template-scimitar",
-  "weapon-template-longsword",
-  "weapon-template-great-sword",
-  "weapon-template-1-h-javelin",
-  "weapon-template-1-h-spear",
-  "weapon-template-2-h-javelin",
-  "weapon-template-spear",
-  "weapon-template-halberd",
-  "weapon-template-sabre",
-];
-
-const strikeMode2Ids = [
-  "weapon-template-morning-star",
-  "weapon-template-hatchet",
-  "weapon-template-wood-axe",
-  "weapon-template-hand-axe",
-  "weapon-template-battle-axe",
-  "weapon-template-quarterstaff",
-  "weapon-template-pole-axe",
-  "weapon-template-lance",
-];
 
 const throwMode1Ids = [
   "weapon-template-t-knife",
@@ -99,30 +67,6 @@ const shotMode1Ids = [
 ];
 
 export const themistogenesWeaponEnrichments: Record<string, WeaponTemplateEnrichment> = {
-  ...fromIds(slashMode2Ids, {
-    attackModes: {
-      "mode-2": {
-        label: "Slash",
-        note: "Manual enrichment: workbook provides mode-2 numbers and crits but no explicit secondary label.",
-      },
-    },
-  }),
-  ...fromIds(thrustMode2Ids, {
-    attackModes: {
-      "mode-2": {
-        label: "Thrust",
-        note: "Manual enrichment: workbook provides mode-2 numbers and crits but no explicit secondary label.",
-      },
-    },
-  }),
-  ...fromIds(strikeMode2Ids, {
-    attackModes: {
-      "mode-2": {
-        label: "Strike",
-        note: "Manual enrichment: workbook provides mode-2/blunt follow-up data without an explicit label.",
-      },
-    },
-  }),
   ...fromIds(throwMode1Ids, {
     attackModes: {
       "mode-1": {
@@ -161,6 +105,92 @@ function resolveWarningCategory(warning: string): string {
     return "non_numeric_parry";
   }
   return "other";
+}
+
+function trimToNull(value: string | null | undefined): string | null {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
+}
+
+function getRawSourceValue(
+  template: WeaponTemplate,
+  sourceKey: string,
+): string | null {
+  const sourceColumn = template.sourceMetadata?.sourceColumns?.[sourceKey];
+  if (!sourceColumn) {
+    return null;
+  }
+
+  return trimToNull(template.sourceMetadata?.rawRow?.[sourceColumn]);
+}
+
+function hasWeaponOneSecondaryModeSignal(template: WeaponTemplate): boolean {
+  return [
+    getRawSourceValue(template, "ob2"),
+    getRawSourceValue(template, "dmb2"),
+    getRawSourceValue(template, "armorMod2"),
+    getRawSourceValue(template, "crit2"),
+  ].some((value) => value != null);
+}
+
+function applyCanonicalWeaponOneMeleeMapping(
+  template: WeaponTemplate,
+): WeaponAttackMode[] | null | undefined {
+  if (template.sourceMetadata?.sheet !== "Weapon1" || !template.attackModes) {
+    return template.attackModes;
+  }
+
+  const primaryAttackLabel =
+    trimToNull(template.primaryAttackType) ??
+    getRawSourceValue(template, "primaryAttackLabel");
+  const primaryModeFamily =
+    getCanonicalMeleeModeFromAttackLabel(primaryAttackLabel) ??
+    getCanonicalMeleeModeFromCrit(template.crit1);
+  const secondaryCrit = getRawSourceValue(template, "crit2") ?? template.crit2 ?? null;
+  const secondaryModeFamily = getCanonicalMeleeModeFromCrit(secondaryCrit);
+  const secondCrit = getRawSourceValue(template, "secondCrit") ?? template.secondCrit ?? null;
+  const hasSecondaryMode = hasWeaponOneSecondaryModeSignal(template);
+
+  const nextModes: WeaponAttackMode[] = [];
+
+  for (const mode of template.attackModes) {
+    if (mode.id === "mode-1") {
+      nextModes.push({
+        ...mode,
+        label:
+          primaryAttackLabel ??
+          mode.label ??
+          getCanonicalMeleeModeLabel(primaryModeFamily),
+        canonicalMeleeMode:
+          primaryModeFamily ?? getCanonicalMeleeModeFromCrit(mode.crit),
+        isPrimaryAttack: true,
+        secondCrit,
+      });
+      continue;
+    }
+
+    if (mode.id === "mode-2") {
+      if (!hasSecondaryMode) {
+        continue;
+      }
+
+      nextModes.push({
+        ...mode,
+        label: getCanonicalMeleeModeLabel(secondaryModeFamily) ?? mode.label,
+        canonicalMeleeMode:
+          secondaryModeFamily ??
+          getCanonicalMeleeModeFromAttackLabel(mode.label) ??
+          getCanonicalMeleeModeFromCrit(mode.crit),
+        isPrimaryAttack: false,
+        secondCrit: null,
+      });
+      continue;
+    }
+
+    nextModes.push(mode);
+  }
+
+  return nextModes;
 }
 
 function applyAttackModeEnrichment(
@@ -205,13 +235,19 @@ function applyAttackModeEnrichment(
 
 function isWarningResolvedByOverride(
   warning: string,
+  template: WeaponTemplate,
   overrides: Array<{ modeId: string; fields: string[] }>,
 ): boolean {
   if (warning.includes("mode-1") && warning.includes("attack label")) {
     return overrides.some((override) => override.modeId === "mode-1" && override.fields.includes("label"));
   }
   if (warning.includes("mode-2") && warning.includes("secondary attack label")) {
-    return overrides.some((override) => override.modeId === "mode-2" && override.fields.includes("label"));
+    const secondaryMode = template.attackModes?.find((mode) => mode.id === "mode-2");
+    return (
+      secondaryMode == null ||
+      secondaryMode.label != null ||
+      overrides.some((override) => override.modeId === "mode-2" && override.fields.includes("label"))
+    );
   }
   return false;
 }
@@ -221,25 +257,35 @@ export function applyThemistogenesWeaponEnrichments(
 ): WeaponTemplate[] {
   return templates.map((template) => {
     const enrichment = themistogenesWeaponEnrichments[template.id];
-    if (!enrichment) {
-      return template;
-    }
-
-    const { attackModes, overrides } = applyAttackModeEnrichment(template.attackModes, enrichment);
+    const canonicallyMappedTemplate: WeaponTemplate = {
+      ...template,
+      attackModes: applyCanonicalWeaponOneMeleeMapping(template),
+    };
+    const { attackModes, overrides } = applyAttackModeEnrichment(
+      canonicallyMappedTemplate.attackModes,
+      enrichment,
+    );
+    const enrichedTemplateWithModes: WeaponTemplate = {
+      ...canonicallyMappedTemplate,
+      attackModes,
+    };
     const resolvedWarnings = (template.importWarnings ?? []).filter((warning) =>
-      isWarningResolvedByOverride(warning, overrides),
+      isWarningResolvedByOverride(warning, enrichedTemplateWithModes, overrides),
     );
     const unresolvedWarnings = (template.importWarnings ?? []).filter(
-      (warning) => !isWarningResolvedByOverride(warning, overrides),
+      (warning) => !isWarningResolvedByOverride(warning, enrichedTemplateWithModes, overrides),
     );
 
-    const manualEnrichment: WeaponTemplateManualEnrichment = {
-      source: "themistogenes-manual-v1",
-      notes: enrichment.notes ?? null,
-      attackModeOverrides: overrides.length > 0 ? overrides : null,
-      resolvedImportWarnings: resolvedWarnings.length > 0 ? resolvedWarnings : null,
-      unresolvedImportWarnings: unresolvedWarnings.length > 0 ? unresolvedWarnings : null,
-    };
+    const manualEnrichment: WeaponTemplateManualEnrichment | null =
+      enrichment || overrides.length > 0 || resolvedWarnings.length > 0 || unresolvedWarnings.length > 0
+        ? {
+            source: "themistogenes-manual-v1",
+            notes: enrichment?.notes ?? null,
+            attackModeOverrides: overrides.length > 0 ? overrides : null,
+            resolvedImportWarnings: resolvedWarnings.length > 0 ? resolvedWarnings : null,
+            unresolvedImportWarnings: unresolvedWarnings.length > 0 ? unresolvedWarnings : null,
+          }
+        : null;
 
     const primaryMode = attackModes?.find((mode) => mode.id === "mode-1");
     const secondaryMode = attackModes?.find((mode) => mode.id === "mode-2");
