@@ -4,12 +4,18 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 import {
+  getSkillGroupIds,
   glantriCharacteristicLabels,
   glantriCharacteristicOrder,
+  type GlantriCharacteristicKey,
   type ProfessionDefinition,
   type SkillDefinition
 } from "@glantri/domain";
-import { buildCharacterSheetSummary, getCharacteristicGm } from "@glantri/rules-engine";
+import {
+  buildCharacterSheetSummary,
+  getCharacteristicGm,
+  selectBestSkillGroupContribution
+} from "@glantri/rules-engine";
 
 import {
   getPlayerFacingSkillBucket,
@@ -45,6 +51,18 @@ function sortSkills(skills: SkillDefinition[]): SkillDefinition[] {
 
 function formatSkillStats(skill: SkillDefinition): string {
   return [...new Set(skill.linkedStats)].map((stat) => stat.toUpperCase()).join(" / ");
+}
+
+function getSkillLinkedStatAverage(
+  profile: LocalCharacterRecord["build"]["profile"],
+  skill: SkillDefinition
+): number {
+  const total = skill.linkedStats.reduce(
+    (sum, stat) => sum + (profile.rolledStats[stat as GlantriCharacteristicKey] ?? 0),
+    0
+  );
+
+  return Math.floor(total / skill.linkedStats.length);
 }
 
 function getProfessionFamilyName(
@@ -131,31 +149,51 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
   }, [record, sheetSummary]);
 
   const groupedSkillRows = useMemo(() => {
-    if (!contentState || !sheetSummary) {
+    if (!contentState || !sheetSummary || !record) {
       return [];
     }
 
     const rows = sortSkills(contentState.skills)
       .map((skill) => {
         const skillView = sheetSummary.draftView.skills.find((item) => item.skillId === skill.id);
-        if (!skillView) {
-          return null;
-        }
+        const bestContributingGroup = selectBestSkillGroupContribution(
+          getSkillGroupIds(skill)
+            .map((groupId) => {
+              const groupView = sheetSummary.draftView.groups.find((group) => group.groupId === groupId);
+              const groupDefinition = contentState.skillGroups.find((group) => group.id === groupId);
 
-        const totalXp = skillView.groupLevel + skillView.specificSkillLevel;
+              if (!groupView || groupView.groupLevel <= 0) {
+                return null;
+              }
+
+              return {
+                groupId,
+                groupLevel: groupView.groupLevel,
+                name: groupDefinition?.name ?? groupId,
+                sortOrder: groupDefinition?.sortOrder ?? Number.MAX_SAFE_INTEGER
+              };
+            })
+            .filter((group): group is NonNullable<typeof group> => group !== null)
+        );
+
+        const skillGroupXp = bestContributingGroup?.groupLevel ?? skillView?.groupLevel ?? 0;
+        const skillXp = skillView?.specificSkillLevel ?? 0;
+        const totalXp = skillGroupXp + skillXp;
         if (totalXp <= 0) {
           return null;
         }
 
         return {
-          avgStats: skillView.linkedStatAverage,
-          skillGroupXp: skillView.groupLevel,
+          avgStats: skillView?.linkedStatAverage ?? getSkillLinkedStatAverage(record.build.profile, skill),
+          skillGroupXp,
           skillId: skill.id,
           skillName: skill.name,
           skillType: getPlayerFacingSkillBucket(skill),
-          skillXp: skillView.specificSkillLevel,
+          skillXp,
           stats: formatSkillStats(skill),
-          totalSkillLevel: skillView.totalSkill,
+          totalSkillLevel:
+            skillView?.totalSkill ??
+            getSkillLinkedStatAverage(record.build.profile, skill) + totalXp,
           totalXp
         } satisfies CharacterSheetSkillRow;
       })
