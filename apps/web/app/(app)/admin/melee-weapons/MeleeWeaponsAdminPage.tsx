@@ -18,15 +18,7 @@ import {
 
 const materialOptions: MaterialType[] = [
   "steel",
-  "bronze",
-  "wood",
-  "leather",
-  "cloth",
-  "bone",
-  "stone",
-  "silver",
-  "gold",
-  "other"
+  "bronze"
 ];
 
 const qualityOptions: QualityType[] = ["standard", "extraordinary"];
@@ -44,12 +36,27 @@ function TableShell(input: {
   rows: string[][];
 }) {
   return input.rows.length > 0 ? (
-    <div style={{ overflowX: "auto" }}>
+    <div
+      style={{
+        maxHeight: "70vh",
+        overflow: "auto"
+      }}
+    >
       <table style={{ borderCollapse: "collapse", minWidth: "100%", width: "100%" }}>
         <thead>
           <tr style={{ borderBottom: "1px solid rgba(85, 73, 48, 0.14)", textAlign: "left" }}>
             {input.columns.map((column) => (
-              <th key={column} style={{ padding: "0.55rem 0.75rem 0.55rem 0", verticalAlign: "bottom" }}>
+              <th
+                key={column}
+                style={{
+                  background: "rgba(250, 245, 234, 0.98)",
+                  padding: "0.55rem 0.75rem 0.55rem 0",
+                  position: "sticky",
+                  top: 0,
+                  verticalAlign: "bottom",
+                  zIndex: 1
+                }}
+              >
                 {column}
               </th>
             ))}
@@ -85,7 +92,11 @@ export default function MeleeWeaponsAdminPage() {
       [...equipmentTemplates]
         .filter((template): template is WeaponTemplate => template.category === "weapon")
         .filter(isMeleeWeaponTemplate)
-        .sort((left, right) => left.name.localeCompare(right.name)),
+        .sort(
+          (left, right) =>
+            left.weaponSkill.localeCompare(right.weaponSkill) ||
+            left.name.localeCompare(right.name)
+        ),
     []
   );
 
