@@ -61,6 +61,11 @@ function getTemplateCategoryLabel(category: string): string {
   }
 }
 
+const legacyShieldTemplateIds = new Set([
+  "shield-template-buckler",
+  "shield-template-round-shield"
+]);
+
 const materialOptions: MaterialType[] = [
   "steel",
   "bronze",
@@ -143,7 +148,7 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
         ? Object.values(state.templates.templatesById)
             .filter((template) =>
               template.category === "shield"
-                ? template.tags.includes("themistogenes-import")
+                ? !legacyShieldTemplateIds.has(template.id)
                 : true
             )
             .sort((left, right) =>
