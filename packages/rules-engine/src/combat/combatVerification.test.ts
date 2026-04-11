@@ -102,7 +102,7 @@ const combatVerificationCases: CombatVerificationCase[] = [
     actorSlot: "primary",
     loadout: {
       primaryWeaponTemplateId: "weapon-template-longsword",
-      shieldTemplateId: "shield-template-round-shield"
+      shieldTemplateId: "shield-template-medium-shield"
     },
     skills: {
       "1-h edged": 37,
@@ -111,14 +111,14 @@ const combatVerificationCases: CombatVerificationCase[] = [
     },
     expected: {
       ob: 14,
-      db: 13,
-      dm: 3,
+      db: 16,
+      dm: 6,
       dmb: 9,
       parry: "14 (allocation pending)",
-      encumbrance: 15
+      encumbrance: 20
     },
     notes:
-      "Workbook-faithful melee OB/DMB with Long sword mode-1, using skill XP 15 and Str GM 3 while keeping current shield DB/DM behavior.",
+      "Workbook-faithful melee OB/DMB with Long sword mode-1 and merged Medium shield defensive values from the Shields tab.",
     skillXp: {
       "1-h edged": 15,
       Brawling: 9,

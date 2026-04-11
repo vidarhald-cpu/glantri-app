@@ -181,6 +181,15 @@ export const ImportedWeaponSourceMetadataSchema = z.object({
   rawRow: z.record(z.string()),
 });
 
+export const ImportedShieldSourceMetadataSchema = z.object({
+  workbook: z.string(),
+  sheet: z.string(),
+  row: z.number().int().positive(),
+  sourceRange: z.string(),
+  sourceColumns: z.record(z.string()),
+  rawRow: z.record(z.string()),
+});
+
 export const WeaponAttackModeManualOverrideSchema = z.object({
   modeId: z.string(),
   fields: z.array(z.string()),
@@ -246,8 +255,30 @@ export const WeaponTemplateSchema = EquipmentTemplateSchema.extend({
 
 export const ShieldTemplateSchema = EquipmentTemplateSchema.extend({
   category: z.literal("shield"),
+  weaponSkill: z.string().nullable().optional(),
+  handlingClass: WeaponHandlingClassSchema.nullable().optional(),
+  attackModes: z.array(WeaponAttackModeSchema).nullable().optional(),
+  primeAttackType: z.string().nullable().optional(),
+  primaryAttackType: z.string().nullable().optional(),
+  secondaryAttackType: z.string().nullable().optional(),
+  ob1: z.number().nullable().optional(),
+  dmb1: z.number().nullable().optional(),
+  ob2: z.number().nullable().optional(),
+  dmb2: z.number().nullable().optional(),
+  parry: z.number().nullable().optional(),
+  initiative: z.number().nullable().optional(),
+  range: z.string().nullable().optional(),
+  armorMod1: z.string().nullable().optional(),
+  armorMod2: z.string().nullable().optional(),
+  crit1: z.string().nullable().optional(),
+  crit2: z.string().nullable().optional(),
+  secondCrit: z.string().nullable().optional(),
   shieldBonus: z.number().nullable().optional(),
   defensiveValue: z.number().nullable().optional(),
+  movementModifier: z.number().nullable().optional(),
+  offensiveSourceMetadata: ImportedShieldSourceMetadataSchema.nullable().optional(),
+  defensiveSourceMetadata: ImportedShieldSourceMetadataSchema.nullable().optional(),
+  importWarnings: z.array(z.string()).nullable().optional(),
 });
 
 export const ArmorTemplateSchema = EquipmentTemplateSchema.extend({

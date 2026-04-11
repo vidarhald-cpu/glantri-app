@@ -113,7 +113,7 @@ const sampleEquipmentItems: EquipmentItem[] = [
   {
     id: "shield-item-round-1",
     characterId: sampleCharacterId,
-    templateId: "shield-template-round-shield",
+    templateId: "shield-template-medium-shield",
     category: "shield",
     displayName: null,
     specificityType: "generic",
@@ -275,7 +275,7 @@ describe("combatStateDerivation", () => {
 
     expect(snapshot.gripSummary).toBe("One-handed + shield");
     expect(snapshot.wornArmorLabel).toBe("Leather Jerkin");
-    expect(snapshot.readyShieldLabel).toBe("Round Shield");
+    expect(snapshot.readyShieldLabel).toBe("Medium shield");
     expect(primaryRow).toMatchObject({
       slotLabel: "Primary weapon",
       currentItemLabel: "Long sword",
@@ -290,19 +290,22 @@ describe("combatStateDerivation", () => {
       attack2: "Thrust (Pointed)",
       crit2: "EP",
       armorMod2: "C",
-      db: 13,
-      dm: 3,
+      db: 16,
+      dm: 6,
       parry: "14 (allocation pending)",
     });
     expect(primaryRow?.notes).toContain("Thrust Pointed | AM C");
     expect(shieldRow).toMatchObject({
       slotLabel: "Shield",
-      currentItemLabel: "Round Shield",
-      attack1: "—",
+      currentItemLabel: "Medium shield",
+      attack1: "Strike (Blunt)",
+      ob1: 0,
+      dmb1: 0,
+      crit1: "AC",
       attack2: "—",
-      db: 13,
-      dm: 2,
-      parry: "—",
+      db: 16,
+      dm: 5,
+      parry: 5,
     });
     expect(getRowBySlotLabel(snapshot, "Unarmed / brawling")).toBeUndefined();
     expect(punchRow).toMatchObject({
@@ -322,8 +325,8 @@ describe("combatStateDerivation", () => {
       armorMod1: "A",
     });
     expect(getRowBySlotLabel(snapshot, "Secondary weapon")).toBeUndefined();
-    expect(snapshot.defenseSummary).toContain("DB 13");
-    expect(snapshot.defenseSummary).toContain("DM 3");
+    expect(snapshot.defenseSummary).toContain("DB 16");
+    expect(snapshot.defenseSummary).toContain("DM 6");
     expect(snapshot.defenseSummary).toContain("Parry 14 (allocation pending)");
     expect(snapshot.unarmedSummary).toContain("Punch and Kick");
   });
@@ -393,11 +396,11 @@ describe("combatStateDerivation", () => {
     const primaryRow = getRowBySlotLabel(snapshot, "Primary weapon");
 
     expect(primaryRow?.ob1).toBe(16);
-    expect(primaryRow?.db).toBe(14);
+    expect(primaryRow?.db).toBe(17);
     expect(primaryRow?.parry).toBe(16);
     expect(snapshot.readinessSummary).toContain("Posture Parry");
     expect(snapshot.defenseSummary).toContain("Posture Parry");
-    expect(snapshot.defenseSummary).toContain("DB 14");
+    expect(snapshot.defenseSummary).toContain("DB 17");
     expect(snapshot.defenseSummary).toContain("Parry 16");
     expect(snapshot.movementModifierSummary).toContain("situational");
     expect(snapshot.perceptionSummary).toContain("Current perception modifier -2");
@@ -431,7 +434,7 @@ describe("combatStateDerivation", () => {
 
     expect(snapshot).not.toBeNull();
     expect(getRowBySlotLabel(snapshot!, "Primary weapon")?.ob1).toBe(16);
-    expect(getRowBySlotLabel(snapshot!, "Primary weapon")?.db).toBe(14);
+    expect(getRowBySlotLabel(snapshot!, "Primary weapon")?.db).toBe(17);
     expect(getRowBySlotLabel(snapshot!, "Primary weapon")?.parry).toBe(16);
     expect(snapshot?.readinessSummary).toContain("Posture Parry");
   });

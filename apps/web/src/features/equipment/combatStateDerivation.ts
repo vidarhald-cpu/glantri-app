@@ -335,7 +335,10 @@ function getItemLabel(state: EquipmentFeatureState, item: EquipmentItem | undefi
   return item.displayName ? `${item.displayName} (${typeName})` : typeName;
 }
 
-function getAttackMode(template: WeaponTemplate | null, modeId: string): WeaponAttackMode | null {
+function getAttackMode(
+  template: Pick<WeaponTemplate, "attackModes"> | Pick<ShieldTemplate, "attackModes"> | null,
+  modeId: string,
+): WeaponAttackMode | null {
   return template?.attackModes?.find((mode) => mode.id === modeId) ?? null;
 }
 
@@ -875,17 +878,18 @@ function buildShieldRow(input: {
     weaponDefensiveValue: 0,
     weaponParryModifier: null,
   });
+  const mode1 = getAttackMode(input.shieldTemplate, "mode-1");
 
   return {
     slotLabel: "Shield",
     modeLabel: "Shield",
     currentItemLabel: getItemLabel(input.state, input.item),
-    initiative: "—",
-    attack1: "—",
-    ob1: "—",
-    dmb1: "—",
-    crit1: "—",
-    armorMod1: "—",
+    initiative: input.shieldTemplate.initiative ?? "—",
+    attack1: getAttackLabel(mode1),
+    ob1: mode1?.ob ?? "—",
+    dmb1: getDmbValue(mode1),
+    crit1: mode1?.crit ?? "—",
+    armorMod1: getArmorModifierValue(mode1),
     attack2: "—",
     ob2: "—",
     dmb2: "—",
@@ -893,8 +897,9 @@ function buildShieldRow(input: {
     armorMod2: "—",
     db: defenseValues.db,
     dm: defenseValues.dm,
-    parry: defenseValues.parry,
-    notes: "Shield defensive values are exact where current rules support them.",
+    parry: input.shieldTemplate.parry ?? defenseValues.parry,
+    notes:
+      "Shield rows merge offensive workbook weapon-table values with defensive shield-table values where current rules support them.",
   };
 }
 

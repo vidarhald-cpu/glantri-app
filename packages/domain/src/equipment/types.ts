@@ -160,6 +160,15 @@ export interface ImportedWeaponSourceMetadata {
   rawRow: Record<string, string>;
 }
 
+export interface ImportedShieldSourceMetadata {
+  workbook: string;
+  sheet: string;
+  row: number;
+  sourceRange: string;
+  sourceColumns: Record<string, string>;
+  rawRow: Record<string, string>;
+}
+
 export interface WeaponAttackModeManualOverride {
   modeId: string;
   fields: string[];
@@ -225,8 +234,30 @@ export interface WeaponTemplate extends EquipmentTemplateBase {
 
 export interface ShieldTemplate extends EquipmentTemplateBase {
   category: "shield";
+  weaponSkill?: string | null;
+  handlingClass?: WeaponHandlingClass | null;
+  attackModes?: WeaponAttackMode[] | null;
+  primeAttackType?: string | null;
+  primaryAttackType?: string | null;
+  secondaryAttackType?: string | null;
+  ob1?: number | null;
+  dmb1?: number | null;
+  ob2?: number | null;
+  dmb2?: number | null;
+  parry?: number | null;
+  initiative?: number | null;
+  range?: string | null;
+  armorMod1?: string | null;
+  armorMod2?: string | null;
+  crit1?: string | null;
+  crit2?: string | null;
+  secondCrit?: string | null;
   shieldBonus?: number | null;
   defensiveValue?: number | null;
+  movementModifier?: number | null;
+  offensiveSourceMetadata?: ImportedShieldSourceMetadata | null;
+  defensiveSourceMetadata?: ImportedShieldSourceMetadata | null;
+  importWarnings?: string[] | null;
 }
 
 export interface ArmorTemplate extends EquipmentTemplateBase {
