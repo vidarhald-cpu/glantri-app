@@ -501,7 +501,7 @@ describe("combatStateDerivation", () => {
     expect(getRowBySlotLabel(snapshot, "Kick")?.initiative).toBe(-1);
   });
 
-  it("uses direct skill XP rather than effective skill number for workbook initiative lookup", () => {
+  it("uses workbook weapon-skill XP rather than direct specific ranks for initiative lookup", () => {
     const sheetSummary = {
       adjustedStats: {
         dex: 13,
@@ -517,11 +517,10 @@ describe("combatStateDerivation", () => {
       distractionLevel: 0,
       draftView: {
         education: {
-          base: 0,
-          granted: 0,
-          purchased: 0,
+          baseEducation: 0,
+          gmInt: 0,
+          socialClassEducationValue: 0,
           theoreticalSkillCount: 0,
-          total: 0,
         },
         groups: [],
         primaryPoolAvailable: 0,
@@ -529,37 +528,39 @@ describe("combatStateDerivation", () => {
         skills: [
           {
             category: "ordinary",
-            effectiveSkillNumber: 7,
+            effectiveSkillNumber: 6,
             groupId: "martial",
             groupIds: ["martial"],
             groupLevel: 4,
             linkedStatAverage: 0,
             name: "1-h edged",
-            primaryRanks: 13,
-            requiresLiteracy: "not_needed",
+            primaryRanks: 2,
+            requiresLiteracy: "no",
             secondaryRanks: 0,
             skillId: "skill-1h-edged",
-            specificSkillLevel: 13,
-            totalSkill: 7,
+            specificSkillLevel: 2,
+            totalSkill: 6,
           },
         ],
         specializations: [],
-        totalSkillPointsInvested: 13,
+        totalSkillPointsInvested: 6,
       },
       equipment: {
-        armorLabel: "None",
-        dodge: 0,
+        armorSummary: "None",
+        carriedItems: [],
         equippedWeapons: [],
+        equippedArmor: [],
+        equippedShields: [],
         hasEquippedShield: false,
+        readinessLabel: "Unarmed",
         shieldBonus: 0,
-        shieldLabel: "None",
       },
       gms: {
         byGroup: [],
         total: 0,
       },
-      seniority: 13,
-      totalSkillPointsInvested: 13,
+      seniority: 6,
+      totalSkillPointsInvested: 6,
     } satisfies CharacterSheetSummary;
 
     const inputs = buildCombatStateCharacterInputs(sheetSummary);
@@ -577,7 +578,7 @@ describe("combatStateDerivation", () => {
       },
     );
 
-    expect(inputs.skillXpByName["1-h edged"]).toBe(13);
-    expect(getRowBySlotLabel(snapshot, "Primary weapon")?.initiative).toBe(2);
+    expect(inputs.skillXpByName["1-h edged"]).toBe(6);
+    expect(getRowBySlotLabel(snapshot, "Primary weapon")?.initiative).toBe(-1);
   });
 });

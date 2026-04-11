@@ -275,7 +275,13 @@ export function buildCombatStateCharacterInputs(
   sheet: CharacterSheetSummary,
 ): CombatStateCharacterInputs {
   const skillXpByName = Object.fromEntries(
-    sheet.draftView.skills.map((skill) => [skill.name, skill.specificSkillLevel]),
+    sheet.draftView.skills.map((skill) => [
+      skill.name,
+      // Workbook initiative uses Character sheet entry -> Weapon skills -> XP,
+      // which matches the chargen draft's effective skill number
+      // (group contribution + direct skill XP), not the direct specific ranks alone.
+      skill.effectiveSkillNumber,
+    ]),
   );
   const skillTotalsByName = Object.fromEntries(
     sheet.draftView.skills.map((skill) => [skill.name, skill.totalSkill]),
