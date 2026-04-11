@@ -46,20 +46,13 @@ export function getDexteritySizeModifier(siz: number): number {
   return -sizeGm;
 }
 
+export function getWorkbookCharacterSheetGm(value: number): number {
+  return Math.trunc((value - 11) / 2);
+}
+
 export function getCharacteristicGm(
-  stat: GlantriCharacteristicKey,
+  _stat: GlantriCharacteristicKey,
   stats: GlantriCharacteristicBlock
-): number | null {
-  switch (stat) {
-    case "str":
-      return getGlantriStatModifier(stats.siz);
-    case "dex":
-      return getDexteritySizeModifier(stats.siz);
-    case "health":
-      return getGlantriStatModifier(stats.con);
-    case "cha":
-      return getGlantriStatModifier(stats.com);
-    default:
-      return null;
-  }
+): number {
+  return getWorkbookCharacterSheetGm(stats[_stat]);
 }
