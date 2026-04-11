@@ -396,12 +396,13 @@ function extractActualValues(
   testCase: CombatVerificationCase,
   snapshot: ReturnType<typeof deriveCombatStateSnapshot>
 ): VerificationActual {
-  const row =
+  const row = snapshot.weaponRows.find((candidate) =>
     testCase.actorSlot === "primary"
-      ? snapshot.weaponRows[0]
+      ? candidate.slotLabel === "Primary weapon"
       : testCase.actorSlot === "missile"
-        ? snapshot.weaponRows[2]
-        : snapshot.weaponRows[3];
+        ? candidate.slotLabel === "Missile weapon"
+        : candidate.slotLabel === "Unarmed / brawling"
+  );
 
   return {
     ob: row?.ob1 ?? "—",

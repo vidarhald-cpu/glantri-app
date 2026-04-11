@@ -254,6 +254,13 @@ function cloneState(): EquipmentFeatureState {
   };
 }
 
+function getRowBySlotLabel(
+  snapshot: ReturnType<typeof deriveCombatStateSnapshot>,
+  slotLabel: string,
+) {
+  return snapshot.weaponRows.find((row) => row.slotLabel === slotLabel);
+}
+
 describe("combatStateDerivation", () => {
   it("derives current one-handed plus shield combat rows from the persisted loadout", () => {
     const snapshot = deriveCombatStateSnapshot(
@@ -261,8 +268,9 @@ describe("combatStateDerivation", () => {
       "char-themistogenes",
       sampleCharacterInputs,
     );
-    const primaryRow = snapshot.weaponRows[0];
-    const unarmedRow = snapshot.weaponRows[3];
+    const primaryRow = getRowBySlotLabel(snapshot, "Primary weapon");
+    const shieldRow = getRowBySlotLabel(snapshot, "Shield");
+    const unarmedRow = getRowBySlotLabel(snapshot, "Unarmed / brawling");
 
     expect(snapshot.gripSummary).toBe("One-handed + shield");
     expect(snapshot.wornArmorLabel).toBe("Leather Jerkin");
@@ -285,10 +293,20 @@ describe("combatStateDerivation", () => {
       dm: 3,
       parry: "14 (allocation pending)",
     });
-    expect(primaryRow.notes).toContain("Thrust Pointed | AM C");
-    expect(unarmedRow.ob1).toBe(18);
-    expect(unarmedRow.db).toBe(13);
-    expect(unarmedRow.parry).toBe("12 (weapon allocation pending)");
+    expect(primaryRow?.notes).toContain("Thrust Pointed | AM C");
+    expect(shieldRow).toMatchObject({
+      slotLabel: "Shield",
+      currentItemLabel: "Round Shield",
+      attack1: "—",
+      attack2: "—",
+      db: 13,
+      dm: 2,
+      parry: "—",
+    });
+    expect(unarmedRow?.ob1).toBe(18);
+    expect(unarmedRow?.db).toBe(13);
+    expect(unarmedRow?.parry).toBe("12 (weapon allocation pending)");
+    expect(getRowBySlotLabel(snapshot, "Secondary weapon")).toBeUndefined();
     expect(snapshot.defenseSummary).toContain("DB 13");
     expect(snapshot.defenseSummary).toContain("DM 3");
     expect(snapshot.defenseSummary).toContain("Parry 14 (allocation pending)");
@@ -300,12 +318,12 @@ describe("combatStateDerivation", () => {
       "char-themistogenes",
       sampleCharacterInputs,
     );
-    const primaryRow = snapshot.weaponRows[0];
+    const primaryRow = getRowBySlotLabel(snapshot, "Primary weapon");
 
-    expect(primaryRow.ob1).toBe(14);
-    expect(primaryRow.dmb1).toBe(9);
-    expect(primaryRow.ob2).toBe(13);
-    expect(primaryRow.dmb2).toBe(7);
+    expect(primaryRow?.ob1).toBe(14);
+    expect(primaryRow?.dmb1).toBe(9);
+    expect(primaryRow?.ob2).toBe(13);
+    expect(primaryRow?.dmb2).toBe(7);
   });
 
   it("surfaces formula-based missile DMB and special encumbrance notes without faking precision", () => {
@@ -325,14 +343,14 @@ describe("combatStateDerivation", () => {
     state.itemsById["weapon-item-longsword-1"].templateId = "weapon-template-ballista";
 
     const snapshot = deriveCombatStateSnapshot(state, "char-themistogenes");
-    const missileRow = snapshot.weaponRows[2];
+    const missileRow = getRowBySlotLabel(snapshot, "Missile weapon");
 
     expect(snapshot.gripSummary).toBe("Missile ready");
-    expect(missileRow.currentItemLabel).toBe("Ballista");
-    expect(missileRow.dmb1).toBe("4d8+1 (formula)");
-    expect(missileRow.attack1).toBe("Shot (Pointed)");
-    expect(missileRow.db).toBe("—");
-    expect(missileRow.notes).toContain("Source encumbrance 20+20 is ammo-linked");
+    expect(missileRow?.currentItemLabel).toBe("Ballista");
+    expect(missileRow?.dmb1).toBe("4d8+1 (formula)");
+    expect(missileRow?.attack1).toBe("Shot (Pointed)");
+    expect(missileRow?.db).toBe("—");
+    expect(missileRow?.notes).toContain("Source encumbrance 20+20 is ammo-linked");
     expect(snapshot.loadNotes).toContain("Source encumbrance 20+20 is ammo-linked");
   });
 
@@ -356,11 +374,11 @@ describe("combatStateDerivation", () => {
       }),
     );
 
-    const primaryRow = snapshot.weaponRows[0];
+    const primaryRow = getRowBySlotLabel(snapshot, "Primary weapon");
 
-    expect(primaryRow.ob1).toBe(16);
-    expect(primaryRow.db).toBe(14);
-    expect(primaryRow.parry).toBe(16);
+    expect(primaryRow?.ob1).toBe(16);
+    expect(primaryRow?.db).toBe(14);
+    expect(primaryRow?.parry).toBe(16);
     expect(snapshot.readinessSummary).toContain("Posture Parry");
     expect(snapshot.defenseSummary).toContain("Posture Parry");
     expect(snapshot.defenseSummary).toContain("DB 14");
@@ -396,9 +414,57 @@ describe("combatStateDerivation", () => {
     });
 
     expect(snapshot).not.toBeNull();
-    expect(snapshot?.weaponRows[0]?.ob1).toBe(16);
-    expect(snapshot?.weaponRows[0]?.db).toBe(14);
-    expect(snapshot?.weaponRows[0]?.parry).toBe(16);
+    expect(getRowBySlotLabel(snapshot!, "Primary weapon")?.ob1).toBe(16);
+    expect(getRowBySlotLabel(snapshot!, "Primary weapon")?.db).toBe(14);
+    expect(getRowBySlotLabel(snapshot!, "Primary weapon")?.parry).toBe(16);
     expect(snapshot?.readinessSummary).toContain("Posture Parry");
+  });
+
+  it("shows a fully derived secondary weapon row only when a secondary weapon is equipped", () => {
+    const state = cloneState();
+    state.itemsById["weapon-item-dagger-1"] = {
+      id: "weapon-item-dagger-1",
+      characterId: sampleCharacterId,
+      templateId: "weapon-template-dagger",
+      category: "weapon",
+      displayName: null,
+      specificityType: "generic",
+      quantity: 1,
+      isStackable: false,
+      material: "steel",
+      quality: "standard",
+      storageAssignment: {
+        locationId: `${sampleCharacterId}:loc-equipped`,
+        carryMode: "equipped",
+      },
+      conditionState: "intact",
+      durabilityCurrent: 12,
+      durabilityMax: 12,
+      encumbranceOverride: null,
+      valueOverride: null,
+      specialProperties: null,
+      notes: null,
+      isEquipped: true,
+      isFavorite: null,
+      acquiredFrom: null,
+      statusTags: null,
+    };
+    state.activeLoadoutByCharacterId[sampleCharacterId] = {
+      ...state.activeLoadoutByCharacterId[sampleCharacterId],
+      readyShieldItemId: null,
+      activeSecondaryWeaponItemId: "weapon-item-dagger-1",
+    };
+
+    const snapshot = deriveCombatStateSnapshot(state, sampleCharacterId, sampleCharacterInputs);
+    const secondaryRow = getRowBySlotLabel(snapshot, "Secondary weapon");
+
+    expect(getRowBySlotLabel(snapshot, "Shield")).toBeUndefined();
+    expect(secondaryRow).toMatchObject({
+      slotLabel: "Secondary weapon",
+      currentItemLabel: "Dagger",
+      attack1: "Thrust (Pointed)",
+      ob1: 14,
+      dmb1: 4,
+    });
   });
 });

@@ -699,6 +699,49 @@ function buildUnarmedRow(input: {
   };
 }
 
+function buildShieldRow(input: {
+  allocationInputs: CombatStateAllocationInputs;
+  characterInputs?: CombatStateCharacterInputs;
+  item: EquipmentItem | undefined;
+  shieldTemplate: ShieldTemplate;
+  state: EquipmentFeatureState;
+}): DerivedCombatWeaponRow {
+  const defenseValues = composeCombatDefenseValues({
+    allocationState: input.allocationInputs,
+    availableOb: null,
+    canUseShield: true,
+    dexterity: input.characterInputs?.dexterity ?? null,
+    shieldBonus: input.shieldTemplate.shieldBonus ?? 0,
+    shieldDefensiveValue: input.shieldTemplate.defensiveValue ?? 0,
+    usesSelectedParrySource: usesCombatParrySource(
+      input.allocationInputs.parry.source,
+      "shield",
+    ),
+    weaponDefensiveValue: 0,
+    weaponParryModifier: null,
+  });
+
+  return {
+    slotLabel: "Shield",
+    currentItemLabel: getItemLabel(input.state, input.item),
+    initiative: "—",
+    attack1: "—",
+    ob1: "—",
+    dmb1: "—",
+    crit1: "—",
+    armorMod1: "—",
+    attack2: "—",
+    ob2: "—",
+    dmb2: "—",
+    crit2: "—",
+    armorMod2: "—",
+    db: defenseValues.db,
+    dm: defenseValues.dm,
+    parry: defenseValues.parry,
+    notes: "Shield defensive values are exact where current rules support them.",
+  };
+}
+
 function getMovementSummary(input: {
   armorTemplate: ArmorTemplate | null;
   backpackCount: number;
@@ -859,7 +902,9 @@ export function deriveCombatStateSnapshot(
     shieldTemplate,
     secondaryWeaponTemplate,
   );
-  const weaponRows = [
+  const weaponRows: DerivedCombatWeaponRow[] = [];
+
+  weaponRows.push(
     buildWeaponRow({
       allocationInputs: resolvedAllocationInputs,
       armorTemplate,
@@ -872,17 +917,37 @@ export function deriveCombatStateSnapshot(
       state,
       template: primaryWeaponTemplate,
     }),
-    buildWeaponRow({
-      allocationInputs: resolvedAllocationInputs,
-      armorTemplate,
-      characterInputs,
-      parrySource: "secondary",
-      slotLabel: "Secondary weapon",
-      item: secondaryItem,
-      shieldTemplate,
-      state,
-      template: secondaryWeaponTemplate,
-    }),
+  );
+
+  if (shieldItem && shieldTemplate) {
+    weaponRows.push(
+      buildShieldRow({
+        allocationInputs: resolvedAllocationInputs,
+        characterInputs,
+        item: shieldItem,
+        shieldTemplate,
+        state,
+      }),
+    );
+  }
+
+  if (secondaryItem && secondaryWeaponTemplate) {
+    weaponRows.push(
+      buildWeaponRow({
+        allocationInputs: resolvedAllocationInputs,
+        armorTemplate,
+        characterInputs,
+        parrySource: "secondary",
+        slotLabel: "Secondary weapon",
+        item: secondaryItem,
+        shieldTemplate,
+        state,
+        template: secondaryWeaponTemplate,
+      }),
+    );
+  }
+
+  weaponRows.push(
     buildWeaponRow({
       allocationInputs: resolvedAllocationInputs,
       armorTemplate,
@@ -894,12 +959,15 @@ export function deriveCombatStateSnapshot(
       state,
       template: missileWeaponTemplate,
     }),
+  );
+
+  weaponRows.push(
     buildUnarmedRow({
       allocationInputs: resolvedAllocationInputs,
       characterInputs,
       shieldTemplate,
     }),
-  ];
+  );
 
   return {
     gripSummary,
