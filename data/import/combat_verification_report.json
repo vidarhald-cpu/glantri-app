@@ -1,0 +1,135 @@
+{
+  "cases": [
+    {
+      "name": "Long sword + round shield",
+      "expected": {
+        "ob": 39,
+        "db": 13,
+        "dm": 3,
+        "dmb": 5,
+        "parry": "39 (allocation pending)",
+        "encumbrance": 15
+      },
+      "actual": {
+        "ob": 39,
+        "db": 13,
+        "dm": 3,
+        "dmb": 5,
+        "parry": "39 (allocation pending)",
+        "encumbrance": 15
+      },
+      "status": "match",
+      "notes": "Workbook Weapon1 row 10 long sword values plus round shield DB/DM and Dex 11 match current derivation."
+    },
+    {
+      "name": "Great sword two-handed",
+      "expected": {
+        "ob": 44,
+        "db": 11,
+        "dm": 2,
+        "dmb": 8,
+        "parry": "46 (allocation pending)",
+        "encumbrance": 10
+      },
+      "actual": {
+        "ob": 44,
+        "db": 11,
+        "dm": 2,
+        "dmb": 8,
+        "parry": "46 (allocation pending)",
+        "encumbrance": 10
+      },
+      "status": "match",
+      "notes": "Workbook Weapon1 row 22 great sword values match current two-handed derivation with no shield contribution."
+    },
+    {
+      "name": "Short bow missile",
+      "expected": {
+        "ob": 31,
+        "db": 11,
+        "dm": "—",
+        "dmb": "2d6 (formula)",
+        "parry": "—",
+        "encumbrance": 5
+      },
+      "actual": {
+        "ob": 31,
+        "db": 11,
+        "dm": "—",
+        "dmb": "2d6 (formula)",
+        "parry": "—",
+        "encumbrance": 5
+      },
+      "status": "match",
+      "notes": "Workbook Weapon2 row 14 short bow keeps the dice DMB expression intact and matches current missile derivation."
+    },
+    {
+      "name": "Composite bow formula DMB",
+      "expected": {
+        "ob": 32,
+        "db": 11,
+        "dm": "—",
+        "dmb": "2d6 + GMstr (formula)",
+        "parry": "—",
+        "encumbrance": 8
+      },
+      "actual": {
+        "ob": 32,
+        "db": 11,
+        "dm": "—",
+        "dmb": "2d6 + GMstr (formula)",
+        "parry": "—",
+        "encumbrance": 8
+      },
+      "status": "match",
+      "notes": "Workbook Weapon2 row 15 matches current formula-preserving DMB handling for GMstr-based composite bow damage."
+    },
+    {
+      "name": "Unarmed / brawling baseline",
+      "expected": {
+        "ob": 18,
+        "db": 11,
+        "dm": "—",
+        "dmb": "Interim",
+        "parry": "12 (weapon allocation pending)",
+        "encumbrance": 0
+      },
+      "actual": {
+        "ob": 18,
+        "db": 11,
+        "dm": "—",
+        "dmb": "Interim",
+        "parry": "12 (weapon allocation pending)",
+        "encumbrance": 0
+      },
+      "status": "match",
+      "notes": "Workbook Weapon1 contains brawling rows, but the current app intentionally exposes an interim unarmed baseline; this matches current expected behavior."
+    },
+    {
+      "name": "Ballista ammo-linked encumbrance",
+      "expected": {
+        "ob": 28,
+        "db": 11,
+        "dm": "—",
+        "dmb": "4d8+1 (formula)",
+        "parry": "—",
+        "encumbrance": 40
+      },
+      "actual": {
+        "ob": 28,
+        "db": 11,
+        "dm": "—",
+        "dmb": "4d8+1 (formula)",
+        "parry": "—",
+        "encumbrance": 20
+      },
+      "status": "mismatch",
+      "notes": "Workbook Weapon2 row 30 source encumbrance is 20+20, while current personal encumbrance totals still use the compatibility base 20 and preserve the ammo-linked detail only in notes."
+    }
+  ],
+  "summary": {
+    "total": 6,
+    "matches": 5,
+    "mismatches": 1
+  }
+}
