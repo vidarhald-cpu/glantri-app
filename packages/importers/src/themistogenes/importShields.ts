@@ -208,18 +208,11 @@ function buildSourceMetadata(input: {
   };
 }
 
-function buildShieldAttackMode(row: SourceRow, rowWarnings: string[], shieldName: string): WeaponAttackMode | null {
+function buildShieldAttackMode(row: SourceRow): WeaponAttackMode | null {
   const label = row.C?.trim() || null;
   const ob = parseNumber(row.D);
   const dmb = parseNumber(row.E);
   const crit = row.M?.trim() || null;
-  const armorModifierRaw = row.K?.trim() || null;
-  const armorModifier =
-    armorModifierRaw && armorModifierRaw.toUpperCase() !== "N/A" ? armorModifierRaw : null;
-
-  if (armorModifierRaw?.toUpperCase() === "N/A") {
-    rowWarnings.push(`${shieldName}: offensive armor modifier is marked N/A in Weapon1 and stays empty.`);
-  }
 
   return {
     id: "mode-1",
@@ -233,7 +226,7 @@ function buildShieldAttackMode(row: SourceRow, rowWarnings: string[], shieldName
     dmbRaw: row.E?.trim() || null,
     crit,
     secondCrit: row.Q?.trim() || null,
-    armorModifier,
+    armorModifier: "A",
     provenance: "imported",
     notes: null,
   };
@@ -247,7 +240,7 @@ function buildShieldTemplate(input: {
 }): ShieldTemplate {
   const name = input.defensiveRow.A.trim();
   const rowWarnings: string[] = [];
-  const attackMode = buildShieldAttackMode(input.offensiveRow, rowWarnings, name);
+  const attackMode = buildShieldAttackMode(input.offensiveRow);
   const offensiveDefensiveValue = parseNumber(input.offensiveRow.P);
   const defensiveValue = parseNumber(input.defensiveRow.B);
   const parry = parseNumber(input.defensiveRow.F);
@@ -291,7 +284,7 @@ function buildShieldTemplate(input: {
     parry,
     initiative: parseNumber(input.offensiveRow.I),
     range: input.offensiveRow.J?.trim() || null,
-    armorMod1: attackMode?.armorModifier ?? null,
+    armorMod1: attackMode?.armorModifier ?? "A",
     armorMod2: null,
     crit1: attackMode?.crit ?? null,
     crit2: null,

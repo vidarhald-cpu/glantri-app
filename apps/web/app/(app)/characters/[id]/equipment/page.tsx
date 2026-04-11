@@ -140,9 +140,15 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
   const templateOptions = useMemo(
     () =>
       state
-        ? Object.values(state.templates.templatesById).sort((left, right) =>
+        ? Object.values(state.templates.templatesById)
+            .filter((template) =>
+              template.category === "shield"
+                ? template.tags.includes("themistogenes-import")
+                : true
+            )
+            .sort((left, right) =>
             left.name.localeCompare(right.name)
-          )
+            )
         : [],
     [state]
   );

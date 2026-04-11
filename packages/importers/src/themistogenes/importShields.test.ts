@@ -18,6 +18,7 @@ describe("importThemistogenesShields", () => {
       ob1: 0,
       dmb1: 0,
       crit1: "AC",
+      armorMod1: "A",
       initiative: 0,
       parry: 5,
       shieldBonus: 5,
@@ -48,6 +49,7 @@ describe("importThemistogenesShields", () => {
       ob1: 0,
       dmb1: 0,
       crit1: "AC",
+      armorMod1: "A",
       initiative: 0,
     });
     expect(tyasianShield?.offensiveSourceMetadata).toMatchObject({

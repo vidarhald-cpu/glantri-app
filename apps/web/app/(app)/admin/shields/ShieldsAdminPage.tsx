@@ -16,12 +16,18 @@ function formatOptionalDisplayValue(value: number | string | null | undefined): 
   return text.length > 0 ? text : "—";
 }
 
-function formatWarnings(template: ShieldTemplate): string {
-  if (!template.importWarnings || template.importWarnings.length === 0) {
+function formatRangeLabel(value: number | string | null | undefined): string {
+  if (value === null || value === undefined) {
     return "—";
   }
 
-  return template.importWarnings.join(" | ");
+  const parsed = typeof value === "number" ? value : Number(value.trim());
+  if (Number.isFinite(parsed)) {
+    return String(Math.trunc(parsed));
+  }
+
+  const text = typeof value === "number" ? String(value) : value.trim();
+  return text.length > 0 ? text : "—";
 }
 
 function TableShell(input: {
@@ -73,7 +79,10 @@ export default function ShieldsAdminPage() {
   const shields = useMemo(
     () =>
       [...equipmentTemplates]
-        .filter((template): template is ShieldTemplate => template.category === "shield")
+        .filter(
+          (template): template is ShieldTemplate =>
+            template.category === "shield" && template.tags.includes("themistogenes-import")
+        )
         .sort((left, right) => left.name.localeCompare(right.name)),
     []
   );
@@ -99,13 +108,12 @@ export default function ShieldsAdminPage() {
           formatOptionalDisplayValue(secondaryMode?.crit ?? template.crit2),
           formatOptionalDisplayValue(secondaryMode?.armorModifier ?? template.armorMod2),
           formatOptionalDisplayValue(template.initiative),
-          formatOptionalDisplayValue(template.range),
+          formatRangeLabel(template.range),
           formatOptionalDisplayValue(template.shieldBonus),
           formatOptionalDisplayValue(template.defensiveValue),
           formatOptionalDisplayValue(template.parry),
           formatOptionalDisplayValue(template.baseEncumbrance),
-          formatOptionalDisplayValue(template.movementModifier),
-          formatWarnings(template)
+          formatOptionalDisplayValue(template.movementModifier)
         ];
       }),
     [shields]
@@ -145,8 +153,7 @@ export default function ShieldsAdminPage() {
             "Defensive value",
             "Parry",
             "Encumbrance",
-            "Movement modifier",
-            "Notes"
+            "Movement modifier"
           ]}
           rows={rows}
         />
