@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { Fragment, use, useEffect, useMemo, useState } from "react";
 import {
   type CarryMode,
@@ -490,12 +489,6 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
         <h1 style={{ margin: 0 }}>Inventory</h1>
         <div style={{ color: "#5e5a50" }}>
           Inventory snapshot for character <code>{id}</code>.
-        </div>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
-          <Link href="/characters">Characters</Link>
-          <Link href={`/characters/${id}`}>Character sheet</Link>
-          <Link href={`/characters/${id}/loadout`}>Equip items</Link>
-          <Link href={`/characters/${id}/advance`}>Advance Character</Link>
         </div>
       </div>
 

@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { use, useEffect, useMemo, useState } from "react";
 import type { EncounterDefensePosture } from "@glantri/domain";
 import { getAccessTier, isWithYouLocation, type CarryMode } from "@glantri/domain/equipment";
@@ -356,12 +355,6 @@ export default function CharacterLoadoutPage({ params }: CharacterLoadoutPagePro
         <h1 style={{ margin: 0 }}>Equip items</h1>
         <div style={{ color: "#5e5a50" }}>
           Active carry snapshot for character <code>{id}</code>.
-        </div>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
-          <Link href="/characters">Characters</Link>
-          <Link href={`/characters/${id}`}>Character sheet</Link>
-          <Link href={`/characters/${id}/equipment`}>Inventory</Link>
-          <Link href={`/characters/${id}/advance`}>Advance Character</Link>
         </div>
       </div>
 

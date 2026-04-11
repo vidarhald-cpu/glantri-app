@@ -205,7 +205,6 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
     );
   }
 
-  const hasPersistedServerCharacter = record.syncStatus === "synced";
   const professionFamilyName = getProfessionFamilyName(contentState, profession);
   const socialClassLabel =
     record.build.socialClass ?? record.build.profile.socialClassResult ?? "Not set";
@@ -218,17 +217,6 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
 
   return (
     <section style={{ display: "grid", gap: "1rem", maxWidth: 1180 }}>
-      <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
-        <Link href="/characters">Characters</Link>
-        {hasPersistedServerCharacter ? (
-          <Link href={`/characters/${record.id}/equipment`}>Inventory</Link>
-        ) : null}
-        {hasPersistedServerCharacter ? (
-          <Link href={`/characters/${record.id}/loadout`}>Equip items</Link>
-        ) : null}
-        <Link href={`/characters/${record.id}/advance`}>Advance Character</Link>
-      </div>
-
       <div>
         <h1 style={{ margin: 0 }}>Character Sheet — {getCharacterName(record)}</h1>
       </div>

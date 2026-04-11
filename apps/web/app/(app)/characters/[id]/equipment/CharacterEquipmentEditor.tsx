@@ -348,14 +348,6 @@ export default function CharacterEquipmentEditor({ id }: CharacterEquipmentEdito
 
   return (
     <section style={{ display: "grid", gap: "1rem", maxWidth: 980 }}>
-      <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
-        <Link href="/characters">Characters</Link>
-        <Link href={`/characters/${record.id}`}>Character sheet</Link>
-        <Link href={`/characters/${record.id}/equipment`}>Inventory</Link>
-        <Link href={`/characters/${record.id}/loadout`}>Equip items</Link>
-        <Link href={`/characters/${record.id}/advance`}>Advance Character</Link>
-      </div>
-
       <div>
         <h1 style={{ marginBottom: "0.5rem" }}>Inventory</h1>
         <p style={{ margin: 0 }}>

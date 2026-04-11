@@ -254,13 +254,6 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
 
   return (
     <section style={{ display: "grid", gap: "1rem", maxWidth: 1040 }}>
-      <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
-        <Link href="/characters">Characters</Link>
-        <Link href={`/characters/${record.id}`}>Character sheet</Link>
-        <Link href={`/characters/${record.id}/equipment`}>Inventory</Link>
-        <Link href={`/characters/${record.id}/loadout`}>Equip items</Link>
-      </div>
-
       <div>
         <h1 style={{ marginBottom: "0.5rem" }}>Advance Character</h1>
         <p style={{ margin: 0 }}>
