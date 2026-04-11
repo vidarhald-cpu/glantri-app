@@ -57,6 +57,11 @@ export const adminNavItems: AdminNavItem[] = [
     label: "Melee weapons"
   },
   {
+    description: "Inspect the system shield catalog with merged offensive and defensive workbook data.",
+    href: "/admin/shields",
+    label: "Shields"
+  },
+  {
     description: "Read short player-facing notes for current combat calculations.",
     href: "/admin/documents",
     label: "Documents"

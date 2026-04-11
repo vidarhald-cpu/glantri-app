@@ -44,6 +44,23 @@ function formatLabel(value: string): string {
     .join(" ");
 }
 
+function getTemplateCategoryLabel(category: string): string {
+  switch (category) {
+    case "weapon":
+      return "Weapons";
+    case "shield":
+      return "Shields";
+    case "armor":
+      return "Armor";
+    case "gear":
+      return "Gear";
+    case "valuables":
+      return "Valuables";
+    default:
+      return formatLabel(category);
+  }
+}
+
 const materialOptions: MaterialType[] = [
   "steel",
   "bronze",
@@ -129,6 +146,23 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
         : [],
     [state]
   );
+  const templateGroups = useMemo(() => {
+    const grouped = new Map<string, typeof templateOptions>();
+
+    for (const template of templateOptions) {
+      const current = grouped.get(template.category) ?? [];
+      current.push(template);
+      grouped.set(template.category, current);
+    }
+
+    return ["weapon", "shield", "armor", "gear", "valuables"]
+      .map((category) => ({
+        category,
+        label: getTemplateCategoryLabel(category),
+        templates: grouped.get(category) ?? []
+      }))
+      .filter((group) => group.templates.length > 0);
+  }, [templateOptions]);
   const selectedTemplate =
     addTemplateId && state ? state.templates.templatesById[addTemplateId] ?? null : null;
   const selectedTemplateIsStackable = selectedTemplate?.category === "valuables";
@@ -509,7 +543,7 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
           <div style={{ display: "grid", gap: "0.2rem" }}>
             <strong>Add item</strong>
             <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
-              Create a persisted inventory item from an existing equipment template.
+              Create a persisted inventory item from an existing equipment template, including workbook-backed shields.
             </div>
           </div>
           <div
@@ -526,10 +560,14 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
                 onChange={(event) => setAddTemplateId(event.target.value)}
                 value={addTemplateId}
               >
-                {templateOptions.map((template) => (
-                  <option key={template.id} value={template.id}>
-                    {template.name}
-                  </option>
+                {templateGroups.map((group) => (
+                  <optgroup key={group.category} label={group.label}>
+                    {group.templates.map((template) => (
+                      <option key={template.id} value={template.id}>
+                        {template.name}
+                      </option>
+                    ))}
+                  </optgroup>
                 ))}
               </select>
             </label>
