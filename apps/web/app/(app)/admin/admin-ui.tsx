@@ -55,6 +55,11 @@ export const adminNavItems: AdminNavItem[] = [
     description: "Inspect the system melee weapon catalog with split mode columns.",
     href: "/admin/melee-weapons",
     label: "Melee weapons"
+  },
+  {
+    description: "Read short player-facing notes for current combat calculations.",
+    href: "/admin/documents",
+    label: "Documents"
   }
 ];
 
