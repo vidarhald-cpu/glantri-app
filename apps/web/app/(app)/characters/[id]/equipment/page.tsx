@@ -28,6 +28,8 @@ import {
   updateCharacterEquipmentMetadataOnServer,
   updateCharacterEquipmentQuantityOnServer
 } from "../../../../../src/lib/api/localServiceClient";
+import { loadLocalCharacterContext } from "../../../../../src/lib/characters/loadLocalCharacterContext";
+import { UNNAMED_CHARACTER_PLACEHOLDER } from "../../../../../src/lib/offline/repositories/localCharacterRepository";
 
 interface CharacterEquipmentPageProps {
   params: Promise<{
@@ -74,6 +76,7 @@ const availabilityOptions: Array<{
 export default function CharacterEquipmentPage({ params }: CharacterEquipmentPageProps) {
   const { id } = use(params);
   const [state, setState] = useState<EquipmentFeatureState | null>(null);
+  const [characterName, setCharacterName] = useState(UNNAMED_CHARACTER_PLACEHOLDER);
   const [loading, setLoading] = useState(true);
   const [pageError, setPageError] = useState<string>();
   const [locationName, setLocationName] = useState("");
@@ -133,13 +136,16 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
   useEffect(() => {
     let cancelled = false;
 
-    loadCharacterEquipmentState(id)
-      .then((nextState) => {
+    Promise.all([loadCharacterEquipmentState(id), loadLocalCharacterContext(id)])
+      .then(([nextState, characterContext]) => {
         if (cancelled) {
           return;
         }
 
         setState(nextState);
+        setCharacterName(
+          characterContext.record?.build.name.trim() || UNNAMED_CHARACTER_PLACEHOLDER
+        );
         setPageError(undefined);
       })
       .catch((error) => {
@@ -486,10 +492,7 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
   return (
     <section style={{ display: "grid", gap: "1rem", maxWidth: 1080 }}>
       <div style={{ display: "grid", gap: "0.35rem" }}>
-        <h1 style={{ margin: 0 }}>Inventory</h1>
-        <div style={{ color: "#5e5a50" }}>
-          Inventory snapshot for character <code>{id}</code>.
-        </div>
+        <h1 style={{ margin: 0 }}>Inventory by location - {characterName}</h1>
       </div>
 
       {!loading && !pageError && state ? (

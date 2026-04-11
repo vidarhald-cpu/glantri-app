@@ -41,7 +41,14 @@ export default function CharactersSubmenu() {
     {
       href: characterId ? `/characters/${characterId}/equipment` : undefined,
       isActive: characterId ? pathname === `/characters/${characterId}/equipment` : false,
-      label: "Inventory"
+      label: "Inventory by location"
+    },
+    {
+      href: characterId ? `/characters/${characterId}/weapons-shields-armor` : undefined,
+      isActive: characterId
+        ? pathname === `/characters/${characterId}/weapons-shields-armor`
+        : false,
+      label: "Weapons/Shields/Armor"
     },
     {
       href: characterId ? `/characters/${characterId}/loadout` : undefined,

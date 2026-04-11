@@ -96,7 +96,10 @@ export default function CharactersBrowser() {
               <div>Storage status: {record.syncStatus}</div>
               <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
                 <Link href={`/characters/${record.id}`}>Character sheet</Link>
-                <Link href={`/characters/${record.id}/equipment`}>Inventory</Link>
+                <Link href={`/characters/${record.id}/equipment`}>Inventory by location</Link>
+                <Link href={`/characters/${record.id}/weapons-shields-armor`}>
+                  Weapons/Shields/Armor
+                </Link>
                 <Link href={`/characters/${record.id}/loadout`}>Equip items</Link>
                 <Link href={`/characters/${record.id}/advance`}>Advance Character</Link>
               </div>
