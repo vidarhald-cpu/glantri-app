@@ -275,10 +275,12 @@ describe("combatStateDerivation", () => {
       dmb1: 9,
       attack1: "Slash (Edged)",
       crit1: "FS",
+      armorMod1: "C",
       ob2: 13,
       dmb2: 7,
       attack2: "Thrust (Pointed)",
       crit2: "EP",
+      armorMod2: "C",
       db: 13,
       dm: 3,
       parry: "14 (allocation pending)",
@@ -290,6 +292,20 @@ describe("combatStateDerivation", () => {
     expect(snapshot.defenseSummary).toContain("DB 13");
     expect(snapshot.defenseSummary).toContain("DM 3");
     expect(snapshot.defenseSummary).toContain("Parry 14 (allocation pending)");
+  });
+
+  it("derives the displayed secondary melee DMB from the secondary mode values", () => {
+    const snapshot = deriveCombatStateSnapshot(
+      cloneState(),
+      "char-themistogenes",
+      sampleCharacterInputs,
+    );
+    const primaryRow = snapshot.weaponRows[0];
+
+    expect(primaryRow.ob1).toBe(14);
+    expect(primaryRow.dmb1).toBe(9);
+    expect(primaryRow.ob2).toBe(13);
+    expect(primaryRow.dmb2).toBe(7);
   });
 
   it("surfaces formula-based missile DMB and special encumbrance notes without faking precision", () => {

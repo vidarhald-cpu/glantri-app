@@ -67,10 +67,12 @@ export interface DerivedCombatWeaponRow {
   dmb1: DerivedCombatValue;
   attack1: DerivedCombatValue;
   crit1: DerivedCombatValue;
+  armorMod1: DerivedCombatValue;
   ob2: DerivedCombatValue;
   dmb2: DerivedCombatValue;
   attack2: DerivedCombatValue;
   crit2: DerivedCombatValue;
+  armorMod2: DerivedCombatValue;
   db: DerivedCombatValue;
   dm: DerivedCombatValue;
   parry: DerivedCombatValue;
@@ -442,6 +444,10 @@ function getAttackLabel(mode: WeaponAttackMode | null): DerivedCombatValue {
   return `${baseLabel} (${formatDamageClass(mode.damageClass)})`;
 }
 
+function getArmorModifierValue(mode: WeaponAttackMode | null): DerivedCombatValue {
+  return mode?.armorModifier ?? "—";
+}
+
 function formatModeCatalogNote(mode: WeaponAttackMode | null): string | null {
   if (!mode) {
     return null;
@@ -620,6 +626,7 @@ function buildWeaponRow(input: {
     }),
     attack1: getAttackLabel(mode1),
     crit1: mode1?.crit ?? "—",
+    armorMod1: getArmorModifierValue(mode1),
     ob2: getDerivedObValue({
       allocationInputs: input.allocationInputs,
       armorTemplate: input.armorTemplate,
@@ -635,6 +642,7 @@ function buildWeaponRow(input: {
     }),
     attack2: getAttackLabel(mode2),
     crit2: mode2?.crit ?? "—",
+    armorMod2: getArmorModifierValue(mode2),
     db: defenseValues.db,
     dm: defenseValues.dm,
     parry: defenseValues.parry,
@@ -670,10 +678,12 @@ function buildUnarmedRow(input: {
     dmb1: "Interim",
     attack1: "Strike / grapple baseline",
     crit1: "—",
+    armorMod1: "—",
     ob2: "—",
     dmb2: "—",
     attack2: "—",
     crit2: "—",
+    armorMod2: "—",
     db: defenseValues.db,
     dm: defenseValues.dm,
     parry:
