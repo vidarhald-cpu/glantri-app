@@ -24,4 +24,5 @@ export * from "./skills/calculateSpecializationLevel";
 export * from "./skills/evaluateSkillSelection";
 export * from "./skills/selectBestSkillGroupContribution";
 export * from "./stats/calculateAdjustedStats";
+export * from "./stats/characteristicGms";
 export * from "./validation/validateCharacterBuild";

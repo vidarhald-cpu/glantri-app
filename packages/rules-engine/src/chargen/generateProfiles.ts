@@ -4,6 +4,10 @@ import type {
 } from "@glantri/domain";
 
 import { glantriCharacteristicOrder } from "@glantri/domain";
+import {
+  getDexteritySizeModifier,
+  getGlantriStatModifier
+} from "../stats/characteristicGms";
 
 export interface GenerateProfilesInput {
   count?: number;
@@ -19,33 +23,6 @@ const SOCIAL_CLASS_THRESHOLDS = [
   { educationValue: 4, maxRoll: 15, result: "Håndverkere" },
   { educationValue: 6, maxRoll: 18, result: "Storbønder" },
   { educationValue: 8, maxRoll: 20, result: "Adelen" }
-] as const;
-const STAT_MODIFIER_TABLE = [
-  -5,
-  -4,
-  -4,
-  -3,
-  -3,
-  -2,
-  -2,
-  -1,
-  -1,
-  0,
-  0,
-  0,
-  1,
-  1,
-  2,
-  2,
-  3,
-  3,
-  4,
-  4,
-  5,
-  5,
-  6,
-  6,
-  7
 ] as const;
 
 function rollDie(rng: () => number, sides: number): number {
@@ -63,24 +40,6 @@ function rollBestOfTwoD20(rng: () => number): number {
 
 function rollDistractionLevel(rng: () => number): number {
   return rollDie(rng, 3) + rollDie(rng, 3);
-}
-
-function getStatModifier(value: number): number {
-  return STAT_MODIFIER_TABLE[value - 1] ?? 0;
-}
-
-function getDexteritySizeModifier(siz: number): number {
-  const sizeGm = getStatModifier(siz);
-
-  if (siz > 14) {
-    return -(sizeGm - 1);
-  }
-
-  if (siz > 9) {
-    return 0;
-  }
-
-  return -sizeGm;
 }
 
 function rollSocialClass(input: {
@@ -123,16 +82,16 @@ function generateCharacteristicBlock(rng: () => number): GlantriCharacteristicBl
   } as const;
 
   const adjusted: GlantriCharacteristicBlock = {
-    cha: raw.cha + getStatModifier(raw.com),
+    cha: raw.cha + getGlantriStatModifier(raw.com),
     com: raw.com,
     con: raw.con,
     dex: raw.dex + getDexteritySizeModifier(raw.siz),
-    health: raw.health + getStatModifier(raw.con),
+    health: raw.health + getGlantriStatModifier(raw.con),
     int: raw.int,
     lck: raw.lck,
     pow: raw.pow,
     siz: raw.siz,
-    str: raw.str + getStatModifier(raw.siz),
+    str: raw.str + getGlantriStatModifier(raw.siz),
     will: raw.will
   };
 

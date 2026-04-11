@@ -1,34 +1,66 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
-import { glantriCharacteristicLabels, glantriCharacteristicOrder } from "@glantri/domain";
-import { buildCharacterSheetSummary, buildChargenDraftView } from "@glantri/rules-engine";
+import {
+  glantriCharacteristicLabels,
+  glantriCharacteristicOrder,
+  type ProfessionDefinition,
+  type SkillDefinition
+} from "@glantri/domain";
+import { buildCharacterSheetSummary, getCharacteristicGm } from "@glantri/rules-engine";
 
-import { saveCharacterToServer } from "../../../../src/lib/api/localServiceClient";
+import {
+  getPlayerFacingSkillBucket,
+  groupRowsBySkillType
+} from "../../../../src/lib/chargen/chargenBrowse";
 import { loadLocalCharacterContext } from "../../../../src/lib/characters/loadLocalCharacterContext";
 import type { LocalCharacterRecord } from "../../../../src/lib/offline/glantriDexie";
-import {
-  LocalCharacterRepository,
-  UNNAMED_CHARACTER_PLACEHOLDER
-} from "../../../../src/lib/offline/repositories/localCharacterRepository";
+import { UNNAMED_CHARACTER_PLACEHOLDER } from "../../../../src/lib/offline/repositories/localCharacterRepository";
 
 interface CharacterDetailProps {
   id: string;
 }
 
-const localCharacterRepository = new LocalCharacterRepository();
+interface CharacterSheetSkillRow {
+  avgStats: number;
+  skillGroupXp: number;
+  skillId: string;
+  skillName: string;
+  skillType: ReturnType<typeof getPlayerFacingSkillBucket>;
+  skillXp: number;
+  stats: string;
+  totalSkillLevel: number;
+  totalXp: number;
+}
 
 function getCharacterName(record: LocalCharacterRecord): string {
   return record.build.name.trim() || UNNAMED_CHARACTER_PLACEHOLDER;
 }
 
+function sortSkills(skills: SkillDefinition[]): SkillDefinition[] {
+  return [...skills].sort((left, right) => left.sortOrder - right.sortOrder);
+}
+
+function formatSkillStats(skill: SkillDefinition): string {
+  return [...new Set(skill.linkedStats)].map((stat) => stat.toUpperCase()).join(" / ");
+}
+
+function getProfessionFamilyName(
+  content: Awaited<ReturnType<typeof loadLocalCharacterContext>>["content"],
+  profession: ProfessionDefinition | undefined
+): string | null {
+  if (!profession?.familyId) {
+    return null;
+  }
+
+  return content.professionFamilies.find((family) => family.id === profession.familyId)?.name ?? null;
+}
+
 export default function CharacterDetail({ id }: CharacterDetailProps) {
   const [loading, setLoading] = useState(true);
-  const [nameInput, setNameInput] = useState("");
   const [record, setRecord] = useState<LocalCharacterRecord>();
-  const [feedback, setFeedback] = useState<string>();
   const [contentState, setContentState] = useState<
     Awaited<ReturnType<typeof loadLocalCharacterContext>>["content"] | undefined
   >();
@@ -44,7 +76,6 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
 
         setContentState(result.content);
         setRecord(result.record);
-        setNameInput(result.record?.build.name ?? "");
       })
       .finally(() => {
         if (!cancelled) {
@@ -57,11 +88,115 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
     };
   }, [id]);
 
+  const profession = useMemo(() => {
+    if (!record || !contentState) {
+      return undefined;
+    }
+
+    return contentState.professions.find((item) => item.id === record.build.professionId);
+  }, [contentState, record]);
+
+  const sheetSummary = useMemo(() => {
+    if (!record || !contentState) {
+      return undefined;
+    }
+
+    return buildCharacterSheetSummary({
+      build: record.build,
+      content: contentState
+    });
+  }, [contentState, record]);
+
+  const profileStatRows = useMemo(() => {
+    if (!record || !sheetSummary) {
+      return [];
+    }
+
+    return glantriCharacteristicOrder.map((stat) => {
+      const originalValue = record.build.profile.rolledStats[stat];
+      const currentValue = sheetSummary.adjustedStats[stat] ?? originalValue;
+      const gmValue = getCharacteristicGm(stat, {
+        ...record.build.profile.rolledStats,
+        ...sheetSummary.adjustedStats
+      });
+
+      return {
+        currentValue,
+        gmValue,
+        label: glantriCharacteristicLabels[stat],
+        stat,
+        originalValue
+      };
+    });
+  }, [record, sheetSummary]);
+
+  const groupedSkillRows = useMemo(() => {
+    if (!contentState || !sheetSummary) {
+      return [];
+    }
+
+    const rows = sortSkills(contentState.skills)
+      .map((skill) => {
+        const skillView = sheetSummary.draftView.skills.find((item) => item.skillId === skill.id);
+        if (!skillView) {
+          return null;
+        }
+
+        const totalXp = skillView.groupLevel + skillView.specificSkillLevel;
+        if (totalXp <= 0) {
+          return null;
+        }
+
+        return {
+          avgStats: skillView.linkedStatAverage,
+          skillGroupXp: skillView.groupLevel,
+          skillId: skill.id,
+          skillName: skill.name,
+          skillType: getPlayerFacingSkillBucket(skill),
+          skillXp: skillView.specificSkillLevel,
+          stats: formatSkillStats(skill),
+          totalSkillLevel: skillView.totalSkill,
+          totalXp
+        } satisfies CharacterSheetSkillRow;
+      })
+      .filter((row): row is CharacterSheetSkillRow => row !== null);
+
+    return groupRowsBySkillType(rows);
+  }, [contentState, sheetSummary]);
+
+  const skillGroupRows = useMemo(() => {
+    if (!contentState || !sheetSummary) {
+      return [];
+    }
+
+    return [...contentState.skillGroups]
+      .sort((left, right) => left.sortOrder - right.sortOrder)
+      .map((group) => {
+        const groupView = sheetSummary.draftView.groups.find((item) => item.groupId === group.id);
+        if (!groupView || groupView.groupLevel <= 0) {
+          return null;
+        }
+
+        return {
+          groupLevel: groupView.groupLevel,
+          name: group.name
+        };
+      })
+      .filter(
+        (
+          group
+        ): group is {
+          groupLevel: number;
+          name: string;
+        } => group !== null
+      );
+  }, [contentState, sheetSummary]);
+
   if (loading) {
-    return <section>Loading character...</section>;
+    return <section>Loading character sheet...</section>;
   }
 
-  if (!record || !contentState) {
+  if (!record || !contentState || !sheetSummary) {
     return (
       <section style={{ display: "grid", gap: "1rem", maxWidth: 720 }}>
         <h1 style={{ margin: 0 }}>Character not found</h1>
@@ -70,74 +205,21 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
     );
   }
 
-  const profession = contentState.professions.find(
-    (item) => item.id === record.build.professionId
-  );
   const hasPersistedServerCharacter = record.syncStatus === "synced";
-  const detailView = buildChargenDraftView({
-    content: contentState,
-    professionId: record.build.professionId,
-    profile: record.build.profile,
-    progression: record.build.progression,
-    societyId: record.build.societyId,
-    societyLevel: record.build.societyLevel
-  });
-  const sheetSummary = buildCharacterSheetSummary({
-    build: record.build,
-    content: contentState
-  });
-
-  async function handleSaveName() {
-    if (!record) {
-      setFeedback("Character could not be updated.");
-      return;
-    }
-
-    const updated = await localCharacterRepository.updateName(record.id, nameInput);
-
-    if (!updated) {
-      setFeedback("Character could not be updated.");
-      return;
-    }
-
-    setRecord(updated);
-    setNameInput(updated.build.name);
-    setFeedback("Character name saved locally.");
-  }
-
-  async function handleSaveToServer() {
-    if (!record) {
-      setFeedback("Character could not be saved to the server.");
-      return;
-    }
-
-    try {
-      const serverRecord = await saveCharacterToServer({
-        ...record.build,
-        name: nameInput.trim() || record.build.name
-      });
-
-      const syncedRecord = await localCharacterRepository.save({
-        build: serverRecord.build,
-        createdAt: serverRecord.createdAt,
-        finalizedAt: record.finalizedAt,
-        syncStatus: "synced",
-        updatedAt: serverRecord.updatedAt
-      });
-
-      setRecord(syncedRecord);
-      setNameInput(syncedRecord.build.name);
-      setFeedback("Character saved to the local service and database.");
-    } catch (error) {
-      setFeedback(error instanceof Error ? error.message : "Character could not be saved to the server.");
-    }
-  }
+  const professionFamilyName = getProfessionFamilyName(contentState, profession);
+  const socialClassLabel =
+    record.build.socialClass ?? record.build.profile.socialClassResult ?? "Not set";
+  const socialClassNumber = record.build.profile.socialClassRoll;
+  const socialClassSummary =
+    socialClassNumber !== undefined ? `${socialClassLabel} (${socialClassNumber})` : socialClassLabel;
+  const spentSkillPoints = sheetSummary.totalSkillPointsInvested;
+  const remainingSkillPoints =
+    sheetSummary.draftView.primaryPoolAvailable + sheetSummary.draftView.secondaryPoolAvailable;
 
   return (
-    <section style={{ display: "grid", gap: "1rem", maxWidth: 900 }}>
+    <section style={{ display: "grid", gap: "1rem", maxWidth: 1180 }}>
       <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
         <Link href="/characters">Back to characters</Link>
-        <Link href={`/characters/${record.id}/sheet`}>Character sheet</Link>
         {hasPersistedServerCharacter ? (
           <Link href={`/characters/${record.id}/equipment`}>Equipment</Link>
         ) : null}
@@ -149,150 +231,112 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
       </div>
 
       <div>
-        <h1 style={{ marginBottom: "0.5rem" }}>{getCharacterName(record)}</h1>
-        <p style={{ margin: 0 }}>Finalized local character record stored in IndexedDB.</p>
+        <h1 style={{ margin: 0 }}>Character Sheet — {getCharacterName(record)}</h1>
       </div>
 
       <section
         style={{
-          background: "#f6f5ef",
-          border: "1px solid #d9ddd8",
-          borderRadius: 12,
-          display: "grid",
-          gap: "0.75rem",
-          padding: "1rem"
-        }}
-      >
-        <h2 style={{ margin: 0 }}>Name</h2>
-        <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
-          <input
-            onChange={(event) => setNameInput(event.target.value)}
-            style={{ minWidth: 260, padding: "0.5rem" }}
-            type="text"
-            value={nameInput}
-          />
-          <button onClick={() => void handleSaveName()} type="button">
-            Save name
-          </button>
-          <button onClick={() => void handleSaveToServer()} type="button">
-            Save to server
-          </button>
-        </div>
-        {feedback ? <div>{feedback}</div> : null}
-        <div>Storage status: {record.syncStatus}</div>
-        {!hasPersistedServerCharacter ? (
-          <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
-            Save this character to the server before opening persisted Equipment or Loadout.
-          </div>
-        ) : null}
-      </section>
-
-      <section style={{ display: "grid", gap: "0.75rem" }}>
-        <h2 style={{ margin: 0 }}>Profile summary</h2>
-        <div>Profile: {record.build.profile.label}</div>
-        <div
-          style={{
-            display: "grid",
-            gap: "0.5rem",
-            gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))"
-          }}
-        >
-          {glantriCharacteristicOrder.map((stat) => (
-            <div
-              key={stat}
-              style={{ border: "1px solid #d9ddd8", borderRadius: 10, padding: "0.75rem" }}
-            >
-              <div style={{ fontSize: "0.85rem" }}>{glantriCharacteristicLabels[stat]}</div>
-              <strong>{record.build.profile.rolledStats[stat]}</strong>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section
-        style={{
-          background: "#fbfaf5",
-          border: "1px solid #d9ddd8",
-          borderRadius: 12,
-          display: "grid",
-          gap: "0.5rem",
-          padding: "1rem"
-        }}
-      >
-        <h2 style={{ margin: 0 }}>Identity</h2>
-        <div>Society: {record.build.societyLevel ?? "Not set"}</div>
-        <div>Social class: {record.build.socialClass ?? "Not set"}</div>
-        <div>Profession: {profession?.name ?? record.build.professionId ?? "Not set"}</div>
-      </section>
-
-      <section
-        style={{
-          background: "#fbfaf5",
-          border: "1px solid #d9ddd8",
-          borderRadius: 12,
-          display: "grid",
-          gap: "0.5rem",
-          padding: "1rem"
-        }}
-      >
-        <h2 style={{ margin: 0 }}>Equipment</h2>
-        <div>{sheetSummary.equipment.readinessLabel}</div>
-        <div>
-          Equipped weapons:{" "}
-          {sheetSummary.equipment.equippedWeapons.length > 0
-            ? sheetSummary.equipment.equippedWeapons.map((item) => item.name).join(", ")
-            : "None"}
-        </div>
-        <div>
-          Equipped shields:{" "}
-          {sheetSummary.equipment.equippedShields.length > 0
-            ? sheetSummary.equipment.equippedShields.map((item) => item.name).join(", ")
-            : "None"}
-        </div>
-        <div>Armor: {sheetSummary.equipment.armorSummary}</div>
-        <div>Carried items: {sheetSummary.equipment.carriedItems.length}</div>
-      </section>
-
-      <section
-        style={{
-          background: "#fbfaf5",
-          border: "1px solid #d9ddd8",
-          borderRadius: 12,
-          display: "grid",
-          gap: "0.5rem",
-          padding: "1rem"
-        }}
-      >
-        <h2 style={{ margin: 0 }}>Education</h2>
-        <div>Base education: {detailView.education.baseEducation}</div>
-        <div>Social class education value: {detailView.education.socialClassEducationValue}</div>
-        <div>GM_int: {detailView.education.gmInt}</div>
-        <div>Theoretical skill count: {detailView.education.theoreticalSkillCount}</div>
-        <div>Total skill points invested: {detailView.totalSkillPointsInvested}</div>
-      </section>
-
-      <section
-        style={{
-          background: "#fbfaf5",
-          border: "1px solid #d9ddd8",
-          borderRadius: 12,
           display: "grid",
           gap: "1rem",
-          padding: "1rem"
+          gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))"
         }}
       >
-        <h2 style={{ margin: 0 }}>Groups</h2>
-        {detailView.groups.length > 0 ? (
-          detailView.groups.map((group) => (
-            <div key={group.groupId} style={{ borderTop: "1px solid #e7e2d7", paddingTop: "0.75rem" }}>
-              <strong>{group.name}</strong>
-              <div>Primary ranks: {group.primaryRanks}</div>
-              <div>Group level: {group.groupLevel}</div>
+        <section
+          style={{
+            background: "#fbfaf5",
+            border: "1px solid #d9ddd8",
+            borderRadius: 12,
+            overflowX: "auto",
+            padding: "1rem"
+          }}
+        >
+          <h2 style={{ margin: "0 0 0.75rem 0" }}>Profile Stats</h2>
+          <table style={{ borderCollapse: "collapse", width: "100%" }}>
+            <thead>
+              <tr style={{ borderBottom: "1px solid #d9ddd8", textAlign: "left" }}>
+                <th style={{ padding: "0.5rem 0.75rem 0.5rem 0" }}>Stat</th>
+                <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Original</th>
+                <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Current</th>
+                <th style={{ padding: "0.5rem 0", textAlign: "right" }}>GM</th>
+              </tr>
+            </thead>
+            <tbody>
+              {profileStatRows.map((row) => (
+                <tr key={row.stat} style={{ borderBottom: "1px solid #eee8dc" }}>
+                  <td style={{ padding: "0.6rem 0.75rem 0.6rem 0" }}>{row.label}</td>
+                  <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>{row.originalValue}</td>
+                  <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>{row.currentValue}</td>
+                  <td style={{ padding: "0.6rem 0", textAlign: "right" }}>
+                    {row.gmValue === null ? "—" : row.gmValue}
+                  </td>
+                </tr>
+              ))}
+              <tr style={{ borderBottom: "1px solid #eee8dc" }}>
+                <td style={{ padding: "0.6rem 0.75rem 0.6rem 0" }}>Distraction</td>
+                <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>
+                  {sheetSummary.distractionLevel}
+                </td>
+                <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>
+                  {sheetSummary.distractionLevel}
+                </td>
+                <td style={{ padding: "0.6rem 0", textAlign: "right" }}>—</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section
+          style={{
+            background: "#f6f5ef",
+            border: "1px solid #d9ddd8",
+            borderRadius: 12,
+            padding: "1rem"
+          }}
+        >
+          <h2 style={{ margin: "0 0 0.75rem 0" }}>Summary</h2>
+          <div
+            style={{
+              alignItems: "start",
+              columnGap: "1rem",
+              display: "grid",
+              gridTemplateColumns: "minmax(120px, auto) minmax(0, 1fr)",
+              rowGap: "0.6rem"
+            }}
+          >
+            <strong>Name</strong>
+            <div>{getCharacterName(record)}</div>
+
+            <strong>Society</strong>
+            <div>{sheetSummary.societyLabel ?? "Not set"}</div>
+
+            <strong>Social class</strong>
+            <div>{socialClassSummary}</div>
+
+            <strong>Profession</strong>
+            <div>
+              {sheetSummary.professionName ?? record.build.professionId ?? "Not set"}
+              {professionFamilyName ? `, ${professionFamilyName}` : ""}
             </div>
-          ))
-        ) : (
-          <div>No groups recorded.</div>
-        )}
+
+            <strong>Skill points</strong>
+            <div>
+              {spentSkillPoints} spent / {remainingSkillPoints} remaining
+            </div>
+
+            <strong>Skill groups</strong>
+            <div style={{ display: "grid", gap: "0.2rem" }}>
+              {skillGroupRows.length > 0 ? (
+                skillGroupRows.map((group) => (
+                  <div key={group.name}>
+                    {group.name} (Level {group.groupLevel})
+                  </div>
+                ))
+              ) : (
+                <div>No skill groups recorded.</div>
+              )}
+            </div>
+          </div>
+        </section>
       </section>
 
       <section
@@ -306,50 +350,76 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
         }}
       >
         <h2 style={{ margin: 0 }}>Skills</h2>
-        {detailView.skills.length > 0 ? (
-          detailView.skills.map((skill) => (
-            <div key={skill.skillId} style={{ borderTop: "1px solid #e7e2d7", paddingTop: "0.75rem" }}>
-              <strong>{skill.name}</strong>
-              <div>Category: {skill.category}</div>
-              <div>Group level: {skill.groupLevel}</div>
-              <div>Specific skill level: {skill.specificSkillLevel}</div>
-              <div>Effective skill number: {skill.effectiveSkillNumber}</div>
-              <div>Linked stat average: {skill.linkedStatAverage}</div>
-              <div>Total skill: {skill.totalSkill}</div>
-            </div>
-          ))
-        ) : (
-          <div>No skills recorded.</div>
-        )}
-      </section>
+        {groupedSkillRows.length > 0 ? (
+          <div style={{ display: "grid", gap: "1rem" }}>
+            {groupedSkillRows.map((group) => (
+              <section
+                key={group.bucketId}
+                style={{ border: "1px solid #e7e2d7", borderRadius: 10, overflowX: "auto" }}
+              >
+                <div
+                  style={{
+                    alignItems: "center",
+                    background: "#f6f5ef",
+                    borderBottom: "1px solid #e7e2d7",
+                    display: "flex",
+                    gap: "0.5rem",
+                    justifyContent: "space-between",
+                    padding: "0.75rem 1rem"
+                  }}
+                >
+                  <strong>{group.label}</strong>
+                  <span style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
+                    {group.rows.length} skill{group.rows.length === 1 ? "" : "s"}
+                  </span>
+                </div>
+                <div
+                  style={{
+                    borderBottom: "1px solid #e7e2d7",
+                    color: "#5e5a50",
+                    display: "grid",
+                    fontSize: "0.8rem",
+                    gap: "0.75rem",
+                    gridTemplateColumns:
+                      "minmax(180px, 2fr) minmax(120px, 1.2fr) repeat(5, minmax(72px, 88px))",
+                    padding: "0.75rem 1rem"
+                  }}
+                >
+                  <strong>Skill</strong>
+                  <strong>Stats</strong>
+                  <strong>Avg stats</strong>
+                  <strong>Skill group XP</strong>
+                  <strong>Skill XP</strong>
+                  <strong>Total XP</strong>
+                  <strong>Total skill level</strong>
+                </div>
 
-      <section
-        style={{
-          background: "#fbfaf5",
-          border: "1px solid #d9ddd8",
-          borderRadius: 12,
-          display: "grid",
-          gap: "1rem",
-          padding: "1rem"
-        }}
-      >
-        <h2 style={{ margin: 0 }}>Specializations</h2>
-        {detailView.specializations.length > 0 ? (
-          detailView.specializations.map((specialization) => (
-            <div
-              key={specialization.specializationId}
-              style={{ borderTop: "1px solid #e7e2d7", paddingTop: "0.75rem" }}
-            >
-              <strong>{specialization.name}</strong>
-              <div>Parent skill: {specialization.parentSkillName}</div>
-              <div>Specialization level: {specialization.specializationLevel}</div>
-              <div>
-                Effective specialization number: {specialization.effectiveSpecializationNumber}
-              </div>
-            </div>
-          ))
+                {group.rows.map((skill) => (
+                  <div
+                    key={skill.skillId}
+                    style={{
+                      borderTop: "1px solid #f0eadf",
+                      display: "grid",
+                      gap: "0.75rem",
+                      gridTemplateColumns:
+                        "minmax(180px, 2fr) minmax(120px, 1.2fr) repeat(5, minmax(72px, 88px))",
+                      padding: "0.75rem 1rem"
+                    }}
+                  >
+                    <div>{skill.skillName}</div>
+                    <div>{skill.stats}</div>
+                    <div>{skill.avgStats}</div>
+                    <div>{skill.skillGroupXp}</div>
+                    <div>{skill.skillXp}</div>
+                    <div>{skill.totalXp}</div>
+                    <div>{skill.totalSkillLevel}</div>
+                  </div>
+                ))}
+              </section>
+            ))}
+          </div>
         ) : (
-          <div>No specializations recorded.</div>
+          <div>No current skills recorded.</div>
         )}
       </section>
     </section>
