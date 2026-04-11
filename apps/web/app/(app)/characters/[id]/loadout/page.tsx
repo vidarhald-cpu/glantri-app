@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useEffect, useMemo, useState } from "react";
+import { use, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { EncounterDefensePosture } from "@glantri/domain";
 import { getAccessTier, isWithYouLocation, type CarryMode } from "@glantri/domain/equipment";
 import { buildCharacterSheetSummary } from "@glantri/rules-engine";
@@ -39,6 +39,10 @@ interface CharacterLoadoutPageProps {
   }>;
 }
 
+function getCharacterName(name: string | undefined): string {
+  return name?.trim() || "Unnamed character";
+}
+
 function getItemName(input: {
   displayName?: string | null;
   templateId?: string;
@@ -51,21 +55,24 @@ function getItemName(input: {
   return input.displayName ?? input.templateName ?? "Unknown item";
 }
 
-function SummaryCard(input: { label: string; value: string | number }) {
+function ControlSection(input: {
+  children: ReactNode;
+  title: string;
+}) {
   return (
-    <div
+    <section
       style={{
-        background: "#f6f5ef",
+        background: "#fbfaf5",
         border: "1px solid #d9ddd8",
         borderRadius: 12,
         display: "grid",
-        gap: "0.35rem",
+        gap: "0.9rem",
         padding: "1rem"
       }}
     >
-      <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>{input.label}</div>
-      <strong>{input.value}</strong>
-    </div>
+      <h2 style={{ margin: 0 }}>{input.title}</h2>
+      {input.children}
+    </section>
   );
 }
 
@@ -108,29 +115,50 @@ function WeaponControl(input: {
   );
 }
 
-function NumberControl(input: {
+function ParryAllocationControl(input: {
+  allocationValue: number;
   label: string;
-  onChange: (value: number) => void;
-  value: number;
+  onAllocationChange: (value: number) => void;
+  onSourceChange: (value: string | null) => void;
+  options: Array<{ id: string; label: string }>;
+  sourceValue: string;
 }) {
   return (
-    <label
+    <div
       style={{
         background: "#f6f5ef",
         border: "1px solid #d9ddd8",
         borderRadius: 12,
         display: "grid",
-        gap: "0.35rem",
+        gap: "0.75rem",
         padding: "1rem"
       }}
     >
-      <span>{input.label}</span>
-      <input
-        onChange={(event) => input.onChange(Number(event.target.value) || 0)}
-        type="number"
-        value={input.value}
-      />
-    </label>
+      <div>{input.label}</div>
+      <label style={{ display: "grid", gap: "0.35rem" }}>
+        <span style={{ color: "#5e5a50", fontSize: "0.9rem" }}>Source</span>
+        <select
+          onChange={(event) =>
+            input.onSourceChange(event.target.value.length > 0 ? event.target.value : null)
+          }
+          value={input.sourceValue}
+        >
+          {input.options.map((option) => (
+            <option key={option.id} value={option.id}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label style={{ display: "grid", gap: "0.35rem" }}>
+        <span style={{ color: "#5e5a50", fontSize: "0.9rem" }}>Allocated OB</span>
+        <input
+          onChange={(event) => input.onAllocationChange(Number(event.target.value) || 0)}
+          type="number"
+          value={input.allocationValue}
+        />
+      </label>
+    </div>
   );
 }
 
@@ -141,6 +169,13 @@ const defensePostureOptions: Array<{ label: string; value: EncounterDefensePostu
   { label: "Shield defense", value: "shield" },
   { label: "Full defense", value: "full-defense" },
 ];
+
+const combatActionOptions = [
+  { label: "None", value: "none" },
+  { label: "Attack", value: "attack" },
+  { label: "Move", value: "move" },
+  { label: "Hold", value: "hold" },
+] as const;
 
 function getParrySourceOptions(loadout: ReturnType<typeof getLoadoutEquipment>): Array<{
   label: string;
@@ -202,6 +237,7 @@ export default function CharacterLoadoutPage({ params }: CharacterLoadoutPagePro
   const [combatAllocationInputs, setCombatAllocationInputs] = useState<CombatAllocationState>(
     defaultCombatAllocationState
   );
+  const [combatAction, setCombatAction] = useState<(typeof combatActionOptions)[number]["value"]>("none");
   const [errors, setErrors] = useState<
     Record<"armor" | "primary" | "secondary" | "missile" | "shield", string | undefined>
   >({
@@ -349,13 +385,12 @@ export default function CharacterLoadoutPage({ params }: CharacterLoadoutPagePro
     }
   }
 
+  const characterName = getCharacterName(characterContext?.record?.build.name);
+
   return (
     <section style={{ display: "grid", gap: "1rem", maxWidth: 900 }}>
       <div style={{ display: "grid", gap: "0.35rem" }}>
-        <h1 style={{ margin: 0 }}>Equip items</h1>
-        <div style={{ color: "#5e5a50" }}>
-          Active carry snapshot for character <code>{id}</code>.
-        </div>
+        <h1 style={{ margin: 0 }}>Equip items - {characterName}</h1>
       </div>
 
       {loading ? (
@@ -386,270 +421,123 @@ export default function CharacterLoadoutPage({ params }: CharacterLoadoutPagePro
       ) : null}
 
       {!loading && !pageError ? (
-        <div
-          style={{
-            display: "grid",
-            gap: "0.75rem",
-            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))"
-          }}
-        >
-          <WeaponControl
-            error={errors.armor}
-            label="Worn armor"
-            onChange={(itemId) => void applySelection({ itemId, kind: "armor" })}
-            options={armorOptions}
-            value={"armor" in loadout ? loadout.armor?.id ?? "" : ""}
-          />
-          <WeaponControl
-            error={errors.shield}
-            label="Ready shield"
-            onChange={(itemId) => void applySelection({ itemId, kind: "shield" })}
-            options={shieldOptions}
-            value={"shield" in loadout ? loadout.shield?.id ?? "" : ""}
-          />
-          <WeaponControl
-            error={errors.primary}
-            label="Active primary weapon"
-            onChange={(itemId) => void applySelection({ itemId, kind: "primary" })}
-            options={weaponOptions}
-            value={"primary" in loadout ? loadout.primary?.id ?? "" : ""}
-          />
-          <WeaponControl
-            error={errors.secondary}
-            label="Active secondary weapon"
-            onChange={(itemId) => void applySelection({ itemId, kind: "secondary" })}
-            options={weaponOptions}
-            value={"secondary" in loadout ? loadout.secondary?.id ?? "" : ""}
-          />
-          <WeaponControl
-            error={errors.missile}
-            label="Active missile weapon"
-            onChange={(itemId) => void applySelection({ itemId, kind: "missile" })}
-            options={weaponOptions}
-            value={"missile" in loadout ? loadout.missile?.id ?? "" : ""}
-          />
-        </div>
+        <ControlSection title="Equipment choices">
+          <div
+            style={{
+              display: "grid",
+              gap: "0.75rem",
+              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))"
+            }}
+          >
+            <WeaponControl
+              error={errors.primary}
+              label="Primary weapon"
+              onChange={(itemId) => void applySelection({ itemId, kind: "primary" })}
+              options={weaponOptions}
+              value={"primary" in loadout ? loadout.primary?.id ?? "" : ""}
+            />
+            <WeaponControl
+              error={errors.shield}
+              label="Shield"
+              onChange={(itemId) => void applySelection({ itemId, kind: "shield" })}
+              options={shieldOptions}
+              value={"shield" in loadout ? loadout.shield?.id ?? "" : ""}
+            />
+            <WeaponControl
+              error={errors.armor}
+              label="Armor"
+              onChange={(itemId) => void applySelection({ itemId, kind: "armor" })}
+              options={armorOptions}
+              value={"armor" in loadout ? loadout.armor?.id ?? "" : ""}
+            />
+            <WeaponControl
+              error={errors.secondary}
+              label="Second hand weapon"
+              onChange={(itemId) => void applySelection({ itemId, kind: "secondary" })}
+              options={weaponOptions}
+              value={"secondary" in loadout ? loadout.secondary?.id ?? "" : ""}
+            />
+            <WeaponControl
+              error={errors.missile}
+              label="Missile weapon"
+              onChange={(itemId) => void applySelection({ itemId, kind: "missile" })}
+              options={weaponOptions}
+              value={"missile" in loadout ? loadout.missile?.id ?? "" : ""}
+            />
+          </div>
+        </ControlSection>
       ) : null}
 
       {!loading && !pageError ? (
-        <div
-          style={{
-            display: "grid",
-            gap: "0.75rem",
-            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))"
-          }}
-        >
-          <WeaponControl
-            label="Defense posture"
-            onChange={(value) =>
-              setCombatAllocationInputs((current) => ({
-                ...current,
-                defensePosture: (value ?? "none") as EncounterDefensePosture,
-              }))
-            }
-            options={defensePostureOptions.map((option) => ({
-              id: option.value,
-              label: option.label,
-            }))}
-            value={combatAllocationInputs.defensePosture}
-          />
-          <WeaponControl
-            label="Parry source"
-            onChange={(value) =>
-              setCombatAllocationInputs((current) => ({
-                ...current,
-                parry: {
-                  ...current.parry,
-                  source: (value ?? "none") as CombatParrySource,
-                },
-              }))
-            }
-            options={parrySourceOptions.map((option) => ({
-              id: option.value,
-              label: option.label,
-            }))}
-            value={combatAllocationInputs.parry.source}
-          />
-          <NumberControl
-            label="Parry allocation"
-            onChange={(value) =>
-              setCombatAllocationInputs((current) => ({
-                ...current,
-                parry: {
-                  ...current.parry,
-                  allocatedOb: value,
-                },
-              }))
-            }
-            value={combatAllocationInputs.parry.allocatedOb ?? 0}
-          />
-          <NumberControl
-            label="Attack modifier"
-            onChange={(value) =>
-              setCombatAllocationInputs((current) => ({
-                ...current,
-                situationalModifiers: {
-                  ...current.situationalModifiers,
-                  attack: value,
-                },
-              }))
-            }
-            value={combatAllocationInputs.situationalModifiers.attack}
-          />
-          <NumberControl
-            label="Defense modifier"
-            onChange={(value) =>
-              setCombatAllocationInputs((current) => ({
-                ...current,
-                situationalModifiers: {
-                  ...current.situationalModifiers,
-                  defense: value,
-                },
-              }))
-            }
-            value={combatAllocationInputs.situationalModifiers.defense}
-          />
-          <NumberControl
-            label="Movement modifier"
-            onChange={(value) =>
-              setCombatAllocationInputs((current) => ({
-                ...current,
-                situationalModifiers: {
-                  ...current.situationalModifiers,
-                  movement: value,
-                },
-              }))
-            }
-            value={combatAllocationInputs.situationalModifiers.movement}
-          />
-          <NumberControl
-            label="Perception modifier"
-            onChange={(value) =>
-              setCombatAllocationInputs((current) => ({
-                ...current,
-                situationalModifiers: {
-                  ...current.situationalModifiers,
-                  perception: value,
-                },
-              }))
-            }
-            value={combatAllocationInputs.situationalModifiers.perception}
-          />
-        </div>
-      ) : null}
-
-      {!loading && !pageError ? (
-        <div
-          style={{
-            display: "grid",
-            gap: "0.75rem",
-            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))"
-          }}
-        >
-          <SummaryCard
-            label="Worn armor"
-            value={getItemName({
-              displayName: "armor" in loadout ? loadout.armor?.displayName : undefined,
-              templateId: "armor" in loadout ? loadout.armor?.templateId : undefined,
-              templateName:
-                state && "armor" in loadout && loadout.armor
-                  ? getEquipmentTemplateById(state, loadout.armor.templateId)?.name
-                  : undefined,
-            })}
-          />
-          <SummaryCard
-            label="Ready shield"
-            value={getItemName({
-              displayName: "shield" in loadout ? loadout.shield?.displayName : undefined,
-              templateId: "shield" in loadout ? loadout.shield?.templateId : undefined,
-              templateName:
-                state && "shield" in loadout && loadout.shield
-                  ? getEquipmentTemplateById(state, loadout.shield.templateId)?.name
-                  : undefined,
-            })}
-          />
-          <SummaryCard
-            label="Active primary weapon"
-            value={getItemName({
-              displayName: "primary" in loadout ? loadout.primary?.displayName : undefined,
-              templateId: "primary" in loadout ? loadout.primary?.templateId : undefined,
-              templateName:
-                state && "primary" in loadout && loadout.primary
-                  ? getEquipmentTemplateById(state, loadout.primary.templateId)?.name
-                  : undefined,
-            })}
-          />
-          <SummaryCard
-            label="Active secondary weapon"
-            value={getItemName({
-              displayName: "secondary" in loadout ? loadout.secondary?.displayName : undefined,
-              templateId: "secondary" in loadout ? loadout.secondary?.templateId : undefined,
-              templateName:
-                state && "secondary" in loadout && loadout.secondary
-                  ? getEquipmentTemplateById(state, loadout.secondary.templateId)?.name
-                  : undefined,
-            })}
-          />
-          <SummaryCard
-            label="Active missile weapon"
-            value={getItemName({
-              displayName: "missile" in loadout ? loadout.missile?.displayName : undefined,
-              templateId: "missile" in loadout ? loadout.missile?.templateId : undefined,
-              templateName:
-                state && "missile" in loadout && loadout.missile
-                  ? getEquipmentTemplateById(state, loadout.missile.templateId)?.name
-                  : undefined,
-            })}
-          />
-          <SummaryCard
-            label="Personal encumbrance total"
-            value={combatStatePanelModel?.capabilityRows.find((row) => row.label === "Personal encumbrance")?.value ?? 0}
-          />
-          <SummaryCard
-            label="Mount encumbrance total"
-            value={combatStatePanelModel?.capabilityRows.find((row) => row.label === "Mount encumbrance")?.value ?? 0}
-          />
-          <SummaryCard
-            label="Gear item count"
-            value={combatStatePanelModel?.capabilityRows.find((row) => row.label === "Gear item count")?.value ?? 0}
-          />
-          <SummaryCard
-            label="Encounter-accessible gear"
-            value={combatStatePanelModel?.capabilityRows.find((row) => row.label === "Encounter-accessible gear")?.value ?? 0}
-          />
-          <SummaryCard
-            label="Valuables item count"
-            value={combatStatePanelModel?.capabilityRows.find((row) => row.label === "Valuables item count")?.value ?? 0}
-          />
-          <SummaryCard
-            label="Encounter-accessible valuables"
-            value={combatStatePanelModel?.capabilityRows.find((row) => row.label === "Encounter-accessible valuables")?.value ?? 0}
-          />
-          <SummaryCard
-            label="Carried coin quantity"
-            value={combatStatePanelModel?.capabilityRows.find((row) => row.label === "Carried coin quantity")?.value ?? 0}
-          />
-          <SummaryCard
-            label="Backpack item count"
-            value={combatStatePanelModel?.capabilityRows.find((row) => row.label === "Backpack items")?.value ?? 0}
-          />
-          <SummaryCard
-            label="Stored item count"
-            value={combatStatePanelModel?.capabilityRows.find((row) => row.label === "Stored elsewhere")?.value ?? 0}
-          />
-          <SummaryCard
-            label="With-you item count"
-            value={combatStatePanelModel?.capabilityRows.find((row) => row.label === "With-you items")?.value ?? 0}
-          />
-        </div>
+        <ControlSection title="Combat actions">
+          <div
+            style={{
+              display: "grid",
+              gap: "0.75rem",
+              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))"
+            }}
+          >
+            <WeaponControl
+              label="Defence posture"
+              onChange={(value) =>
+                setCombatAllocationInputs((current) => ({
+                  ...current,
+                  defensePosture: (value ?? "none") as EncounterDefensePosture,
+                }))
+              }
+              options={defensePostureOptions.map((option) => ({
+                id: option.value,
+                label: option.label,
+              }))}
+              value={combatAllocationInputs.defensePosture}
+            />
+            <ParryAllocationControl
+              allocationValue={combatAllocationInputs.parry.allocatedOb ?? 0}
+              label="Parry allocation"
+              onAllocationChange={(value) =>
+                setCombatAllocationInputs((current) => ({
+                  ...current,
+                  parry: {
+                    ...current.parry,
+                    allocatedOb: value,
+                  },
+                }))
+              }
+              onSourceChange={(value) =>
+                setCombatAllocationInputs((current) => ({
+                  ...current,
+                  parry: {
+                    ...current.parry,
+                    source: (value ?? "none") as CombatParrySource,
+                  },
+                }))
+              }
+              options={parrySourceOptions.map((option) => ({
+                id: option.value,
+                label: option.label,
+              }))}
+              sourceValue={combatAllocationInputs.parry.source}
+            />
+            <WeaponControl
+              label="Combat action"
+              onChange={(value) => setCombatAction((value ?? "none") as (typeof combatActionOptions)[number]["value"])}
+              options={combatActionOptions.map((option) => ({
+                id: option.value,
+                label: option.label,
+              }))}
+              value={combatAction}
+            />
+          </div>
+        </ControlSection>
       ) : null}
 
       {!loading && !pageError ? (
         <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
           Loadout options are drawn from items currently with you. Choosing a different item swaps
           it into active use and stows the previous one back into the source location when
-          possible. Combat posture and situational controls on this page are temporary live inputs
-          for derivation only and are not yet persisted.
+          possible. Combat posture and parry inputs on this page are temporary live inputs for
+          derivation only and are not yet persisted. Combat action is currently a UI placeholder
+          and does not drive combat behavior yet.
         </div>
       ) : null}
 
