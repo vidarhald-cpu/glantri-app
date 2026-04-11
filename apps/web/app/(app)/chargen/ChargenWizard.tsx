@@ -54,7 +54,10 @@ import {
   type ProfessionBrowseItem,
   type SkillVisibilityFilter
 } from "../../../src/lib/chargen/chargenBrowse";
-import { getCurrentSessionUser } from "../../../src/lib/api/localServiceClient";
+import {
+  getCurrentSessionUser,
+  saveCharacterToServer
+} from "../../../src/lib/api/localServiceClient";
 import { ChargenSessionRepository } from "../../../src/lib/offline/repositories/chargenSessionRepository";
 import { ContentCacheRepository } from "../../../src/lib/offline/repositories/contentCacheRepository";
 import { LocalCharacterRepository } from "../../../src/lib/offline/repositories/localCharacterRepository";
@@ -518,6 +521,7 @@ export default function ChargenWizard() {
   const [characterName, setCharacterName] = useState("");
   const [content, setContent] = useState<CanonicalContent>(defaultCanonicalContent);
   const [currentUser, setCurrentUser] = useState<AuthUser | null>();
+  const [isFinalizing, setIsFinalizing] = useState(false);
   const [feedback, setFeedback] = useState<string[]>([]);
   const [hasStartedChargen, setHasStartedChargen] = useState(false);
   const [hydrated, setHydrated] = useState(false);
@@ -1500,6 +1504,10 @@ export default function ChargenWizard() {
       return;
     }
 
+    if (isFinalizing) {
+      return;
+    }
+
     const result = finalizeChargenDraft({
       content,
       name: characterName,
@@ -1516,14 +1524,48 @@ export default function ChargenWizard() {
       return;
     }
 
-    await localCharacterRepository.save({
-      build: result.build,
-      creatorDisplayName: currentUser?.displayName,
-      creatorEmail: currentUser?.email,
-      creatorId: currentUser?.id
-    });
-    await chargenSessionRepository.delete(SESSION_ID);
-    router.push("/characters");
+    const finalizedBuild = result.build;
+    setIsFinalizing(true);
+
+    try {
+      const existingRecord = await localCharacterRepository.get(finalizedBuild.id);
+
+      if (existingRecord?.syncStatus === "synced") {
+        await chargenSessionRepository.delete(SESSION_ID);
+        router.push(`/characters/${existingRecord.id}`);
+        return;
+      }
+
+      let finalizedRecord;
+
+      if (currentUser) {
+        const serverRecord = await saveCharacterToServer(finalizedBuild);
+
+        finalizedRecord = await localCharacterRepository.save({
+          build: serverRecord.build,
+          createdAt: serverRecord.createdAt,
+          creatorDisplayName: currentUser.displayName,
+          creatorEmail: currentUser.email,
+          creatorId: currentUser.id,
+          finalizedAt: serverRecord.createdAt,
+          syncStatus: "synced",
+          updatedAt: serverRecord.updatedAt
+        });
+      } else {
+        finalizedRecord = await localCharacterRepository.save({
+          build: finalizedBuild
+        });
+      }
+
+      await chargenSessionRepository.delete(SESSION_ID);
+      router.push(`/characters/${finalizedRecord.id}`);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Unable to finalize and save the character.";
+      setFeedback([message]);
+    } finally {
+      setIsFinalizing(false);
+    }
   }
 
   return (
@@ -2981,7 +3023,7 @@ export default function ChargenWizard() {
             <strong>Creator attribution</strong>
             <div>{formatPlayerLabel(currentUser)}</div>
             <button
-              disabled={!review.canFinalize || currentUser === undefined}
+              disabled={!review.canFinalize || currentUser === undefined || isFinalizing}
               onClick={() => {
                 handleFinalize().catch((error) => {
                   console.error(error);
@@ -2990,7 +3032,7 @@ export default function ChargenWizard() {
               style={{ width: "fit-content" }}
               type="button"
             >
-              Finalize to local character record
+              {isFinalizing ? "Saving character..." : "Finalize character"}
             </button>
           </div>
         </div>
