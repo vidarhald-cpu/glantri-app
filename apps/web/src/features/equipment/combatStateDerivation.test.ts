@@ -8,10 +8,15 @@ import type {
 } from "@glantri/domain";
 import type { CombatAllocationState } from "../../../../../packages/rules-engine/src/combat/combatAllocationState";
 import { createCombatSession } from "../../../../../packages/rules-engine/src/combat/combatSessionState";
+import type { CharacterSheetSummary } from "@glantri/rules-engine";
 
 import { equipmentTemplates } from "../../../../../packages/content/src/equipment";
 import type { EquipmentFeatureState } from "./types";
-import { deriveCombatStateSnapshot, getActorCombatState } from "./combatStateDerivation";
+import {
+  buildCombatStateCharacterInputs,
+  deriveCombatStateSnapshot,
+  getActorCombatState,
+} from "./combatStateDerivation";
 
 const sampleCharacterId = "char-themistogenes";
 
@@ -494,5 +499,85 @@ describe("combatStateDerivation", () => {
     expect(getRowBySlotLabel(snapshot, "Primary weapon")?.initiative).toBe(2);
     expect(getRowBySlotLabel(snapshot, "Punch")?.initiative).toBe(-1);
     expect(getRowBySlotLabel(snapshot, "Kick")?.initiative).toBe(-1);
+  });
+
+  it("uses direct skill XP rather than effective skill number for workbook initiative lookup", () => {
+    const sheetSummary = {
+      adjustedStats: {
+        dex: 13,
+        str: 11,
+      },
+      combat: {
+        combatGroups: [],
+        dodge: 0,
+        hasShield: false,
+        parry: 0,
+        weaponSkills: [],
+      },
+      distractionLevel: 0,
+      draftView: {
+        education: {
+          base: 0,
+          granted: 0,
+          purchased: 0,
+          theoreticalSkillCount: 0,
+          total: 0,
+        },
+        groups: [],
+        primaryPoolAvailable: 0,
+        secondaryPoolAvailable: 0,
+        skills: [
+          {
+            category: "ordinary",
+            effectiveSkillNumber: 7,
+            groupId: "martial",
+            groupIds: ["martial"],
+            groupLevel: 4,
+            linkedStatAverage: 0,
+            name: "1-h edged",
+            primaryRanks: 13,
+            requiresLiteracy: "not_needed",
+            secondaryRanks: 0,
+            skillId: "skill-1h-edged",
+            specificSkillLevel: 13,
+            totalSkill: 7,
+          },
+        ],
+        specializations: [],
+        totalSkillPointsInvested: 13,
+      },
+      equipment: {
+        armorLabel: "None",
+        dodge: 0,
+        equippedWeapons: [],
+        hasEquippedShield: false,
+        shieldBonus: 0,
+        shieldLabel: "None",
+      },
+      gms: {
+        byGroup: [],
+        total: 0,
+      },
+      seniority: 13,
+      totalSkillPointsInvested: 13,
+    } satisfies CharacterSheetSummary;
+
+    const inputs = buildCombatStateCharacterInputs(sheetSummary);
+    const snapshot = deriveCombatStateSnapshot(
+      cloneState(),
+      sampleCharacterId,
+      {
+        ...sampleCharacterInputs,
+        dexterity: 13,
+        dexterityGm: 1,
+        skillXpByName: {
+          ...sampleCharacterInputs.skillXpByName,
+          "1-h edged": inputs.skillXpByName["1-h edged"],
+        },
+      },
+    );
+
+    expect(inputs.skillXpByName["1-h edged"]).toBe(13);
+    expect(getRowBySlotLabel(snapshot, "Primary weapon")?.initiative).toBe(2);
   });
 });

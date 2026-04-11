@@ -275,7 +275,7 @@ export function buildCombatStateCharacterInputs(
   sheet: CharacterSheetSummary,
 ): CombatStateCharacterInputs {
   const skillXpByName = Object.fromEntries(
-    sheet.draftView.skills.map((skill) => [skill.name, skill.effectiveSkillNumber]),
+    sheet.draftView.skills.map((skill) => [skill.name, skill.specificSkillLevel]),
   );
   const skillTotalsByName = Object.fromEntries(
     sheet.draftView.skills.map((skill) => [skill.name, skill.totalSkill]),
