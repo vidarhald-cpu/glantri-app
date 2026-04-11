@@ -43,6 +43,15 @@ interface ArmorRow {
   template: ArmorTemplate;
 }
 
+type CanonicalMeleeModeSlot = "slash" | "strike" | "thrust";
+
+interface CanonicalMeleeModeDisplay {
+  armorModifier: string;
+  crit: string;
+  dmb: string;
+  ob: string;
+}
+
 function getCharacterName(name: string | undefined): string {
   return name?.trim() || UNNAMED_CHARACTER_PLACEHOLDER;
 }
@@ -67,18 +76,86 @@ function formatOptional(value: number | string | null | undefined): string {
   return value === null || value === undefined || value === "" ? "—" : String(value);
 }
 
-function formatAttackMode(mode: WeaponAttackMode): string {
-  const parts = [
-    mode.label ?? mode.id,
-    mode.damageClass ? `damage ${mode.damageClass}` : null,
-    mode.ob !== null && mode.ob !== undefined ? `OB ${mode.ob}` : null,
-    mode.dmb !== null && mode.dmb !== undefined ? `DMB ${mode.dmb}` : null,
-    mode.dmbFormula ? `DMB ${mode.dmbFormula.raw}` : null,
-    mode.crit ? `Crit ${mode.crit}` : null,
-    mode.armorModifier ? `Armor ${mode.armorModifier}` : null
-  ].filter(Boolean);
+function formatDmb(mode: WeaponAttackMode): string {
+  if (mode.dmb !== null && mode.dmb !== undefined) {
+    return String(mode.dmb);
+  }
 
-  return parts.join(" | ");
+  if (mode.dmbFormula) {
+    return mode.dmbFormula.raw;
+  }
+
+  return "—";
+}
+
+function getCanonicalMeleeModeSlot(label: string | null | undefined): CanonicalMeleeModeSlot | null {
+  switch (label?.trim().toLowerCase()) {
+    case "slash":
+      return "slash";
+    case "strike":
+      return "strike";
+    case "thrust":
+      return "thrust";
+    default:
+      return null;
+  }
+}
+
+function getEmptyMeleeModeDisplay(): CanonicalMeleeModeDisplay {
+  return {
+    armorModifier: "—",
+    crit: "—",
+    dmb: "—",
+    ob: "—"
+  };
+}
+
+function getCanonicalMeleeModeDisplay(
+  attackModes: WeaponAttackMode[] | null | undefined
+): Record<CanonicalMeleeModeSlot, CanonicalMeleeModeDisplay> {
+  const result: Record<CanonicalMeleeModeSlot, CanonicalMeleeModeDisplay> = {
+    slash: getEmptyMeleeModeDisplay(),
+    strike: getEmptyMeleeModeDisplay(),
+    thrust: getEmptyMeleeModeDisplay()
+  };
+
+  for (const mode of attackModes ?? []) {
+    const slot = getCanonicalMeleeModeSlot(mode.label);
+    if (!slot) {
+      continue;
+    }
+
+    result[slot] = {
+      armorModifier: formatOptional(mode.armorModifier),
+      crit: formatOptional(mode.crit),
+      dmb: formatDmb(mode),
+      ob: formatOptional(mode.ob)
+    };
+  }
+
+  return result;
+}
+
+function formatNonMeleeModes(attackModes: WeaponAttackMode[] | null | undefined): string {
+  const otherModes = (attackModes ?? []).filter((mode) => getCanonicalMeleeModeSlot(mode.label) === null);
+
+  if (otherModes.length === 0) {
+    return "—";
+  }
+
+  return otherModes
+    .map((mode) => {
+      const parts = [
+        mode.label ?? mode.id,
+        mode.ob !== null && mode.ob !== undefined ? `OB ${mode.ob}` : null,
+        formatDmb(mode) !== "—" ? `DMB ${formatDmb(mode)}` : null,
+        mode.crit ? `Crit ${mode.crit}` : null,
+        mode.armorModifier ? `Armor ${mode.armorModifier}` : null
+      ].filter(Boolean);
+
+      return parts.join(" | ");
+    })
+    .join("; ");
 }
 
 function TableShell(input: {
@@ -244,7 +321,19 @@ export default function WeaponsShieldsArmorPage({ params }: WeaponsShieldsArmorP
           "Weapon skill",
           "Class",
           "Handling",
-          "Attack modes",
+          "Slash OB",
+          "Slash DMB",
+          "Slash Crit",
+          "Slash Armor mod",
+          "Strike OB",
+          "Strike DMB",
+          "Strike Crit",
+          "Strike Armor mod",
+          "Thrust OB",
+          "Thrust DMB",
+          "Thrust Crit",
+          "Thrust Armor mod",
+          "Other modes",
           "Parry",
           "Initiative",
           "Defensive value",
@@ -257,27 +346,41 @@ export default function WeaponsShieldsArmorPage({ params }: WeaponsShieldsArmorP
           "Quantity",
           "Notes"
         ]}
-        rows={weaponRows.map(({ item, template }) => [
-          getItemName(item, template),
-          template.name,
-          template.weaponSkill,
-          template.weaponClass,
-          template.handlingClass,
-          template.attackModes?.length
-            ? template.attackModes.map(formatAttackMode).join("\n")
-            : "—",
-          formatOptional(template.parry),
-          formatOptional(template.initiative),
-          formatOptional(template.defensiveValue),
-          formatOptional(template.range),
-          String(getEffectiveEncumbrance(item, template)),
-          formatOptional(item.valueOverride ?? template.baseValue),
-          item.material,
-          item.quality,
-          item.conditionState,
-          String(item.quantity),
-          item.notes ?? template.rulesNotes ?? "—"
-        ])}
+        rows={weaponRows.map(({ item, template }) => {
+          const meleeModes = getCanonicalMeleeModeDisplay(template.attackModes);
+
+          return [
+            getItemName(item, template),
+            template.name,
+            template.weaponSkill,
+            template.weaponClass,
+            template.handlingClass,
+            meleeModes.slash.ob,
+            meleeModes.slash.dmb,
+            meleeModes.slash.crit,
+            meleeModes.slash.armorModifier,
+            meleeModes.strike.ob,
+            meleeModes.strike.dmb,
+            meleeModes.strike.crit,
+            meleeModes.strike.armorModifier,
+            meleeModes.thrust.ob,
+            meleeModes.thrust.dmb,
+            meleeModes.thrust.crit,
+            meleeModes.thrust.armorModifier,
+            formatNonMeleeModes(template.attackModes),
+            formatOptional(template.parry),
+            formatOptional(template.initiative),
+            formatOptional(template.defensiveValue),
+            formatOptional(template.range),
+            String(getEffectiveEncumbrance(item, template)),
+            formatOptional(item.valueOverride ?? template.baseValue),
+            item.material,
+            item.quality,
+            item.conditionState,
+            String(item.quantity),
+            item.notes ?? template.rulesNotes ?? "—"
+          ];
+        })}
       />
 
       <TableShell
