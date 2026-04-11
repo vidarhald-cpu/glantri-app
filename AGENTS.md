@@ -98,3 +98,17 @@ For calculation-heavy tasks:
 • target field / code location
 • ambiguity list
 • Only then implement.
+
+Skill XP rule for combat calculations
+
+For combat calculations, use total skill XP only.
+
+In this codebase:
+• effectiveSkillNumber is the canonical workbook-equivalent total skill XP
+• it includes all skill XP regardless of source, including direct allocation and group-derived contribution
+
+Do not use partial skill values such as:
+• only direct/specific skill allocation
+• only group contribution
+
+The split between direct allocation and group contribution exists for character building and later progression workflows, not for combat math.
