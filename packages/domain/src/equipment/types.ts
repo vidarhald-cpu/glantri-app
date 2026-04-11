@@ -196,6 +196,7 @@ export interface WeaponTemplate extends EquipmentTemplateBase {
   weaponSkill: string;
   handlingClass: WeaponHandlingClass;
   attackModes?: WeaponAttackMode[] | null;
+  primeAttackType?: string | null;
   primaryAttackType?: string | null;
   secondaryAttackType?: string | null;
   ob1?: number | null;

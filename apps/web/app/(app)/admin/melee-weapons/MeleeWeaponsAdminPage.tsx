@@ -12,6 +12,8 @@ import {
   formatNonMeleeModes,
   formatOptionalDisplayValue,
   getCanonicalMeleeModeDisplay,
+  getPrimaryAttackTypeForDisplay,
+  getPrimarySecondCritForDisplay,
   getTemplateEncumbranceForDisplay,
   isMeleeWeaponTemplate
 } from "../../../../src/features/equipment/meleeWeaponDisplay";
@@ -107,6 +109,8 @@ export default function MeleeWeaponsAdminPage() {
 
         return [
           template.name,
+          getPrimaryAttackTypeForDisplay(template),
+          getPrimarySecondCritForDisplay(template),
           template.weaponSkill,
           template.weaponClass,
           template.handlingClass,
@@ -206,6 +210,8 @@ export default function MeleeWeaponsAdminPage() {
           emptyLabel="No melee weapon templates found."
           columns={[
             "Name",
+            "Primary attack",
+            "Secondary crit",
             "Weapon skill",
             "Class",
             "Handling",

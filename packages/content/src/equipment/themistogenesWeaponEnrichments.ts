@@ -141,6 +141,7 @@ function applyCanonicalWeaponOneMeleeMapping(
   }
 
   const primaryAttackLabel =
+    trimToNull(template.primeAttackType) ??
     trimToNull(template.primaryAttackType) ??
     getRawSourceValue(template, "primaryAttackLabel");
   const primaryModeFamily =
@@ -257,6 +258,10 @@ export function applyThemistogenesWeaponEnrichments(
 ): WeaponTemplate[] {
   return templates.map((template) => {
     const enrichment = themistogenesWeaponEnrichments[template.id];
+    const primeAttackType =
+      trimToNull(template.primeAttackType) ??
+      trimToNull(template.primaryAttackType) ??
+      getRawSourceValue(template, "primaryAttackLabel");
     const canonicallyMappedTemplate: WeaponTemplate = {
       ...template,
       attackModes: applyCanonicalWeaponOneMeleeMapping(template),
@@ -293,7 +298,8 @@ export function applyThemistogenesWeaponEnrichments(
     return {
       ...template,
       attackModes,
-      primaryAttackType: primaryMode?.label ?? template.primaryAttackType ?? null,
+      primeAttackType,
+      primaryAttackType: primeAttackType ?? primaryMode?.label ?? template.primaryAttackType ?? null,
       secondaryAttackType: secondaryMode?.label ?? template.secondaryAttackType ?? null,
       importWarnings: unresolvedWarnings.length > 0 ? unresolvedWarnings : null,
       manualEnrichment,

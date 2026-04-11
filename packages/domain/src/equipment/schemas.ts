@@ -217,6 +217,7 @@ export const WeaponTemplateSchema = EquipmentTemplateSchema.extend({
   weaponSkill: z.string(),
   handlingClass: WeaponHandlingClassSchema,
   attackModes: z.array(WeaponAttackModeSchema).nullable().optional(),
+  primeAttackType: z.string().nullable().optional(),
   primaryAttackType: z.string().nullable().optional(),
   secondaryAttackType: z.string().nullable().optional(),
   ob1: z.number().nullable().optional(),

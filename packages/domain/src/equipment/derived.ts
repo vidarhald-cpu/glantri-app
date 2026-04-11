@@ -241,6 +241,16 @@ export function getCanonicalMeleeModeForAttackMode(
   );
 }
 
+export function getPrimaryAttackMode(
+  attackModes: WeaponAttackMode[] | null | undefined,
+): WeaponAttackMode | null {
+  if (!attackModes?.length) {
+    return null;
+  }
+
+  return attackModes.find((mode) => mode.isPrimaryAttack) ?? attackModes[0] ?? null;
+}
+
 export function getItemAccessTier(
   carryMode: CarryMode,
   location?: Pick<StorageLocation, "availabilityClass">,

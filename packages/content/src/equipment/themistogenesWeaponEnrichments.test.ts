@@ -15,6 +15,7 @@ describe("themistogenes weapon enrichments", () => {
     const handAxe = enrichedById["weapon-template-hand-axe"];
 
     expect(handAxe?.attackModes).toHaveLength(1);
+    expect(handAxe?.primeAttackType).toBe("Strike");
     expect(handAxe?.attackModes?.[0]).toMatchObject({
       id: "mode-1",
       label: "Strike",
@@ -30,6 +31,7 @@ describe("themistogenes weapon enrichments", () => {
   it("derives canonical secondary melee labels from Crit 2 family for swords", () => {
     const shortSword = enrichedById["weapon-template-short-sword"];
 
+    expect(shortSword?.primeAttackType).toBe("Slash");
     expect(shortSword?.attackModes?.[1]).toMatchObject({
       id: "mode-2",
       label: "Thrust",
@@ -42,6 +44,7 @@ describe("themistogenes weapon enrichments", () => {
   it("keeps thrust-main weapons aligned with workbook main/secondary families", () => {
     const spear = enrichedById["weapon-template-1-h-spear"];
 
+    expect(spear?.primeAttackType).toBe("Thrust");
     expect(spear?.attackModes?.[0]).toMatchObject({
       id: "mode-1",
       label: "Thrust",
@@ -54,5 +57,21 @@ describe("themistogenes weapon enrichments", () => {
       canonicalMeleeMode: "slash",
       crit: "BS",
     });
+  });
+
+  it("preserves Lance primary Charge attack explicitly while keeping Second crit. on that primary mode", () => {
+    const lance = enrichedById["weapon-template-lance"];
+
+    expect(lance?.primeAttackType).toBe("Charge");
+    expect(lance?.primaryAttackType).toBe("Charge");
+    expect(lance?.attackModes?.[0]).toMatchObject({
+      id: "mode-1",
+      label: "Charge",
+      canonicalMeleeMode: "thrust",
+      secondCrit: "DC",
+    });
+    expect(lance?.importWarnings).toContain(
+      "Lance mode-2: source table has no explicit secondary attack label column.",
+    );
   });
 });

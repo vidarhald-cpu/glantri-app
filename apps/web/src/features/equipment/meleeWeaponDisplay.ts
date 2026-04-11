@@ -7,6 +7,7 @@ import type {
 } from "@glantri/domain";
 import {
   getCanonicalMeleeModeForAttackMode,
+  getPrimaryAttackMode,
   getEffectiveEncumbrance
 } from "@glantri/domain";
 
@@ -83,6 +84,26 @@ export function getCanonicalMeleeModeDisplay(
   }
 
   return result;
+}
+
+export function getPrimaryAttackTypeForDisplay(
+  template: Pick<WeaponTemplate, "attackModes" | "primeAttackType" | "primaryAttackType">
+): string {
+  const primaryMode = getPrimaryAttackMode(template.attackModes);
+
+  return (
+    template.primeAttackType ??
+    primaryMode?.label ??
+    template.primaryAttackType ??
+    "—"
+  );
+}
+
+export function getPrimarySecondCritForDisplay(
+  template: Pick<WeaponTemplate, "attackModes" | "secondCrit">
+): string {
+  const primaryMode = getPrimaryAttackMode(template.attackModes);
+  return formatOptionalDisplayValue(primaryMode?.secondCrit ?? template.secondCrit);
 }
 
 export function formatNonMeleeModes(

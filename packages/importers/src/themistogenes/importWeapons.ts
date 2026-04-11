@@ -537,6 +537,7 @@ function buildWeaponTemplate(input: {
     weaponSkill: skill,
     handlingClass,
     attackModes,
+    primeAttackType: primaryAttackType,
     primaryAttackType,
     secondaryAttackType,
     ob1: mode1?.ob ?? null,

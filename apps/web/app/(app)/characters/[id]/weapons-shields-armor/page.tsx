@@ -19,7 +19,9 @@ import {
 import {
   formatNonMeleeModes,
   formatOptionalDisplayValue,
-  getCanonicalMeleeModeDisplay
+  getCanonicalMeleeModeDisplay,
+  getPrimaryAttackTypeForDisplay,
+  getPrimarySecondCritForDisplay
 } from "../../../../../src/features/equipment/meleeWeaponDisplay";
 import type { EquipmentFeatureState } from "../../../../../src/features/equipment/types";
 import { loadCharacterEquipmentState } from "../../../../../src/lib/api/localServiceClient";
@@ -227,6 +229,8 @@ export default function WeaponsShieldsArmorPage({ params }: WeaponsShieldsArmorP
         columns={[
           "Name",
           "Template",
+          "Primary attack",
+          "Secondary crit",
           "Weapon skill",
           "Class",
           "Handling",
@@ -261,6 +265,8 @@ export default function WeaponsShieldsArmorPage({ params }: WeaponsShieldsArmorP
           return [
             getItemName(item, template),
             template.name,
+            getPrimaryAttackTypeForDisplay(template),
+            getPrimarySecondCritForDisplay(template),
             template.weaponSkill,
             template.weaponClass,
             template.handlingClass,
