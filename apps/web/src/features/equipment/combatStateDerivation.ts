@@ -87,6 +87,7 @@ export interface DerivedCombatWeaponRow {
 }
 
 export interface DerivedCombatStateSnapshot {
+  encumbranceCapacity: DerivedCombatValue;
   encumbranceLevel: DerivedCombatValue;
   gripSummary: string;
   readinessSummary: string;
@@ -1125,6 +1126,7 @@ export function deriveCombatStateSnapshot(
   );
 
   return {
+    encumbranceCapacity: workbookMovement.carryCapacity ?? "—",
     encumbranceLevel: workbookMovement.encumbranceLevel ?? "—",
     gripSummary,
     readinessSummary: getReadinessSummary({

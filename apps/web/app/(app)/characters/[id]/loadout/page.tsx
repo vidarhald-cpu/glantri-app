@@ -16,6 +16,7 @@ import {
   getWorkbookCharacterSize,
 } from "../../../../../src/features/equipment/armorSummary";
 import { buildCombatStatePanelModel } from "../../../../../src/features/equipment/combatStatePanel";
+import { formatEncumbranceDisplay } from "../../../../../src/features/equipment/displayFormatting";
 import {
   buildCombatStateCharacterInputs,
 } from "../../../../../src/features/equipment/combatStateDerivation";
@@ -783,8 +784,8 @@ export default function CharacterLoadoutPage({ params }: CharacterLoadoutPagePro
                 <div><strong>General armor</strong><div>{wornArmorSummary.generalArmorWithType}</div></div>
                 <div><strong>AA modifier</strong><div>{wornArmorSummary.aaModifier ?? "—"}</div></div>
                 <div><strong>Perception modifier</strong><div>{wornArmorSummary.perceptionModifier ?? "—"}</div></div>
-                <div><strong>Encumbrance factor</strong><div>{wornArmorSummary.encumbranceFactor ?? "—"}</div></div>
-                <div><strong>Actual encumbrance</strong><div>{wornArmorSummary.actualEncumbrance ?? "—"}</div></div>
+                <div><strong>Encumbrance factor</strong><div>{formatEncumbranceDisplay(wornArmorSummary.encumbranceFactor)}</div></div>
+                <div><strong>Actual encumbrance</strong><div>{formatEncumbranceDisplay(wornArmorSummary.actualEncumbrance)}</div></div>
               </div>
               <div style={{ overflowX: "auto" }}>
                 <table style={{ borderCollapse: "collapse", minWidth: "100%", width: "100%" }}>

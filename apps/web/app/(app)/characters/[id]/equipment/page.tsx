@@ -30,6 +30,7 @@ import {
 } from "../../../../../src/lib/api/localServiceClient";
 import { loadLocalCharacterContext } from "../../../../../src/lib/characters/loadLocalCharacterContext";
 import { UNNAMED_CHARACTER_PLACEHOLDER } from "../../../../../src/lib/offline/repositories/localCharacterRepository";
+import { formatEncumbranceDisplay } from "../../../../../src/features/equipment/displayFormatting";
 
 interface CharacterEquipmentPageProps {
   params: Promise<{
@@ -820,7 +821,7 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
                         <strong>{group.location.name}</strong>
                         <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
                           {groupRows.length} item{groupRows.length === 1 ? "" : "s"} • Total encumbrance{" "}
-                          {groupEncumbrance}
+                          {formatEncumbranceDisplay(groupEncumbrance)}
                         </div>
                       </div>
                       {canDeleteLocation ? (
@@ -912,7 +913,7 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
                                       state?.itemsById[row.itemId]?.quantity ?? 1
                                     )}
                                   </td>
-                                  <td style={tableCellStyle}>{row.effectiveEncumbrance}</td>
+                                  <td style={tableCellStyle}>{formatEncumbranceDisplay(row.effectiveEncumbrance)}</td>
                                   <td style={tableCellStyle}>{formatLabel(row.accessTier)}</td>
                                   <td style={tableCellStyle}>
                                     <div style={{ display: "grid", gap: "0.5rem", maxWidth: 220 }}>

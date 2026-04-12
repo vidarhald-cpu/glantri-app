@@ -70,6 +70,11 @@ export const adminNavItems: AdminNavItem[] = [
     description: "Read short player-facing notes for current combat calculations.",
     href: "/admin/documents",
     label: "Documents"
+  },
+  {
+    description: "Inspect workbook-backed reference tables used by current combat and movement calculations.",
+    href: "/admin/tables",
+    label: "Tables"
   }
 ];
 

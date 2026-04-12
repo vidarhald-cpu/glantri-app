@@ -11,6 +11,9 @@ const dmbText =
 const initiativeText =
   "Melee initiative is your Dexterity modifier plus the weapon's initiative plus the skill modifier from the workbook skill table. On the equipment screens, that is the full rule currently shown, because no extra game-sheet situation modifier is being added there yet.";
 
+const encumbranceAndMovementText =
+  "Your carrying capacity comes from Strength, Size, and half Constitution. Your carried load is compared to that capacity to find an encumbrance level, and that level then sets the movement modifier used for final movement on the equipment screens.";
+
 export default function DocumentsAdminPage() {
   return (
     <section style={{ display: "grid", gap: "1.25rem" }}>
@@ -31,6 +34,10 @@ export default function DocumentsAdminPage() {
 
         <AdminPanel title="Initiative">
           <p style={{ color: "#4f4635", lineHeight: 1.7, margin: 0 }}>{initiativeText}</p>
+        </AdminPanel>
+
+        <AdminPanel title="Encumbrance and movement">
+          <p style={{ color: "#4f4635", lineHeight: 1.7, margin: 0 }}>{encumbranceAndMovementText}</p>
         </AdminPanel>
       </div>
     </section>

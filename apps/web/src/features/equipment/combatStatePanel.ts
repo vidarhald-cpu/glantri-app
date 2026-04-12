@@ -7,6 +7,7 @@ import {
   deriveCombatStateSnapshot,
   type DerivedCombatValue,
 } from "./combatStateDerivation";
+import { formatEncumbranceDisplay } from "./displayFormatting";
 import type { EquipmentFeatureState } from "./types";
 
 export type CombatStateValue = string | number;
@@ -55,6 +56,10 @@ function getProtectionCoverageLabel(armorTemplate: ArmorTemplate | null): string
 
 function getWeaponModeValue(value: DerivedCombatValue | null | undefined): CombatStateValue {
   return value ?? "—";
+}
+
+function getEncumbranceDisplayValue(value: CombatStateValue): CombatStateValue {
+  return typeof value === "number" ? formatEncumbranceDisplay(value) : value;
 }
 
 export function buildCombatStatePanelModel(
@@ -184,31 +189,15 @@ export function buildCombatStatePanelModel(
   ];
 
   const capabilityRows: CombatStateDetailRow[] = [
-    { label: "Readiness", value: snapshot.readinessSummary },
-    { label: "Personal encumbrance", value: snapshot.personalEncumbrance },
-    { label: "Mount encumbrance", value: snapshot.mountEncumbrance },
+    { label: "Encumbrance capacity", value: getEncumbranceDisplayValue(snapshot.encumbranceCapacity) },
+    { label: "Gear item count", value: snapshot.gearCount },
+    { label: "Personal encumbrance", value: getEncumbranceDisplayValue(snapshot.personalEncumbrance) },
     { label: "Encumbrance level", value: snapshot.encumbranceLevel },
-    { label: "Movement", value: snapshot.movementSummary },
     {
       label: "Movement modifier",
       value: snapshot.movementModifierSummary,
     },
-    {
-      label: "Perception",
-      value: snapshot.perceptionSummary,
-    },
-    { label: "Gear item count", value: snapshot.gearCount },
-    { label: "Valuables item count", value: snapshot.valuablesCount },
-    { label: "Backpack items", value: snapshot.backpackCount },
-    { label: "With-you items", value: snapshot.withYouCount },
-    { label: "Stored elsewhere", value: snapshot.storedCount },
-    { label: "Encounter-accessible gear", value: snapshot.encounterAccessibleGearCount },
-    { label: "Encounter-accessible valuables", value: snapshot.encounterAccessibleValuablesCount },
-    { label: "Carried coin quantity", value: snapshot.carriedCoinQuantity },
-    {
-      label: "Load notes",
-      value: snapshot.loadNotes,
-    },
+    { label: "Movement", value: snapshot.movementSummary },
   ];
 
   return {
