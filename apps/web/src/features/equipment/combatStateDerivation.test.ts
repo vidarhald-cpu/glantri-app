@@ -209,6 +209,7 @@ const sampleActiveLoadout: CharacterLoadout = {
 };
 
 const sampleCharacterInputs = {
+  constitution: 11,
   dexterityGm: 0,
   dexterity: 11,
   parryCombatSkillXp: 13,
@@ -218,6 +219,8 @@ const sampleCharacterInputs = {
     Brawling: 9,
     Parry: 13,
   },
+  size: 13,
+  sizeGm: 1,
   strengthGm: 3,
   strength: 17,
 } as const;
@@ -402,7 +405,9 @@ describe("combatStateDerivation", () => {
     expect(snapshot.defenseSummary).toContain("Posture Parry");
     expect(snapshot.defenseSummary).toContain("DB 17");
     expect(snapshot.defenseSummary).toContain("Parry 16");
-    expect(snapshot.movementModifierSummary).toContain("situational");
+    expect(snapshot.encumbranceLevel).toBe(4);
+    expect(snapshot.movementModifierSummary).toBe(4);
+    expect(snapshot.movementSummary).toBe(8);
     expect(snapshot.perceptionSummary).toContain("Current perception modifier -2");
   });
 

@@ -187,6 +187,7 @@ export function buildCombatStatePanelModel(
     { label: "Readiness", value: snapshot.readinessSummary },
     { label: "Personal encumbrance", value: snapshot.personalEncumbrance },
     { label: "Mount encumbrance", value: snapshot.mountEncumbrance },
+    { label: "Encumbrance level", value: snapshot.encumbranceLevel },
     { label: "Movement", value: snapshot.movementSummary },
     {
       label: "Movement modifier",

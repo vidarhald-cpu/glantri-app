@@ -45,11 +45,13 @@ import {
   getStoredItems,
   getWithYouItems,
 } from "./equipmentSelectors";
+import { buildWorkbookMovementSummary } from "./movementSummary";
 import type { EquipmentFeatureState } from "./types";
 
 export type DerivedCombatValue = string | number;
 
 export interface CombatStateCharacterInputs {
+  constitution: number | null;
   dexterityGm: number | null;
   dexterity: number | null;
   // Canonical workbook-equivalent total skill XP used by combat calculations.
@@ -57,6 +59,8 @@ export interface CombatStateCharacterInputs {
   combatSkillXpByName: Record<string, number>;
   parryCombatSkillXp: number | null;
   brawlingCombatSkillXp: number | null;
+  size: number | null;
+  sizeGm: number | null;
   strengthGm: number | null;
   strength: number | null;
 }
@@ -83,10 +87,11 @@ export interface DerivedCombatWeaponRow {
 }
 
 export interface DerivedCombatStateSnapshot {
+  encumbranceLevel: DerivedCombatValue;
   gripSummary: string;
   readinessSummary: string;
-  movementSummary: string;
-  movementModifierSummary: string;
+  movementSummary: DerivedCombatValue;
+  movementModifierSummary: DerivedCombatValue;
   perceptionSummary: string;
   defenseSummary: string;
   loadNotes: string;
@@ -282,14 +287,19 @@ export function buildCombatStateCharacterInputs(
     ]),
   );
   const strength = sheet.adjustedStats.str ?? null;
+  const constitution = sheet.adjustedStats.con ?? null;
   const dexterity = sheet.adjustedStats.dex ?? null;
+  const size = sheet.adjustedStats.siz ?? null;
 
   return {
     brawlingCombatSkillXp: combatSkillXpByName[BRAWLING_SKILL_NAME] ?? null,
     combatSkillXpByName,
+    constitution,
     dexterity,
     dexterityGm: getWorkbookStatGm(dexterity),
     parryCombatSkillXp: combatSkillXpByName[PARRY_SKILL_NAME] ?? null,
+    size,
+    sizeGm: getWorkbookStatGm(size),
     strength,
     strengthGm: getWorkbookStatGm(strength),
   };
@@ -903,41 +913,6 @@ function buildShieldRow(input: {
   };
 }
 
-function getMovementSummary(input: {
-  armorTemplate: ArmorTemplate | null;
-  backpackCount: number;
-  mountEncumbrance: number;
-  personalEncumbrance: number;
-}): string {
-  const notes: string[] = [];
-
-  if (input.armorTemplate?.mobilityPenalty != null) {
-    notes.push(`Armor MP ${input.armorTemplate.mobilityPenalty}`);
-  }
-
-  notes.push(`Personal encumbrance ${input.personalEncumbrance}`);
-
-  if (input.backpackCount > 0) {
-    notes.push(`${input.backpackCount} backpack item${input.backpackCount === 1 ? "" : "s"}`);
-  }
-
-  if (input.mountEncumbrance > 0) {
-    notes.push(`Mount load ${input.mountEncumbrance}`);
-  }
-
-  return notes.join(" | ");
-}
-
-function getMovementModifierSummary(input: {
-  allocationInputs: CombatStateAllocationInputs;
-  armorTemplate: ArmorTemplate | null;
-}): string {
-  const armorPenalty = input.armorTemplate?.mobilityPenalty ?? 0;
-  const totalModifier = armorPenalty + input.allocationInputs.situationalModifiers.movement;
-
-  return `${formatSignedModifier(totalModifier)} total (${formatSignedModifier(armorPenalty)} armor, ${formatSignedModifier(input.allocationInputs.situationalModifiers.movement)} situational); encumbrance-based movement penalties beyond armor remain interim.`;
-}
-
 function getPerceptionSummary(input: {
   allocationInputs: CombatStateAllocationInputs;
   backpackCount: number;
@@ -1029,6 +1004,11 @@ export function deriveCombatStateSnapshot(
   const carriedCoinQuantity = getEncounterAccessibleCoinQuantity(state, characterId);
   const storedCount = getStoredItems(state, characterId).length;
   const withYouCount = getWithYouItems(state, characterId).length;
+  const workbookMovement = buildWorkbookMovementSummary({
+    characterId,
+    characterInputs,
+    state,
+  });
 
   const armorItem = "armor" in loadout ? loadout.armor : undefined;
   const shieldItem = "shield" in loadout ? loadout.shield : undefined;
@@ -1145,22 +1125,15 @@ export function deriveCombatStateSnapshot(
   );
 
   return {
+    encumbranceLevel: workbookMovement.encumbranceLevel ?? "—",
     gripSummary,
     readinessSummary: getReadinessSummary({
       allocationInputs: resolvedAllocationInputs,
       backpackCount,
       gripSummary,
     }),
-    movementSummary: getMovementSummary({
-      armorTemplate,
-      backpackCount,
-      mountEncumbrance,
-      personalEncumbrance,
-    }),
-    movementModifierSummary: getMovementModifierSummary({
-      allocationInputs: resolvedAllocationInputs,
-      armorTemplate,
-    }),
+    movementSummary: workbookMovement.movement ?? "—",
+    movementModifierSummary: workbookMovement.movementModifier ?? "—",
     perceptionSummary: getPerceptionSummary({
       allocationInputs: resolvedAllocationInputs,
       backpackCount,
@@ -1180,7 +1153,7 @@ export function deriveCombatStateSnapshot(
       primaryTemplate: primaryWeaponTemplate,
       secondaryTemplate: secondaryWeaponTemplate,
     }),
-    personalEncumbrance,
+    personalEncumbrance: workbookMovement.personalEncumbrance ?? personalEncumbrance,
     mountEncumbrance,
     gearCount,
     encounterAccessibleGearCount,

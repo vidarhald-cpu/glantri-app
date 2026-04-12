@@ -1,10 +1,16 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  calculateWorkbookBaseMove,
+  calculateWorkbookCarryCapacity,
+  calculateWorkbookEncumbranceLevel,
   calculateWorkbookMeleeDmb,
   calculateWorkbookMeleeInitiative,
   calculateWorkbookMeleeOb,
+  calculateWorkbookMovement,
+  calculateWorkbookMovementModifier,
   getWorkbookStatGm,
+  lookupWorkbookMovementAdjustment,
   lookupWorkbookSkillInitiativeModifier,
 } from "./workbookCombatMath";
 
@@ -127,6 +133,68 @@ describe("workbookCombatMath", () => {
       finalInitiative: 1,
       gameModifier: 0,
       skillModifier: 0,
+    });
+  });
+
+  it("matches the workbook's encumbrance level and movement chain for the sample carried load", () => {
+    const carryCapacity = calculateWorkbookCarryCapacity({
+      constitution: 11,
+      size: 13,
+      strength: 17,
+    });
+    const encumbrance = calculateWorkbookEncumbranceLevel({
+      carryCapacity,
+      totalEncumbrance: 32.66666666658,
+    });
+
+    expect(carryCapacity).toBe(36);
+    expect(encumbrance).toMatchObject({
+      carryCapacity: 36,
+      encumbranceLevel: 4,
+      encumbrancePercent: 91,
+      totalEncumbrance: 32.66666666658,
+    });
+
+    const movementModifier = calculateWorkbookMovementModifier({
+      encumbranceLevel: encumbrance!.encumbranceLevel,
+      shieldMovementModifier: 2,
+    });
+    const baseMove = calculateWorkbookBaseMove({
+      dexterityGm: 0,
+      sizeGm: 1,
+      strengthGm: 3,
+    });
+
+    expect(movementModifier).toBe(4);
+    expect(baseMove).toBe(14);
+    expect(lookupWorkbookMovementAdjustment(baseMove, movementModifier)).toBe(6);
+    expect(
+      calculateWorkbookMovement({
+        baseMove,
+        movementModifier,
+      }),
+    ).toBe(8);
+  });
+
+  it("keeps lighter and heavier loads in different encumbrance bands", () => {
+    expect(
+      calculateWorkbookEncumbranceLevel({
+        carryCapacity: 40,
+        totalEncumbrance: 8,
+      }),
+    ).toMatchObject({
+      encumbranceLevel: 0,
+      encumbrancePercent: 20,
+    });
+
+    expect(
+      calculateWorkbookEncumbranceLevel({
+        carryCapacity: 40,
+        totalEncumbrance: 60.4,
+      }),
+    ).toMatchObject({
+      encumbranceLevel: 6,
+      encumbrancePercent: 151,
     });
   });
 });
