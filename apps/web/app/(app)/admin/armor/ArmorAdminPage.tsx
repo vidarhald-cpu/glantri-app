@@ -6,6 +6,35 @@ import type { ArmorTemplate } from "@glantri/domain";
 
 import { AdminPageIntro, AdminPanel } from "../admin-ui";
 
+type ArmorDisplayRow = {
+  cells: string[];
+  kind: "armor" | "component";
+};
+
+const LOCATION_COLUMNS: Array<{
+  key:
+    | "head"
+    | "frontArm"
+    | "chest"
+    | "backArm"
+    | "abdomen"
+    | "frontThigh"
+    | "frontFoot"
+    | "backThigh"
+    | "backFoot";
+  label: string;
+}> = [
+  { key: "head", label: "Head" },
+  { key: "frontArm", label: "Front Arm" },
+  { key: "chest", label: "Chest" },
+  { key: "backArm", label: "Back Arm" },
+  { key: "abdomen", label: "Abdomen" },
+  { key: "frontThigh", label: "Front Thigh" },
+  { key: "frontFoot", label: "Front Foot" },
+  { key: "backThigh", label: "Back Thigh" },
+  { key: "backFoot", label: "Back Foot" },
+];
+
 function formatOptionalValue(value: number | string | null | undefined): string {
   if (value === null || value === undefined) {
     return "—";
@@ -20,99 +49,59 @@ function formatOptionalValue(value: number | string | null | undefined): string 
   return text.length > 0 ? text : "—";
 }
 
-function formatGeneralArmor(template: ArmorTemplate): string {
-  if (template.armorRating === null || template.armorRating === undefined) {
+function formatWorkbookWholeNumber(value: number | null | undefined): string {
+  if (value === null || value === undefined) {
     return "—";
   }
 
-  const rounded = template.generalArmorRounded;
-  return rounded === null || rounded === undefined
-    ? formatOptionalValue(template.armorRating)
-    : `${formatOptionalValue(template.armorRating)} -> ${rounded}`;
+  return String(Math.round(value));
 }
 
-function formatLocationValues(template: ArmorTemplate): string {
-  const values = template.locationValues;
-  if (!values) {
+function formatMainLocationCell(template: ArmorTemplate, key: keyof NonNullable<ArmorTemplate["locationValues"]>): string {
+  const value = template.locationValues?.[key];
+  if (value === null || value === undefined) {
     return "—";
   }
 
-  const entries = [
-    ["Hd", values.head],
-    ["FA", values.frontArm],
-    ["Ch", values.chest],
-    ["BA", values.backArm],
-    ["Ab", values.abdomen],
-    ["FT", values.frontThigh],
-    ["FF", values.frontFoot],
-    ["BT", values.backThigh],
-    ["BF", values.backFoot]
-  ].filter(([, value]) => value !== null && value !== undefined);
-
-  return entries.length > 0
-    ? entries.map(([label, value]) => `${label} ${formatOptionalValue(value)}`).join(" · ")
-    : "—";
+  const typeByKey = template.locationTypes?.[key];
+  return `${formatWorkbookWholeNumber(value)}${typeByKey?.trim() ?? ""}`;
 }
 
-function formatComponentNames(template: ArmorTemplate): string {
-  const components = template.componentProfiles
-    ?.map((component) => {
-      const name = component.name.trim();
+function formatMainGeneralArmorCell(template: ArmorTemplate): string {
+  const rounded = template.generalArmorRounded ?? (template.armorRating === null || template.armorRating === undefined
+    ? null
+    : Math.round(template.armorRating));
+  if (rounded === null || rounded === undefined) {
+    return "—";
+  }
 
-      if (!name) {
-        return "";
-      }
-
-      return name.startsWith("Unnamed component") ? template.name : name;
-    })
-    .filter(Boolean)
-    .filter((componentName, index, allNames) => allNames.indexOf(componentName) === index) ?? [];
-
-  return components.length > 0 ? components.join(", ") : "—";
+  const generalType = template.locationTypes?.generalArmor?.trim() ?? "";
+  return `${rounded}${generalType}`;
 }
 
-function formatCriticalModifiers(template: ArmorTemplate): string {
-  const values = template.criticalModifierByArea;
-  if (!values) {
-    return template.criticalModifierGeneral === null || template.criticalModifierGeneral === undefined
-      ? "—"
-      : `Gen ${template.criticalModifierGeneral}`;
+function formatComponentLabel(rawName: string | null | undefined): string {
+  const name = rawName?.trim() ?? "";
+  if (!name || name.startsWith("Unnamed component")) {
+    return "";
   }
 
-  const entries = [
-    ["Hd", values.head],
-    ["FA", values.frontArm],
-    ["Ch", values.chest],
-    ["BA", values.backArm],
-    ["Ab", values.abdomen],
-    ["FT", values.frontThigh],
-    ["FF", values.frontFoot],
-    ["BT", values.backThigh],
-    ["BF", values.backFoot]
-  ].filter(([, value]) => value !== null && value !== undefined);
-
-  if (template.criticalModifierGeneral !== null && template.criticalModifierGeneral !== undefined) {
-    entries.push(["Gen", template.criticalModifierGeneral]);
-  }
-
-  return entries.length > 0
-    ? entries.map(([label, value]) => `${label} ${formatOptionalValue(value)}`).join(" · ")
-    : "—";
+  return `\u00A0\u00A0${name}`;
 }
 
-function formatTypeSummary(template: ArmorTemplate): string {
-  const generalType = template.locationTypes?.generalArmor?.trim();
-  if (template.subtype && generalType) {
-    return `${template.subtype} / ${generalType}`;
+function formatComponentLocationCell(template: ArmorTemplate, index: number, key: keyof NonNullable<ArmorTemplate["locationValues"]>): string {
+  const component = template.componentProfiles?.[index];
+  const value = component?.locationValues?.[key];
+  if (value === null || value === undefined) {
+    return "—";
   }
 
-  return formatOptionalValue(template.subtype ?? generalType ?? null);
+  return formatWorkbookWholeNumber(value);
 }
 
 function TableShell(input: {
   columns: string[];
   emptyLabel: string;
-  rows: string[][];
+  rows: ArmorDisplayRow[];
 }) {
   return input.rows.length > 0 ? (
     <div style={{ maxHeight: "70vh", overflow: "auto" }}>
@@ -138,11 +127,21 @@ function TableShell(input: {
         </thead>
         <tbody>
           {input.rows.map((row, rowIndex) => (
-            <tr key={`armor-row-${rowIndex}`} style={{ borderBottom: "1px solid rgba(85, 73, 48, 0.08)" }}>
-              {row.map((value, cellIndex) => (
+            <tr
+              key={`armor-row-${rowIndex}`}
+              style={{
+                background: row.kind === "component" ? "rgba(250, 245, 234, 0.38)" : undefined,
+                borderBottom: "1px solid rgba(85, 73, 48, 0.08)"
+              }}
+            >
+              {row.cells.map((value, cellIndex) => (
                 <td
                   key={`armor-row-${rowIndex}-${cellIndex}`}
-                  style={{ padding: "0.65rem 0.75rem 0.65rem 0", verticalAlign: "top" }}
+                  style={{
+                    color: row.kind === "component" ? "rgba(85, 73, 48, 0.88)" : undefined,
+                    padding: "0.65rem 0.75rem 0.65rem 0",
+                    verticalAlign: "top"
+                  }}
                 >
                   {value}
                 </td>
@@ -166,13 +165,6 @@ export default function ArmorAdminPage() {
             template.category === "armor" && template.tags.includes("themistogenes-import")
         )
         .sort((left, right) => {
-          const leftArmor = left.generalArmorRounded ?? Number.POSITIVE_INFINITY;
-          const rightArmor = right.generalArmorRounded ?? Number.POSITIVE_INFINITY;
-
-          if (leftArmor !== rightArmor) {
-            return leftArmor - rightArmor;
-          }
-
           return left.name.localeCompare(right.name);
         }),
     []
@@ -180,19 +172,35 @@ export default function ArmorAdminPage() {
 
   const rows = useMemo(
     () =>
-      armorTemplates.map((template) => [
-        template.name,
-        formatOptionalValue(template.defaultMaterial),
-        formatTypeSummary(template),
-        formatComponentNames(template),
-        formatLocationValues(template),
-        formatGeneralArmor(template),
-        formatOptionalValue(template.armorActivityModifier),
-        formatOptionalValue(template.perceptionModifier),
-        formatCriticalModifiers(template),
-        formatOptionalValue(template.encumbranceFactor ?? template.baseEncumbrance),
-        formatOptionalValue(template.movementFactor ?? template.mobilityPenalty),
-      ]),
+      armorTemplates.flatMap((template) => {
+        const armorRow: ArmorDisplayRow = {
+          kind: "armor",
+          cells: [
+            template.name,
+            formatOptionalValue(template.encumbranceFactor ?? template.baseEncumbrance),
+            formatOptionalValue(template.movementFactor ?? template.mobilityPenalty),
+            ...LOCATION_COLUMNS.map(({ key }) => formatMainLocationCell(template, key)),
+            formatMainGeneralArmorCell(template),
+            formatOptionalValue(template.armorActivityModifier),
+            formatOptionalValue(template.perceptionModifier),
+          ],
+        };
+
+        const componentRows: ArmorDisplayRow[] = (template.componentProfiles ?? []).map((component, index) => ({
+          kind: "component",
+          cells: [
+            formatComponentLabel(component.name),
+            formatOptionalValue(component.encumbranceFactor),
+            formatOptionalValue(component.movementFactor),
+            ...LOCATION_COLUMNS.map(({ key }) => formatComponentLocationCell(template, index, key)),
+            formatWorkbookWholeNumber(component.generalArmorRounded ?? component.generalArmor),
+            "—",
+            formatOptionalValue(component.perceptionModifier),
+          ],
+        }));
+
+        return [armorRow, ...componentRows];
+      }),
     [armorTemplates]
   );
 
@@ -206,22 +214,18 @@ export default function ArmorAdminPage() {
 
       <AdminPanel
         title="System Armor Catalog"
-        subtitle="Workbook-backed armor templates preserve component rows, per-area protection, rounded general armor, critical modifiers, and the workbook encumbrance-factor rule."
+        subtitle="Workbook-backed armor templates are shown as finished armor rows with component sub-lines, close to the original Armor sheet layout."
       >
         <TableShell
           emptyLabel="No armor templates found."
           columns={[
             "Name",
-            "Material",
-            "Type / subtype",
-            "Components",
-            "Per-area protection",
-            "General armor",
-            "AA modifier",
-            "Perception modifier",
-            "Critical modifiers",
-            "Encumbrance factor",
-            "Movement modifier",
+            "Enc. factor",
+            "MM. factor",
+            ...LOCATION_COLUMNS.map(({ label }) => label),
+            "Gen. Armor",
+            "AA. mod",
+            "Per. Mod",
           ]}
           rows={rows}
         />
