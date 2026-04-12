@@ -62,6 +62,11 @@ export const adminNavItems: AdminNavItem[] = [
     label: "Shields"
   },
   {
+    description: "Inspect the system armor catalog imported from the workbook Armor sheet.",
+    href: "/admin/armor",
+    label: "Armor"
+  },
+  {
     description: "Read short player-facing notes for current combat calculations.",
     href: "/admin/documents",
     label: "Documents"

@@ -66,6 +66,8 @@ const legacyShieldTemplateIds = new Set([
   "shield-template-round-shield"
 ]);
 
+const legacyArmorTemplateIds = new Set(["armor-template-mail-hauberk"]);
+
 const materialOptions: MaterialType[] = [
   "steel",
   "bronze",
@@ -149,10 +151,12 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
             .filter((template) =>
               template.category === "shield"
                 ? !legacyShieldTemplateIds.has(template.id)
-                : true
+                : template.category === "armor"
+                  ? !legacyArmorTemplateIds.has(template.id)
+                  : true
             )
             .sort((left, right) =>
-            left.name.localeCompare(right.name)
+              left.name.localeCompare(right.name)
             )
         : [],
     [state]

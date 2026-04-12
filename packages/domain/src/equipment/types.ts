@@ -169,6 +169,52 @@ export interface ImportedShieldSourceMetadata {
   rawRow: Record<string, string>;
 }
 
+export interface ArmorLocationValues {
+  head?: number | null;
+  frontArm?: number | null;
+  chest?: number | null;
+  backArm?: number | null;
+  abdomen?: number | null;
+  frontThigh?: number | null;
+  frontFoot?: number | null;
+  backThigh?: number | null;
+  backFoot?: number | null;
+}
+
+export interface ArmorLocationTypes {
+  head?: string | null;
+  frontArm?: string | null;
+  chest?: string | null;
+  backArm?: string | null;
+  abdomen?: string | null;
+  frontThigh?: string | null;
+  frontFoot?: string | null;
+  backThigh?: string | null;
+  backFoot?: string | null;
+  generalArmor?: string | null;
+}
+
+export interface ArmorComponentProfile {
+  name: string;
+  encumbranceFactor?: number | null;
+  movementFactor?: number | null;
+  generalArmor?: number | null;
+  perceptionModifier?: number | null;
+  locationValues?: ArmorLocationValues | null;
+  sourceMetadata?: ImportedArmorSourceMetadata | null;
+}
+
+export interface ImportedArmorSourceMetadata {
+  workbook: string;
+  sheet: string;
+  finishedRow: number;
+  typeRow?: number | null;
+  componentRows?: number[] | null;
+  sourceRange: string;
+  sourceColumns: Record<string, string>;
+  rawRows: Record<string, Record<string, string>>;
+}
+
 export interface WeaponAttackModeManualOverride {
   modeId: string;
   fields: string[];
@@ -265,6 +311,13 @@ export interface ArmorTemplate extends EquipmentTemplateBase {
   armorRating?: number | null;
   mobilityPenalty?: number | null;
   armorActivityModifier?: number | null;
+  movementFactor?: number | null;
+  perceptionModifier?: number | null;
+  locationValues?: ArmorLocationValues | null;
+  locationTypes?: ArmorLocationTypes | null;
+  componentProfiles?: ArmorComponentProfile[] | null;
+  sourceMetadata?: ImportedArmorSourceMetadata | null;
+  importWarnings?: string[] | null;
 }
 
 export interface GearTemplate extends EquipmentTemplateBase {

@@ -190,6 +190,52 @@ export const ImportedShieldSourceMetadataSchema = z.object({
   rawRow: z.record(z.string()),
 });
 
+export const ArmorLocationValuesSchema = z.object({
+  head: z.number().nullable().optional(),
+  frontArm: z.number().nullable().optional(),
+  chest: z.number().nullable().optional(),
+  backArm: z.number().nullable().optional(),
+  abdomen: z.number().nullable().optional(),
+  frontThigh: z.number().nullable().optional(),
+  frontFoot: z.number().nullable().optional(),
+  backThigh: z.number().nullable().optional(),
+  backFoot: z.number().nullable().optional(),
+});
+
+export const ArmorLocationTypesSchema = z.object({
+  head: z.string().nullable().optional(),
+  frontArm: z.string().nullable().optional(),
+  chest: z.string().nullable().optional(),
+  backArm: z.string().nullable().optional(),
+  abdomen: z.string().nullable().optional(),
+  frontThigh: z.string().nullable().optional(),
+  frontFoot: z.string().nullable().optional(),
+  backThigh: z.string().nullable().optional(),
+  backFoot: z.string().nullable().optional(),
+  generalArmor: z.string().nullable().optional(),
+});
+
+export const ImportedArmorSourceMetadataSchema = z.object({
+  workbook: z.string(),
+  sheet: z.string(),
+  finishedRow: z.number().int().positive(),
+  typeRow: z.number().int().positive().nullable().optional(),
+  componentRows: z.array(z.number().int().positive()).nullable().optional(),
+  sourceRange: z.string(),
+  sourceColumns: z.record(z.string()),
+  rawRows: z.record(z.record(z.string())),
+});
+
+export const ArmorComponentProfileSchema = z.object({
+  name: z.string(),
+  encumbranceFactor: z.number().nullable().optional(),
+  movementFactor: z.number().nullable().optional(),
+  generalArmor: z.number().nullable().optional(),
+  perceptionModifier: z.number().nullable().optional(),
+  locationValues: ArmorLocationValuesSchema.nullable().optional(),
+  sourceMetadata: ImportedArmorSourceMetadataSchema.nullable().optional(),
+});
+
 export const WeaponAttackModeManualOverrideSchema = z.object({
   modeId: z.string(),
   fields: z.array(z.string()),
@@ -286,6 +332,13 @@ export const ArmorTemplateSchema = EquipmentTemplateSchema.extend({
   armorRating: z.number().nullable().optional(),
   mobilityPenalty: z.number().nullable().optional(),
   armorActivityModifier: z.number().nullable().optional(),
+  movementFactor: z.number().nullable().optional(),
+  perceptionModifier: z.number().nullable().optional(),
+  locationValues: ArmorLocationValuesSchema.nullable().optional(),
+  locationTypes: ArmorLocationTypesSchema.nullable().optional(),
+  componentProfiles: z.array(ArmorComponentProfileSchema).nullable().optional(),
+  sourceMetadata: ImportedArmorSourceMetadataSchema.nullable().optional(),
+  importWarnings: z.array(z.string()).nullable().optional(),
 });
 
 export const GearTemplateSchema = EquipmentTemplateSchema.extend({
