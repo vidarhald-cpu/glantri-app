@@ -93,6 +93,7 @@ export interface DerivedCombatStateSnapshot {
   readinessSummary: string;
   movementSummary: DerivedCombatValue;
   movementModifierSummary: DerivedCombatValue;
+  shieldMovementModifierSummary: DerivedCombatValue;
   perceptionSummary: string;
   defenseSummary: string;
   loadNotes: string;
@@ -1136,6 +1137,7 @@ export function deriveCombatStateSnapshot(
     }),
     movementSummary: workbookMovement.movement ?? "—",
     movementModifierSummary: workbookMovement.movementModifier ?? "—",
+    shieldMovementModifierSummary: workbookMovement.shieldMovementModifier ?? "—",
     perceptionSummary: getPerceptionSummary({
       allocationInputs: resolvedAllocationInputs,
       backpackCount,

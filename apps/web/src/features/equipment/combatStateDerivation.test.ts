@@ -406,6 +406,7 @@ describe("combatStateDerivation", () => {
     expect(snapshot.defenseSummary).toContain("DB 17");
     expect(snapshot.defenseSummary).toContain("Parry 16");
     expect(snapshot.encumbranceLevel).toBe(4);
+    expect(snapshot.shieldMovementModifierSummary).toBe(2);
     expect(snapshot.movementModifierSummary).toBe(4);
     expect(snapshot.movementSummary).toBe(8);
     expect(snapshot.perceptionSummary).toContain("Current perception modifier -2");

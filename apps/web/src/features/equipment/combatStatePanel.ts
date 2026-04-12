@@ -193,6 +193,7 @@ export function buildCombatStatePanelModel(
     { label: "Gear item count", value: snapshot.gearCount },
     { label: "Personal encumbrance", value: getEncumbranceDisplayValue(snapshot.personalEncumbrance) },
     { label: "Encumbrance level", value: snapshot.encumbranceLevel },
+    { label: "Shield movement modifier", value: snapshot.shieldMovementModifierSummary },
     {
       label: "Movement modifier",
       value: snapshot.movementModifierSummary,

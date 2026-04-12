@@ -14,6 +14,15 @@ const initiativeText =
 const encumbranceAndMovementText =
   "Your carrying capacity comes from Strength, Size, and half Constitution. Your carried load is compared to that capacity to find an encumbrance level, and that level then sets the movement modifier used for final movement on the equipment screens.";
 
+const perceptionText =
+  "Armor can reduce perception. The equipment screens use the workbook-backed armor perception modifier from the armor you are wearing, so heavier head and face coverage can make awareness worse.";
+
+const armorActivityText =
+  "Armor activity shows how much your worn armor interferes with active combat use. On melee attacks, that armor activity modifier is combined with the weapon's own OB adjustment through the workbook table.";
+
+const shieldMovementText =
+  "Shield movement modifier still matters in the workbook movement path. A ready shield adds its shield movement penalty into movement modifier before final movement is taken from the workbook table.";
+
 export default function DocumentsAdminPage() {
   return (
     <section style={{ display: "grid", gap: "1.25rem" }}>
@@ -38,6 +47,18 @@ export default function DocumentsAdminPage() {
 
         <AdminPanel title="Encumbrance and movement">
           <p style={{ color: "#4f4635", lineHeight: 1.7, margin: 0 }}>{encumbranceAndMovementText}</p>
+        </AdminPanel>
+
+        <AdminPanel title="Perception">
+          <p style={{ color: "#4f4635", lineHeight: 1.7, margin: 0 }}>{perceptionText}</p>
+        </AdminPanel>
+
+        <AdminPanel title="Armor activity">
+          <p style={{ color: "#4f4635", lineHeight: 1.7, margin: 0 }}>{armorActivityText}</p>
+        </AdminPanel>
+
+        <AdminPanel title="Shield movement">
+          <p style={{ color: "#4f4635", lineHeight: 1.7, margin: 0 }}>{shieldMovementText}</p>
         </AdminPanel>
       </div>
     </section>
