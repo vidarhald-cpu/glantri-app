@@ -17,6 +17,10 @@ import {
   getEquipmentTemplateById
 } from "../../../../../src/features/equipment/equipmentSelectors";
 import {
+  buildCharacterArmorSummary,
+  getWorkbookCharacterSize,
+} from "../../../../../src/features/equipment/armorSummary";
+import {
   formatNonMeleeModes,
   formatOptionalDisplayValue,
   formatWeaponModeDmb,
@@ -123,6 +127,7 @@ function TableShell(input: {
 export default function WeaponsShieldsArmorPage({ params }: WeaponsShieldsArmorPageProps) {
   const { id } = use(params);
   const [characterName, setCharacterName] = useState(UNNAMED_CHARACTER_PLACEHOLDER);
+  const [characterSize, setCharacterSize] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [pageError, setPageError] = useState<string>();
   const [state, setState] = useState<EquipmentFeatureState | null>(null);
@@ -138,6 +143,7 @@ export default function WeaponsShieldsArmorPage({ params }: WeaponsShieldsArmorP
 
         setState(nextState);
         setCharacterName(getCharacterName(characterContext.record?.build.name));
+        setCharacterSize(getWorkbookCharacterSize(characterContext.record?.build));
         setPageError(undefined);
       })
       .catch((error) => {
@@ -352,10 +358,20 @@ export default function WeaponsShieldsArmorPage({ params }: WeaponsShieldsArmorP
         columns={[
           "Name",
           "Template",
-          "Subtype",
-          "Armor rating",
-          "Mobility penalty",
-          "Encumbrance",
+          "Head",
+          "Front Arm",
+          "Chest",
+          "Back Arm",
+          "Abdomen",
+          "Front Thigh",
+          "Front Foot",
+          "Back Thigh",
+          "Back Foot",
+          "General armor",
+          "AA mod",
+          "Per. mod",
+          "Enc. factor",
+          "Actual encumbrance",
           "Value",
           "Material",
           "Quality",
@@ -363,20 +379,38 @@ export default function WeaponsShieldsArmorPage({ params }: WeaponsShieldsArmorP
           "Quantity",
           "Notes"
         ]}
-        rows={armorRows.map(({ item, template }) => [
-          getItemName(item, template),
-          template.name,
-          formatOptionalDisplayValue(template.subtype),
-          formatOptionalDisplayValue(template.armorRating),
-          formatOptionalDisplayValue(template.mobilityPenalty),
-          String(getEffectiveEncumbrance(item, template)),
-          formatOptionalDisplayValue(item.valueOverride ?? template.baseValue),
-          item.material,
-          item.quality,
-          item.conditionState,
-          String(item.quantity),
-          item.notes ?? template.rulesNotes ?? "—"
-        ])}
+        rows={armorRows.map(({ item, template }) => {
+          const armorSummary = buildCharacterArmorSummary({
+            characterSize,
+            item,
+            template,
+          });
+
+          return [
+            getItemName(item, template),
+            template.name,
+            armorSummary?.locations.find((location) => location.key === "head")?.valueWithType ?? "—",
+            armorSummary?.locations.find((location) => location.key === "frontArm")?.valueWithType ?? "—",
+            armorSummary?.locations.find((location) => location.key === "chest")?.valueWithType ?? "—",
+            armorSummary?.locations.find((location) => location.key === "backArm")?.valueWithType ?? "—",
+            armorSummary?.locations.find((location) => location.key === "abdomen")?.valueWithType ?? "—",
+            armorSummary?.locations.find((location) => location.key === "frontThigh")?.valueWithType ?? "—",
+            armorSummary?.locations.find((location) => location.key === "frontFoot")?.valueWithType ?? "—",
+            armorSummary?.locations.find((location) => location.key === "backThigh")?.valueWithType ?? "—",
+            armorSummary?.locations.find((location) => location.key === "backFoot")?.valueWithType ?? "—",
+            armorSummary?.generalArmorWithType ?? "—",
+            formatOptionalDisplayValue(armorSummary?.aaModifier),
+            formatOptionalDisplayValue(armorSummary?.perceptionModifier),
+            formatOptionalDisplayValue(armorSummary?.encumbranceFactor),
+            formatOptionalDisplayValue(armorSummary?.actualEncumbrance),
+            formatOptionalDisplayValue(item.valueOverride ?? template.baseValue),
+            item.material,
+            item.quality,
+            item.conditionState,
+            String(item.quantity),
+            item.notes ?? template.rulesNotes ?? "—"
+          ];
+        })}
       />
     </section>
   );

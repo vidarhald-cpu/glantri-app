@@ -11,6 +11,10 @@ import {
 } from "../../../../../../../packages/rules-engine/src/combat/combatAllocationState";
 
 import { CombatStatePanel } from "../../../../../src/features/equipment/components/CombatStatePanel";
+import {
+  buildCharacterArmorSummary,
+  getWorkbookCharacterSize,
+} from "../../../../../src/features/equipment/armorSummary";
 import { buildCombatStatePanelModel } from "../../../../../src/features/equipment/combatStatePanel";
 import {
   buildCombatStateCharacterInputs,
@@ -404,6 +408,22 @@ export default function CharacterLoadoutPage({ params }: CharacterLoadoutPagePro
         : [],
     [loadout, state, weaponOptions]
   );
+  const wornArmorSummary = useMemo(() => {
+    if (!state || !characterContext?.record || !("armor" in loadout) || !loadout.armor) {
+      return null;
+    }
+
+    const armorTemplate = getEquipmentTemplateById(state, loadout.armor.templateId);
+    if (armorTemplate?.category !== "armor") {
+      return null;
+    }
+
+    return buildCharacterArmorSummary({
+      characterSize: getWorkbookCharacterSize(characterContext.record.build),
+      item: loadout.armor,
+      template: armorTemplate,
+    });
+  }, [characterContext, loadout, state]);
 
   useEffect(() => {
     let cancelled = false;
@@ -738,6 +758,72 @@ export default function CharacterLoadoutPage({ params }: CharacterLoadoutPagePro
           persisted. Combat action and Throwing weapon are currently UI placeholders and do not
           drive combat behavior yet.
         </div>
+      ) : null}
+
+      {!loading && !pageError ? (
+        <ControlSection title="Armor summary">
+          {"armor" in loadout && loadout.armor && wornArmorSummary ? (
+            <div style={{ display: "grid", gap: "0.85rem" }}>
+              <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
+                Worn armor uses the workbook-backed armor model. Actual armor encumbrance follows
+                the workbook rule: Armor sheet Enc. Factor x character Size.
+              </div>
+              <div
+                style={{
+                  display: "grid",
+                  gap: "0.75rem",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))"
+                }}
+              >
+                <div><strong>Armor</strong><div>{getItemName({
+                  displayName: loadout.armor.displayName,
+                  templateId: loadout.armor.templateId,
+                  templateName: getEquipmentTemplateById(state!, loadout.armor.templateId)?.name,
+                })}</div></div>
+                <div><strong>General armor</strong><div>{wornArmorSummary.generalArmorWithType}</div></div>
+                <div><strong>AA modifier</strong><div>{wornArmorSummary.aaModifier ?? "—"}</div></div>
+                <div><strong>Perception modifier</strong><div>{wornArmorSummary.perceptionModifier ?? "—"}</div></div>
+                <div><strong>Encumbrance factor</strong><div>{wornArmorSummary.encumbranceFactor ?? "—"}</div></div>
+                <div><strong>Actual encumbrance</strong><div>{wornArmorSummary.actualEncumbrance ?? "—"}</div></div>
+              </div>
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ borderCollapse: "collapse", minWidth: "100%", width: "100%" }}>
+                  <thead>
+                    <tr style={{ borderBottom: "1px solid #d9ddd8", textAlign: "left" }}>
+                      {[
+                        "Head",
+                        "Front Arm",
+                        "Chest",
+                        "Back Arm",
+                        "Abdomen",
+                        "Front Thigh",
+                        "Front Foot",
+                        "Back Thigh",
+                        "Back Foot",
+                      ].map((label) => (
+                        <th key={label} style={{ padding: "0.5rem 0.75rem 0.5rem 0" }}>{label}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      {wornArmorSummary.locations.map((location) => (
+                        <td
+                          key={location.key}
+                          style={{ padding: "0.6rem 0.75rem 0.6rem 0", verticalAlign: "top" }}
+                        >
+                          {location.valueWithType}
+                        </td>
+                      ))}
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : (
+            <div>No armor is currently worn.</div>
+          )}
+        </ControlSection>
       ) : null}
 
       {!loading && !pageError && combatStatePanelModel ? (
