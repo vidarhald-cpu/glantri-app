@@ -170,9 +170,9 @@ export function CombatStatePanel(input: { model: CombatStatePanelModel }) {
           rows={input.model.currentUseRows}
         />
         <BattleStatCard
-          title="Armor and Protection"
-          subtitle="Exact template values are shown directly; location-specific armor coverage remains an interim structure."
-          rows={input.model.armorProtectionRows}
+          title="Defence and movement"
+          subtitle="Unarmed defense baseline together with current movement and carried-state values."
+          rows={input.model.capabilityRows}
         />
       </StatGrid>
 
@@ -183,18 +183,11 @@ export function CombatStatePanel(input: { model: CombatStatePanelModel }) {
         rows={input.model.weaponModeTable.rows}
       />
 
-      <StatGrid>
-        <BattleStatCard
-          title="Weapons and Defense"
-          subtitle="Quick-read interpretation of the current mode table."
-          rows={input.model.weaponDefenseRows}
-        />
-        <BattleStatCard
-          title="Encumbrance and Capability"
-          subtitle="Current carried-state inputs that later combat movement and readiness logic can reuse."
-          rows={input.model.capabilityRows}
-        />
-      </StatGrid>
+      <BattleStatCard
+        title="Weapons and Defense"
+        subtitle="Workbook-backed defense pairs for one selected defensive item and combined two-item defence."
+        rows={input.model.weaponDefenseRows}
+      />
     </SectionCard>
   );
 }

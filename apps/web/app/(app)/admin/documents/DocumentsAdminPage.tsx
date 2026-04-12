@@ -23,6 +23,9 @@ const armorActivityText =
 const shieldMovementText =
   "Shield movement modifier still matters in the workbook movement path. A ready shield adds its shield movement penalty into movement modifier before final movement is taken from the workbook table.";
 
+const dbDmText =
+  "DB and DM depend on how many defensive items you are using. With none, one, or two defensive items, the workbook builds a different defense result, so a shield alone, a weapon alone, and a combined defence do not produce the same pair.";
+
 export default function DocumentsAdminPage() {
   return (
     <section style={{ display: "grid", gap: "1.25rem" }}>
@@ -59,6 +62,10 @@ export default function DocumentsAdminPage() {
 
         <AdminPanel title="Shield movement">
           <p style={{ color: "#4f4635", lineHeight: 1.7, margin: 0 }}>{shieldMovementText}</p>
+        </AdminPanel>
+
+        <AdminPanel title="DB / DM">
+          <p style={{ color: "#4f4635", lineHeight: 1.7, margin: 0 }}>{dbDmText}</p>
         </AdminPanel>
       </div>
     </section>

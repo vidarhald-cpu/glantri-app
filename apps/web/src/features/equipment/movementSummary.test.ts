@@ -74,11 +74,13 @@ const characterInputs: CombatStateCharacterInputs = {
   combatSkillXpByName: {
     "1-h edged": 15,
     Brawling: 9,
+    Dodge: 15,
     Parry: 13,
   },
   constitution: 11,
   dexterity: 11,
   dexterityGm: 0,
+  dodgeCombatSkillXp: 15,
   parryCombatSkillXp: 13,
   size: 13,
   sizeGm: 1,

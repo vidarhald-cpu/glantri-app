@@ -208,7 +208,7 @@ const sampleActiveLoadout: CharacterLoadout = {
   notes: null,
 };
 
-const sampleCharacterInputs = {
+  const sampleCharacterInputs = {
   constitution: 11,
   dexterityGm: 0,
   dexterity: 11,
@@ -217,8 +217,10 @@ const sampleCharacterInputs = {
   combatSkillXpByName: {
     "1-h edged": 15,
     Brawling: 9,
+    Dodge: 15,
     Parry: 13,
   },
+  dodgeCombatSkillXp: 15,
   size: 13,
   sizeGm: 1,
   strengthGm: 3,
@@ -332,6 +334,14 @@ describe("combatStateDerivation", () => {
     expect(snapshot.defenseSummary).toContain("DM 6");
     expect(snapshot.defenseSummary).toContain("Parry 14 (allocation pending)");
     expect(snapshot.unarmedSummary).toContain("Punch and Kick");
+    expect(snapshot.unarmedDbSummary).toBe(12);
+    expect(snapshot.unarmedDmSummary).toBe(0);
+    expect(snapshot.oneItemDefenseLabel).toContain("Long sword");
+    expect(snapshot.oneItemDbSummary).toBe(13);
+    expect(snapshot.oneItemDmSummary).toBe(0);
+    expect(snapshot.twoItemDefenseLabel).toContain("Medium shield");
+    expect(snapshot.twoItemDbSummary).toBe(19);
+    expect(snapshot.twoItemDmSummary).toBe(0);
   });
 
   it("derives the displayed secondary melee DMB from the secondary mode values", () => {

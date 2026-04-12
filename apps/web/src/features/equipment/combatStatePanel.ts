@@ -179,16 +179,19 @@ export function buildCombatStatePanelModel(
 
   const weaponDefenseRows: CombatStateDetailRow[] = [
     { label: "Current grip", value: snapshot.gripSummary },
-    { label: "Primary notes", value: snapshot.primaryNotes },
-    { label: "Secondary notes", value: snapshot.secondaryNotes },
-    { label: "Missile notes", value: snapshot.missileNotes },
     {
-      label: "Defense status",
-      value: snapshot.defenseSummary,
+      label: snapshot.oneItemDefenseLabel,
+      value: formatDbDmPair(snapshot.oneItemDbSummary, snapshot.oneItemDmSummary),
     },
+    {
+      label: snapshot.twoItemDefenseLabel,
+      value: formatDbDmPair(snapshot.twoItemDbSummary, snapshot.twoItemDmSummary),
+    },
+    { label: "Primary notes", value: snapshot.primaryNotes },
   ];
 
   const capabilityRows: CombatStateDetailRow[] = [
+    { label: "Unarmed DB / DM", value: formatDbDmPair(snapshot.unarmedDbSummary, snapshot.unarmedDmSummary) },
     { label: "Encumbrance capacity", value: getEncumbranceDisplayValue(snapshot.encumbranceCapacity) },
     { label: "Gear item count", value: snapshot.gearCount },
     { label: "Personal encumbrance", value: getEncumbranceDisplayValue(snapshot.personalEncumbrance) },
@@ -212,4 +215,8 @@ export function buildCombatStatePanelModel(
     weaponDefenseRows,
     capabilityRows,
   };
+}
+
+function formatDbDmPair(db: CombatStateValue, dm: CombatStateValue): string {
+  return `DB ${db} / DM ${dm}`;
 }

@@ -116,6 +116,22 @@ export interface WorkbookMovementInput {
   movementModifier: number;
 }
 
+export interface WorkbookDefensePairInput {
+  baseDb: number;
+  equipmentModifier?: number | null;
+  toHitModifier?: number | null;
+}
+
+export interface WorkbookDefensePairResult {
+  db: number;
+  dm: number;
+  fullAdjustment: number;
+  fullModifier: number;
+  noToHitAdjustment: number;
+  noToHitDb: number;
+  noToHitModifier: number;
+}
+
 export const WORKBOOK_MOVEMENT_PERCENT_TABLE: Record<number, Record<number, number>> = {
   0: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0, 10: 0, 11: 0, 12: 0, 13: 0, 14: 0, 15: 0 },
   1: { 1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6, 7: 7, 8: 8, 9: 9, 10: 10, 11: 11, 12: 12, 13: 13, 14: 14, 15: 15 },
@@ -169,6 +185,25 @@ export const WORKBOOK_MOVEMENT_PERCENT_TABLE: Record<number, Record<number, numb
   49: { 1: 5, 2: 10, 3: 15, 4: 20, 5: 25, 6: 29, 7: 34, 8: 35, 9: 36, 10: 37, 11: 38, 12: 39, 13: 40, 14: 41, 15: 42 },
 };
 
+export const WORKBOOK_TO_HIT_MODIFIER_TABLE: Record<number, number> = {
+  0: 2,
+  1: 1,
+  2: 1,
+  3: 0,
+  4: 0,
+  5: -1,
+  6: -1,
+  7: -2,
+  8: -2,
+  9: -3,
+  10: -3,
+  11: -4,
+  12: -4,
+  13: -5,
+  14: -5,
+  15: -6,
+};
+
 export function getWorkbookCappedStrengthObModifier(strengthGm: number): number {
   return Math.min(strengthGm, 4);
 }
@@ -194,6 +229,61 @@ export function lookupWorkbookPercentageAdjustment(
   }
 
   return WORKBOOK_PERCENTAGE_ADJUSTMENT_TABLE[rawOb]?.[absoluteModifier] ?? null;
+}
+
+function applyWorkbookSignedAdjustment(
+  baseValue: number,
+  modifier: number,
+): { adjustment: number; value: number } | null {
+  const adjustment = lookupWorkbookPercentageAdjustment(baseValue, Math.abs(modifier));
+
+  if (adjustment == null) {
+    return null;
+  }
+
+  return {
+    adjustment,
+    value: modifier >= 0 ? baseValue + adjustment : baseValue - adjustment,
+  };
+}
+
+export function lookupWorkbookToHitModifier(encumbranceLevel: number): number | null {
+  if (!Number.isInteger(encumbranceLevel)) {
+    return null;
+  }
+
+  return WORKBOOK_TO_HIT_MODIFIER_TABLE[encumbranceLevel] ?? null;
+}
+
+export function calculateWorkbookBaseDb(input: {
+  dexterityGm: number;
+  dodgeSkillXp: number;
+}): number {
+  return Math.round(input.dodgeSkillXp / 2) + 4 + input.dexterityGm;
+}
+
+export function calculateWorkbookDefensePair(
+  input: WorkbookDefensePairInput,
+): WorkbookDefensePairResult | null {
+  const noToHitModifier = input.equipmentModifier ?? 0;
+  const fullModifier = noToHitModifier + (input.toHitModifier ?? 0);
+
+  const full = applyWorkbookSignedAdjustment(input.baseDb, fullModifier);
+  const noToHit = applyWorkbookSignedAdjustment(input.baseDb, noToHitModifier);
+
+  if (full == null || noToHit == null) {
+    return null;
+  }
+
+  return {
+    db: full.value,
+    dm: full.value - noToHit.value,
+    fullAdjustment: full.adjustment,
+    fullModifier,
+    noToHitAdjustment: noToHit.adjustment,
+    noToHitDb: noToHit.value,
+    noToHitModifier,
+  };
 }
 
 export function calculateWorkbookMeleeOb(

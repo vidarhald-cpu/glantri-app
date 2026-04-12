@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  calculateWorkbookBaseDb,
+  calculateWorkbookDefensePair,
   calculateWorkbookBaseMove,
   calculateWorkbookCarryCapacity,
   calculateWorkbookEncumbranceLevel,
@@ -10,6 +12,7 @@ import {
   calculateWorkbookMovement,
   calculateWorkbookMovementModifier,
   getWorkbookStatGm,
+  lookupWorkbookToHitModifier,
   lookupWorkbookMovementAdjustment,
   lookupWorkbookSkillInitiativeModifier,
 } from "./workbookCombatMath";
@@ -195,6 +198,62 @@ describe("workbookCombatMath", () => {
     ).toMatchObject({
       encumbranceLevel: 6,
       encumbrancePercent: 151,
+    });
+  });
+
+  it("maps the workbook to-hit modifier table faithfully", () => {
+    expect(lookupWorkbookToHitModifier(0)).toBe(2);
+    expect(lookupWorkbookToHitModifier(3)).toBe(0);
+    expect(lookupWorkbookToHitModifier(4)).toBe(0);
+    expect(lookupWorkbookToHitModifier(5)).toBe(-1);
+    expect(lookupWorkbookToHitModifier(15)).toBe(-6);
+    expect(lookupWorkbookToHitModifier(16)).toBeNull();
+  });
+
+  it("matches the workbook defense chain for unarmed, one-item, and two-item cases", () => {
+    const baseDb = calculateWorkbookBaseDb({
+      dexterityGm: 0,
+      dodgeSkillXp: 15,
+    });
+    const toHitModifier = lookupWorkbookToHitModifier(4);
+
+    expect(baseDb).toBe(12);
+    expect(toHitModifier).toBe(0);
+
+    expect(
+      calculateWorkbookDefensePair({
+        baseDb,
+        equipmentModifier: 0,
+        toHitModifier,
+      }),
+    ).toMatchObject({
+      db: 12,
+      dm: 0,
+      noToHitDb: 12,
+    });
+
+    expect(
+      calculateWorkbookDefensePair({
+        baseDb,
+        equipmentModifier: 5,
+        toHitModifier,
+      }),
+    ).toMatchObject({
+      db: 18,
+      dm: 0,
+      noToHitDb: 18,
+    });
+
+    expect(
+      calculateWorkbookDefensePair({
+        baseDb,
+        equipmentModifier: 6,
+        toHitModifier,
+      }),
+    ).toMatchObject({
+      db: 19,
+      dm: 0,
+      noToHitDb: 19,
     });
   });
 });

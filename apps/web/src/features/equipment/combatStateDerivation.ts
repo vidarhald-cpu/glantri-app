@@ -27,9 +27,12 @@ import {
   usesCombatParrySource,
 } from "../../../../../packages/rules-engine/src/combat/composeDefenseValues";
 import {
+  calculateWorkbookBaseDb,
+  calculateWorkbookDefensePair,
   calculateWorkbookMeleeDmb,
   calculateWorkbookMeleeInitiative,
   calculateWorkbookMeleeOb,
+  lookupWorkbookToHitModifier,
 } from "../../../../../packages/rules-engine/src/combat/workbookCombatMath";
 
 import {
@@ -57,6 +60,7 @@ export interface CombatStateCharacterInputs {
   // Canonical workbook-equivalent total skill XP used by combat calculations.
   // This is effectiveSkillNumber: best group contribution + direct skill ranks.
   combatSkillXpByName: Record<string, number>;
+  dodgeCombatSkillXp: number | null;
   parryCombatSkillXp: number | null;
   brawlingCombatSkillXp: number | null;
   size: number | null;
@@ -94,6 +98,14 @@ export interface DerivedCombatStateSnapshot {
   movementSummary: DerivedCombatValue;
   movementModifierSummary: DerivedCombatValue;
   shieldMovementModifierSummary: DerivedCombatValue;
+  unarmedDbSummary: DerivedCombatValue;
+  unarmedDmSummary: DerivedCombatValue;
+  oneItemDefenseLabel: string;
+  oneItemDbSummary: DerivedCombatValue;
+  oneItemDmSummary: DerivedCombatValue;
+  twoItemDefenseLabel: string;
+  twoItemDbSummary: DerivedCombatValue;
+  twoItemDmSummary: DerivedCombatValue;
   perceptionSummary: string;
   defenseSummary: string;
   loadNotes: string;
@@ -299,6 +311,7 @@ export function buildCombatStateCharacterInputs(
     constitution,
     dexterity,
     dexterityGm: getWorkbookStatGm(dexterity),
+    dodgeCombatSkillXp: combatSkillXpByName.Dodge ?? null,
     parryCombatSkillXp: combatSkillXpByName[PARRY_SKILL_NAME] ?? null,
     size,
     sizeGm: getWorkbookStatGm(size),
@@ -925,6 +938,117 @@ function getPerceptionSummary(input: {
   return `Current perception modifier ${formatSignedModifier(perceptionModifier)} from explicit live combat state; encumbrance-specific perception formula remains interim. Current carried state is ${input.withYouCount} with-you items, including ${input.backpackCount} in backpack.`;
 }
 
+function getWorkbookDefenseCases(input: {
+  allocationInputs: CombatStateAllocationInputs;
+  characterInputs?: CombatStateCharacterInputs;
+  encumbranceLevel: number | null;
+  primaryWeaponTemplate: WeaponTemplate | null;
+  secondaryWeaponTemplate: WeaponTemplate | null;
+  shieldTemplate: ShieldTemplate | null;
+}): {
+  oneItemLabel: string;
+  oneItemPair: { db: DerivedCombatValue; dm: DerivedCombatValue };
+  twoItemLabel: string;
+  twoItemPair: { db: DerivedCombatValue; dm: DerivedCombatValue };
+  unarmedPair: { db: DerivedCombatValue; dm: DerivedCombatValue };
+} {
+  const dexterityGm = input.characterInputs?.dexterityGm ?? null;
+  const dodgeSkillXp = input.characterInputs?.dodgeCombatSkillXp ?? -1;
+  const toHitModifier =
+    input.encumbranceLevel == null ? null : lookupWorkbookToHitModifier(input.encumbranceLevel);
+
+  if (dexterityGm == null || toHitModifier == null) {
+    return {
+      oneItemLabel: "Selected defensive item",
+      oneItemPair: { db: "—", dm: "—" },
+      twoItemLabel: "Selected combined defence",
+      twoItemPair: { db: "—", dm: "—" },
+      unarmedPair: { db: "—", dm: "—" },
+    };
+  }
+
+  const baseDb = calculateWorkbookBaseDb({
+    dexterityGm,
+    dodgeSkillXp,
+  });
+
+  const unarmedPair = calculateWorkbookDefensePair({
+    baseDb,
+    equipmentModifier: 0,
+    toHitModifier,
+  });
+
+  const singleWeaponTemplate = input.primaryWeaponTemplate ?? input.secondaryWeaponTemplate ?? null;
+  const singleShieldTemplate = input.shieldTemplate;
+  const singleItemTemplate = singleWeaponTemplate ?? singleShieldTemplate ?? null;
+  const singleItemModifier = singleItemTemplate?.defensiveValue ?? 0;
+  const singleItemLabel = singleItemTemplate
+    ? `One-item defence (${singleItemTemplate.name})`
+    : "One-item defence";
+  const singleItemPair = calculateWorkbookDefensePair({
+    baseDb,
+    equipmentModifier: singleItemModifier,
+    toHitModifier,
+  });
+
+  const combinedWeaponTemplate = input.primaryWeaponTemplate ?? input.secondaryWeaponTemplate ?? null;
+  const offHandCandidates = [
+    input.shieldTemplate
+      ? {
+          label: input.shieldTemplate.name,
+          value: input.shieldTemplate.defensiveValue ?? 0,
+        }
+      : null,
+    input.primaryWeaponTemplate && input.secondaryWeaponTemplate
+      ? {
+          label: input.secondaryWeaponTemplate.name,
+          value: input.secondaryWeaponTemplate.defensiveValue ?? 0,
+        }
+      : null,
+  ].filter((candidate): candidate is { label: string; value: number } => candidate !== null);
+
+  const offHandCandidate = offHandCandidates.reduce<{ label: string; value: number } | null>(
+    (best, current) => {
+      if (!best || current.value > best.value) {
+        return current;
+      }
+      return best;
+    },
+    null,
+  );
+
+  const combinedLabel =
+    combinedWeaponTemplate && offHandCandidate
+      ? `Two-item defence (${combinedWeaponTemplate.name} + ${offHandCandidate.label})`
+      : "Two-item defence";
+  const combinedPair =
+    combinedWeaponTemplate && offHandCandidate
+      ? calculateWorkbookDefensePair({
+          baseDb,
+          equipmentModifier:
+            (combinedWeaponTemplate.defensiveValue ?? 0) + offHandCandidate.value,
+          toHitModifier,
+        })
+      : null;
+
+  return {
+    oneItemLabel: singleItemLabel,
+    oneItemPair: {
+      db: singleItemPair?.db ?? "—",
+      dm: singleItemPair?.dm ?? "—",
+    },
+    twoItemLabel: combinedLabel,
+    twoItemPair: {
+      db: combinedPair?.db ?? "—",
+      dm: combinedPair?.dm ?? "—",
+    },
+    unarmedPair: {
+      db: unarmedPair?.db ?? "—",
+      dm: unarmedPair?.dm ?? "—",
+    },
+  };
+}
+
 function getReadinessSummary(input: {
   allocationInputs: CombatStateAllocationInputs;
   backpackCount: number;
@@ -1126,6 +1250,15 @@ export function deriveCombatStateSnapshot(
     }),
   );
 
+  const workbookDefenseCases = getWorkbookDefenseCases({
+    allocationInputs: resolvedAllocationInputs,
+    characterInputs,
+    encumbranceLevel: workbookMovement.encumbranceLevel,
+    primaryWeaponTemplate,
+    secondaryWeaponTemplate,
+    shieldTemplate,
+  });
+
   return {
     encumbranceCapacity: workbookMovement.carryCapacity ?? "—",
     encumbranceLevel: workbookMovement.encumbranceLevel ?? "—",
@@ -1138,6 +1271,14 @@ export function deriveCombatStateSnapshot(
     movementSummary: workbookMovement.movement ?? "—",
     movementModifierSummary: workbookMovement.movementModifier ?? "—",
     shieldMovementModifierSummary: workbookMovement.shieldMovementModifier ?? "—",
+    unarmedDbSummary: workbookDefenseCases.unarmedPair.db,
+    unarmedDmSummary: workbookDefenseCases.unarmedPair.dm,
+    oneItemDefenseLabel: workbookDefenseCases.oneItemLabel,
+    oneItemDbSummary: workbookDefenseCases.oneItemPair.db,
+    oneItemDmSummary: workbookDefenseCases.oneItemPair.dm,
+    twoItemDefenseLabel: workbookDefenseCases.twoItemLabel,
+    twoItemDbSummary: workbookDefenseCases.twoItemPair.db,
+    twoItemDmSummary: workbookDefenseCases.twoItemPair.dm,
     perceptionSummary: getPerceptionSummary({
       allocationInputs: resolvedAllocationInputs,
       backpackCount,
