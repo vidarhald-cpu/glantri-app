@@ -177,13 +177,6 @@ export function CombatStatePanel(input: { model: CombatStatePanelModel }) {
       </StatGrid>
 
       <TableCard
-        title={input.model.armorProtectionTable.title}
-        description={input.model.armorProtectionTable.description}
-        columns={input.model.armorProtectionTable.columns}
-        rows={input.model.armorProtectionTable.rows}
-      />
-
-      <TableCard
         title={input.model.weaponModeTable.title}
         description={input.model.weaponModeTable.description}
         columns={input.model.weaponModeTable.columns}

@@ -30,6 +30,7 @@ import {
 } from "../../../../../src/lib/api/localServiceClient";
 import { loadLocalCharacterContext } from "../../../../../src/lib/characters/loadLocalCharacterContext";
 import { UNNAMED_CHARACTER_PLACEHOLDER } from "../../../../../src/lib/offline/repositories/localCharacterRepository";
+import { getWorkbookCharacterSize } from "../../../../../src/features/equipment/armorSummary";
 import { formatEncumbranceDisplay } from "../../../../../src/features/equipment/displayFormatting";
 
 interface CharacterEquipmentPageProps {
@@ -101,6 +102,7 @@ const availabilityOptions: Array<{
 export default function CharacterEquipmentPage({ params }: CharacterEquipmentPageProps) {
   const { id } = use(params);
   const [state, setState] = useState<EquipmentFeatureState | null>(null);
+  const [characterSize, setCharacterSize] = useState<number | null>(null);
   const [characterName, setCharacterName] = useState(UNNAMED_CHARACTER_PLACEHOLDER);
   const [loading, setLoading] = useState(true);
   const [pageError, setPageError] = useState<string>();
@@ -133,7 +135,10 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
       }
     >
   >({});
-  const rows = useMemo(() => (state ? getInventoryRows(state, id) : []), [state, id]);
+  const rows = useMemo(
+    () => (state ? getInventoryRows(state, id, characterSize) : []),
+    [state, id, characterSize]
+  );
   const locations = useMemo(() => (state ? getCharacterLocations(state, id) : []), [state, id]);
   const groupedSections = useMemo(
     () => (state ? getItemsGroupedByAvailability(state, id) : []),
@@ -196,6 +201,7 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
         setCharacterName(
           characterContext.record?.build.name.trim() || UNNAMED_CHARACTER_PLACEHOLDER
         );
+        setCharacterSize(getWorkbookCharacterSize(characterContext.record?.build));
         setPageError(undefined);
       })
       .catch((error) => {

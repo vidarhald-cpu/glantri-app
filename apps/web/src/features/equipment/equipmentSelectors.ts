@@ -14,6 +14,7 @@ import {
   type EquipmentTemplate,
   type StorageLocation,
 } from "@glantri/domain";
+import { calculateWorkbookArmorEncumbrance } from "./armorSummary";
 import type { EquipmentFeatureState, InventoryRow } from "./types";
 
 export function getCharacterEquipmentItems(
@@ -89,6 +90,7 @@ export function getEquipmentTemplateById(
 export function getInventoryRows(
   state: EquipmentFeatureState,
   characterId: string,
+  characterSize?: number | null,
 ): InventoryRow[] {
   const items = getCharacterEquipmentItems(state, characterId);
   const rows: InventoryRow[] = [];
@@ -100,7 +102,14 @@ export function getInventoryRows(
     }
 
     const location = state.locationsById[item.storageAssignment.locationId];
-    const effectiveEncumbrance = getEffectiveEncumbrance(item, template);
+    const effectiveEncumbrance =
+      template.category === "armor"
+        ? calculateWorkbookArmorEncumbrance({
+            characterSize: characterSize ?? null,
+            item,
+            template,
+          }) ?? getEffectiveEncumbrance(item, template)
+        : getEffectiveEncumbrance(item, template);
 
     rows.push({
       itemId: item.id,

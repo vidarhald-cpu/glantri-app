@@ -20,6 +20,7 @@ import {
   buildCharacterArmorSummary,
   getWorkbookCharacterSize,
 } from "../../../../../src/features/equipment/armorSummary";
+import { formatEncumbranceDisplay } from "../../../../../src/features/equipment/displayFormatting";
 import {
   formatNonMeleeModes,
   formatOptionalDisplayValue,
@@ -401,8 +402,8 @@ export default function WeaponsShieldsArmorPage({ params }: WeaponsShieldsArmorP
             armorSummary?.generalArmorWithType ?? "—",
             formatOptionalDisplayValue(armorSummary?.aaModifier),
             formatOptionalDisplayValue(armorSummary?.perceptionModifier),
-            formatOptionalDisplayValue(armorSummary?.encumbranceFactor),
-            formatOptionalDisplayValue(armorSummary?.actualEncumbrance),
+            formatEncumbranceDisplay(armorSummary?.encumbranceFactor),
+            formatEncumbranceDisplay(armorSummary?.actualEncumbrance),
             formatOptionalDisplayValue(item.valueOverride ?? template.baseValue),
             item.material,
             item.quality,
