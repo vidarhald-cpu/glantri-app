@@ -1583,13 +1583,11 @@ export function buildChargenDraftView(input: {
     .sort((left, right) => left.name.localeCompare(right.name));
   const groupViewById = new Map(groups.map((group) => [group.groupId, group]));
 
-  const skills = progression.skills
-    .map((skill) => {
-      const definition = getSkillById(input.content, skill.skillId);
+  const progressionSkillById = new Map(progression.skills.map((skill) => [skill.skillId, skill]));
 
-      if (!definition) {
-        return null;
-      }
+  const skills = input.content.skills
+    .map((definition) => {
+      const skill = progressionSkillById.get(definition.id);
 
       const groupIds = getSkillDefinitionGroupIds(definition);
       const bestContributingGroup = selectBestSkillGroupContribution(
@@ -1613,13 +1611,19 @@ export function buildChargenDraftView(input: {
       );
       const fallbackGroupId = getBestGroupIdByDefinitionOrder(input.content, groupIds);
       const resolvedGroupId = bestContributingGroup?.groupId ?? fallbackGroupId;
+      const hasProgressionEntry = skill !== undefined;
+      const groupContribution = bestContributingGroup?.groupLevel ?? 0;
+
+      if (!hasProgressionEntry && groupContribution <= 0) {
+        return null;
+      }
 
       if (!resolvedGroupId) {
         return null;
       }
 
-      const specificSkillLevel = skill.ranks;
-      const effectiveSkillNumber = (bestContributingGroup?.groupLevel ?? 0) + specificSkillLevel;
+      const specificSkillLevel = skill?.ranks ?? 0;
+      const effectiveSkillNumber = groupContribution + specificSkillLevel;
       const linkedStatAverage = getLinkedStatAverage(input.profile, definition);
       const literacyWarning =
         definition.requiresLiteracy === "recommended" && !hasLiteracy(progression)
@@ -1627,19 +1631,19 @@ export function buildChargenDraftView(input: {
           : undefined;
 
       const view: ChargenSkillView = {
-        category: skill.category,
+        category: skill?.category ?? definition.category,
         contributingGroupId: bestContributingGroup?.groupId,
         effectiveSkillNumber,
         groupId: resolvedGroupId,
         groupIds,
-        groupLevel: bestContributingGroup?.groupLevel ?? 0,
+        groupLevel: groupContribution,
         linkedStatAverage,
         literacyWarning,
         name: definition.name,
-        primaryRanks: skill.primaryRanks,
+        primaryRanks: skill?.primaryRanks ?? 0,
         requiresLiteracy: definition.requiresLiteracy,
-        secondaryRanks: skill.secondaryRanks,
-        skillId: skill.skillId,
+        secondaryRanks: skill?.secondaryRanks ?? 0,
+        skillId: definition.id,
         specificSkillLevel,
         totalSkill: effectiveSkillNumber + linkedStatAverage
       };

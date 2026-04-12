@@ -534,6 +534,108 @@ describe("combatStateDerivation", () => {
     expect(snapshot.twoItemDmSummary).toBe("—");
   });
 
+  it("maps Dodge XP into combat inputs when it exists in the sheet summary skill rows", () => {
+    const sheetSummary = {
+      adjustedStats: {
+        con: 11,
+        dex: 11,
+        siz: 13,
+        str: 17,
+      },
+      combat: {
+        combatGroups: [],
+        dodge: 0,
+        hasShield: false,
+        parry: 0,
+        weaponSkills: [],
+      },
+      distractionLevel: 0,
+      draftView: {
+        education: {
+          baseEducation: 0,
+          gmInt: 0,
+          socialClassEducationValue: 0,
+          theoreticalSkillCount: 0,
+        },
+        groups: [],
+        primaryPoolAvailable: 0,
+        secondaryPoolAvailable: 0,
+        skills: [
+          {
+            category: "ordinary",
+            effectiveSkillNumber: 10,
+            groupId: "basic_melee_training",
+            groupIds: ["basic_melee_training"],
+            groupLevel: 10,
+            linkedStatAverage: 0,
+            name: "Dodge",
+            primaryRanks: 0,
+            requiresLiteracy: "no",
+            secondaryRanks: 0,
+            skillId: "dodge",
+            specificSkillLevel: 0,
+            totalSkill: 10,
+          },
+          {
+            category: "ordinary",
+            effectiveSkillNumber: 11,
+            groupId: "basic_melee_training",
+            groupIds: ["basic_melee_training"],
+            groupLevel: 10,
+            linkedStatAverage: 0,
+            name: "1-h edged",
+            primaryRanks: 1,
+            requiresLiteracy: "no",
+            secondaryRanks: 0,
+            skillId: "one_h_edged",
+            specificSkillLevel: 1,
+            totalSkill: 11,
+          },
+          {
+            category: "ordinary",
+            effectiveSkillNumber: 10,
+            groupId: "basic_melee_training",
+            groupIds: ["basic_melee_training"],
+            groupLevel: 10,
+            linkedStatAverage: 0,
+            name: "Parry",
+            primaryRanks: 0,
+            requiresLiteracy: "no",
+            secondaryRanks: 0,
+            skillId: "parry",
+            specificSkillLevel: 0,
+            totalSkill: 10,
+          },
+        ],
+        specializations: [],
+        totalSkillPointsInvested: 0,
+      },
+      equipment: {
+        armorSummary: "",
+        carriedItems: [],
+        equippedArmor: [],
+        equippedShields: [],
+        equippedWeapons: [],
+        hasEquippedShield: false,
+        readinessLabel: "",
+        shieldBonus: 0,
+      },
+      gms: {
+        byGroup: [],
+        total: 0,
+      },
+      seniority: 0,
+      totalSkillPointsInvested: 0,
+    } satisfies CharacterSheetSummary;
+
+    const inputs = buildCombatStateCharacterInputs(sheetSummary);
+
+    expect(inputs.dodgeCombatSkillXp).toBe(10);
+    expect(inputs.combatSkillXpByName.Dodge).toBe(10);
+    expect(inputs.parryCombatSkillXp).toBe(10);
+    expect(inputs.combatSkillXpByName["1-h edged"]).toBe(11);
+  });
+
   it("uses workbook-equivalent total skill XP rather than direct specific ranks for initiative lookup", () => {
     const sheetSummary = {
       adjustedStats: {
