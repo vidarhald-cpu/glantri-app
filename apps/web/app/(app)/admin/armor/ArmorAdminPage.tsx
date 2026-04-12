@@ -55,7 +55,19 @@ function formatLocationValues(template: ArmorTemplate): string {
 }
 
 function formatComponentNames(template: ArmorTemplate): string {
-  const components = template.componentProfiles?.map((component) => component.name.trim()).filter(Boolean) ?? [];
+  const components = template.componentProfiles
+    ?.map((component) => {
+      const name = component.name.trim();
+
+      if (!name) {
+        return "";
+      }
+
+      return name.startsWith("Unnamed component") ? template.name : name;
+    })
+    .filter(Boolean)
+    .filter((componentName, index, allNames) => allNames.indexOf(componentName) === index) ?? [];
+
   return components.length > 0 ? components.join(", ") : "—";
 }
 
@@ -153,7 +165,16 @@ export default function ArmorAdminPage() {
           (template): template is ArmorTemplate =>
             template.category === "armor" && template.tags.includes("themistogenes-import")
         )
-        .sort((left, right) => left.name.localeCompare(right.name)),
+        .sort((left, right) => {
+          const leftArmor = left.generalArmorRounded ?? Number.POSITIVE_INFINITY;
+          const rightArmor = right.generalArmorRounded ?? Number.POSITIVE_INFINITY;
+
+          if (leftArmor !== rightArmor) {
+            return leftArmor - rightArmor;
+          }
+
+          return left.name.localeCompare(right.name);
+        }),
     []
   );
 
@@ -170,7 +191,6 @@ export default function ArmorAdminPage() {
         formatOptionalValue(template.perceptionModifier),
         formatCriticalModifiers(template),
         formatOptionalValue(template.encumbranceFactor ?? template.baseEncumbrance),
-        "Factor x size",
         formatOptionalValue(template.movementFactor ?? template.mobilityPenalty),
       ]),
     [armorTemplates]
@@ -201,7 +221,6 @@ export default function ArmorAdminPage() {
             "Perception modifier",
             "Critical modifiers",
             "Encumbrance factor",
-            "Final encumbrance",
             "Movement modifier",
           ]}
           rows={rows}
