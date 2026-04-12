@@ -16,6 +16,7 @@ const THEMISTOGENES_WORKBOOK_PATH = path.resolve(
 );
 const THEMISTOGENES_WORKBOOK_NAME = "Themistogenes 1.07.xlsx";
 const ARMOR_TARGET = "xl/worksheets/sheet16.xml";
+const CRIT_MOD_TARGET = "xl/worksheets/sheet23.xml";
 
 const ARMOR_SOURCE_COLUMNS = {
   name: "A",
@@ -37,6 +38,7 @@ const ARMOR_SOURCE_COLUMNS = {
 } as const;
 
 type SourceRow = Record<string, string>;
+type NumericLookup = Map<number, number>;
 
 export interface ImportedArmorRowWarning {
   row: number;
@@ -185,9 +187,91 @@ const LOCATION_VALUE_COLUMNS: Array<[keyof ArmorLocationValues, keyof typeof ARM
   ["backFoot", "backFoot"],
 ];
 
+const ARMOR_DATA_COLUMNS = [
+  "A",
+  "B",
+  "C",
+  "D",
+  "E",
+  "F",
+  "G",
+  "H",
+  "I",
+  "J",
+  "K",
+  "L",
+  "M",
+  "N",
+  "O",
+  "R",
+] as const;
+
 function buildLocationValues(row: SourceRow): ArmorLocationValues {
   return Object.fromEntries(
     LOCATION_VALUE_COLUMNS.map(([key, columnKey]) => [key, parseNumber(row[ARMOR_SOURCE_COLUMNS[columnKey]])]),
+  ) as ArmorLocationValues;
+}
+
+function pickArmorSourceColumns(row: SourceRow): SourceRow {
+  return Object.fromEntries(
+    ARMOR_DATA_COLUMNS.map((column) => [column, row[column] ?? ""]),
+  );
+}
+
+function hasArmorWorkbookData(row: SourceRow | undefined): boolean {
+  if (!row) {
+    return false;
+  }
+
+  return ARMOR_DATA_COLUMNS.some((column) => (row[column] ?? "").trim().length > 0);
+}
+
+function sumLocationValues(values: Array<ArmorLocationValues | null | undefined>): ArmorLocationValues {
+  const entries = LOCATION_VALUE_COLUMNS.map(([key]) => {
+    const total = values.reduce((sum, current) => sum + (current?.[key] ?? 0), 0);
+    return [key, total];
+  });
+
+  return Object.fromEntries(entries) as ArmorLocationValues;
+}
+
+function averageLocationValues(values: ArmorLocationValues): number {
+  const total = LOCATION_VALUE_COLUMNS.reduce((sum, [key]) => sum + (values[key] ?? 0), 0);
+  return total / LOCATION_VALUE_COLUMNS.length;
+}
+
+function roundWorkbookGeneralArmor(value: number): number {
+  return Math.round(value);
+}
+
+function normalizeNumericKey(value: number): number {
+  return Number(value.toFixed(9));
+}
+
+function buildNumericLookup(rows: Array<{ rowNumber: number; values: SourceRow }>, keyColumn: string, valueColumn: string): NumericLookup {
+  const lookup = new Map<number, number>();
+
+  for (const row of rows) {
+    const key = parseNumber(row.values[keyColumn]);
+    const value = parseNumber(row.values[valueColumn]);
+
+    if (key === null || value === null) {
+      continue;
+    }
+
+    lookup.set(normalizeNumericKey(key), value);
+  }
+
+  return lookup;
+}
+
+function lookupNumericValue(lookup: NumericLookup, value: number): number | null {
+  return lookup.get(normalizeNumericKey(value)) ?? null;
+}
+
+function buildCriticalModifierByArea(values: ArmorLocationValues, lookup: NumericLookup): ArmorLocationValues {
+  return Object.fromEntries(
+    LOCATION_VALUE_COLUMNS.map(([key]) => [key, lookupNumericValue(lookup, values[key] ?? 0)]),
   ) as ArmorLocationValues;
 }
 
@@ -223,7 +307,7 @@ function buildSourceMetadata(input: {
     sourceRange: `Armor!A${startRow}:R${endRow}`,
     sourceColumns: ARMOR_SOURCE_COLUMNS,
     rawRows: Object.fromEntries(
-      rowNumbers.map((rowNumber) => [String(rowNumber), input.rowsByNumber[rowNumber] ?? {}]),
+      rowNumbers.map((rowNumber) => [String(rowNumber), pickArmorSourceColumns(input.rowsByNumber[rowNumber] ?? {})]),
     ),
   };
 }
@@ -286,17 +370,36 @@ function inferTags(name: string, defaultMaterial: MaterialType): string[] {
 }
 
 function buildComponentProfile(input: {
+  armorCritModifierLookup: NumericLookup;
   row: SourceRow;
   rowNumber: number;
   rowsByNumber: Record<number, SourceRow>;
+  warnings: string[];
 }): ArmorComponentProfile {
+  const locationValues = buildLocationValues(input.row);
+  const generalArmor = parseNumber(input.row.M);
+  const name = input.row.A?.trim();
+
+  if (!name) {
+    input.warnings.push(
+      `Armor row ${input.rowNumber}: workbook component row has no label, so it is preserved as an unnamed component row.`,
+    );
+  }
+
   return {
-    name: input.row.A?.trim() || `Armor component ${input.rowNumber}`,
+    name: name || `Unnamed component (row ${input.rowNumber})`,
     encumbranceFactor: parseNumber(input.row.B),
     movementFactor: parseNumber(input.row.C),
-    generalArmor: parseNumber(input.row.M),
+    generalArmor,
+    generalArmorRounded: generalArmor === null ? null : roundWorkbookGeneralArmor(generalArmor),
+    armorActivityModifier: parseNumber(input.row.N),
     perceptionModifier: parseNumber(input.row.O),
-    locationValues: buildLocationValues(input.row),
+    locationValues,
+    criticalModifierByArea: buildCriticalModifierByArea(locationValues, input.armorCritModifierLookup),
+    criticalModifierGeneral:
+      generalArmor === null
+        ? null
+        : lookupNumericValue(input.armorCritModifierLookup, roundWorkbookGeneralArmor(generalArmor)),
     sourceMetadata: {
       workbook: THEMISTOGENES_WORKBOOK_NAME,
       sheet: "Armor",
@@ -306,13 +409,14 @@ function buildComponentProfile(input: {
       sourceRange: `Armor!A${input.rowNumber}:R${input.rowNumber}`,
       sourceColumns: ARMOR_SOURCE_COLUMNS,
       rawRows: {
-        [String(input.rowNumber)]: input.rowsByNumber[input.rowNumber] ?? {},
+        [String(input.rowNumber)]: pickArmorSourceColumns(input.rowsByNumber[input.rowNumber] ?? {}),
       },
     },
   };
 }
 
 function buildArmorTemplate(input: {
+  armorCritModifierLookup: NumericLookup;
   componentRows: number[];
   finishedRow: SourceRow;
   finishedRowNumber: number;
@@ -323,13 +427,56 @@ function buildArmorTemplate(input: {
   const { defaultMaterial, warnings: materialWarnings } = inferMaterial(name);
   const subtype = slugify(name);
   const typeRow = input.typeRowNumber ? input.rowsByNumber[input.typeRowNumber] ?? null : null;
+  const warnings = [...materialWarnings];
   const componentProfiles = input.componentRows.map((rowNumber) =>
     buildComponentProfile({
+      armorCritModifierLookup: input.armorCritModifierLookup,
       row: input.rowsByNumber[rowNumber],
       rowNumber,
       rowsByNumber: input.rowsByNumber,
+      warnings,
     }),
   );
+  const derivedLocationValues =
+    componentProfiles.length > 0
+      ? sumLocationValues(componentProfiles.map((profile) => profile.locationValues))
+      : buildLocationValues(input.finishedRow);
+  const finishedLocationValues = buildLocationValues(input.finishedRow);
+  const generalArmorRaw = averageLocationValues(derivedLocationValues);
+  const generalArmorRounded = roundWorkbookGeneralArmor(generalArmorRaw);
+  const workbookArmorRating = parseNumber(input.finishedRow.M);
+  const derivedEncumbranceFactor =
+    componentProfiles.length > 0
+      ? componentProfiles.reduce((sum, profile) => sum + (profile.encumbranceFactor ?? 0), 0)
+      : parseNumber(input.finishedRow.B);
+
+  for (const [key] of LOCATION_VALUE_COLUMNS) {
+    const derivedValue = derivedLocationValues[key] ?? 0;
+    const workbookValue = finishedLocationValues[key] ?? 0;
+
+    if (Math.abs(derivedValue - workbookValue) > 1e-9) {
+      warnings.push(
+        `${name}: derived ${String(key)} protection ${derivedValue} does not match workbook row value ${workbookValue}.`,
+      );
+    }
+  }
+
+  if (workbookArmorRating !== null && Math.abs(workbookArmorRating - generalArmorRaw) > 1e-9) {
+    warnings.push(
+      `${name}: derived general armor ${generalArmorRaw} does not match workbook row value ${workbookArmorRating}.`,
+    );
+  }
+
+  const workbookEncumbranceFactor = parseNumber(input.finishedRow.B);
+  if (
+    derivedEncumbranceFactor !== null
+    && workbookEncumbranceFactor !== null
+    && Math.abs(derivedEncumbranceFactor - workbookEncumbranceFactor) > 1e-9
+  ) {
+    warnings.push(
+      `${name}: derived encumbrance factor ${derivedEncumbranceFactor} does not match workbook row value ${workbookEncumbranceFactor}.`,
+    );
+  }
 
   return {
     id: stableArmorId(name),
@@ -339,17 +486,21 @@ function buildArmorTemplate(input: {
     tags: inferTags(name, defaultMaterial),
     specificityTypeDefault: "generic",
     defaultMaterial,
-    baseEncumbrance: parseNumber(input.finishedRow.B) ?? 0,
+    baseEncumbrance: derivedEncumbranceFactor ?? 0,
+    encumbranceFactor: derivedEncumbranceFactor,
     baseValue: null,
     rulesNotes: null,
     roleplayNotes: null,
-    armorRating: parseNumber(input.finishedRow.M),
+    armorRating: generalArmorRaw,
+    generalArmorRounded,
     mobilityPenalty: parseNumber(input.finishedRow.C),
     armorActivityModifier: parseNumber(input.finishedRow.N),
     movementFactor: parseNumber(input.finishedRow.C),
     perceptionModifier: parseNumber(input.finishedRow.O),
-    locationValues: buildLocationValues(input.finishedRow),
+    locationValues: derivedLocationValues,
     locationTypes: buildLocationTypes(typeRow),
+    criticalModifierByArea: buildCriticalModifierByArea(derivedLocationValues, input.armorCritModifierLookup),
+    criticalModifierGeneral: lookupNumericValue(input.armorCritModifierLookup, generalArmorRounded),
     componentProfiles: componentProfiles.length > 0 ? componentProfiles : null,
     sourceMetadata: buildSourceMetadata({
       rowsByNumber: input.rowsByNumber,
@@ -357,7 +508,7 @@ function buildArmorTemplate(input: {
       typeRow: input.typeRowNumber,
       componentRows: input.componentRows,
     }),
-    importWarnings: materialWarnings.length > 0 ? materialWarnings : null,
+    importWarnings: warnings.length > 0 ? warnings : null,
   };
 }
 
@@ -367,6 +518,8 @@ export function importThemistogenesArmor(
   const sharedStringsXml = readZipEntryUtf8(workbookPath, "xl/sharedStrings.xml");
   const sharedStrings = parseSharedStrings(sharedStringsXml);
   const rows = parseWorksheetRows(readZipEntryUtf8(workbookPath, ARMOR_TARGET), sharedStrings);
+  const critModifierRows = parseWorksheetRows(readZipEntryUtf8(workbookPath, CRIT_MOD_TARGET), sharedStrings);
+  const armorCritModifierLookup = buildNumericLookup(critModifierRows, "A", "B");
   const rowsByNumber = Object.fromEntries(rows.map((row) => [row.rowNumber, row.values]));
 
   const templates: ArmorTemplate[] = [];
@@ -398,7 +551,7 @@ export function importThemistogenesArmor(
         break;
       }
 
-      if (previousName) {
+      if (hasArmorWorkbookData(previous)) {
         componentRows.push(previousRow);
       }
     }
@@ -410,6 +563,7 @@ export function importThemistogenesArmor(
         : null;
 
     const template = buildArmorTemplate({
+      armorCritModifierLookup,
       componentRows,
       finishedRow: row.values,
       finishedRowNumber: row.rowNumber,

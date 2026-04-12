@@ -199,8 +199,12 @@ export interface ArmorComponentProfile {
   encumbranceFactor?: number | null;
   movementFactor?: number | null;
   generalArmor?: number | null;
+  generalArmorRounded?: number | null;
+  armorActivityModifier?: number | null;
   perceptionModifier?: number | null;
   locationValues?: ArmorLocationValues | null;
+  criticalModifierByArea?: ArmorLocationValues | null;
+  criticalModifierGeneral?: number | null;
   sourceMetadata?: ImportedArmorSourceMetadata | null;
 }
 
@@ -309,12 +313,16 @@ export interface ShieldTemplate extends EquipmentTemplateBase {
 export interface ArmorTemplate extends EquipmentTemplateBase {
   category: "armor";
   armorRating?: number | null;
+  generalArmorRounded?: number | null;
+  encumbranceFactor?: number | null;
   mobilityPenalty?: number | null;
   armorActivityModifier?: number | null;
   movementFactor?: number | null;
   perceptionModifier?: number | null;
   locationValues?: ArmorLocationValues | null;
   locationTypes?: ArmorLocationTypes | null;
+  criticalModifierByArea?: ArmorLocationValues | null;
+  criticalModifierGeneral?: number | null;
   componentProfiles?: ArmorComponentProfile[] | null;
   sourceMetadata?: ImportedArmorSourceMetadata | null;
   importWarnings?: string[] | null;

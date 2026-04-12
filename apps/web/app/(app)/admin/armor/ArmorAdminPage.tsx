@@ -13,46 +13,88 @@ function formatOptionalValue(value: number | string | null | undefined): string 
 
   const text =
     typeof value === "number"
-      ? value.toFixed(2)
+      ? Number.isInteger(value)
+        ? String(value)
+        : value.toFixed(2)
       : value.trim();
   return text.length > 0 ? text : "—";
 }
 
 function formatGeneralArmor(template: ArmorTemplate): string {
-  const generalArmorType = template.locationTypes?.generalArmor?.trim();
-  if (generalArmorType) {
-    return generalArmorType;
+  if (template.armorRating === null || template.armorRating === undefined) {
+    return "—";
   }
 
-  return "—";
+  const rounded = template.generalArmorRounded;
+  return rounded === null || rounded === undefined
+    ? formatOptionalValue(template.armorRating)
+    : `${formatOptionalValue(template.armorRating)} -> ${rounded}`;
 }
 
-function formatLocationTypes(template: ArmorTemplate): string {
-  const types = template.locationTypes;
-  if (!types) {
+function formatLocationValues(template: ArmorTemplate): string {
+  const values = template.locationValues;
+  if (!values) {
     return "—";
   }
 
   const entries = [
-    ["Head", types.head],
-    ["Front arm", types.frontArm],
-    ["Chest", types.chest],
-    ["Back arm", types.backArm],
-    ["Abdomen", types.abdomen],
-    ["Front thigh", types.frontThigh],
-    ["Front foot", types.frontFoot],
-    ["Back thigh", types.backThigh],
-    ["Back foot", types.backFoot]
-  ].filter(([, value]) => typeof value === "string" && value.trim().length > 0);
+    ["Hd", values.head],
+    ["FA", values.frontArm],
+    ["Ch", values.chest],
+    ["BA", values.backArm],
+    ["Ab", values.abdomen],
+    ["FT", values.frontThigh],
+    ["FF", values.frontFoot],
+    ["BT", values.backThigh],
+    ["BF", values.backFoot]
+  ].filter(([, value]) => value !== null && value !== undefined);
 
   return entries.length > 0
-    ? entries.map(([label, value]) => `${label}: ${value}`).join(" · ")
+    ? entries.map(([label, value]) => `${label} ${formatOptionalValue(value)}`).join(" · ")
     : "—";
 }
 
 function formatComponentNames(template: ArmorTemplate): string {
   const components = template.componentProfiles?.map((component) => component.name.trim()).filter(Boolean) ?? [];
   return components.length > 0 ? components.join(", ") : "—";
+}
+
+function formatCriticalModifiers(template: ArmorTemplate): string {
+  const values = template.criticalModifierByArea;
+  if (!values) {
+    return template.criticalModifierGeneral === null || template.criticalModifierGeneral === undefined
+      ? "—"
+      : `Gen ${template.criticalModifierGeneral}`;
+  }
+
+  const entries = [
+    ["Hd", values.head],
+    ["FA", values.frontArm],
+    ["Ch", values.chest],
+    ["BA", values.backArm],
+    ["Ab", values.abdomen],
+    ["FT", values.frontThigh],
+    ["FF", values.frontFoot],
+    ["BT", values.backThigh],
+    ["BF", values.backFoot]
+  ].filter(([, value]) => value !== null && value !== undefined);
+
+  if (template.criticalModifierGeneral !== null && template.criticalModifierGeneral !== undefined) {
+    entries.push(["Gen", template.criticalModifierGeneral]);
+  }
+
+  return entries.length > 0
+    ? entries.map(([label, value]) => `${label} ${formatOptionalValue(value)}`).join(" · ")
+    : "—";
+}
+
+function formatTypeSummary(template: ArmorTemplate): string {
+  const generalType = template.locationTypes?.generalArmor?.trim();
+  if (template.subtype && generalType) {
+    return `${template.subtype} / ${generalType}`;
+  }
+
+  return formatOptionalValue(template.subtype ?? generalType ?? null);
 }
 
 function TableShell(input: {
@@ -120,15 +162,16 @@ export default function ArmorAdminPage() {
       armorTemplates.map((template) => [
         template.name,
         formatOptionalValue(template.defaultMaterial),
-        formatOptionalValue(template.subtype),
-        formatOptionalValue(template.armorRating),
+        formatTypeSummary(template),
+        formatComponentNames(template),
+        formatLocationValues(template),
+        formatGeneralArmor(template),
         formatOptionalValue(template.armorActivityModifier),
         formatOptionalValue(template.perceptionModifier),
-        formatOptionalValue(template.baseEncumbrance),
+        formatCriticalModifiers(template),
+        formatOptionalValue(template.encumbranceFactor ?? template.baseEncumbrance),
+        "Factor x size",
         formatOptionalValue(template.movementFactor ?? template.mobilityPenalty),
-        formatGeneralArmor(template),
-        formatLocationTypes(template),
-        formatComponentNames(template)
       ]),
     [armorTemplates]
   );
@@ -143,7 +186,7 @@ export default function ArmorAdminPage() {
 
       <AdminPanel
         title="System Armor Catalog"
-        subtitle="Workbook-backed armor templates preserve Armor-sheet encumbrance, movement, AA, perception, location values, and component rows for later location-based rules work."
+        subtitle="Workbook-backed armor templates preserve component rows, per-area protection, rounded general armor, critical modifiers, and the workbook encumbrance-factor rule."
       >
         <TableShell
           emptyLabel="No armor templates found."
@@ -151,14 +194,15 @@ export default function ArmorAdminPage() {
             "Name",
             "Material",
             "Type / subtype",
-            "Armor rating",
+            "Components",
+            "Per-area protection",
+            "General armor",
             "AA modifier",
             "Perception modifier",
-            "Encumbrance",
+            "Critical modifiers",
+            "Encumbrance factor",
+            "Final encumbrance",
             "Movement modifier",
-            "General armor",
-            "Locations",
-            "Parts"
           ]}
           rows={rows}
         />
