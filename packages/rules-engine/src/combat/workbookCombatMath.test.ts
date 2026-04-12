@@ -256,4 +256,48 @@ describe("workbookCombatMath", () => {
       noToHitDb: 19,
     });
   });
+
+  it("matches the worksheet example for no weapon, shield, and longsword defense", () => {
+    const baseDb = calculateWorkbookBaseDb({
+      dexterityGm: 1,
+      dodgeSkillXp: 10,
+    });
+    const toHitModifier = lookupWorkbookToHitModifier(4);
+
+    expect(baseDb).toBe(10);
+    expect(toHitModifier).toBe(0);
+
+    expect(
+      calculateWorkbookDefensePair({
+        baseDb,
+        equipmentModifier: 0,
+        toHitModifier,
+      }),
+    ).toMatchObject({
+      db: 10,
+      dm: 0,
+    });
+
+    expect(
+      calculateWorkbookDefensePair({
+        baseDb,
+        equipmentModifier: 5,
+        toHitModifier,
+      }),
+    ).toMatchObject({
+      db: 15,
+      dm: 0,
+    });
+
+    expect(
+      calculateWorkbookDefensePair({
+        baseDb,
+        equipmentModifier: 1,
+        toHitModifier,
+      }),
+    ).toMatchObject({
+      db: 11,
+      dm: 0,
+    });
+  });
 });

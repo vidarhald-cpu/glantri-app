@@ -953,11 +953,11 @@ function getWorkbookDefenseCases(input: {
   unarmedPair: { db: DerivedCombatValue; dm: DerivedCombatValue };
 } {
   const dexterityGm = input.characterInputs?.dexterityGm ?? null;
-  const dodgeSkillXp = input.characterInputs?.dodgeCombatSkillXp ?? -1;
+  const dodgeSkillXp = input.characterInputs?.dodgeCombatSkillXp ?? null;
   const toHitModifier =
     input.encumbranceLevel == null ? null : lookupWorkbookToHitModifier(input.encumbranceLevel);
 
-  if (dexterityGm == null || toHitModifier == null) {
+  if (dexterityGm == null || dodgeSkillXp == null || toHitModifier == null) {
     return {
       oneItemLabel: "Selected defensive item",
       oneItemPair: { db: "—", dm: "—" },

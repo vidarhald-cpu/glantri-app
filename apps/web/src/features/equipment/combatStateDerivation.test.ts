@@ -515,6 +515,25 @@ describe("combatStateDerivation", () => {
     expect(getRowBySlotLabel(snapshot, "Kick")?.initiative).toBe(0);
   });
 
+  it("shows missing defense pairs instead of misleading fallback values when Dodge XP is absent", () => {
+    const snapshot = deriveCombatStateSnapshot(cloneState(), sampleCharacterId, {
+      ...sampleCharacterInputs,
+      combatSkillXpByName: {
+        "1-h edged": 15,
+        Brawling: 9,
+        Parry: 13,
+      },
+      dodgeCombatSkillXp: null,
+    });
+
+    expect(snapshot.unarmedDbSummary).toBe("—");
+    expect(snapshot.unarmedDmSummary).toBe("—");
+    expect(snapshot.oneItemDbSummary).toBe("—");
+    expect(snapshot.oneItemDmSummary).toBe("—");
+    expect(snapshot.twoItemDbSummary).toBe("—");
+    expect(snapshot.twoItemDmSummary).toBe("—");
+  });
+
   it("uses workbook-equivalent total skill XP rather than direct specific ranks for initiative lookup", () => {
     const sheetSummary = {
       adjustedStats: {
