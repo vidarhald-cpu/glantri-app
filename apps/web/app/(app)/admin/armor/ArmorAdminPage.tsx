@@ -8,6 +8,7 @@ import { AdminPageIntro, AdminPanel } from "../admin-ui";
 
 type ArmorDisplayRow = {
   cells: string[];
+  isFirstInBlock?: boolean;
   kind: "armor" | "component";
 };
 
@@ -130,6 +131,10 @@ function TableShell(input: {
             <tr
               key={`armor-row-${rowIndex}`}
               style={{
+                borderTop:
+                  row.kind === "armor" && row.isFirstInBlock && rowIndex > 0
+                    ? "2px solid rgba(85, 73, 48, 0.18)"
+                    : undefined,
                 background: row.kind === "component" ? "rgba(250, 245, 234, 0.38)" : undefined,
                 borderBottom: "1px solid rgba(85, 73, 48, 0.08)"
               }}
@@ -165,6 +170,13 @@ export default function ArmorAdminPage() {
             template.category === "armor" && template.tags.includes("themistogenes-import")
         )
         .sort((left, right) => {
+          const leftArmor = left.generalArmorRounded ?? Number.POSITIVE_INFINITY;
+          const rightArmor = right.generalArmorRounded ?? Number.POSITIVE_INFINITY;
+
+          if (leftArmor !== rightArmor) {
+            return leftArmor - rightArmor;
+          }
+
           return left.name.localeCompare(right.name);
         }),
     []
@@ -175,6 +187,7 @@ export default function ArmorAdminPage() {
       armorTemplates.flatMap((template) => {
         const armorRow: ArmorDisplayRow = {
           kind: "armor",
+          isFirstInBlock: true,
           cells: [
             template.name,
             formatOptionalValue(template.encumbranceFactor ?? template.baseEncumbrance),
