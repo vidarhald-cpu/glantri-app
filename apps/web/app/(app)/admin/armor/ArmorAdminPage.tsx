@@ -13,11 +13,18 @@ function formatOptionalValue(value: number | string | null | undefined): string 
 
   const text =
     typeof value === "number"
-      ? Number.isInteger(value)
-        ? String(value)
-        : value.toFixed(2).replace(/\.?0+$/, "")
+      ? value.toFixed(2)
       : value.trim();
   return text.length > 0 ? text : "—";
+}
+
+function formatGeneralArmor(template: ArmorTemplate): string {
+  const generalArmorType = template.locationTypes?.generalArmor?.trim();
+  if (generalArmorType) {
+    return generalArmorType;
+  }
+
+  return "—";
 }
 
 function formatLocationTypes(template: ArmorTemplate): string {
@@ -35,8 +42,7 @@ function formatLocationTypes(template: ArmorTemplate): string {
     ["Front thigh", types.frontThigh],
     ["Front foot", types.frontFoot],
     ["Back thigh", types.backThigh],
-    ["Back foot", types.backFoot],
-    ["General", types.generalArmor]
+    ["Back foot", types.backFoot]
   ].filter(([, value]) => typeof value === "string" && value.trim().length > 0);
 
   return entries.length > 0
@@ -55,7 +61,7 @@ function TableShell(input: {
   rows: string[][];
 }) {
   return input.rows.length > 0 ? (
-    <div style={{ overflow: "auto" }}>
+    <div style={{ maxHeight: "70vh", overflow: "auto" }}>
       <table style={{ borderCollapse: "collapse", minWidth: "100%", width: "100%" }}>
         <thead>
           <tr style={{ borderBottom: "1px solid rgba(85, 73, 48, 0.14)", textAlign: "left" }}>
@@ -65,7 +71,10 @@ function TableShell(input: {
                 style={{
                   background: "rgba(250, 245, 234, 0.98)",
                   padding: "0.55rem 0.75rem 0.55rem 0",
-                  verticalAlign: "bottom"
+                  position: "sticky",
+                  top: 0,
+                  verticalAlign: "bottom",
+                  zIndex: 1
                 }}
               >
                 {column}
@@ -117,6 +126,7 @@ export default function ArmorAdminPage() {
         formatOptionalValue(template.perceptionModifier),
         formatOptionalValue(template.baseEncumbrance),
         formatOptionalValue(template.movementFactor ?? template.mobilityPenalty),
+        formatGeneralArmor(template),
         formatLocationTypes(template),
         formatComponentNames(template)
       ]),
@@ -146,6 +156,7 @@ export default function ArmorAdminPage() {
             "Perception modifier",
             "Encumbrance",
             "Movement modifier",
+            "General armor",
             "Locations",
             "Parts"
           ]}
