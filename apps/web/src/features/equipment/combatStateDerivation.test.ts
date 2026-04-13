@@ -275,6 +275,7 @@ describe("combatStateDerivation", () => {
     );
     const primaryRow = getRowBySlotLabel(snapshot, "Primary weapon");
     const shieldRow = getRowBySlotLabel(snapshot, "Shield");
+    const brawlingRow = getRowBySlotLabel(snapshot, "Brawling");
     const punchRow = getRowBySlotLabel(snapshot, "Punch");
     const kickRow = getRowBySlotLabel(snapshot, "Kick");
 
@@ -287,51 +288,72 @@ describe("combatStateDerivation", () => {
       initiative: 1,
       ob1: 14,
       dmb1: 9,
-      attack1: "Slash (Edged)",
+      attack1: "Slash",
       crit1: "FS",
+      sec: "—",
       armorMod1: "C",
       ob2: 13,
       dmb2: 7,
-      attack2: "Thrust (Pointed)",
+      attack2: "Thrust",
       crit2: "EP",
       armorMod2: "C",
-      db: 16,
-      dm: 6,
+      db: 13,
+      dm: 0,
       parry: "14 (allocation pending)",
     });
+    expect(primaryRow?.attack3).toBe("—");
     expect(primaryRow?.notes).toContain("Thrust Pointed | AM C");
     expect(shieldRow).toMatchObject({
       slotLabel: "Shield",
       currentItemLabel: "Medium shield",
-      attack1: "Strike (Blunt)",
+      attack1: "Strike",
       ob1: 0,
       dmb1: 0,
       crit1: "AC",
+      sec: "—",
       attack2: "—",
-      db: 16,
-      dm: 5,
+      db: 18,
+      dm: 0,
       parry: 5,
+    });
+    expect(brawlingRow).toMatchObject({
+      slotLabel: "Brawling",
+      modeLabel: "Unarmed",
+      currentItemLabel: "Brawling",
+      ob1: 10,
+      db: 12,
+      dm: 0,
+      parry: "10 (allocation pending)",
+      attack1: "—",
     });
     expect(getRowBySlotLabel(snapshot, "Unarmed / brawling")).toBeUndefined();
     expect(punchRow).toMatchObject({
       slotLabel: "Punch",
       currentItemLabel: "Punch",
+      modeLabel: "Unarmed",
       initiative: 0,
-      attack1: "Strike (Blunt)",
+      attack1: "Strike",
       crit1: "AC",
       armorMod1: "A",
+      db: "—",
+      dm: "—",
+      parry: "—",
     });
     expect(kickRow).toMatchObject({
       slotLabel: "Kick",
       currentItemLabel: "Kick",
+      modeLabel: "Unarmed",
       initiative: 0,
-      attack1: "Strike (Blunt)",
+      attack1: "Strike",
       crit1: "AC",
       armorMod1: "A",
+      db: "—",
+      dm: "—",
+      parry: "—",
     });
     expect(getRowBySlotLabel(snapshot, "Secondary weapon")).toBeUndefined();
-    expect(snapshot.defenseSummary).toContain("DB 16");
-    expect(snapshot.defenseSummary).toContain("DM 6");
+    expect(snapshot.defenseSummary).toContain("DB 13");
+    expect(snapshot.defenseSummary).toContain("DM 0");
     expect(snapshot.defenseSummary).toContain("Parry 14 (allocation pending)");
     expect(snapshot.unarmedSummary).toContain("Punch and Kick");
     expect(snapshot.unarmedDbSummary).toBe(12);
@@ -380,7 +402,7 @@ describe("combatStateDerivation", () => {
     expect(snapshot.gripSummary).toBe("Missile ready");
     expect(missileRow?.currentItemLabel).toBe("Ballista");
     expect(missileRow?.dmb1).toBe("4d8+1 (formula)");
-    expect(missileRow?.attack1).toBe("Shot (Pointed)");
+    expect(missileRow?.attack1).toBe("Shot");
     expect(missileRow?.db).toBe("—");
     expect(missileRow?.notes).toContain("Source encumbrance 20+20 is ammo-linked");
     expect(snapshot.loadNotes).toContain("Source encumbrance 20+20 is ammo-linked");
@@ -409,11 +431,11 @@ describe("combatStateDerivation", () => {
     const primaryRow = getRowBySlotLabel(snapshot, "Primary weapon");
 
     expect(primaryRow?.ob1).toBe(16);
-    expect(primaryRow?.db).toBe(17);
+    expect(primaryRow?.db).toBe(13);
     expect(primaryRow?.parry).toBe(16);
     expect(snapshot.readinessSummary).toContain("Posture Parry");
     expect(snapshot.defenseSummary).toContain("Posture Parry");
-    expect(snapshot.defenseSummary).toContain("DB 17");
+    expect(snapshot.defenseSummary).toContain("DB 13");
     expect(snapshot.defenseSummary).toContain("Parry 16");
     expect(snapshot.encumbranceLevel).toBe(4);
     expect(snapshot.shieldMovementModifierSummary).toBe(2);
@@ -450,7 +472,7 @@ describe("combatStateDerivation", () => {
 
     expect(snapshot).not.toBeNull();
     expect(getRowBySlotLabel(snapshot!, "Primary weapon")?.ob1).toBe(16);
-    expect(getRowBySlotLabel(snapshot!, "Primary weapon")?.db).toBe(17);
+    expect(getRowBySlotLabel(snapshot!, "Primary weapon")?.db).toBe(13);
     expect(getRowBySlotLabel(snapshot!, "Primary weapon")?.parry).toBe(16);
     expect(snapshot?.readinessSummary).toContain("Posture Parry");
   });
@@ -497,7 +519,7 @@ describe("combatStateDerivation", () => {
     expect(secondaryRow).toMatchObject({
       slotLabel: "Secondary weapon",
       currentItemLabel: "Dagger",
-      attack1: "Thrust (Pointed)",
+      attack1: "Thrust",
       ob1: 14,
       dmb1: 4,
     });

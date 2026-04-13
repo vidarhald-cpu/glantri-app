@@ -94,6 +94,7 @@ function TableCard(input: {
   title: string;
   description?: string;
   columns: string[];
+  nowrapColumnIndexes?: number[];
   rows: Array<Array<ReactNode>>;
 }) {
   return (
@@ -142,10 +143,11 @@ function TableCard(input: {
                   <td
                     key={`${rowIndex}-${cellIndex}`}
                     style={{
-                      borderBottom: rowIndex === input.rows.length - 1 ? "none" : "1px solid #e6e6df",
+                    borderBottom: rowIndex === input.rows.length - 1 ? "none" : "1px solid #e6e6df",
                       fontSize: "0.95rem",
                       padding: "0.6rem",
-                      verticalAlign: "top"
+                      verticalAlign: "top",
+                      whiteSpace: input.nowrapColumnIndexes?.includes(cellIndex) ? "nowrap" : "normal",
                     }}
                   >
                     {cell}
@@ -165,13 +167,13 @@ export function CombatStatePanel(input: { model: CombatStatePanelModel }) {
     <SectionCard title={input.model.title} description={input.model.description}>
       <StatGrid>
         <BattleStatCard
-          title="Current Use"
-          subtitle="What is worn, readied, and immediately used right now."
-          rows={input.model.currentUseRows}
+          title="Stats"
+          subtitle="Current stats and GMs used by the workbook-backed combat calculations."
+          rows={input.model.statsRows}
         />
         <BattleStatCard
           title="Defence and movement"
-          subtitle="Unarmed defense baseline together with current movement and carried-state values."
+          subtitle="Unarmed and combined defence together with current movement and carried-state values."
           rows={input.model.capabilityRows}
         />
       </StatGrid>
@@ -180,13 +182,8 @@ export function CombatStatePanel(input: { model: CombatStatePanelModel }) {
         title={input.model.weaponModeTable.title}
         description={input.model.weaponModeTable.description}
         columns={input.model.weaponModeTable.columns}
+        nowrapColumnIndexes={[0, 1]}
         rows={input.model.weaponModeTable.rows}
-      />
-
-      <BattleStatCard
-        title="Weapons and Defense"
-        subtitle="Workbook-backed defense pairs for one selected defensive item and combined two-item defence."
-        rows={input.model.weaponDefenseRows}
       />
     </SectionCard>
   );

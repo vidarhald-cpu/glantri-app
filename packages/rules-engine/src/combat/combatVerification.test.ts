@@ -111,8 +111,8 @@ const combatVerificationCases: CombatVerificationCase[] = [
     },
     expected: {
       ob: 14,
-      db: 16,
-      dm: 6,
+      db: 13,
+      dm: 1,
       dmb: 9,
       parry: "14 (allocation pending)",
       encumbrance: 20
@@ -139,8 +139,8 @@ const combatVerificationCases: CombatVerificationCase[] = [
     },
     expected: {
       ob: 13,
-      db: 11,
-      dm: 1,
+      db: 14,
+      dm: 2,
       dmb: 10,
       parry: "10 (allocation pending)",
       encumbrance: 7
@@ -166,7 +166,7 @@ const combatVerificationCases: CombatVerificationCase[] = [
     },
     expected: {
       ob: 16,
-      db: 11,
+      db: 13,
       dm: 1,
       dmb: 9,
       parry: "17 (allocation pending)",
@@ -193,8 +193,8 @@ const combatVerificationCases: CombatVerificationCase[] = [
     },
     expected: {
       ob: 31,
-      db: 11,
-      dm: "—",
+      db: 13,
+      dm: 2,
       dmb: "2d6 (formula)",
       parry: "—",
       encumbrance: 5
@@ -214,8 +214,8 @@ const combatVerificationCases: CombatVerificationCase[] = [
     },
     expected: {
       ob: 32,
-      db: 11,
-      dm: "—",
+      db: 12,
+      dm: 1,
       dmb: "2d6 + GMstr (formula)",
       parry: "—",
       encumbrance: 8
@@ -232,9 +232,9 @@ const combatVerificationCases: CombatVerificationCase[] = [
     },
     expected: {
       ob: 11,
-      db: 11,
-      dm: "—",
-      dmb: 0,
+      db: 13,
+      dm: 2,
+      dmb: "—",
       parry: "11 (allocation pending)",
       encumbrance: 0
     },
@@ -309,12 +309,20 @@ function buildCharacterInputs(
   skillXp?: Record<string, number>,
   strength = 11,
 ): CharacterInputs {
+  const dodgeXp = (skillXp ?? {}).Dodge ?? skills.Dodge ?? 13;
   return {
+    constitution: 11,
     dexterityGm: 0,
     dexterity: 11,
+    dodgeCombatSkillXp: dodgeXp,
     parryCombatSkillXp: (skillXp ?? {}).Parry ?? skills.Parry ?? null,
     brawlingCombatSkillXp: (skillXp ?? {}).Brawling ?? skills.Brawling ?? null,
-    combatSkillXpByName: skillXp ?? skills,
+    combatSkillXpByName: {
+      ...(skillXp ?? skills),
+      Dodge: dodgeXp,
+    },
+    size: 13,
+    sizeGm: 1,
     strengthGm: Math.trunc((strength - 11) / 2),
     strength
   };
@@ -400,7 +408,7 @@ function extractActualValues(
       ? candidate.slotLabel === "Primary weapon"
       : testCase.actorSlot === "missile"
         ? candidate.slotLabel === "Missile weapon"
-        : candidate.slotLabel === "Punch"
+        : candidate.slotLabel === "Brawling"
   );
 
   return {

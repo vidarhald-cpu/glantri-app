@@ -78,15 +78,21 @@ export interface DerivedCombatWeaponRow {
   dmb1: DerivedCombatValue;
   attack1: DerivedCombatValue;
   crit1: DerivedCombatValue;
+  sec: DerivedCombatValue;
   armorMod1: DerivedCombatValue;
+  db: DerivedCombatValue;
+  dm: DerivedCombatValue;
+  parry: DerivedCombatValue;
   ob2: DerivedCombatValue;
   dmb2: DerivedCombatValue;
   attack2: DerivedCombatValue;
   crit2: DerivedCombatValue;
   armorMod2: DerivedCombatValue;
-  db: DerivedCombatValue;
-  dm: DerivedCombatValue;
-  parry: DerivedCombatValue;
+  attack3: DerivedCombatValue;
+  ob3: DerivedCombatValue;
+  dmb3: DerivedCombatValue;
+  crit3: DerivedCombatValue;
+  armorMod3: DerivedCombatValue;
   notes: string;
 }
 
@@ -357,7 +363,7 @@ function getItemLabel(state: EquipmentFeatureState, item: EquipmentItem | undefi
   }
 
   const typeName = getTemplateName(state, item);
-  return item.displayName ? `${item.displayName} (${typeName})` : typeName;
+  return item.displayName ?? typeName;
 }
 
 function getAttackMode(
@@ -629,8 +635,7 @@ function getAttackLabel(mode: WeaponAttackMode | null): DerivedCombatValue {
     return "—";
   }
 
-  const baseLabel = mode.label ?? formatLabel(mode.id);
-  return `${baseLabel} (${formatDamageClass(mode.damageClass)})`;
+  return mode.label ?? formatLabel(mode.id);
 }
 
 function getArmorModifierValue(mode: WeaponAttackMode | null): DerivedCombatValue {
@@ -760,15 +765,50 @@ function getCombatRowModeLabel(slotLabel: string): string {
       return "Secondary";
     case "Missile weapon":
       return "Missile";
+    case "Punch":
+    case "Kick":
+    case "Brawling":
+      return "Unarmed";
     default:
       return slotLabel;
   }
+}
+
+function getWorkbookOneItemDefensePair(input: {
+  characterInputs?: CombatStateCharacterInputs;
+  encumbranceLevel: number | null;
+  equipmentModifier: number;
+}): { db: DerivedCombatValue; dm: DerivedCombatValue } {
+  const dexterityGm = input.characterInputs?.dexterityGm ?? null;
+  const dodgeSkillXp = input.characterInputs?.dodgeCombatSkillXp ?? null;
+  const toHitModifier =
+    input.encumbranceLevel == null ? null : lookupWorkbookToHitModifier(input.encumbranceLevel);
+
+  if (dexterityGm == null || dodgeSkillXp == null || toHitModifier == null) {
+    return { db: "—", dm: "—" };
+  }
+
+  const baseDb = calculateWorkbookBaseDb({
+    dexterityGm,
+    dodgeSkillXp,
+  });
+  const pair = calculateWorkbookDefensePair({
+    baseDb,
+    equipmentModifier: input.equipmentModifier,
+    toHitModifier,
+  });
+
+  return {
+    db: pair?.db ?? "—",
+    dm: pair?.dm ?? "—",
+  };
 }
 
 function buildWeaponRow(input: {
   allocationInputs: CombatStateAllocationInputs;
   armorTemplate: ArmorTemplate | null;
   characterInputs?: CombatStateCharacterInputs;
+  encumbranceLevel: number | null;
   slotLabel: string;
   item: EquipmentItem | undefined;
   parrySource: CombatStateParrySource;
@@ -807,7 +847,13 @@ function buildWeaponRow(input: {
     weaponDefensiveValue: input.template?.defensiveValue ?? 0,
     weaponParryModifier: input.template?.parry ?? null,
   });
+  const oneItemDefensePair = getWorkbookOneItemDefensePair({
+    characterInputs: input.characterInputs,
+    encumbranceLevel: input.encumbranceLevel,
+    equipmentModifier: input.template?.defensiveValue ?? 0,
+  });
   const notes = input.template ? formatWeaponNotes(input.template) : "Not equipped";
+  const mode3 = getAttackMode(input.template, "mode-3");
 
   return {
     slotLabel: input.slotLabel,
@@ -837,7 +883,11 @@ function buildWeaponRow(input: {
     }),
     attack1: getAttackLabel(mode1),
     crit1: mode1?.crit ?? "—",
+    sec: mode1?.secondCrit ?? input.template?.secondCrit ?? "—",
     armorMod1: getArmorModifierValue(mode1),
+    db: oneItemDefensePair.db,
+    dm: oneItemDefensePair.dm,
+    parry: defenseValues.parry,
     ob2: getDerivedObValue({
       allocationInputs: input.allocationInputs,
       armorTemplate: input.armorTemplate,
@@ -854,9 +904,11 @@ function buildWeaponRow(input: {
     attack2: getAttackLabel(mode2),
     crit2: mode2?.crit ?? "—",
     armorMod2: getArmorModifierValue(mode2),
-    db: defenseValues.db,
-    dm: defenseValues.dm,
-    parry: defenseValues.parry,
+    attack3: getAttackLabel(mode3),
+    ob3: "—",
+    dmb3: "—",
+    crit3: "—",
+    armorMod3: "—",
     notes,
   };
 }
@@ -865,26 +917,103 @@ function buildBrawlingRow(input: {
   allocationInputs: CombatStateAllocationInputs;
   armorTemplate: ArmorTemplate | null;
   characterInputs?: CombatStateCharacterInputs;
-  shieldTemplate: ShieldTemplate | null;
   state: EquipmentFeatureState;
   template: WeaponTemplate;
 }): DerivedCombatWeaponRow {
-  return buildWeaponRow({
+  const row = buildWeaponRow({
     allocationInputs: input.allocationInputs,
     armorTemplate: input.armorTemplate,
     characterInputs: input.characterInputs,
+    encumbranceLevel: null,
     slotLabel: input.template.name,
     item: undefined,
     parrySource: "unarmed",
-    shieldTemplate: input.shieldTemplate,
+    shieldTemplate: null,
     state: input.state,
     template: input.template,
   });
+
+  return {
+    ...row,
+    db: "—",
+    dm: "—",
+    parry: "—",
+  };
+}
+
+function buildBrawlingSummaryRow(input: {
+  allocationInputs: CombatStateAllocationInputs;
+  armorTemplate: ArmorTemplate | null;
+  characterInputs?: CombatStateCharacterInputs;
+  encumbranceLevel: number | null;
+  template: WeaponTemplate;
+}): DerivedCombatWeaponRow {
+  const mode1 = getAttackMode(input.template, "mode-1");
+  const availableOb = getAvailableObForParry({
+    allocationInputs: input.allocationInputs,
+    armorTemplate: input.armorTemplate,
+    characterInputs: input.characterInputs,
+    mode: mode1,
+    template: input.template,
+  });
+  const defenseValues = composeCombatDefenseValues({
+    allocationState: input.allocationInputs,
+    availableOb,
+    canUseShield: false,
+    dexterity: input.characterInputs?.dexterity ?? null,
+    shieldBonus: 0,
+    shieldDefensiveValue: 0,
+    usesSelectedParrySource: usesCombatParrySource(
+      input.allocationInputs.parry.source,
+      "unarmed",
+    ),
+    weaponDefensiveValue: 0,
+    weaponParryModifier: input.template.parry ?? 0,
+  });
+  const unarmedDefensePair = getWorkbookOneItemDefensePair({
+    characterInputs: input.characterInputs,
+    encumbranceLevel: input.encumbranceLevel,
+    equipmentModifier: 0,
+  });
+
+  return {
+    slotLabel: "Brawling",
+    modeLabel: "Unarmed",
+    currentItemLabel: "Brawling",
+    initiative: "—",
+    attack1: "—",
+    ob1: getDerivedObValue({
+      allocationInputs: input.allocationInputs,
+      armorTemplate: input.armorTemplate,
+      characterInputs: input.characterInputs,
+      mode: mode1,
+      template: input.template,
+    }),
+    dmb1: "—",
+    crit1: "—",
+    sec: "—",
+    armorMod1: "—",
+    db: unarmedDefensePair.db,
+    dm: unarmedDefensePair.dm,
+    parry: defenseValues.parry,
+    attack2: "—",
+    ob2: "—",
+    dmb2: "—",
+    crit2: "—",
+    armorMod2: "—",
+    attack3: "—",
+    ob3: "—",
+    dmb3: "—",
+    crit3: "—",
+    armorMod3: "—",
+    notes: "Workbook-backed unarmed skill summary row.",
+  };
 }
 
 function buildShieldRow(input: {
   allocationInputs: CombatStateAllocationInputs;
   characterInputs?: CombatStateCharacterInputs;
+  encumbranceLevel: number | null;
   item: EquipmentItem | undefined;
   shieldTemplate: ShieldTemplate;
   state: EquipmentFeatureState;
@@ -904,6 +1033,11 @@ function buildShieldRow(input: {
     weaponParryModifier: null,
   });
   const mode1 = getAttackMode(input.shieldTemplate, "mode-1");
+  const oneItemDefensePair = getWorkbookOneItemDefensePair({
+    characterInputs: input.characterInputs,
+    encumbranceLevel: input.encumbranceLevel,
+    equipmentModifier: input.shieldTemplate.defensiveValue ?? 0,
+  });
 
   return {
     slotLabel: "Shield",
@@ -914,15 +1048,21 @@ function buildShieldRow(input: {
     ob1: mode1?.ob ?? "—",
     dmb1: getDmbValue(mode1),
     crit1: mode1?.crit ?? "—",
+    sec: mode1?.secondCrit ?? input.shieldTemplate.secondCrit ?? "—",
     armorMod1: getArmorModifierValue(mode1),
+    db: oneItemDefensePair.db,
+    dm: oneItemDefensePair.dm,
+    parry: input.shieldTemplate.parry ?? defenseValues.parry,
     attack2: "—",
     ob2: "—",
     dmb2: "—",
     crit2: "—",
     armorMod2: "—",
-    db: defenseValues.db,
-    dm: defenseValues.dm,
-    parry: input.shieldTemplate.parry ?? defenseValues.parry,
+    attack3: "—",
+    ob3: "—",
+    dmb3: "—",
+    crit3: "—",
+    armorMod3: "—",
     notes:
       "Shield rows merge offensive workbook weapon-table values with defensive shield-table values where current rules support them.",
   };
@@ -1171,26 +1311,30 @@ export function deriveCombatStateSnapshot(
   );
   const weaponRows: DerivedCombatWeaponRow[] = [];
 
-  weaponRows.push(
-    buildWeaponRow({
-      allocationInputs: resolvedAllocationInputs,
-      armorTemplate,
-      characterInputs,
-      parrySource: "primary",
-      slotLabel: "Primary weapon",
-      item: primaryItem,
-      secondaryTemplate: secondaryWeaponTemplate,
-      shieldTemplate,
-      state,
-      template: primaryWeaponTemplate,
-    }),
-  );
+  if (primaryItem && primaryWeaponTemplate) {
+    weaponRows.push(
+      buildWeaponRow({
+        allocationInputs: resolvedAllocationInputs,
+        armorTemplate,
+        characterInputs,
+        encumbranceLevel: workbookMovement.encumbranceLevel,
+        parrySource: "primary",
+        slotLabel: "Primary weapon",
+        item: primaryItem,
+        secondaryTemplate: secondaryWeaponTemplate,
+        shieldTemplate,
+        state,
+        template: primaryWeaponTemplate,
+      }),
+    );
+  }
 
   if (shieldItem && shieldTemplate) {
     weaponRows.push(
       buildShieldRow({
         allocationInputs: resolvedAllocationInputs,
         characterInputs,
+        encumbranceLevel: workbookMovement.encumbranceLevel,
         item: shieldItem,
         shieldTemplate,
         state,
@@ -1204,6 +1348,7 @@ export function deriveCombatStateSnapshot(
         allocationInputs: resolvedAllocationInputs,
         armorTemplate,
         characterInputs,
+        encumbranceLevel: workbookMovement.encumbranceLevel,
         parrySource: "secondary",
         slotLabel: "Secondary weapon",
         item: secondaryItem,
@@ -1214,17 +1359,30 @@ export function deriveCombatStateSnapshot(
     );
   }
 
+  if (missileItem && missileWeaponTemplate) {
+    weaponRows.push(
+      buildWeaponRow({
+        allocationInputs: resolvedAllocationInputs,
+        armorTemplate,
+        characterInputs,
+        encumbranceLevel: workbookMovement.encumbranceLevel,
+        parrySource: "none",
+        slotLabel: "Missile weapon",
+        item: missileItem,
+        shieldTemplate: null,
+        state,
+        template: missileWeaponTemplate,
+      }),
+    );
+  }
+
   weaponRows.push(
-    buildWeaponRow({
+    buildBrawlingSummaryRow({
       allocationInputs: resolvedAllocationInputs,
       armorTemplate,
       characterInputs,
-      parrySource: "none",
-      slotLabel: "Missile weapon",
-      item: missileItem,
-      shieldTemplate: null,
-      state,
-      template: missileWeaponTemplate,
+      encumbranceLevel: workbookMovement.encumbranceLevel,
+      template: PUNCH_TEMPLATE,
     }),
   );
 
@@ -1233,7 +1391,6 @@ export function deriveCombatStateSnapshot(
       allocationInputs: resolvedAllocationInputs,
       armorTemplate,
       characterInputs,
-      shieldTemplate,
       state,
       template: PUNCH_TEMPLATE,
     }),
@@ -1244,7 +1401,6 @@ export function deriveCombatStateSnapshot(
       allocationInputs: resolvedAllocationInputs,
       armorTemplate,
       characterInputs,
-      shieldTemplate,
       state,
       template: KICK_TEMPLATE,
     }),

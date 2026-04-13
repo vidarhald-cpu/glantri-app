@@ -27,7 +27,7 @@ export interface CombatStateTableModel {
 export interface CombatStatePanelModel {
   title: string;
   description: string;
-  currentUseRows: CombatStateDetailRow[];
+  statsRows: CombatStateDetailRow[];
   armorProtectionRows: CombatStateDetailRow[];
   armorProtectionTable: CombatStateTableModel;
   weaponModeTable: CombatStateTableModel;
@@ -75,14 +75,23 @@ export function buildCombatStatePanelModel(
     ? asArmorTemplate(getEquipmentTemplateById(state, armorItem.templateId))
     : null;
 
-  const currentUseRows: CombatStateDetailRow[] = [
-    { label: "Grip / current use", value: snapshot.gripSummary },
-    { label: "Worn armor", value: snapshot.wornArmorLabel },
-    { label: "Ready shield", value: snapshot.readyShieldLabel },
-    { label: "Active primary weapon", value: snapshot.activePrimaryLabel },
-    { label: "Active secondary weapon", value: snapshot.activeSecondaryLabel },
-    { label: "Active missile weapon", value: snapshot.activeMissileLabel },
-    { label: "Unarmed baseline", value: snapshot.unarmedSummary },
+  const statsRows: CombatStateDetailRow[] = [
+    {
+      label: "Strength",
+      value: formatStatPair(characterInputs?.strength ?? null, characterInputs?.strengthGm ?? null),
+    },
+    {
+      label: "Constitution",
+      value: formatStatPair(characterInputs?.constitution ?? null, null),
+    },
+    {
+      label: "Dexterity",
+      value: formatStatPair(characterInputs?.dexterity ?? null, characterInputs?.dexterityGm ?? null),
+    },
+    {
+      label: "Size",
+      value: formatStatPair(characterInputs?.size ?? null, characterInputs?.sizeGm ?? null),
+    },
   ];
 
   const armorProtectionRows: CombatStateDetailRow[] = [
@@ -136,26 +145,30 @@ export function buildCombatStatePanelModel(
   };
 
   const weaponModeTable: CombatStateTableModel = {
-    title: "Weapons and Defense",
-    description:
-      "Weapon mode values derive from the imported attack-mode catalog, current loadout selection, and available live character inputs. Formula DMB stays explicit, and values that still depend on deeper allocation or situational rules remain clearly interim.",
+    title: "Weapons",
     columns: [
       "Mode",
-      "Current item",
+      "Weapon",
       "I",
       "Attack 1",
       "OB",
       "DMB",
       "Crit 1",
-      "Armor mod 1",
+      "Sec",
+      "AM",
+      "DB",
+      "DM",
+      "Parry",
       "Attack 2",
       "OB2",
       "DMB2",
       "Crit 2",
-      "Armor mod 2",
-      "DB",
-      "DM",
-      "Parry",
+      "AM 2",
+      "Attack 3",
+      "OB3",
+      "DMB3",
+      "Crit 3",
+      "AM 3",
     ],
     rows: snapshot.weaponRows.map((row) => [
       row.modeLabel,
@@ -165,33 +178,32 @@ export function buildCombatStatePanelModel(
       getWeaponModeValue(row.ob1),
       getWeaponModeValue(row.dmb1),
       getWeaponModeValue(row.crit1),
+      getWeaponModeValue(row.sec),
       getWeaponModeValue(row.armorMod1),
+      getWeaponModeValue(row.db),
+      getWeaponModeValue(row.dm),
+      getWeaponModeValue(row.parry),
       getWeaponModeValue(row.attack2),
       getWeaponModeValue(row.ob2),
       getWeaponModeValue(row.dmb2),
       getWeaponModeValue(row.crit2),
       getWeaponModeValue(row.armorMod2),
-      getWeaponModeValue(row.db),
-      getWeaponModeValue(row.dm),
-      getWeaponModeValue(row.parry),
+      getWeaponModeValue(row.attack3),
+      getWeaponModeValue(row.ob3),
+      getWeaponModeValue(row.dmb3),
+      getWeaponModeValue(row.crit3),
+      getWeaponModeValue(row.armorMod3),
     ]),
   };
 
-  const weaponDefenseRows: CombatStateDetailRow[] = [
-    { label: "Current grip", value: snapshot.gripSummary },
-    {
-      label: snapshot.oneItemDefenseLabel,
-      value: formatDbDmPair(snapshot.oneItemDbSummary, snapshot.oneItemDmSummary),
-    },
+  const weaponDefenseRows: CombatStateDetailRow[] = [];
+
+  const capabilityRows: CombatStateDetailRow[] = [
+    { label: "Unarmed DB / DM", value: formatDbDmPair(snapshot.unarmedDbSummary, snapshot.unarmedDmSummary) },
     {
       label: snapshot.twoItemDefenseLabel,
       value: formatDbDmPair(snapshot.twoItemDbSummary, snapshot.twoItemDmSummary),
     },
-    { label: "Primary notes", value: snapshot.primaryNotes },
-  ];
-
-  const capabilityRows: CombatStateDetailRow[] = [
-    { label: "Unarmed DB / DM", value: formatDbDmPair(snapshot.unarmedDbSummary, snapshot.unarmedDmSummary) },
     { label: "Encumbrance capacity", value: getEncumbranceDisplayValue(snapshot.encumbranceCapacity) },
     { label: "Gear item count", value: snapshot.gearCount },
     { label: "Personal encumbrance", value: getEncumbranceDisplayValue(snapshot.personalEncumbrance) },
@@ -208,7 +220,7 @@ export function buildCombatStatePanelModel(
     title: "Combat State Panel",
     description:
       "Structured read-only combat snapshot of the current persisted fighting state, using imported weapon modes, current loadout selections, and live character inputs where the combat rules document marks them as safely derivable.",
-    currentUseRows,
+    statsRows,
     armorProtectionRows,
     armorProtectionTable,
     weaponModeTable,
@@ -219,4 +231,16 @@ export function buildCombatStatePanelModel(
 
 function formatDbDmPair(db: CombatStateValue, dm: CombatStateValue): string {
   return `DB ${db} / DM ${dm}`;
+}
+
+function formatStatPair(value: number | null, gm: number | null): string {
+  if (value == null) {
+    return "—";
+  }
+
+  if (gm == null) {
+    return `${value} / GM —`;
+  }
+
+  return `${value} / GM ${gm >= 0 ? `+${gm}` : gm}`;
 }
