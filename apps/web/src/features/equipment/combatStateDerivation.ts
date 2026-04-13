@@ -23,15 +23,12 @@ import {
 } from "../../../../../packages/rules-engine/src/combat/combatAllocationState";
 import type { CombatSessionState } from "../../../../../packages/rules-engine/src/combat/combatSessionState";
 import {
-  composeCombatDefenseValues,
-  usesCombatParrySource,
-} from "../../../../../packages/rules-engine/src/combat/composeDefenseValues";
-import {
   calculateWorkbookBaseDb,
   calculateWorkbookDefensePair,
   calculateWorkbookMeleeDmb,
   calculateWorkbookMeleeInitiative,
   calculateWorkbookMeleeOb,
+  calculateWorkbookWeaponParry,
   lookupWorkbookToHitModifier,
 } from "../../../../../packages/rules-engine/src/combat/workbookCombatMath";
 
@@ -563,17 +560,6 @@ function getDerivedObValue(input: {
   });
 }
 
-function getAvailableObForParry(input: {
-  allocationInputs: CombatStateAllocationInputs;
-  armorTemplate: ArmorTemplate | null;
-  characterInputs?: CombatStateCharacterInputs;
-  mode: WeaponAttackMode | null;
-  template: WeaponTemplate | null;
-}): number | null {
-  const value = getDerivedObValue(input);
-  return typeof value === "number" ? value : null;
-}
-
 function getDmbValue(mode: WeaponAttackMode | null): DerivedCombatValue {
   if (!mode) {
     return "—";
@@ -806,6 +792,35 @@ function getWorkbookOneItemDefensePair(input: {
   };
 }
 
+function getWorkbookWeaponRowParry(input: {
+  armorTemplate: ArmorTemplate | null;
+  characterInputs?: CombatStateCharacterInputs;
+  template: WeaponTemplate | null;
+}): DerivedCombatValue {
+  const dexterityGm = input.characterInputs?.dexterityGm ?? null;
+  const parrySkillXp = input.characterInputs?.parryCombatSkillXp ?? null;
+  const weaponParryModifier = input.template?.parry ?? null;
+
+  if (dexterityGm == null || parrySkillXp == null || weaponParryModifier == null) {
+    return "—";
+  }
+
+  const workbookParry = calculateWorkbookWeaponParry({
+    armorActivityModifier: input.armorTemplate?.armorActivityModifier ?? 0,
+    dexterityGm,
+    parrySkillXp,
+    weaponParryModifier,
+  });
+
+  return workbookParry?.finalParry ?? "—";
+}
+
+function getWorkbookShieldRowParry(input: {
+  shieldTemplate: ShieldTemplate;
+}): DerivedCombatValue {
+  return input.shieldTemplate.parry ?? "—";
+}
+
 function buildWeaponRow(input: {
   allocationInputs: CombatStateAllocationInputs;
   armorTemplate: ArmorTemplate | null;
@@ -813,7 +828,6 @@ function buildWeaponRow(input: {
   encumbranceLevel: number | null;
   slotLabel: string;
   item: EquipmentItem | undefined;
-  parrySource: CombatStateParrySource;
   secondaryTemplate?: WeaponTemplate | null;
   shieldTemplate: ShieldTemplate | null;
   state: EquipmentFeatureState;
@@ -821,34 +835,6 @@ function buildWeaponRow(input: {
 }): DerivedCombatWeaponRow {
   const mode1 = getAttackMode(input.template, "mode-1");
   const mode2 = getAttackMode(input.template, "mode-2");
-  const shieldUsable = canUseReadyShieldWithWeapon(
-    input.template,
-    input.shieldTemplate,
-    input.secondaryTemplate ?? null,
-  );
-  const shieldBonus = shieldUsable ? input.shieldTemplate?.shieldBonus ?? 0 : 0;
-  const shieldDefensiveValue = shieldUsable ? input.shieldTemplate?.defensiveValue ?? 0 : 0;
-  const availableOb = getAvailableObForParry({
-    allocationInputs: input.allocationInputs,
-    armorTemplate: input.armorTemplate,
-    characterInputs: input.characterInputs,
-    mode: mode1,
-    template: input.template,
-  });
-  const defenseValues = composeCombatDefenseValues({
-    allocationState: input.allocationInputs,
-    availableOb,
-    canUseShield: shieldUsable,
-    dexterity: input.characterInputs?.dexterity ?? null,
-    shieldBonus,
-    shieldDefensiveValue,
-    usesSelectedParrySource: usesCombatParrySource(
-      input.allocationInputs.parry.source,
-      input.parrySource,
-    ),
-    weaponDefensiveValue: input.template?.defensiveValue ?? 0,
-    weaponParryModifier: input.template?.parry ?? null,
-  });
   const oneItemDefensePair = getWorkbookOneItemDefensePair({
     characterInputs: input.characterInputs,
     encumbranceLevel: input.encumbranceLevel,
@@ -889,7 +875,11 @@ function buildWeaponRow(input: {
     armorMod1: getArmorModifierValue(mode1),
     db: oneItemDefensePair.db,
     dm: oneItemDefensePair.dm,
-    parry: defenseValues.parry,
+    parry: getWorkbookWeaponRowParry({
+      armorTemplate: input.armorTemplate,
+      characterInputs: input.characterInputs,
+      template: input.template,
+    }),
     ob2: getDerivedObValue({
       allocationInputs: input.allocationInputs,
       armorTemplate: input.armorTemplate,
@@ -929,7 +919,6 @@ function buildBrawlingRow(input: {
     encumbranceLevel: null,
     slotLabel: input.template.name,
     item: undefined,
-    parrySource: "unarmed",
     shieldTemplate: null,
     state: input.state,
     template: input.template,
@@ -951,27 +940,6 @@ function buildBrawlingSummaryRow(input: {
   template: WeaponTemplate;
 }): DerivedCombatWeaponRow {
   const mode1 = getAttackMode(input.template, "mode-1");
-  const availableOb = getAvailableObForParry({
-    allocationInputs: input.allocationInputs,
-    armorTemplate: input.armorTemplate,
-    characterInputs: input.characterInputs,
-    mode: mode1,
-    template: input.template,
-  });
-  const defenseValues = composeCombatDefenseValues({
-    allocationState: input.allocationInputs,
-    availableOb,
-    canUseShield: false,
-    dexterity: input.characterInputs?.dexterity ?? null,
-    shieldBonus: 0,
-    shieldDefensiveValue: 0,
-    usesSelectedParrySource: usesCombatParrySource(
-      input.allocationInputs.parry.source,
-      "unarmed",
-    ),
-    weaponDefensiveValue: 0,
-    weaponParryModifier: input.template.parry ?? 0,
-  });
   const unarmedDefensePair = getWorkbookOneItemDefensePair({
     characterInputs: input.characterInputs,
     encumbranceLevel: input.encumbranceLevel,
@@ -997,7 +965,11 @@ function buildBrawlingSummaryRow(input: {
     armorMod1: "—",
     db: unarmedDefensePair.db,
     dm: unarmedDefensePair.dm,
-    parry: defenseValues.parry,
+    parry: getWorkbookWeaponRowParry({
+      armorTemplate: input.armorTemplate,
+      characterInputs: input.characterInputs,
+      template: input.template,
+    }),
     attack2: "—",
     ob2: "—",
     dmb2: "—",
@@ -1020,20 +992,6 @@ function buildShieldRow(input: {
   shieldTemplate: ShieldTemplate;
   state: EquipmentFeatureState;
 }): DerivedCombatWeaponRow {
-  const defenseValues = composeCombatDefenseValues({
-    allocationState: input.allocationInputs,
-    availableOb: null,
-    canUseShield: true,
-    dexterity: input.characterInputs?.dexterity ?? null,
-    shieldBonus: input.shieldTemplate.shieldBonus ?? 0,
-    shieldDefensiveValue: input.shieldTemplate.defensiveValue ?? 0,
-    usesSelectedParrySource: usesCombatParrySource(
-      input.allocationInputs.parry.source,
-      "shield",
-    ),
-    weaponDefensiveValue: 0,
-    weaponParryModifier: null,
-  });
   const mode1 = getAttackMode(input.shieldTemplate, "mode-1");
   const oneItemDefensePair = getWorkbookOneItemDefensePair({
     characterInputs: input.characterInputs,
@@ -1054,7 +1012,9 @@ function buildShieldRow(input: {
     armorMod1: getArmorModifierValue(mode1),
     db: oneItemDefensePair.db,
     dm: oneItemDefensePair.dm,
-    parry: input.shieldTemplate.parry ?? defenseValues.parry,
+    parry: getWorkbookShieldRowParry({
+      shieldTemplate: input.shieldTemplate,
+    }),
     attack2: "—",
     ob2: "—",
     dmb2: "—",
@@ -1231,57 +1191,10 @@ function getDefenseSummary(input: {
   return `${notes.join(" | ")}; full situational stacking still remains interim.`;
 }
 
-function getComparableParryValue(
-  value: DerivedCombatValue,
-): { display: DerivedCombatValue; numeric: number | null } {
-  if (typeof value === "number") {
-    return { display: value, numeric: value };
-  }
-
-  const match = /^(-?\d+(?:\.\d+)?)(?:\s+\(allocation pending\))?$/.exec(value);
-  if (!match) {
-    return { display: value, numeric: null };
-  }
-
+function getCombinedParrySummary(): { label: string; value: DerivedCombatValue } {
   return {
-    display: value,
-    numeric: Number(match[1]),
-  };
-}
-
-function getCombinedParrySummary(input: {
-  primaryRow: DerivedCombatWeaponRow | undefined;
-  secondaryRow: DerivedCombatWeaponRow | undefined;
-  shieldRow: DerivedCombatWeaponRow | undefined;
-}): { label: string; value: DerivedCombatValue } {
-  const offHandRow = input.shieldRow ?? input.secondaryRow;
-
-  if (!input.primaryRow || !offHandRow) {
-    return {
-      label: "Combined parry",
-      value: "—",
-    };
-  }
-
-  const primaryParry = getComparableParryValue(input.primaryRow.parry);
-  const offHandParry = getComparableParryValue(offHandRow.parry);
-
-  if (primaryParry.numeric == null && offHandParry.numeric == null) {
-    return {
-      label: `Combined parry (${input.primaryRow.currentItemLabel} + ${offHandRow.currentItemLabel})`,
-      value: "—",
-    };
-  }
-
-  const selected =
-    offHandParry.numeric != null &&
-    (primaryParry.numeric == null || offHandParry.numeric > primaryParry.numeric)
-      ? offHandParry
-      : primaryParry;
-
-  return {
-    label: `Combined parry (${input.primaryRow.currentItemLabel} + ${offHandRow.currentItemLabel})`,
-    value: selected.display,
+    label: "Combined parry",
+    value: "—",
   };
 }
 
@@ -1374,7 +1287,6 @@ export function deriveCombatStateSnapshot(
         armorTemplate,
         characterInputs,
         encumbranceLevel: workbookMovement.encumbranceLevel,
-        parrySource: "primary",
         slotLabel: "Primary weapon",
         item: primaryItem,
         secondaryTemplate: secondaryWeaponTemplate,
@@ -1405,7 +1317,6 @@ export function deriveCombatStateSnapshot(
         armorTemplate,
         characterInputs,
         encumbranceLevel: workbookMovement.encumbranceLevel,
-        parrySource: "secondary",
         slotLabel: "Secondary weapon",
         item: secondaryItem,
         shieldTemplate,
@@ -1422,7 +1333,6 @@ export function deriveCombatStateSnapshot(
         armorTemplate,
         characterInputs,
         encumbranceLevel: workbookMovement.encumbranceLevel,
-        parrySource: "none",
         slotLabel: "Missile weapon",
         item: missileItem,
         shieldTemplate: null,
@@ -1470,14 +1380,7 @@ export function deriveCombatStateSnapshot(
     secondaryWeaponTemplate,
     shieldTemplate,
   });
-  const primaryRow = weaponRows.find((row) => row.slotLabel === "Primary weapon");
-  const shieldRow = weaponRows.find((row) => row.slotLabel === "Shield");
-  const secondaryRow = weaponRows.find((row) => row.slotLabel === "Secondary weapon");
-  const combinedParrySummary = getCombinedParrySummary({
-    primaryRow,
-    secondaryRow,
-    shieldRow,
-  });
+  const combinedParrySummary = getCombinedParrySummary();
 
   return {
     encumbranceCapacity: workbookMovement.carryCapacity ?? "—",

@@ -299,7 +299,7 @@ describe("combatStateDerivation", () => {
       armorMod2: "C",
       db: 13,
       dm: 0,
-      parry: "14 (allocation pending)",
+      parry: 8,
     });
     expect(primaryRow?.attack3).toBe("—");
     expect(primaryRow?.notes).toContain("Thrust Pointed | AM C");
@@ -323,7 +323,7 @@ describe("combatStateDerivation", () => {
       ob1: 10,
       db: 12,
       dm: 0,
-      parry: "10 (allocation pending)",
+      parry: 8,
       attack1: "—",
     });
     expect(getRowBySlotLabel(snapshot, "Unarmed / brawling")).toBeUndefined();
@@ -354,9 +354,9 @@ describe("combatStateDerivation", () => {
     expect(getRowBySlotLabel(snapshot, "Secondary weapon")).toBeUndefined();
     expect(snapshot.defenseSummary).toContain("DB 13");
     expect(snapshot.defenseSummary).toContain("DM 0");
-    expect(snapshot.defenseSummary).toContain("Parry 14 (allocation pending)");
-    expect(snapshot.combinedParryLabel).toBe("Combined parry (Long sword + Medium shield)");
-    expect(snapshot.combinedParrySummary).toBe("14 (allocation pending)");
+    expect(snapshot.defenseSummary).toContain("Parry 8");
+    expect(snapshot.combinedParryLabel).toBe("Combined parry");
+    expect(snapshot.combinedParrySummary).toBe("—");
     expect(snapshot.unarmedSummary).toContain("Punch and Kick");
     expect(snapshot.unarmedDbSummary).toBe(12);
     expect(snapshot.unarmedDmSummary).toBe(0);
@@ -434,11 +434,11 @@ describe("combatStateDerivation", () => {
 
     expect(primaryRow?.ob1).toBe(16);
     expect(primaryRow?.db).toBe(13);
-    expect(primaryRow?.parry).toBe(16);
+    expect(primaryRow?.parry).toBe(8);
     expect(snapshot.readinessSummary).toContain("Posture Parry");
     expect(snapshot.defenseSummary).toContain("Posture Parry");
     expect(snapshot.defenseSummary).toContain("DB 13");
-    expect(snapshot.defenseSummary).toContain("Parry 16");
+    expect(snapshot.defenseSummary).toContain("Parry 8");
     expect(snapshot.encumbranceLevel).toBe(4);
     expect(snapshot.shieldMovementModifierSummary).toBe(2);
     expect(snapshot.movementModifierSummary).toBe(4);
@@ -475,7 +475,7 @@ describe("combatStateDerivation", () => {
     expect(snapshot).not.toBeNull();
     expect(getRowBySlotLabel(snapshot!, "Primary weapon")?.ob1).toBe(16);
     expect(getRowBySlotLabel(snapshot!, "Primary weapon")?.db).toBe(13);
-    expect(getRowBySlotLabel(snapshot!, "Primary weapon")?.parry).toBe(16);
+    expect(getRowBySlotLabel(snapshot!, "Primary weapon")?.parry).toBe(8);
     expect(snapshot?.readinessSummary).toContain("Posture Parry");
   });
 
@@ -524,10 +524,10 @@ describe("combatStateDerivation", () => {
       attack1: "Thrust",
       ob1: 14,
       dmb1: 4,
-      parry: "11 (allocation pending)",
+      parry: 5,
     });
-    expect(snapshot.combinedParryLabel).toBe("Combined parry (Long sword + Dagger)");
-    expect(snapshot.combinedParrySummary).toBe("14 (allocation pending)");
+    expect(snapshot.combinedParryLabel).toBe("Combined parry");
+    expect(snapshot.combinedParrySummary).toBe("—");
   });
 
   it("uses workbook-faithful melee initiative for equipped weapons and brawling rows", () => {
@@ -759,6 +759,41 @@ describe("combatStateDerivation", () => {
     expect(getRowBySlotLabel(snapshot, "Primary weapon")?.initiative).toBe(1);
     expect(getRowBySlotLabel(snapshot, "Punch")?.initiative).toBe(1);
     expect(getRowBySlotLabel(snapshot, "Kick")?.initiative).toBe(1);
+  });
+
+  it("uses the workbook weapon-row parry formula for longsword rows", () => {
+    const snapshot = deriveCombatStateSnapshot(cloneState(), sampleCharacterId, {
+      ...sampleCharacterInputs,
+      parryCombatSkillXp: 11,
+      combatSkillXpByName: {
+        ...sampleCharacterInputs.combatSkillXpByName,
+        Parry: 11,
+      },
+    });
+
+    expect(getRowBySlotLabel(snapshot, "Primary weapon")?.parry).toBe(7);
+    expect(getRowBySlotLabel(snapshot, "Shield")?.parry).toBe(5);
+    expect(snapshot.combinedParryLabel).toBe("Combined parry");
+    expect(snapshot.combinedParrySummary).toBe("—");
+    expect(getRowBySlotLabel(snapshot, "Punch")?.parry).toBe("—");
+    expect(getRowBySlotLabel(snapshot, "Kick")?.parry).toBe("—");
+    expect(getRowBySlotLabel(snapshot, "Brawling")?.parry).toBe(7);
+  });
+
+  it("keeps shield-row parry on the worksheet shield-parry source path", () => {
+    const state = cloneState();
+    state.itemsById["shield-item-round-1"] = {
+      ...state.itemsById["shield-item-round-1"],
+      templateId: "shield-template-medium-metal-shield",
+      material: "steel",
+    };
+
+    const snapshot = deriveCombatStateSnapshot(state, sampleCharacterId, sampleCharacterInputs);
+
+    expect(getRowBySlotLabel(snapshot, "Shield")?.currentItemLabel).toBe("Medium metal shield");
+    expect(getRowBySlotLabel(snapshot, "Shield")?.parry).toBe(5);
+    expect(snapshot.combinedParryLabel).toBe("Combined parry");
+    expect(snapshot.combinedParrySummary).toBe("—");
   });
 
   it("uses workbook-equivalent total skill XP for non-workbook OB fallback paths", () => {
