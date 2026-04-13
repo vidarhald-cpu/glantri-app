@@ -32,6 +32,7 @@ import { loadLocalCharacterContext } from "../../../../../src/lib/characters/loa
 import { UNNAMED_CHARACTER_PLACEHOLDER } from "../../../../../src/lib/offline/repositories/localCharacterRepository";
 import { getWorkbookCharacterSize } from "../../../../../src/features/equipment/armorSummary";
 import { formatEncumbranceDisplay } from "../../../../../src/features/equipment/displayFormatting";
+import { getPlayerFacingEquipmentLocationTemplateOptions } from "../../../../../src/features/equipment/playerFacingTemplateOptions";
 
 interface CharacterEquipmentPageProps {
   params: Promise<{
@@ -62,13 +63,6 @@ function getTemplateCategoryLabel(category: string): string {
       return formatLabel(category);
   }
 }
-
-const legacyShieldTemplateIds = new Set([
-  "shield-template-buckler",
-  "shield-template-round-shield"
-]);
-
-const legacyArmorTemplateIds = new Set(["armor-template-mail-hauberk"]);
 
 const materialOptions: MaterialType[] = [
   "steel",
@@ -153,19 +147,9 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
   const templateOptions = useMemo(
     () =>
       state
-        ? Object.values(state.templates.templatesById)
-            .filter((template) =>
-              template.name.startsWith("T. ")
-                ? false
-                : template.category === "shield"
-                  ? !legacyShieldTemplateIds.has(template.id)
-                  : template.category === "armor"
-                    ? !legacyArmorTemplateIds.has(template.id)
-                    : true
-            )
-            .sort((left, right) =>
-              left.name.localeCompare(right.name)
-            )
+        ? getPlayerFacingEquipmentLocationTemplateOptions(
+            state.templates.templatesById,
+          )
         : [],
     [state]
   );
