@@ -155,11 +155,13 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
       state
         ? Object.values(state.templates.templatesById)
             .filter((template) =>
-              template.category === "shield"
-                ? !legacyShieldTemplateIds.has(template.id)
-                : template.category === "armor"
-                  ? !legacyArmorTemplateIds.has(template.id)
-                  : true
+              template.name.startsWith("T. ")
+                ? false
+                : template.category === "shield"
+                  ? !legacyShieldTemplateIds.has(template.id)
+                  : template.category === "armor"
+                    ? !legacyArmorTemplateIds.has(template.id)
+                    : true
             )
             .sort((left, right) =>
               left.name.localeCompare(right.name)
