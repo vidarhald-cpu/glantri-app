@@ -842,4 +842,57 @@ describe("combatStateDerivation", () => {
 
     expect(getRowBySlotLabel(snapshot, "Missile weapon")?.ob1).toBe(9);
   });
+
+  it("uses skill total for composite bow OB and dexterity-adjusted missile initiative", () => {
+    const state = cloneState();
+
+    state.itemsById["weapon-item-longsword-1"].storageAssignment = {
+      carryMode: "on_person",
+      locationId: "char-themistogenes:loc-person",
+    };
+    state.itemsById["weapon-item-longsword-1"].isEquipped = false;
+    state.activeLoadoutByCharacterId["char-themistogenes"] = {
+      ...state.activeLoadoutByCharacterId["char-themistogenes"],
+      readyShieldItemId: null,
+      activePrimaryWeaponItemId: null,
+      activeMissileWeaponItemId: "weapon-item-longsword-1",
+    };
+    state.itemsById["weapon-item-longsword-1"].templateId = "weapon-template-composite-bow";
+
+    const snapshot = deriveCombatStateSnapshot(state, sampleCharacterId, {
+      ...sampleCharacterInputs,
+      combatSkillXpByName: {
+        ...sampleCharacterInputs.combatSkillXpByName,
+        Bow: 3,
+      },
+      combatSkillTotalByName: {
+        ...sampleCharacterInputs.combatSkillXpByName,
+        Bow: 4,
+      },
+      dexterity: 13,
+      dexterityGm: 1,
+    });
+
+    expect(getRowBySlotLabel(snapshot, "Missile weapon")?.ob1).toBe(6);
+    expect(getRowBySlotLabel(snapshot, "Missile weapon")?.initiative).toBe(-1);
+  });
+
+  it("adds a visible thrown row when dagger is selected as the throwing weapon", () => {
+    const state = cloneState();
+    state.itemsById["weapon-item-longsword-1"].templateId = "weapon-template-dagger";
+
+    const snapshot = deriveCombatStateSnapshot(
+      state,
+      sampleCharacterId,
+      sampleCharacterInputs,
+      undefined,
+      "weapon-item-longsword-1",
+    );
+
+    expect(getRowBySlotLabel(snapshot, "Throwing weapon")).toMatchObject({
+      attack1: "Throw",
+      currentItemLabel: "Dagger",
+      modeLabel: "Thrown",
+    });
+  });
 });

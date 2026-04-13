@@ -527,6 +527,7 @@ export default function CharacterLoadoutPage({ params }: CharacterLoadoutPagePro
         id,
         characterCombatInputs,
         combatAllocationInputs,
+        throwingWeaponItemId || null,
       );
 
       const statsRows: CombatStateDetailRow[] = [
