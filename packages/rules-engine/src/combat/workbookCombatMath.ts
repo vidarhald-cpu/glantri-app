@@ -69,6 +69,20 @@ export interface WorkbookMeleeObResult {
   rawOb: number;
 }
 
+export interface WorkbookProjectileObInput {
+  armorActivityModifier?: number | null;
+  dexterityGm: number;
+  skillXp: number;
+  weaponOb: number;
+}
+
+export interface WorkbookProjectileObResult {
+  adjustment: number;
+  combinedModifier: number;
+  finalOb: number;
+  rawOb: number;
+}
+
 export interface WorkbookMeleeDmbInput extends WorkbookMeleeObInput {
   weaponDmb: number;
 }
@@ -324,6 +338,25 @@ export function calculateWorkbookMeleeOb(
     Math.round(input.skillXp / 2) +
     1 +
     Math.max(getWorkbookCappedStrengthObModifier(input.strengthGm), input.dexterityGm);
+  const combinedModifier = (input.armorActivityModifier ?? 0) + input.weaponOb;
+  const adjustment = lookupWorkbookPercentageAdjustment(rawOb, Math.abs(combinedModifier));
+
+  if (adjustment == null) {
+    return null;
+  }
+
+  return {
+    adjustment,
+    combinedModifier,
+    finalOb: combinedModifier >= 0 ? rawOb + adjustment : rawOb - adjustment,
+    rawOb,
+  };
+}
+
+export function calculateWorkbookProjectileOb(
+  input: WorkbookProjectileObInput,
+): WorkbookProjectileObResult | null {
+  const rawOb = Math.round(input.skillXp / 2) + 1 + input.dexterityGm;
   const combinedModifier = (input.armorActivityModifier ?? 0) + input.weaponOb;
   const adjustment = lookupWorkbookPercentageAdjustment(rawOb, Math.abs(combinedModifier));
 

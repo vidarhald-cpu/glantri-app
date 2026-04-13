@@ -114,7 +114,7 @@ const combatVerificationCases: CombatVerificationCase[] = [
       db: 13,
       dm: 1,
       dmb: 9,
-      parry: "14 (allocation pending)",
+      parry: 8,
       encumbrance: 20
     },
     notes:
@@ -142,7 +142,7 @@ const combatVerificationCases: CombatVerificationCase[] = [
       db: 14,
       dm: 2,
       dmb: 10,
-      parry: "10 (allocation pending)",
+      parry: 5,
       encumbrance: 7
     },
     notes: "Workbook-faithful strike-main conc./axe case using Hand axe mode-1 with skill XP 15 and Str GM 3.",
@@ -169,7 +169,7 @@ const combatVerificationCases: CombatVerificationCase[] = [
       db: 13,
       dm: 1,
       dmb: 9,
-      parry: "17 (allocation pending)",
+      parry: 9,
       encumbrance: 8
     },
     notes: "Workbook-faithful thrust-main polearm case using 2-h Spear mode-1 with skill XP 15 and Str GM 3.",
@@ -192,10 +192,10 @@ const combatVerificationCases: CombatVerificationCase[] = [
       Parry: 12
     },
     expected: {
-      ob: 31,
+      ob: 20,
       db: 13,
       dm: 2,
-      dmb: "2d6 (formula)",
+      dmb: "2d6",
       parry: "—",
       encumbrance: 5
     },
@@ -213,10 +213,10 @@ const combatVerificationCases: CombatVerificationCase[] = [
       Parry: 12
     },
     expected: {
-      ob: 32,
+      ob: 19,
       db: 12,
       dm: 1,
-      dmb: "2d6 + GMstr (formula)",
+      dmb: "2d6",
       parry: "—",
       encumbrance: 8
     },
@@ -235,7 +235,7 @@ const combatVerificationCases: CombatVerificationCase[] = [
       db: 13,
       dm: 2,
       dmb: "—",
-      parry: "11 (allocation pending)",
+      parry: 7,
       encumbrance: 0
     },
     notes:

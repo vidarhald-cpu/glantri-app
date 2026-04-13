@@ -395,7 +395,7 @@ describe("combatStateDerivation", () => {
     expect(primaryRow?.dmb2).toBe(7);
   });
 
-  it("surfaces formula-based missile DMB and special encumbrance notes without faking precision", () => {
+  it("surfaces clean formula-based missile DMB and special encumbrance notes without fake numeric rolls", () => {
     const state = cloneState();
 
     state.itemsById["weapon-item-longsword-1"].storageAssignment = {
@@ -416,7 +416,7 @@ describe("combatStateDerivation", () => {
 
     expect(snapshot.gripSummary).toBe("Missile ready");
     expect(missileRow?.currentItemLabel).toBe("Ballista");
-    expect(missileRow?.dmb1).toBe("4d8+1 (formula)");
+    expect(missileRow?.dmb1).toBe("4d8+1");
     expect(missileRow?.attack1).toBe("Shot");
     expect(missileRow?.db).toBe("—");
     expect(missileRow?.notes).toContain("Source encumbrance 20+20 is ammo-linked");
@@ -816,7 +816,7 @@ describe("combatStateDerivation", () => {
     expect(snapshot.combinedParrySummary).toBe("—");
   });
 
-  it("uses workbook-equivalent combat XP for non-workbook OB fallback paths", () => {
+  it("uses the workbook projectile OB formula for non-melee bow rows", () => {
     const state = cloneState();
 
     state.itemsById["weapon-item-longsword-1"].storageAssignment = {
@@ -840,10 +840,10 @@ describe("combatStateDerivation", () => {
       },
     });
 
-    expect(getRowBySlotLabel(snapshot, "Missile weapon")?.ob1).toBe(9);
+    expect(getRowBySlotLabel(snapshot, "Missile weapon")?.ob1).toBe(7);
   });
 
-  it("uses workbook combat XP for composite bow OB and dexterity-adjusted missile initiative", () => {
+  it("uses the workbook projectile OB formula for composite bow and keeps dexterity-adjusted missile initiative", () => {
     const state = cloneState();
 
     state.itemsById["weapon-item-longsword-1"].storageAssignment = {
@@ -863,7 +863,7 @@ describe("combatStateDerivation", () => {
       ...sampleCharacterInputs,
       combatSkillXpByName: {
         ...sampleCharacterInputs.combatSkillXpByName,
-        Bow: 4,
+        Bow: 3,
       },
       dexterity: 13,
       dexterityGm: 1,
@@ -871,6 +871,7 @@ describe("combatStateDerivation", () => {
 
     expect(getRowBySlotLabel(snapshot, "Missile weapon")?.ob1).toBe(6);
     expect(getRowBySlotLabel(snapshot, "Missile weapon")?.initiative).toBe(-1);
+    expect(getRowBySlotLabel(snapshot, "Missile weapon")?.dmb1).toBe("2d6+3");
   });
 
   it("adds a visible thrown row when dagger is selected as the throwing weapon", () => {
@@ -914,7 +915,7 @@ describe("combatStateDerivation", () => {
     expect(getRowBySlotLabel(snapshot, "Throwing weapon")).toMatchObject({
       currentItemLabel: "Dagger",
       modeLabel: "Thrown",
-      ob1: 6,
+      ob1: 5,
     });
   });
 });

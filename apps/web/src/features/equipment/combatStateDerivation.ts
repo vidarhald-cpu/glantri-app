@@ -29,6 +29,7 @@ import {
   calculateWorkbookMeleeDmb,
   calculateWorkbookMeleeInitiative,
   calculateWorkbookMeleeOb,
+  calculateWorkbookProjectileOb,
   calculateWorkbookWeaponParry,
   lookupWorkbookToHitModifier,
 } from "../../../../../packages/rules-engine/src/combat/workbookCombatMath";
@@ -440,7 +441,26 @@ function formatFormulaModifier(value: number | null | undefined): string {
   return value > 0 ? `+${value}` : `${value}`;
 }
 
-function formatDmbFormula(formula: WeaponDamageModifierFormula | null | undefined): string {
+function resolveDmbTextModifier(
+  value: string | null | undefined,
+  characterInputs: CombatStateCharacterInputs | undefined,
+): string | null {
+  if (!value) {
+    return null;
+  }
+
+  if (value === "GMstr") {
+    const strengthGm = characterInputs?.strengthGm;
+    return strengthGm == null ? "Str" : `${strengthGm}`;
+  }
+
+  return value;
+}
+
+function formatDmbFormula(
+  formula: WeaponDamageModifierFormula | null | undefined,
+  characterInputs: CombatStateCharacterInputs | undefined,
+): string {
   if (!formula) {
     return "—";
   }
@@ -451,13 +471,22 @@ function formatDmbFormula(formula: WeaponDamageModifierFormula | null | undefine
     case "dice": {
       const dice = `${formula.diceCount ?? 0}d${formula.diceSides ?? 0}`;
       const flat = formatFormulaModifier(formula.flatModifier);
-      const text = formula.textModifier ? ` + ${formula.textModifier}` : "";
-      return `${dice}${flat}${text} (formula)`;
+      const resolvedText = resolveDmbTextModifier(formula.textModifier, characterInputs);
+      if (resolvedText) {
+        const numericResolved = Number(resolvedText);
+        if (Number.isFinite(numericResolved)) {
+          return `${dice}${flat}${formatFormulaModifier(numericResolved)}`;
+        }
+
+        return `${dice}${flat} + ${resolvedText}`;
+      }
+
+      return `${dice}${flat}`;
     }
     case "special":
-      return `${formula.specialValue ?? formula.raw} (special)`;
+      return `${formula.specialValue ?? formula.raw}`;
     case "unresolved":
-      return `${formula.raw} (unresolved)`;
+      return `${formula.raw}`;
   }
 }
 
@@ -575,11 +604,16 @@ function getDerivedObValue(input: {
     (input.template?.handlingClass === "missile" || input.treatAsThrownUse) &&
     missileOrThrownSkillXp != null
   ) {
-    return calculateBaseOB({
-      skill: missileOrThrownSkillXp,
-      weaponBonus: input.mode.ob ?? 0,
-      situationalModifier: input.allocationInputs.situationalModifiers.attack,
+    const projectileOb = calculateWorkbookProjectileOb({
+      armorActivityModifier: input.armorTemplate?.armorActivityModifier ?? 0,
+      dexterityGm: dexterityGm ?? 0,
+      skillXp: missileOrThrownSkillXp,
+      weaponOb: input.mode.ob ?? 0,
     });
+
+    if (projectileOb) {
+      return projectileOb.finalOb + input.allocationInputs.situationalModifiers.attack;
+    }
   }
 
   if (skillXp == null) {
@@ -593,7 +627,10 @@ function getDerivedObValue(input: {
   });
 }
 
-function getDmbValue(mode: WeaponAttackMode | null): DerivedCombatValue {
+function getDmbValue(
+  mode: WeaponAttackMode | null,
+  characterInputs?: CombatStateCharacterInputs,
+): DerivedCombatValue {
   if (!mode) {
     return "—";
   }
@@ -603,7 +640,7 @@ function getDmbValue(mode: WeaponAttackMode | null): DerivedCombatValue {
   }
 
   if (mode.dmbFormula) {
-    return formatDmbFormula(mode.dmbFormula);
+    return formatDmbFormula(mode.dmbFormula, characterInputs);
   }
 
   if (mode.dmbRaw) {
@@ -650,7 +687,7 @@ function getDerivedDmbValue(input: {
     }
   }
 
-  return getDmbValue(input.mode);
+  return getDmbValue(input.mode, input.characterInputs);
 }
 
 function getAttackLabel(mode: WeaponAttackMode | null): DerivedCombatValue {

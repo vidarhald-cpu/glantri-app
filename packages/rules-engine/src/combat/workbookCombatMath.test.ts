@@ -10,6 +10,7 @@ import {
   calculateWorkbookMeleeDmb,
   calculateWorkbookMeleeInitiative,
   calculateWorkbookMeleeOb,
+  calculateWorkbookProjectileOb,
   calculateWorkbookWeaponParry,
   calculateWorkbookMovement,
   calculateWorkbookMovementModifier,
@@ -74,6 +75,22 @@ describe("workbookCombatMath", () => {
       finalDmb: 6,
       rawDmb: 5,
       referenceOb: 16,
+    });
+  });
+
+  it("matches the workbook projectile OB pattern for a composite bow style row", () => {
+    expect(
+      calculateWorkbookProjectileOb({
+        armorActivityModifier: 0,
+        dexterityGm: 1,
+        skillXp: 3,
+        weaponOb: 2,
+      }),
+    ).toMatchObject({
+      adjustment: 2,
+      combinedModifier: 2,
+      finalOb: 6,
+      rawOb: 4,
     });
   });
 
