@@ -9,6 +9,7 @@ import {
   calculateWorkbookMeleeDmb,
   calculateWorkbookMeleeInitiative,
   calculateWorkbookMeleeOb,
+  calculateWorkbookWeaponParry,
   calculateWorkbookMovement,
   calculateWorkbookMovementModifier,
   getWorkbookStatGm,
@@ -108,6 +109,50 @@ describe("workbookCombatMath", () => {
       finalInitiative: 0,
       gameModifier: 0,
       skillModifier: 0,
+    });
+  });
+
+  it("matches the workbook's weapon-row parry formula", () => {
+    expect(
+      calculateWorkbookWeaponParry({
+        armorActivityModifier: 0,
+        dexterityGm: 3,
+        parrySkillXp: 13,
+        weaponParryModifier: -1,
+      }),
+    ).toMatchObject({
+      adjustment: 1,
+      combinedModifier: -1,
+      finalParry: 10,
+      rawParry: 11,
+    });
+
+    expect(
+      calculateWorkbookWeaponParry({
+        armorActivityModifier: 0,
+        dexterityGm: 0,
+        parrySkillXp: 11,
+        weaponParryModifier: 0,
+      }),
+    ).toMatchObject({
+      adjustment: 0,
+      combinedModifier: 0,
+      finalParry: 7,
+      rawParry: 7,
+    });
+
+    expect(
+      calculateWorkbookWeaponParry({
+        armorActivityModifier: 0,
+        dexterityGm: 0,
+        parrySkillXp: 11,
+        weaponParryModifier: 5,
+      }),
+    ).toMatchObject({
+      adjustment: 5,
+      combinedModifier: 5,
+      finalParry: 12,
+      rawParry: 7,
     });
   });
 

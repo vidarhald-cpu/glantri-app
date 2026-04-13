@@ -816,9 +816,26 @@ function getWorkbookWeaponRowParry(input: {
 }
 
 function getWorkbookShieldRowParry(input: {
+  armorTemplate: ArmorTemplate | null;
+  characterInputs?: CombatStateCharacterInputs;
   shieldTemplate: ShieldTemplate;
 }): DerivedCombatValue {
-  return input.shieldTemplate.parry ?? "—";
+  const dexterityGm = input.characterInputs?.dexterityGm ?? null;
+  const parrySkillXp = input.characterInputs?.parryCombatSkillXp ?? null;
+  const shieldParryModifier = input.shieldTemplate.parry ?? null;
+
+  if (dexterityGm == null || parrySkillXp == null || shieldParryModifier == null) {
+    return "—";
+  }
+
+  const workbookParry = calculateWorkbookWeaponParry({
+    armorActivityModifier: input.armorTemplate?.armorActivityModifier ?? 0,
+    dexterityGm,
+    parrySkillXp,
+    weaponParryModifier: shieldParryModifier,
+  });
+
+  return workbookParry?.finalParry ?? "—";
 }
 
 function buildWeaponRow(input: {
@@ -985,7 +1002,7 @@ function buildBrawlingSummaryRow(input: {
 }
 
 function buildShieldRow(input: {
-  allocationInputs: CombatStateAllocationInputs;
+  armorTemplate: ArmorTemplate | null;
   characterInputs?: CombatStateCharacterInputs;
   encumbranceLevel: number | null;
   item: EquipmentItem | undefined;
@@ -1013,6 +1030,8 @@ function buildShieldRow(input: {
     db: oneItemDefensePair.db,
     dm: oneItemDefensePair.dm,
     parry: getWorkbookShieldRowParry({
+      armorTemplate: input.armorTemplate,
+      characterInputs: input.characterInputs,
       shieldTemplate: input.shieldTemplate,
     }),
     attack2: "—",
@@ -1300,7 +1319,7 @@ export function deriveCombatStateSnapshot(
   if (shieldItem && shieldTemplate) {
     weaponRows.push(
       buildShieldRow({
-        allocationInputs: resolvedAllocationInputs,
+        armorTemplate,
         characterInputs,
         encumbranceLevel: workbookMovement.encumbranceLevel,
         item: shieldItem,

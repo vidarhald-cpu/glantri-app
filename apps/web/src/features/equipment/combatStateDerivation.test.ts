@@ -314,7 +314,7 @@ describe("combatStateDerivation", () => {
       attack2: "—",
       db: 18,
       dm: 0,
-      parry: 5,
+      parry: 13,
     });
     expect(brawlingRow).toMatchObject({
       slotLabel: "Brawling",
@@ -772,7 +772,7 @@ describe("combatStateDerivation", () => {
     });
 
     expect(getRowBySlotLabel(snapshot, "Primary weapon")?.parry).toBe(7);
-    expect(getRowBySlotLabel(snapshot, "Shield")?.parry).toBe(5);
+    expect(getRowBySlotLabel(snapshot, "Shield")?.parry).toBe(12);
     expect(snapshot.combinedParryLabel).toBe("Combined parry");
     expect(snapshot.combinedParrySummary).toBe("—");
     expect(getRowBySlotLabel(snapshot, "Punch")?.parry).toBe("—");
@@ -780,7 +780,7 @@ describe("combatStateDerivation", () => {
     expect(getRowBySlotLabel(snapshot, "Brawling")?.parry).toBe(7);
   });
 
-  it("keeps shield-row parry on the worksheet shield-parry source path", () => {
+  it("uses the worksheet shield-row parry formula for medium metal shields", () => {
     const state = cloneState();
     state.itemsById["shield-item-round-1"] = {
       ...state.itemsById["shield-item-round-1"],
@@ -788,10 +788,17 @@ describe("combatStateDerivation", () => {
       material: "steel",
     };
 
-    const snapshot = deriveCombatStateSnapshot(state, sampleCharacterId, sampleCharacterInputs);
+    const snapshot = deriveCombatStateSnapshot(state, sampleCharacterId, {
+      ...sampleCharacterInputs,
+      parryCombatSkillXp: 11,
+      combatSkillXpByName: {
+        ...sampleCharacterInputs.combatSkillXpByName,
+        Parry: 11,
+      },
+    });
 
     expect(getRowBySlotLabel(snapshot, "Shield")?.currentItemLabel).toBe("Medium metal shield");
-    expect(getRowBySlotLabel(snapshot, "Shield")?.parry).toBe(5);
+    expect(getRowBySlotLabel(snapshot, "Shield")?.parry).toBe(12);
     expect(snapshot.combinedParryLabel).toBe("Combined parry");
     expect(snapshot.combinedParrySummary).toBe("—");
   });
