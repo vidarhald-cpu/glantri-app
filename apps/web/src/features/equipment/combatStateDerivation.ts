@@ -24,6 +24,7 @@ import {
 import type { CombatSessionState } from "../../../../../packages/rules-engine/src/combat/combatSessionState";
 import {
   calculateWorkbookBaseDb,
+  calculateWorkbookCombinedParry,
   calculateWorkbookDefensePair,
   calculateWorkbookMeleeDmb,
   calculateWorkbookMeleeInitiative,
@@ -838,6 +839,39 @@ function getWorkbookShieldRowParry(input: {
   return workbookParry?.finalParry ?? "—";
 }
 
+function getWorkbookCombinedRowParry(input: {
+  armorTemplate: ArmorTemplate | null;
+  characterInputs?: CombatStateCharacterInputs;
+  offHandShieldTemplate: ShieldTemplate | null;
+  primaryWeaponTemplate: WeaponTemplate | null;
+  secondaryWeaponTemplate: WeaponTemplate | null;
+}): DerivedCombatValue {
+  const dexterityGm = input.characterInputs?.dexterityGm ?? null;
+  const parrySkillXp = input.characterInputs?.parryCombatSkillXp ?? null;
+  const primaryParryModifier = input.primaryWeaponTemplate?.parry ?? null;
+  const offHandParryModifier =
+    input.offHandShieldTemplate?.parry ?? input.secondaryWeaponTemplate?.parry ?? null;
+
+  if (
+    dexterityGm == null ||
+    parrySkillXp == null ||
+    primaryParryModifier == null ||
+    offHandParryModifier == null
+  ) {
+    return "—";
+  }
+
+  const workbookParry = calculateWorkbookCombinedParry({
+    armorActivityModifier: input.armorTemplate?.armorActivityModifier ?? 0,
+    dexterityGm,
+    offHandParryModifier,
+    parrySkillXp,
+    primaryParryModifier,
+  });
+
+  return workbookParry?.finalParry ?? "—";
+}
+
 function buildWeaponRow(input: {
   allocationInputs: CombatStateAllocationInputs;
   armorTemplate: ArmorTemplate | null;
@@ -1046,6 +1080,50 @@ function buildShieldRow(input: {
     armorMod3: "—",
     notes:
       "Shield rows merge offensive workbook weapon-table values with defensive shield-table values where current rules support them.",
+  };
+}
+
+function buildCombinedDefenseRow(input: {
+  armorTemplate: ArmorTemplate | null;
+  characterInputs?: CombatStateCharacterInputs;
+  offHandLabel: string;
+  offHandShieldTemplate: ShieldTemplate | null;
+  primaryLabel: string;
+  primaryWeaponTemplate: WeaponTemplate;
+  secondaryWeaponTemplate: WeaponTemplate | null;
+  twoItemPair: { db: DerivedCombatValue; dm: DerivedCombatValue };
+}): DerivedCombatWeaponRow {
+  return {
+    slotLabel: "Combined",
+    modeLabel: "Combined",
+    currentItemLabel: `${input.primaryLabel} + ${input.offHandLabel}`,
+    initiative: "—",
+    attack1: "—",
+    ob1: "—",
+    dmb1: "—",
+    crit1: "—",
+    sec: "—",
+    armorMod1: "—",
+    db: input.twoItemPair.db,
+    dm: input.twoItemPair.dm,
+    parry: getWorkbookCombinedRowParry({
+      armorTemplate: input.armorTemplate,
+      characterInputs: input.characterInputs,
+      offHandShieldTemplate: input.offHandShieldTemplate,
+      primaryWeaponTemplate: input.primaryWeaponTemplate,
+      secondaryWeaponTemplate: input.secondaryWeaponTemplate,
+    }),
+    attack2: "—",
+    ob2: "—",
+    dmb2: "—",
+    crit2: "—",
+    armorMod2: "—",
+    attack3: "—",
+    ob3: "—",
+    dmb3: "—",
+    crit3: "—",
+    armorMod3: "—",
+    notes: "Workbook-backed combined defense row using primary plus off-hand defensive item.",
   };
 }
 
@@ -1361,6 +1439,34 @@ export function deriveCombatStateSnapshot(
     );
   }
 
+  const workbookDefenseCases = getWorkbookDefenseCases({
+    allocationInputs: resolvedAllocationInputs,
+    characterInputs,
+    encumbranceLevel: workbookMovement.encumbranceLevel,
+    primaryWeaponTemplate,
+    secondaryWeaponTemplate,
+    shieldTemplate,
+  });
+
+  if (primaryWeaponTemplate && (shieldTemplate || secondaryWeaponTemplate)) {
+    const offHandLabel = shieldTemplate?.name ?? secondaryWeaponTemplate?.name ?? null;
+
+    if (offHandLabel) {
+      weaponRows.push(
+        buildCombinedDefenseRow({
+          armorTemplate,
+          characterInputs,
+          offHandLabel,
+          offHandShieldTemplate: shieldTemplate,
+          primaryLabel: primaryWeaponTemplate.name,
+          primaryWeaponTemplate,
+          secondaryWeaponTemplate,
+          twoItemPair: workbookDefenseCases.twoItemPair,
+        }),
+      );
+    }
+  }
+
   weaponRows.push(
     buildBrawlingSummaryRow({
       allocationInputs: resolvedAllocationInputs,
@@ -1391,14 +1497,6 @@ export function deriveCombatStateSnapshot(
     }),
   );
 
-  const workbookDefenseCases = getWorkbookDefenseCases({
-    allocationInputs: resolvedAllocationInputs,
-    characterInputs,
-    encumbranceLevel: workbookMovement.encumbranceLevel,
-    primaryWeaponTemplate,
-    secondaryWeaponTemplate,
-    shieldTemplate,
-  });
   const combinedParrySummary = getCombinedParrySummary();
 
   return {

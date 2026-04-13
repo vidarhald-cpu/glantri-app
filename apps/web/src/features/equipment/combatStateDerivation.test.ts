@@ -275,6 +275,7 @@ describe("combatStateDerivation", () => {
     );
     const primaryRow = getRowBySlotLabel(snapshot, "Primary weapon");
     const shieldRow = getRowBySlotLabel(snapshot, "Shield");
+    const combinedRow = getRowBySlotLabel(snapshot, "Combined");
     const brawlingRow = getRowBySlotLabel(snapshot, "Brawling");
     const punchRow = getRowBySlotLabel(snapshot, "Punch");
     const kickRow = getRowBySlotLabel(snapshot, "Kick");
@@ -316,6 +317,15 @@ describe("combatStateDerivation", () => {
       dm: 0,
       parry: 13,
     });
+    expect(combinedRow).toMatchObject({
+      slotLabel: "Combined",
+      modeLabel: "Combined",
+      currentItemLabel: "Long sword + Medium shield",
+      db: 19,
+      dm: 0,
+      parry: 14,
+      attack1: "—",
+    });
     expect(brawlingRow).toMatchObject({
       slotLabel: "Brawling",
       modeLabel: "Unarmed",
@@ -326,6 +336,9 @@ describe("combatStateDerivation", () => {
       parry: 8,
       attack1: "—",
     });
+    expect(
+      snapshot.weaponRows.findIndex((row) => row.slotLabel === "Combined"),
+    ).toBeLessThan(snapshot.weaponRows.findIndex((row) => row.slotLabel === "Brawling"));
     expect(getRowBySlotLabel(snapshot, "Unarmed / brawling")).toBeUndefined();
     expect(punchRow).toMatchObject({
       slotLabel: "Punch",

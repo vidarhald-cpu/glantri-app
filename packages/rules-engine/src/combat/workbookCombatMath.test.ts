@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   calculateWorkbookBaseDb,
+  calculateWorkbookCombinedParry,
   calculateWorkbookDefensePair,
   calculateWorkbookBaseMove,
   calculateWorkbookCarryCapacity,
@@ -152,6 +153,25 @@ describe("workbookCombatMath", () => {
       adjustment: 5,
       combinedModifier: 5,
       finalParry: 12,
+      rawParry: 7,
+    });
+  });
+
+  it("applies armor AA once globally after summing minimum-1 item parry contributions", () => {
+    expect(
+      calculateWorkbookCombinedParry({
+        armorActivityModifier: 2,
+        dexterityGm: 0,
+        offHandParryModifier: 5,
+        parrySkillXp: 11,
+        primaryParryModifier: 0,
+      }),
+    ).toMatchObject({
+      primaryContribution: 1,
+      offHandContribution: 5,
+      combinedModifier: 8,
+      adjustment: 8,
+      finalParry: 15,
       rawParry: 7,
     });
   });

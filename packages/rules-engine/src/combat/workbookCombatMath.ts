@@ -94,6 +94,37 @@ export interface WorkbookMeleeInitiativeResult {
   skillModifier: number;
 }
 
+export interface WorkbookWeaponParryInput {
+  armorActivityModifier?: number | null;
+  dexterityGm: number;
+  parrySkillXp: number;
+  weaponParryModifier: number;
+}
+
+export interface WorkbookWeaponParryResult {
+  adjustment: number;
+  combinedModifier: number;
+  finalParry: number;
+  rawParry: number;
+}
+
+export interface WorkbookCombinedParryInput {
+  armorActivityModifier?: number | null;
+  dexterityGm: number;
+  offHandParryModifier: number;
+  parrySkillXp: number;
+  primaryParryModifier: number;
+}
+
+export interface WorkbookCombinedParryResult {
+  adjustment: number;
+  combinedModifier: number;
+  finalParry: number;
+  offHandContribution: number;
+  primaryContribution: number;
+  rawParry: number;
+}
+
 export interface WorkbookEncumbranceLevelInput {
   carryCapacity: number;
   totalEncumbrance: number;
@@ -378,6 +409,49 @@ export function calculateWorkbookMeleeInitiative(
     finalInitiative: baseInitiative + initiativeAdjustment,
     gameModifier,
     skillModifier,
+  };
+}
+
+export function calculateWorkbookWeaponParry(
+  input: WorkbookWeaponParryInput,
+): WorkbookWeaponParryResult | null {
+  const rawParry = Math.round(input.parrySkillXp / 2) + 1 + input.dexterityGm;
+  const combinedModifier = (input.armorActivityModifier ?? 0) + input.weaponParryModifier;
+  const adjustment = lookupWorkbookPercentageAdjustment(rawParry, Math.abs(combinedModifier));
+
+  if (adjustment == null) {
+    return null;
+  }
+
+  return {
+    adjustment,
+    combinedModifier,
+    finalParry: combinedModifier > 0 ? rawParry + adjustment : rawParry - adjustment,
+    rawParry,
+  };
+}
+
+export function calculateWorkbookCombinedParry(
+  input: WorkbookCombinedParryInput,
+): WorkbookCombinedParryResult | null {
+  const rawParry = Math.round(input.parrySkillXp / 2) + 1 + input.dexterityGm;
+  const primaryContribution = Math.max(1, input.primaryParryModifier);
+  const offHandContribution = Math.max(1, input.offHandParryModifier);
+  const combinedModifier =
+    (input.armorActivityModifier ?? 0) + primaryContribution + offHandContribution;
+  const adjusted = applyWorkbookSignedAdjustment(rawParry, combinedModifier);
+
+  if (adjusted == null) {
+    return null;
+  }
+
+  return {
+    adjustment: adjusted.adjustment,
+    combinedModifier,
+    finalParry: adjusted.value,
+    offHandContribution,
+    primaryContribution,
+    rawParry,
   };
 }
 
