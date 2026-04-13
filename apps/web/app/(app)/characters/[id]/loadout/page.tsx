@@ -9,17 +9,26 @@ import {
   type CombatAllocationState,
   type CombatParrySource,
 } from "../../../../../../../packages/rules-engine/src/combat/combatAllocationState";
+import {
+  lookupWorkbookPercentageAdjustment,
+  lookupWorkbookSkillInitiativeModifier,
+} from "../../../../../../../packages/rules-engine/src/combat/workbookCombatMath";
 
 import { CombatStatePanel } from "../../../../../src/features/equipment/components/CombatStatePanel";
 import {
   buildCharacterArmorSummary,
   getWorkbookCharacterSize,
 } from "../../../../../src/features/equipment/armorSummary";
-import { buildCombatStatePanelModel } from "../../../../../src/features/equipment/combatStatePanel";
-import { formatEncumbranceDisplay } from "../../../../../src/features/equipment/displayFormatting";
+import {
+  buildCombatStatePanelModel,
+  type CombatStateDetailRow,
+  type CombatStateTableModel,
+} from "../../../../../src/features/equipment/combatStatePanel";
 import {
   buildCombatStateCharacterInputs,
+  deriveCombatStateSnapshot,
 } from "../../../../../src/features/equipment/combatStateDerivation";
+import { buildLoadoutCombatStatsTable } from "../../../../../src/features/equipment/loadoutCombatStats";
 import {
   getCharacterArmorItems,
   getCharacterShieldItems,
@@ -28,6 +37,7 @@ import {
   getLoadoutEquipment,
 } from "../../../../../src/features/equipment/equipmentSelectors";
 import type { EquipmentFeatureState } from "../../../../../src/features/equipment/types";
+import { lookupWorkbookCompositeAdjustment } from "../../../../../src/features/equipment/workbookCompositeTable";
 import {
   loadCharacterEquipmentState,
   setCharacterActiveMissileWeaponOnServer,
@@ -62,6 +72,8 @@ function getItemName(input: {
 
 function ControlSection(input: {
   children: ReactNode;
+  compact?: boolean;
+  sticky?: boolean;
   title: string;
 }) {
   return (
@@ -71,8 +83,11 @@ function ControlSection(input: {
         border: "1px solid #d9ddd8",
         borderRadius: 12,
         display: "grid",
-        gap: "0.9rem",
-        padding: "1rem"
+        gap: input.compact ? "0.65rem" : "0.9rem",
+        padding: input.compact ? "0.85rem" : "1rem",
+        position: input.sticky ? "sticky" : "static",
+        top: input.sticky ? "1rem" : undefined,
+        zIndex: input.sticky ? 10 : undefined
       }}
     >
       <h2 style={{ margin: 0 }}>{input.title}</h2>
@@ -95,8 +110,8 @@ function WeaponControl(input: {
         border: "1px solid #d9ddd8",
         borderRadius: 12,
         display: "grid",
-        gap: "0.35rem",
-        padding: "1rem"
+        gap: "0.25rem",
+        padding: "0.75rem 0.85rem"
       }}
     >
       <span>{input.label}</span>
@@ -135,8 +150,8 @@ function ParryAllocationControl(input: {
         border: "1px solid #d9ddd8",
         borderRadius: 12,
         display: "grid",
-        gap: "0.75rem",
-        padding: "1rem"
+        gap: "0.55rem",
+        padding: "0.75rem 0.85rem"
       }}
     >
       <div>{input.label}</div>
@@ -314,6 +329,116 @@ function buildThrowingWeaponOptions(input: {
   );
 }
 
+type EncumbranceDependentSkillType = "combat" | "covert" | "physical";
+
+const ENCOMBRANCE_SKILL_TYPE_ORDER: EncumbranceDependentSkillType[] = [
+  "combat",
+  "covert",
+  "physical",
+];
+
+function getEncumbranceDependentSkillType(input: {
+  groupIds: string[];
+  skillGroups: Array<{ id: string; name: string }>;
+}): EncumbranceDependentSkillType | null {
+  const groupNames = input.groupIds
+    .map((groupId) => input.skillGroups.find((group) => group.id === groupId)?.name ?? null)
+    .filter((groupName): groupName is string => Boolean(groupName));
+
+  if (groupNames.includes("Combat")) {
+    return "combat";
+  }
+
+  if (
+    groupNames.includes("Stealth") ||
+    groupNames.includes("Security") ||
+    input.groupIds.some((groupId) => groupId.toLowerCase().includes("covert"))
+  ) {
+    return "covert";
+  }
+
+  if (groupNames.includes("Athletics")) {
+    return "physical";
+  }
+
+  return null;
+}
+
+function getWorkbookSkillBaseTotal(input: {
+  adjustedStats: Record<string, number>;
+  linkedStats: string[];
+  adjustedXp: number;
+}): number | null {
+  if (input.linkedStats.length === 0) {
+    return null;
+  }
+
+  const statValues = input.linkedStats
+    .map((stat) => input.adjustedStats[stat])
+    .filter((value): value is number => typeof value === "number");
+
+  if (statValues.length !== input.linkedStats.length) {
+    return null;
+  }
+
+  const average = Math.round(statValues.reduce((sum, value) => sum + value, 0) / statValues.length);
+  return average + input.adjustedXp;
+}
+
+function getWorkbookSkillEncumberedTotal(input: {
+  baseTotal: number;
+  movementModifier: number | null;
+}): number | null {
+  if (input.movementModifier == null) {
+    return null;
+  }
+
+  const adjustment = lookupWorkbookCompositeAdjustment(input.baseTotal, input.movementModifier);
+  if (adjustment == null) {
+    return null;
+  }
+
+  return input.baseTotal - adjustment;
+}
+
+function getWorkbookSkillInitiative(input: {
+  adjustedXp: number;
+  dexterityGm: number | null | undefined;
+}): number | null {
+  if (input.dexterityGm == null) {
+    return null;
+  }
+
+  const skillModifier = lookupWorkbookSkillInitiativeModifier(input.adjustedXp);
+  if (skillModifier == null) {
+    return null;
+  }
+
+  return input.dexterityGm + skillModifier;
+}
+
+function getWorkbookArmorAdjustedPerception(input: {
+  adjustedStats: Record<string, number>;
+  armorPerceptionModifier: number | null | undefined;
+  perceptionAdjustedXp: number;
+}): number | null {
+  const intValue = input.adjustedStats.int;
+  const powValue = input.adjustedStats.pow;
+  const lckValue = input.adjustedStats.lck;
+  if (intValue == null || powValue == null || lckValue == null) {
+    return null;
+  }
+
+  const basePerception = Math.round((intValue + powValue + lckValue) / 3) + input.perceptionAdjustedXp;
+  const modifier = input.armorPerceptionModifier ?? 0;
+  const adjustment = lookupWorkbookPercentageAdjustment(basePerception, Math.abs(modifier));
+  if (adjustment == null) {
+    return null;
+  }
+
+  return modifier > 0 ? basePerception + adjustment : basePerception - adjustment;
+}
+
 export default function CharacterLoadoutPage({ params }: CharacterLoadoutPageProps) {
   const { id } = use(params);
   const [state, setState] = useState<EquipmentFeatureState | null>(null);
@@ -337,18 +462,23 @@ export default function CharacterLoadoutPage({ params }: CharacterLoadoutPagePro
     shield: undefined,
   });
 
-  const characterCombatInputs = useMemo(() => {
+  const sheetSummary = useMemo(() => {
     if (!characterContext?.content || !characterContext.record) {
       return undefined;
     }
 
-    return buildCombatStateCharacterInputs(
-      buildCharacterSheetSummary({
-        build: characterContext.record.build,
-        content: characterContext.content,
-      }),
-    );
+    return buildCharacterSheetSummary({
+      build: characterContext.record.build,
+      content: characterContext.content,
+    });
   }, [characterContext]);
+  const characterCombatInputs = useMemo(() => {
+    if (!sheetSummary) {
+      return undefined;
+    }
+
+    return buildCombatStateCharacterInputs(sheetSummary);
+  }, [sheetSummary]);
 
   const loadout = useMemo(() => (state ? getLoadoutEquipment(state, id) : {}), [state, id]);
   const weaponOptions = useMemo(
@@ -390,12 +520,12 @@ export default function CharacterLoadoutPage({ params }: CharacterLoadoutPagePro
         : [],
     [state, id]
   );
-  const combatStatePanelModel = useMemo(
+  const combatSnapshot = useMemo(
     () =>
       state
-        ? buildCombatStatePanelModel(state, id, characterCombatInputs, combatAllocationInputs)
+        ? deriveCombatStateSnapshot(state, id, characterCombatInputs, combatAllocationInputs)
         : null,
-    [characterCombatInputs, combatAllocationInputs, state, id]
+    [characterCombatInputs, combatAllocationInputs, id, state],
   );
   const parrySourceOptions = useMemo(() => getParrySourceOptions(loadout), [loadout]);
   const throwingWeaponOptions = useMemo(
@@ -425,6 +555,144 @@ export default function CharacterLoadoutPage({ params }: CharacterLoadoutPagePro
       template: armorTemplate,
     });
   }, [characterContext, loadout, state]);
+  const workbookPerceptionValue = useMemo(() => {
+    if (!sheetSummary) {
+      return null;
+    }
+
+    const perceptionSkill = characterContext?.content?.skills.find(
+      (skill) => skill.name.toLowerCase() === "perception",
+    );
+    const perceptionAdjustedXp =
+      perceptionSkill
+        ? sheetSummary.draftView.skills.find((skill) => skill.skillId === perceptionSkill.id)
+            ?.effectiveSkillNumber ?? -3
+        : -3;
+
+    return getWorkbookArmorAdjustedPerception({
+      adjustedStats: sheetSummary.adjustedStats,
+      armorPerceptionModifier: wornArmorSummary?.perceptionModifier ?? 0,
+      perceptionAdjustedXp,
+    });
+  }, [characterContext, sheetSummary, wornArmorSummary]);
+  const combatStatePanelModel = useMemo(
+    () => {
+      if (!state) {
+        return null;
+      }
+
+      const baseModel = buildCombatStatePanelModel(
+        state,
+        id,
+        characterCombatInputs,
+        combatAllocationInputs,
+      );
+
+      const statsRows: CombatStateDetailRow[] = [
+        {
+          label: "Hitpoints",
+          value: characterContext?.record?.build.profile.rolledStats.health ?? "—",
+        },
+        {
+          label: "GMR",
+          value:
+            sheetSummary?.adjustedStats.pow != null && sheetSummary?.adjustedStats.lck != null
+              ? sheetSummary.adjustedStats.pow + sheetSummary.adjustedStats.lck - 3
+              : "—",
+        },
+      ];
+      const statsTable: CombatStateTableModel | undefined =
+        sheetSummary && characterContext?.content
+          ? buildLoadoutCombatStatsTable({
+              adjustedStats: sheetSummary.adjustedStats,
+              draftSkills: sheetSummary.draftView.skills,
+              skills: characterContext.content.skills,
+              workbookPerceptionValue,
+            })
+          : undefined;
+
+      return {
+        ...baseModel,
+        statsRows,
+        statsTable,
+      };
+    },
+    [characterCombatInputs, characterContext, combatAllocationInputs, id, sheetSummary, state, workbookPerceptionValue]
+  );
+  const skillsSectionTable = useMemo<CombatStateTableModel | null>(() => {
+    if (!sheetSummary || !characterContext?.content || !characterCombatInputs || !combatSnapshot) {
+      return null;
+    }
+
+    const movementModifier =
+      typeof combatSnapshot.movementModifierSummary === "number"
+        ? combatSnapshot.movementModifierSummary
+        : null;
+
+    const rows = characterContext.content.skills
+      .map((skillDefinition) => {
+        const skillType = getEncumbranceDependentSkillType({
+          groupIds: skillDefinition.groupIds,
+          skillGroups: characterContext.content.skillGroups,
+        });
+        if (!skillType) {
+          return null;
+        }
+
+        const skillView = sheetSummary.draftView.skills.find(
+          (skill) => skill.skillId === skillDefinition.id,
+        );
+        if (!skillView || skillView.effectiveSkillNumber <= 0) {
+          return null;
+        }
+
+        const baseTotal =
+          skillDefinition.name.toLowerCase() === "perception"
+            ? workbookPerceptionValue
+            : getWorkbookSkillBaseTotal({
+                adjustedStats: sheetSummary.adjustedStats,
+                linkedStats: skillDefinition.linkedStats,
+                adjustedXp: skillView.effectiveSkillNumber,
+              });
+        const encumbered =
+          baseTotal == null
+            ? null
+            : getWorkbookSkillEncumberedTotal({
+                baseTotal,
+                movementModifier,
+              });
+        const initiative = getWorkbookSkillInitiative({
+          adjustedXp: skillView.effectiveSkillNumber,
+          dexterityGm: characterCombatInputs.dexterityGm,
+        });
+
+        return {
+          initiative,
+          row: [
+            skillDefinition.name,
+            initiative ?? "—",
+            baseTotal ?? "—",
+            encumbered ?? "—",
+          ],
+          skillType,
+          sortOrder: skillDefinition.sortOrder,
+        };
+      })
+      .filter((row): row is NonNullable<typeof row> => row !== null)
+      .sort((left, right) =>
+        ENCOMBRANCE_SKILL_TYPE_ORDER.indexOf(left.skillType) -
+          ENCOMBRANCE_SKILL_TYPE_ORDER.indexOf(right.skillType) ||
+        left.sortOrder - right.sortOrder ||
+        String(left.row[0]).localeCompare(String(right.row[0])),
+      )
+      .map((entry) => entry.row);
+
+    return {
+      title: "Encumbrance dependent skills",
+      columns: ["Skill", "Initiative", "Base", "Encumbered"],
+      rows,
+    };
+  }, [characterCombatInputs, characterContext, combatSnapshot, sheetSummary, workbookPerceptionValue]);
 
   useEffect(() => {
     let cancelled = false;
@@ -633,11 +901,11 @@ export default function CharacterLoadoutPage({ params }: CharacterLoadoutPagePro
       ) : null}
 
       {!loading && !pageError ? (
-        <ControlSection title="Equipment choices">
+        <ControlSection compact sticky title="Equipment choices">
           <div
             style={{
               display: "grid",
-              gap: "0.75rem",
+              gap: "0.6rem",
               gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))"
             }}
           >
@@ -687,11 +955,11 @@ export default function CharacterLoadoutPage({ params }: CharacterLoadoutPagePro
       ) : null}
 
       {!loading && !pageError ? (
-        <ControlSection title="Combat actions">
+        <ControlSection compact title="Combat actions">
           <div
             style={{
               display: "grid",
-              gap: "0.75rem",
+              gap: "0.6rem",
               gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))"
             }}
           >
@@ -749,26 +1017,14 @@ export default function CharacterLoadoutPage({ params }: CharacterLoadoutPagePro
         </ControlSection>
       ) : null}
 
-      {!loading && !pageError ? (
-        <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
-          Loadout options are drawn from items currently with you. Choosing a different item swaps
-          it into active use and stows the previous one back into the source location when
-          possible. Shield and second-hand choices toggle each other out, and bow or two-handed
-          primary/secondary choices clear conflicting off-hand use. Combat posture and parry
-          inputs on this page are temporary live inputs for derivation only and are not yet
-          persisted. Combat action and Throwing weapon are currently UI placeholders and do not
-          drive combat behavior yet.
-        </div>
+      {!loading && !pageError && combatStatePanelModel ? (
+        <CombatStatePanel model={combatStatePanelModel} />
       ) : null}
 
       {!loading && !pageError ? (
-        <ControlSection title="Armor summary">
+        <ControlSection title="Armor">
           {"armor" in loadout && loadout.armor && wornArmorSummary ? (
             <div style={{ display: "grid", gap: "0.85rem" }}>
-              <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
-                Worn armor uses the workbook-backed armor model. Actual armor encumbrance follows
-                the workbook rule: Armor sheet Enc. Factor x character Size.
-              </div>
               <div
                 style={{
                   display: "grid",
@@ -783,9 +1039,7 @@ export default function CharacterLoadoutPage({ params }: CharacterLoadoutPagePro
                 })}</div></div>
                 <div><strong>General armor</strong><div>{wornArmorSummary.generalArmorWithType}</div></div>
                 <div><strong>AA modifier</strong><div>{wornArmorSummary.aaModifier ?? "—"}</div></div>
-                <div><strong>Perception modifier</strong><div>{wornArmorSummary.perceptionModifier ?? "—"}</div></div>
-                <div><strong>Encumbrance factor</strong><div>{formatEncumbranceDisplay(wornArmorSummary.encumbranceFactor)}</div></div>
-                <div><strong>Actual encumbrance</strong><div>{formatEncumbranceDisplay(wornArmorSummary.actualEncumbrance)}</div></div>
+                <div><strong>Perception</strong><div>{workbookPerceptionValue ?? "—"}</div></div>
               </div>
               <div style={{ overflowX: "auto" }}>
                 <table style={{ borderCollapse: "collapse", minWidth: "100%", width: "100%" }}>
@@ -827,8 +1081,31 @@ export default function CharacterLoadoutPage({ params }: CharacterLoadoutPagePro
         </ControlSection>
       ) : null}
 
-      {!loading && !pageError && combatStatePanelModel ? (
-        <CombatStatePanel model={combatStatePanelModel} />
+      {!loading && !pageError && skillsSectionTable && skillsSectionTable.rows.length > 0 ? (
+        <ControlSection title="Encumbrance dependent skills">
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ borderCollapse: "collapse", minWidth: "100%", width: "100%" }}>
+              <thead>
+                <tr style={{ borderBottom: "1px solid #d9ddd8", textAlign: "left" }}>
+                  {skillsSectionTable.columns.map((column) => (
+                    <th key={column} style={{ padding: "0.5rem 0.75rem 0.5rem 0" }}>{column}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {skillsSectionTable.rows.map((row, rowIndex) => (
+                  <tr key={`${row[0]}-${rowIndex}`} style={{ borderBottom: rowIndex === skillsSectionTable.rows.length - 1 ? "none" : "1px solid #e6e6df" }}>
+                    {row.map((cell, cellIndex) => (
+                      <td key={`${rowIndex}-${cellIndex}`} style={{ padding: "0.6rem 0.75rem 0.6rem 0", verticalAlign: "top" }}>
+                        {cell}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </ControlSection>
       ) : null}
     </section>
   );
