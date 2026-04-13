@@ -616,6 +616,10 @@ function getDerivedObValue(input: {
     }
   }
 
+  if (input.treatAsThrownUse) {
+    return "—";
+  }
+
   if (skillXp == null) {
     return input.mode.ob ?? "—";
   }
@@ -685,6 +689,14 @@ function getDerivedDmbValue(input: {
     if (workbookDmb) {
       return workbookDmb.finalDmb;
     }
+  }
+
+  if (input.treatAsThrownUse) {
+    if (input.mode.dmb != null && strengthGm != null) {
+      return strengthGm + input.mode.dmb;
+    }
+
+    return getDmbValue(input.mode, input.characterInputs);
   }
 
   return getDmbValue(input.mode, input.characterInputs);

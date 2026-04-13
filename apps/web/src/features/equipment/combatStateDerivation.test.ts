@@ -881,7 +881,13 @@ describe("combatStateDerivation", () => {
     const snapshot = deriveCombatStateSnapshot(
       state,
       sampleCharacterId,
-      sampleCharacterInputs,
+      {
+        ...sampleCharacterInputs,
+        combatSkillXpByName: {
+          ...sampleCharacterInputs.combatSkillXpByName,
+          Throwing: 4,
+        },
+      },
       undefined,
       "weapon-item-longsword-1",
     );
@@ -890,6 +896,8 @@ describe("combatStateDerivation", () => {
       attack1: "Throw",
       currentItemLabel: "Dagger",
       modeLabel: "Thrown",
+      ob1: 5,
+      dmb1: 3,
     });
   });
 
