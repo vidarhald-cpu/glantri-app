@@ -200,6 +200,7 @@ export function buildCombatStatePanelModel(
 
   const capabilityRows: CombatStateDetailRow[] = [
     { label: "Unarmed DB / DM", value: formatDbDmPair(snapshot.unarmedDbSummary, snapshot.unarmedDmSummary) },
+    { label: snapshot.combinedParryLabel, value: snapshot.combinedParrySummary },
     {
       label: snapshot.twoItemDefenseLabel,
       value: formatDbDmPair(snapshot.twoItemDbSummary, snapshot.twoItemDmSummary),

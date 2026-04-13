@@ -355,6 +355,8 @@ describe("combatStateDerivation", () => {
     expect(snapshot.defenseSummary).toContain("DB 13");
     expect(snapshot.defenseSummary).toContain("DM 0");
     expect(snapshot.defenseSummary).toContain("Parry 14 (allocation pending)");
+    expect(snapshot.combinedParryLabel).toBe("Combined parry (Long sword + Medium shield)");
+    expect(snapshot.combinedParrySummary).toBe("14 (allocation pending)");
     expect(snapshot.unarmedSummary).toContain("Punch and Kick");
     expect(snapshot.unarmedDbSummary).toBe(12);
     expect(snapshot.unarmedDmSummary).toBe(0);
@@ -522,7 +524,10 @@ describe("combatStateDerivation", () => {
       attack1: "Thrust",
       ob1: 14,
       dmb1: 4,
+      parry: "11 (allocation pending)",
     });
+    expect(snapshot.combinedParryLabel).toBe("Combined parry (Long sword + Dagger)");
+    expect(snapshot.combinedParrySummary).toBe("14 (allocation pending)");
   });
 
   it("uses workbook-faithful melee initiative for equipped weapons and brawling rows", () => {

@@ -106,6 +106,8 @@ export interface DerivedCombatStateSnapshot {
   shieldMovementModifierSummary: DerivedCombatValue;
   unarmedDbSummary: DerivedCombatValue;
   unarmedDmSummary: DerivedCombatValue;
+  combinedParryLabel: string;
+  combinedParrySummary: DerivedCombatValue;
   oneItemDefenseLabel: string;
   oneItemDbSummary: DerivedCombatValue;
   oneItemDmSummary: DerivedCombatValue;
@@ -1229,6 +1231,60 @@ function getDefenseSummary(input: {
   return `${notes.join(" | ")}; full situational stacking still remains interim.`;
 }
 
+function getComparableParryValue(
+  value: DerivedCombatValue,
+): { display: DerivedCombatValue; numeric: number | null } {
+  if (typeof value === "number") {
+    return { display: value, numeric: value };
+  }
+
+  const match = /^(-?\d+(?:\.\d+)?)(?:\s+\(allocation pending\))?$/.exec(value);
+  if (!match) {
+    return { display: value, numeric: null };
+  }
+
+  return {
+    display: value,
+    numeric: Number(match[1]),
+  };
+}
+
+function getCombinedParrySummary(input: {
+  primaryRow: DerivedCombatWeaponRow | undefined;
+  secondaryRow: DerivedCombatWeaponRow | undefined;
+  shieldRow: DerivedCombatWeaponRow | undefined;
+}): { label: string; value: DerivedCombatValue } {
+  const offHandRow = input.shieldRow ?? input.secondaryRow;
+
+  if (!input.primaryRow || !offHandRow) {
+    return {
+      label: "Combined parry",
+      value: "—",
+    };
+  }
+
+  const primaryParry = getComparableParryValue(input.primaryRow.parry);
+  const offHandParry = getComparableParryValue(offHandRow.parry);
+
+  if (primaryParry.numeric == null && offHandParry.numeric == null) {
+    return {
+      label: `Combined parry (${input.primaryRow.currentItemLabel} + ${offHandRow.currentItemLabel})`,
+      value: "—",
+    };
+  }
+
+  const selected =
+    offHandParry.numeric != null &&
+    (primaryParry.numeric == null || offHandParry.numeric > primaryParry.numeric)
+      ? offHandParry
+      : primaryParry;
+
+  return {
+    label: `Combined parry (${input.primaryRow.currentItemLabel} + ${offHandRow.currentItemLabel})`,
+    value: selected.display,
+  };
+}
+
 function getLoadNotes(input: {
   backpackCount: number;
   missileTemplate: WeaponTemplate | null;
@@ -1414,6 +1470,14 @@ export function deriveCombatStateSnapshot(
     secondaryWeaponTemplate,
     shieldTemplate,
   });
+  const primaryRow = weaponRows.find((row) => row.slotLabel === "Primary weapon");
+  const shieldRow = weaponRows.find((row) => row.slotLabel === "Shield");
+  const secondaryRow = weaponRows.find((row) => row.slotLabel === "Secondary weapon");
+  const combinedParrySummary = getCombinedParrySummary({
+    primaryRow,
+    secondaryRow,
+    shieldRow,
+  });
 
   return {
     encumbranceCapacity: workbookMovement.carryCapacity ?? "—",
@@ -1429,6 +1493,8 @@ export function deriveCombatStateSnapshot(
     shieldMovementModifierSummary: workbookMovement.shieldMovementModifier ?? "—",
     unarmedDbSummary: workbookDefenseCases.unarmedPair.db,
     unarmedDmSummary: workbookDefenseCases.unarmedPair.dm,
+    combinedParryLabel: combinedParrySummary.label,
+    combinedParrySummary: combinedParrySummary.value,
     oneItemDefenseLabel: workbookDefenseCases.oneItemLabel,
     oneItemDbSummary: workbookDefenseCases.oneItemPair.db,
     oneItemDmSummary: workbookDefenseCases.oneItemPair.dm,
