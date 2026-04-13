@@ -55,10 +55,9 @@ export interface CombatStateCharacterInputs {
   constitution: number | null;
   dexterityGm: number | null;
   dexterity: number | null;
-  // Canonical workbook-equivalent total skill XP used by combat calculations.
+  // Canonical workbook-equivalent combat skill XP used by combat calculations.
   // This is effectiveSkillNumber: best group contribution + direct skill ranks.
   combatSkillXpByName: Record<string, number>;
-  combatSkillTotalByName?: Record<string, number>;
   dodgeCombatSkillXp: number | null;
   parryCombatSkillXp: number | null;
   brawlingCombatSkillXp: number | null;
@@ -307,9 +306,6 @@ export function buildCombatStateCharacterInputs(
       skill.effectiveSkillNumber,
     ]),
   );
-  const combatSkillTotalByName = Object.fromEntries(
-    sheet.draftView.skills.map((skill) => [skill.name, skill.totalSkill]),
-  );
   const strength = sheet.adjustedStats.str ?? null;
   const constitution = sheet.adjustedStats.con ?? null;
   const dexterity = sheet.adjustedStats.dex ?? null;
@@ -318,7 +314,6 @@ export function buildCombatStateCharacterInputs(
   return {
     brawlingCombatSkillXp: combatSkillXpByName[BRAWLING_SKILL_NAME] ?? null,
     combatSkillXpByName,
-    combatSkillTotalByName,
     constitution,
     dexterity,
     dexterityGm: getWorkbookStatGm(dexterity),
@@ -481,15 +476,15 @@ function getWeaponSkillXp(
   return characterInputs.combatSkillXpByName[template.weaponSkill] ?? null;
 }
 
-function getWeaponSkillTotal(
-  template: WeaponTemplate | null,
+function getSkillXpByName(
+  skillName: string | null | undefined,
   characterInputs: CombatStateCharacterInputs | undefined,
 ): number | null {
-  if (!template?.weaponSkill || !characterInputs?.combatSkillTotalByName) {
+  if (!skillName || !characterInputs) {
     return null;
   }
 
-  return characterInputs.combatSkillTotalByName[template.weaponSkill] ?? null;
+  return characterInputs.combatSkillXpByName[skillName] ?? null;
 }
 
 function canUseWorkbookMeleeCalculation(template: WeaponTemplate | null): boolean {
@@ -550,7 +545,9 @@ function getDerivedObValue(input: {
   }
 
   const skillXp = getWeaponSkillXp(input.template, input.characterInputs);
-  const skillTotal = getWeaponSkillTotal(input.template, input.characterInputs);
+  const missileOrThrownSkillXp = input.treatAsThrownUse
+    ? getSkillXpByName("Throwing", input.characterInputs)
+    : skillXp;
   const strengthGm = input.characterInputs?.strengthGm ?? null;
   const dexterityGm = input.characterInputs?.dexterityGm ?? null;
   if (
@@ -574,9 +571,12 @@ function getDerivedObValue(input: {
     }
   }
 
-  if ((input.template?.handlingClass === "missile" || input.treatAsThrownUse) && skillTotal != null) {
+  if (
+    (input.template?.handlingClass === "missile" || input.treatAsThrownUse) &&
+    missileOrThrownSkillXp != null
+  ) {
     return calculateBaseOB({
-      skill: skillTotal,
+      skill: missileOrThrownSkillXp,
       weaponBonus: input.mode.ob ?? 0,
       situationalModifier: input.allocationInputs.situationalModifiers.attack,
     });

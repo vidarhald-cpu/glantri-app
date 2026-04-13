@@ -816,7 +816,7 @@ describe("combatStateDerivation", () => {
     expect(snapshot.combinedParrySummary).toBe("—");
   });
 
-  it("uses workbook-equivalent total skill XP for non-workbook OB fallback paths", () => {
+  it("uses workbook-equivalent combat XP for non-workbook OB fallback paths", () => {
     const state = cloneState();
 
     state.itemsById["weapon-item-longsword-1"].storageAssignment = {
@@ -843,7 +843,7 @@ describe("combatStateDerivation", () => {
     expect(getRowBySlotLabel(snapshot, "Missile weapon")?.ob1).toBe(9);
   });
 
-  it("uses skill total for composite bow OB and dexterity-adjusted missile initiative", () => {
+  it("uses workbook combat XP for composite bow OB and dexterity-adjusted missile initiative", () => {
     const state = cloneState();
 
     state.itemsById["weapon-item-longsword-1"].storageAssignment = {
@@ -862,10 +862,6 @@ describe("combatStateDerivation", () => {
     const snapshot = deriveCombatStateSnapshot(state, sampleCharacterId, {
       ...sampleCharacterInputs,
       combatSkillXpByName: {
-        ...sampleCharacterInputs.combatSkillXpByName,
-        Bow: 3,
-      },
-      combatSkillTotalByName: {
         ...sampleCharacterInputs.combatSkillXpByName,
         Bow: 4,
       },
@@ -893,6 +889,32 @@ describe("combatStateDerivation", () => {
       attack1: "Throw",
       currentItemLabel: "Dagger",
       modeLabel: "Thrown",
+    });
+  });
+
+  it("uses the thrown skill path rather than the base melee skill for thrown dagger OB", () => {
+    const state = cloneState();
+    state.itemsById["weapon-item-longsword-1"].templateId = "weapon-template-dagger";
+
+    const snapshot = deriveCombatStateSnapshot(
+      state,
+      sampleCharacterId,
+      {
+        ...sampleCharacterInputs,
+        combatSkillXpByName: {
+          ...sampleCharacterInputs.combatSkillXpByName,
+          "1-h edged": 21,
+          Throwing: 4,
+        },
+      },
+      undefined,
+      "weapon-item-longsword-1",
+    );
+
+    expect(getRowBySlotLabel(snapshot, "Throwing weapon")).toMatchObject({
+      currentItemLabel: "Dagger",
+      modeLabel: "Thrown",
+      ob1: 6,
     });
   });
 });
