@@ -30,9 +30,13 @@ import {
 } from "../../../../../src/features/equipment/combatStateDerivation";
 import { buildLoadoutCombatStatsTable } from "../../../../../src/features/equipment/loadoutCombatStats";
 import {
+  buildLoadoutMeleeWeaponOptions,
+  buildLoadoutMissileWeaponOptions,
+  buildLoadoutThrowingWeaponOptions,
+} from "../../../../../src/features/equipment/loadoutWeaponOptions";
+import {
   getCharacterArmorItems,
   getCharacterShieldItems,
-  getCharacterWeaponItems,
   getEquipmentTemplateById,
   getLoadoutEquipment,
 } from "../../../../../src/features/equipment/equipmentSelectors";
@@ -211,20 +215,6 @@ function isBowOrTwoHandedTemplate(templateId: string | null, state: EquipmentFea
   );
 }
 
-function isDedicatedThrownTemplate(templateId: string | null, state: EquipmentFeatureState): boolean {
-  if (!templateId) {
-    return false;
-  }
-
-  const template = getEquipmentTemplateById(state, templateId);
-  return (
-    template?.category === "weapon" &&
-    (template.handlingClass === "thrown" ||
-      template.weaponSkill.toLowerCase().includes("throw") ||
-      template.tags.includes("thrown"))
-  );
-}
-
 function getParrySourceOptions(loadout: ReturnType<typeof getLoadoutEquipment>): Array<{
   label: string;
   value: CombatParrySource;
@@ -272,61 +262,6 @@ function buildSelectableItemOptions(input: {
       })}${getAccessTier(item.storageAssignment.carryMode) === "slow" ? " (Backpack / slow)" : ""}`,
     }))
     .sort((left, right) => left.label.localeCompare(right.label));
-}
-
-function buildThrowingWeaponOptions(input: {
-  loadout: ReturnType<typeof getLoadoutEquipment>;
-  state: EquipmentFeatureState;
-  weaponOptions: Array<{ id: string; label: string }>;
-}): Array<{ id: string; label: string }> {
-  const options = new Map<string, string>();
-
-  const addOption = (itemId: string | null | undefined, prefix?: string) => {
-    if (!itemId) {
-      return;
-    }
-
-    const item = input.state.itemsById[itemId];
-    if (!item || item.category !== "weapon") {
-      return;
-    }
-
-    const matchingOption = input.weaponOptions.find((option) => option.id === itemId);
-    const baseLabel =
-      matchingOption?.label ??
-      getItemName({
-        displayName: item.displayName,
-        templateId: item.templateId,
-        templateName: getEquipmentTemplateById(input.state, item.templateId)?.name,
-      });
-
-    options.set(itemId, prefix ? `${prefix}: ${baseLabel}` : baseLabel);
-  };
-
-  if ("primary" in input.loadout && input.loadout.primary) {
-    addOption(input.loadout.primary.id, "Current primary");
-  }
-
-  if ("secondary" in input.loadout && input.loadout.secondary) {
-    addOption(input.loadout.secondary.id, "Current secondary");
-  }
-
-  if ("missile" in input.loadout && input.loadout.missile) {
-    addOption(input.loadout.missile.id, "Current missile");
-  }
-
-  for (const option of input.weaponOptions) {
-    const item = input.state.itemsById[option.id];
-    if (!item || !isDedicatedThrownTemplate(item.templateId, input.state)) {
-      continue;
-    }
-
-    options.set(option.id, option.label);
-  }
-
-  return Array.from(options, ([id, label]) => ({ id, label })).sort((left, right) =>
-    left.label.localeCompare(right.label),
-  );
 }
 
 type EncumbranceDependentSkillType = "combat" | "covert" | "physical";
@@ -481,14 +416,21 @@ export default function CharacterLoadoutPage({ params }: CharacterLoadoutPagePro
   }, [sheetSummary]);
 
   const loadout = useMemo(() => (state ? getLoadoutEquipment(state, id) : {}), [state, id]);
-  const weaponOptions = useMemo(
+  const meleeWeaponOptions = useMemo(
     () =>
       state
-        ? buildSelectableItemOptions({
-            items: getCharacterWeaponItems(state, id).filter((item) => {
-              const location = state.locationsById[item.storageAssignment.locationId];
-              return location ? isWithYouLocation(location) : false;
-            }),
+        ? buildLoadoutMeleeWeaponOptions({
+            characterId: id,
+            state,
+          })
+        : [],
+    [state, id]
+  );
+  const missileWeaponOptions = useMemo(
+    () =>
+      state
+        ? buildLoadoutMissileWeaponOptions({
+            characterId: id,
             state,
           })
         : [],
@@ -531,13 +473,12 @@ export default function CharacterLoadoutPage({ params }: CharacterLoadoutPagePro
   const throwingWeaponOptions = useMemo(
     () =>
       state
-        ? buildThrowingWeaponOptions({
-            loadout,
+        ? buildLoadoutThrowingWeaponOptions({
+            characterId: id,
             state,
-            weaponOptions,
           })
         : [],
-    [loadout, state, weaponOptions]
+    [id, state]
   );
   const wornArmorSummary = useMemo(() => {
     if (!state || !characterContext?.record || !("armor" in loadout) || !loadout.armor) {
@@ -726,25 +667,14 @@ export default function CharacterLoadoutPage({ params }: CharacterLoadoutPagePro
   }, [id]);
 
   useEffect(() => {
-    if (!throwingWeaponItemId || !state) {
+    if (!throwingWeaponItemId) {
       return;
     }
 
-    const armedIds = new Set([
-      "primary" in loadout ? loadout.primary?.id ?? null : null,
-      "secondary" in loadout ? loadout.secondary?.id ?? null : null,
-      "missile" in loadout ? loadout.missile?.id ?? null : null,
-    ].filter((value): value is string => Boolean(value)));
-
-    const selectedItem = state.itemsById[throwingWeaponItemId];
-    const isDedicatedThrown =
-      selectedItem?.category === "weapon" &&
-      isDedicatedThrownTemplate(selectedItem.templateId, state);
-
-    if (isDedicatedThrown && !armedIds.has(throwingWeaponItemId)) {
+    if (!throwingWeaponOptions.some((option) => option.id === throwingWeaponItemId)) {
       setThrowingWeaponItemId("");
     }
-  }, [loadout, state, throwingWeaponItemId]);
+  }, [throwingWeaponItemId, throwingWeaponOptions]);
 
   async function applySelection(input: {
     itemId: string | null;
@@ -913,7 +843,7 @@ export default function CharacterLoadoutPage({ params }: CharacterLoadoutPagePro
               error={errors.primary}
               label="Primary weapon"
               onChange={(itemId) => void applySelection({ itemId, kind: "primary" })}
-              options={weaponOptions}
+              options={meleeWeaponOptions}
               value={"primary" in loadout ? loadout.primary?.id ?? "" : ""}
             />
             <WeaponControl
@@ -934,14 +864,14 @@ export default function CharacterLoadoutPage({ params }: CharacterLoadoutPagePro
               error={errors.secondary}
               label="Second hand weapon"
               onChange={(itemId) => void applySelection({ itemId, kind: "secondary" })}
-              options={weaponOptions}
+              options={meleeWeaponOptions}
               value={"secondary" in loadout ? loadout.secondary?.id ?? "" : ""}
             />
             <WeaponControl
               error={errors.missile}
               label="Missile weapon"
               onChange={(itemId) => void applySelection({ itemId, kind: "missile" })}
-              options={weaponOptions}
+              options={missileWeaponOptions}
               value={"missile" in loadout ? loadout.missile?.id ?? "" : ""}
             />
             <WeaponControl
