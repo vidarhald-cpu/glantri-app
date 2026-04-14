@@ -73,6 +73,75 @@ enum ItemConditionState {
   lost
 }
 
+enum CampaignStatus {
+  draft
+  active
+  archived
+}
+
+enum ScenarioKind {
+  combat
+  social
+  travel
+  mixed
+}
+
+enum ScenarioStatus {
+  draft
+  prepared
+  live
+  completed
+  archived
+}
+
+enum ScenarioCombatStatus {
+  not_started
+  in_progress
+  paused
+  ended
+}
+
+enum ScenarioParticipantSourceType {
+  character
+  entity
+}
+
+enum ScenarioParticipantRole {
+  player_character
+  npc
+  monster
+  animal
+  neutral
+  ally
+  enemy
+}
+
+enum ScenarioParticipantJoinSource {
+  gm_added
+  player_joined
+  imported_from_template
+}
+
+enum ScenarioVisibility {
+  hidden
+  visible_to_all
+  gm_only
+}
+
+enum CampaignAssetType {
+  map
+  image
+  document
+  handout
+  drawing
+}
+
+enum ReusableEntityKind {
+  npc
+  monster
+  animal
+}
+
 model Character {
   id               String                    @id @default(cuid())
   name             String
@@ -85,6 +154,7 @@ model Character {
   equipmentItems   CharacterEquipmentItem[]
   storageLocations CharacterStorageLocation[]
   loadouts         CharacterLoadout[]
+  scenarioParticipants ScenarioParticipant[]
 }
 
 model Weapon {
@@ -109,8 +179,13 @@ model User {
   passwordHash String
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
+  campaigns   Campaign[]
   characters  Character[]
+  createdAssets CampaignAsset[]
+  controlledScenarioParticipants ScenarioParticipant[] @relation("ScenarioParticipantController")
+  reusableEntities ReusableEntity[]
   roles       UserRole[]
+  scenarioEvents ScenarioEventLog[]
   sessions    Session[]
 }
 
@@ -219,4 +294,123 @@ model CharacterLoadout {
 
   @@index([characterId])
   @@index([characterId, isActive])
+}
+
+model Campaign {
+  id          String          @id @default(cuid())
+  name        String
+  slug        String          @unique
+  description String
+  gmUserId    String
+  status      CampaignStatus
+  settingsJson Json
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  assets      CampaignAsset[]
+  gmUser      User            @relation(fields: [gmUserId], references: [id], onDelete: Cascade)
+  scenarios   Scenario[]
+}
+
+model Scenario {
+  id            String             @id @default(cuid())
+  campaignId    String
+  name          String
+  description   String
+  kind          ScenarioKind
+  status        ScenarioStatus
+  mapAssetId    String?
+  liveStateJson Json?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+  campaign      Campaign           @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  eventLogs     ScenarioEventLog[]
+  mapAsset      CampaignAsset?     @relation("ScenarioMapAsset", fields: [mapAssetId], references: [id], onDelete: SetNull)
+  participants  ScenarioParticipant[]
+
+  @@index([campaignId])
+  @@index([campaignId, status])
+}
+
+model ReusableEntity {
+  id          String             @id @default(cuid())
+  gmUserId    String
+  name        String
+  kind        ReusableEntityKind
+  description String?
+  notes       String?
+  snapshotJson Json?
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  gmUser      User               @relation(fields: [gmUserId], references: [id], onDelete: Cascade)
+  scenarioParticipants ScenarioParticipant[]
+
+  @@index([gmUserId])
+}
+
+model ScenarioParticipant {
+  id          String                        @id @default(cuid())
+  scenarioId  String
+  sourceType  ScenarioParticipantSourceType
+  characterId String?
+  entityId    String?
+  role        ScenarioParticipantRole
+  controlledByUserId String?
+  joinSource  ScenarioParticipantJoinSource
+  initiativeSlot Int?
+  positionJson Json?
+  visibilityOverridesJson Json?
+  stateJson   Json
+  snapshotJson Json
+  isActive    Boolean                       @default(true)
+  createdAt   DateTime                      @default(now())
+  updatedAt   DateTime                      @updatedAt
+  character   Character?                    @relation(fields: [characterId], references: [id], onDelete: SetNull)
+  controlledByUser User?                    @relation("ScenarioParticipantController", fields: [controlledByUserId], references: [id], onDelete: SetNull)
+  entity      ReusableEntity?               @relation(fields: [entityId], references: [id], onDelete: SetNull)
+  scenario    Scenario                      @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+  eventLogs   ScenarioEventLog[]
+
+  @@index([scenarioId])
+  @@index([characterId])
+  @@index([entityId])
+  @@index([controlledByUserId])
+}
+
+model CampaignAsset {
+  id          String             @id @default(cuid())
+  campaignId  String
+  type        CampaignAssetType
+  title       String
+  description String?
+  storageUrl  String
+  mimeType    String?
+  visibility  ScenarioVisibility
+  createdByUserId String
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  campaign    Campaign           @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  createdByUser User             @relation(fields: [createdByUserId], references: [id], onDelete: Cascade)
+  mappedScenarios Scenario[]     @relation("ScenarioMapAsset")
+
+  @@index([campaignId])
+}
+
+model ScenarioEventLog {
+  id            String   @id @default(cuid())
+  scenarioId     String
+  roundNumber    Int?
+  phase          Int?
+  eventType      String
+  actorUserId    String?
+  participantId  String?
+  summary        String
+  payloadJson    Json?
+  createdAt      DateTime @default(now())
+  actorUser      User?    @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+  participant    ScenarioParticipant? @relation(fields: [participantId], references: [id], onDelete: SetNull)
+  scenario       Scenario @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+
+  @@index([scenarioId])
+  @@index([participantId])
+  @@index([actorUserId])
 }
