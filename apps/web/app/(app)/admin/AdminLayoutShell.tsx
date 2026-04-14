@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 
 import { AdminContentProvider, useAdminContent } from "../../../src/lib/admin/AdminContentContext";
+import { useCanAccessAdmin } from "../../../src/lib/auth/SessionUserContext";
 import {
   adminNavItems,
   AdminButton,
@@ -69,6 +70,7 @@ function buildRecoveryMessage(options: {
 
 function AdminLayoutInner({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const canEdit = useCanAccessAdmin();
   const {
     discardLocalDraft,
     feedback,
@@ -145,19 +147,25 @@ function AdminLayoutInner({ children }: { children: ReactNode }) {
               </span>
             </div>
             <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
-              <AdminButton
-                disabled={isLoading || isSaving}
-                onClick={() => void reloadFromServer()}
-                variant="ghost"
-              >
-                Reload Latest Server Content
-              </AdminButton>
-              {hasLocalDraft ? (
-                <AdminButton disabled={isLoading || isSaving} onClick={keepLocalDraft} variant="secondary">
+              {canEdit ? (
+                <AdminButton
+                  disabled={isLoading || isSaving}
+                  onClick={() => void reloadFromServer()}
+                  variant="ghost"
+                >
+                  Reload Latest Server Content
+                </AdminButton>
+              ) : null}
+              {canEdit && hasLocalDraft ? (
+                <AdminButton
+                  disabled={isLoading || isSaving}
+                  onClick={keepLocalDraft}
+                  variant="secondary"
+                >
                   Keep Local Draft
                 </AdminButton>
               ) : null}
-              {hasLocalDraft ? (
+              {canEdit && hasLocalDraft ? (
                 <AdminButton
                   disabled={isLoading || isSaving}
                   onClick={() => void discardLocalDraft()}
@@ -175,6 +183,9 @@ function AdminLayoutInner({ children }: { children: ReactNode }) {
             <AdminStatusBadge tone={saveState.tone}>{saveState.label}</AdminStatusBadge>
             <AdminStatusBadge tone={hasDraftChanges ? "warning" : "neutral"}>
               {hasDraftChanges ? "Draft differs from published" : "No unpublished draft delta"}
+            </AdminStatusBadge>
+            <AdminStatusBadge tone={canEdit ? "warning" : "neutral"}>
+              {canEdit ? "Editing enabled" : "View-only access"}
             </AdminStatusBadge>
             {hasLocalDraft ? (
               <AdminStatusBadge tone={hasRevisionConflict ? "danger" : "warning"}>
@@ -324,23 +335,33 @@ function AdminLayoutInner({ children }: { children: ReactNode }) {
                 <span style={{ color: "#5f543a", lineHeight: 1.5 }}>{recoveryMessage}</span>
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
-                <AdminButton
-                  disabled={isLoading || isSaving}
-                  onClick={() => void reloadFromServer()}
-                  variant="ghost"
-                >
-                  Reload Latest Server Content
-                </AdminButton>
-                <AdminButton disabled={isLoading || isSaving} onClick={keepLocalDraft} variant="secondary">
-                  Keep Local Draft
-                </AdminButton>
-                <AdminButton
-                  disabled={isLoading || isSaving}
-                  onClick={() => void discardLocalDraft()}
-                  variant="ghost"
-                >
-                  Discard Local Draft
-                </AdminButton>
+                {canEdit ? (
+                  <AdminButton
+                    disabled={isLoading || isSaving}
+                    onClick={() => void reloadFromServer()}
+                    variant="ghost"
+                  >
+                    Reload Latest Server Content
+                  </AdminButton>
+                ) : null}
+                {canEdit ? (
+                  <AdminButton
+                    disabled={isLoading || isSaving}
+                    onClick={keepLocalDraft}
+                    variant="secondary"
+                  >
+                    Keep Local Draft
+                  </AdminButton>
+                ) : null}
+                {canEdit ? (
+                  <AdminButton
+                    disabled={isLoading || isSaving}
+                    onClick={() => void discardLocalDraft()}
+                    variant="ghost"
+                  >
+                    Discard Local Draft
+                  </AdminButton>
+                ) : null}
               </div>
             </div>
           ) : null}
@@ -377,6 +398,12 @@ function AdminLayoutInner({ children }: { children: ReactNode }) {
               ? "Loading server-backed rules content..."
               : `${isSaving ? "Saving to server... " : ""}${feedback ?? ""}`}
           </div>
+          {!canEdit && !isLoading ? (
+            <div style={{ color: "#5f543a" }}>
+              You can browse the admin reference pages with a player account, but editing tools are
+              hidden unless your role is Admin or GM.
+            </div>
+          ) : null}
         </section>
 
         {children}

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { useAdminContent } from "../../../../src/lib/admin/AdminContentContext";
+import { useCanAccessAdmin } from "../../../../src/lib/auth/SessionUserContext";
 import {
   replaceProfessionRelations,
   updateProfessionInContent
@@ -17,6 +18,7 @@ import {
   AdminInput,
   AdminPageIntro,
   AdminPanel,
+  AdminReadOnlyNotice,
   AdminTagList,
   AdminTextarea
 } from "../admin-ui";
@@ -54,6 +56,7 @@ function createProfessionFormState(input: {
 }
 
 export default function ProfessionsAdminPage() {
+  const canEdit = useCanAccessAdmin();
   const { content, replaceContent } = useAdminContent();
   const rows = buildProfessionAdminRows(content);
   const [selectedProfessionId, setSelectedProfessionId] = useState<string>();
@@ -261,113 +264,117 @@ export default function ProfessionsAdminPage() {
           subtitle="Skill grants are edited here as relation sets. New persistence work can later add grant metadata such as ranks and core-flag editing without changing the page structure."
           title={`Edit ${selectedProfession.name}`}
         >
-          <form
-            onSubmit={(event) => {
-              event.preventDefault();
-              void handleSave();
-            }}
-            style={{ display: "grid", gap: "0.9rem" }}
-          >
-            <AdminField label="Profession id">
-              <AdminInput readOnly value={selectedProfession.id} />
-            </AdminField>
-
-            <AdminField label="Name">
-              <AdminInput
-                onChange={(event) => setFormState({ ...formState, name: event.target.value })}
-                value={activeForm.name}
-              />
-            </AdminField>
-
-            <AdminField
-              hint="Describe the profession as a grant package and play-facing identity. This helps later society-layer review explain why the package exists."
-              label="Description"
+          {canEdit ? (
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                void handleSave();
+              }}
+              style={{ display: "grid", gap: "0.9rem" }}
             >
-              <AdminTextarea
-                onChange={(event) =>
-                  setFormState({ ...activeForm, description: event.target.value })
-                }
-                value={activeForm.description}
-              />
-            </AdminField>
+              <AdminField label="Profession id">
+                <AdminInput readOnly value={selectedProfession.id} />
+              </AdminField>
 
-            <AdminField
-              hint="These group grants are the authoritative profession package. Most profession reach should come from groups rather than one-off direct skills."
-              label="Allowed skill groups"
-            >
-              <AdminCheckboxList
-                onToggle={(value) => toggleRelation("groupIds", value)}
-                options={content.skillGroups
-                  .slice()
-                  .sort((left, right) => left.sortOrder - right.sortOrder)
-                  .map((group) => ({
-                    label: group.name,
-                    selected: activeForm.groupIds.includes(group.id),
-                    value: group.id
-                  }))}
-              />
-            </AdminField>
+              <AdminField label="Name">
+                <AdminInput
+                  onChange={(event) => setFormState({ ...formState, name: event.target.value })}
+                  value={activeForm.name}
+                />
+              </AdminField>
 
-            <AdminField
-              hint="Use direct ordinary skills as explicit exceptions or additions when a profession needs skills outside its granted groups."
-              label="Individually allowed ordinary skills"
-            >
-              <AdminCheckboxList
-                onToggle={(value) => toggleRelation("ordinarySkillIds", value)}
-                options={content.skills
-                  .filter((skill) => skill.category === "ordinary")
-                  .sort((left, right) => left.sortOrder - right.sortOrder || left.name.localeCompare(right.name))
-                  .map((skill) => ({
-                    label: skill.name,
-                    selected: activeForm.ordinarySkillIds.includes(skill.id),
-                    value: skill.id
-                  }))}
-              />
-            </AdminField>
+              <AdminField
+                hint="Describe the profession as a grant package and play-facing identity. This helps later society-layer review explain why the package exists."
+                label="Description"
+              >
+                <AdminTextarea
+                  onChange={(event) =>
+                    setFormState({ ...activeForm, description: event.target.value })
+                  }
+                  value={activeForm.description}
+                />
+              </AdminField>
 
-            <AdminField
-              hint="Use direct secondary skills sparingly when the profession should reach a secondary branch without granting the whole parent group."
-              label="Individually allowed secondary skills"
-            >
-              <AdminCheckboxList
-                onToggle={(value) => toggleRelation("secondarySkillIds", value)}
-                options={content.skills
-                  .filter((skill) => skill.category === "secondary")
-                  .sort((left, right) => left.sortOrder - right.sortOrder || left.name.localeCompare(right.name))
-                  .map((skill) => ({
-                    label: skill.name,
-                    selected: activeForm.secondarySkillIds.includes(skill.id),
-                    value: skill.id
-                  }))}
-              />
-            </AdminField>
+              <AdminField
+                hint="These group grants are the authoritative profession package. Most profession reach should come from groups rather than one-off direct skills."
+                label="Allowed skill groups"
+              >
+                <AdminCheckboxList
+                  onToggle={(value) => toggleRelation("groupIds", value)}
+                  options={content.skillGroups
+                    .slice()
+                    .sort((left, right) => left.sortOrder - right.sortOrder)
+                    .map((group) => ({
+                      label: group.name,
+                      selected: activeForm.groupIds.includes(group.id),
+                      value: group.id
+                    }))}
+                />
+              </AdminField>
 
-            <AdminField
-              hint="These rows govern where the profession package is reachable. Society rows orchestrate access to professions rather than redefining the package."
-              label="Allowed societies / social classes"
-            >
-              <AdminCheckboxList
-                onToggle={(value) => toggleRelation("societyEntryIds", value)}
-                options={content.societyLevels
-                  .slice()
-                  .sort((left, right) => left.societyName.localeCompare(right.societyName) || left.societyLevel - right.societyLevel)
-                  .map((societyLevel) => {
-                    const value = createSocietyEntryId({
-                      societyId: societyLevel.societyId,
-                      societyLevel: societyLevel.societyLevel
-                    });
+              <AdminField
+                hint="Use direct ordinary skills as explicit exceptions or additions when a profession needs skills outside its granted groups."
+                label="Individually allowed ordinary skills"
+              >
+                <AdminCheckboxList
+                  onToggle={(value) => toggleRelation("ordinarySkillIds", value)}
+                  options={content.skills
+                    .filter((skill) => skill.category === "ordinary")
+                    .sort((left, right) => left.sortOrder - right.sortOrder || left.name.localeCompare(right.name))
+                    .map((skill) => ({
+                      label: skill.name,
+                      selected: activeForm.ordinarySkillIds.includes(skill.id),
+                      value: skill.id
+                    }))}
+                />
+              </AdminField>
 
-                    return {
-                      label: `${societyLevel.societyName} L${societyLevel.societyLevel} - ${societyLevel.socialClass}`,
-                      selected: activeForm.societyEntryIds.includes(value),
-                      value
-                    };
-                  })}
-              />
-            </AdminField>
+              <AdminField
+                hint="Use direct secondary skills sparingly when the profession should reach a secondary branch without granting the whole parent group."
+                label="Individually allowed secondary skills"
+              >
+                <AdminCheckboxList
+                  onToggle={(value) => toggleRelation("secondarySkillIds", value)}
+                  options={content.skills
+                    .filter((skill) => skill.category === "secondary")
+                    .sort((left, right) => left.sortOrder - right.sortOrder || left.name.localeCompare(right.name))
+                    .map((skill) => ({
+                      label: skill.name,
+                      selected: activeForm.secondarySkillIds.includes(skill.id),
+                      value: skill.id
+                    }))}
+                />
+              </AdminField>
 
-            <AdminButton type="submit">Save Profession</AdminButton>
-          </form>
+              <AdminField
+                hint="These rows govern where the profession package is reachable. Society rows orchestrate access to professions rather than redefining the package."
+                label="Allowed societies / social classes"
+              >
+                <AdminCheckboxList
+                  onToggle={(value) => toggleRelation("societyEntryIds", value)}
+                  options={content.societyLevels
+                    .slice()
+                    .sort((left, right) => left.societyName.localeCompare(right.societyName) || left.societyLevel - right.societyLevel)
+                    .map((societyLevel) => {
+                      const value = createSocietyEntryId({
+                        societyId: societyLevel.societyId,
+                        societyLevel: societyLevel.societyLevel
+                      });
+
+                      return {
+                        label: `${societyLevel.societyName} L${societyLevel.societyLevel} - ${societyLevel.socialClass}`,
+                        selected: activeForm.societyEntryIds.includes(value),
+                        value
+                      };
+                    })}
+                />
+              </AdminField>
+
+              <AdminButton type="submit">Save Profession</AdminButton>
+            </form>
+          ) : (
+            <AdminReadOnlyNotice message="Professions are viewable here for all signed-in users, while editing stays limited to Admin and GM roles." />
+          )}
         </AdminPanel>
       </div>
     </section>

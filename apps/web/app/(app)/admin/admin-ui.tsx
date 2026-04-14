@@ -82,6 +82,11 @@ export const adminNavItems: AdminNavItem[] = [
     label: "Valuables"
   },
   {
+    description: "Manage local users and assign Player, GM, or Admin roles.",
+    href: "/admin/players",
+    label: "Players"
+  },
+  {
     description: "Read short player-facing notes for current combat calculations.",
     href: "/admin/documents",
     label: "Documents"
@@ -183,6 +188,23 @@ export function AdminPanel(props: { children: ReactNode; title?: string; subtitl
       ) : null}
       {props.children}
     </section>
+  );
+}
+
+export function AdminReadOnlyNotice(props: { message?: string }) {
+  return (
+    <div
+      style={{
+        background: "rgba(255, 252, 245, 0.88)",
+        border: "1px solid rgba(85, 73, 48, 0.12)",
+        borderRadius: 18,
+        color: "#5f543a",
+        lineHeight: 1.5,
+        padding: "0.95rem 1rem"
+      }}
+    >
+      {props.message ?? "This page is view-only for your current role."}
+    </div>
   );
 }
 

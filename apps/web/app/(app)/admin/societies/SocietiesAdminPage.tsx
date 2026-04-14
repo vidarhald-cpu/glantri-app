@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { useAdminContent } from "../../../../src/lib/admin/AdminContentContext";
+import { useCanAccessAdmin } from "../../../../src/lib/auth/SessionUserContext";
 import { downloadCsv } from "../../../../src/lib/admin/exporters";
 import { buildSocietyAdminRows } from "../../../../src/lib/admin/viewModels";
 import {
@@ -13,6 +14,7 @@ import {
   AdminInput,
   AdminPageIntro,
   AdminPanel,
+  AdminReadOnlyNotice,
   AdminTagList,
   AdminTextarea
 } from "../admin-ui";
@@ -53,6 +55,7 @@ function createSocietyFormState(input: {
 }
 
 export default function SocietiesAdminPage() {
+  const canEdit = useCanAccessAdmin();
   const { content, replaceContent } = useAdminContent();
   const rows = buildSocietyAdminRows(content);
   const [selectedRowId, setSelectedRowId] = useState<string>();
@@ -285,127 +288,131 @@ export default function SocietiesAdminPage() {
           subtitle="The society name is shared across all bands for a society id, so saving that field propagates to the sibling rows automatically."
           title={`Edit ${selectedSocietyLevel.societyName} L${selectedSocietyLevel.societyLevel}`}
         >
-          <form
-            onSubmit={(event) => {
-              event.preventDefault();
-              void handleSave();
-            }}
-            style={{ display: "grid", gap: "0.9rem" }}
-          >
-            <AdminField label="Society id">
-              <AdminInput readOnly value={selectedSocietyLevel.societyId} />
-            </AdminField>
-
-            <AdminField
-              hint="This row's neutral access band within the society. It is distinct from skill-layer society level, which lives on individual skills."
-              label="Neutral band / level"
+          {canEdit ? (
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                void handleSave();
+              }}
+              style={{ display: "grid", gap: "0.9rem" }}
             >
-              <AdminInput readOnly value={String(selectedSocietyLevel.societyLevel)} />
-            </AdminField>
+              <AdminField label="Society id">
+                <AdminInput readOnly value={selectedSocietyLevel.societyId} />
+              </AdminField>
 
-            <AdminField label="Die range">
-              <AdminInput readOnly value={rows.find((row) => row.id === selectedRowDisplayId)?.dieRange ?? "Custom"} />
-            </AdminField>
+              <AdminField
+                hint="This row's neutral access band within the society. It is distinct from skill-layer society level, which lives on individual skills."
+                label="Neutral band / level"
+              >
+                <AdminInput readOnly value={String(selectedSocietyLevel.societyLevel)} />
+              </AdminField>
 
-            <AdminField label="Society">
-              <AdminInput
-                onChange={(event) =>
-                  setFormState({ ...activeForm, societyName: event.target.value })
-                }
-                value={activeForm.societyName}
-              />
-            </AdminField>
+              <AdminField label="Die range">
+                <AdminInput readOnly value={rows.find((row) => row.id === selectedRowDisplayId)?.dieRange ?? "Custom"} />
+              </AdminField>
 
-            <AdminField
-              hint="Display label for this access row inside the selected society at this neutral band."
-              label="Society-specific class name"
-            >
-              <AdminInput
-                onChange={(event) =>
-                  setFormState({ ...activeForm, socialClass: event.target.value })
-                }
-                value={activeForm.socialClass}
-              />
-            </AdminField>
+              <AdminField label="Society">
+                <AdminInput
+                  onChange={(event) =>
+                    setFormState({ ...activeForm, societyName: event.target.value })
+                  }
+                  value={activeForm.societyName}
+                />
+              </AdminField>
 
-            <AdminField
-              hint="Base education is row metadata, not a direct skill grant. Use it to describe the educational floor implied by this society/class band."
-              label="Base education"
-            >
-              <AdminInput
-                onChange={(event) =>
-                  setFormState({ ...activeForm, baseEducation: event.target.value })
-                }
-                type="number"
-                value={activeForm.baseEducation}
-              />
-            </AdminField>
+              <AdminField
+                hint="Display label for this access row inside the selected society at this neutral band."
+                label="Society-specific class name"
+              >
+                <AdminInput
+                  onChange={(event) =>
+                    setFormState({ ...activeForm, socialClass: event.target.value })
+                  }
+                  value={activeForm.socialClass}
+                />
+              </AdminField>
 
-            <AdminField
-              hint="These professions are the main access packages this row unlocks. Society rows should usually orchestrate professions first, then add limited direct overrides only when needed."
-              label="Allowed professions"
-            >
-              <AdminCheckboxList
-                onToggle={(value) => toggleRelation("professionIds", value)}
-                options={content.professions
-                  .slice()
-                  .sort((left, right) => left.name.localeCompare(right.name))
-                  .map((profession) => ({
-                    label: profession.name,
-                    selected: activeForm.professionIds.includes(profession.id),
-                    value: profession.id
-                  }))}
-              />
-            </AdminField>
+              <AdminField
+                hint="Base education is row metadata, not a direct skill grant. Use it to describe the educational floor implied by this society/class band."
+                label="Base education"
+              >
+                <AdminInput
+                  onChange={(event) =>
+                    setFormState({ ...activeForm, baseEducation: event.target.value })
+                  }
+                  type="number"
+                  value={activeForm.baseEducation}
+                />
+              </AdminField>
 
-            <AdminField
-              hint="Direct skill-group overrides add access beyond the profession-derived package. Use sparingly when the society row needs extra group-level reach."
-              label="Allowed skill groups"
-            >
-              <AdminCheckboxList
-                onToggle={(value) => toggleRelation("skillGroupIds", value)}
-                options={content.skillGroups
-                  .slice()
-                  .sort((left, right) => left.sortOrder - right.sortOrder)
-                  .map((group) => ({
-                    label: group.name,
-                    selected: activeForm.skillGroupIds.includes(group.id),
-                    value: group.id
-                  }))}
-              />
-            </AdminField>
+              <AdminField
+                hint="These professions are the main access packages this row unlocks. Society rows should usually orchestrate professions first, then add limited direct overrides only when needed."
+                label="Allowed professions"
+              >
+                <AdminCheckboxList
+                  onToggle={(value) => toggleRelation("professionIds", value)}
+                  options={content.professions
+                    .slice()
+                    .sort((left, right) => left.name.localeCompare(right.name))
+                    .map((profession) => ({
+                      label: profession.name,
+                      selected: activeForm.professionIds.includes(profession.id),
+                      value: profession.id
+                    }))}
+                />
+              </AdminField>
 
-            <AdminField
-              hint="Direct skill overrides are best for narrowly targeted additions on top of profession-derived reach."
-              label="Individually allowed skills"
-            >
-              <AdminCheckboxList
-                onToggle={(value) => toggleRelation("skillIds", value)}
-                options={content.skills
-                  .slice()
-                  .sort((left, right) => left.sortOrder - right.sortOrder || left.name.localeCompare(right.name))
-                  .map((skill) => ({
-                    label: skill.name,
-                    selected: activeForm.skillIds.includes(skill.id),
-                    value: skill.id
-                  }))}
-              />
-            </AdminField>
+              <AdminField
+                hint="Direct skill-group overrides add access beyond the profession-derived package. Use sparingly when the society row needs extra group-level reach."
+                label="Allowed skill groups"
+              >
+                <AdminCheckboxList
+                  onToggle={(value) => toggleRelation("skillGroupIds", value)}
+                  options={content.skillGroups
+                    .slice()
+                    .sort((left, right) => left.sortOrder - right.sortOrder)
+                    .map((group) => ({
+                      label: group.name,
+                      selected: activeForm.skillGroupIds.includes(group.id),
+                      value: group.id
+                    }))}
+                />
+              </AdminField>
 
-            <AdminField
-              hint="Use notes for row-specific rationale or exceptions that help reviewers understand why this access orchestration differs from neighboring levels."
-              label="Notes"
-            >
-              <AdminTextarea
-                onChange={(event) =>
-                  setFormState({ ...activeForm, notes: event.target.value })
-                }
-                value={activeForm.notes}
-              />
-            </AdminField>
+              <AdminField
+                hint="Direct skill overrides are best for narrowly targeted additions on top of profession-derived reach."
+                label="Individually allowed skills"
+              >
+                <AdminCheckboxList
+                  onToggle={(value) => toggleRelation("skillIds", value)}
+                  options={content.skills
+                    .slice()
+                    .sort((left, right) => left.sortOrder - right.sortOrder || left.name.localeCompare(right.name))
+                    .map((skill) => ({
+                      label: skill.name,
+                      selected: activeForm.skillIds.includes(skill.id),
+                      value: skill.id
+                    }))}
+                />
+              </AdminField>
 
-            <AdminButton type="submit">Save Society Row</AdminButton>
-          </form>
+              <AdminField
+                hint="Use notes for row-specific rationale or exceptions that help reviewers understand why this access orchestration differs from neighboring levels."
+                label="Notes"
+              >
+                <AdminTextarea
+                  onChange={(event) =>
+                    setFormState({ ...activeForm, notes: event.target.value })
+                  }
+                  value={activeForm.notes}
+                />
+              </AdminField>
+
+              <AdminButton type="submit">Save Society Row</AdminButton>
+            </form>
+          ) : (
+            <AdminReadOnlyNotice message="Society access rows are readable for all signed-in users, while editing stays limited to Admin and GM roles." />
+          )}
         </AdminPanel>
       </div>
     </section>

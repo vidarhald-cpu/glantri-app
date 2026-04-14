@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { useAdminContent } from "../../../../src/lib/admin/AdminContentContext";
+import { useCanAccessAdmin } from "../../../../src/lib/auth/SessionUserContext";
 import {
   normalizeSkillDefinition,
   updateSkillGroupInContent
@@ -17,6 +18,7 @@ import {
   AdminInput,
   AdminPageIntro,
   AdminPanel,
+  AdminReadOnlyNotice,
   AdminTagList,
   AdminTextarea
 } from "../admin-ui";
@@ -38,6 +40,7 @@ function createFormState(group: { description?: string; name: string; sortOrder:
 }
 
 export default function SkillGroupsAdminPage() {
+  const canEdit = useCanAccessAdmin();
   const { content, replaceContent } = useAdminContent();
   const rows = buildSkillGroupAdminRows(content);
   const [selectedGroupId, setSelectedGroupId] = useState<string>();
@@ -186,59 +189,63 @@ export default function SkillGroupsAdminPage() {
           subtitle="Included skills are edited here because group membership is one of the core relationships we want to manage explicitly."
           title={`Edit ${selectedGroup.name}`}
         >
-          <form
-            onSubmit={(event) => {
-              event.preventDefault();
-              void handleSave();
-            }}
-            style={{ display: "grid", gap: "0.9rem" }}
-          >
-            <AdminField label="Group id">
-              <AdminInput readOnly value={selectedGroup.id} />
-            </AdminField>
+          {canEdit ? (
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                void handleSave();
+              }}
+              style={{ display: "grid", gap: "0.9rem" }}
+            >
+              <AdminField label="Group id">
+                <AdminInput readOnly value={selectedGroup.id} />
+              </AdminField>
 
-            <AdminField label="Name">
-              <AdminInput
-                onChange={(event) => setFormState({ ...formState, name: event.target.value })}
-                value={activeForm.name}
-              />
-            </AdminField>
+              <AdminField label="Name">
+                <AdminInput
+                  onChange={(event) => setFormState({ ...formState, name: event.target.value })}
+                  value={activeForm.name}
+                />
+              </AdminField>
 
-            <AdminField label="Sort order">
-              <AdminInput
+              <AdminField label="Sort order">
+                <AdminInput
                   onChange={(event) =>
-                  setFormState({ ...activeForm, sortOrder: event.target.value })
-                }
-                type="number"
-                value={activeForm.sortOrder}
-              />
-            </AdminField>
+                    setFormState({ ...activeForm, sortOrder: event.target.value })
+                  }
+                  type="number"
+                  value={activeForm.sortOrder}
+                />
+              </AdminField>
 
-            <AdminField label="Notes">
-              <AdminTextarea
-                onChange={(event) =>
-                  setFormState({ ...activeForm, description: event.target.value })
-                }
-                value={activeForm.description}
-              />
-            </AdminField>
+              <AdminField label="Notes">
+                <AdminTextarea
+                  onChange={(event) =>
+                    setFormState({ ...activeForm, description: event.target.value })
+                  }
+                  value={activeForm.description}
+                />
+              </AdminField>
 
-            <AdminField label="Included skills">
-              <AdminCheckboxList
-                onToggle={toggleSkill}
-                options={content.skills
-                  .slice()
-                  .sort((left, right) => left.sortOrder - right.sortOrder || left.name.localeCompare(right.name))
-                  .map((skill) => ({
-                    label: skill.name,
-                    selected: activeForm.includedSkillIds.includes(skill.id),
-                    value: skill.id
-                  }))}
-              />
-            </AdminField>
+              <AdminField label="Included skills">
+                <AdminCheckboxList
+                  onToggle={toggleSkill}
+                  options={content.skills
+                    .slice()
+                    .sort((left, right) => left.sortOrder - right.sortOrder || left.name.localeCompare(right.name))
+                    .map((skill) => ({
+                      label: skill.name,
+                      selected: activeForm.includedSkillIds.includes(skill.id),
+                      value: skill.id
+                    }))}
+                />
+              </AdminField>
 
-            <AdminButton type="submit">Save Skill Group</AdminButton>
-          </form>
+              <AdminButton type="submit">Save Skill Group</AdminButton>
+            </form>
+          ) : (
+            <AdminReadOnlyNotice message="Skill groups are visible here for review, but editing is limited to Admin and GM accounts." />
+          )}
         </AdminPanel>
       </div>
     </section>
