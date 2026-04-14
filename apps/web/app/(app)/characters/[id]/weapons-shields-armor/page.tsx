@@ -6,7 +6,6 @@ import type {
   EquipmentItem,
   EquipmentTemplate,
   ShieldTemplate,
-  WeaponTemplate
 } from "@glantri/domain";
 import { getEffectiveEncumbrance } from "@glantri/domain/equipment";
 
@@ -22,13 +21,14 @@ import {
 } from "../../../../../src/features/equipment/armorSummary";
 import { formatEncumbranceDisplay } from "../../../../../src/features/equipment/displayFormatting";
 import {
-  formatNonMeleeModes,
   formatOptionalDisplayValue,
   formatWeaponModeDmb,
-  getCanonicalMeleeModeDisplay,
-  getPrimaryAttackTypeForDisplay,
-  getPrimarySecondCritForDisplay
 } from "../../../../../src/features/equipment/meleeWeaponDisplay";
+import {
+  buildMeleeWeaponCatalogTable,
+  buildMissileWeaponCatalogTable,
+  getCharacterWeaponCatalogRows,
+} from "../../../../../src/features/equipment/weaponCatalogTables";
 import type { EquipmentFeatureState } from "../../../../../src/features/equipment/types";
 import { loadCharacterEquipmentState } from "../../../../../src/lib/api/localServiceClient";
 import { loadLocalCharacterContext } from "../../../../../src/lib/characters/loadLocalCharacterContext";
@@ -38,11 +38,6 @@ interface WeaponsShieldsArmorPageProps {
   params: Promise<{
     id: string;
   }>;
-}
-
-interface WeaponRow {
-  item: EquipmentItem;
-  template: WeaponTemplate;
 }
 
 interface ShieldRow {
@@ -57,10 +52,6 @@ interface ArmorRow {
 
 function getCharacterName(name: string | undefined): string {
   return name?.trim() || UNNAMED_CHARACTER_PLACEHOLDER;
-}
-
-function asWeaponTemplate(template: EquipmentTemplate | undefined): WeaponTemplate | null {
-  return template?.category === "weapon" ? template : null;
 }
 
 function asShieldTemplate(template: EquipmentTemplate | undefined): ShieldTemplate | null {
@@ -170,19 +161,19 @@ export default function WeaponsShieldsArmorPage({ params }: WeaponsShieldsArmorP
     };
   }, [id]);
 
-  const weaponRows = useMemo(() => {
-    if (!state) {
-      return [];
-    }
-
-    return getCharacterWeaponItems(state, id)
-      .map((item) => {
-        const template = asWeaponTemplate(getEquipmentTemplateById(state, item.templateId));
-        return template ? ({ item, template } satisfies WeaponRow) : null;
-      })
-      .filter((row): row is WeaponRow => row !== null)
-      .sort((left, right) => getItemName(left.item, left.template).localeCompare(getItemName(right.item, right.template)));
-  }, [id, state]);
+  const weaponCatalogRows = useMemo(
+    () =>
+      state
+        ? getCharacterWeaponCatalogRows({
+            characterId: id,
+            items: getCharacterWeaponItems(state, id),
+            state,
+          })
+        : [],
+    [id, state],
+  );
+  const meleeWeaponTable = useMemo(() => buildMeleeWeaponCatalogTable(weaponCatalogRows), [weaponCatalogRows]);
+  const missileWeaponTable = useMemo(() => buildMissileWeaponCatalogTable(weaponCatalogRows), [weaponCatalogRows]);
 
   const shieldRows = useMemo(() => {
     if (!state) {
@@ -233,77 +224,16 @@ export default function WeaponsShieldsArmorPage({ params }: WeaponsShieldsArmorP
 
       <TableShell
         title="Weapons"
-        emptyLabel="No weapon items recorded."
-        columns={[
-          "Name",
-          "Template",
-          "Primary attack",
-          "Secondary crit",
-          "Weapon skill",
-          "Class",
-          "Handling",
-          "Slash OB",
-          "Slash DMB",
-          "Slash Crit",
-          "Slash Armor mod",
-          "Strike OB",
-          "Strike DMB",
-          "Strike Crit",
-          "Strike Armor mod",
-          "Thrust OB",
-          "Thrust DMB",
-          "Thrust Crit",
-          "Thrust Armor mod",
-          "Other modes",
-          "Parry",
-          "Initiative",
-          "Defensive value",
-          "Range",
-          "Encumbrance",
-          "Value",
-          "Material",
-          "Quality",
-          "Condition",
-          "Quantity",
-          "Notes"
-        ]}
-        rows={weaponRows.map(({ item, template }) => {
-          const meleeModes = getCanonicalMeleeModeDisplay(template.attackModes);
+        emptyLabel="No melee or thrown-capable weapon items recorded."
+        columns={meleeWeaponTable.columns.map((column) => String(column))}
+        rows={meleeWeaponTable.rows}
+      />
 
-          return [
-            getItemName(item, template),
-            template.name,
-            getPrimaryAttackTypeForDisplay(template),
-            getPrimarySecondCritForDisplay(template),
-            template.weaponSkill,
-            template.weaponClass,
-            template.handlingClass,
-            meleeModes.slash.ob,
-            meleeModes.slash.dmb,
-            meleeModes.slash.crit,
-            meleeModes.slash.armorModifier,
-            meleeModes.strike.ob,
-            meleeModes.strike.dmb,
-            meleeModes.strike.crit,
-            meleeModes.strike.armorModifier,
-            meleeModes.thrust.ob,
-            meleeModes.thrust.dmb,
-            meleeModes.thrust.crit,
-            meleeModes.thrust.armorModifier,
-            formatNonMeleeModes(template.attackModes),
-            formatOptionalDisplayValue(template.parry),
-            formatOptionalDisplayValue(template.initiative),
-            formatOptionalDisplayValue(template.defensiveValue),
-            formatOptionalDisplayValue(template.range),
-            String(getEffectiveEncumbrance(item, template)),
-            formatOptionalDisplayValue(item.valueOverride ?? template.baseValue),
-            item.material,
-            item.quality,
-            item.conditionState,
-            String(item.quantity),
-            item.notes ?? template.rulesNotes ?? "—"
-          ];
-        })}
+      <TableShell
+        title="Missile weapons"
+        emptyLabel="No missile weapon items recorded."
+        columns={missileWeaponTable.columns.map((column) => String(column))}
+        rows={missileWeaponTable.rows}
       />
 
       <TableShell

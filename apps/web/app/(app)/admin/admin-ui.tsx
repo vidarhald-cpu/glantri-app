@@ -57,6 +57,11 @@ export const adminNavItems: AdminNavItem[] = [
     label: "Melee weapons"
   },
   {
+    description: "Inspect the system missile weapon catalog with missile-appropriate attack columns.",
+    href: "/admin/missile-weapons",
+    label: "Missile weapons"
+  },
+  {
     description: "Inspect the system shield catalog with merged offensive and defensive workbook data.",
     href: "/admin/shields",
     label: "Shields"

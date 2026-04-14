@@ -9,9 +9,9 @@ import {
   AdminPanel,
 } from "../admin-ui";
 import {
-  buildMeleeWeaponCatalogTable,
+  buildMissileWeaponCatalogTable,
   getAdminWeaponCatalogRows,
-  isCatalogMeleeWeaponTemplate,
+  isCatalogMissileWeaponTemplate,
 } from "../../../../src/features/equipment/weaponCatalogTables";
 
 const materialOptions: MaterialType[] = ["steel", "bronze"];
@@ -58,10 +58,10 @@ function TableShell(input: {
         </thead>
         <tbody>
           {input.rows.map((row, index) => (
-            <tr key={`melee-weapons-row-${index}`} style={{ borderBottom: "1px solid rgba(85, 73, 48, 0.08)" }}>
+            <tr key={`missile-weapons-row-${index}`} style={{ borderBottom: "1px solid rgba(85, 73, 48, 0.08)" }}>
               {row.map((value, cellIndex) => (
                 <td
-                  key={`melee-weapons-row-${index}-${cellIndex}`}
+                  key={`missile-weapons-row-${index}-${cellIndex}`}
                   style={{ padding: "0.65rem 0.75rem 0.65rem 0", verticalAlign: "top" }}
                 >
                   {value}
@@ -77,36 +77,36 @@ function TableShell(input: {
   );
 }
 
-export default function MeleeWeaponsAdminPage() {
+export default function MissileWeaponsAdminPage() {
   const [material, setMaterial] = useState<MaterialType>("steel");
   const [quality, setQuality] = useState<QualityType>("standard");
 
-  const meleeWeapons = useMemo(
+  const missileWeapons = useMemo(
     () =>
       [...equipmentTemplates]
         .filter((template): template is WeaponTemplate => template.category === "weapon")
-        .filter(isCatalogMeleeWeaponTemplate),
+        .filter(isCatalogMissileWeaponTemplate),
     [],
   );
 
   const table = useMemo(
     () =>
-      buildMeleeWeaponCatalogTable(
+      buildMissileWeaponCatalogTable(
         getAdminWeaponCatalogRows({
           material,
           quality,
-          templates: meleeWeapons,
+          templates: missileWeapons,
         }),
       ),
-    [material, meleeWeapons, quality],
+    [material, missileWeapons, quality],
   );
 
   return (
     <section style={{ display: "grid", gap: "1.25rem" }}>
       <AdminPageIntro
-        eyebrow="Admin / Melee weapons"
-        title="Melee weapons"
-        summary="Read-only catalog view of system melee and thrown-capable weapon templates."
+        eyebrow="Admin / Missile weapons"
+        title="Missile weapons"
+        summary="Read-only catalog view of system missile weapon templates."
         actions={
           <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
             <label style={{ display: "grid", gap: "0.25rem", minWidth: 160 }}>
@@ -157,11 +157,11 @@ export default function MeleeWeaponsAdminPage() {
       />
 
       <AdminPanel
-        title="System Melee Weapon Catalog"
-        subtitle="Melee and thrown-capable weapons use the same shared table structure as the current character-facing overview."
+        title="System Missile Weapon Catalog"
+        subtitle="Missile weapons use their own shared table structure so bow and pistol rows no longer borrow melee-only attack columns."
       >
         <TableShell
-          emptyLabel="No melee weapon templates found."
+          emptyLabel="No missile weapon templates found."
           columns={table.columns.map((column) => String(column))}
           rows={table.rows}
         />
