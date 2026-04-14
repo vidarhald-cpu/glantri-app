@@ -15,6 +15,7 @@ export interface CreateSessionInput {
 }
 
 export interface AuthRepository {
+  anyPrivilegedUserExists(): Promise<boolean>;
   createSession(input: CreateSessionInput): Promise<AuthSession>;
   createUser(input: CreateUserInput): Promise<AuthUser>;
   deleteSessionByTokenHash(tokenHash: string): Promise<void>;
@@ -40,6 +41,10 @@ export function normalizeStoredAuthRole(roleName: string): AuthRole | null {
   return null;
 }
 
+function getStoredPrivilegedRoleNames(): string[] {
+  return ["admin", "game_master", "gm"];
+}
+
 function mapRoles(roles: Array<{ role: { name: string } }>): AuthRole[] {
   return roles
     .map((item) => normalizeStoredAuthRole(item.role.name))
@@ -48,6 +53,23 @@ function mapRoles(roles: Array<{ role: { name: string } }>): AuthRole[] {
 
 export function createPrismaAuthRepository(): AuthRepository {
   return {
+    async anyPrivilegedUserExists() {
+      const privilegedUserCount = await prisma.user.count({
+        where: {
+          roles: {
+            some: {
+              role: {
+                name: {
+                  in: getStoredPrivilegedRoleNames()
+                }
+              }
+            }
+          }
+        }
+      });
+
+      return privilegedUserCount > 0;
+    },
     async createSession(input) {
       const session = await prisma.session.create({
         data: {

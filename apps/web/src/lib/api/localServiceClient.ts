@@ -90,8 +90,28 @@ export async function getCurrentSessionUser(): Promise<AuthUser | null> {
   const response = await fetch(`${API_BASE_URL}/auth/me`, {
     credentials: "include"
   });
-  const payload = await parseResponse<{ user: AuthUser | null }>(response);
+  const payload = await parseResponse<{ canBootstrapGameMaster?: boolean; user: AuthUser | null }>(
+    response
+  );
   return payload.user;
+}
+
+export async function getBootstrapGameMasterAvailability(): Promise<boolean> {
+  const payload = await sendJson<{ canBootstrapGameMaster: boolean }>("/auth/bootstrap-status", {
+    method: "GET"
+  });
+
+  return payload.canBootstrapGameMaster;
+}
+
+export async function bootstrapGameMasterRole(): Promise<{
+  canBootstrapGameMaster: boolean;
+  user: AuthUser;
+}> {
+  return sendJson<{ canBootstrapGameMaster: boolean; user: AuthUser }>("/auth/bootstrap-gm", {
+    body: JSON.stringify({}),
+    method: "POST"
+  });
 }
 
 export async function registerLocalUser(input: CredentialRegisterInput): Promise<AuthUser> {

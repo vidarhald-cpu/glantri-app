@@ -21,9 +21,17 @@ const authService = new AuthService();
 export const authRoutes: FastifyPluginAsync = async (app) => {
   app.get("/me", async (request) => {
     const user = await getAuthenticatedUser(request, authService);
+    const canBootstrapGameMaster = await authService.canBootstrapGameMaster();
 
     return {
+      canBootstrapGameMaster,
       user
+    };
+  });
+
+  app.get("/bootstrap-status", async () => {
+    return {
+      canBootstrapGameMaster: await authService.canBootstrapGameMaster()
     };
   });
 
@@ -119,6 +127,27 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     }
 
     return {
+      user: updatedUser
+    };
+  });
+
+  app.post("/bootstrap-gm", async (request, reply) => {
+    const user = await requireAuthenticatedUser(request, reply, authService);
+
+    if (!user) {
+      return;
+    }
+
+    const updatedUser = await authService.bootstrapGameMasterForUser(user.id);
+
+    if (!updatedUser) {
+      return reply.code(403).send({
+        error: "Bootstrap GM claim is no longer available."
+      });
+    }
+
+    return {
+      canBootstrapGameMaster: false,
       user: updatedUser
     };
   });

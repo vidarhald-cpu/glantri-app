@@ -18,6 +18,10 @@ const SESSION_DURATION_MS = 1000 * 60 * 60 * 24 * 7;
 export class AuthService {
   constructor(private readonly repository = createPrismaAuthRepository()) {}
 
+  async canBootstrapGameMaster(): Promise<boolean> {
+    return !(await this.repository.anyPrivilegedUserExists());
+  }
+
   async registerLocalUser(input: CredentialRegisterInput): Promise<AuthUser> {
     return this.repository.createUser({
       displayName: input.displayName,
@@ -44,6 +48,16 @@ export class AuthService {
 
   async replaceUserRoles(userId: string, roles: AuthRole[]): Promise<AuthUser | null> {
     return this.repository.replaceUserRoles(userId, roles);
+  }
+
+  async bootstrapGameMasterForUser(userId: string): Promise<AuthUser | null> {
+    const bootstrapAvailable = await this.canBootstrapGameMaster();
+
+    if (!bootstrapAvailable) {
+      return null;
+    }
+
+    return this.repository.replaceUserRoles(userId, ["game_master"]);
   }
 
   async createSessionForUser(userId: string): Promise<{ session: AuthSession; token: string }> {
