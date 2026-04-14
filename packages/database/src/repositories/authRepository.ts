@@ -28,10 +28,22 @@ export interface AuthRepository {
   ): Promise<{ passwordHash: string; user: AuthUser } | null>;
 }
 
+export function normalizeStoredAuthRole(roleName: string): AuthRole | null {
+  if (roleName === "gm") {
+    return "game_master";
+  }
+
+  if (roleName === "player" || roleName === "game_master" || roleName === "admin") {
+    return roleName;
+  }
+
+  return null;
+}
+
 function mapRoles(roles: Array<{ role: { name: string } }>): AuthRole[] {
   return roles
-    .map((item) => item.role.name)
-    .filter((role): role is AuthRole => role === "player" || role === "game_master" || role === "admin");
+    .map((item) => normalizeStoredAuthRole(item.role.name))
+    .filter((role): role is AuthRole => role !== null);
 }
 
 export function createPrismaAuthRepository(): AuthRepository {
