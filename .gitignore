@@ -20,3 +20,12 @@ data/staging/*
 !data/staging/.gitkeep
 data/snapshots/*
 !data/snapshots/.gitkeep
+
+# Generated TS/JS outputs in source trees
+packages/content/src/**/*.js
+packages/content/src/**/*.d.ts
+packages/content/src/**/*.map
+
+packages/domain/src/**/*.js
+packages/domain/src/**/*.d.ts
+packages/domain/src/**/*.map
