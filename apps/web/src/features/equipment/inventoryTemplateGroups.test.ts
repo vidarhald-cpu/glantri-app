@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { EquipmentTemplate } from "@glantri/domain";
 
-import { buildInventoryTemplateGroups } from "./inventoryTemplateGroups";
+import {
+  buildInventoryTemplateGroups,
+  filterInventoryTemplateOptions,
+} from "./inventoryTemplateGroups";
 import { getPlayerFacingEquipmentTemplateName } from "./playerFacingTemplateOptions";
 
 function createTemplate(
@@ -62,5 +65,46 @@ describe("buildInventoryTemplateGroups", () => {
         getPlayerFacingEquipmentTemplateName(template),
       ),
     ).toEqual(["Composite bow"]);
+  });
+
+  it("filters template options by the requested structural category", () => {
+    const templates = [
+      createTemplate({
+        attackModes: [{ id: "mode-3", label: "Throw" }] as never,
+        category: "weapon",
+        handlingClass: "one_handed",
+        id: "weapon-template-dagger",
+        name: "Dagger",
+      }),
+      createTemplate({
+        category: "weapon",
+        handlingClass: "missile",
+        id: "weapon-template-composite-bow",
+        name: "Composite bow",
+        weaponClass: "bow",
+      }),
+      createTemplate({
+        category: "armor",
+        id: "armor-template-cloth",
+        name: "Cloth",
+      }),
+      createTemplate({
+        category: "gear",
+        id: "gear-template-rope",
+        name: "Rope",
+      }),
+      createTemplate({
+        category: "valuables",
+        id: "valuable-template-gold-coins",
+        name: "Gold coins",
+      }),
+    ];
+
+    expect(filterInventoryTemplateOptions(templates, "weapons").map((template) => template.name)).toEqual([]);
+    expect(filterInventoryTemplateOptions(templates, "missile").map((template) => template.name)).toEqual(["Composite bow"]);
+    expect(filterInventoryTemplateOptions(templates, "throwing").map((template) => template.name)).toEqual(["Dagger"]);
+    expect(filterInventoryTemplateOptions(templates, "armor").map((template) => template.name)).toEqual(["Cloth"]);
+    expect(filterInventoryTemplateOptions(templates, "gear").map((template) => template.name)).toEqual(["Rope"]);
+    expect(filterInventoryTemplateOptions(templates, "valuables").map((template) => template.name)).toEqual(["Gold coins"]);
   });
 });

@@ -72,6 +72,16 @@ export const adminNavItems: AdminNavItem[] = [
     label: "Armor"
   },
   {
+    description: "Inspect the system gear catalog with shared encumbrance, value, and notes columns.",
+    href: "/admin/gear",
+    label: "Gear"
+  },
+  {
+    description: "Inspect the system valuables catalog with shared encumbrance, value, and notes columns.",
+    href: "/admin/valuables",
+    label: "Valuables"
+  },
+  {
     description: "Read short player-facing notes for current combat calculations.",
     href: "/admin/documents",
     label: "Documents"

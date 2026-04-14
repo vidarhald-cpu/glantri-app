@@ -204,16 +204,23 @@ describe("equipmentSelectors inventory page grouping", () => {
     expect(elsewhere?.groups.map((group) => group.location.type)).toEqual(["home"]);
   });
 
-  it("includes actual and effective encumbrance on inventory rows", () => {
+  it("includes carried encumbrance only for carried locations", () => {
     const state = createState();
     const rows = getInventoryRows(state, characterId, 6);
     const spearRow = rows.find((row) => row.itemId === "item-mount");
+    const equippedRow = rows.find((row) => row.itemId === "item-equipped");
 
     expect(spearRow).toMatchObject({
       actualEncumbrance: 8.25,
-      effectiveEncumbrance: 0,
+      effectiveEncumbrance: null,
       locationName: "Mount",
       templateName: "Spear",
+    });
+    expect(equippedRow).toMatchObject({
+      actualEncumbrance: 4,
+      effectiveEncumbrance: 4,
+      locationName: "Equipped",
+      templateName: "Long sword",
     });
   });
 });

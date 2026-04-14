@@ -1,11 +1,53 @@
 import type { EquipmentTemplate } from "@glantri/domain";
 
+import {
+  hasLoadoutThrownWeaponStats,
+  isLoadoutMissileWeaponTemplate,
+} from "./loadoutWeaponOptions";
 import { getPlayerFacingEquipmentTemplateName } from "./playerFacingTemplateOptions";
+
+export type InventoryTemplateFilter =
+  | "all"
+  | "weapons"
+  | "missile"
+  | "throwing"
+  | "armor"
+  | "gear"
+  | "valuables";
 
 export interface InventoryTemplateGroup {
   category: string;
   label: string;
   templates: EquipmentTemplate[];
+}
+
+export function filterInventoryTemplateOptions(
+  templateOptions: EquipmentTemplate[],
+  filter: InventoryTemplateFilter,
+): EquipmentTemplate[] {
+  switch (filter) {
+    case "all":
+      return templateOptions;
+    case "weapons":
+      return templateOptions.filter(
+        (template) =>
+          template.category === "weapon" &&
+          !isLoadoutMissileWeaponTemplate(template) &&
+          !hasLoadoutThrownWeaponStats(template),
+      );
+    case "missile":
+      return templateOptions.filter((template) => isLoadoutMissileWeaponTemplate(template));
+    case "throwing":
+      return templateOptions.filter((template) => hasLoadoutThrownWeaponStats(template));
+    case "armor":
+      return templateOptions.filter((template) => template.category === "armor");
+    case "gear":
+      return templateOptions.filter((template) => template.category === "gear");
+    case "valuables":
+      return templateOptions.filter((template) => template.category === "valuables");
+    default:
+      return templateOptions;
+  }
 }
 
 function getTemplateCategoryLabel(category: string): string {

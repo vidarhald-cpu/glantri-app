@@ -19,6 +19,14 @@ import {
 import { calculateWorkbookArmorEncumbrance } from "./armorSummary";
 import type { EquipmentFeatureState, InventoryRow } from "./types";
 
+const CARRIED_LOCATION_TYPES = new Set(["equipped_system", "person_system", "backpack_system"]);
+
+export function isCarriedInventoryLocation(
+  location: Pick<StorageLocation, "type"> | undefined | null,
+): boolean {
+  return location ? CARRIED_LOCATION_TYPES.has(location.type) : false;
+}
+
 export function getActualInventoryEncumbrance(
   item: EquipmentItem,
   template: EquipmentTemplate,
@@ -137,13 +145,15 @@ export function getInventoryRows(
       characterSize,
     );
     const effectiveEncumbrance =
-      template.category === "armor"
-        ? calculateWorkbookArmorEncumbrance({
-            characterSize: characterSize ?? null,
-            item,
-            template,
-          }) ?? getEffectiveEncumbrance(item, template)
-        : getEffectiveEncumbrance(item, template);
+      isCarriedInventoryLocation(location)
+        ? template.category === "armor"
+          ? calculateWorkbookArmorEncumbrance({
+              characterSize: characterSize ?? null,
+              item,
+              template,
+            }) ?? getEffectiveEncumbrance(item, template)
+          : getEffectiveEncumbrance(item, template)
+        : null;
 
     rows.push({
       itemId: item.id,
@@ -274,8 +284,6 @@ export function getItemsGroupedForInventoryPage(
 }> {
   const locations = getCharacterLocations(state, characterId);
   const items = getCharacterEquipmentItems(state, characterId);
-  const carriedLocationTypes = new Set(["equipped_system", "person_system", "backpack_system"]);
-
   function buildGroups(filter: (location: StorageLocation) => boolean) {
     return locations
       .filter(filter)
@@ -314,7 +322,7 @@ export function getItemsGroupedForInventoryPage(
       groups: buildGroups(
         (location) =>
           location.availabilityClass === "with_you" &&
-          carriedLocationTypes.has(location.type),
+          isCarriedInventoryLocation(location),
       ),
     },
     {
@@ -324,7 +332,7 @@ export function getItemsGroupedForInventoryPage(
       groups: buildGroups(
         (location) =>
           location.availabilityClass === "with_you" &&
-          !carriedLocationTypes.has(location.type),
+          !isCarriedInventoryLocation(location),
       ),
     },
     {

@@ -32,7 +32,11 @@ import { loadLocalCharacterContext } from "../../../../../src/lib/characters/loa
 import { UNNAMED_CHARACTER_PLACEHOLDER } from "../../../../../src/lib/offline/repositories/localCharacterRepository";
 import { getWorkbookCharacterSize } from "../../../../../src/features/equipment/armorSummary";
 import { formatEncumbranceDisplay } from "../../../../../src/features/equipment/displayFormatting";
-import { buildInventoryTemplateGroups } from "../../../../../src/features/equipment/inventoryTemplateGroups";
+import {
+  buildInventoryTemplateGroups,
+  filterInventoryTemplateOptions,
+  type InventoryTemplateFilter,
+} from "../../../../../src/features/equipment/inventoryTemplateGroups";
 import {
   getPlayerFacingEquipmentLocationTemplateOptions,
   getPlayerFacingEquipmentTemplateName,
@@ -80,6 +84,16 @@ const availabilityOptions: Array<{
   { label: "Elsewhere", value: "elsewhere" }
 ];
 
+const templateFilterOptions: Array<{ label: string; value: InventoryTemplateFilter }> = [
+  { label: "All", value: "all" },
+  { label: "Weapons", value: "weapons" },
+  { label: "Missile", value: "missile" },
+  { label: "Throwing", value: "throwing" },
+  { label: "Armor", value: "armor" },
+  { label: "Gear", value: "gear" },
+  { label: "Valuables", value: "valuables" },
+];
+
 export default function CharacterEquipmentPage({ params }: CharacterEquipmentPageProps) {
   const { id } = use(params);
   const [state, setState] = useState<EquipmentFeatureState | null>(null);
@@ -97,6 +111,7 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
   const [bootstrapping, setBootstrapping] = useState(false);
   const [addItemError, setAddItemError] = useState<string>();
   const [addingItem, setAddingItem] = useState(false);
+  const [addTemplateFilter, setAddTemplateFilter] = useState<InventoryTemplateFilter>("all");
   const [addTemplateId, setAddTemplateId] = useState("");
   const [addLocationValue, setAddLocationValue] = useState("");
   const [addQuantity, setAddQuantity] = useState("1");
@@ -141,9 +156,13 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
         : [],
     [state]
   );
+  const filteredTemplateOptions = useMemo(
+    () => filterInventoryTemplateOptions(templateOptions, addTemplateFilter),
+    [addTemplateFilter, templateOptions],
+  );
   const templateGroups = useMemo(() => {
-    return buildInventoryTemplateGroups(templateOptions);
-  }, [templateOptions]);
+    return buildInventoryTemplateGroups(filteredTemplateOptions);
+  }, [filteredTemplateOptions]);
   const selectedTemplate =
     addTemplateId && state ? state.templates.templatesById[addTemplateId] ?? null : null;
   const selectedTemplateIsStackable = selectedTemplate?.category === "valuables";
@@ -188,17 +207,25 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
   }, [id]);
 
   useEffect(() => {
-    if (templateOptions.length === 0) {
+    if (filteredTemplateOptions.length === 0) {
       return;
     }
 
     if (!addTemplateId || !state?.templates.templatesById[addTemplateId]) {
-      const firstTemplate = templateOptions[0];
+      const firstTemplate = filteredTemplateOptions[0];
+      setAddTemplateId(firstTemplate.id);
+      setAddMaterial(firstTemplate.defaultMaterial);
+      setAddQuality("standard");
+      return;
+    }
+
+    if (!filteredTemplateOptions.some((template) => template.id === addTemplateId)) {
+      const firstTemplate = filteredTemplateOptions[0];
       setAddTemplateId(firstTemplate.id);
       setAddMaterial(firstTemplate.defaultMaterial);
       setAddQuality("standard");
     }
-  }, [addTemplateId, state, templateOptions]);
+  }, [addTemplateId, filteredTemplateOptions, state]);
 
   useEffect(() => {
     if (moveOptions.length === 0) {
@@ -530,6 +557,26 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
               Create a persisted inventory item from an existing equipment template, including workbook-backed shields.
             </div>
           </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+            {templateFilterOptions.map((option) => (
+              <button
+                key={option.value}
+                onClick={() => setAddTemplateFilter(option.value)}
+                style={{
+                  background: addTemplateFilter === option.value ? "#efe1c3" : "#fffdf8",
+                  border: "1px solid #d9c5a0",
+                  borderRadius: 999,
+                  color: "#4b3c23",
+                  font: "inherit",
+                  fontWeight: addTemplateFilter === option.value ? 700 : 500,
+                  padding: "0.45rem 0.8rem",
+                }}
+                type="button"
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
           <div
             style={{
               display: "grid",
@@ -541,8 +588,11 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
               <span>Template</span>
               <select
                 onChange={(event) => setAddTemplateId(event.target.value)}
-                value={addTemplateId}
+                value={filteredTemplateOptions.length > 0 ? addTemplateId : ""}
               >
+                {templateGroups.length === 0 ? (
+                  <option value="">No templates match this filter</option>
+                ) : null}
                 {templateGroups.map((group) => (
                   <optgroup key={group.category} label={group.label}>
                     {group.templates.map((template) => (
@@ -631,7 +681,7 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
               />
             </label>
             <button
-              disabled={addingItem}
+              disabled={addingItem || filteredTemplateOptions.length === 0}
               onClick={() => void handleAddItem()}
               style={{
                 background: "#7e5d2a",
@@ -760,6 +810,29 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
 
       {!loading && !pageError && hasVisibleLocationGroups ? (
         <div style={{ display: "grid", gap: "1rem" }}>
+          <section
+            style={{
+              background: "#f6f5ef",
+              border: "1px solid #d9ddd8",
+              borderRadius: 12,
+              display: "grid",
+              gap: "0.35rem",
+              padding: "1rem"
+            }}
+          >
+            <div style={{ color: "#5e5a50", fontSize: "0.95rem" }}>
+              Total encumbrance{" "}
+              {formatEncumbranceDisplay(
+                rows.reduce((total, row) => total + row.actualEncumbrance, 0),
+              )}
+            </div>
+            <div style={{ color: "#5e5a50", fontSize: "0.95rem" }}>
+              Carried encumbrance{" "}
+              {formatEncumbranceDisplay(
+                rows.reduce((total, row) => total + (row.effectiveEncumbrance ?? 0), 0),
+              )}
+            </div>
+          </section>
           {groupedSections.map((section) => {
             const sectionRows = section.groups.flatMap((group) =>
               group.items
@@ -771,7 +844,7 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
               0,
             );
             const sectionEffectiveEncumbrance = sectionRows.reduce(
-              (total, row) => total + row.effectiveEncumbrance,
+              (total, row) => total + (row.effectiveEncumbrance ?? 0),
               0,
             );
 
@@ -793,9 +866,13 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
                   {section.description}
                 </div>
                 <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
-                  Total encumbrance {formatEncumbranceDisplay(sectionActualEncumbrance)} actual /{" "}
-                  {formatEncumbranceDisplay(sectionEffectiveEncumbrance)} effective
+                  Total encumbrance {formatEncumbranceDisplay(sectionActualEncumbrance)}
                 </div>
+                {section.key === "carried" ? (
+                  <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
+                    Carried encumbrance {formatEncumbranceDisplay(sectionEffectiveEncumbrance)}
+                  </div>
+                ) : null}
               </div>
 
               {section.groups.map((group) => {
@@ -807,7 +884,7 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
                   0
                 );
                 const groupEffectiveEncumbrance = groupRows.reduce(
-                  (total, row) => total + row.effectiveEncumbrance,
+                  (total, row) => total + (row.effectiveEncumbrance ?? 0),
                   0
                 );
                 const canDeleteLocation =
@@ -838,8 +915,15 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
                         <strong>{group.location.name}</strong>
                         <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
                           {groupRows.length} item{groupRows.length === 1 ? "" : "s"} • Total encumbrance{" "}
-                          {formatEncumbranceDisplay(groupActualEncumbrance)} actual / {formatEncumbranceDisplay(groupEffectiveEncumbrance)} effective
+                          {formatEncumbranceDisplay(groupActualEncumbrance)}
                         </div>
+                        {group.location.type === "equipped_system" ||
+                        group.location.type === "person_system" ||
+                        group.location.type === "backpack_system" ? (
+                          <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
+                            Carried encumbrance {formatEncumbranceDisplay(groupEffectiveEncumbrance)}
+                          </div>
+                        ) : null}
                       </div>
                       {canDeleteLocation ? (
                         <button
@@ -869,8 +953,8 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
                               <th style={tableHeaderStyle}>Quality</th>
                               <th style={tableHeaderStyle}>Condition</th>
                               <th style={tableHeaderStyle}>Quantity</th>
-                              <th style={tableHeaderStyle}>Actual encumbrance</th>
-                              <th style={tableHeaderStyle}>Effective encumbrance</th>
+                              <th style={tableHeaderStyle}>Encumbrance</th>
+                              <th style={tableHeaderStyle}>Carried encumbrance</th>
                               <th style={tableHeaderStyle}>Access tier</th>
                               <th style={tableHeaderStyle}>Actions</th>
                             </tr>

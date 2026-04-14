@@ -30,6 +30,6 @@ export interface InventoryRow {
   quality: QualityType;
   conditionState: ItemConditionState;
   actualEncumbrance: number;
-  effectiveEncumbrance: number;
+  effectiveEncumbrance: number | null;
   accessTier: AccessTier;
 }
