@@ -1,6 +1,12 @@
 import { createHash, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 
-import type { AuthSession, AuthUser, CredentialLoginInput, CredentialRegisterInput } from "@glantri/auth";
+import type {
+  AuthRole,
+  AuthSession,
+  AuthUser,
+  CredentialLoginInput,
+  CredentialRegisterInput
+} from "@glantri/auth";
 
 import {
   createPrismaAuthRepository,
@@ -30,6 +36,14 @@ export class AuthService {
 
   async findUserByEmail(email: string): Promise<AuthUser | null> {
     return this.repository.findUserByEmail(email);
+  }
+
+  async listUsers(): Promise<AuthUser[]> {
+    return this.repository.listUsers();
+  }
+
+  async replaceUserRoles(userId: string, roles: AuthRole[]): Promise<AuthUser | null> {
+    return this.repository.replaceUserRoles(userId, roles);
   }
 
   async createSessionForUser(userId: string): Promise<{ session: AuthSession; token: string }> {

@@ -21,6 +21,8 @@ export interface AuthRepository {
   findSessionByTokenHash(tokenHash: string): Promise<AuthSession | null>;
   findUserById(id: string): Promise<AuthUser | null>;
   findUserByEmail(email: string): Promise<AuthUser | null>;
+  listUsers(): Promise<AuthUser[]>;
+  replaceUserRoles(userId: string, roles: AuthRole[]): Promise<AuthUser | null>;
   findUserCredentialByEmail(
     email: string
   ): Promise<{ passwordHash: string; user: AuthUser } | null>;
@@ -154,6 +156,75 @@ export function createPrismaAuthRepository(): AuthRepository {
           email
         }
       });
+
+      if (!user) {
+        return null;
+      }
+
+      return {
+        displayName: user.displayName ?? undefined,
+        email: user.email,
+        id: user.id,
+        roles: mapRoles(user.roles)
+      };
+    },
+    async listUsers() {
+      const users = await prisma.user.findMany({
+        include: {
+          roles: {
+            include: {
+              role: true
+            }
+          }
+        },
+        orderBy: {
+          email: "asc"
+        }
+      });
+
+      return users.map((user) => ({
+        displayName: user.displayName ?? undefined,
+        email: user.email,
+        id: user.id,
+        roles: mapRoles(user.roles)
+      }));
+    },
+    async replaceUserRoles(userId, roles) {
+      const normalizedRoles = [...new Set(roles)];
+      const roleRecords = await Promise.all(
+        normalizedRoles.map((roleName) =>
+          prisma.role.upsert({
+            create: {
+              name: roleName
+            },
+            update: {},
+            where: {
+              name: roleName
+            }
+          }),
+        ),
+      );
+
+      const user = await prisma.user.update({
+        data: {
+          roles: {
+            deleteMany: {},
+            create: roleRecords.map((role) => ({
+              roleId: role.id
+            }))
+          }
+        },
+        include: {
+          roles: {
+            include: {
+              role: true
+            }
+          }
+        },
+        where: {
+          id: userId
+        }
+      }).catch(() => null);
 
       if (!user) {
         return null;

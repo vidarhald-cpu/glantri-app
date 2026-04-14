@@ -1,13 +1,14 @@
 "use client";
 
+import { formatAuthRoleLabel } from "@glantri/auth";
 import { useEffect, useState } from "react";
 
 import {
   getCurrentSessionUser,
   loginLocalUser,
-  logoutLocalUser,
   registerLocalUser
 } from "../../src/lib/api/localServiceClient";
+import { useSessionUser } from "../../src/lib/auth/SessionUserContext";
 
 const sectionStyle = {
   background: "#f6f5ef",
@@ -19,7 +20,7 @@ const sectionStyle = {
 } as const;
 
 export default function AuthPage() {
-  const [currentUser, setCurrentUser] = useState<Awaited<ReturnType<typeof getCurrentSessionUser>>>();
+  const { currentUser, setCurrentUser, signOut } = useSessionUser();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
@@ -37,7 +38,7 @@ export default function AuthPage() {
       .finally(() => {
         setLoading(false);
       });
-  }, []);
+  }, [setCurrentUser]);
 
   async function handleRegister() {
     try {
@@ -68,8 +69,7 @@ export default function AuthPage() {
 
   async function handleLogout() {
     try {
-      await logoutLocalUser();
-      setCurrentUser(null);
+      await signOut();
       setFeedback("Signed out.");
     } catch (error) {
       setFeedback(error instanceof Error ? error.message : "Logout failed.");
@@ -92,7 +92,7 @@ export default function AuthPage() {
             <div style={{ display: "grid", gap: "0.5rem" }}>
               <div>Email: {currentUser.email}</div>
               <div>Display name: {currentUser.displayName ?? "Not set"}</div>
-              <div>Roles: {currentUser.roles.join(", ")}</div>
+              <div>Roles: {currentUser.roles.map((role) => formatAuthRoleLabel(role)).join(", ")}</div>
               <div>
                 <button onClick={() => void handleLogout()} type="button">
                   Logout

@@ -1,4 +1,4 @@
-import type { AuthUser, CredentialLoginInput, CredentialRegisterInput } from "@glantri/auth";
+import type { AuthRole, AuthUser, CredentialLoginInput, CredentialRegisterInput } from "@glantri/auth";
 import type { CanonicalContent } from "@glantri/content";
 import type { CharacterBuild } from "@glantri/domain";
 import type {
@@ -117,6 +117,28 @@ export async function logoutLocalUser(): Promise<void> {
     body: JSON.stringify({}),
     method: "POST"
   });
+}
+
+export async function loadAuthUsers(): Promise<AuthUser[]> {
+  const payload = await sendJson<{ users: AuthUser[] }>("/auth/users", {
+    method: "GET"
+  });
+
+  return payload.users;
+}
+
+export async function updateAuthUserRole(input: {
+  role: AuthRole;
+  userId: string;
+}): Promise<AuthUser> {
+  const payload = await sendJson<{ user: AuthUser }>(`/auth/users/${input.userId}/role`, {
+    body: JSON.stringify({
+      role: input.role
+    }),
+    method: "POST"
+  });
+
+  return payload.user;
 }
 
 export async function saveCharacterToServer(build: CharacterBuild): Promise<ServerCharacterRecord> {

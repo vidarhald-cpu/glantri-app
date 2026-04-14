@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import type { LocalCharacterRecord } from "../../../src/lib/offline/glantriDexie";
 import { loadMyServerCharacters } from "../../../src/lib/api/localServiceClient";
+import { useSessionUser } from "../../../src/lib/auth/SessionUserContext";
 import {
   LocalCharacterRepository,
   UNNAMED_CHARACTER_PLACEHOLDER
@@ -17,6 +18,7 @@ function getCharacterName(record: LocalCharacterRecord): string {
 }
 
 export default function CharactersBrowser() {
+  const { currentUser, loading: sessionLoading } = useSessionUser();
   const [characters, setCharacters] = useState<LocalCharacterRecord[]>([]);
   const [feedback, setFeedback] = useState<string>();
   const [loading, setLoading] = useState(true);
@@ -35,7 +37,20 @@ export default function CharactersBrowser() {
       });
   }, []);
 
+  const visibleCharacters = useMemo(
+    () =>
+      currentUser
+        ? characters.filter((record) => record.creatorId === currentUser.id)
+        : [],
+    [characters, currentUser],
+  );
+
   async function handleLoadServerCharacters() {
+    if (!currentUser) {
+      setFeedback("Login required before loading server characters.");
+      return;
+    }
+
     try {
       const serverCharacters = await loadMyServerCharacters();
 
@@ -43,6 +58,9 @@ export default function CharactersBrowser() {
         await localCharacterRepository.save({
           build: character.build,
           createdAt: character.createdAt,
+          creatorDisplayName: currentUser.displayName,
+          creatorEmail: currentUser.email,
+          creatorId: currentUser.id,
           finalizedAt: character.createdAt,
           syncStatus: "synced",
           updatedAt: character.updatedAt
@@ -73,11 +91,11 @@ export default function CharactersBrowser() {
         {feedback ? <div>{feedback}</div> : null}
       </div>
 
-      {loading ? (
+      {loading || sessionLoading ? (
         <div>Loading local characters...</div>
-      ) : characters.length > 0 ? (
+      ) : visibleCharacters.length > 0 ? (
         <div style={{ display: "grid", gap: "0.75rem" }}>
-          {characters.map((record) => (
+          {visibleCharacters.map((record) => (
             <div
               key={record.id}
               style={{
