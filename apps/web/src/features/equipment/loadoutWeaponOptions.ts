@@ -54,6 +54,12 @@ function isWeaponTemplate(
   return template?.category === "weapon";
 }
 
+function hasDerivedThrownAttackMode(
+  template: Extract<EquipmentTemplate, { category: "weapon" }>,
+): boolean {
+  return template.attackModes?.some((mode) => mode.id === "mode-3") === true;
+}
+
 export function isLoadoutMeleeWeaponTemplate(
   template: EquipmentTemplate | undefined,
 ): boolean {
@@ -81,9 +87,22 @@ export function hasLoadoutThrownWeaponStats(
     isWeaponTemplate(template) &&
     (
       template.handlingClass === "thrown" ||
-      template.tags.includes("thrown") ||
-      template.attackModes?.some((mode) => mode.id === "mode-3") === true
+      hasDerivedThrownAttackMode(template)
     )
+  );
+}
+
+export function isValidLoadoutThrowingWeaponItem(input: {
+  item: EquipmentItem | undefined;
+  state: EquipmentFeatureState;
+}): boolean {
+  if (!input.item) {
+    return false;
+  }
+
+  return (
+    isSelectableWeaponItem(input.item, input.state) &&
+    hasLoadoutThrownWeaponStats(input.state.templates.templatesById[input.item.templateId])
   );
 }
 

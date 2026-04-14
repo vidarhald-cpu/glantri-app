@@ -178,4 +178,23 @@ describe("loadout weapon option filtering", () => {
       "T. Javelin",
     ]);
   });
+
+  it("does not treat a thrown tag alone as real thrown stats for loadout throwing choices", () => {
+    const state = createState();
+    state.itemsById["item-tag-only-thrown"] = createWeaponItem({
+      id: "item-tag-only-thrown",
+      templateId: "weapon-template-tag-only-thrown",
+    });
+    state.templates.templatesById["weapon-template-tag-only-thrown"] = createWeaponTemplate({
+      id: "weapon-template-tag-only-thrown",
+      name: "Tag only thrown",
+      tags: ["thrown"],
+      weaponClass: "knife",
+      weaponSkill: "Thrown Weapons",
+    });
+
+    expect(buildLoadoutThrowingWeaponOptions({ characterId, state }).map((option) => option.label)).not.toContain(
+      "Tag only thrown",
+    );
+  });
 });

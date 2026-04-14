@@ -33,6 +33,7 @@ import {
   buildLoadoutMeleeWeaponOptions,
   buildLoadoutMissileWeaponOptions,
   buildLoadoutThrowingWeaponOptions,
+  isValidLoadoutThrowingWeaponItem,
 } from "../../../../../src/features/equipment/loadoutWeaponOptions";
 import {
   getCharacterArmorItems,
@@ -559,7 +560,20 @@ export default function CharacterLoadoutPage({ params }: CharacterLoadoutPagePro
         statsTable,
       };
     },
-    [characterCombatInputs, characterContext, combatAllocationInputs, id, sheetSummary, state, workbookPerceptionValue]
+    [
+      characterCombatInputs,
+      characterContext,
+      combatAllocationInputs,
+      id,
+      sheetSummary,
+      state,
+      throwingWeaponItemId,
+      workbookPerceptionValue,
+    ]
+  );
+  const selectedThrowingWeaponItem = useMemo(
+    () => (throwingWeaponItemId && state ? state.itemsById[throwingWeaponItemId] : undefined),
+    [state, throwingWeaponItemId],
   );
   const skillsSectionTable = useMemo<CombatStateTableModel | null>(() => {
     if (!sheetSummary || !characterContext?.content || !characterCombatInputs || !combatSnapshot) {
@@ -668,14 +682,19 @@ export default function CharacterLoadoutPage({ params }: CharacterLoadoutPagePro
   }, [id]);
 
   useEffect(() => {
-    if (!throwingWeaponItemId) {
+    if (!throwingWeaponItemId || !state) {
       return;
     }
 
-    if (!throwingWeaponOptions.some((option) => option.id === throwingWeaponItemId)) {
+    if (
+      !isValidLoadoutThrowingWeaponItem({
+        item: selectedThrowingWeaponItem,
+        state,
+      })
+    ) {
       setThrowingWeaponItemId("");
     }
-  }, [throwingWeaponItemId, throwingWeaponOptions]);
+  }, [selectedThrowingWeaponItem, state, throwingWeaponItemId]);
 
   async function applySelection(input: {
     itemId: string | null;

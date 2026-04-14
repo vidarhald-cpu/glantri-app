@@ -1,0 +1,142 @@
+import { describe, expect, it } from "vitest";
+
+import type {
+  CharacterLoadout,
+  EquipmentItem,
+  EquipmentTemplate,
+  StorageLocation,
+} from "@glantri/domain";
+
+import { equipmentTemplates } from "../../../../../packages/content/src/equipment";
+import { defaultCombatAllocationState } from "../../../../../packages/rules-engine/src/combat/combatAllocationState";
+import { buildCombatStatePanelModel } from "./combatStatePanel";
+import type { CombatStateCharacterInputs } from "./combatStateDerivation";
+import type { EquipmentFeatureState } from "./types";
+
+const characterId = "char-throwing-panel";
+
+function indexById<T extends { id: string }>(items: T[]): Record<string, T> {
+  return Object.fromEntries(items.map((item) => [item.id, item]));
+}
+
+const locations: StorageLocation[] = [
+  {
+    id: `${characterId}:loc-equipped`,
+    characterId,
+    name: "Equipped",
+    type: "equipped_system",
+    availabilityClass: "with_you",
+    parentLocationId: null,
+    isMobile: true,
+    isAccessibleInEncounter: true,
+    notes: null,
+  },
+];
+
+const daggerItem: EquipmentItem = {
+  id: "weapon-item-dagger-throwing",
+  characterId,
+  templateId: "weapon-template-dagger",
+  category: "weapon",
+  displayName: null,
+  specificityType: "generic",
+  quantity: 1,
+  isStackable: false,
+  material: "steel",
+  quality: "standard",
+  storageAssignment: {
+    locationId: `${characterId}:loc-equipped`,
+    carryMode: "equipped",
+  },
+  conditionState: "intact",
+  durabilityCurrent: 12,
+  durabilityMax: 12,
+  encumbranceOverride: null,
+  valueOverride: null,
+  specialProperties: null,
+  notes: null,
+  isEquipped: true,
+  isFavorite: null,
+  acquiredFrom: null,
+  statusTags: null,
+};
+
+const activeLoadout: CharacterLoadout = {
+  id: `${characterId}:loadout-active`,
+  characterId,
+  name: "Current",
+  isActive: true,
+  wornArmorItemId: null,
+  readyShieldItemId: null,
+  activePrimaryWeaponItemId: null,
+  activeSecondaryWeaponItemId: null,
+  activeMissileWeaponItemId: null,
+  activeAmmoItemIds: [],
+  quickAccessItemIds: [],
+  notes: null,
+};
+
+const characterInputs: CombatStateCharacterInputs = {
+  constitution: 11,
+  dexterity: 11,
+  dexterityGm: 0,
+  combatSkillXpByName: {
+    Throwing: 4,
+  },
+  dodgeCombatSkillXp: null,
+  parryCombatSkillXp: null,
+  brawlingCombatSkillXp: null,
+  size: 13,
+  sizeGm: 1,
+  strength: 17,
+  strengthGm: 3,
+};
+
+function createState(): EquipmentFeatureState {
+  return {
+    templates: {
+      templatesById: indexById<EquipmentTemplate>(equipmentTemplates),
+    },
+    itemsById: {
+      [daggerItem.id]: structuredClone(daggerItem),
+    },
+    locationsById: indexById(structuredClone(locations)),
+    activeLoadoutByCharacterId: {
+      [characterId]: structuredClone(activeLoadout),
+    },
+  };
+}
+
+function getThrowingRow(model: ReturnType<typeof buildCombatStatePanelModel>) {
+  return model.weaponModeTable.rows.find((row) => row[1] === "Dagger" && row[3] === "Throw");
+}
+
+describe("combatStatePanel throwing row reliability", () => {
+  it("includes the throwing row whenever the same valid throwing selection is recomputed", () => {
+    const state = createState();
+
+    const firstModel = buildCombatStatePanelModel(
+      state,
+      characterId,
+      characterInputs,
+      defaultCombatAllocationState,
+      daggerItem.id,
+    );
+    const secondModel = buildCombatStatePanelModel(
+      state,
+      characterId,
+      characterInputs,
+      {
+        ...defaultCombatAllocationState,
+        situationalModifiers: {
+          ...defaultCombatAllocationState.situationalModifiers,
+          movement: 1,
+        },
+      },
+      daggerItem.id,
+    );
+
+    expect(getThrowingRow(firstModel)).toBeDefined();
+    expect(getThrowingRow(secondModel)).toBeDefined();
+  });
+});
