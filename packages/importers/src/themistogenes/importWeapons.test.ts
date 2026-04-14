@@ -11,7 +11,7 @@ describe("importThemistogenesWeapons", () => {
   it("keeps axe-family main attacks on Strike and attaches Second crit. to that main mode", () => {
     const handAxe = templatesById["weapon-template-hand-axe"];
 
-    expect(handAxe?.attackModes).toHaveLength(1);
+    expect(handAxe?.attackModes).toHaveLength(2);
     expect(handAxe?.primeAttackType).toBe("Strike");
     expect(handAxe?.attackModes?.[0]).toMatchObject({
       id: "mode-1",
@@ -22,6 +22,13 @@ describe("importThemistogenesWeapons", () => {
       dmb: 6,
       crit: "FS",
       secondCrit: "CC",
+    });
+    expect(handAxe?.attackModes?.[1]).toMatchObject({
+      id: "mode-3",
+      ob: 0,
+      dmb: 6,
+      crit: "ES",
+      armorModifier: "C",
     });
     expect(handAxe?.crit2).toBeNull();
     expect(handAxe?.secondCrit).toBe("CC");
@@ -88,5 +95,26 @@ describe("importThemistogenesWeapons", () => {
       canonicalMeleeMode: null,
       secondCrit: null,
     });
+  });
+
+  it("merges exact-match T. rows into the base weapon instead of importing duplicate inventory templates", () => {
+    const knife = templatesById["weapon-template-knife"];
+
+    expect(templatesById["weapon-template-t-knife"]).toBeUndefined();
+    expect(knife?.tags).toContain("thrown");
+    expect(knife?.attackModes?.map((mode) => mode.id)).toEqual(["mode-1", "mode-2", "mode-3"]);
+    expect(knife?.attackModes?.[2]).toMatchObject({
+      id: "mode-3",
+      ob: 2,
+      dmb: -1,
+      crit: "DP",
+      armorModifier: "A",
+    });
+  });
+
+  it("keeps ambiguous thrown rows separate when the workbook does not name a single exact base weapon", () => {
+    expect(templatesById["weapon-template-t-th-dagger"]?.name).toBe("T. Th. dagger");
+    expect(templatesById["weapon-template-t-javelin"]?.name).toBe("T. Javelin");
+    expect(templatesById["weapon-template-t-spear"]?.name).toBe("T. Spear");
   });
 });
