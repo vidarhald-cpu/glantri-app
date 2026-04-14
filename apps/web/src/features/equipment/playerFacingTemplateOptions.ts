@@ -6,9 +6,22 @@ const legacyShieldTemplateIds = new Set([
 ]);
 
 const legacyArmorTemplateIds = new Set(["armor-template-mail-hauberk"]);
+const allowedStandaloneThrownTemplateIds = new Set(["weapon-template-t-th-dagger"]);
+
+export function getPlayerFacingEquipmentTemplateName(template: EquipmentTemplate): string {
+  if (template.id === "weapon-template-t-th-dagger") {
+    return "Throwing dagger";
+  }
+
+  return template.name;
+}
 
 function isHiddenThrownTemplateArtifact(template: EquipmentTemplate): boolean {
   if (template.category !== "weapon") {
+    return false;
+  }
+
+  if (allowedStandaloneThrownTemplateIds.has(template.id)) {
     return false;
   }
 
@@ -45,5 +58,7 @@ export function getPlayerFacingEquipmentLocationTemplateOptions(
 ): EquipmentTemplate[] {
   return Object.values(templatesById)
     .filter(shouldShowInEquipmentLocationDropdown)
-    .sort((left, right) => left.name.localeCompare(right.name));
+    .sort((left, right) =>
+      getPlayerFacingEquipmentTemplateName(left).localeCompare(getPlayerFacingEquipmentTemplateName(right)),
+    );
 }

@@ -9,6 +9,7 @@ import {
   CANONICAL_MISSILE_WEAPON_TABLE_COLUMNS,
   getAdminWeaponCatalogRows,
   getCharacterWeaponCatalogRows,
+  truncateWeaponCatalogNote,
 } from "./weaponCatalogTables";
 import type { EquipmentFeatureState } from "./types";
 
@@ -133,5 +134,14 @@ describe("weaponCatalogTables", () => {
 
     expect(buildMeleeWeaponCatalogTable(characterRows).columns).toEqual(buildMeleeWeaponCatalogTable(adminRows).columns);
     expect(buildMissileWeaponCatalogTable(characterRows).columns).toEqual(buildMissileWeaponCatalogTable(adminRows).columns);
+  });
+
+  it("truncates long notes cleanly for compact table display", () => {
+    expect(
+      truncateWeaponCatalogNote(
+        "This is a very long weapon note that should be trimmed before it widens the character catalog table too much.",
+      ),
+    ).toBe("This is a very long weapon note that should be trimmed...");
+    expect(truncateWeaponCatalogNote("  ")).toBe("—");
   });
 });

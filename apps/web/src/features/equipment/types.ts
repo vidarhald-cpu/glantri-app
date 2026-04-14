@@ -29,6 +29,7 @@ export interface InventoryRow {
   material: MaterialType;
   quality: QualityType;
   conditionState: ItemConditionState;
+  actualEncumbrance: number;
   effectiveEncumbrance: number;
   accessTier: AccessTier;
 }

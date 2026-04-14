@@ -28,6 +28,7 @@ import {
   buildMeleeWeaponCatalogTable,
   buildMissileWeaponCatalogTable,
   getCharacterWeaponCatalogRows,
+  truncateWeaponCatalogNote,
 } from "../../../../../src/features/equipment/weaponCatalogTables";
 import type { EquipmentFeatureState } from "../../../../../src/features/equipment/types";
 import { loadCharacterEquipmentState } from "../../../../../src/lib/api/localServiceClient";
@@ -174,6 +175,26 @@ export default function WeaponsShieldsArmorPage({ params }: WeaponsShieldsArmorP
   );
   const meleeWeaponTable = useMemo(() => buildMeleeWeaponCatalogTable(weaponCatalogRows), [weaponCatalogRows]);
   const missileWeaponTable = useMemo(() => buildMissileWeaponCatalogTable(weaponCatalogRows), [weaponCatalogRows]);
+  const meleeWeaponRowsWithNotes = useMemo(
+    () =>
+      meleeWeaponTable.rows.map((row) => {
+        const source = weaponCatalogRows.find(
+          (candidate) => candidate.label === row[0] && candidate.template.handlingClass !== "missile",
+        );
+        return [...row, truncateWeaponCatalogNote(source?.notes ?? "—")];
+      }),
+    [meleeWeaponTable.rows, weaponCatalogRows],
+  );
+  const missileWeaponRowsWithNotes = useMemo(
+    () =>
+      missileWeaponTable.rows.map((row) => {
+        const source = weaponCatalogRows.find(
+          (candidate) => candidate.label === row[0] && candidate.template.handlingClass === "missile",
+        );
+        return [...row, truncateWeaponCatalogNote(source?.notes ?? "—")];
+      }),
+    [missileWeaponTable.rows, weaponCatalogRows],
+  );
 
   const shieldRows = useMemo(() => {
     if (!state) {
@@ -225,15 +246,15 @@ export default function WeaponsShieldsArmorPage({ params }: WeaponsShieldsArmorP
       <TableShell
         title="Weapons"
         emptyLabel="No melee or thrown-capable weapon items recorded."
-        columns={meleeWeaponTable.columns.map((column) => String(column))}
-        rows={meleeWeaponTable.rows}
+        columns={[...meleeWeaponTable.columns.map((column) => String(column)), "Notes"]}
+        rows={meleeWeaponRowsWithNotes}
       />
 
       <TableShell
         title="Missile weapons"
         emptyLabel="No missile weapon items recorded."
-        columns={missileWeaponTable.columns.map((column) => String(column))}
-        rows={missileWeaponTable.rows}
+        columns={[...missileWeaponTable.columns.map((column) => String(column)), "Notes"]}
+        rows={missileWeaponRowsWithNotes}
       />
 
       <TableShell

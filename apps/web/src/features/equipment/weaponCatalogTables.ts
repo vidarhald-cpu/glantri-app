@@ -11,6 +11,7 @@ import type { EquipmentFeatureState } from "./types";
 
 export interface WeaponCatalogOptionRow {
   label: string;
+  notes: string;
   template: WeaponTemplate;
   encumbrance: string;
 }
@@ -69,6 +70,15 @@ export const CANONICAL_MISSILE_WEAPON_TABLE_COLUMNS = [
   "Handling",
   "Encumbrance",
 ] as const;
+
+export function truncateWeaponCatalogNote(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed || trimmed === "—") {
+    return "—";
+  }
+
+  return trimmed.length > 56 ? `${trimmed.slice(0, 55).trimEnd()}...` : trimmed;
+}
 
 function formatLabel(value: string): string {
   return value
@@ -148,6 +158,7 @@ export function getCharacterWeaponCatalogRows(input: {
       return template?.category === "weapon"
         ? {
             label: item.displayName ?? template.name,
+            notes: item.notes ?? template.rulesNotes ?? "—",
             template,
             encumbrance: formatEncumbranceDisplay(getEffectiveEncumbrance(item, template)),
           }
@@ -194,6 +205,7 @@ export function getAdminWeaponCatalogRows(input: {
 
       return {
         label: template.name,
+        notes: template.rulesNotes ?? "—",
         template,
         encumbrance: formatEncumbranceDisplay(getEffectiveEncumbrance(syntheticItem, template)),
       };

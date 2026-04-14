@@ -5,6 +5,8 @@ import {
   isEncounterAccessible,
   isPersonalCarryMode,
   getEffectiveEncumbrance,
+  getMaterialFactor,
+  getQualityFactor,
   getLocationSortOrder,
   getStorageAssignmentForLocation,
   isStoredCarryMode,
@@ -16,6 +18,33 @@ import {
 } from "@glantri/domain";
 import { calculateWorkbookArmorEncumbrance } from "./armorSummary";
 import type { EquipmentFeatureState, InventoryRow } from "./types";
+
+export function getActualInventoryEncumbrance(
+  item: EquipmentItem,
+  template: EquipmentTemplate,
+  characterSize?: number | null,
+): number {
+  if (template.category === "armor") {
+    return (
+      calculateWorkbookArmorEncumbrance({
+        characterSize: characterSize ?? null,
+        item,
+        template,
+      }) ??
+      (template.baseEncumbrance *
+        item.quantity *
+        getMaterialFactor(item.material) *
+        getQualityFactor(item.quality))
+    );
+  }
+
+  return (
+    template.baseEncumbrance *
+    item.quantity *
+    getMaterialFactor(item.material) *
+    getQualityFactor(item.quality)
+  );
+}
 
 export function getCharacterEquipmentItems(
   state: EquipmentFeatureState,
@@ -102,6 +131,11 @@ export function getInventoryRows(
     }
 
     const location = state.locationsById[item.storageAssignment.locationId];
+    const actualEncumbrance = getActualInventoryEncumbrance(
+      item,
+      template,
+      characterSize,
+    );
     const effectiveEncumbrance =
       template.category === "armor"
         ? calculateWorkbookArmorEncumbrance({
@@ -121,6 +155,7 @@ export function getInventoryRows(
       material: item.material,
       quality: item.quality,
       conditionState: item.conditionState,
+      actualEncumbrance,
       effectiveEncumbrance,
       accessTier: getItemAccessTier(item.storageAssignment.carryMode, location),
     });
@@ -226,6 +261,79 @@ export function getItemsGroupedByAvailability(
     availabilityClass: "with_you" | "elsewhere";
     groups: Array<{ location: StorageLocation; items: EquipmentItem[] }>;
   }>;
+}
+
+export function getItemsGroupedForInventoryPage(
+  state: EquipmentFeatureState,
+  characterId: string,
+): Array<{
+  key: "carried" | "with_you" | "elsewhere";
+  label: string;
+  description: string;
+  groups: Array<{ location: StorageLocation; items: EquipmentItem[] }>;
+}> {
+  const locations = getCharacterLocations(state, characterId);
+  const items = getCharacterEquipmentItems(state, characterId);
+  const carriedLocationTypes = new Set(["equipped_system", "person_system", "backpack_system"]);
+
+  function buildGroups(filter: (location: StorageLocation) => boolean) {
+    return locations
+      .filter(filter)
+      .map((location) => ({
+        location,
+        items: items
+          .filter((item) => item.storageAssignment.locationId === location.id)
+          .sort((a, b) => a.id.localeCompare(b.id)),
+      }))
+      .filter((entry) => entry.items.length > 0 || !entry.location.type.endsWith("_system"))
+      .sort((left, right) => {
+        const availabilityDifference =
+          getLocationAvailabilitySortOrder(left.location.availabilityClass) -
+          getLocationAvailabilitySortOrder(right.location.availabilityClass);
+
+        if (availabilityDifference !== 0) {
+          return availabilityDifference;
+        }
+
+        const orderDifference =
+          getLocationSortOrder(left.location) - getLocationSortOrder(right.location);
+
+        if (orderDifference !== 0) {
+          return orderDifference;
+        }
+
+        return left.location.name.localeCompare(right.location.name);
+      });
+  }
+
+  return [
+    {
+      key: "carried",
+      label: "Carried",
+      description: "Items currently worn, on person, or in backpack.",
+      groups: buildGroups(
+        (location) =>
+          location.availabilityClass === "with_you" &&
+          carriedLocationTypes.has(location.type),
+      ),
+    },
+    {
+      key: "with_you",
+      label: "With you",
+      description: "Items currently travelling with the character.",
+      groups: buildGroups(
+        (location) =>
+          location.availabilityClass === "with_you" &&
+          !carriedLocationTypes.has(location.type),
+      ),
+    },
+    {
+      key: "elsewhere",
+      label: "Elsewhere",
+      description: "Items stored away from the character.",
+      groups: buildGroups((location) => location.availabilityClass === "elsewhere"),
+    },
+  ];
 }
 
 export function getInventoryMoveOptions(

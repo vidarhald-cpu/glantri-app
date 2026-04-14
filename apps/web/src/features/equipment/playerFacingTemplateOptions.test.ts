@@ -3,6 +3,7 @@ import type { EquipmentTemplate } from "@glantri/domain";
 
 import {
   getPlayerFacingEquipmentLocationTemplateOptions,
+  getPlayerFacingEquipmentTemplateName,
   shouldShowInEquipmentLocationDropdown,
 } from "./playerFacingTemplateOptions";
 
@@ -73,7 +74,7 @@ describe("player-facing equipment location template options", () => {
           } as never,
         }),
       ),
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it("keeps normal weapons, shields, and armor available", () => {
@@ -106,12 +107,25 @@ describe("player-facing equipment location template options", () => {
           workbook: "Themistogenes 1.07.xlsx",
         } as never,
       }),
+      "weapon-template-t-th-dagger": createTemplate({
+        category: "weapon",
+        id: "weapon-template-t-th-dagger",
+        name: "T. Th. dagger",
+        sourceMetadata: {
+          rawRow: { A: "T. Th. dagger" },
+          row: 4,
+          sheet: "Weapon2",
+          sourceColumns: ["A"],
+          sourceRange: "A4:K4",
+          workbook: "Themistogenes 1.07.xlsx",
+        } as never,
+      }),
     };
 
     expect(
       getPlayerFacingEquipmentLocationTemplateOptions(templates).map(
-        (template) => template.name,
+        (template) => getPlayerFacingEquipmentTemplateName(template),
       ),
-    ).toEqual(["1-h Javelin", "Cloth", "Medium metal shield"]);
+    ).toEqual(["1-h Javelin", "Cloth", "Medium metal shield", "Throwing dagger"]);
   });
 });

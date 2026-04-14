@@ -3,6 +3,5 @@ export function formatEncumbranceDisplay(value: number | null | undefined): stri
     return "—";
   }
 
-  return value.toFixed(2);
+  return Number(value.toFixed(2)).toString();
 }
-
