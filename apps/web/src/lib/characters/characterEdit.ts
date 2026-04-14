@@ -31,6 +31,22 @@ export interface CharacterEditStatRow {
   stat: GlantriCharacteristicKey;
 }
 
+export interface CharacterEditSkillGroupRow {
+  groupId: string;
+  level: number;
+  name: string;
+}
+
+export interface CharacterEditSkillRow {
+  groupXp: number;
+  skillId: string;
+  skillName: string;
+  stats: number;
+  total: number;
+  totalXp: number;
+  xp: number;
+}
+
 function clampStatValue(value: number): number {
   return Math.max(1, Math.min(25, Math.trunc(value)));
 }
@@ -139,6 +155,10 @@ export function addCharacterSkill(build: CharacterBuild, skill: SkillDefinition)
   return nextBuild;
 }
 
+export function addCharacterSkillGroup(build: CharacterBuild, groupId: string): CharacterBuild {
+  return setCharacterSkillGroupLevel(build, groupId, 1);
+}
+
 export function removeCharacterSkill(build: CharacterBuild, skillId: string): CharacterBuild {
   const nextBuild = cloneBuild(build);
   nextBuild.progression.skills = nextBuild.progression.skills.filter(
@@ -209,6 +229,79 @@ export function buildCharacterEditStatRows(
       stat
     };
   });
+}
+
+export function buildCharacterEditSkillGroupRows(input: {
+  content: Pick<CharacterEditContentShape, "skillGroups">;
+  sheetSummary: CharacterSheetSummary;
+}): CharacterEditSkillGroupRow[] {
+  const groupsById = new Map(
+    input.sheetSummary.draftView.groups.map((group) => [group.groupId, group] as const)
+  );
+
+  return [...input.content.skillGroups]
+    .map((group) => {
+      const groupView = groupsById.get(group.id);
+      const level = groupView?.groupLevel ?? 0;
+
+      if (level <= 0) {
+        return null;
+      }
+
+      return {
+        groupId: group.id,
+        level,
+        name: group.name
+      };
+    })
+    .filter((row): row is CharacterEditSkillGroupRow => row !== null)
+    .sort((left, right) => left.name.localeCompare(right.name));
+}
+
+export function buildAvailableCharacterEditSkillGroups(input: {
+  content: Pick<CharacterEditContentShape, "skillGroups">;
+  sheetSummary: CharacterSheetSummary;
+}): CharacterEditSkillGroupRow[] {
+  const visibleGroupIds = new Set(
+    buildCharacterEditSkillGroupRows(input).map((group) => group.groupId)
+  );
+
+  return [...input.content.skillGroups]
+    .filter((group) => !visibleGroupIds.has(group.id))
+    .sort((left, right) => left.sortOrder - right.sortOrder || left.name.localeCompare(right.name))
+    .map((group) => ({
+      groupId: group.id,
+      level: 0,
+      name: group.name
+    }));
+}
+
+export function buildCharacterEditSkillRows(input: {
+  build: CharacterBuild;
+  content: Pick<CharacterEditContentShape, "skills">;
+  sheetSummary: CharacterSheetSummary;
+}): CharacterEditSkillRow[] {
+  return input.build.progression.skills
+    .map((entry) => {
+      const definition = input.content.skills.find((skill) => skill.id === entry.skillId);
+      const skillView = input.sheetSummary.draftView.skills.find((skill) => skill.skillId === entry.skillId);
+
+      if (!definition || !skillView) {
+        return null;
+      }
+
+      return {
+        groupXp: skillView.groupLevel,
+        skillId: definition.id,
+        skillName: definition.name,
+        stats: skillView.linkedStatAverage,
+        total: skillView.totalSkill,
+        totalXp: skillView.effectiveSkillNumber,
+        xp: skillView.specificSkillLevel
+      };
+    })
+    .filter((row): row is CharacterEditSkillRow => row !== null)
+    .sort((left, right) => left.skillName.localeCompare(right.skillName));
 }
 
 export function getCharacterEditSheetSummary(

@@ -4,6 +4,10 @@ import type { CharacterBuild, SkillDefinition, SkillGroupDefinition } from "@gla
 import { glantriCharacteristicLabels, glantriCharacteristicOrder } from "@glantri/domain";
 
 import {
+  addCharacterSkillGroup,
+  buildAvailableCharacterEditSkillGroups,
+  buildCharacterEditSkillGroupRows,
+  buildCharacterEditSkillRows,
   addCharacterSkill,
   buildCharacterEditStatRows,
   getCharacterEditSheetSummary,
@@ -146,5 +150,62 @@ describe("characterEdit helpers", () => {
       totalSkill: 19
     });
     expect(removed.progression.skills).toEqual([]);
+  });
+
+  it("shows only groups with positive current XP and lets hidden groups be added back", () => {
+    const withAwareness = setCharacterSkillGroupLevel(baseBuild, "awareness", 4);
+    const summary = getCharacterEditSheetSummary(withAwareness, content);
+
+    expect(
+      buildCharacterEditSkillGroupRows({
+        content,
+        sheetSummary: summary
+      })
+    ).toEqual([{ groupId: "awareness", level: 4, name: "Awareness" }]);
+
+    expect(
+      buildAvailableCharacterEditSkillGroups({
+        content,
+        sheetSummary: summary
+      })
+    ).toEqual([{ groupId: "martial", level: 0, name: "Martial" }]);
+
+    const withAddedHiddenGroup = addCharacterSkillGroup(withAwareness, "martial");
+    const updatedSummary = getCharacterEditSheetSummary(withAddedHiddenGroup, content);
+
+    expect(
+      buildCharacterEditSkillGroupRows({
+        content,
+        sheetSummary: updatedSummary
+      })
+    ).toEqual([
+      { groupId: "awareness", level: 4, name: "Awareness" },
+      { groupId: "martial", level: 1, name: "Martial" }
+    ]);
+  });
+
+  it("builds skill rows with Group XP, direct XP, Total XP, and Total from the draft view", () => {
+    const withGroup = setCharacterSkillGroupLevel(baseBuild, "awareness", 4);
+    const withSkill = addCharacterSkill(withGroup, skills[0]);
+    const withXp = setCharacterSkillXp(withSkill, skills[0], 3);
+    const summary = getCharacterEditSheetSummary(withXp, content);
+
+    expect(
+      buildCharacterEditSkillRows({
+        build: withXp,
+        content,
+        sheetSummary: summary
+      })
+    ).toEqual([
+      {
+        groupXp: 4,
+        skillId: "perception",
+        skillName: "Perception",
+        stats: 12,
+        total: 19,
+        totalXp: 7,
+        xp: 3
+      }
+    ]);
   });
 });

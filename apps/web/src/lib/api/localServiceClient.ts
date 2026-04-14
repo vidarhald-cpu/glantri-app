@@ -178,6 +178,28 @@ export async function loadMyServerCharacters(): Promise<ServerCharacterRecord[]>
   return payload.characters;
 }
 
+export async function loadServerCharacterById(characterId: string): Promise<ServerCharacterRecord> {
+  const payload = await sendJson<{ character: ServerCharacterRecord }>(`/characters/${characterId}`, {
+    method: "GET"
+  });
+
+  return payload.character;
+}
+
+export async function updateServerCharacter(input: {
+  build: CharacterBuild;
+  characterId: string;
+}): Promise<ServerCharacterRecord> {
+  const payload = await sendJson<{ character: ServerCharacterRecord }>(`/characters/${input.characterId}`, {
+    body: JSON.stringify({
+      build: input.build
+    }),
+    method: "PUT"
+  });
+
+  return payload.character;
+}
+
 export async function loadCharacterEquipmentState(
   characterId: string
 ): Promise<EquipmentFeatureState> {

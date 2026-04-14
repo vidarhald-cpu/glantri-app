@@ -10,8 +10,12 @@ import {
   type GlantriCharacteristicKey
 } from "@glantri/domain";
 
-import { loadLocalCharacterContext } from "../../../../../src/lib/characters/loadLocalCharacterContext";
+import { updateServerCharacter } from "../../../../../src/lib/api/localServiceClient";
 import {
+  addCharacterSkillGroup,
+  buildAvailableCharacterEditSkillGroups,
+  buildCharacterEditSkillGroupRows,
+  buildCharacterEditSkillRows,
   addCharacterSkill,
   buildCharacterEditStatRows,
   getCharacterEditSheetSummary,
@@ -21,6 +25,7 @@ import {
   setCharacterSkillGroupLevel,
   setCharacterSkillXp
 } from "../../../../../src/lib/characters/characterEdit";
+import { loadServerCharacterEditContext } from "../../../../../src/lib/characters/loadServerCharacterEditContext";
 import type { LocalCharacterRecord } from "../../../../../src/lib/offline/glantriDexie";
 import { LocalCharacterRepository } from "../../../../../src/lib/offline/repositories/localCharacterRepository";
 
@@ -28,21 +33,13 @@ interface CharacterEditPageProps {
   id: string;
 }
 
-interface EditableSkillGroupRow {
-  groupId: string;
-  level: number;
-  name: string;
-}
-
-interface EditableSkillRow {
-  skillId: string;
-  skillName: string;
-  stats: number;
-  total: number;
-  xp: number;
-}
-
 const localCharacterRepository = new LocalCharacterRepository();
+const numericInputStyle = {
+  fontSize: "1rem",
+  padding: "0.45rem",
+  textAlign: "right" as const,
+  width: 80
+};
 
 function getCharacterName(record: LocalCharacterRecord): string {
   return record.build.name.trim() || "Unnamed Character";
@@ -56,26 +53,27 @@ function parseWholeNumber(value: string): number {
 export default function CharacterEditPage({ id }: CharacterEditPageProps) {
   const [build, setBuild] = useState<CharacterBuild>();
   const [content, setContent] = useState<
-    Awaited<ReturnType<typeof loadLocalCharacterContext>>["content"] | undefined
+    Awaited<ReturnType<typeof loadServerCharacterEditContext>>["content"] | undefined
   >();
   const [feedback, setFeedback] = useState<string>();
   const [loading, setLoading] = useState(true);
   const [record, setRecord] = useState<LocalCharacterRecord>();
   const [saving, setSaving] = useState(false);
+  const [selectedSkillGroupId, setSelectedSkillGroupId] = useState("");
   const [selectedSkillId, setSelectedSkillId] = useState("");
 
   useEffect(() => {
     let cancelled = false;
 
-    loadLocalCharacterContext(id)
+    loadServerCharacterEditContext(id)
       .then((result) => {
         if (cancelled) {
           return;
         }
 
         setContent(result.content);
-        setRecord(result.record);
-        setBuild(result.record?.build);
+        setRecord(result.localRecord);
+        setBuild(result.serverRecord.build);
       })
       .finally(() => {
         if (!cancelled) {
@@ -109,48 +107,38 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
     );
   }, [build, sheetSummary]);
 
-  const skillGroupRows = useMemo<EditableSkillGroupRow[]>(() => {
+  const skillGroupRows = useMemo(() => {
     if (!content || !sheetSummary) {
       return [];
     }
 
-    const groupLevels = new Map(
-      sheetSummary.draftView.groups.map((group) => [group.groupId, group.groupLevel] as const)
-    );
-
-    return [...content.skillGroups]
-      .sort((left, right) => left.sortOrder - right.sortOrder || left.name.localeCompare(right.name))
-      .map((group) => ({
-        groupId: group.id,
-        level: groupLevels.get(group.id) ?? 0,
-        name: group.name
-      }));
+    return buildCharacterEditSkillGroupRows({
+      content,
+      sheetSummary
+    });
   }, [content, sheetSummary]);
 
-  const skillRows = useMemo<EditableSkillRow[]>(() => {
+  const availableSkillGroups = useMemo(() => {
+    if (!content || !sheetSummary) {
+      return [];
+    }
+
+    return buildAvailableCharacterEditSkillGroups({
+      content,
+      sheetSummary
+    });
+  }, [content, sheetSummary]);
+
+  const skillRows = useMemo(() => {
     if (!build || !content || !sheetSummary) {
       return [];
     }
 
-    return build.progression.skills
-      .map((entry) => {
-        const definition = content.skills.find((skill) => skill.id === entry.skillId);
-        const skillView = sheetSummary.draftView.skills.find((skill) => skill.skillId === entry.skillId);
-
-        if (!definition || !skillView) {
-          return null;
-        }
-
-        return {
-          skillId: definition.id,
-          skillName: definition.name,
-          stats: skillView.linkedStatAverage,
-          total: skillView.totalSkill,
-          xp: skillView.specificSkillLevel
-        };
-      })
-      .filter((row): row is NonNullable<typeof row> => row !== null)
-      .sort((left, right) => left.skillName.localeCompare(right.skillName));
+    return buildCharacterEditSkillRows({
+      build,
+      content,
+      sheetSummary
+    });
   }, [build, content, sheetSummary]);
 
   const availableSkills = useMemo(() => {
@@ -173,18 +161,26 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
     setSaving(true);
 
     try {
-      const saved = await localCharacterRepository.save({
+      const savedServerRecord = await updateServerCharacter({
         build,
+        characterId: id
+      });
+      const savedLocalRecord = await localCharacterRepository.save({
+        build: savedServerRecord.build,
+        creatorId: savedServerRecord.ownerId ?? record.creatorId,
         createdAt: record.createdAt,
         finalizedAt: record.finalizedAt,
-        syncStatus: "local"
+        syncStatus: "synced",
+        updatedAt: savedServerRecord.updatedAt
       });
 
-      setRecord(saved);
-      setBuild(saved.build);
-      setFeedback("Character edits saved locally.");
+      setRecord(savedLocalRecord);
+      setBuild(savedServerRecord.build);
+      setFeedback("Character edits saved to the server.");
     } catch (error) {
-      setFeedback(error instanceof Error ? error.message : "Unable to save character edits.");
+      setFeedback(
+        error instanceof Error ? error.message : "Unable to save character edits to the server."
+      );
     } finally {
       setSaving(false);
     }
@@ -206,6 +202,15 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
     setBuild((current) =>
       current ? setCharacterSkillGroupLevel(current, groupId, parseWholeNumber(value)) : current
     );
+  }
+
+  function handleAddSkillGroup() {
+    if (!build || !selectedSkillGroupId) {
+      return;
+    }
+
+    setBuild(addCharacterSkillGroup(build, selectedSkillGroupId));
+    setSelectedSkillGroupId("");
   }
 
   function updateSkill(skillId: string, value: string) {
@@ -307,7 +312,7 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
                   <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>
                     <input
                       onChange={(event) => updateOriginalStat(row.stat, event.target.value)}
-                      style={{ padding: "0.35rem", textAlign: "right", width: 72 }}
+                      style={numericInputStyle}
                       type="number"
                       value={row.originalValue}
                     />
@@ -315,7 +320,7 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
                   <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>
                     <input
                       onChange={(event) => updateCurrentStat(row.stat, event.target.value)}
-                      style={{ padding: "0.35rem", textAlign: "right", width: 72 }}
+                      style={numericInputStyle}
                       type="number"
                       value={row.currentValue}
                     />
@@ -336,6 +341,23 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
           }}
         >
           <h2 style={{ margin: "0 0 0.75rem 0" }}>Skill Groups</h2>
+          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginBottom: "0.9rem" }}>
+            <select
+              onChange={(event) => setSelectedSkillGroupId(event.target.value)}
+              style={{ fontSize: "1rem", padding: "0.45rem" }}
+              value={selectedSkillGroupId}
+            >
+              <option value="">Add skill group...</option>
+              {availableSkillGroups.map((group) => (
+                <option key={group.groupId} value={group.groupId}>
+                  {group.name}
+                </option>
+              ))}
+            </select>
+            <button disabled={!selectedSkillGroupId} onClick={handleAddSkillGroup} type="button">
+              Add group
+            </button>
+          </div>
           <div
             style={{
               display: "grid",
@@ -352,7 +374,7 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
                 <div>{group.name}</div>
                 <input
                   onChange={(event) => updateSkillGroup(group.groupId, event.target.value)}
-                  style={{ padding: "0.35rem", textAlign: "right", width: 72 }}
+                  style={numericInputStyle}
                   type="number"
                   value={group.level}
                 />
@@ -377,6 +399,7 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
           <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
             <select
               onChange={(event) => setSelectedSkillId(event.target.value)}
+              style={{ fontSize: "1rem", padding: "0.45rem" }}
               value={selectedSkillId}
             >
               <option value="">Add skill...</option>
@@ -398,7 +421,9 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
               <tr style={{ borderBottom: "1px solid #d9ddd8", textAlign: "left" }}>
                 <th style={{ padding: "0.5rem 0.75rem 0.5rem 0" }}>Skill</th>
                 <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Stats</th>
+                <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Group XP</th>
                 <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>XP</th>
+                <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Total XP</th>
                 <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Total</th>
                 <th style={{ padding: "0.5rem 0", textAlign: "right" }}>Remove</th>
               </tr>
@@ -409,14 +434,16 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
                   <tr key={skill.skillId} style={{ borderBottom: "1px solid #eee8dc" }}>
                     <td style={{ padding: "0.6rem 0.75rem 0.6rem 0" }}>{skill.skillName}</td>
                     <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>{skill.stats}</td>
+                    <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>{skill.groupXp}</td>
                     <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>
                       <input
                         onChange={(event) => updateSkill(skill.skillId, event.target.value)}
-                        style={{ padding: "0.35rem", textAlign: "right", width: 72 }}
+                        style={numericInputStyle}
                         type="number"
                         value={skill.xp}
                       />
                     </td>
+                    <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>{skill.totalXp}</td>
                     <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>{skill.total}</td>
                     <td style={{ padding: "0.6rem 0", textAlign: "right" }}>
                       <button onClick={() => handleRemoveSkill(skill.skillId)} type="button">
@@ -427,7 +454,7 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
                 ))
               ) : (
                 <tr>
-                  <td colSpan={5} style={{ padding: "0.75rem 0" }}>
+                  <td colSpan={7} style={{ padding: "0.75rem 0" }}>
                     No progression skill rows yet.
                   </td>
                 </tr>

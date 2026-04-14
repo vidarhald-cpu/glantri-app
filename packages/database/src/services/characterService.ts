@@ -4,6 +4,7 @@ import { validateCharacterBuild } from "@glantri/rules-engine";
 import {
   createPrismaCharacterRepository,
   type CharacterRecord,
+  type CharacterRepository,
   type CreateCharacterRecordInput
 } from "../repositories/characterRepository";
 
@@ -14,7 +15,7 @@ export class CharacterValidationError extends Error {
 }
 
 export class CharacterService {
-  constructor(private readonly repository = createPrismaCharacterRepository()) {}
+  constructor(private readonly repository: CharacterRepository = createPrismaCharacterRepository()) {}
 
   async saveCharacter(input: CreateCharacterRecordInput): Promise<CharacterRecord> {
     const build = characterBuildSchema.parse(input.build);
@@ -41,7 +42,30 @@ export class CharacterService {
     return this.repository.listByOwner(ownerId);
   }
 
+  async getCharacterById(characterId: string): Promise<CharacterRecord | null> {
+    return this.repository.findById(characterId);
+  }
+
   async getOwnedCharacter(ownerId: string, characterId: string): Promise<CharacterRecord | null> {
     return this.repository.findOwnedById(ownerId, characterId);
+  }
+
+  async saveExistingCharacter(input: {
+    build: CreateCharacterRecordInput["build"];
+    characterId: string;
+  }): Promise<CharacterRecord | null> {
+    const existingCharacter = await this.repository.findById(input.characterId);
+
+    if (!existingCharacter) {
+      return null;
+    }
+
+    return this.saveCharacter({
+      build: input.build,
+      id: input.characterId,
+      level: input.build.progression.level,
+      name: input.build.name,
+      ownerId: existingCharacter.ownerId ?? null
+    });
   }
 }
