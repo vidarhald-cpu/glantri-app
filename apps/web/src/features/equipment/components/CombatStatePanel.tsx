@@ -167,16 +167,38 @@ export function CombatStatePanel(input: { model: CombatStatePanelModel }) {
     <SectionCard title={input.model.title} description={input.model.description}>
       <StatGrid>
         <BattleStatCard
-          title="Stats"
-          subtitle="Current stats and GMs used by the workbook-backed combat calculations."
+          title="Combat stats and skills"
           rows={input.model.statsRows}
         />
         <BattleStatCard
           title="Defence and movement"
-          subtitle="Unarmed and combined defence together with current movement and carried-state values."
           rows={input.model.capabilityRows}
         />
+        {input.model.armorRows ? (
+          <BattleStatCard
+            title="Armor"
+            rows={input.model.armorRows}
+          />
+        ) : null}
       </StatGrid>
+
+      {input.model.statsTable ? (
+        <TableCard
+          title={input.model.statsTable.title}
+          description={input.model.statsTable.description}
+          columns={input.model.statsTable.columns}
+          rows={input.model.statsTable.rows}
+        />
+      ) : null}
+
+      {input.model.armorTable ? (
+        <TableCard
+          title={input.model.armorTable.title}
+          description={input.model.armorTable.description}
+          columns={input.model.armorTable.columns}
+          rows={input.model.armorTable.rows}
+        />
+      ) : null}
 
       <TableCard
         title={input.model.weaponModeTable.title}

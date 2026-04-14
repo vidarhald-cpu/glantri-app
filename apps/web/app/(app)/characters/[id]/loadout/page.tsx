@@ -353,6 +353,25 @@ function getWorkbookSkillInitiative(input: {
   return input.dexterityGm + skillModifier;
 }
 
+function getRoundedLinkedStatAverage(
+  adjustedStats: Record<string, number>,
+  linkedStats: string[],
+): number | null {
+  if (linkedStats.length === 0) {
+    return null;
+  }
+
+  const values = linkedStats
+    .map((stat) => adjustedStats[stat])
+    .filter((value): value is number => typeof value === "number");
+
+  if (values.length !== linkedStats.length) {
+    return null;
+  }
+
+  return Math.round(values.reduce((sum, value) => sum + value, 0) / values.length);
+}
+
 function getWorkbookArmorAdjustedPerception(input: {
   adjustedStats: Record<string, number>;
   armorPerceptionModifier: number | null | undefined;
@@ -553,7 +572,6 @@ export default function CharacterLoadoutPage({ params }: CharacterLoadoutPagePro
               workbookPerceptionValue,
             })
           : undefined;
-
       return {
         ...baseModel,
         statsRows,
@@ -601,6 +619,10 @@ export default function CharacterLoadoutPage({ params }: CharacterLoadoutPagePro
         if (!skillView || skillView.effectiveSkillNumber <= 0) {
           return null;
         }
+        const statAverage = getRoundedLinkedStatAverage(
+          sheetSummary.adjustedStats,
+          skillDefinition.linkedStats,
+        );
 
         const baseTotal =
           skillDefinition.name.toLowerCase() === "perception"
@@ -627,6 +649,8 @@ export default function CharacterLoadoutPage({ params }: CharacterLoadoutPagePro
           row: [
             skillDefinition.name,
             initiative ?? "—",
+            statAverage ?? "—",
+            skillView.effectiveSkillNumber,
             baseTotal ?? "—",
             encumbered ?? "—",
           ],
@@ -645,7 +669,7 @@ export default function CharacterLoadoutPage({ params }: CharacterLoadoutPagePro
 
     return {
       title: "Encumbrance dependent skills",
-      columns: ["Skill", "Initiative", "Base", "Encumbered"],
+      columns: ["Skill", "Initiative", "Stat average", "XP", "Skill level", "Encumbered"],
       rows,
     };
   }, [characterCombatInputs, characterContext, combatSnapshot, sheetSummary, workbookPerceptionValue]);
@@ -969,66 +993,6 @@ export default function CharacterLoadoutPage({ params }: CharacterLoadoutPagePro
 
       {!loading && !pageError && combatStatePanelModel ? (
         <CombatStatePanel model={combatStatePanelModel} />
-      ) : null}
-
-      {!loading && !pageError ? (
-        <ControlSection title="Armor">
-          {"armor" in loadout && loadout.armor && wornArmorSummary ? (
-            <div style={{ display: "grid", gap: "0.85rem" }}>
-              <div
-                style={{
-                  display: "grid",
-                  gap: "0.75rem",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))"
-                }}
-              >
-                <div><strong>Armor</strong><div>{getItemName({
-                  displayName: loadout.armor.displayName,
-                  templateId: loadout.armor.templateId,
-                  templateName: getEquipmentTemplateById(state!, loadout.armor.templateId)?.name,
-                })}</div></div>
-                <div><strong>General armor</strong><div>{wornArmorSummary.generalArmorWithType}</div></div>
-                <div><strong>AA modifier</strong><div>{wornArmorSummary.aaModifier ?? "—"}</div></div>
-                <div><strong>Perception</strong><div>{workbookPerceptionValue ?? "—"}</div></div>
-              </div>
-              <div style={{ overflowX: "auto" }}>
-                <table style={{ borderCollapse: "collapse", minWidth: "100%", width: "100%" }}>
-                  <thead>
-                    <tr style={{ borderBottom: "1px solid #d9ddd8", textAlign: "left" }}>
-                      {[
-                        "Head",
-                        "Front Arm",
-                        "Chest",
-                        "Back Arm",
-                        "Abdomen",
-                        "Front Thigh",
-                        "Front Foot",
-                        "Back Thigh",
-                        "Back Foot",
-                      ].map((label) => (
-                        <th key={label} style={{ padding: "0.5rem 0.75rem 0.5rem 0" }}>{label}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr>
-                      {wornArmorSummary.locations.map((location) => (
-                        <td
-                          key={location.key}
-                          style={{ padding: "0.6rem 0.75rem 0.6rem 0", verticalAlign: "top" }}
-                        >
-                          {location.valueWithType}
-                        </td>
-                      ))}
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          ) : (
-            <div>No armor is currently worn.</div>
-          )}
-        </ControlSection>
       ) : null}
 
       {!loading && !pageError && skillsSectionTable && skillsSectionTable.rows.length > 0 ? (

@@ -61,6 +61,35 @@ const daggerItem: EquipmentItem = {
   statusTags: null,
 };
 
+const longswordItem: EquipmentItem = {
+  ...daggerItem,
+  id: "weapon-item-longsword-primary",
+  templateId: "weapon-template-longsword",
+};
+
+const shieldItem: EquipmentItem = {
+  ...daggerItem,
+  id: "shield-item-medium",
+  templateId: "shield-template-medium-shield",
+  category: "shield",
+  material: "wood",
+};
+
+const armorItem: EquipmentItem = {
+  ...daggerItem,
+  id: "armor-item-leather-jerkin",
+  templateId: "armor-template-leather-jerkin",
+  category: "armor",
+  material: "leather",
+};
+
+const bowItem: EquipmentItem = {
+  ...daggerItem,
+  id: "weapon-item-bow-missile",
+  templateId: "weapon-template-bow",
+  material: "wood",
+};
+
 const activeLoadout: CharacterLoadout = {
   id: `${characterId}:loadout-active`,
   characterId,
@@ -99,6 +128,10 @@ function createState(): EquipmentFeatureState {
     },
     itemsById: {
       [daggerItem.id]: structuredClone(daggerItem),
+      [longswordItem.id]: structuredClone(longswordItem),
+      [shieldItem.id]: structuredClone(shieldItem),
+      [armorItem.id]: structuredClone(armorItem),
+      [bowItem.id]: structuredClone(bowItem),
     },
     locationsById: indexById(structuredClone(locations)),
     activeLoadoutByCharacterId: {
@@ -138,5 +171,55 @@ describe("combatStatePanel throwing row reliability", () => {
 
     expect(getThrowingRow(firstModel)).toBeDefined();
     expect(getThrowingRow(secondModel)).toBeDefined();
+  });
+
+  it("shows armor inside the panel and orders combined, unarmed, missile, and thrown rows correctly", () => {
+    const state = createState();
+    state.activeLoadoutByCharacterId[characterId] = {
+      ...state.activeLoadoutByCharacterId[characterId],
+      wornArmorItemId: armorItem.id,
+      readyShieldItemId: shieldItem.id,
+      activePrimaryWeaponItemId: longswordItem.id,
+      activeMissileWeaponItemId: bowItem.id,
+    };
+
+    const model = buildCombatStatePanelModel(
+      state,
+      characterId,
+      {
+        ...characterInputs,
+        brawlingCombatSkillXp: 9,
+        combatSkillXpByName: {
+          ...characterInputs.combatSkillXpByName,
+          "1-h edged": 15,
+          Bow: 6,
+          Brawling: 9,
+          Dodge: 15,
+          Parry: 11,
+        },
+        dodgeCombatSkillXp: 15,
+        parryCombatSkillXp: 11,
+      },
+      defaultCombatAllocationState,
+      daggerItem.id,
+    );
+
+    expect(model.armorRows).toEqual([
+      { label: "Armor", value: "Leather Jerkin" },
+      { label: "General armor", value: "3B" },
+      { label: "AA modifier", value: 0 },
+      { label: "Perception modifier", value: 0 },
+    ]);
+
+    expect(model.weaponModeTable.rows.map((row) => `${row[0]}|${row[1]}`)).toEqual([
+      "Primary|Long sword",
+      "Shield|Medium shield",
+      "Combined|Sword / shield",
+      "Unarmed|Brawling",
+      "Unarmed|Punch",
+      "Unarmed|Kick",
+      "Missile|Short bow",
+      "Thrown|Dagger",
+    ]);
   });
 });
