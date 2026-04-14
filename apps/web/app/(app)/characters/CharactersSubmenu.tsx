@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import { useHasAnyRole } from "../../../src/lib/auth/SessionUserContext";
+
 interface CharactersSubmenuItem {
   href?: string;
   isActive: boolean;
@@ -26,6 +28,7 @@ function isCharacterSheetPath(pathname: string, characterId: string): boolean {
 export default function CharactersSubmenu() {
   const pathname = usePathname();
   const characterId = getCurrentCharacterId(pathname);
+  const isGameMaster = useHasAnyRole(["game_master"]);
 
   const items: CharactersSubmenuItem[] = [
     {
@@ -59,6 +62,11 @@ export default function CharactersSubmenu() {
       href: characterId ? `/characters/${characterId}/advance` : undefined,
       isActive: characterId ? pathname === `/characters/${characterId}/advance` : false,
       label: "Advance Character"
+    },
+    {
+      href: characterId && isGameMaster ? `/characters/${characterId}/edit` : undefined,
+      isActive: characterId ? pathname === `/characters/${characterId}/edit` : false,
+      label: "Edit Character"
     }
   ];
 

@@ -12,10 +12,10 @@ import {
   type SkillDefinition
 } from "@glantri/domain";
 import {
-  buildCharacterSheetSummary,
-  getCharacteristicGm,
-  selectBestSkillGroupContribution
-} from "@glantri/rules-engine";
+  buildCharacterSheetSummary
+} from "../../../../../../packages/rules-engine/src/sheets/buildCharacterSheetSummary";
+import { selectBestSkillGroupContribution } from "../../../../../../packages/rules-engine/src/skills/selectBestSkillGroupContribution";
+import { getCharacteristicGm } from "../../../../../../packages/rules-engine/src/stats/characteristicGms";
 
 import {
   getPlayerFacingSkillBucket,

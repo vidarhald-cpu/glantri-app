@@ -109,7 +109,10 @@ export function buildCharacterSheetSummary(input: {
   });
   const adjustedStats = calculateAdjustedStats({
     baseStats: input.build.profile.rolledStats,
-    modifiers: input.statModifiers
+    modifiers: {
+      ...(input.build.statModifiers ?? {}),
+      ...(input.statModifiers ?? {})
+    }
   });
   const equipment = buildCharacterEquipmentLoadoutSummary({
     build: input.build,

@@ -26,6 +26,12 @@ export function RequireOwnedLocalCharacter(props: {
         return;
       }
 
+      if (currentUser.roles.includes("game_master")) {
+        setIsAllowed(true);
+        setLoading(false);
+        return;
+      }
+
       const record = await localCharacterRepository.get(props.characterId);
 
       if (cancelled) {

@@ -10,6 +10,7 @@ export const characterBuildSchema = z.object({
   name: z.string().min(1),
   profile: rolledCharacterProfileSchema,
   progression: characterProgressionSchema,
+  statModifiers: z.record(z.string(), z.number().int()).optional(),
   professionId: z.string().min(1).optional(),
   socialClass: z.string().min(1).optional(),
   societyId: z.string().min(1).optional(),
