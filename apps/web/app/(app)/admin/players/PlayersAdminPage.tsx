@@ -9,6 +9,18 @@ import { AdminPageIntro, AdminPanel, AdminReadOnlyNotice } from "../admin-ui";
 
 const roleOptions: AuthRole[] = ["player", "game_master", "admin"];
 
+export function getDisplayedUserRole(user: AuthUser): AuthRole {
+  if (user.roles.includes("admin")) {
+    return "admin";
+  }
+
+  if (user.roles.includes("game_master")) {
+    return "game_master";
+  }
+
+  return "player";
+}
+
 export default function PlayersAdminPage() {
   const canEdit = useCanAccessAdmin();
   const [users, setUsers] = useState<AuthUser[]>([]);
@@ -75,7 +87,7 @@ export default function PlayersAdminPage() {
               </thead>
               <tbody>
                 {users.map((user) => {
-                  const currentRole = user.roles[0] ?? "player";
+                  const currentRole = getDisplayedUserRole(user);
 
                   return (
                     <tr key={user.id} style={{ borderBottom: "1px solid rgba(85, 73, 48, 0.08)" }}>
