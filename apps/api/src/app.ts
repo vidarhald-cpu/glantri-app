@@ -7,6 +7,7 @@ import { characterEquipmentRoutes } from "./routes/characterEquipment";
 import { charactersRoutes } from "./routes/characters";
 import { chargenRoutes } from "./routes/chargen";
 import { contentRoutes } from "./routes/content";
+import { scenariosRoutes } from "./routes/scenarios";
 import { syncRoutes } from "./routes/sync";
 
 export function buildApiServer() {
@@ -27,6 +28,7 @@ export function buildApiServer() {
   app.register(chargenRoutes, { prefix: "/chargen" });
   app.register(charactersRoutes, { prefix: "/characters" });
   app.register(characterEquipmentRoutes, { prefix: "/characters" });
+  app.register(scenariosRoutes);
   app.register(syncRoutes, { prefix: "/sync" });
 
   return app;

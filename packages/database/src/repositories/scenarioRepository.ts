@@ -219,6 +219,14 @@ export interface ScenarioRepository {
   }): Promise<Scenario>;
   getScenarioById(scenarioId: string): Promise<Scenario | null>;
   listScenariosByCampaign(campaignId: string): Promise<Scenario[]>;
+  updateScenario(input: {
+    description?: string;
+    kind?: Scenario["kind"];
+    mapAssetId?: string | null;
+    name?: string;
+    scenarioId: string;
+    status?: Scenario["status"];
+  }): Promise<Scenario>;
   createReusableEntity(input: {
     description?: string | null;
     gmUserId: string;
@@ -264,6 +272,11 @@ export interface ScenarioRepository {
     visibility: CampaignAsset["visibility"];
   }): Promise<CampaignAsset>;
   listCampaignAssets(campaignId: string): Promise<CampaignAsset[]>;
+  getCampaignAssetById(assetId: string): Promise<CampaignAsset | null>;
+  updateCampaignAssetVisibility(
+    assetId: string,
+    visibility: CampaignAsset["visibility"]
+  ): Promise<CampaignAsset>;
   createScenarioEventLog(input: {
     actorUserId?: string | null;
     eventType: string;
@@ -336,6 +349,20 @@ export function createPrismaScenarioRepository(): ScenarioRepository {
       });
 
       return records.map(mapScenario);
+    },
+    async updateScenario(input) {
+      const record = await prisma.scenario.update({
+        data: {
+          description: input.description,
+          kind: input.kind,
+          mapAssetId: input.mapAssetId,
+          name: input.name,
+          status: input.status
+        },
+        where: { id: input.scenarioId }
+      });
+
+      return mapScenario(record);
     },
     async createReusableEntity(input) {
       const record = await prisma.reusableEntity.create({
@@ -439,6 +466,23 @@ export function createPrismaScenarioRepository(): ScenarioRepository {
       });
 
       return records.map(mapCampaignAsset);
+    },
+    async getCampaignAssetById(assetId) {
+      const record = await prisma.campaignAsset.findUnique({
+        where: { id: assetId }
+      });
+
+      return record ? mapCampaignAsset(record) : null;
+    },
+    async updateCampaignAssetVisibility(assetId, visibility) {
+      const record = await prisma.campaignAsset.update({
+        data: {
+          visibility
+        },
+        where: { id: assetId }
+      });
+
+      return mapCampaignAsset(record);
     },
     async createScenarioEventLog(input) {
       const record = await prisma.scenarioEventLog.create({

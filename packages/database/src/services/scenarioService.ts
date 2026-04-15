@@ -63,6 +63,10 @@ export class ScenarioService {
     return this.repository.listCampaignsByGameMaster(gmUserId);
   }
 
+  async getCampaignById(campaignId: string): Promise<Campaign | null> {
+    return this.repository.getCampaignById(campaignId);
+  }
+
   async createScenario(input: {
     campaignId: string;
     description?: string;
@@ -83,6 +87,21 @@ export class ScenarioService {
 
   async listScenariosByCampaign(campaignId: string): Promise<Scenario[]> {
     return this.repository.listScenariosByCampaign(campaignId);
+  }
+
+  async getScenarioById(scenarioId: string): Promise<Scenario | null> {
+    return this.repository.getScenarioById(scenarioId);
+  }
+
+  async updateScenario(input: {
+    description?: string;
+    kind?: Scenario["kind"];
+    mapAssetId?: string | null;
+    name?: string;
+    scenarioId: string;
+    status?: Scenario["status"];
+  }): Promise<Scenario> {
+    return this.repository.updateScenario(input);
   }
 
   async createReusableEntity(input: {
@@ -107,6 +126,10 @@ export class ScenarioService {
     return this.repository.listReusableEntitiesByGameMaster(gmUserId);
   }
 
+  async getReusableEntityById(entityId: string): Promise<ReusableEntity | null> {
+    return this.repository.getReusableEntityById(entityId);
+  }
+
   async createCampaignAsset(input: {
     campaignId: string;
     createdByUserId: string;
@@ -127,6 +150,21 @@ export class ScenarioService {
       type: input.type,
       visibility: input.visibility
     });
+  }
+
+  async listCampaignAssets(campaignId: string): Promise<CampaignAsset[]> {
+    return this.repository.listCampaignAssets(campaignId);
+  }
+
+  async getCampaignAssetById(assetId: string): Promise<CampaignAsset | null> {
+    return this.repository.getCampaignAssetById(assetId);
+  }
+
+  async updateCampaignAssetVisibility(input: {
+    assetId: string;
+    visibility: CampaignAsset["visibility"];
+  }): Promise<CampaignAsset> {
+    return this.repository.updateCampaignAssetVisibility(input.assetId, input.visibility);
   }
 
   async addCharacterParticipant(input: {
@@ -240,6 +278,33 @@ export class ScenarioService {
 
   async listScenarioParticipants(scenarioId: string): Promise<ScenarioParticipant[]> {
     return this.repository.listScenarioParticipants(scenarioId);
+  }
+
+  async updateScenarioLiveState(input: {
+    liveState: Scenario["liveState"];
+    scenarioId: string;
+  }): Promise<Scenario> {
+    const existingScenario = await this.repository.getScenarioById(input.scenarioId);
+
+    if (!existingScenario) {
+      throw new Error("Scenario not found.");
+    }
+
+    const scenario = await this.repository.updateScenarioLiveState(
+      input.scenarioId,
+      input.liveState ?? createScenarioLiveState()
+    );
+
+    await this.repository.createScenarioEventLog({
+      eventType: "live_state_updated",
+      payload: scenario.liveState,
+      phase: scenario.liveState?.phase,
+      roundNumber: scenario.liveState?.roundNumber,
+      scenarioId: input.scenarioId,
+      summary: "Scenario live state updated."
+    });
+
+    return scenario;
   }
 
   async startScenario(scenarioId: string): Promise<Scenario> {
