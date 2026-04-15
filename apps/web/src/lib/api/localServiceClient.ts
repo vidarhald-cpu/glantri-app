@@ -264,6 +264,14 @@ export async function loadCampaigns(): Promise<Campaign[]> {
   return payload.campaigns;
 }
 
+export async function loadTemplates(): Promise<ReusableEntity[]> {
+  const payload = await sendJson<{ templates: ReusableEntity[] }>("/templates", {
+    method: "GET"
+  });
+
+  return payload.templates;
+}
+
 export async function loadJoinableScenarios(): Promise<JoinableScenarioRecord[]> {
   const payload = await sendJson<{ joinableScenarios: JoinableScenarioRecord[] }>(
     "/scenarios/joinable",
@@ -287,6 +295,27 @@ export async function createCampaignOnServer(input: {
   });
 
   return payload.campaign;
+}
+
+export async function createTemplateOnServer(input: {
+  description?: string;
+  kind: ReusableEntity["kind"];
+  name: string;
+  notes?: string;
+  snapshot?: unknown;
+}): Promise<ReusableEntity> {
+  const payload = await sendJson<{ template: ReusableEntity }>("/templates", {
+    body: JSON.stringify({
+      description: input.description,
+      kind: input.kind,
+      name: input.name,
+      notes: input.notes,
+      snapshot: input.snapshot
+    }),
+    method: "POST"
+  });
+
+  return payload.template;
 }
 
 export async function loadCampaignById(campaignId: string): Promise<Campaign> {

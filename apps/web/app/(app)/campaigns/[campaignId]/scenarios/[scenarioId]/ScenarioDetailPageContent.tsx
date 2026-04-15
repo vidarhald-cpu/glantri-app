@@ -1,19 +1,24 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import type { ReusableEntity, Scenario, ScenarioEventLog, ScenarioParticipant } from "@glantri/domain";
 
 import {
   addScenarioParticipantFromEntityOnServer,
   loadCampaignEntities,
+  loadTemplates,
   loadScenarioById,
   loadScenarioEventLogs,
   loadScenarioParticipants,
   updateScenarioLiveStateOnServer,
   updateScenarioOnServer
 } from "../../../../../../src/lib/api/localServiceClient";
+import {
+  getCampaignActorMetadata,
+  splitCampaignActors
+} from "../../../../../../src/lib/campaigns/campaignActors";
 
 interface ScenarioDetailPageContentProps {
   campaignId: string;
@@ -31,6 +36,7 @@ export default function ScenarioDetailPageContent({
   const [loading, setLoading] = useState(true);
   const [participants, setParticipants] = useState<ScenarioParticipant[]>([]);
   const [scenario, setScenario] = useState<Scenario | null>(null);
+  const [templates, setTemplates] = useState<ReusableEntity[]>([]);
 
   const [selectedEntityId, setSelectedEntityId] = useState("");
   const [participantRole, setParticipantRole] = useState<ScenarioParticipant["role"]>("npc");
@@ -42,20 +48,27 @@ export default function ScenarioDetailPageContent({
   const [combatStatus, setCombatStatus] = useState<
     NonNullable<Scenario["liveState"]>["combatStatus"]
   >("not_started");
+  const splitEntities = useMemo(() => splitCampaignActors(entities, campaignId), [campaignId, entities]);
 
   async function refreshScenario() {
-    const [nextScenario, nextParticipants, nextEntities, nextEventLogs] = await Promise.all([
+    const [nextScenario, nextParticipants, nextEntities, nextTemplates, nextEventLogs] = await Promise.all([
       loadScenarioById(scenarioId),
       loadScenarioParticipants(scenarioId),
       loadCampaignEntities(campaignId),
+      loadTemplates(),
       loadScenarioEventLogs(scenarioId)
     ]);
+
+    const globalTemplates = nextTemplates.filter(
+      (entity) => getCampaignActorMetadata(entity).actorClass === "template"
+    );
 
     setScenario(nextScenario);
     setParticipants(nextParticipants);
     setEntities(nextEntities);
+    setTemplates(globalTemplates);
     setEventLogs(nextEventLogs);
-    setSelectedEntityId((current) => current || nextEntities[0]?.id || "");
+    setSelectedEntityId((current) => current || globalTemplates[0]?.id || nextEntities[0]?.id || "");
     setScenarioName(nextScenario.name);
     setScenarioStatus(nextScenario.status);
     setRoundNumber(String(nextScenario.liveState?.roundNumber ?? 1));
@@ -209,18 +222,44 @@ export default function ScenarioDetailPageContent({
       </section>
 
       <section style={{ border: "1px solid #d9ddd8", borderRadius: 12, display: "grid", gap: "0.75rem", padding: "1rem" }}>
-        <h2 style={{ margin: 0 }}>Add participant from reusable entity</h2>
-        {entities.length > 0 ? (
+        <h2 style={{ margin: 0 }}>Add participant from template or campaign NPC</h2>
+        <p style={{ margin: 0 }}>
+          Choose either a reusable archetype or a persistent campaign individual as the source.
+        </p>
+        {templates.length > 0 || splitEntities.campaignNpcs.length > 0 ? (
           <>
             <select
               onChange={(event) => setSelectedEntityId(event.target.value)}
               value={selectedEntityId}
             >
-              {entities.map((entity) => (
-                <option key={entity.id} value={entity.id}>
-                  {entity.name} ({entity.kind})
-                </option>
-              ))}
+              {templates.length > 0 ? (
+                <optgroup label="Templates">
+                  {templates.map((entity) => {
+                    const metadata = getCampaignActorMetadata(entity);
+
+                    return (
+                      <option key={entity.id} value={entity.id}>
+                        {entity.name} ({entity.kind}
+                        {metadata.roleLabel ? `, ${metadata.roleLabel}` : ""})
+                      </option>
+                    );
+                  })}
+                </optgroup>
+              ) : null}
+              {splitEntities.campaignNpcs.length > 0 ? (
+                <optgroup label="Campaign NPCs">
+                  {splitEntities.campaignNpcs.map((entity) => {
+                    const metadata = getCampaignActorMetadata(entity);
+
+                    return (
+                      <option key={entity.id} value={entity.id}>
+                        {entity.name} ({entity.kind}
+                        {metadata.allegiance ? `, ${metadata.allegiance}` : ""})
+                      </option>
+                    );
+                  })}
+                </optgroup>
+              ) : null}
             </select>
             <select
               onChange={(event) => setParticipantRole(event.target.value as ScenarioParticipant["role"])}
@@ -240,7 +279,7 @@ export default function ScenarioDetailPageContent({
             </div>
           </>
         ) : (
-          <div>No reusable entities available for this campaign yet.</div>
+          <div>No templates or campaign NPCs are available yet.</div>
         )}
       </section>
 

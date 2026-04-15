@@ -92,6 +92,54 @@ function parseOptionalNullableString(
 }
 
 export const scenariosRoutes: FastifyPluginAsync = async (app) => {
+  app.get("/templates", async (request, reply) => {
+    const user = await requireAdminUser(request, reply);
+
+    if (!user) {
+      return;
+    }
+
+    try {
+      const entities = await scenarioService.listReusableEntitiesByGameMaster(user.id);
+      return { templates: entities };
+    } catch (error) {
+      return reply.code(400).send({
+        error: error instanceof Error ? error.message : "Unable to list templates."
+      });
+    }
+  });
+
+  app.post("/templates", async (request, reply) => {
+    const user = await requireAdminUser(request, reply);
+
+    if (!user) {
+      return;
+    }
+
+    try {
+      const body = parseBodyObject(request.body, "Template payload");
+      const snapshot =
+        body.snapshot && typeof body.snapshot === "object"
+          ? { ...(body.snapshot as Record<string, unknown>), actorClass: "template" }
+          : { actorClass: "template" };
+
+      const template = await scenarioService.createReusableEntity({
+        description: parseOptionalString(body, "description"),
+        gmUserId: user.id,
+        kind: reusableEntityKindSchema.parse(body.kind),
+        name: parseRequiredString(body, "name"),
+        notes: parseOptionalString(body, "notes"),
+        snapshot
+      });
+
+      return { template };
+    } catch (error) {
+      return reply.code(400).send({
+        error: error instanceof Error ? error.message : "Unable to create template."
+      });
+    }
+  });
+
   app.get("/scenarios/joinable", async (request, reply) => {
     const user = await requireAuthenticatedUser(request, reply);
 

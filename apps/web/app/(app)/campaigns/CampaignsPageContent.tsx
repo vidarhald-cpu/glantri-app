@@ -62,7 +62,8 @@ export default function CampaignsPageContent() {
       <div>
         <h1 style={{ marginBottom: "0.5rem" }}>Campaigns</h1>
         <p style={{ margin: 0 }}>
-          Basic GM campaign management for scenarios, reusable entities, and assets.
+          Basic GM campaign management for scenarios, campaign NPC rosters, and assets. Reusable
+          templates now live in the shared Templates library.
         </p>
       </div>
 
