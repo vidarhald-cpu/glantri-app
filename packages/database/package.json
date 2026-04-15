@@ -16,7 +16,13 @@
     "lint": "eslint .",
     "test": "vitest run --passWithNoTests",
     "db:generate": "prisma generate",
-    "db:migrate": "prisma migrate dev"
+    "db:migrate": "prisma migrate dev",
+    "db:backup": "pnpm exec tsx ./scripts/backupLocalDb.ts",
+    "db:seed": "pnpm exec tsx ./scripts/seedLocalDev.ts",
+    "db:reset:local": "pnpm exec tsx ./scripts/resetLocalDb.ts"
+  },
+  "prisma": {
+    "seed": "pnpm exec tsx ./scripts/seedLocalDev.ts"
   },
   "dependencies": {
     "@glantri/auth": "workspace:*",
