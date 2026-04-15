@@ -1,30 +1,53 @@
 "use client";
 
-import Link from "next/link";
-import { useEffect, useState } from "react";
+import { hasAnyRole } from "@glantri/auth";
+import type { Scenario } from "@glantri/domain";
+import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
 
-import type { LocalCharacterRecord } from "../../../src/lib/offline/glantriDexie";
-import { loadMyServerCharacters } from "../../../src/lib/api/localServiceClient";
+import {
+  addScenarioParticipantFromCharacterOnServer,
+  loadCampaignScenarios,
+  loadCampaigns,
+  loadMyServerCharacters
+} from "../../../src/lib/api/localServiceClient";
 import { useSessionUser } from "../../../src/lib/auth/SessionUserContext";
 import {
-  LocalCharacterRepository,
-  UNNAMED_CHARACTER_PLACEHOLDER
-} from "../../../src/lib/offline/repositories/localCharacterRepository";
+  buildCharacterBrowserEntries,
+  filterCharacterBrowserEntries,
+  type CharacterBrowserOwnerFilter,
+  type CharacterBrowserTypeFilter
+} from "../../../src/lib/characters/characterBrowser";
+import { LocalCharacterRepository } from "../../../src/lib/offline/repositories/localCharacterRepository";
 
 const localCharacterRepository = new LocalCharacterRepository();
 
-function getCharacterName(record: LocalCharacterRecord): string {
-  return record.build.name.trim() || UNNAMED_CHARACTER_PLACEHOLDER;
-}
-
 type ServerCharacterRecord = Awaited<ReturnType<typeof loadMyServerCharacters>>[number];
+type JoinableScenarioOption = {
+  campaignId: string;
+  campaignName: string;
+  kind: Scenario["kind"];
+  scenarioId: string;
+  scenarioName: string;
+  status: Scenario["status"];
+};
 
 export default function CharactersBrowser() {
+  const router = useRouter();
   const { currentUser, loading: sessionLoading } = useSessionUser();
-  const [localCharacters, setLocalCharacters] = useState<LocalCharacterRecord[]>([]);
+  const [localCharacters, setLocalCharacters] = useState<
+    Awaited<ReturnType<typeof localCharacterRepository.listFinalized>>
+  >([]);
   const [serverCharacters, setServerCharacters] = useState<ServerCharacterRecord[]>();
   const [feedback, setFeedback] = useState<string>();
   const [loading, setLoading] = useState(true);
+  const [ownerFilter, setOwnerFilter] = useState<CharacterBrowserOwnerFilter>("all");
+  const [typeFilter, setTypeFilter] = useState<CharacterBrowserTypeFilter>("all");
+  const [joiningCharacterId, setJoiningCharacterId] = useState<string>();
+  const [joiningScenarioId, setJoiningScenarioId] = useState<string>();
+  const [joinableScenarios, setJoinableScenarios] = useState<JoinableScenarioOption[]>();
+  const [joinLoading, setJoinLoading] = useState(false);
+  const [joinError, setJoinError] = useState<string>();
 
   async function refreshCharacters() {
     const records = await localCharacterRepository.listFinalized();
@@ -40,6 +63,46 @@ export default function CharactersBrowser() {
       });
   }, []);
 
+  const browserEntries = useMemo(
+    () => buildCharacterBrowserEntries(localCharacters, currentUser),
+    [currentUser, localCharacters]
+  );
+  const visibleEntries = useMemo(
+    () =>
+      filterCharacterBrowserEntries(browserEntries, {
+        currentUser,
+        ownerFilter,
+        typeFilter
+      }),
+    [browserEntries, currentUser, ownerFilter, typeFilter]
+  );
+  const canUseGameMasterOwnerFilter = currentUser
+    ? hasAnyRole(currentUser.roles, ["game_master", "admin"])
+    : false;
+  const ownerFilterOptions = useMemo(() => {
+    const options: Array<{ label: string; value: CharacterBrowserOwnerFilter }> = [
+      { label: "All owners", value: "all" }
+    ];
+
+    if (browserEntries.some((entry) => entry.ownerCategory === "gm")) {
+      options.push({ label: "GM-owned characters", value: "gm" });
+    }
+
+    if (browserEntries.some((entry) => entry.ownerCategory === "player")) {
+      options.push({ label: "Player-owned characters", value: "player" });
+    }
+
+    if (
+      canUseGameMasterOwnerFilter &&
+      currentUser &&
+      browserEntries.some((entry) => entry.record.creatorId === currentUser.id)
+    ) {
+      options.push({ label: "My characters", value: "mine" });
+    }
+
+    return options;
+  }, [browserEntries, canUseGameMasterOwnerFilter, currentUser]);
+
   async function handleLoadServerCharacters() {
     if (!currentUser) {
       setFeedback("Login required before loading server characters.");
@@ -47,10 +110,10 @@ export default function CharactersBrowser() {
     }
 
     try {
-      const serverCharacters = await loadMyServerCharacters();
-      setServerCharacters(serverCharacters);
+      const nextServerCharacters = await loadMyServerCharacters();
+      setServerCharacters(nextServerCharacters);
 
-      for (const character of serverCharacters) {
+      for (const character of nextServerCharacters) {
         await localCharacterRepository.save({
           build: character.build,
           createdAt: character.createdAt,
@@ -64,66 +127,304 @@ export default function CharactersBrowser() {
       }
 
       await refreshCharacters();
-      setFeedback(`Loaded ${serverCharacters.length} server character${serverCharacters.length === 1 ? "" : "s"} into the local browser.`);
+      setFeedback(
+        `Loaded ${nextServerCharacters.length} server character${
+          nextServerCharacters.length === 1 ? "" : "s"
+        } into the local browser.`
+      );
     } catch (error) {
       setFeedback(error instanceof Error ? error.message : "Unable to load server characters.");
     }
   }
 
+  async function ensureJoinableScenarios(): Promise<JoinableScenarioOption[]> {
+    if (joinableScenarios) {
+      return joinableScenarios;
+    }
+
+    const campaigns = await loadCampaigns();
+    const scenarioGroups = await Promise.all(
+      campaigns.map(async (campaign) => ({
+        campaign,
+        scenarios: await loadCampaignScenarios(campaign.id)
+      }))
+    );
+
+    const options = scenarioGroups
+      .flatMap(({ campaign, scenarios }) =>
+        scenarios.map((scenario) => ({
+          campaignId: campaign.id,
+          campaignName: campaign.name,
+          kind: scenario.kind,
+          scenarioId: scenario.id,
+          scenarioName: scenario.name,
+          status: scenario.status
+        }))
+      )
+      .filter((scenario) => scenario.status !== "archived" && scenario.status !== "completed")
+      .sort((left, right) => left.campaignName.localeCompare(right.campaignName));
+
+    setJoinableScenarios(options);
+    return options;
+  }
+
+  async function handleToggleJoinChooser(characterId: string) {
+    if (joiningCharacterId === characterId) {
+      setJoiningCharacterId(undefined);
+      setJoiningScenarioId(undefined);
+      setJoinError(undefined);
+      return;
+    }
+
+    setJoiningCharacterId(characterId);
+    setJoiningScenarioId(undefined);
+    setJoinError(undefined);
+    setJoinLoading(true);
+
+    try {
+      const options = await ensureJoinableScenarios();
+      setJoiningScenarioId(options[0]?.scenarioId);
+    } catch (error) {
+      setJoinError(error instanceof Error ? error.message : "Unable to load scenarios.");
+    } finally {
+      setJoinLoading(false);
+    }
+  }
+
+  async function handleJoinScenario(characterId: string) {
+    if (!joiningScenarioId) {
+      setJoinError("Choose a scenario first.");
+      return;
+    }
+
+    const selectedScenario = joinableScenarios?.find(
+      (scenario) => scenario.scenarioId === joiningScenarioId
+    );
+
+    if (!selectedScenario) {
+      setJoinError("Selected scenario could not be found.");
+      return;
+    }
+
+    try {
+      setJoinError(undefined);
+      setFeedback(undefined);
+      await addScenarioParticipantFromCharacterOnServer({
+        characterId,
+        controlledByUserId: currentUser?.id,
+        joinSource: "player_joined",
+        role: "player_character",
+        scenarioId: selectedScenario.scenarioId
+      });
+      setFeedback(`Joined ${selectedScenario.scenarioName}.`);
+      setJoiningCharacterId(undefined);
+      setJoiningScenarioId(undefined);
+      router.push(`/campaigns/${selectedScenario.campaignId}/scenarios/${selectedScenario.scenarioId}`);
+    } catch (error) {
+      setJoinError(error instanceof Error ? error.message : "Unable to join scenario.");
+    }
+  }
+
+  function handleOpenCharacter(characterId: string) {
+    router.push(`/characters/${characterId}`);
+  }
+
   return (
-    <section style={{ display: "grid", gap: "1rem", maxWidth: 840 }}>
+    <section style={{ display: "grid", gap: "1rem", maxWidth: 920 }}>
       <div>
         <h1 style={{ marginBottom: "0.5rem" }}>Characters</h1>
         <p style={{ margin: 0 }}>
-          Finalized local characters are stored in the browser first. Server-backed characters can be
-          loaded separately without hiding the local list.
+          Browse finalized local characters, filter the list, and jump straight into a scenario when
+          a character is ready.
         </p>
-      </div>
-
-      <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
-        <button onClick={() => void handleLoadServerCharacters()} type="button">
-          Load my server characters
-        </button>
-        {feedback ? <div>{feedback}</div> : null}
       </div>
 
       {loading || sessionLoading ? (
         <div>Loading character lists...</div>
       ) : (
         <div style={{ display: "grid", gap: "1rem" }}>
-          <section style={{ display: "grid", gap: "0.75rem" }}>
+          <section
+            style={{
+              border: "1px solid #d9ddd8",
+              borderRadius: 12,
+              display: "grid",
+              gap: "0.75rem",
+              padding: "1rem"
+            }}
+          >
             <div>
-              <h2 style={{ margin: "0 0 0.25rem" }}>Finalized local characters</h2>
-              <p style={{ margin: 0 }}>This matches the saved local characters list shown in Chargen.</p>
+              <h2 style={{ margin: "0 0 0.25rem" }}>Browser</h2>
+              <p style={{ margin: 0 }}>
+                Sorted by most recently saved first, using the local record&apos;s latest update time.
+              </p>
             </div>
 
-            {localCharacters.length > 0 ? (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
+              <label style={{ display: "grid", gap: "0.25rem" }}>
+                <span>Type</span>
+                <select
+                  onChange={(event) => setTypeFilter(event.target.value as CharacterBrowserTypeFilter)}
+                  value={typeFilter}
+                >
+                  <option value="all">All</option>
+                  <option value="pc">PCs</option>
+                  <option value="npc">NPCs</option>
+                </select>
+              </label>
+
+              <label style={{ display: "grid", gap: "0.25rem" }}>
+                <span>Owner</span>
+                <select
+                  onChange={(event) =>
+                    setOwnerFilter(event.target.value as CharacterBrowserOwnerFilter)
+                  }
+                  value={ownerFilter}
+                >
+                  {ownerFilterOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            {visibleEntries.length > 0 ? (
               <div style={{ display: "grid", gap: "0.75rem" }}>
-                {localCharacters.map((record) => (
+                {visibleEntries.map((entry) => (
                   <div
-                    key={record.id}
+                    key={entry.id}
+                    aria-label={`Open ${entry.name}`}
+                    onClick={() => handleOpenCharacter(entry.id)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        handleOpenCharacter(entry.id);
+                      }
+                    }}
+                    role="link"
                     style={{
                       border: "1px solid #d9ddd8",
                       borderRadius: 12,
+                      cursor: "pointer",
                       display: "grid",
-                      gap: "0.35rem",
+                      gap: "0.6rem",
                       padding: "1rem"
                     }}
+                    tabIndex={0}
                   >
-                    <strong>{getCharacterName(record)}</strong>
-                    <div>Profile: {record.build.profile.label}</div>
-                    <div>Profession: {record.build.professionId ?? "Not set"}</div>
-                    <div>Social class: {record.build.socialClass ?? "Not set"}</div>
-                    <div>Finalized: {record.finalizedAt}</div>
-                    <div>Storage status: {record.syncStatus}</div>
-                    <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
-                      <Link href={`/characters/${record.id}`}>Character sheet</Link>
-                      <Link href={`/characters/${record.id}/equipment`}>Inventory by location</Link>
-                      <Link href={`/characters/${record.id}/weapons-shields-armor`}>
-                        Weapons/Shields/Armor
-                      </Link>
-                      <Link href={`/characters/${record.id}/loadout`}>Equip items</Link>
-                      <Link href={`/characters/${record.id}/advance`}>Advance Character</Link>
+                    <div
+                      style={{
+                        alignItems: "center",
+                        display: "flex",
+                        flexWrap: "wrap",
+                        gap: "0.5rem",
+                        justifyContent: "space-between"
+                      }}
+                    >
+                      <strong>{entry.name}</strong>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+                        <span
+                          style={{
+                            background: "#f0ede2",
+                            borderRadius: 999,
+                            fontSize: "0.85rem",
+                            padding: "0.15rem 0.5rem"
+                          }}
+                        >
+                          {entry.type.toUpperCase()}
+                        </span>
+                        <span
+                          style={{
+                            background: "#eef5ef",
+                            borderRadius: 999,
+                            fontSize: "0.85rem",
+                            padding: "0.15rem 0.5rem"
+                          }}
+                        >
+                          {entry.sourceLabel}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div style={{ color: "#4f4a40", display: "grid", gap: "0.2rem" }}>
+                      <div>Profession: {entry.professionLabel}</div>
+                      <div>Social class: {entry.socialClassLabel}</div>
+                      <div>Owner: {entry.ownerLabel}</div>
+                      <div>Last saved: {entry.lastSavedAt}</div>
+                    </div>
+
+                    <div
+                      onClick={(event) => event.stopPropagation()}
+                      onKeyDown={(event) => event.stopPropagation()}
+                      style={{ display: "grid", gap: "0.5rem" }}
+                    >
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
+                        <button
+                          onClick={() => {
+                            void handleToggleJoinChooser(entry.id);
+                          }}
+                          type="button"
+                        >
+                          Join scenario
+                        </button>
+                      </div>
+
+                      {joiningCharacterId === entry.id ? (
+                        <div
+                          style={{
+                            background: "#f6f5ef",
+                            border: "1px solid #d9ddd8",
+                            borderRadius: 10,
+                            display: "grid",
+                            gap: "0.5rem",
+                            padding: "0.75rem"
+                          }}
+                        >
+                          <strong>Join scenario</strong>
+                          {joinLoading ? (
+                            <div>Loading available scenarios...</div>
+                          ) : joinableScenarios && joinableScenarios.length > 0 ? (
+                            <>
+                              <select
+                                onChange={(event) => setJoiningScenarioId(event.target.value)}
+                                value={joiningScenarioId}
+                              >
+                                {joinableScenarios.map((scenario) => (
+                                  <option key={scenario.scenarioId} value={scenario.scenarioId}>
+                                    {scenario.campaignName} - {scenario.scenarioName} ({scenario.kind},{" "}
+                                    {scenario.status})
+                                  </option>
+                                ))}
+                              </select>
+                              <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+                                <button
+                                  onClick={() => {
+                                    void handleJoinScenario(entry.id);
+                                  }}
+                                  type="button"
+                                >
+                                  Confirm join
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setJoiningCharacterId(undefined);
+                                    setJoiningScenarioId(undefined);
+                                    setJoinError(undefined);
+                                  }}
+                                  type="button"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            </>
+                          ) : (
+                            <div>No active scenarios are currently available from the campaign list.</div>
+                          )}
+
+                          {joinError ? <div>{joinError}</div> : null}
+                        </div>
+                      ) : null}
                     </div>
                   </div>
                 ))}
@@ -137,53 +438,43 @@ export default function CharactersBrowser() {
                   padding: "1rem"
                 }}
               >
-                No finalized local characters yet.
+                No characters match the current browser filters.
               </div>
             )}
           </section>
 
-          <section style={{ display: "grid", gap: "0.75rem" }}>
+          <section
+            style={{
+              border: "1px solid #d9ddd8",
+              borderRadius: 12,
+              display: "grid",
+              gap: "0.75rem",
+              padding: "1rem"
+            }}
+          >
             <div>
-              <h2 style={{ margin: "0 0 0.25rem" }}>Server-backed characters</h2>
+              <h2 style={{ margin: "0 0 0.25rem" }}>Server import</h2>
               <p style={{ margin: 0 }}>
-                Use the button above to load your current server characters into the local browser.
+                Load server-backed characters into the local browser without replacing the finalized
+                local list.
               </p>
             </div>
 
-            {serverCharacters === undefined ? (
-              <div
-                style={{
-                  background: "#f6f5ef",
-                  border: "1px solid #d9ddd8",
-                  borderRadius: 12,
-                  padding: "1rem"
-                }}
-              >
-                Server characters have not been loaded in this view yet.
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
+              <button onClick={() => void handleLoadServerCharacters()} type="button">
+                Load my server characters
+              </button>
+              <div>
+                {serverCharacters === undefined
+                  ? "Server characters have not been loaded in this view yet."
+                  : `Last server load returned ${serverCharacters.length} character${
+                      serverCharacters.length === 1 ? "" : "s"
+                    }.`}
               </div>
-            ) : serverCharacters.length > 0 ? (
-              <div style={{ display: "grid", gap: "0.75rem" }}>
-                {serverCharacters.map((record) => (
-                  <div
-                    key={record.id}
-                    style={{
-                      border: "1px solid #d9ddd8",
-                      borderRadius: 12,
-                      display: "grid",
-                      gap: "0.35rem",
-                      padding: "1rem"
-                    }}
-                  >
-                    <strong>{record.build.name.trim() || UNNAMED_CHARACTER_PLACEHOLDER}</strong>
-                    <div>Profile: {record.build.profile.label}</div>
-                    <div>Profession: {record.build.professionId ?? "Not set"}</div>
-                    <div>Social class: {record.build.socialClass ?? "Not set"}</div>
-                    <div>Created on server: {record.createdAt}</div>
-                    <div>Updated on server: {record.updatedAt}</div>
-                  </div>
-                ))}
-              </div>
-            ) : (
+            </div>
+
+            {feedback ? <div>{feedback}</div> : null}
+            {serverCharacters !== undefined && serverCharacters.length === 0 ? (
               <div
                 style={{
                   background: "#f6f5ef",
@@ -194,7 +485,7 @@ export default function CharactersBrowser() {
               >
                 No server characters were returned for this account.
               </div>
-            )}
+            ) : null}
           </section>
         </div>
       )}
