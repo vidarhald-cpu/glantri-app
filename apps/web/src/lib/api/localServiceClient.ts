@@ -1,6 +1,15 @@
 import type { AuthRole, AuthUser, CredentialLoginInput, CredentialRegisterInput } from "@glantri/auth";
 import type { CanonicalContent } from "@glantri/content";
-import type { CharacterBuild } from "@glantri/domain";
+import type {
+  Campaign,
+  CampaignAsset,
+  ReusableEntity,
+  Scenario,
+  ScenarioEventLog,
+  ScenarioLiveState,
+  ScenarioParticipant,
+  CharacterBuild
+} from "@glantri/domain";
 import type {
   CarryMode,
   ItemConditionState,
@@ -34,6 +43,34 @@ export interface ApiErrorPayload {
 
 export interface EquipmentStateResponse {
   state: EquipmentFeatureState;
+}
+
+export interface ScenarioParticipantFromCharacterInput {
+  characterId: string;
+  controlledByUserId?: string | null;
+  joinSource?: "gm_added" | "player_joined" | "imported_from_template";
+  role?:
+    | "player_character"
+    | "npc"
+    | "monster"
+    | "animal"
+    | "neutral"
+    | "ally"
+    | "enemy";
+}
+
+export interface ScenarioParticipantFromEntityInput {
+  controlledByUserId?: string | null;
+  entityId?: string;
+  entityInput?: {
+    description?: string;
+    kind: "npc" | "monster" | "animal";
+    name: string;
+    notes?: string;
+    snapshot?: unknown;
+  };
+  joinSource?: "gm_added" | "player_joined" | "imported_from_template";
+  role: "player_character" | "npc" | "monster" | "animal" | "neutral" | "ally" | "enemy";
 }
 
 export class ApiRequestError extends Error {
@@ -208,6 +245,283 @@ export async function loadCharacterEquipmentState(
   });
 
   return payload.state;
+}
+
+export async function loadCampaigns(): Promise<Campaign[]> {
+  const payload = await sendJson<{ campaigns: Campaign[] }>("/campaigns", {
+    method: "GET"
+  });
+
+  return payload.campaigns;
+}
+
+export async function createCampaignOnServer(input: {
+  description?: string;
+  name: string;
+  settings?: Campaign["settings"];
+  status?: Campaign["status"];
+}): Promise<Campaign> {
+  const payload = await sendJson<{ campaign: Campaign }>("/campaigns", {
+    body: JSON.stringify(input),
+    method: "POST"
+  });
+
+  return payload.campaign;
+}
+
+export async function loadCampaignById(campaignId: string): Promise<Campaign> {
+  const payload = await sendJson<{ campaign: Campaign }>(`/campaigns/${campaignId}`, {
+    method: "GET"
+  });
+
+  return payload.campaign;
+}
+
+export async function loadCampaignScenarios(campaignId: string): Promise<Scenario[]> {
+  const payload = await sendJson<{ scenarios: Scenario[] }>(
+    `/campaigns/${campaignId}/scenarios`,
+    {
+      method: "GET"
+    }
+  );
+
+  return payload.scenarios;
+}
+
+export async function createScenarioOnServer(input: {
+  campaignId: string;
+  description?: string;
+  kind?: Scenario["kind"];
+  mapAssetId?: string | null;
+  name: string;
+  status?: Scenario["status"];
+}): Promise<Scenario> {
+  const payload = await sendJson<{ scenario: Scenario }>(
+    `/campaigns/${input.campaignId}/scenarios`,
+    {
+      body: JSON.stringify({
+        description: input.description,
+        kind: input.kind,
+        mapAssetId: input.mapAssetId,
+        name: input.name,
+        status: input.status
+      }),
+      method: "POST"
+    }
+  );
+
+  return payload.scenario;
+}
+
+export async function loadCampaignEntities(campaignId: string): Promise<ReusableEntity[]> {
+  const payload = await sendJson<{ entities: ReusableEntity[] }>(
+    `/campaigns/${campaignId}/entities`,
+    {
+      method: "GET"
+    }
+  );
+
+  return payload.entities;
+}
+
+export async function createReusableEntityOnServer(input: {
+  campaignId: string;
+  description?: string;
+  kind: ReusableEntity["kind"];
+  name: string;
+  notes?: string;
+  snapshot?: unknown;
+}): Promise<ReusableEntity> {
+  const payload = await sendJson<{ entity: ReusableEntity }>(
+    `/campaigns/${input.campaignId}/entities`,
+    {
+      body: JSON.stringify({
+        description: input.description,
+        kind: input.kind,
+        name: input.name,
+        notes: input.notes,
+        snapshot: input.snapshot
+      }),
+      method: "POST"
+    }
+  );
+
+  return payload.entity;
+}
+
+export async function loadCampaignAssets(campaignId: string): Promise<CampaignAsset[]> {
+  const payload = await sendJson<{ assets: CampaignAsset[] }>(`/campaigns/${campaignId}/assets`, {
+    method: "GET"
+  });
+
+  return payload.assets;
+}
+
+export async function createCampaignAssetOnServer(input: {
+  campaignId: string;
+  description?: string;
+  mimeType?: string;
+  storageUrl: string;
+  title: string;
+  type: CampaignAsset["type"];
+  visibility: CampaignAsset["visibility"];
+}): Promise<CampaignAsset> {
+  const payload = await sendJson<{ asset: CampaignAsset }>(`/campaigns/${input.campaignId}/assets`, {
+    body: JSON.stringify({
+      description: input.description,
+      mimeType: input.mimeType,
+      storageUrl: input.storageUrl,
+      title: input.title,
+      type: input.type,
+      visibility: input.visibility
+    }),
+    method: "POST"
+  });
+
+  return payload.asset;
+}
+
+export async function loadScenarioById(scenarioId: string): Promise<Scenario> {
+  const payload = await sendJson<{ scenario: Scenario }>(`/scenarios/${scenarioId}`, {
+    method: "GET"
+  });
+
+  return payload.scenario;
+}
+
+export async function updateScenarioOnServer(input: {
+  description?: string;
+  kind?: Scenario["kind"];
+  mapAssetId?: string | null;
+  name?: string;
+  scenarioId: string;
+  status?: Scenario["status"];
+}): Promise<Scenario> {
+  const payload = await sendJson<{ scenario: Scenario }>(`/scenarios/${input.scenarioId}`, {
+    body: JSON.stringify({
+      description: input.description,
+      kind: input.kind,
+      mapAssetId: input.mapAssetId,
+      name: input.name,
+      status: input.status
+    }),
+    method: "PUT"
+  });
+
+  return payload.scenario;
+}
+
+export async function updateScenarioLiveStateOnServer(input: {
+  liveState: ScenarioLiveState;
+  scenarioId: string;
+}): Promise<Scenario> {
+  const payload = await sendJson<{ scenario: Scenario }>(
+    `/scenarios/${input.scenarioId}/live-state`,
+    {
+      body: JSON.stringify({
+        liveState: input.liveState
+      }),
+      method: "PUT"
+    }
+  );
+
+  return payload.scenario;
+}
+
+export async function loadScenarioParticipants(scenarioId: string): Promise<ScenarioParticipant[]> {
+  const payload = await sendJson<{ participants: ScenarioParticipant[] }>(
+    `/scenarios/${scenarioId}/participants`,
+    {
+      method: "GET"
+    }
+  );
+
+  return payload.participants;
+}
+
+export async function addScenarioParticipantFromCharacterOnServer(input: {
+  scenarioId: string;
+} & ScenarioParticipantFromCharacterInput): Promise<ScenarioParticipant> {
+  const payload = await sendJson<{ participant: ScenarioParticipant }>(
+    `/scenarios/${input.scenarioId}/participants/character`,
+    {
+      body: JSON.stringify({
+        characterId: input.characterId,
+        controlledByUserId: input.controlledByUserId,
+        joinSource: input.joinSource,
+        role: input.role
+      }),
+      method: "POST"
+    }
+  );
+
+  return payload.participant;
+}
+
+export async function addScenarioParticipantFromEntityOnServer(input: {
+  scenarioId: string;
+} & ScenarioParticipantFromEntityInput): Promise<ScenarioParticipant> {
+  const payload = await sendJson<{ participant: ScenarioParticipant }>(
+    `/scenarios/${input.scenarioId}/participants/entity`,
+    {
+      body: JSON.stringify({
+        controlledByUserId: input.controlledByUserId,
+        entityId: input.entityId,
+        entityInput: input.entityInput,
+        joinSource: input.joinSource,
+        role: input.role
+      }),
+      method: "POST"
+    }
+  );
+
+  return payload.participant;
+}
+
+export async function updateScenarioParticipantStateOnServer(input: {
+  participantId: string;
+  scenarioId: string;
+  state: ScenarioParticipant["state"];
+}): Promise<ScenarioParticipant> {
+  const payload = await sendJson<{ participant: ScenarioParticipant }>(
+    `/scenarios/${input.scenarioId}/participants/${input.participantId}/state`,
+    {
+      body: JSON.stringify({
+        state: input.state
+      }),
+      method: "PUT"
+    }
+  );
+
+  return payload.participant;
+}
+
+export async function updateCampaignAssetVisibilityOnServer(input: {
+  assetId: string;
+  visibility: CampaignAsset["visibility"];
+}): Promise<CampaignAsset> {
+  const payload = await sendJson<{ asset: CampaignAsset }>(
+    `/campaign-assets/${input.assetId}/visibility`,
+    {
+      body: JSON.stringify({
+        visibility: input.visibility
+      }),
+      method: "PUT"
+    }
+  );
+
+  return payload.asset;
+}
+
+export async function loadScenarioEventLogs(scenarioId: string): Promise<ScenarioEventLog[]> {
+  const payload = await sendJson<{ eventLogs: ScenarioEventLog[] }>(
+    `/scenarios/${scenarioId}/events`,
+    {
+      method: "GET"
+    }
+  );
+
+  return payload.eventLogs;
 }
 
 export async function moveCharacterEquipmentItemOnServer(input: {
