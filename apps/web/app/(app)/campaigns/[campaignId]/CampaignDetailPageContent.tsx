@@ -17,6 +17,7 @@ import {
   updateCampaignAssetVisibilityOnServer
 } from "../../../../src/lib/api/localServiceClient";
 import {
+  buildCampaignNpcSnapshotFromTemplate,
   getCampaignActorMetadata,
   splitCampaignActors
 } from "../../../../src/lib/campaigns/campaignActors";
@@ -109,6 +110,17 @@ export default function CampaignDetailPageContent({
     try {
       setError(undefined);
       setFeedback(undefined);
+      const selectedTemplate = templates.find((template) => template.id === selectedTemplateId);
+      const templateSnapshot = selectedTemplate
+        ? buildCampaignNpcSnapshotFromTemplate({
+            campaignId,
+            name: entityName,
+            template: selectedTemplate
+          })
+        : {
+            actorClass: "campaign_npc" as const,
+            campaignId
+          };
 
       const entity = await createReusableEntityOnServer({
         campaignId,
@@ -116,8 +128,7 @@ export default function CampaignDetailPageContent({
         kind: entityKind,
         name: entityName,
         snapshot: {
-          actorClass: "campaign_npc",
-          campaignId,
+          ...templateSnapshot,
           allegiance: entityAllegiance.trim() || undefined,
           roleLabel: entityRoleLabel.trim() || undefined,
           tags: entityTags
@@ -151,6 +162,7 @@ export default function CampaignDetailPageContent({
     setEntityName(selectedTemplate.name);
     setEntityDescription(selectedTemplate.description ?? "");
     setEntityKind(selectedTemplate.kind);
+    setEntityAllegiance("");
     setEntityRoleLabel(metadata.roleLabel ?? "");
     setEntityTags(metadata.tags?.join(", ") ?? "");
     setFeedback(`Loaded template ${selectedTemplate.name} into the campaign NPC form.`);

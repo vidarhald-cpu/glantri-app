@@ -16,6 +16,7 @@ import {
   updateScenarioOnServer
 } from "../../../../../../src/lib/api/localServiceClient";
 import {
+  buildScenarioActorInputFromTemplate,
   getCampaignActorMetadata,
   splitCampaignActors
 } from "../../../../../../src/lib/campaigns/campaignActors";
@@ -39,6 +40,7 @@ export default function ScenarioDetailPageContent({
   const [templates, setTemplates] = useState<ReusableEntity[]>([]);
 
   const [selectedEntityId, setSelectedEntityId] = useState("");
+  const [temporaryActorName, setTemporaryActorName] = useState("");
   const [participantRole, setParticipantRole] = useState<ScenarioParticipant["role"]>("npc");
 
   const [scenarioName, setScenarioName] = useState("");
@@ -128,14 +130,25 @@ export default function ScenarioDetailPageContent({
     try {
       setError(undefined);
       setFeedback(undefined);
+      const selectedTemplate = templates.find((template) => template.id === selectedEntityId);
 
       const participant = await addScenarioParticipantFromEntityOnServer({
-        entityId: selectedEntityId,
+        entityId: selectedTemplate ? undefined : selectedEntityId,
+        entityInput: selectedTemplate
+          ? {
+              ...buildScenarioActorInputFromTemplate({
+                name: temporaryActorName.trim() || selectedTemplate.name,
+                template: selectedTemplate
+              })
+            }
+          : undefined,
+        isTemporary: Boolean(selectedTemplate),
         role: participantRole,
         scenarioId
       });
 
       setFeedback(`Added participant ${participant.snapshot.displayName}.`);
+      setTemporaryActorName("");
       await refreshScenario();
     } catch (caughtError) {
       setError(
@@ -272,9 +285,18 @@ export default function ScenarioDetailPageContent({
               <option value="ally">Ally</option>
               <option value="enemy">Enemy</option>
             </select>
+            {templates.some((template) => template.id === selectedEntityId) ? (
+              <input
+                onChange={(event) => setTemporaryActorName(event.target.value)}
+                placeholder="Temporary actor name override (optional)"
+                value={temporaryActorName}
+              />
+            ) : null}
             <div>
               <button onClick={() => void handleAddParticipant()} type="button">
-                Add participant
+                {templates.some((template) => template.id === selectedEntityId)
+                  ? "Create temporary scenario actor"
+                  : "Add participant"}
               </button>
             </div>
           </>

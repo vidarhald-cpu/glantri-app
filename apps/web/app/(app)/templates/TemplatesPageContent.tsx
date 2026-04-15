@@ -2,31 +2,50 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-import type { ReusableEntity } from "@glantri/domain";
+import type { Campaign, ReusableEntity } from "@glantri/domain";
 
 import {
+  createReusableEntityOnServer,
   createTemplateOnServer,
+  loadCampaigns,
   loadTemplates
 } from "../../../src/lib/api/localServiceClient";
-import { getCampaignActorMetadata } from "../../../src/lib/campaigns/campaignActors";
+import {
+  buildCampaignNpcSnapshotFromTemplate,
+  getCampaignActorMetadata
+} from "../../../src/lib/campaigns/campaignActors";
 
 type TemplateKindFilter = "all" | ReusableEntity["kind"];
 
 export default function TemplatesPageContent() {
   const [description, setDescription] = useState("");
+  const [campaignNpcName, setCampaignNpcName] = useState("");
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [error, setError] = useState<string>();
   const [feedback, setFeedback] = useState<string>();
   const [kind, setKind] = useState<ReusableEntity["kind"]>("npc");
   const [kindFilter, setKindFilter] = useState<TemplateKindFilter>("all");
   const [loading, setLoading] = useState(true);
   const [name, setName] = useState("");
+  const [equipmentProfile, setEquipmentProfile] = useState("");
+  const [profession, setProfession] = useState("");
   const [roleLabel, setRoleLabel] = useState("");
+  const [selectedCampaignId, setSelectedCampaignId] = useState("");
+  const [selectedTemplateId, setSelectedTemplateId] = useState("");
+  const [socialClass, setSocialClass] = useState("");
   const [tags, setTags] = useState("");
   const [templates, setTemplates] = useState<ReusableEntity[]>([]);
 
   async function refreshTemplates() {
-    const nextTemplates = await loadTemplates();
-    setTemplates(nextTemplates.filter((template) => getCampaignActorMetadata(template).actorClass === "template"));
+    const [nextTemplates, nextCampaigns] = await Promise.all([loadTemplates(), loadCampaigns()]);
+    const filteredTemplates = nextTemplates.filter(
+      (template) => getCampaignActorMetadata(template).actorClass === "template"
+    );
+
+    setTemplates(filteredTemplates);
+    setCampaigns(nextCampaigns);
+    setSelectedCampaignId((current) => current || nextCampaigns[0]?.id || "");
+    setSelectedTemplateId((current) => current || filteredTemplates[0]?.id || "");
   }
 
   useEffect(() => {
@@ -53,7 +72,10 @@ export default function TemplatesPageContent() {
         name,
         snapshot: {
           actorClass: "template",
+          equipmentProfile: equipmentProfile.trim() || undefined,
+          profession: profession.trim() || undefined,
           roleLabel: roleLabel.trim() || undefined,
+          socialClass: socialClass.trim() || undefined,
           tags: tags
             .split(",")
             .map((tag) => tag.trim())
@@ -64,11 +86,49 @@ export default function TemplatesPageContent() {
       setFeedback(`Created template ${template.name}.`);
       setName("");
       setDescription("");
+      setEquipmentProfile("");
+      setProfession("");
       setRoleLabel("");
+      setSocialClass("");
       setTags("");
       await refreshTemplates();
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : "Unable to create template.");
+    }
+  }
+
+  async function handleCreateCampaignNpcFromTemplate() {
+    try {
+      setError(undefined);
+      setFeedback(undefined);
+
+      const template = templates.find((entry) => entry.id === selectedTemplateId);
+
+      if (!template || !selectedCampaignId) {
+        setError("Choose both a template and a target campaign.");
+        return;
+      }
+
+      const entity = await createReusableEntityOnServer({
+        campaignId: selectedCampaignId,
+        description: template.description,
+        kind: template.kind,
+        name: campaignNpcName.trim() || template.name,
+        snapshot: buildCampaignNpcSnapshotFromTemplate({
+          campaignId: selectedCampaignId,
+          name: campaignNpcName.trim() || template.name,
+          template
+        })
+      });
+
+      setFeedback(`Created campaign NPC ${entity.name} from template ${template.name}.`);
+      setCampaignNpcName("");
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Unable to create campaign NPC from template."
+      );
     }
   }
 
@@ -114,6 +174,21 @@ export default function TemplatesPageContent() {
           onChange={(event) => setRoleLabel(event.target.value)}
           placeholder="Role or use case (optional)"
           value={roleLabel}
+        />
+        <input
+          onChange={(event) => setProfession(event.target.value)}
+          placeholder="Profession or archetype fit (optional)"
+          value={profession}
+        />
+        <input
+          onChange={(event) => setSocialClass(event.target.value)}
+          placeholder="Social class or society context (optional)"
+          value={socialClass}
+        />
+        <input
+          onChange={(event) => setEquipmentProfile(event.target.value)}
+          placeholder="Equipment profile or notes (optional)"
+          value={equipmentProfile}
         />
         <input
           onChange={(event) => setTags(event.target.value)}
@@ -173,6 +248,11 @@ export default function TemplatesPageContent() {
                 <div>{template.kind}</div>
                 <div>{template.description || "No description yet."}</div>
                 {metadata.roleLabel ? <div>Use: {metadata.roleLabel}</div> : null}
+                {metadata.profession ? <div>Profession: {metadata.profession}</div> : null}
+                {metadata.socialClass ? <div>Social context: {metadata.socialClass}</div> : null}
+                {metadata.equipmentProfile ? (
+                  <div>Equipment profile: {metadata.equipmentProfile}</div>
+                ) : null}
                 {metadata.tags?.length ? <div>Tags: {metadata.tags.join(", ")}</div> : null}
               </div>
             );
@@ -189,6 +269,52 @@ export default function TemplatesPageContent() {
             No templates match the current library view.
           </div>
         )}
+      </section>
+
+      <section
+        style={{
+          border: "1px solid #d9ddd8",
+          borderRadius: 12,
+          display: "grid",
+          gap: "0.75rem",
+          padding: "1rem"
+        }}
+      >
+        <h2 style={{ margin: 0 }}>Create campaign NPC from template</h2>
+        <select
+          onChange={(event) => setSelectedTemplateId(event.target.value)}
+          value={selectedTemplateId}
+        >
+          {templates.map((template) => (
+            <option key={template.id} value={template.id}>
+              {template.name} ({template.kind})
+            </option>
+          ))}
+        </select>
+        <select
+          onChange={(event) => setSelectedCampaignId(event.target.value)}
+          value={selectedCampaignId}
+        >
+          {campaigns.map((campaign) => (
+            <option key={campaign.id} value={campaign.id}>
+              {campaign.name}
+            </option>
+          ))}
+        </select>
+        <input
+          onChange={(event) => setCampaignNpcName(event.target.value)}
+          placeholder="NPC name override (optional)"
+          value={campaignNpcName}
+        />
+        <div>
+          <button
+            disabled={templates.length === 0 || campaigns.length === 0}
+            onClick={() => void handleCreateCampaignNpcFromTemplate()}
+            type="button"
+          >
+            Create campaign NPC
+          </button>
+        </div>
       </section>
     </section>
   );

@@ -2,7 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import type { ReusableEntity } from "@glantri/domain";
 
-import { getCampaignActorMetadata, splitCampaignActors } from "./campaignActors";
+import {
+  buildCampaignNpcSnapshotFromTemplate,
+  buildScenarioActorInputFromTemplate,
+  getCampaignActorMetadata,
+  splitCampaignActors
+} from "./campaignActors";
 
 function createEntity(input: Partial<ReusableEntity> & Pick<ReusableEntity, "id" | "name">): ReusableEntity {
   return {
@@ -78,5 +83,53 @@ describe("campaignActors", () => {
     );
 
     expect(result.campaignNpcs.map((entity) => entity.id)).toEqual(["npc-a"]);
+  });
+
+  it("maps template metadata into campaign npc and temporary scenario actor inputs", () => {
+    const template = createEntity({
+      description: "Harbor guard template",
+      id: "template-guard",
+      kind: "npc",
+      name: "City Guard",
+      snapshot: {
+        actorClass: "template",
+        equipmentProfile: "Mail shirt and spear",
+        profession: "guard",
+        roleLabel: "Town watch",
+        socialClass: "Common",
+        tags: ["urban", "watch"]
+      }
+    });
+
+    expect(
+      buildCampaignNpcSnapshotFromTemplate({
+        campaignId: "campaign-1",
+        template
+      })
+    ).toMatchObject({
+      actorClass: "campaign_npc",
+      campaignId: "campaign-1",
+      equipmentProfile: "Mail shirt and spear",
+      profession: "guard",
+      socialClass: "Common",
+      templateId: "template-guard",
+      templateName: "City Guard"
+    });
+
+    expect(
+      buildScenarioActorInputFromTemplate({
+        name: "North Gate Guard",
+        template
+      })
+    ).toMatchObject({
+      description: "Harbor guard template",
+      kind: "npc",
+      name: "North Gate Guard",
+      snapshot: {
+        actorClass: "template",
+        profession: "guard",
+        templateId: "template-guard"
+      }
+    });
   });
 });

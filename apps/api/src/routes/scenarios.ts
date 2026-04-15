@@ -91,6 +91,23 @@ function parseOptionalNullableString(
   return value;
 }
 
+function parseOptionalBoolean(
+  object: Record<string, unknown>,
+  key: string
+): boolean | undefined {
+  const value = object[key];
+
+  if (value == null) {
+    return undefined;
+  }
+
+  if (typeof value !== "boolean") {
+    throw new Error(`${key} must be a boolean when provided.`);
+  }
+
+  return value;
+}
+
 export const scenariosRoutes: FastifyPluginAsync = async (app) => {
   app.get("/templates", async (request, reply) => {
     const user = await requireAdminUser(request, reply);
@@ -703,6 +720,7 @@ export const scenariosRoutes: FastifyPluginAsync = async (app) => {
         controlledByUserId: parseOptionalNullableString(body, "controlledByUserId") ?? user.id,
         entityId,
         entityInput,
+        isTemporary: parseOptionalBoolean(body, "isTemporary"),
         joinSource:
           body.joinSource == null
             ? "gm_added"

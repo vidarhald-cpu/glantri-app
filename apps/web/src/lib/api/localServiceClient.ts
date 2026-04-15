@@ -78,6 +78,7 @@ export interface ScenarioParticipantFromEntityInput {
     notes?: string;
     snapshot?: unknown;
   };
+  isTemporary?: boolean;
   joinSource?: "gm_added" | "player_joined" | "imported_from_template";
   role: "player_character" | "npc" | "monster" | "animal" | "neutral" | "ally" | "enemy";
 }
@@ -517,6 +518,7 @@ export async function addScenarioParticipantFromEntityOnServer(input: {
         controlledByUserId: input.controlledByUserId,
         entityId: input.entityId,
         entityInput: input.entityInput,
+        isTemporary: input.isTemporary,
         joinSource: input.joinSource,
         role: input.role
       }),

@@ -235,6 +235,7 @@ export class ScenarioService {
       notes?: string;
       snapshot?: unknown;
     };
+    isTemporary?: boolean;
     controlledByUserId?: string | null;
     joinSource?: ScenarioParticipant["joinSource"];
     role: ScenarioParticipantRole;
@@ -244,7 +245,19 @@ export class ScenarioService {
       input.entityId != null
         ? await this.repository.getReusableEntityById(input.entityId)
         : input.entityInput
-          ? await this.createReusableEntity(input.entityInput)
+          ? input.isTemporary
+            ? {
+                createdAt: new Date().toISOString(),
+                description: input.entityInput.description,
+                gmUserId: input.entityInput.gmUserId,
+                id: "",
+                kind: input.entityInput.kind,
+                name: input.entityInput.name,
+                notes: input.entityInput.notes,
+                snapshot: input.entityInput.snapshot,
+                updatedAt: new Date().toISOString()
+              }
+            : await this.createReusableEntity(input.entityInput)
           : null;
 
     if (!entity) {
@@ -263,7 +276,7 @@ export class ScenarioService {
     });
     const participant = await this.repository.createScenarioParticipant({
       controlledByUserId: input.controlledByUserId ?? null,
-      entityId: entity.id,
+      entityId: entity.id || null,
       joinSource: input.joinSource ?? "gm_added",
       role: input.role,
       scenarioId: input.scenarioId,
@@ -276,7 +289,8 @@ export class ScenarioService {
       eventType: "participant_added",
       participantId: participant.id,
       payload: {
-        entityId: entity.id,
+        entityId: entity.id || null,
+        isTemporary: input.isTemporary ?? false,
         joinSource: participant.joinSource,
         role: participant.role,
         sourceType: participant.sourceType

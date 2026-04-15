@@ -402,6 +402,7 @@ export function createParticipantSnapshotFromEntity(input: {
 
   return {
     snapshot: scenarioParticipantSnapshotSchema.parse({
+      build: input.entity.snapshot ?? undefined,
       displayName: input.entity.name,
       entity: {
         description: input.entity.description ?? undefined,
