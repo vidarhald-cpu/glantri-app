@@ -7,8 +7,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import {
   addScenarioParticipantFromCharacterOnServer,
-  loadCampaignScenarios,
-  loadCampaigns,
+  loadJoinableScenarios,
   loadMyServerCharacters
 } from "../../../src/lib/api/localServiceClient";
 import { useSessionUser } from "../../../src/lib/auth/SessionUserContext";
@@ -23,14 +22,7 @@ import { LocalCharacterRepository } from "../../../src/lib/offline/repositories/
 const localCharacterRepository = new LocalCharacterRepository();
 
 type ServerCharacterRecord = Awaited<ReturnType<typeof loadMyServerCharacters>>[number];
-type JoinableScenarioOption = {
-  campaignId: string;
-  campaignName: string;
-  kind: Scenario["kind"];
-  scenarioId: string;
-  scenarioName: string;
-  status: Scenario["status"];
-};
+type JoinableScenarioOption = Awaited<ReturnType<typeof loadJoinableScenarios>>[number];
 
 export default function CharactersBrowser() {
   const router = useRouter();
@@ -142,33 +134,21 @@ export default function CharactersBrowser() {
       return joinableScenarios;
     }
 
-    const campaigns = await loadCampaigns();
-    const scenarioGroups = await Promise.all(
-      campaigns.map(async (campaign) => ({
-        campaign,
-        scenarios: await loadCampaignScenarios(campaign.id)
-      }))
+    const options = (await loadJoinableScenarios()).sort((left, right) =>
+      left.campaignName.localeCompare(right.campaignName)
     );
-
-    const options = scenarioGroups
-      .flatMap(({ campaign, scenarios }) =>
-        scenarios.map((scenario) => ({
-          campaignId: campaign.id,
-          campaignName: campaign.name,
-          kind: scenario.kind,
-          scenarioId: scenario.id,
-          scenarioName: scenario.name,
-          status: scenario.status
-        }))
-      )
-      .filter((scenario) => scenario.status !== "archived" && scenario.status !== "completed")
-      .sort((left, right) => left.campaignName.localeCompare(right.campaignName));
 
     setJoinableScenarios(options);
     return options;
   }
 
   async function handleToggleJoinChooser(characterId: string) {
+    const selectedEntry = browserEntries.find((entry) => entry.id === characterId);
+
+    if (!selectedEntry) {
+      return;
+    }
+
     if (joiningCharacterId === characterId) {
       setJoiningCharacterId(undefined);
       setJoiningScenarioId(undefined);
@@ -176,8 +156,15 @@ export default function CharactersBrowser() {
       return;
     }
 
+    if (selectedEntry.record.syncStatus !== "synced") {
+      setFeedback("Join scenario currently requires a server-backed character record.");
+      setJoinError(undefined);
+      return;
+    }
+
     setJoiningCharacterId(characterId);
     setJoiningScenarioId(undefined);
+    setFeedback(undefined);
     setJoinError(undefined);
     setJoinLoading(true);
 
@@ -402,6 +389,7 @@ export default function CharactersBrowser() {
                                   onClick={() => {
                                     void handleJoinScenario(entry.id);
                                   }}
+                                  disabled={!joiningScenarioId}
                                   type="button"
                                 >
                                   Confirm join

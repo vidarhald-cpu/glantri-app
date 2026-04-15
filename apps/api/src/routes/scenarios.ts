@@ -92,6 +92,49 @@ function parseOptionalNullableString(
 }
 
 export const scenariosRoutes: FastifyPluginAsync = async (app) => {
+  app.get("/scenarios/joinable", async (request, reply) => {
+    const user = await requireAuthenticatedUser(request, reply);
+
+    if (!user) {
+      return;
+    }
+
+    try {
+      const isGameMaster = user.roles.includes("game_master") || user.roles.includes("admin");
+      const campaigns = isGameMaster
+        ? user.roles.includes("admin")
+          ? await scenarioService.listCampaignsAllowingPlayerSelfJoin()
+          : await scenarioService.listCampaignsByGameMaster(user.id)
+        : await scenarioService.listCampaignsAllowingPlayerSelfJoin();
+
+      const scenarioGroups = await Promise.all(
+        campaigns.map(async (campaign) => ({
+          campaign,
+          scenarios: await scenarioService.listScenariosByCampaign(campaign.id)
+        }))
+      );
+
+      const joinableScenarios = scenarioGroups.flatMap(({ campaign, scenarios }) =>
+        scenarios
+          .filter((scenario) => scenario.status !== "archived" && scenario.status !== "completed")
+          .map((scenario) => ({
+            campaignId: campaign.id,
+            campaignName: campaign.name,
+            kind: scenario.kind,
+            scenarioId: scenario.id,
+            scenarioName: scenario.name,
+            status: scenario.status
+          }))
+      );
+
+      return { joinableScenarios };
+    } catch (error) {
+      return reply.code(400).send({
+        error: error instanceof Error ? error.message : "Unable to load joinable scenarios."
+      });
+    }
+  });
+
   app.get("/campaigns", async (request, reply) => {
     const user = await requireAdminUser(request, reply);
 
@@ -520,8 +563,29 @@ export const scenariosRoutes: FastifyPluginAsync = async (app) => {
         });
       }
 
+      const campaign = await scenarioService.getCampaignById(scenario.campaignId);
+
+      if (!campaign) {
+        return reply.code(404).send({
+          error: "Campaign not found."
+        });
+      }
+
       const body = parseBodyObject(request.body, "Character participant payload");
       const characterId = parseRequiredString(body, "characterId");
+      const isGameMaster = user.roles.includes("game_master") || user.roles.includes("admin");
+
+      if (isGameMaster && !user.roles.includes("admin") && campaign.gmUserId !== user.id) {
+        return reply.code(404).send({
+          error: "Scenario not found."
+        });
+      }
+
+      if (!isGameMaster && !campaign.settings.allowPlayerSelfJoin) {
+        return reply.code(403).send({
+          error: "Player self-join is not enabled for this campaign."
+        });
+      }
 
       if (!canEditCharacterInApi(user)) {
         const character = await characterService.getOwnedCharacter(user.id, characterId);

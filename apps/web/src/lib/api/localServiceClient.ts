@@ -36,6 +36,15 @@ export interface ServerCharacterRecord {
   updatedAt: string;
 }
 
+export interface JoinableScenarioRecord {
+  campaignId: string;
+  campaignName: string;
+  kind: Scenario["kind"];
+  scenarioId: string;
+  scenarioName: string;
+  status: Scenario["status"];
+}
+
 export interface ApiErrorPayload {
   error?: string;
   issues?: string[];
@@ -253,6 +262,17 @@ export async function loadCampaigns(): Promise<Campaign[]> {
   });
 
   return payload.campaigns;
+}
+
+export async function loadJoinableScenarios(): Promise<JoinableScenarioRecord[]> {
+  const payload = await sendJson<{ joinableScenarios: JoinableScenarioRecord[] }>(
+    "/scenarios/joinable",
+    {
+      method: "GET"
+    }
+  );
+
+  return payload.joinableScenarios;
 }
 
 export async function createCampaignOnServer(input: {

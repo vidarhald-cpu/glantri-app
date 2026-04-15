@@ -63,6 +63,10 @@ export class ScenarioService {
     return this.repository.listCampaignsByGameMaster(gmUserId);
   }
 
+  async listCampaignsAllowingPlayerSelfJoin(): Promise<Campaign[]> {
+    return this.repository.listCampaignsAllowingPlayerSelfJoin();
+  }
+
   async getCampaignById(campaignId: string): Promise<Campaign | null> {
     return this.repository.getCampaignById(campaignId);
   }
@@ -178,6 +182,14 @@ export class ScenarioService {
 
     if (!character) {
       throw new Error("Character not found.");
+    }
+
+    const existingParticipant = (await this.repository.listScenarioParticipants(input.scenarioId)).find(
+      (participant) => participant.characterId === input.characterId
+    );
+
+    if (existingParticipant) {
+      throw new Error("Character is already participating in this scenario.");
     }
 
     const equipmentState = await this.equipmentService.getCharacterEquipmentState(input.characterId);

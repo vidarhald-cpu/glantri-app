@@ -209,6 +209,7 @@ export interface ScenarioRepository {
   }): Promise<Campaign>;
   getCampaignById(campaignId: string): Promise<Campaign | null>;
   listCampaignsByGameMaster(gmUserId: string): Promise<Campaign[]>;
+  listCampaignsAllowingPlayerSelfJoin(): Promise<Campaign[]>;
   createScenario(input: {
     campaignId: string;
     description: string;
@@ -317,6 +318,19 @@ export function createPrismaScenarioRepository(): ScenarioRepository {
       const records = await prisma.campaign.findMany({
         orderBy: { updatedAt: "desc" },
         where: { gmUserId }
+      });
+
+      return records.map(mapCampaign);
+    },
+    async listCampaignsAllowingPlayerSelfJoin() {
+      const records = await prisma.campaign.findMany({
+        orderBy: { updatedAt: "desc" },
+        where: {
+          settingsJson: {
+            path: ["allowPlayerSelfJoin"],
+            equals: true
+          }
+        }
       });
 
       return records.map(mapCampaign);
