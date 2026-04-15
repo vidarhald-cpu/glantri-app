@@ -902,7 +902,7 @@ export default function ChargenWizard() {
     async function hydrate() {
       const [cachedContent, existingCharacters, sessionUser] = await Promise.all([
         contentCacheRepository.get(CONTENT_CACHE_KEY),
-        localCharacterRepository.list(),
+        localCharacterRepository.listFinalized(),
         getCurrentSessionUser().catch(() => null)
       ]);
 

@@ -34,13 +34,17 @@ export class LocalCharacterRepository {
     };
   }
 
-  async list(): Promise<LocalCharacterRecord[]> {
+  async listFinalized(): Promise<LocalCharacterRecord[]> {
     const records = await localDb.localCharacters.orderBy("finalizedAt").reverse().toArray();
 
     return records.map((record) => ({
       ...record,
       build: characterBuildSchema.parse(record.build)
     }));
+  }
+
+  async list(): Promise<LocalCharacterRecord[]> {
+    return this.listFinalized();
   }
 
   async save(input: SaveLocalCharacterInput): Promise<LocalCharacterRecord> {
