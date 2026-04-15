@@ -1,7 +1,5 @@
 "use client";
 
-import { hasAnyRole } from "@glantri/auth";
-import type { Scenario } from "@glantri/domain";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
@@ -68,32 +66,30 @@ export default function CharactersBrowser() {
       }),
     [browserEntries, currentUser, ownerFilter, typeFilter]
   );
-  const canUseGameMasterOwnerFilter = currentUser
-    ? hasAnyRole(currentUser.roles, ["game_master", "admin"])
-    : false;
   const ownerFilterOptions = useMemo(() => {
     const options: Array<{ label: string; value: CharacterBrowserOwnerFilter }> = [
       { label: "All owners", value: "all" }
     ];
 
-    if (browserEntries.some((entry) => entry.ownerCategory === "gm")) {
-      options.push({ label: "GM-owned characters", value: "gm" });
-    }
-
-    if (browserEntries.some((entry) => entry.ownerCategory === "player")) {
-      options.push({ label: "Player-owned characters", value: "player" });
-    }
-
-    if (
-      canUseGameMasterOwnerFilter &&
-      currentUser &&
-      browserEntries.some((entry) => entry.record.creatorId === currentUser.id)
-    ) {
+    if (browserEntries.some((entry) => entry.ownershipState === "mine")) {
       options.push({ label: "My characters", value: "mine" });
     }
 
+    if (
+      browserEntries.some(
+        (entry) =>
+          entry.ownershipState === "mine" || entry.ownershipState === "recorded_owner"
+      )
+    ) {
+      options.push({ label: "Has recorded owner", value: "recorded_owner" });
+    }
+
+    if (browserEntries.some((entry) => entry.ownershipState === "no_recorded_owner")) {
+      options.push({ label: "No recorded owner", value: "no_recorded_owner" });
+    }
+
     return options;
-  }, [browserEntries, canUseGameMasterOwnerFilter, currentUser]);
+  }, [browserEntries]);
 
   async function handleLoadServerCharacters() {
     if (!currentUser) {
@@ -156,8 +152,12 @@ export default function CharactersBrowser() {
       return;
     }
 
-    if (selectedEntry.record.syncStatus !== "synced") {
-      setFeedback("Join scenario currently requires a server-backed character record.");
+    if (!selectedEntry.canJoinScenario) {
+      setFeedback(
+        selectedEntry.canOpenSheet
+          ? "Join scenario currently requires a server-backed character record."
+          : "Join scenario is only available for characters this account can open."
+      );
       setJoinError(undefined);
       return;
     }
@@ -242,7 +242,8 @@ export default function CharactersBrowser() {
             <div>
               <h2 style={{ margin: "0 0 0.25rem" }}>Browser</h2>
               <p style={{ margin: 0 }}>
-                Sorted by most recently saved first, using the local record&apos;s latest update time.
+                Sorted by most recently saved first. Cards only open the character sheet when this
+                account can actually access that character.
               </p>
             </div>
 
@@ -281,24 +282,36 @@ export default function CharactersBrowser() {
                 {visibleEntries.map((entry) => (
                   <div
                     key={entry.id}
-                    aria-label={`Open ${entry.name}`}
-                    onClick={() => handleOpenCharacter(entry.id)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" || event.key === " ") {
-                        event.preventDefault();
-                        handleOpenCharacter(entry.id);
-                      }
-                    }}
-                    role="link"
+                    aria-disabled={!entry.canOpenSheet}
+                    aria-label={
+                      entry.canOpenSheet
+                        ? `Open ${entry.name}`
+                        : `${entry.name} is not openable in this account`
+                    }
+                    onClick={
+                      entry.canOpenSheet ? () => handleOpenCharacter(entry.id) : undefined
+                    }
+                    onKeyDown={
+                      entry.canOpenSheet
+                        ? (event) => {
+                            if (event.key === "Enter" || event.key === " ") {
+                              event.preventDefault();
+                              handleOpenCharacter(entry.id);
+                            }
+                          }
+                        : undefined
+                    }
+                    role={entry.canOpenSheet ? "link" : undefined}
                     style={{
-                      border: "1px solid #d9ddd8",
+                      background: entry.canOpenSheet ? "#ffffff" : "#f8f7f2",
+                      border: `1px solid ${entry.canOpenSheet ? "#d9ddd8" : "#d7d1c5"}`,
                       borderRadius: 12,
-                      cursor: "pointer",
+                      cursor: entry.canOpenSheet ? "pointer" : "default",
                       display: "grid",
                       gap: "0.6rem",
                       padding: "1rem"
                     }}
-                    tabIndex={0}
+                    tabIndex={entry.canOpenSheet ? 0 : -1}
                   >
                     <div
                       style={{
@@ -331,6 +344,16 @@ export default function CharactersBrowser() {
                         >
                           {entry.sourceLabel}
                         </span>
+                        <span
+                          style={{
+                            background: entry.canOpenSheet ? "#edf2fb" : "#f4e8e3",
+                            borderRadius: 999,
+                            fontSize: "0.85rem",
+                            padding: "0.15rem 0.5rem"
+                          }}
+                        >
+                          {entry.accessLabel}
+                        </span>
                       </div>
                     </div>
 
@@ -351,11 +374,26 @@ export default function CharactersBrowser() {
                           onClick={() => {
                             void handleToggleJoinChooser(entry.id);
                           }}
+                          disabled={!entry.canJoinScenario}
                           type="button"
                         >
                           Join scenario
                         </button>
                       </div>
+
+                      {!entry.canOpenSheet ? (
+                        <div style={{ color: "#6a5c48" }}>
+                          This character is visible in the local browser but cannot be opened by the
+                          current account.
+                        </div>
+                      ) : null}
+
+                      {entry.canOpenSheet && !entry.canJoinScenario ? (
+                        <div style={{ color: "#6a5c48" }}>
+                          Join scenario becomes available once this character has a server-backed
+                          record.
+                        </div>
+                      ) : null}
 
                       {joiningCharacterId === entry.id ? (
                         <div

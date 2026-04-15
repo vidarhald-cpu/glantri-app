@@ -88,7 +88,7 @@ describe("characterBrowser", () => {
     expect(entries.map((entry) => entry.id)).toEqual(["newer", "older"]);
   });
 
-  it("keeps player-owned and GM-owned filtering distinct", () => {
+  it("only treats recorded ownership buckets as filterable", () => {
     const entries = buildCharacterBrowserEntries(
       [
         createRecord({
@@ -108,7 +108,7 @@ describe("characterBrowser", () => {
     expect(
       filterCharacterBrowserEntries(entries, {
         currentUser,
-        ownerFilter: "player",
+        ownerFilter: "recorded_owner",
         typeFilter: "all"
       }).map((entry) => entry.id)
     ).toEqual(["player-character"]);
@@ -116,9 +116,47 @@ describe("characterBrowser", () => {
     expect(
       filterCharacterBrowserEntries(entries, {
         currentUser,
-        ownerFilter: "gm",
+        ownerFilter: "no_recorded_owner",
         typeFilter: "all"
       }).map((entry) => entry.id)
     ).toEqual(["gm-character"]);
+  });
+
+  it("marks non-owned player-visible records as restricted for non-gm users", () => {
+    const playerUser: AuthUser = {
+      email: "player@example.com",
+      id: "player-1",
+      roles: ["player"]
+    };
+
+    const entries = buildCharacterBrowserEntries(
+      [
+        createRecord({
+          creatorDisplayName: "Someone Else",
+          creatorEmail: "other@example.com",
+          creatorId: "player-2",
+          id: "other-player-character",
+          syncStatus: "synced"
+        }),
+        createRecord({
+          creatorDisplayName: "Player One",
+          creatorEmail: "player@example.com",
+          creatorId: "player-1",
+          id: "own-character",
+          syncStatus: "synced"
+        })
+      ],
+      playerUser
+    );
+
+    const restrictedEntry = entries.find((entry) => entry.id === "other-player-character");
+    const ownEntry = entries.find((entry) => entry.id === "own-character");
+
+    expect(restrictedEntry).toBeDefined();
+    expect(ownEntry).toBeDefined();
+    expect(restrictedEntry!.canOpenSheet).toBe(false);
+    expect(restrictedEntry!.accessLabel).toBe("Server-backed, not openable here");
+    expect(ownEntry!.canOpenSheet).toBe(true);
+    expect(ownEntry!.canJoinScenario).toBe(true);
   });
 });
