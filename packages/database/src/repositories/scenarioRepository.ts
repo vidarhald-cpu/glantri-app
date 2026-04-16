@@ -236,6 +236,14 @@ export interface ScenarioRepository {
     notes?: string | null;
     snapshot?: unknown;
   }): Promise<ReusableEntity>;
+  updateReusableEntity(input: {
+    description?: string | null;
+    entityId: string;
+    kind: ReusableEntity["kind"];
+    name: string;
+    notes?: string | null;
+    snapshot?: unknown;
+  }): Promise<ReusableEntity>;
   getReusableEntityById(entityId: string): Promise<ReusableEntity | null>;
   listReusableEntitiesByGameMaster(gmUserId: string): Promise<ReusableEntity[]>;
   createScenarioParticipant(input: {
@@ -398,6 +406,20 @@ export function createPrismaScenarioRepository(): ScenarioRepository {
       });
 
       return record ? mapReusableEntity(record) : null;
+    },
+    async updateReusableEntity(input) {
+      const record = await prisma.reusableEntity.update({
+        data: {
+          description: input.description ?? null,
+          kind: input.kind,
+          name: input.name,
+          notes: input.notes ?? null,
+          snapshotJson: input.snapshot == null ? Prisma.JsonNull : asJson(input.snapshot)
+        },
+        where: { id: input.entityId }
+      });
+
+      return mapReusableEntity(record);
     },
     async listReusableEntitiesByGameMaster(gmUserId) {
       const records = await prisma.reusableEntity.findMany({

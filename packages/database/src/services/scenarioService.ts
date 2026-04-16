@@ -134,6 +134,24 @@ export class ScenarioService {
     return this.repository.getReusableEntityById(entityId);
   }
 
+  async updateReusableEntity(input: {
+    description?: string;
+    entityId: string;
+    kind: ReusableEntity["kind"];
+    name: string;
+    notes?: string;
+    snapshot?: unknown;
+  }): Promise<ReusableEntity> {
+    return this.repository.updateReusableEntity({
+      description: input.description ?? null,
+      entityId: input.entityId,
+      kind: input.kind,
+      name: input.name.trim(),
+      notes: input.notes ?? null,
+      snapshot: input.snapshot
+    });
+  }
+
   async createCampaignAsset(input: {
     campaignId: string;
     createdByUserId: string;

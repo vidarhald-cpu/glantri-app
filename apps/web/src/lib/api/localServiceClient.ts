@@ -319,6 +319,28 @@ export async function createTemplateOnServer(input: {
   return payload.template;
 }
 
+export async function updateTemplateOnServer(input: {
+  description?: string;
+  kind: ReusableEntity["kind"];
+  name: string;
+  notes?: string;
+  snapshot?: unknown;
+  templateId: string;
+}): Promise<ReusableEntity> {
+  const payload = await sendJson<{ template: ReusableEntity }>(`/templates/${input.templateId}`, {
+    body: JSON.stringify({
+      description: input.description,
+      kind: input.kind,
+      name: input.name,
+      notes: input.notes,
+      snapshot: input.snapshot
+    }),
+    method: "PUT"
+  });
+
+  return payload.template;
+}
+
 export async function loadCampaignById(campaignId: string): Promise<Campaign> {
   const payload = await sendJson<{ campaign: Campaign }>(`/campaigns/${campaignId}`, {
     method: "GET"

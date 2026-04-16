@@ -157,6 +157,52 @@ export const scenariosRoutes: FastifyPluginAsync = async (app) => {
     }
   });
 
+  app.put("/templates/:templateId", async (request, reply) => {
+    const user = await requireAdminUser(request, reply);
+
+    if (!user) {
+      return;
+    }
+
+    try {
+      const { templateId } = request.params as { templateId: string };
+      const existing = await scenarioService.getReusableEntityById(templateId);
+
+      if (!existing) {
+        return reply.code(404).send({
+          error: "Template not found."
+        });
+      }
+
+      if (existing.gmUserId !== user.id && !user.roles.includes("admin")) {
+        return reply.code(403).send({
+          error: "Template access restricted."
+        });
+      }
+
+      const body = parseBodyObject(request.body, "Template payload");
+      const snapshot =
+        body.snapshot && typeof body.snapshot === "object"
+          ? { ...(body.snapshot as Record<string, unknown>), actorClass: "template" }
+          : { actorClass: "template" };
+
+      const template = await scenarioService.updateReusableEntity({
+        description: parseOptionalString(body, "description"),
+        entityId: templateId,
+        kind: reusableEntityKindSchema.parse(body.kind),
+        name: parseRequiredString(body, "name"),
+        notes: parseOptionalString(body, "notes"),
+        snapshot
+      });
+
+      return { template };
+    } catch (error) {
+      return reply.code(400).send({
+        error: error instanceof Error ? error.message : "Unable to update template."
+      });
+    }
+  });
+
   app.get("/scenarios/joinable", async (request, reply) => {
     const user = await requireAuthenticatedUser(request, reply);
 
