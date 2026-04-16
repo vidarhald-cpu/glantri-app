@@ -588,6 +588,16 @@ export default function ChargenWizard() {
       ? getSocialBand(selectedProfile.socialClassRoll)
       : undefined;
   const selectedResolvedStats = getResolvedProfileStats(selectedProfile);
+  const exchangeDisabled =
+    !selectedAdjustment ||
+    exchangeFirstStat === exchangeSecondStat ||
+    selectedAdjustment.exchangesUsed >= STANDARD_CHARGEN_METHOD_POLICY.maxExchanges;
+  const buildDisabled =
+    !selectedAdjustment ||
+    buildIncreaseStat === buildDecreaseStat ||
+    selectedAdjustment.buildsUsed >= STANDARD_CHARGEN_METHOD_POLICY.maxBuilds ||
+    selectedAdjustment.stats[buildDecreaseStat] - 2 < 1 ||
+    selectedAdjustment.stats[buildIncreaseStat] + 1 > 25;
   const selectedRolledProfileSummary = selectedRolledProfile
     ? summarizeRolledProfile({
         profile: selectedRolledProfile
@@ -1854,11 +1864,6 @@ export default function ChargenWizard() {
 
       <section style={{ display: "grid", gap: "0.75rem", opacity: selectedRolledProfile ? 1 : 0.6 }}>
         <h2 style={{ margin: 0 }}>2. Resolve stats</h2>
-        <div style={{ fontSize: "0.95rem" }}>
-          After choosing a roll, you may exchange two stats up to{" "}
-          {STANDARD_CHARGEN_METHOD_POLICY.maxExchanges} times and build stats up to{" "}
-          {STANDARD_CHARGEN_METHOD_POLICY.maxBuilds} times before choosing society.
-        </div>
         {selectedRolledProfile && selectedAdjustment && selectedProfile && selectedResolvedStats ? (
           <div style={{ display: "grid", gap: "0.75rem" }}>
             <div
@@ -1871,7 +1876,14 @@ export default function ChargenWizard() {
                 padding: "1rem"
               }}
             >
-              <div style={{ display: "flex", flexWrap: "wrap", gap: "1rem" }}>
+              <div
+                style={{
+                  alignItems: "center",
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: "0.75rem"
+                }}
+              >
                 <div>
                   Exchanges: {selectedAdjustment.exchangesUsed} /{" "}
                   {STANDARD_CHARGEN_METHOD_POLICY.maxExchanges}
@@ -1879,98 +1891,8 @@ export default function ChargenWizard() {
                 <div>
                   Builds: {selectedAdjustment.buildsUsed} / {STANDARD_CHARGEN_METHOD_POLICY.maxBuilds}
                 </div>
-              </div>
-              <div
-                style={{
-                  display: "grid",
-                  gap: "0.75rem",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))"
-                }}
-              >
-                <div style={{ border: "1px solid #e6e2d5", borderRadius: 10, padding: "0.75rem" }}>
-                  <strong>Selected roll</strong>
-                  <div
-                    style={{
-                      display: "grid",
-                      gap: "0.25rem",
-                      gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-                      marginTop: "0.75rem"
-                    }}
-                  >
-                    {glantriCharacteristicOrder.map((stat) => (
-                      <div key={`rolled-${stat}`}>
-                        {glantriCharacteristicLabels[stat]} {selectedRolledProfile.rolledStats[stat]}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                <div style={{ border: "1px solid #e6e2d5", borderRadius: 10, padding: "0.75rem" }}>
-                  <strong>Stored original/current</strong>
-                  <div style={{ color: "#5e5a50", fontSize: "0.85rem", marginTop: "0.25rem" }}>
-                    These values are saved as the character&apos;s baseline stats.
-                  </div>
-                  <div
-                    style={{
-                      display: "grid",
-                      gap: "0.25rem",
-                      gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-                      marginTop: "0.75rem"
-                    }}
-                  >
-                    {glantriCharacteristicOrder.map((stat) => (
-                      <div key={`stored-${stat}`}>
-                        {glantriCharacteristicLabels[stat]} {selectedAdjustment.stats[stat]}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                <div style={{ border: "1px solid #e6e2d5", borderRadius: 10, padding: "0.75rem" }}>
-                  <strong>After workbook modifiers</strong>
-                  <div style={{ color: "#5e5a50", fontSize: "0.85rem", marginTop: "0.25rem" }}>
-                    Strength, Dexterity, Health, and Charisma resolve after the base stats are set.
-                  </div>
-                  <div
-                    style={{
-                      display: "grid",
-                      gap: "0.25rem",
-                      gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-                      marginTop: "0.75rem"
-                    }}
-                  >
-                    {glantriCharacteristicOrder.map((stat) => (
-                      <div key={`resolved-${stat}`}>
-                        {glantriCharacteristicLabels[stat]} {selectedResolvedStats[stat]}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div
-              style={{
-                background: "#f6f5ef",
-                border: "1px solid #d9ddd8",
-                borderRadius: 12,
-                display: "grid",
-                gap: "0.75rem",
-                padding: "1rem"
-              }}
-            >
-              <strong>Exchange</strong>
-              <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
-                Swap the current values of two stats. You may do this up to{" "}
-                {STANDARD_CHARGEN_METHOD_POLICY.maxExchanges} times.
-              </div>
-              <div
-                style={{
-                  alignItems: "end",
-                  display: "grid",
-                  gap: "0.75rem",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))"
-                }}
-              >
-                <label style={{ display: "grid", gap: "0.35rem" }}>
-                  <span>First stat</span>
+                <label style={{ alignItems: "center", display: "flex", gap: "0.35rem" }}>
+                  <span style={{ fontSize: "0.85rem" }}>A</span>
                   <select
                     onChange={(event) =>
                       setExchangeFirstStat(event.target.value as GlantriCharacteristicKey)
@@ -1984,8 +1906,8 @@ export default function ChargenWizard() {
                     ))}
                   </select>
                 </label>
-                <label style={{ display: "grid", gap: "0.35rem" }}>
-                  <span>Second stat</span>
+                <label style={{ alignItems: "center", display: "flex", gap: "0.35rem" }}>
+                  <span style={{ fontSize: "0.85rem" }}>B</span>
                   <select
                     onChange={(event) =>
                       setExchangeSecondStat(event.target.value as GlantriCharacteristicKey)
@@ -1999,42 +1921,11 @@ export default function ChargenWizard() {
                     ))}
                   </select>
                 </label>
-                <button
-                  disabled={
-                    selectedAdjustment.exchangesUsed >= STANDARD_CHARGEN_METHOD_POLICY.maxExchanges
-                  }
-                  onClick={handleExchangeStats}
-                  type="button"
-                >
-                  Exchange stats
+                <button disabled={exchangeDisabled} onClick={handleExchangeStats} type="button">
+                  Swap
                 </button>
-              </div>
-            </div>
-            <div
-              style={{
-                background: "#f6f5ef",
-                border: "1px solid #d9ddd8",
-                borderRadius: 12,
-                display: "grid",
-                gap: "0.75rem",
-                padding: "1rem"
-              }}
-            >
-              <strong>Build</strong>
-              <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
-                Increase one stat by 1 and decrease another by 2. You may do this up to{" "}
-                {STANDARD_CHARGEN_METHOD_POLICY.maxBuilds} times.
-              </div>
-              <div
-                style={{
-                  alignItems: "end",
-                  display: "grid",
-                  gap: "0.75rem",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))"
-                }}
-              >
-                <label style={{ display: "grid", gap: "0.35rem" }}>
-                  <span>Increase</span>
+                <label style={{ alignItems: "center", display: "flex", gap: "0.35rem" }}>
+                  <span style={{ fontSize: "0.85rem" }}>+</span>
                   <select
                     onChange={(event) =>
                       setBuildIncreaseStat(event.target.value as GlantriCharacteristicKey)
@@ -2048,8 +1939,8 @@ export default function ChargenWizard() {
                     ))}
                   </select>
                 </label>
-                <label style={{ display: "grid", gap: "0.35rem" }}>
-                  <span>Decrease</span>
+                <label style={{ alignItems: "center", display: "flex", gap: "0.35rem" }}>
+                  <span style={{ fontSize: "0.85rem" }}>-</span>
                   <select
                     onChange={(event) =>
                       setBuildDecreaseStat(event.target.value as GlantriCharacteristicKey)
@@ -2063,18 +1954,70 @@ export default function ChargenWizard() {
                     ))}
                   </select>
                 </label>
-                <button
-                  disabled={selectedAdjustment.buildsUsed >= STANDARD_CHARGEN_METHOD_POLICY.maxBuilds}
-                  onClick={handleBuildStats}
-                  type="button"
-                >
-                  Build stats
+                <button disabled={buildDisabled} onClick={handleBuildStats} type="button">
+                  Apply
+                </button>
+                <button onClick={handleResetStatAdjustments} type="button">
+                  Reset
                 </button>
               </div>
-              <div>
-                <button onClick={handleResetStatAdjustments} type="button">
-                  Reset to selected roll
-                </button>
+              <div
+                style={{
+                  display: "grid",
+                  gap: "0.75rem",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))"
+                }}
+              >
+                <div style={{ border: "1px solid #e6e2d5", borderRadius: 10, padding: "0.75rem" }}>
+                  <strong>Base stats</strong>
+                  <div
+                    style={{
+                      display: "grid",
+                      gap: "0.25rem",
+                      gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                      marginTop: "0.75rem"
+                    }}
+                  >
+                    {glantriCharacteristicOrder.map((stat) => (
+                      <div
+                        key={`base-${stat}`}
+                        style={{
+                          alignItems: "center",
+                          display: "flex",
+                          justifyContent: "space-between"
+                        }}
+                      >
+                        <span>{glantriCharacteristicLabels[stat]}</span>
+                        <strong>{selectedAdjustment.stats[stat]}</strong>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div style={{ border: "1px solid #e6e2d5", borderRadius: 10, padding: "0.75rem" }}>
+                  <strong>Final stats</strong>
+                  <div
+                    style={{
+                      display: "grid",
+                      gap: "0.25rem",
+                      gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                      marginTop: "0.75rem"
+                    }}
+                  >
+                    {glantriCharacteristicOrder.map((stat) => (
+                      <div
+                        key={`resolved-${stat}`}
+                        style={{
+                          alignItems: "center",
+                          display: "flex",
+                          justifyContent: "space-between"
+                        }}
+                      >
+                        <span>{glantriCharacteristicLabels[stat]}</span>
+                        <strong>{selectedResolvedStats[stat]}</strong>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
             </div>
           </div>
