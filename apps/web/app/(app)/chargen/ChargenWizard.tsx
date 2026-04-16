@@ -17,12 +17,20 @@ import type {
   SkillDefinition,
   SocietyLevelAccess
 } from "@glantri/domain";
-import { getSkillGroupIds } from "@glantri/domain";
+import {
+  getSkillGroupIds,
+  glantriCharacteristicLabels,
+  glantriCharacteristicOrder
+} from "@glantri/domain";
 import {
   applyProfessionGrants,
+  applyChargenStatBuild,
+  applyChargenStatExchange,
   allocateChargenPoint,
+  buildResolvedProfile,
   buildChargenDraftView,
   buildChargenSkillAccessSummary,
+  createChargenStatAdjustmentState,
   createChargenProgression,
   evaluateSkillSelection,
   finalizeChargenDraft,
@@ -30,11 +38,14 @@ import {
   removeChargenPoint,
   removeSecondaryPoint,
   resolveEffectiveProfessionPackage,
+  STANDARD_CHARGEN_METHOD_POLICY,
   reviewChargenDraft,
   selectProfile,
   selectBestSkillGroupContribution,
   spendSecondaryPoint,
   summarizeRolledProfile,
+  getResolvedProfileStats,
+  type ChargenStatAdjustmentState,
   type RolledProfileSummary
 } from "@glantri/rules-engine";
 
@@ -461,12 +472,14 @@ function getSkillLinkedStatAverage(
   profile: RolledCharacterProfile | undefined,
   skill: SkillDefinition
 ): number {
-  if (!profile) {
+  const resolvedStats = getResolvedProfileStats(profile);
+
+  if (!resolvedStats) {
     return 0;
   }
 
   const total = skill.linkedStats.reduce(
-    (sum, stat) => sum + (profile.rolledStats[stat as GlantriCharacteristicKey] ?? 0),
+    (sum, stat) => sum + (resolvedStats[stat as GlantriCharacteristicKey] ?? 0),
     0
   );
 
@@ -525,6 +538,9 @@ export default function ChargenWizard() {
   const [feedback, setFeedback] = useState<string[]>([]);
   const [hasStartedChargen, setHasStartedChargen] = useState(false);
   const [hydrated, setHydrated] = useState(false);
+  const [profileAdjustments, setProfileAdjustments] = useState<
+    Record<string, ChargenStatAdjustmentState>
+  >({});
   const [progression, setProgression] = useState<CharacterProgression>(createChargenProgression());
   const [rowActionFeedback, setRowActionFeedback] = useState<Record<string, string>>({});
   const [rolledProfiles, setRolledProfiles] = useState<RolledCharacterProfile[]>([]);
@@ -548,17 +564,33 @@ export default function ChargenWizard() {
   const [skillTypeFilter, setSkillTypeFilter] = useState<SkillBrowseTypeFilter>("all");
   const [specializationSearch, setSpecializationSearch] = useState("");
   const [showAllSpecializations, setShowAllSpecializations] = useState(false);
+  const [exchangeFirstStat, setExchangeFirstStat] = useState<GlantriCharacteristicKey>("str");
+  const [exchangeSecondStat, setExchangeSecondStat] = useState<GlantriCharacteristicKey>("dex");
+  const [buildIncreaseStat, setBuildIncreaseStat] = useState<GlantriCharacteristicKey>("str");
+  const [buildDecreaseStat, setBuildDecreaseStat] = useState<GlantriCharacteristicKey>("dex");
 
-  const selectedProfile = selectedProfileId
+  const selectedRolledProfile = selectedProfileId
     ? selectProfile({ profileId: selectedProfileId, profiles: rolledProfiles })
     : undefined;
+  const selectedAdjustment =
+    selectedRolledProfile &&
+    (profileAdjustments[selectedRolledProfile.id] ??
+      createChargenStatAdjustmentState(selectedRolledProfile.rolledStats));
+  const selectedProfile =
+    selectedRolledProfile && selectedAdjustment
+      ? buildResolvedProfile({
+          adjustedStats: selectedAdjustment.stats,
+          profile: selectedRolledProfile
+        })
+      : undefined;
   const selectedSocialBand =
     selectedProfile?.socialClassRoll !== undefined
       ? getSocialBand(selectedProfile.socialClassRoll)
       : undefined;
-  const selectedProfileSummary = selectedProfile
+  const selectedResolvedStats = getResolvedProfileStats(selectedProfile);
+  const selectedRolledProfileSummary = selectedRolledProfile
     ? summarizeRolledProfile({
-        profile: selectedProfile
+        profile: selectedRolledProfile
       })
     : undefined;
   const sortedRolledProfiles = rolledProfiles
@@ -1019,6 +1051,23 @@ export default function ChargenWizard() {
   }, [defaultExpandedAllocationSections, selectedProfessionId]);
 
   useEffect(() => {
+    if (!selectedRolledProfile) {
+      return;
+    }
+
+    setProfileAdjustments((current) => {
+      if (current[selectedRolledProfile.id]) {
+        return current;
+      }
+
+      return {
+        ...current,
+        [selectedRolledProfile.id]: createChargenStatAdjustmentState(selectedRolledProfile.rolledStats)
+      };
+    });
+  }, [selectedRolledProfile]);
+
+  useEffect(() => {
     if (!hydrated) {
       return;
     }
@@ -1099,11 +1148,74 @@ export default function ChargenWizard() {
     setRowActionFeedback({});
   }
 
+  function handleResetStatAdjustments() {
+    if (!selectedRolledProfile) {
+      return;
+    }
+
+    setProfileAdjustments((current) => ({
+      ...current,
+      [selectedRolledProfile.id]: createChargenStatAdjustmentState(selectedRolledProfile.rolledStats)
+    }));
+    setFeedback(["Stat exchanges and builds were reset to the selected roll."]);
+  }
+
+  function handleExchangeStats() {
+    if (!selectedRolledProfile || !selectedAdjustment) {
+      return;
+    }
+
+    const result = applyChargenStatExchange({
+      firstStat: exchangeFirstStat,
+      secondStat: exchangeSecondStat,
+      state: selectedAdjustment
+    });
+
+    if (result.error) {
+      setFeedback([result.error]);
+      return;
+    }
+
+    setProfileAdjustments((current) => ({
+      ...current,
+      [selectedRolledProfile.id]: result.state
+    }));
+    setFeedback([
+      `${glantriCharacteristicLabels[exchangeFirstStat]} and ${glantriCharacteristicLabels[exchangeSecondStat]} were exchanged.`
+    ]);
+  }
+
+  function handleBuildStats() {
+    if (!selectedRolledProfile || !selectedAdjustment) {
+      return;
+    }
+
+    const result = applyChargenStatBuild({
+      decreaseStat: buildDecreaseStat,
+      increaseStat: buildIncreaseStat,
+      state: selectedAdjustment
+    });
+
+    if (result.error) {
+      setFeedback([result.error]);
+      return;
+    }
+
+    setProfileAdjustments((current) => ({
+      ...current,
+      [selectedRolledProfile.id]: result.state
+    }));
+    setFeedback([
+      `${glantriCharacteristicLabels[buildIncreaseStat]} increased by 1 and ${glantriCharacteristicLabels[buildDecreaseStat]} decreased by 2.`
+    ]);
+  }
+
   async function handleStartChargen() {
     await chargenSessionRepository.delete(SESSION_ID);
 
     setHasStartedChargen(true);
     setRolledProfiles(generateProfiles({}));
+    setProfileAdjustments({});
     setCharacterName("");
     setFeedback([]);
     setProgression(createChargenProgression());
@@ -1632,7 +1744,7 @@ export default function ChargenWizard() {
             {showRolledProfileOptions ? "Collapse stats" : "Expand stats"}
           </button>
         </div>
-        {selectedProfile && !showRolledProfileOptions ? (
+        {selectedRolledProfile && !showRolledProfileOptions ? (
           <div
             style={{
               background: "#f6f5ef",
@@ -1651,15 +1763,15 @@ export default function ChargenWizard() {
                 justifyContent: "space-between"
               }}
             >
-              <strong>{selectedProfile.label}</strong>
+              <strong>{selectedRolledProfile.label}</strong>
               <button onClick={() => setShowRolledProfileOptions(true)} type="button">
                 Expand stats
               </button>
             </div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: "1rem" }}>
-              <div>Total {selectedProfileSummary?.totalCharacteristicSum ?? 0}</div>
-              <div>Distraction {selectedProfile.distractionLevel}</div>
-              <div>Social band {formatProfileSocialBand(selectedProfile)}</div>
+              <div>Total {selectedRolledProfileSummary?.totalCharacteristicSum ?? 0}</div>
+              <div>Distraction {selectedRolledProfile.distractionLevel}</div>
+              <div>Social band {formatProfileSocialBand(selectedRolledProfile)}</div>
             </div>
           </div>
         ) : showRolledProfileOptions ? (
@@ -1740,8 +1852,249 @@ export default function ChargenWizard() {
         )}
       </section>
 
+      <section style={{ display: "grid", gap: "0.75rem", opacity: selectedRolledProfile ? 1 : 0.6 }}>
+        <h2 style={{ margin: 0 }}>2. Resolve stats</h2>
+        <div style={{ fontSize: "0.95rem" }}>
+          After choosing a roll, you may exchange two stats up to{" "}
+          {STANDARD_CHARGEN_METHOD_POLICY.maxExchanges} times and build stats up to{" "}
+          {STANDARD_CHARGEN_METHOD_POLICY.maxBuilds} times before choosing society.
+        </div>
+        {selectedRolledProfile && selectedAdjustment && selectedProfile && selectedResolvedStats ? (
+          <div style={{ display: "grid", gap: "0.75rem" }}>
+            <div
+              style={{
+                background: "#f6f5ef",
+                border: "1px solid #d9ddd8",
+                borderRadius: 12,
+                display: "grid",
+                gap: "0.75rem",
+                padding: "1rem"
+              }}
+            >
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "1rem" }}>
+                <div>
+                  Exchanges: {selectedAdjustment.exchangesUsed} /{" "}
+                  {STANDARD_CHARGEN_METHOD_POLICY.maxExchanges}
+                </div>
+                <div>
+                  Builds: {selectedAdjustment.buildsUsed} / {STANDARD_CHARGEN_METHOD_POLICY.maxBuilds}
+                </div>
+              </div>
+              <div
+                style={{
+                  display: "grid",
+                  gap: "0.75rem",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))"
+                }}
+              >
+                <div style={{ border: "1px solid #e6e2d5", borderRadius: 10, padding: "0.75rem" }}>
+                  <strong>Selected roll</strong>
+                  <div
+                    style={{
+                      display: "grid",
+                      gap: "0.25rem",
+                      gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                      marginTop: "0.75rem"
+                    }}
+                  >
+                    {glantriCharacteristicOrder.map((stat) => (
+                      <div key={`rolled-${stat}`}>
+                        {glantriCharacteristicLabels[stat]} {selectedRolledProfile.rolledStats[stat]}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div style={{ border: "1px solid #e6e2d5", borderRadius: 10, padding: "0.75rem" }}>
+                  <strong>Stored original/current</strong>
+                  <div style={{ color: "#5e5a50", fontSize: "0.85rem", marginTop: "0.25rem" }}>
+                    These values are saved as the character&apos;s baseline stats.
+                  </div>
+                  <div
+                    style={{
+                      display: "grid",
+                      gap: "0.25rem",
+                      gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                      marginTop: "0.75rem"
+                    }}
+                  >
+                    {glantriCharacteristicOrder.map((stat) => (
+                      <div key={`stored-${stat}`}>
+                        {glantriCharacteristicLabels[stat]} {selectedAdjustment.stats[stat]}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div style={{ border: "1px solid #e6e2d5", borderRadius: 10, padding: "0.75rem" }}>
+                  <strong>After workbook modifiers</strong>
+                  <div style={{ color: "#5e5a50", fontSize: "0.85rem", marginTop: "0.25rem" }}>
+                    Strength, Dexterity, Health, and Charisma resolve after the base stats are set.
+                  </div>
+                  <div
+                    style={{
+                      display: "grid",
+                      gap: "0.25rem",
+                      gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                      marginTop: "0.75rem"
+                    }}
+                  >
+                    {glantriCharacteristicOrder.map((stat) => (
+                      <div key={`resolved-${stat}`}>
+                        {glantriCharacteristicLabels[stat]} {selectedResolvedStats[stat]}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div
+              style={{
+                background: "#f6f5ef",
+                border: "1px solid #d9ddd8",
+                borderRadius: 12,
+                display: "grid",
+                gap: "0.75rem",
+                padding: "1rem"
+              }}
+            >
+              <strong>Exchange</strong>
+              <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
+                Swap the current values of two stats. You may do this up to{" "}
+                {STANDARD_CHARGEN_METHOD_POLICY.maxExchanges} times.
+              </div>
+              <div
+                style={{
+                  alignItems: "end",
+                  display: "grid",
+                  gap: "0.75rem",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))"
+                }}
+              >
+                <label style={{ display: "grid", gap: "0.35rem" }}>
+                  <span>First stat</span>
+                  <select
+                    onChange={(event) =>
+                      setExchangeFirstStat(event.target.value as GlantriCharacteristicKey)
+                    }
+                    value={exchangeFirstStat}
+                  >
+                    {glantriCharacteristicOrder.map((stat) => (
+                      <option key={`exchange-a-${stat}`} value={stat}>
+                        {glantriCharacteristicLabels[stat]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label style={{ display: "grid", gap: "0.35rem" }}>
+                  <span>Second stat</span>
+                  <select
+                    onChange={(event) =>
+                      setExchangeSecondStat(event.target.value as GlantriCharacteristicKey)
+                    }
+                    value={exchangeSecondStat}
+                  >
+                    {glantriCharacteristicOrder.map((stat) => (
+                      <option key={`exchange-b-${stat}`} value={stat}>
+                        {glantriCharacteristicLabels[stat]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <button
+                  disabled={
+                    selectedAdjustment.exchangesUsed >= STANDARD_CHARGEN_METHOD_POLICY.maxExchanges
+                  }
+                  onClick={handleExchangeStats}
+                  type="button"
+                >
+                  Exchange stats
+                </button>
+              </div>
+            </div>
+            <div
+              style={{
+                background: "#f6f5ef",
+                border: "1px solid #d9ddd8",
+                borderRadius: 12,
+                display: "grid",
+                gap: "0.75rem",
+                padding: "1rem"
+              }}
+            >
+              <strong>Build</strong>
+              <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
+                Increase one stat by 1 and decrease another by 2. You may do this up to{" "}
+                {STANDARD_CHARGEN_METHOD_POLICY.maxBuilds} times.
+              </div>
+              <div
+                style={{
+                  alignItems: "end",
+                  display: "grid",
+                  gap: "0.75rem",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))"
+                }}
+              >
+                <label style={{ display: "grid", gap: "0.35rem" }}>
+                  <span>Increase</span>
+                  <select
+                    onChange={(event) =>
+                      setBuildIncreaseStat(event.target.value as GlantriCharacteristicKey)
+                    }
+                    value={buildIncreaseStat}
+                  >
+                    {glantriCharacteristicOrder.map((stat) => (
+                      <option key={`build-plus-${stat}`} value={stat}>
+                        {glantriCharacteristicLabels[stat]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label style={{ display: "grid", gap: "0.35rem" }}>
+                  <span>Decrease</span>
+                  <select
+                    onChange={(event) =>
+                      setBuildDecreaseStat(event.target.value as GlantriCharacteristicKey)
+                    }
+                    value={buildDecreaseStat}
+                  >
+                    {glantriCharacteristicOrder.map((stat) => (
+                      <option key={`build-minus-${stat}`} value={stat}>
+                        {glantriCharacteristicLabels[stat]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <button
+                  disabled={selectedAdjustment.buildsUsed >= STANDARD_CHARGEN_METHOD_POLICY.maxBuilds}
+                  onClick={handleBuildStats}
+                  type="button"
+                >
+                  Build stats
+                </button>
+              </div>
+              <div>
+                <button onClick={handleResetStatAdjustments} type="button">
+                  Reset to selected roll
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div
+            style={{
+              background: "#f6f5ef",
+              border: "1px solid #d9ddd8",
+              borderRadius: 12,
+              color: "#5e5a50",
+              padding: "1rem"
+            }}
+          >
+            Choose a rolled profile first to exchange or build stats.
+          </div>
+        )}
+      </section>
+
       <section style={{ display: "grid", gap: "0.75rem", opacity: selectedProfile ? 1 : 0.6 }}>
-        <h2 style={{ margin: 0 }}>2. Choose society</h2>
+        <h2 style={{ margin: 0 }}>3. Choose society</h2>
         <div style={{ fontSize: "0.95rem" }}>
           Choose the society used for this character. Society determines the class labels and later
           skill, education, and profession access.
@@ -1842,7 +2195,7 @@ export default function ChargenWizard() {
           opacity: selectedProfile && selectedSociety ? 1 : 0.6
         }}
       >
-        <h2 style={{ margin: 0 }}>3. Social class</h2>
+        <h2 style={{ margin: 0 }}>4. Social class</h2>
         <div style={{ fontSize: "0.95rem" }}>
           Your social roll maps to one of four universal bands. The selected society determines the
           class name for that band.
@@ -1882,7 +2235,7 @@ export default function ChargenWizard() {
           opacity: selectedSocietyAccess ? 1 : 0.6
         }}
       >
-        <h2 style={{ margin: 0 }}>4. Choose profession</h2>
+        <h2 style={{ margin: 0 }}>5. Choose profession</h2>
         <div style={{ fontSize: "0.95rem" }}>
           Pick a profession subtype, then review the included profession packages. Favored package
           preview shows likely reach, not a direct grant by itself.

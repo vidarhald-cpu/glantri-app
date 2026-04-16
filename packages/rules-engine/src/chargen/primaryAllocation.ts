@@ -23,15 +23,14 @@ import { calculateGroupLevel } from "../skills/calculateGroupLevel";
 import { calculateSpecializationLevel } from "../skills/calculateSpecializationLevel";
 import { evaluateSkillSelection } from "../skills/evaluateSkillSelection";
 import { selectBestSkillGroupContribution } from "../skills/selectBestSkillGroupContribution";
+import { STANDARD_CHARGEN_METHOD_POLICY } from "./policy";
+import { getResolvedProfileStats } from "./statResolution";
 
 const GROUP_POINT_COST = 4;
 const ORDINARY_SKILL_POINT_COST = 2;
 const SECONDARY_SKILL_POINT_COST = 1;
 const NEW_SPECIALIZATION_COST = 4;
 const EXISTING_SPECIALIZATION_COST = 2;
-const DEFAULT_PRIMARY_POOL_TOTAL = 60;
-const DEFAULT_SECONDARY_POOL_TOTAL = 0;
-const ORDINARY_POOL_TOTAL = 60;
 const LITERACY_SKILL_ID = "literacy";
 
 interface CanonicalContentShape {
@@ -266,9 +265,11 @@ function recalculateProgression(progression: CharacterProgression): CharacterPro
     chargenMode: progression.chargenMode ?? "standard",
     educationPoints: progression.educationPoints ?? 0,
     primaryPoolSpent: progression.primaryPoolSpent ?? 0,
-    primaryPoolTotal: progression.primaryPoolTotal ?? DEFAULT_PRIMARY_POOL_TOTAL,
+    primaryPoolTotal:
+      progression.primaryPoolTotal ?? STANDARD_CHARGEN_METHOD_POLICY.primaryPoolTotal,
     secondaryPoolSpent: progression.secondaryPoolSpent ?? 0,
-    secondaryPoolTotal: progression.secondaryPoolTotal ?? DEFAULT_SECONDARY_POOL_TOTAL,
+    secondaryPoolTotal:
+      progression.secondaryPoolTotal ?? STANDARD_CHARGEN_METHOD_POLICY.secondaryPoolTotal,
     skillGroups: progression.skillGroups.map(normalizeGroup),
     skills: progression.skills.map(normalizeSkill),
     specializations: progression.specializations.map(normalizeSpecialization)
@@ -510,13 +511,13 @@ function getLinkedStatAverage(
   profile: RolledCharacterProfile | undefined,
   skill: SkillDefinition
 ): number {
-  if (!profile) {
+  const resolvedStats = getResolvedProfileStats(profile);
+
+  if (!resolvedStats) {
     return 0;
   }
 
-  const values = skill.linkedStats.map(
-    (stat) => profile.rolledStats[stat as GlantriCharacteristicKey] ?? 0
-  );
+  const values = skill.linkedStats.map((stat) => resolvedStats[stat as GlantriCharacteristicKey] ?? 0);
   const total = values.reduce((sum, value) => sum + value, 0);
 
   return Math.floor(total / values.length);
@@ -617,17 +618,19 @@ function getEvaluationMessages(input: {
 }
 
 export function getOrdinaryPoolTotal(): number {
-  return ORDINARY_POOL_TOTAL;
+  return STANDARD_CHARGEN_METHOD_POLICY.primaryPoolTotal;
 }
 
 export function getFlexiblePoolTotal(
   profile: RolledCharacterProfile | undefined
 ): number {
-  if (!profile) {
+  const resolvedStats = getResolvedProfileStats(profile);
+
+  if (!resolvedStats) {
     return 0;
   }
 
-  return (profile.rolledStats.int ?? 0) + (profile.rolledStats.lck ?? 0);
+  return (resolvedStats.int ?? 0) + (resolvedStats.lck ?? 0);
 }
 
 export function createChargenProgression(mode: ChargenMode = "standard"): CharacterProgression {
@@ -636,9 +639,9 @@ export function createChargenProgression(mode: ChargenMode = "standard"): Charac
     educationPoints: 0,
     level: 1,
     primaryPoolSpent: 0,
-    primaryPoolTotal: DEFAULT_PRIMARY_POOL_TOTAL,
+    primaryPoolTotal: STANDARD_CHARGEN_METHOD_POLICY.primaryPoolTotal,
     secondaryPoolSpent: 0,
-    secondaryPoolTotal: DEFAULT_SECONDARY_POOL_TOTAL,
+    secondaryPoolTotal: STANDARD_CHARGEN_METHOD_POLICY.secondaryPoolTotal,
     skillGroups: [],
     skills: [],
     specializations: []

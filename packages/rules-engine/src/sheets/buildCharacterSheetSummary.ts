@@ -10,6 +10,7 @@ import type {
 } from "@glantri/domain";
 
 import { buildChargenDraftView, type ChargenDraftView } from "../chargen/primaryAllocation";
+import { getResolvedProfileStats } from "../chargen/statResolution";
 import {
   buildCharacterEquipmentLoadoutSummary,
   calculateEquipmentDrivenDodge,
@@ -99,6 +100,7 @@ export function buildCharacterSheetSummary(input: {
   content: CanonicalContentShape;
   statModifiers?: Record<string, number>;
 }): CharacterSheetSummary {
+  const resolvedStats = getResolvedProfileStats(input.build.profile) ?? input.build.profile.rolledStats;
   const draftView = buildChargenDraftView({
     content: input.content,
     professionId: input.build.professionId,
@@ -108,7 +110,7 @@ export function buildCharacterSheetSummary(input: {
     societyLevel: input.build.societyLevel
   });
   const adjustedStats = calculateAdjustedStats({
-    baseStats: input.build.profile.rolledStats,
+    baseStats: resolvedStats,
     modifiers: {
       ...(input.build.statModifiers ?? {}),
       ...(input.statModifiers ?? {})

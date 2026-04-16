@@ -65,6 +65,7 @@ export const rolledCharacterProfileSchema = z.object({
   description: z.string().optional(),
   distractionLevel: z.number().int().min(2).max(6),
   rolledStats: glantriCharacteristicBlockSchema,
+  resolvedStats: glantriCharacteristicBlockSchema.optional(),
   socialClassEducationValue: z.number().int().nonnegative().optional(),
   socialClassResult: z.string().min(1).optional(),
   socialClassRoll: z.number().int().min(1).max(20).optional(),

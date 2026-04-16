@@ -3,11 +3,7 @@ import type {
   RolledCharacterProfile
 } from "@glantri/domain";
 
-import { glantriCharacteristicOrder } from "@glantri/domain";
-import {
-  getDexteritySizeModifier,
-  getGlantriStatModifier
-} from "../stats/characteristicGms";
+import { STANDARD_CHARGEN_METHOD_POLICY } from "./policy";
 
 export interface GenerateProfilesInput {
   count?: number;
@@ -16,7 +12,6 @@ export interface GenerateProfilesInput {
   socialClassTableId?: string;
 }
 
-const DEFAULT_PROFILE_COUNT = 20;
 const DEFAULT_SOCIAL_CLASS_TABLE_ID = "scandia_social_class_v1";
 const SOCIAL_CLASS_THRESHOLDS = [
   { educationValue: 2, maxRoll: 10, result: "Bønder" },
@@ -67,7 +62,7 @@ function rollSocialClass(input: {
 }
 
 function generateCharacteristicBlock(rng: () => number): GlantriCharacteristicBlock {
-  const raw = {
+  return {
     cha: rollFourD6DropLowest(rng),
     com: rollFourD6DropLowest(rng),
     con: rollFourD6DropLowest(rng),
@@ -79,25 +74,7 @@ function generateCharacteristicBlock(rng: () => number): GlantriCharacteristicBl
     siz: rollFourD6DropLowest(rng),
     str: rollFourD6DropLowest(rng),
     will: rollFourD6DropLowest(rng)
-  } as const;
-
-  const adjusted: GlantriCharacteristicBlock = {
-    cha: raw.cha + getGlantriStatModifier(raw.com),
-    com: raw.com,
-    con: raw.con,
-    dex: raw.dex + getDexteritySizeModifier(raw.siz),
-    health: raw.health + getGlantriStatModifier(raw.con),
-    int: raw.int,
-    lck: raw.lck,
-    pow: raw.pow,
-    siz: raw.siz,
-    str: raw.str + getGlantriStatModifier(raw.siz),
-    will: raw.will
   };
-
-  return Object.fromEntries(
-    glantriCharacteristicOrder.map((key) => [key, adjusted[key]])
-  ) as GlantriCharacteristicBlock;
 }
 
 function createRolledProfile(input: {
@@ -130,7 +107,7 @@ export function generateProfiles(input: GenerateProfilesInput): RolledCharacterP
   const socialClassTableId = input.socialClassTableId ?? DEFAULT_SOCIAL_CLASS_TABLE_ID;
   const rollSets =
     input.rollSets ??
-    Array.from({ length: input.count ?? DEFAULT_PROFILE_COUNT }, () =>
+    Array.from({ length: input.count ?? STANDARD_CHARGEN_METHOD_POLICY.displayedRollCount }, () =>
       generateCharacteristicBlock(rng)
     );
 
