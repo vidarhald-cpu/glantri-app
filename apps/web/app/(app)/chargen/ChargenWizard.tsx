@@ -1872,151 +1872,149 @@ export default function ChargenWizard() {
                 border: "1px solid #d9ddd8",
                 borderRadius: 12,
                 display: "grid",
-                gap: "0.75rem",
+                gap: "1rem",
                 padding: "1rem"
               }}
             >
               <div
                 style={{
-                  alignItems: "center",
-                  display: "flex",
-                  flexWrap: "wrap",
-                  gap: "0.75rem"
-                }}
-              >
-                <div>
-                  Exchanges: {selectedAdjustment.exchangesUsed} /{" "}
-                  {STANDARD_CHARGEN_METHOD_POLICY.maxExchanges}
-                </div>
-                <div>
-                  Builds: {selectedAdjustment.buildsUsed} / {STANDARD_CHARGEN_METHOD_POLICY.maxBuilds}
-                </div>
-                <label style={{ alignItems: "center", display: "flex", gap: "0.35rem" }}>
-                  <span style={{ fontSize: "0.85rem" }}>A</span>
-                  <select
-                    onChange={(event) =>
-                      setExchangeFirstStat(event.target.value as GlantriCharacteristicKey)
-                    }
-                    value={exchangeFirstStat}
-                  >
-                    {glantriCharacteristicOrder.map((stat) => (
-                      <option key={`exchange-a-${stat}`} value={stat}>
-                        {glantriCharacteristicLabels[stat]}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label style={{ alignItems: "center", display: "flex", gap: "0.35rem" }}>
-                  <span style={{ fontSize: "0.85rem" }}>B</span>
-                  <select
-                    onChange={(event) =>
-                      setExchangeSecondStat(event.target.value as GlantriCharacteristicKey)
-                    }
-                    value={exchangeSecondStat}
-                  >
-                    {glantriCharacteristicOrder.map((stat) => (
-                      <option key={`exchange-b-${stat}`} value={stat}>
-                        {glantriCharacteristicLabels[stat]}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <button disabled={exchangeDisabled} onClick={handleExchangeStats} type="button">
-                  Swap
-                </button>
-                <label style={{ alignItems: "center", display: "flex", gap: "0.35rem" }}>
-                  <span style={{ fontSize: "0.85rem" }}>+</span>
-                  <select
-                    onChange={(event) =>
-                      setBuildIncreaseStat(event.target.value as GlantriCharacteristicKey)
-                    }
-                    value={buildIncreaseStat}
-                  >
-                    {glantriCharacteristicOrder.map((stat) => (
-                      <option key={`build-plus-${stat}`} value={stat}>
-                        {glantriCharacteristicLabels[stat]}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label style={{ alignItems: "center", display: "flex", gap: "0.35rem" }}>
-                  <span style={{ fontSize: "0.85rem" }}>-</span>
-                  <select
-                    onChange={(event) =>
-                      setBuildDecreaseStat(event.target.value as GlantriCharacteristicKey)
-                    }
-                    value={buildDecreaseStat}
-                  >
-                    {glantriCharacteristicOrder.map((stat) => (
-                      <option key={`build-minus-${stat}`} value={stat}>
-                        {glantriCharacteristicLabels[stat]}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <button disabled={buildDisabled} onClick={handleBuildStats} type="button">
-                  Apply
-                </button>
-                <button onClick={handleResetStatAdjustments} type="button">
-                  Reset
-                </button>
-              </div>
-              <div
-                style={{
+                  alignItems: "start",
                   display: "grid",
-                  gap: "0.75rem",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))"
+                  gap: "1rem",
+                  gridTemplateColumns: "minmax(0, 1fr) minmax(250px, 320px)"
                 }}
               >
-                <div style={{ border: "1px solid #e6e2d5", borderRadius: 10, padding: "0.75rem" }}>
-                  <strong>Base stats</strong>
+                <div style={{ border: "1px solid #e6e2d5", borderRadius: 10, overflow: "hidden" }}>
                   <div
                     style={{
+                      background: "#ece8da",
                       display: "grid",
-                      gap: "0.25rem",
-                      gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-                      marginTop: "0.75rem"
+                      fontSize: "0.8rem",
+                      fontWeight: 600,
+                      gap: "0.75rem",
+                      gridTemplateColumns: "minmax(0, 1.2fr) 64px 64px",
+                      letterSpacing: "0.02em",
+                      padding: "0.65rem 0.85rem",
+                      textTransform: "uppercase"
                     }}
                   >
-                    {glantriCharacteristicOrder.map((stat) => (
+                    <span>Stat</span>
+                    <span style={{ textAlign: "right" }}>Base</span>
+                    <span style={{ textAlign: "right" }}>Final</span>
+                  </div>
+                  <div style={{ display: "grid" }}>
+                    {glantriCharacteristicOrder.map((stat, index) => (
                       <div
-                        key={`base-${stat}`}
+                        key={`stat-row-${stat}`}
                         style={{
-                          alignItems: "center",
-                          display: "flex",
-                          justifyContent: "space-between"
+                          background: index % 2 === 0 ? "#f6f5ef" : "#f2efe6",
+                          borderTop: index === 0 ? "none" : "1px solid #e6e2d5",
+                          display: "grid",
+                          gap: "0.75rem",
+                          gridTemplateColumns: "minmax(0, 1.2fr) 64px 64px",
+                          padding: "0.6rem 0.85rem"
                         }}
                       >
                         <span>{glantriCharacteristicLabels[stat]}</span>
-                        <strong>{selectedAdjustment.stats[stat]}</strong>
+                        <strong style={{ textAlign: "right" }}>{selectedAdjustment.stats[stat]}</strong>
+                        <strong style={{ textAlign: "right" }}>{selectedResolvedStats[stat]}</strong>
                       </div>
                     ))}
                   </div>
                 </div>
-                <div style={{ border: "1px solid #e6e2d5", borderRadius: 10, padding: "0.75rem" }}>
-                  <strong>Final stats</strong>
-                  <div
-                    style={{
-                      display: "grid",
-                      gap: "0.25rem",
-                      gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-                      marginTop: "0.75rem"
-                    }}
-                  >
-                    {glantriCharacteristicOrder.map((stat) => (
-                      <div
-                        key={`resolved-${stat}`}
-                        style={{
-                          alignItems: "center",
-                          display: "flex",
-                          justifyContent: "space-between"
-                        }}
-                      >
-                        <span>{glantriCharacteristicLabels[stat]}</span>
-                        <strong>{selectedResolvedStats[stat]}</strong>
-                      </div>
-                    ))}
+                <div
+                  style={{
+                    background: "#f2efe6",
+                    border: "1px solid #e6e2d5",
+                    borderRadius: 10,
+                    display: "grid",
+                    gap: "0.85rem",
+                    padding: "0.85rem"
+                  }}
+                >
+                  <div style={{ display: "grid", gap: "0.25rem" }}>
+                    <div>
+                      Exchanges: {selectedAdjustment.exchangesUsed} /{" "}
+                      {STANDARD_CHARGEN_METHOD_POLICY.maxExchanges}
+                    </div>
+                    <div>
+                      Builds: {selectedAdjustment.buildsUsed} /{" "}
+                      {STANDARD_CHARGEN_METHOD_POLICY.maxBuilds}
+                    </div>
                   </div>
+                  <div style={{ display: "grid", gap: "0.5rem" }}>
+                    <label style={{ display: "grid", gap: "0.25rem" }}>
+                      <span style={{ fontSize: "0.85rem" }}>Stat A</span>
+                      <select
+                        onChange={(event) =>
+                          setExchangeFirstStat(event.target.value as GlantriCharacteristicKey)
+                        }
+                        value={exchangeFirstStat}
+                      >
+                        {glantriCharacteristicOrder.map((stat) => (
+                          <option key={`exchange-a-${stat}`} value={stat}>
+                            {glantriCharacteristicLabels[stat]}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label style={{ display: "grid", gap: "0.25rem" }}>
+                      <span style={{ fontSize: "0.85rem" }}>Stat B</span>
+                      <select
+                        onChange={(event) =>
+                          setExchangeSecondStat(event.target.value as GlantriCharacteristicKey)
+                        }
+                        value={exchangeSecondStat}
+                      >
+                        {glantriCharacteristicOrder.map((stat) => (
+                          <option key={`exchange-b-${stat}`} value={stat}>
+                            {glantriCharacteristicLabels[stat]}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <button disabled={exchangeDisabled} onClick={handleExchangeStats} type="button">
+                      Swap
+                    </button>
+                  </div>
+                  <div style={{ display: "grid", gap: "0.5rem" }}>
+                    <label style={{ display: "grid", gap: "0.25rem" }}>
+                      <span style={{ fontSize: "0.85rem" }}>+ Stat</span>
+                      <select
+                        onChange={(event) =>
+                          setBuildIncreaseStat(event.target.value as GlantriCharacteristicKey)
+                        }
+                        value={buildIncreaseStat}
+                      >
+                        {glantriCharacteristicOrder.map((stat) => (
+                          <option key={`build-plus-${stat}`} value={stat}>
+                            {glantriCharacteristicLabels[stat]}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label style={{ display: "grid", gap: "0.25rem" }}>
+                      <span style={{ fontSize: "0.85rem" }}>- Stat</span>
+                      <select
+                        onChange={(event) =>
+                          setBuildDecreaseStat(event.target.value as GlantriCharacteristicKey)
+                        }
+                        value={buildDecreaseStat}
+                      >
+                        {glantriCharacteristicOrder.map((stat) => (
+                          <option key={`build-minus-${stat}`} value={stat}>
+                            {glantriCharacteristicLabels[stat]}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <button disabled={buildDisabled} onClick={handleBuildStats} type="button">
+                      Apply
+                    </button>
+                  </div>
+                  <button onClick={handleResetStatAdjustments} type="button">
+                    Reset
+                  </button>
                 </div>
               </div>
             </div>
