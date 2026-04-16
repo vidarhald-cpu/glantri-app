@@ -5,7 +5,6 @@ import { useEffect, useMemo, useState } from "react";
 import { type CanonicalContent } from "@glantri/content";
 import { equipmentTemplates } from "@glantri/content/equipment";
 import type {
-  Campaign,
   GlantriCharacteristicKey,
   ReusableEntity
 } from "@glantri/domain";
@@ -17,16 +16,11 @@ import type { EquipmentTemplate } from "@glantri/domain/equipment";
 import { resolveGlantriCharacterStats } from "@glantri/rules-engine";
 
 import {
-  createReusableEntityOnServer,
   createTemplateOnServer,
-  loadCampaigns,
   loadTemplates,
   updateTemplateOnServer
 } from "../../../src/lib/api/localServiceClient";
-import {
-  buildCampaignNpcSnapshotFromTemplate,
-  getCampaignActorMetadata
-} from "../../../src/lib/campaigns/campaignActors";
+import { getCampaignActorMetadata } from "../../../src/lib/campaigns/campaignActors";
 import { loadCanonicalContent } from "../../../src/lib/content/loadCanonicalContent";
 import {
   filterInventoryTemplateOptions,
@@ -83,38 +77,25 @@ function sortTemplatesByName(templates: EquipmentTemplate[]): EquipmentTemplate[
 
 export default function TemplatesPageContent() {
   const [content, setContent] = useState<CanonicalContent | null>(null);
-  const [campaignNpcName, setCampaignNpcName] = useState("");
-  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
   const [error, setError] = useState<string>();
   const [feedback, setFeedback] = useState<string>();
   const [kindFilter, setKindFilter] = useState<TemplateKindFilter>("all");
   const [loading, setLoading] = useState(true);
-  const [selectedCampaignId, setSelectedCampaignId] = useState("");
-  const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const [templates, setTemplates] = useState<ReusableEntity[]>([]);
   const [activeStep, setActiveStep] = useState<ArchetypeStepId>("society");
   const [archetypeDraft, setArchetypeDraft] = useState<HumanoidNpcArchetypeDraft>(
     createEmptyHumanoidNpcArchetypeDraft()
   );
+  const [showAllSkillGroups, setShowAllSkillGroups] = useState(false);
   const [selectedSkillId, setSelectedSkillId] = useState("");
   const [skillSearch, setSkillSearch] = useState("");
   const [gearFilter, setGearFilter] = useState<InventoryTemplateFilter>("all");
   const [selectedGearTemplateId, setSelectedGearTemplateId] = useState("");
 
-  const [quickTemplateName, setQuickTemplateName] = useState("");
-  const [quickTemplateDescription, setQuickTemplateDescription] = useState("");
-  const [quickTemplateKind, setQuickTemplateKind] = useState<ReusableEntity["kind"]>("monster");
-  const [quickTemplateRoleLabel, setQuickTemplateRoleLabel] = useState("");
-  const [quickTemplateProfession, setQuickTemplateProfession] = useState("");
-  const [quickTemplateSocialClass, setQuickTemplateSocialClass] = useState("");
-  const [quickTemplateEquipmentProfile, setQuickTemplateEquipmentProfile] = useState("");
-  const [quickTemplateTags, setQuickTemplateTags] = useState("");
-
   async function refreshTemplates() {
-    const [nextTemplates, nextCampaigns, nextContent] = await Promise.all([
+    const [nextTemplates, nextContent] = await Promise.all([
       loadTemplates(),
-      loadCampaigns(),
       loadCanonicalContent()
     ]);
     const filteredTemplates = nextTemplates.filter(
@@ -122,10 +103,7 @@ export default function TemplatesPageContent() {
     );
 
     setTemplates(filteredTemplates);
-    setCampaigns(nextCampaigns);
     setContent(nextContent);
-    setSelectedCampaignId((current) => current || nextCampaigns[0]?.id || "");
-    setSelectedTemplateId((current) => current || filteredTemplates[0]?.id || "");
   }
 
   useEffect(() => {
@@ -224,6 +202,21 @@ export default function TemplatesPageContent() {
     selectedProfession && content
       ? content.professionFamilies.find((family) => family.id === selectedProfession.familyId)
       : undefined;
+  const visibleSkillGroups = useMemo(() => {
+    const sortedGroups =
+      content?.skillGroups
+        .slice()
+        .sort((left, right) => left.name.localeCompare(right.name)) ?? [];
+
+    if (showAllSkillGroups || suggestedSkillGroupIds.length === 0) {
+      return sortedGroups;
+    }
+
+    const suggestedIds = new Set(suggestedSkillGroupIds);
+    return sortedGroups.filter((group) => suggestedIds.has(group.id));
+  }, [content, showAllSkillGroups, suggestedSkillGroupIds]);
+  const hiddenSkillGroupCount =
+    (content?.skillGroups.length ?? 0) - visibleSkillGroups.length;
   const resolvedStats = resolveGlantriCharacterStats(archetypeDraft.stats);
   const activeStepIndex = ARCHETYPE_STEPS.findIndex((step) => step.id === activeStep);
   const canMoveForwardByStep: Record<ArchetypeStepId, boolean> = {
@@ -236,8 +229,6 @@ export default function TemplatesPageContent() {
     stats: true,
     variability: archetypeDraft.name.trim().length > 0
   };
-  const selectedTemplateEntity = templates.find((entry) => entry.id === selectedTemplateId);
-
   function updateDraft(updater: (current: HumanoidNpcArchetypeDraft) => HumanoidNpcArchetypeDraft) {
     setArchetypeDraft((current) => updater(current));
   }
@@ -250,6 +241,7 @@ export default function TemplatesPageContent() {
     setSelectedGearTemplateId("");
     setSkillSearch("");
     setGearFilter("all");
+    setShowAllSkillGroups(false);
   }
 
   function handleSocietyChange(societyId: string) {
@@ -271,6 +263,7 @@ export default function TemplatesPageContent() {
       selectedSkillGroupIds: [],
       skillSelections: []
     }));
+    setShowAllSkillGroups(false);
   }
 
   function handleApplySuggestedSkillGroups() {
@@ -418,79 +411,6 @@ export default function TemplatesPageContent() {
     }
   }
 
-  async function handleCreateQuickTemplate() {
-    try {
-      setError(undefined);
-      setFeedback(undefined);
-
-      const template = await createTemplateOnServer({
-        description: quickTemplateDescription,
-        kind: quickTemplateKind,
-        name: quickTemplateName,
-        snapshot: {
-          actorClass: "template",
-          equipmentProfile: quickTemplateEquipmentProfile.trim() || undefined,
-          profession: quickTemplateProfession.trim() || undefined,
-          roleLabel: quickTemplateRoleLabel.trim() || undefined,
-          socialClass: quickTemplateSocialClass.trim() || undefined,
-          tags: quickTemplateTags
-            .split(",")
-            .map((tag) => tag.trim())
-            .filter(Boolean)
-        }
-      });
-
-      setFeedback(`Created generic template ${template.name}.`);
-      setQuickTemplateName("");
-      setQuickTemplateDescription("");
-      setQuickTemplateEquipmentProfile("");
-      setQuickTemplateProfession("");
-      setQuickTemplateRoleLabel("");
-      setQuickTemplateSocialClass("");
-      setQuickTemplateTags("");
-      await refreshTemplates();
-    } catch (caughtError) {
-      setError(
-        caughtError instanceof Error ? caughtError.message : "Unable to create the generic template."
-      );
-    }
-  }
-
-  async function handleCreateCampaignNpcFromTemplate() {
-    try {
-      setError(undefined);
-      setFeedback(undefined);
-
-      const template = templates.find((entry) => entry.id === selectedTemplateId);
-
-      if (!template || !selectedCampaignId) {
-        setError("Choose both a template and a target campaign.");
-        return;
-      }
-
-      const entity = await createReusableEntityOnServer({
-        campaignId: selectedCampaignId,
-        description: template.description,
-        kind: template.kind,
-        name: campaignNpcName.trim() || template.name,
-        snapshot: buildCampaignNpcSnapshotFromTemplate({
-          campaignId: selectedCampaignId,
-          name: campaignNpcName.trim() || template.name,
-          template
-        })
-      });
-
-      setFeedback(`Created campaign NPC ${entity.name} from template ${template.name}.`);
-      setCampaignNpcName("");
-    } catch (caughtError) {
-      setError(
-        caughtError instanceof Error
-          ? caughtError.message
-          : "Unable to create campaign NPC from template."
-      );
-    }
-  }
-
   function handleLoadTemplateIntoEditor(template: ReusableEntity) {
     const loaded = loadHumanoidNpcArchetypeDraft(template);
 
@@ -501,6 +421,7 @@ export default function TemplatesPageContent() {
     setSelectedGearTemplateId("");
     setSkillSearch("");
     setGearFilter("all");
+    setShowAllSkillGroups(false);
     setFeedback(
       loaded.isHumanoidNpcArchetype
         ? `Loaded ${template.name} into the archetype editor.`
@@ -536,24 +457,80 @@ export default function TemplatesPageContent() {
       >
         <div
           style={{
-            alignItems: "start",
-            display: "flex",
-            flexWrap: "wrap",
+            background: "#fbfaf4",
+            borderBottom: "1px solid #ece8da",
+            display: "grid",
             gap: "0.75rem",
-            justifyContent: "space-between"
+            margin: "-1rem -1rem 0",
+            padding: "1rem",
+            position: "sticky",
+            top: 0,
+            zIndex: 1
           }}
         >
-          <div>
-            <h2 style={{ margin: 0 }}>Create humanoid NPC archetype</h2>
-            <div style={{ color: "#5e5a50", fontSize: "0.9rem", marginTop: "0.25rem" }}>
-              Manual authoring flow for chargen-compatible human-like NPC templates.
+          <div
+            style={{
+              alignItems: "start",
+              display: "flex",
+              flexWrap: "wrap",
+              gap: "0.75rem",
+              justifyContent: "space-between"
+            }}
+          >
+            <div>
+              <h2 style={{ margin: 0 }}>Create humanoid NPC archetype</h2>
+              <div style={{ color: "#5e5a50", fontSize: "0.9rem", marginTop: "0.25rem" }}>
+                Manual authoring flow for chargen-compatible human-like NPC templates.
+              </div>
+            </div>
+            <div style={{ alignItems: "center", display: "flex", gap: "0.75rem" }}>
+              <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
+                {editingTemplateId ? "Editing existing template" : "Creating new template"}
+              </div>
+              <button onClick={resetArchetypeEditor} type="button">
+                New archetype
+              </button>
             </div>
           </div>
-          <div style={{ display: "flex", gap: "0.5rem" }}>
-            <button onClick={resetArchetypeEditor} type="button">
-              New archetype
+
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+            {ARCHETYPE_STEPS.map((step, index) => (
+              <button
+                key={step.id}
+                onClick={() => setActiveStep(step.id)}
+                style={{
+                  background: activeStep === step.id ? "#ece8da" : "#f6f5ef",
+                  border: "1px solid #d9ddd8",
+                  borderRadius: 999,
+                  fontWeight: activeStep === step.id ? 600 : 400,
+                  padding: "0.35rem 0.75rem"
+                }}
+                type="button"
+              >
+                {index + 1}. {step.label}
+              </button>
+            ))}
+          </div>
+
+          <div style={{ display: "flex", gap: "0.75rem", justifyContent: "space-between" }}>
+            <button disabled={activeStepIndex === 0} onClick={goToPreviousStep} type="button">
+              Back
             </button>
-            {editingTemplateId ? <div>Editing existing template</div> : <div>Creating new template</div>}
+            <div style={{ display: "flex", gap: "0.75rem" }}>
+              {activeStep !== "variability" ? (
+                <button disabled={!canMoveForwardByStep[activeStep]} onClick={goToNextStep} type="button">
+                  Next
+                </button>
+              ) : (
+                <button
+                  disabled={archetypeDraft.name.trim().length === 0}
+                  onClick={() => void handleSaveNpcArchetypeTemplate()}
+                  type="button"
+                >
+                  {editingTemplateId ? "Save template changes" : "Save archetype template"}
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
@@ -607,25 +584,6 @@ export default function TemplatesPageContent() {
             value={archetypeDraft.description}
           />
         </label>
-
-        <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
-          {ARCHETYPE_STEPS.map((step, index) => (
-            <button
-              key={step.id}
-              onClick={() => setActiveStep(step.id)}
-              style={{
-                background: activeStep === step.id ? "#ece8da" : "#f6f5ef",
-                border: "1px solid #d9ddd8",
-                borderRadius: 999,
-                fontWeight: activeStep === step.id ? 600 : 400,
-                padding: "0.35rem 0.75rem"
-              }}
-              type="button"
-            >
-              {index + 1}. {step.label}
-            </button>
-          ))}
-        </div>
 
         {activeStep === "society" ? (
           <section style={{ display: "grid", gap: "0.75rem" }}>
@@ -719,18 +677,29 @@ export default function TemplatesPageContent() {
                 justifyContent: "space-between"
               }}
             >
-              <h3 style={{ margin: 0 }}>Skill groups</h3>
-              {suggestedSkillGroupIds.length > 0 ? (
-                <button onClick={handleApplySuggestedSkillGroups} type="button">
-                  Apply suggested groups
-                </button>
-              ) : null}
+              <div style={{ display: "grid", gap: "0.25rem" }}>
+                <h3 style={{ margin: 0 }}>Skill groups</h3>
+                {suggestedSkillGroupIds.length > 0 ? (
+                  <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
+                    Showing profession and society suggestions first. You can reveal the full list at any time.
+                  </div>
+                ) : null}
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+                {suggestedSkillGroupIds.length > 0 ? (
+                  <button onClick={handleApplySuggestedSkillGroups} type="button">
+                    Apply suggested groups
+                  </button>
+                ) : null}
+                {suggestedSkillGroupIds.length > 0 ? (
+                  <button onClick={() => setShowAllSkillGroups((current) => !current)} type="button">
+                    {showAllSkillGroups ? "Show suggested only" : `Show all${hiddenSkillGroupCount > 0 ? ` (${hiddenSkillGroupCount} more)` : ""}`}
+                  </button>
+                ) : null}
+              </div>
             </div>
             <div style={{ display: "grid", gap: "0.5rem", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
-              {content?.skillGroups
-                .slice()
-                .sort((left, right) => left.name.localeCompare(right.name))
-                .map((group) => (
+              {visibleSkillGroups.map((group) => (
                   <label
                     key={group.id}
                     style={{
@@ -1147,27 +1116,6 @@ export default function TemplatesPageContent() {
             </div>
           </section>
         ) : null}
-
-        <div style={{ display: "flex", gap: "0.75rem", justifyContent: "space-between" }}>
-          <button disabled={activeStepIndex === 0} onClick={goToPreviousStep} type="button">
-            Back
-          </button>
-          <div style={{ display: "flex", gap: "0.75rem" }}>
-            {activeStep !== "variability" ? (
-              <button disabled={!canMoveForwardByStep[activeStep]} onClick={goToNextStep} type="button">
-                Next
-              </button>
-            ) : (
-              <button
-                disabled={archetypeDraft.name.trim().length === 0}
-                onClick={() => void handleSaveNpcArchetypeTemplate()}
-                type="button"
-              >
-                {editingTemplateId ? "Save template changes" : "Save archetype template"}
-              </button>
-            )}
-          </div>
-        </div>
       </section>
 
       <section
@@ -1269,115 +1217,6 @@ export default function TemplatesPageContent() {
         )}
       </section>
 
-      <section
-        style={{
-          border: "1px solid #d9ddd8",
-          borderRadius: 12,
-          display: "grid",
-          gap: "0.75rem",
-          padding: "1rem"
-        }}
-      >
-        <h2 style={{ margin: 0 }}>Quick generic template</h2>
-        <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
-          Keep using this for quick monster or animal archetypes while the humanoid NPC editor grows.
-        </div>
-        <input
-          onChange={(event) => setQuickTemplateName(event.target.value)}
-          placeholder="Template name"
-          value={quickTemplateName}
-        />
-        <textarea
-          onChange={(event) => setQuickTemplateDescription(event.target.value)}
-          placeholder="Description"
-          rows={3}
-          value={quickTemplateDescription}
-        />
-        <select
-          onChange={(event) => setQuickTemplateKind(event.target.value as ReusableEntity["kind"])}
-          value={quickTemplateKind}
-        >
-          <option value="npc">NPC</option>
-          <option value="monster">Monster</option>
-          <option value="animal">Animal</option>
-        </select>
-        <input
-          onChange={(event) => setQuickTemplateRoleLabel(event.target.value)}
-          placeholder="Role or use case (optional)"
-          value={quickTemplateRoleLabel}
-        />
-        <input
-          onChange={(event) => setQuickTemplateProfession(event.target.value)}
-          placeholder="Profession or archetype fit (optional)"
-          value={quickTemplateProfession}
-        />
-        <input
-          onChange={(event) => setQuickTemplateSocialClass(event.target.value)}
-          placeholder="Social class or society context (optional)"
-          value={quickTemplateSocialClass}
-        />
-        <input
-          onChange={(event) => setQuickTemplateEquipmentProfile(event.target.value)}
-          placeholder="Equipment profile or notes (optional)"
-          value={quickTemplateEquipmentProfile}
-        />
-        <input
-          onChange={(event) => setQuickTemplateTags(event.target.value)}
-          placeholder="Tags (comma-separated, optional)"
-          value={quickTemplateTags}
-        />
-        <div>
-          <button onClick={() => void handleCreateQuickTemplate()} type="button">
-            Create generic template
-          </button>
-        </div>
-      </section>
-
-      <section
-        style={{
-          border: "1px solid #d9ddd8",
-          borderRadius: 12,
-          display: "grid",
-          gap: "0.75rem",
-          padding: "1rem"
-        }}
-      >
-        <h2 style={{ margin: 0 }}>Create campaign NPC from template</h2>
-        <select
-          onChange={(event) => setSelectedTemplateId(event.target.value)}
-          value={selectedTemplateId}
-        >
-          {templates.map((template) => (
-            <option key={template.id} value={template.id}>
-              {template.name} ({template.kind})
-            </option>
-          ))}
-        </select>
-        <select
-          onChange={(event) => setSelectedCampaignId(event.target.value)}
-          value={selectedCampaignId}
-        >
-          {campaigns.map((campaign) => (
-            <option key={campaign.id} value={campaign.id}>
-              {campaign.name}
-            </option>
-          ))}
-        </select>
-        <input
-          onChange={(event) => setCampaignNpcName(event.target.value)}
-          placeholder="Optional campaign NPC name override"
-          value={campaignNpcName}
-        />
-        <div>
-          <button
-            disabled={templates.length === 0 || campaigns.length === 0}
-            onClick={() => void handleCreateCampaignNpcFromTemplate()}
-            type="button"
-          >
-            Create campaign NPC
-          </button>
-        </div>
-      </section>
     </section>
   );
 }
