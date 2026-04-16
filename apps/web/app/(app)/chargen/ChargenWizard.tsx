@@ -1881,25 +1881,33 @@ export default function ChargenWizard() {
                   alignItems: "start",
                   display: "grid",
                   gap: "1rem",
-                  gridTemplateColumns: "minmax(0, 1fr) minmax(250px, 320px)"
+                  gridTemplateColumns: "minmax(0, 520px) minmax(280px, 1fr)"
                 }}
               >
-                <div style={{ border: "1px solid #e6e2d5", borderRadius: 10, overflow: "hidden" }}>
+                <div
+                  style={{
+                    border: "1px solid #e6e2d5",
+                    borderRadius: 10,
+                    maxWidth: 520,
+                    overflow: "hidden"
+                  }}
+                >
                   <div
                     style={{
                       background: "#ece8da",
                       display: "grid",
-                      fontSize: "0.8rem",
+                      fontSize: "0.78rem",
                       fontWeight: 600,
-                      gap: "0.75rem",
-                      gridTemplateColumns: "minmax(0, 1.2fr) 64px 64px",
+                      gap: "0.5rem",
+                      gridTemplateColumns: "minmax(92px, 1fr) 56px 68px 56px",
                       letterSpacing: "0.02em",
-                      padding: "0.65rem 0.85rem",
+                      padding: "0.55rem 0.75rem",
                       textTransform: "uppercase"
                     }}
                   >
                     <span>Stat</span>
                     <span style={{ textAlign: "right" }}>Base</span>
+                    <span style={{ textAlign: "right" }}>Adjusted</span>
                     <span style={{ textAlign: "right" }}>Final</span>
                   </div>
                   <div style={{ display: "grid" }}>
@@ -1910,12 +1918,16 @@ export default function ChargenWizard() {
                           background: index % 2 === 0 ? "#f6f5ef" : "#f2efe6",
                           borderTop: index === 0 ? "none" : "1px solid #e6e2d5",
                           display: "grid",
-                          gap: "0.75rem",
-                          gridTemplateColumns: "minmax(0, 1.2fr) 64px 64px",
-                          padding: "0.6rem 0.85rem"
+                          fontSize: "0.92rem",
+                          gap: "0.5rem",
+                          gridTemplateColumns: "minmax(92px, 1fr) 56px 68px 56px",
+                          padding: "0.5rem 0.75rem"
                         }}
                       >
                         <span>{glantriCharacteristicLabels[stat]}</span>
+                        <strong style={{ textAlign: "right" }}>
+                          {selectedRolledProfile.rolledStats[stat]}
+                        </strong>
                         <strong style={{ textAlign: "right" }}>{selectedAdjustment.stats[stat]}</strong>
                         <strong style={{ textAlign: "right" }}>{selectedResolvedStats[stat]}</strong>
                       </div>
@@ -1924,27 +1936,25 @@ export default function ChargenWizard() {
                 </div>
                 <div
                   style={{
+                    alignSelf: "stretch",
                     background: "#f2efe6",
                     border: "1px solid #e6e2d5",
                     borderRadius: 10,
                     display: "grid",
-                    gap: "0.85rem",
+                    gap: "0.75rem",
                     padding: "0.85rem"
                   }}
                 >
-                  <div style={{ display: "grid", gap: "0.25rem" }}>
-                    <div>
-                      Exchanges: {selectedAdjustment.exchangesUsed} /{" "}
-                      {STANDARD_CHARGEN_METHOD_POLICY.maxExchanges}
-                    </div>
-                    <div>
-                      Builds: {selectedAdjustment.buildsUsed} /{" "}
-                      {STANDARD_CHARGEN_METHOD_POLICY.maxBuilds}
-                    </div>
-                  </div>
                   <div style={{ display: "grid", gap: "0.5rem" }}>
+                    <div style={{ display: "grid", gap: "0.25rem" }}>
+                      <strong style={{ fontSize: "0.9rem", fontWeight: 600 }}>Exchange</strong>
+                      <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
+                        Exchanges: {selectedAdjustment.exchangesUsed} /{" "}
+                        {STANDARD_CHARGEN_METHOD_POLICY.maxExchanges}
+                      </div>
+                    </div>
                     <label style={{ display: "grid", gap: "0.25rem" }}>
-                      <span style={{ fontSize: "0.85rem" }}>Stat A</span>
+                      <span style={{ fontSize: "0.9rem" }}>Stat A</span>
                       <select
                         onChange={(event) =>
                           setExchangeFirstStat(event.target.value as GlantriCharacteristicKey)
@@ -1959,7 +1969,7 @@ export default function ChargenWizard() {
                       </select>
                     </label>
                     <label style={{ display: "grid", gap: "0.25rem" }}>
-                      <span style={{ fontSize: "0.85rem" }}>Stat B</span>
+                      <span style={{ fontSize: "0.9rem" }}>Stat B</span>
                       <select
                         onChange={(event) =>
                           setExchangeSecondStat(event.target.value as GlantriCharacteristicKey)
@@ -1978,8 +1988,15 @@ export default function ChargenWizard() {
                     </button>
                   </div>
                   <div style={{ display: "grid", gap: "0.5rem" }}>
+                    <div style={{ display: "grid", gap: "0.25rem" }}>
+                      <strong style={{ fontSize: "0.9rem", fontWeight: 600 }}>Build</strong>
+                      <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
+                        Builds: {selectedAdjustment.buildsUsed} /{" "}
+                        {STANDARD_CHARGEN_METHOD_POLICY.maxBuilds}
+                      </div>
+                    </div>
                     <label style={{ display: "grid", gap: "0.25rem" }}>
-                      <span style={{ fontSize: "0.85rem" }}>+ Stat</span>
+                      <span style={{ fontSize: "0.9rem" }}>+ Stat</span>
                       <select
                         onChange={(event) =>
                           setBuildIncreaseStat(event.target.value as GlantriCharacteristicKey)
@@ -1994,7 +2011,7 @@ export default function ChargenWizard() {
                       </select>
                     </label>
                     <label style={{ display: "grid", gap: "0.25rem" }}>
-                      <span style={{ fontSize: "0.85rem" }}>- Stat</span>
+                      <span style={{ fontSize: "0.9rem" }}>- Stat</span>
                       <select
                         onChange={(event) =>
                           setBuildDecreaseStat(event.target.value as GlantriCharacteristicKey)
@@ -2012,9 +2029,11 @@ export default function ChargenWizard() {
                       Apply
                     </button>
                   </div>
-                  <button onClick={handleResetStatAdjustments} type="button">
-                    Reset
-                  </button>
+                  <div style={{ paddingTop: "0.25rem" }}>
+                    <button onClick={handleResetStatAdjustments} type="button">
+                      Reset
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
