@@ -202,6 +202,67 @@ function parseStringArray(value: unknown): string[] | undefined {
   return entries.length > 0 ? entries : undefined;
 }
 
+function listProfessionGrants(input: {
+  content: CanonicalContent;
+  professionId: string;
+}) {
+  const profession = input.content.professions.find(
+    (candidate) => candidate.id === input.professionId
+  );
+
+  return input.content.professionSkills.filter((entry) => {
+    if (!profession) {
+      return false;
+    }
+
+    if (entry.scope === "family") {
+      return entry.professionId === profession.familyId;
+    }
+
+    return entry.professionId === profession.id;
+  });
+}
+
+function listProfessionGroupIds(input: {
+  content: CanonicalContent;
+  professionId: string;
+  isCore?: boolean;
+}): string[] {
+  return listProfessionGrants(input)
+    .filter((entry) => entry.grantType === "group")
+    .filter((entry) => input.isCore === undefined || entry.isCore === input.isCore)
+    .map((entry) => entry.skillGroupId)
+    .filter((groupId): groupId is string => typeof groupId === "string");
+}
+
+function listProfessionSkillIds(input: {
+  content: CanonicalContent;
+  professionId: string;
+}): string[] {
+  return listProfessionGrants(input)
+    .filter((entry) => entry.skillId)
+    .map((entry) => entry.skillId)
+    .filter((skillId): skillId is string => typeof skillId === "string");
+}
+
+function listSkillIdsForGroups(input: {
+  content: CanonicalContent;
+  groupIds: string[];
+}): string[] {
+  const selectedGroupIds = new Set(input.groupIds);
+  const groupSkillIds = input.content.skillGroups
+    .filter((group) => selectedGroupIds.has(group.id))
+    .flatMap((group) =>
+      (group.skillMemberships?.length ?? 0) > 0
+        ? (group.skillMemberships ?? []).map((membership) => membership.skillId)
+        : input.content.skills
+            .filter((skill) => getSkillGroupIds(skill).includes(group.id))
+            .map((skill) => skill.id)
+    );
+
+  return [...new Set(groupSkillIds)];
+}
+
 export function listSocietyOptions(content: CanonicalContent): SocietyOption[] {
   const societyDefinitionsById = new Map(
     (content.societies ?? []).map((society) => [society.id, society])
@@ -267,27 +328,24 @@ export function listSuggestedSkillGroupIds(input: {
   const society = listSocietyOptions(input.content).find(
     (option) => option.societyId === input.societyId
   );
-  const profession = input.content.professions.find(
-    (candidate) => candidate.id === input.professionId
-  );
+  const coreGroupIds = listProfessionGroupIds({
+    content: input.content,
+    isCore: true,
+    professionId: input.professionId
+  });
+  const optionalGroupIds = listProfessionGroupIds({
+    content: input.content,
+    isCore: false,
+    professionId: input.professionId
+  });
 
-  const directGroups = input.content.professionSkills
-    .filter((entry) => entry.grantType === "group")
-    .filter((entry) => {
-      if (!profession) {
-        return false;
-      }
-
-      if (entry.scope === "family") {
-        return entry.professionId === profession.familyId;
-      }
-
-      return entry.professionId === profession.id;
-    })
-    .map((entry) => entry.skillGroupId)
-    .filter((groupId): groupId is string => typeof groupId === "string");
-
-  return [...new Set([...(society?.skillGroupIds ?? []), ...directGroups])];
+  return [
+    ...new Set([
+      ...coreGroupIds,
+      ...optionalGroupIds,
+      ...(society?.skillGroupIds ?? [])
+    ])
+  ];
 }
 
 export function listAvailableSkills(input: {
@@ -306,37 +364,28 @@ export function listAvailableSkills(input: {
   const society = listSocietyOptions(input.content).find(
     (option) => option.societyId === input.societyId
   );
-  const profession = input.content.professions.find(
-    (candidate) => candidate.id === input.professionId
-  );
   const directSkillIds = new Set(
-    input.content.professionSkills
-      .filter((entry) => entry.skillId)
-      .filter((entry) => {
-        if (!profession) {
-          return false;
-        }
-
-        if (entry.scope === "family") {
-          return entry.professionId === profession.familyId;
-        }
-
-        return entry.professionId === profession.id;
-      })
-      .map((entry) => entry.skillId as string)
+    listProfessionSkillIds({
+      content: input.content,
+      professionId: input.professionId
+    })
   );
   const selectedGroupIds = new Set(input.selectedSkillGroupIds);
   const societySkillIds = new Set(society?.skillIds ?? []);
+  const groupDerivedSkillIds = new Set(
+    listSkillIdsForGroups({
+      content: input.content,
+      groupIds: [...new Set([...input.selectedSkillGroupIds, ...suggestedSkillGroupIds])]
+    })
+  );
 
   return input.content.skills
     .filter((skill) => {
-      const skillGroupIds = getSkillGroupIds(skill);
-
       return (
-        skillGroupIds.some((groupId) => selectedGroupIds.has(groupId)) ||
-        skillGroupIds.some((groupId) => suggestedSkillGroupIds.has(groupId)) ||
+        groupDerivedSkillIds.has(skill.id) ||
         directSkillIds.has(skill.id) ||
-        societySkillIds.has(skill.id)
+        societySkillIds.has(skill.id) ||
+        getSkillGroupIds(skill).some((groupId) => selectedGroupIds.has(groupId))
       );
     })
     .sort((left, right) => left.name.localeCompare(right.name));
@@ -351,25 +400,12 @@ export function listSuggestedSkills(input: {
   const society = listSocietyOptions(input.content).find(
     (option) => option.societyId === input.societyId
   );
-  const profession = input.content.professions.find(
-    (candidate) => candidate.id === input.professionId
-  );
   const selectedGroupIds = new Set(input.selectedSkillGroupIds);
   const directSkillIds = new Set(
-    input.content.professionSkills
-      .filter((entry) => entry.skillId)
-      .filter((entry) => {
-        if (!profession) {
-          return false;
-        }
-
-        if (entry.scope === "family") {
-          return entry.professionId === profession.familyId;
-        }
-
-        return entry.professionId === profession.id;
-      })
-      .map((entry) => entry.skillId as string)
+    listProfessionSkillIds({
+      content: input.content,
+      professionId: input.professionId
+    })
   );
   const societySkillIds = new Set(society?.skillIds ?? []);
   const suggestedGroupIds = new Set(
@@ -379,16 +415,20 @@ export function listSuggestedSkills(input: {
       societyId: input.societyId
     })
   );
+  const groupedSkillIds = new Set(
+    listSkillIdsForGroups({
+      content: input.content,
+      groupIds: [...selectedGroupIds, ...suggestedGroupIds]
+    })
+  );
 
   return input.content.skills
     .filter((skill) => {
-      const skillGroupIds = getSkillGroupIds(skill);
-
       return (
         directSkillIds.has(skill.id) ||
         societySkillIds.has(skill.id) ||
-        skillGroupIds.some((groupId) => selectedGroupIds.has(groupId)) ||
-        skillGroupIds.some((groupId) => suggestedGroupIds.has(groupId))
+        groupedSkillIds.has(skill.id) ||
+        getSkillGroupIds(skill).some((groupId) => selectedGroupIds.has(groupId))
       );
     })
     .sort((left, right) => left.name.localeCompare(right.name));

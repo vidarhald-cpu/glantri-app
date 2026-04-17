@@ -5,6 +5,7 @@ const literacyRequirementSchema = z.enum(["no", "recommended", "required"]);
 const skillCategorySchema = z.enum(["ordinary", "secondary"]);
 const skillSocietyLevelSchema = z.number().int().min(1).max(6);
 const skillDependencyStrengthSchema = z.enum(["required", "recommended", "helpful"]);
+const skillGroupSkillRelevanceSchema = z.enum(["core", "optional"]);
 
 const SKILL_DEPENDENCY_STRENGTH_PRIORITY: Record<SkillDependencyStrength, number> = {
   helpful: 0,
@@ -107,10 +108,16 @@ function normalizeSkillDependencies(input: {
   return dedupeDependencies(dependencies);
 }
 
+export const skillGroupSkillMembershipSchema = z.object({
+  skillId: idSchema,
+  relevance: skillGroupSkillRelevanceSchema.default("optional")
+});
+
 export const skillGroupDefinitionSchema = z.object({
   id: idSchema,
   name: z.string().min(1),
   description: z.string().optional(),
+  skillMemberships: z.array(skillGroupSkillMembershipSchema).optional(),
   sortOrder: z.number().int().default(0)
 });
 
@@ -244,21 +251,32 @@ export const societyDefinitionSchema = z.object({
   id: idSchema,
   name: z.string().min(1),
   societyLevel: z.number().int().min(1).max(6),
+  baselineLanguageIds: z.array(idSchema).optional(),
   shortDescription: z.string().min(1),
   historicalReference: z.string().optional(),
   glantriExamples: z.string().optional(),
   notes: z.string().optional()
 });
 
+export const languageDefinitionSchema = z.object({
+  id: idSchema,
+  name: z.string().min(1),
+  notes: z.string().optional(),
+  sourceSocietyId: idSchema.optional()
+});
+
 export type SkillGroupDefinition = z.infer<typeof skillGroupDefinitionSchema>;
+export type SkillGroupSkillMembership = z.infer<typeof skillGroupSkillMembershipSchema>;
 export type SkillDefinition = z.infer<typeof skillDefinitionSchema>;
 export type SkillDependency = z.infer<typeof skillDependencySchema>;
 export type SkillSpecialization = z.infer<typeof skillSpecializationSchema>;
 export type SocietyLevelAccess = z.infer<typeof societyLevelAccessSchema>;
 export type SocietyDefinition = z.infer<typeof societyDefinitionSchema>;
+export type LanguageDefinition = z.infer<typeof languageDefinitionSchema>;
 export type LiteracyRequirement = z.infer<typeof literacyRequirementSchema>;
 export type SkillCategory = z.infer<typeof skillCategorySchema>;
 export type SkillDependencyStrength = z.infer<typeof skillDependencyStrengthSchema>;
+export type SkillGroupSkillRelevance = z.infer<typeof skillGroupSkillRelevanceSchema>;
 
 export function getSkillDependencies(
   skill: Pick<SkillDefinition, "dependencies">

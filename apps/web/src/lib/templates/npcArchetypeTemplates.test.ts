@@ -34,6 +34,13 @@ const testEquipmentTemplates = [
 ] as EquipmentTemplate[];
 
 const content = {
+  languages: [
+    {
+      id: "glantri_language",
+      name: "Glantri",
+      sourceSocietyId: "glantri"
+    }
+  ],
   professionFamilies: [{ id: "military", name: "Military" }],
   professionSkills: [
     {
@@ -60,8 +67,20 @@ const content = {
     }
   ],
   skillGroups: [
-    { description: "Field soldiering", id: "field_soldiering", name: "Field soldiering", sortOrder: 1 },
-    { description: "Urban watch", id: "urban_watch", name: "Urban watch", sortOrder: 2 }
+    {
+      description: "Field soldiering",
+      id: "field_soldiering",
+      name: "Field soldiering",
+      skillMemberships: [{ relevance: "core", skillId: "shield_use" }],
+      sortOrder: 1
+    },
+    {
+      description: "Urban watch",
+      id: "urban_watch",
+      name: "Urban watch",
+      skillMemberships: [{ relevance: "core", skillId: "leadership" }],
+      sortOrder: 2
+    }
   ],
   skills: [
     {
@@ -93,6 +112,7 @@ const content = {
   ],
   societies: [
     {
+      baselineLanguageIds: ["glantri_language"],
       id: "glantri",
       name: "Glantri",
       shortDescription: "Ranked feudal magocracy with courtly and urban institutions.",
@@ -178,7 +198,7 @@ describe("npcArchetypeTemplates", () => {
         professionId: "guard",
         societyId: "glantri"
       })
-    ).toEqual(["urban_watch", "field_soldiering"]);
+    ).toEqual(["field_soldiering", "urban_watch"]);
 
     expect(
       listAvailableSkills({

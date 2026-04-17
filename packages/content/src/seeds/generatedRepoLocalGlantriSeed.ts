@@ -2,311 +2,1393 @@
 // Do not hand-edit unless you are intentionally changing the repo-local import mapping.
 
 export const generatedRepoLocalGlantriSeed = {
+  "languages": [
+    {
+      "id": "forager_ritual_tribal_language",
+      "name": "Forager / ritual-tribal",
+      "notes": "Provisional baseline language derived from the current society source. Replace with dedicated language content when the language system expands.",
+      "sourceSocietyId": "forager_ritual_tribal"
+    },
+    {
+      "id": "pastoral_clan_nomadic_language",
+      "name": "Pastoral clan / nomadic warrior",
+      "notes": "Provisional baseline language derived from the current society source. Replace with dedicated language content when the language system expands.",
+      "sourceSocietyId": "pastoral_clan_nomadic"
+    },
+    {
+      "id": "early_agrarian_proto_state_language",
+      "name": "Early agrarian chiefdom / proto-state",
+      "notes": "Provisional baseline language derived from the current society source. Replace with dedicated language content when the language system expands.",
+      "sourceSocietyId": "early_agrarian_proto_state"
+    },
+    {
+      "id": "bronze_age_palace_state_language",
+      "name": "Bronze Age palace state",
+      "notes": "Provisional baseline language derived from the current society source. Replace with dedicated language content when the language system expands.",
+      "sourceSocietyId": "bronze_age_palace_state"
+    },
+    {
+      "id": "temple_state_literate_language",
+      "name": "Temple-state / early literate agrarian state",
+      "notes": "Provisional baseline language derived from the current society source. Replace with dedicated language content when the language system expands.",
+      "sourceSocietyId": "temple_state_literate"
+    },
+    {
+      "id": "imperial_agrarian_bureaucracy_language",
+      "name": "Imperial agrarian bureaucracy",
+      "notes": "Provisional baseline language derived from the current society source. Replace with dedicated language content when the language system expands.",
+      "sourceSocietyId": "imperial_agrarian_bureaucracy"
+    },
+    {
+      "id": "feudal_manorial_kingdom_language",
+      "name": "Feudal / manorial kingdom",
+      "notes": "Provisional baseline language derived from the current society source. Replace with dedicated language content when the language system expands.",
+      "sourceSocietyId": "feudal_manorial_kingdom"
+    },
+    {
+      "id": "classical_polis_city_state_language",
+      "name": "Classical polis / city-state civilization",
+      "notes": "Provisional baseline language derived from the current society source. Replace with dedicated language content when the language system expands.",
+      "sourceSocietyId": "classical_polis_city_state"
+    },
+    {
+      "id": "imperial_classical_high_civ_language",
+      "name": "Imperial classical / Hellenistic-Roman high civilization",
+      "notes": "Provisional baseline language derived from the current society source. Replace with dedicated language content when the language system expands.",
+      "sourceSocietyId": "imperial_classical_high_civ"
+    },
+    {
+      "id": "court_bureaucratic_empire_language",
+      "name": "Court-bureaucratic high medieval empire",
+      "notes": "Provisional baseline language derived from the current society source. Replace with dedicated language content when the language system expands.",
+      "sourceSocietyId": "court_bureaucratic_empire"
+    },
+    {
+      "id": "renaissance_city_state_language",
+      "name": "Commercial renaissance city-state / principality",
+      "notes": "Provisional baseline language derived from the current society source. Replace with dedicated language content when the language system expands.",
+      "sourceSocietyId": "renaissance_city_state"
+    }
+  ],
   "skillGroups": [
     {
       "description": "Basic literate education for scribes, scholars, clerks, and formal learners.",
       "id": "literate_foundation",
       "name": "Literate Foundation",
+      "skillMemberships": [
+        {
+          "relevance": "core",
+          "skillId": "literacy"
+        },
+        {
+          "relevance": "core",
+          "skillId": "language"
+        },
+        {
+          "relevance": "core",
+          "skillId": "history"
+        }
+      ],
       "sortOrder": 1
     },
     {
       "description": "Formal literate office, law, and rhetorical culture.",
       "id": "civic_learning",
       "name": "Civic Learning",
+      "skillMemberships": [
+        {
+          "relevance": "core",
+          "skillId": "law"
+        },
+        {
+          "relevance": "core",
+          "skillId": "bureaucratic_writing"
+        },
+        {
+          "relevance": "core",
+          "skillId": "rhetorical_composition"
+        }
+      ],
       "sortOrder": 2
     },
     {
       "description": "Priestly, doctrinal, and ritual-intellectual training.",
       "id": "sacred_learning",
       "name": "Sacred Learning",
+      "skillMemberships": [
+        {
+          "relevance": "core",
+          "skillId": "theology"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "history"
+        },
+        {
+          "relevance": "core",
+          "skillId": "ritual_interpretation"
+        }
+      ],
       "sortOrder": 3
     },
     {
       "description": "Practical trade, bargaining, and valuation training.",
       "id": "mercantile_practice",
       "name": "Mercantile Practice",
+      "skillMemberships": [
+        {
+          "relevance": "core",
+          "skillId": "bargaining"
+        },
+        {
+          "relevance": "core",
+          "skillId": "trading"
+        },
+        {
+          "relevance": "core",
+          "skillId": "appraisal"
+        }
+      ],
       "sortOrder": 4
     },
     {
       "description": "Record-heavy office and mercantile administration training.",
       "id": "commercial_administration",
       "name": "Commercial Administration",
+      "skillMemberships": [
+        {
+          "relevance": "core",
+          "skillId": "bookkeeping"
+        },
+        {
+          "relevance": "core",
+          "skillId": "administration"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "bureaucratic_writing"
+        }
+      ],
       "sortOrder": 5
     },
     {
       "description": "Basic training in elite manners, rank, and ceremonial conduct.",
       "id": "courtly_formation",
       "name": "Courtly Formation",
+      "skillMemberships": [
+        {
+          "relevance": "core",
+          "skillId": "etiquette"
+        },
+        {
+          "relevance": "core",
+          "skillId": "heraldry"
+        },
+        {
+          "relevance": "core",
+          "skillId": "courtly_protocol"
+        }
+      ],
       "sortOrder": 6
     },
     {
       "description": "Reading people, factions, and elite social situations.",
       "id": "political_acumen",
       "name": "Political Acumen",
+      "skillMemberships": [
+        {
+          "relevance": "core",
+          "skillId": "intrigue"
+        },
+        {
+          "relevance": "core",
+          "skillId": "insight"
+        },
+        {
+          "relevance": "core",
+          "skillId": "social_perception"
+        }
+      ],
       "sortOrder": 7
     },
     {
       "description": "Practical organized healing and immediate care.",
       "id": "healing_practice",
       "name": "Healing Practice",
+      "skillMemberships": [
+        {
+          "relevance": "core",
+          "skillId": "medicine"
+        },
+        {
+          "relevance": "core",
+          "skillId": "first_aid"
+        },
+        {
+          "relevance": "core",
+          "skillId": "nursing"
+        }
+      ],
       "sortOrder": 8
     },
     {
       "description": "Plant, remedy, and poison-related healing knowledge.",
       "id": "herb_and_remedy_craft",
       "name": "Herb and Remedy Craft",
+      "skillMemberships": [
+        {
+          "relevance": "core",
+          "skillId": "herb_lore"
+        },
+        {
+          "relevance": "core",
+          "skillId": "pharmacy"
+        },
+        {
+          "relevance": "core",
+          "skillId": "poison_lore"
+        }
+      ],
       "sortOrder": 9
     },
     {
       "description": "Basic sailor and working seamanship training.",
       "id": "maritime_crew_training",
       "name": "Maritime Crew Training",
+      "skillMemberships": [
+        {
+          "relevance": "core",
+          "skillId": "sailing"
+        },
+        {
+          "relevance": "core",
+          "skillId": "ropework"
+        },
+        {
+          "relevance": "core",
+          "skillId": "boat_handling"
+        }
+      ],
       "sortOrder": 10
     },
     {
       "description": "Advanced maritime route-finding.",
       "id": "maritime_navigation",
       "name": "Maritime Navigation",
+      "skillMemberships": [
+        {
+          "relevance": "core",
+          "skillId": "navigation"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "sailing"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "measurement"
+        }
+      ],
       "sortOrder": 11
     },
     {
       "description": "Practical stock, herd, and animal-working training.",
       "id": "animal_husbandry",
       "name": "Animal Husbandry",
+      "skillMemberships": [
+        {
+          "relevance": "core",
+          "skillId": "animal_care"
+        },
+        {
+          "relevance": "core",
+          "skillId": "herding"
+        },
+        {
+          "relevance": "core",
+          "skillId": "animal_training"
+        }
+      ],
       "sortOrder": 12
     },
     {
       "description": "Riding and mounted practical service training.",
       "id": "mounted_service",
       "name": "Mounted Service",
+      "skillMemberships": [
+        {
+          "relevance": "core",
+          "skillId": "riding"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "animal_training"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "animal_care"
+        }
+      ],
       "sortOrder": 13
     },
     {
       "description": "Overland freight and movement.",
       "id": "transport_and_caravan_work",
       "name": "Transport and Caravan Work",
+      "skillMemberships": [
+        {
+          "relevance": "core",
+          "skillId": "teamstering"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "animal_care"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "trading"
+        }
+      ],
       "sortOrder": 14
     },
     {
       "description": "Burglary, stealth entry, and covert access skills.",
       "id": "covert_entry",
       "name": "Covert Entry",
+      "skillMemberships": [
+        {
+          "relevance": "core",
+          "skillId": "stealth"
+        },
+        {
+          "relevance": "core",
+          "skillId": "hide"
+        },
+        {
+          "relevance": "core",
+          "skillId": "lockpicking"
+        },
+        {
+          "relevance": "core",
+          "skillId": "search"
+        }
+      ],
       "sortOrder": 15
     },
     {
       "description": "Urban theft and covert carry.",
       "id": "street_theft",
       "name": "Street Theft",
+      "skillMemberships": [
+        {
+          "relevance": "core",
+          "skillId": "pickpocket"
+        },
+        {
+          "relevance": "core",
+          "skillId": "conceal_object"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "stealth"
+        }
+      ],
       "sortOrder": 16
     },
     {
       "description": "Technical intrusion and trap-handling.",
       "id": "trap_and_intrusion_work",
       "name": "Trap and Intrusion Work",
+      "skillMemberships": [
+        {
+          "relevance": "optional",
+          "skillId": "search"
+        },
+        {
+          "relevance": "core",
+          "skillId": "trap_handling"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "lockpicking"
+        }
+      ],
       "sortOrder": 17
     },
     {
       "description": "Rural stealth, concealment, and ambush skills.",
       "id": "fieldcraft_stealth",
       "name": "Fieldcraft Stealth",
+      "skillMemberships": [
+        {
+          "relevance": "optional",
+          "skillId": "stealth"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "hide"
+        },
+        {
+          "relevance": "core",
+          "skillId": "camouflage"
+        }
+      ],
       "sortOrder": 18
     },
     {
       "description": "General movement and body-control training.",
       "id": "athletic_conditioning",
       "name": "Athletic Conditioning",
+      "skillMemberships": [
+        {
+          "relevance": "core",
+          "skillId": "climb"
+        },
+        {
+          "relevance": "core",
+          "skillId": "run"
+        },
+        {
+          "relevance": "core",
+          "skillId": "jump"
+        },
+        {
+          "relevance": "core",
+          "skillId": "balance"
+        }
+      ],
       "sortOrder": 19
     },
     {
       "description": "Interpersonal judgment and emotional awareness.",
       "id": "social_reading",
       "name": "Social Reading",
+      "skillMemberships": [
+        {
+          "relevance": "optional",
+          "skillId": "insight"
+        },
+        {
+          "relevance": "core",
+          "skillId": "detect_lies"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "social_perception"
+        }
+      ],
       "sortOrder": 20
     },
     {
       "description": "Broad entertainer and expressive performance package.",
       "id": "performance_basics",
       "name": "Performance Basics",
+      "skillMemberships": [
+        {
+          "relevance": "core",
+          "skillId": "singing"
+        },
+        {
+          "relevance": "core",
+          "skillId": "dancing"
+        },
+        {
+          "relevance": "core",
+          "skillId": "storytelling"
+        },
+        {
+          "relevance": "core",
+          "skillId": "music"
+        }
+      ],
       "sortOrder": 21
     },
     {
       "description": "Elite, staged, or formal speaking/performance training.",
       "id": "formal_performance",
       "name": "Formal Performance",
+      "skillMemberships": [
+        {
+          "relevance": "core",
+          "skillId": "acting"
+        },
+        {
+          "relevance": "core",
+          "skillId": "recitation"
+        },
+        {
+          "relevance": "core",
+          "skillId": "oratory"
+        }
+      ],
       "sortOrder": 22
     },
     {
       "description": "Trained inner control and focus.",
       "id": "mental_discipline",
       "name": "Mental Discipline",
+      "skillMemberships": [
+        {
+          "relevance": "core",
+          "skillId": "concentration"
+        },
+        {
+          "relevance": "core",
+          "skillId": "memory"
+        },
+        {
+          "relevance": "core",
+          "skillId": "self_control"
+        },
+        {
+          "relevance": "core",
+          "skillId": "meditation"
+        }
+      ],
       "sortOrder": 23
     },
     {
       "description": "Practical technical, surveying, and measurement training.",
       "id": "technical_measurement",
       "name": "Technical Measurement",
+      "skillMemberships": [
+        {
+          "relevance": "core",
+          "skillId": "measurement"
+        },
+        {
+          "relevance": "core",
+          "skillId": "mathematics"
+        },
+        {
+          "relevance": "core",
+          "skillId": "surveying"
+        }
+      ],
       "sortOrder": 24
     },
     {
       "description": "Advanced scientific and scholarly investigation.",
       "id": "learned_natural_inquiry",
       "name": "Learned Natural Inquiry",
+      "skillMemberships": [
+        {
+          "relevance": "optional",
+          "skillId": "mathematics"
+        },
+        {
+          "relevance": "core",
+          "skillId": "astronomy"
+        },
+        {
+          "relevance": "core",
+          "skillId": "natural_philosophy"
+        },
+        {
+          "relevance": "core",
+          "skillId": "alchemy"
+        }
+      ],
       "sortOrder": 25
     },
     {
       "description": "Practical divinatory and ritual-interpretive training.",
       "id": "omen_and_ritual_practice",
       "name": "Omen and Ritual Practice",
+      "skillMemberships": [
+        {
+          "relevance": "core",
+          "skillId": "divination"
+        },
+        {
+          "relevance": "core",
+          "skillId": "omen_reading"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "ritual_interpretation"
+        }
+      ],
       "sortOrder": 26
     },
     {
       "description": "One melee attack skill plus Dodge and Parry.",
       "id": "basic_melee_training",
       "name": "Basic Melee Training",
+      "skillMemberships": [
+        {
+          "relevance": "core",
+          "skillId": "dodge"
+        },
+        {
+          "relevance": "core",
+          "skillId": "parry"
+        }
+      ],
       "sortOrder": 27
     },
     {
       "description": "Two related melee attack skills plus Dodge and Parry.",
       "id": "advanced_melee_training",
       "name": "Advanced Melee Training",
+      "skillMemberships": [
+        {
+          "relevance": "optional",
+          "skillId": "dodge"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "parry"
+        }
+      ],
       "sortOrder": 28
     },
     {
       "description": "One missile attack skill plus Dodge and Perception.",
       "id": "basic_missile_training",
       "name": "Basic Missile Training",
+      "skillMemberships": [
+        {
+          "relevance": "optional",
+          "skillId": "dodge"
+        },
+        {
+          "relevance": "core",
+          "skillId": "perception"
+        }
+      ],
       "sortOrder": 29
     },
     {
       "description": "Broader trained ranged-combat package.",
       "id": "advanced_missile_training",
       "name": "Advanced Missile Training",
+      "skillMemberships": [
+        {
+          "relevance": "optional",
+          "skillId": "dodge"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "perception"
+        }
+      ],
       "sortOrder": 30
     },
     {
       "description": "Defensive discipline and line-fighting package.",
       "id": "defensive_soldiering",
       "name": "Defensive Soldiering",
+      "skillMemberships": [
+        {
+          "relevance": "optional",
+          "skillId": "parry"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "dodge"
+        },
+        {
+          "relevance": "core",
+          "skillId": "formation_fighting"
+        }
+      ],
       "sortOrder": 31
     },
     {
       "description": "Proper mounted combat package.",
       "id": "mounted_warrior_training",
       "name": "Mounted Warrior Training",
+      "skillMemberships": [
+        {
+          "relevance": "optional",
+          "skillId": "riding"
+        },
+        {
+          "relevance": "core",
+          "skillId": "lance"
+        },
+        {
+          "relevance": "core",
+          "skillId": "one_handed_edged"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "dodge"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "parry"
+        }
+      ],
       "sortOrder": 32
     },
     {
       "description": "Practical field-combat adaptation package.",
       "id": "field_soldiering",
       "name": "Field Soldiering",
+      "skillMemberships": [
+        {
+          "relevance": "optional",
+          "skillId": "dodge"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "perception"
+        },
+        {
+          "relevance": "core",
+          "skillId": "battlefield_awareness"
+        }
+      ],
       "sortOrder": 33
     },
     {
       "description": "Hardened battlefield survival and veteran composure package.",
       "id": "veteran_soldiering",
       "name": "Veteran Soldiering",
+      "skillMemberships": [
+        {
+          "relevance": "core",
+          "skillId": "combat_experience"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "battlefield_awareness"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "perception"
+        }
+      ],
       "sortOrder": 34
     },
     {
       "description": "Battlefield leadership and control package.",
       "id": "officer_training",
       "name": "Officer Training",
+      "skillMemberships": [
+        {
+          "relevance": "core",
+          "skillId": "tactics"
+        },
+        {
+          "relevance": "core",
+          "skillId": "captaincy"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "perception"
+        }
+      ],
       "sortOrder": 35
     },
     {
       "description": "Seasoned military command under pressure.",
       "id": "veteran_leadership",
       "name": "Veteran Leadership",
+      "skillMemberships": [
+        {
+          "relevance": "optional",
+          "skillId": "captaincy"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "combat_experience"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "tactics"
+        }
+      ],
       "sortOrder": 36
     },
     {
       "description": "Animal care, training, riding, and related work.",
       "id": "animal_handling",
       "name": "Animal Handling",
+      "skillMemberships": [
+        {
+          "relevance": "optional",
+          "skillId": "animal_care"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "animal_training"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "herding"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "riding"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "teamstering"
+        },
+        {
+          "relevance": "core",
+          "skillId": "falconry"
+        }
+      ],
       "sortOrder": 37
     },
     {
       "description": "Movement, balance, climbing, swimming, and body control.",
       "id": "athletics",
       "name": "Athletics",
+      "skillMemberships": [
+        {
+          "relevance": "optional",
+          "skillId": "climb"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "run"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "jump"
+        },
+        {
+          "relevance": "core",
+          "skillId": "swim"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "balance"
+        },
+        {
+          "relevance": "core",
+          "skillId": "acrobatics"
+        }
+      ],
       "sortOrder": 38
     },
     {
       "description": "Literacy, language, history, theology, law, and related learned culture.",
       "id": "humanities",
       "name": "Humanities",
+      "skillMemberships": [
+        {
+          "relevance": "optional",
+          "skillId": "literacy"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "language"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "history"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "theology"
+        },
+        {
+          "relevance": "core",
+          "skillId": "philosophy"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "law"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "rhetorical_composition"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "etiquette"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "heraldry"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "courtly_protocol"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "insight"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "social_perception"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "detect_lies"
+        },
+        {
+          "relevance": "core",
+          "skillId": "seduction"
+        }
+      ],
       "sortOrder": 39
     },
     {
       "description": "Healing, remedies, surgery, and related care.",
       "id": "medicine_group",
       "name": "Medicine",
+      "skillMemberships": [
+        {
+          "relevance": "optional",
+          "skillId": "medicine"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "first_aid"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "herb_lore"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "poison_lore"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "pharmacy"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "nursing"
+        }
+      ],
       "sortOrder": 40
     },
     {
       "description": "Trade, administration, accounting, and practical organization.",
       "id": "operations",
       "name": "Operations",
+      "skillMemberships": [
+        {
+          "relevance": "optional",
+          "skillId": "bureaucratic_writing"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "bargaining"
+        },
+        {
+          "relevance": "core",
+          "skillId": "gambling"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "trading"
+        },
+        {
+          "relevance": "core",
+          "skillId": "banking"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "administration"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "intrigue"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "bookkeeping"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "appraisal"
+        }
+      ],
       "sortOrder": 41
     },
     {
       "description": "Expressive, staged, musical, and spoken performance.",
       "id": "performance_group",
       "name": "Performance",
+      "skillMemberships": [
+        {
+          "relevance": "optional",
+          "skillId": "singing"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "dancing"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "storytelling"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "music"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "acting"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "recitation"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "oratory"
+        }
+      ],
       "sortOrder": 42
     },
     {
       "description": "Measurement, mathematics, astronomy, and related inquiry.",
       "id": "physical_science",
       "name": "Physical Science",
+      "skillMemberships": [
+        {
+          "relevance": "optional",
+          "skillId": "measurement"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "mathematics"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "astronomy"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "alchemy"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "natural_philosophy"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "surveying"
+        },
+        {
+          "relevance": "core",
+          "skillId": "mechanics"
+        }
+      ],
       "sortOrder": 43
     },
     {
       "description": "Search, locks, traps, concealment, and related covert handling.",
       "id": "security",
       "name": "Security",
+      "skillMemberships": [
+        {
+          "relevance": "optional",
+          "skillId": "perception"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "search"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "conceal_object"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "trap_handling"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "lockpicking"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "pickpocket"
+        }
+      ],
       "sortOrder": 44
     },
     {
       "description": "Stealth, hiding, camouflage, and disguise.",
       "id": "stealth_group",
       "name": "Stealth",
+      "skillMemberships": [
+        {
+          "relevance": "optional",
+          "skillId": "stealth"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "hide"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "camouflage"
+        },
+        {
+          "relevance": "core",
+          "skillId": "disguise"
+        }
+      ],
       "sortOrder": 45
     },
     {
       "description": "Attack, defense, weapon-family skills, and combat styles.",
       "id": "combat_group",
       "name": "Combat",
+      "skillMemberships": [
+        {
+          "relevance": "optional",
+          "skillId": "dodge"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "parry"
+        },
+        {
+          "relevance": "core",
+          "skillId": "brawling"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "one_handed_edged"
+        },
+        {
+          "relevance": "core",
+          "skillId": "one_handed_concussion_axe"
+        },
+        {
+          "relevance": "core",
+          "skillId": "two_handed_edged"
+        },
+        {
+          "relevance": "core",
+          "skillId": "polearms"
+        },
+        {
+          "relevance": "core",
+          "skillId": "two_handed_concussion_axe"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "lance"
+        },
+        {
+          "relevance": "core",
+          "skillId": "throwing"
+        },
+        {
+          "relevance": "core",
+          "skillId": "sling"
+        },
+        {
+          "relevance": "core",
+          "skillId": "bow"
+        },
+        {
+          "relevance": "core",
+          "skillId": "longbow"
+        },
+        {
+          "relevance": "core",
+          "skillId": "crossbow"
+        },
+        {
+          "relevance": "core",
+          "skillId": "mounted_combat"
+        }
+      ],
       "sortOrder": 46
     },
     {
       "description": "Leadership, battlefield skill, veteran nerve, and unit fighting.",
       "id": "military_group",
       "name": "Military",
+      "skillMemberships": [
+        {
+          "relevance": "optional",
+          "skillId": "perception"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "weapon_maintenance"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "combat_experience"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "battlefield_awareness"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "formation_fighting"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "mounted_combat"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "tactics"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "captaincy"
+        }
+      ],
       "sortOrder": 47
     },
     {
       "description": "Pottery, weaving, carpentry, smithing, and related making skills.",
       "id": "craft_group",
       "name": "Craft",
+      "skillMemberships": [
+        {
+          "relevance": "core",
+          "skillId": "pottery"
+        },
+        {
+          "relevance": "core",
+          "skillId": "weaving"
+        },
+        {
+          "relevance": "core",
+          "skillId": "leatherworking"
+        },
+        {
+          "relevance": "core",
+          "skillId": "carpentry"
+        },
+        {
+          "relevance": "core",
+          "skillId": "tailoring"
+        },
+        {
+          "relevance": "core",
+          "skillId": "baking"
+        },
+        {
+          "relevance": "core",
+          "skillId": "brewing"
+        },
+        {
+          "relevance": "core",
+          "skillId": "stoneworking"
+        },
+        {
+          "relevance": "core",
+          "skillId": "smithing"
+        },
+        {
+          "relevance": "core",
+          "skillId": "weapon_maintenance"
+        }
+      ],
       "sortOrder": 48
     },
     {
       "description": "Concentration, memory, self-control, meditation, and awareness.",
       "id": "mental_group",
       "name": "Mental",
+      "skillMemberships": [
+        {
+          "relevance": "optional",
+          "skillId": "concentration"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "memory"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "self_control"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "meditation"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "perception"
+        }
+      ],
       "sortOrder": 49
     },
     {
       "description": "Divination, omen reading, ritual interpretation, and astrology.",
       "id": "mystical_group",
       "name": "Mystical",
+      "skillMemberships": [
+        {
+          "relevance": "optional",
+          "skillId": "divination"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "omen_reading"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "ritual_interpretation"
+        },
+        {
+          "relevance": "core",
+          "skillId": "astrology"
+        }
+      ],
       "sortOrder": 50
     },
     {
       "description": "Seamanship, navigation, riding, animal handling, and outdoor survival-adjacent practice.",
       "id": "wilderness_group",
       "name": "Wilderness",
+      "skillMemberships": [
+        {
+          "relevance": "optional",
+          "skillId": "animal_care"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "animal_training"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "herding"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "riding"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "teamstering"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "falconry"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "sailing"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "navigation"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "ropework"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "boat_handling"
+        }
+      ],
       "sortOrder": 51
     }
   ],
@@ -341,8 +1423,9 @@ export const generatedRepoLocalGlantriSeed = {
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Language Speak and understand a language. Spoken language is universal; written use depends on Literacy.",
-      "groupId": "humanities",
+      "groupId": "literate_foundation",
       "groupIds": [
+        "literate_foundation",
         "humanities"
       ],
       "id": "language",
@@ -1522,7 +2605,9 @@ export const generatedRepoLocalGlantriSeed = {
       "groupId": "basic_missile_training",
       "groupIds": [
         "basic_missile_training",
+        "advanced_missile_training",
         "officer_training",
+        "field_soldiering",
         "veteran_soldiering",
         "security",
         "military_group",
@@ -2125,6 +3210,7 @@ export const generatedRepoLocalGlantriSeed = {
       "groupId": "covert_entry",
       "groupIds": [
         "covert_entry",
+        "street_theft",
         "fieldcraft_stealth",
         "stealth_group"
       ],
@@ -8345,6 +9431,9 @@ export const generatedRepoLocalGlantriSeed = {
   ],
   "societies": [
     {
+      "baselineLanguageIds": [
+        "forager_ritual_tribal_language"
+      ],
       "historicalReference": "England/Stonehenge",
       "id": "forager_ritual_tribal",
       "name": "Forager / ritual-tribal",
@@ -8353,6 +9442,9 @@ export const generatedRepoLocalGlantriSeed = {
       "societyLevel": 1
     },
     {
+      "baselineLanguageIds": [
+        "pastoral_clan_nomadic_language"
+      ],
       "glantriExamples": "Scandia",
       "historicalReference": "old Norse, England 600s",
       "id": "pastoral_clan_nomadic",
@@ -8361,6 +9453,9 @@ export const generatedRepoLocalGlantriSeed = {
       "societyLevel": 2
     },
     {
+      "baselineLanguageIds": [
+        "early_agrarian_proto_state_language"
+      ],
       "historicalReference": "Ancient Sumer, Ancient crete",
       "id": "early_agrarian_proto_state",
       "name": "Early agrarian chiefdom / proto-state",
@@ -8369,6 +9464,9 @@ export const generatedRepoLocalGlantriSeed = {
       "societyLevel": 2
     },
     {
+      "baselineLanguageIds": [
+        "bronze_age_palace_state_language"
+      ],
       "historicalReference": "Ancient Sumer, Ancient crete",
       "id": "bronze_age_palace_state",
       "name": "Bronze Age palace state",
@@ -8377,6 +9475,9 @@ export const generatedRepoLocalGlantriSeed = {
       "societyLevel": 3
     },
     {
+      "baselineLanguageIds": [
+        "temple_state_literate_language"
+      ],
       "historicalReference": "Ancient Sumer, Ancient crete",
       "id": "temple_state_literate",
       "name": "Temple-state / early literate agrarian state",
@@ -8385,6 +9486,9 @@ export const generatedRepoLocalGlantriSeed = {
       "societyLevel": 3
     },
     {
+      "baselineLanguageIds": [
+        "imperial_agrarian_bureaucracy_language"
+      ],
       "historicalReference": "Ancient Egypt, newer kingdom",
       "id": "imperial_agrarian_bureaucracy",
       "name": "Imperial agrarian bureaucracy",
@@ -8392,6 +9496,9 @@ export const generatedRepoLocalGlantriSeed = {
       "societyLevel": 4
     },
     {
+      "baselineLanguageIds": [
+        "feudal_manorial_kingdom_language"
+      ],
       "glantriExamples": "Glantri",
       "historicalReference": "medevieal feudals",
       "id": "feudal_manorial_kingdom",
@@ -8400,6 +9507,9 @@ export const generatedRepoLocalGlantriSeed = {
       "societyLevel": 4
     },
     {
+      "baselineLanguageIds": [
+        "classical_polis_city_state_language"
+      ],
       "glantriExamples": "Scyria",
       "historicalReference": "Athens 300bc",
       "id": "classical_polis_city_state",
@@ -8408,6 +9518,9 @@ export const generatedRepoLocalGlantriSeed = {
       "societyLevel": 5
     },
     {
+      "baselineLanguageIds": [
+        "imperial_classical_high_civ_language"
+      ],
       "glantriExamples": "Thyasis",
       "historicalReference": "late rome, byszantine empire",
       "id": "imperial_classical_high_civ",
@@ -8416,6 +9529,9 @@ export const generatedRepoLocalGlantriSeed = {
       "societyLevel": 5
     },
     {
+      "baselineLanguageIds": [
+        "court_bureaucratic_empire_language"
+      ],
       "glantriExamples": "Thyasis",
       "historicalReference": "late rome, byszantine empire",
       "id": "court_bureaucratic_empire",
@@ -8425,6 +9541,9 @@ export const generatedRepoLocalGlantriSeed = {
       "societyLevel": 5
     },
     {
+      "baselineLanguageIds": [
+        "renaissance_city_state_language"
+      ],
       "glantriExamples": "Iest",
       "historicalReference": "italian city states",
       "id": "renaissance_city_state",

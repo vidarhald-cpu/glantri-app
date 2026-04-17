@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import {
+  languageDefinitionSchema,
   professionFamilyDefinitionSchema,
   professionDefinitionSchema,
   professionSkillMapSchema,
@@ -12,6 +13,7 @@ import {
 } from "@glantri/domain";
 
 export const canonicalContentSchema = z.object({
+  languages: z.array(languageDefinitionSchema).default([]),
   skillGroups: z.array(skillGroupDefinitionSchema).default([]),
   skills: z.array(skillDefinitionSchema).default([]),
   specializations: z.array(skillSpecializationSchema).default([]),

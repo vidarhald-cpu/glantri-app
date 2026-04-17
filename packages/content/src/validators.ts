@@ -2,9 +2,32 @@ import { canonicalContentSchema, type CanonicalContent } from "./types";
 
 const EXPECTED_SOCIAL_BANDS = [1, 2, 3, 4] as const;
 const EXPECTED_SOCIETY_SCALE = [1, 2, 3, 4, 5, 6] as const;
+const MINIMUM_GROUP_SKILL_COUNT = 3;
+const MINIMUM_GROUP_SKILL_POINTS = 7;
+
+export interface CanonicalContentWarning {
+  code: string;
+  detail: string;
+}
+
+function getSkillPointWeight(skill: CanonicalContent["skills"][number]): number {
+  return skill.category === "secondary" ? 1 : 2;
+}
+
+function getSkillIdsForGroup(content: CanonicalContent, groupId: string): string[] {
+  const group = content.skillGroups.find((candidate) => candidate.id === groupId);
+
+  if ((group?.skillMemberships?.length ?? 0) > 0) {
+    return [...new Set((group?.skillMemberships ?? []).map((membership) => membership.skillId))];
+  }
+
+  return content.skills
+    .filter((skill) => skill.groupIds.includes(groupId))
+    .map((skill) => skill.id);
+}
 
 function validateSocieties(content: CanonicalContent): CanonicalContent {
-  if (content.societies.length === 0) {
+  if ((content.societies?.length ?? 0) === 0) {
     return content;
   }
 
@@ -14,7 +37,7 @@ function validateSocieties(content: CanonicalContent): CanonicalContent {
   );
   const issues: string[] = [];
 
-  for (const society of content.societies) {
+  for (const society of content.societies ?? []) {
     if (
       !EXPECTED_SOCIETY_SCALE.includes(
         society.societyLevel as (typeof EXPECTED_SOCIETY_SCALE)[number]
@@ -34,7 +57,7 @@ function validateSocieties(content: CanonicalContent): CanonicalContent {
     }
   }
 
-  const societyDefinitionIds = new Set(content.societies.map((society) => society.id));
+  const societyDefinitionIds = new Set((content.societies ?? []).map((society) => society.id));
   const missingDefinitions = [...societyIdsFromRows].filter((societyId) => !societyDefinitionIds.has(societyId));
 
   if (missingDefinitions.length > 0) {
@@ -47,6 +70,27 @@ function validateSocieties(content: CanonicalContent): CanonicalContent {
 
   if (issues.length > 0) {
     throw new Error(`Invalid society definition content:\n${issues.join("\n")}`);
+  }
+
+  return content;
+}
+
+function validateLanguages(content: CanonicalContent): CanonicalContent {
+  const languageIds = new Set(content.languages.map((language) => language.id));
+  const issues: string[] = [];
+
+  for (const society of content.societies) {
+    for (const languageId of society.baselineLanguageIds ?? []) {
+      if (!languageIds.has(languageId)) {
+        issues.push(
+          `Society "${society.name}" (${society.id}) references unknown baseline language "${languageId}".`
+        );
+      }
+    }
+  }
+
+  if (issues.length > 0) {
+    throw new Error(`Invalid language content:\n${issues.join("\n")}`);
   }
 
   return content;
@@ -183,6 +227,42 @@ function validateSkillRelationships(content: CanonicalContent): CanonicalContent
     }
   }
 
+  for (const group of content.skillGroups) {
+    for (const membership of group.skillMemberships ?? []) {
+      if (!skillIds.has(membership.skillId)) {
+        issues.push(
+          `Skill group "${group.name}" (${group.id}) references unknown skill "${membership.skillId}".`
+        );
+        continue;
+      }
+
+      const skill = content.skills.find((candidate) => candidate.id === membership.skillId);
+
+      if (!skill) {
+        continue;
+      }
+
+      if (!skill.groupIds.includes(group.id)) {
+        issues.push(
+          `Skill group "${group.name}" (${group.id}) references skill "${membership.skillId}" that does not include the group in its groupIds.`
+        );
+        continue;
+      }
+
+      if (skill.groupId === group.id && membership.relevance !== "core") {
+        issues.push(
+          `Skill group "${group.name}" (${group.id}) should mark primary skill "${skill.name}" (${skill.id}) as core.`
+        );
+      }
+
+      if (skill.groupId !== group.id && membership.relevance !== "optional") {
+        issues.push(
+          `Skill group "${group.name}" (${group.id}) should mark cross-listed skill "${skill.name}" (${skill.id}) as optional.`
+        );
+      }
+    }
+  }
+
   const visitState = new Map<string, "done" | "visiting">();
 
   function visit(skillId: string, trail: string[]) {
@@ -227,6 +307,30 @@ function validateSkillRelationships(content: CanonicalContent): CanonicalContent
   }
 
   return content;
+}
+
+export function collectCanonicalContentWarnings(content: CanonicalContent): CanonicalContentWarning[] {
+  const warnings: CanonicalContentWarning[] = [];
+
+  for (const group of content.skillGroups) {
+    const groupSkillIds = getSkillIdsForGroup(content, group.id);
+    const points = groupSkillIds.reduce((total, skillId) => {
+      const skill = content.skills.find((candidate) => candidate.id === skillId);
+      return total + (skill ? getSkillPointWeight(skill) : 0);
+    }, 0);
+
+    if (
+      groupSkillIds.length < MINIMUM_GROUP_SKILL_COUNT &&
+      points < MINIMUM_GROUP_SKILL_POINTS
+    ) {
+      warnings.push({
+        code: "weak-skill-group",
+        detail: `Skill group "${group.name}" (${group.id}) is weak: ${groupSkillIds.length} skills / ${points} points. Expected at least ${MINIMUM_GROUP_SKILL_COUNT} skills or ${MINIMUM_GROUP_SKILL_POINTS} points.`
+      });
+    }
+  }
+
+  return warnings;
 }
 
 function validateProfessionRelationships(content: CanonicalContent): CanonicalContent {
@@ -284,7 +388,7 @@ function validateProfessionRelationships(content: CanonicalContent): CanonicalCo
 export function validateCanonicalContent(input: unknown): CanonicalContent {
   return validateProfessionRelationships(
     validateSkillRelationships(
-      validateSocieties(validateSocietyBandRows(canonicalContentSchema.parse(input)))
+      validateLanguages(validateSocieties(validateSocietyBandRows(canonicalContentSchema.parse(input))))
     )
   );
 }

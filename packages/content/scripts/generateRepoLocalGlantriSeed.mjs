@@ -107,21 +107,22 @@ function getLiteracyRequirement(dependencies) {
   return "no";
 }
 
-const trainingGroups = rawBundle.trainingGroups.map((group, index) => ({
+const trainingGroupSources = rawBundle.trainingGroups.map((group, index) => ({
   description: group.shortDescription || undefined,
   id: group.trainingGroupId,
   name: group.name,
+  skillIds: parseJsonLike(group.skillIds),
   sortOrder: index + 1
 }));
 
-const taxonomyGroups = rawBundle.taxonomyGroups.map((group, index) => ({
+const taxonomyGroupSources = rawBundle.taxonomyGroups.map((group, index) => ({
   description: group.shortDescription || undefined,
   id: group.groupId,
   name: group.name,
-  sortOrder: trainingGroups.length + index + 1
+  skillIds: parseJsonLike(group.skillIds),
+  sortOrder: trainingGroupSources.length + index + 1
 }));
-
-const skillGroups = [...trainingGroups, ...taxonomyGroups];
+const skillGroupSources = [...trainingGroupSources, ...taxonomyGroupSources];
 const specializationRows = rawBundle.skills.filter((skill) => skill.tier === "specialization");
 const specializationParentIds = new Set(
   specializationRows
@@ -295,19 +296,32 @@ const professionSkills = [
   ])
 ];
 
+const skillGroups = skillGroupSources.map((group) => ({
+  description: group.description,
+  id: group.id,
+  name: group.name,
+  skillMemberships: group.skillIds
+    .filter((skillId) => skillsById.has(skillId))
+    .map((skillId) => ({
+      relevance: skillsById.get(skillId)?.groupId === group.id ? "core" : "optional",
+      skillId
+    })),
+  sortOrder: group.sortOrder
+}));
+
 const groupMinSocietyLevel = new Map();
 
-for (const group of rawBundle.trainingGroups) {
-  const skillIds = parseJsonLike(group.skillIds);
+for (const group of trainingGroupSources) {
+  const skillIds = group.skillIds;
   const minLevel = skillIds
     .map((skillId) => skillsById.get(skillId)?.societyLevel ?? 6)
     .reduce((lowest, level) => Math.min(lowest, level), 6);
 
-  groupMinSocietyLevel.set(group.trainingGroupId, minLevel);
+  groupMinSocietyLevel.set(group.id, minLevel);
 }
 
-for (const group of rawBundle.taxonomyGroups) {
-  const skillIds = parseJsonLike(group.skillIds);
+for (const group of taxonomyGroupSources) {
+  const skillIds = group.skillIds;
   const minLevel = skillIds
     .map((skillId) => {
       const skill = skillsById.get(skillId);
@@ -316,7 +330,7 @@ for (const group of rawBundle.taxonomyGroups) {
     })
     .reduce((lowest, level) => Math.min(lowest, level), 6);
 
-  groupMinSocietyLevel.set(group.groupId, minLevel);
+  groupMinSocietyLevel.set(group.id, minLevel);
 }
 
 const societyLevels = rawBundle.societyTypes.flatMap((society) =>
@@ -353,7 +367,16 @@ const societyLevels = rawBundle.societyTypes.flatMap((society) =>
   })
 );
 
+const languages = rawBundle.societyTypes.map((society) => ({
+  id: `${society.societyTypeId}_language`,
+  name: society.name,
+  notes:
+    "Provisional baseline language derived from the current society source. Replace with dedicated language content when the language system expands.",
+  sourceSocietyId: society.societyTypeId
+}));
+
 const societies = rawBundle.societyTypes.map((society) => ({
+  baselineLanguageIds: [`${society.societyTypeId}_language`],
   glantriExamples: society.glantriExamples || undefined,
   historicalReference: society.historicalReference || undefined,
   id: society.societyTypeId,
@@ -364,6 +387,7 @@ const societies = rawBundle.societyTypes.map((society) => ({
 }));
 
 const seed = {
+  languages,
   skillGroups,
   skills,
   specializations,
