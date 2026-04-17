@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { useAdminContent } from "../../../../src/lib/admin/AdminContentContext";
@@ -16,6 +17,7 @@ import {
   AdminDataTable,
   AdminField,
   AdminInput,
+  AdminMetric,
   AdminPageIntro,
   AdminPanel,
   AdminReadOnlyNotice,
@@ -48,6 +50,7 @@ export default function SkillGroupsAdminPage() {
     content.skillGroups.find((group) => group.id === selectedGroupId) ??
     content.skillGroups.slice().sort((left, right) => left.sortOrder - right.sortOrder)[0];
   const [formState, setFormState] = useState<SkillGroupFormState>();
+  const selectedRow = rows.find((row) => row.id === selectedGroup.id);
 
   useEffect(() => {
     if (!selectedGroupId && rows[0]) {
@@ -153,7 +156,7 @@ export default function SkillGroupsAdminPage() {
         title="Skill Groups"
       />
 
-      <div style={{ display: "grid", gap: "1rem", gridTemplateColumns: "minmax(0, 1.65fr) minmax(320px, 1fr)" }}>
+      <div style={{ display: "grid", gap: "1rem", gridTemplateColumns: "minmax(0, 1.65fr) minmax(340px, 1fr)" }}>
         <AdminPanel title="Group Catalog">
           <AdminDataTable
             columns={[
@@ -162,20 +165,41 @@ export default function SkillGroupsAdminPage() {
                 render: (row) => <strong>{row.name}</strong>
               },
               {
-                header: "Sort Order",
-                render: (row) => row.sortOrder
+                header: "Core Skills",
+                render: (row) => <AdminTagList values={row.coreSkills} />
               },
               {
-                header: "Included Skills",
-                render: (row) => <AdminTagList values={row.includedSkills} />
+                header: "Optional Skills",
+                render: (row) =>
+                  row.optionalSkills.length > 0 ? (
+                    <AdminTagList values={row.optionalSkills} />
+                  ) : (
+                    <span style={{ color: "#8a7e63" }}>None</span>
+                  )
+              },
+              {
+                header: "Weighted Size",
+                render: (row) => `${row.weightedContentPoints} pts`
+              },
+              {
+                header: "Warnings",
+                render: (row) =>
+                  row.warningDetails.length > 0 ? (
+                    <span style={{ color: "#8a3b2f", fontWeight: 700 }}>
+                      {row.warningDetails.length} warning{row.warningDetails.length === 1 ? "" : "s"}
+                    </span>
+                  ) : (
+                    <span style={{ color: "#567043" }}>Healthy</span>
+                  )
               },
               {
                 header: "Allowed Profession(s)",
-                render: (row) => <AdminTagList values={row.allowedProfessions} />
-              },
-              {
-                header: "Notes",
-                render: (row) => row.notes || <span style={{ color: "#8a7e63" }}>None</span>
+                render: (row) =>
+                  row.allowedProfessions.length > 0 ? (
+                    <AdminTagList values={row.allowedProfessions} />
+                  ) : (
+                    <span style={{ color: "#8a7e63" }}>None</span>
+                  )
               }
             ]}
             emptyState="No skill groups found."
@@ -185,68 +209,153 @@ export default function SkillGroupsAdminPage() {
           />
         </AdminPanel>
 
-        <AdminPanel
-          subtitle="Included skills are edited here because group membership is one of the core relationships we want to manage explicitly."
-          title={`Edit ${selectedGroup.name}`}
-        >
-          {canEdit ? (
-            <form
-              onSubmit={(event) => {
-                event.preventDefault();
-                void handleSave();
-              }}
-              style={{ display: "grid", gap: "0.9rem" }}
-            >
-              <AdminField label="Group id">
-                <AdminInput readOnly value={selectedGroup.id} />
-              </AdminField>
+        <div style={{ display: "grid", gap: "1rem" }}>
+          <AdminPanel
+            subtitle="This is the primary inspection view for the new skill-group structure. Core versus optional membership, weighted content size, and weak-group warnings are surfaced here instead of being hidden in raw ids."
+            title={selectedGroup.name}
+          >
+            <div style={{ display: "grid", gap: "0.85rem" }}>
+              <div style={{ display: "grid", gap: "0.75rem", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))" }}>
+                <AdminMetric label="Core skills" value={selectedRow?.coreSkills.length ?? 0} />
+                <AdminMetric label="Optional skills" value={selectedRow?.optionalSkills.length ?? 0} />
+                <AdminMetric label="Weighted size" value={`${selectedRow?.weightedContentPoints ?? 0} pts`} />
+              </div>
 
-              <AdminField label="Name">
-                <AdminInput
-                  onChange={(event) => setFormState({ ...formState, name: event.target.value })}
-                  value={activeForm.name}
-                />
-              </AdminField>
+              {selectedRow?.warningDetails.length ? (
+                <div
+                  style={{
+                    background: "rgba(139, 59, 47, 0.08)",
+                    border: "1px solid rgba(139, 59, 47, 0.16)",
+                    borderRadius: 16,
+                    color: "#6b3429",
+                    display: "grid",
+                    gap: "0.45rem",
+                    padding: "0.9rem 1rem"
+                  }}
+                >
+                  <strong>Validation warnings</strong>
+                  {selectedRow.warningDetails.map((warning) => (
+                    <div key={warning}>{warning}</div>
+                  ))}
+                </div>
+              ) : (
+                <div
+                  style={{
+                    background: "rgba(86, 112, 67, 0.08)",
+                    border: "1px solid rgba(86, 112, 67, 0.16)",
+                    borderRadius: 16,
+                    color: "#46613a",
+                    padding: "0.9rem 1rem"
+                  }}
+                >
+                  No weak-group warnings for this skill group.
+                </div>
+              )}
 
-              <AdminField label="Sort order">
-                <AdminInput
-                  onChange={(event) =>
-                    setFormState({ ...activeForm, sortOrder: event.target.value })
-                  }
-                  type="number"
-                  value={activeForm.sortOrder}
-                />
-              </AdminField>
+              <div style={{ display: "grid", gap: "0.85rem" }}>
+                <div>
+                  <div style={{ color: "#5f543a", fontSize: "0.85rem", fontWeight: 700, marginBottom: "0.35rem", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                    Core skills
+                  </div>
+                  <AdminTagList values={selectedRow?.coreSkills ?? []} />
+                </div>
 
-              <AdminField label="Notes">
-                <AdminTextarea
-                  onChange={(event) =>
-                    setFormState({ ...activeForm, description: event.target.value })
-                  }
-                  value={activeForm.description}
-                />
-              </AdminField>
+                <div>
+                  <div style={{ color: "#5f543a", fontSize: "0.85rem", fontWeight: 700, marginBottom: "0.35rem", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                    Optional skills
+                  </div>
+                  {selectedRow?.optionalSkills.length ? (
+                    <AdminTagList values={selectedRow.optionalSkills} />
+                  ) : (
+                    <div style={{ color: "#8a7e63" }}>No optional cross-listed skills in this group.</div>
+                  )}
+                </div>
 
-              <AdminField label="Included skills">
-                <AdminCheckboxList
-                  onToggle={toggleSkill}
-                  options={content.skills
-                    .slice()
-                    .sort((left, right) => left.sortOrder - right.sortOrder || left.name.localeCompare(right.name))
-                    .map((skill) => ({
-                      label: skill.name,
-                      selected: activeForm.includedSkillIds.includes(skill.id),
-                      value: skill.id
-                    }))}
-                />
-              </AdminField>
+                <div>
+                  <div style={{ color: "#5f543a", fontSize: "0.85rem", fontWeight: 700, marginBottom: "0.35rem", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                    Professions using this group
+                  </div>
+                  {selectedRow?.allowedProfessions.length ? (
+                    <AdminTagList values={selectedRow.allowedProfessions} />
+                  ) : (
+                    <div style={{ color: "#8a7e63" }}>No profession currently grants this group.</div>
+                  )}
+                </div>
 
-              <AdminButton type="submit">Save Skill Group</AdminButton>
-            </form>
-          ) : (
-            <AdminReadOnlyNotice message="Skill groups are visible here for review, but editing is limited to Admin and GM accounts." />
-          )}
-        </AdminPanel>
+                <div style={{ color: "#5f543a", fontSize: "0.92rem", lineHeight: 1.5 }}>
+                  <Link href="/admin/skills" style={{ color: "#7e5d2a", fontWeight: 700 }}>
+                    Open skills inspector
+                  </Link>
+                  {" "}
+                  to review the linked skills in the broader skill catalog.
+                </div>
+              </div>
+            </div>
+          </AdminPanel>
+
+          <AdminPanel
+            subtitle="Editing remains available here, but membership relevance editing is still deferred. This form preserves the current raw inclusion workflow."
+            title={`Edit ${selectedGroup.name}`}
+          >
+            {canEdit ? (
+              <form
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void handleSave();
+                }}
+                style={{ display: "grid", gap: "0.9rem" }}
+              >
+                <AdminField label="Group id">
+                  <AdminInput readOnly value={selectedGroup.id} />
+                </AdminField>
+
+                <AdminField label="Name">
+                  <AdminInput
+                    onChange={(event) => setFormState({ ...formState, name: event.target.value })}
+                    value={activeForm.name}
+                  />
+                </AdminField>
+
+                <AdminField label="Sort order">
+                  <AdminInput
+                    onChange={(event) =>
+                      setFormState({ ...activeForm, sortOrder: event.target.value })
+                    }
+                    type="number"
+                    value={activeForm.sortOrder}
+                  />
+                </AdminField>
+
+                <AdminField label="Notes">
+                  <AdminTextarea
+                    onChange={(event) =>
+                      setFormState({ ...activeForm, description: event.target.value })
+                    }
+                    value={activeForm.description}
+                  />
+                </AdminField>
+
+                <AdminField label="Included skills">
+                  <AdminCheckboxList
+                    onToggle={toggleSkill}
+                    options={content.skills
+                      .slice()
+                      .sort((left, right) => left.sortOrder - right.sortOrder || left.name.localeCompare(right.name))
+                      .map((skill) => ({
+                        label: skill.name,
+                        selected: activeForm.includedSkillIds.includes(skill.id),
+                        value: skill.id
+                      }))}
+                  />
+                </AdminField>
+
+                <AdminButton type="submit">Save Skill Group</AdminButton>
+              </form>
+            ) : (
+              <AdminReadOnlyNotice message="Skill groups are visible here for review, but editing is limited to Admin and GM accounts." />
+            )}
+          </AdminPanel>
+        </div>
       </div>
     </section>
   );

@@ -1,4 +1,4 @@
-import type { CanonicalContent } from "@glantri/content";
+import { collectCanonicalContentWarnings, type CanonicalContent } from "@glantri/content";
 import { getSkillGroupIds } from "@glantri/domain";
 import { resolveEffectiveProfessionPackage } from "@glantri/rules-engine";
 
@@ -50,15 +50,20 @@ export interface SkillAuditIssue {
 
 export interface SkillGroupAdminRow {
   allowedProfessions: string[];
+  coreSkills: string[];
   id: string;
   includedSkills: string[];
   name: string;
   notes: string;
+  optionalSkills: string[];
   sortOrder: number;
+  warningDetails: string[];
+  weightedContentPoints: number;
 }
 
 export interface ProfessionAdminRow {
   allowedSocietyEntries: string[];
+  coreSkillGroups: string[];
   description: string;
   directSkillExceptions: string[];
   directlyGrantedSkills: string[];
@@ -66,6 +71,7 @@ export interface ProfessionAdminRow {
   id: string;
   name: string;
   notes: string;
+  optionalSkillGroups: string[];
   reachableGroupSkills: string[];
   totalReachableSkills: number;
 }
@@ -102,6 +108,8 @@ export interface ProfessionAuditIssue {
 
 export interface SocietyAdminRow {
   baseEducation: string;
+  baselineLanguages: string[];
+  canonicalSocietyLevel?: number;
   directOnlySkills: string[];
   directSkillGroups: string[];
   directSkills: string[];
@@ -110,6 +118,7 @@ export interface SocietyAdminRow {
   id: string;
   notes: string;
   reachableProfessions: string[];
+  shortDescription: string;
   society: string;
   societyClassName: string;
   societyLevel: number;
@@ -176,6 +185,10 @@ function uniqueSorted(values: string[]): string[] {
 
 function joinDisplayName(name: string, suffix?: string): string {
   return suffix ? `${name} (${suffix})` : name;
+}
+
+function getWeightedSkillPoints(skill: CanonicalContent["skills"][number]): number {
+  return skill.category === "secondary" ? 1 : 2;
 }
 
 function formatSocietyEntryLabel(societyName: string, level: number, socialClass: string): string {
@@ -1110,11 +1123,55 @@ export function buildSocietyAuditIssues(content: CanonicalContent): SocietyAudit
 }
 
 export function buildSkillGroupAdminRows(content: CanonicalContent): SkillGroupAdminRow[] {
+  const warningsByGroupId = new Map<string, string[]>();
+
+  for (const warning of collectCanonicalContentWarnings(content)) {
+    const match = warning.detail.match(/\(([^)]+)\)/);
+
+    if (!match) {
+      continue;
+    }
+
+    const existing = warningsByGroupId.get(match[1]) ?? [];
+    existing.push(warning.detail);
+    warningsByGroupId.set(match[1], existing);
+  }
+
   return [...content.skillGroups]
     .sort((left, right) => left.sortOrder - right.sortOrder || left.name.localeCompare(right.name))
     .map((group) => {
-      const includedSkills = content.skills
-        .filter((skill) => getSkillGroupIds(skill).includes(group.id))
+      const memberships =
+        group.skillMemberships?.length
+          ? group.skillMemberships
+          : content.skills
+              .filter((skill) => getSkillGroupIds(skill).includes(group.id))
+              .map((skill) => ({
+                relevance: skill.groupId === group.id ? ("core" as const) : ("optional" as const),
+                skillId: skill.id
+              }));
+      const includedSkillRows = memberships
+        .map((membership) => {
+          const skill = content.skills.find((candidate) => candidate.id === membership.skillId);
+
+          if (!skill) {
+            return undefined;
+          }
+
+          return {
+            name: skill.name,
+            points: getWeightedSkillPoints(skill),
+            relevance: membership.relevance,
+            sortOrder: skill.sortOrder
+          };
+        })
+        .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry))
+        .sort((left, right) => left.sortOrder - right.sortOrder || left.name.localeCompare(right.name));
+      const includedSkills = includedSkillRows.map((skill) => skill.name);
+      const coreSkills = includedSkillRows
+        .filter((skill) => skill.relevance === "core")
+        .map((skill) => skill.name);
+      const optionalSkills = includedSkillRows
+        .filter((skill) => skill.relevance === "optional")
         .sort((left, right) => left.sortOrder - right.sortOrder || left.name.localeCompare(right.name))
         .map((skill) => skill.name);
       const allowedProfessions = content.professionSkills
@@ -1131,46 +1188,86 @@ export function buildSkillGroupAdminRows(content: CanonicalContent): SkillGroupA
 
       return {
         allowedProfessions: uniqueSorted(allowedProfessions),
+        coreSkills,
         id: group.id,
         includedSkills,
         name: group.name,
         notes: group.description ?? "",
+        optionalSkills,
         sortOrder: group.sortOrder
+        ,
+        warningDetails: warningsByGroupId.get(group.id) ?? [],
+        weightedContentPoints: includedSkillRows.reduce((sum, skill) => sum + skill.points, 0)
       };
     });
 }
 
 export function buildProfessionAdminRows(content: CanonicalContent): ProfessionAdminRow[] {
-  return buildProfessionMatrixRows(content).map((profession) => ({
-    allowedSocietyEntries: profession.allowedSocietyEntries,
-    description: profession.description,
-    directSkillExceptions: profession.directSkillExceptions,
-    directlyGrantedSkills: profession.directlyGrantedSkills,
-    grantedSkillGroups: profession.grantedSkillGroups,
-    id: profession.id,
-    name: profession.name,
-    notes: profession.notes,
-    reachableGroupSkills: profession.reachableGroupSkills,
-    totalReachableSkills: profession.totalReachableSkills
-  }));
+  return buildProfessionMatrixRows(content).map((profession) => {
+    const groupGrants = content.professionSkills
+      .filter(
+        (professionSkill) =>
+          professionSkill.professionId === profession.id &&
+          professionSkill.grantType === "group" &&
+          professionSkill.skillGroupId
+      )
+      .map((professionSkill) => {
+        const group = content.skillGroups.find(
+          (candidate) => candidate.id === professionSkill.skillGroupId
+        );
+
+        return {
+          isCore: professionSkill.isCore,
+          name: group?.name ?? professionSkill.skillGroupId ?? ""
+        };
+      });
+
+    return {
+      allowedSocietyEntries: profession.allowedSocietyEntries,
+      coreSkillGroups: uniqueSorted(
+        groupGrants.filter((grant) => grant.isCore).map((grant) => grant.name)
+      ),
+      description: profession.description,
+      directSkillExceptions: profession.directSkillExceptions,
+      directlyGrantedSkills: profession.directlyGrantedSkills,
+      grantedSkillGroups: profession.grantedSkillGroups,
+      id: profession.id,
+      name: profession.name,
+      notes: profession.notes,
+      optionalSkillGroups: uniqueSorted(
+        groupGrants.filter((grant) => !grant.isCore).map((grant) => grant.name)
+      ),
+      reachableGroupSkills: profession.reachableGroupSkills,
+      totalReachableSkills: profession.totalReachableSkills
+    };
+  });
 }
 
 export function buildSocietyAdminRows(content: CanonicalContent): SocietyAdminRow[] {
-  return buildSocietyMatrixRows(content).map((societyRow) => ({
-    baseEducation: societyRow.baseEducation,
-    directOnlySkills: societyRow.directOnlySkills,
-    directSkillGroups: societyRow.directSkillGroups,
-    directSkills: societyRow.directSkills,
-    dieRange: societyRow.dieRange,
-    effectiveProfessionSkills: societyRow.effectiveProfessionSkills,
-    id: societyRow.id,
-    notes: societyRow.notes,
-    reachableProfessions: societyRow.reachableProfessions,
-    society: societyRow.society,
-    societyClassName: societyRow.societyClassName,
-    societyLevel: societyRow.societyLevel,
-    totalEffectiveReachableSkills: societyRow.totalEffectiveReachableSkills
-  }));
+  return buildSocietyMatrixRows(content).map((societyRow) => {
+    const society = content.societies.find((candidate) => candidate.id === societyRow.id.split(":")[0]);
+    const baselineLanguages = (society?.baselineLanguageIds ?? [])
+      .map((languageId) => content.languages.find((candidate) => candidate.id === languageId)?.name ?? languageId);
+
+    return {
+      baseEducation: societyRow.baseEducation,
+      baselineLanguages,
+      canonicalSocietyLevel: society?.societyLevel,
+      directOnlySkills: societyRow.directOnlySkills,
+      directSkillGroups: societyRow.directSkillGroups,
+      directSkills: societyRow.directSkills,
+      dieRange: societyRow.dieRange,
+      effectiveProfessionSkills: societyRow.effectiveProfessionSkills,
+      id: societyRow.id,
+      notes: societyRow.notes,
+      reachableProfessions: societyRow.reachableProfessions,
+      shortDescription: society?.shortDescription ?? "",
+      society: societyRow.society,
+      societyClassName: societyRow.societyClassName,
+      societyLevel: societyRow.societyLevel,
+      totalEffectiveReachableSkills: societyRow.totalEffectiveReachableSkills
+    };
+  });
 }
 
 export function buildProfessionAccessRows(content: CanonicalContent): ProfessionAccessRow[] {
