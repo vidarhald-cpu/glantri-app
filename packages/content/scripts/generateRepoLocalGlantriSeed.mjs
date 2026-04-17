@@ -353,6 +353,16 @@ const societyLevels = rawBundle.societyTypes.flatMap((society) =>
   })
 );
 
+const societies = rawBundle.societyTypes.map((society) => ({
+  glantriExamples: society.glantriExamples || undefined,
+  historicalReference: society.historicalReference || undefined,
+  id: society.societyTypeId,
+  name: society.name,
+  notes: society.notes || undefined,
+  shortDescription: society.shortDescription,
+  societyLevel: Math.max(1, Math.min(6, Number(society.level || 1)))
+}));
+
 const seed = {
   skillGroups,
   skills,
@@ -360,6 +370,7 @@ const seed = {
   professionFamilies,
   professions,
   professionSkills,
+  societies,
   societyLevels
 };
 

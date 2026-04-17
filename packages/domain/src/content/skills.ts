@@ -240,11 +240,22 @@ export const societyLevelAccessSchema = z.preprocess(
   })
 );
 
+export const societyDefinitionSchema = z.object({
+  id: idSchema,
+  name: z.string().min(1),
+  societyLevel: z.number().int().min(1).max(6),
+  shortDescription: z.string().min(1),
+  historicalReference: z.string().optional(),
+  glantriExamples: z.string().optional(),
+  notes: z.string().optional()
+});
+
 export type SkillGroupDefinition = z.infer<typeof skillGroupDefinitionSchema>;
 export type SkillDefinition = z.infer<typeof skillDefinitionSchema>;
 export type SkillDependency = z.infer<typeof skillDependencySchema>;
 export type SkillSpecialization = z.infer<typeof skillSpecializationSchema>;
 export type SocietyLevelAccess = z.infer<typeof societyLevelAccessSchema>;
+export type SocietyDefinition = z.infer<typeof societyDefinitionSchema>;
 export type LiteracyRequirement = z.infer<typeof literacyRequirementSchema>;
 export type SkillCategory = z.infer<typeof skillCategorySchema>;
 export type SkillDependencyStrength = z.infer<typeof skillDependencyStrengthSchema>;

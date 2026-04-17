@@ -979,12 +979,16 @@ export default function TemplatesPageContent() {
                 >
                   <strong>{society.societyName}</strong>
                   <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
-                    Levels {society.levelMin}
-                    {society.levelMin === society.levelMax ? "" : `-${society.levelMax}`}
+                    {society.societyLevel ? `Society level ${society.societyLevel}` : "Society level pending"}
                     {society.socialClasses.length > 0
                       ? ` • ${society.socialClasses.join(", ")}`
                       : ""}
                   </div>
+                  {society.shortDescription ? (
+                    <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
+                      {society.shortDescription}
+                    </div>
+                  ) : null}
                   <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
                     {society.professionIds.length} profession options • {society.skillGroupIds.length} recommended skill groups
                   </div>

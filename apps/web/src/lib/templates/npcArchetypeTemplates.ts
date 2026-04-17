@@ -10,13 +10,13 @@ import { resolveGlantriCharacterStats } from "@glantri/rules-engine";
 import type { EquipmentTemplate } from "@glantri/domain/equipment";
 
 export interface SocietyOption {
-  levelMax: number;
-  levelMin: number;
   professionIds: string[];
   skillGroupIds: string[];
   skillIds: string[];
+  shortDescription?: string;
   socialClasses: string[];
   societyId: string;
+  societyLevel?: number;
   societyName: string;
 }
 
@@ -203,27 +203,29 @@ function parseStringArray(value: unknown): string[] | undefined {
 }
 
 export function listSocietyOptions(content: CanonicalContent): SocietyOption[] {
+  const societyDefinitionsById = new Map(
+    (content.societies ?? []).map((society) => [society.id, society])
+  );
   const societies = new Map<string, SocietyOption>();
 
   for (const access of content.societyLevels) {
     const existing = societies.get(access.societyId);
+    const societyDefinition = societyDefinitionsById.get(access.societyId);
 
     if (!existing) {
       societies.set(access.societyId, {
-        levelMax: access.societyLevel,
-        levelMin: access.societyLevel,
         professionIds: [...access.professionIds],
         skillGroupIds: [...access.skillGroupIds],
         skillIds: [...access.skillIds],
+        shortDescription: societyDefinition?.shortDescription,
         socialClasses: access.socialClass ? [access.socialClass] : [],
         societyId: access.societyId,
+        societyLevel: societyDefinition?.societyLevel,
         societyName: access.societyName
       });
       continue;
     }
 
-    existing.levelMax = Math.max(existing.levelMax, access.societyLevel);
-    existing.levelMin = Math.min(existing.levelMin, access.societyLevel);
     existing.professionIds = [...new Set([...existing.professionIds, ...access.professionIds])];
     existing.skillGroupIds = [...new Set([...existing.skillGroupIds, ...access.skillGroupIds])];
     existing.skillIds = [...new Set([...existing.skillIds, ...access.skillIds])];

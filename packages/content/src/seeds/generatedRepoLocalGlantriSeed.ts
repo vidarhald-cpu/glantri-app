@@ -8343,6 +8343,97 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "leatherworking"
     }
   ],
+  "societies": [
+    {
+      "historicalReference": "England/Stonehenge",
+      "id": "forager_ritual_tribal",
+      "name": "Forager / ritual-tribal",
+      "notes": "Source sheet note: bronze age",
+      "shortDescription": "Mobile or semi-settled society with oral tradition, limited formal hierarchy, and little bureaucracy.",
+      "societyLevel": 1
+    },
+    {
+      "glantriExamples": "Scandia",
+      "historicalReference": "old Norse, England 600s",
+      "id": "pastoral_clan_nomadic",
+      "name": "Pastoral clan / nomadic warrior",
+      "shortDescription": "Kin-based, mobile, animal-centered society with practical martial and survival training.",
+      "societyLevel": 2
+    },
+    {
+      "historicalReference": "Ancient Sumer, Ancient crete",
+      "id": "early_agrarian_proto_state",
+      "name": "Early agrarian chiefdom / proto-state",
+      "notes": "Source sheet note: bronze age",
+      "shortDescription": "Settled farming society with local hierarchy and growing specialization.",
+      "societyLevel": 2
+    },
+    {
+      "historicalReference": "Ancient Sumer, Ancient crete",
+      "id": "bronze_age_palace_state",
+      "name": "Bronze Age palace state",
+      "notes": "Use as palace-state variant of the source row",
+      "shortDescription": "Palace-centered society with elite coordination, recordkeeping, and specialized craft.",
+      "societyLevel": 3
+    },
+    {
+      "historicalReference": "Ancient Sumer, Ancient crete",
+      "id": "temple_state_literate",
+      "name": "Temple-state / early literate agrarian state",
+      "notes": "Literate temple-state interpretation of source row",
+      "shortDescription": "Early literate state with priesthood, scribal culture, taxation, and formal ritual order.",
+      "societyLevel": 3
+    },
+    {
+      "historicalReference": "Ancient Egypt, newer kingdom",
+      "id": "imperial_agrarian_bureaucracy",
+      "name": "Imperial agrarian bureaucracy",
+      "shortDescription": "Large organized state with formal offices, recordkeeping, and infrastructure.",
+      "societyLevel": 4
+    },
+    {
+      "glantriExamples": "Glantri",
+      "historicalReference": "medevieal feudals",
+      "id": "feudal_manorial_kingdom",
+      "name": "Feudal / manorial kingdom",
+      "shortDescription": "Rank-based landholding society with noble households, retainers, and local obligations.",
+      "societyLevel": 4
+    },
+    {
+      "glantriExamples": "Scyria",
+      "historicalReference": "Athens 300bc",
+      "id": "classical_polis_city_state",
+      "name": "Classical polis / city-state civilization",
+      "shortDescription": "Urban civic society with rhetoric, education, public life, and structured elite culture.",
+      "societyLevel": 5
+    },
+    {
+      "glantriExamples": "Thyasis",
+      "historicalReference": "late rome, byszantine empire",
+      "id": "imperial_classical_high_civ",
+      "name": "Imperial classical / Hellenistic-Roman high civilization",
+      "shortDescription": "Highly organized urban imperial culture with law, engineering, and broad learned life.",
+      "societyLevel": 5
+    },
+    {
+      "glantriExamples": "Thyasis",
+      "historicalReference": "late rome, byszantine empire",
+      "id": "court_bureaucratic_empire",
+      "name": "Court-bureaucratic high medieval empire",
+      "notes": "Court-bureaucratic interpretation of source civilization row",
+      "shortDescription": "Literate imperial court culture with ceremony, bureaucracy, and high-status administration.",
+      "societyLevel": 5
+    },
+    {
+      "glantriExamples": "Iest",
+      "historicalReference": "italian city states",
+      "id": "renaissance_city_state",
+      "name": "Commercial renaissance city-state / principality",
+      "notes": "Source sheet note: modern",
+      "shortDescription": "Urban commercial elite culture with diplomacy, finance, advanced technique, and refined court life.",
+      "societyLevel": 6
+    }
+  ],
   "societyLevels": [
     {
       "baseEducation": 0,

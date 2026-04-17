@@ -1,6 +1,56 @@
 import { canonicalContentSchema, type CanonicalContent } from "./types";
 
 const EXPECTED_SOCIAL_BANDS = [1, 2, 3, 4] as const;
+const EXPECTED_SOCIETY_SCALE = [1, 2, 3, 4, 5, 6] as const;
+
+function validateSocieties(content: CanonicalContent): CanonicalContent {
+  if (content.societies.length === 0) {
+    return content;
+  }
+
+  const societyIdsFromRows = new Set(content.societyLevels.map((entry) => entry.societyId));
+  const societyNamesById = new Map(
+    content.societyLevels.map((entry) => [entry.societyId, entry.societyName])
+  );
+  const issues: string[] = [];
+
+  for (const society of content.societies) {
+    if (
+      !EXPECTED_SOCIETY_SCALE.includes(
+        society.societyLevel as (typeof EXPECTED_SOCIETY_SCALE)[number]
+      )
+    ) {
+      issues.push(
+        `Society "${society.name}" (${society.id}) uses unsupported society level ${society.societyLevel}. Expected 1-6.`
+      );
+    }
+
+    const bandName = societyNamesById.get(society.id);
+
+    if (bandName && bandName !== society.name) {
+      issues.push(
+        `Society "${society.id}" uses mismatched names between societies ("${society.name}") and societyLevels ("${bandName}").`
+      );
+    }
+  }
+
+  const societyDefinitionIds = new Set(content.societies.map((society) => society.id));
+  const missingDefinitions = [...societyIdsFromRows].filter((societyId) => !societyDefinitionIds.has(societyId));
+
+  if (missingDefinitions.length > 0) {
+    issues.push(
+      `Missing society definitions for: ${missingDefinitions
+        .map((societyId) => `${societyNamesById.get(societyId) ?? societyId} (${societyId})`)
+        .join(", ")}.`
+    );
+  }
+
+  if (issues.length > 0) {
+    throw new Error(`Invalid society definition content:\n${issues.join("\n")}`);
+  }
+
+  return content;
+}
 
 function getSkillDependencies(skill: CanonicalContent["skills"][number]) {
   const strongestDependencyBySkillId = new Map<
@@ -233,6 +283,8 @@ function validateProfessionRelationships(content: CanonicalContent): CanonicalCo
 
 export function validateCanonicalContent(input: unknown): CanonicalContent {
   return validateProfessionRelationships(
-    validateSkillRelationships(validateSocietyBandRows(canonicalContentSchema.parse(input)))
+    validateSkillRelationships(
+      validateSocieties(validateSocietyBandRows(canonicalContentSchema.parse(input)))
+    )
   );
 }

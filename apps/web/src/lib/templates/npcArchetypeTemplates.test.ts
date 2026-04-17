@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { validateCanonicalContent } from "@glantri/content";
+import type { CanonicalContent } from "@glantri/content";
 import type { ReusableEntity } from "@glantri/domain";
 import type { EquipmentTemplate } from "@glantri/domain/equipment";
 
@@ -33,7 +33,7 @@ const testEquipmentTemplates = [
   }
 ] as EquipmentTemplate[];
 
-const content = validateCanonicalContent({
+const content = {
   professionFamilies: [{ id: "military", name: "Military" }],
   professionSkills: [
     {
@@ -91,6 +91,14 @@ const content = validateCanonicalContent({
       sortOrder: 2
     }
   ],
+  societies: [
+    {
+      id: "glantri",
+      name: "Glantri",
+      shortDescription: "Ranked feudal magocracy with courtly and urban institutions.",
+      societyLevel: 4
+    }
+  ],
   societyLevels: [
     {
       professionIds: ["guard"],
@@ -130,7 +138,7 @@ const content = validateCanonicalContent({
     }
   ],
   specializations: []
-});
+} as unknown as CanonicalContent;
 
 function createEntity(snapshot: unknown): ReusableEntity {
   return {
@@ -148,13 +156,13 @@ describe("npcArchetypeTemplates", () => {
   it("builds society and profession options from canonical content", () => {
     expect(listSocietyOptions(content)).toEqual([
       {
-        levelMax: 4,
-        levelMin: 1,
         professionIds: ["guard"],
         skillGroupIds: ["urban_watch"],
         skillIds: [],
+        shortDescription: "Ranked feudal magocracy with courtly and urban institutions.",
         socialClasses: ["Common"],
         societyId: "glantri",
+        societyLevel: 4,
         societyName: "Glantri"
       }
     ]);
