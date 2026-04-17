@@ -30,6 +30,8 @@ export type NpcArchetypeSeniority =
   | "veteran"
   | "expert";
 
+export type NpcArchetypeSkillRelevance = "core" | "optional" | "other";
+
 export interface NpcArchetypeVariability {
   gearSubstitutionNotes?: string;
   notes?: string;
@@ -154,6 +156,27 @@ export function getDefaultSkillLevelForSeniority(seniority: NpcArchetypeSeniorit
   return (
     NPC_ARCHETYPE_SENIORITY_OPTIONS.find((option) => option.id === seniority)?.defaultSkillLevel ?? 0
   );
+}
+
+export function getOptionalSkillLevelForSeniority(seniority: NpcArchetypeSeniority): number {
+  const index = NPC_ARCHETYPE_SENIORITY_OPTIONS.findIndex((option) => option.id === seniority);
+
+  if (index <= 0) {
+    return getDefaultSkillLevelForSeniority("unskilled");
+  }
+
+  return NPC_ARCHETYPE_SENIORITY_OPTIONS[index - 1]?.defaultSkillLevel ?? 0;
+}
+
+export function getDefaultSkillLevelForRelevance(input: {
+  relevance: NpcArchetypeSkillRelevance;
+  seniority: NpcArchetypeSeniority;
+}): number {
+  if (input.relevance === "optional") {
+    return getOptionalSkillLevelForSeniority(input.seniority);
+  }
+
+  return getDefaultSkillLevelForSeniority(input.seniority);
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {

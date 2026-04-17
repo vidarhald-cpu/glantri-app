@@ -8,6 +8,8 @@ import {
   buildHumanoidNpcArchetypeSnapshot,
   createEmptyHumanoidNpcArchetypeDraft,
   getDefaultSkillLevelForSeniority,
+  getDefaultSkillLevelForRelevance,
+  getOptionalSkillLevelForSeniority,
   type HumanoidNpcArchetypeSnapshot,
   loadHumanoidNpcArchetypeDraft,
   listAvailableSkills,
@@ -193,6 +195,11 @@ describe("npcArchetypeTemplates", () => {
     expect(getDefaultSkillLevelForSeniority("fully_trained")).toBe(13);
     expect(getDefaultSkillLevelForSeniority("veteran")).toBe(17);
     expect(getDefaultSkillLevelForSeniority("expert")).toBe(21);
+    expect(getOptionalSkillLevelForSeniority("unskilled")).toBe(0);
+    expect(getOptionalSkillLevelForSeniority("fully_trained")).toBe(8);
+    expect(getDefaultSkillLevelForRelevance({ relevance: "core", seniority: "fully_trained" })).toBe(13);
+    expect(getDefaultSkillLevelForRelevance({ relevance: "optional", seniority: "fully_trained" })).toBe(8);
+    expect(getDefaultSkillLevelForRelevance({ relevance: "other", seniority: "fully_trained" })).toBe(13);
   });
 
   it("builds a reusable humanoid npc archetype snapshot with future generator metadata", () => {
