@@ -22,6 +22,14 @@ export interface NpcArchetypeSkillSelection {
   targetLevel: number;
 }
 
+export type NpcArchetypeSeniority =
+  | "unskilled"
+  | "basic"
+  | "under_training"
+  | "fully_trained"
+  | "veteran"
+  | "expert";
+
 export interface NpcArchetypeVariability {
   gearSubstitutionNotes?: string;
   notes?: string;
@@ -35,6 +43,7 @@ export interface HumanoidNpcArchetypeDraft {
   name: string;
   professionId: string;
   roleLabel: string;
+  seniority: NpcArchetypeSeniority;
   selectedGearTemplateIds: string[];
   selectedSkillGroupIds: string[];
   skillSelections: NpcArchetypeSkillSelection[];
@@ -63,6 +72,7 @@ export interface HumanoidNpcArchetypeSnapshot {
   schemaVersion: 1;
   skillGroupIds: string[];
   skills: Array<{ skillId: string; skillName: string; targetLevel: number }>;
+  seniority: NpcArchetypeSeniority;
   society: {
     societyId: string;
     societyName: string;
@@ -81,6 +91,7 @@ export interface ParsedHumanoidNpcTemplateSummary {
   isHumanoidNpcArchetype: boolean;
   profession?: string;
   roleLabel?: string;
+  seniority?: NpcArchetypeSeniority;
   skillCount: number;
   skillGroupCount: number;
   societyName?: string;
@@ -98,6 +109,21 @@ export interface LoadedHumanoidNpcArchetypeDraft {
 }
 
 const DEFAULT_BASE_STAT = 10;
+const DEFAULT_SENIORITY: NpcArchetypeSeniority = "fully_trained";
+
+export const NPC_ARCHETYPE_SENIORITY_OPTIONS: Array<{
+  defaultSkillLevel: number;
+  id: NpcArchetypeSeniority;
+  label: string;
+  rangeLabel: string;
+}> = [
+  { defaultSkillLevel: 0, id: "unskilled", label: "Unskilled", rangeLabel: "0" },
+  { defaultSkillLevel: 3, id: "basic", label: "Basic", rangeLabel: "1-5" },
+  { defaultSkillLevel: 8, id: "under_training", label: "Under training", rangeLabel: "6-10" },
+  { defaultSkillLevel: 13, id: "fully_trained", label: "Fully trained", rangeLabel: "11-15" },
+  { defaultSkillLevel: 17, id: "veteran", label: "Veteran / Senior", rangeLabel: "16-19" },
+  { defaultSkillLevel: 21, id: "expert", label: "Expert / Guru", rangeLabel: "20+" }
+];
 
 export function createEmptyHumanoidNpcArchetypeDraft(): HumanoidNpcArchetypeDraft {
   return {
@@ -106,6 +132,7 @@ export function createEmptyHumanoidNpcArchetypeDraft(): HumanoidNpcArchetypeDraf
     name: "",
     professionId: "",
     roleLabel: "",
+    seniority: DEFAULT_SENIORITY,
     selectedGearTemplateIds: [],
     selectedSkillGroupIds: [],
     skillSelections: [],
@@ -121,6 +148,12 @@ export function createEmptyHumanoidNpcArchetypeDraft(): HumanoidNpcArchetypeDraf
       statVariance: 1
     }
   };
+}
+
+export function getDefaultSkillLevelForSeniority(seniority: NpcArchetypeSeniority): number {
+  return (
+    NPC_ARCHETYPE_SENIORITY_OPTIONS.find((option) => option.id === seniority)?.defaultSkillLevel ?? 0
+  );
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -270,6 +303,58 @@ export function listAvailableSkills(input: {
     .sort((left, right) => left.name.localeCompare(right.name));
 }
 
+export function listSuggestedSkills(input: {
+  content: CanonicalContent;
+  professionId: string;
+  selectedSkillGroupIds: string[];
+  societyId: string;
+}): SkillDefinition[] {
+  const society = listSocietyOptions(input.content).find(
+    (option) => option.societyId === input.societyId
+  );
+  const profession = input.content.professions.find(
+    (candidate) => candidate.id === input.professionId
+  );
+  const selectedGroupIds = new Set(input.selectedSkillGroupIds);
+  const directSkillIds = new Set(
+    input.content.professionSkills
+      .filter((entry) => entry.skillId)
+      .filter((entry) => {
+        if (!profession) {
+          return false;
+        }
+
+        if (entry.scope === "family") {
+          return entry.professionId === profession.familyId;
+        }
+
+        return entry.professionId === profession.id;
+      })
+      .map((entry) => entry.skillId as string)
+  );
+  const societySkillIds = new Set(society?.skillIds ?? []);
+  const suggestedGroupIds = new Set(
+    listSuggestedSkillGroupIds({
+      content: input.content,
+      professionId: input.professionId,
+      societyId: input.societyId
+    })
+  );
+
+  return input.content.skills
+    .filter((skill) => {
+      const skillGroupIds = getSkillGroupIds(skill);
+
+      return (
+        directSkillIds.has(skill.id) ||
+        societySkillIds.has(skill.id) ||
+        skillGroupIds.some((groupId) => selectedGroupIds.has(groupId)) ||
+        skillGroupIds.some((groupId) => suggestedGroupIds.has(groupId))
+      );
+    })
+    .sort((left, right) => left.name.localeCompare(right.name));
+}
+
 export function buildHumanoidNpcArchetypeSnapshot(input: {
   content: CanonicalContent;
   draft: HumanoidNpcArchetypeDraft;
@@ -340,6 +425,7 @@ export function buildHumanoidNpcArchetypeSnapshot(input: {
     schemaVersion: 1,
     skillGroupIds: input.draft.selectedSkillGroupIds,
     skills: skillRows,
+    seniority: input.draft.seniority,
     society: {
       societyId: society?.societyId ?? input.draft.societyId,
       societyName: society?.societyName ?? input.draft.societyId
@@ -381,6 +467,7 @@ export function parseHumanoidNpcArchetypeTemplate(
       isHumanoidNpcArchetype: false,
       profession: toNonEmptyString(isObject(snapshot) ? snapshot.profession : undefined),
       roleLabel: toNonEmptyString(isObject(snapshot) ? snapshot.roleLabel : undefined),
+      seniority: DEFAULT_SENIORITY,
       skillCount: 0,
       skillGroupCount: 0,
       tags: parseStringArray(isObject(snapshot) ? snapshot.tags : undefined)
@@ -418,6 +505,10 @@ export function parseHumanoidNpcArchetypeTemplate(
     isHumanoidNpcArchetype: true,
     profession: toNonEmptyString(profession?.name) ?? toNonEmptyString(snapshot.profession),
     roleLabel: toNonEmptyString(snapshot.roleLabel),
+    seniority:
+      typeof archetype.seniority === "string"
+        ? (archetype.seniority as NpcArchetypeSeniority)
+        : DEFAULT_SENIORITY,
     skillCount: skills.length,
     skillGroupCount: skillGroupIds.length,
     societyName: toNonEmptyString(society?.societyName),
@@ -467,6 +558,10 @@ export function loadHumanoidNpcArchetypeDraft(
       name: entity.name,
       professionId: toNonEmptyString(profession?.id) ?? "",
       roleLabel: toNonEmptyString(snapshot.roleLabel) ?? "",
+      seniority:
+        typeof archetype.seniority === "string"
+          ? (archetype.seniority as NpcArchetypeSeniority)
+          : DEFAULT_SENIORITY,
       selectedGearTemplateIds: parseStringArray(gear?.templateIds) ?? [],
       selectedSkillGroupIds: parseStringArray(archetype.skillGroupIds) ?? [],
       skillSelections: skills

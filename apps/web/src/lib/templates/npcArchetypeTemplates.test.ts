@@ -7,10 +7,12 @@ import type { EquipmentTemplate } from "@glantri/domain/equipment";
 import {
   buildHumanoidNpcArchetypeSnapshot,
   createEmptyHumanoidNpcArchetypeDraft,
+  getDefaultSkillLevelForSeniority,
   type HumanoidNpcArchetypeSnapshot,
   loadHumanoidNpcArchetypeDraft,
   listAvailableSkills,
   listProfessionsForSociety,
+  listSuggestedSkills,
   listSocietyOptions,
   listSuggestedSkillGroupIds,
   parseHumanoidNpcArchetypeTemplate
@@ -173,6 +175,24 @@ describe("npcArchetypeTemplates", () => {
         societyId: "glantri"
       }).map((skill) => skill.id)
     ).toEqual(["leadership", "shield_use"]);
+
+    expect(
+      listSuggestedSkills({
+        content,
+        professionId: "guard",
+        selectedSkillGroupIds: ["field_soldiering"],
+        societyId: "glantri"
+      }).map((skill) => skill.id)
+    ).toEqual(["leadership", "shield_use"]);
+  });
+
+  it("maps seniority presets to default skill target levels", () => {
+    expect(getDefaultSkillLevelForSeniority("unskilled")).toBe(0);
+    expect(getDefaultSkillLevelForSeniority("basic")).toBe(3);
+    expect(getDefaultSkillLevelForSeniority("under_training")).toBe(8);
+    expect(getDefaultSkillLevelForSeniority("fully_trained")).toBe(13);
+    expect(getDefaultSkillLevelForSeniority("veteran")).toBe(17);
+    expect(getDefaultSkillLevelForSeniority("expert")).toBe(21);
   });
 
   it("builds a reusable humanoid npc archetype snapshot with future generator metadata", () => {
@@ -183,6 +203,7 @@ describe("npcArchetypeTemplates", () => {
     draft.name = "City Guard";
     draft.professionId = "guard";
     draft.roleLabel = "Town watch";
+    draft.seniority = "veteran";
     draft.selectedGearTemplateIds = [sword?.id ?? "", rope?.id ?? ""].filter(Boolean);
     draft.selectedSkillGroupIds = ["field_soldiering", "urban_watch"];
     draft.skillSelections = [{ skillId: "shield_use", targetLevel: 12 }];
@@ -207,6 +228,7 @@ describe("npcArchetypeTemplates", () => {
         id: "guard",
         name: "Guard"
       },
+      seniority: "veteran",
       society: {
         societyId: "glantri",
         societyName: "Glantri"
@@ -270,6 +292,7 @@ describe("npcArchetypeTemplates", () => {
       isHumanoidNpcArchetype: true,
       profession: "Guard",
       roleLabel: "Town watch",
+      seniority: "fully_trained",
       skillCount: 1,
       skillGroupCount: 1,
       societyName: "Glantri",
@@ -297,6 +320,7 @@ describe("npcArchetypeTemplates", () => {
           },
           skillGroupIds: ["field_soldiering"],
           skills: [{ skillId: "shield_use", skillName: "Shield Use", targetLevel: 12 }],
+          seniority: "expert",
           society: {
             societyId: "glantri",
             societyName: "Glantri"
@@ -322,6 +346,7 @@ describe("npcArchetypeTemplates", () => {
       gearNotes: "Optional rope",
       professionId: "guard",
       roleLabel: "Town watch",
+      seniority: "expert",
       selectedGearTemplateIds: ["weapon-1"],
       selectedSkillGroupIds: ["field_soldiering"],
       skillSelections: [{ skillId: "shield_use", targetLevel: 12 }],

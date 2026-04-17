@@ -28,11 +28,13 @@ import {
 } from "../../../src/features/equipment/inventoryTemplateGroups";
 import { getPlayerFacingEquipmentTemplateName } from "../../../src/features/equipment/playerFacingTemplateOptions";
 import {
+  NPC_ARCHETYPE_SENIORITY_OPTIONS,
   buildHumanoidNpcArchetypeSnapshot,
   createEmptyHumanoidNpcArchetypeDraft,
-  listAvailableSkills,
+  getDefaultSkillLevelForSeniority,
   listProfessionsForSociety,
   listSocietyOptions,
+  listSuggestedSkills,
   listSuggestedSkillGroupIds,
   loadHumanoidNpcArchetypeDraft,
   parseHumanoidNpcArchetypeTemplate,
@@ -43,6 +45,7 @@ type TemplateKindFilter = "all" | ReusableEntity["kind"];
 type ArchetypeStepId =
   | "society"
   | "profession"
+  | "seniority"
   | "skill-groups"
   | "skills"
   | "stats"
@@ -53,6 +56,7 @@ type ArchetypeStepId =
 const ARCHETYPE_STEPS: Array<{ id: ArchetypeStepId; label: string }> = [
   { id: "society", label: "Society" },
   { id: "profession", label: "Profession" },
+  { id: "seniority", label: "Seniority" },
   { id: "skill-groups", label: "Skill groups" },
   { id: "skills", label: "Skills" },
   { id: "stats", label: "Stats" },
@@ -88,7 +92,7 @@ export default function TemplatesPageContent() {
     createEmptyHumanoidNpcArchetypeDraft()
   );
   const [showAllSkillGroups, setShowAllSkillGroups] = useState(false);
-  const [selectedSkillId, setSelectedSkillId] = useState("");
+  const [showAllSkills, setShowAllSkills] = useState(false);
   const [skillSearch, setSkillSearch] = useState("");
   const [gearFilter, setGearFilter] = useState<InventoryTemplateFilter>("all");
   const [selectedGearTemplateId, setSelectedGearTemplateId] = useState("");
@@ -143,14 +147,14 @@ export default function TemplatesPageContent() {
         : [],
     [archetypeDraft.professionId, archetypeDraft.societyId, content]
   );
-  const availableSkills = useMemo(() => {
+  const suggestedSkills = useMemo(() => {
     if (!content || !archetypeDraft.societyId || !archetypeDraft.professionId) {
       return [];
     }
 
     const selectedSkillIds = new Set(archetypeDraft.skillSelections.map((selection) => selection.skillId));
 
-    return listAvailableSkills({
+    return listSuggestedSkills({
       content,
       professionId: archetypeDraft.professionId,
       selectedSkillGroupIds: archetypeDraft.selectedSkillGroupIds,
@@ -174,6 +178,30 @@ export default function TemplatesPageContent() {
     content,
     skillSearch
   ]);
+  const visibleAllSkills = useMemo(() => {
+    if (!showAllSkills) {
+      return [];
+    }
+
+    const selectedSkillIds = new Set(archetypeDraft.skillSelections.map((selection) => selection.skillId));
+    const suggestedSkillIds = new Set(suggestedSkills.map((skill) => skill.id));
+    const normalizedSearch = skillSearch.trim().toLowerCase();
+
+    return (
+      content?.skills
+        .slice()
+        .sort((left, right) => left.name.localeCompare(right.name))
+        .filter((skill) => !selectedSkillIds.has(skill.id))
+        .filter((skill) => !suggestedSkillIds.has(skill.id))
+        .filter((skill) => {
+          return (
+            normalizedSearch.length === 0 ||
+            skill.name.toLowerCase().includes(normalizedSearch) ||
+            skill.id.toLowerCase().includes(normalizedSearch)
+          );
+        }) ?? []
+    );
+  }, [archetypeDraft.skillSelections, content, showAllSkills, skillSearch, suggestedSkills]);
   const availableGearTemplates = useMemo(() => {
     const selectedIds = new Set(archetypeDraft.selectedGearTemplateIds);
 
@@ -217,12 +245,14 @@ export default function TemplatesPageContent() {
   }, [content, showAllSkillGroups, suggestedSkillGroupIds]);
   const hiddenSkillGroupCount =
     (content?.skillGroups.length ?? 0) - visibleSkillGroups.length;
+  const hiddenSkillCount = Math.max((content?.skills.length ?? 0) - suggestedSkills.length, 0);
   const resolvedStats = resolveGlantriCharacterStats(archetypeDraft.stats);
   const activeStepIndex = ARCHETYPE_STEPS.findIndex((step) => step.id === activeStep);
   const canMoveForwardByStep: Record<ArchetypeStepId, boolean> = {
     gear: true,
     profession: Boolean(archetypeDraft.professionId),
     review: true,
+    seniority: true,
     skills: archetypeDraft.skillSelections.length > 0,
     "skill-groups": archetypeDraft.selectedSkillGroupIds.length > 0,
     society: Boolean(archetypeDraft.societyId),
@@ -237,11 +267,11 @@ export default function TemplatesPageContent() {
     setArchetypeDraft(createEmptyHumanoidNpcArchetypeDraft());
     setEditingTemplateId(null);
     setActiveStep("society");
-    setSelectedSkillId("");
     setSelectedGearTemplateId("");
     setSkillSearch("");
     setGearFilter("all");
     setShowAllSkillGroups(false);
+    setShowAllSkills(false);
   }
 
   function handleSocietyChange(societyId: string) {
@@ -252,6 +282,8 @@ export default function TemplatesPageContent() {
       skillSelections: [],
       societyId
     }));
+    setShowAllSkillGroups(false);
+    setShowAllSkills(false);
   }
 
   function handleProfessionChange(professionId: string) {
@@ -264,6 +296,7 @@ export default function TemplatesPageContent() {
       skillSelections: []
     }));
     setShowAllSkillGroups(false);
+    setShowAllSkills(false);
   }
 
   function handleApplySuggestedSkillGroups() {
@@ -282,16 +315,13 @@ export default function TemplatesPageContent() {
     }));
   }
 
-  function handleAddSkill() {
-    if (!selectedSkillId) {
-      return;
-    }
-
+  function handleAddSkill(skillId: string, targetLevel = getDefaultSkillLevelForSeniority(archetypeDraft.seniority)) {
     updateDraft((current) => ({
       ...current,
-      skillSelections: [...current.skillSelections, { skillId: selectedSkillId, targetLevel: 11 }]
+      skillSelections: current.skillSelections.some((selection) => selection.skillId === skillId)
+        ? current.skillSelections
+        : [...current.skillSelections, { skillId, targetLevel }]
     }));
-    setSelectedSkillId("");
   }
 
   function handleSkillLevelChange(skillId: string, nextValue: number) {
@@ -417,11 +447,11 @@ export default function TemplatesPageContent() {
     setArchetypeDraft(loaded.draft);
     setEditingTemplateId(loaded.isHumanoidNpcArchetype ? template.id : null);
     setActiveStep("society");
-    setSelectedSkillId("");
     setSelectedGearTemplateId("");
     setSkillSearch("");
     setGearFilter("all");
     setShowAllSkillGroups(false);
+    setShowAllSkills(false);
     setFeedback(
       loaded.isHumanoidNpcArchetype
         ? `Loaded ${template.name} into the archetype editor.`
@@ -666,6 +696,45 @@ export default function TemplatesPageContent() {
           </section>
         ) : null}
 
+        {activeStep === "seniority" ? (
+          <section style={{ display: "grid", gap: "0.75rem" }}>
+            <h3 style={{ margin: 0 }}>Seniority</h3>
+            <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
+              Seniority sets the default target level used when you add suggested skills. You can still edit any skill level afterward.
+            </div>
+            <div style={{ display: "grid", gap: "0.5rem" }}>
+              {NPC_ARCHETYPE_SENIORITY_OPTIONS.map((option) => (
+                <label
+                  key={option.id}
+                  style={{
+                    border: "1px solid #d9ddd8",
+                    borderRadius: 10,
+                    cursor: "pointer",
+                    display: "grid",
+                    gap: "0.25rem",
+                    padding: "0.75rem"
+                  }}
+                >
+                  <div style={{ alignItems: "center", display: "flex", gap: "0.5rem" }}>
+                    <input
+                      checked={archetypeDraft.seniority === option.id}
+                      name="archetype-seniority"
+                      onChange={() =>
+                        updateDraft((current) => ({ ...current, seniority: option.id }))
+                      }
+                      type="radio"
+                    />
+                    <strong>{option.label}</strong>
+                  </div>
+                  <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
+                    Competency band {option.rangeLabel} • default skill target {option.defaultSkillLevel}
+                  </div>
+                </label>
+              ))}
+            </div>
+          </section>
+        ) : null}
+
         {activeStep === "skill-groups" ? (
           <section style={{ display: "grid", gap: "0.75rem" }}>
             <div
@@ -731,40 +800,132 @@ export default function TemplatesPageContent() {
 
         {activeStep === "skills" ? (
           <section style={{ display: "grid", gap: "0.75rem" }}>
-            <h3 style={{ margin: 0 }}>Skills</h3>
             <div
               style={{
-                alignItems: "end",
-                display: "grid",
+                alignItems: "center",
+                display: "flex",
+                flexWrap: "wrap",
                 gap: "0.75rem",
-                gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr) auto"
+                justifyContent: "space-between"
+              }}
+            >
+              <div style={{ display: "grid", gap: "0.25rem" }}>
+                <h3 style={{ margin: 0 }}>Skills</h3>
+                <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
+                  Suggested skills start with the {NPC_ARCHETYPE_SENIORITY_OPTIONS.find((option) => option.id === archetypeDraft.seniority)?.label?.toLowerCase() ?? "selected"} default of{" "}
+                  {getDefaultSkillLevelForSeniority(archetypeDraft.seniority)}.
+                </div>
+              </div>
+              <button onClick={() => setShowAllSkills((current) => !current)} type="button">
+                {showAllSkills ? "Show suggested only" : `Show all skills${hiddenSkillCount > 0 ? ` (${hiddenSkillCount} more)` : ""}`}
+              </button>
+            </div>
+            <div
+              style={{
+                display: "grid",
+                gap: "0.75rem"
               }}
             >
               <label style={{ display: "grid", gap: "0.25rem" }}>
                 <span>Search</span>
                 <input
                   onChange={(event) => setSkillSearch(event.target.value)}
-                  placeholder="Filter available skills"
+                  placeholder="Filter suggested or all skills"
                   value={skillSearch}
                 />
               </label>
-              <label style={{ display: "grid", gap: "0.25rem" }}>
-                <span>Available skill</span>
-                <select
-                  onChange={(event) => setSelectedSkillId(event.target.value)}
-                  value={selectedSkillId}
-                >
-                  <option value="">Select a skill</option>
-                  {availableSkills.map((skill) => (
-                    <option key={skill.id} value={skill.id}>
-                      {skill.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <button disabled={!selectedSkillId} onClick={handleAddSkill} type="button">
-                Add skill
-              </button>
+              <div style={{ display: "grid", gap: "0.5rem" }}>
+                <div style={{ fontWeight: 600 }}>Suggested skills</div>
+                {suggestedSkills.length > 0 ? (
+                  suggestedSkills.map((skill) => {
+                    const groupNames = skill.groupIds
+                      .map((groupId) => content?.skillGroups.find((group) => group.id === groupId)?.name ?? groupId)
+                      .join(", ");
+
+                    return (
+                      <div
+                        key={`suggested-${skill.id}`}
+                        style={{
+                          alignItems: "center",
+                          border: "1px solid #d9ddd8",
+                          borderRadius: 10,
+                          display: "grid",
+                          gap: "0.75rem",
+                          gridTemplateColumns: "minmax(0, 1fr) auto",
+                          padding: "0.75rem"
+                        }}
+                      >
+                        <div style={{ display: "grid", gap: "0.25rem" }}>
+                          <strong>{skill.name}</strong>
+                          <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>{groupNames}</div>
+                        </div>
+                        <button
+                          onClick={() =>
+                            handleAddSkill(
+                              skill.id,
+                              getDefaultSkillLevelForSeniority(archetypeDraft.seniority)
+                            )
+                          }
+                          type="button"
+                        >
+                          Add {getDefaultSkillLevelForSeniority(archetypeDraft.seniority)}
+                        </button>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
+                    No suggested skills match the current society, profession, skill groups, and search.
+                  </div>
+                )}
+              </div>
+              {showAllSkills ? (
+                <div style={{ display: "grid", gap: "0.5rem" }}>
+                  <div style={{ fontWeight: 600 }}>All reachable skills</div>
+                  {visibleAllSkills.length > 0 ? (
+                    visibleAllSkills.map((skill) => {
+                      const groupNames = skill.groupIds
+                        .map((groupId) => content?.skillGroups.find((group) => group.id === groupId)?.name ?? groupId)
+                        .join(", ");
+
+                      return (
+                        <div
+                          key={`all-${skill.id}`}
+                          style={{
+                            alignItems: "center",
+                            border: "1px solid #d9ddd8",
+                            borderRadius: 10,
+                            display: "grid",
+                            gap: "0.75rem",
+                            gridTemplateColumns: "minmax(0, 1fr) auto",
+                            padding: "0.75rem"
+                          }}
+                        >
+                          <div style={{ display: "grid", gap: "0.25rem" }}>
+                            <strong>{skill.name}</strong>
+                            <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>{groupNames}</div>
+                          </div>
+                          <button
+                            onClick={() =>
+                              handleAddSkill(
+                                skill.id,
+                                getDefaultSkillLevelForSeniority(archetypeDraft.seniority)
+                              )
+                            }
+                            type="button"
+                          >
+                            Add {getDefaultSkillLevelForSeniority(archetypeDraft.seniority)}
+                          </button>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
+                      No additional skills match the current search.
+                    </div>
+                  )}
+                </div>
+              ) : null}
             </div>
             {archetypeDraft.skillSelections.length > 0 ? (
               <div style={{ display: "grid", gap: "0.5rem" }}>
@@ -977,6 +1138,11 @@ export default function TemplatesPageContent() {
               <div>{archetypeDraft.description || "No description yet."}</div>
               <div style={{ display: "grid", gap: "0.35rem" }}>
                 <div>Skill groups: {archetypeDraft.selectedSkillGroupIds.length}</div>
+                <div>
+                  Seniority:{" "}
+                  {NPC_ARCHETYPE_SENIORITY_OPTIONS.find((option) => option.id === archetypeDraft.seniority)?.label ??
+                    archetypeDraft.seniority}
+                </div>
                 <div>Skills: {archetypeDraft.skillSelections.length}</div>
                 <div>
                   Gear:{" "}
