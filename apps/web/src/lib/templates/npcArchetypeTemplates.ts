@@ -10,9 +10,12 @@ import { resolveGlantriCharacterStats } from "@glantri/rules-engine";
 import type { EquipmentTemplate } from "@glantri/domain/equipment";
 
 export interface SocietyOption {
+  levelMax: number;
+  levelMin: number;
   professionIds: string[];
   skillGroupIds: string[];
   skillIds: string[];
+  socialClasses: string[];
   societyId: string;
   societyName: string;
 }
@@ -207,18 +210,29 @@ export function listSocietyOptions(content: CanonicalContent): SocietyOption[] {
 
     if (!existing) {
       societies.set(access.societyId, {
+        levelMax: access.societyLevel,
+        levelMin: access.societyLevel,
         professionIds: [...access.professionIds],
         skillGroupIds: [...access.skillGroupIds],
         skillIds: [...access.skillIds],
+        socialClasses: access.socialClass ? [access.socialClass] : [],
         societyId: access.societyId,
         societyName: access.societyName
       });
       continue;
     }
 
+    existing.levelMax = Math.max(existing.levelMax, access.societyLevel);
+    existing.levelMin = Math.min(existing.levelMin, access.societyLevel);
     existing.professionIds = [...new Set([...existing.professionIds, ...access.professionIds])];
     existing.skillGroupIds = [...new Set([...existing.skillGroupIds, ...access.skillGroupIds])];
     existing.skillIds = [...new Set([...existing.skillIds, ...access.skillIds])];
+    existing.socialClasses = [
+      ...new Set([
+        ...existing.socialClasses,
+        ...(access.socialClass ? [access.socialClass] : [])
+      ])
+    ];
   }
 
   return [...societies.values()].sort((left, right) =>

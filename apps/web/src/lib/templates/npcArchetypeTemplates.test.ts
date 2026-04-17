@@ -148,9 +148,12 @@ describe("npcArchetypeTemplates", () => {
   it("builds society and profession options from canonical content", () => {
     expect(listSocietyOptions(content)).toEqual([
       {
+        levelMax: 4,
+        levelMin: 1,
         professionIds: ["guard"],
         skillGroupIds: ["urban_watch"],
         skillIds: [],
+        socialClasses: ["Common"],
         societyId: "glantri",
         societyName: "Glantri"
       }
