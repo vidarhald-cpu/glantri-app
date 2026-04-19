@@ -20,6 +20,12 @@ export default function GlantriTermsAdminPage() {
               <div style={{ color: "#776b52", fontSize: "0.82rem", letterSpacing: "0.08em", textTransform: "uppercase" }}>
                 {term.id}
               </div>
+              {term.implementationNote ? (
+                <div style={{ display: "grid", gap: "0.3rem" }}>
+                  <strong style={{ color: "#2c2418", fontSize: "0.95rem" }}>Implementation note</strong>
+                  <div style={{ color: "#4f4635", lineHeight: 1.6 }}>{term.implementationNote}</div>
+                </div>
+              ) : null}
               <div style={{ display: "grid", gap: "0.45rem" }}>
                 <strong style={{ color: "#2c2418", fontSize: "0.95rem" }}>Where used</strong>
                 <ul style={{ color: "#4f4635", lineHeight: 1.6, margin: 0, paddingLeft: "1.1rem" }}>

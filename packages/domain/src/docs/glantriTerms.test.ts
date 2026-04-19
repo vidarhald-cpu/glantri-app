@@ -11,6 +11,8 @@ describe("glantriTerms", () => {
       "skill-type",
       "skill-group",
       "skill-category",
+      "primary-group-membership",
+      "secondary-group-membership",
       "primary-vs-optional-group",
       "profession",
       "society-level",
@@ -23,6 +25,9 @@ describe("glantriTerms", () => {
       expect(term.name.length).toBeGreaterThan(0);
       expect(term.definition.length).toBeGreaterThan(0);
       expect(term.whereUsed.length).toBeGreaterThan(0);
+      if (term.implementationNote) {
+        expect(term.implementationNote.length).toBeGreaterThan(0);
+      }
     }
   });
 });

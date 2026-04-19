@@ -1,6 +1,7 @@
 export interface GlantriTermEntry {
   definition: string;
   id: string;
+  implementationNote?: string;
   name: string;
   whereUsed: string[];
 }
@@ -20,7 +21,7 @@ export const glantriTerms: GlantriTermEntry[] = [
   },
   {
     id: "skill-type",
-    name: "Skill Type",
+    name: "Mechanical Type",
     definition:
       "The mechanical kind of skill entry. Use Type for values such as ordinary, secondary, and specialization when they are rendered in the UI.",
     whereUsed: [
@@ -34,11 +35,12 @@ export const glantriTerms: GlantriTermEntry[] = [
     id: "skill-group",
     name: "Skill Group",
     definition:
-      "A training bundle that collects related skills and contributes shared advancement. Professions grant groups, and skills belong to one primary group with optional cross-list memberships.",
+      "A training bundle that collects related skills and contributes shared advancement. Skill Groups are used for profession design, skill access, and training structure.",
     whereUsed: [
+      "Professions and profession grants",
       "Admin Skill Groups review",
-      "Profession grant inspection",
       "Chargen group allocation",
+      "NPC template authoring",
       "Template authoring group selection"
     ]
   },
@@ -46,18 +48,49 @@ export const glantriTerms: GlantriTermEntry[] = [
     id: "skill-category",
     name: "Skill Category",
     definition:
-      "A player-facing domain grouping such as Combat, Military, Maritime, or Knowledge. Skill category is derived from the skill's primary skill group and is separate from mechanical Type.",
+      "A player-facing classification used for browsing, filtering, and displaying skills, such as Combat, Military, Maritime, or Knowledge. Skill Category is conceptually independent from Skill Group membership.",
+    implementationNote:
+      "Current behavior: Skill Category is currently inferred from a skill's Primary Skill Group Membership in parts of the app, including chargen. That is an implementation shortcut and not the intended long-term model. Category should eventually be defined explicitly.",
     whereUsed: [
-      "Chargen other-skills filter",
-      "Player-facing skill browsing",
-      "Future documentation and search terminology"
+      "Chargen skill filter",
+      "Character sheet grouping",
+      "Template authoring filtering",
+      "Player-facing skill browsing"
+    ]
+  },
+  {
+    id: "primary-group-membership",
+    name: "Primary Skill Group Membership",
+    definition:
+      "The skill's main membership in the skill-group training structure. It defines the skill's structural identity in the training model.",
+    implementationNote:
+      "Current behavior: Primary Skill Group Membership currently drives Skill Category inference in chargen and some admin views. That shortcut does not mean category is conceptually defined by group membership.",
+    whereUsed: [
+      "Canonical skill definitions",
+      "Admin Skills review and inspector",
+      "Group membership structure",
+      "Template generation and suggestions"
+    ]
+  },
+  {
+    id: "secondary-group-membership",
+    name: "Secondary Skill Group Membership",
+    definition:
+      "Additional memberships in other Skill Groups beyond the primary group. They represent alternative training contexts and access paths.",
+    implementationNote:
+      "Cross-listed group is still a useful synonym for current UI and content discussions, but Secondary Skill Group Membership is the preferred conceptual term.",
+    whereUsed: [
+      "Admin Skills review and inspector",
+      "Group membership structure",
+      "Template generation and suggestions",
+      "Profession and society reach inspection"
     ]
   },
   {
     id: "primary-vs-optional-group",
     name: "Primary vs Optional Group",
     definition:
-      "A relevance distinction inside profession and skill-group relationships. Primary or core groups define the main training package, while optional groups and memberships are common but not essential additions.",
+      "A relevance distinction inside profession and skill-group relationships. Core or primary groups define the main training package, while optional groups and memberships are common but not essential additions.",
     whereUsed: [
       "Profession review surfaces",
       "Skill group memberships",
