@@ -8,6 +8,10 @@ export interface SkillAdminRow {
   groupNames: string[];
   id: string;
   name: string;
+  optionalGroupCount: number;
+  optionalGroupNames: string[];
+  primaryGroup: string;
+  professionNames: string[];
   secondaryOf: string;
   shortDescription: string;
   skillType: string;
@@ -67,6 +71,14 @@ export interface ProfessionAdminRow {
   description: string;
   directSkillExceptions: string[];
   directlyGrantedSkills: string[];
+  familyName: string;
+  groupFans: Array<{
+    coreSkills: string[];
+    groupName: string;
+    optionalSkills: string[];
+    relevance: "core" | "optional";
+    weightedContentPoints: number;
+  }>;
   grantedSkillGroups: string[];
   id: string;
   name: string;
@@ -205,6 +217,24 @@ function joinDisplayName(name: string, suffix?: string): string {
 
 function getWeightedSkillPoints(skill: CanonicalContent["skills"][number]): number {
   return skill.category === "secondary" ? 1 : 2;
+}
+
+function getGroupMemberships(
+  content: CanonicalContent,
+  groupId: string
+): Array<{ relevance: "core" | "optional"; skillId: string }> {
+  const group = content.skillGroups.find((candidate) => candidate.id === groupId);
+
+  if (group?.skillMemberships?.length) {
+    return group.skillMemberships;
+  }
+
+  return content.skills
+    .filter((skill) => getSkillGroupIds(skill).includes(groupId))
+    .map((skill) => ({
+      relevance: skill.groupId === groupId ? ("core" as const) : ("optional" as const),
+      skillId: skill.id
+    }));
 }
 
 function formatSocietyEntryLabel(societyName: string, level: number, socialClass: string): string {
@@ -354,11 +384,33 @@ export function buildAdminOverviewStats(content: CanonicalContent): AdminOvervie
 
 export function buildSkillAdminRows(content: CanonicalContent): SkillAdminRow[] {
   const { skillGroupsById, skillsById } = buildSkillMaps(content);
+  const professionPackages = content.professions.map((profession) => {
+    const resolvedPackage = resolveProfessionGrantPackage(content, profession.id);
+
+    return {
+      name: profession.name,
+      reachableSkillIds: resolvedPackage.reachableSkillIds
+    };
+  });
 
   return [...content.skills]
     .sort((left, right) => left.sortOrder - right.sortOrder || left.name.localeCompare(right.name))
     .map((skill) => {
       const groupIds = getSkillGroupIds(skill);
+      const primaryGroupId = skill.groupId ?? groupIds[0];
+      const primaryGroup = primaryGroupId
+        ? skillGroupsById.get(primaryGroupId)?.name ?? primaryGroupId
+        : "";
+      const optionalGroupNames = uniqueSorted(
+        groupIds
+          .filter((groupId) => groupId !== primaryGroupId)
+          .map((groupId) => skillGroupsById.get(groupId)?.name ?? groupId)
+      );
+      const professionNames = uniqueSorted(
+        professionPackages
+          .filter((professionPackage) => professionPackage.reachableSkillIds.includes(skill.id))
+          .map((professionPackage) => professionPackage.name)
+      );
 
       return {
         characteristics: formatCharacteristicList(skill.linkedStats),
@@ -370,6 +422,10 @@ export function buildSkillAdminRows(content: CanonicalContent): SkillAdminRow[] 
         groupNames: groupIds.map((groupId) => skillGroupsById.get(groupId)?.name ?? groupId),
         id: skill.id,
         name: skill.name,
+        optionalGroupCount: optionalGroupNames.length,
+        optionalGroupNames,
+        primaryGroup,
+        professionNames,
         secondaryOf: skill.secondaryOfSkillId
           ? skillsById.get(skill.secondaryOfSkillId)?.name ?? skill.secondaryOfSkillId
           : "",
@@ -1156,15 +1212,7 @@ export function buildSkillGroupAdminRows(content: CanonicalContent): SkillGroupA
   return [...content.skillGroups]
     .sort((left, right) => left.sortOrder - right.sortOrder || left.name.localeCompare(right.name))
     .map((group) => {
-      const memberships =
-        group.skillMemberships?.length
-          ? group.skillMemberships
-          : content.skills
-              .filter((skill) => getSkillGroupIds(skill).includes(group.id))
-              .map((skill) => ({
-                relevance: skill.groupId === group.id ? ("core" as const) : ("optional" as const),
-                skillId: skill.id
-              }));
+      const memberships = getGroupMemberships(content, group.id);
       const includedSkillRows = memberships
         .map((membership) => {
           const skill = content.skills.find((candidate) => candidate.id === membership.skillId);
@@ -1210,8 +1258,7 @@ export function buildSkillGroupAdminRows(content: CanonicalContent): SkillGroupA
         name: group.name,
         notes: group.description ?? "",
         optionalSkills,
-        sortOrder: group.sortOrder
-        ,
+        sortOrder: group.sortOrder,
         warningDetails: warningsByGroupId.get(group.id) ?? [],
         weightedContentPoints: includedSkillRows.reduce((sum, skill) => sum + skill.points, 0)
       };
@@ -1219,6 +1266,10 @@ export function buildSkillGroupAdminRows(content: CanonicalContent): SkillGroupA
 }
 
 export function buildProfessionAdminRows(content: CanonicalContent): ProfessionAdminRow[] {
+  const familiesById = new Map(
+    content.professionFamilies.map((family) => [family.id, family.name])
+  );
+
   return buildProfessionMatrixRows(content).map((profession) => {
     const groupGrants = content.professionSkills
       .filter(
@@ -1231,12 +1282,46 @@ export function buildProfessionAdminRows(content: CanonicalContent): ProfessionA
         const group = content.skillGroups.find(
           (candidate) => candidate.id === professionSkill.skillGroupId
         );
+        const memberships = professionSkill.skillGroupId
+          ? getGroupMemberships(content, professionSkill.skillGroupId)
+          : [];
+        const membershipRows = memberships
+          .map((membership) => {
+            const skill = content.skills.find((candidate) => candidate.id === membership.skillId);
+
+            if (!skill) {
+              return undefined;
+            }
+
+            return {
+              name: skill.name,
+              points: getWeightedSkillPoints(skill),
+              relevance: membership.relevance,
+              sortOrder: skill.sortOrder
+            };
+          })
+          .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry))
+          .sort((left, right) => left.sortOrder - right.sortOrder || left.name.localeCompare(right.name));
 
         return {
+          coreSkills: membershipRows
+            .filter((membership) => membership.relevance === "core")
+            .map((membership) => membership.name),
           isCore: professionSkill.isCore,
-          name: group?.name ?? professionSkill.skillGroupId ?? ""
+          name: group?.name ?? professionSkill.skillGroupId ?? "",
+          optionalSkills: membershipRows
+            .filter((membership) => membership.relevance === "optional")
+            .map((membership) => membership.name),
+          relevance: professionSkill.isCore ? ("core" as const) : ("optional" as const),
+          weightedContentPoints: membershipRows.reduce(
+            (sum, membership) => sum + membership.points,
+            0
+          )
         };
       });
+    const professionDefinition = content.professions.find(
+      (candidate) => candidate.id === profession.id
+    );
 
     return {
       allowedSocietyEntries: profession.allowedSocietyEntries,
@@ -1246,6 +1331,22 @@ export function buildProfessionAdminRows(content: CanonicalContent): ProfessionA
       description: profession.description,
       directSkillExceptions: profession.directSkillExceptions,
       directlyGrantedSkills: profession.directlyGrantedSkills,
+      familyName: professionDefinition
+        ? familiesById.get(professionDefinition.familyId) ?? professionDefinition.familyId
+        : "",
+      groupFans: groupGrants
+        .map((grant) => ({
+          coreSkills: grant.coreSkills,
+          groupName: grant.name,
+          optionalSkills: grant.optionalSkills,
+          relevance: grant.relevance,
+          weightedContentPoints: grant.weightedContentPoints
+        }))
+        .sort(
+          (left, right) =>
+            (left.relevance === "core" ? 0 : 1) - (right.relevance === "core" ? 0 : 1) ||
+            left.groupName.localeCompare(right.groupName)
+        ),
       grantedSkillGroups: profession.grantedSkillGroups,
       id: profession.id,
       name: profession.name,

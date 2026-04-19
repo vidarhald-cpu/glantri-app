@@ -17,9 +17,9 @@ import { buildSkillAdminRows } from "../../../../src/lib/admin/viewModels";
 import {
   AdminButton,
   AdminCheckboxList,
-  AdminDataTable,
   AdminField,
   AdminInput,
+  AdminMetric,
   AdminPageIntro,
   AdminPanel,
   AdminReadOnlyNotice,
@@ -71,6 +71,137 @@ function toggleSelectedValue(values: string[], nextValue: string): string[] {
     : [...values, nextValue];
 }
 
+function summarizeList(values: string[], maxItems = 3): string {
+  if (values.length === 0) {
+    return "None";
+  }
+
+  if (values.length <= maxItems) {
+    return values.join(", ");
+  }
+
+  return `${values.slice(0, maxItems).join(", ")} +${values.length - maxItems} more`;
+}
+
+function renderClampedCell(text: string, lines = 2) {
+  return (
+    <span
+      style={{
+        color: "#4f4635",
+        display: "-webkit-box",
+        lineHeight: 1.45,
+        overflow: "hidden",
+        WebkitBoxOrient: "vertical",
+        WebkitLineClamp: lines
+      }}
+      title={text}
+    >
+      {text}
+    </span>
+  );
+}
+
+const skillsReviewGridTemplate =
+  "minmax(13rem, 1.2fr) 6rem minmax(11rem, 1fr) minmax(10rem, 0.95fr) minmax(11rem, 1fr) minmax(11rem, 0.95fr) 5.5rem";
+
+function SkillsReviewTable(props: {
+  onInspect: (rowId: string) => void;
+  rows: ReturnType<typeof buildSkillAdminRows>;
+  selectedId?: string;
+}) {
+  if (props.rows.length === 0) {
+    return <div style={{ color: "#6d624d", padding: "1rem" }}>No skills found.</div>;
+  }
+
+  return (
+    <div
+      style={{
+        border: "1px solid rgba(85, 73, 48, 0.12)",
+        borderRadius: 18,
+        overflowX: "auto"
+      }}
+    >
+      <div style={{ minWidth: 1080 }}>
+        <div
+          style={{
+            background: "rgba(126, 93, 42, 0.08)",
+            borderBottom: "1px solid rgba(85, 73, 48, 0.1)",
+            display: "grid",
+            gridTemplateColumns: skillsReviewGridTemplate
+          }}
+        >
+          {["Skill", "Type", "Primary Group", "Cross-listed", "Professions", "Dependencies", "Inspect"].map(
+            (header) => (
+              <div
+                key={header}
+                style={{
+                  color: "#594320",
+                  fontSize: "0.8rem",
+                  fontWeight: 700,
+                  letterSpacing: "0.08em",
+                  padding: "0.8rem",
+                  textTransform: "uppercase",
+                  whiteSpace: "nowrap"
+                }}
+              >
+                {header}
+              </div>
+            )
+          )}
+        </div>
+
+        {props.rows.map((row) => {
+          const selected = row.id === props.selectedId;
+
+          return (
+            <div
+              key={row.id}
+              onClick={() => props.onInspect(row.id)}
+              style={{
+                background: selected ? "rgba(215, 226, 216, 0.72)" : "transparent",
+                borderTop: "1px solid rgba(85, 73, 48, 0.1)",
+                cursor: "pointer",
+                display: "grid",
+                gridTemplateColumns: skillsReviewGridTemplate
+              }}
+            >
+              <div style={{ padding: "0.9rem 0.8rem" }}>
+                <div style={{ color: "#2e2619", fontWeight: 700 }}>{row.name}</div>
+                <div style={{ color: "#7a6f5a", fontSize: "0.9rem", marginTop: "0.2rem" }}>
+                  {row.shortDescription ? renderClampedCell(row.shortDescription, 2) : "No short description"}
+                </div>
+              </div>
+              <div style={{ color: "#2e2619", padding: "0.9rem 0.8rem", textTransform: "capitalize" }}>{row.skillType}</div>
+              <div style={{ color: "#2e2619", padding: "0.9rem 0.8rem" }}>
+                {row.primaryGroup || <span style={{ color: "#8a7e63" }}>None</span>}
+              </div>
+              <div style={{ color: "#2e2619", padding: "0.9rem 0.8rem" }}>
+                {row.optionalGroupCount > 0
+                  ? renderClampedCell(summarizeList(row.optionalGroupNames, 2), 2)
+                  : <span style={{ color: "#8a7e63" }}>None</span>}
+              </div>
+              <div style={{ color: "#2e2619", padding: "0.9rem 0.8rem" }}>
+                {renderClampedCell(summarizeList(row.professionNames, 3), 2)}
+              </div>
+              <div style={{ color: "#2e2619", padding: "0.9rem 0.8rem" }}>
+                {renderClampedCell(summarizeList(row.dependencies, 2), 2)}
+              </div>
+              <div style={{ padding: "0.75rem 0.8rem" }}>
+                <AdminButton
+                  onClick={() => props.onInspect(row.id)}
+                  variant={selected ? "primary" : "secondary"}
+                >
+                  {selected ? "Open" : "Inspect"}
+                </AdminButton>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export default function SkillsAdminPage() {
   const canEdit = useCanAccessAdmin();
   const { content, replaceContent } = useAdminContent();
@@ -81,6 +212,7 @@ export default function SkillsAdminPage() {
   const selectedSkill =
     content.skills.find((skill) => skill.id === selectedSkillId) ??
     content.skills.slice().sort((left, right) => left.sortOrder - right.sortOrder)[0];
+  const selectedRow = rows.find((row) => row.id === selectedSkill.id);
 
   const relationSkillOptions = useMemo(
     () =>
@@ -204,83 +336,90 @@ export default function SkillsAdminPage() {
         style={{
           display: "grid",
           gap: "1rem",
-          gridTemplateColumns: "minmax(0, 2.2fr) minmax(340px, 1fr)"
+          gridTemplateColumns: "minmax(0, 2.35fr) minmax(340px, 1fr)"
         }}
       >
         <AdminPanel
           subtitle="The table centers the canonical skill model rather than derived profession or society reach. Select a skill to edit its structure and rule text."
           title="Skill Catalog"
         >
-          <AdminDataTable
-            columns={[
-              {
-                header: "Name",
-                render: (row) => <strong>{row.name}</strong>,
-                width: "12rem"
-              },
-              {
-                header: "Short Description",
-                render: (row) =>
-                  row.shortDescription || <span style={{ color: "#8a7e63" }}>None</span>,
-                width: "16rem"
-              },
-              {
-                header: "Skill Type",
-                render: (row) => row.skillType
-              },
-              {
-                header: "Parent Skill Group(s)",
-                render: (row) => <AdminTagList values={row.groupNames} />
-              },
-              {
-                header: "Characteristics",
-                render: (row) => row.characteristics
-              },
-              {
-                header: "Theoretical",
-                render: (row) => (row.theoretical ? "Yes" : "No")
-              },
-              {
-                header: "Society Level",
-                render: (row) => row.societyLevel
-              },
-              {
-                header: "Dependencies",
-                render: (row) => <AdminTagList values={row.dependencies} />
-              },
-              {
-                header: "Secondary Of",
-                render: (row) => row.secondaryOf || <span style={{ color: "#8a7e63" }}>None</span>
-              },
-              {
-                header: "Specialization Of",
-                render: (row) =>
-                  row.specializationOf || <span style={{ color: "#8a7e63" }}>None</span>
-              },
-              {
-                header: "Sort Order",
-                render: (row) => row.sortOrder
-              }
-            ]}
-            emptyState="No skills found."
-            onSelect={setSelectedSkillId}
-            rows={rows}
-            selectedId={selectedSkill.id}
-          />
+          <SkillsReviewTable onInspect={setSelectedSkillId} rows={rows} selectedId={selectedSkill.id} />
         </AdminPanel>
 
-        <AdminPanel
-          subtitle="This editor updates the canonical skill definition that the server-backed admin draft saves as a full content snapshot."
-          title={`Edit ${selectedSkill.name}`}
-        >
-          {canEdit ? (
-            <form
-              onSubmit={(event) => {
-                event.preventDefault();
-                void handleSave();
-              }}
-              style={{ display: "grid", gap: "0.9rem" }}
-            >
+        <div style={{ display: "grid", gap: "1rem" }}>
+          <AdminPanel
+            subtitle="This review inspector makes the explicit membership system visible before you drop into the raw editing form."
+            title={selectedSkill.name}
+          >
+            <div style={{ display: "grid", gap: "0.85rem" }}>
+              <div style={{ display: "grid", gap: "0.75rem", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))" }}>
+                <AdminMetric label="Society level" value={`L${selectedRow?.societyLevel ?? selectedSkill.societyLevel}`} />
+                <AdminMetric label="Cross-listed groups" value={selectedRow?.optionalGroupCount ?? 0} />
+                <AdminMetric label="Professions" value={selectedRow?.professionNames.length ?? 0} />
+              </div>
+
+              <div
+                style={{
+                  background: "rgba(126, 93, 42, 0.07)",
+                  border: "1px solid rgba(85, 73, 48, 0.12)",
+                  borderRadius: 16,
+                  display: "grid",
+                  gap: "0.25rem",
+                  padding: "0.85rem 1rem"
+                }}
+              >
+                <div><strong>Primary group:</strong> {selectedRow?.primaryGroup || "None"}</div>
+                <div><strong>Characteristics:</strong> {selectedRow?.characteristics || "None"}</div>
+                <div><strong>Type:</strong> {selectedRow?.skillType}</div>
+              </div>
+
+              <div>
+                <div style={{ color: "#5f543a", fontSize: "0.85rem", fontWeight: 700, marginBottom: "0.35rem", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                  Cross-listed groups
+                </div>
+                {(selectedRow?.optionalGroupNames.length ?? 0) > 0 ? (
+                  <AdminTagList values={selectedRow?.optionalGroupNames ?? []} />
+                ) : (
+                  <div style={{ color: "#8a7e63" }}>No optional or cross-listed group memberships.</div>
+                )}
+              </div>
+
+              <div>
+                <div style={{ color: "#5f543a", fontSize: "0.85rem", fontWeight: 700, marginBottom: "0.35rem", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                  Profession reach
+                </div>
+                {(selectedRow?.professionNames.length ?? 0) > 0 ? (
+                  <AdminTagList values={selectedRow?.professionNames ?? []} />
+                ) : (
+                  <div style={{ color: "#8a7e63" }}>No profession package currently reaches this skill.</div>
+                )}
+              </div>
+
+              <div>
+                <div style={{ color: "#5f543a", fontSize: "0.85rem", fontWeight: 700, marginBottom: "0.35rem", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                  Structural links
+                </div>
+                <div style={{ display: "grid", gap: "0.45rem" }}>
+                  <div><strong>Dependencies:</strong> {summarizeList(selectedRow?.dependencies ?? [], 4)}</div>
+                  <div><strong>Secondary of:</strong> {selectedRow?.secondaryOf || "None"}</div>
+                  <div><strong>Specialization of:</strong> {selectedRow?.specializationOf || "None"}</div>
+                </div>
+              </div>
+            </div>
+          </AdminPanel>
+
+          <AdminPanel
+            subtitle="This editor updates the canonical skill definition that the server-backed admin draft saves as a full content snapshot."
+            title={`Edit ${selectedSkill.name}`}
+          >
+            {canEdit ? (
+              <form
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void handleSave();
+                }}
+                style={{ display: "grid", gap: "0.9rem" }}
+              >
               <AdminField label="Skill id">
                 <AdminInput readOnly value={selectedSkill.id} />
               </AdminField>
@@ -518,12 +657,13 @@ export default function SkillsAdminPage() {
                 />
               </AdminField>
 
-              <AdminButton type="submit">Save Skill</AdminButton>
-            </form>
-          ) : (
-            <AdminReadOnlyNotice message="This skill workspace is view-only for player accounts. Sign in as Admin or GM to edit canonical skill definitions." />
-          )}
-        </AdminPanel>
+                <AdminButton type="submit">Save Skill</AdminButton>
+              </form>
+            ) : (
+              <AdminReadOnlyNotice message="This skill workspace is view-only for player accounts. Sign in as Admin or GM to edit canonical skill definitions." />
+            )}
+          </AdminPanel>
+        </div>
       </div>
     </section>
   );

@@ -14,7 +14,6 @@ import { buildSkillGroupAdminRows } from "../../../../src/lib/admin/viewModels";
 import {
   AdminButton,
   AdminCheckboxList,
-  AdminDataTable,
   AdminField,
   AdminInput,
   AdminMetric,
@@ -39,6 +38,135 @@ function createFormState(group: { description?: string; name: string; sortOrder:
     name: group.name,
     sortOrder: String(group.sortOrder)
   };
+}
+
+function summarizeList(values: string[], maxItems = 3): string {
+  if (values.length === 0) {
+    return "None";
+  }
+
+  if (values.length <= maxItems) {
+    return values.join(", ");
+  }
+
+  return `${values.slice(0, maxItems).join(", ")} +${values.length - maxItems} more`;
+}
+
+function renderClampedCell(text: string, lines = 2) {
+  return (
+    <span
+      style={{
+        color: "#4f4635",
+        display: "-webkit-box",
+        lineHeight: 1.45,
+        overflow: "hidden",
+        WebkitBoxOrient: "vertical",
+        WebkitLineClamp: lines
+      }}
+      title={text}
+    >
+      {text}
+    </span>
+  );
+}
+
+const skillGroupsReviewGridTemplate =
+  "minmax(12rem, 1.2fr) 5.5rem 6rem 6.5rem 9rem minmax(12rem, 1.15fr) 5.5rem";
+
+function SkillGroupsReviewTable(props: {
+  onInspect: (rowId: string) => void;
+  rows: ReturnType<typeof buildSkillGroupAdminRows>;
+  selectedId?: string;
+}) {
+  if (props.rows.length === 0) {
+    return <div style={{ color: "#6d624d", padding: "1rem" }}>No skill groups found.</div>;
+  }
+
+  return (
+    <div
+      style={{
+        border: "1px solid rgba(85, 73, 48, 0.12)",
+        borderRadius: 18,
+        overflowX: "auto"
+      }}
+    >
+      <div style={{ minWidth: 980 }}>
+        <div
+          style={{
+            background: "rgba(126, 93, 42, 0.08)",
+            borderBottom: "1px solid rgba(85, 73, 48, 0.1)",
+            display: "grid",
+            gridTemplateColumns: skillGroupsReviewGridTemplate
+          }}
+        >
+          {["Group", "Core", "Optional", "Points", "Warnings", "Professions", "Inspect"].map(
+            (header) => (
+              <div
+                key={header}
+                style={{
+                  color: "#594320",
+                  fontSize: "0.8rem",
+                  fontWeight: 700,
+                  letterSpacing: "0.08em",
+                  padding: "0.8rem",
+                  textTransform: "uppercase",
+                  whiteSpace: "nowrap"
+                }}
+              >
+                {header}
+              </div>
+            )
+          )}
+        </div>
+
+        {props.rows.map((row) => {
+          const selected = row.id === props.selectedId;
+          const warningText =
+            row.warningDetails.length > 0
+              ? `${row.warningDetails.length} warning${row.warningDetails.length === 1 ? "" : "s"}`
+              : "Healthy";
+
+          return (
+            <div
+              key={row.id}
+              onClick={() => props.onInspect(row.id)}
+              style={{
+                background: selected ? "rgba(215, 226, 216, 0.72)" : "transparent",
+                borderTop: "1px solid rgba(85, 73, 48, 0.1)",
+                cursor: "pointer",
+                display: "grid",
+                gridTemplateColumns: skillGroupsReviewGridTemplate
+              }}
+            >
+              <div style={{ padding: "0.9rem 0.8rem" }}>
+                <div style={{ color: "#2e2619", fontWeight: 700 }}>{row.name}</div>
+                <div style={{ color: "#7a6f5a", fontSize: "0.9rem", marginTop: "0.2rem" }}>
+                  {row.notes ? renderClampedCell(row.notes, 2) : "No notes"}
+                </div>
+              </div>
+              <div style={{ color: "#2e2619", padding: "0.9rem 0.8rem" }}>{row.coreSkills.length}</div>
+              <div style={{ color: "#2e2619", padding: "0.9rem 0.8rem" }}>{row.optionalSkills.length}</div>
+              <div style={{ color: "#2e2619", padding: "0.9rem 0.8rem" }}>{row.weightedContentPoints} pts</div>
+              <div style={{ color: row.warningDetails.length ? "#8a3b2f" : "#46613a", fontWeight: 700, padding: "0.9rem 0.8rem" }}>
+                {warningText}
+              </div>
+              <div style={{ color: "#2e2619", padding: "0.9rem 0.8rem" }}>
+                {renderClampedCell(summarizeList(row.allowedProfessions, 3), 2)}
+              </div>
+              <div style={{ padding: "0.75rem 0.8rem" }}>
+                <AdminButton
+                  onClick={() => props.onInspect(row.id)}
+                  variant={selected ? "primary" : "secondary"}
+                >
+                  {selected ? "Open" : "Inspect"}
+                </AdminButton>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 export default function SkillGroupsAdminPage() {
@@ -156,57 +284,9 @@ export default function SkillGroupsAdminPage() {
         title="Skill Groups"
       />
 
-      <div style={{ display: "grid", gap: "1rem", gridTemplateColumns: "minmax(0, 1.65fr) minmax(340px, 1fr)" }}>
+      <div style={{ display: "grid", gap: "1rem", gridTemplateColumns: "minmax(0, 2.2fr) minmax(340px, 1fr)" }}>
         <AdminPanel title="Group Catalog">
-          <AdminDataTable
-            columns={[
-              {
-                header: "Name",
-                render: (row) => <strong>{row.name}</strong>
-              },
-              {
-                header: "Core Skills",
-                render: (row) => <AdminTagList values={row.coreSkills} />
-              },
-              {
-                header: "Optional Skills",
-                render: (row) =>
-                  row.optionalSkills.length > 0 ? (
-                    <AdminTagList values={row.optionalSkills} />
-                  ) : (
-                    <span style={{ color: "#8a7e63" }}>None</span>
-                  )
-              },
-              {
-                header: "Weighted Size",
-                render: (row) => `${row.weightedContentPoints} pts`
-              },
-              {
-                header: "Warnings",
-                render: (row) =>
-                  row.warningDetails.length > 0 ? (
-                    <span style={{ color: "#8a3b2f", fontWeight: 700 }}>
-                      {row.warningDetails.length} warning{row.warningDetails.length === 1 ? "" : "s"}
-                    </span>
-                  ) : (
-                    <span style={{ color: "#567043" }}>Healthy</span>
-                  )
-              },
-              {
-                header: "Allowed Profession(s)",
-                render: (row) =>
-                  row.allowedProfessions.length > 0 ? (
-                    <AdminTagList values={row.allowedProfessions} />
-                  ) : (
-                    <span style={{ color: "#8a7e63" }}>None</span>
-                  )
-              }
-            ]}
-            emptyState="No skill groups found."
-            onSelect={setSelectedGroupId}
-            rows={rows}
-            selectedId={selectedGroup.id}
-          />
+          <SkillGroupsReviewTable onInspect={setSelectedGroupId} rows={rows} selectedId={selectedGroup.id} />
         </AdminPanel>
 
         <div style={{ display: "grid", gap: "1rem" }}>
@@ -219,6 +299,21 @@ export default function SkillGroupsAdminPage() {
                 <AdminMetric label="Core skills" value={selectedRow?.coreSkills.length ?? 0} />
                 <AdminMetric label="Optional skills" value={selectedRow?.optionalSkills.length ?? 0} />
                 <AdminMetric label="Weighted size" value={`${selectedRow?.weightedContentPoints ?? 0} pts`} />
+              </div>
+
+              <div
+                style={{
+                  background: "rgba(126, 93, 42, 0.07)",
+                  border: "1px solid rgba(85, 73, 48, 0.12)",
+                  borderRadius: 16,
+                  color: "#5b5036",
+                  fontSize: "0.92rem",
+                  lineHeight: 1.5,
+                  padding: "0.85rem 1rem"
+                }}
+              >
+                {selectedRow?.coreSkills.length ?? 0} core skills and {selectedRow?.optionalSkills.length ?? 0} optional skills contribute{" "}
+                <strong>{selectedRow?.weightedContentPoints ?? 0} weighted points</strong> to this group.
               </div>
 
               {selectedRow?.warningDetails.length ? (

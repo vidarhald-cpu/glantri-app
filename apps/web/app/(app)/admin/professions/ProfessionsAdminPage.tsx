@@ -14,7 +14,6 @@ import { buildProfessionAdminRows } from "../../../../src/lib/admin/viewModels";
 import {
   AdminButton,
   AdminCheckboxList,
-  AdminDataTable,
   AdminField,
   AdminInput,
   AdminMetric,
@@ -55,6 +54,135 @@ function createProfessionFormState(input: {
     societyEntryIds: input.societyEntryIds,
     secondarySkillIds: input.secondarySkillIds
   };
+}
+
+function summarizeList(values: string[], maxItems = 3): string {
+  if (values.length === 0) {
+    return "None";
+  }
+
+  if (values.length <= maxItems) {
+    return values.join(", ");
+  }
+
+  return `${values.slice(0, maxItems).join(", ")} +${values.length - maxItems} more`;
+}
+
+function renderClampedCell(text: string, lines = 2) {
+  return (
+    <span
+      style={{
+        color: "#4f4635",
+        display: "-webkit-box",
+        lineHeight: 1.45,
+        overflow: "hidden",
+        WebkitBoxOrient: "vertical",
+        WebkitLineClamp: lines
+      }}
+      title={text}
+    >
+      {text}
+    </span>
+  );
+}
+
+const professionsReviewGridTemplate =
+  "minmax(12rem, 1.15fr) minmax(8rem, 0.8fr) minmax(12rem, 1.1fr) minmax(12rem, 1.1fr) minmax(15rem, 1.35fr) 6rem 5.5rem";
+
+function ProfessionsReviewTable(props: {
+  onInspect: (rowId: string) => void;
+  rows: ReturnType<typeof buildProfessionAdminRows>;
+  selectedId?: string;
+}) {
+  if (props.rows.length === 0) {
+    return <div style={{ color: "#6d624d", padding: "1rem" }}>No professions found.</div>;
+  }
+
+  return (
+    <div
+      style={{
+        border: "1px solid rgba(85, 73, 48, 0.12)",
+        borderRadius: 18,
+        overflowX: "auto"
+      }}
+    >
+      <div style={{ minWidth: 1080 }}>
+        <div
+          style={{
+            background: "rgba(126, 93, 42, 0.08)",
+            borderBottom: "1px solid rgba(85, 73, 48, 0.1)",
+            display: "grid",
+            gridTemplateColumns: professionsReviewGridTemplate
+          }}
+        >
+          {["Profession", "Family", "Core Groups", "Optional Groups", "Access", "Skills", "Inspect"].map(
+            (header) => (
+              <div
+                key={header}
+                style={{
+                  color: "#594320",
+                  fontSize: "0.8rem",
+                  fontWeight: 700,
+                  letterSpacing: "0.08em",
+                  padding: "0.8rem",
+                  textTransform: "uppercase",
+                  whiteSpace: "nowrap"
+                }}
+              >
+                {header}
+              </div>
+            )
+          )}
+        </div>
+
+        {props.rows.map((row) => {
+          const selected = row.id === props.selectedId;
+
+          return (
+            <div
+              key={row.id}
+              onClick={() => props.onInspect(row.id)}
+              style={{
+                background: selected ? "rgba(215, 226, 216, 0.72)" : "transparent",
+                borderTop: "1px solid rgba(85, 73, 48, 0.1)",
+                cursor: "pointer",
+                display: "grid",
+                gridTemplateColumns: professionsReviewGridTemplate
+              }}
+            >
+              <div style={{ padding: "0.9rem 0.8rem" }}>
+                <div style={{ color: "#2e2619", fontWeight: 700 }}>{row.name}</div>
+                <div style={{ color: "#7a6f5a", fontSize: "0.9rem", marginTop: "0.2rem" }}>
+                  {row.description ? renderClampedCell(row.description, 2) : "No description"}
+                </div>
+              </div>
+              <div style={{ color: "#2e2619", padding: "0.9rem 0.8rem" }}>
+                {row.familyName || <span style={{ color: "#8a7e63" }}>None</span>}
+              </div>
+              <div style={{ color: "#2e2619", padding: "0.9rem 0.8rem" }}>
+                {renderClampedCell(summarizeList(row.coreSkillGroups, 3), 2)}
+              </div>
+              <div style={{ color: "#2e2619", padding: "0.9rem 0.8rem" }}>
+                {renderClampedCell(summarizeList(row.optionalSkillGroups, 3), 2)}
+              </div>
+              <div style={{ color: "#2e2619", padding: "0.9rem 0.8rem" }}>
+                {renderClampedCell(summarizeList(row.allowedSocietyEntries, 2), 2)}
+              </div>
+              <div style={{ color: "#2e2619", padding: "0.9rem 0.8rem" }}>{row.totalReachableSkills}</div>
+              <div style={{ padding: "0.75rem 0.8rem" }}>
+                <AdminButton
+                  onClick={() => props.onInspect(row.id)}
+                  variant={selected ? "primary" : "secondary"}
+                >
+                  {selected ? "Open" : "Inspect"}
+                </AdminButton>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 export default function ProfessionsAdminPage() {
@@ -215,55 +343,10 @@ export default function ProfessionsAdminPage() {
 
       <ProfessionsWorkspaceTabs />
 
-      <div style={{ display: "grid", gap: "1rem", gridTemplateColumns: "minmax(0, 1.65fr) minmax(340px, 1fr)" }}>
+      <div style={{ display: "grid", gap: "1rem", gridTemplateColumns: "minmax(0, 2.2fr) minmax(340px, 1fr)" }}>
         <AdminPanel title="Profession Catalog">
-          <AdminDataTable
-            columns={[
-              {
-                header: "Name",
-                render: (row) => <strong>{row.name}</strong>
-              },
-              {
-                header: "Description",
-                render: (row) => row.description || <span style={{ color: "#8a7e63" }}>None</span>
-              },
-              {
-                header: "Core Groups",
-                render: (row) => <AdminTagList values={row.coreSkillGroups} />
-              },
-              {
-                header: "Optional Groups",
-                render: (row) =>
-                  row.optionalSkillGroups.length > 0 ? (
-                    <AdminTagList values={row.optionalSkillGroups} />
-                  ) : (
-                    <span style={{ color: "#8a7e63" }}>None</span>
-                  )
-              },
-              {
-                header: "Directly Granted Skills",
-                render: (row) =>
-                  row.directlyGrantedSkills.length > 0 ? (
-                    <AdminTagList values={row.directlyGrantedSkills} />
-                  ) : (
-                    <span style={{ color: "#8a7e63" }}>None</span>
-                  )
-              },
-              {
-                header: "Allowed Societies / Social Classes",
-                render: (row) => <AdminTagList values={row.allowedSocietyEntries} />
-              },
-              {
-                header: "Total Reachable Skills",
-                render: (row) => row.totalReachableSkills
-              },
-              {
-                header: "Notes",
-                render: () => <span style={{ color: "#8a7e63" }}>Not yet modeled</span>
-              }
-            ]}
-            emptyState="No professions found."
-            onSelect={setSelectedProfessionId}
+          <ProfessionsReviewTable
+            onInspect={setSelectedProfessionId}
             rows={rows}
             selectedId={selectedProfession.id}
           />
@@ -279,6 +362,26 @@ export default function ProfessionsAdminPage() {
                 <AdminMetric label="Core groups" value={selectedRow?.coreSkillGroups.length ?? 0} />
                 <AdminMetric label="Optional groups" value={selectedRow?.optionalSkillGroups.length ?? 0} />
                 <AdminMetric label="Reachable skills" value={selectedRow?.totalReachableSkills ?? 0} />
+              </div>
+
+              <div
+                style={{
+                  background: "rgba(126, 93, 42, 0.07)",
+                  border: "1px solid rgba(85, 73, 48, 0.12)",
+                  borderRadius: 16,
+                  color: "#5b5036",
+                  display: "grid",
+                  gap: "0.25rem",
+                  padding: "0.85rem 1rem"
+                }}
+              >
+                <div><strong>Family:</strong> {selectedRow?.familyName || "Unclassified"}</div>
+                <div>
+                  <strong>Direct skills:</strong>{" "}
+                  {selectedRow?.directlyGrantedSkills.length
+                    ? summarizeList(selectedRow.directlyGrantedSkills, 4)
+                    : "None"}
+                </div>
               </div>
 
               <div>
@@ -304,6 +407,52 @@ export default function ProfessionsAdminPage() {
                   Allowed societies / access rows
                 </div>
                 <AdminTagList values={selectedRow?.allowedSocietyEntries ?? []} />
+              </div>
+
+              <div style={{ display: "grid", gap: "0.75rem" }}>
+                <div style={{ color: "#5f543a", fontSize: "0.85rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                  Group to skill fan
+                </div>
+                {selectedRow?.groupFans.length ? (
+                  selectedRow.groupFans.map((groupFan) => (
+                    <div
+                      key={`${groupFan.relevance}:${groupFan.groupName}`}
+                      style={{
+                        background: "rgba(255, 255, 255, 0.78)",
+                        border: "1px solid rgba(85, 73, 48, 0.12)",
+                        borderRadius: 16,
+                        display: "grid",
+                        gap: "0.55rem",
+                        padding: "0.85rem 0.95rem"
+                      }}
+                    >
+                      <div style={{ alignItems: "baseline", display: "flex", gap: "0.45rem", justifyContent: "space-between" }}>
+                        <strong style={{ color: "#2f2618" }}>{groupFan.groupName}</strong>
+                        <span style={{ color: "#7a6f5a", fontSize: "0.85rem", textTransform: "capitalize" }}>
+                          {groupFan.relevance} group · {groupFan.weightedContentPoints} pts
+                        </span>
+                      </div>
+                      <div>
+                        <div style={{ color: "#5f543a", fontSize: "0.78rem", fontWeight: 700, marginBottom: "0.3rem", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                          Core skills
+                        </div>
+                        <AdminTagList values={groupFan.coreSkills} />
+                      </div>
+                      <div>
+                        <div style={{ color: "#5f543a", fontSize: "0.78rem", fontWeight: 700, marginBottom: "0.3rem", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                          Optional skills
+                        </div>
+                        {groupFan.optionalSkills.length ? (
+                          <AdminTagList values={groupFan.optionalSkills} />
+                        ) : (
+                          <div style={{ color: "#8a7e63" }}>No optional cross-listed skills.</div>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div style={{ color: "#8a7e63" }}>No skill-group grants are modeled for this profession.</div>
+                )}
               </div>
 
               <div style={{ color: "#5f543a", fontSize: "0.92rem", lineHeight: 1.5 }}>
