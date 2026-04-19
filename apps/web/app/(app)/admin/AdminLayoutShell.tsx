@@ -31,6 +31,7 @@ function AdminLayoutInner({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const activeSection = findActiveSection(pathname);
   const activeGroup = findActiveGroupItems(pathname);
+  const showChildTabs = activeGroup.items.length > 1;
 
   return (
     <div
@@ -42,84 +43,72 @@ function AdminLayoutInner({ children }: { children: ReactNode }) {
         padding: "2rem 1.5rem 2.5rem"
       }}
     >
-      <div style={{ display: "grid", gap: "1.25rem", margin: "0 auto", maxWidth: 1420 }}>
-        <section
-          style={{
-            background: "rgba(254, 251, 245, 0.88)",
-            border: "1px solid rgba(85, 73, 48, 0.14)",
-            borderRadius: 28,
-            boxShadow: "0 24px 60px rgba(73, 56, 29, 0.09)",
-            display: "grid",
-            gap: "0.9rem",
-            padding: "1rem 1.1rem"
-          }}
-        >
+      <div style={{ display: "grid", gap: "0.85rem", margin: "0 auto", maxWidth: 1420 }}>
+        <div style={{ alignItems: "center", display: "flex", justifyContent: "flex-end" }}>
+          <Link href="/" style={{ color: "#594320", fontSize: "0.92rem", whiteSpace: "nowrap" }}>
+            Back to app
+          </Link>
+        </div>
+
+        <nav style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
+          {adminNavGroups.map((group) => {
+            const active = group.label === activeSection;
+            const targetHref = group.items[0]?.href ?? "/admin";
+
+            return (
+              <Link
+                href={targetHref}
+                key={group.label}
+                style={{
+                  background: active ? "#7e5d2a" : "rgba(126, 93, 42, 0.08)",
+                  border: active
+                    ? "1px solid transparent"
+                    : "1px solid rgba(126, 93, 42, 0.14)",
+                  borderRadius: 999,
+                  color: active ? "#fffaf0" : "#594320",
+                  padding: "0.7rem 1rem",
+                  textDecoration: "none"
+                }}
+              >
+                {group.label}
+              </Link>
+            );
+          })}
+        </nav>
+
+        {showChildTabs ? (
           <div
             style={{
-              alignItems: "center",
-              display: "flex",
-              flexWrap: "wrap",
-              gap: "0.75rem",
-              justifyContent: "space-between"
+              borderBottom: "1px solid rgba(85, 73, 48, 0.12)",
+              paddingBottom: "0.2rem"
             }}
           >
-            <nav style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
-              {adminNavGroups.map((group) => {
-                const active = group.label === activeSection;
-                const targetHref = group.items[0]?.href ?? "/admin";
+            <nav style={{ display: "flex", flexWrap: "wrap", gap: "0.65rem" }}>
+              {activeGroup.items.map((item) => {
+                const active =
+                  pathname === item.href ||
+                  (item.href !== "/admin" && pathname.startsWith(`${item.href}/`));
 
                 return (
                   <Link
-                    href={targetHref}
-                    key={group.label}
+                    href={item.href}
+                    key={item.href}
                     style={{
-                      background: active ? "#7e5d2a" : "rgba(126, 93, 42, 0.08)",
-                      border: active
-                        ? "1px solid transparent"
-                        : "1px solid rgba(126, 93, 42, 0.14)",
+                      background: active ? "rgba(126, 93, 42, 0.16)" : "transparent",
+                      border: "1px solid transparent",
                       borderRadius: 999,
-                      color: active ? "#fffaf0" : "#594320",
-                      padding: "0.7rem 1rem",
+                      color: "#594320",
+                      padding: "0.55rem 0.85rem",
                       textDecoration: "none"
                     }}
                   >
-                    {group.label}
+                    {item.label}
                   </Link>
                 );
               })}
             </nav>
-            <Link href="/" style={{ color: "#594320", fontSize: "0.92rem", whiteSpace: "nowrap" }}>
-              Back to app
-            </Link>
           </div>
-
-          <nav style={{ display: "flex", flexWrap: "wrap", gap: "0.65rem" }}>
-            {activeGroup.items.map((item) => {
-              const active =
-                pathname === item.href ||
-                (item.href !== "/admin" && pathname.startsWith(`${item.href}/`));
-
-              return (
-                <Link
-                  href={item.href}
-                  key={item.href}
-                  style={{
-                    background: active ? "rgba(126, 93, 42, 0.16)" : "rgba(255, 252, 245, 0.82)",
-                    border: active
-                      ? "1px solid rgba(126, 93, 42, 0.24)"
-                      : "1px solid rgba(85, 73, 48, 0.12)",
-                    borderRadius: 999,
-                    color: "#594320",
-                    padding: "0.55rem 0.85rem",
-                    textDecoration: "none"
-                  }}
-                >
-                  {item.label}
-                </Link>
-              );
-            })}
-          </nav>
-        </section>
+        ) : null}
 
         {children}
       </div>
