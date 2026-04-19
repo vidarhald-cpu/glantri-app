@@ -29,3 +29,7 @@ packages/content/src/**/*.map
 packages/domain/src/**/*.js
 packages/domain/src/**/*.d.ts
 packages/domain/src/**/*.map
+apps/web/src/features/equipment/*.js
+apps/web/src/features/equipment/*.js.map
+apps/web/src/features/equipment/*.d.ts
+apps/web/src/features/equipment/*.d.ts.map
