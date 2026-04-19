@@ -196,7 +196,7 @@ const PLAYER_FACING_SKILL_BUCKET_BY_GROUP_ID: Partial<Record<string, PlayerFacin
   mercantile_practice: "trade",
   military_group: "military",
   mounted_service: "fieldcraft",
-  mounted_warrior_training: "military",
+  mounted_warrior_training: "combat",
   mystical_group: "mystical",
   officer_training: "leadership",
   omen_and_ritual_practice: "mystical",

@@ -4,6 +4,7 @@ import {
   filterProfessionBrowseItems,
   filterSpecializationBrowseItems,
   getSkillAccessSourceLabels,
+  getPlayerFacingSkillBucket,
   isRelevantSpecializationBrowseItem,
   matchesSkillBrowseFilters
 } from "./chargenBrowse";
@@ -132,5 +133,23 @@ describe("chargenBrowse helpers", () => {
         search: "cross"
       }).map((item) => item.specializationName)
     ).toEqual(["Crossbow"]);
+  });
+
+  it("classifies mounted warrior weapon skills as combat", () => {
+    expect(
+      getPlayerFacingSkillBucket({
+        groupId: "mounted_warrior_training",
+        groupIds: ["mounted_warrior_training", "combat_group"],
+        id: "one_handed_edged"
+      })
+    ).toBe("combat");
+
+    expect(
+      getPlayerFacingSkillBucket({
+        groupId: "mounted_warrior_training",
+        groupIds: ["mounted_warrior_training", "combat_group"],
+        id: "lance"
+      })
+    ).toBe("combat");
   });
 });
