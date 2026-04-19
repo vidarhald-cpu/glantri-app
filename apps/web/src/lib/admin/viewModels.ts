@@ -115,6 +115,8 @@ export interface SocietyAdminRow {
   directSkills: string[];
   dieRange: string;
   effectiveProfessionSkills: string[];
+  glantriExamples?: string;
+  historicalReference?: string;
   id: string;
   notes: string;
   professionFans: Array<{
@@ -1330,6 +1332,8 @@ export function buildSocietyAdminRows(content: CanonicalContent): SocietyAdminRo
       directSkills: societyRow.directSkills,
       dieRange: societyRow.dieRange,
       effectiveProfessionSkills: societyRow.effectiveProfessionSkills,
+      glantriExamples: society?.glantriExamples,
+      historicalReference: society?.historicalReference,
       id: societyRow.id,
       notes: societyRow.notes,
       professionFans,

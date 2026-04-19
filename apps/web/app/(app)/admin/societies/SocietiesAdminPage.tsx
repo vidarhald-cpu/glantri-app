@@ -68,6 +68,20 @@ function summarizeList(values: string[], maxItems = 3): string {
   return `${values.slice(0, maxItems).join(", ")} +${values.length - maxItems} more`;
 }
 
+function summarizeText(value: string | undefined, maxLength = 90): string {
+  const trimmed = value?.trim();
+
+  if (!trimmed) {
+    return "";
+  }
+
+  if (trimmed.length <= maxLength) {
+    return trimmed;
+  }
+
+  return `${trimmed.slice(0, maxLength - 1).trimEnd()}…`;
+}
+
 export default function SocietiesAdminPage() {
   const canEdit = useCanAccessAdmin();
   const { content, replaceContent } = useAdminContent();
@@ -246,44 +260,72 @@ export default function SocietiesAdminPage() {
               {
                 header: "Society",
                 render: (row) => <strong>{row.society}</strong>,
-                width: "14rem"
+                width: "12rem"
               },
               {
-                header: "Society Level (1–6)",
+                header: "Level",
                 render: (row) => row.canonicalSocietyLevel ?? <span style={{ color: "#8a7e63" }}>None</span>,
-                width: "8rem"
+                width: "5.5rem"
               },
               {
-                header: "Access Band (L1–L4)",
+                header: "Band",
                 render: (row) => `L${row.societyLevel}`,
-                width: "8rem"
+                width: "5.5rem"
               },
               {
-                header: "Class Name",
+                header: "Class",
                 render: (row) => row.societyClassName,
-                width: "14rem"
+                width: "12rem"
               },
               {
-                header: "Base Education",
+                header: "Education",
                 render: (row) => row.baseEducation || <span style={{ color: "#8a7e63" }}>None</span>,
-                width: "9rem"
+                width: "6rem"
               },
               {
-                header: "Notes / Description",
+                header: "Description",
                 render: (row) => (
-                  <span style={{ color: "#4f4635", lineHeight: 1.45 }}>
-                    {row.shortDescription || row.notes || <span style={{ color: "#8a7e63" }}>None</span>}
+                  <span style={{ color: "#4f4635", display: "block", lineHeight: 1.45 }}>
+                    {summarizeText(row.shortDescription || row.notes, 120) || (
+                      <span style={{ color: "#8a7e63" }}>None</span>
+                    )}
                   </span>
                 ),
-                width: "22rem"
+                width: "24rem"
               },
               {
-                header: "Reachable Professions",
-                render: (row) => summarizeList(row.reachableProfessions, 3),
-                width: "18rem"
+                header: "Historical Ref.",
+                render: (row) => (
+                  <span style={{ color: "#4f4635", display: "block", lineHeight: 1.45 }}>
+                    {summarizeText(row.historicalReference, 70) || (
+                      <span style={{ color: "#8a7e63" }}> </span>
+                    )}
+                  </span>
+                ),
+                width: "16rem"
               },
               {
-                header: "Open Inspector",
+                header: "Glantri Examples",
+                render: (row) => (
+                  <span style={{ color: "#4f4635", display: "block", lineHeight: 1.45 }}>
+                    {summarizeText(row.glantriExamples, 70) || (
+                      <span style={{ color: "#8a7e63" }}> </span>
+                    )}
+                  </span>
+                ),
+                width: "14rem"
+              },
+              {
+                header: "Professions",
+                render: (row) => (
+                  <span style={{ color: "#4f4635", display: "block", lineHeight: 1.45 }}>
+                    {summarizeList(row.reachableProfessions, 4)}
+                  </span>
+                ),
+                width: "20rem"
+              },
+              {
+                header: "Inspector",
                 render: (row) => (
                   <AdminButton
                     onClick={() => setSelectedRowId(row.id)}
@@ -343,6 +385,32 @@ export default function SocietiesAdminPage() {
                 </div>
                 <div style={{ color: "#4f4635", lineHeight: 1.5 }}>
                   {selectedRow?.shortDescription || "No canonical society description recorded."}
+                </div>
+              </div>
+
+              <div
+                style={{
+                  display: "grid",
+                  gap: "0.85rem",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))"
+                }}
+              >
+                <div>
+                  <div style={{ color: "#5f543a", fontSize: "0.85rem", fontWeight: 700, marginBottom: "0.35rem", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                    Historical reference
+                  </div>
+                  <div style={{ color: "#4f4635", lineHeight: 1.5 }}>
+                    {selectedRow?.historicalReference || <span style={{ color: "#8a7e63" }}>None</span>}
+                  </div>
+                </div>
+
+                <div>
+                  <div style={{ color: "#5f543a", fontSize: "0.85rem", fontWeight: 700, marginBottom: "0.35rem", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                    Glantri examples
+                  </div>
+                  <div style={{ color: "#4f4635", lineHeight: 1.5 }}>
+                    {selectedRow?.glantriExamples || <span style={{ color: "#8a7e63" }}>None</span>}
+                  </div>
                 </div>
               </div>
 
