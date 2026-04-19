@@ -3,9 +3,81 @@ import { z } from "zod";
 const idSchema = z.string().min(1);
 const literacyRequirementSchema = z.enum(["no", "recommended", "required"]);
 const skillCategorySchema = z.enum(["ordinary", "secondary"]);
+export const playerFacingSkillCategoryIdSchema = z.enum([
+  "combat",
+  "military",
+  "leadership",
+  "fieldcraft",
+  "maritime",
+  "healing",
+  "trade",
+  "court-social",
+  "covert",
+  "knowledge",
+  "mental",
+  "mystical",
+  "craft",
+  "physical",
+  "special-access"
+]);
 const skillSocietyLevelSchema = z.number().int().min(1).max(6);
 const skillDependencyStrengthSchema = z.enum(["required", "recommended", "helpful"]);
 const skillGroupSkillRelevanceSchema = z.enum(["core", "optional"]);
+
+const LEGACY_PLAYER_FACING_SKILL_CATEGORY_BY_GROUP_ID: Partial<
+  Record<string, PlayerFacingSkillCategoryId>
+> = {
+  advanced_melee_training: "combat",
+  advanced_missile_training: "combat",
+  animal_handling: "fieldcraft",
+  animal_husbandry: "fieldcraft",
+  athletic_conditioning: "physical",
+  athletics: "physical",
+  basic_melee_training: "combat",
+  basic_missile_training: "combat",
+  civic_learning: "knowledge",
+  combat_group: "combat",
+  commercial_administration: "trade",
+  courtly_formation: "court-social",
+  covert_entry: "covert",
+  craft_group: "craft",
+  defensive_soldiering: "military",
+  field_soldiering: "military",
+  fieldcraft_stealth: "fieldcraft",
+  formal_performance: "court-social",
+  healing_practice: "healing",
+  herb_and_remedy_craft: "healing",
+  humanities: "knowledge",
+  learned_natural_inquiry: "knowledge",
+  literate_foundation: "knowledge",
+  maritime_crew_training: "maritime",
+  maritime_navigation: "maritime",
+  medicine_group: "healing",
+  mental_discipline: "mental",
+  mental_group: "mental",
+  mercantile_practice: "trade",
+  military_group: "military",
+  mounted_service: "fieldcraft",
+  mounted_warrior_training: "combat",
+  mystical_group: "mystical",
+  officer_training: "leadership",
+  omen_and_ritual_practice: "mystical",
+  operations: "military",
+  performance_basics: "court-social",
+  physical_science: "knowledge",
+  political_acumen: "leadership",
+  sacred_learning: "knowledge",
+  security: "covert",
+  social_reading: "court-social",
+  stealth_group: "covert",
+  street_theft: "covert",
+  technical_measurement: "knowledge",
+  transport_and_caravan_work: "trade",
+  trap_and_intrusion_work: "covert",
+  veteran_leadership: "leadership",
+  veteran_soldiering: "military",
+  wilderness_group: "fieldcraft"
+};
 
 const SKILL_DEPENDENCY_STRENGTH_PRIORITY: Record<SkillDependencyStrength, number> = {
   helpful: 0,
@@ -135,6 +207,7 @@ export const skillDefinitionSchema = z.preprocess(
     const candidate = input as {
       dependencies?: unknown;
       dependencySkillIds?: unknown;
+      categoryId?: unknown;
       groupId?: unknown;
       groupIds?: unknown;
       helpfulDependencySkillIds?: unknown;
@@ -153,9 +226,21 @@ export const skillDefinitionSchema = z.preprocess(
           ? candidate.groupIds[0]
           : undefined;
     const normalizedDependencies = normalizeSkillDependencies(candidate);
+    const explicitCategoryId =
+      typeof candidate.categoryId === "string" && candidate.categoryId.length > 0
+        ? candidate.categoryId
+        : undefined;
+    const inferredCategoryId = inferPlayerFacingSkillCategoryIdFromGroupIds({
+      groupId: String(normalizedGroupId ?? ""),
+      groupIds: Array.isArray(normalizedGroupIds)
+        ? normalizedGroupIds
+            .filter((groupId): groupId is string => typeof groupId === "string")
+        : []
+    });
 
     return {
       ...candidate,
+      categoryId: explicitCategoryId ?? inferredCategoryId,
       dependencies: normalizedDependencies,
       dependencySkillIds: getRequiredDependencySkillIds(normalizedDependencies),
       groupId: normalizedGroupId,
@@ -177,6 +262,7 @@ export const skillDefinitionSchema = z.preprocess(
     secondaryOfSkillId: idSchema.optional(),
     specializationOfSkillId: idSchema.optional(),
     category: skillCategorySchema.default("ordinary"),
+    categoryId: playerFacingSkillCategoryIdSchema.optional(),
     requiresLiteracy: literacyRequirementSchema.default("no"),
     sortOrder: z.number().int().default(0),
     allowsSpecializations: z.boolean().default(false)
@@ -275,6 +361,7 @@ export type SocietyDefinition = z.infer<typeof societyDefinitionSchema>;
 export type LanguageDefinition = z.infer<typeof languageDefinitionSchema>;
 export type LiteracyRequirement = z.infer<typeof literacyRequirementSchema>;
 export type SkillCategory = z.infer<typeof skillCategorySchema>;
+export type PlayerFacingSkillCategoryId = z.infer<typeof playerFacingSkillCategoryIdSchema>;
 export type SkillDependencyStrength = z.infer<typeof skillDependencyStrengthSchema>;
 export type SkillGroupSkillRelevance = z.infer<typeof skillGroupSkillRelevanceSchema>;
 
@@ -310,4 +397,39 @@ export function getSkillGroupIds(skill: Pick<SkillDefinition, "groupId" | "group
     seen.add(groupId);
     return true;
   });
+}
+
+export function inferPlayerFacingSkillCategoryIdFromGroupIds(
+  skill: Pick<SkillDefinition, "groupId" | "groupIds"> | { groupId?: string; groupIds?: string[] }
+): PlayerFacingSkillCategoryId {
+  const orderedGroupIds = [
+    ...(skill.groupId ? [skill.groupId] : []),
+    ...((skill.groupIds ?? []).filter((groupId) => groupId !== skill.groupId) as string[])
+  ];
+
+  for (const groupId of orderedGroupIds) {
+    const mapped = LEGACY_PLAYER_FACING_SKILL_CATEGORY_BY_GROUP_ID[groupId];
+    if (mapped) {
+      return mapped;
+    }
+  }
+
+  return "special-access";
+}
+
+export function getPlayerFacingSkillCategoryId(
+  skill:
+    | Pick<SkillDefinition, "categoryId" | "groupId" | "groupIds">
+    | { categoryId?: string; groupId?: string; groupIds?: string[] },
+  options?: { preferDirectProfession?: boolean }
+): PlayerFacingSkillCategoryId {
+  if (options?.preferDirectProfession) {
+    return "special-access";
+  }
+
+  if (typeof skill.categoryId === "string" && skill.categoryId.length > 0) {
+    return skill.categoryId as PlayerFacingSkillCategoryId;
+  }
+
+  return inferPlayerFacingSkillCategoryIdFromGroupIds(skill);
 }

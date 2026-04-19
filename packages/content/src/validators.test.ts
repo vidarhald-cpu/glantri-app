@@ -160,6 +160,22 @@ describe("validateCanonicalContent", () => {
     );
   });
 
+  it("fails on invalid explicit skill categories", () => {
+    const invalidContent = {
+      ...defaultCanonicalContent,
+      skills: defaultCanonicalContent.skills.map((skill) =>
+        skill.id === firstSkill.id
+          ? {
+              ...skill,
+              categoryId: "not-a-real-category"
+            }
+          : skill
+      )
+    };
+
+    expect(() => validateCanonicalContent(invalidContent)).toThrow();
+  });
+
   it("fails on invalid secondary or specialization skill parents", () => {
     expect(firstSecondarySkill).toBeDefined();
 

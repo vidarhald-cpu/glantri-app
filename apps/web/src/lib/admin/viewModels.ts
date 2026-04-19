@@ -1,6 +1,6 @@
 import { collectCanonicalContentWarnings, type CanonicalContent } from "@glantri/content";
 import { equipmentTemplates } from "@glantri/content/equipment";
-import { getSkillGroupIds } from "@glantri/domain";
+import { getPlayerFacingSkillCategoryId, getSkillGroupIds } from "@glantri/domain";
 import { resolveEffectiveProfessionPackage } from "@glantri/rules-engine";
 import type { ArmorTemplate, GearTemplate, ShieldTemplate, ValuableTemplate, WeaponTemplate } from "@glantri/domain";
 
@@ -27,6 +27,7 @@ export interface SkillAdminRow {
   primaryGroup: string;
   professionNames: string[];
   secondaryOf: string;
+  skillCategory: string;
   shortDescription: string;
   skillType: string;
   societyLevel: number;
@@ -494,6 +495,7 @@ export function buildSkillAdminRows(content: CanonicalContent): SkillAdminRow[] 
         secondaryOf: skill.secondaryOfSkillId
           ? skillsById.get(skill.secondaryOfSkillId)?.name ?? skill.secondaryOfSkillId
           : "",
+        skillCategory: getPlayerFacingSkillCategoryId(skill),
         shortDescription: skill.shortDescription ?? "",
         skillType: skill.category,
         societyLevel: skill.societyLevel,

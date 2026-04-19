@@ -102,7 +102,7 @@ function renderClampedCell(text: string, lines = 2) {
 }
 
 const skillsReviewGridTemplate =
-  "minmax(11rem, 0.95fr) minmax(22rem, 1.9fr) 5.5rem minmax(10rem, 0.9fr) minmax(9rem, 0.85fr) minmax(10rem, 0.9fr) minmax(10rem, 0.85fr) 5.5rem";
+  "minmax(11rem, 0.95fr) minmax(20rem, 1.75fr) 5.5rem minmax(9rem, 0.9fr) minmax(10rem, 0.95fr) minmax(9rem, 0.85fr) minmax(10rem, 0.9fr) minmax(10rem, 0.85fr) 5.5rem";
 
 function SkillsReviewTable(props: {
   onInspect: (rowId: string) => void;
@@ -135,7 +135,7 @@ function SkillsReviewTable(props: {
             zIndex: 2
           }}
         >
-          {["Skill", "Description", "Type", "Primary Group", "Cross-listed", "Professions", "Dependencies", "Inspect"].map(
+          {["Skill", "Description", "Type", "Skill category", "Primary Group", "Cross-listed", "Professions", "Dependencies", "Inspect"].map(
             (header) => (
               <div
                 key={header}
@@ -177,6 +177,9 @@ function SkillsReviewTable(props: {
                 {row.shortDescription ? renderClampedCell(row.shortDescription, 2) : <span style={{ color: "#8a7e63" }}>None</span>}
               </div>
               <div style={{ color: "#2e2619", padding: "0.9rem 0.8rem", textTransform: "capitalize" }}>{row.skillType}</div>
+              <div style={{ color: "#2e2619", padding: "0.9rem 0.8rem", textTransform: "capitalize" }}>
+                {row.skillCategory.replaceAll("-", " ")}
+              </div>
               <div style={{ color: "#2e2619", padding: "0.9rem 0.8rem" }}>
                 {row.primaryGroup || <span style={{ color: "#8a7e63" }}>None</span>}
               </div>
@@ -210,14 +213,26 @@ function SkillsReviewTable(props: {
 export default function SkillsAdminPage() {
   const canEdit = useCanAccessAdmin();
   const { content, replaceContent } = useAdminContent();
-  const rows = buildSkillAdminRows(content);
+  const allRows = buildSkillAdminRows(content);
+  const [skillCategoryFilter, setSkillCategoryFilter] = useState("all");
   const [selectedSkillId, setSelectedSkillId] = useState<string>();
   const [formState, setFormState] = useState<SkillFormState>();
+  const skillCategoryOptions = useMemo(
+    () => ["all", ...new Set(allRows.map((row) => row.skillCategory))],
+    [allRows]
+  );
+  const rows = useMemo(
+    () =>
+      allRows.filter((row) =>
+        skillCategoryFilter === "all" ? true : row.skillCategory === skillCategoryFilter
+      ),
+    [allRows, skillCategoryFilter]
+  );
 
   const selectedSkill =
     content.skills.find((skill) => skill.id === selectedSkillId) ??
     content.skills.slice().sort((left, right) => left.sortOrder - right.sortOrder)[0];
-  const selectedRow = rows.find((row) => row.id === selectedSkill.id);
+  const selectedRow = allRows.find((row) => row.id === selectedSkill.id);
 
   const relationSkillOptions = useMemo(
     () =>
@@ -312,6 +327,7 @@ export default function SkillsAdminPage() {
                   { header: "Name", value: (row) => row.name },
                   { header: "Short Description", value: (row) => row.shortDescription },
                   { header: "Type", value: (row) => row.skillType },
+                  { header: "Skill Category", value: (row) => row.skillCategory },
                   { header: "Parent Skill Groups", value: (row) => row.groupNames.join(" | ") },
                   { header: "Characteristics", value: (row) => row.characteristics },
                   { header: "Theoretical", value: (row) => row.theoretical },
@@ -336,6 +352,26 @@ export default function SkillsAdminPage() {
       />
 
       <SkillsWorkspaceTabs />
+
+      <AdminPanel
+        subtitle="Skill category comes from the canonical explicit category field used by chargen and other player-facing views. Type remains the mechanical ordinary / secondary field."
+        title="Review filters"
+      >
+        <div style={{ display: "grid", gap: "0.9rem", gridTemplateColumns: "minmax(220px, 280px)" }}>
+          <AdminField label="Skill category">
+            <AdminSelect
+              onChange={(event) => setSkillCategoryFilter(event.target.value)}
+              value={skillCategoryFilter}
+            >
+              {skillCategoryOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option === "all" ? "All categories" : option.replaceAll("-", " ")}
+                </option>
+              ))}
+            </AdminSelect>
+          </AdminField>
+        </div>
+      </AdminPanel>
 
       <div
         style={{
@@ -374,6 +410,8 @@ export default function SkillsAdminPage() {
                 }}
               >
                 <div><strong>Primary group:</strong> {selectedRow?.primaryGroup || "None"}</div>
+                <div><strong>Skill category:</strong> {selectedRow?.skillCategory.replaceAll("-", " ")}</div>
+                <div><strong>Cross-listed groups:</strong> {selectedRow?.optionalGroupNames.join(", ") || "None"}</div>
                 <div><strong>Characteristics:</strong> {selectedRow?.characteristics || "None"}</div>
                 <div><strong>Type:</strong> {selectedRow?.skillType}</div>
               </div>

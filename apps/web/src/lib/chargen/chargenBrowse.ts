@@ -1,10 +1,12 @@
-import type { SkillDefinition } from "@glantri/domain";
+import { getPlayerFacingSkillCategoryId, type PlayerFacingSkillCategoryId, type SkillDefinition } from "@glantri/domain";
 import type { ChargenSkillAccessSource } from "@glantri/rules-engine";
 
 /*
   Terminology guardrail:
   This module exposes player-facing Skill category buckets.
   They are distinct from mechanical Type (ordinary / secondary / specialization).
+  Prefer explicit skill.categoryId when available; only fall back to legacy
+  primary-group inference for older transitional data.
   If this wording changes, update packages/domain/src/docs/glantriTerms.ts too.
 */
 
@@ -31,22 +33,7 @@ export interface SpecializationBrowseItem {
   specializationName: string;
 }
 
-export type PlayerFacingSkillBucketId =
-  | "combat"
-  | "military"
-  | "leadership"
-  | "fieldcraft"
-  | "maritime"
-  | "healing"
-  | "trade"
-  | "court-social"
-  | "covert"
-  | "knowledge"
-  | "mental"
-  | "mystical"
-  | "craft"
-  | "physical"
-  | "special-access";
+export type PlayerFacingSkillBucketId = PlayerFacingSkillCategoryId;
 
 export type SkillBrowseTypeFilter = "all" | PlayerFacingSkillBucketId;
 
@@ -164,59 +151,6 @@ const PLAYER_FACING_SKILL_BUCKETS: PlayerFacingSkillBucketDefinition[] = [
   }
 ];
 
-const PLAYER_FACING_SKILL_BUCKET_BY_GROUP_ID: Partial<Record<string, PlayerFacingSkillBucketId>> = {
-  advanced_melee_training: "combat",
-  advanced_missile_training: "combat",
-  animal_handling: "fieldcraft",
-  animal_husbandry: "fieldcraft",
-  athletic_conditioning: "physical",
-  athletics: "physical",
-  basic_melee_training: "combat",
-  basic_missile_training: "combat",
-  civic_learning: "knowledge",
-  combat_group: "combat",
-  commercial_administration: "trade",
-  courtly_formation: "court-social",
-  covert_entry: "covert",
-  craft_group: "craft",
-  defensive_soldiering: "military",
-  field_soldiering: "military",
-  fieldcraft_stealth: "fieldcraft",
-  formal_performance: "court-social",
-  healing_practice: "healing",
-  herb_and_remedy_craft: "healing",
-  humanities: "knowledge",
-  learned_natural_inquiry: "knowledge",
-  literate_foundation: "knowledge",
-  maritime_crew_training: "maritime",
-  maritime_navigation: "maritime",
-  medicine_group: "healing",
-  mental_discipline: "mental",
-  mental_group: "mental",
-  mercantile_practice: "trade",
-  military_group: "military",
-  mounted_service: "fieldcraft",
-  mounted_warrior_training: "combat",
-  mystical_group: "mystical",
-  officer_training: "leadership",
-  omen_and_ritual_practice: "mystical",
-  operations: "military",
-  performance_basics: "court-social",
-  physical_science: "knowledge",
-  political_acumen: "leadership",
-  sacred_learning: "knowledge",
-  security: "covert",
-  social_reading: "court-social",
-  stealth_group: "covert",
-  street_theft: "covert",
-  technical_measurement: "knowledge",
-  transport_and_caravan_work: "trade",
-  trap_and_intrusion_work: "covert",
-  veteran_leadership: "leadership",
-  veteran_soldiering: "military",
-  wilderness_group: "fieldcraft"
-};
-
 export function filterProfessionBrowseItems<T extends ProfessionBrowseItem>(input: {
   familyFilter: string;
   items: T[];
@@ -294,27 +228,11 @@ export function getPlayerFacingSkillBucketDefinitions(): PlayerFacingSkillBucket
 
 export function getPlayerFacingSkillBucket(
   skill:
-    | Pick<SkillDefinition, "id" | "groupId" | "groupIds">
-    | { id: string; groupId?: string; groupIds?: string[] },
+    | Pick<SkillDefinition, "id" | "categoryId" | "groupId" | "groupIds">
+    | { id: string; categoryId?: string; groupId?: string; groupIds?: string[] },
   options?: { preferDirectProfession?: boolean }
 ): PlayerFacingSkillBucketId {
-  if (options?.preferDirectProfession) {
-    return "special-access";
-  }
-
-  const orderedGroupIds = [
-    ...(skill.groupId ? [skill.groupId] : []),
-    ...((skill.groupIds ?? []).filter((groupId) => groupId !== skill.groupId) as string[])
-  ];
-
-  for (const groupId of orderedGroupIds) {
-    const mapped = PLAYER_FACING_SKILL_BUCKET_BY_GROUP_ID[groupId];
-    if (mapped) {
-      return mapped;
-    }
-  }
-
-  return "special-access";
+  return getPlayerFacingSkillCategoryId(skill, options);
 }
 
 export function mergeSkillBrowseRowsBySkillId<T extends SkillBrowseRowLike>(rows: T[]): T[] {

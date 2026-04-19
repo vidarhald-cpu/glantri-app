@@ -50,7 +50,7 @@ export const glantriTerms: GlantriTermEntry[] = [
     definition:
       "A player-facing classification used for browsing, filtering, and displaying skills, such as Combat, Military, Maritime, or Knowledge. Skill Category is conceptually independent from Skill Group membership.",
     implementationNote:
-      "Current behavior: Skill Category is currently inferred from a skill's Primary Skill Group Membership in parts of the app, including chargen. That is an implementation shortcut and not the intended long-term model. Category should eventually be defined explicitly.",
+      "Current behavior: Skill Category is now stored explicitly on canonical skill content as categoryId. Some helpers still keep a temporary fallback to primary-group inference for older data during the transition.",
     whereUsed: [
       "Chargen skill filter",
       "Character sheet grouping",
@@ -64,7 +64,7 @@ export const glantriTerms: GlantriTermEntry[] = [
     definition:
       "The skill's main membership in the skill-group training structure. It defines the skill's structural identity in the training model.",
     implementationNote:
-      "Current behavior: Primary Skill Group Membership currently drives Skill Category inference in chargen and some admin views. That shortcut does not mean category is conceptually defined by group membership.",
+      "Current behavior: Primary Skill Group Membership remains the main structural placement for training and access. Some fallback helpers may still consult it when explicit categoryId is absent in older data, but it no longer conceptually defines Skill Category.",
     whereUsed: [
       "Canonical skill definitions",
       "Admin Skills review and inspector",

@@ -53,6 +53,59 @@ const DEFAULT_LINKED_STATS_BY_TYPE = {
   wilderness: ["dex", "int"]
 };
 
+const PLAYER_FACING_SKILL_CATEGORY_BY_GROUP_ID = {
+  advanced_melee_training: "combat",
+  advanced_missile_training: "combat",
+  animal_handling: "fieldcraft",
+  animal_husbandry: "fieldcraft",
+  athletic_conditioning: "physical",
+  athletics: "physical",
+  basic_melee_training: "combat",
+  basic_missile_training: "combat",
+  civic_learning: "knowledge",
+  combat_group: "combat",
+  commercial_administration: "trade",
+  courtly_formation: "court-social",
+  covert_entry: "covert",
+  craft_group: "craft",
+  defensive_soldiering: "military",
+  field_soldiering: "military",
+  fieldcraft_stealth: "fieldcraft",
+  formal_performance: "court-social",
+  healing_practice: "healing",
+  herb_and_remedy_craft: "healing",
+  humanities: "knowledge",
+  learned_natural_inquiry: "knowledge",
+  literate_foundation: "knowledge",
+  maritime_crew_training: "maritime",
+  maritime_navigation: "maritime",
+  medicine_group: "healing",
+  mental_discipline: "mental",
+  mental_group: "mental",
+  mercantile_practice: "trade",
+  military_group: "military",
+  mounted_service: "fieldcraft",
+  mounted_warrior_training: "combat",
+  mystical_group: "mystical",
+  officer_training: "leadership",
+  omen_and_ritual_practice: "mystical",
+  operations: "military",
+  performance_basics: "court-social",
+  physical_science: "knowledge",
+  political_acumen: "leadership",
+  sacred_learning: "knowledge",
+  security: "covert",
+  social_reading: "court-social",
+  stealth_group: "covert",
+  street_theft: "covert",
+  technical_measurement: "knowledge",
+  transport_and_caravan_work: "trade",
+  trap_and_intrusion_work: "covert",
+  veteran_leadership: "leadership",
+  veteran_soldiering: "military",
+  wilderness_group: "fieldcraft"
+};
+
 function parseJsonLike(value, fallback = []) {
   if (Array.isArray(value)) {
     return value;
@@ -87,6 +140,32 @@ function getLinkedStats(skill) {
   }
 
   return DEFAULT_LINKED_STATS_BY_TYPE[skill.skillType] ?? ["int", "int"];
+}
+
+function inferPlayerFacingSkillCategoryId(groupIds) {
+  for (const groupId of groupIds) {
+    const mapped = PLAYER_FACING_SKILL_CATEGORY_BY_GROUP_ID[groupId];
+    if (mapped) {
+      return mapped;
+    }
+  }
+
+  return "special-access";
+}
+
+function orderCanonicalSkillGroupIds(skillId, groupIds) {
+  if (
+    skillId === "one_handed_edged" &&
+    groupIds.includes("combat_group") &&
+    groupIds.includes("mounted_warrior_training")
+  ) {
+    return [
+      "combat_group",
+      ...groupIds.filter((groupId) => groupId !== "combat_group")
+    ];
+  }
+
+  return groupIds;
 }
 
 function getLiteracyRequirement(dependencies) {
@@ -135,7 +214,10 @@ const skills = rawBundle.skills
   .map((skill) => {
     const trainingGroupIds = parseJsonLike(skill.trainingGroupIds);
     const taxonomyGroupIds = parseJsonLike(skill.taxonomyGroupIds);
-    const groupIds = [...new Set([...trainingGroupIds, ...taxonomyGroupIds])];
+    const groupIds = orderCanonicalSkillGroupIds(
+      skill.skillId,
+      [...new Set([...trainingGroupIds, ...taxonomyGroupIds])]
+    );
     const dependencies = parseJsonLike(skill.dependencyRules).map((dependency) => ({
       skillId: dependency.skillId,
       strength: dependency.strength ?? "required"
@@ -145,6 +227,7 @@ const skills = rawBundle.skills
     return {
       allowsSpecializations: specializationParentIds.has(skill.skillId),
       category: skill.tier === "secondary" ? "secondary" : "ordinary",
+      categoryId: inferPlayerFacingSkillCategoryId(groupIds),
       dependencies,
       dependencySkillIds: dependencies
         .filter((dependency) => dependency.strength === "required")

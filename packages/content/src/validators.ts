@@ -187,6 +187,12 @@ function validateSkillRelationships(content: CanonicalContent): CanonicalContent
   const issues: string[] = [];
 
   for (const skill of content.skills) {
+    if (!skill.categoryId) {
+      issues.push(
+        `Skill "${skill.name}" (${skill.id}) is missing an explicit player-facing categoryId.`
+      );
+    }
+
     for (const groupId of skill.groupIds) {
       if (!skillGroupIds.has(groupId)) {
         issues.push(`Skill "${skill.name}" (${skill.id}) references unknown skill group "${groupId}".`);

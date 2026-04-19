@@ -138,6 +138,7 @@ describe("chargenBrowse helpers", () => {
   it("classifies mounted warrior weapon skills as combat", () => {
     expect(
       getPlayerFacingSkillBucket({
+        categoryId: "combat",
         groupId: "mounted_warrior_training",
         groupIds: ["mounted_warrior_training", "combat_group"],
         id: "one_handed_edged"
@@ -146,10 +147,22 @@ describe("chargenBrowse helpers", () => {
 
     expect(
       getPlayerFacingSkillBucket({
+        categoryId: "combat",
         groupId: "mounted_warrior_training",
         groupIds: ["mounted_warrior_training", "combat_group"],
         id: "lance"
       })
     ).toBe("combat");
+  });
+
+  it("prefers explicit skill category over legacy group inference", () => {
+    expect(
+      getPlayerFacingSkillBucket({
+        categoryId: "fieldcraft",
+        groupId: "combat_group",
+        groupIds: ["combat_group"],
+        id: "test_skill"
+      })
+    ).toBe("fieldcraft");
   });
 });
