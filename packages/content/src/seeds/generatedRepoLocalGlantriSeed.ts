@@ -709,7 +709,7 @@ export const generatedRepoLocalGlantriSeed = {
           "skillId": "lance"
         },
         {
-          "relevance": "core",
+          "relevance": "optional",
           "skillId": "one_handed_edged"
         },
         {
@@ -1153,7 +1153,7 @@ export const generatedRepoLocalGlantriSeed = {
           "skillId": "brawling"
         },
         {
-          "relevance": "optional",
+          "relevance": "core",
           "skillId": "one_handed_edged"
         },
         {
@@ -1396,6 +1396,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "knowledge",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Literacy Read and write a script used by the character’s culture. Gateway skill for learned and administrative roles.",
@@ -1420,6 +1421,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": true,
       "category": "ordinary",
+      "categoryId": "knowledge",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Language Speak and understand a language. Spoken language is universal; written use depends on Literacy.",
@@ -1443,6 +1445,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "knowledge",
       "dependencies": [
         {
           "skillId": "language",
@@ -1476,6 +1479,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "knowledge",
       "dependencies": [
         {
           "skillId": "language",
@@ -1508,6 +1512,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "knowledge",
       "dependencies": [
         {
           "skillId": "literacy",
@@ -1541,6 +1546,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "knowledge",
       "dependencies": [
         {
           "skillId": "literacy",
@@ -1569,6 +1575,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "secondary",
+      "categoryId": "knowledge",
       "dependencies": [
         {
           "skillId": "literacy",
@@ -1608,6 +1615,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "secondary",
+      "categoryId": "knowledge",
       "dependencies": [
         {
           "skillId": "literacy",
@@ -1647,6 +1655,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "knowledge",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Apply length, area, weight, volume, and proportion in practical use. Practical learned gateway.",
@@ -1671,6 +1680,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "knowledge",
       "dependencies": [
         {
           "skillId": "measurement",
@@ -1700,6 +1710,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "knowledge",
       "dependencies": [
         {
           "skillId": "mathematics",
@@ -1732,6 +1743,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "knowledge",
       "dependencies": [
         {
           "skillId": "measurement",
@@ -1768,6 +1780,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "secondary",
+      "categoryId": "knowledge",
       "dependencies": [
         {
           "skillId": "literacy",
@@ -1803,6 +1816,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "secondary",
+      "categoryId": "knowledge",
       "dependencies": [
         {
           "skillId": "measurement",
@@ -1833,6 +1847,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "secondary",
+      "categoryId": "knowledge",
       "dependencies": [
         {
           "skillId": "measurement",
@@ -1864,6 +1879,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "trade",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Bargaining Negotiate prices, terms, favors, and exchanges. Universal exchange skill.",
@@ -1887,6 +1903,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "military",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Gambling Understand games of chance, betting behavior, and risk-taking. Flavorful, broad social/practical skill.",
@@ -1909,6 +1926,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "trade",
       "dependencies": [
         {
           "skillId": "bargaining",
@@ -1942,6 +1960,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "military",
       "dependencies": [
         {
           "skillId": "literacy",
@@ -1981,6 +2000,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "trade",
       "dependencies": [
         {
           "skillId": "literacy",
@@ -2011,6 +2031,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "leadership",
       "dependencies": [
         {
           "skillId": "insight",
@@ -2047,6 +2068,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "secondary",
+      "categoryId": "trade",
       "dependencies": [
         {
           "skillId": "literacy",
@@ -2081,6 +2103,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "secondary",
+      "categoryId": "trade",
       "dependencies": [
         {
           "skillId": "bargaining",
@@ -2113,6 +2136,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": true,
       "category": "ordinary",
+      "categoryId": "court-social",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Know expected manners, forms of respect, and socially correct behavior. Broad elite-social core.",
@@ -2136,6 +2160,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "court-social",
       "dependencies": [
         {
           "skillId": "etiquette",
@@ -2166,6 +2191,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "secondary",
+      "categoryId": "court-social",
       "dependencies": [
         {
           "skillId": "etiquette",
@@ -2196,6 +2222,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "leadership",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Read mood, intention, sincerity, fear, uncertainty, or emotional state. Broad social-reading core.",
@@ -2220,6 +2247,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "secondary",
+      "categoryId": "leadership",
       "dependencies": [
         {
           "skillId": "insight",
@@ -2251,6 +2279,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "secondary",
+      "categoryId": "court-social",
       "dependencies": [
         {
           "skillId": "insight",
@@ -2285,6 +2314,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "secondary",
+      "categoryId": "knowledge",
       "dependencies": [
         {
           "skillId": "insight",
@@ -2318,6 +2348,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "court-social",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Use the voice for song, pitch, rhythm, and expression. Broad expressive and social primary.",
@@ -2341,6 +2372,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "court-social",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Dancing Perform structured or improvised movement for ritual, celebration, or display. Broad expressive and social primary.",
@@ -2364,6 +2396,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "court-social",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Hold attention through spoken narrative, pacing, memory, and dramatic delivery. Strong oral-performance core.",
@@ -2387,6 +2420,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "court-social",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Play or perform structured instrumental music. Performance profession core.",
@@ -2410,6 +2444,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "secondary",
+      "categoryId": "court-social",
       "dependencies": [
         {
           "skillId": "storytelling",
@@ -2438,6 +2473,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "secondary",
+      "categoryId": "court-social",
       "dependencies": [
         {
           "skillId": "language",
@@ -2466,6 +2502,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "secondary",
+      "categoryId": "court-social",
       "dependencies": [
         {
           "skillId": "language",
@@ -2500,6 +2537,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "mental",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Sustain attention and mental focus under distraction or pressure. Broad mental-discipline core.",
@@ -2523,6 +2561,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "mental",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Retain, recall, and organize learned details or patterns. Broad cognitive core.",
@@ -2546,6 +2585,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "mental",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Govern impulse, fear, pain response, and emotional reaction under pressure. Broad mental and emotional control core.",
@@ -2569,6 +2609,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "secondary",
+      "categoryId": "mental",
       "dependencies": [
         {
           "skillId": "concentration",
@@ -2599,6 +2640,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "combat",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Perception Notice relevant details, threats, movement, and hidden information. Core observation skill in and out of combat.",
@@ -2628,6 +2670,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "fieldcraft",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Animal care Feed, calm, house, and maintain animals in routine condition. Broad baseline animal profession skill.",
@@ -2654,6 +2697,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "fieldcraft",
       "dependencies": [
         {
           "skillId": "animal_care",
@@ -2686,6 +2730,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "fieldcraft",
       "dependencies": [
         {
           "skillId": "animal_care",
@@ -2715,6 +2760,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "fieldcraft",
       "dependencies": [
         {
           "skillId": "animal_training",
@@ -2745,6 +2791,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "secondary",
+      "categoryId": "trade",
       "dependencies": [
         {
           "skillId": "animal_care",
@@ -2774,6 +2821,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "secondary",
+      "categoryId": "fieldcraft",
       "dependencies": [
         {
           "skillId": "animal_training",
@@ -2804,6 +2852,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "maritime",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Sailing Handle sails and work aboard a vessel under routine maritime conditions. Core sailor profession skill.",
@@ -2828,6 +2877,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": true,
       "category": "ordinary",
+      "categoryId": "maritime",
       "dependencies": [
         {
           "skillId": "sailing",
@@ -2862,6 +2912,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "secondary",
+      "categoryId": "maritime",
       "dependencies": [
         {
           "skillId": "sailing",
@@ -2890,6 +2941,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "secondary",
+      "categoryId": "maritime",
       "dependencies": [
         {
           "skillId": "sailing",
@@ -2918,6 +2970,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "physical",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Climb Climb natural or built surfaces safely and efficiently. Broad adventuring physical core.",
@@ -2941,6 +2994,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "physical",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Run Sprint, pace, pursue, and move rapidly on foot. Broad movement core.",
@@ -2964,6 +3018,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "physical",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Leap gaps, obstacles, and vertical distances with control. Broad movement core.",
@@ -2987,6 +3042,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "physical",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Swim Move safely and effectively through water. Broad physical survival and adventure core.",
@@ -3009,6 +3065,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "secondary",
+      "categoryId": "physical",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Keep footing on narrow, unstable, moving, or slippery surfaces. Cheap narrow movement enhancer.",
@@ -3032,6 +3089,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "secondary",
+      "categoryId": "physical",
       "dependencies": [
         {
           "skillId": "balance",
@@ -3063,6 +3121,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "covert",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Search persons, containers, rooms, or sites for hidden items or traces. Broad enough to support several roles.",
@@ -3087,6 +3146,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "secondary",
+      "categoryId": "covert",
       "dependencies": [
         {
           "skillId": "stealth",
@@ -3115,6 +3175,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "secondary",
+      "categoryId": "covert",
       "dependencies": [
         {
           "skillId": "search",
@@ -3145,6 +3206,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "secondary",
+      "categoryId": "covert",
       "dependencies": [
         {
           "skillId": "search",
@@ -3176,6 +3238,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "secondary",
+      "categoryId": "covert",
       "dependencies": [
         {
           "skillId": "stealth",
@@ -3204,6 +3267,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "covert",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Stealth Move quietly, stay unnoticed, and avoid attention while approaching or withdrawing. Core covert movement skill.",
@@ -3229,6 +3293,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "secondary",
+      "categoryId": "covert",
       "dependencies": [
         {
           "skillId": "stealth",
@@ -3260,6 +3325,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "secondary",
+      "categoryId": "fieldcraft",
       "dependencies": [
         {
           "skillId": "stealth",
@@ -3290,6 +3356,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "secondary",
+      "categoryId": "covert",
       "dependencies": [
         {
           "skillId": "stealth",
@@ -3323,6 +3390,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "craft",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Shape, fire, and finish clay vessels and ceramic goods. Very early settled craft.",
@@ -3345,6 +3413,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "craft",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Produce woven cloth, bands, and simple textiles. Very early settled craft.",
@@ -3367,6 +3436,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "craft",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Cut, cure, shape, and repair leather goods and hide equipment. Broad practical craft core.",
@@ -3389,6 +3459,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "craft",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Make and repair wooden structures, fittings, tools, and objects. Broad craft core.",
@@ -3411,6 +3482,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "secondary",
+      "categoryId": "craft",
       "dependencies": [
         {
           "skillId": "weaving",
@@ -3438,6 +3510,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "secondary",
+      "categoryId": "craft",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Prepare and bake bread and staple oven foods reliably. Useful domestic and provisioning secondary.",
@@ -3460,6 +3533,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "secondary",
+      "categoryId": "craft",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Produce fermented drink from grain, fruit, honey, or similar materials. Useful domestic and commercial secondary.",
@@ -3482,6 +3556,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "craft",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Cut, dress, shape, and fit stone for tools, structures, and finishes. Strong structural craft core.",
@@ -3504,6 +3579,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": true,
       "category": "ordinary",
+      "categoryId": "craft",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Forge, shape, and repair metal tools, fittings, and simple equipment. Broad metalworking core.",
@@ -3526,6 +3602,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "secondary",
+      "categoryId": "craft",
       "dependencies": [
         {
           "skillId": "smithing",
@@ -3554,6 +3631,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": true,
       "category": "ordinary",
+      "categoryId": "healing",
       "dependencies": [
         {
           "skillId": "literacy",
@@ -3582,6 +3660,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "secondary",
+      "categoryId": "healing",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "First aid Give immediate practical treatment to stabilize wounds, bleeding, shock, and urgent injury. Intentionally secondary; light, in-the-moment care.",
@@ -3605,6 +3684,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "healing",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Herb lore Know medicinal, harmful, and useful plants and their common uses. Strong low-tech or hybrid healing core.",
@@ -3628,6 +3708,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "healing",
       "dependencies": [
         {
           "skillId": "herb_lore",
@@ -3660,6 +3741,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "secondary",
+      "categoryId": "healing",
       "dependencies": [
         {
           "skillId": "medicine",
@@ -3696,6 +3778,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "secondary",
+      "categoryId": "healing",
       "dependencies": [
         {
           "skillId": "first_aid",
@@ -3724,6 +3807,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "mystical",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Interpret signs, omens, visions, or ritual indicators for hidden meaning. Broad mystical core.",
@@ -3747,6 +3831,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": true,
       "category": "secondary",
+      "categoryId": "mystical",
       "dependencies": [
         {
           "skillId": "divination",
@@ -3777,6 +3862,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "secondary",
+      "categoryId": "knowledge",
       "dependencies": [
         {
           "skillId": "divination",
@@ -3812,6 +3898,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "secondary",
+      "categoryId": "mystical",
       "dependencies": [
         {
           "skillId": "divination",
@@ -3849,6 +3936,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "combat",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Dodge Avoid attacks through movement, timing, and body positioning. Core defense; part of real melee training.",
@@ -3878,6 +3966,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "combat",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Parry Defend with weapon or shield by turning aside or controlling an attack. Core defense; includes shield use in base model.",
@@ -3904,6 +3993,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "combat",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Brawling Fight effectively with punches, kicks, grapples, and rough unarmed violence. Baseline unarmed attack skill.",
@@ -3926,13 +4016,14 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": true,
       "category": "ordinary",
+      "categoryId": "combat",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "1-h edged Fight with one-handed bladed weapons. Core melee attack family.",
-      "groupId": "mounted_warrior_training",
+      "groupId": "combat_group",
       "groupIds": [
-        "mounted_warrior_training",
-        "combat_group"
+        "combat_group",
+        "mounted_warrior_training"
       ],
       "id": "one_handed_edged",
       "isTheoretical": false,
@@ -3949,6 +4040,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "combat",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "1-h conc./axe Fight with one-handed crushing or chopping weapons such as maces and axes. Core melee attack family.",
@@ -3971,6 +4063,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "combat",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "2-h edged Fight with large two-handed bladed weapons using strength, reach, and committed technique. Heavy cutting or slashing weapon family. Split from the former broad 2-handed Weapons row to align better with the source combat structure.",
@@ -3993,6 +4086,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "combat",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Polearms Fight with spears and longer pole weapons used at reach. Very important common-soldier weapon family.",
@@ -4015,6 +4109,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "combat",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "2-h conc./axe Fight with large two-handed crushing or chopping weapons such as great axes, hammers, or mauls. Heavy impact/chopping weapon family. Split from the former broad 2-handed Weapons row to align better with the source combat structure.",
@@ -4037,6 +4132,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "combat",
       "dependencies": [
         {
           "skillId": "riding",
@@ -4065,6 +4161,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "combat",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Throwing Attack accurately with thrown weapons such as javelins, knives, or axes. Practical ranged family.",
@@ -4087,6 +4184,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "combat",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Sling Use sling-based missile weapons effectively in combat or hunting. Distinct missile family.",
@@ -4109,6 +4207,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "combat",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Bow Use ordinary bows effectively in combat or hunting. Core ranged family.",
@@ -4131,6 +4230,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "combat",
       "dependencies": [
         {
           "skillId": "bow",
@@ -4158,6 +4258,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "combat",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Crossbow Use mechanically spanned missile weapons effectively in combat. Later-society missile family.",
@@ -4180,6 +4281,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "secondary",
+      "categoryId": "military",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Stay functional and rational under lethal danger and battlefield shock. Veteran-facing secondary; not baseline novice training.",
@@ -4204,6 +4306,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "secondary",
+      "categoryId": "military",
       "dependencies": [
         {
           "skillId": "perception",
@@ -4235,6 +4338,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "secondary",
+      "categoryId": "military",
       "dependencies": [
         {
           "skillId": "parry",
@@ -4263,6 +4367,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "secondary",
+      "categoryId": "combat",
       "dependencies": [
         {
           "skillId": "riding",
@@ -4293,6 +4398,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "leadership",
       "dependencies": [
         {
           "skillId": "perception",
@@ -4326,6 +4432,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "leadership",
       "dependencies": [
         {
           "skillId": "insight",
