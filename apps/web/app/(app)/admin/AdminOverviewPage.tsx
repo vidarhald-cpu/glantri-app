@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useState } from "react";
 
 import { useAdminContent } from "../../../src/lib/admin/AdminContentContext";
@@ -12,7 +11,6 @@ import {
   AdminPanel,
   AdminStatusBadge,
   AdminTextarea,
-  adminNavGroups,
   formatAdminTimestamp
 } from "./admin-ui";
 
@@ -50,23 +48,13 @@ export default function AdminOverviewPage() {
   return (
     <section style={{ display: "grid", gap: "1.25rem" }}>
       <AdminPageIntro
-        actions={
-          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
-            <Link href="/admin/skills" style={{ color: "#594320", fontWeight: 700 }}>
-              Open Skills & Societies
-            </Link>
-            <Link href="/admin/melee-weapons" style={{ color: "#594320", fontWeight: 700 }}>
-              Open Weapons & Equipment
-            </Link>
-          </div>
-        }
         eyebrow="Admin Overview"
         summary="Overview is now the single home for aggregate content counts, server-versus-draft persistence status, and save/reload workflow context. The child workspaces stay focused on their own review and editing tasks."
         title="Rules Content Management"
       />
 
       <AdminPanel
-        subtitle="These metrics summarize the major content areas and grouped workspaces without repeating that framing on every child page."
+        subtitle="These metrics summarize the real content entities currently visible through the admin layer. When a category is not sourced through the current canonical/admin model, the total is shown as unavailable instead of fabricated."
         title="System Snapshot"
       >
         <div style={{ display: "grid", gap: "1rem", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
@@ -74,18 +62,23 @@ export default function AdminOverviewPage() {
           <AdminMetric hint="Higher-level content buckets" label="Skill Groups" value={stats.skillGroupCount} />
           <AdminMetric hint="Profession rule definitions" label="Professions" value={stats.professionCount} />
           <AdminMetric hint="Canonical societies" label="Societies" value={stats.societyCount} />
-          <AdminMetric hint="Society/social-class access rows" label="Access Rows" value={stats.societyEntryCount} />
-          <AdminMetric hint="Baseline language definitions" label="Languages" value={stats.languageCount} />
-          <AdminMetric hint="Skills, groups, professions, societies, access" label="Skills & Societies Pages" value={stats.societyWorkspaceCount} />
-          <AdminMetric hint="Melee, missile, shields, armor, gear, valuables" label="Weapons & Equipment Pages" value={stats.weaponWorkspaceCount + stats.equipmentWorkspaceCount} />
-          <AdminMetric hint="Players workspace" label="Accounts Pages" value={stats.accountWorkspaceCount} />
-          <AdminMetric hint="Documents and tables" label="Rules & Docs Pages" value={stats.documentWorkspaceCount} />
+          <AdminMetric hint="Society/social-class access rows" label="Access Rows" value={stats.societyAccessRowCount} />
+          <AdminMetric hint={stats.languageCountLabel} label="Languages" value={stats.languageCount} />
+          <AdminMetric hint="System melee and thrown-capable weapon templates" label="Melee Weapons" value={stats.meleeWeaponCount} />
+          <AdminMetric hint="System missile weapon templates" label="Missile Weapons" value={stats.missileWeaponCount} />
+          <AdminMetric hint="Workbook-backed shield templates" label="Shields" value={stats.shieldCount} />
+          <AdminMetric hint="Workbook-backed armor templates" label="Armor" value={stats.armorCount} />
+          <AdminMetric hint="System gear templates" label="Gear" value={stats.gearCount} />
+          <AdminMetric hint="System valuables templates" label="Valuables" value={stats.valuablesCount} />
+          <AdminMetric hint="No standalone content total is wired into Overview for documents yet." label="Documents" value={stats.documentsCount ?? "Unavailable"} />
+          <AdminMetric hint="No standalone content total is wired into Overview for tables yet." label="Tables" value={stats.tablesCount ?? "Unavailable"} />
+          <AdminMetric hint="Player/account totals are not loaded into Overview yet." label="Players" value={stats.accountCount ?? "Unavailable"} />
         </div>
       </AdminPanel>
 
       <AdminPanel
-        subtitle="This panel keeps published state, working state, local draft recovery, and save/publish controls together in one place."
-        title="Persistence & Publishing"
+        subtitle="This panel keeps published state, working state, local draft recovery, and save/reload controls together in one place without implying a fuller revision-log workflow than currently exists."
+        title="Persistence & Revision Snapshot"
       >
         <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", marginBottom: "1rem" }}>
           <AdminStatusBadge>{describeSource(loadedSource)}</AdminStatusBadge>
@@ -209,7 +202,7 @@ export default function AdminOverviewPage() {
               padding: "1rem"
             }}
           >
-            <strong style={{ color: "#2e2619" }}>Save / publish controls</strong>
+            <strong style={{ color: "#2e2619" }}>Save / reload controls</strong>
             <div style={{ color: "#5f543a", fontSize: "0.92rem", lineHeight: 1.5 }}>
               Reload and draft-recovery actions live here so the child workspaces can stay focused on inspection and editing.
             </div>
@@ -241,51 +234,6 @@ export default function AdminOverviewPage() {
               ) : null}
             </div>
           </div>
-        </div>
-      </AdminPanel>
-
-      <AdminPanel
-        subtitle="The route map follows the grouped admin structure so operators can scan by responsibility instead of reading one long flat list."
-        title="Workspace Map"
-      >
-        <div style={{ display: "grid", gap: "1rem" }}>
-          {adminNavGroups.map((group) => (
-            <div key={group.label} style={{ display: "grid", gap: "0.6rem" }}>
-              <div
-                style={{
-                  color: "#7e5d2a",
-                  fontSize: "0.82rem",
-                  fontWeight: 700,
-                  letterSpacing: "0.12em",
-                  textTransform: "uppercase"
-                }}
-              >
-                {group.label}
-              </div>
-              <div style={{ display: "grid", gap: "1rem", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
-                {group.items.map((item) => (
-                  <Link
-                    href={item.href}
-                    key={item.href}
-                    style={{
-                      background: "rgba(255, 252, 245, 0.92)",
-                      border: "1px solid rgba(85, 73, 48, 0.12)",
-                      borderRadius: 20,
-                      color: "inherit",
-                      display: "grid",
-                      gap: "0.35rem",
-                      padding: "1rem",
-                      textDecoration: "none"
-                    }}
-                  >
-                    <strong style={{ color: "#2e2619" }}>{item.label}</strong>
-                    <span style={{ color: "#5f543a", lineHeight: 1.5 }}>{item.description}</span>
-                    <span style={{ color: "#835c1f", fontSize: "0.9rem", fontWeight: 700 }}>{item.href}</span>
-                  </Link>
-                ))}
-              </div>
-            </div>
-          ))}
         </div>
       </AdminPanel>
     </section>

@@ -21,6 +21,16 @@ function findActiveSection(pathname: string): string {
   return activeGroup?.label ?? "Overview";
 }
 
+function findActiveGroupItems(pathname: string) {
+  const activeGroup = adminNavGroups.find((group) =>
+    group.items.some(
+      (item) => pathname === item.href || (item.href !== "/admin" && pathname.startsWith(`${item.href}/`))
+    )
+  );
+
+  return activeGroup ?? adminNavGroups[0];
+}
+
 function AdminLayoutInner({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const canEdit = useCanAccessAdmin();
@@ -34,6 +44,7 @@ function AdminLayoutInner({ children }: { children: ReactNode }) {
     syncState
   } = useAdminContent();
   const activeSection = findActiveSection(pathname);
+  const activeGroup = findActiveGroupItems(pathname);
   const feedbackColor =
     syncState === "conflict" || syncState === "error"
       ? "#7f2f17"
@@ -96,48 +107,79 @@ function AdminLayoutInner({ children }: { children: ReactNode }) {
             </div>
           </div>
 
-          <div style={{ display: "grid", gap: "0.85rem" }}>
-            {adminNavGroups.map((group) => (
-              <div key={group.label} style={{ display: "grid", gap: "0.45rem" }}>
-                <div
-                  style={{
-                    color: group.label === activeSection ? "#7e5d2a" : "#6b5c3e",
-                    fontSize: "0.8rem",
-                    fontWeight: 700,
-                    letterSpacing: "0.12em",
-                    textTransform: "uppercase"
-                  }}
-                >
-                  {group.label}
-                </div>
-                <nav style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
-                  {group.items.map((item) => {
-                    const active =
-                      pathname === item.href ||
-                      (item.href !== "/admin" && pathname.startsWith(`${item.href}/`));
+          <div style={{ display: "grid", gap: "0.8rem" }}>
+            <nav style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
+              {adminNavGroups.map((group) => {
+                const active = group.label === activeSection;
+                const targetHref = group.items[0]?.href ?? "/admin";
 
-                    return (
-                      <Link
-                        href={item.href}
-                        key={item.href}
-                        style={{
-                          background: active ? "#7e5d2a" : "rgba(126, 93, 42, 0.08)",
-                          border: active
-                            ? "1px solid transparent"
-                            : "1px solid rgba(126, 93, 42, 0.14)",
-                          borderRadius: 999,
-                          color: active ? "#fffaf0" : "#594320",
-                          padding: "0.65rem 0.9rem",
-                          textDecoration: "none"
-                        }}
-                      >
-                        {item.label}
-                      </Link>
-                    );
-                  })}
-                </nav>
-              </div>
-            ))}
+                return (
+                  <Link
+                    href={targetHref}
+                    key={group.label}
+                    style={{
+                      background: active ? "#7e5d2a" : "rgba(126, 93, 42, 0.08)",
+                      border: active
+                        ? "1px solid transparent"
+                        : "1px solid rgba(126, 93, 42, 0.14)",
+                      borderRadius: 999,
+                      color: active ? "#fffaf0" : "#594320",
+                      padding: "0.7rem 1rem",
+                      textDecoration: "none"
+                    }}
+                  >
+                    {group.label}
+                  </Link>
+                );
+              })}
+            </nav>
+
+            <div
+              style={{
+                alignItems: "center",
+                display: "flex",
+                flexWrap: "wrap",
+                gap: "0.65rem"
+              }}
+            >
+              <span
+                style={{
+                  color: "#6b5c3e",
+                  fontSize: "0.8rem",
+                  fontWeight: 700,
+                  letterSpacing: "0.12em",
+                  textTransform: "uppercase"
+                }}
+              >
+                {activeGroup.label}
+              </span>
+              <nav style={{ display: "flex", flexWrap: "wrap", gap: "0.65rem" }}>
+                {activeGroup.items.map((item) => {
+                  const active =
+                    pathname === item.href ||
+                    (item.href !== "/admin" && pathname.startsWith(`${item.href}/`));
+
+                  return (
+                    <Link
+                      href={item.href}
+                      key={item.href}
+                      style={{
+                        background: active ? "rgba(126, 93, 42, 0.16)" : "rgba(255, 252, 245, 0.82)",
+                        border: active
+                          ? "1px solid rgba(126, 93, 42, 0.24)"
+                          : "1px solid rgba(85, 73, 48, 0.12)",
+                        borderRadius: 999,
+                        color: "#594320",
+                        padding: "0.55rem 0.85rem",
+                        textDecoration: "none"
+                      }}
+                    >
+                      {item.label}
+                    </Link>
+                  );
+                })}
+              </nav>
+            </div>
           </div>
 
           <div style={{ color: isLoading ? "#7b5713" : feedbackColor, minHeight: 24 }}>

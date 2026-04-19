@@ -1,6 +1,13 @@
 import { collectCanonicalContentWarnings, type CanonicalContent } from "@glantri/content";
+import { equipmentTemplates } from "@glantri/content/equipment";
 import { getSkillGroupIds } from "@glantri/domain";
 import { resolveEffectiveProfessionPackage } from "@glantri/rules-engine";
+import type { ArmorTemplate, GearTemplate, ShieldTemplate, ValuableTemplate, WeaponTemplate } from "@glantri/domain";
+
+import {
+  isCatalogMeleeWeaponTemplate,
+  isCatalogMissileWeaponTemplate
+} from "../../features/equipment/weaponCatalogTables";
 
 export interface SkillAdminRow {
   characteristics: string;
@@ -207,17 +214,22 @@ export interface SocietyAccessRow {
 }
 
 export interface AdminOverviewStats {
-  accountWorkspaceCount: number;
-  documentWorkspaceCount: number;
-  equipmentWorkspaceCount: number;
+  accountCount?: number;
+  armorCount: number;
+  documentsCount?: number;
+  gearCount: number;
   languageCount: number;
+  languageCountLabel: string;
+  meleeWeaponCount: number;
+  missileWeaponCount: number;
   professionCount: number;
   societyCount: number;
-  societyWorkspaceCount: number;
+  societyAccessRowCount: number;
+  shieldCount: number;
   skillCount: number;
   skillGroupCount: number;
-  societyEntryCount: number;
-  weaponWorkspaceCount: number;
+  tablesCount?: number;
+  valuablesCount: number;
 }
 
 function uniqueSorted(values: string[]): string[] {
@@ -387,18 +399,44 @@ function buildSkillRelationshipContext(content: CanonicalContent) {
 }
 
 export function buildAdminOverviewStats(content: CanonicalContent): AdminOverviewStats {
+  const meleeWeaponCount = equipmentTemplates.filter(
+    (template): template is WeaponTemplate =>
+      template.category === "weapon" && isCatalogMeleeWeaponTemplate(template)
+  ).length;
+  const missileWeaponCount = equipmentTemplates.filter(
+    (template): template is WeaponTemplate =>
+      template.category === "weapon" && isCatalogMissileWeaponTemplate(template)
+  ).length;
+  const shieldCount = equipmentTemplates.filter(
+    (template): template is ShieldTemplate => template.category === "shield"
+  ).length;
+  const armorCount = equipmentTemplates.filter(
+    (template): template is ArmorTemplate => template.category === "armor"
+  ).length;
+  const gearCount = equipmentTemplates.filter(
+    (template): template is GearTemplate => template.category === "gear"
+  ).length;
+  const valuablesCount = equipmentTemplates.filter(
+    (template): template is ValuableTemplate => template.category === "valuables"
+  ).length;
+
   return {
-    accountWorkspaceCount: 1,
-    documentWorkspaceCount: 2,
-    equipmentWorkspaceCount: 4,
+    accountCount: undefined,
+    armorCount,
+    documentsCount: undefined,
+    gearCount,
     languageCount: content.languages.length,
+    languageCountLabel: "Baseline / provisional languages",
+    meleeWeaponCount,
+    missileWeaponCount,
     professionCount: content.professions.length,
     societyCount: content.societies.length,
-    societyWorkspaceCount: 5,
+    societyAccessRowCount: content.societyLevels.length,
+    shieldCount,
     skillCount: content.skills.length,
     skillGroupCount: content.skillGroups.length,
-    societyEntryCount: content.societyLevels.length,
-    weaponWorkspaceCount: 2
+    tablesCount: undefined,
+    valuablesCount
   };
 }
 
