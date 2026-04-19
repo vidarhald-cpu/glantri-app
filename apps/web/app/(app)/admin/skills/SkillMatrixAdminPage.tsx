@@ -215,7 +215,7 @@ export default function SkillMatrixAdminPage() {
             gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))"
           }}
         >
-          <AdminField label="Skill type">
+          <AdminField label="Type">
             <AdminSelect
               onChange={(event) => setSkillTypeFilter(event.target.value)}
               value={skillTypeFilter}
@@ -285,7 +285,7 @@ export default function SkillMatrixAdminPage() {
             >
               <option value="none">No grouping</option>
               <option value="parent-group">Parent group</option>
-              <option value="skill-type">Skill type</option>
+              <option value="skill-type">Type</option>
               <option value="society-level">Society level</option>
             </AdminSelect>
           </AdminField>
@@ -372,7 +372,7 @@ export default function SkillMatrixAdminPage() {
                 width: "12rem"
               },
               {
-                header: "Skill Type",
+                header: "Type",
                 render: (row) => row.skillType
               },
               {

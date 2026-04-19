@@ -311,7 +311,7 @@ export default function SkillsAdminPage() {
                 columns: [
                   { header: "Name", value: (row) => row.name },
                   { header: "Short Description", value: (row) => row.shortDescription },
-                  { header: "Skill Type", value: (row) => row.skillType },
+                  { header: "Type", value: (row) => row.skillType },
                   { header: "Parent Skill Groups", value: (row) => row.groupNames.join(" | ") },
                   { header: "Characteristics", value: (row) => row.characteristics },
                   { header: "Theoretical", value: (row) => row.theoretical },
@@ -457,7 +457,7 @@ export default function SkillsAdminPage() {
               >
                 <AdminField
                   hint="`ordinary` is a core skill node in the graph. `secondary` marks a skill that typically hangs off another primary skill path."
-                  label="Skill type"
+                  label="Type"
                 >
                   <AdminSelect
                     onChange={(event) =>

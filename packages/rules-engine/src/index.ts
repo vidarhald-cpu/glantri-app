@@ -1,3 +1,10 @@
+/*
+  Terminology guardrail:
+  Rules code should preserve canonical Glantri terminology.
+  If terminology changes ripple into exported rules concepts or docs-facing strings,
+  update packages/domain/src/docs/glantriTerms.ts in the same patch.
+*/
+
 export * from "./advancement/advanceCharacter";
 export * from "./chargen/generateProfiles";
 export * from "./chargen/policy";

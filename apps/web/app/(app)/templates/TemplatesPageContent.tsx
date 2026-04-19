@@ -2,6 +2,13 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+/*
+  Terminology guardrail:
+  Template authoring uses both mechanical Type and player-facing Skill category concepts.
+  Keep those labels distinct, and update packages/domain/src/docs/glantriTerms.ts whenever
+  terminology changes here.
+*/
+
 import { type CanonicalContent } from "@glantri/content";
 import { equipmentTemplates } from "@glantri/content/equipment";
 import type {
@@ -1326,7 +1333,7 @@ export default function TemplatesPageContent() {
                   ["selected-groups", "Selected groups"],
                   ["core-skills", "Core skills"],
                   ["optional-skills", "Optional skills"],
-                  ["skill-type", "Skill type"],
+                  ["skill-type", "Type"],
                   ["all-skills", "All skills"]
                 ] as Array<[SkillsFilterMode, string]>).map(([mode, label]) => (
                   <button
@@ -1356,7 +1363,7 @@ export default function TemplatesPageContent() {
               </div>
               {skillsFilterMode === "skill-type" ? (
                 <label style={{ display: "grid", gap: "0.25rem", maxWidth: 220 }}>
-                  <span>Skill type</span>
+                  <span>Type</span>
                   <select
                     onChange={(event) => setSkillTypeFilter(event.target.value)}
                     value={skillTypeFilter}

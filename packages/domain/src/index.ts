@@ -4,6 +4,7 @@ export * from "./character/profiles";
 export * from "./character/progression";
 export * from "./campaign/scenario";
 export * from "./content/skills";
+export * from "./docs/glantriTerms";
 export * from "./encounter/session";
 export * from "./equipment";
 export * from "./profession/professions";

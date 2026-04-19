@@ -120,6 +120,11 @@ export const adminNavGroups: AdminNavGroup[] = [
         label: "Documents"
       },
       {
+        description: "Read the canonical Glantri app terminology definitions and usage guidance.",
+        href: "/admin/glantri-terms",
+        label: "Glantri App Terms"
+      },
+      {
         description: "Inspect workbook-backed reference tables used by current combat and movement calculations.",
         href: "/admin/tables",
         label: "Tables"
