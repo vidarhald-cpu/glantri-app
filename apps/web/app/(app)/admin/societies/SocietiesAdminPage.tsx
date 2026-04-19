@@ -56,6 +56,18 @@ function createSocietyFormState(input: {
   };
 }
 
+function summarizeList(values: string[], maxItems = 3): string {
+  if (values.length === 0) {
+    return "None";
+  }
+
+  if (values.length <= maxItems) {
+    return values.join(", ");
+  }
+
+  return `${values.slice(0, maxItems).join(", ")} +${values.length - maxItems} more`;
+}
+
 export default function SocietiesAdminPage() {
   const canEdit = useCanAccessAdmin();
   const { content, replaceContent } = useAdminContent();
@@ -221,44 +233,66 @@ export default function SocietiesAdminPage() {
           </AdminButton>
         }
         eyebrow="Admin / Societies"
-        summary="Society/social-class rows define who can start with which professions, skill groups, and direct skills. This page keeps those access rows legible as one matrix instead of a scattered set of ids."
+        summary="Review societies as compact access rows first, then drill into a selected row to inspect baseline languages, reachable professions, and the downstream profession → group → skill fan."
         title="Societies / Social Classes"
       />
 
       <SocietiesWorkspaceTabs />
 
       <div style={{ display: "grid", gap: "1rem", gridTemplateColumns: "minmax(0, 1.7fr) minmax(340px, 1fr)" }}>
-        <AdminPanel title="Society Access Rows">
+        <AdminPanel title="Society Access Review">
           <AdminDataTable
             columns={[
               {
                 header: "Society",
-                render: (row) => <strong>{row.society}</strong>
+                render: (row) => <strong>{row.society}</strong>,
+                width: "14rem"
               },
               {
                 header: "Society Level (1–6)",
-                render: (row) => row.canonicalSocietyLevel ?? <span style={{ color: "#8a7e63" }}>None</span>
+                render: (row) => row.canonicalSocietyLevel ?? <span style={{ color: "#8a7e63" }}>None</span>,
+                width: "8rem"
               },
               {
                 header: "Access Band (L1–L4)",
-                render: (row) => row.societyLevel
-              },
-              {
-                header: "Baseline Languages",
-                render: (row) =>
-                  row.baselineLanguages.length > 0 ? (
-                    <AdminTagList values={row.baselineLanguages} />
-                  ) : (
-                    <span style={{ color: "#8a7e63" }}>None</span>
-                  )
+                render: (row) => `L${row.societyLevel}`,
+                width: "8rem"
               },
               {
                 header: "Class Name",
-                render: (row) => row.societyClassName
+                render: (row) => row.societyClassName,
+                width: "14rem"
+              },
+              {
+                header: "Base Education",
+                render: (row) => row.baseEducation || <span style={{ color: "#8a7e63" }}>None</span>,
+                width: "9rem"
+              },
+              {
+                header: "Notes / Description",
+                render: (row) => (
+                  <span style={{ color: "#4f4635", lineHeight: 1.45 }}>
+                    {row.shortDescription || row.notes || <span style={{ color: "#8a7e63" }}>None</span>}
+                  </span>
+                ),
+                width: "22rem"
               },
               {
                 header: "Reachable Professions",
-                render: (row) => <AdminTagList values={row.reachableProfessions} />
+                render: (row) => summarizeList(row.reachableProfessions, 3),
+                width: "18rem"
+              },
+              {
+                header: "Open Inspector",
+                render: (row) => (
+                  <AdminButton
+                    onClick={() => setSelectedRowId(row.id)}
+                    variant={row.id === selectedRowDisplayId ? "primary" : "secondary"}
+                  >
+                    {row.id === selectedRowDisplayId ? "Open" : "Inspect"}
+                  </AdminButton>
+                ),
+                width: "10rem"
               }
             ]}
             emptyState="No society rows found."
@@ -270,7 +304,7 @@ export default function SocietiesAdminPage() {
 
         <div style={{ display: "grid", gap: "1rem" }}>
           <AdminPanel
-            subtitle="This panel keeps the two concepts separate: society level 1–6 is the canonical culture scale, while access band L1–L4 is the society-specific social access row used by profession access."
+            subtitle="This inspector keeps the two concepts separate: society level 1–6 is the canonical culture scale, while access band L1–L4 is the row-specific access band that shapes reachable professions and downstream skill reach."
             title={`${selectedSocietyLevel.societyName} L${selectedSocietyLevel.societyLevel}`}
           >
             <div style={{ display: "grid", gap: "0.85rem" }}>
@@ -317,6 +351,79 @@ export default function SocietiesAdminPage() {
                   Reachable professions
                 </div>
                 <AdminTagList values={selectedRow?.reachableProfessions ?? []} />
+              </div>
+
+              <div style={{ display: "grid", gap: "0.75rem" }}>
+                <div style={{ color: "#5f543a", fontSize: "0.85rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                  Profession → groups → skills fan
+                </div>
+                {selectedRow?.professionFans.length ? (
+                  selectedRow.professionFans.map((fan) => (
+                    <details
+                      key={fan.professionName}
+                      style={{
+                        background: "rgba(255, 252, 245, 0.88)",
+                        border: "1px solid rgba(85, 73, 48, 0.12)",
+                        borderRadius: 16,
+                        padding: "0.85rem 1rem"
+                      }}
+                    >
+                      <summary style={{ cursor: "pointer", fontWeight: 700, color: "#2e2619" }}>
+                        {fan.professionName} · {fan.reachableSkills.length} reachable skills
+                      </summary>
+                      <div style={{ display: "grid", gap: "0.8rem", marginTop: "0.8rem" }}>
+                        <div>
+                          <div style={{ color: "#5f543a", fontSize: "0.82rem", fontWeight: 700, marginBottom: "0.3rem", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                            Core groups
+                          </div>
+                          {fan.coreGroups.length ? (
+                            <div style={{ display: "grid", gap: "0.55rem" }}>
+                              {fan.coreGroups.map((group) => (
+                                <div key={group.groupName} style={{ color: "#4f4635", lineHeight: 1.45 }}>
+                                  <strong>{group.groupName}</strong>
+                                  <div>Core: {summarizeList(group.coreSkills, 4)}</div>
+                                  {group.optionalSkills.length ? <div>Optional: {summarizeList(group.optionalSkills, 4)}</div> : null}
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div style={{ color: "#8a7e63" }}>No core groups modeled.</div>
+                          )}
+                        </div>
+
+                        <div>
+                          <div style={{ color: "#5f543a", fontSize: "0.82rem", fontWeight: 700, marginBottom: "0.3rem", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                            Optional groups
+                          </div>
+                          {fan.optionalGroups.length ? (
+                            <div style={{ display: "grid", gap: "0.55rem" }}>
+                              {fan.optionalGroups.map((group) => (
+                                <div key={group.groupName} style={{ color: "#4f4635", lineHeight: 1.45 }}>
+                                  <strong>{group.groupName}</strong>
+                                  <div>Core: {summarizeList(group.coreSkills, 4)}</div>
+                                  {group.optionalSkills.length ? <div>Optional: {summarizeList(group.optionalSkills, 4)}</div> : null}
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div style={{ color: "#8a7e63" }}>No optional groups modeled.</div>
+                          )}
+                        </div>
+
+                        <div>
+                          <div style={{ color: "#5f543a", fontSize: "0.82rem", fontWeight: 700, marginBottom: "0.3rem", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                            Total reachable skills
+                          </div>
+                          <div style={{ color: "#4f4635", lineHeight: 1.45 }}>
+                            {summarizeList(fan.reachableSkills, 8)}
+                          </div>
+                        </div>
+                      </div>
+                    </details>
+                  ))
+                ) : (
+                  <div style={{ color: "#8a7e63" }}>No profession fan is available for this row yet.</div>
+                )}
               </div>
 
               <div style={{ color: "#5f543a", fontSize: "0.92rem", lineHeight: 1.5 }}>

@@ -117,6 +117,20 @@ export interface SocietyAdminRow {
   effectiveProfessionSkills: string[];
   id: string;
   notes: string;
+  professionFans: Array<{
+    coreGroups: Array<{
+      coreSkills: string[];
+      groupName: string;
+      optionalSkills: string[];
+    }>;
+    optionalGroups: Array<{
+      coreSkills: string[];
+      groupName: string;
+      optionalSkills: string[];
+    }>;
+    professionName: string;
+    reachableSkills: string[];
+  }>;
   reachableProfessions: string[];
   shortDescription: string;
   society: string;
@@ -1244,10 +1258,68 @@ export function buildProfessionAdminRows(content: CanonicalContent): ProfessionA
 }
 
 export function buildSocietyAdminRows(content: CanonicalContent): SocietyAdminRow[] {
-  return buildSocietyMatrixRows(content).map((societyRow) => {
+  return buildSocietyMatrixRows(content)
+    .map((societyRow) => {
     const society = content.societies.find((candidate) => candidate.id === societyRow.id.split(":")[0]);
     const baselineLanguages = (society?.baselineLanguageIds ?? [])
       .map((languageId) => content.languages.find((candidate) => candidate.id === languageId)?.name ?? languageId);
+    const professionFans = societyRow.reachableProfessions.map((professionName) => {
+      const profession = content.professions.find((candidate) => candidate.name === professionName);
+
+      if (!profession) {
+        return {
+          coreGroups: [],
+          optionalGroups: [],
+          professionName,
+          reachableSkills: []
+        };
+      }
+
+      const grants = content.professionSkills.filter(
+        (candidate) =>
+          candidate.professionId === profession.id &&
+          candidate.grantType === "group" &&
+          candidate.skillGroupId
+      );
+      const mapGroup = (skillGroupId: string) => {
+        const group = content.skillGroups.find((candidate) => candidate.id === skillGroupId);
+        const memberships =
+          group?.skillMemberships?.length
+            ? group.skillMemberships
+            : content.skills
+                .filter((skill) => getSkillGroupIds(skill).includes(skillGroupId))
+                .map((skill) => ({
+                  relevance: skill.groupId === skillGroupId ? ("core" as const) : ("optional" as const),
+                  skillId: skill.id
+                }));
+
+        return {
+          coreSkills: memberships
+            .filter((membership) => membership.relevance === "core")
+            .map((membership) => content.skills.find((skill) => skill.id === membership.skillId)?.name ?? membership.skillId),
+          groupName: group?.name ?? skillGroupId,
+          optionalSkills: memberships
+            .filter((membership) => membership.relevance === "optional")
+            .map((membership) => content.skills.find((skill) => skill.id === membership.skillId)?.name ?? membership.skillId)
+        };
+      };
+      const resolvedPackage = resolveProfessionGrantPackage(content, profession.id);
+
+      return {
+        coreGroups: grants
+          .filter((grant) => grant.isCore && grant.skillGroupId)
+          .map((grant) => mapGroup(grant.skillGroupId ?? "")),
+        optionalGroups: grants
+          .filter((grant) => !grant.isCore && grant.skillGroupId)
+          .map((grant) => mapGroup(grant.skillGroupId ?? "")),
+        professionName,
+        reachableSkills: uniqueSorted(
+          resolvedPackage.reachableSkillIds.map(
+            (skillId) => content.skills.find((skill) => skill.id === skillId)?.name ?? skillId
+          )
+        )
+      };
+    });
 
     return {
       baseEducation: societyRow.baseEducation,
@@ -1260,6 +1332,7 @@ export function buildSocietyAdminRows(content: CanonicalContent): SocietyAdminRo
       effectiveProfessionSkills: societyRow.effectiveProfessionSkills,
       id: societyRow.id,
       notes: societyRow.notes,
+      professionFans,
       reachableProfessions: societyRow.reachableProfessions,
       shortDescription: society?.shortDescription ?? "",
       society: societyRow.society,
@@ -1267,7 +1340,14 @@ export function buildSocietyAdminRows(content: CanonicalContent): SocietyAdminRo
       societyLevel: societyRow.societyLevel,
       totalEffectiveReachableSkills: societyRow.totalEffectiveReachableSkills
     };
-  });
+  })
+    .sort(
+      (left, right) =>
+        (left.canonicalSocietyLevel ?? left.societyLevel) -
+          (right.canonicalSocietyLevel ?? right.societyLevel) ||
+        left.society.localeCompare(right.society) ||
+        left.societyLevel - right.societyLevel
+    );
 }
 
 export function buildProfessionAccessRows(content: CanonicalContent): ProfessionAccessRow[] {
