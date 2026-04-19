@@ -3,6 +3,13 @@
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 
+/*
+  Terminology guardrail:
+  Chargen exposes both mechanical Type and player-facing Skill category.
+  Keep those terms distinct in filters and tables, and update
+  packages/domain/src/docs/glantriTerms.ts whenever the wording changes.
+*/
+
 import {
   defaultCanonicalContent,
   type CanonicalContent,
@@ -3101,14 +3108,14 @@ export default function ChargenWizard() {
                 </select>
               </label>
               <label style={{ display: "grid", gap: "0.35rem" }}>
-                <span>Skill type</span>
+                <span>Skill category</span>
                 <select
                   onChange={(event) =>
                     setSkillTypeFilter(event.target.value as SkillBrowseTypeFilter)
                   }
                   value={skillTypeFilter}
                 >
-                  <option value="all">All types</option>
+                  <option value="all">All categories</option>
                   {otherSkillTypeOptions.map((definition) => (
                     <option key={definition.id} value={definition.id}>
                       {definition.label}

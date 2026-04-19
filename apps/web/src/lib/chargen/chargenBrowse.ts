@@ -1,6 +1,13 @@
 import type { SkillDefinition } from "@glantri/domain";
 import type { ChargenSkillAccessSource } from "@glantri/rules-engine";
 
+/*
+  Terminology guardrail:
+  This module exposes player-facing Skill category buckets.
+  They are distinct from mechanical Type (ordinary / secondary / specialization).
+  If this wording changes, update packages/domain/src/docs/glantriTerms.ts too.
+*/
+
 export interface ProfessionBrowseItem {
   description?: string;
   familyName: string;
@@ -78,20 +85,6 @@ const ACCESS_SOURCE_ORDER: ChargenSkillAccessSource[] = [
   "profession-group",
   "society-skill"
 ];
-
-const WEAPON_SKILL_IDS = new Set([
-  "one_handed_edged",
-  "one_handed_concussion_axe",
-  "two_handed_edged",
-  "two_handed_concussion_axe",
-  "polearms",
-  "lance",
-  "throwing",
-  "sling",
-  "bow",
-  "longbow",
-  "crossbow"
-]);
 
 const PLAYER_FACING_SKILL_BUCKETS: PlayerFacingSkillBucketDefinition[] = [
   {
@@ -309,23 +302,19 @@ export function getPlayerFacingSkillBucket(
     return "special-access";
   }
 
-  const groupIds = [
+  const orderedGroupIds = [
     ...(skill.groupId ? [skill.groupId] : []),
-    ...((skill.groupIds ?? []).filter(Boolean) as string[])
+    ...((skill.groupIds ?? []).filter((groupId) => groupId !== skill.groupId) as string[])
   ];
 
-  for (const groupId of groupIds) {
+  for (const groupId of orderedGroupIds) {
     const mapped = PLAYER_FACING_SKILL_BUCKET_BY_GROUP_ID[groupId];
     if (mapped) {
       return mapped;
     }
   }
 
-  if (WEAPON_SKILL_IDS.has(skill.id)) {
-    return "combat";
-  }
-
-  return "trade";
+  return "special-access";
 }
 
 export function mergeSkillBrowseRowsBySkillId<T extends SkillBrowseRowLike>(rows: T[]): T[] {
