@@ -10,7 +10,6 @@ import { buildSocietyAdminRows } from "../../../../src/lib/admin/viewModels";
 import {
   AdminButton,
   AdminCheckboxList,
-  AdminDataTable,
   AdminField,
   AdminInput,
   AdminMetric,
@@ -80,6 +79,151 @@ function summarizeText(value: string | undefined, maxLength = 90): string {
   }
 
   return `${trimmed.slice(0, maxLength - 1).trimEnd()}…`;
+}
+
+function renderClampedCell(text: string, options?: { lines?: number; width?: string }) {
+  return (
+    <span
+      style={{
+        color: "#4f4635",
+        display: "-webkit-box",
+        lineHeight: 1.45,
+        maxWidth: options?.width ?? "100%",
+        overflow: "hidden",
+        WebkitBoxOrient: "vertical",
+        WebkitLineClamp: options?.lines ?? 2
+      }}
+      title={text}
+    >
+      {text}
+    </span>
+  );
+}
+
+const societiesReviewGridTemplate =
+  "minmax(10rem, 1.1fr) 3.5rem 3.75rem 8rem 4rem minmax(26rem, 2.7fr) minmax(9rem, 0.95fr) minmax(8rem, 0.9fr) minmax(15rem, 1.5fr) 4.5rem";
+
+function SocietiesReviewTable(props: {
+  onInspect: (rowId: string) => void;
+  rows: ReturnType<typeof buildSocietyAdminRows>;
+  selectedId?: string;
+}) {
+  if (props.rows.length === 0) {
+    return <div style={{ color: "#6d624d", padding: "1rem" }}>No society rows found.</div>;
+  }
+
+  return (
+    <div
+      style={{
+        border: "1px solid rgba(85, 73, 48, 0.12)",
+        borderRadius: 18,
+        overflowX: "auto"
+      }}
+    >
+      <div style={{ minWidth: 1280 }}>
+        <div
+          style={{
+            background: "rgba(126, 93, 42, 0.08)",
+            borderBottom: "1px solid rgba(85, 73, 48, 0.1)",
+            display: "grid",
+            gridTemplateColumns: societiesReviewGridTemplate
+          }}
+        >
+          {[
+            "Society",
+            "Level",
+            "Band",
+            "Class",
+            "Edu",
+            "Description",
+            "Historical Ref.",
+            "Glantri Examples",
+            "Professions",
+            "Inspect"
+          ].map((header) => (
+            <div
+              key={header}
+              style={{
+                color: "#594320",
+                fontSize: "0.8rem",
+                fontWeight: 700,
+                letterSpacing: "0.08em",
+                padding: "0.8rem",
+                textTransform: "uppercase",
+                whiteSpace: "nowrap"
+              }}
+            >
+              {header}
+            </div>
+          ))}
+        </div>
+
+        {props.rows.map((row) => {
+          const selected = row.id === props.selectedId;
+
+          return (
+            <div
+              key={row.id}
+              onClick={() => props.onInspect(row.id)}
+              style={{
+                background: selected ? "rgba(215, 226, 216, 0.72)" : "transparent",
+                borderTop: "1px solid rgba(85, 73, 48, 0.1)",
+                cursor: "pointer",
+                display: "grid",
+                gridTemplateColumns: societiesReviewGridTemplate
+              }}
+            >
+              <div style={{ color: "#2e2619", fontWeight: 700, padding: "0.9rem 0.8rem" }}>{row.society}</div>
+              <div style={{ color: "#2e2619", padding: "0.9rem 0.8rem" }}>
+                {row.canonicalSocietyLevel ?? <span style={{ color: "#8a7e63" }}>None</span>}
+              </div>
+              <div style={{ color: "#2e2619", padding: "0.9rem 0.8rem" }}>{`L${row.societyLevel}`}</div>
+              <div style={{ color: "#2e2619", padding: "0.9rem 0.8rem" }}>
+                {renderClampedCell(row.societyClassName, { lines: 2 })}
+              </div>
+              <div style={{ color: "#2e2619", padding: "0.9rem 0.8rem" }}>
+                {row.baseEducation || <span style={{ color: "#8a7e63" }}>None</span>}
+              </div>
+              <div style={{ color: "#2e2619", padding: "0.9rem 0.8rem" }}>
+                {row.shortDescription || row.notes ? (
+                  renderClampedCell(summarizeText(row.shortDescription || row.notes, 220), {
+                    lines: 2
+                  })
+                ) : (
+                  <span style={{ color: "#8a7e63" }}>None</span>
+                )}
+              </div>
+              <div style={{ color: "#2e2619", padding: "0.9rem 0.8rem" }}>
+                {row.historicalReference ? (
+                  renderClampedCell(summarizeText(row.historicalReference, 90), { lines: 2 })
+                ) : (
+                  <span style={{ color: "#8a7e63" }}> </span>
+                )}
+              </div>
+              <div style={{ color: "#2e2619", padding: "0.9rem 0.8rem" }}>
+                {row.glantriExamples ? (
+                  renderClampedCell(summarizeText(row.glantriExamples, 90), { lines: 2 })
+                ) : (
+                  <span style={{ color: "#8a7e63" }}> </span>
+                )}
+              </div>
+              <div style={{ color: "#2e2619", padding: "0.9rem 0.8rem" }}>
+                {renderClampedCell(summarizeList(row.reachableProfessions, 5), { lines: 2 })}
+              </div>
+              <div style={{ padding: "0.75rem 0.8rem" }}>
+                <AdminButton
+                  onClick={() => props.onInspect(row.id)}
+                  variant={selected ? "primary" : "secondary"}
+                >
+                  {selected ? "Open" : "Inspect"}
+                </AdminButton>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 export default function SocietiesAdminPage() {
@@ -253,92 +397,10 @@ export default function SocietiesAdminPage() {
 
       <SocietiesWorkspaceTabs />
 
-      <div style={{ display: "grid", gap: "1rem", gridTemplateColumns: "minmax(0, 1.7fr) minmax(340px, 1fr)" }}>
+      <div style={{ display: "grid", gap: "1rem", gridTemplateColumns: "minmax(0, 2.8fr) minmax(340px, 1fr)" }}>
         <AdminPanel title="Society Access Review">
-          <AdminDataTable
-            columns={[
-              {
-                header: "Society",
-                render: (row) => <strong>{row.society}</strong>,
-                width: "12rem"
-              },
-              {
-                header: "Level",
-                render: (row) => row.canonicalSocietyLevel ?? <span style={{ color: "#8a7e63" }}>None</span>,
-                width: "5.5rem"
-              },
-              {
-                header: "Band",
-                render: (row) => `L${row.societyLevel}`,
-                width: "5.5rem"
-              },
-              {
-                header: "Class",
-                render: (row) => row.societyClassName,
-                width: "12rem"
-              },
-              {
-                header: "Education",
-                render: (row) => row.baseEducation || <span style={{ color: "#8a7e63" }}>None</span>,
-                width: "6rem"
-              },
-              {
-                header: "Description",
-                render: (row) => (
-                  <span style={{ color: "#4f4635", display: "block", lineHeight: 1.45 }}>
-                    {summarizeText(row.shortDescription || row.notes, 120) || (
-                      <span style={{ color: "#8a7e63" }}>None</span>
-                    )}
-                  </span>
-                ),
-                width: "24rem"
-              },
-              {
-                header: "Historical Ref.",
-                render: (row) => (
-                  <span style={{ color: "#4f4635", display: "block", lineHeight: 1.45 }}>
-                    {summarizeText(row.historicalReference, 70) || (
-                      <span style={{ color: "#8a7e63" }}> </span>
-                    )}
-                  </span>
-                ),
-                width: "16rem"
-              },
-              {
-                header: "Glantri Examples",
-                render: (row) => (
-                  <span style={{ color: "#4f4635", display: "block", lineHeight: 1.45 }}>
-                    {summarizeText(row.glantriExamples, 70) || (
-                      <span style={{ color: "#8a7e63" }}> </span>
-                    )}
-                  </span>
-                ),
-                width: "14rem"
-              },
-              {
-                header: "Professions",
-                render: (row) => (
-                  <span style={{ color: "#4f4635", display: "block", lineHeight: 1.45 }}>
-                    {summarizeList(row.reachableProfessions, 4)}
-                  </span>
-                ),
-                width: "20rem"
-              },
-              {
-                header: "Inspector",
-                render: (row) => (
-                  <AdminButton
-                    onClick={() => setSelectedRowId(row.id)}
-                    variant={row.id === selectedRowDisplayId ? "primary" : "secondary"}
-                  >
-                    {row.id === selectedRowDisplayId ? "Open" : "Inspect"}
-                  </AdminButton>
-                ),
-                width: "10rem"
-              }
-            ]}
-            emptyState="No society rows found."
-            onSelect={setSelectedRowId}
+          <SocietiesReviewTable
+            onInspect={setSelectedRowId}
             rows={rows}
             selectedId={selectedRowDisplayId}
           />
