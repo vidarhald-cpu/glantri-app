@@ -207,10 +207,17 @@ export interface SocietyAccessRow {
 }
 
 export interface AdminOverviewStats {
+  accountWorkspaceCount: number;
+  documentWorkspaceCount: number;
+  equipmentWorkspaceCount: number;
+  languageCount: number;
   professionCount: number;
+  societyCount: number;
+  societyWorkspaceCount: number;
   skillCount: number;
   skillGroupCount: number;
   societyEntryCount: number;
+  weaponWorkspaceCount: number;
 }
 
 function uniqueSorted(values: string[]): string[] {
@@ -381,10 +388,17 @@ function buildSkillRelationshipContext(content: CanonicalContent) {
 
 export function buildAdminOverviewStats(content: CanonicalContent): AdminOverviewStats {
   return {
+    accountWorkspaceCount: 1,
+    documentWorkspaceCount: 2,
+    equipmentWorkspaceCount: 4,
+    languageCount: content.languages.length,
     professionCount: content.professions.length,
+    societyCount: content.societies.length,
+    societyWorkspaceCount: 5,
     skillCount: content.skills.length,
     skillGroupCount: content.skillGroups.length,
-    societyEntryCount: content.societyLevels.length
+    societyEntryCount: content.societyLevels.length,
+    weaponWorkspaceCount: 2
   };
 }
 

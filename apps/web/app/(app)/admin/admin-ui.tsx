@@ -14,89 +14,121 @@ export interface AdminNavItem {
   label: string;
 }
 
+export interface AdminNavGroup {
+  items: AdminNavItem[];
+  label: string;
+}
+
 export interface AdminTableColumn<TRow> {
   header: string;
   render: (row: TRow) => ReactNode;
   width?: string;
 }
 
-export const adminNavItems: AdminNavItem[] = [
+export const adminNavGroups: AdminNavGroup[] = [
   {
-    description: "Summary, draft status, and export entry points.",
-    href: "/admin",
-    label: "Overview"
+    label: "Overview",
+    items: [
+      {
+        description: "Summary, draft status, publishing controls, and grouped route map.",
+        href: "/admin",
+        label: "Overview"
+      }
+    ]
   },
   {
-    description: "Inspect and edit skill definitions and access.",
-    href: "/admin/skills",
-    label: "Skills"
+    label: "Skills & Societies",
+    items: [
+      {
+        description: "Inspect and edit skill definitions and access.",
+        href: "/admin/skills",
+        label: "Skills"
+      },
+      {
+        description: "Inspect and edit skill group structure.",
+        href: "/admin/skill-groups",
+        label: "Skill Groups"
+      },
+      {
+        description: "Inspect and edit professions and grants.",
+        href: "/admin/professions",
+        label: "Professions"
+      },
+      {
+        description: "Inspect and edit society/social-class rows.",
+        href: "/admin/societies",
+        label: "Societies"
+      },
+      {
+        description: "Read relationship views across professions and society rows.",
+        href: "/admin/access",
+        label: "Access"
+      }
+    ]
   },
   {
-    description: "Inspect and edit skill group structure.",
-    href: "/admin/skill-groups",
-    label: "Skill Groups"
+    label: "Weapons & Equipment",
+    items: [
+      {
+        description: "Inspect the system melee weapon catalog with split mode columns.",
+        href: "/admin/melee-weapons",
+        label: "Melee weapons"
+      },
+      {
+        description: "Inspect the system missile weapon catalog with missile-appropriate attack columns.",
+        href: "/admin/missile-weapons",
+        label: "Missile weapons"
+      },
+      {
+        description: "Inspect the system shield catalog with merged offensive and defensive workbook data.",
+        href: "/admin/shields",
+        label: "Shields"
+      },
+      {
+        description: "Inspect the system armor catalog imported from the workbook Armor sheet.",
+        href: "/admin/armor",
+        label: "Armor"
+      },
+      {
+        description: "Inspect the system gear catalog with shared encumbrance, value, and notes columns.",
+        href: "/admin/gear",
+        label: "Gear"
+      },
+      {
+        description: "Inspect the system valuables catalog with shared encumbrance, value, and notes columns.",
+        href: "/admin/valuables",
+        label: "Valuables"
+      }
+    ]
   },
   {
-    description: "Inspect and edit professions and grants.",
-    href: "/admin/professions",
-    label: "Professions"
+    label: "Accounts",
+    items: [
+      {
+        description: "Manage local users and assign Player, GM, or Admin roles.",
+        href: "/admin/players",
+        label: "Players"
+      }
+    ]
   },
   {
-    description: "Inspect and edit society/social-class rows.",
-    href: "/admin/societies",
-    label: "Societies"
-  },
-  {
-    description: "Read relationship views across professions and society rows.",
-    href: "/admin/access",
-    label: "Access"
-  },
-  {
-    description: "Inspect the system melee weapon catalog with split mode columns.",
-    href: "/admin/melee-weapons",
-    label: "Melee weapons"
-  },
-  {
-    description: "Inspect the system missile weapon catalog with missile-appropriate attack columns.",
-    href: "/admin/missile-weapons",
-    label: "Missile weapons"
-  },
-  {
-    description: "Inspect the system shield catalog with merged offensive and defensive workbook data.",
-    href: "/admin/shields",
-    label: "Shields"
-  },
-  {
-    description: "Inspect the system armor catalog imported from the workbook Armor sheet.",
-    href: "/admin/armor",
-    label: "Armor"
-  },
-  {
-    description: "Inspect the system gear catalog with shared encumbrance, value, and notes columns.",
-    href: "/admin/gear",
-    label: "Gear"
-  },
-  {
-    description: "Inspect the system valuables catalog with shared encumbrance, value, and notes columns.",
-    href: "/admin/valuables",
-    label: "Valuables"
-  },
-  {
-    description: "Manage local users and assign Player, GM, or Admin roles.",
-    href: "/admin/players",
-    label: "Players"
-  },
-  {
-    description: "Read short player-facing notes for current combat calculations.",
-    href: "/admin/documents",
-    label: "Documents"
-  },
-  {
-    description: "Inspect workbook-backed reference tables used by current combat and movement calculations.",
-    href: "/admin/tables",
-    label: "Tables"
+    label: "Rules & Documentation",
+    items: [
+      {
+        description: "Read short player-facing notes for current combat calculations.",
+        href: "/admin/documents",
+        label: "Documents"
+      },
+      {
+        description: "Inspect workbook-backed reference tables used by current combat and movement calculations.",
+        href: "/admin/tables",
+        label: "Tables"
+      }
+    ]
   }
 ];
+
+export const adminNavItems: AdminNavItem[] = adminNavGroups.flatMap((group) => group.items);
 
 const panelStyle: CSSProperties = {
   background: "rgba(250, 245, 234, 0.88)",
