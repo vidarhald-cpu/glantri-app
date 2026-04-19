@@ -71,7 +71,7 @@ function renderClampedCell(text: string, lines = 2) {
 }
 
 const skillGroupsReviewGridTemplate =
-  "minmax(12rem, 1.2fr) 5.5rem 6rem 6.5rem 9rem minmax(12rem, 1.15fr) 5.5rem";
+  "minmax(11rem, 0.95fr) minmax(22rem, 1.95fr) 5rem 5.5rem 6rem minmax(11rem, 0.95fr) 5.5rem";
 
 function SkillGroupsReviewTable(props: {
   onInspect: (rowId: string) => void;
@@ -99,7 +99,7 @@ function SkillGroupsReviewTable(props: {
             gridTemplateColumns: skillGroupsReviewGridTemplate
           }}
         >
-          {["Group", "Core", "Optional", "Points", "Warnings", "Professions", "Inspect"].map(
+          {["Group", "Description", "Core", "Optional", "Points", "Professions", "Inspect"].map(
             (header) => (
               <div
                 key={header}
@@ -140,18 +140,20 @@ function SkillGroupsReviewTable(props: {
             >
               <div style={{ padding: "0.9rem 0.8rem" }}>
                 <div style={{ color: "#2e2619", fontWeight: 700 }}>{row.name}</div>
-                <div style={{ color: "#7a6f5a", fontSize: "0.9rem", marginTop: "0.2rem" }}>
-                  {row.notes ? renderClampedCell(row.notes, 2) : "No notes"}
-                </div>
+              </div>
+              <div style={{ color: "#2e2619", padding: "0.9rem 0.8rem" }}>
+                {row.notes ? renderClampedCell(row.notes, 2) : <span style={{ color: "#8a7e63" }}>None</span>}
               </div>
               <div style={{ color: "#2e2619", padding: "0.9rem 0.8rem" }}>{row.coreSkills.length}</div>
               <div style={{ color: "#2e2619", padding: "0.9rem 0.8rem" }}>{row.optionalSkills.length}</div>
               <div style={{ color: "#2e2619", padding: "0.9rem 0.8rem" }}>{row.weightedContentPoints} pts</div>
-              <div style={{ color: row.warningDetails.length ? "#8a3b2f" : "#46613a", fontWeight: 700, padding: "0.9rem 0.8rem" }}>
-                {warningText}
-              </div>
               <div style={{ color: "#2e2619", padding: "0.9rem 0.8rem" }}>
-                {renderClampedCell(summarizeList(row.allowedProfessions, 3), 2)}
+                <div style={{ alignItems: "center", display: "grid", gap: "0.25rem" }}>
+                  <span>{renderClampedCell(summarizeList(row.allowedProfessions, 3), 2)}</span>
+                  <span style={{ color: row.warningDetails.length ? "#8a3b2f" : "#46613a", fontSize: "0.82rem", fontWeight: 700 }}>
+                    {warningText}
+                  </span>
+                </div>
               </div>
               <div style={{ padding: "0.75rem 0.8rem" }}>
                 <AdminButton

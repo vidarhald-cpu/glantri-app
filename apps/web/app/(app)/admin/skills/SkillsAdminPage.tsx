@@ -102,7 +102,7 @@ function renderClampedCell(text: string, lines = 2) {
 }
 
 const skillsReviewGridTemplate =
-  "minmax(13rem, 1.2fr) 6rem minmax(11rem, 1fr) minmax(10rem, 0.95fr) minmax(11rem, 1fr) minmax(11rem, 0.95fr) 5.5rem";
+  "minmax(11rem, 0.95fr) minmax(22rem, 1.9fr) 5.5rem minmax(10rem, 0.9fr) minmax(9rem, 0.85fr) minmax(10rem, 0.9fr) minmax(10rem, 0.85fr) 5.5rem";
 
 function SkillsReviewTable(props: {
   onInspect: (rowId: string) => void;
@@ -130,7 +130,7 @@ function SkillsReviewTable(props: {
             gridTemplateColumns: skillsReviewGridTemplate
           }}
         >
-          {["Skill", "Type", "Primary Group", "Cross-listed", "Professions", "Dependencies", "Inspect"].map(
+          {["Skill", "Description", "Type", "Primary Group", "Cross-listed", "Professions", "Dependencies", "Inspect"].map(
             (header) => (
               <div
                 key={header}
@@ -167,9 +167,9 @@ function SkillsReviewTable(props: {
             >
               <div style={{ padding: "0.9rem 0.8rem" }}>
                 <div style={{ color: "#2e2619", fontWeight: 700 }}>{row.name}</div>
-                <div style={{ color: "#7a6f5a", fontSize: "0.9rem", marginTop: "0.2rem" }}>
-                  {row.shortDescription ? renderClampedCell(row.shortDescription, 2) : "No short description"}
-                </div>
+              </div>
+              <div style={{ color: "#2e2619", padding: "0.9rem 0.8rem" }}>
+                {row.shortDescription ? renderClampedCell(row.shortDescription, 2) : <span style={{ color: "#8a7e63" }}>None</span>}
               </div>
               <div style={{ color: "#2e2619", padding: "0.9rem 0.8rem", textTransform: "capitalize" }}>{row.skillType}</div>
               <div style={{ color: "#2e2619", padding: "0.9rem 0.8rem" }}>

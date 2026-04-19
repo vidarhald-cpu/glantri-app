@@ -87,7 +87,7 @@ function renderClampedCell(text: string, lines = 2) {
 }
 
 const professionsReviewGridTemplate =
-  "minmax(12rem, 1.15fr) minmax(8rem, 0.8fr) minmax(12rem, 1.1fr) minmax(12rem, 1.1fr) minmax(15rem, 1.35fr) 6rem 5.5rem";
+  "minmax(11rem, 0.95fr) minmax(8rem, 0.75fr) minmax(22rem, 1.95fr) minmax(10rem, 0.95fr) minmax(10rem, 0.95fr) minmax(12rem, 1fr) 5rem 5.5rem";
 
 function ProfessionsReviewTable(props: {
   onInspect: (rowId: string) => void;
@@ -115,7 +115,7 @@ function ProfessionsReviewTable(props: {
             gridTemplateColumns: professionsReviewGridTemplate
           }}
         >
-          {["Profession", "Family", "Core Groups", "Optional Groups", "Access", "Skills", "Inspect"].map(
+          {["Profession", "Family", "Description", "Core Groups", "Optional Groups", "Access", "Skills", "Inspect"].map(
             (header) => (
               <div
                 key={header}
@@ -152,12 +152,12 @@ function ProfessionsReviewTable(props: {
             >
               <div style={{ padding: "0.9rem 0.8rem" }}>
                 <div style={{ color: "#2e2619", fontWeight: 700 }}>{row.name}</div>
-                <div style={{ color: "#7a6f5a", fontSize: "0.9rem", marginTop: "0.2rem" }}>
-                  {row.description ? renderClampedCell(row.description, 2) : "No description"}
-                </div>
               </div>
               <div style={{ color: "#2e2619", padding: "0.9rem 0.8rem" }}>
                 {row.familyName || <span style={{ color: "#8a7e63" }}>None</span>}
+              </div>
+              <div style={{ color: "#2e2619", padding: "0.9rem 0.8rem" }}>
+                {row.description ? renderClampedCell(row.description, 2) : <span style={{ color: "#8a7e63" }}>None</span>}
               </div>
               <div style={{ color: "#2e2619", padding: "0.9rem 0.8rem" }}>
                 {renderClampedCell(summarizeList(row.coreSkillGroups, 3), 2)}
@@ -403,8 +403,106 @@ export default function ProfessionsAdminPage() {
               </div>
 
               <div>
-                <div style={{ color: "#5f543a", fontSize: "0.85rem", fontWeight: 700, marginBottom: "0.35rem", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                  Allowed societies / access rows
+                <div style={{ color: "#5f543a", fontSize: "0.85rem", fontWeight: 700, marginBottom: "0.45rem", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                  Access overview
+                </div>
+                <div
+                  style={{
+                    border: "1px solid rgba(85, 73, 48, 0.12)",
+                    borderRadius: 16,
+                    overflow: "hidden"
+                  }}
+                >
+                  <div
+                    style={{
+                      background: "rgba(126, 93, 42, 0.08)",
+                      display: "grid",
+                      gridTemplateColumns: "5.75rem repeat(4, minmax(0, 1fr))"
+                    }}
+                  >
+                    {["Level", "L1", "L2", "L3", "L4"].map((header) => (
+                      <div
+                        key={header}
+                        style={{
+                          color: "#594320",
+                          fontSize: "0.78rem",
+                          fontWeight: 700,
+                          letterSpacing: "0.08em",
+                          padding: "0.7rem 0.65rem",
+                          textTransform: "uppercase"
+                        }}
+                      >
+                        {header}
+                      </div>
+                    ))}
+                  </div>
+                  {Array.from({ length: 6 }, (_, index) => index + 1).map((canonicalLevel) => (
+                    <div
+                      key={canonicalLevel}
+                      style={{
+                        borderTop: "1px solid rgba(85, 73, 48, 0.08)",
+                        display: "grid",
+                        gridTemplateColumns: "5.75rem repeat(4, minmax(0, 1fr))"
+                      }}
+                    >
+                      <div
+                        style={{
+                          color: "#4d412d",
+                          fontSize: "0.85rem",
+                          fontWeight: 700,
+                          padding: "0.7rem 0.65rem"
+                        }}
+                      >
+                        S{canonicalLevel}
+                      </div>
+                      {Array.from({ length: 4 }, (_, bandIndex) => bandIndex + 1).map((accessBand) => {
+                        const matchingSlots =
+                          selectedRow?.allowedSocietySlots.filter(
+                            (slot) =>
+                              slot.canonicalSocietyLevel === canonicalLevel &&
+                              slot.accessBand === accessBand
+                          ) ?? [];
+                        const isAllowed = matchingSlots.length > 0;
+
+                        return (
+                          <div
+                            key={`${canonicalLevel}:${accessBand}`}
+                            style={{
+                              alignItems: "center",
+                              background: isAllowed ? "rgba(86, 112, 67, 0.13)" : "rgba(255, 255, 255, 0.55)",
+                              color: isAllowed ? "#36512b" : "#9b9077",
+                              display: "flex",
+                              justifyContent: "center",
+                              minHeight: "2.7rem",
+                              padding: "0.45rem",
+                              textAlign: "center"
+                            }}
+                            title={
+                              isAllowed
+                                ? matchingSlots
+                                    .map((slot) => `${slot.societyName} - ${slot.socialClass}`)
+                                    .join("\n")
+                                : `No access at society level ${canonicalLevel}, band L${accessBand}`
+                            }
+                          >
+                            {isAllowed ? (
+                              <span style={{ fontWeight: 700 }}>
+                                Yes{matchingSlots.length > 1 ? ` (${matchingSlots.length})` : ""}
+                              </span>
+                            ) : (
+                              <span>—</span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <div style={{ color: "#5f543a", fontSize: "0.78rem", fontWeight: 700, marginBottom: "0.35rem", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                  Detailed access rows
                 </div>
                 <AdminTagList values={selectedRow?.allowedSocietyEntries ?? []} />
               </div>

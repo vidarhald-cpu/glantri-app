@@ -67,6 +67,12 @@ export interface SkillGroupAdminRow {
 
 export interface ProfessionAdminRow {
   allowedSocietyEntries: string[];
+  allowedSocietySlots: Array<{
+    accessBand: number;
+    canonicalSocietyLevel?: number;
+    socialClass: string;
+    societyName: string;
+  }>;
   coreSkillGroups: string[];
   description: string;
   directSkillExceptions: string[];
@@ -1269,6 +1275,9 @@ export function buildProfessionAdminRows(content: CanonicalContent): ProfessionA
   const familiesById = new Map(
     content.professionFamilies.map((family) => [family.id, family.name])
   );
+  const societiesById = new Map(
+    content.societies.map((society) => [society.id, society])
+  );
 
   return buildProfessionMatrixRows(content).map((profession) => {
     const groupGrants = content.professionSkills
@@ -1322,9 +1331,25 @@ export function buildProfessionAdminRows(content: CanonicalContent): ProfessionA
     const professionDefinition = content.professions.find(
       (candidate) => candidate.id === profession.id
     );
+    const allowedSocietySlots = content.societyLevels
+      .filter((societyLevel) => societyLevel.professionIds.includes(profession.id))
+      .map((societyLevel) => ({
+        accessBand: societyLevel.societyLevel,
+        canonicalSocietyLevel: societiesById.get(societyLevel.societyId)?.societyLevel,
+        socialClass: societyLevel.socialClass,
+        societyName: societyLevel.societyName
+      }))
+      .sort(
+        (left, right) =>
+          (left.canonicalSocietyLevel ?? 99) - (right.canonicalSocietyLevel ?? 99) ||
+          left.societyName.localeCompare(right.societyName) ||
+          left.accessBand - right.accessBand ||
+          left.socialClass.localeCompare(right.socialClass)
+      );
 
     return {
       allowedSocietyEntries: profession.allowedSocietyEntries,
+      allowedSocietySlots,
       coreSkillGroups: uniqueSorted(
         groupGrants.filter((grant) => grant.isCore).map((grant) => grant.name)
       ),
