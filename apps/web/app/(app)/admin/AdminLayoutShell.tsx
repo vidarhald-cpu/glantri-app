@@ -4,12 +4,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 
-import { AdminContentProvider, useAdminContent } from "../../../src/lib/admin/AdminContentContext";
-import { useCanAccessAdmin } from "../../../src/lib/auth/SessionUserContext";
-import {
-  adminNavGroups,
-  AdminStatusBadge
-} from "./admin-ui";
+import { AdminContentProvider } from "../../../src/lib/admin/AdminContentContext";
+import { adminNavGroups } from "./admin-ui";
 
 function findActiveSection(pathname: string): string {
   const activeGroup = adminNavGroups.find((group) =>
@@ -33,26 +29,8 @@ function findActiveGroupItems(pathname: string) {
 
 function AdminLayoutInner({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const canEdit = useCanAccessAdmin();
-  const {
-    feedback,
-    hasDraftChanges,
-    hasLocalDraft,
-    hasRevisionConflict,
-    isLoading,
-    isSaving,
-    syncState
-  } = useAdminContent();
   const activeSection = findActiveSection(pathname);
   const activeGroup = findActiveGroupItems(pathname);
-  const feedbackColor =
-    syncState === "conflict" || syncState === "error"
-      ? "#7f2f17"
-      : syncState === "saving"
-        ? "#7b5713"
-        : syncState === "synced"
-          ? "#2f6a44"
-          : "#5f543a";
 
   return (
     <div
@@ -72,8 +50,8 @@ function AdminLayoutInner({ children }: { children: ReactNode }) {
             borderRadius: 28,
             boxShadow: "0 24px 60px rgba(73, 56, 29, 0.09)",
             display: "grid",
-            gap: "1rem",
-            padding: "1.25rem"
+            gap: "0.9rem",
+            padding: "1rem 1.1rem"
           }}
         >
           <div
@@ -85,29 +63,6 @@ function AdminLayoutInner({ children }: { children: ReactNode }) {
               justifyContent: "space-between"
             }}
           >
-            <div style={{ display: "grid", gap: "0.25rem" }}>
-              <strong style={{ color: "#2b2419", fontSize: "1.1rem" }}>Glantri Rules Admin</strong>
-              <span style={{ color: "#5f543a", lineHeight: 1.5 }}>
-                Grouped admin workspaces for content review, equipment reference, accounts, and workbook-backed rules documentation.
-              </span>
-            </div>
-            <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", alignItems: "center" }}>
-              <AdminStatusBadge tone={hasDraftChanges ? "warning" : "neutral"}>
-                {hasDraftChanges ? "Unpublished draft changes" : "No unpublished draft delta"}
-              </AdminStatusBadge>
-              {hasLocalDraft ? (
-                <AdminStatusBadge tone={hasRevisionConflict ? "danger" : "warning"}>
-                  {hasRevisionConflict ? "Local draft has stale revision" : "Local draft preserved"}
-                </AdminStatusBadge>
-              ) : null}
-              <AdminStatusBadge tone={canEdit ? "warning" : "neutral"}>
-                {canEdit ? "Editing enabled" : "View-only access"}
-              </AdminStatusBadge>
-              <Link href="/">Back to app</Link>
-            </div>
-          </div>
-
-          <div style={{ display: "grid", gap: "0.8rem" }}>
             <nav style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
               {adminNavGroups.map((group) => {
                 const active = group.label === activeSection;
@@ -133,66 +88,37 @@ function AdminLayoutInner({ children }: { children: ReactNode }) {
                 );
               })}
             </nav>
-
-            <div
-              style={{
-                alignItems: "center",
-                display: "flex",
-                flexWrap: "wrap",
-                gap: "0.65rem"
-              }}
-            >
-              <span
-                style={{
-                  color: "#6b5c3e",
-                  fontSize: "0.8rem",
-                  fontWeight: 700,
-                  letterSpacing: "0.12em",
-                  textTransform: "uppercase"
-                }}
-              >
-                {activeGroup.label}
-              </span>
-              <nav style={{ display: "flex", flexWrap: "wrap", gap: "0.65rem" }}>
-                {activeGroup.items.map((item) => {
-                  const active =
-                    pathname === item.href ||
-                    (item.href !== "/admin" && pathname.startsWith(`${item.href}/`));
-
-                  return (
-                    <Link
-                      href={item.href}
-                      key={item.href}
-                      style={{
-                        background: active ? "rgba(126, 93, 42, 0.16)" : "rgba(255, 252, 245, 0.82)",
-                        border: active
-                          ? "1px solid rgba(126, 93, 42, 0.24)"
-                          : "1px solid rgba(85, 73, 48, 0.12)",
-                        borderRadius: 999,
-                        color: "#594320",
-                        padding: "0.55rem 0.85rem",
-                        textDecoration: "none"
-                      }}
-                    >
-                      {item.label}
-                    </Link>
-                  );
-                })}
-              </nav>
-            </div>
+            <Link href="/" style={{ color: "#594320", fontSize: "0.92rem", whiteSpace: "nowrap" }}>
+              Back to app
+            </Link>
           </div>
 
-          <div style={{ color: isLoading ? "#7b5713" : feedbackColor, minHeight: 24 }}>
-            {isLoading
-              ? "Loading server-backed rules content..."
-              : `${isSaving ? "Saving to server... " : ""}${feedback ?? ""}`}
-          </div>
-          {!canEdit && !isLoading ? (
-            <div style={{ color: "#5f543a" }}>
-              You can browse the admin reference pages with a player account, but editing tools are
-              hidden unless your role is Admin or GM.
-            </div>
-          ) : null}
+          <nav style={{ display: "flex", flexWrap: "wrap", gap: "0.65rem" }}>
+            {activeGroup.items.map((item) => {
+              const active =
+                pathname === item.href ||
+                (item.href !== "/admin" && pathname.startsWith(`${item.href}/`));
+
+              return (
+                <Link
+                  href={item.href}
+                  key={item.href}
+                  style={{
+                    background: active ? "rgba(126, 93, 42, 0.16)" : "rgba(255, 252, 245, 0.82)",
+                    border: active
+                      ? "1px solid rgba(126, 93, 42, 0.24)"
+                      : "1px solid rgba(85, 73, 48, 0.12)",
+                    borderRadius: 999,
+                    color: "#594320",
+                    padding: "0.55rem 0.85rem",
+                    textDecoration: "none"
+                  }}
+                >
+                  {item.label}
+                </Link>
+              );
+            })}
+          </nav>
         </section>
 
         {children}

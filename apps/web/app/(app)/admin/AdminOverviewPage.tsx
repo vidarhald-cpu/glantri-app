@@ -7,7 +7,6 @@ import { buildAdminOverviewStats } from "../../../src/lib/admin/viewModels";
 import {
   AdminButton,
   AdminMetric,
-  AdminPageIntro,
   AdminPanel,
   AdminStatusBadge,
   AdminTextarea,
@@ -47,12 +46,6 @@ export default function AdminOverviewPage() {
 
   return (
     <section style={{ display: "grid", gap: "1.25rem" }}>
-      <AdminPageIntro
-        eyebrow="Admin Overview"
-        summary="Overview is now the single home for aggregate content counts, server-versus-draft persistence status, and save/reload workflow context. The child workspaces stay focused on their own review and editing tasks."
-        title="Rules Content Management"
-      />
-
       <AdminPanel
         subtitle="These metrics summarize the real content entities currently visible through the admin layer. When a category is not sourced through the current canonical/admin model, the total is shown as unavailable instead of fabricated."
         title="System Snapshot"
