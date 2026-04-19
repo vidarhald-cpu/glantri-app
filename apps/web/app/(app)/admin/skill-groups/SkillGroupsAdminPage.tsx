@@ -87,7 +87,9 @@ function SkillGroupsReviewTable(props: {
       style={{
         border: "1px solid rgba(85, 73, 48, 0.12)",
         borderRadius: 18,
-        overflowX: "auto"
+        maxHeight: "70vh",
+        overflow: "auto",
+        position: "relative"
       }}
     >
       <div style={{ minWidth: 980 }}>
@@ -96,7 +98,10 @@ function SkillGroupsReviewTable(props: {
             background: "rgba(126, 93, 42, 0.08)",
             borderBottom: "1px solid rgba(85, 73, 48, 0.1)",
             display: "grid",
-            gridTemplateColumns: skillGroupsReviewGridTemplate
+            gridTemplateColumns: skillGroupsReviewGridTemplate,
+            position: "sticky",
+            top: 0,
+            zIndex: 2
           }}
         >
           {["Group", "Description", "Core", "Optional", "Points", "Professions", "Inspect"].map(

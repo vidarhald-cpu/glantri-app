@@ -117,7 +117,9 @@ function SocietiesReviewTable(props: {
       style={{
         border: "1px solid rgba(85, 73, 48, 0.12)",
         borderRadius: 18,
-        overflowX: "auto"
+        maxHeight: "70vh",
+        overflow: "auto",
+        position: "relative"
       }}
     >
       <div style={{ minWidth: 1280 }}>
@@ -126,7 +128,10 @@ function SocietiesReviewTable(props: {
             background: "rgba(126, 93, 42, 0.08)",
             borderBottom: "1px solid rgba(85, 73, 48, 0.1)",
             display: "grid",
-            gridTemplateColumns: societiesReviewGridTemplate
+            gridTemplateColumns: societiesReviewGridTemplate,
+            position: "sticky",
+            top: 0,
+            zIndex: 2
           }}
         >
           {[

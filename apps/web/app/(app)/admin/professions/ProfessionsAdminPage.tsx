@@ -103,7 +103,9 @@ function ProfessionsReviewTable(props: {
       style={{
         border: "1px solid rgba(85, 73, 48, 0.12)",
         borderRadius: 18,
-        overflowX: "auto"
+        maxHeight: "70vh",
+        overflow: "auto",
+        position: "relative"
       }}
     >
       <div style={{ minWidth: 1080 }}>
@@ -112,7 +114,10 @@ function ProfessionsReviewTable(props: {
             background: "rgba(126, 93, 42, 0.08)",
             borderBottom: "1px solid rgba(85, 73, 48, 0.1)",
             display: "grid",
-            gridTemplateColumns: professionsReviewGridTemplate
+            gridTemplateColumns: professionsReviewGridTemplate,
+            position: "sticky",
+            top: 0,
+            zIndex: 2
           }}
         >
           {["Profession", "Family", "Description", "Core Groups", "Optional Groups", "Access", "Skills", "Inspect"].map(
