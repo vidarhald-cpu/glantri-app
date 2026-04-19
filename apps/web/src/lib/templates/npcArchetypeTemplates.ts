@@ -1,11 +1,16 @@
-import type { CanonicalContent } from "@glantri/content";
+import { equipmentTemplates, type CanonicalContent } from "@glantri/content";
 import type {
   GlantriCharacteristicBlock,
+  PlayerFacingSkillCategoryId,
   ProfessionDefinition,
   ReusableEntity,
   SkillDefinition
 } from "@glantri/domain";
-import { getSkillGroupIds, glantriCharacteristicOrder } from "@glantri/domain";
+import {
+  getPlayerFacingSkillCategoryId,
+  getSkillGroupIds,
+  glantriCharacteristicOrder
+} from "@glantri/domain";
 import { resolveGlantriCharacterStats } from "@glantri/rules-engine";
 import type { EquipmentTemplate } from "@glantri/domain/equipment";
 
@@ -113,6 +118,52 @@ export interface LoadedHumanoidNpcArchetypeDraft {
   isHumanoidNpcArchetype: boolean;
 }
 
+export interface GeneratedHumanoidNpcSkill {
+  categoryId: PlayerFacingSkillCategoryId;
+  groupIds: string[];
+  isCore: boolean;
+  skillId: string;
+  skillName: string;
+  targetLevel: number;
+}
+
+export interface GeneratedHumanoidNpc {
+  actorClass: "generated_npc";
+  description?: string;
+  displayName: string;
+  gearNames: string[];
+  kind: ReusableEntity["kind"];
+  professionName: string;
+  roleLabel?: string;
+  seniority: NpcArchetypeSeniority;
+  skills: GeneratedHumanoidNpcSkill[];
+  societyName: string;
+  sourceTemplateId: string;
+  sourceTemplateName: string;
+  stats: {
+    base: GlantriCharacteristicBlock;
+    final: GlantriCharacteristicBlock;
+  };
+  tags: string[];
+}
+
+export interface ParsedGeneratedHumanoidNpcSummary {
+  actorClass: "generated_npc";
+  gearNames: string[];
+  isGeneratedHumanoidNpc: boolean;
+  profession?: string;
+  roleLabel?: string;
+  seniority?: NpcArchetypeSeniority;
+  skillCount: number;
+  societyName?: string;
+  sourceTemplateName?: string;
+  stats?: {
+    base: GlantriCharacteristicBlock;
+    final: GlantriCharacteristicBlock;
+  };
+  tags?: string[];
+}
+
 const DEFAULT_BASE_STAT = 10;
 const DEFAULT_SENIORITY: NpcArchetypeSeniority = "fully_trained";
 
@@ -202,6 +253,24 @@ function parseStringArray(value: unknown): string[] | undefined {
   return entries.length > 0 ? entries : undefined;
 }
 
+function clampSkillLevel(value: number): number {
+  return Math.max(0, Math.min(99, Math.trunc(value)));
+}
+
+function clampStatValue(value: number): number {
+  return Math.max(1, Math.min(25, Math.trunc(value)));
+}
+
+function createRandomDelta(variance: number): number {
+  const span = Math.max(0, Math.trunc(variance));
+
+  if (span === 0) {
+    return 0;
+  }
+
+  return Math.floor(Math.random() * (span * 2 + 1)) - span;
+}
+
 function listProfessionGrants(input: {
   content: CanonicalContent;
   professionId: string;
@@ -261,6 +330,27 @@ function listSkillIdsForGroups(input: {
     );
 
   return [...new Set(groupSkillIds)];
+}
+
+function listCoreProfessionSkillIds(input: {
+  content: CanonicalContent;
+  professionId: string;
+}): string[] {
+  return listProfessionGrants(input)
+    .filter((entry) => entry.grantType !== "group" && entry.isCore)
+    .map((entry) => entry.skillId)
+    .filter((skillId): skillId is string => typeof skillId === "string");
+}
+
+function listCoreProfessionGroupIds(input: {
+  content: CanonicalContent;
+  professionId: string;
+}): string[] {
+  return listProfessionGroupIds({
+    content: input.content,
+    isCore: true,
+    professionId: input.professionId
+  });
 }
 
 export function listSocietyOptions(content: CanonicalContent): SocietyOption[] {
@@ -530,6 +620,201 @@ export function buildHumanoidNpcArchetypeSnapshot(input: {
     roleLabel: toNonEmptyString(input.draft.roleLabel) ?? archetype.profession.name,
     tags: tags.length > 0 ? tags : undefined,
     templateKind: "humanoid_npc_archetype"
+  };
+}
+
+function getTemplateSkillRelevance(input: {
+  content: CanonicalContent;
+  professionId: string;
+  selectedSkillGroupIds: string[];
+  skill: SkillDefinition;
+}): NpcArchetypeSkillRelevance {
+  const coreSkillIds = new Set(
+    listCoreProfessionSkillIds({
+      content: input.content,
+      professionId: input.professionId
+    })
+  );
+  const coreGroupIds = new Set(
+    listCoreProfessionGroupIds({
+      content: input.content,
+      professionId: input.professionId
+    })
+  );
+  const selectedGroupIds = new Set(input.selectedSkillGroupIds);
+
+  if (coreSkillIds.has(input.skill.id)) {
+    return "core";
+  }
+
+  if (getSkillGroupIds(input.skill).some((groupId) => coreGroupIds.has(groupId))) {
+    return "core";
+  }
+
+  if (getSkillGroupIds(input.skill).some((groupId) => selectedGroupIds.has(groupId))) {
+    return "optional";
+  }
+
+  return "other";
+}
+
+export function generateHumanoidNpcFromTemplate(input: {
+  content: CanonicalContent;
+  equipmentTemplates?: EquipmentTemplate[];
+  seniority: NpcArchetypeSeniority;
+  template: ReusableEntity;
+}): GeneratedHumanoidNpc {
+  const { draft, isHumanoidNpcArchetype } = loadHumanoidNpcArchetypeDraft(input.template);
+
+  if (!isHumanoidNpcArchetype) {
+    throw new Error("Selected template is not a humanoid NPC archetype.");
+  }
+
+  const society = listSocietyOptions(input.content).find(
+    (option) => option.societyId === draft.societyId
+  );
+  const profession = input.content.professions.find(
+    (candidate) => candidate.id === draft.professionId
+  );
+  const availableEquipmentTemplates = input.equipmentTemplates ?? equipmentTemplates ?? [];
+  const gearTemplates = availableEquipmentTemplates.filter((template) =>
+    draft.selectedGearTemplateIds.includes(template.id)
+  );
+  const variedBaseStats = Object.fromEntries(
+    glantriCharacteristicOrder.map((stat) => [
+      stat,
+      clampStatValue(draft.stats[stat] + createRandomDelta(draft.variability.statVariance))
+    ])
+  ) as GlantriCharacteristicBlock;
+  const resolvedStats = resolveGlantriCharacterStats(variedBaseStats);
+  const generatedSkills = draft.skillSelections
+    .map((selection) => {
+      const skill = input.content.skills.find((candidate) => candidate.id === selection.skillId);
+
+      if (!skill) {
+        return null;
+      }
+
+      const relevance = getTemplateSkillRelevance({
+        content: input.content,
+        professionId: draft.professionId,
+        selectedSkillGroupIds: draft.selectedSkillGroupIds,
+        skill
+      });
+      const baseline =
+        relevance === "other"
+          ? selection.targetLevel
+          : getDefaultSkillLevelForRelevance({
+              relevance,
+              seniority: input.seniority
+            });
+
+      return {
+        categoryId: getPlayerFacingSkillCategoryId(skill),
+        groupIds: getSkillGroupIds(skill),
+        isCore: relevance === "core",
+        skillId: skill.id,
+        skillName: skill.name,
+        targetLevel: clampSkillLevel(
+          baseline + createRandomDelta(draft.variability.skillVariance)
+        )
+      } satisfies GeneratedHumanoidNpcSkill;
+    })
+    .filter((skill): skill is GeneratedHumanoidNpcSkill => skill !== null)
+    .sort((left, right) => left.skillName.localeCompare(right.skillName));
+  const tags = draft.tags
+    .split(",")
+    .map((tag) => tag.trim())
+    .filter(Boolean);
+  const roleLabel = toNonEmptyString(draft.roleLabel) ?? profession?.name;
+  const nameSeed = roleLabel ?? profession?.name ?? input.template.name;
+
+  return {
+    actorClass: "generated_npc",
+    description: toNonEmptyString(draft.description) ?? input.template.description,
+    displayName: `${nameSeed} ${Math.floor(Math.random() * 900) + 100}`,
+    gearNames: gearTemplates.map((template) => template.name),
+    kind: input.template.kind,
+    professionName: profession?.name ?? draft.professionId,
+    roleLabel,
+    seniority: input.seniority,
+    skills: generatedSkills,
+    societyName: society?.societyName ?? draft.societyId,
+    sourceTemplateId: input.template.id,
+    sourceTemplateName: input.template.name,
+    stats: {
+      base: variedBaseStats,
+      final: resolvedStats
+    },
+    tags
+  };
+}
+
+export function buildGeneratedHumanoidNpcSnapshot(
+  npc: GeneratedHumanoidNpc
+): Record<string, unknown> {
+  return {
+    actorClass: "generated_npc",
+    generatedHumanoidNpc: {
+      gearNames: npc.gearNames,
+      professionName: npc.professionName,
+      seniority: npc.seniority,
+      skills: npc.skills,
+      societyName: npc.societyName,
+      sourceTemplateId: npc.sourceTemplateId,
+      sourceTemplateName: npc.sourceTemplateName,
+      stats: npc.stats
+    },
+    profession: npc.professionName,
+    roleLabel: npc.roleLabel,
+    tags: npc.tags,
+    templateId: npc.sourceTemplateId,
+    templateName: npc.sourceTemplateName
+  };
+}
+
+export function parseGeneratedHumanoidNpcEntity(
+  entity: ReusableEntity
+): ParsedGeneratedHumanoidNpcSummary {
+  const snapshot = entity.snapshot;
+
+  if (!isObject(snapshot) || !isObject(snapshot.generatedHumanoidNpc)) {
+    return {
+      actorClass: "generated_npc",
+      gearNames: [],
+      isGeneratedHumanoidNpc: false,
+      skillCount: 0
+    };
+  }
+
+  const generated = snapshot.generatedHumanoidNpc as Record<string, unknown>;
+  const stats = isObject(generated.stats) ? generated.stats : undefined;
+  const baseStats = isObject(stats?.base) ? (stats?.base as GlantriCharacteristicBlock) : undefined;
+  const finalStats = isObject(stats?.final) ? (stats?.final as GlantriCharacteristicBlock) : undefined;
+  const skills = Array.isArray(generated.skills) ? generated.skills : [];
+
+  return {
+    actorClass: "generated_npc",
+    gearNames: parseStringArray(generated.gearNames) ?? [],
+    isGeneratedHumanoidNpc: true,
+    profession: toNonEmptyString(generated.professionName) ?? toNonEmptyString(snapshot.profession),
+    roleLabel: toNonEmptyString(snapshot.roleLabel),
+    seniority:
+      typeof generated.seniority === "string"
+        ? (generated.seniority as NpcArchetypeSeniority)
+        : undefined,
+    skillCount: skills.length,
+    societyName: toNonEmptyString(generated.societyName),
+    sourceTemplateName:
+      toNonEmptyString(generated.sourceTemplateName) ?? toNonEmptyString(snapshot.templateName),
+    stats:
+      baseStats && finalStats
+        ? {
+            base: baseStats,
+            final: finalStats
+          }
+        : undefined,
+    tags: parseStringArray(snapshot.tags)
   };
 }
 

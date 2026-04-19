@@ -9,8 +9,7 @@ import { useEffect, useMemo, useState } from "react";
   terminology changes here.
 */
 
-import { type CanonicalContent } from "@glantri/content";
-import { equipmentTemplates } from "@glantri/content/equipment";
+import { equipmentTemplates, type CanonicalContent } from "@glantri/content";
 import type {
   GlantriCharacteristicKey,
   ReusableEntity
@@ -35,22 +34,32 @@ import {
 } from "../../../src/features/equipment/inventoryTemplateGroups";
 import { getPlayerFacingEquipmentTemplateName } from "../../../src/features/equipment/playerFacingTemplateOptions";
 import {
+  groupRowsBySkillType,
+  type PlayerFacingSkillBucketId,
+  getPlayerFacingSkillBucketDefinitions
+} from "../../../src/lib/chargen/chargenBrowse";
+import {
   NPC_ARCHETYPE_SENIORITY_OPTIONS,
+  buildGeneratedHumanoidNpcSnapshot,
   buildHumanoidNpcArchetypeSnapshot,
   createEmptyHumanoidNpcArchetypeDraft,
+  generateHumanoidNpcFromTemplate,
   getDefaultSkillLevelForRelevance,
   listProfessionsForSociety,
   listSocietyOptions,
   listSuggestedSkills,
   listSuggestedSkillGroupIds,
   loadHumanoidNpcArchetypeDraft,
+  parseGeneratedHumanoidNpcEntity,
   parseHumanoidNpcArchetypeTemplate,
+  type GeneratedHumanoidNpc,
   type HumanoidNpcArchetypeDraft,
+  type NpcArchetypeSeniority,
   type NpcArchetypeSkillRelevance
 } from "../../../src/lib/templates/npcArchetypeTemplates";
 
 type TemplateKindFilter = "all" | ReusableEntity["kind"];
-type TemplatesPageTab = "create-template" | "library";
+type TemplatesPageTab = "create-template" | "generate-npc" | "library";
 type SkillsFilterMode =
   | "selected-groups"
   | "core-skills"
@@ -201,6 +210,13 @@ function buildTagStringFromValues(values: string[]): string {
   return values.join(", ");
 }
 
+function formatPlayerFacingCategoryLabel(categoryId: PlayerFacingSkillBucketId): string {
+  return (
+    getPlayerFacingSkillBucketDefinitions().find((entry) => entry.id === categoryId)?.label ??
+    categoryId.replaceAll("-", " ")
+  );
+}
+
 export default function TemplatesPageContent() {
   const [content, setContent] = useState<CanonicalContent | null>(null);
   const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
@@ -219,6 +235,10 @@ export default function TemplatesPageContent() {
   const [skillTypeFilter, setSkillTypeFilter] = useState("all");
   const [skillSearch, setSkillSearch] = useState("");
   const [gearFilter, setGearFilter] = useState<InventoryTemplateFilter>("all");
+  const [generatedNpc, setGeneratedNpc] = useState<GeneratedHumanoidNpc | null>(null);
+  const [generatorSeniority, setGeneratorSeniority] =
+    useState<NpcArchetypeSeniority>("fully_trained");
+  const [selectedGeneratorTemplateId, setSelectedGeneratorTemplateId] = useState("");
   const [selectedGearTemplateId, setSelectedGearTemplateId] = useState("");
 
   async function refreshTemplates() {
@@ -226,9 +246,10 @@ export default function TemplatesPageContent() {
       loadTemplates(),
       loadCanonicalContent()
     ]);
-    const filteredTemplates = nextTemplates.filter(
-      (template) => getCampaignActorMetadata(template).actorClass === "template"
-    );
+    const filteredTemplates = nextTemplates.filter((template) => {
+      const actorClass = getCampaignActorMetadata(template).actorClass;
+      return actorClass === "template" || actorClass === "generated_npc";
+    });
 
     setTemplates(filteredTemplates);
     setContent(nextContent);
@@ -245,6 +266,17 @@ export default function TemplatesPageContent() {
   const visibleTemplates = useMemo(
     () => templates.filter((template) => kindFilter === "all" || template.kind === kindFilter),
     [kindFilter, templates]
+  );
+  const humanoidArchetypeTemplates = useMemo(
+    () =>
+      templates.filter((template) => {
+        const metadata = getCampaignActorMetadata(template);
+        return metadata.actorClass === "template" && parseHumanoidNpcArchetypeTemplate(template).isHumanoidNpcArchetype;
+      }),
+    [templates]
+  );
+  const selectedGeneratorTemplate = humanoidArchetypeTemplates.find(
+    (template) => template.id === selectedGeneratorTemplateId
   );
   const societyOptions = useMemo(
     () => (content ? listSocietyOptions(content) : []),
@@ -506,6 +538,19 @@ export default function TemplatesPageContent() {
       return total + selection.targetLevel * multiplier;
     }, 0);
   }, [archetypeDraft.skillSelections, content]);
+  const generatedSkillGroups = useMemo(() => {
+    if (!generatedNpc) {
+      return [];
+    }
+
+    return groupRowsBySkillType(
+      generatedNpc.skills.map((skill) => ({
+        ...skill,
+        skillName: skill.skillName,
+        skillType: skill.categoryId
+      }))
+    );
+  }, [generatedNpc]);
   const resolvedStats = resolveGlantriCharacterStats(archetypeDraft.stats);
   const activeStepIndex = ARCHETYPE_STEPS.findIndex((step) => step.id === activeStep);
   const canMoveForwardByStep: Record<ArchetypeStepId, boolean> = {
@@ -532,6 +577,15 @@ export default function TemplatesPageContent() {
     setSkillTypeFilter("all");
     setGearFilter("all");
     setShowAllSkillGroups(false);
+  }
+
+  function handleSelectGeneratorTemplate(templateId: string) {
+    setSelectedGeneratorTemplateId(templateId);
+    const template = humanoidArchetypeTemplates.find((entry) => entry.id === templateId);
+    const summary = template ? parseHumanoidNpcArchetypeTemplate(template) : undefined;
+
+    setGeneratorSeniority(summary?.seniority ?? "fully_trained");
+    setGeneratedNpc(null);
   }
 
   function handleSocietyChange(societyId: string) {
@@ -711,6 +765,68 @@ export default function TemplatesPageContent() {
     }
   }
 
+  function handleGenerateNpc() {
+    if (!content || !selectedGeneratorTemplate) {
+      return;
+    }
+
+    try {
+      setError(undefined);
+      setFeedback(undefined);
+
+      const npc = generateHumanoidNpcFromTemplate({
+        content,
+        seniority: generatorSeniority,
+        template: selectedGeneratorTemplate
+      });
+
+      setGeneratedNpc(npc);
+      setFeedback(`Generated ${npc.displayName} from ${selectedGeneratorTemplate.name}.`);
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error ? caughtError.message : "Unable to generate NPC preview."
+      );
+    }
+  }
+
+  async function handleSaveGeneratedNpc() {
+    if (!generatedNpc) {
+      return;
+    }
+
+    try {
+      setError(undefined);
+      setFeedback(undefined);
+
+      const entity = await createTemplateOnServer({
+        description:
+          generatedNpc.description ??
+          `Generated from template ${generatedNpc.sourceTemplateName}.`,
+        kind: generatedNpc.kind,
+        name: generatedNpc.displayName,
+        snapshot: buildGeneratedHumanoidNpcSnapshot(generatedNpc)
+      });
+
+      await refreshTemplates();
+      setFeedback(`Saved generated NPC ${entity.name} to the reusable library.`);
+      setPageTab("library");
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error ? caughtError.message : "Unable to save generated NPC."
+      );
+    }
+  }
+
+  function handleOpenGeneratorFromTemplate(template: ReusableEntity) {
+    const summary = parseHumanoidNpcArchetypeTemplate(template);
+
+    setSelectedGeneratorTemplateId(template.id);
+    setGeneratorSeniority(summary.seniority ?? "fully_trained");
+    setGeneratedNpc(null);
+    setPageTab("generate-npc");
+    setFeedback(`Ready to generate an NPC from ${template.name}.`);
+  }
+
   function handleLoadTemplateIntoEditor(template: ReusableEntity) {
     const loaded = loadHumanoidNpcArchetypeDraft(template);
 
@@ -724,6 +840,7 @@ export default function TemplatesPageContent() {
     setGearFilter("all");
     setShowAllSkillGroups(false);
     setPageTab("create-template");
+    setGeneratedNpc(null);
     setFeedback(
       loaded.isHumanoidNpcArchetype
         ? `Loaded ${template.name} into the archetype editor.`
@@ -757,6 +874,18 @@ export default function TemplatesPageContent() {
           type="button"
         >
           Create template
+        </button>
+        <button
+          onClick={() => setPageTab("generate-npc")}
+          style={{
+            background: pageTab === "generate-npc" ? "#ece8da" : "#f6f5ef",
+            border: "1px solid #d9ddd8",
+            borderRadius: 999,
+            padding: "0.45rem 0.85rem"
+          }}
+          type="button"
+        >
+          Generate NPC
         </button>
         <button
           onClick={() => setPageTab("library")}
@@ -1826,6 +1955,269 @@ export default function TemplatesPageContent() {
       </section>
       ) : null}
 
+      {pageTab === "generate-npc" ? (
+      <section
+        style={{
+          border: "1px solid #d9ddd8",
+          borderRadius: 12,
+          display: "grid",
+          gap: "1rem",
+          padding: "1rem"
+        }}
+      >
+        <div style={{ display: "grid", gap: "0.35rem" }}>
+          <h2 style={{ margin: 0 }}>Generate humanoid NPC</h2>
+          <div style={{ color: "#5e5a50", fontSize: "0.95rem" }}>
+            Pick a humanoid archetype template, choose a seniority band, and generate a first-pass NPC preview with varied stats and skill levels.
+          </div>
+        </div>
+
+        <div
+          style={{
+            alignItems: "end",
+            display: "grid",
+            gap: "0.75rem",
+            gridTemplateColumns: "minmax(240px, 1.6fr) 220px auto auto"
+          }}
+        >
+          <label style={{ display: "grid", gap: "0.25rem" }}>
+            <span>Template</span>
+            <select
+              onChange={(event) => handleSelectGeneratorTemplate(event.target.value)}
+              value={selectedGeneratorTemplateId}
+            >
+              <option value="">Select humanoid archetype</option>
+              {humanoidArchetypeTemplates.map((template) => (
+                <option key={template.id} value={template.id}>
+                  {template.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label style={{ display: "grid", gap: "0.25rem" }}>
+            <span>Seniority</span>
+            <select
+              onChange={(event) => setGeneratorSeniority(event.target.value as NpcArchetypeSeniority)}
+              value={generatorSeniority}
+            >
+              {NPC_ARCHETYPE_SENIORITY_OPTIONS.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button disabled={!selectedGeneratorTemplateId} onClick={handleGenerateNpc} type="button">
+            Generate
+          </button>
+          <button disabled={!selectedGeneratorTemplateId} onClick={handleGenerateNpc} type="button">
+            Regenerate
+          </button>
+        </div>
+
+        {selectedGeneratorTemplate ? (
+          <div
+            style={{
+              background: "#f6f5ef",
+              border: "1px solid #e6e2d5",
+              borderRadius: 10,
+              display: "flex",
+              flexWrap: "wrap",
+              gap: "0.75rem 1rem",
+              padding: "0.75rem"
+            }}
+          >
+            {(() => {
+              const summary = parseHumanoidNpcArchetypeTemplate(selectedGeneratorTemplate);
+              return (
+                <>
+                  <div>
+                    <strong>Template:</strong> {selectedGeneratorTemplate.name}
+                  </div>
+                  <div>
+                    <strong>Society:</strong> {summary.societyName ?? "Not set"}
+                  </div>
+                  <div>
+                    <strong>Profession:</strong> {summary.profession ?? "Not set"}
+                  </div>
+                  <div>
+                    <strong>Role:</strong> {summary.roleLabel ?? "Not set"}
+                  </div>
+                </>
+              );
+            })()}
+          </div>
+        ) : null}
+
+        {generatedNpc ? (
+          <div style={{ display: "grid", gap: "1rem" }}>
+            <div
+              style={{
+                alignItems: "end",
+                display: "grid",
+                gap: "0.75rem",
+                gridTemplateColumns: "minmax(220px, 1fr) auto"
+              }}
+            >
+              <label style={{ display: "grid", gap: "0.25rem" }}>
+                <span>Name</span>
+                <input
+                  onChange={(event) =>
+                    setGeneratedNpc((current) =>
+                      current ? { ...current, displayName: event.target.value } : current
+                    )
+                  }
+                  value={generatedNpc.displayName}
+                />
+              </label>
+              <button onClick={() => void handleSaveGeneratedNpc()} type="button">
+                Save generated NPC
+              </button>
+            </div>
+
+            <div
+              style={{
+                border: "1px solid #d9ddd8",
+                borderRadius: 12,
+                display: "grid",
+                gap: "1rem",
+                padding: "1rem"
+              }}
+            >
+              <div>
+                <strong>{generatedNpc.displayName}</strong>
+                <div style={{ color: "#5e5a50", fontSize: "0.95rem", marginTop: "0.25rem" }}>
+                  {generatedNpc.societyName} • {generatedNpc.professionName}
+                  {generatedNpc.roleLabel ? ` • ${generatedNpc.roleLabel}` : ""}
+                </div>
+                <div style={{ color: "#5e5a50", fontSize: "0.9rem", marginTop: "0.25rem" }}>
+                  Seniority:{" "}
+                  {NPC_ARCHETYPE_SENIORITY_OPTIONS.find((option) => option.id === generatedNpc.seniority)?.label ??
+                    generatedNpc.seniority}
+                  {" • "}Source template: {generatedNpc.sourceTemplateName}
+                </div>
+              </div>
+
+              <div
+                style={{
+                  display: "grid",
+                  gap: "1rem",
+                  gridTemplateColumns: "minmax(280px, 0.9fr) minmax(0, 1.4fr)"
+                }}
+              >
+                <div
+                  style={{
+                    border: "1px solid #e6e2d5",
+                    borderRadius: 10,
+                    overflow: "hidden"
+                  }}
+                >
+                  <div
+                    style={{
+                      background: "#ece8da",
+                      display: "grid",
+                      gap: "0.5rem",
+                      gridTemplateColumns: "minmax(0, 1fr) 72px 72px",
+                      padding: "0.55rem 0.75rem"
+                    }}
+                  >
+                    <strong>Stat</strong>
+                    <strong style={{ textAlign: "right" }}>Base</strong>
+                    <strong style={{ textAlign: "right" }}>Final</strong>
+                  </div>
+                  {glantriCharacteristicOrder.map((stat, index) => (
+                    <div
+                      key={`generated-${stat}`}
+                      style={{
+                        background: index % 2 === 0 ? "#f6f5ef" : "#f2efe6",
+                        borderTop: index === 0 ? "none" : "1px solid #e6e2d5",
+                        display: "grid",
+                        gap: "0.5rem",
+                        gridTemplateColumns: "minmax(0, 1fr) 72px 72px",
+                        padding: "0.5rem 0.75rem"
+                      }}
+                    >
+                      <span>{glantriCharacteristicLabels[stat]}</span>
+                      <strong style={{ textAlign: "right" }}>{generatedNpc.stats.base[stat]}</strong>
+                      <strong style={{ textAlign: "right" }}>{generatedNpc.stats.final[stat]}</strong>
+                    </div>
+                  ))}
+                </div>
+
+                <div style={{ display: "grid", gap: "0.75rem" }}>
+                  {generatedSkillGroups.map((group) => (
+                    <div
+                      key={`generated-group-${group.bucketId}`}
+                      style={{
+                        border: "1px solid #e6e2d5",
+                        borderRadius: 10,
+                        overflow: "hidden"
+                      }}
+                    >
+                      <div
+                        style={{
+                          background: "#ece8da",
+                          padding: "0.6rem 0.8rem"
+                        }}
+                      >
+                        <strong>{formatPlayerFacingCategoryLabel(group.bucketId)}</strong>
+                      </div>
+                      <div style={{ display: "grid" }}>
+                        {group.rows.map((skill, index) => (
+                          <div
+                            key={`generated-skill-${skill.skillId}`}
+                            style={{
+                              alignItems: "center",
+                              background: index % 2 === 0 ? "#f6f5ef" : "#f2efe6",
+                              borderTop: index === 0 ? "none" : "1px solid #e6e2d5",
+                              display: "grid",
+                              gap: "0.75rem",
+                              gridTemplateColumns: "minmax(0, 1fr) 110px 72px",
+                              padding: "0.5rem 0.75rem"
+                            }}
+                          >
+                            <div style={{ display: "grid", gap: "0.2rem" }}>
+                              <span>{skill.skillName}</span>
+                              <span style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
+                                {skill.isCore ? "Core" : "Optional"}
+                              </span>
+                            </div>
+                            <span style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
+                              {skill.groupIds.join(", ")}
+                            </span>
+                            <strong style={{ textAlign: "right" }}>{skill.targetLevel}</strong>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+
+                  <div
+                    style={{
+                      border: "1px solid #e6e2d5",
+                      borderRadius: 10,
+                      padding: "0.75rem"
+                    }}
+                  >
+                    <div><strong>Gear:</strong> {generatedNpc.gearNames.length > 0 ? generatedNpc.gearNames.join(", ") : "None"}</div>
+                    {generatedNpc.tags.length > 0 ? (
+                      <div style={{ marginTop: "0.35rem" }}>
+                        <strong>Tags:</strong> {generatedNpc.tags.join(", ")}
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div style={{ color: "#5e5a50", fontSize: "0.95rem" }}>
+            Choose a humanoid archetype template and generate a preview to inspect stats, skills, and gear.
+          </div>
+        )}
+      </section>
+      ) : null}
+
       {pageTab === "library" ? (
       <section
         style={{
@@ -1853,6 +2245,10 @@ export default function TemplatesPageContent() {
           visibleTemplates.map((template) => {
             const metadata = getCampaignActorMetadata(template);
             const archetypeSummary = parseHumanoidNpcArchetypeTemplate(template);
+            const generatedSummary = parseGeneratedHumanoidNpcEntity(template);
+            const isGeneratedNpc = metadata.actorClass === "generated_npc" && generatedSummary.isGeneratedHumanoidNpc;
+            const canGenerateFromTemplate =
+              metadata.actorClass === "template" && archetypeSummary.isHumanoidNpcArchetype;
 
             return (
               <div
@@ -1877,52 +2273,101 @@ export default function TemplatesPageContent() {
                     <strong>{template.name}</strong>
                     <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
                       {template.kind}
-                      {archetypeSummary.isHumanoidNpcArchetype ? " • humanoid NPC archetype" : ""}
+                      {isGeneratedNpc
+                        ? " • generated humanoid NPC"
+                        : archetypeSummary.isHumanoidNpcArchetype
+                          ? " • humanoid NPC archetype"
+                          : ""}
                     </div>
                   </div>
-                  <button onClick={() => handleLoadTemplateIntoEditor(template)} type="button">
-                    Load into editor
-                  </button>
+                  <div style={{ display: "flex", gap: "0.5rem" }}>
+                    {metadata.actorClass === "template" ? (
+                      <button onClick={() => handleLoadTemplateIntoEditor(template)} type="button">
+                        Load into editor
+                      </button>
+                    ) : null}
+                    {canGenerateFromTemplate ? (
+                      <button
+                        onClick={() => handleOpenGeneratorFromTemplate(template)}
+                        type="button"
+                      >
+                        Generate NPC
+                      </button>
+                    ) : null}
+                  </div>
                 </div>
                 <div>{template.description || "No description yet."}</div>
-                {archetypeSummary.societyName ? <div>Society: {archetypeSummary.societyName}</div> : null}
-                {archetypeSummary.profession ?? metadata.profession ? (
-                  <div>Profession: {archetypeSummary.profession ?? metadata.profession}</div>
-                ) : null}
-                {archetypeSummary.roleLabel ?? metadata.roleLabel ? (
-                  <div>Role: {archetypeSummary.roleLabel ?? metadata.roleLabel}</div>
-                ) : null}
-                {archetypeSummary.isHumanoidNpcArchetype ? (
+                {isGeneratedNpc ? (
                   <>
                     <div>
-                      Skill groups: {archetypeSummary.skillGroupCount} • Skills: {archetypeSummary.skillCount}
+                      Society: {generatedSummary.societyName ?? "Unspecified"} • Profession:{" "}
+                      {generatedSummary.profession ?? "Unspecified"}
                     </div>
-                    {archetypeSummary.gearNames.length > 0 ? (
-                      <div>Gear: {archetypeSummary.gearNames.join(", ")}</div>
-                    ) : null}
-                    {archetypeSummary.variability ? (
+                    {generatedSummary.roleLabel ? <div>Role: {generatedSummary.roleLabel}</div> : null}
+                    {generatedSummary.seniority ? (
                       <div>
-                        Variability: stats ±{archetypeSummary.variability.statVariance}, skills ±
-                        {archetypeSummary.variability.skillVariance}
+                        Seniority:{" "}
+                        {NPC_ARCHETYPE_SENIORITY_OPTIONS.find(
+                          (option) => option.id === generatedSummary.seniority
+                        )?.label ?? generatedSummary.seniority}
                       </div>
+                    ) : null}
+                    {generatedSummary.sourceTemplateName ? (
+                      <div>Source template: {generatedSummary.sourceTemplateName}</div>
+                    ) : null}
+                    <div>Skills: {generatedSummary.skillCount}</div>
+                    {generatedSummary.gearNames.length > 0 ? (
+                      <div>Gear: {generatedSummary.gearNames.join(", ")}</div>
                     ) : null}
                   </>
                 ) : (
                   <>
-                    {metadata.socialClass ? <div>Social context: {metadata.socialClass}</div> : null}
-                    {metadata.equipmentProfile ? (
-                      <div>Equipment profile: {metadata.equipmentProfile}</div>
+                    {archetypeSummary.societyName ? (
+                      <div>Society: {archetypeSummary.societyName}</div>
                     ) : null}
+                    {archetypeSummary.profession ?? metadata.profession ? (
+                      <div>Profession: {archetypeSummary.profession ?? metadata.profession}</div>
+                    ) : null}
+                    {archetypeSummary.roleLabel ?? metadata.roleLabel ? (
+                      <div>Role: {archetypeSummary.roleLabel ?? metadata.roleLabel}</div>
+                    ) : null}
+                    {archetypeSummary.isHumanoidNpcArchetype ? (
+                      <>
+                        <div>
+                          Skill groups: {archetypeSummary.skillGroupCount} • Skills:{" "}
+                          {archetypeSummary.skillCount}
+                        </div>
+                        {archetypeSummary.gearNames.length > 0 ? (
+                          <div>Gear: {archetypeSummary.gearNames.join(", ")}</div>
+                        ) : null}
+                        {archetypeSummary.variability ? (
+                          <div>
+                            Variability: stats ±{archetypeSummary.variability.statVariance}, skills ±
+                            {archetypeSummary.variability.skillVariance}
+                          </div>
+                        ) : null}
+                      </>
+                    ) : (
+                      <>
+                        {metadata.socialClass ? <div>Social context: {metadata.socialClass}</div> : null}
+                        {metadata.equipmentProfile ? (
+                          <div>Equipment profile: {metadata.equipmentProfile}</div>
+                        ) : null}
+                      </>
+                    )}
                   </>
                 )}
-                {(archetypeSummary.tags ?? metadata.tags)?.length ? (
-                  <div>Tags: {(archetypeSummary.tags ?? metadata.tags)?.join(", ")}</div>
+                {(isGeneratedNpc ? generatedSummary.tags : archetypeSummary.tags ?? metadata.tags)?.length ? (
+                  <div>
+                    Tags:{" "}
+                    {(isGeneratedNpc ? generatedSummary.tags : archetypeSummary.tags ?? metadata.tags)?.join(", ")}
+                  </div>
                 ) : null}
               </div>
             );
           })
         ) : (
-          <div>No templates match the current library view.</div>
+          <div>No library entries match the current view.</div>
         )}
       </section>
       ) : null}

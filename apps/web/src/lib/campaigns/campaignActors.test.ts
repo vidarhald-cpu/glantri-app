@@ -35,6 +35,22 @@ describe("campaignActors", () => {
     expect(metadata.actorClass).toBe("template");
   });
 
+  it("preserves generated npc actor class from snapshot metadata", () => {
+    const metadata = getCampaignActorMetadata(
+      createEntity({
+        id: "generated-1",
+        name: "Town watch 101",
+        snapshot: {
+          actorClass: "generated_npc",
+          profession: "guard",
+          templateId: "template-guard"
+        }
+      })
+    );
+
+    expect(metadata.actorClass).toBe("generated_npc");
+  });
+
   it("splits templates and campaign npcs using snapshot metadata", () => {
     const result = splitCampaignActors([
       createEntity({

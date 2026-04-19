@@ -1,6 +1,6 @@
 import type { ReusableEntity } from "@glantri/domain";
 
-export type CampaignActorClass = "template" | "campaign_npc";
+export type CampaignActorClass = "template" | "campaign_npc" | "generated_npc";
 
 export interface CampaignActorMetadata {
   actorClass: CampaignActorClass;
@@ -38,7 +38,12 @@ export function getCampaignActorMetadata(entity: ReusableEntity): CampaignActorM
   const actorClass = snapshot.actorClass;
 
   return {
-    actorClass: actorClass === "campaign_npc" ? "campaign_npc" : "template",
+    actorClass:
+      actorClass === "campaign_npc"
+        ? "campaign_npc"
+        : actorClass === "generated_npc"
+          ? "generated_npc"
+          : "template",
     campaignId: typeof snapshot.campaignId === "string" ? snapshot.campaignId : undefined,
     allegiance: typeof snapshot.allegiance === "string" ? snapshot.allegiance : undefined,
     equipmentProfile:

@@ -5,8 +5,10 @@ import type { ReusableEntity } from "@glantri/domain";
 import type { EquipmentTemplate } from "@glantri/domain/equipment";
 
 import {
+  buildGeneratedHumanoidNpcSnapshot,
   buildHumanoidNpcArchetypeSnapshot,
   createEmptyHumanoidNpcArchetypeDraft,
+  generateHumanoidNpcFromTemplate,
   getDefaultSkillLevelForSeniority,
   getDefaultSkillLevelForRelevance,
   getOptionalSkillLevelForSeniority,
@@ -14,6 +16,7 @@ import {
   loadHumanoidNpcArchetypeDraft,
   listAvailableSkills,
   listProfessionsForSociety,
+  parseGeneratedHumanoidNpcEntity,
   listSuggestedSkills,
   listSocietyOptions,
   listSuggestedSkillGroupIds,
@@ -86,6 +89,7 @@ const content = {
     {
       allowsSpecializations: false,
       category: "ordinary",
+      categoryId: "combat",
       dependencies: [],
       dependencySkillIds: [],
       groupId: "field_soldiering",
@@ -99,6 +103,7 @@ const content = {
     {
       allowsSpecializations: false,
       category: "ordinary",
+      categoryId: "leadership",
       dependencies: [],
       dependencySkillIds: [],
       groupId: "urban_watch",
@@ -396,6 +401,142 @@ describe("npcArchetypeTemplates", () => {
         skillVariance: 3,
         statVariance: 2
       }
+    });
+  });
+
+  it("generates a humanoid npc from an archetype template using seniority defaults", () => {
+    const snapshot = buildHumanoidNpcArchetypeSnapshot({
+      content,
+      draft: {
+        ...createEmptyHumanoidNpcArchetypeDraft(),
+        description: "Reliable town guard.",
+        name: "City Guard",
+        professionId: "guard",
+        roleLabel: "Town watch",
+        selectedSkillGroupIds: ["field_soldiering", "urban_watch"],
+        skillSelections: [
+          { skillId: "leadership", targetLevel: 12 },
+          { skillId: "shield_use", targetLevel: 12 }
+        ],
+        societyId: "glantri",
+        stats: {
+          ...createEmptyHumanoidNpcArchetypeDraft().stats,
+          cha: 10,
+          com: 10,
+          con: 10,
+          dex: 10,
+          health: 10,
+          int: 10,
+          siz: 10,
+          str: 10
+        },
+        variability: {
+          gearSubstitutionNotes: "",
+          notes: "",
+          skillVariance: 0,
+          statVariance: 0
+        }
+      },
+      equipmentTemplates: testEquipmentTemplates
+    });
+    const template = {
+      ...createEntity(snapshot),
+      description: "Reliable town guard."
+    };
+
+    const npc = generateHumanoidNpcFromTemplate({
+      content,
+      equipmentTemplates: testEquipmentTemplates,
+      seniority: "fully_trained",
+      template
+    });
+
+    expect(npc).toMatchObject({
+      actorClass: "generated_npc",
+      description: "Reliable town guard.",
+      kind: "npc",
+      professionName: "Guard",
+      roleLabel: "Town watch",
+      seniority: "fully_trained",
+      societyName: "Glantri",
+      sourceTemplateId: "template-1",
+      sourceTemplateName: "City Guard"
+    });
+    expect(npc.skills).toEqual([
+      {
+        categoryId: "leadership",
+        groupIds: ["urban_watch"],
+        isCore: true,
+        skillId: "leadership",
+        skillName: "Leadership",
+        targetLevel: 13
+      },
+      {
+        categoryId: "combat",
+        groupIds: ["field_soldiering"],
+        isCore: true,
+        skillId: "shield_use",
+        skillName: "Shield Use",
+        targetLevel: 13
+      }
+    ]);
+    expect(npc.stats.base).toEqual({
+      ...createEmptyHumanoidNpcArchetypeDraft().stats,
+      cha: 10,
+      com: 10,
+      con: 10,
+      dex: 10,
+      health: 10,
+      int: 10,
+      siz: 10,
+      str: 10
+    });
+  });
+
+  it("parses generated humanoid npc snapshots back out of saved entities", () => {
+    const summary = parseGeneratedHumanoidNpcEntity(
+      createEntity(
+        buildGeneratedHumanoidNpcSnapshot({
+          actorClass: "generated_npc",
+          displayName: "Town watch 101",
+          gearNames: ["Sword"],
+          kind: "npc",
+          professionName: "Guard",
+          roleLabel: "Town watch",
+          seniority: "veteran",
+          skills: [
+            {
+              categoryId: "combat",
+              groupIds: ["field_soldiering"],
+              isCore: true,
+              skillId: "shield_use",
+              skillName: "Shield Use",
+              targetLevel: 17
+            }
+          ],
+          societyName: "Glantri",
+          sourceTemplateId: "template-1",
+          sourceTemplateName: "City Guard",
+          stats: {
+            base: createEmptyHumanoidNpcArchetypeDraft().stats,
+            final: createEmptyHumanoidNpcArchetypeDraft().stats
+          },
+          tags: ["urban", "guard"]
+        })
+      )
+    );
+
+    expect(summary).toMatchObject({
+      actorClass: "generated_npc",
+      gearNames: ["Sword"],
+      isGeneratedHumanoidNpc: true,
+      profession: "Guard",
+      roleLabel: "Town watch",
+      seniority: "veteran",
+      skillCount: 1,
+      societyName: "Glantri",
+      sourceTemplateName: "City Guard",
+      tags: ["urban", "guard"]
     });
   });
 });
