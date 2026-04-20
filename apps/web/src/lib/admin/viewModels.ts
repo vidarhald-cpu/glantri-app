@@ -20,6 +20,11 @@ export interface SkillAdminRow {
   characteristics: string;
   dependencies: string[];
   foundationalAccessBandsSummary: string;
+  foundationalAccessMatrixRows: Array<{
+    canonicalSocietyLevel?: number;
+    societyName: string;
+    socialBands: number[];
+  }>;
   foundationalAccessSlots: Array<{
     accessBand: number;
     canonicalSocietyLevel?: number;
@@ -535,8 +540,45 @@ export function buildSkillAdminRows(content: CanonicalContent): SkillAdminRow[] 
         .sort(
           (left, right) =>
             (left.canonicalSocietyLevel ?? 99) - (right.canonicalSocietyLevel ?? 99) ||
-            left.societyName.localeCompare(right.societyName) ||
-            left.accessBand - right.accessBand
+          left.societyName.localeCompare(right.societyName) ||
+          left.accessBand - right.accessBand
+        );
+      const foundationalAccessMatrixRows = Array.from(
+        foundationalAccessSlots.reduce(
+          (map, slot) => {
+            const existing = map.get(slot.societyName);
+
+            if (existing) {
+              existing.socialBands.push(slot.accessBand);
+              return map;
+            }
+
+            map.set(slot.societyName, {
+              canonicalSocietyLevel: slot.canonicalSocietyLevel,
+              societyName: slot.societyName,
+              socialBands: [slot.accessBand]
+            });
+
+            return map;
+          },
+          new Map<
+            string,
+            {
+              canonicalSocietyLevel?: number;
+              societyName: string;
+              socialBands: number[];
+            }
+          >()
+        ).values()
+      )
+        .map((row) => ({
+          ...row,
+          socialBands: [...new Set(row.socialBands)].sort((left, right) => left - right)
+        }))
+        .sort(
+          (left, right) =>
+            (left.canonicalSocietyLevel ?? 99) - (right.canonicalSocietyLevel ?? 99) ||
+            left.societyName.localeCompare(right.societyName)
         );
 
       return {
@@ -549,6 +591,7 @@ export function buildSkillAdminRows(content: CanonicalContent): SkillAdminRow[] 
         foundationalAccessBandsSummary: summarizeAccessBands(
           foundationalAccessSlots.map((slot) => slot.accessBand)
         ),
+        foundationalAccessMatrixRows,
         foundationalAccessSlots,
         groupNames: groupIds.map((groupId) => skillGroupsById.get(groupId)?.name ?? groupId),
         id: skill.id,

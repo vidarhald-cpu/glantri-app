@@ -355,18 +355,10 @@ export default function SkillsAdminPage() {
                         </div>
                       ))}
                     </div>
-                    {[...new Set((selectedRow?.foundationalAccessSlots ?? []).map((slot) => slot.societyName))]
-                      .sort((left, right) => left.localeCompare(right))
-                      .map((societyName) => {
-                        const societySlots =
-                          selectedRow?.foundationalAccessSlots.filter(
-                            (slot) => slot.societyName === societyName
-                          ) ?? [];
-                        const canonicalLevel = societySlots[0]?.canonicalSocietyLevel;
-
+                    {(selectedRow?.foundationalAccessMatrixRows ?? []).map((societyRow) => {
                         return (
                           <div
-                            key={societyName}
+                            key={societyRow.societyName}
                             style={{
                               borderTop: "1px solid rgba(85, 73, 48, 0.08)",
                               display: "grid",
@@ -382,19 +374,17 @@ export default function SkillsAdminPage() {
                                 padding: "0.7rem 0.65rem"
                               }}
                             >
-                              {societyName}
+                              {societyRow.societyName}
                               <div style={{ color: "#8a7e63", fontSize: "0.78rem", fontWeight: 600 }}>
-                                {canonicalLevel ? `S${canonicalLevel}` : "Society"}
+                                {societyRow.canonicalSocietyLevel ? `S${societyRow.canonicalSocietyLevel}` : "Society"}
                               </div>
                             </div>
                             {Array.from({ length: 4 }, (_, bandIndex) => bandIndex + 1).map((accessBand) => {
-                              const isAccessible = societySlots.some(
-                                (slot) => slot.accessBand === accessBand
-                              );
+                              const isAccessible = societyRow.socialBands.includes(accessBand);
 
                               return (
                                 <div
-                                  key={`${societyName}:${accessBand}`}
+                                  key={`${societyRow.societyName}:${accessBand}`}
                                   style={{
                                     alignItems: "center",
                                     background: isAccessible
@@ -409,8 +399,8 @@ export default function SkillsAdminPage() {
                                   }}
                                   title={
                                     isAccessible
-                                      ? `${selectedSkill.name} is accessible for main skill-point spending in ${societyName} at band L${accessBand}.`
-                                      : `${selectedSkill.name} is not accessible in ${societyName} at band L${accessBand}.`
+                                      ? `${selectedSkill.name} is accessible for main skill-point spending in ${societyRow.societyName} at band L${accessBand}.`
+                                      : `${selectedSkill.name} is not accessible in ${societyRow.societyName} at band L${accessBand}.`
                                   }
                                 >
                                   <span style={{ fontWeight: isAccessible ? 700 : 500 }}>
