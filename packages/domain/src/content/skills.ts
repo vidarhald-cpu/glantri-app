@@ -371,18 +371,45 @@ export const languageDefinitionSchema = z.object({
   sourceSocietyId: idSchema.optional()
 });
 
-export const civilizationDefinitionSchema = z.object({
-  id: idSchema,
-  name: z.string().min(1),
-  shortDescription: z.string().min(1),
-  historicalAnalogue: z.string().min(1),
-  spokenLanguageName: z.string().min(1),
-  writtenLanguageName: z.string().min(1).nullable(),
-  period: z.string().min(1),
-  linkedSocietyId: idSchema,
-  linkedSocietyLevel: z.number().int().min(1).max(6),
-  notes: z.string().optional()
-});
+export const civilizationDefinitionSchema = z.preprocess(
+  (input) => {
+    if (typeof input !== "object" || input === null) {
+      return input;
+    }
+
+    const candidate = input as {
+      motherTongueLanguageName?: unknown;
+      optionalLanguageNames?: unknown;
+      spokenLanguageName?: unknown;
+    };
+
+    return {
+      ...candidate,
+      motherTongueLanguageName:
+        typeof candidate.motherTongueLanguageName === "string" &&
+        candidate.motherTongueLanguageName.length > 0
+          ? candidate.motherTongueLanguageName
+          : candidate.spokenLanguageName,
+      optionalLanguageNames: Array.isArray(candidate.optionalLanguageNames)
+        ? candidate.optionalLanguageNames
+        : []
+    };
+  },
+  z.object({
+    id: idSchema,
+    name: z.string().min(1),
+    shortDescription: z.string().min(1),
+    historicalAnalogue: z.string().min(1),
+    spokenLanguageName: z.string().min(1),
+    writtenLanguageName: z.string().min(1).nullable(),
+    motherTongueLanguageName: z.string().min(1),
+    optionalLanguageNames: z.array(z.string().min(1)).default([]),
+    period: z.string().min(1),
+    linkedSocietyId: idSchema,
+    linkedSocietyLevel: z.number().int().min(1).max(6),
+    notes: z.string().optional()
+  })
+);
 
 export type SkillGroupSkillMembership = z.infer<typeof skillGroupSkillMembershipSchema>;
 export type SkillGroupSelectionSlot = z.infer<typeof skillGroupSelectionSlotSchema>;

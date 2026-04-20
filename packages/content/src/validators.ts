@@ -124,6 +124,24 @@ function validateCivilizations(content: CanonicalContent): CanonicalContent {
         `Civilization "${civilization.name}" (${civilization.id}) uses linked society level ${civilization.linkedSocietyLevel}, but linked society "${linkedSociety.name}" (${linkedSociety.id}) is level ${linkedSociety.societyLevel}.`
       );
     }
+
+    const seenOptionalLanguageNames = new Set<string>();
+
+    for (const languageName of civilization.optionalLanguageNames ?? []) {
+      if (languageName === civilization.motherTongueLanguageName) {
+        issues.push(
+          `Civilization "${civilization.name}" (${civilization.id}) repeats mother tongue "${languageName}" inside optionalLanguageNames.`
+        );
+      }
+
+      if (seenOptionalLanguageNames.has(languageName)) {
+        issues.push(
+          `Civilization "${civilization.name}" (${civilization.id}) repeats optional language "${languageName}".`
+        );
+      }
+
+      seenOptionalLanguageNames.add(languageName);
+    }
   }
 
   if (issues.length > 0) {

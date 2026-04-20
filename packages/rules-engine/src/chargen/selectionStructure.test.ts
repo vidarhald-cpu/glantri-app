@@ -3,11 +3,27 @@ import { describe, expect, it } from "vitest";
 import type { CharacterProgression } from "@glantri/domain";
 
 import {
+  buildChargenMotherTongueSummary,
   buildChargenLanguageSelectionSummary,
   buildChargenSelectableSkillSummary
 } from "./selectionStructure";
 
 const content = {
+  civilizations: [
+    {
+      historicalAnalogue: "Test analogue",
+      id: "glantri_civ",
+      linkedSocietyId: "glantri",
+      linkedSocietyLevel: 4,
+      motherTongueLanguageName: "Common",
+      name: "Glantri",
+      optionalLanguageNames: ["Old Common"],
+      period: "Test period",
+      shortDescription: "Test civilization",
+      spokenLanguageName: "Common",
+      writtenLanguageName: "Common"
+    }
+  ],
   languages: [{ id: "glantri_language", name: "Glantri" }],
   professionFamilies: [{ id: "military", name: "Military" }],
   professionSkills: [
@@ -47,6 +63,22 @@ const content = {
     { id: "urban_watch", name: "Urban watch", sortOrder: 2 }
   ],
   skills: [
+    {
+      allowsSpecializations: false,
+      category: "ordinary" as const,
+      categoryId: "knowledge" as const,
+      dependencies: [],
+      dependencySkillIds: [],
+      groupId: "language_group",
+      groupIds: ["language_group"],
+      id: "language",
+      isTheoretical: false,
+      linkedStats: ["rea"],
+      name: "Language",
+      requiresLiteracy: "no" as const,
+      societyLevel: 1,
+      sortOrder: 0
+    },
     {
       allowsSpecializations: false,
       category: "ordinary" as const,
@@ -178,6 +210,19 @@ const progression: CharacterProgression = {
 };
 
 describe("selectionStructure", () => {
+  it("builds mother tongue language data from civilization and keeps optional language choices separate", () => {
+    const summary = buildChargenMotherTongueSummary({
+      content,
+      civilizationId: "glantri_civ",
+      educationLevel: 9
+    });
+
+    expect(summary.displayLabel).toBe("Language (Common)");
+    expect(summary.languageName).toBe("Common");
+    expect(summary.optionalLanguageNames).toEqual(["Old Common"]);
+    expect(summary.startingLevel).toBe(11);
+  });
+
   it("derives baseline languages from society", () => {
     const summary = buildChargenLanguageSelectionSummary({
       content,
