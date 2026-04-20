@@ -762,17 +762,24 @@ const civilizations = CIVILIZATION_SEED_DEFINITIONS.map((civilization) => ({
   linkedSocietyLevel: societyLevelById.get(civilization.linkedSocietyId) ?? 1
 }));
 
-const societyBandSkillAccess = [
-  {
-    linkedSocietyLevel: 1,
+const literacyBandsBySocietyLevel = new Map([
+  [3, [4]],
+  [4, [3, 4]],
+  [5, [2, 3, 4]],
+  [6, [1, 2, 3, 4]]
+]);
+
+const societyBandSkillAccess = societies.flatMap((society) =>
+  (literacyBandsBySocietyLevel.get(society.societyLevel) ?? []).map((socialBand) => ({
+    linkedSocietyLevel: society.societyLevel,
     notes:
       "Foundational access only: Literacy is available for main skill-point spending from this society-band slot, not granted for free.",
     skillId: "literacy",
-    socialBand: 1,
-    societyId: "forager_ritual_tribal",
-    societyName: "Forager / ritual-tribal"
-  }
-];
+    socialBand,
+    societyId: society.id,
+    societyName: society.name
+  }))
+);
 
 const seed = {
   civilizations,

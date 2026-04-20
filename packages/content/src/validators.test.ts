@@ -99,6 +99,21 @@ describe("validateCanonicalContent", () => {
     );
   });
 
+  it("fails on duplicate society-band skill access rows", () => {
+    const duplicateEntry = defaultCanonicalContent.societyBandSkillAccess[0];
+    const invalidContent = {
+      ...defaultCanonicalContent,
+      societyBandSkillAccess: [
+        ...defaultCanonicalContent.societyBandSkillAccess,
+        duplicateEntry
+      ]
+    };
+
+    expect(() => validateCanonicalContent(invalidContent)).toThrow(
+      `Duplicate society-band skill access row "${duplicateEntry?.societyId}:L${duplicateEntry?.socialBand}:${duplicateEntry?.skillId}".`
+    );
+  });
+
   it("fails clearly when a society is missing a universal band", () => {
     const missingBandContent = {
       ...defaultCanonicalContent,

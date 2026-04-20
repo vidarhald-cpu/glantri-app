@@ -224,6 +224,7 @@ function validateSocietyBandSkillAccess(content: CanonicalContent): CanonicalCon
   }
 
   const issues: string[] = [];
+  const seenEntryKeys = new Set<string>();
   const skillIds = new Set(content.skills.map((skill) => skill.id));
   const societiesById = new Map(content.societies.map((society) => [society.id, society]));
   const societyBandRows = new Set(
@@ -231,6 +232,17 @@ function validateSocietyBandSkillAccess(content: CanonicalContent): CanonicalCon
   );
 
   for (const entry of content.societyBandSkillAccess) {
+    const entryKey = `${entry.societyId}:${entry.socialBand}:${entry.skillId}`;
+
+    if (seenEntryKeys.has(entryKey)) {
+      issues.push(
+        `Duplicate society-band skill access row "${entry.societyId}:L${entry.socialBand}:${entry.skillId}".`
+      );
+      continue;
+    }
+
+    seenEntryKeys.add(entryKey);
+
     if (!skillIds.has(entry.skillId)) {
       issues.push(
         `Society-band skill access "${entry.societyId}:L${entry.socialBand}:${entry.skillId}" references unknown skill "${entry.skillId}".`

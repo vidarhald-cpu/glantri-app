@@ -9836,12 +9836,156 @@ export const generatedRepoLocalGlantriSeed = {
   ],
   "societyBandSkillAccess": [
     {
-      "linkedSocietyLevel": 1,
+      "linkedSocietyLevel": 3,
+      "notes": "Foundational access only: Literacy is available for main skill-point spending from this society-band slot, not granted for free.",
+      "skillId": "literacy",
+      "socialBand": 4,
+      "societyId": "bronze_age_palace_state",
+      "societyName": "Bronze Age palace state"
+    },
+    {
+      "linkedSocietyLevel": 3,
+      "notes": "Foundational access only: Literacy is available for main skill-point spending from this society-band slot, not granted for free.",
+      "skillId": "literacy",
+      "socialBand": 4,
+      "societyId": "temple_state_literate",
+      "societyName": "Temple-state / early literate agrarian state"
+    },
+    {
+      "linkedSocietyLevel": 4,
+      "notes": "Foundational access only: Literacy is available for main skill-point spending from this society-band slot, not granted for free.",
+      "skillId": "literacy",
+      "socialBand": 3,
+      "societyId": "imperial_agrarian_bureaucracy",
+      "societyName": "Imperial agrarian bureaucracy"
+    },
+    {
+      "linkedSocietyLevel": 4,
+      "notes": "Foundational access only: Literacy is available for main skill-point spending from this society-band slot, not granted for free.",
+      "skillId": "literacy",
+      "socialBand": 4,
+      "societyId": "imperial_agrarian_bureaucracy",
+      "societyName": "Imperial agrarian bureaucracy"
+    },
+    {
+      "linkedSocietyLevel": 4,
+      "notes": "Foundational access only: Literacy is available for main skill-point spending from this society-band slot, not granted for free.",
+      "skillId": "literacy",
+      "socialBand": 3,
+      "societyId": "feudal_manorial_kingdom",
+      "societyName": "Feudal / manorial kingdom"
+    },
+    {
+      "linkedSocietyLevel": 4,
+      "notes": "Foundational access only: Literacy is available for main skill-point spending from this society-band slot, not granted for free.",
+      "skillId": "literacy",
+      "socialBand": 4,
+      "societyId": "feudal_manorial_kingdom",
+      "societyName": "Feudal / manorial kingdom"
+    },
+    {
+      "linkedSocietyLevel": 5,
+      "notes": "Foundational access only: Literacy is available for main skill-point spending from this society-band slot, not granted for free.",
+      "skillId": "literacy",
+      "socialBand": 2,
+      "societyId": "classical_polis_city_state",
+      "societyName": "Classical polis / city-state civilization"
+    },
+    {
+      "linkedSocietyLevel": 5,
+      "notes": "Foundational access only: Literacy is available for main skill-point spending from this society-band slot, not granted for free.",
+      "skillId": "literacy",
+      "socialBand": 3,
+      "societyId": "classical_polis_city_state",
+      "societyName": "Classical polis / city-state civilization"
+    },
+    {
+      "linkedSocietyLevel": 5,
+      "notes": "Foundational access only: Literacy is available for main skill-point spending from this society-band slot, not granted for free.",
+      "skillId": "literacy",
+      "socialBand": 4,
+      "societyId": "classical_polis_city_state",
+      "societyName": "Classical polis / city-state civilization"
+    },
+    {
+      "linkedSocietyLevel": 5,
+      "notes": "Foundational access only: Literacy is available for main skill-point spending from this society-band slot, not granted for free.",
+      "skillId": "literacy",
+      "socialBand": 2,
+      "societyId": "imperial_classical_high_civ",
+      "societyName": "Imperial classical / Hellenistic-Roman high civilization"
+    },
+    {
+      "linkedSocietyLevel": 5,
+      "notes": "Foundational access only: Literacy is available for main skill-point spending from this society-band slot, not granted for free.",
+      "skillId": "literacy",
+      "socialBand": 3,
+      "societyId": "imperial_classical_high_civ",
+      "societyName": "Imperial classical / Hellenistic-Roman high civilization"
+    },
+    {
+      "linkedSocietyLevel": 5,
+      "notes": "Foundational access only: Literacy is available for main skill-point spending from this society-band slot, not granted for free.",
+      "skillId": "literacy",
+      "socialBand": 4,
+      "societyId": "imperial_classical_high_civ",
+      "societyName": "Imperial classical / Hellenistic-Roman high civilization"
+    },
+    {
+      "linkedSocietyLevel": 5,
+      "notes": "Foundational access only: Literacy is available for main skill-point spending from this society-band slot, not granted for free.",
+      "skillId": "literacy",
+      "socialBand": 2,
+      "societyId": "court_bureaucratic_empire",
+      "societyName": "Court-bureaucratic high medieval empire"
+    },
+    {
+      "linkedSocietyLevel": 5,
+      "notes": "Foundational access only: Literacy is available for main skill-point spending from this society-band slot, not granted for free.",
+      "skillId": "literacy",
+      "socialBand": 3,
+      "societyId": "court_bureaucratic_empire",
+      "societyName": "Court-bureaucratic high medieval empire"
+    },
+    {
+      "linkedSocietyLevel": 5,
+      "notes": "Foundational access only: Literacy is available for main skill-point spending from this society-band slot, not granted for free.",
+      "skillId": "literacy",
+      "socialBand": 4,
+      "societyId": "court_bureaucratic_empire",
+      "societyName": "Court-bureaucratic high medieval empire"
+    },
+    {
+      "linkedSocietyLevel": 6,
       "notes": "Foundational access only: Literacy is available for main skill-point spending from this society-band slot, not granted for free.",
       "skillId": "literacy",
       "socialBand": 1,
-      "societyId": "forager_ritual_tribal",
-      "societyName": "Forager / ritual-tribal"
+      "societyId": "renaissance_city_state",
+      "societyName": "Commercial renaissance city-state / principality"
+    },
+    {
+      "linkedSocietyLevel": 6,
+      "notes": "Foundational access only: Literacy is available for main skill-point spending from this society-band slot, not granted for free.",
+      "skillId": "literacy",
+      "socialBand": 2,
+      "societyId": "renaissance_city_state",
+      "societyName": "Commercial renaissance city-state / principality"
+    },
+    {
+      "linkedSocietyLevel": 6,
+      "notes": "Foundational access only: Literacy is available for main skill-point spending from this society-band slot, not granted for free.",
+      "skillId": "literacy",
+      "socialBand": 3,
+      "societyId": "renaissance_city_state",
+      "societyName": "Commercial renaissance city-state / principality"
+    },
+    {
+      "linkedSocietyLevel": 6,
+      "notes": "Foundational access only: Literacy is available for main skill-point spending from this society-band slot, not granted for free.",
+      "skillId": "literacy",
+      "socialBand": 4,
+      "societyId": "renaissance_city_state",
+      "societyName": "Commercial renaissance city-state / principality"
     }
   ],
   "societies": [
