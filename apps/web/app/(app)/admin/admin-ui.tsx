@@ -120,6 +120,11 @@ export const adminNavGroups: AdminNavGroup[] = [
         label: "Documents"
       },
       {
+        description: "Inspect the canonical civilization layer that links named cultures to society models and language names.",
+        href: "/admin/civilizations",
+        label: "Civilizations"
+      },
+      {
         description: "Read the canonical Glantri app terminology definitions and usage guidance.",
         href: "/admin/glantri-terms",
         label: "Glantri App Terms"

@@ -106,6 +106,182 @@ const PLAYER_FACING_SKILL_CATEGORY_BY_GROUP_ID = {
   wilderness_group: "fieldcraft"
 };
 
+const CIVILIZATION_SEED_DEFINITIONS = [
+  {
+    historicalAnalogue: "Early medieval Scandinavia / Norse jarldoms",
+    id: "scandia",
+    linkedSocietyId: "feudal_manorial_kingdom",
+    name: "Scandia",
+    notes: "Glantri-facing northern culture analogue with sea raiding, thing-style assemblies, and carved runic literacy.",
+    period: "c. 800-1000 CE",
+    shortDescription:
+      "Sea-going northern kingdom culture of jarls, oath-bands, and coastal trade.",
+    spokenLanguageName: "Scandian",
+    writtenLanguageName: "Runic Scandian"
+  },
+  {
+    historicalAnalogue: "Italian Renaissance city-states",
+    id: "iest",
+    linkedSocietyId: "renaissance_city_state",
+    name: "Iest",
+    notes: "Glantri-facing mercantile principality analogue centered on guild money, diplomacy, and urban courts.",
+    period: "c. 1300-1500 CE",
+    shortDescription:
+      "Merchant-principality culture of bankers, guild captains, and walled-city politics.",
+    spokenLanguageName: "Iestian",
+    writtenLanguageName: "Iestian chancery"
+  },
+  {
+    historicalAnalogue: "Roman imperial high civilization",
+    id: "thyatis",
+    linkedSocietyId: "imperial_classical_high_civ",
+    name: "Thyatis",
+    notes: "Glantri-facing Roman analogue where Common is the everyday imperial language of administration and soldiery.",
+    period: "c. 100 BCE-200 CE",
+    shortDescription:
+      "Imperial civic culture of roads, legions, bureaucracy, and metropolitan law.",
+    spokenLanguageName: "Common",
+    writtenLanguageName: "Classical Thyatian"
+  },
+  {
+    historicalAnalogue: "Classical Greek polis culture",
+    id: "scyria",
+    linkedSocietyId: "classical_polis_city_state",
+    name: "Scyria",
+    notes: "Glantri-facing Greek city-state analogue with rhetoric, civic competition, and maritime urbanism.",
+    period: "c. 500-250 BCE",
+    shortDescription:
+      "Urban polis culture of debate, hoplite citizenship, and maritime trade.",
+    spokenLanguageName: "Old Common",
+    writtenLanguageName: "Classical Scyrian"
+  },
+  {
+    historicalAnalogue: "Feudal western and central Europe",
+    id: "glantri",
+    linkedSocietyId: "feudal_manorial_kingdom",
+    name: "Glantri",
+    notes: "Glantri-facing core feudal analogue with knightly households, castles, and landed obligations.",
+    period: "c. 800-1100 CE",
+    shortDescription:
+      "Feudal landed culture of noble households, retainers, and local obligations.",
+    spokenLanguageName: "Glantrian",
+    writtenLanguageName: "High Glantrian"
+  },
+  {
+    historicalAnalogue: "Medieval Rus and eastern Christian principalities",
+    id: "olog",
+    linkedSocietyId: "court_bureaucratic_empire",
+    name: "Olog",
+    notes: "Glantri-facing eastern court culture analogue with princely service hierarchies and scribal religion.",
+    period: "c. 1100-1300 CE",
+    shortDescription:
+      "Eastern court culture of princely households, tribute, and church-backed literacy.",
+    spokenLanguageName: "Ologian",
+    writtenLanguageName: "Church Ologian"
+  },
+  {
+    historicalAnalogue: "Pre-Hellenistic Egypt",
+    id: "mogreb",
+    linkedSocietyId: "temple_state_literate",
+    name: "Mogreb",
+    notes: "Glantri-facing Nile temple culture analogue built on sacred estates, scribes, and river administration.",
+    period: "c. 1500-400 BCE",
+    shortDescription:
+      "River-valley temple civilization with sacred estates, priests, and early recordkeeping.",
+    spokenLanguageName: "Mogrebi",
+    writtenLanguageName: "Sacred Mogrebi"
+  },
+  {
+    historicalAnalogue: "Sub-Saharan court kingdom",
+    id: "nkolo",
+    linkedSocietyId: "imperial_agrarian_bureaucracy",
+    name: "N'Kolo",
+    notes: "Glantri-facing sub-Saharan royal culture analogue with court hierarchy, trade routes, and dynastic authority.",
+    period: "c. 900-1100 CE",
+    shortDescription:
+      "Court kingdom culture of royal households, regional trade, and sacred kingship.",
+    spokenLanguageName: "N'kolian",
+    writtenLanguageName: "Royal N'kolian"
+  },
+  {
+    historicalAnalogue: "Southern African San forager bands",
+    id: "san_forager_bands",
+    linkedSocietyId: "forager_ritual_tribal",
+    name: "San Forager Bands",
+    period: "Pre-state to early modern continuity",
+    shortDescription:
+      "Ritual-forager culture of small kin bands, seasonal movement, and oral spiritual practice.",
+    spokenLanguageName: "Tuu",
+    writtenLanguageName: null
+  },
+  {
+    historicalAnalogue: "Scythian and related steppe nomads",
+    id: "scythians",
+    linkedSocietyId: "pastoral_clan_nomadic",
+    name: "Scythians",
+    period: "c. 700-200 BCE",
+    shortDescription:
+      "Mounted pastoral-warrior culture organized through clans, mobile camps, and raiding confederations.",
+    spokenLanguageName: "Scythian",
+    writtenLanguageName: null
+  },
+  {
+    historicalAnalogue: "Latial and early Italic chiefdoms",
+    id: "latial_chiefdoms",
+    linkedSocietyId: "early_agrarian_proto_state",
+    name: "Latial Chiefdoms",
+    period: "c. 900-600 BCE",
+    shortDescription:
+      "Early agrarian hill-and-valley chiefdom culture with clan elites, fortified villages, and emerging civic centers.",
+    spokenLanguageName: "Old Latin",
+    writtenLanguageName: "Old Italic"
+  },
+  {
+    historicalAnalogue: "Mycenaean Greece",
+    id: "mycenaean_greece",
+    linkedSocietyId: "bronze_age_palace_state",
+    name: "Mycenaean Greece",
+    period: "c. 1600-1100 BCE",
+    shortDescription:
+      "Palace-centered bronze age culture with elite households, redistribution, and fortified royal seats.",
+    spokenLanguageName: "Mycenaean Greek",
+    writtenLanguageName: "Linear B"
+  },
+  {
+    historicalAnalogue: "Sumerian city-states",
+    id: "sumer",
+    linkedSocietyId: "temple_state_literate",
+    name: "Sumer",
+    period: "c. 3000-2000 BCE",
+    shortDescription:
+      "Temple-centered literate agrarian civilization with scribes, canal management, and sacred urban estates.",
+    spokenLanguageName: "Sumerian",
+    writtenLanguageName: "Cuneiform"
+  },
+  {
+    historicalAnalogue: "Achaemenid Persian imperial administration",
+    id: "achaemenid_persia",
+    linkedSocietyId: "imperial_agrarian_bureaucracy",
+    name: "Achaemenid Persia",
+    period: "c. 550-330 BCE",
+    shortDescription:
+      "Imperial agrarian bureaucracy with satrapies, royal roads, scribal governance, and layered provincial rule.",
+    spokenLanguageName: "Old Persian",
+    writtenLanguageName: "Imperial Aramaic"
+  },
+  {
+    historicalAnalogue: "Byzantine Empire",
+    id: "byzantine_empire",
+    linkedSocietyId: "court_bureaucratic_empire",
+    name: "Byzantine Empire",
+    period: "c. 700-1200 CE",
+    shortDescription:
+      "Court-bureaucratic imperial culture of palace service, provincial administration, and orthodox scribal institutions.",
+    spokenLanguageName: "Medieval Greek",
+    writtenLanguageName: "Byzantine Greek"
+  }
+];
+
 function parseJsonLike(value, fallback = []) {
   if (Array.isArray(value)) {
     return value;
@@ -469,7 +645,17 @@ const societies = rawBundle.societyTypes.map((society) => ({
   societyLevel: Math.max(1, Math.min(6, Number(society.level || 1)))
 }));
 
+const societyLevelById = new Map(
+  societies.map((society) => [society.id, society.societyLevel])
+);
+
+const civilizations = CIVILIZATION_SEED_DEFINITIONS.map((civilization) => ({
+  ...civilization,
+  linkedSocietyLevel: societyLevelById.get(civilization.linkedSocietyId) ?? 1
+}));
+
 const seed = {
+  civilizations,
   languages,
   skillGroups,
   skills,

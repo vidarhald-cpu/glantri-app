@@ -96,6 +96,38 @@ function validateLanguages(content: CanonicalContent): CanonicalContent {
   return content;
 }
 
+function validateCivilizations(content: CanonicalContent): CanonicalContent {
+  if (content.civilizations.length === 0) {
+    return content;
+  }
+
+  const societiesById = new Map(content.societies.map((society) => [society.id, society]));
+  const issues: string[] = [];
+
+  for (const civilization of content.civilizations) {
+    const linkedSociety = societiesById.get(civilization.linkedSocietyId);
+
+    if (!linkedSociety) {
+      issues.push(
+        `Civilization "${civilization.name}" (${civilization.id}) references unknown linked society "${civilization.linkedSocietyId}".`
+      );
+      continue;
+    }
+
+    if (linkedSociety.societyLevel !== civilization.linkedSocietyLevel) {
+      issues.push(
+        `Civilization "${civilization.name}" (${civilization.id}) uses linked society level ${civilization.linkedSocietyLevel}, but linked society "${linkedSociety.name}" (${linkedSociety.id}) is level ${linkedSociety.societyLevel}.`
+      );
+    }
+  }
+
+  if (issues.length > 0) {
+    throw new Error(`Invalid civilization content:\n${issues.join("\n")}`);
+  }
+
+  return content;
+}
+
 function getSkillDependencies(skill: CanonicalContent["skills"][number]) {
   const strongestDependencyBySkillId = new Map<
     string,
@@ -392,9 +424,22 @@ function validateProfessionRelationships(content: CanonicalContent): CanonicalCo
 }
 
 export function validateCanonicalContent(input: unknown): CanonicalContent {
+  const parsedContent = canonicalContentSchema.parse(input);
+  const normalizedContent = {
+    ...parsedContent,
+    civilizations:
+      typeof input === "object" &&
+      input !== null &&
+      Array.isArray((input as { civilizations?: unknown[] }).civilizations)
+        ? ((input as { civilizations: CanonicalContent["civilizations"] }).civilizations ?? [])
+        : parsedContent.civilizations ?? []
+  } satisfies CanonicalContent;
+
   return validateProfessionRelationships(
     validateSkillRelationships(
-      validateLanguages(validateSocieties(validateSocietyBandRows(canonicalContentSchema.parse(input))))
+      validateCivilizations(
+        validateLanguages(validateSocieties(validateSocietyBandRows(normalizedContent)))
+      )
     )
   );
 }
