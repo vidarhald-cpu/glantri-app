@@ -31,11 +31,13 @@ import {
 } from "@glantri/domain";
 import {
   applyProfessionGrants,
+  buildChargenLanguageSelectionSummary,
   applyChargenStatBuild,
   applyChargenStatExchange,
   allocateChargenPoint,
   buildResolvedProfile,
   buildChargenDraftView,
+  buildChargenSelectableSkillSummary,
   buildChargenSkillAccessSummary,
   createChargenStatAdjustmentState,
   createChargenProgression,
@@ -739,6 +741,34 @@ export default function ChargenWizard() {
     societyId: selectedSocietyId,
     societyLevel: selectedSocietyBand
   });
+  const languageSelectionSummary = buildChargenLanguageSelectionSummary({
+    content,
+    progression,
+    societyId: selectedSocietyId
+  });
+  const selectableSkillSummary = buildChargenSelectableSkillSummary({
+    content,
+    professionId: selectedProfessionId,
+    progression,
+    societyId: selectedSocietyId,
+    societyLevel: selectedSocietyBand
+  });
+  const selectedSelectableSkillIdSet = new Set(selectableSkillSummary.selectedSkillIds);
+  const groupedCoreSkillChoiceRows = groupRowsBySkillType(
+    selectableSkillSummary.coreSkills.map((skill) => ({
+      skill,
+      skillName: skill.name,
+      skillType: getPlayerFacingSkillBucket(skill)
+    }))
+  );
+  const groupedSelectableSkillChoiceRows = groupRowsBySkillType(
+    selectableSkillSummary.selectableSkills.map((skill) => ({
+      isSelected: selectedSelectableSkillIdSet.has(skill.id),
+      skill,
+      skillName: skill.name,
+      skillType: getPlayerFacingSkillBucket(skill)
+    }))
+  );
   const skillAccess =
     selectedProfessionId && selectedSocietyId && selectedSocietyBand !== undefined
       ? buildChargenSkillAccessSummary({
@@ -1137,6 +1167,38 @@ export default function ChargenWizard() {
     setRowActionFeedback({});
     setExpandedSkillDetails([]);
     setFeedback(["Profession access loaded. Skill allocation, education, and review are ready."]);
+  }
+
+  function handleToggleSelectableSkillChoice(skillId: string) {
+    setProgression((current) => {
+      const selectableSummary = buildChargenSelectableSkillSummary({
+        content,
+        professionId: selectedProfessionId,
+        progression: current,
+        societyId: selectedSocietyId,
+        societyLevel: selectedSocietyBand
+      });
+
+      if (!selectableSummary.selectableSkillIds.includes(skillId)) {
+        return current;
+      }
+
+      const selectedSkillIds = new Set(current.chargenSelections?.selectedSkillIds ?? []);
+
+      if (selectedSkillIds.has(skillId)) {
+        selectedSkillIds.delete(skillId);
+      } else {
+        selectedSkillIds.add(skillId);
+      }
+
+      return {
+        ...current,
+        chargenSelections: {
+          selectedLanguageIds: current.chargenSelections?.selectedLanguageIds ?? [],
+          selectedSkillIds: [...selectedSkillIds]
+        }
+      };
+    });
   }
 
   function toggleProfessionPreview(professionId: string) {
@@ -2497,6 +2559,175 @@ export default function ChargenWizard() {
           opacity: selectedProfession ? 1 : 0.6
         }}
       >
+        <h2 style={{ margin: 0 }}>6. Languages and skill choices</h2>
+        <div style={{ fontSize: "0.95rem" }}>
+          Baseline languages are derived from society. Selectable skills mark the explicit skills
+          you want to carry forward from chargen as player choices, while point spending still
+          happens in the allocation sections below.
+        </div>
+        <div
+          style={{
+            display: "grid",
+            gap: "1rem",
+            gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))"
+          }}
+        >
+          <div
+            style={{
+              background: "#f6f5ef",
+              border: "1px solid #d9ddd8",
+              borderRadius: 12,
+              display: "grid",
+              gap: "0.75rem",
+              padding: "1rem"
+            }}
+          >
+            <div style={{ display: "grid", gap: "0.2rem" }}>
+              <strong>Languages</strong>
+              <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
+                Chargen now stores selected language ids structurally.
+              </div>
+            </div>
+            {languageSelectionSummary.selectedLanguages.length > 0 ? (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+                {languageSelectionSummary.selectedLanguages.map((language) => (
+                  <span key={language.id} style={getBadgeStyle()}>
+                    {language.name}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
+                Select a society to derive baseline languages.
+              </div>
+            )}
+            <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
+              {languageSelectionSummary.selectableLanguageIds.length > 0
+                ? "Additional language choices are available for this build."
+                : "Current content only supports baseline society languages cleanly, so no extra language choices are offered yet."}
+            </div>
+          </div>
+
+          <div
+            style={{
+              background: "#f6f5ef",
+              border: "1px solid #d9ddd8",
+              borderRadius: 12,
+              display: "grid",
+              gap: "0.75rem",
+              padding: "1rem"
+            }}
+          >
+            <div style={{ display: "grid", gap: "0.2rem" }}>
+              <strong>Chargen skill structure</strong>
+              <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
+                Core skills come from the profession frame. Selectable skills are the explicit
+                player-choice pool.
+              </div>
+            </div>
+            <div style={{ display: "grid", gap: "0.35rem" }}>
+              <div>Core skills: {selectableSkillSummary.coreSkillIds.length}</div>
+              <div>Selectable pool: {selectableSkillSummary.selectableSkillIds.length}</div>
+              <div>Chosen skills: {selectableSkillSummary.selectedSkillIds.length}</div>
+            </div>
+            {selectableSkillSummary.selectedSkills.length > 0 ? (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+                {selectableSkillSummary.selectedSkills.map((skill) => (
+                  <span key={skill.id} style={getBadgeStyle()}>
+                    {skill.name}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
+                No selectable skills marked yet.
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div
+          style={{
+            background: "#f6f5ef",
+            border: "1px solid #d9ddd8",
+            borderRadius: 12,
+            display: "grid",
+            gap: "0.85rem",
+            padding: "1rem"
+          }}
+        >
+          <div style={{ display: "grid", gap: "0.35rem" }}>
+            <strong>Core skills</strong>
+            {groupedCoreSkillChoiceRows.length > 0 ? (
+              groupedCoreSkillChoiceRows.map((group) => (
+                <div key={`core-${group.bucketId}`} style={{ display: "grid", gap: "0.35rem" }}>
+                  <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>{group.label}</div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+                    {group.rows.map((row) => (
+                      <span key={row.skill.id} style={getBadgeStyle({ muted: true })}>
+                        {row.skill.name}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
+                Select a profession to derive core skills.
+              </div>
+            )}
+          </div>
+
+          <div style={{ display: "grid", gap: "0.5rem" }}>
+            <strong>Selectable skill pool</strong>
+            {groupedSelectableSkillChoiceRows.length > 0 ? (
+              groupedSelectableSkillChoiceRows.map((group) => (
+                <div
+                  key={`selectable-${group.bucketId}`}
+                  style={{
+                    borderTop: "1px solid #e7e2d7",
+                    display: "grid",
+                    gap: "0.5rem",
+                    paddingTop: "0.75rem"
+                  }}
+                >
+                  <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>{group.label}</div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+                    {group.rows.map((row) => (
+                      <button
+                        key={row.skill.id}
+                        onClick={() => handleToggleSelectableSkillChoice(row.skill.id)}
+                        style={{
+                          background: row.isSelected ? "#ece8da" : "#fff",
+                          border: row.isSelected ? "1px solid #8b7345" : "1px solid #d9ddd8",
+                          borderRadius: 999,
+                          cursor: "pointer",
+                          padding: "0.4rem 0.75rem"
+                        }}
+                        type="button"
+                      >
+                        {row.skill.name} • Type {row.skill.category}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
+                No selectable skill pool is available until society and profession are chosen.
+              </div>
+            )}
+          </div>
+        </div>
+      </section>
+
+      <section
+        style={{
+          display: "grid",
+          gap: "0.75rem",
+          opacity: selectedProfession ? 1 : 0.6
+        }}
+      >
         <div style={{ display: "grid", gap: "1rem" }}>
           <div
             style={{
@@ -2533,7 +2764,7 @@ export default function ChargenWizard() {
               opacity: selectedProfession ? 1 : 0.6
             }}
           >
-        <h2 style={{ margin: 0 }}>5. Skill allocation</h2>
+        <h2 style={{ margin: 0 }}>7. Skill allocation</h2>
         <div style={{ fontSize: "0.95rem" }}>
           Normal access is what you can buy directly with ordinary points. Favored package preview
           from the profession step is guidance only. Other skills sit outside normal access and use
@@ -2865,7 +3096,7 @@ export default function ChargenWizard() {
               padding: "1rem"
             }}
           >
-        <h2 style={{ margin: 0 }}>6. Specializations</h2>
+        <h2 style={{ margin: 0 }}>8. Specializations</h2>
 
         <div style={{ fontSize: "0.95rem" }}>
           Specializations use flexible points and are gated by the parent skill. The default list
@@ -3043,7 +3274,7 @@ export default function ChargenWizard() {
               padding: "1rem"
             }}
           >
-        <h2 style={{ margin: 0 }}>7. Other skills</h2>
+        <h2 style={{ margin: 0 }}>9. Other skills</h2>
         <div style={{ display: "grid", gap: "0.75rem" }}>
             <div
               style={{
@@ -3147,7 +3378,7 @@ export default function ChargenWizard() {
           padding: "1rem"
         }}
       >
-        <h2 style={{ margin: 0 }}>8. Skills table</h2>
+        <h2 style={{ margin: 0 }}>10. Skills table</h2>
 
         {groupedPlayerSkillTableRows.length > 0 ? (
           <div
@@ -3245,7 +3476,7 @@ export default function ChargenWizard() {
           padding: "1rem"
         }}
       >
-        <h2 style={{ margin: 0 }}>9. Review summary</h2>
+        <h2 style={{ margin: 0 }}>11. Review summary</h2>
 
         <div
           style={{
@@ -3270,8 +3501,17 @@ export default function ChargenWizard() {
             <div>Social band: {selectedSocialBand ?? "Not selected"}</div>
             <div>Social class: {selectedSocietyAccess?.socialClass ?? "Not selected"}</div>
             <div>Profession: {selectedProfession?.name ?? "Not selected"}</div>
+            <div>
+              Languages:{" "}
+              {languageSelectionSummary.selectedLanguages.length > 0
+                ? languageSelectionSummary.selectedLanguages.map((language) => language.name).join(", ")
+                : "None"}
+            </div>
             <div>Skill groups: {draftView.groups.length}</div>
             <div>Skills: {draftView.skills.length}</div>
+            <div>Core skills: {selectableSkillSummary.coreSkillIds.length}</div>
+            <div>Selectable pool: {selectableSkillSummary.selectableSkillIds.length}</div>
+            <div>Chosen skills: {selectableSkillSummary.selectedSkillIds.length}</div>
             <div>Specializations: {draftView.specializations.length}</div>
           </div>
 
@@ -3314,7 +3554,7 @@ export default function ChargenWizard() {
           padding: "1rem"
         }}
       >
-        <h2 style={{ margin: 0 }}>10. Finalize character</h2>
+        <h2 style={{ margin: 0 }}>12. Finalize character</h2>
         <div style={{ fontSize: "0.95rem" }}>
           Confirm the name and create the local character record. The signed-in player is stored as
           the creator for attribution.
@@ -3368,7 +3608,7 @@ export default function ChargenWizard() {
           padding: "1rem"
         }}
       >
-        <h2 style={{ margin: 0 }}>11. Saved local characters</h2>
+        <h2 style={{ margin: 0 }}>13. Saved local characters</h2>
         {savedCharacters.length > 0 ? (
           savedCharacters.map((character) => (
             <div

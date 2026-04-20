@@ -1,11 +1,13 @@
 import type {
   CharacterBuild,
+  CharacterChargenSelections,
   CharacterProgression,
   CharacterSkill,
   CharacterSkillGroup,
   CharacterSpecialization,
   ChargenMode,
   GlantriCharacteristicKey,
+  LanguageDefinition,
   ProfessionDefinition,
   ProfessionFamilyDefinition,
   ProfessionSkillMap,
@@ -13,6 +15,7 @@ import type {
   SkillDefinition,
   SkillGroupDefinition,
   SkillSpecialization,
+  SocietyDefinition,
   SocietyLevelAccess
 } from "@glantri/domain";
 import { getSkillGroupIds } from "@glantri/domain";
@@ -24,6 +27,10 @@ import { calculateSpecializationLevel } from "../skills/calculateSpecializationL
 import { evaluateSkillSelection } from "../skills/evaluateSkillSelection";
 import { selectBestSkillGroupContribution } from "../skills/selectBestSkillGroupContribution";
 import { STANDARD_CHARGEN_METHOD_POLICY } from "./policy";
+import {
+  buildChargenLanguageSelectionSummary,
+  buildChargenSelectableSkillSummary
+} from "./selectionStructure";
 import { getResolvedProfileStats } from "./statResolution";
 
 const GROUP_POINT_COST = 4;
@@ -34,11 +41,13 @@ const EXISTING_SPECIALIZATION_COST = 2;
 const LITERACY_SKILL_ID = "literacy";
 
 interface CanonicalContentShape {
+  languages?: LanguageDefinition[];
   professionFamilies: ProfessionFamilyDefinition[];
   professionSkills: ProfessionSkillMap[];
   professions: ProfessionDefinition[];
   skillGroups: SkillGroupDefinition[];
   skills: SkillDefinition[];
+  societies?: SocietyDefinition[];
   societyLevels: SocietyLevelAccess[];
   specializations: SkillSpecialization[];
 }
@@ -260,9 +269,15 @@ function normalizeSpecialization(
 }
 
 function recalculateProgression(progression: CharacterProgression): CharacterProgression {
+  const chargenSelections: CharacterChargenSelections = {
+    selectedLanguageIds: [...new Set(progression.chargenSelections?.selectedLanguageIds ?? [])],
+    selectedSkillIds: [...new Set(progression.chargenSelections?.selectedSkillIds ?? [])]
+  };
+
   return {
     ...progression,
     chargenMode: progression.chargenMode ?? "standard",
+    chargenSelections,
     educationPoints: progression.educationPoints ?? 0,
     primaryPoolSpent: progression.primaryPoolSpent ?? 0,
     primaryPoolTotal:
@@ -1853,6 +1868,22 @@ export function finalizeChargenDraft(
 
   const progression = recalculateProgression(structuredClone(input.progression));
   progression.educationPoints = review.draftView.education.theoreticalSkillCount;
+  const languageSummary = buildChargenLanguageSelectionSummary({
+    content: input.content,
+    progression,
+    societyId: input.societyId
+  });
+  const selectableSkillSummary = buildChargenSelectableSkillSummary({
+    content: input.content,
+    professionId: input.professionId,
+    progression,
+    societyId: input.societyId,
+    societyLevel: input.societyLevel
+  });
+  progression.chargenSelections = {
+    selectedLanguageIds: languageSummary.selectedLanguageIds,
+    selectedSkillIds: selectableSkillSummary.selectedSkillIds
+  };
 
   const profession = getProfessionById(input.content, input.professionId);
   const build: CharacterBuild = {

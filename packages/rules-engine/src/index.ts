@@ -9,6 +9,7 @@ export * from "./advancement/advanceCharacter";
 export * from "./chargen/generateProfiles";
 export * from "./chargen/policy";
 export * from "./chargen/primaryAllocation";
+export * from "./chargen/selectionStructure";
 export * from "./chargen/selectProfile";
 export * from "./chargen/statResolution";
 export * from "./chargen/summarizeRolledProfile";
