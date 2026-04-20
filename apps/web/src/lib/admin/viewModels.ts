@@ -19,6 +19,12 @@ import {
 export interface SkillAdminRow {
   characteristics: string;
   dependencies: string[];
+  foundationalAccessBandsSummary: string;
+  foundationalAccessSlots: Array<{
+    accessBand: number;
+    canonicalSocietyLevel?: number;
+    societyName: string;
+  }>;
   groupNames: string[];
   id: string;
   name: string;
@@ -164,6 +170,7 @@ export interface SocietyAdminRow {
   glantriExamples?: string;
   historicalReference?: string;
   id: string;
+  literacyAccessSummary: string;
   notes: string;
   professionFans: Array<{
     coreGroups: Array<{
@@ -304,6 +311,34 @@ function getDieRange(level: number): string {
     default:
       return "Custom";
   }
+}
+
+function summarizeAccessBands(bands: number[]): string {
+  if (bands.length === 0) {
+    return "—";
+  }
+
+  const uniqueBands = [...new Set(bands)].sort((left, right) => left - right);
+  const ranges: string[] = [];
+  let rangeStart = uniqueBands[0] ?? 0;
+  let previous = uniqueBands[0] ?? 0;
+
+  for (let index = 1; index < uniqueBands.length; index += 1) {
+    const current = uniqueBands[index];
+
+    if (current === previous + 1) {
+      previous = current;
+      continue;
+    }
+
+    ranges.push(rangeStart === previous ? `L${rangeStart}` : `L${rangeStart}-L${previous}`);
+    rangeStart = current ?? previous;
+    previous = current ?? previous;
+  }
+
+  ranges.push(rangeStart === previous ? `L${rangeStart}` : `L${rangeStart}-L${previous}`);
+
+  return ranges.join(", ");
 }
 
 function getAuditSeverityRank(severity: AuditSeverity): number {
@@ -490,6 +525,19 @@ export function buildSkillAdminRows(content: CanonicalContent): SkillAdminRow[] 
           .filter((professionPackage) => professionPackage.reachableSkillIds.includes(skill.id))
           .map((professionPackage) => professionPackage.name)
       );
+      const foundationalAccessSlots = content.societyBandSkillAccess
+        .filter((entry) => entry.skillId === skill.id)
+        .map((entry) => ({
+          accessBand: entry.socialBand,
+          canonicalSocietyLevel: entry.linkedSocietyLevel,
+          societyName: entry.societyName
+        }))
+        .sort(
+          (left, right) =>
+            (left.canonicalSocietyLevel ?? 99) - (right.canonicalSocietyLevel ?? 99) ||
+            left.societyName.localeCompare(right.societyName) ||
+            left.accessBand - right.accessBand
+        );
 
       return {
         characteristics: formatCharacteristicList(skill.linkedStats),
@@ -498,6 +546,10 @@ export function buildSkillAdminRows(content: CanonicalContent): SkillAdminRow[] 
             (dependencySkillId) => skillsById.get(dependencySkillId)?.name ?? dependencySkillId
           )
         ),
+        foundationalAccessBandsSummary: summarizeAccessBands(
+          foundationalAccessSlots.map((slot) => slot.accessBand)
+        ),
+        foundationalAccessSlots,
         groupNames: groupIds.map((groupId) => skillGroupsById.get(groupId)?.name ?? groupId),
         id: skill.id,
         name: skill.name,
@@ -1480,6 +1532,13 @@ export function buildSocietyAdminRows(content: CanonicalContent): SocietyAdminRo
   return buildSocietyMatrixRows(content)
     .map((societyRow) => {
     const society = content.societies.find((candidate) => candidate.id === societyRow.id.split(":")[0]);
+    const literacyAccessSummary = summarizeAccessBands(
+      content.societyBandSkillAccess
+        .filter(
+          (entry) => entry.societyId === societyRow.id.split(":")[0] && entry.skillId === "literacy"
+        )
+        .map((entry) => entry.socialBand)
+    );
     const baselineLanguages = (society?.baselineLanguageIds ?? [])
       .map((languageId) => content.languages.find((candidate) => candidate.id === languageId)?.name ?? languageId);
     const professionFans = societyRow.reachableProfessions.map((professionName) => {
@@ -1552,6 +1611,7 @@ export function buildSocietyAdminRows(content: CanonicalContent): SocietyAdminRo
       glantriExamples: society?.glantriExamples,
       historicalReference: society?.historicalReference,
       id: societyRow.id,
+      literacyAccessSummary,
       notes: societyRow.notes,
       professionFans,
       reachableProfessions: societyRow.reachableProfessions,

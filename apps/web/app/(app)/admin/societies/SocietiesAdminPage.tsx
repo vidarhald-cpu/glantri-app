@@ -65,7 +65,7 @@ function renderClampedCell(text: string, options?: { lines?: number; width?: str
 }
 
 const societiesReviewGridTemplate =
-  "minmax(10rem, 1.1fr) 3.5rem 3.75rem 8rem 4rem minmax(26rem, 2.7fr) minmax(9rem, 0.95fr) minmax(8rem, 0.9fr) minmax(15rem, 1.5fr) 4.5rem";
+  "minmax(10rem, 1.1fr) 3.5rem 3.75rem 8rem 4rem 5.25rem minmax(24rem, 2.5fr) minmax(9rem, 0.95fr) minmax(8rem, 0.9fr) minmax(15rem, 1.45fr) 4.5rem";
 
 function SocietiesReviewTable(props: {
   onInspect: (rowId: string) => void;
@@ -86,7 +86,7 @@ function SocietiesReviewTable(props: {
         position: "relative"
       }}
     >
-      <div style={{ minWidth: 1280 }}>
+      <div style={{ minWidth: 1360 }}>
         <div
           style={{
             background: "rgba(126, 93, 42, 0.08)",
@@ -104,6 +104,7 @@ function SocietiesReviewTable(props: {
             "Band",
             "Class",
             "Edu",
+            "Literacy",
             "Description",
             "Historical Ref.",
             "Glantri Examples",
@@ -152,6 +153,9 @@ function SocietiesReviewTable(props: {
               </div>
               <div style={{ color: "#2e2619", padding: "0.9rem 0.8rem" }}>
                 {row.baseEducation || <span style={{ color: "#8a7e63" }}>None</span>}
+              </div>
+              <div style={{ color: "#2e2619", padding: "0.9rem 0.8rem" }}>
+                {row.literacyAccessSummary}
               </div>
               <div style={{ color: "#2e2619", padding: "0.9rem 0.8rem" }}>
                 {row.shortDescription || row.notes ? (

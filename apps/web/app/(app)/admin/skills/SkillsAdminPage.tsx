@@ -278,6 +278,7 @@ export default function SkillsAdminPage() {
                 <AdminMetric label="Society level" value={`L${selectedRow?.societyLevel ?? selectedSkill.societyLevel}`} />
                 <AdminMetric label="Cross-listed groups" value={selectedRow?.optionalGroupCount ?? 0} />
                 <AdminMetric label="Professions" value={selectedRow?.professionNames.length ?? 0} />
+                <AdminMetric label="Foundational access" value={selectedRow?.foundationalAccessBandsSummary ?? "—"} />
               </div>
 
               <div
@@ -317,6 +318,121 @@ export default function SkillsAdminPage() {
                 ) : (
                   <div style={{ color: "#8a7e63" }}>No profession package currently reaches this skill.</div>
                 )}
+              </div>
+
+              <div>
+                <div style={{ color: "#5f543a", fontSize: "0.85rem", fontWeight: 700, marginBottom: "0.45rem", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                  Access overview
+                </div>
+                {(selectedRow?.foundationalAccessSlots.length ?? 0) > 0 ? (
+                  <div
+                    style={{
+                      border: "1px solid rgba(85, 73, 48, 0.12)",
+                      borderRadius: 16,
+                      overflow: "hidden"
+                    }}
+                  >
+                    <div
+                      style={{
+                        background: "rgba(126, 93, 42, 0.08)",
+                        display: "grid",
+                        gridTemplateColumns: "minmax(11rem, 1.15fr) repeat(4, minmax(0, 1fr))"
+                      }}
+                    >
+                      {["Society", "L1", "L2", "L3", "L4"].map((header) => (
+                        <div
+                          key={header}
+                          style={{
+                            color: "#594320",
+                            fontSize: "0.78rem",
+                            fontWeight: 700,
+                            letterSpacing: "0.08em",
+                            padding: "0.7rem 0.65rem",
+                            textTransform: "uppercase"
+                          }}
+                        >
+                          {header}
+                        </div>
+                      ))}
+                    </div>
+                    {[...new Set((selectedRow?.foundationalAccessSlots ?? []).map((slot) => slot.societyName))]
+                      .sort((left, right) => left.localeCompare(right))
+                      .map((societyName) => {
+                        const societySlots =
+                          selectedRow?.foundationalAccessSlots.filter(
+                            (slot) => slot.societyName === societyName
+                          ) ?? [];
+                        const canonicalLevel = societySlots[0]?.canonicalSocietyLevel;
+
+                        return (
+                          <div
+                            key={societyName}
+                            style={{
+                              borderTop: "1px solid rgba(85, 73, 48, 0.08)",
+                              display: "grid",
+                              gridTemplateColumns: "minmax(11rem, 1.15fr) repeat(4, minmax(0, 1fr))"
+                            }}
+                          >
+                            <div
+                              style={{
+                                color: "#4d412d",
+                                fontSize: "0.85rem",
+                                fontWeight: 700,
+                                lineHeight: 1.4,
+                                padding: "0.7rem 0.65rem"
+                              }}
+                            >
+                              {societyName}
+                              <div style={{ color: "#8a7e63", fontSize: "0.78rem", fontWeight: 600 }}>
+                                {canonicalLevel ? `S${canonicalLevel}` : "Society"}
+                              </div>
+                            </div>
+                            {Array.from({ length: 4 }, (_, bandIndex) => bandIndex + 1).map((accessBand) => {
+                              const isAccessible = societySlots.some(
+                                (slot) => slot.accessBand === accessBand
+                              );
+
+                              return (
+                                <div
+                                  key={`${societyName}:${accessBand}`}
+                                  style={{
+                                    alignItems: "center",
+                                    background: isAccessible
+                                      ? "rgba(86, 112, 67, 0.13)"
+                                      : "rgba(255, 255, 255, 0.55)",
+                                    color: isAccessible ? "#36512b" : "#9b9077",
+                                    display: "flex",
+                                    justifyContent: "center",
+                                    minHeight: "2.7rem",
+                                    padding: "0.45rem",
+                                    textAlign: "center"
+                                  }}
+                                  title={
+                                    isAccessible
+                                      ? `${selectedSkill.name} is accessible for main skill-point spending in ${societyName} at band L${accessBand}.`
+                                      : `${selectedSkill.name} is not accessible in ${societyName} at band L${accessBand}.`
+                                  }
+                                >
+                                  <span style={{ fontWeight: isAccessible ? 700 : 500 }}>
+                                    {isAccessible ? "Yes" : "—"}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        );
+                      })}
+                  </div>
+                ) : (
+                  <div style={{ color: "#8a7e63" }}>
+                    No society-band foundational access is currently modeled for this skill.
+                  </div>
+                )}
+                {(selectedRow?.foundationalAccessSlots.length ?? 0) > 0 ? (
+                  <div style={{ color: "#7a6f5a", fontSize: "0.88rem", lineHeight: 1.45, marginTop: "0.45rem" }}>
+                    This marks access for main skill-point spending, not a free grant.
+                  </div>
+                ) : null}
               </div>
 
               <div>
