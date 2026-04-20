@@ -218,6 +218,60 @@ function validateSocietyBandRows(content: CanonicalContent): CanonicalContent {
   return content;
 }
 
+function validateSocietyBandSkillAccess(content: CanonicalContent): CanonicalContent {
+  if (content.societyBandSkillAccess.length === 0) {
+    return content;
+  }
+
+  const issues: string[] = [];
+  const skillIds = new Set(content.skills.map((skill) => skill.id));
+  const societiesById = new Map(content.societies.map((society) => [society.id, society]));
+  const societyBandRows = new Set(
+    content.societyLevels.map((row) => `${row.societyId}:${row.societyLevel}`)
+  );
+
+  for (const entry of content.societyBandSkillAccess) {
+    if (!skillIds.has(entry.skillId)) {
+      issues.push(
+        `Society-band skill access "${entry.societyId}:L${entry.socialBand}:${entry.skillId}" references unknown skill "${entry.skillId}".`
+      );
+    }
+
+    const society = societiesById.get(entry.societyId);
+
+    if (!society) {
+      issues.push(
+        `Society-band skill access "${entry.societyId}:L${entry.socialBand}:${entry.skillId}" references unknown society "${entry.societyId}".`
+      );
+      continue;
+    }
+
+    if (society.name !== entry.societyName) {
+      issues.push(
+        `Society-band skill access "${entry.societyId}:L${entry.socialBand}:${entry.skillId}" uses mismatched society name "${entry.societyName}". Expected "${society.name}".`
+      );
+    }
+
+    if (society.societyLevel !== entry.linkedSocietyLevel) {
+      issues.push(
+        `Society-band skill access "${entry.societyId}:L${entry.socialBand}:${entry.skillId}" uses linked society level ${entry.linkedSocietyLevel}, but society "${society.name}" (${society.id}) is level ${society.societyLevel}.`
+      );
+    }
+
+    if (!societyBandRows.has(`${entry.societyId}:${entry.socialBand}`)) {
+      issues.push(
+        `Society-band skill access "${entry.societyId}:L${entry.socialBand}:${entry.skillId}" references missing social-band row "${entry.societyId}:${entry.socialBand}".`
+      );
+    }
+  }
+
+  if (issues.length > 0) {
+    throw new Error(`Invalid society-band skill access content:\n${issues.join("\n")}`);
+  }
+
+  return content;
+}
+
 function validateSkillRelationships(content: CanonicalContent): CanonicalContent {
   const skillIds = new Set(content.skills.map((skill) => skill.id));
   const skillGroupIds = new Set(content.skillGroups.map((group) => group.id));
@@ -472,7 +526,11 @@ export function validateCanonicalContent(input: unknown): CanonicalContent {
   return validateProfessionRelationships(
     validateSkillRelationships(
       validateCivilizations(
-        validateLanguages(validateSocieties(validateSocietyBandRows(normalizedContent)))
+        validateLanguages(
+          validateSocieties(
+            validateSocietyBandSkillAccess(validateSocietyBandRows(normalizedContent))
+          )
+        )
       )
     )
   );

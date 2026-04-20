@@ -342,6 +342,17 @@ export const societyLevelAccessSchema = z.preprocess(
   })
 );
 
+// Society-band skill access means "eligible to spend main skill points here",
+// not "granted for free". Keep this separate from direct skill grants.
+export const societyBandSkillAccessSchema = z.object({
+  societyId: idSchema,
+  societyName: z.string().min(1),
+  linkedSocietyLevel: z.number().int().min(1).max(6),
+  socialBand: z.number().int().min(1).max(4),
+  skillId: idSchema,
+  notes: z.string().optional()
+});
+
 export const societyDefinitionSchema = z.object({
   id: idSchema,
   name: z.string().min(1),
@@ -380,6 +391,7 @@ export type SkillDefinition = z.infer<typeof skillDefinitionSchema>;
 export type SkillDependency = z.infer<typeof skillDependencySchema>;
 export type SkillSpecialization = z.infer<typeof skillSpecializationSchema>;
 export type SocietyLevelAccess = z.infer<typeof societyLevelAccessSchema>;
+export type SocietyBandSkillAccess = z.infer<typeof societyBandSkillAccessSchema>;
 export type SocietyDefinition = z.infer<typeof societyDefinitionSchema>;
 export type LanguageDefinition = z.infer<typeof languageDefinitionSchema>;
 export type CivilizationDefinition = z.infer<typeof civilizationDefinitionSchema>;
@@ -456,4 +468,17 @@ export function getPlayerFacingSkillCategoryId(
   }
 
   return inferPlayerFacingSkillCategoryIdFromGroupIds(skill);
+}
+
+export function getAccessibleFoundationalSkillIdsForSocietyBand(
+  entries: SocietyBandSkillAccess[],
+  input: { socialBand: number; societyId: string }
+): string[] {
+  const matchingEntries = entries.filter(
+    (entry) =>
+      entry.societyId === input.societyId &&
+      entry.socialBand === input.socialBand
+  );
+
+  return [...new Set(matchingEntries.map((entry) => entry.skillId))];
 }

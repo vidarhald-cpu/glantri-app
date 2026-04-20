@@ -9834,6 +9834,16 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "leatherworking"
     }
   ],
+  "societyBandSkillAccess": [
+    {
+      "linkedSocietyLevel": 1,
+      "notes": "Foundational access only: Literacy is available for main skill-point spending from this society-band slot, not granted for free.",
+      "skillId": "literacy",
+      "socialBand": 1,
+      "societyId": "forager_ritual_tribal",
+      "societyName": "Forager / ritual-tribal"
+    }
+  ],
   "societies": [
     {
       "baselineLanguageIds": [

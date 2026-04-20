@@ -16,6 +16,9 @@ describe("validateCanonicalContent", () => {
 
     expect(normalizedContent.skillGroups).toEqual(defaultCanonicalContent.skillGroups);
     expect(normalizedContent.societyLevels).toEqual(defaultCanonicalContent.societyLevels);
+    expect(normalizedContent.societyBandSkillAccess).toEqual(
+      defaultCanonicalContent.societyBandSkillAccess
+    );
     expect(normalizedContent.skills.map((skill) => skill.id)).toEqual(
       defaultCanonicalContent.skills.map((skill) => skill.id)
     );
@@ -57,6 +60,42 @@ describe("validateCanonicalContent", () => {
 
     expect(() => validateCanonicalContent(duplicateBandContent)).toThrow(
       `Duplicate social band row for society "${firstSociety.societyName}" (${firstSociety.societyId}), band ${firstSociety.societyLevel}.`
+    );
+  });
+
+  it("fails on invalid society-band skill access skill references", () => {
+    const invalidContent = {
+      ...defaultCanonicalContent,
+      societyBandSkillAccess: defaultCanonicalContent.societyBandSkillAccess.map((entry, index) =>
+        index === 0
+          ? {
+              ...entry,
+              skillId: "missing-skill"
+            }
+          : entry
+      )
+    };
+
+    expect(() => validateCanonicalContent(invalidContent)).toThrow(
+      `Society-band skill access "${defaultCanonicalContent.societyBandSkillAccess[0]?.societyId}:L${defaultCanonicalContent.societyBandSkillAccess[0]?.socialBand}:missing-skill" references unknown skill "missing-skill".`
+    );
+  });
+
+  it("fails on invalid society-band row references", () => {
+    const targetEntry = defaultCanonicalContent.societyBandSkillAccess[0];
+    const invalidContent = {
+      ...defaultCanonicalContent,
+      societyLevels: defaultCanonicalContent.societyLevels.filter(
+        (row) =>
+          !(
+            row.societyId === targetEntry?.societyId &&
+            row.societyLevel === targetEntry?.socialBand
+          )
+      )
+    };
+
+    expect(() => validateCanonicalContent(invalidContent)).toThrow(
+      `Society "${targetEntry?.societyName}" (${targetEntry?.societyId}) is missing social band(s): ${targetEntry?.socialBand}.`
     );
   });
 
