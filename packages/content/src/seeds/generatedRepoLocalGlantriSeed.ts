@@ -813,7 +813,7 @@ export const generatedRepoLocalGlantriSeed = {
       "sortOrder": 26
     },
     {
-      "description": "One melee attack skill plus Dodge and Parry.",
+      "description": "Dodge, parry, and brawling plus one required melee weapon skill.",
       "id": "basic_melee_training",
       "name": "Basic Melee Training",
       "skillMemberships": [
@@ -824,6 +824,10 @@ export const generatedRepoLocalGlantriSeed = {
         {
           "relevance": "core",
           "skillId": "parry"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "brawling"
         }
       ],
       "selectionSlots": [
@@ -845,7 +849,7 @@ export const generatedRepoLocalGlantriSeed = {
       "sortOrder": 27
     },
     {
-      "description": "Two related melee attack skills plus Dodge and Parry.",
+      "description": "Dodge, parry, and brawling plus three required melee weapon skills.",
       "id": "advanced_melee_training",
       "name": "Advanced Melee Training",
       "skillMemberships": [
@@ -856,43 +860,72 @@ export const generatedRepoLocalGlantriSeed = {
         {
           "relevance": "optional",
           "skillId": "parry"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "brawling"
         }
       ],
-      "selectionSlots": [],
+      "selectionSlots": [
+        {
+          "candidateSkillIds": [
+            "one_handed_edged",
+            "one_handed_concussion_axe",
+            "polearms",
+            "lance",
+            "two_handed_edged",
+            "two_handed_concussion_axe"
+          ],
+          "chooseCount": 3,
+          "id": "advanced_melee_weapon_choices",
+          "label": "Choose three melee weapon skills",
+          "required": true
+        }
+      ],
       "sortOrder": 28
     },
     {
-      "description": "One missile attack skill plus Dodge and Perception.",
+      "description": "One required missile weapon skill.",
       "id": "basic_missile_training",
       "name": "Basic Missile Training",
-      "skillMemberships": [
+      "skillMemberships": [],
+      "selectionSlots": [
         {
-          "relevance": "optional",
-          "skillId": "dodge"
-        },
-        {
-          "relevance": "core",
-          "skillId": "perception"
+          "candidateSkillIds": [
+            "throwing",
+            "sling",
+            "bow",
+            "longbow",
+            "crossbow"
+          ],
+          "chooseCount": 1,
+          "id": "missile_weapon_choice",
+          "label": "Choose one missile weapon skill",
+          "required": true
         }
       ],
-      "selectionSlots": [],
       "sortOrder": 29
     },
     {
-      "description": "Broader trained ranged-combat package.",
+      "description": "Three required missile weapon skills.",
       "id": "advanced_missile_training",
       "name": "Advanced Missile Training",
-      "skillMemberships": [
+      "skillMemberships": [],
+      "selectionSlots": [
         {
-          "relevance": "optional",
-          "skillId": "dodge"
-        },
-        {
-          "relevance": "optional",
-          "skillId": "perception"
+          "candidateSkillIds": [
+            "throwing",
+            "sling",
+            "bow",
+            "longbow",
+            "crossbow"
+          ],
+          "chooseCount": 3,
+          "id": "advanced_missile_weapon_choices",
+          "label": "Choose three missile weapon skills",
+          "required": true
         }
       ],
-      "selectionSlots": [],
       "sortOrder": 30
     },
     {
@@ -4240,7 +4273,9 @@ export const generatedRepoLocalGlantriSeed = {
       "description": "Brawling Fight effectively with punches, kicks, grapples, and rough unarmed violence. Baseline unarmed attack skill.",
       "groupId": "combat_group",
       "groupIds": [
-        "combat_group"
+        "combat_group",
+        "basic_melee_training",
+        "advanced_melee_training"
       ],
       "id": "brawling",
       "isTheoretical": false,
@@ -4265,7 +4300,8 @@ export const generatedRepoLocalGlantriSeed = {
       "groupIds": [
         "combat_group",
         "mounted_warrior_training",
-        "basic_melee_training"
+        "basic_melee_training",
+        "advanced_melee_training"
       ],
       "id": "one_handed_edged",
       "isTheoretical": false,
@@ -4289,7 +4325,8 @@ export const generatedRepoLocalGlantriSeed = {
       "groupId": "combat_group",
       "groupIds": [
         "combat_group",
-        "basic_melee_training"
+        "basic_melee_training",
+        "advanced_melee_training"
       ],
       "id": "one_handed_concussion_axe",
       "isTheoretical": false,
@@ -4313,7 +4350,8 @@ export const generatedRepoLocalGlantriSeed = {
       "groupId": "combat_group",
       "groupIds": [
         "combat_group",
-        "basic_melee_training"
+        "basic_melee_training",
+        "advanced_melee_training"
       ],
       "id": "two_handed_edged",
       "isTheoretical": false,
@@ -4337,7 +4375,8 @@ export const generatedRepoLocalGlantriSeed = {
       "groupId": "combat_group",
       "groupIds": [
         "combat_group",
-        "basic_melee_training"
+        "basic_melee_training",
+        "advanced_melee_training"
       ],
       "id": "polearms",
       "isTheoretical": false,
@@ -4361,7 +4400,8 @@ export const generatedRepoLocalGlantriSeed = {
       "groupId": "combat_group",
       "groupIds": [
         "combat_group",
-        "basic_melee_training"
+        "basic_melee_training",
+        "advanced_melee_training"
       ],
       "id": "two_handed_concussion_axe",
       "isTheoretical": false,
@@ -4391,7 +4431,8 @@ export const generatedRepoLocalGlantriSeed = {
       "groupIds": [
         "mounted_warrior_training",
         "combat_group",
-        "basic_melee_training"
+        "basic_melee_training",
+        "advanced_melee_training"
       ],
       "id": "lance",
       "isTheoretical": false,
@@ -4414,7 +4455,9 @@ export const generatedRepoLocalGlantriSeed = {
       "description": "Throwing Attack accurately with thrown weapons such as javelins, knives, or axes. Practical ranged family.",
       "groupId": "combat_group",
       "groupIds": [
-        "combat_group"
+        "combat_group",
+        "basic_missile_training",
+        "advanced_missile_training"
       ],
       "id": "throwing",
       "isTheoretical": false,
@@ -4437,7 +4480,9 @@ export const generatedRepoLocalGlantriSeed = {
       "description": "Sling Use sling-based missile weapons effectively in combat or hunting. Distinct missile family.",
       "groupId": "combat_group",
       "groupIds": [
-        "combat_group"
+        "combat_group",
+        "basic_missile_training",
+        "advanced_missile_training"
       ],
       "id": "sling",
       "isTheoretical": false,
@@ -4460,7 +4505,9 @@ export const generatedRepoLocalGlantriSeed = {
       "description": "Bow Use ordinary bows effectively in combat or hunting. Core ranged family.",
       "groupId": "combat_group",
       "groupIds": [
-        "combat_group"
+        "combat_group",
+        "basic_missile_training",
+        "advanced_missile_training"
       ],
       "id": "bow",
       "isTheoretical": false,
@@ -4488,7 +4535,9 @@ export const generatedRepoLocalGlantriSeed = {
       "description": "Longbow Use powerful longbows requiring strength, discipline, and trained missile technique. More specialized than ordinary bow use.",
       "groupId": "combat_group",
       "groupIds": [
-        "combat_group"
+        "combat_group",
+        "basic_missile_training",
+        "advanced_missile_training"
       ],
       "id": "longbow",
       "isTheoretical": false,
@@ -4511,7 +4560,9 @@ export const generatedRepoLocalGlantriSeed = {
       "description": "Crossbow Use mechanically spanned missile weapons effectively in combat. Later-society missile family.",
       "groupId": "combat_group",
       "groupIds": [
-        "combat_group"
+        "combat_group",
+        "basic_missile_training",
+        "advanced_missile_training"
       ],
       "id": "crossbow",
       "isTheoretical": false,

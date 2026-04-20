@@ -106,27 +106,80 @@ const PLAYER_FACING_SKILL_CATEGORY_BY_GROUP_ID = {
   wilderness_group: "fieldcraft"
 };
 
+const MELEE_WEAPON_SKILL_IDS = [
+  "one_handed_edged",
+  "one_handed_concussion_axe",
+  "polearms",
+  "lance",
+  "two_handed_edged",
+  "two_handed_concussion_axe"
+];
+
+const MISSILE_WEAPON_SKILL_IDS = [
+  "throwing",
+  "sling",
+  "bow",
+  "longbow",
+  "crossbow"
+];
+
 const SKILL_GROUP_SELECTION_SLOTS_BY_ID = {
   basic_melee_training: [
     {
-      candidateSkillIds: [
-        "one_handed_edged",
-        "one_handed_concussion_axe",
-        "polearms",
-        "lance",
-        "two_handed_edged",
-        "two_handed_concussion_axe"
-      ],
+      candidateSkillIds: MELEE_WEAPON_SKILL_IDS,
       chooseCount: 1,
       id: "melee_weapon_choice",
       label: "Choose one melee weapon skill",
       required: true
     }
+  ],
+  advanced_melee_training: [
+    {
+      candidateSkillIds: MELEE_WEAPON_SKILL_IDS,
+      chooseCount: 3,
+      id: "advanced_melee_weapon_choices",
+      label: "Choose three melee weapon skills",
+      required: true
+    }
+  ],
+  basic_missile_training: [
+    {
+      candidateSkillIds: MISSILE_WEAPON_SKILL_IDS,
+      chooseCount: 1,
+      id: "missile_weapon_choice",
+      label: "Choose one missile weapon skill",
+      required: true
+    }
+  ],
+  advanced_missile_training: [
+    {
+      candidateSkillIds: MISSILE_WEAPON_SKILL_IDS,
+      chooseCount: 3,
+      id: "advanced_missile_weapon_choices",
+      label: "Choose three missile weapon skills",
+      required: true
+    }
   ]
 };
 
-const EXTRA_GROUP_IDS_BY_SKILL_ID = Object.entries(SKILL_GROUP_SELECTION_SLOTS_BY_ID).reduce(
-  (result, [groupId, slots]) => {
+const FIXED_SKILL_MEMBERSHIPS_BY_GROUP_ID = {
+  basic_melee_training: ["dodge", "parry", "brawling"],
+  advanced_melee_training: ["dodge", "parry", "brawling"],
+  basic_missile_training: [],
+  advanced_missile_training: []
+};
+
+const GROUP_DESCRIPTION_OVERRIDES = {
+  basic_melee_training: "Dodge, parry, and brawling plus one required melee weapon skill.",
+  advanced_melee_training: "Dodge, parry, and brawling plus three required melee weapon skills.",
+  basic_missile_training: "One required missile weapon skill.",
+  advanced_missile_training: "Three required missile weapon skills."
+};
+
+const EXTRA_GROUP_IDS_BY_SKILL_ID = (() => {
+  const result = {};
+
+  for (const [groupId, slots] of Object.entries(SKILL_GROUP_SELECTION_SLOTS_BY_ID)) {
     for (const slot of slots) {
       for (const skillId of slot.candidateSkillIds) {
         const existingGroupIds = result[skillId] ?? [];
@@ -136,11 +189,20 @@ const EXTRA_GROUP_IDS_BY_SKILL_ID = Object.entries(SKILL_GROUP_SELECTION_SLOTS_B
         }
       }
     }
+  }
 
-    return result;
-  },
-  {}
-);
+  for (const [groupId, skillIds] of Object.entries(FIXED_SKILL_MEMBERSHIPS_BY_GROUP_ID)) {
+    for (const skillId of skillIds) {
+      const existingGroupIds = result[skillId] ?? [];
+
+      if (!existingGroupIds.includes(groupId)) {
+        result[skillId] = [...existingGroupIds, groupId];
+      }
+    }
+  }
+
+  return result;
+})();
 
 const CIVILIZATION_SEED_DEFINITIONS = [
   {
@@ -598,10 +660,10 @@ const professionSkills = [
 ];
 
 const skillGroups = skillGroupSources.map((group) => ({
-  description: group.description,
+  description: GROUP_DESCRIPTION_OVERRIDES[group.id] ?? group.description,
   id: group.id,
   name: group.name,
-  skillMemberships: group.skillIds
+  skillMemberships: (FIXED_SKILL_MEMBERSHIPS_BY_GROUP_ID[group.id] ?? group.skillIds)
     .filter((skillId) => skillsById.has(skillId))
     .map((skillId) => ({
       relevance: skillsById.get(skillId)?.groupId === group.id ? "core" : "optional",
