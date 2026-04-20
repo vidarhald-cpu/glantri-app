@@ -190,4 +190,22 @@ describe("imported content chargen integration", () => {
     expect(purchase?.error).toBeUndefined();
     expect(purchase?.spentCost).toBeGreaterThan(0);
   });
+
+  it("exposes literacy through society-band foundational access only when the selected band allows it", () => {
+    const levelThreeAccess = buildChargenSkillAccessSummary({
+      content: defaultCanonicalContent,
+      professionId: "temple_scribe",
+      societyId: "bronze_age_palace_state",
+      societyLevel: 4
+    });
+    const levelTwoAccess = buildChargenSkillAccessSummary({
+      content: defaultCanonicalContent,
+      professionId: "merchant",
+      societyId: "pastoral_clan_nomadic",
+      societyLevel: 4
+    });
+
+    expect(levelThreeAccess.normalSkillIds).toContain("literacy");
+    expect(levelTwoAccess.normalSkillIds).not.toContain("literacy");
+  });
 });

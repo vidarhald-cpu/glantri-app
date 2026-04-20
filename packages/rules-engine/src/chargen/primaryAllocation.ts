@@ -15,10 +15,14 @@ import type {
   SkillDefinition,
   SkillGroupDefinition,
   SkillSpecialization,
+  SocietyBandSkillAccess,
   SocietyDefinition,
   SocietyLevelAccess
 } from "@glantri/domain";
-import { getSkillGroupIds } from "@glantri/domain";
+import {
+  getAccessibleFoundationalSkillIdsForSocietyBand,
+  getSkillGroupIds
+} from "@glantri/domain";
 
 import { calculateEducation, type EducationBreakdown } from "../education/calculateEducation";
 import { resolveEffectiveProfessionPackage } from "../professions/resolveEffectiveProfessionPackage";
@@ -48,6 +52,7 @@ interface CanonicalContentShape {
   professions: ProfessionDefinition[];
   skillGroups: SkillGroupDefinition[];
   skills: SkillDefinition[];
+  societyBandSkillAccess?: SocietyBandSkillAccess[];
   societies?: SocietyDefinition[];
   societyLevels: SocietyLevelAccess[];
   specializations: SkillSpecialization[];
@@ -149,6 +154,7 @@ export interface ChargenDraftView {
 export type ChargenSkillAccessSource =
   | "profession-group"
   | "profession-skill"
+  | "society-foundational-skill"
   | "society-skill";
 
 export interface ChargenSkillAccessSummary {
@@ -385,6 +391,13 @@ function buildChargenSkillAccessSummaryInternal(input: {
   ]);
   const societySkillIds =
     getSocietyAccess(input.content, input.societyLevel, input.societyId)?.skillIds ?? [];
+  const foundationalSkillIds = getAccessibleFoundationalSkillIdsForSocietyBand(
+    input.content.societyBandSkillAccess ?? [],
+    {
+      socialBand: input.societyLevel,
+      societyId: input.societyId ?? ""
+    }
+  );
   const skillSources = new Map<string, Set<ChargenSkillAccessSource>>();
 
   for (const skill of input.content.skills) {
@@ -400,6 +413,12 @@ function buildChargenSkillAccessSummaryInternal(input: {
   for (const skillId of societySkillIds) {
     const sources = skillSources.get(skillId) ?? new Set<ChargenSkillAccessSource>();
     sources.add("society-skill");
+    skillSources.set(skillId, sources);
+  }
+
+  for (const skillId of foundationalSkillIds) {
+    const sources = skillSources.get(skillId) ?? new Set<ChargenSkillAccessSource>();
+    sources.add("society-foundational-skill");
     skillSources.set(skillId, sources);
   }
 

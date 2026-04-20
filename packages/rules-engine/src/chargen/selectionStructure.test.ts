@@ -94,6 +94,31 @@ const content = {
       requiresLiteracy: "no" as const,
       societyLevel: 1,
       sortOrder: 3
+    },
+    {
+      allowsSpecializations: false,
+      category: "ordinary" as const,
+      categoryId: "knowledge" as const,
+      dependencies: [],
+      dependencySkillIds: [],
+      groupId: "urban_watch",
+      groupIds: ["urban_watch"],
+      id: "literacy",
+      isTheoretical: false,
+      linkedStats: ["rea"],
+      name: "Literacy",
+      requiresLiteracy: "no" as const,
+      societyLevel: 1,
+      sortOrder: 4
+    }
+  ],
+  societyBandSkillAccess: [
+    {
+      linkedSocietyLevel: 4,
+      skillId: "literacy",
+      socialBand: 1 as const,
+      societyId: "glantri",
+      societyName: "Glantri"
     }
   ],
   societies: [
@@ -183,7 +208,27 @@ describe("selectionStructure", () => {
       selectedSkillIds: ["spear"],
       slotId: "melee_choice"
     });
-    expect(summary.selectableSkillIds).toEqual(["leadership"]);
+    expect(summary.selectableSkillIds).toEqual(["leadership", "literacy"]);
     expect(summary.selectedSkillIds).toEqual(["spear", "leadership"]);
+  });
+
+  it("only exposes foundational skills when society-band access grants them", () => {
+    const accessibleSummary = buildChargenSelectableSkillSummary({
+      content,
+      professionId: "guard",
+      progression,
+      societyId: "glantri",
+      societyLevel: 1
+    });
+    const blockedSummary = buildChargenSelectableSkillSummary({
+      content,
+      professionId: "guard",
+      progression,
+      societyId: "glantri",
+      societyLevel: 2
+    });
+
+    expect(accessibleSummary.selectableSkillIds).toContain("literacy");
+    expect(blockedSummary.selectableSkillIds).not.toContain("literacy");
   });
 });

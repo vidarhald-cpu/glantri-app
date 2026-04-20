@@ -64,12 +64,14 @@ export interface SkillTypeGroup<T extends SkillTypeGroupedRow> {
 const ACCESS_SOURCE_LABELS: Record<ChargenSkillAccessSource, string> = {
   "profession-group": "Profession group",
   "profession-skill": "Direct profession skill",
+  "society-foundational-skill": "Society access",
   "society-skill": "Society access"
 };
 
 const ACCESS_SOURCE_ORDER: ChargenSkillAccessSource[] = [
   "profession-skill",
   "profession-group",
+  "society-foundational-skill",
   "society-skill"
 ];
 

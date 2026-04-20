@@ -2813,6 +2813,9 @@ export default function ChargenWizard() {
                         type="button"
                       >
                         {row.skill.name} • Type {row.skill.category}
+                        {skillAccess.skillSources[row.skill.id]?.includes("society-foundational-skill")
+                          ? " • Society access"
+                          : ""}
                       </button>
                     ))}
                   </div>

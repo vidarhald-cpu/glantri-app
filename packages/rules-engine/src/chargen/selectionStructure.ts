@@ -7,10 +7,14 @@ import type {
   ProfessionSkillMap,
   SkillDefinition,
   SkillGroupDefinition,
+  SocietyBandSkillAccess,
   SocietyDefinition,
   SocietyLevelAccess
 } from "@glantri/domain";
-import { getSkillGroupIds } from "@glantri/domain";
+import {
+  getAccessibleFoundationalSkillIdsForSocietyBand,
+  getSkillGroupIds
+} from "@glantri/domain";
 
 import { resolveEffectiveProfessionPackage } from "../professions/resolveEffectiveProfessionPackage";
 
@@ -27,6 +31,7 @@ interface ChargenSelectionContentShape {
   professions: ProfessionDefinition[];
   skillGroups: SkillGroupDefinition[];
   skills: SkillDefinition[];
+  societyBandSkillAccess?: SocietyBandSkillAccess[];
   societies?: SocietyDefinition[];
   societyLevels: SocietyLevelAccess[];
 }
@@ -244,6 +249,13 @@ export function buildChargenSelectableSkillSummary(input: {
       .filter((skill) => getSkillGroupIds(skill).some((groupId) => allowedGroupIds.includes(groupId)))
       .map((skill) => skill.id),
     ...(societyAccess?.skillIds ?? []),
+    ...getAccessibleFoundationalSkillIdsForSocietyBand(
+      input.content.societyBandSkillAccess ?? [],
+      {
+        socialBand: input.societyLevel,
+        societyId: input.societyId ?? ""
+      }
+    ),
     ...professionPackage.core.finalEffectiveSkillIds,
     ...professionPackage.favored.finalEffectiveSkillIds
   ]);
