@@ -4,41 +4,15 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { useAdminContent } from "../../../../src/lib/admin/AdminContentContext";
-import { useCanAccessAdmin } from "../../../../src/lib/auth/SessionUserContext";
-import {
-  normalizeSkillDefinition,
-  updateSkillGroupInContent
-} from "../../../../src/lib/admin/editing";
 import { downloadCsv } from "../../../../src/lib/admin/exporters";
 import { buildSkillGroupAdminRows } from "../../../../src/lib/admin/viewModels";
 import {
   AdminButton,
-  AdminCheckboxList,
-  AdminField,
-  AdminInput,
   AdminMetric,
   AdminPageIntro,
   AdminPanel,
-  AdminReadOnlyNotice,
-  AdminTagList,
-  AdminTextarea
+  AdminTagList
 } from "../admin-ui";
-
-interface SkillGroupFormState {
-  description: string;
-  includedSkillIds: string[];
-  name: string;
-  sortOrder: string;
-}
-
-function createFormState(group: { description?: string; name: string; sortOrder: number }, includedSkillIds: string[]): SkillGroupFormState {
-  return {
-    description: group.description ?? "",
-    includedSkillIds,
-    name: group.name,
-    sortOrder: String(group.sortOrder)
-  };
-}
 
 function summarizeList(values: string[], maxItems = 3): string {
   if (values.length === 0) {
@@ -198,16 +172,13 @@ function SkillGroupsReviewTable(props: {
 }
 
 export default function SkillGroupsAdminPage() {
-  const canEdit = useCanAccessAdmin();
-  const { content, replaceContent } = useAdminContent();
+  const { content } = useAdminContent();
   const rows = buildSkillGroupAdminRows(content);
   const [selectedGroupId, setSelectedGroupId] = useState<string>();
   const selectedGroup =
     content.skillGroups.find((group) => group.id === selectedGroupId) ??
     content.skillGroups.slice().sort((left, right) => left.sortOrder - right.sortOrder)[0];
-  const [formState, setFormState] = useState<SkillGroupFormState>();
   const selectedRow = rows.find((row) => row.id === selectedGroup.id);
-  const selectedRowHasSlots = (selectedRow?.selectionSlotCount ?? 0) > 0;
 
   useEffect(() => {
     if (!selectedGroupId && rows[0]) {
@@ -215,71 +186,12 @@ export default function SkillGroupsAdminPage() {
     }
   }, [rows, selectedGroupId]);
 
-  useEffect(() => {
-    if (!selectedGroup) {
-      return;
-    }
-
-    const includedSkillIds =
-      selectedGroup.skillMemberships?.map((membership) => membership.skillId) ??
-      content.skills.filter((skill) => skill.groupIds.includes(selectedGroup.id)).map((skill) => skill.id);
-
-    setSelectedGroupId(selectedGroup.id);
-    setFormState(createFormState(selectedGroup, includedSkillIds));
-  }, [content.skills, selectedGroup]);
-
-  if (!selectedGroup || !formState) {
+  if (!selectedGroup) {
     return (
       <AdminPanel title="Skill Groups">
         <div>No skill groups found.</div>
       </AdminPanel>
     );
-  }
-
-  const activeForm = formState;
-
-  function toggleSkill(skillId: string) {
-    setFormState((current) =>
-      current
-        ? {
-            ...current,
-            includedSkillIds: current.includedSkillIds.includes(skillId)
-              ? current.includedSkillIds.filter((candidate) => candidate !== skillId)
-              : [...current.includedSkillIds, skillId]
-          }
-        : current
-    );
-  }
-
-  async function handleSave() {
-    const updatedGroupContent = updateSkillGroupInContent(content, {
-      ...selectedGroup,
-      description: activeForm.description.trim() || undefined,
-      name: activeForm.name.trim(),
-      sortOrder: Number(activeForm.sortOrder) || 0
-    });
-    const fallbackGroupId =
-      updatedGroupContent.skillGroups.find((group) => group.id !== selectedGroup.id)?.id ?? selectedGroup.id;
-    const nextContent = {
-      ...updatedGroupContent,
-      skills: updatedGroupContent.skills.map((skill) => {
-        const hasGroup = skill.groupIds.includes(selectedGroup.id);
-        const shouldHaveGroup = activeForm.includedSkillIds.includes(skill.id);
-
-        if (hasGroup === shouldHaveGroup) {
-          return skill;
-        }
-
-        if (shouldHaveGroup) {
-          return normalizeSkillDefinition(skill, [...skill.groupIds, selectedGroup.id]);
-        }
-
-        const remainingGroups = skill.groupIds.filter((groupId) => groupId !== selectedGroup.id);
-        return normalizeSkillDefinition(skill, remainingGroups.length > 0 ? remainingGroups : [fallbackGroupId]);
-      })
-    };
-
-    await replaceContent(nextContent, `Saved skill group "${activeForm.name.trim()}".`);
   }
 
   return (
@@ -313,7 +225,7 @@ export default function SkillGroupsAdminPage() {
           </AdminButton>
         }
         eyebrow="Admin / Skill Groups"
-        summary="Skill groups are the structural layer that professions and societies point at most often. This workspace keeps those memberships visible and editable."
+        summary="Skill groups are the structural layer that professions and societies point at most often. This workspace keeps fixed memberships, slot-based choices, and validation warnings visible for review."
         title="Skill Groups"
       />
 
@@ -324,7 +236,7 @@ export default function SkillGroupsAdminPage() {
 
         <div style={{ display: "grid", gap: "1rem" }}>
           <AdminPanel
-            subtitle="This inspection view separates fixed memberships from slot-based choices so combat training packages and future choice-driven groups read correctly."
+            subtitle="This inspection view separates fixed memberships from slot-based choices so combat training packages and future choice-driven groups read correctly. Relevance stays visible as supporting context rather than being confused with slot-based selection."
             title={selectedGroup.name}
           >
             <div style={{ display: "grid", gap: "0.85rem" }}>
@@ -458,108 +370,6 @@ export default function SkillGroupsAdminPage() {
                 </div>
               </div>
             </div>
-          </AdminPanel>
-
-          <AdminPanel
-            subtitle={
-              selectedRowHasSlots
-                ? "Slot-driven groups are shown accurately here. Metadata editing remains available, but fixed memberships and selection slots are read-only in this pass to avoid misleading checkbox-only editing."
-                : "Editing remains available here. Legacy groups without slots still use the raw inclusion workflow."
-            }
-            title={`Edit ${selectedGroup.name}`}
-          >
-            {canEdit ? (
-              <form
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  void handleSave();
-                }}
-                style={{ display: "grid", gap: "0.9rem" }}
-              >
-                <AdminField label="Group id">
-                  <AdminInput readOnly value={selectedGroup.id} />
-                </AdminField>
-
-                <AdminField label="Name">
-                  <AdminInput
-                    onChange={(event) => setFormState({ ...formState, name: event.target.value })}
-                    value={activeForm.name}
-                  />
-                </AdminField>
-
-                <AdminField label="Sort order">
-                  <AdminInput
-                    onChange={(event) =>
-                      setFormState({ ...activeForm, sortOrder: event.target.value })
-                    }
-                    type="number"
-                    value={activeForm.sortOrder}
-                  />
-                </AdminField>
-
-                <AdminField label="Notes">
-                  <AdminTextarea
-                    onChange={(event) =>
-                      setFormState({ ...activeForm, description: event.target.value })
-                    }
-                    value={activeForm.description}
-                  />
-                </AdminField>
-
-                {selectedRowHasSlots ? (
-                  <>
-                    <AdminField label="Fixed skills">
-                      {selectedRow?.fixedSkills.length ? (
-                        <AdminTagList values={selectedRow.fixedSkills.map(renderMembershipLabel)} />
-                      ) : (
-                        <div style={{ color: "#8a7e63" }}>No fixed skills in this group.</div>
-                      )}
-                    </AdminField>
-
-                    <AdminField label="Selection slots">
-                      <div style={{ display: "grid", gap: "0.75rem" }}>
-                        {(selectedRow?.selectionSlots ?? []).map((slot) => (
-                          <div
-                            key={slot.id}
-                            style={{
-                              background: "rgba(126, 93, 42, 0.06)",
-                              border: "1px solid rgba(85, 73, 48, 0.12)",
-                              borderRadius: 14,
-                              display: "grid",
-                              gap: "0.45rem",
-                              padding: "0.75rem 0.9rem"
-                            }}
-                          >
-                            <div style={{ color: "#2e2619", fontWeight: 700 }}>{renderSlotSummary(slot)}</div>
-                            <div style={{ color: "#5b5036", fontSize: "0.92rem", lineHeight: 1.5 }}>
-                              Candidates: {slot.candidateSkills.join(", ")}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </AdminField>
-                  </>
-                ) : (
-                  <AdminField label="Included skills">
-                    <AdminCheckboxList
-                      onToggle={toggleSkill}
-                      options={content.skills
-                        .slice()
-                        .sort((left, right) => left.sortOrder - right.sortOrder || left.name.localeCompare(right.name))
-                        .map((skill) => ({
-                          label: skill.name,
-                          selected: activeForm.includedSkillIds.includes(skill.id),
-                          value: skill.id
-                        }))}
-                    />
-                  </AdminField>
-                )}
-
-                <AdminButton type="submit">Save Skill Group</AdminButton>
-              </form>
-            ) : (
-              <AdminReadOnlyNotice message="Skill groups are visible here for review, but editing is limited to Admin and GM accounts." />
-            )}
           </AdminPanel>
         </div>
       </div>
