@@ -106,6 +106,42 @@ const PLAYER_FACING_SKILL_CATEGORY_BY_GROUP_ID = {
   wilderness_group: "fieldcraft"
 };
 
+const SKILL_GROUP_SELECTION_SLOTS_BY_ID = {
+  basic_melee_training: [
+    {
+      candidateSkillIds: [
+        "one_handed_edged",
+        "one_handed_concussion_axe",
+        "polearms",
+        "lance",
+        "two_handed_edged",
+        "two_handed_concussion_axe"
+      ],
+      chooseCount: 1,
+      id: "melee_weapon_choice",
+      label: "Choose one melee weapon skill",
+      required: true
+    }
+  ]
+};
+
+const EXTRA_GROUP_IDS_BY_SKILL_ID = Object.entries(SKILL_GROUP_SELECTION_SLOTS_BY_ID).reduce(
+  (result, [groupId, slots]) => {
+    for (const slot of slots) {
+      for (const skillId of slot.candidateSkillIds) {
+        const existingGroupIds = result[skillId] ?? [];
+
+        if (!existingGroupIds.includes(groupId)) {
+          result[skillId] = [...existingGroupIds, groupId];
+        }
+      }
+    }
+
+    return result;
+  },
+  {}
+);
+
 const CIVILIZATION_SEED_DEFINITIONS = [
   {
     historicalAnalogue: "Early medieval Scandinavia / Norse jarldoms",
@@ -392,7 +428,13 @@ const skills = rawBundle.skills
     const taxonomyGroupIds = parseJsonLike(skill.taxonomyGroupIds);
     const groupIds = orderCanonicalSkillGroupIds(
       skill.skillId,
-      [...new Set([...trainingGroupIds, ...taxonomyGroupIds])]
+      [
+        ...new Set([
+          ...trainingGroupIds,
+          ...taxonomyGroupIds,
+          ...(EXTRA_GROUP_IDS_BY_SKILL_ID[skill.skillId] ?? [])
+        ])
+      ]
     );
     const dependencies = parseJsonLike(skill.dependencyRules).map((dependency) => ({
       skillId: dependency.skillId,
@@ -565,6 +607,10 @@ const skillGroups = skillGroupSources.map((group) => ({
       relevance: skillsById.get(skillId)?.groupId === group.id ? "core" : "optional",
       skillId
     })),
+  selectionSlots: (SKILL_GROUP_SELECTION_SLOTS_BY_ID[group.id] ?? []).map((slot) => ({
+    ...slot,
+    candidateSkillIds: slot.candidateSkillIds.filter((skillId) => skillsById.has(skillId))
+  })),
   sortOrder: group.sortOrder
 }));
 

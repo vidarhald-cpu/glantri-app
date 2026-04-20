@@ -176,6 +176,40 @@ describe("validateCanonicalContent", () => {
     expect(() => validateCanonicalContent(invalidContent)).toThrow();
   });
 
+  it("fails on invalid skill-group selection slot references", () => {
+    expect(() =>
+      validateCanonicalContent({
+        civilizations: [],
+        languages: [],
+        professionFamilies: [],
+        professionSkills: [],
+        professions: [],
+        societies: [],
+        societyLevels: [],
+        skillGroups: [
+          {
+            id: "test_group",
+            name: "Test group",
+            selectionSlots: [
+              {
+                candidateSkillIds: ["missing-skill"],
+                chooseCount: 1,
+                id: "missing_choice",
+                label: "Choose one missing skill",
+                required: true
+              }
+            ],
+            sortOrder: 1
+          }
+        ],
+        skills: [],
+        specializations: []
+      })
+    ).toThrow(
+      `Skill group "Test group" (test_group) selection slot "missing_choice" references unknown skill "missing-skill".`
+    );
+  });
+
   it("fails on invalid secondary or specialization skill parents", () => {
     expect(firstSecondarySkill).toBeDefined();
 

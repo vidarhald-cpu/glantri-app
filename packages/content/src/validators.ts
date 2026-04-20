@@ -17,8 +17,13 @@ function getSkillPointWeight(skill: CanonicalContent["skills"][number]): number 
 function getSkillIdsForGroup(content: CanonicalContent, groupId: string): string[] {
   const group = content.skillGroups.find((candidate) => candidate.id === groupId);
 
-  if ((group?.skillMemberships?.length ?? 0) > 0) {
-    return [...new Set((group?.skillMemberships ?? []).map((membership) => membership.skillId))];
+  if ((group?.skillMemberships?.length ?? 0) > 0 || (group?.selectionSlots?.length ?? 0) > 0) {
+    return [
+      ...new Set([
+        ...(group?.skillMemberships ?? []).map((membership) => membership.skillId),
+        ...(group?.selectionSlots ?? []).flatMap((slot) => slot.candidateSkillIds)
+      ])
+    ];
   }
 
   return content.skills
@@ -297,6 +302,35 @@ function validateSkillRelationships(content: CanonicalContent): CanonicalContent
         issues.push(
           `Skill group "${group.name}" (${group.id}) should mark cross-listed skill "${skill.name}" (${skill.id}) as optional.`
         );
+      }
+    }
+
+    for (const slot of group.selectionSlots ?? []) {
+      if (slot.chooseCount > slot.candidateSkillIds.length) {
+        issues.push(
+          `Skill group "${group.name}" (${group.id}) has selection slot "${slot.id}" choosing ${slot.chooseCount} skill(s) from only ${slot.candidateSkillIds.length} candidate(s).`
+        );
+      }
+
+      for (const candidateSkillId of slot.candidateSkillIds) {
+        if (!skillIds.has(candidateSkillId)) {
+          issues.push(
+            `Skill group "${group.name}" (${group.id}) selection slot "${slot.id}" references unknown skill "${candidateSkillId}".`
+          );
+          continue;
+        }
+
+        const skill = content.skills.find((candidate) => candidate.id === candidateSkillId);
+
+        if (!skill) {
+          continue;
+        }
+
+        if (!skill.groupIds.includes(group.id)) {
+          issues.push(
+            `Skill group "${group.name}" (${group.id}) selection slot "${slot.id}" references skill "${candidateSkillId}" that does not include the group in its groupIds.`
+          );
+        }
       }
     }
   }

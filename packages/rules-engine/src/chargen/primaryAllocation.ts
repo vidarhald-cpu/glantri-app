@@ -29,7 +29,8 @@ import { selectBestSkillGroupContribution } from "../skills/selectBestSkillGroup
 import { STANDARD_CHARGEN_METHOD_POLICY } from "./policy";
 import {
   buildChargenLanguageSelectionSummary,
-  buildChargenSelectableSkillSummary
+  buildChargenSelectableSkillSummary,
+  syncChargenSelectionSkillRows
 } from "./selectionStructure";
 import { getResolvedProfileStats } from "./statResolution";
 
@@ -271,7 +272,19 @@ function normalizeSpecialization(
 function recalculateProgression(progression: CharacterProgression): CharacterProgression {
   const chargenSelections: CharacterChargenSelections = {
     selectedLanguageIds: [...new Set(progression.chargenSelections?.selectedLanguageIds ?? [])],
-    selectedSkillIds: [...new Set(progression.chargenSelections?.selectedSkillIds ?? [])]
+    selectedSkillIds: [...new Set(progression.chargenSelections?.selectedSkillIds ?? [])],
+    selectedGroupSlots: [
+      ...new Map(
+        (progression.chargenSelections?.selectedGroupSlots ?? []).map((selection) => [
+          `${selection.groupId}:${selection.slotId}`,
+          {
+            groupId: selection.groupId,
+            selectedSkillIds: [...new Set(selection.selectedSkillIds ?? [])],
+            slotId: selection.slotId
+          }
+        ])
+      ).values()
+    ]
   };
 
   return {
@@ -1571,7 +1584,12 @@ export function buildChargenDraftView(input: {
   societyId?: string;
   societyLevel?: number;
 }): ChargenDraftView {
-  const progression = recalculateProgression(input.progression);
+  const progression = recalculateProgression(
+    syncChargenSelectionSkillRows({
+      content: input.content,
+      progression: recalculateProgression(input.progression)
+    })
+  );
   const education = buildEducationBreakdown({
     content: input.content,
     professionId: input.professionId,
@@ -1846,6 +1864,20 @@ export function reviewChargenDraft(
     }
   }
 
+  const selectableSkillSummary = buildChargenSelectableSkillSummary({
+    content: input.content,
+    professionId: input.professionId,
+    progression,
+    societyId: input.societyId,
+    societyLevel: input.societyLevel
+  });
+
+  for (const slot of selectableSkillSummary.selectionSlots) {
+    if (slot.required && !slot.isSatisfied) {
+      errorSet.add(`${slot.groupName}: ${slot.label}.`);
+    }
+  }
+
   return {
     canFinalize: errorSet.size === 0,
     draftView,
@@ -1866,7 +1898,13 @@ export function finalizeChargenDraft(
     };
   }
 
-  const progression = recalculateProgression(structuredClone(input.progression));
+  let progression = recalculateProgression(structuredClone(input.progression));
+  progression = recalculateProgression(
+    syncChargenSelectionSkillRows({
+      content: input.content,
+      progression
+    })
+  );
   progression.educationPoints = review.draftView.education.theoreticalSkillCount;
   const languageSummary = buildChargenLanguageSelectionSummary({
     content: input.content,
@@ -1882,7 +1920,8 @@ export function finalizeChargenDraft(
   });
   progression.chargenSelections = {
     selectedLanguageIds: languageSummary.selectedLanguageIds,
-    selectedSkillIds: selectableSkillSummary.selectedSkillIds
+    selectedSkillIds: selectableSkillSummary.selectedSkillIds,
+    selectedGroupSlots: progression.chargenSelections?.selectedGroupSlots ?? []
   };
 
   const profession = getProfessionById(input.content, input.professionId);

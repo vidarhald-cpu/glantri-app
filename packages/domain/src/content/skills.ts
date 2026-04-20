@@ -185,11 +185,20 @@ export const skillGroupSkillMembershipSchema = z.object({
   relevance: skillGroupSkillRelevanceSchema.default("optional")
 });
 
+export const skillGroupSelectionSlotSchema = z.object({
+  candidateSkillIds: z.array(idSchema).min(1),
+  chooseCount: z.number().int().positive().default(1),
+  id: idSchema,
+  label: z.string().min(1),
+  required: z.boolean().default(true)
+});
+
 export const skillGroupDefinitionSchema = z.object({
   id: idSchema,
   name: z.string().min(1),
   description: z.string().optional(),
   skillMemberships: z.array(skillGroupSkillMembershipSchema).optional(),
+  selectionSlots: z.array(skillGroupSelectionSlotSchema).optional(),
   sortOrder: z.number().int().default(0)
 });
 
@@ -364,8 +373,9 @@ export const civilizationDefinitionSchema = z.object({
   notes: z.string().optional()
 });
 
-export type SkillGroupDefinition = z.infer<typeof skillGroupDefinitionSchema>;
 export type SkillGroupSkillMembership = z.infer<typeof skillGroupSkillMembershipSchema>;
+export type SkillGroupSelectionSlot = z.infer<typeof skillGroupSelectionSlotSchema>;
+export type SkillGroupDefinition = z.infer<typeof skillGroupDefinitionSchema>;
 export type SkillDefinition = z.infer<typeof skillDefinitionSchema>;
 export type SkillDependency = z.infer<typeof skillDependencySchema>;
 export type SkillSpecialization = z.infer<typeof skillSpecializationSchema>;

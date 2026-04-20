@@ -1,4 +1,5 @@
 import type {
+  CharacterChargenGroupSlotSelection,
   CharacterProgression,
   LanguageDefinition,
   ProfessionDefinition,
@@ -42,10 +43,25 @@ export interface ChargenLanguageSelectionSummary {
 export interface ChargenSelectableSkillSummary {
   coreSkillIds: string[];
   coreSkills: SkillDefinition[];
+  selectionSlots: ChargenSelectableSkillSlotSummary[];
   selectableSkillIds: string[];
   selectableSkills: SkillDefinition[];
   selectedSkillIds: string[];
   selectedSkills: SkillDefinition[];
+}
+
+export interface ChargenSelectableSkillSlotSummary {
+  candidateSkillIds: string[];
+  candidateSkills: SkillDefinition[];
+  chooseCount: number;
+  groupId: string;
+  groupName: string;
+  isSatisfied: boolean;
+  label: string;
+  required: boolean;
+  selectedSkillIds: string[];
+  selectedSkills: SkillDefinition[];
+  slotId: string;
 }
 
 function uniqueIds(ids: Iterable<string>): string[] {
@@ -80,6 +96,53 @@ function sortSkillIds(content: ChargenSelectionContentShape, ids: string[]): str
 
     return leftOrder[1] - rightOrder[1] || left.localeCompare(right);
   });
+}
+
+function createEmptySkillProgressionRow(skill: SkillDefinition) {
+  return {
+    category: skill.category,
+    grantedRanks: 0,
+    groupId: skill.groupId,
+    level: 0,
+    primaryRanks: 0,
+    ranks: 0,
+    secondaryRanks: 0,
+    skillId: skill.id
+  } satisfies CharacterProgression["skills"][number];
+}
+
+function normalizeGroupSlotSelections(
+  selections: CharacterChargenGroupSlotSelection[]
+): CharacterChargenGroupSlotSelection[] {
+  const normalizedByKey = new Map<string, CharacterChargenGroupSlotSelection>();
+
+  for (const selection of selections) {
+    normalizedByKey.set(`${selection.groupId}:${selection.slotId}`, {
+      groupId: selection.groupId,
+      selectedSkillIds: uniqueIds(selection.selectedSkillIds ?? []),
+      slotId: selection.slotId
+    });
+  }
+
+  return [...normalizedByKey.values()];
+}
+
+function getStoredGroupSlotSelections(progression: CharacterProgression): CharacterChargenGroupSlotSelection[] {
+  return normalizeGroupSlotSelections(progression.chargenSelections?.selectedGroupSlots ?? []);
+}
+
+function getResolvedSelectedSlotSkillIds(progression: CharacterProgression): string[] {
+  const activeGroupIds = new Set(
+    progression.skillGroups
+      .filter((group) => (group.ranks ?? 0) > 0 || (group.grantedRanks ?? 0) > 0)
+      .map((group) => group.groupId)
+  );
+
+  return uniqueIds(
+    getStoredGroupSlotSelections(progression)
+      .filter((selection) => activeGroupIds.has(selection.groupId))
+      .flatMap((selection) => selection.selectedSkillIds)
+  );
 }
 
 function getSocietyDefinition(
@@ -155,6 +218,7 @@ export function buildChargenSelectableSkillSummary(input: {
     return {
       coreSkillIds: [],
       coreSkills: [],
+      selectionSlots: [],
       selectableSkillIds: [],
       selectableSkills: [],
       selectedSkillIds: [],
@@ -184,38 +248,135 @@ export function buildChargenSelectableSkillSummary(input: {
     ...professionPackage.favored.finalEffectiveSkillIds
   ]);
   const normalSkillIdSet = new Set(normalSkillIds);
+  const skillsById = new Map(input.content.skills.map((skill) => [skill.id, skill]));
+  const groupById = new Map(input.content.skillGroups.map((group) => [group.id, group]));
+  const storedGroupSlotSelections = getStoredGroupSlotSelections(input.progression);
+  const ownedGroupIds = new Set(
+    input.progression.skillGroups
+      .filter((group) => (group.ranks ?? 0) > 0 || (group.grantedRanks ?? 0) > 0)
+      .map((group) => group.groupId)
+  );
+  const selectionSlots = allowedGroupIds.filter((groupId) => ownedGroupIds.has(groupId)).flatMap((groupId) => {
+    const group = groupById.get(groupId);
+
+    return (group?.selectionSlots ?? []).map((slot) => {
+      const candidateSkillIds = sortSkillIds(
+        input.content,
+        uniqueIds(slot.candidateSkillIds.filter((skillId) => skillsById.has(skillId)))
+      );
+      const candidateSkillIdSet = new Set(candidateSkillIds);
+      const storedSelection = storedGroupSlotSelections.find(
+        (selection) => selection.groupId === groupId && selection.slotId === slot.id
+      );
+      const selectedSkillIds = sortSkillIds(
+        input.content,
+        uniqueIds(
+          (storedSelection?.selectedSkillIds ?? []).filter((skillId) => candidateSkillIdSet.has(skillId))
+        ).slice(0, slot.chooseCount)
+      );
+
+      return {
+        candidateSkillIds,
+        candidateSkills: candidateSkillIds
+          .map((skillId) => skillsById.get(skillId))
+          .filter((skill): skill is SkillDefinition => skill !== undefined),
+        chooseCount: slot.chooseCount,
+        groupId,
+        groupName: group?.name ?? groupId,
+        isSatisfied: !slot.required || selectedSkillIds.length >= slot.chooseCount,
+        label: slot.label,
+        required: slot.required,
+        selectedSkillIds,
+        selectedSkills: selectedSkillIds
+          .map((skillId) => skillsById.get(skillId))
+          .filter((skill): skill is SkillDefinition => skill !== undefined),
+        slotId: slot.id
+      } satisfies ChargenSelectableSkillSlotSummary;
+    });
+  });
+  const slotCandidateSkillIdSet = new Set(selectionSlots.flatMap((slot) => slot.candidateSkillIds));
   const coreSkillIds = sortSkillIds(
     input.content,
-    professionPackage.core.finalEffectiveReachableSkillIds.filter((skillId) =>
-      normalSkillIdSet.has(skillId)
+    professionPackage.core.finalEffectiveReachableSkillIds.filter(
+      (skillId) => normalSkillIdSet.has(skillId) && !slotCandidateSkillIdSet.has(skillId)
     )
   );
   const coreSkillIdSet = new Set(coreSkillIds);
   const selectableSkillIds = sortSkillIds(
     input.content,
-    normalSkillIds.filter((skillId) => !coreSkillIdSet.has(skillId))
+    normalSkillIds.filter(
+      (skillId) => !coreSkillIdSet.has(skillId) && !slotCandidateSkillIdSet.has(skillId)
+    )
   );
-  const selectableSkillIdSet = new Set(selectableSkillIds);
-  const selectedSkillIds = sortSkillIds(
+  const filteredSelectableSkillIds = sortSkillIds(
+    input.content,
+    selectableSkillIds
+  );
+  const selectableSkillIdSet = new Set(filteredSelectableSkillIds);
+  const selectedFreeChoiceSkillIds = sortSkillIds(
     input.content,
     (input.progression.chargenSelections?.selectedSkillIds ?? []).filter((skillId) =>
       selectableSkillIdSet.has(skillId)
     )
   );
-  const skillsById = new Map(input.content.skills.map((skill) => [skill.id, skill]));
+  const selectedSkillIds = sortSkillIds(
+    input.content,
+    uniqueIds([
+      ...selectedFreeChoiceSkillIds,
+      ...selectionSlots.flatMap((slot) => slot.selectedSkillIds)
+    ])
+  );
 
   return {
     coreSkillIds,
     coreSkills: coreSkillIds
       .map((skillId) => skillsById.get(skillId))
       .filter((skill): skill is SkillDefinition => skill !== undefined),
-    selectableSkillIds,
-    selectableSkills: selectableSkillIds
+    selectionSlots,
+    selectableSkillIds: filteredSelectableSkillIds,
+    selectableSkills: filteredSelectableSkillIds
       .map((skillId) => skillsById.get(skillId))
       .filter((skill): skill is SkillDefinition => skill !== undefined),
     selectedSkillIds,
     selectedSkills: selectedSkillIds
       .map((skillId) => skillsById.get(skillId))
       .filter((skill): skill is SkillDefinition => skill !== undefined)
+  };
+}
+
+export function syncChargenSelectionSkillRows(input: {
+  content: Pick<ChargenSelectionContentShape, "skills">;
+  progression: CharacterProgression;
+}): CharacterProgression {
+  const selectedSkillIds = new Set([
+    ...(input.progression.chargenSelections?.selectedSkillIds ?? []),
+    ...getResolvedSelectedSlotSkillIds(input.progression)
+  ]);
+  const selectedDefinitions = input.content.skills.filter((skill) => selectedSkillIds.has(skill.id));
+  const nextSkills = [...input.progression.skills];
+
+  for (const skill of selectedDefinitions) {
+    if (!nextSkills.some((candidate) => candidate.skillId === skill.id)) {
+      nextSkills.push(createEmptySkillProgressionRow(skill));
+    }
+  }
+
+  const nextSkillIdSet = new Set(selectedDefinitions.map((skill) => skill.id));
+  const cleanedSkills = nextSkills.filter((skill) => {
+    if (nextSkillIdSet.has(skill.skillId)) {
+      return true;
+    }
+
+    return (
+      (skill.grantedRanks ?? 0) > 0 ||
+      (skill.primaryRanks ?? 0) > 0 ||
+      (skill.secondaryRanks ?? 0) > 0 ||
+      (skill.ranks ?? 0) > 0
+    );
+  });
+
+  return {
+    ...input.progression,
+    skills: cleanedSkills
   };
 }

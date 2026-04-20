@@ -30,14 +30,27 @@ const content = {
   ],
   professions: [{ familyId: "military", id: "guard", name: "Guard", subtypeName: "Guard" }],
   skillGroups: [
-    { id: "field_soldiering", name: "Field soldiering", sortOrder: 1 },
+    {
+      id: "field_soldiering",
+      name: "Field soldiering",
+      selectionSlots: [
+        {
+          candidateSkillIds: ["spear"],
+          chooseCount: 1,
+          id: "melee_choice",
+          label: "Choose one melee skill",
+          required: true
+        }
+      ],
+      sortOrder: 1
+    },
     { id: "urban_watch", name: "Urban watch", sortOrder: 2 }
   ],
   skills: [
     {
       allowsSpecializations: false,
-      category: "ordinary",
-      categoryId: "combat",
+      category: "ordinary" as const,
+      categoryId: "combat" as const,
       dependencies: [],
       dependencySkillIds: [],
       groupId: "field_soldiering",
@@ -46,14 +59,30 @@ const content = {
       isTheoretical: false,
       linkedStats: ["dex"],
       name: "Shield Use",
-      requiresLiteracy: "no",
+      requiresLiteracy: "no" as const,
       societyLevel: 1,
       sortOrder: 1
     },
     {
       allowsSpecializations: false,
-      category: "ordinary",
-      categoryId: "leadership",
+      category: "ordinary" as const,
+      categoryId: "combat" as const,
+      dependencies: [],
+      dependencySkillIds: [],
+      groupId: "field_soldiering",
+      groupIds: ["field_soldiering"],
+      id: "spear",
+      isTheoretical: false,
+      linkedStats: ["dex"],
+      name: "Spear",
+      requiresLiteracy: "no" as const,
+      societyLevel: 1,
+      sortOrder: 2
+    },
+    {
+      allowsSpecializations: false,
+      category: "ordinary" as const,
+      categoryId: "leadership" as const,
       dependencies: [],
       dependencySkillIds: [],
       groupId: "urban_watch",
@@ -62,9 +91,9 @@ const content = {
       isTheoretical: false,
       linkedStats: ["cha"],
       name: "Leadership",
-      requiresLiteracy: "no",
+      requiresLiteracy: "no" as const,
       societyLevel: 1,
-      sortOrder: 2
+      sortOrder: 3
     }
   ],
   societies: [
@@ -94,6 +123,13 @@ const progression: CharacterProgression = {
   chargenMode: "standard",
   chargenSelections: {
     selectedLanguageIds: [],
+    selectedGroupSlots: [
+      {
+        groupId: "field_soldiering",
+        selectedSkillIds: ["spear"],
+        slotId: "melee_choice"
+      }
+    ],
     selectedSkillIds: ["leadership"]
   },
   educationPoints: 0,
@@ -102,7 +138,16 @@ const progression: CharacterProgression = {
   primaryPoolTotal: 60,
   secondaryPoolSpent: 0,
   secondaryPoolTotal: 0,
-  skillGroups: [],
+  skillGroups: [
+    {
+      gms: 0,
+      grantedRanks: 0,
+      groupId: "field_soldiering",
+      primaryRanks: 1,
+      secondaryRanks: 0,
+      ranks: 1
+    }
+  ],
   skills: [],
   specializations: []
 };
@@ -130,7 +175,15 @@ describe("selectionStructure", () => {
     });
 
     expect(summary.coreSkillIds).toEqual(["shield_use"]);
+    expect(summary.selectionSlots).toHaveLength(1);
+    expect(summary.selectionSlots[0]).toMatchObject({
+      candidateSkillIds: ["spear"],
+      groupId: "field_soldiering",
+      isSatisfied: true,
+      selectedSkillIds: ["spear"],
+      slotId: "melee_choice"
+    });
     expect(summary.selectableSkillIds).toEqual(["leadership"]);
-    expect(summary.selectedSkillIds).toEqual(["leadership"]);
+    expect(summary.selectedSkillIds).toEqual(["spear", "leadership"]);
   });
 });

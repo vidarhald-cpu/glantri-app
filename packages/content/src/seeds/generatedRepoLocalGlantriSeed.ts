@@ -264,6 +264,7 @@ export const generatedRepoLocalGlantriSeed = {
           "skillId": "history"
         }
       ],
+      "selectionSlots": [],
       "sortOrder": 1
     },
     {
@@ -284,6 +285,7 @@ export const generatedRepoLocalGlantriSeed = {
           "skillId": "rhetorical_composition"
         }
       ],
+      "selectionSlots": [],
       "sortOrder": 2
     },
     {
@@ -304,6 +306,7 @@ export const generatedRepoLocalGlantriSeed = {
           "skillId": "ritual_interpretation"
         }
       ],
+      "selectionSlots": [],
       "sortOrder": 3
     },
     {
@@ -324,6 +327,7 @@ export const generatedRepoLocalGlantriSeed = {
           "skillId": "appraisal"
         }
       ],
+      "selectionSlots": [],
       "sortOrder": 4
     },
     {
@@ -344,6 +348,7 @@ export const generatedRepoLocalGlantriSeed = {
           "skillId": "bureaucratic_writing"
         }
       ],
+      "selectionSlots": [],
       "sortOrder": 5
     },
     {
@@ -364,6 +369,7 @@ export const generatedRepoLocalGlantriSeed = {
           "skillId": "courtly_protocol"
         }
       ],
+      "selectionSlots": [],
       "sortOrder": 6
     },
     {
@@ -384,6 +390,7 @@ export const generatedRepoLocalGlantriSeed = {
           "skillId": "social_perception"
         }
       ],
+      "selectionSlots": [],
       "sortOrder": 7
     },
     {
@@ -404,6 +411,7 @@ export const generatedRepoLocalGlantriSeed = {
           "skillId": "nursing"
         }
       ],
+      "selectionSlots": [],
       "sortOrder": 8
     },
     {
@@ -424,6 +432,7 @@ export const generatedRepoLocalGlantriSeed = {
           "skillId": "poison_lore"
         }
       ],
+      "selectionSlots": [],
       "sortOrder": 9
     },
     {
@@ -444,6 +453,7 @@ export const generatedRepoLocalGlantriSeed = {
           "skillId": "boat_handling"
         }
       ],
+      "selectionSlots": [],
       "sortOrder": 10
     },
     {
@@ -464,6 +474,7 @@ export const generatedRepoLocalGlantriSeed = {
           "skillId": "measurement"
         }
       ],
+      "selectionSlots": [],
       "sortOrder": 11
     },
     {
@@ -484,6 +495,7 @@ export const generatedRepoLocalGlantriSeed = {
           "skillId": "animal_training"
         }
       ],
+      "selectionSlots": [],
       "sortOrder": 12
     },
     {
@@ -504,6 +516,7 @@ export const generatedRepoLocalGlantriSeed = {
           "skillId": "animal_care"
         }
       ],
+      "selectionSlots": [],
       "sortOrder": 13
     },
     {
@@ -524,6 +537,7 @@ export const generatedRepoLocalGlantriSeed = {
           "skillId": "trading"
         }
       ],
+      "selectionSlots": [],
       "sortOrder": 14
     },
     {
@@ -548,6 +562,7 @@ export const generatedRepoLocalGlantriSeed = {
           "skillId": "search"
         }
       ],
+      "selectionSlots": [],
       "sortOrder": 15
     },
     {
@@ -568,6 +583,7 @@ export const generatedRepoLocalGlantriSeed = {
           "skillId": "stealth"
         }
       ],
+      "selectionSlots": [],
       "sortOrder": 16
     },
     {
@@ -588,6 +604,7 @@ export const generatedRepoLocalGlantriSeed = {
           "skillId": "lockpicking"
         }
       ],
+      "selectionSlots": [],
       "sortOrder": 17
     },
     {
@@ -608,6 +625,7 @@ export const generatedRepoLocalGlantriSeed = {
           "skillId": "camouflage"
         }
       ],
+      "selectionSlots": [],
       "sortOrder": 18
     },
     {
@@ -632,6 +650,7 @@ export const generatedRepoLocalGlantriSeed = {
           "skillId": "balance"
         }
       ],
+      "selectionSlots": [],
       "sortOrder": 19
     },
     {
@@ -652,6 +671,7 @@ export const generatedRepoLocalGlantriSeed = {
           "skillId": "social_perception"
         }
       ],
+      "selectionSlots": [],
       "sortOrder": 20
     },
     {
@@ -676,6 +696,7 @@ export const generatedRepoLocalGlantriSeed = {
           "skillId": "music"
         }
       ],
+      "selectionSlots": [],
       "sortOrder": 21
     },
     {
@@ -696,6 +717,7 @@ export const generatedRepoLocalGlantriSeed = {
           "skillId": "oratory"
         }
       ],
+      "selectionSlots": [],
       "sortOrder": 22
     },
     {
@@ -720,6 +742,7 @@ export const generatedRepoLocalGlantriSeed = {
           "skillId": "meditation"
         }
       ],
+      "selectionSlots": [],
       "sortOrder": 23
     },
     {
@@ -740,6 +763,7 @@ export const generatedRepoLocalGlantriSeed = {
           "skillId": "surveying"
         }
       ],
+      "selectionSlots": [],
       "sortOrder": 24
     },
     {
@@ -764,6 +788,7 @@ export const generatedRepoLocalGlantriSeed = {
           "skillId": "alchemy"
         }
       ],
+      "selectionSlots": [],
       "sortOrder": 25
     },
     {
@@ -784,6 +809,7 @@ export const generatedRepoLocalGlantriSeed = {
           "skillId": "ritual_interpretation"
         }
       ],
+      "selectionSlots": [],
       "sortOrder": 26
     },
     {
@@ -798,6 +824,22 @@ export const generatedRepoLocalGlantriSeed = {
         {
           "relevance": "core",
           "skillId": "parry"
+        }
+      ],
+      "selectionSlots": [
+        {
+          "candidateSkillIds": [
+            "one_handed_edged",
+            "one_handed_concussion_axe",
+            "polearms",
+            "lance",
+            "two_handed_edged",
+            "two_handed_concussion_axe"
+          ],
+          "chooseCount": 1,
+          "id": "melee_weapon_choice",
+          "label": "Choose one melee weapon skill",
+          "required": true
         }
       ],
       "sortOrder": 27
@@ -816,6 +858,7 @@ export const generatedRepoLocalGlantriSeed = {
           "skillId": "parry"
         }
       ],
+      "selectionSlots": [],
       "sortOrder": 28
     },
     {
@@ -832,6 +875,7 @@ export const generatedRepoLocalGlantriSeed = {
           "skillId": "perception"
         }
       ],
+      "selectionSlots": [],
       "sortOrder": 29
     },
     {
@@ -848,6 +892,7 @@ export const generatedRepoLocalGlantriSeed = {
           "skillId": "perception"
         }
       ],
+      "selectionSlots": [],
       "sortOrder": 30
     },
     {
@@ -868,6 +913,7 @@ export const generatedRepoLocalGlantriSeed = {
           "skillId": "formation_fighting"
         }
       ],
+      "selectionSlots": [],
       "sortOrder": 31
     },
     {
@@ -896,6 +942,7 @@ export const generatedRepoLocalGlantriSeed = {
           "skillId": "parry"
         }
       ],
+      "selectionSlots": [],
       "sortOrder": 32
     },
     {
@@ -916,6 +963,7 @@ export const generatedRepoLocalGlantriSeed = {
           "skillId": "battlefield_awareness"
         }
       ],
+      "selectionSlots": [],
       "sortOrder": 33
     },
     {
@@ -936,6 +984,7 @@ export const generatedRepoLocalGlantriSeed = {
           "skillId": "perception"
         }
       ],
+      "selectionSlots": [],
       "sortOrder": 34
     },
     {
@@ -956,6 +1005,7 @@ export const generatedRepoLocalGlantriSeed = {
           "skillId": "perception"
         }
       ],
+      "selectionSlots": [],
       "sortOrder": 35
     },
     {
@@ -976,6 +1026,7 @@ export const generatedRepoLocalGlantriSeed = {
           "skillId": "tactics"
         }
       ],
+      "selectionSlots": [],
       "sortOrder": 36
     },
     {
@@ -1008,6 +1059,7 @@ export const generatedRepoLocalGlantriSeed = {
           "skillId": "falconry"
         }
       ],
+      "selectionSlots": [],
       "sortOrder": 37
     },
     {
@@ -1040,6 +1092,7 @@ export const generatedRepoLocalGlantriSeed = {
           "skillId": "acrobatics"
         }
       ],
+      "selectionSlots": [],
       "sortOrder": 38
     },
     {
@@ -1104,6 +1157,7 @@ export const generatedRepoLocalGlantriSeed = {
           "skillId": "seduction"
         }
       ],
+      "selectionSlots": [],
       "sortOrder": 39
     },
     {
@@ -1136,6 +1190,7 @@ export const generatedRepoLocalGlantriSeed = {
           "skillId": "nursing"
         }
       ],
+      "selectionSlots": [],
       "sortOrder": 40
     },
     {
@@ -1180,6 +1235,7 @@ export const generatedRepoLocalGlantriSeed = {
           "skillId": "appraisal"
         }
       ],
+      "selectionSlots": [],
       "sortOrder": 41
     },
     {
@@ -1216,6 +1272,7 @@ export const generatedRepoLocalGlantriSeed = {
           "skillId": "oratory"
         }
       ],
+      "selectionSlots": [],
       "sortOrder": 42
     },
     {
@@ -1252,6 +1309,7 @@ export const generatedRepoLocalGlantriSeed = {
           "skillId": "mechanics"
         }
       ],
+      "selectionSlots": [],
       "sortOrder": 43
     },
     {
@@ -1284,6 +1342,7 @@ export const generatedRepoLocalGlantriSeed = {
           "skillId": "pickpocket"
         }
       ],
+      "selectionSlots": [],
       "sortOrder": 44
     },
     {
@@ -1308,6 +1367,7 @@ export const generatedRepoLocalGlantriSeed = {
           "skillId": "disguise"
         }
       ],
+      "selectionSlots": [],
       "sortOrder": 45
     },
     {
@@ -1376,6 +1436,7 @@ export const generatedRepoLocalGlantriSeed = {
           "skillId": "mounted_combat"
         }
       ],
+      "selectionSlots": [],
       "sortOrder": 46
     },
     {
@@ -1416,6 +1477,7 @@ export const generatedRepoLocalGlantriSeed = {
           "skillId": "captaincy"
         }
       ],
+      "selectionSlots": [],
       "sortOrder": 47
     },
     {
@@ -1464,6 +1526,7 @@ export const generatedRepoLocalGlantriSeed = {
           "skillId": "weapon_maintenance"
         }
       ],
+      "selectionSlots": [],
       "sortOrder": 48
     },
     {
@@ -1492,6 +1555,7 @@ export const generatedRepoLocalGlantriSeed = {
           "skillId": "perception"
         }
       ],
+      "selectionSlots": [],
       "sortOrder": 49
     },
     {
@@ -1516,6 +1580,7 @@ export const generatedRepoLocalGlantriSeed = {
           "skillId": "astrology"
         }
       ],
+      "selectionSlots": [],
       "sortOrder": 50
     },
     {
@@ -1564,6 +1629,7 @@ export const generatedRepoLocalGlantriSeed = {
           "skillId": "boat_handling"
         }
       ],
+      "selectionSlots": [],
       "sortOrder": 51
     }
   ],
@@ -4198,7 +4264,8 @@ export const generatedRepoLocalGlantriSeed = {
       "groupId": "combat_group",
       "groupIds": [
         "combat_group",
-        "mounted_warrior_training"
+        "mounted_warrior_training",
+        "basic_melee_training"
       ],
       "id": "one_handed_edged",
       "isTheoretical": false,
@@ -4221,7 +4288,8 @@ export const generatedRepoLocalGlantriSeed = {
       "description": "1-h conc./axe Fight with one-handed crushing or chopping weapons such as maces and axes. Core melee attack family.",
       "groupId": "combat_group",
       "groupIds": [
-        "combat_group"
+        "combat_group",
+        "basic_melee_training"
       ],
       "id": "one_handed_concussion_axe",
       "isTheoretical": false,
@@ -4244,7 +4312,8 @@ export const generatedRepoLocalGlantriSeed = {
       "description": "2-h edged Fight with large two-handed bladed weapons using strength, reach, and committed technique. Heavy cutting or slashing weapon family. Split from the former broad 2-handed Weapons row to align better with the source combat structure.",
       "groupId": "combat_group",
       "groupIds": [
-        "combat_group"
+        "combat_group",
+        "basic_melee_training"
       ],
       "id": "two_handed_edged",
       "isTheoretical": false,
@@ -4267,7 +4336,8 @@ export const generatedRepoLocalGlantriSeed = {
       "description": "Polearms Fight with spears and longer pole weapons used at reach. Very important common-soldier weapon family.",
       "groupId": "combat_group",
       "groupIds": [
-        "combat_group"
+        "combat_group",
+        "basic_melee_training"
       ],
       "id": "polearms",
       "isTheoretical": false,
@@ -4290,7 +4360,8 @@ export const generatedRepoLocalGlantriSeed = {
       "description": "2-h conc./axe Fight with large two-handed crushing or chopping weapons such as great axes, hammers, or mauls. Heavy impact/chopping weapon family. Split from the former broad 2-handed Weapons row to align better with the source combat structure.",
       "groupId": "combat_group",
       "groupIds": [
-        "combat_group"
+        "combat_group",
+        "basic_melee_training"
       ],
       "id": "two_handed_concussion_axe",
       "isTheoretical": false,
@@ -4319,7 +4390,8 @@ export const generatedRepoLocalGlantriSeed = {
       "groupId": "mounted_warrior_training",
       "groupIds": [
         "mounted_warrior_training",
-        "combat_group"
+        "combat_group",
+        "basic_melee_training"
       ],
       "id": "lance",
       "isTheoretical": false,

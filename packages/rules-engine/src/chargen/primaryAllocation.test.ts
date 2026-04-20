@@ -6,6 +6,7 @@ import type { CharacterProgression } from "@glantri/domain";
 import {
   buildChargenDraftView,
   createChargenProgression,
+  reviewChargenDraft,
   spendPrimaryPoint,
   spendSecondaryPoint
 } from "./primaryAllocation";
@@ -322,6 +323,360 @@ describe("chargen purchase gate integration", () => {
       name: "1-h edged",
       specificSkillLevel: 1,
     });
+  });
+
+  it("includes chosen group-slot skills in the draft view like normal skills", () => {
+    const combatContent = validateCanonicalContent({
+      skillGroups: [
+        {
+          id: "basic_melee_training",
+          name: "Basic Melee Training",
+          selectionSlots: [
+            {
+              candidateSkillIds: ["one_h_edged"],
+              chooseCount: 1,
+              id: "melee_choice",
+              label: "Choose one melee weapon skill",
+              required: true
+            }
+          ],
+          skillMemberships: [
+            {
+              relevance: "core",
+              skillId: "dodge"
+            },
+            {
+              relevance: "core",
+              skillId: "parry"
+            }
+          ],
+          sortOrder: 1
+        },
+        {
+          id: "combat_group",
+          name: "Combat group",
+          sortOrder: 2
+        }
+      ],
+      skills: [
+        {
+          id: "dodge",
+          groupId: "basic_melee_training",
+          groupIds: ["basic_melee_training"],
+          name: "Dodge",
+          linkedStats: ["dex"],
+          dependencies: [],
+          dependencySkillIds: [],
+          category: "ordinary",
+          requiresLiteracy: "no",
+          sortOrder: 1,
+          allowsSpecializations: false,
+          categoryId: "combat"
+        },
+        {
+          id: "parry",
+          groupId: "basic_melee_training",
+          groupIds: ["basic_melee_training"],
+          name: "Parry",
+          linkedStats: ["dex"],
+          dependencies: [],
+          dependencySkillIds: [],
+          category: "ordinary",
+          requiresLiteracy: "no",
+          sortOrder: 2,
+          allowsSpecializations: false,
+          categoryId: "combat"
+        },
+        {
+          id: "one_h_edged",
+          groupId: "combat_group",
+          groupIds: ["combat_group", "basic_melee_training"],
+          name: "1-h edged",
+          linkedStats: ["dex"],
+          dependencies: [],
+          dependencySkillIds: [],
+          category: "ordinary",
+          requiresLiteracy: "no",
+          sortOrder: 3,
+          allowsSpecializations: false,
+          categoryId: "combat"
+        }
+      ],
+      specializations: [],
+      professionFamilies: [
+        {
+          id: "soldier",
+          name: "Soldier"
+        }
+      ],
+      professions: [
+        {
+          id: "fighter",
+          familyId: "soldier",
+          name: "Fighter",
+          subtypeName: "Fighter"
+        }
+      ],
+      professionSkills: [
+        {
+          professionId: "soldier",
+          scope: "family",
+          grantType: "group",
+          skillGroupId: "basic_melee_training",
+          isCore: true
+        }
+      ],
+      societyLevels: [
+        {
+          societyId: "glantri",
+          societyLevel: 1,
+          societyName: "Glantri",
+          socialClass: "Common",
+          professionIds: ["fighter"],
+          skillGroupIds: ["basic_melee_training"]
+        },
+        {
+          societyId: "glantri",
+          societyLevel: 2,
+          societyName: "Glantri",
+          socialClass: "Guild",
+          professionIds: ["fighter"],
+          skillGroupIds: ["basic_melee_training"]
+        },
+        {
+          societyId: "glantri",
+          societyLevel: 3,
+          societyName: "Glantri",
+          socialClass: "Patrician",
+          professionIds: ["fighter"],
+          skillGroupIds: ["basic_melee_training"]
+        },
+        {
+          societyId: "glantri",
+          societyLevel: 4,
+          societyName: "Glantri",
+          socialClass: "Noble",
+          professionIds: ["fighter"],
+          skillGroupIds: ["basic_melee_training"]
+        }
+      ]
+    });
+
+    const draftView = buildChargenDraftView({
+      content: combatContent,
+      professionId: "fighter",
+      progression: {
+        ...createChargenProgression(),
+        chargenSelections: {
+          selectedGroupSlots: [
+            {
+              groupId: "basic_melee_training",
+              selectedSkillIds: ["one_h_edged"],
+              slotId: "melee_choice"
+            }
+          ],
+          selectedLanguageIds: [],
+          selectedSkillIds: []
+        },
+        skillGroups: [
+          {
+            gms: 0,
+            grantedRanks: 0,
+            groupId: "basic_melee_training",
+            primaryRanks: 1,
+            secondaryRanks: 0,
+            ranks: 1
+          }
+        ],
+        skills: []
+      },
+      societyId: "glantri",
+      societyLevel: 1
+    });
+
+    expect(draftView.skills.find((skill) => skill.skillId === "one_h_edged")).toMatchObject({
+      name: "1-h edged",
+      specificSkillLevel: 0
+    });
+  });
+
+  it("requires required group-slot choices before finalizing", () => {
+    const review = reviewChargenDraft({
+      content: validateCanonicalContent({
+        skillGroups: [
+          {
+            id: "basic_melee_training",
+            name: "Basic Melee Training",
+            selectionSlots: [
+              {
+                candidateSkillIds: ["one_h_edged"],
+                chooseCount: 1,
+                id: "melee_choice",
+                label: "Choose one melee weapon skill",
+                required: true
+              }
+            ],
+            skillMemberships: [
+              {
+                relevance: "core",
+                skillId: "dodge"
+              },
+              {
+                relevance: "core",
+                skillId: "parry"
+              }
+            ],
+            sortOrder: 1
+          },
+          {
+            id: "combat_group",
+            name: "Combat group",
+            sortOrder: 2
+          }
+        ],
+        skills: [
+          {
+            id: "dodge",
+            groupId: "basic_melee_training",
+            groupIds: ["basic_melee_training"],
+            name: "Dodge",
+            linkedStats: ["dex"],
+            dependencies: [],
+            dependencySkillIds: [],
+            category: "ordinary",
+            requiresLiteracy: "no",
+            sortOrder: 1,
+            allowsSpecializations: false,
+            categoryId: "combat"
+          },
+          {
+            id: "parry",
+            groupId: "basic_melee_training",
+            groupIds: ["basic_melee_training"],
+            name: "Parry",
+            linkedStats: ["dex"],
+            dependencies: [],
+            dependencySkillIds: [],
+            category: "ordinary",
+            requiresLiteracy: "no",
+            sortOrder: 2,
+            allowsSpecializations: false,
+            categoryId: "combat"
+          },
+          {
+            id: "one_h_edged",
+            groupId: "combat_group",
+            groupIds: ["combat_group", "basic_melee_training"],
+            name: "1-h edged",
+            linkedStats: ["dex"],
+            dependencies: [],
+            dependencySkillIds: [],
+            category: "ordinary",
+            requiresLiteracy: "no",
+            sortOrder: 3,
+            allowsSpecializations: false,
+            categoryId: "combat"
+          }
+        ],
+        specializations: [],
+        professionFamilies: [
+          {
+            id: "soldier",
+            name: "Soldier"
+          }
+        ],
+        professions: [
+          {
+            id: "fighter",
+            familyId: "soldier",
+            name: "Fighter",
+            subtypeName: "Fighter"
+          }
+        ],
+        professionSkills: [
+          {
+            professionId: "soldier",
+            scope: "family",
+            grantType: "group",
+            skillGroupId: "basic_melee_training",
+            isCore: true
+          }
+        ],
+        societyLevels: [
+          {
+            societyId: "glantri",
+            societyLevel: 1,
+            societyName: "Glantri",
+            socialClass: "Common",
+            professionIds: ["fighter"],
+            skillGroupIds: ["basic_melee_training"]
+          },
+          {
+            societyId: "glantri",
+            societyLevel: 2,
+            societyName: "Glantri",
+            socialClass: "Guild",
+            professionIds: ["fighter"],
+            skillGroupIds: ["basic_melee_training"]
+          },
+          {
+            societyId: "glantri",
+            societyLevel: 3,
+            societyName: "Glantri",
+            socialClass: "Patrician",
+            professionIds: ["fighter"],
+            skillGroupIds: ["basic_melee_training"]
+          },
+          {
+            societyId: "glantri",
+            societyLevel: 4,
+            societyName: "Glantri",
+            socialClass: "Noble",
+            professionIds: ["fighter"],
+            skillGroupIds: ["basic_melee_training"]
+          }
+        ]
+      }),
+      professionId: "fighter",
+      profile: {
+        distractionLevel: 0,
+        id: "profile-baseline",
+        label: "Baseline",
+        rolledStats: {
+          cha: 10,
+          com: 10,
+          con: 10,
+          dex: 10,
+          health: 10,
+          int: 10,
+          lck: 10,
+          pow: 10,
+          siz: 10,
+          str: 10,
+          will: 10
+        },
+        societyLevel: 0
+      },
+      progression: {
+        ...createChargenProgression(),
+        skillGroups: [
+          {
+            gms: 0,
+            grantedRanks: 0,
+            groupId: "basic_melee_training",
+            primaryRanks: 1,
+            secondaryRanks: 0,
+            ranks: 1
+          }
+        ]
+      },
+      socialClass: "Common",
+      societyId: "glantri",
+      societyLevel: 1
+    });
+
+    expect(review.canFinalize).toBe(false);
+    expect(review.errors).toContain("Basic Melee Training: Choose one melee weapon skill.");
   });
 
   it("uses the evaluator result for literacy-gated skill purchases", () => {

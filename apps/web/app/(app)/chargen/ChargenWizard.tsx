@@ -1195,7 +1195,59 @@ export default function ChargenWizard() {
         ...current,
         chargenSelections: {
           selectedLanguageIds: current.chargenSelections?.selectedLanguageIds ?? [],
+          selectedGroupSlots: current.chargenSelections?.selectedGroupSlots ?? [],
           selectedSkillIds: [...selectedSkillIds]
+        }
+      };
+    });
+  }
+
+  function handleSelectGroupSlotSkill(groupId: string, slotId: string, skillId: string) {
+    setProgression((current) => {
+      const selectableSummary = buildChargenSelectableSkillSummary({
+        content,
+        professionId: selectedProfessionId,
+        progression: current,
+        societyId: selectedSocietyId,
+        societyLevel: selectedSocietyBand
+      });
+      const slot = selectableSummary.selectionSlots.find(
+        (candidate) => candidate.groupId === groupId && candidate.slotId === slotId
+      );
+
+      if (!slot || !slot.candidateSkillIds.includes(skillId)) {
+        return current;
+      }
+
+      const existingSelections = current.chargenSelections?.selectedGroupSlots ?? [];
+      const nextSelections = existingSelections.filter(
+        (selection) => !(selection.groupId === groupId && selection.slotId === slotId)
+      );
+      const selectedSkillIds = new Set(slot.selectedSkillIds);
+
+      if (selectedSkillIds.has(skillId)) {
+        selectedSkillIds.delete(skillId);
+      } else if (slot.chooseCount === 1) {
+        selectedSkillIds.clear();
+        selectedSkillIds.add(skillId);
+      } else if (selectedSkillIds.size < slot.chooseCount) {
+        selectedSkillIds.add(skillId);
+      } else {
+        return current;
+      }
+
+      nextSelections.push({
+        groupId,
+        selectedSkillIds: [...selectedSkillIds],
+        slotId
+      });
+
+      return {
+        ...current,
+        chargenSelections: {
+          selectedLanguageIds: current.chargenSelections?.selectedLanguageIds ?? [],
+          selectedGroupSlots: nextSelections,
+          selectedSkillIds: current.chargenSelections?.selectedSkillIds ?? []
         }
       };
     });
@@ -2627,6 +2679,7 @@ export default function ChargenWizard() {
             </div>
             <div style={{ display: "grid", gap: "0.35rem" }}>
               <div>Core skills: {selectableSkillSummary.coreSkillIds.length}</div>
+              <div>Required group choices: {selectableSkillSummary.selectionSlots.length}</div>
               <div>Selectable pool: {selectableSkillSummary.selectableSkillIds.length}</div>
               <div>Chosen skills: {selectableSkillSummary.selectedSkillIds.length}</div>
             </div>
@@ -2674,6 +2727,59 @@ export default function ChargenWizard() {
             ) : (
               <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
                 Select a profession to derive core skills.
+              </div>
+            )}
+          </div>
+
+          <div style={{ display: "grid", gap: "0.5rem" }}>
+            <strong>Required group choices</strong>
+            {selectableSkillSummary.selectionSlots.length > 0 ? (
+              selectableSkillSummary.selectionSlots.map((slot) => (
+                <div
+                  key={`${slot.groupId}:${slot.slotId}`}
+                  style={{
+                    borderTop: "1px solid #e7e2d7",
+                    display: "grid",
+                    gap: "0.5rem",
+                    paddingTop: "0.75rem"
+                  }}
+                >
+                  <div style={{ display: "grid", gap: "0.2rem" }}>
+                    <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+                      <span>{slot.groupName}</span>
+                      <span style={getBadgeStyle({ muted: !slot.isSatisfied })}>
+                        {slot.required ? "Required" : "Optional"} • Choose {slot.chooseCount}
+                      </span>
+                    </div>
+                    <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>{slot.label}</div>
+                  </div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+                    {slot.candidateSkills.map((skill) => {
+                      const isSelected = slot.selectedSkillIds.includes(skill.id);
+
+                      return (
+                        <button
+                          key={`${slot.slotId}-${skill.id}`}
+                          onClick={() => handleSelectGroupSlotSkill(slot.groupId, slot.slotId, skill.id)}
+                          style={{
+                            background: isSelected ? "#ece8da" : "#fff",
+                            border: isSelected ? "1px solid #8b7345" : "1px solid #d9ddd8",
+                            borderRadius: 999,
+                            cursor: "pointer",
+                            padding: "0.4rem 0.75rem"
+                          }}
+                          type="button"
+                        >
+                          {skill.name} • Type {skill.category}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
+                No explicit skill-group choices are required for the current build.
               </div>
             )}
           </div>
@@ -3510,6 +3616,7 @@ export default function ChargenWizard() {
             <div>Skill groups: {draftView.groups.length}</div>
             <div>Skills: {draftView.skills.length}</div>
             <div>Core skills: {selectableSkillSummary.coreSkillIds.length}</div>
+            <div>Required group choices: {selectableSkillSummary.selectionSlots.length}</div>
             <div>Selectable pool: {selectableSkillSummary.selectableSkillIds.length}</div>
             <div>Chosen skills: {selectableSkillSummary.selectedSkillIds.length}</div>
             <div>Specializations: {draftView.specializations.length}</div>

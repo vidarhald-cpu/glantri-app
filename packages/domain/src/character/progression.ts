@@ -3,6 +3,11 @@ import { z } from "zod";
 const chargenModeSchema = z.enum(["standard"]);
 const skillCategorySchema = z.enum(["ordinary", "secondary"]);
 const chargenSelectionIdsSchema = z.array(z.string().min(1)).default([]);
+const characterChargenGroupSlotSelectionSchema = z.object({
+  groupId: z.string().min(1),
+  selectedSkillIds: chargenSelectionIdsSchema,
+  slotId: z.string().min(1)
+});
 
 export const characterSkillGroupSchema = z.object({
   groupId: z.string().min(1),
@@ -34,7 +39,8 @@ export const characterSpecializationSchema = z.object({
 
 export const characterChargenSelectionsSchema = z.object({
   selectedLanguageIds: chargenSelectionIdsSchema,
-  selectedSkillIds: chargenSelectionIdsSchema
+  selectedSkillIds: chargenSelectionIdsSchema,
+  selectedGroupSlots: z.array(characterChargenGroupSlotSelectionSchema).default([])
 });
 
 export const characterProgressionSchema = z.object({
@@ -54,6 +60,9 @@ export const characterProgressionSchema = z.object({
 export type CharacterSkillGroup = z.infer<typeof characterSkillGroupSchema>;
 export type CharacterSkill = z.infer<typeof characterSkillSchema>;
 export type CharacterSpecialization = z.infer<typeof characterSpecializationSchema>;
+export type CharacterChargenGroupSlotSelection = z.infer<
+  typeof characterChargenGroupSlotSelectionSchema
+>;
 export type CharacterChargenSelections = z.infer<typeof characterChargenSelectionsSchema>;
 export type CharacterProgression = z.infer<typeof characterProgressionSchema>;
 export type ChargenMode = z.infer<typeof chargenModeSchema>;
