@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 import {
+  getCharacterSkillKey,
   getSkillGroupIds,
   glantriCharacteristicLabels,
   glantriCharacteristicOrder,
@@ -33,6 +34,7 @@ interface CharacterSheetSkillRow {
   avgStats: number;
   skillGroupXp: number;
   skillId: string;
+  skillKey: string;
   skillName: string;
   skillType: ReturnType<typeof getPlayerFacingSkillBucket>;
   skillXp: number;
@@ -154,8 +156,8 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
     }
 
     const rows = sortSkills(contentState.skills)
-      .map((skill) => {
-        const skillView = sheetSummary.draftView.skills.find((item) => item.skillId === skill.id);
+      .flatMap((skill) => {
+        const matchingViews = sheetSummary.draftView.skills.filter((item) => item.skillId === skill.id);
         const bestContributingGroup = selectBestSkillGroupContribution(
           getSkillGroupIds(skill)
             .map((groupId) => {
@@ -176,28 +178,37 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
             .filter((group): group is NonNullable<typeof group> => group !== null)
         );
 
-        const skillGroupXp = bestContributingGroup?.groupLevel ?? skillView?.groupLevel ?? 0;
-        const skillXp = skillView?.specificSkillLevel ?? 0;
-        const totalXp = skillGroupXp + skillXp;
-        if (totalXp <= 0) {
-          return null;
-        }
+        return matchingViews
+          .map((skillView) => {
+            const skillGroupXp = bestContributingGroup?.groupLevel ?? skillView.groupLevel ?? 0;
+            const skillXp = skillView.specificSkillLevel ?? 0;
+            const totalXp = skillGroupXp + skillXp;
 
-        return {
-          avgStats: skillView?.linkedStatAverage ?? getSkillLinkedStatAverage(record.build.profile, skill),
-          skillGroupXp,
-          skillId: skill.id,
-          skillName: skill.name,
-          skillType: getPlayerFacingSkillBucket(skill),
-          skillXp,
-          stats: formatSkillStats(skill),
-          totalSkillLevel:
-            skillView?.totalSkill ??
-            getSkillLinkedStatAverage(record.build.profile, skill) + totalXp,
-          totalXp
-        } satisfies CharacterSheetSkillRow;
+            if (totalXp <= 0) {
+              return null;
+            }
+
+            return {
+              avgStats:
+                skillView.linkedStatAverage ?? getSkillLinkedStatAverage(record.build.profile, skill),
+              skillGroupXp,
+              skillId: skill.id,
+              skillKey: getCharacterSkillKey({
+                languageName: skillView.languageName,
+                skillId: skill.id
+              }),
+              skillName: skillView.languageName ? `${skill.name} (${skillView.languageName})` : skill.name,
+              skillType: getPlayerFacingSkillBucket(skill),
+              skillXp,
+              stats: formatSkillStats(skill),
+              totalSkillLevel:
+                skillView.totalSkill ??
+                getSkillLinkedStatAverage(record.build.profile, skill) + totalXp,
+              totalXp
+            } satisfies CharacterSheetSkillRow;
+          })
+          .filter((row): row is CharacterSheetSkillRow => row !== null);
       })
-      .filter((row): row is CharacterSheetSkillRow => row !== null);
 
     return groupRowsBySkillType(rows);
   }, [contentState, sheetSummary]);
@@ -419,7 +430,7 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
 
                 {group.rows.map((skill) => (
                   <div
-                    key={skill.skillId}
+                    key={skill.skillKey}
                     style={{
                       borderTop: "1px solid #f0eadf",
                       display: "grid",

@@ -69,3 +69,26 @@ export type CharacterChargenGroupSlotSelection = z.infer<
 export type CharacterChargenSelections = z.infer<typeof characterChargenSelectionsSchema>;
 export type CharacterProgression = z.infer<typeof characterProgressionSchema>;
 export type ChargenMode = z.infer<typeof chargenModeSchema>;
+
+export function normalizeCharacterSkillLanguageName(
+  languageName: string | undefined
+): string | undefined {
+  const normalized = languageName?.trim();
+  return normalized ? normalized : undefined;
+}
+
+export function getCharacterSkillKey(
+  skill: Pick<CharacterSkill, "skillId" | "languageName">
+): string {
+  const normalizedLanguageName = normalizeCharacterSkillLanguageName(skill.languageName);
+  return normalizedLanguageName
+    ? `${skill.skillId}::language:${normalizedLanguageName}`
+    : skill.skillId;
+}
+
+export function isSameCharacterSkill(
+  left: Pick<CharacterSkill, "skillId" | "languageName">,
+  right: Pick<CharacterSkill, "skillId" | "languageName">
+): boolean {
+  return getCharacterSkillKey(left) === getCharacterSkillKey(right);
+}

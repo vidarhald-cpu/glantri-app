@@ -25,6 +25,7 @@ import type {
   SocietyLevelAccess
 } from "@glantri/domain";
 import {
+  getCharacterSkillKey,
   getSkillGroupIds,
   glantriCharacteristicLabels,
   glantriCharacteristicOrder
@@ -194,7 +195,14 @@ function getSkillDisplayGroupId(input: {
   skill: SkillDefinition;
   skillAccess: ReturnType<typeof buildChargenSkillAccessSummary>;
 }): string | undefined {
-  const purchasedSkill = input.draftView.skills.find((candidate) => candidate.skillId === input.skill.id);
+  const purchasedSkill =
+    input.draftView.skills.find(
+      (candidate) => candidate.skillId === input.skill.id && candidate.sourceTag === "mother-tongue"
+    ) ??
+    input.draftView.skills.find(
+      (candidate) => candidate.skillId === input.skill.id && candidate.languageName
+    ) ??
+    input.draftView.skills.find((candidate) => candidate.skillId === input.skill.id);
 
   if (purchasedSkill?.contributingGroupId) {
     return purchasedSkill.contributingGroupId;
@@ -220,6 +228,13 @@ function getSkillDisplayGroupId(input: {
       };
     })
   )?.groupId;
+}
+
+function getSkillDisplayName(input: {
+  languageName?: string;
+  skill: Pick<SkillDefinition, "name">;
+}): string {
+  return input.languageName ? `${input.skill.name} (${input.languageName})` : input.skill.name;
 }
 
 function formatSkillStatLabel(stat: string): string {
@@ -546,7 +561,12 @@ function getSkillAllocationMetrics(input: {
   profile: RolledCharacterProfile | undefined;
   skill: SkillDefinition;
 }): SkillAllocationMetrics {
-  const skillView = input.draftView.skills.find((item) => item.skillId === input.skill.id);
+  const skillView =
+    input.draftView.skills.find(
+      (item) => item.skillId === input.skill.id && item.sourceTag === "mother-tongue"
+    ) ??
+    input.draftView.skills.find((item) => item.skillId === input.skill.id && item.languageName) ??
+    input.draftView.skills.find((item) => item.skillId === input.skill.id);
   const bestContributingGroup = selectBestSkillGroupContribution(
     getSkillGroupIds(input.skill)
       .map((groupId) => {
@@ -849,7 +869,10 @@ export default function ChargenWizard() {
   );
   const skillRowsById = new Map<string, SkillBrowseRow>(
     sortSkills(content.skills).map((skill) => {
-      const skillView = draftView.skills.find((item) => item.skillId === skill.id);
+      const skillView =
+        draftView.skills.find((item) => item.skillId === skill.id && item.sourceTag === "mother-tongue") ??
+        draftView.skills.find((item) => item.skillId === skill.id && item.languageName) ??
+        draftView.skills.find((item) => item.skillId === skill.id);
       const metrics = getSkillAllocationMetrics({
         content,
         draftView,
@@ -868,10 +891,10 @@ export default function ChargenWizard() {
       return [
         skill.id,
         {
-          displayName:
-            skillView?.languageName && skill.name === "Language"
-              ? `${skill.name} (${skillView.languageName})`
-              : skill.name,
+          displayName: getSkillDisplayName({
+            languageName: skillView?.languageName,
+            skill
+          }),
           evaluation,
           isNormalAccess: skillAccess.normalSkillIds.includes(skill.id),
           metrics,
@@ -960,36 +983,37 @@ export default function ChargenWizard() {
     [coreProfessionSections.length, Boolean(specialAccessSection)]
   );
   const playerSkillTableRows = sortSkills(content.skills)
-    .map((skill) => {
-      const skillView = draftView.skills.find((item) => item.skillId === skill.id);
-      const skillMetrics = getSkillAllocationMetrics({
-        content,
-        draftView,
-        profile: selectedProfile,
-        skill
-      });
+    .flatMap((skill) => {
+      const matchingViews = draftView.skills.filter((item) => item.skillId === skill.id);
+      const views = matchingViews.length > 0 ? matchingViews : [];
 
-      if (skillMetrics.totalXp <= 0) {
-        return null;
-      }
+      return views
+        .map((skillView) => {
+          if (skillView.effectiveSkillNumber <= 0) {
+            return null;
+          }
 
-      return {
-        avgStats: skillMetrics.avgStats,
-        literacyWarning: skillMetrics.literacyWarning,
-        skillType: getPlayerFacingSkillBucket(skill),
-        skillGroupXp: skillMetrics.groupXp,
-        skillId: skill.id,
-        skillName:
-          skillView?.languageName && skill.name === "Language"
-            ? `${skill.name} (${skillView.languageName})`
-            : skill.name,
-        skillXp: skillMetrics.skillXp,
-        stats: formatSkillStats(skill),
-        totalSkillLevel: skillMetrics.totalSkillLevel,
-        totalXp: skillMetrics.totalXp
-      };
-    })
-    .filter((skill): skill is NonNullable<typeof skill> => skill !== null);
+          return {
+            avgStats: skillView.linkedStatAverage,
+            literacyWarning: skillView.literacyWarning,
+            skillType: getPlayerFacingSkillBucket(skill),
+            skillGroupXp: skillView.groupLevel,
+            skillId: getCharacterSkillKey({
+              languageName: skillView.languageName,
+              skillId: skill.id
+            }),
+            skillName: getSkillDisplayName({
+              languageName: skillView.languageName,
+              skill
+            }),
+            skillXp: skillView.specificSkillLevel,
+            stats: formatSkillStats(skill),
+            totalSkillLevel: skillView.totalSkill,
+            totalXp: skillView.effectiveSkillNumber
+          };
+        })
+        .filter((row): row is NonNullable<typeof row> => row !== null);
+    });
   const groupedPlayerSkillTableRows = groupRowsBySkillType(playerSkillTableRows);
   const specializationRows = [...content.specializations]
     .sort((left, right) => left.sortOrder - right.sortOrder)

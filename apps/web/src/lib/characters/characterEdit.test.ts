@@ -200,6 +200,7 @@ describe("characterEdit helpers", () => {
       {
         groupXp: 4,
         skillId: "perception",
+        skillKey: "perception",
         skillName: "Perception",
         stats: 12,
         total: 19,

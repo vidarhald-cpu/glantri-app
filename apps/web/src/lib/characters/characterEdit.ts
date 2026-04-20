@@ -9,6 +9,7 @@ import type {
   SkillSpecialization,
   SocietyLevelAccess
 } from "@glantri/domain";
+import { getCharacterSkillKey } from "@glantri/domain";
 
 import { buildCharacterSheetSummary, type CharacterSheetSummary } from "../../../../../packages/rules-engine/src/sheets/buildCharacterSheetSummary";
 import { getCharacteristicGm } from "../../../../../packages/rules-engine/src/stats/characteristicGms";
@@ -40,6 +41,7 @@ export interface CharacterEditSkillGroupRow {
 export interface CharacterEditSkillRow {
   groupXp: number;
   skillId: string;
+  skillKey: string;
   skillName: string;
   stats: number;
   total: number;
@@ -284,7 +286,14 @@ export function buildCharacterEditSkillRows(input: {
   return input.build.progression.skills
     .map((entry) => {
       const definition = input.content.skills.find((skill) => skill.id === entry.skillId);
-      const skillView = input.sheetSummary.draftView.skills.find((skill) => skill.skillId === entry.skillId);
+      const skillView = input.sheetSummary.draftView.skills.find(
+        (skill) =>
+          getCharacterSkillKey(skill) ===
+          getCharacterSkillKey({
+            languageName: entry.languageName,
+            skillId: entry.skillId
+          })
+      );
 
       if (!definition || !skillView) {
         return null;
@@ -293,7 +302,11 @@ export function buildCharacterEditSkillRows(input: {
       return {
         groupXp: skillView.groupLevel,
         skillId: definition.id,
-        skillName: definition.name,
+        skillKey: getCharacterSkillKey({
+          languageName: entry.languageName,
+          skillId: definition.id
+        }),
+        skillName: entry.languageName ? `${definition.name} (${entry.languageName})` : definition.name,
         stats: skillView.linkedStatAverage,
         total: skillView.totalSkill,
         totalXp: skillView.effectiveSkillNumber,

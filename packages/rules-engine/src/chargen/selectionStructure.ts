@@ -1,6 +1,7 @@
 import type {
   CivilizationDefinition,
   CharacterChargenGroupSlotSelection,
+  CharacterSkill,
   CharacterProgression,
   LanguageDefinition,
   ProfessionDefinition,
@@ -14,6 +15,7 @@ import type {
 } from "@glantri/domain";
 import {
   getAccessibleFoundationalSkillIdsForSocietyBand,
+  getCharacterSkillKey,
   getSkillGroupIds
 } from "@glantri/domain";
 
@@ -126,6 +128,14 @@ function createEmptySkillProgressionRow(skill: SkillDefinition) {
     skillId: skill.id,
     sourceTag: undefined
   } satisfies CharacterProgression["skills"][number];
+}
+
+function findSkillIndex(
+  skills: CharacterProgression["skills"],
+  target: Pick<CharacterSkill, "skillId" | "languageName">
+): number {
+  const targetKey = getCharacterSkillKey(target);
+  return skills.findIndex((skill) => getCharacterSkillKey(skill) === targetKey);
 }
 
 const MOTHER_TONGUE_SKILL_ID = "language";
@@ -460,14 +470,16 @@ export function syncChargenMotherTongueSkillRow(input: {
     educationLevel: input.educationLevel
   });
   const nextSkills = [...input.progression.skills];
-  const languageIndex = nextSkills.findIndex((skill) => skill.skillId === MOTHER_TONGUE_SKILL_ID);
+  const motherTongueIndex = nextSkills.findIndex(
+    (skill) => skill.skillId === MOTHER_TONGUE_SKILL_ID && skill.sourceTag === "mother-tongue"
+  );
 
   if (!motherTongue.skill || !motherTongue.languageName) {
-    if (languageIndex < 0) {
+    if (motherTongueIndex < 0) {
       return input.progression;
     }
 
-    const existing = nextSkills[languageIndex];
+    const existing = nextSkills[motherTongueIndex];
 
     if (existing?.sourceTag !== "mother-tongue") {
       return input.progression;
@@ -482,9 +494,9 @@ export function syncChargenMotherTongueSkillRow(input: {
     };
 
     if ((clearedSkill.primaryRanks ?? 0) <= 0 && (clearedSkill.secondaryRanks ?? 0) <= 0) {
-      nextSkills.splice(languageIndex, 1);
+      nextSkills.splice(motherTongueIndex, 1);
     } else {
-      nextSkills[languageIndex] = clearedSkill;
+      nextSkills[motherTongueIndex] = clearedSkill;
     }
 
     return {
@@ -493,8 +505,16 @@ export function syncChargenMotherTongueSkillRow(input: {
     };
   }
 
+  const matchingLanguageIndex = findSkillIndex(nextSkills, {
+    languageName: motherTongue.languageName,
+    skillId: MOTHER_TONGUE_SKILL_ID
+  });
   const baseSkill =
-    languageIndex >= 0 ? nextSkills[languageIndex] : createEmptySkillProgressionRow(motherTongue.skill);
+    motherTongueIndex >= 0
+      ? nextSkills[motherTongueIndex]
+      : matchingLanguageIndex >= 0
+        ? nextSkills[matchingLanguageIndex]
+        : createEmptySkillProgressionRow(motherTongue.skill);
   const syncedSkill = {
     ...baseSkill,
     category: motherTongue.skill.category,
@@ -506,8 +526,10 @@ export function syncChargenMotherTongueSkillRow(input: {
     sourceTag: "mother-tongue" as const
   };
 
-  if (languageIndex >= 0) {
-    nextSkills[languageIndex] = syncedSkill;
+  if (motherTongueIndex >= 0) {
+    nextSkills[motherTongueIndex] = syncedSkill;
+  } else if (matchingLanguageIndex >= 0) {
+    nextSkills[matchingLanguageIndex] = syncedSkill;
   } else {
     nextSkills.push(syncedSkill);
   }

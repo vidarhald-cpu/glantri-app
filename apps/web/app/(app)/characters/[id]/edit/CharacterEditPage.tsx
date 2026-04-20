@@ -431,7 +431,7 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
             <tbody>
               {skillRows.length > 0 ? (
                 skillRows.map((skill) => (
-                  <tr key={skill.skillId} style={{ borderBottom: "1px solid #eee8dc" }}>
+                  <tr key={skill.skillKey} style={{ borderBottom: "1px solid #eee8dc" }}>
                     <td style={{ padding: "0.6rem 0.75rem 0.6rem 0" }}>{skill.skillName}</td>
                     <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>{skill.stats}</td>
                     <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>{skill.groupXp}</td>

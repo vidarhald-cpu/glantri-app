@@ -22,6 +22,8 @@ import type {
 } from "@glantri/domain";
 import {
   getAccessibleFoundationalSkillIdsForSocietyBand,
+  getCharacterSkillKey,
+  normalizeCharacterSkillLanguageName,
   getSkillGroupIds
 } from "@glantri/domain";
 
@@ -128,6 +130,7 @@ export interface ChargenSkillView {
   requiresLiteracy: SkillDefinition["requiresLiteracy"];
   secondaryRanks: number;
   skillId: string;
+  skillKey: string;
   sourceTag?: CharacterSkill["sourceTag"];
   specificSkillLevel: number;
   totalSkill: number;
@@ -260,7 +263,7 @@ function normalizeSkill(skill: CharacterSkill): CharacterSkill {
     category: skill.category ?? "ordinary",
     grantedRanks,
     groupId: skill.groupId,
-    languageName: skill.languageName,
+    languageName: normalizeCharacterSkillLanguageName(skill.languageName),
     level: skill.level ?? 0,
     primaryRanks,
     ranks: grantedRanks + primaryRanks + secondaryRanks,
@@ -610,17 +613,46 @@ function ensureGroupExists(
 
 function ensureSkillExists(
   progression: CharacterProgression,
-  skill: SkillDefinition
+  skill: SkillDefinition,
+  variant?: Pick<CharacterSkill, "languageName">
 ): CharacterSkill {
-  const existing = progression.skills.find((item) => item.skillId === skill.id);
+  const existing = progression.skills.find(
+    (item) =>
+      getCharacterSkillKey(item) ===
+      getCharacterSkillKey({
+        languageName: variant?.languageName,
+        skillId: skill.id
+      })
+  );
 
   if (existing) {
     return existing;
   }
 
   const created = createEmptySkill(skill);
+  created.languageName = variant?.languageName;
   progression.skills.push(created);
   return created;
+}
+
+function getProgressionSkillRows(
+  progression: CharacterProgression,
+  skillId: string
+): CharacterSkill[] {
+  return progression.skills.filter((skill) => skill.skillId === skillId);
+}
+
+function getPreferredProgressionSkillRow(
+  progression: CharacterProgression,
+  skillId: string
+): CharacterSkill | undefined {
+  const rows = getProgressionSkillRows(progression, skillId);
+
+  return (
+    rows.find((skill) => skill.sourceTag === "mother-tongue") ??
+    rows.find((skill) => skill.languageName) ??
+    rows[0]
+  );
 }
 
 function ensureSpecializationExists(
@@ -1046,9 +1078,7 @@ function getPrimarySkillRemovalError(input: {
   progression: CharacterProgression;
   skillDefinition: SkillDefinition;
 }): string | undefined {
-  const skill = input.progression.skills.find(
-    (item) => item.skillId === input.skillDefinition.id
-  );
+  const skill = getPreferredProgressionSkillRow(input.progression, input.skillDefinition.id);
 
   if (!skill || skill.primaryRanks < 1) {
     return "No primary-point skill purchase to remove.";
@@ -1151,9 +1181,7 @@ function getChargenSkillRemovalError(input: {
   progression: CharacterProgression;
   skillDefinition: SkillDefinition;
 }): string | undefined {
-  const skill = input.progression.skills.find(
-    (item) => item.skillId === input.skillDefinition.id
-  );
+  const skill = getPreferredProgressionSkillRow(input.progression, input.skillDefinition.id);
 
   if (!skill || skill.primaryRanks + skill.secondaryRanks < 1) {
     return "No allocated skill points to remove.";
@@ -1242,7 +1270,7 @@ export function removePrimaryPoint(input: SpendPrimaryPointInput): SpendPointRes
     };
   }
 
-  const skill = progression.skills.find((item) => item.skillId === input.targetId);
+  const skill = getPreferredProgressionSkillRow(progression, input.targetId);
   const error = getPrimarySkillRemovalError({
     content: input.content,
     progression,
@@ -1327,7 +1355,7 @@ export function removeChargenPoint(
     };
   }
 
-  const skill = progression.skills.find((item) => item.skillId === input.targetId);
+  const skill = getPreferredProgressionSkillRow(progression, input.targetId);
   const error = getChargenSkillRemovalError({
     content: input.content,
     progression,
@@ -1374,7 +1402,7 @@ export function removeSecondaryPoint(input: SpendSecondaryPointInput): SpendPoin
       };
     }
 
-    const skill = progression.skills.find((item) => item.skillId === input.targetId);
+    const skill = getPreferredProgressionSkillRow(progression, input.targetId);
 
     if (!skill || skill.secondaryRanks < 1) {
       return {
@@ -1655,12 +1683,9 @@ export function buildChargenDraftView(input: {
     .sort((left, right) => left.name.localeCompare(right.name));
   const groupViewById = new Map(groups.map((group) => [group.groupId, group]));
 
-  const progressionSkillById = new Map(progression.skills.map((skill) => [skill.skillId, skill]));
-
   const skills = input.content.skills
-    .map((definition) => {
-      const skill = progressionSkillById.get(definition.id);
-
+    .flatMap((definition) => {
+      const progressionSkillRows = getProgressionSkillRows(progression, definition.id);
       const groupIds = getSkillDefinitionGroupIds(definition);
       const bestContributingGroup = selectBestSkillGroupContribution(
         groupIds
@@ -1683,49 +1708,59 @@ export function buildChargenDraftView(input: {
       );
       const fallbackGroupId = getBestGroupIdByDefinitionOrder(input.content, groupIds);
       const resolvedGroupId = bestContributingGroup?.groupId ?? fallbackGroupId;
-      const hasProgressionEntry = skill !== undefined;
       const groupContribution = bestContributingGroup?.groupLevel ?? 0;
-
-      if (!hasProgressionEntry && groupContribution <= 0) {
-        return null;
-      }
+      const skillRows =
+        progressionSkillRows.length > 0
+          ? progressionSkillRows
+          : groupContribution > 0
+            ? [undefined]
+            : [];
 
       if (!resolvedGroupId) {
-        return null;
+        return [];
       }
 
-      const specificSkillLevel = skill?.ranks ?? 0;
-      const effectiveSkillNumber = groupContribution + specificSkillLevel;
-      const linkedStatAverage = getLinkedStatAverage(input.profile, definition);
-      const literacyWarning =
-        definition.requiresLiteracy === "recommended" && !hasLiteracy(progression)
-          ? "Literacy recommended"
-          : undefined;
+      return skillRows.map((skill) => {
+        const specificSkillLevel = skill?.ranks ?? 0;
+        const effectiveSkillNumber = groupContribution + specificSkillLevel;
+        const linkedStatAverage = getLinkedStatAverage(input.profile, definition);
+        const literacyWarning =
+          definition.requiresLiteracy === "recommended" && !hasLiteracy(progression)
+            ? "Literacy recommended"
+            : undefined;
 
-      const view: ChargenSkillView = {
-        category: skill?.category ?? definition.category,
-        contributingGroupId: bestContributingGroup?.groupId,
-        effectiveSkillNumber,
-        groupId: resolvedGroupId,
-        groupIds,
-        groupLevel: groupContribution,
-        languageName: skill?.languageName,
-        linkedStatAverage,
-        literacyWarning,
-        name: definition.name,
-        primaryRanks: skill?.primaryRanks ?? 0,
-        requiresLiteracy: definition.requiresLiteracy,
-        secondaryRanks: skill?.secondaryRanks ?? 0,
-        skillId: definition.id,
-        sourceTag: skill?.sourceTag,
-        specificSkillLevel,
-        totalSkill: effectiveSkillNumber + linkedStatAverage
-      };
+        const view: ChargenSkillView = {
+          category: skill?.category ?? definition.category,
+          contributingGroupId: bestContributingGroup?.groupId,
+          effectiveSkillNumber,
+          groupId: resolvedGroupId,
+          groupIds,
+          groupLevel: groupContribution,
+          languageName: skill?.languageName,
+          linkedStatAverage,
+          literacyWarning,
+          name: definition.name,
+          primaryRanks: skill?.primaryRanks ?? 0,
+          requiresLiteracy: definition.requiresLiteracy,
+          secondaryRanks: skill?.secondaryRanks ?? 0,
+          skillId: definition.id,
+          skillKey: getCharacterSkillKey({
+            languageName: skill?.languageName,
+            skillId: definition.id
+          }),
+          sourceTag: skill?.sourceTag,
+          specificSkillLevel,
+          totalSkill: effectiveSkillNumber + linkedStatAverage
+        };
 
-      return view;
+        return view;
+      });
     })
-    .filter(isDefined)
-    .sort((left, right) => left.name.localeCompare(right.name));
+    .sort(
+      (left, right) =>
+        left.name.localeCompare(right.name) ||
+        (left.languageName ?? "").localeCompare(right.languageName ?? "")
+    );
 
   const specializations = progression.specializations
     .map((specialization) => {
@@ -2026,7 +2061,7 @@ export function getPrimaryPurchaseCostForSkill(
   progression: CharacterProgression,
   skillDefinition: SkillDefinition
 ): number {
-  const skill = progression.skills.find((item) => item.skillId === skillDefinition.id);
+  const skill = getPreferredProgressionSkillRow(progression, skillDefinition.id);
   return getSkillSpendCost(skillDefinition, Boolean(skill && skill.ranks > 0));
 }
 
@@ -2034,7 +2069,7 @@ export function getSecondaryPurchaseCostForSkill(
   progression: CharacterProgression,
   skillDefinition: SkillDefinition
 ): number {
-  const skill = progression.skills.find((item) => item.skillId === skillDefinition.id);
+  const skill = getPreferredProgressionSkillRow(progression, skillDefinition.id);
   return getSkillSpendCost(skillDefinition, Boolean(skill && skill.ranks > 0));
 }
 

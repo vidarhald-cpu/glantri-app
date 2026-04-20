@@ -835,4 +835,73 @@ describe("chargen purchase gate integration", () => {
     expect(result.build?.progression.primaryPoolSpent).toBe(0);
     expect(result.build?.progression.secondaryPoolSpent).toBe(0);
   });
+
+  it("emits separate concrete Language entries when progression contains multiple picked languages", () => {
+    const draftView = buildChargenDraftView({
+      civilizationId: "glantri_civ",
+      content: motherTongueTestContent,
+      profile: {
+        distractionLevel: 0,
+        id: "profile-linguist",
+        label: "Linguist",
+        rolledStats: {
+          cha: 10,
+          com: 10,
+          con: 10,
+          dex: 10,
+          health: 10,
+          int: 10,
+          lck: 10,
+          pow: 10,
+          siz: 10,
+          str: 10,
+          will: 10
+        },
+        socialClassEducationValue: 12,
+        societyLevel: 0
+      },
+      progression: {
+        ...createChargenProgression(),
+        skills: [
+          {
+            category: "ordinary",
+            grantedRanks: 2,
+            groupId: "scholarly",
+            languageName: "Phoenician",
+            level: 0,
+            primaryRanks: 0,
+            ranks: 2,
+            secondaryRanks: 0,
+            skillId: "language"
+          }
+        ]
+      },
+      societyId: "glantri",
+      societyLevel: 1
+    });
+
+    expect(
+      draftView.skills
+        .filter((skill) => skill.skillId === "language")
+        .map((skill) => ({
+          languageName: skill.languageName,
+          skillKey: skill.skillKey,
+          sourceTag: skill.sourceTag,
+          specificSkillLevel: skill.specificSkillLevel
+        }))
+    ).toEqual([
+      {
+        languageName: "Common",
+        skillKey: "language::language:Common",
+        sourceTag: "mother-tongue",
+        specificSkillLevel: 12
+      },
+      {
+        languageName: "Phoenician",
+        skillKey: "language::language:Phoenician",
+        sourceTag: undefined,
+        specificSkillLevel: 2
+      }
+    ]);
+  });
 });
