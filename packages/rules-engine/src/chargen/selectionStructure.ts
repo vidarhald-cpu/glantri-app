@@ -47,6 +47,8 @@ export interface ChargenLanguageSelectionSummary {
   selectableLanguages: LanguageDefinition[];
   selectedLanguageIds: string[];
   selectedLanguages: LanguageDefinition[];
+  selectedOptionalLanguageIds: string[];
+  selectedOptionalLanguages: LanguageDefinition[];
 }
 
 export interface ChargenMotherTongueSummary {
@@ -127,6 +129,16 @@ function createEmptySkillProgressionRow(skill: SkillDefinition) {
     secondaryRanks: 0,
     skillId: skill.id,
     sourceTag: undefined
+  } satisfies CharacterProgression["skills"][number];
+}
+
+function createEmptyLanguageSkillProgressionRow(
+  skill: SkillDefinition,
+  languageName: string
+) {
+  return {
+    ...createEmptySkillProgressionRow(skill),
+    languageName
   } satisfies CharacterProgression["skills"][number];
 }
 
@@ -241,38 +253,66 @@ function getSocietyAccess(
   );
 }
 
+function getLanguageDefinitionMaps(content: Pick<ChargenSelectionContentShape, "languages">) {
+  const languages = content.languages ?? [];
+
+  return {
+    byId: new Map(languages.map((language) => [language.id, language])),
+    byName: new Map(languages.map((language) => [language.name, language]))
+  };
+}
+
 export function buildChargenLanguageSelectionSummary(input: {
-  content: ChargenSelectionContentShape;
+  content: Pick<ChargenSelectionContentShape, "civilizations" | "languages" | "societies">;
+  civilizationId?: string;
   progression: CharacterProgression;
   societyId?: string;
 }): ChargenLanguageSelectionSummary {
   const society = getSocietyDefinition(input.content, input.societyId);
+  const civilization = getCivilizationDefinition(input.content, input.civilizationId);
+  const languageMaps = getLanguageDefinitionMaps(input.content);
   const requiredLanguageIds = sortLanguageIds(
     input.content,
     uniqueIds(society?.baselineLanguageIds ?? [])
   );
-  const selectableLanguageIds: string[] = [];
+  const requiredLanguageIdSet = new Set(requiredLanguageIds);
+  const selectableLanguageIds = sortLanguageIds(
+    input.content,
+    uniqueIds(
+      (civilization?.optionalLanguageNames ?? [])
+        .map((languageName) => languageMaps.byName.get(languageName)?.id)
+        .filter((languageId): languageId is string => languageId !== undefined)
+        .filter((languageId) => !requiredLanguageIdSet.has(languageId))
+    )
+  );
   const selectableLanguageIdSet = new Set(selectableLanguageIds);
-  const selectedOptionalLanguageIds = (input.progression.chargenSelections?.selectedLanguageIds ?? [])
-    .filter((languageId) => selectableLanguageIdSet.has(languageId));
+  const selectedOptionalLanguageIds = sortLanguageIds(
+    input.content,
+    (input.progression.chargenSelections?.selectedLanguageIds ?? []).filter((languageId) =>
+      selectableLanguageIdSet.has(languageId)
+    )
+  );
   const selectedLanguageIds = sortLanguageIds(
     input.content,
     uniqueIds([...requiredLanguageIds, ...selectedOptionalLanguageIds])
-  );
-  const languagesById = new Map(
-    (input.content.languages ?? []).map((language) => [language.id, language])
   );
 
   return {
     requiredLanguageIds,
     requiredLanguages: requiredLanguageIds
-      .map((languageId) => languagesById.get(languageId))
+      .map((languageId) => languageMaps.byId.get(languageId))
       .filter((language): language is LanguageDefinition => language !== undefined),
     selectableLanguageIds,
-    selectableLanguages: [],
+    selectableLanguages: selectableLanguageIds
+      .map((languageId) => languageMaps.byId.get(languageId))
+      .filter((language): language is LanguageDefinition => language !== undefined),
     selectedLanguageIds,
     selectedLanguages: selectedLanguageIds
-      .map((languageId) => languagesById.get(languageId))
+      .map((languageId) => languageMaps.byId.get(languageId))
+      .filter((language): language is LanguageDefinition => language !== undefined),
+    selectedOptionalLanguageIds,
+    selectedOptionalLanguages: selectedOptionalLanguageIds
+      .map((languageId) => languageMaps.byId.get(languageId))
       .filter((language): language is LanguageDefinition => language !== undefined)
   };
 }
@@ -441,6 +481,74 @@ export function syncChargenSelectionSkillRows(input: {
   const nextSkillIdSet = new Set(selectedDefinitions.map((skill) => skill.id));
   const cleanedSkills = nextSkills.filter((skill) => {
     if (nextSkillIdSet.has(skill.skillId)) {
+      return true;
+    }
+
+    return (
+      (skill.grantedRanks ?? 0) > 0 ||
+      (skill.primaryRanks ?? 0) > 0 ||
+      (skill.secondaryRanks ?? 0) > 0 ||
+      (skill.ranks ?? 0) > 0
+    );
+  });
+
+  return {
+    ...input.progression,
+    skills: cleanedSkills
+  };
+}
+
+export function syncChargenLanguageSkillRows(input: {
+  content: Pick<ChargenSelectionContentShape, "civilizations" | "languages" | "skills">;
+  civilizationId?: string;
+  progression: CharacterProgression;
+  societyId?: string;
+}): CharacterProgression {
+  const languageSkill = input.content.skills.find((skill) => skill.id === MOTHER_TONGUE_SKILL_ID);
+
+  if (!languageSkill) {
+    return input.progression;
+  }
+
+  const languageSelectionSummary = buildChargenLanguageSelectionSummary({
+    civilizationId: input.civilizationId,
+    content: input.content,
+    progression: input.progression,
+    societyId: input.societyId
+  });
+  const selectedLanguageKeys = new Set(
+    languageSelectionSummary.selectedOptionalLanguages.map((language) =>
+      getCharacterSkillKey({
+        languageName: language.name,
+        skillId: MOTHER_TONGUE_SKILL_ID
+      })
+    )
+  );
+  const nextSkills = [...input.progression.skills];
+
+  for (const language of languageSelectionSummary.selectedOptionalLanguages) {
+    if (
+      findSkillIndex(nextSkills, {
+        languageName: language.name,
+        skillId: MOTHER_TONGUE_SKILL_ID
+      }) >= 0
+    ) {
+      continue;
+    }
+
+    nextSkills.push(createEmptyLanguageSkillProgressionRow(languageSkill, language.name));
+  }
+
+  const cleanedSkills = nextSkills.filter((skill) => {
+    if (skill.skillId !== MOTHER_TONGUE_SKILL_ID || skill.sourceTag === "mother-tongue") {
+      return true;
+    }
+
+    if (!skill.languageName) {
+      return true;
+    }
+
+    if (selectedLanguageKeys.has(getCharacterSkillKey(skill))) {
       return true;
     }
 

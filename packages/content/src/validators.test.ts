@@ -52,7 +52,7 @@ describe("validateCanonicalContent", () => {
       defaultCanonicalContent.civilizations.find((civilization) => civilization.id === "glantri")
     ).toMatchObject({
       motherTongueLanguageName: "Common",
-      optionalLanguageNames: [],
+      optionalLanguageNames: ["Old Common"],
       spokenLanguageName: "Common",
       writtenLanguageName: "Common"
     });

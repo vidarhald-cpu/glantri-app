@@ -66,7 +66,9 @@ export const generatedRepoLocalGlantriSeed = {
       "motherTongueLanguageName": "Common",
       "name": "Glantri",
       "notes": "Glantri-facing core feudal analogue with knightly households, castles, and landed obligations.",
-      "optionalLanguageNames": [],
+      "optionalLanguageNames": [
+        "Old Common"
+      ],
       "period": "c. 800-1100 CE",
       "shortDescription": "Feudal landed culture of noble households, retainers, and local obligations.",
       "spokenLanguageName": "Common",

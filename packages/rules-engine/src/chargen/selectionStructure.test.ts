@@ -5,7 +5,8 @@ import type { CharacterProgression } from "@glantri/domain";
 import {
   buildChargenMotherTongueSummary,
   buildChargenLanguageSelectionSummary,
-  buildChargenSelectableSkillSummary
+  buildChargenSelectableSkillSummary,
+  syncChargenLanguageSkillRows
 } from "./selectionStructure";
 
 const content = {
@@ -24,7 +25,11 @@ const content = {
       writtenLanguageName: "Common"
     }
   ],
-  languages: [{ id: "glantri_language", name: "Glantri" }],
+  languages: [
+    { id: "common_language", name: "Common" },
+    { id: "old_common_language", name: "Old Common" },
+    { id: "glantri_language", name: "Glantri" }
+  ],
   professionFamilies: [{ id: "military", name: "Military" }],
   professionSkills: [
     {
@@ -225,14 +230,39 @@ describe("selectionStructure", () => {
 
   it("derives baseline languages from society", () => {
     const summary = buildChargenLanguageSelectionSummary({
+      civilizationId: "glantri_civ",
       content,
       progression,
       societyId: "glantri"
     });
 
     expect(summary.requiredLanguageIds).toEqual(["glantri_language"]);
-    expect(summary.selectableLanguageIds).toEqual([]);
+    expect(summary.selectableLanguageIds).toEqual(["old_common_language"]);
     expect(summary.selectedLanguageIds).toEqual(["glantri_language"]);
+    expect(summary.selectedOptionalLanguageIds).toEqual([]);
+  });
+
+  it("materializes selected optional civilization languages as concrete Language rows", () => {
+    const synced = syncChargenLanguageSkillRows({
+      civilizationId: "glantri_civ",
+      content,
+      progression: {
+        ...progression,
+        chargenSelections: {
+          selectedGroupSlots: progression.chargenSelections?.selectedGroupSlots ?? [],
+          selectedLanguageIds: ["old_common_language"],
+          selectedSkillIds: progression.chargenSelections?.selectedSkillIds ?? []
+        }
+      },
+      societyId: "glantri"
+    });
+
+    expect(synced.skills).toContainEqual(
+      expect.objectContaining({
+        languageName: "Old Common",
+        skillId: "language"
+      })
+    );
   });
 
   it("separates core and selectable skills and preserves chosen selections", () => {

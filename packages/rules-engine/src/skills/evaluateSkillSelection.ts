@@ -92,7 +92,9 @@ function getPurchasedSkillLevel(
   progression: CharacterProgression,
   skillId: string
 ): number {
-  return progression.skills.find((skill) => skill.skillId === skillId)?.ranks ?? 0;
+  return progression.skills
+    .filter((skill) => skill.skillId === skillId)
+    .reduce((highest, skill) => Math.max(highest, skill.ranks ?? 0), 0);
 }
 
 function getEffectiveSkillLevel(input: {

@@ -32,6 +32,7 @@ import {
 } from "@glantri/domain";
 import {
   applyProfessionGrants,
+  buildChargenLanguageSelectionSummary,
   buildChargenMotherTongueSummary,
   applyChargenStatBuild,
   applyChargenStatExchange,
@@ -818,6 +819,12 @@ export default function ChargenWizard() {
     content,
     educationLevel: draftView.education.theoreticalSkillCount
   });
+  const languageSelectionSummary = buildChargenLanguageSelectionSummary({
+    civilizationId: selectedCivilizationId,
+    content,
+    progression,
+    societyId: selectedSocietyId
+  });
   const selectableSkillSummary = buildChargenSelectableSkillSummary({
     content,
     professionId: selectedProfessionId,
@@ -842,6 +849,13 @@ export default function ChargenWizard() {
   const normalSkillGroups = sortedSkillGroups.filter((group) =>
     skillAccess.normalSkillGroupIds.includes(group.id)
   );
+  const languageSkillViews = draftView.skills
+    .filter((skill) => skill.skillId === "language")
+    .sort(
+      (left, right) =>
+        Number(right.sourceTag === "mother-tongue") - Number(left.sourceTag === "mother-tongue") ||
+        (left.languageName ?? "").localeCompare(right.languageName ?? "")
+    );
   const skillDisplayGroupIds = new Map(
     content.skills.map((skill) => [
       skill.id,
@@ -856,6 +870,7 @@ export default function ChargenWizard() {
   const additionalAllowedSkills = sortSkills(
     content.skills.filter(
       (skill) =>
+        skill.id !== "language" &&
         skillAccess.normalSkillIds.includes(skill.id) &&
         skillDisplayGroupIds.get(skill.id) === undefined
     )
@@ -863,6 +878,7 @@ export default function ChargenWizard() {
   const otherSkills = sortSkills(
     content.skills.filter(
       (skill) =>
+        skill.id !== "language" &&
         skillDisplayGroupIds.get(skill.id) === undefined &&
         !skillAccess.normalSkillIds.includes(skill.id)
     )
@@ -1312,6 +1328,63 @@ export default function ChargenWizard() {
     });
   }
 
+  function handleToggleLanguageSelection(languageId: string) {
+    setProgression((current) => {
+      const currentLanguageSummary = buildChargenLanguageSelectionSummary({
+        civilizationId: selectedCivilizationId,
+        content,
+        progression: current,
+        societyId: selectedSocietyId
+      });
+
+      if (!currentLanguageSummary.selectableLanguageIds.includes(languageId)) {
+        return current;
+      }
+
+      const language = currentLanguageSummary.selectableLanguages.find(
+        (candidate) => candidate.id === languageId
+      );
+
+      if (!language) {
+        return current;
+      }
+
+      const languageSkillKey = getCharacterSkillKey({
+        languageName: language.name,
+        skillId: "language"
+      });
+      const existingSkill = current.skills.find(
+        (skill) => getCharacterSkillKey(skill) === languageSkillKey
+      );
+      const currentSelections = new Set(current.chargenSelections?.selectedLanguageIds ?? []);
+
+      if (currentSelections.has(languageId)) {
+        const investedRanks =
+          (existingSkill?.grantedRanks ?? 0) +
+          (existingSkill?.primaryRanks ?? 0) +
+          (existingSkill?.secondaryRanks ?? 0);
+
+        if (investedRanks > 0) {
+          setFeedback([`Remove ranks from Language (${language.name}) before unselecting it.`]);
+          return current;
+        }
+
+        currentSelections.delete(languageId);
+      } else {
+        currentSelections.add(languageId);
+      }
+
+      return {
+        ...current,
+        chargenSelections: {
+          selectedLanguageIds: [...currentSelections],
+          selectedGroupSlots: current.chargenSelections?.selectedGroupSlots ?? [],
+          selectedSkillIds: current.chargenSelections?.selectedSkillIds ?? []
+        }
+      };
+    });
+  }
+
   function toggleProfessionPreview(professionId: string) {
     setExpandedProfessionId((current) => (current === professionId ? undefined : professionId));
   }
@@ -1428,16 +1501,28 @@ export default function ChargenWizard() {
     setShowAllSpecializations(false);
   }
 
-  function handleAllocate(targetId: string, targetType: "group" | "skill") {
+  function handleAllocate(
+    targetId: string,
+    targetType: "group" | "skill",
+    targetLanguageName?: string
+  ) {
     if (!skillAllocationContext) {
       return;
     }
 
     const result = allocateChargenPoint({
       ...skillAllocationContext,
+      targetLanguageName,
       targetId,
       targetType
     });
+    const feedbackTargetId =
+      targetType === "skill"
+        ? getCharacterSkillKey({
+            languageName: targetLanguageName,
+            skillId: targetId
+          })
+        : targetId;
 
     if (result.error) {
       const message = formatActionError(result.error) ?? result.error;
@@ -1445,7 +1530,7 @@ export default function ChargenWizard() {
       if (targetType === "skill") {
         setRowActionFeedback((current) => ({
           ...current,
-          [getRowActionFeedbackKey(targetId, targetType)]: message
+          [getRowActionFeedbackKey(feedbackTargetId, targetType)]: message
         }));
 
         if (result.warnings.length > 0) {
@@ -1461,7 +1546,7 @@ export default function ChargenWizard() {
 
     setRowActionFeedback((current) => {
       const next = { ...current };
-      delete next[getRowActionFeedbackKey(targetId, targetType)];
+      delete next[getRowActionFeedbackKey(feedbackTargetId, targetType)];
       return next;
     });
     setProgression(result.progression);
@@ -1473,16 +1558,28 @@ export default function ChargenWizard() {
     ]);
   }
 
-  function handleRemoveAllocation(targetId: string, targetType: "group" | "skill") {
+  function handleRemoveAllocation(
+    targetId: string,
+    targetType: "group" | "skill",
+    targetLanguageName?: string
+  ) {
     if (!skillAllocationContext) {
       return;
     }
 
     const result = removeChargenPoint({
       ...skillAllocationContext,
+      targetLanguageName,
       targetId,
       targetType
     });
+    const feedbackTargetId =
+      targetType === "skill"
+        ? getCharacterSkillKey({
+            languageName: targetLanguageName,
+            skillId: targetId
+          })
+        : targetId;
 
     if (result.error) {
       const message = formatActionError(result.error) ?? result.error;
@@ -1490,7 +1587,7 @@ export default function ChargenWizard() {
       if (targetType === "skill") {
         setRowActionFeedback((current) => ({
           ...current,
-          [getRowActionFeedbackKey(targetId, targetType)]: message
+          [getRowActionFeedbackKey(feedbackTargetId, targetType)]: message
         }));
 
         if (result.warnings.length > 0) {
@@ -1506,7 +1603,7 @@ export default function ChargenWizard() {
 
     setRowActionFeedback((current) => {
       const next = { ...current };
-      delete next[getRowActionFeedbackKey(targetId, targetType)];
+      delete next[getRowActionFeedbackKey(feedbackTargetId, targetType)];
       return next;
     });
     setProgression(result.progression);
@@ -2296,6 +2393,12 @@ export default function ChargenWizard() {
                   {motherTongueSummary.startingLevel}
                 </div>
               ) : null}
+              {languageSelectionSummary.selectableLanguages.length > 0 ? (
+                <div>
+                  Optional languages:{" "}
+                  {languageSelectionSummary.selectableLanguages.map((language) => language.name).join(", ")}
+                </div>
+              ) : null}
               <div>Band labels: {selectedSociety ? formatSocietyBandLabels(selectedSociety) : "—"}</div>
               {selectedCivilization.historicalAnalogue ? (
                 <div>Historical analogue: {selectedCivilization.historicalAnalogue}</div>
@@ -2834,6 +2937,166 @@ export default function ChargenWizard() {
 
                 {expandedAllocationSections.includes("core-profession-skills") ? (
                   <div style={{ display: "grid", gap: "1rem" }}>
+                    {motherTongueSummary.displayLabel || languageSelectionSummary.selectableLanguages.length > 0 ? (
+                      <section
+                        style={{
+                          background: "#fbfaf5",
+                          border: "1px solid #e7e2d7",
+                          borderRadius: 10,
+                          display: "grid",
+                          gap: "0.75rem",
+                          padding: "1rem"
+                        }}
+                      >
+                        <div style={{ display: "grid", gap: "0.25rem" }}>
+                          <strong>Languages</strong>
+                          <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
+                            Mother tongue is granted automatically. Extra civilization languages become real
+                            {" "}Language entries when selected here.
+                          </div>
+                        </div>
+
+                        {motherTongueSummary.displayLabel ? (
+                          <div style={{ color: "#4a4f45", fontSize: "0.9rem" }}>
+                            Mother tongue: {motherTongueSummary.displayLabel} • Starting XP{" "}
+                            {motherTongueSummary.startingLevel}
+                          </div>
+                        ) : null}
+
+                        {languageSelectionSummary.selectableLanguages.length > 0 ? (
+                          <div style={{ display: "grid", gap: "0.5rem" }}>
+                            <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+                              <span style={getBadgeStyle({ muted: true })}>Optional language choices</span>
+                              <span style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
+                                Select any civilization languages you want available in this draft.
+                              </span>
+                            </div>
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+                              {languageSelectionSummary.selectableLanguages.map((language) => {
+                                const isSelected =
+                                  languageSelectionSummary.selectedOptionalLanguageIds.includes(language.id);
+
+                                return (
+                                  <button
+                                    key={language.id}
+                                    onClick={() => handleToggleLanguageSelection(language.id)}
+                                    style={{
+                                      background: isSelected ? "#ece8da" : "#fff",
+                                      border: isSelected ? "1px solid #8b7345" : "1px solid #d9ddd8",
+                                      borderRadius: 999,
+                                      cursor: "pointer",
+                                      padding: "0.4rem 0.75rem"
+                                    }}
+                                    type="button"
+                                  >
+                                    {language.name}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ) : null}
+
+                        {languageSkillViews.length > 0 ? (
+                          <div style={{ display: "grid", gap: "0.5rem" }}>
+                            {languageSkillViews.map((skillView) => {
+                              const rowFeedback = rowActionFeedback[
+                                getRowActionFeedbackKey(skillView.skillKey, "skill")
+                              ];
+                              const addPreview = skillAllocationContext
+                                ? allocateChargenPoint({
+                                    ...skillAllocationContext,
+                                    targetId: skillView.skillId,
+                                    targetLanguageName: skillView.languageName,
+                                    targetType: "skill"
+                                  })
+                                : undefined;
+
+                              return (
+                                <div
+                                  key={skillView.skillKey}
+                                  style={{
+                                    borderTop: "1px solid #e7e2d7",
+                                    display: "grid",
+                                    gap: "0.5rem",
+                                    paddingTop: "0.75rem"
+                                  }}
+                                >
+                                  <div
+                                    style={{
+                                      alignItems: "center",
+                                      display: "grid",
+                                      gap: "0.75rem",
+                                      gridTemplateColumns:
+                                        "minmax(180px, 2fr) repeat(4, minmax(72px, 84px)) minmax(150px, 1fr)"
+                                    }}
+                                  >
+                                    <div style={{ display: "grid", gap: "0.3rem" }}>
+                                      <div
+                                        style={{
+                                          alignItems: "center",
+                                          display: "flex",
+                                          flexWrap: "wrap",
+                                          gap: "0.5rem"
+                                        }}
+                                      >
+                                        <span>{getSkillDisplayName({ languageName: skillView.languageName, skill: { name: skillView.name } })}</span>
+                                        <span style={getSkillTierTone({ category: skillView.category })}>
+                                          {getSkillTierLabel({ category: skillView.category })}
+                                        </span>
+                                        {skillView.sourceTag === "mother-tongue" ? (
+                                          <span style={getBadgeStyle({ muted: true })}>Mother tongue</span>
+                                        ) : null}
+                                        {languageSelectionSummary.selectedOptionalLanguages.some(
+                                          (language) => language.name === skillView.languageName
+                                        ) ? (
+                                          <span style={getBadgeStyle({ muted: true })}>Selected option</span>
+                                        ) : null}
+                                      </div>
+                                      {addPreview?.spentCost ? (
+                                        <div style={{ color: "#5e5a50", fontSize: "0.82rem" }}>
+                                          Next purchase cost: {addPreview.spentCost}
+                                        </div>
+                                      ) : null}
+                                    </div>
+                                    <div>{skillView.groupLevel}</div>
+                                    <div>{skillView.primaryRanks}</div>
+                                    <div>{skillView.secondaryRanks}</div>
+                                    <div>{skillView.effectiveSkillNumber}</div>
+                                    <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+                                      <button
+                                        disabled={!skillAllocationContext}
+                                        onClick={() =>
+                                          handleAllocate(skillView.skillId, "skill", skillView.languageName)
+                                        }
+                                        type="button"
+                                      >
+                                        +
+                                      </button>
+                                      <button
+                                        disabled={!skillAllocationContext}
+                                        onClick={() =>
+                                          handleRemoveAllocation(skillView.skillId, "skill", skillView.languageName)
+                                        }
+                                        type="button"
+                                      >
+                                        -
+                                      </button>
+                                    </div>
+                                  </div>
+                                  {rowFeedback ? (
+                                    <div role="status" style={{ color: "#7a4b00", fontSize: "0.85rem" }}>
+                                      {rowFeedback}
+                                    </div>
+                                  ) : null}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : null}
+                      </section>
+                    ) : null}
+
                     {coreProfessionSections.map((section) => (
                       <section
                         key={section.definition.id}
@@ -3486,6 +3749,7 @@ export default function ChargenWizard() {
                 ? `${motherTongueSummary.displayLabel} • XP ${motherTongueSummary.startingLevel}`
                 : "Not selected"}
             </div>
+            <div>Selected extra languages: {languageSelectionSummary.selectedOptionalLanguageIds.length}</div>
             <div>Skill groups: {draftView.groups.length}</div>
             <div>Skills: {draftView.skills.length}</div>
             <div>Core skills: {selectableSkillSummary.coreSkillIds.length}</div>

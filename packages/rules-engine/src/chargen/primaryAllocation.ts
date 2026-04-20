@@ -37,6 +37,7 @@ import { STANDARD_CHARGEN_METHOD_POLICY } from "./policy";
 import {
   buildChargenLanguageSelectionSummary,
   buildChargenSelectableSkillSummary,
+  syncChargenLanguageSkillRows,
   syncChargenMotherTongueSkillRow,
   syncChargenSelectionSkillRows
 } from "./selectionStructure";
@@ -69,6 +70,7 @@ export interface SpendPrimaryPointInput {
   progression: CharacterProgression;
   societyId?: string;
   societyLevel: number;
+  targetLanguageName?: string;
   targetId: string;
   targetType: "group" | "skill";
 }
@@ -80,6 +82,7 @@ export interface SpendSecondaryPointInput {
   progression: CharacterProgression;
   societyId?: string;
   societyLevel: number;
+  targetLanguageName?: string;
   targetId: string;
   targetType: "skill" | "specialization";
 }
@@ -91,6 +94,7 @@ export interface AllocateChargenPointInput {
   progression: CharacterProgression;
   societyId?: string;
   societyLevel: number;
+  targetLanguageName?: string;
   targetId: string;
   targetType: "group" | "skill";
 }
@@ -655,6 +659,25 @@ function getPreferredProgressionSkillRow(
   );
 }
 
+function getTargetedProgressionSkillRow(input: {
+  progression: CharacterProgression;
+  skillId: string;
+  targetLanguageName?: string;
+}): CharacterSkill | undefined {
+  if (input.targetLanguageName) {
+    return input.progression.skills.find(
+      (skill) =>
+        getCharacterSkillKey(skill) ===
+        getCharacterSkillKey({
+          languageName: input.targetLanguageName,
+          skillId: input.skillId
+        })
+    );
+  }
+
+  return getPreferredProgressionSkillRow(input.progression, input.skillId);
+}
+
 function ensureSpecializationExists(
   progression: CharacterProgression,
   specialization: SkillSpecialization
@@ -873,7 +896,9 @@ export function allocateChargenPoint(input: AllocateChargenPointInput): SpendPoi
     };
   }
 
-  const skill = ensureSkillExists(progression, skillDefinition);
+  const skill = ensureSkillExists(progression, skillDefinition, {
+    languageName: input.targetLanguageName
+  });
 
   if (pool === "primary") {
     skill.primaryRanks += 1;
@@ -974,7 +999,9 @@ export function spendPrimaryPoint(input: SpendPrimaryPointInput): SpendPointResu
     };
   }
 
-  const skill = ensureSkillExists(progression, skillDefinition);
+  const skill = ensureSkillExists(progression, skillDefinition, {
+    languageName: input.targetLanguageName
+  });
   const cost = getSkillSpendCost(skillDefinition, skill.ranks > 0);
 
   if (progression.primaryPoolSpent + cost > progression.primaryPoolTotal) {
@@ -1077,8 +1104,13 @@ function getPrimarySkillRemovalError(input: {
   content: CanonicalContentShape;
   progression: CharacterProgression;
   skillDefinition: SkillDefinition;
+  targetLanguageName?: string;
 }): string | undefined {
-  const skill = getPreferredProgressionSkillRow(input.progression, input.skillDefinition.id);
+  const skill = getTargetedProgressionSkillRow({
+    progression: input.progression,
+    skillId: input.skillDefinition.id,
+    targetLanguageName: input.targetLanguageName
+  });
 
   if (!skill || skill.primaryRanks < 1) {
     return "No primary-point skill purchase to remove.";
@@ -1180,8 +1212,13 @@ function getChargenSkillRemovalError(input: {
   content: CanonicalContentShape;
   progression: CharacterProgression;
   skillDefinition: SkillDefinition;
+  targetLanguageName?: string;
 }): string | undefined {
-  const skill = getPreferredProgressionSkillRow(input.progression, input.skillDefinition.id);
+  const skill = getTargetedProgressionSkillRow({
+    progression: input.progression,
+    skillId: input.skillDefinition.id,
+    targetLanguageName: input.targetLanguageName
+  });
 
   if (!skill || skill.primaryRanks + skill.secondaryRanks < 1) {
     return "No allocated skill points to remove.";
@@ -1270,11 +1307,16 @@ export function removePrimaryPoint(input: SpendPrimaryPointInput): SpendPointRes
     };
   }
 
-  const skill = getPreferredProgressionSkillRow(progression, input.targetId);
+  const skill = getTargetedProgressionSkillRow({
+    progression,
+    skillId: input.targetId,
+    targetLanguageName: input.targetLanguageName
+  });
   const error = getPrimarySkillRemovalError({
     content: input.content,
     progression,
-    skillDefinition
+    skillDefinition,
+    targetLanguageName: input.targetLanguageName
   });
 
   if (!skill || error) {
@@ -1355,11 +1397,16 @@ export function removeChargenPoint(
     };
   }
 
-  const skill = getPreferredProgressionSkillRow(progression, input.targetId);
+  const skill = getTargetedProgressionSkillRow({
+    progression,
+    skillId: input.targetId,
+    targetLanguageName: input.targetLanguageName
+  });
   const error = getChargenSkillRemovalError({
     content: input.content,
     progression,
-    skillDefinition
+    skillDefinition,
+    targetLanguageName: input.targetLanguageName
   });
 
   if (!skill || error) {
@@ -1402,7 +1449,11 @@ export function removeSecondaryPoint(input: SpendSecondaryPointInput): SpendPoin
       };
     }
 
-    const skill = getPreferredProgressionSkillRow(progression, input.targetId);
+    const skill = getTargetedProgressionSkillRow({
+      progression,
+      skillId: input.targetId,
+      targetLanguageName: input.targetLanguageName
+    });
 
     if (!skill || skill.secondaryRanks < 1) {
       return {
@@ -1415,7 +1466,8 @@ export function removeSecondaryPoint(input: SpendSecondaryPointInput): SpendPoin
     const error = getChargenSkillRemovalError({
       content: input.content,
       progression,
-      skillDefinition
+      skillDefinition,
+      targetLanguageName: input.targetLanguageName
     });
 
     if (error) {
@@ -1523,7 +1575,9 @@ export function spendSecondaryPoint(input: SpendSecondaryPointInput): SpendPoint
       };
     }
 
-    const skill = ensureSkillExists(progression, skillDefinition);
+    const skill = ensureSkillExists(progression, skillDefinition, {
+      languageName: input.targetLanguageName
+    });
     const cost = getSkillSpendCost(skillDefinition, skill.ranks > 0);
 
     if (progression.secondaryPoolSpent + cost > progression.secondaryPoolTotal) {
@@ -1646,11 +1700,19 @@ export function buildChargenDraftView(input: {
       progression: recalculateProgression(input.progression)
     })
   );
+  const languageSyncedProgression = recalculateProgression(
+    syncChargenLanguageSkillRows({
+      civilizationId: input.civilizationId,
+      content: input.content,
+      progression: selectionSyncedProgression,
+      societyId: input.societyId
+    })
+  );
   const education = buildEducationBreakdown({
     content: input.content,
     professionId: input.professionId,
     profile: input.profile,
-    progression: selectionSyncedProgression,
+    progression: languageSyncedProgression,
     societyId: input.societyId,
     societyLevel: input.societyLevel
   });
@@ -1659,7 +1721,7 @@ export function buildChargenDraftView(input: {
       civilizationId: input.civilizationId,
       content: input.content,
       educationLevel: education.theoreticalSkillCount,
-      progression: selectionSyncedProgression
+      progression: languageSyncedProgression
     })
   );
 
@@ -1829,11 +1891,19 @@ export function reviewChargenDraft(
   input: ReviewChargenDraftInput
 ): ReviewChargenDraftResult {
   const normalizedProgression = recalculateProgression(input.progression);
+  const languageSyncedProgression = recalculateProgression(
+    syncChargenLanguageSkillRows({
+      civilizationId: input.civilizationId,
+      content: input.content,
+      progression: normalizedProgression,
+      societyId: input.societyId
+    })
+  );
   const education = buildEducationBreakdown({
     content: input.content,
     professionId: input.professionId,
     profile: input.profile,
-    progression: normalizedProgression,
+    progression: languageSyncedProgression,
     societyId: input.societyId,
     societyLevel: input.societyLevel
   });
@@ -1842,7 +1912,7 @@ export function reviewChargenDraft(
       civilizationId: input.civilizationId,
       content: input.content,
       educationLevel: education.theoreticalSkillCount,
-      progression: normalizedProgression
+      progression: languageSyncedProgression
     })
   );
   const access =
@@ -1996,6 +2066,14 @@ export function finalizeChargenDraft(
     })
   );
   progression = recalculateProgression(
+    syncChargenLanguageSkillRows({
+      civilizationId: input.civilizationId,
+      content: input.content,
+      progression,
+      societyId: input.societyId
+    })
+  );
+  progression = recalculateProgression(
     syncChargenMotherTongueSkillRow({
       civilizationId: input.civilizationId,
       content: input.content,
@@ -2005,6 +2083,7 @@ export function finalizeChargenDraft(
   );
   progression.educationPoints = review.draftView.education.theoreticalSkillCount;
   const languageSummary = buildChargenLanguageSelectionSummary({
+    civilizationId: input.civilizationId,
     content: input.content,
     progression,
     societyId: input.societyId
