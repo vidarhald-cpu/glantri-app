@@ -1,13 +1,18 @@
 import type {
   CharacterProgression,
   SkillDefinition,
+  SkillGroupDefinition,
   SkillSpecialization
 } from "@glantri/domain";
+import { getSkillGroupIds } from "@glantri/domain";
+import { calculateGroupLevel } from "./calculateGroupLevel";
+import { selectBestSkillGroupContribution } from "./selectBestSkillGroupContribution";
 
 const LITERACY_SKILL_ID = "literacy";
 
 interface SkillSelectionContentShape {
   skills: SkillDefinition[];
+  skillGroups?: SkillGroupDefinition[];
 }
 
 function getSkillDependencies(skill: SkillDefinition): SkillDefinition["dependencies"] {
@@ -90,6 +95,37 @@ function getPurchasedSkillLevel(
   return progression.skills.find((skill) => skill.skillId === skillId)?.ranks ?? 0;
 }
 
+function getEffectiveSkillLevel(input: {
+  content: SkillSelectionContentShape;
+  progression: CharacterProgression;
+  skill: SkillDefinition;
+}): number {
+  const directRanks = getPurchasedSkillLevel(input.progression, input.skill.id);
+  const relevantGroupIds = new Set(getSkillGroupIds(input.skill));
+  const bestGroupContribution =
+    selectBestSkillGroupContribution(
+      input.progression.skillGroups
+        .filter((group) => group.ranks > 0 && relevantGroupIds.has(group.groupId))
+        .map((group) => {
+          const definition = input.content.skillGroups?.find(
+            (skillGroup) => skillGroup.id === group.groupId
+          );
+
+          return {
+            groupId: group.groupId,
+            groupLevel: calculateGroupLevel({
+              gms: group.gms,
+              ranks: group.ranks
+            }),
+            name: definition?.name ?? group.groupId,
+            sortOrder: definition?.sortOrder ?? Number.MAX_SAFE_INTEGER
+          };
+        })
+    )?.groupLevel ?? 0;
+
+  return directRanks + bestGroupContribution;
+}
+
 function createEmptyEvaluation(): SkillSelectionEvaluationResult {
   return {
     advisories: [],
@@ -152,7 +188,16 @@ function evaluateSkillDependencies(input: {
   const result = createEmptyEvaluation();
 
   for (const dependency of getSkillDependencies(input.skill)) {
-    if (getPurchasedSkillLevel(input.progression, dependency.skillId) > 0) {
+    const dependencySkill = getSkillDefinitionById(input.content, dependency.skillId);
+    const effectiveDependencyLevel = dependencySkill
+      ? getEffectiveSkillLevel({
+          content: input.content,
+          progression: input.progression,
+          skill: dependencySkill
+        })
+      : getPurchasedSkillLevel(input.progression, dependency.skillId);
+
+    if (effectiveDependencyLevel > 0) {
       continue;
     }
 
@@ -180,13 +225,28 @@ function evaluateSkillDependencies(input: {
 }
 
 function evaluateLiteracyRequirement(input: {
+  content: SkillSelectionContentShape;
   progression: CharacterProgression;
   skill: SkillDefinition;
 }): SkillSelectionEvaluationResult {
   if (
     input.skill.id === LITERACY_SKILL_ID ||
     input.skill.requiresLiteracy === "no" ||
-    getPurchasedSkillLevel(input.progression, LITERACY_SKILL_ID) > 0
+    (() => {
+      const literacySkill = getSkillDefinitionById(input.content, LITERACY_SKILL_ID);
+
+      if (!literacySkill) {
+        return getPurchasedSkillLevel(input.progression, LITERACY_SKILL_ID) > 0;
+      }
+
+      return (
+        getEffectiveSkillLevel({
+          content: input.content,
+          progression: input.progression,
+          skill: literacySkill
+        }) > 0
+      );
+    })()
   ) {
     return createEmptyEvaluation();
   }
@@ -267,7 +327,11 @@ function evaluateSpecializationGate(input: {
     };
   }
 
-  const parentLevel = getPurchasedSkillLevel(input.progression, parentSkill.id);
+  const parentLevel = getEffectiveSkillLevel({
+    content: input.content,
+    progression: input.progression,
+    skill: parentSkill
+  });
 
   if (parentLevel <= 0) {
     return {
@@ -322,6 +386,7 @@ export function evaluateSkillSelection(
         skill: input.target.skill
       }),
       evaluateLiteracyRequirement({
+        content: input.content,
         progression: input.progression,
         skill: input.target.skill
       })

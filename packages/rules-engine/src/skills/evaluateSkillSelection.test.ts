@@ -243,9 +243,20 @@ function getSpecialization(specializationId: string): SkillSpecialization {
   return specialization;
 }
 
-function buildProgression(skillRanks: Record<string, number>): CharacterProgression {
+function buildProgression(
+  skillRanks: Record<string, number>,
+  groupRanks: Record<string, number> = {}
+): CharacterProgression {
   return {
     ...createChargenProgression(),
+    skillGroups: Object.entries(groupRanks).map(([groupId, ranks]) => ({
+      gms: 0,
+      grantedRanks: 0,
+      groupId,
+      primaryRanks: ranks,
+      ranks,
+      secondaryRanks: 0
+    })),
     skills: Object.entries(skillRanks).map(([skillId, ranks]) => {
       const skill = getSkill(skillId);
 
@@ -297,6 +308,20 @@ describe("evaluateSkillSelection", () => {
     expect(evaluation.advisories).toHaveLength(0);
   });
 
+  it("allows when a required dependency is satisfied through effective group XP", () => {
+    const evaluation = evaluateSkillSelection({
+      content: testContent,
+      progression: buildProgression({}, { scholarly: 1 }),
+      target: {
+        skill: getSkill("history"),
+        targetType: "skill"
+      }
+    });
+
+    expect(evaluation.isAllowed).toBe(true);
+    expect(evaluation.blockingReasons).toHaveLength(0);
+  });
+
   it("warns but allows when a recommended dependency is missing", () => {
     const evaluation = evaluateSkillSelection({
       content: testContent,
@@ -313,6 +338,20 @@ describe("evaluateSkillSelection", () => {
       "missing-recommended-dependency"
     ]);
     expect(evaluation.advisories).toHaveLength(0);
+  });
+
+  it("clears recommended dependency warnings when support is present through group XP", () => {
+    const evaluation = evaluateSkillSelection({
+      content: testContent,
+      progression: buildProgression({}, { social: 1 }),
+      target: {
+        skill: getSkill("appraisal"),
+        targetType: "skill"
+      }
+    });
+
+    expect(evaluation.isAllowed).toBe(true);
+    expect(evaluation.warnings).toHaveLength(0);
   });
 
   it("advises but allows when a helpful dependency is missing", () => {
@@ -422,6 +461,20 @@ describe("evaluateSkillSelection", () => {
     const evaluation = evaluateSkillSelection({
       content: testContent,
       progression: buildProgression({ weapon_training: 3 }),
+      target: {
+        specialization: getSpecialization("dueling"),
+        targetType: "specialization"
+      }
+    });
+
+    expect(evaluation.isAllowed).toBe(true);
+    expect(evaluation.blockingReasons).toHaveLength(0);
+  });
+
+  it("allows a specialization when the parent skill threshold is met through effective group XP", () => {
+    const evaluation = evaluateSkillSelection({
+      content: testContent,
+      progression: buildProgression({}, { combat: 3 }),
       target: {
         specialization: getSpecialization("dueling"),
         targetType: "specialization"

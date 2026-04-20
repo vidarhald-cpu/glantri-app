@@ -2686,12 +2686,13 @@ export default function ChargenWizard() {
               background: "rgba(246, 245, 239, 0.96)",
               border: "1px solid #d9ddd8",
               borderRadius: 12,
+              boxShadow: "0 6px 18px rgba(80, 72, 55, 0.08)",
               display: "grid",
-              gap: "0.75rem",
+              gap: "0.65rem",
               gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-              padding: "0.9rem 1rem",
+              padding: "0.75rem 0.9rem",
               position: "sticky",
-              top: 0,
+              top: "0.5rem",
               zIndex: 4
             }}
           >
@@ -2773,53 +2774,6 @@ export default function ChargenWizard() {
           >
             <strong>Profession skills</strong>
 
-            {selectableSkillSummary.selectionSlots.length > 0 ? (
-              <div style={{ display: "grid", gap: "0.5rem" }}>
-                {selectableSkillSummary.selectionSlots.map((slot) => (
-                  <div
-                    key={`${slot.groupId}:${slot.slotId}`}
-                    style={{
-                      borderTop: "1px solid #e7e2d7",
-                      display: "grid",
-                      gap: "0.5rem",
-                      paddingTop: "0.75rem"
-                    }}
-                  >
-                    <div style={{ display: "grid", gap: "0.2rem" }}>
-                      <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
-                        <span>{slot.groupName}</span>
-                        <span style={getBadgeStyle({ muted: !slot.isSatisfied })}>
-                          {slot.required ? "Required" : "Optional"} • Choose {slot.chooseCount}
-                        </span>
-                      </div>
-                    </div>
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
-                      {slot.candidateSkills.map((skill) => {
-                        const isSelected = slot.selectedSkillIds.includes(skill.id);
-
-                        return (
-                          <button
-                            key={`${slot.slotId}-${skill.id}`}
-                            onClick={() => handleSelectGroupSlotSkill(slot.groupId, slot.slotId, skill.id)}
-                            style={{
-                              background: isSelected ? "#ece8da" : "#fff",
-                              border: isSelected ? "1px solid #8b7345" : "1px solid #d9ddd8",
-                              borderRadius: 999,
-                              cursor: "pointer",
-                              padding: "0.4rem 0.75rem"
-                            }}
-                            type="button"
-                          >
-                            {skill.name} • Type {skill.category}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : null}
-
             {coreProfessionSections.length > 0 ? (
               <section
                 style={{
@@ -2840,45 +2794,7 @@ export default function ChargenWizard() {
                   }}
                 >
                   <div style={{ display: "grid", gap: "0.25rem" }}>
-                    <div style={{ alignItems: "center", display: "flex", gap: "0.5rem" }}>
-                      <strong>Profession groups</strong>
-                    </div>
-                    <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
-                      Main profession-linked skills and included training packages for
-                      ordinary-point spending.
-                    </div>
-                    <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
-                      {coreProfessionSections.reduce((sum, section) => sum + section.groups.length, 0)} training package
-                      {coreProfessionSections.reduce((sum, section) => sum + section.groups.length, 0) === 1 ? "" : "s"} •{" "}
-                      {coreProfessionSections.reduce(
-                        (sum, section) =>
-                          sum +
-                          section.directRows.length +
-                          section.groups.reduce((groupSum, group) => {
-                            const groupSkillRows = content.skills.filter(
-                              (skill) => skillDisplayGroupIds.get(skill.id) === group.id
-                            );
-
-                            return groupSum + groupSkillRows.length;
-                          }, 0),
-                        0
-                      )} skill
-                      {coreProfessionSections.reduce(
-                        (sum, section) =>
-                          sum +
-                          section.directRows.length +
-                          section.groups.reduce((groupSum, group) => {
-                            const groupSkillRows = content.skills.filter(
-                              (skill) => skillDisplayGroupIds.get(skill.id) === group.id
-                            );
-
-                            return groupSum + groupSkillRows.length;
-                          }, 0),
-                        0
-                      ) === 1
-                        ? ""
-                        : "s"}
-                    </div>
+                    <strong>Profession groups</strong>
                   </div>
                   <button onClick={() => toggleAllocationSection("core-profession-skills")} type="button">
                     {expandedAllocationSections.includes("core-profession-skills") ? "Collapse" : "Expand"}
@@ -2908,6 +2824,9 @@ export default function ChargenWizard() {
 
                         {section.groups.map((group) => {
                           const groupView = draftView.groups.find((item) => item.groupId === group.id);
+                          const groupSelectionSlots = selectableSkillSummary.selectionSlots.filter(
+                            (slot) => slot.groupId === group.id
+                          );
                           const addPreview = skillAllocationContext
                             ? allocateChargenPoint({
                                 ...skillAllocationContext,
@@ -3002,6 +2921,54 @@ export default function ChargenWizard() {
 
                               {addPreview?.spentCost ? <div>Next purchase cost: {addPreview.spentCost}</div> : null}
 
+                              {groupSelectionSlots.length > 0 ? (
+                                <div style={{ display: "grid", gap: "0.5rem" }}>
+                                  {groupSelectionSlots.map((slot) => (
+                                    <div
+                                      key={`${group.id}:${slot.slotId}`}
+                                      style={{
+                                        borderTop: "1px solid #e7e2d7",
+                                        display: "grid",
+                                        gap: "0.5rem",
+                                        paddingTop: "0.75rem"
+                                      }}
+                                    >
+                                      <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+                                        <span style={getBadgeStyle({ muted: !slot.isSatisfied })}>
+                                          {slot.required ? "Required" : "Optional"} • Choose {slot.chooseCount}
+                                        </span>
+                                      </div>
+                                      <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+                                        {slot.candidateSkills.map((skill) => {
+                                          const isSelected = slot.selectedSkillIds.includes(skill.id);
+
+                                          return (
+                                            <button
+                                              key={`${slot.slotId}-${skill.id}`}
+                                              onClick={() =>
+                                                handleSelectGroupSlotSkill(slot.groupId, slot.slotId, skill.id)
+                                              }
+                                              style={{
+                                                background: isSelected ? "#ece8da" : "#fff",
+                                                border: isSelected
+                                                  ? "1px solid #8b7345"
+                                                  : "1px solid #d9ddd8",
+                                                borderRadius: 999,
+                                                cursor: "pointer",
+                                                padding: "0.4rem 0.75rem"
+                                              }}
+                                              type="button"
+                                            >
+                                              {skill.name} • Type {skill.category}
+                                            </button>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : null}
+
                               {renderSkillRowsTable({
                                 emptyMessage: "No skills in this group are currently available.",
                                 rows: visibleSkillRows
@@ -3050,14 +3017,6 @@ export default function ChargenWizard() {
                 >
                   <div style={{ display: "grid", gap: "0.25rem" }}>
                     <strong>Special-access granted skills</strong>
-                    <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
-                      Profession-linked skills available directly, outside the included training
-                      packages.
-                    </div>
-                    <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
-                      {specialAccessSection.directRows.length} skill
-                      {specialAccessSection.directRows.length === 1 ? "" : "s"}
-                    </div>
                   </div>
                   <button onClick={() => toggleAllocationSection("special-access")} type="button">
                     {expandedAllocationSections.includes("special-access") ? "Collapse" : "Expand"}
