@@ -70,8 +70,22 @@ function renderClampedCell(text: string, lines = 2) {
   );
 }
 
+function renderMembershipLabel(skill: { name: string; relevance: "core" | "optional" }) {
+  return `${skill.name}${skill.relevance === "optional" ? " (secondary membership)" : ""}`;
+}
+
+function renderSlotSummary(slot: {
+  candidateSkills: string[];
+  chooseCount: number;
+  label: string;
+  required: boolean;
+}) {
+  const requirement = slot.required ? "Required" : "Optional";
+  return `${slot.label} • choose ${slot.chooseCount} • ${requirement}`;
+}
+
 const skillGroupsReviewGridTemplate =
-  "minmax(11rem, 0.95fr) minmax(22rem, 1.95fr) 5rem 5.5rem 6rem minmax(11rem, 0.95fr) 5.5rem";
+  "minmax(11rem, 0.95fr) minmax(22rem, 1.8fr) 5.5rem 5.5rem 6rem minmax(11rem, 1fr) 5.5rem";
 
 function SkillGroupsReviewTable(props: {
   onInspect: (rowId: string) => void;
@@ -104,7 +118,7 @@ function SkillGroupsReviewTable(props: {
             zIndex: 2
           }}
         >
-          {["Group", "Description", "Core", "Optional", "Points", "Professions", "Inspect"].map(
+          {["Group", "Description", "Fixed", "Slots", "Points", "Professions", "Inspect"].map(
             (header) => (
               <div
                 key={header}
@@ -149,12 +163,19 @@ function SkillGroupsReviewTable(props: {
               <div style={{ color: "#2e2619", padding: "0.9rem 0.8rem" }}>
                 {row.notes ? renderClampedCell(row.notes, 2) : <span style={{ color: "#8a7e63" }}>None</span>}
               </div>
-              <div style={{ color: "#2e2619", padding: "0.9rem 0.8rem" }}>{row.coreSkills.length}</div>
-              <div style={{ color: "#2e2619", padding: "0.9rem 0.8rem" }}>{row.optionalSkills.length}</div>
+              <div style={{ color: "#2e2619", padding: "0.9rem 0.8rem" }}>{row.fixedSkills.length}</div>
+              <div style={{ color: "#2e2619", padding: "0.9rem 0.8rem" }}>{row.selectionSlotCount}</div>
               <div style={{ color: "#2e2619", padding: "0.9rem 0.8rem" }}>{row.weightedContentPoints} pts</div>
               <div style={{ color: "#2e2619", padding: "0.9rem 0.8rem" }}>
                 <div style={{ alignItems: "center", display: "grid", gap: "0.25rem" }}>
-                  <span>{renderClampedCell(summarizeList(row.allowedProfessions, 3), 2)}</span>
+                  <span>
+                    {renderClampedCell(
+                      row.selectionSlotCount > 0
+                        ? `${summarizeList(row.allowedProfessions, 2)} • ${row.selectionSlotCount} slot${row.selectionSlotCount === 1 ? "" : "s"}`
+                        : summarizeList(row.allowedProfessions, 3),
+                      2
+                    )}
+                  </span>
                   <span style={{ color: row.warningDetails.length ? "#8a3b2f" : "#46613a", fontSize: "0.82rem", fontWeight: 700 }}>
                     {warningText}
                   </span>
@@ -186,6 +207,7 @@ export default function SkillGroupsAdminPage() {
     content.skillGroups.slice().sort((left, right) => left.sortOrder - right.sortOrder)[0];
   const [formState, setFormState] = useState<SkillGroupFormState>();
   const selectedRow = rows.find((row) => row.id === selectedGroup.id);
+  const selectedRowHasSlots = (selectedRow?.selectionSlotCount ?? 0) > 0;
 
   useEffect(() => {
     if (!selectedGroupId && rows[0]) {
@@ -198,9 +220,9 @@ export default function SkillGroupsAdminPage() {
       return;
     }
 
-    const includedSkillIds = content.skills
-      .filter((skill) => skill.groupIds.includes(selectedGroup.id))
-      .map((skill) => skill.id);
+    const includedSkillIds =
+      selectedGroup.skillMemberships?.map((membership) => membership.skillId) ??
+      content.skills.filter((skill) => skill.groupIds.includes(selectedGroup.id)).map((skill) => skill.id);
 
     setSelectedGroupId(selectedGroup.id);
     setFormState(createFormState(selectedGroup, includedSkillIds));
@@ -270,7 +292,11 @@ export default function SkillGroupsAdminPage() {
                 columns: [
                   { header: "Name", value: (row) => row.name },
                   { header: "Sort Order", value: (row) => row.sortOrder },
-                  { header: "Included Skills", value: (row) => row.includedSkills.join(" | ") },
+                  { header: "Fixed Skills", value: (row) => row.fixedSkillNames.join(" | ") },
+                  {
+                    header: "Selection Slots",
+                    value: (row) => row.selectionSlots.map((slot) => `${slot.label} [${slot.chooseCount}]`).join(" | ")
+                  },
                   {
                     header: "Allowed Professions",
                     value: (row) => row.allowedProfessions.join(" | ")
@@ -298,13 +324,13 @@ export default function SkillGroupsAdminPage() {
 
         <div style={{ display: "grid", gap: "1rem" }}>
           <AdminPanel
-            subtitle="This is the primary inspection view for the new skill-group structure. Core versus optional membership, weighted content size, and weak-group warnings are surfaced here instead of being hidden in raw ids."
+            subtitle="This inspection view separates fixed memberships from slot-based choices so combat training packages and future choice-driven groups read correctly."
             title={selectedGroup.name}
           >
             <div style={{ display: "grid", gap: "0.85rem" }}>
               <div style={{ display: "grid", gap: "0.75rem", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))" }}>
-                <AdminMetric label="Core skills" value={selectedRow?.coreSkills.length ?? 0} />
-                <AdminMetric label="Optional skills" value={selectedRow?.optionalSkills.length ?? 0} />
+                <AdminMetric label="Fixed skills" value={selectedRow?.fixedSkills.length ?? 0} />
+                <AdminMetric label="Selection slots" value={selectedRow?.selectionSlotCount ?? 0} />
                 <AdminMetric label="Weighted size" value={`${selectedRow?.weightedContentPoints ?? 0} pts`} />
               </div>
 
@@ -319,8 +345,15 @@ export default function SkillGroupsAdminPage() {
                   padding: "0.85rem 1rem"
                 }}
               >
-                {selectedRow?.coreSkills.length ?? 0} core skills and {selectedRow?.optionalSkills.length ?? 0} optional skills contribute{" "}
-                <strong>{selectedRow?.weightedContentPoints ?? 0} weighted points</strong> to this group.
+                {(selectedRow?.fixedSkills.length ?? 0) === 0
+                  ? "No fixed skills are attached to this group."
+                  : `${selectedRow?.fixedSkills.length ?? 0} fixed skill${(selectedRow?.fixedSkills.length ?? 0) === 1 ? "" : "s"} contribute `}
+                {(selectedRow?.fixedSkills.length ?? 0) > 0 ? <strong>{selectedRow?.weightedContentPoints ?? 0} weighted points</strong> : null}
+                {(selectedRow?.selectionSlotCount ?? 0) > 0
+                  ? `, with ${selectedRow?.selectionSlotCount ?? 0} selection slot${(selectedRow?.selectionSlotCount ?? 0) === 1 ? "" : "s"} layered on top.`
+                  : (selectedRow?.fixedSkills.length ?? 0) > 0
+                    ? "."
+                    : ""}
               </div>
 
               {selectedRow?.warningDetails.length ? (
@@ -357,21 +390,53 @@ export default function SkillGroupsAdminPage() {
               <div style={{ display: "grid", gap: "0.85rem" }}>
                 <div>
                   <div style={{ color: "#5f543a", fontSize: "0.85rem", fontWeight: 700, marginBottom: "0.35rem", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                    Core skills
+                    Fixed skills
                   </div>
-                  <AdminTagList values={selectedRow?.coreSkills ?? []} />
+                  {selectedRow?.fixedSkills.length ? (
+                    <AdminTagList values={selectedRow.fixedSkills.map(renderMembershipLabel)} />
+                  ) : (
+                    <div style={{ color: "#8a7e63" }}>No fixed skills in this group.</div>
+                  )}
                 </div>
 
                 <div>
                   <div style={{ color: "#5f543a", fontSize: "0.85rem", fontWeight: 700, marginBottom: "0.35rem", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                    Optional skills
+                    Selection slots
                   </div>
-                  {selectedRow?.optionalSkills.length ? (
-                    <AdminTagList values={selectedRow.optionalSkills} />
+                  {selectedRow?.selectionSlots.length ? (
+                    <div style={{ display: "grid", gap: "0.75rem" }}>
+                      {selectedRow.selectionSlots.map((slot) => (
+                        <div
+                          key={slot.id}
+                          style={{
+                            background: "rgba(126, 93, 42, 0.06)",
+                            border: "1px solid rgba(85, 73, 48, 0.12)",
+                            borderRadius: 14,
+                            display: "grid",
+                            gap: "0.45rem",
+                            padding: "0.75rem 0.9rem"
+                          }}
+                        >
+                          <div style={{ color: "#2e2619", fontWeight: 700 }}>{renderSlotSummary(slot)}</div>
+                          <div style={{ color: "#5b5036", fontSize: "0.92rem", lineHeight: 1.5 }}>
+                            Candidates: {slot.candidateSkills.join(", ")}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   ) : (
-                    <div style={{ color: "#8a7e63" }}>No optional cross-listed skills in this group.</div>
+                    <div style={{ color: "#8a7e63" }}>No selection slots in this group.</div>
                   )}
                 </div>
+
+                {selectedRow?.optionalSkills.length ? (
+                  <div>
+                    <div style={{ color: "#5f543a", fontSize: "0.85rem", fontWeight: 700, marginBottom: "0.35rem", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                      Secondary fixed memberships
+                    </div>
+                    <AdminTagList values={selectedRow.optionalSkills} />
+                  </div>
+                ) : null}
 
                 <div>
                   <div style={{ color: "#5f543a", fontSize: "0.85rem", fontWeight: 700, marginBottom: "0.35rem", textTransform: "uppercase", letterSpacing: "0.08em" }}>
@@ -396,7 +461,11 @@ export default function SkillGroupsAdminPage() {
           </AdminPanel>
 
           <AdminPanel
-            subtitle="Editing remains available here, but membership relevance editing is still deferred. This form preserves the current raw inclusion workflow."
+            subtitle={
+              selectedRowHasSlots
+                ? "Slot-driven groups are shown accurately here. Metadata editing remains available, but fixed memberships and selection slots are read-only in this pass to avoid misleading checkbox-only editing."
+                : "Editing remains available here. Legacy groups without slots still use the raw inclusion workflow."
+            }
             title={`Edit ${selectedGroup.name}`}
           >
             {canEdit ? (
@@ -437,19 +506,54 @@ export default function SkillGroupsAdminPage() {
                   />
                 </AdminField>
 
-                <AdminField label="Included skills">
-                  <AdminCheckboxList
-                    onToggle={toggleSkill}
-                    options={content.skills
-                      .slice()
-                      .sort((left, right) => left.sortOrder - right.sortOrder || left.name.localeCompare(right.name))
-                      .map((skill) => ({
-                        label: skill.name,
-                        selected: activeForm.includedSkillIds.includes(skill.id),
-                        value: skill.id
-                      }))}
-                  />
-                </AdminField>
+                {selectedRowHasSlots ? (
+                  <>
+                    <AdminField label="Fixed skills">
+                      {selectedRow?.fixedSkills.length ? (
+                        <AdminTagList values={selectedRow.fixedSkills.map(renderMembershipLabel)} />
+                      ) : (
+                        <div style={{ color: "#8a7e63" }}>No fixed skills in this group.</div>
+                      )}
+                    </AdminField>
+
+                    <AdminField label="Selection slots">
+                      <div style={{ display: "grid", gap: "0.75rem" }}>
+                        {(selectedRow?.selectionSlots ?? []).map((slot) => (
+                          <div
+                            key={slot.id}
+                            style={{
+                              background: "rgba(126, 93, 42, 0.06)",
+                              border: "1px solid rgba(85, 73, 48, 0.12)",
+                              borderRadius: 14,
+                              display: "grid",
+                              gap: "0.45rem",
+                              padding: "0.75rem 0.9rem"
+                            }}
+                          >
+                            <div style={{ color: "#2e2619", fontWeight: 700 }}>{renderSlotSummary(slot)}</div>
+                            <div style={{ color: "#5b5036", fontSize: "0.92rem", lineHeight: 1.5 }}>
+                              Candidates: {slot.candidateSkills.join(", ")}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </AdminField>
+                  </>
+                ) : (
+                  <AdminField label="Included skills">
+                    <AdminCheckboxList
+                      onToggle={toggleSkill}
+                      options={content.skills
+                        .slice()
+                        .sort((left, right) => left.sortOrder - right.sortOrder || left.name.localeCompare(right.name))
+                        .map((skill) => ({
+                          label: skill.name,
+                          selected: activeForm.includedSkillIds.includes(skill.id),
+                          value: skill.id
+                        }))}
+                    />
+                  </AdminField>
+                )}
 
                 <AdminButton type="submit">Save Skill Group</AdminButton>
               </form>

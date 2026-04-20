@@ -70,11 +70,24 @@ export interface SkillAuditIssue {
 export interface SkillGroupAdminRow {
   allowedProfessions: string[];
   coreSkills: string[];
+  fixedSkills: Array<{
+    name: string;
+    relevance: "core" | "optional";
+  }>;
+  fixedSkillNames: string[];
   id: string;
   includedSkills: string[];
   name: string;
   notes: string;
   optionalSkills: string[];
+  selectionSlotCount: number;
+  selectionSlots: Array<{
+    candidateSkills: string[];
+    chooseCount: number;
+    id: string;
+    label: string;
+    required: boolean;
+  }>;
   sortOrder: number;
   warningDetails: string[];
   weightedContentPoints: number;
@@ -1280,7 +1293,7 @@ export function buildSkillGroupAdminRows(content: CanonicalContent): SkillGroupA
     .sort((left, right) => left.sortOrder - right.sortOrder || left.name.localeCompare(right.name))
     .map((group) => {
       const memberships = getGroupMemberships(content, group.id);
-      const includedSkillRows = memberships
+      const fixedSkillRows = memberships
         .map((membership) => {
           const skill = content.skills.find((candidate) => candidate.id === membership.skillId);
 
@@ -1297,14 +1310,24 @@ export function buildSkillGroupAdminRows(content: CanonicalContent): SkillGroupA
         })
         .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry))
         .sort((left, right) => left.sortOrder - right.sortOrder || left.name.localeCompare(right.name));
-      const includedSkills = includedSkillRows.map((skill) => skill.name);
-      const coreSkills = includedSkillRows
+      const fixedSkillNames = fixedSkillRows.map((skill) => skill.name);
+      const coreSkills = fixedSkillRows
         .filter((skill) => skill.relevance === "core")
         .map((skill) => skill.name);
-      const optionalSkills = includedSkillRows
+      const optionalSkills = fixedSkillRows
         .filter((skill) => skill.relevance === "optional")
         .sort((left, right) => left.sortOrder - right.sortOrder || left.name.localeCompare(right.name))
         .map((skill) => skill.name);
+      const selectionSlots = (group.selectionSlots ?? []).map((slot) => ({
+        candidateSkills: slot.candidateSkillIds
+          .map((skillId) => content.skills.find((candidate) => candidate.id === skillId)?.name)
+          .filter((name): name is string => Boolean(name))
+          .sort((left, right) => left.localeCompare(right)),
+        chooseCount: slot.chooseCount,
+        id: slot.id,
+        label: slot.label,
+        required: slot.required
+      }));
       const allowedProfessions = content.professionSkills
         .filter((professionSkill) => professionSkill.skillGroupId === group.id)
         .map((professionSkill) => {
@@ -1320,14 +1343,21 @@ export function buildSkillGroupAdminRows(content: CanonicalContent): SkillGroupA
       return {
         allowedProfessions: uniqueSorted(allowedProfessions),
         coreSkills,
+        fixedSkills: fixedSkillRows.map((skill) => ({
+          name: skill.name,
+          relevance: skill.relevance
+        })),
+        fixedSkillNames,
         id: group.id,
-        includedSkills,
+        includedSkills: fixedSkillNames,
         name: group.name,
         notes: group.description ?? "",
         optionalSkills,
+        selectionSlotCount: selectionSlots.length,
+        selectionSlots,
         sortOrder: group.sortOrder,
         warningDetails: warningsByGroupId.get(group.id) ?? [],
-        weightedContentPoints: includedSkillRows.reduce((sum, skill) => sum + skill.points, 0)
+        weightedContentPoints: fixedSkillRows.reduce((sum, skill) => sum + skill.points, 0)
       };
     });
 }
