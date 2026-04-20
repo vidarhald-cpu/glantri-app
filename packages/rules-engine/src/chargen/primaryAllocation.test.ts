@@ -138,7 +138,9 @@ const motherTongueTestContent = {
       id: "glantri_civ",
       linkedSocietyId: "glantri",
       linkedSocietyLevel: 1,
+      motherTongueLanguageName: "Common",
       name: "Glantri",
+      optionalLanguageNames: [],
       period: "Test period",
       shortDescription: "Test civilization",
       spokenLanguageName: "Common",
@@ -790,7 +792,7 @@ describe("chargen purchase gate integration", () => {
     });
     const languageView = draftView.skills.find((skill) => skill.skillId === "language");
 
-    expect(languageView?.detailLabel).toBe("Common");
+    expect(languageView?.languageName).toBe("Common");
     expect(languageView?.specificSkillLevel).toBe(12);
   });
 
@@ -827,7 +829,7 @@ describe("chargen purchase gate integration", () => {
     const motherTongueSkill = result.build?.progression.skills.find((skill) => skill.skillId === "language");
 
     expect(result.errors).toEqual([]);
-    expect(motherTongueSkill?.detailLabel).toBe("Common");
+    expect(motherTongueSkill?.languageName).toBe("Common");
     expect(motherTongueSkill?.grantedRanks).toBe(12);
     expect(motherTongueSkill?.sourceTag).toBe("mother-tongue");
     expect(result.build?.progression.primaryPoolSpent).toBe(0);

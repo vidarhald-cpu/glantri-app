@@ -50,6 +50,7 @@ export interface ChargenLanguageSelectionSummary {
 export interface ChargenMotherTongueSummary {
   displayLabel?: string;
   languageName?: string;
+  optionalLanguageNames: string[];
   skill?: SkillDefinition;
   startingLevel: number;
 }
@@ -115,9 +116,9 @@ function sortSkillIds(content: ChargenSelectionContentShape, ids: string[]): str
 function createEmptySkillProgressionRow(skill: SkillDefinition) {
   return {
     category: skill.category,
-    detailLabel: undefined,
     grantedRanks: 0,
     groupId: skill.groupId,
+    languageName: undefined,
     level: 0,
     primaryRanks: 0,
     ranks: 0,
@@ -152,17 +153,19 @@ export function buildChargenMotherTongueSummary(input: {
     return {
       displayLabel: undefined,
       languageName: undefined,
+      optionalLanguageNames: [],
       skill: undefined,
       startingLevel: 0
     };
   }
 
   const startingLevel = Math.max(11, input.educationLevel);
-  const languageName = civilization.spokenLanguageName;
+  const languageName = civilization.motherTongueLanguageName;
 
   return {
     displayLabel: `${skill.name} (${languageName})`,
     languageName,
+    optionalLanguageNames: civilization.optionalLanguageNames ?? [],
     skill,
     startingLevel
   };
@@ -472,8 +475,8 @@ export function syncChargenMotherTongueSkillRow(input: {
 
     const clearedSkill = {
       ...existing,
-      detailLabel: undefined,
       grantedRanks: 0,
+      languageName: undefined,
       ranks: (existing.primaryRanks ?? 0) + (existing.secondaryRanks ?? 0),
       sourceTag: undefined
     };
@@ -495,9 +498,9 @@ export function syncChargenMotherTongueSkillRow(input: {
   const syncedSkill = {
     ...baseSkill,
     category: motherTongue.skill.category,
-    detailLabel: motherTongue.languageName,
     grantedRanks: motherTongue.startingLevel,
     groupId: motherTongue.skill.groupId,
+    languageName: motherTongue.languageName,
     ranks:
       motherTongue.startingLevel + (baseSkill.primaryRanks ?? 0) + (baseSkill.secondaryRanks ?? 0),
     sourceTag: "mother-tongue" as const

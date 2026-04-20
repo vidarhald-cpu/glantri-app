@@ -51,24 +51,32 @@ describe("validateCanonicalContent", () => {
     expect(
       defaultCanonicalContent.civilizations.find((civilization) => civilization.id === "glantri")
     ).toMatchObject({
+      motherTongueLanguageName: "Common",
+      optionalLanguageNames: [],
       spokenLanguageName: "Common",
       writtenLanguageName: "Common"
     });
     expect(
       defaultCanonicalContent.civilizations.find((civilization) => civilization.id === "iest")
     ).toMatchObject({
+      motherTongueLanguageName: "Common",
+      optionalLanguageNames: [],
       spokenLanguageName: "Common",
       writtenLanguageName: "Common"
     });
     expect(
       defaultCanonicalContent.civilizations.find((civilization) => civilization.id === "scyria")
     ).toMatchObject({
+      motherTongueLanguageName: "Old Common",
+      optionalLanguageNames: [],
       spokenLanguageName: "Old Common",
       writtenLanguageName: "Old Common"
     });
     expect(
       defaultCanonicalContent.civilizations.find((civilization) => civilization.id === "thyatis")
     ).toMatchObject({
+      motherTongueLanguageName: "Common",
+      optionalLanguageNames: [],
       spokenLanguageName: "Common",
       writtenLanguageName: "Common"
     });
@@ -77,6 +85,8 @@ describe("validateCanonicalContent", () => {
         (civilization) => civilization.id === "byzantine_empire"
       )
     ).toMatchObject({
+      motherTongueLanguageName: "Old Common",
+      optionalLanguageNames: [],
       spokenLanguageName: "Old Common",
       writtenLanguageName: "Old Common"
     });
@@ -85,6 +95,8 @@ describe("validateCanonicalContent", () => {
     ).toMatchObject({
       linkedSocietyId: "imperial_classical_high_civ",
       linkedSocietyLevel: 5,
+      motherTongueLanguageName: "Phoenician",
+      optionalLanguageNames: [],
       spokenLanguageName: "Phoenician",
       writtenLanguageName: "Phoenician"
     });

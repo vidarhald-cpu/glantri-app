@@ -112,8 +112,10 @@ interface CivilizationOption {
   linkedSocietyId: string;
   linkedSocietyLevel: number;
   linkedSocietyName: string;
+  motherTongueLanguageName: string;
   name: string;
   notes?: string;
+  optionalLanguageNames: string[];
   period: string;
   shortDescription: string;
   spokenLanguageName: string;
@@ -472,8 +474,10 @@ function buildCivilizationOptions(content: CanonicalContent): CivilizationOption
       linkedSocietyLevel: civilization.linkedSocietyLevel,
       linkedSocietyName:
         societiesById.get(civilization.linkedSocietyId)?.name ?? civilization.linkedSocietyId,
+      motherTongueLanguageName: civilization.motherTongueLanguageName,
       name: civilization.name,
       notes: civilization.notes,
+      optionalLanguageNames: civilization.optionalLanguageNames ?? [],
       period: civilization.period,
       shortDescription: civilization.shortDescription,
       spokenLanguageName: civilization.spokenLanguageName,
@@ -865,8 +869,8 @@ export default function ChargenWizard() {
         skill.id,
         {
           displayName:
-            skillView?.detailLabel && skill.name === "Language"
-              ? `${skill.name} (${skillView.detailLabel})`
+            skillView?.languageName && skill.name === "Language"
+              ? `${skill.name} (${skillView.languageName})`
               : skill.name,
           evaluation,
           isNormalAccess: skillAccess.normalSkillIds.includes(skill.id),
@@ -976,8 +980,8 @@ export default function ChargenWizard() {
         skillGroupXp: skillMetrics.groupXp,
         skillId: skill.id,
         skillName:
-          skillView?.detailLabel && skill.name === "Language"
-            ? `${skill.name} (${skillView.detailLabel})`
+          skillView?.languageName && skill.name === "Language"
+            ? `${skill.name} (${skillView.languageName})`
             : skill.name,
         skillXp: skillMetrics.skillXp,
         stats: formatSkillStats(skill),

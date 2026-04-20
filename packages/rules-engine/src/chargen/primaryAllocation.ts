@@ -113,7 +113,6 @@ export interface ChargenGroupView {
 export interface ChargenSkillView {
   category: "ordinary" | "secondary";
   contributingGroupId?: string;
-  detailLabel?: string;
   // Canonical workbook-equivalent combat skill XP. This is the full skill XP
   // used by combat math, combining the best contributing group with direct
   // skill ranks, before any linked-stat average is added.
@@ -121,6 +120,7 @@ export interface ChargenSkillView {
   groupId: string;
   groupIds: string[];
   groupLevel: number;
+  languageName?: string;
   linkedStatAverage: number;
   literacyWarning?: string;
   name: string;
@@ -258,9 +258,9 @@ function normalizeSkill(skill: CharacterSkill): CharacterSkill {
   return {
     ...skill,
     category: skill.category ?? "ordinary",
-    detailLabel: skill.detailLabel,
     grantedRanks,
     groupId: skill.groupId,
+    languageName: skill.languageName,
     level: skill.level ?? 0,
     primaryRanks,
     ranks: grantedRanks + primaryRanks + secondaryRanks,
@@ -1709,7 +1709,7 @@ export function buildChargenDraftView(input: {
         groupId: resolvedGroupId,
         groupIds,
         groupLevel: groupContribution,
-        detailLabel: skill?.detailLabel,
+        languageName: skill?.languageName,
         linkedStatAverage,
         literacyWarning,
         name: definition.name,

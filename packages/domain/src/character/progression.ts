@@ -21,9 +21,9 @@ export const characterSkillGroupSchema = z.object({
 
 export const characterSkillSchema = z.object({
   category: skillCategorySchema.default("ordinary"),
-  detailLabel: z.string().min(1).optional(),
   grantedRanks: z.number().int().nonnegative().default(0),
   groupId: z.string().min(1),
+  languageName: z.string().min(1).optional(),
   primaryRanks: z.number().int().nonnegative().default(0),
   secondaryRanks: z.number().int().nonnegative().default(0),
   skillId: z.string().min(1),
