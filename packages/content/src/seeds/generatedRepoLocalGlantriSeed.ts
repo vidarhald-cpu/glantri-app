@@ -23,8 +23,8 @@ export const generatedRepoLocalGlantriSeed = {
       "notes": "Glantri-facing mercantile principality analogue centered on guild money, diplomacy, and urban courts.",
       "period": "c. 1300-1500 CE",
       "shortDescription": "Merchant-principality culture of bankers, guild captains, and walled-city politics.",
-      "spokenLanguageName": "Iestian",
-      "writtenLanguageName": "Iestian chancery",
+      "spokenLanguageName": "Common",
+      "writtenLanguageName": "Common",
       "linkedSocietyLevel": 6
     },
     {
@@ -36,7 +36,7 @@ export const generatedRepoLocalGlantriSeed = {
       "period": "c. 100 BCE-200 CE",
       "shortDescription": "Imperial civic culture of roads, legions, bureaucracy, and metropolitan law.",
       "spokenLanguageName": "Common",
-      "writtenLanguageName": "Classical Thyatian",
+      "writtenLanguageName": "Common",
       "linkedSocietyLevel": 5
     },
     {
@@ -48,7 +48,7 @@ export const generatedRepoLocalGlantriSeed = {
       "period": "c. 500-250 BCE",
       "shortDescription": "Urban polis culture of debate, hoplite citizenship, and maritime trade.",
       "spokenLanguageName": "Old Common",
-      "writtenLanguageName": "Classical Scyrian",
+      "writtenLanguageName": "Old Common",
       "linkedSocietyLevel": 5
     },
     {
@@ -59,9 +59,21 @@ export const generatedRepoLocalGlantriSeed = {
       "notes": "Glantri-facing core feudal analogue with knightly households, castles, and landed obligations.",
       "period": "c. 800-1100 CE",
       "shortDescription": "Feudal landed culture of noble households, retainers, and local obligations.",
-      "spokenLanguageName": "Glantrian",
-      "writtenLanguageName": "High Glantrian",
+      "spokenLanguageName": "Common",
+      "writtenLanguageName": "Common",
       "linkedSocietyLevel": 4
+    },
+    {
+      "historicalAnalogue": "Ancient Carthage",
+      "id": "lankhmar",
+      "linkedSocietyId": "imperial_classical_high_civ",
+      "name": "Lankhmar",
+      "notes": "Glantri-facing Carthaginian analogue centered on maritime commerce, urban oligarchy, and literate Mediterranean trade networks.",
+      "period": "c. 600-146 BCE",
+      "shortDescription": "Maritime mercantile high civilization of harbor cities, merchant houses, and overseas commercial reach.",
+      "spokenLanguageName": "Phoenician",
+      "writtenLanguageName": "Phoenician",
+      "linkedSocietyLevel": 5
     },
     {
       "historicalAnalogue": "Medieval Rus and eastern Christian principalities",
@@ -172,8 +184,8 @@ export const generatedRepoLocalGlantriSeed = {
       "name": "Byzantine Empire",
       "period": "c. 700-1200 CE",
       "shortDescription": "Court-bureaucratic imperial culture of palace service, provincial administration, and orthodox scribal institutions.",
-      "spokenLanguageName": "Medieval Greek",
-      "writtenLanguageName": "Byzantine Greek",
+      "spokenLanguageName": "Old Common",
+      "writtenLanguageName": "Old Common",
       "linkedSocietyLevel": 5
     }
   ],

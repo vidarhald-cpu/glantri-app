@@ -31,7 +31,7 @@ import {
 } from "@glantri/domain";
 import {
   applyProfessionGrants,
-  buildChargenLanguageSelectionSummary,
+  buildChargenMotherTongueSummary,
   applyChargenStatBuild,
   applyChargenStatExchange,
   allocateChargenPoint,
@@ -148,11 +148,13 @@ interface RuleStatusItem {
 }
 
 interface SkillBrowseRow {
+  displayName: string;
   evaluation: ReturnType<typeof evaluateSkillSelection>;
   isNormalAccess: boolean;
   metrics: SkillAllocationMetrics;
   skill: SkillDefinition;
   sourceLabels: string[];
+  sourceTag?: "mother-tongue";
 }
 
 interface PlayerFacingNormalAccessSection {
@@ -484,22 +486,6 @@ function buildCivilizationOptions(content: CanonicalContent): CivilizationOption
     );
 }
 
-function getCivilizationLanguageLabels(
-  civilization: CivilizationOption | undefined
-): string[] {
-  if (!civilization) {
-    return [];
-  }
-
-  return [
-    civilization.spokenLanguageName,
-    ...(civilization.writtenLanguageName &&
-    civilization.writtenLanguageName !== civilization.spokenLanguageName
-      ? [civilization.writtenLanguageName]
-      : [])
-  ];
-}
-
 interface RolledProfileCardModel {
   originalIndex: number;
   profile: RolledCharacterProfile;
@@ -688,7 +674,6 @@ export default function ChargenWizard() {
       ? selectedSociety.socialBands[selectedSocialBand]
       : undefined;
   const selectedSocietyBand = selectedSociety ? selectedSocialBand : undefined;
-  const civilizationLanguageLabels = getCivilizationLanguageLabels(selectedCivilization);
   const availableProfessions = getAllowedProfessions(content.professions, selectedSocietyAccess);
   const selectedProfession = availableProfessions.find((item) => item.id === selectedProfessionId);
   const sortedSkillGroups = sortSkillGroups(content.skillGroups);
@@ -786,6 +771,7 @@ export default function ChargenWizard() {
         }
       : undefined;
   const draftView = buildChargenDraftView({
+    civilizationId: selectedCivilizationId,
     content,
     professionId: selectedProfessionId,
     profile: selectedProfile,
@@ -794,6 +780,7 @@ export default function ChargenWizard() {
     societyLevel: selectedSocietyBand
   });
   const review = reviewChargenDraft({
+    civilizationId: selectedCivilizationId,
     content,
     professionId: selectedProfessionId,
     profile: selectedProfile,
@@ -802,10 +789,10 @@ export default function ChargenWizard() {
     societyId: selectedSocietyId,
     societyLevel: selectedSocietyBand
   });
-  const languageSelectionSummary = buildChargenLanguageSelectionSummary({
+  const motherTongueSummary = buildChargenMotherTongueSummary({
+    civilizationId: selectedCivilizationId,
     content,
-    progression,
-    societyId: selectedSocietyId
+    educationLevel: draftView.education.theoreticalSkillCount
   });
   const selectableSkillSummary = buildChargenSelectableSkillSummary({
     content,
@@ -858,6 +845,7 @@ export default function ChargenWizard() {
   );
   const skillRowsById = new Map<string, SkillBrowseRow>(
     sortSkills(content.skills).map((skill) => {
+      const skillView = draftView.skills.find((item) => item.skillId === skill.id);
       const metrics = getSkillAllocationMetrics({
         content,
         draftView,
@@ -876,11 +864,16 @@ export default function ChargenWizard() {
       return [
         skill.id,
         {
+          displayName:
+            skillView?.detailLabel && skill.name === "Language"
+              ? `${skill.name} (${skillView.detailLabel})`
+              : skill.name,
           evaluation,
           isNormalAccess: skillAccess.normalSkillIds.includes(skill.id),
           metrics,
           skill,
-          sourceLabels: getSkillAccessSourceLabels(skillAccess.skillSources[skill.id])
+          sourceLabels: getSkillAccessSourceLabels(skillAccess.skillSources[skill.id]),
+          sourceTag: skillView?.sourceTag
         }
       ];
     })
@@ -900,10 +893,6 @@ export default function ChargenWizard() {
         !(skillAccess.skillSources[row.skill.id]?.includes("society-foundational-skill") ?? false)
     )
   );
-  const displayedLanguageLabels =
-    civilizationLanguageLabels.length > 0
-      ? civilizationLanguageLabels
-      : languageSelectionSummary.selectedLanguages.map((language) => language.name);
   const visibleOtherSkillRows = otherSkills
     .map((skill) => skillRowsById.get(skill.id))
     .filter((row): row is SkillBrowseRow => row !== undefined)
@@ -911,7 +900,7 @@ export default function ChargenWizard() {
       matchesSkillBrowseFilters({
         isAllowed: row.evaluation.isAllowed,
         isOwned: row.metrics.totalXp > 0,
-        name: row.skill.name,
+        name: row.displayName,
         search: skillSearch,
         skillType: getPlayerFacingSkillBucket(row.skill),
         skillTypeFilter,
@@ -968,6 +957,7 @@ export default function ChargenWizard() {
   );
   const playerSkillTableRows = sortSkills(content.skills)
     .map((skill) => {
+      const skillView = draftView.skills.find((item) => item.skillId === skill.id);
       const skillMetrics = getSkillAllocationMetrics({
         content,
         draftView,
@@ -985,7 +975,10 @@ export default function ChargenWizard() {
         skillType: getPlayerFacingSkillBucket(skill),
         skillGroupXp: skillMetrics.groupXp,
         skillId: skill.id,
-        skillName: skill.name,
+        skillName:
+          skillView?.detailLabel && skill.name === "Language"
+            ? `${skill.name} (${skillView.detailLabel})`
+            : skill.name,
         skillXp: skillMetrics.skillXp,
         stats: formatSkillStats(skill),
         totalSkillLevel: skillMetrics.totalSkillLevel,
@@ -1648,8 +1641,11 @@ export default function ChargenWizard() {
                 >
                   <div style={{ display: "grid", gap: "0.35rem" }}>
                     <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
-                      <span>{row.skill.name}</span>
+                      <span>{row.displayName}</span>
                       <span style={getSkillTierTone(row.skill)}>{getSkillTierLabel(row.skill)}</span>
+                      {row.sourceTag === "mother-tongue" ? (
+                        <span style={getBadgeStyle({ muted: true })}>Mother tongue</span>
+                      ) : null}
                       {row.skill.id === "literacy" && selectedProfessionCard?.hasLiteracyFoundation ? (
                         <span style={getBadgeStyle()}>Foundation skill</span>
                       ) : null}
@@ -1790,6 +1786,7 @@ export default function ChargenWizard() {
     }
 
     const result = finalizeChargenDraft({
+      civilizationId: selectedCivilizationId,
       content,
       name: characterName,
       professionId: selectedProfessionId,
@@ -2265,6 +2262,12 @@ export default function ChargenWizard() {
                 Inferred society: {selectedCivilization.linkedSocietyName} • Level{" "}
                 {selectedCivilization.linkedSocietyLevel}
               </div>
+              {motherTongueSummary.displayLabel ? (
+                <div>
+                  Mother tongue: {motherTongueSummary.displayLabel} • Starting XP{" "}
+                  {motherTongueSummary.startingLevel}
+                </div>
+              ) : null}
               <div>Band labels: {selectedSociety ? formatSocietyBandLabels(selectedSociety) : "—"}</div>
               {selectedCivilization.historicalAnalogue ? (
                 <div>Historical analogue: {selectedCivilization.historicalAnalogue}</div>
@@ -3450,10 +3453,10 @@ export default function ChargenWizard() {
             <div>Social class: {selectedSocietyAccess?.socialClass ?? "Not selected"}</div>
             <div>Profession: {selectedProfession?.name ?? "Not selected"}</div>
             <div>
-              Languages:{" "}
-              {displayedLanguageLabels.length > 0
-                ? displayedLanguageLabels.join(", ")
-                : "None"}
+              Mother tongue:{" "}
+              {motherTongueSummary.displayLabel
+                ? `${motherTongueSummary.displayLabel} • XP ${motherTongueSummary.startingLevel}`
+                : "Not selected"}
             </div>
             <div>Skill groups: {draftView.groups.length}</div>
             <div>Skills: {draftView.skills.length}</div>

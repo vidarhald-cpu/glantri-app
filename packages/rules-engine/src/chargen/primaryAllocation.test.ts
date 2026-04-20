@@ -6,6 +6,7 @@ import type { CharacterProgression } from "@glantri/domain";
 import {
   buildChargenDraftView,
   createChargenProgression,
+  finalizeChargenDraft,
   reviewChargenDraft,
   spendPrimaryPoint,
   spendSecondaryPoint
@@ -128,6 +129,57 @@ const chargenTestContent = validateCanonicalContent({
     }
   ]
 });
+
+const motherTongueTestContent = {
+  ...chargenTestContent,
+  civilizations: [
+    {
+      historicalAnalogue: "Test analogue",
+      id: "glantri_civ",
+      linkedSocietyId: "glantri",
+      linkedSocietyLevel: 1,
+      name: "Glantri",
+      period: "Test period",
+      shortDescription: "Test civilization",
+      spokenLanguageName: "Common",
+      writtenLanguageName: "Common"
+    }
+  ],
+  languages: [
+    {
+      id: "glantri_language",
+      name: "Common",
+      sourceSocietyId: "glantri"
+    }
+  ],
+  societies: [
+    {
+      baselineLanguageIds: ["glantri_language"],
+      id: "glantri",
+      name: "Glantri",
+      shortDescription: "Test society",
+      societyLevel: 1
+    }
+  ],
+  skills: [
+    ...chargenTestContent.skills,
+    {
+      allowsSpecializations: true,
+      category: "ordinary" as const,
+      dependencies: [],
+      dependencySkillIds: [],
+      groupId: "scholarly",
+      groupIds: ["scholarly"],
+      id: "language",
+      isTheoretical: false,
+      linkedStats: ["int"],
+      name: "Language",
+      requiresLiteracy: "no" as const,
+      societyLevel: 1,
+      sortOrder: 4
+    }
+  ]
+};
 
 function createProgressionWithLore(): CharacterProgression {
   const progression = createChargenProgression();
@@ -706,5 +758,79 @@ describe("chargen purchase gate integration", () => {
 
     expect(result.error).toBe("Lore does not allow specializations like Codes.");
     expect(result.warnings).toEqual([]);
+  });
+
+  it("adds civilization mother tongue as a granted Language row in the draft view", () => {
+    const draftView = buildChargenDraftView({
+      civilizationId: "glantri_civ",
+      content: motherTongueTestContent,
+      profile: {
+        distractionLevel: 0,
+        id: "profile-linguist",
+        label: "Linguist",
+        rolledStats: {
+          cha: 10,
+          com: 10,
+          con: 10,
+          dex: 10,
+          health: 10,
+          int: 10,
+          lck: 10,
+          pow: 10,
+          siz: 10,
+          str: 10,
+          will: 10
+        },
+        socialClassEducationValue: 12,
+        societyLevel: 0
+      },
+      progression: createChargenProgression(),
+      societyId: "glantri",
+      societyLevel: 1
+    });
+    const languageView = draftView.skills.find((skill) => skill.skillId === "language");
+
+    expect(languageView?.detailLabel).toBe("Common");
+    expect(languageView?.specificSkillLevel).toBe(12);
+  });
+
+  it("finalizes mother tongue without spending ordinary or flexible points", () => {
+    const result = finalizeChargenDraft({
+      civilizationId: "glantri_civ",
+      content: motherTongueTestContent,
+      professionId: "scribe",
+      profile: {
+        distractionLevel: 0,
+        id: "profile-linguist",
+        label: "Linguist",
+        rolledStats: {
+          cha: 10,
+          com: 10,
+          con: 10,
+          dex: 10,
+          health: 10,
+          int: 10,
+          lck: 10,
+          pow: 10,
+          siz: 10,
+          str: 10,
+          will: 10
+        },
+        socialClassEducationValue: 12,
+        societyLevel: 0
+      },
+      progression: createChargenProgression(),
+      socialClass: "Common",
+      societyId: "glantri",
+      societyLevel: 1
+    });
+    const motherTongueSkill = result.build?.progression.skills.find((skill) => skill.skillId === "language");
+
+    expect(result.errors).toEqual([]);
+    expect(motherTongueSkill?.detailLabel).toBe("Common");
+    expect(motherTongueSkill?.grantedRanks).toBe(12);
+    expect(motherTongueSkill?.sourceTag).toBe("mother-tongue");
+    expect(result.build?.progression.primaryPoolSpent).toBe(0);
+    expect(result.build?.progression.secondaryPoolSpent).toBe(0);
   });
 });

@@ -1,4 +1,5 @@
 import type {
+  CivilizationDefinition,
   CharacterBuild,
   CharacterChargenSelections,
   CharacterProgression,
@@ -34,6 +35,7 @@ import { STANDARD_CHARGEN_METHOD_POLICY } from "./policy";
 import {
   buildChargenLanguageSelectionSummary,
   buildChargenSelectableSkillSummary,
+  syncChargenMotherTongueSkillRow,
   syncChargenSelectionSkillRows
 } from "./selectionStructure";
 import { getResolvedProfileStats } from "./statResolution";
@@ -46,6 +48,7 @@ const EXISTING_SPECIALIZATION_COST = 2;
 const LITERACY_SKILL_ID = "literacy";
 
 interface CanonicalContentShape {
+  civilizations?: CivilizationDefinition[];
   languages?: LanguageDefinition[];
   professionFamilies: ProfessionFamilyDefinition[];
   professionSkills: ProfessionSkillMap[];
@@ -110,6 +113,7 @@ export interface ChargenGroupView {
 export interface ChargenSkillView {
   category: "ordinary" | "secondary";
   contributingGroupId?: string;
+  detailLabel?: string;
   // Canonical workbook-equivalent combat skill XP. This is the full skill XP
   // used by combat math, combining the best contributing group with direct
   // skill ranks, before any linked-stat average is added.
@@ -124,6 +128,7 @@ export interface ChargenSkillView {
   requiresLiteracy: SkillDefinition["requiresLiteracy"];
   secondaryRanks: number;
   skillId: string;
+  sourceTag?: CharacterSkill["sourceTag"];
   specificSkillLevel: number;
   totalSkill: number;
 }
@@ -165,6 +170,7 @@ export interface ChargenSkillAccessSummary {
 }
 
 export interface ReviewChargenDraftInput {
+  civilizationId?: string;
   content: CanonicalContentShape;
   professionId?: string;
   profile?: RolledCharacterProfile;
@@ -252,12 +258,14 @@ function normalizeSkill(skill: CharacterSkill): CharacterSkill {
   return {
     ...skill,
     category: skill.category ?? "ordinary",
+    detailLabel: skill.detailLabel,
     grantedRanks,
     groupId: skill.groupId,
     level: skill.level ?? 0,
     primaryRanks,
     ranks: grantedRanks + primaryRanks + secondaryRanks,
-    secondaryRanks
+    secondaryRanks,
+    sourceTag: skill.sourceTag
   };
 }
 
@@ -1596,6 +1604,7 @@ export function spendSecondaryPoint(input: SpendSecondaryPointInput): SpendPoint
 }
 
 export function buildChargenDraftView(input: {
+  civilizationId?: string;
   content: CanonicalContentShape;
   professionId?: string;
   profile?: RolledCharacterProfile;
@@ -1603,7 +1612,7 @@ export function buildChargenDraftView(input: {
   societyId?: string;
   societyLevel?: number;
 }): ChargenDraftView {
-  const progression = recalculateProgression(
+  const selectionSyncedProgression = recalculateProgression(
     syncChargenSelectionSkillRows({
       content: input.content,
       progression: recalculateProgression(input.progression)
@@ -1613,10 +1622,18 @@ export function buildChargenDraftView(input: {
     content: input.content,
     professionId: input.professionId,
     profile: input.profile,
-    progression: input.progression,
+    progression: selectionSyncedProgression,
     societyId: input.societyId,
     societyLevel: input.societyLevel
   });
+  const progression = recalculateProgression(
+    syncChargenMotherTongueSkillRow({
+      civilizationId: input.civilizationId,
+      content: input.content,
+      educationLevel: education.theoreticalSkillCount,
+      progression: selectionSyncedProgression
+    })
+  );
 
   const groups = progression.skillGroups
     .map((group) => {
@@ -1692,6 +1709,7 @@ export function buildChargenDraftView(input: {
         groupId: resolvedGroupId,
         groupIds,
         groupLevel: groupContribution,
+        detailLabel: skill?.detailLabel,
         linkedStatAverage,
         literacyWarning,
         name: definition.name,
@@ -1699,6 +1717,7 @@ export function buildChargenDraftView(input: {
         requiresLiteracy: definition.requiresLiteracy,
         secondaryRanks: skill?.secondaryRanks ?? 0,
         skillId: definition.id,
+        sourceTag: skill?.sourceTag,
         specificSkillLevel,
         totalSkill: effectiveSkillNumber + linkedStatAverage
       };
@@ -1774,7 +1793,23 @@ export function buildChargenDraftView(input: {
 export function reviewChargenDraft(
   input: ReviewChargenDraftInput
 ): ReviewChargenDraftResult {
-  const progression = recalculateProgression(input.progression);
+  const normalizedProgression = recalculateProgression(input.progression);
+  const education = buildEducationBreakdown({
+    content: input.content,
+    professionId: input.professionId,
+    profile: input.profile,
+    progression: normalizedProgression,
+    societyId: input.societyId,
+    societyLevel: input.societyLevel
+  });
+  const progression = recalculateProgression(
+    syncChargenMotherTongueSkillRow({
+      civilizationId: input.civilizationId,
+      content: input.content,
+      educationLevel: education.theoreticalSkillCount,
+      progression: normalizedProgression
+    })
+  );
   const access =
     input.professionId && input.societyLevel !== undefined
       ? buildChargenSkillAccessSummaryInternal({
@@ -1790,6 +1825,7 @@ export function reviewChargenDraft(
           skillSources: {}
         };
   const draftView = buildChargenDraftView({
+    civilizationId: input.civilizationId,
     content: input.content,
     professionId: input.professionId,
     profile: input.profile,
@@ -1921,6 +1957,14 @@ export function finalizeChargenDraft(
   progression = recalculateProgression(
     syncChargenSelectionSkillRows({
       content: input.content,
+      progression
+    })
+  );
+  progression = recalculateProgression(
+    syncChargenMotherTongueSkillRow({
+      civilizationId: input.civilizationId,
+      content: input.content,
+      educationLevel: review.draftView.education.theoreticalSkillCount,
       progression
     })
   );

@@ -47,6 +47,49 @@ describe("validateCanonicalContent", () => {
     ).toBe(true);
   });
 
+  it("includes the updated civilization language naming and Lankhmar seed entry", () => {
+    expect(
+      defaultCanonicalContent.civilizations.find((civilization) => civilization.id === "glantri")
+    ).toMatchObject({
+      spokenLanguageName: "Common",
+      writtenLanguageName: "Common"
+    });
+    expect(
+      defaultCanonicalContent.civilizations.find((civilization) => civilization.id === "iest")
+    ).toMatchObject({
+      spokenLanguageName: "Common",
+      writtenLanguageName: "Common"
+    });
+    expect(
+      defaultCanonicalContent.civilizations.find((civilization) => civilization.id === "scyria")
+    ).toMatchObject({
+      spokenLanguageName: "Old Common",
+      writtenLanguageName: "Old Common"
+    });
+    expect(
+      defaultCanonicalContent.civilizations.find((civilization) => civilization.id === "thyatis")
+    ).toMatchObject({
+      spokenLanguageName: "Common",
+      writtenLanguageName: "Common"
+    });
+    expect(
+      defaultCanonicalContent.civilizations.find(
+        (civilization) => civilization.id === "byzantine_empire"
+      )
+    ).toMatchObject({
+      spokenLanguageName: "Old Common",
+      writtenLanguageName: "Old Common"
+    });
+    expect(
+      defaultCanonicalContent.civilizations.find((civilization) => civilization.id === "lankhmar")
+    ).toMatchObject({
+      linkedSocietyId: "imperial_classical_high_civ",
+      linkedSocietyLevel: 5,
+      spokenLanguageName: "Phoenician",
+      writtenLanguageName: "Phoenician"
+    });
+  });
+
   it("fails clearly on duplicate society band rows", () => {
     const duplicateBandContent = {
       ...defaultCanonicalContent,

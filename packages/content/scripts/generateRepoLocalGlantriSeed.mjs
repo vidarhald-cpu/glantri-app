@@ -226,8 +226,8 @@ const CIVILIZATION_SEED_DEFINITIONS = [
     period: "c. 1300-1500 CE",
     shortDescription:
       "Merchant-principality culture of bankers, guild captains, and walled-city politics.",
-    spokenLanguageName: "Iestian",
-    writtenLanguageName: "Iestian chancery"
+    spokenLanguageName: "Common",
+    writtenLanguageName: "Common"
   },
   {
     historicalAnalogue: "Roman imperial high civilization",
@@ -239,7 +239,7 @@ const CIVILIZATION_SEED_DEFINITIONS = [
     shortDescription:
       "Imperial civic culture of roads, legions, bureaucracy, and metropolitan law.",
     spokenLanguageName: "Common",
-    writtenLanguageName: "Classical Thyatian"
+    writtenLanguageName: "Common"
   },
   {
     historicalAnalogue: "Classical Greek polis culture",
@@ -251,7 +251,7 @@ const CIVILIZATION_SEED_DEFINITIONS = [
     shortDescription:
       "Urban polis culture of debate, hoplite citizenship, and maritime trade.",
     spokenLanguageName: "Old Common",
-    writtenLanguageName: "Classical Scyrian"
+    writtenLanguageName: "Old Common"
   },
   {
     historicalAnalogue: "Feudal western and central Europe",
@@ -262,8 +262,21 @@ const CIVILIZATION_SEED_DEFINITIONS = [
     period: "c. 800-1100 CE",
     shortDescription:
       "Feudal landed culture of noble households, retainers, and local obligations.",
-    spokenLanguageName: "Glantrian",
-    writtenLanguageName: "High Glantrian"
+    spokenLanguageName: "Common",
+    writtenLanguageName: "Common"
+  },
+  {
+    historicalAnalogue: "Ancient Carthage",
+    id: "lankhmar",
+    linkedSocietyId: "imperial_classical_high_civ",
+    name: "Lankhmar",
+    notes:
+      "Glantri-facing Carthaginian analogue centered on maritime commerce, urban oligarchy, and literate Mediterranean trade networks.",
+    period: "c. 600-146 BCE",
+    shortDescription:
+      "Maritime mercantile high civilization of harbor cities, merchant houses, and overseas commercial reach.",
+    spokenLanguageName: "Phoenician",
+    writtenLanguageName: "Phoenician"
   },
   {
     historicalAnalogue: "Medieval Rus and eastern Christian principalities",
@@ -375,8 +388,8 @@ const CIVILIZATION_SEED_DEFINITIONS = [
     period: "c. 700-1200 CE",
     shortDescription:
       "Court-bureaucratic imperial culture of palace service, provincial administration, and orthodox scribal institutions.",
-    spokenLanguageName: "Medieval Greek",
-    writtenLanguageName: "Byzantine Greek"
+    spokenLanguageName: "Old Common",
+    writtenLanguageName: "Old Common"
   }
 ];
 
