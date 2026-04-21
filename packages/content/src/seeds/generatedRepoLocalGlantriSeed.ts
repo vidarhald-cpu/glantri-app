@@ -1745,7 +1745,7 @@ export const generatedRepoLocalGlantriSeed = {
         "humanities"
       ],
       "id": "literacy",
-      "isTheoretical": false,
+      "isTheoretical": true,
       "linkedStats": [
         "int",
         "int"
@@ -1769,7 +1769,7 @@ export const generatedRepoLocalGlantriSeed = {
         "humanities"
       ],
       "id": "language",
-      "isTheoretical": false,
+      "isTheoretical": true,
       "linkedStats": [
         "int",
         "int"
@@ -1803,7 +1803,7 @@ export const generatedRepoLocalGlantriSeed = {
         "humanities"
       ],
       "id": "history",
-      "isTheoretical": false,
+      "isTheoretical": true,
       "linkedStats": [
         "int",
         "int"
@@ -1836,7 +1836,7 @@ export const generatedRepoLocalGlantriSeed = {
         "humanities"
       ],
       "id": "theology",
-      "isTheoretical": false,
+      "isTheoretical": true,
       "linkedStats": [
         "int",
         "int"
@@ -1939,7 +1939,7 @@ export const generatedRepoLocalGlantriSeed = {
         "operations"
       ],
       "id": "bureaucratic_writing",
-      "isTheoretical": false,
+      "isTheoretical": true,
       "linkedStats": [
         "int",
         "int"
@@ -2004,7 +2004,7 @@ export const generatedRepoLocalGlantriSeed = {
         "physical_science"
       ],
       "id": "measurement",
-      "isTheoretical": false,
+      "isTheoretical": true,
       "linkedStats": [
         "int",
         "int"
@@ -2153,7 +2153,7 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "allowsSpecializations": false,
-      "category": "secondary",
+      "category": "ordinary",
       "categoryId": "knowledge",
       "dependencies": [
         {
@@ -2171,7 +2171,7 @@ export const generatedRepoLocalGlantriSeed = {
         "physical_science"
       ],
       "id": "surveying",
-      "isTheoretical": false,
+      "isTheoretical": true,
       "linkedStats": [
         "int",
         "int"
@@ -2184,7 +2184,7 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "allowsSpecializations": false,
-      "category": "secondary",
+      "category": "ordinary",
       "categoryId": "knowledge",
       "dependencies": [
         {
@@ -2240,7 +2240,7 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "allowsSpecializations": false,
-      "category": "ordinary",
+      "category": "secondary",
       "categoryId": "military",
       "dependencies": [],
       "dependencySkillIds": [],
@@ -2324,7 +2324,7 @@ export const generatedRepoLocalGlantriSeed = {
         "operations"
       ],
       "id": "banking",
-      "isTheoretical": false,
+      "isTheoretical": true,
       "linkedStats": [
         "int",
         "dex"
@@ -2355,7 +2355,7 @@ export const generatedRepoLocalGlantriSeed = {
         "operations"
       ],
       "id": "administration",
-      "isTheoretical": false,
+      "isTheoretical": true,
       "linkedStats": [
         "int",
         "dex"
@@ -2405,7 +2405,7 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "allowsSpecializations": false,
-      "category": "secondary",
+      "category": "ordinary",
       "categoryId": "trade",
       "dependencies": [
         {
@@ -2440,7 +2440,7 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "allowsSpecializations": false,
-      "category": "secondary",
+      "category": "ordinary",
       "categoryId": "trade",
       "dependencies": [
         {
@@ -2484,7 +2484,7 @@ export const generatedRepoLocalGlantriSeed = {
         "humanities"
       ],
       "id": "etiquette",
-      "isTheoretical": false,
+      "isTheoretical": true,
       "linkedStats": [
         "cha",
         "int"
@@ -2515,7 +2515,7 @@ export const generatedRepoLocalGlantriSeed = {
         "humanities"
       ],
       "id": "heraldry",
-      "isTheoretical": false,
+      "isTheoretical": true,
       "linkedStats": [
         "cha",
         "int"
@@ -2528,7 +2528,7 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "allowsSpecializations": false,
-      "category": "secondary",
+      "category": "ordinary",
       "categoryId": "court-social",
       "dependencies": [
         {
@@ -2546,7 +2546,7 @@ export const generatedRepoLocalGlantriSeed = {
         "humanities"
       ],
       "id": "courtly_protocol",
-      "isTheoretical": false,
+      "isTheoretical": true,
       "linkedStats": [
         "cha",
         "int"
@@ -2781,7 +2781,7 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "allowsSpecializations": false,
-      "category": "secondary",
+      "category": "ordinary",
       "categoryId": "court-social",
       "dependencies": [
         {
@@ -2839,7 +2839,7 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "allowsSpecializations": false,
-      "category": "secondary",
+      "category": "ordinary",
       "categoryId": "court-social",
       "dependencies": [
         {
@@ -2946,7 +2946,7 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "allowsSpecializations": false,
-      "category": "secondary",
+      "category": "ordinary",
       "categoryId": "mental",
       "dependencies": [
         {
@@ -3128,7 +3128,7 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "allowsSpecializations": false,
-      "category": "secondary",
+      "category": "ordinary",
       "categoryId": "trade",
       "dependencies": [
         {
@@ -3236,7 +3236,7 @@ export const generatedRepoLocalGlantriSeed = {
         "wilderness_group"
       ],
       "id": "navigation",
-      "isTheoretical": false,
+      "isTheoretical": true,
       "linkedStats": [
         "dex",
         "int"
@@ -3379,7 +3379,7 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "allowsSpecializations": false,
-      "category": "ordinary",
+      "category": "secondary",
       "categoryId": "physical",
       "dependencies": [],
       "dependencySkillIds": [],
@@ -3543,7 +3543,7 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "allowsSpecializations": false,
-      "category": "secondary",
+      "category": "ordinary",
       "categoryId": "covert",
       "dependencies": [
         {
@@ -3819,7 +3819,7 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "allowsSpecializations": false,
-      "category": "secondary",
+      "category": "ordinary",
       "categoryId": "craft",
       "dependencies": [
         {
@@ -3847,7 +3847,7 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "allowsSpecializations": false,
-      "category": "secondary",
+      "category": "ordinary",
       "categoryId": "craft",
       "dependencies": [],
       "dependencySkillIds": [],
@@ -3870,7 +3870,7 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "allowsSpecializations": false,
-      "category": "secondary",
+      "category": "ordinary",
       "categoryId": "craft",
       "dependencies": [],
       "dependencySkillIds": [],
@@ -4078,7 +4078,7 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "allowsSpecializations": false,
-      "category": "secondary",
+      "category": "ordinary",
       "categoryId": "healing",
       "dependencies": [
         {
@@ -4186,7 +4186,7 @@ export const generatedRepoLocalGlantriSeed = {
         "mystical_group"
       ],
       "id": "omen_reading",
-      "isTheoretical": false,
+      "isTheoretical": true,
       "linkedStats": [
         "pow",
         "int"
@@ -4199,7 +4199,7 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "allowsSpecializations": false,
-      "category": "secondary",
+      "category": "ordinary",
       "categoryId": "knowledge",
       "dependencies": [
         {
@@ -4222,7 +4222,7 @@ export const generatedRepoLocalGlantriSeed = {
         "mystical_group"
       ],
       "id": "ritual_interpretation",
-      "isTheoretical": false,
+      "isTheoretical": true,
       "linkedStats": [
         "pow",
         "int"
@@ -4235,7 +4235,7 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "allowsSpecializations": false,
-      "category": "secondary",
+      "category": "ordinary",
       "categoryId": "mystical",
       "dependencies": [
         {
@@ -4260,7 +4260,7 @@ export const generatedRepoLocalGlantriSeed = {
         "mystical_group"
       ],
       "id": "astrology",
-      "isTheoretical": false,
+      "isTheoretical": true,
       "linkedStats": [
         "pow",
         "int"
@@ -4273,7 +4273,7 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "allowsSpecializations": false,
-      "category": "ordinary",
+      "category": "secondary",
       "categoryId": "combat",
       "dependencies": [],
       "dependencySkillIds": [],
@@ -4303,7 +4303,7 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "allowsSpecializations": false,
-      "category": "ordinary",
+      "category": "secondary",
       "categoryId": "combat",
       "dependencies": [],
       "dependencySkillIds": [],
@@ -4330,7 +4330,7 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "allowsSpecializations": false,
-      "category": "ordinary",
+      "category": "secondary",
       "categoryId": "combat",
       "dependencies": [],
       "dependencySkillIds": [],
@@ -4355,7 +4355,7 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "allowsSpecializations": true,
-      "category": "ordinary",
+      "category": "secondary",
       "categoryId": "combat",
       "dependencies": [],
       "dependencySkillIds": [],
@@ -4381,7 +4381,7 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "allowsSpecializations": false,
-      "category": "ordinary",
+      "category": "secondary",
       "categoryId": "combat",
       "dependencies": [],
       "dependencySkillIds": [],
@@ -4406,7 +4406,7 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "allowsSpecializations": false,
-      "category": "ordinary",
+      "category": "secondary",
       "categoryId": "combat",
       "dependencies": [],
       "dependencySkillIds": [],
@@ -4431,7 +4431,7 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "allowsSpecializations": false,
-      "category": "ordinary",
+      "category": "secondary",
       "categoryId": "combat",
       "dependencies": [],
       "dependencySkillIds": [],
@@ -4456,7 +4456,7 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "allowsSpecializations": false,
-      "category": "ordinary",
+      "category": "secondary",
       "categoryId": "combat",
       "dependencies": [],
       "dependencySkillIds": [],
@@ -4481,7 +4481,7 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "allowsSpecializations": false,
-      "category": "ordinary",
+      "category": "secondary",
       "categoryId": "combat",
       "dependencies": [
         {
@@ -4512,7 +4512,7 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "allowsSpecializations": false,
-      "category": "ordinary",
+      "category": "secondary",
       "categoryId": "combat",
       "dependencies": [],
       "dependencySkillIds": [],
@@ -4537,7 +4537,7 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "allowsSpecializations": false,
-      "category": "ordinary",
+      "category": "secondary",
       "categoryId": "combat",
       "dependencies": [],
       "dependencySkillIds": [],
@@ -4562,7 +4562,7 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "allowsSpecializations": false,
-      "category": "ordinary",
+      "category": "secondary",
       "categoryId": "combat",
       "dependencies": [],
       "dependencySkillIds": [],
@@ -4587,7 +4587,7 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "allowsSpecializations": false,
-      "category": "ordinary",
+      "category": "secondary",
       "categoryId": "combat",
       "dependencies": [
         {
@@ -4617,7 +4617,7 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "allowsSpecializations": false,
-      "category": "ordinary",
+      "category": "secondary",
       "categoryId": "combat",
       "dependencies": [],
       "dependencySkillIds": [],
@@ -5713,7 +5713,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "etiquette"
     },
     {
-      "grantType": "secondary-skill",
+      "grantType": "ordinary-skill",
       "isCore": false,
       "professionId": "merchant_trader",
       "ranks": 0,
@@ -5753,7 +5753,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "insight"
     },
     {
-      "grantType": "secondary-skill",
+      "grantType": "ordinary-skill",
       "isCore": false,
       "professionId": "merchant_trader",
       "ranks": 0,
@@ -5889,7 +5889,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillGroupId": "technical_measurement"
     },
     {
-      "grantType": "secondary-skill",
+      "grantType": "ordinary-skill",
       "isCore": false,
       "professionId": "engineer_builder",
       "ranks": 0,
@@ -5897,7 +5897,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "surveying"
     },
     {
-      "grantType": "secondary-skill",
+      "grantType": "ordinary-skill",
       "isCore": false,
       "professionId": "engineer_builder",
       "ranks": 0,
@@ -6249,7 +6249,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillGroupId": "sacred_learning"
     },
     {
-      "grantType": "secondary-skill",
+      "grantType": "ordinary-skill",
       "isCore": false,
       "professionId": "temple_scribe",
       "ranks": 0,
@@ -6289,7 +6289,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "etiquette"
     },
     {
-      "grantType": "secondary-skill",
+      "grantType": "ordinary-skill",
       "isCore": false,
       "professionId": "court_scribe_clerk",
       "ranks": 0,
@@ -6313,7 +6313,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "bureaucratic_writing"
     },
     {
-      "grantType": "secondary-skill",
+      "grantType": "ordinary-skill",
       "isCore": true,
       "professionId": "local_trader",
       "ranks": 0,
@@ -6321,7 +6321,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "bookkeeping"
     },
     {
-      "grantType": "secondary-skill",
+      "grantType": "ordinary-skill",
       "isCore": false,
       "professionId": "local_trader",
       "ranks": 0,
@@ -6489,7 +6489,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "ropework"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "secondary-skill",
       "isCore": false,
       "professionId": "deck_sailor",
       "ranks": 0,
@@ -6537,7 +6537,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillGroupId": "covert_entry"
     },
     {
-      "grantType": "secondary-skill",
+      "grantType": "ordinary-skill",
       "isCore": true,
       "professionId": "burglar",
       "ranks": 0,
@@ -6617,7 +6617,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "perception"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "secondary-skill",
       "isCore": false,
       "professionId": "tribal_warrior",
       "ranks": 0,
@@ -6625,7 +6625,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "brawling"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "secondary-skill",
       "isCore": false,
       "professionId": "tribal_warrior",
       "ranks": 0,
@@ -6633,7 +6633,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "throwing"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "secondary-skill",
       "isCore": false,
       "professionId": "tribal_warrior",
       "ranks": 0,
@@ -6673,7 +6673,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "first_aid"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "secondary-skill",
       "isCore": false,
       "professionId": "levy_infantry",
       "ranks": 0,
@@ -6681,7 +6681,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "polearms"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "secondary-skill",
       "isCore": false,
       "professionId": "levy_infantry",
       "ranks": 0,
@@ -6753,7 +6753,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillGroupId": "formal_performance"
     },
     {
-      "grantType": "secondary-skill",
+      "grantType": "ordinary-skill",
       "isCore": true,
       "professionId": "actor",
       "ranks": 0,
@@ -6913,7 +6913,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "poison_lore"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "secondary-skill",
       "isCore": false,
       "professionId": "assassin",
       "ranks": 0,
@@ -6953,7 +6953,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "bargaining"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "secondary-skill",
       "isCore": false,
       "professionId": "bandit",
       "ranks": 0,
@@ -6961,7 +6961,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "one_handed_concussion_axe"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "secondary-skill",
       "isCore": false,
       "professionId": "bandit",
       "ranks": 0,
@@ -7105,7 +7105,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "captaincy"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "secondary-skill",
       "isCore": false,
       "professionId": "bounty_hunter",
       "ranks": 0,
@@ -7113,7 +7113,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "one_handed_edged"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "secondary-skill",
       "isCore": false,
       "professionId": "bounty_hunter",
       "ranks": 0,
@@ -7161,7 +7161,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "law"
     },
     {
-      "grantType": "secondary-skill",
+      "grantType": "ordinary-skill",
       "isCore": false,
       "professionId": "bureaucrat",
       "ranks": 0,
@@ -7217,7 +7217,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "riding"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "secondary-skill",
       "isCore": false,
       "professionId": "caravan_guard",
       "ranks": 0,
@@ -7321,7 +7321,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillGroupId": "veteran_soldiering"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "secondary-skill",
       "isCore": false,
       "professionId": "champion",
       "ranks": 0,
@@ -7345,7 +7345,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillGroupId": "transport_and_caravan_work"
     },
     {
-      "grantType": "secondary-skill",
+      "grantType": "ordinary-skill",
       "isCore": true,
       "professionId": "chariot_driver",
       "ranks": 0,
@@ -7385,7 +7385,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "captaincy"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "secondary-skill",
       "isCore": false,
       "professionId": "chariot_driver",
       "ranks": 0,
@@ -7409,7 +7409,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "perception"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "secondary-skill",
       "isCore": true,
       "professionId": "clan_warriors",
       "ranks": 0,
@@ -7425,7 +7425,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillGroupId": "field_soldiering"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "secondary-skill",
       "isCore": false,
       "professionId": "clan_warriors",
       "ranks": 0,
@@ -7433,7 +7433,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "throwing"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "secondary-skill",
       "isCore": false,
       "professionId": "clan_warriors",
       "ranks": 0,
@@ -7617,7 +7617,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "ropework"
     },
     {
-      "grantType": "secondary-skill",
+      "grantType": "ordinary-skill",
       "isCore": true,
       "professionId": "docker",
       "ranks": 0,
@@ -7673,7 +7673,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "medicine"
     },
     {
-      "grantType": "secondary-skill",
+      "grantType": "ordinary-skill",
       "isCore": true,
       "professionId": "embalmer",
       "ranks": 0,
@@ -7753,7 +7753,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "dancing"
     },
     {
-      "grantType": "secondary-skill",
+      "grantType": "ordinary-skill",
       "isCore": false,
       "professionId": "entertainer",
       "ranks": 0,
@@ -7793,7 +7793,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "herding"
     },
     {
-      "grantType": "secondary-skill",
+      "grantType": "ordinary-skill",
       "isCore": false,
       "professionId": "farmer",
       "ranks": 0,
@@ -7801,7 +7801,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "baking"
     },
     {
-      "grantType": "secondary-skill",
+      "grantType": "ordinary-skill",
       "isCore": false,
       "professionId": "farmer",
       "ranks": 0,
@@ -7809,7 +7809,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "brewing"
     },
     {
-      "grantType": "secondary-skill",
+      "grantType": "ordinary-skill",
       "isCore": false,
       "professionId": "farmer",
       "ranks": 0,
@@ -7849,7 +7849,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "navigation"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "secondary-skill",
       "isCore": false,
       "professionId": "fisher",
       "ranks": 0,
@@ -7969,7 +7969,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "nursing"
     },
     {
-      "grantType": "secondary-skill",
+      "grantType": "ordinary-skill",
       "isCore": false,
       "professionId": "healer",
       "ranks": 0,
@@ -8001,7 +8001,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillGroupId": "defensive_soldiering"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "secondary-skill",
       "isCore": true,
       "professionId": "heavy_infantry",
       "ranks": 0,
@@ -8017,7 +8017,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "formation_fighting"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "secondary-skill",
       "isCore": false,
       "professionId": "heavy_infantry",
       "ranks": 0,
@@ -8025,7 +8025,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "polearms"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "secondary-skill",
       "isCore": false,
       "professionId": "heavy_infantry",
       "ranks": 0,
@@ -8057,7 +8057,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "heraldry"
     },
     {
-      "grantType": "secondary-skill",
+      "grantType": "ordinary-skill",
       "isCore": true,
       "professionId": "herald",
       "ranks": 0,
@@ -8073,7 +8073,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "etiquette"
     },
     {
-      "grantType": "secondary-skill",
+      "grantType": "ordinary-skill",
       "isCore": false,
       "professionId": "herald",
       "ranks": 0,
@@ -8105,7 +8105,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "herb_lore"
     },
     {
-      "grantType": "secondary-skill",
+      "grantType": "ordinary-skill",
       "isCore": true,
       "professionId": "herbalist",
       "ranks": 0,
@@ -8153,7 +8153,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillGroupId": "mental_discipline"
     },
     {
-      "grantType": "secondary-skill",
+      "grantType": "ordinary-skill",
       "isCore": true,
       "professionId": "hermit",
       "ranks": 0,
@@ -8225,7 +8225,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "stealth"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "secondary-skill",
       "isCore": false,
       "professionId": "hunter",
       "ranks": 0,
@@ -8233,7 +8233,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "bow"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "secondary-skill",
       "isCore": false,
       "professionId": "hunter",
       "ranks": 0,
@@ -8297,7 +8297,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "search"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "secondary-skill",
       "isCore": false,
       "professionId": "jailer",
       "ranks": 0,
@@ -8321,7 +8321,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "law"
     },
     {
-      "grantType": "secondary-skill",
+      "grantType": "ordinary-skill",
       "isCore": true,
       "professionId": "lawyer",
       "ranks": 0,
@@ -8377,7 +8377,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "perception"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "secondary-skill",
       "isCore": true,
       "professionId": "light_infantry",
       "ranks": 0,
@@ -8393,7 +8393,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillGroupId": "field_soldiering"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "secondary-skill",
       "isCore": false,
       "professionId": "light_infantry",
       "ranks": 0,
@@ -8401,7 +8401,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "throwing"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "secondary-skill",
       "isCore": false,
       "professionId": "light_infantry",
       "ranks": 0,
@@ -8449,7 +8449,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillGroupId": "commercial_administration"
     },
     {
-      "grantType": "secondary-skill",
+      "grantType": "ordinary-skill",
       "isCore": false,
       "professionId": "merchant",
       "ranks": 0,
@@ -8457,7 +8457,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "appraisal"
     },
     {
-      "grantType": "secondary-skill",
+      "grantType": "ordinary-skill",
       "isCore": false,
       "professionId": "merchant",
       "ranks": 0,
@@ -8473,7 +8473,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "language"
     },
     {
-      "grantType": "secondary-skill",
+      "grantType": "ordinary-skill",
       "isCore": false,
       "professionId": "merchant",
       "ranks": 0,
@@ -8521,7 +8521,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "perception"
     },
     {
-      "grantType": "secondary-skill",
+      "grantType": "ordinary-skill",
       "isCore": false,
       "professionId": "military_officer",
       "ranks": 0,
@@ -8633,7 +8633,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "theology"
     },
     {
-      "grantType": "secondary-skill",
+      "grantType": "ordinary-skill",
       "isCore": false,
       "professionId": "mourner",
       "ranks": 0,
@@ -8737,7 +8737,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "insight"
     },
     {
-      "grantType": "secondary-skill",
+      "grantType": "ordinary-skill",
       "isCore": false,
       "professionId": "noble",
       "ranks": 0,
@@ -8785,7 +8785,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "trading"
     },
     {
-      "grantType": "secondary-skill",
+      "grantType": "ordinary-skill",
       "isCore": false,
       "professionId": "peddler",
       "ranks": 0,
@@ -8833,7 +8833,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "insight"
     },
     {
-      "grantType": "secondary-skill",
+      "grantType": "ordinary-skill",
       "isCore": false,
       "professionId": "personal_servant",
       "ranks": 0,
@@ -8921,7 +8921,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "intrigue"
     },
     {
-      "grantType": "secondary-skill",
+      "grantType": "ordinary-skill",
       "isCore": true,
       "professionId": "politician",
       "ranks": 0,
@@ -8985,7 +8985,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "theology"
     },
     {
-      "grantType": "secondary-skill",
+      "grantType": "ordinary-skill",
       "isCore": true,
       "professionId": "priest",
       "ranks": 0,
@@ -9017,7 +9017,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "literacy"
     },
     {
-      "grantType": "secondary-skill",
+      "grantType": "ordinary-skill",
       "isCore": false,
       "professionId": "priest",
       "ranks": 0,
@@ -9049,7 +9049,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "stoneworking"
     },
     {
-      "grantType": "secondary-skill",
+      "grantType": "ordinary-skill",
       "isCore": false,
       "professionId": "prospector",
       "ranks": 0,
@@ -9137,7 +9137,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "boat_handling"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "secondary-skill",
       "isCore": false,
       "professionId": "sailor",
       "ranks": 0,
@@ -9225,7 +9225,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "divination"
     },
     {
-      "grantType": "secondary-skill",
+      "grantType": "ordinary-skill",
       "isCore": true,
       "professionId": "shaman",
       "ranks": 0,
@@ -9425,7 +9425,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "sailing"
     },
     {
-      "grantType": "secondary-skill",
+      "grantType": "ordinary-skill",
       "isCore": false,
       "professionId": "smuggler",
       "ranks": 0,
@@ -9457,7 +9457,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "omen_reading"
     },
     {
-      "grantType": "secondary-skill",
+      "grantType": "ordinary-skill",
       "isCore": false,
       "professionId": "soothsayer",
       "ranks": 0,
@@ -9465,7 +9465,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "ritual_interpretation"
     },
     {
-      "grantType": "secondary-skill",
+      "grantType": "ordinary-skill",
       "isCore": false,
       "professionId": "soothsayer",
       "ranks": 0,
@@ -9545,7 +9545,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "search"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "secondary-skill",
       "isCore": true,
       "professionId": "street_thug",
       "ranks": 0,
@@ -9561,7 +9561,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "insight"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "secondary-skill",
       "isCore": false,
       "professionId": "street_thug",
       "ranks": 0,
@@ -9665,7 +9665,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "administration"
     },
     {
-      "grantType": "secondary-skill",
+      "grantType": "ordinary-skill",
       "isCore": true,
       "professionId": "tax_collector",
       "ranks": 0,
@@ -9745,7 +9745,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillGroupId": "trap_and_intrusion_work"
     },
     {
-      "grantType": "secondary-skill",
+      "grantType": "ordinary-skill",
       "isCore": false,
       "professionId": "thief",
       "ranks": 0,
