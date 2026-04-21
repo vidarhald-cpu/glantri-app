@@ -64,6 +64,8 @@ export interface EquipmentStateResponse {
 export interface ScenarioParticipantFromCharacterInput {
   characterId: string;
   controlledByUserId?: string | null;
+  displayOrder?: number | null;
+  factionId?: string | null;
   joinSource?: "gm_added" | "player_joined" | "imported_from_template";
   role?:
     | "player_character"
@@ -73,10 +75,13 @@ export interface ScenarioParticipantFromCharacterInput {
     | "neutral"
     | "ally"
     | "enemy";
+  roleTag?: string | null;
+  tacticalGroupId?: string | null;
 }
 
 export interface ScenarioParticipantFromEntityInput {
   controlledByUserId?: string | null;
+  displayOrder?: number | null;
   entityId?: string;
   entityInput?: {
     description?: string;
@@ -85,9 +90,12 @@ export interface ScenarioParticipantFromEntityInput {
     notes?: string;
     snapshot?: unknown;
   };
+  factionId?: string | null;
   isTemporary?: boolean;
   joinSource?: "gm_added" | "player_joined" | "imported_from_template";
   role: "player_character" | "npc" | "monster" | "animal" | "neutral" | "ally" | "enemy";
+  roleTag?: string | null;
+  tacticalGroupId?: string | null;
 }
 
 export class ApiRequestError extends Error {
@@ -531,8 +539,12 @@ export async function addScenarioParticipantFromCharacterOnServer(input: {
       body: JSON.stringify({
         characterId: input.characterId,
         controlledByUserId: input.controlledByUserId,
+        displayOrder: input.displayOrder,
+        factionId: input.factionId,
         joinSource: input.joinSource,
-        role: input.role
+        role: input.role,
+        roleTag: input.roleTag,
+        tacticalGroupId: input.tacticalGroupId
       }),
       method: "POST"
     }
@@ -549,11 +561,15 @@ export async function addScenarioParticipantFromEntityOnServer(input: {
     {
       body: JSON.stringify({
         controlledByUserId: input.controlledByUserId,
+        displayOrder: input.displayOrder,
         entityId: input.entityId,
         entityInput: input.entityInput,
+        factionId: input.factionId,
         isTemporary: input.isTemporary,
         joinSource: input.joinSource,
-        role: input.role
+        role: input.role,
+        roleTag: input.roleTag,
+        tacticalGroupId: input.tacticalGroupId
       }),
       method: "POST"
     }
@@ -572,6 +588,36 @@ export async function updateScenarioParticipantStateOnServer(input: {
     {
       body: JSON.stringify({
         state: input.state
+      }),
+      method: "PUT"
+    }
+  );
+
+  return payload.participant;
+}
+
+export async function updateScenarioParticipantMetadataOnServer(input: {
+  controlledByUserId?: string | null;
+  displayOrder?: number | null;
+  factionId?: string | null;
+  isActive?: boolean;
+  participantId: string;
+  roleTag?: string | null;
+  scenarioId: string;
+  tacticalGroupId?: string | null;
+}): Promise<ScenarioParticipant> {
+  const payload = await sendJson<{ participant: ScenarioParticipant }>(
+    `/scenarios/${input.scenarioId}/participants/${input.participantId}/metadata`,
+    {
+      body: JSON.stringify({
+        controlledByUserId:
+          input.controlledByUserId === undefined ? undefined : input.controlledByUserId,
+        displayOrder: input.displayOrder === undefined ? undefined : input.displayOrder,
+        factionId: input.factionId === undefined ? undefined : input.factionId,
+        isActive: input.isActive === undefined ? undefined : input.isActive,
+        roleTag: input.roleTag === undefined ? undefined : input.roleTag,
+        tacticalGroupId:
+          input.tacticalGroupId === undefined ? undefined : input.tacticalGroupId
       }),
       method: "PUT"
     }

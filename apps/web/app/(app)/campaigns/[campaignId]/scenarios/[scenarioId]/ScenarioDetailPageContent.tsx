@@ -3,15 +3,18 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
+import type { AuthUser } from "@glantri/auth";
 import type { ReusableEntity, Scenario, ScenarioEventLog, ScenarioParticipant } from "@glantri/domain";
 
 import {
   addScenarioParticipantFromEntityOnServer,
+  loadAuthUsers,
   loadCampaignEntities,
   loadTemplates,
   loadScenarioById,
   loadScenarioEventLogs,
   loadScenarioParticipants,
+  updateScenarioParticipantMetadataOnServer,
   updateScenarioLiveStateOnServer,
   updateScenarioOnServer
 } from "../../../../../../src/lib/api/localServiceClient";
@@ -30,12 +33,26 @@ export default function ScenarioDetailPageContent({
   campaignId,
   scenarioId
 }: ScenarioDetailPageContentProps) {
+  const [assignableUsers, setAssignableUsers] = useState<AuthUser[]>([]);
   const [entities, setEntities] = useState<ReusableEntity[]>([]);
   const [error, setError] = useState<string>();
   const [eventLogs, setEventLogs] = useState<ScenarioEventLog[]>([]);
   const [feedback, setFeedback] = useState<string>();
   const [loading, setLoading] = useState(true);
   const [participants, setParticipants] = useState<ScenarioParticipant[]>([]);
+  const [participantDrafts, setParticipantDrafts] = useState<
+    Record<
+      string,
+      {
+        controlledByUserId: string;
+        displayOrder: string;
+        factionId: string;
+        isActive: boolean;
+        roleTag: string;
+        tacticalGroupId: string;
+      }
+    >
+  >({});
   const [scenario, setScenario] = useState<Scenario | null>(null);
   const [templates, setTemplates] = useState<ReusableEntity[]>([]);
 
@@ -51,14 +68,36 @@ export default function ScenarioDetailPageContent({
     NonNullable<Scenario["liveState"]>["combatStatus"]
   >("not_started");
   const splitEntities = useMemo(() => splitCampaignActors(entities, campaignId), [campaignId, entities]);
+  const usersById = useMemo(
+    () => new Map(assignableUsers.map((user) => [user.id, user])),
+    [assignableUsers]
+  );
+
+  function formatUserLabel(userId: string | undefined): string {
+    if (!userId) {
+      return "GM / unassigned";
+    }
+
+    const user = usersById.get(userId);
+    if (!user) {
+      return userId;
+    }
+
+    if (user.displayName) {
+      return `${user.displayName} (${user.email})`;
+    }
+
+    return user.email;
+  }
 
   async function refreshScenario() {
-    const [nextScenario, nextParticipants, nextEntities, nextTemplates, nextEventLogs] = await Promise.all([
+    const [nextScenario, nextParticipants, nextEntities, nextTemplates, nextEventLogs, nextUsers] = await Promise.all([
       loadScenarioById(scenarioId),
       loadScenarioParticipants(scenarioId),
       loadCampaignEntities(campaignId),
       loadTemplates(),
-      loadScenarioEventLogs(scenarioId)
+      loadScenarioEventLogs(scenarioId),
+      loadAuthUsers()
     ]);
 
     const globalTemplates = nextTemplates.filter(
@@ -67,9 +106,26 @@ export default function ScenarioDetailPageContent({
 
     setScenario(nextScenario);
     setParticipants(nextParticipants);
+    setParticipantDrafts(
+      Object.fromEntries(
+        nextParticipants.map((participant) => [
+          participant.id,
+          {
+            controlledByUserId: participant.controlledByUserId ?? "",
+            displayOrder:
+              participant.displayOrder === undefined ? "" : String(participant.displayOrder),
+            factionId: participant.factionId ?? "",
+            isActive: participant.isActive,
+            roleTag: participant.roleTag ?? "",
+            tacticalGroupId: participant.tacticalGroupId ?? ""
+          }
+        ])
+      )
+    );
     setEntities(nextEntities);
     setTemplates(globalTemplates);
     setEventLogs(nextEventLogs);
+    setAssignableUsers(nextUsers);
     setSelectedEntityId((current) => current || globalTemplates[0]?.id || nextEntities[0]?.id || "");
     setScenarioName(nextScenario.name);
     setScenarioStatus(nextScenario.status);
@@ -153,6 +209,42 @@ export default function ScenarioDetailPageContent({
     } catch (caughtError) {
       setError(
         caughtError instanceof Error ? caughtError.message : "Unable to add scenario participant."
+      );
+    }
+  }
+
+  async function handleSaveParticipantMetadata(participantId: string) {
+    const draft = participantDrafts[participantId];
+
+    if (!draft) {
+      return;
+    }
+
+    try {
+      setError(undefined);
+      setFeedback(undefined);
+
+      const participant = await updateScenarioParticipantMetadataOnServer({
+        controlledByUserId: draft.controlledByUserId || null,
+        displayOrder:
+          draft.displayOrder.trim().length > 0
+            ? Number.parseInt(draft.displayOrder, 10)
+            : null,
+        factionId: draft.factionId.trim() || null,
+        isActive: draft.isActive,
+        participantId,
+        roleTag: draft.roleTag.trim() || null,
+        scenarioId,
+        tacticalGroupId: draft.tacticalGroupId.trim() || null
+      });
+
+      setFeedback(`Updated control assignment for ${participant.snapshot.displayName}.`);
+      await refreshScenario();
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Unable to update participant control metadata."
       );
     }
   }
@@ -324,9 +416,147 @@ export default function ScenarioDetailPageContent({
                 {participant.sourceType} · {participant.role}
               </div>
               <div>
+                Controller: {formatUserLabel(participant.controlledByUserId)}
+                {participant.role === "player_character" && participant.controlledByUserId ? (
+                  <> · Active controlled character</>
+                ) : null}
+              </div>
+              <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
+                Source trace: participant {participant.id}
+                {participant.characterId ? ` · character ${participant.characterId}` : ""}
+                {participant.entityId ? ` · entity ${participant.entityId}` : ""}
+              </div>
+              <div>
                 HP: {participant.state.health.currentHp}/{participant.state.health.maxHp}
               </div>
               <div>Conditions: {participant.state.conditions.length}</div>
+              <div
+                style={{
+                  borderTop: "1px solid #e7e2d7",
+                  display: "grid",
+                  gap: "0.75rem",
+                  marginTop: "0.5rem",
+                  paddingTop: "0.75rem"
+                }}
+              >
+                <strong style={{ fontSize: "0.95rem" }}>Control and grouping</strong>
+                <div
+                  style={{
+                    display: "grid",
+                    gap: "0.75rem",
+                    gridTemplateColumns: "minmax(220px, 1.4fr) repeat(4, minmax(120px, 1fr))"
+                  }}
+                >
+                  <label style={{ display: "grid", gap: "0.25rem" }}>
+                    <span style={{ fontSize: "0.85rem" }}>Assigned controller</span>
+                    <select
+                      onChange={(event) =>
+                        setParticipantDrafts((current) => ({
+                          ...current,
+                          [participant.id]: {
+                            ...current[participant.id],
+                            controlledByUserId: event.target.value
+                          }
+                        }))
+                      }
+                      value={participantDrafts[participant.id]?.controlledByUserId ?? ""}
+                    >
+                      <option value="">GM / unassigned</option>
+                      {assignableUsers.map((user) => (
+                        <option key={user.id} value={user.id}>
+                          {user.displayName ? `${user.displayName} (${user.email})` : user.email}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label style={{ display: "grid", gap: "0.25rem" }}>
+                    <span style={{ fontSize: "0.85rem" }}>Faction / side</span>
+                    <input
+                      onChange={(event) =>
+                        setParticipantDrafts((current) => ({
+                          ...current,
+                          [participant.id]: {
+                            ...current[participant.id],
+                            factionId: event.target.value
+                          }
+                        }))
+                      }
+                      type="text"
+                      value={participantDrafts[participant.id]?.factionId ?? ""}
+                    />
+                  </label>
+                  <label style={{ display: "grid", gap: "0.25rem" }}>
+                    <span style={{ fontSize: "0.85rem" }}>Tactical group</span>
+                    <input
+                      onChange={(event) =>
+                        setParticipantDrafts((current) => ({
+                          ...current,
+                          [participant.id]: {
+                            ...current[participant.id],
+                            tacticalGroupId: event.target.value
+                          }
+                        }))
+                      }
+                      type="text"
+                      value={participantDrafts[participant.id]?.tacticalGroupId ?? ""}
+                    />
+                  </label>
+                  <label style={{ display: "grid", gap: "0.25rem" }}>
+                    <span style={{ fontSize: "0.85rem" }}>Role tag</span>
+                    <input
+                      onChange={(event) =>
+                        setParticipantDrafts((current) => ({
+                          ...current,
+                          [participant.id]: {
+                            ...current[participant.id],
+                            roleTag: event.target.value
+                          }
+                        }))
+                      }
+                      type="text"
+                      value={participantDrafts[participant.id]?.roleTag ?? ""}
+                    />
+                  </label>
+                  <label style={{ display: "grid", gap: "0.25rem" }}>
+                    <span style={{ fontSize: "0.85rem" }}>Display order</span>
+                    <input
+                      min={0}
+                      onChange={(event) =>
+                        setParticipantDrafts((current) => ({
+                          ...current,
+                          [participant.id]: {
+                            ...current[participant.id],
+                            displayOrder: event.target.value
+                          }
+                        }))
+                      }
+                      type="number"
+                      value={participantDrafts[participant.id]?.displayOrder ?? ""}
+                    />
+                  </label>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: "0.75rem" }}>
+                  <label style={{ alignItems: "center", display: "flex", gap: "0.5rem" }}>
+                    <input
+                      checked={participantDrafts[participant.id]?.isActive ?? participant.isActive}
+                      onChange={(event) =>
+                        setParticipantDrafts((current) => ({
+                          ...current,
+                          [participant.id]: {
+                            ...current[participant.id],
+                            isActive: event.target.checked
+                          }
+                        }))
+                      }
+                      type="checkbox"
+                    />
+                    Participant active in scenario
+                  </label>
+                  <button onClick={() => void handleSaveParticipantMetadata(participant.id)} type="button">
+                    Save assignment
+                  </button>
+                </div>
+              </div>
             </div>
           ))
         ) : (

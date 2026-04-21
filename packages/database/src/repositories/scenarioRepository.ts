@@ -104,17 +104,21 @@ function mapScenarioParticipant(record: {
   characterId: string | null;
   controlledByUserId: string | null;
   createdAt: Date;
+  displayOrder: number | null;
   entityId: string | null;
+  factionId: string | null;
   id: string;
   initiativeSlot: number | null;
   isActive: boolean;
   joinSource: string;
   positionJson: Prisma.JsonValue | null;
   role: string;
+  roleTag: string | null;
   scenarioId: string;
   snapshotJson: Prisma.JsonValue;
   sourceType: string;
   stateJson: Prisma.JsonValue;
+  tacticalGroupId: string | null;
   updatedAt: Date;
   visibilityOverridesJson: Prisma.JsonValue | null;
 }): ScenarioParticipant {
@@ -122,7 +126,9 @@ function mapScenarioParticipant(record: {
     characterId: record.characterId ?? undefined,
     controlledByUserId: record.controlledByUserId ?? undefined,
     createdAt: record.createdAt.toISOString(),
+    displayOrder: record.displayOrder ?? undefined,
     entityId: record.entityId ?? undefined,
+    factionId: record.factionId ?? undefined,
     id: record.id,
     initiativeSlot: record.initiativeSlot ?? undefined,
     isActive: record.isActive,
@@ -132,10 +138,12 @@ function mapScenarioParticipant(record: {
         ? undefined
         : (record.positionJson as ScenarioParticipantPosition),
     role: record.role,
+    roleTag: record.roleTag ?? undefined,
     scenarioId: record.scenarioId,
     snapshot: record.snapshotJson,
     sourceType: record.sourceType,
     state: record.stateJson,
+    tacticalGroupId: record.tacticalGroupId ?? undefined,
     updatedAt: record.updatedAt.toISOString(),
     visibilityOverrides:
       record.visibilityOverridesJson == null
@@ -249,16 +257,20 @@ export interface ScenarioRepository {
   createScenarioParticipant(input: {
     characterId?: string | null;
     controlledByUserId?: string | null;
+    displayOrder?: number | null;
     entityId?: string | null;
+    factionId?: string | null;
     initiativeSlot?: number | null;
     isActive?: boolean;
     joinSource: ScenarioParticipant["joinSource"];
     position?: ScenarioParticipantPosition;
     role: ScenarioParticipant["role"];
+    roleTag?: string | null;
     scenarioId: string;
     snapshot: ScenarioParticipantSnapshot;
     sourceType: ScenarioParticipant["sourceType"];
     state: ScenarioParticipantState;
+    tacticalGroupId?: string | null;
     visibilityOverrides?: ScenarioParticipant["visibilityOverrides"];
   }): Promise<ScenarioParticipant>;
   listScenarioParticipants(scenarioId: string): Promise<ScenarioParticipant[]>;
@@ -270,6 +282,15 @@ export interface ScenarioRepository {
     participantId: string,
     state: ScenarioParticipantState
   ): Promise<ScenarioParticipant>;
+  updateScenarioParticipantMetadata(input: {
+    controlledByUserId?: string | null;
+    displayOrder?: number | null;
+    factionId?: string | null;
+    isActive?: boolean;
+    participantId: string;
+    roleTag?: string | null;
+    tacticalGroupId?: string | null;
+  }): Promise<ScenarioParticipant>;
   createCampaignAsset(input: {
     campaignId: string;
     createdByUserId: string;
@@ -434,16 +455,20 @@ export function createPrismaScenarioRepository(): ScenarioRepository {
         data: {
           characterId: input.characterId ?? null,
           controlledByUserId: input.controlledByUserId ?? null,
+          displayOrder: input.displayOrder ?? null,
           entityId: input.entityId ?? null,
+          factionId: input.factionId ?? null,
           initiativeSlot: input.initiativeSlot ?? null,
           isActive: input.isActive ?? true,
           joinSource: input.joinSource,
           positionJson: input.position == null ? Prisma.JsonNull : asJson(input.position),
           role: input.role,
+          roleTag: input.roleTag ?? null,
           scenarioId: input.scenarioId,
           snapshotJson: asJson(input.snapshot),
           sourceType: input.sourceType,
           stateJson: asJson(input.state),
+          tacticalGroupId: input.tacticalGroupId ?? null,
           visibilityOverridesJson:
             input.visibilityOverrides == null ? Prisma.JsonNull : asJson(input.visibilityOverrides)
         }
@@ -453,7 +478,7 @@ export function createPrismaScenarioRepository(): ScenarioRepository {
     },
     async listScenarioParticipants(scenarioId) {
       const records = await prisma.scenarioParticipant.findMany({
-        orderBy: { createdAt: "asc" },
+        orderBy: [{ displayOrder: "asc" }, { createdAt: "asc" }],
         where: { scenarioId }
       });
 
@@ -475,6 +500,23 @@ export function createPrismaScenarioRepository(): ScenarioRepository {
           stateJson: asJson(state)
         },
         where: { id: participantId }
+      });
+
+      return mapScenarioParticipant(record);
+    },
+    async updateScenarioParticipantMetadata(input) {
+      const record = await prisma.scenarioParticipant.update({
+        data: {
+          controlledByUserId:
+            input.controlledByUserId === undefined ? undefined : input.controlledByUserId,
+          displayOrder: input.displayOrder === undefined ? undefined : input.displayOrder,
+          factionId: input.factionId === undefined ? undefined : input.factionId,
+          isActive: input.isActive === undefined ? undefined : input.isActive,
+          roleTag: input.roleTag === undefined ? undefined : input.roleTag,
+          tacticalGroupId:
+            input.tacticalGroupId === undefined ? undefined : input.tacticalGroupId
+        },
+        where: { id: input.participantId }
       });
 
       return mapScenarioParticipant(record);

@@ -32,6 +32,23 @@ function parseId(params: unknown, key: string, label: string): string {
   return value;
 }
 
+function parseOptionalInteger(
+  object: Record<string, unknown>,
+  key: string
+): number | undefined {
+  const value = object[key];
+
+  if (value == null || value === "") {
+    return undefined;
+  }
+
+  if (typeof value !== "number" || !Number.isInteger(value)) {
+    throw new Error(`${key} must be an integer when provided.`);
+  }
+
+  return value;
+}
+
 function parseBodyObject(body: unknown, label: string): Record<string, unknown> {
   if (!body || typeof body !== "object") {
     throw new Error(`${label} is required.`);
@@ -711,12 +728,16 @@ export const scenariosRoutes: FastifyPluginAsync = async (app) => {
       const participant = await scenarioService.addCharacterParticipant({
         characterId,
         controlledByUserId: parseOptionalNullableString(body, "controlledByUserId") ?? user.id,
+        displayOrder: parseOptionalInteger(body, "displayOrder"),
+        factionId: parseOptionalNullableString(body, "factionId"),
         joinSource:
           body.joinSource == null
             ? "gm_added"
             : scenarioParticipantJoinSourceSchema.parse(body.joinSource),
         role: body.role == null ? undefined : scenarioParticipantRoleSchema.parse(body.role),
-        scenarioId
+        roleTag: parseOptionalNullableString(body, "roleTag"),
+        scenarioId,
+        tacticalGroupId: parseOptionalNullableString(body, "tacticalGroupId")
       });
 
       return { participant };
@@ -764,15 +785,19 @@ export const scenariosRoutes: FastifyPluginAsync = async (app) => {
 
       const participant = await scenarioService.addEntityParticipant({
         controlledByUserId: parseOptionalNullableString(body, "controlledByUserId") ?? user.id,
+        displayOrder: parseOptionalInteger(body, "displayOrder"),
         entityId,
         entityInput,
+        factionId: parseOptionalNullableString(body, "factionId"),
         isTemporary: parseOptionalBoolean(body, "isTemporary"),
         joinSource:
           body.joinSource == null
             ? "gm_added"
             : scenarioParticipantJoinSourceSchema.parse(body.joinSource),
         role: scenarioParticipantRoleSchema.parse(body.role),
-        scenarioId
+        roleTag: parseOptionalNullableString(body, "roleTag"),
+        scenarioId,
+        tacticalGroupId: parseOptionalNullableString(body, "tacticalGroupId")
       });
 
       return { participant };
@@ -804,6 +829,44 @@ export const scenariosRoutes: FastifyPluginAsync = async (app) => {
     } catch (error) {
       return reply.code(400).send({
         error: error instanceof Error ? error.message : "Unable to update participant state."
+      });
+    }
+  });
+
+  app.put("/scenarios/:scenarioId/participants/:participantId/metadata", async (request, reply) => {
+    const user = await requireAdminUser(request, reply);
+
+    if (!user) {
+      return;
+    }
+
+    try {
+      const scenarioId = parseId(request.params, "scenarioId", "Scenario id");
+      const participantId = parseId(request.params, "participantId", "Participant id");
+      const scenario = await scenarioService.getScenarioById(scenarioId);
+
+      if (!scenario) {
+        return reply.code(404).send({
+          error: "Scenario not found."
+        });
+      }
+
+      const body = parseBodyObject(request.body, "Participant metadata payload");
+      const participant = await scenarioService.updateScenarioParticipantMetadata({
+        controlledByUserId: parseOptionalNullableString(body, "controlledByUserId"),
+        displayOrder: parseOptionalInteger(body, "displayOrder"),
+        factionId: parseOptionalNullableString(body, "factionId"),
+        isActive: parseOptionalBoolean(body, "isActive"),
+        participantId,
+        roleTag: parseOptionalNullableString(body, "roleTag"),
+        scenarioId,
+        tacticalGroupId: parseOptionalNullableString(body, "tacticalGroupId")
+      });
+
+      return { participant };
+    } catch (error) {
+      return reply.code(400).send({
+        error: error instanceof Error ? error.message : "Unable to update participant metadata."
       });
     }
   });

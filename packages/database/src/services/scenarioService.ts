@@ -32,6 +32,14 @@ function slugify(value: string): string {
     .slice(0, 60);
 }
 
+function isPlayerControlledParticipant(
+  role: ScenarioParticipantRole,
+  controlledByUserId?: string | null,
+  isActive = true
+): boolean {
+  return role === "player_character" && Boolean(controlledByUserId) && isActive;
+}
+
 export class ScenarioService {
   constructor(
     private readonly repository: ScenarioRepository = createPrismaScenarioRepository(),
@@ -192,9 +200,13 @@ export class ScenarioService {
   async addCharacterParticipant(input: {
     characterId: string;
     controlledByUserId?: string | null;
+    displayOrder?: number | null;
+    factionId?: string | null;
     joinSource: ScenarioParticipant["joinSource"];
     role?: ScenarioParticipantRole;
+    roleTag?: string | null;
     scenarioId: string;
+    tacticalGroupId?: string | null;
   }): Promise<ScenarioParticipant> {
     const character = await this.characterService.getCharacterById(input.characterId);
 
@@ -210,6 +222,12 @@ export class ScenarioService {
       throw new Error("Character is already participating in this scenario.");
     }
 
+    await this.assertControllerAssignmentAvailable({
+      controlledByUserId: input.controlledByUserId ?? character.ownerId ?? null,
+      role: input.role ?? "player_character",
+      scenarioId: input.scenarioId
+    });
+
     const equipmentState = await this.equipmentService.getCharacterEquipmentState(input.characterId);
     const snapshotState = createParticipantSnapshotFromCharacter({
       build: character.build,
@@ -219,12 +237,16 @@ export class ScenarioService {
     const participant = await this.repository.createScenarioParticipant({
       characterId: character.id,
       controlledByUserId: input.controlledByUserId ?? character.ownerId ?? null,
+      displayOrder: input.displayOrder ?? null,
       joinSource: input.joinSource,
+      factionId: input.factionId ?? null,
       role: input.role ?? "player_character",
+      roleTag: input.roleTag ?? null,
       scenarioId: input.scenarioId,
       snapshot: snapshotState.snapshot,
       sourceType: "character",
-      state: snapshotState.state
+      state: snapshotState.state,
+      tacticalGroupId: input.tacticalGroupId ?? null
     });
 
     await this.repository.createScenarioEventLog({
@@ -255,9 +277,13 @@ export class ScenarioService {
     };
     isTemporary?: boolean;
     controlledByUserId?: string | null;
+    displayOrder?: number | null;
+    factionId?: string | null;
     joinSource?: ScenarioParticipant["joinSource"];
     role: ScenarioParticipantRole;
+    roleTag?: string | null;
     scenarioId: string;
+    tacticalGroupId?: string | null;
   }): Promise<ScenarioParticipant> {
     const entity =
       input.entityId != null
@@ -282,6 +308,12 @@ export class ScenarioService {
       throw new Error("Reusable entity not found.");
     }
 
+    await this.assertControllerAssignmentAvailable({
+      controlledByUserId: input.controlledByUserId ?? null,
+      role: input.role,
+      scenarioId: input.scenarioId
+    });
+
     const snapshotState = createParticipantSnapshotFromEntity({
       entity: {
         description: entity.description,
@@ -294,13 +326,17 @@ export class ScenarioService {
     });
     const participant = await this.repository.createScenarioParticipant({
       controlledByUserId: input.controlledByUserId ?? null,
+      displayOrder: input.displayOrder ?? null,
       entityId: entity.id || null,
+      factionId: input.factionId ?? null,
       joinSource: input.joinSource ?? "gm_added",
       role: input.role,
+      roleTag: input.roleTag ?? null,
       scenarioId: input.scenarioId,
       snapshot: snapshotState.snapshot,
       sourceType: "entity",
-      state: snapshotState.state
+      state: snapshotState.state,
+      tacticalGroupId: input.tacticalGroupId ?? null
     });
 
     await this.repository.createScenarioEventLog({
@@ -322,6 +358,59 @@ export class ScenarioService {
 
   async listScenarioParticipants(scenarioId: string): Promise<ScenarioParticipant[]> {
     return this.repository.listScenarioParticipants(scenarioId);
+  }
+
+  async updateScenarioParticipantMetadata(input: {
+    controlledByUserId?: string | null;
+    displayOrder?: number | null;
+    factionId?: string | null;
+    isActive?: boolean;
+    participantId: string;
+    roleTag?: string | null;
+    scenarioId: string;
+    tacticalGroupId?: string | null;
+  }): Promise<ScenarioParticipant> {
+    const participants = await this.repository.listScenarioParticipants(input.scenarioId);
+    const existingParticipant = participants.find(
+      (participant) => participant.id === input.participantId
+    );
+
+    if (!existingParticipant) {
+      throw new Error("Scenario participant not found.");
+    }
+
+    await this.assertControllerAssignmentAvailable({
+      controlledByUserId:
+        input.controlledByUserId === undefined
+          ? existingParticipant.controlledByUserId ?? null
+          : input.controlledByUserId,
+      excludingParticipantId: existingParticipant.id,
+      isActive: input.isActive ?? existingParticipant.isActive,
+      role: existingParticipant.role,
+      scenarioId: input.scenarioId
+    });
+
+    const participant = await this.repository.updateScenarioParticipantMetadata(input);
+    const scenario = await this.repository.getScenarioById(input.scenarioId);
+
+    await this.repository.createScenarioEventLog({
+      eventType: "participant_metadata_updated",
+      participantId: participant.id,
+      payload: {
+        controlledByUserId: participant.controlledByUserId ?? null,
+        displayOrder: participant.displayOrder ?? null,
+        factionId: participant.factionId ?? null,
+        isActive: participant.isActive,
+        roleTag: participant.roleTag ?? null,
+        tacticalGroupId: participant.tacticalGroupId ?? null
+      },
+      phase: scenario?.liveState?.phase,
+      roundNumber: scenario?.liveState?.roundNumber,
+      scenarioId: input.scenarioId,
+      summary: `Updated control and grouping for ${participant.snapshot.displayName}.`
+    });
+
+    return participant;
   }
 
   async updateScenarioLiveState(input: {
@@ -449,5 +538,38 @@ export class ScenarioService {
 
   async listScenarioEventLogs(scenarioId: string) {
     return this.repository.listScenarioEventLogs(scenarioId);
+  }
+
+  private async assertControllerAssignmentAvailable(input: {
+    controlledByUserId?: string | null;
+    excludingParticipantId?: string;
+    isActive?: boolean;
+    role: ScenarioParticipantRole;
+    scenarioId: string;
+  }): Promise<void> {
+    if (
+      !isPlayerControlledParticipant(
+        input.role,
+        input.controlledByUserId ?? null,
+        input.isActive ?? true
+      )
+    ) {
+      return;
+    }
+
+    const participants = await this.repository.listScenarioParticipants(input.scenarioId);
+    const conflictingParticipant = participants.find(
+      (participant) =>
+        participant.id !== input.excludingParticipantId &&
+        participant.isActive &&
+        participant.role === "player_character" &&
+        participant.controlledByUserId === input.controlledByUserId
+    );
+
+    if (conflictingParticipant) {
+      throw new Error(
+        `${conflictingParticipant.snapshot.displayName} is already the active controlled character for this player in the scenario.`
+      );
+    }
   }
 }

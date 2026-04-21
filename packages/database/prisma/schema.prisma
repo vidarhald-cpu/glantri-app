@@ -355,6 +355,10 @@ model ScenarioParticipant {
   entityId    String?
   role        ScenarioParticipantRole
   controlledByUserId String?
+  factionId   String?
+  tacticalGroupId String?
+  roleTag     String?
+  displayOrder Int?
   joinSource  ScenarioParticipantJoinSource
   initiativeSlot Int?
   positionJson Json?
@@ -374,6 +378,9 @@ model ScenarioParticipant {
   @@index([characterId])
   @@index([entityId])
   @@index([controlledByUserId])
+  @@index([scenarioId, controlledByUserId])
+  @@index([scenarioId, factionId])
+  @@index([scenarioId, tacticalGroupId])
 }
 
 model CampaignAsset {
