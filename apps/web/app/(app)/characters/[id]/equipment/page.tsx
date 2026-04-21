@@ -25,10 +25,13 @@ import {
   moveCharacterEquipmentItemOnServer,
   removeCharacterStorageLocationOnServer,
   removeCharacterEquipmentItemOnServer,
+  updateServerCharacter,
   updateCharacterEquipmentMetadataOnServer,
   updateCharacterEquipmentQuantityOnServer
 } from "../../../../../src/lib/api/localServiceClient";
 import { loadLocalCharacterContext } from "../../../../../src/lib/characters/loadLocalCharacterContext";
+import type { LocalCharacterRecord } from "../../../../../src/lib/offline/glantriDexie";
+import { LocalCharacterRepository } from "../../../../../src/lib/offline/repositories/localCharacterRepository";
 import { UNNAMED_CHARACTER_PLACEHOLDER } from "../../../../../src/lib/offline/repositories/localCharacterRepository";
 import { getWorkbookCharacterSize } from "../../../../../src/features/equipment/armorSummary";
 import { formatEncumbranceDisplay } from "../../../../../src/features/equipment/displayFormatting";
@@ -94,11 +97,18 @@ const templateFilterOptions: Array<{ label: string; value: InventoryTemplateFilt
   { label: "Valuables", value: "valuables" },
 ];
 
+const localCharacterRepository = new LocalCharacterRepository();
+
 export default function CharacterEquipmentPage({ params }: CharacterEquipmentPageProps) {
   const { id } = use(params);
+  const [characterRecord, setCharacterRecord] = useState<LocalCharacterRecord | null>(null);
   const [state, setState] = useState<EquipmentFeatureState | null>(null);
   const [characterSize, setCharacterSize] = useState<number | null>(null);
   const [characterName, setCharacterName] = useState(UNNAMED_CHARACTER_PLACEHOLDER);
+  const [inventoryNotes, setInventoryNotes] = useState("");
+  const [inventoryNotesError, setInventoryNotesError] = useState<string>();
+  const [inventoryNotesFeedback, setInventoryNotesFeedback] = useState<string>();
+  const [savingInventoryNotes, setSavingInventoryNotes] = useState(false);
   const [loading, setLoading] = useState(true);
   const [pageError, setPageError] = useState<string>();
   const [locationName, setLocationName] = useState("");
@@ -177,9 +187,11 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
         }
 
         setState(nextState);
+        setCharacterRecord(characterContext.record ?? null);
         setCharacterName(
           characterContext.record?.build.name.trim() || UNNAMED_CHARACTER_PLACEHOLDER
         );
+        setInventoryNotes(characterContext.record?.build.inventoryNotes ?? "");
         setCharacterSize(getWorkbookCharacterSize(characterContext.record?.build));
         setPageError(undefined);
       })
@@ -524,6 +536,47 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
         ...current,
         [itemId]: message
       }));
+    }
+  }
+
+  async function handleSaveInventoryNotes() {
+    if (!characterRecord) {
+      return;
+    }
+
+    setSavingInventoryNotes(true);
+    setInventoryNotesError(undefined);
+    setInventoryNotesFeedback(undefined);
+
+    try {
+      const savedServerRecord = await updateServerCharacter({
+        build: {
+          ...characterRecord.build,
+          inventoryNotes
+        },
+        characterId: id
+      });
+      const savedLocalRecord = await localCharacterRepository.save({
+        build: savedServerRecord.build,
+        creatorDisplayName: characterRecord.creatorDisplayName,
+        creatorEmail: characterRecord.creatorEmail,
+        creatorId: savedServerRecord.ownerId ?? characterRecord.creatorId,
+        createdAt: characterRecord.createdAt,
+        finalizedAt: characterRecord.finalizedAt,
+        syncStatus: "synced",
+        updatedAt: savedServerRecord.updatedAt
+      });
+
+      setCharacterRecord(savedLocalRecord);
+      setCharacterName(savedLocalRecord.build.name.trim() || UNNAMED_CHARACTER_PLACEHOLDER);
+      setInventoryNotes(savedLocalRecord.build.inventoryNotes ?? "");
+      setInventoryNotesFeedback("Inventory notes saved.");
+    } catch (error) {
+      setInventoryNotesError(
+        error instanceof Error ? error.message : "Unable to save inventory notes."
+      );
+    } finally {
+      setSavingInventoryNotes(false);
     }
   }
 
@@ -972,18 +1025,35 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
                                     </div>
                                   </td>
                                   <td style={tableCellStyle}>
-                                    {row.displayName ? (
-                                      <div style={{ display: "grid", gap: "0.2rem" }}>
-                                        <span>{row.displayName}</span>
+                                    <div style={{ display: "grid", gap: "0.35rem", minWidth: 180 }}>
+                                      <input
+                                        onChange={(event) =>
+                                          setMetadataDrafts((current) => ({
+                                            ...current,
+                                            [row.itemId]: {
+                                              ...current[row.itemId],
+                                              displayName: event.target.value
+                                            }
+                                          }))
+                                        }
+                                        placeholder="Optional given name"
+                                        type="text"
+                                        value={metadataDrafts[row.itemId]?.displayName ?? ""}
+                                      />
+                                      <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: "0.5rem" }}>
+                                        <button
+                                          onClick={() => void handleUpdateMetadata(row.itemId)}
+                                          type="button"
+                                        >
+                                          Save name
+                                        </button>
                                         {state?.itemsById[row.itemId]?.isFavorite ? (
                                           <span style={{ color: "#5e5a50", fontSize: "0.8rem" }}>
                                             Favorite
                                           </span>
                                         ) : null}
                                       </div>
-                                    ) : (
-                                      <span style={{ color: "#8a8478" }}>None</span>
-                                    )}
+                                    </div>
                                   </td>
                                   <td style={tableCellStyle}>{formatLabel(row.carryMode)}</td>
                                   <td style={tableCellStyle}>{formatLabel(row.material)}</td>
@@ -1064,26 +1134,9 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
                                           display: "grid",
                                           gap: "0.75rem",
                                           gridTemplateColumns:
-                                            "minmax(180px, 220px) minmax(160px, 180px) minmax(220px, 1fr) auto"
+                                            "minmax(160px, 180px) minmax(220px, 1fr) auto"
                                         }}
                                       >
-                                        <label style={{ display: "grid", gap: "0.25rem" }}>
-                                          <span style={{ fontSize: "0.8rem" }}>Display name</span>
-                                          <input
-                                            onChange={(event) =>
-                                              setMetadataDrafts((current) => ({
-                                                ...current,
-                                                [row.itemId]: {
-                                                  ...current[row.itemId],
-                                                  displayName: event.target.value
-                                                }
-                                              }))
-                                            }
-                                            placeholder="Optional"
-                                            type="text"
-                                            value={metadataDrafts[row.itemId]?.displayName ?? ""}
-                                          />
-                                        </label>
                                         <label style={{ display: "grid", gap: "0.25rem" }}>
                                           <span style={{ fontSize: "0.8rem" }}>Condition</span>
                                           <select
@@ -1203,6 +1256,48 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
             <div style={{ color: "#8b3a1a", fontSize: "0.9rem" }}>{bootstrapError}</div>
           ) : null}
         </div>
+      ) : null}
+
+      {!loading && !pageError ? (
+        <section
+          style={{
+            background: "#f6f5ef",
+            border: "1px solid #d9ddd8",
+            borderRadius: 12,
+            display: "grid",
+            gap: "0.75rem",
+            padding: "1rem"
+          }}
+        >
+          <h2 style={{ margin: 0 }}>Inventory notes</h2>
+          <textarea
+            onChange={(event) => {
+              setInventoryNotes(event.target.value);
+              setInventoryNotesFeedback(undefined);
+            }}
+            placeholder="Inventory handling notes, logistics reminders, or storage plans..."
+            style={{
+              fontFamily: "inherit",
+              fontSize: "1rem",
+              minHeight: 320,
+              overflow: "auto",
+              padding: "0.75rem",
+              resize: "vertical"
+            }}
+            value={inventoryNotes}
+          />
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem", alignItems: "center" }}>
+            <button disabled={savingInventoryNotes || !characterRecord} onClick={() => void handleSaveInventoryNotes()} type="button">
+              {savingInventoryNotes ? "Saving..." : "Save inventory notes"}
+            </button>
+            {inventoryNotesFeedback ? (
+              <span style={{ color: "#5e5a50", fontSize: "0.9rem" }}>{inventoryNotesFeedback}</span>
+            ) : null}
+            {inventoryNotesError ? (
+              <span style={{ color: "#8b3a1a", fontSize: "0.9rem" }}>{inventoryNotesError}</span>
+            ) : null}
+          </div>
+        </section>
       ) : null}
     </section>
   );

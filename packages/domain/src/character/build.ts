@@ -7,6 +7,7 @@ import { rolledCharacterProfileSchema } from "./profiles";
 export const characterBuildSchema = z.object({
   equipment: characterEquipmentSchema.default({ items: [] }),
   id: z.string().min(1),
+  inventoryNotes: z.string().optional(),
   name: z.string().min(1),
   profile: rolledCharacterProfileSchema,
   progression: characterProgressionSchema,
