@@ -545,6 +545,17 @@ export function validateCanonicalContent(input: unknown): CanonicalContent {
   const parsedContent = canonicalContentSchema.parse(input);
   const normalizedContent = {
     ...parsedContent,
+    skills: parsedContent.skills.map((skill) =>
+      skill.id === "language"
+        ? {
+            ...skill,
+            allowsSpecializations: false
+          }
+        : skill
+    ),
+    specializations: parsedContent.specializations.filter(
+      (specialization) => specialization.skillId !== "language"
+    ),
     civilizations:
       typeof input === "object" &&
       input !== null &&

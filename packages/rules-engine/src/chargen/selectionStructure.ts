@@ -87,7 +87,10 @@ function uniqueIds(ids: Iterable<string>): string[] {
   return [...new Set(ids)];
 }
 
-function sortLanguageIds(content: ChargenSelectionContentShape, ids: string[]): string[] {
+function sortLanguageIds(
+  content: Pick<ChargenSelectionContentShape, "languages">,
+  ids: string[]
+): string[] {
   const orderById = new Map(
     (content.languages ?? []).map((language, index) => [language.id, [language.name, index] as const])
   );
@@ -213,22 +216,37 @@ function getStoredGroupSlotSelections(progression: CharacterProgression): Charac
   return normalizeGroupSlotSelections(progression.chargenSelections?.selectedGroupSlots ?? []);
 }
 
-function getResolvedSelectedSlotSkillIds(progression: CharacterProgression): string[] {
+function getResolvedSelectedSlotSkillIds(input: {
+  progression: CharacterProgression;
+  skillGroups: SkillGroupDefinition[];
+}): string[] {
   const activeGroupIds = new Set(
-    progression.skillGroups
+    input.progression.skillGroups
       .filter((group) => (group.ranks ?? 0) > 0 || (group.grantedRanks ?? 0) > 0)
       .map((group) => group.groupId)
   );
+  const groupById = new Map(input.skillGroups.map((group) => [group.id, group]));
 
   return uniqueIds(
-    getStoredGroupSlotSelections(progression)
+    getStoredGroupSlotSelections(input.progression)
       .filter((selection) => activeGroupIds.has(selection.groupId))
-      .flatMap((selection) => selection.selectedSkillIds)
+      .flatMap((selection) => {
+        const group = groupById.get(selection.groupId);
+        const slot = group?.selectionSlots?.find((candidate) => candidate.id === selection.slotId);
+
+        if (!slot) {
+          return [];
+        }
+
+        return selection.selectedSkillIds
+          .filter((skillId) => slot.candidateSkillIds.includes(skillId))
+          .slice(0, slot.chooseCount);
+      })
   );
 }
 
 function getSocietyDefinition(
-  content: ChargenSelectionContentShape,
+  content: Pick<ChargenSelectionContentShape, "societies">,
   societyId: string | undefined
 ): SocietyDefinition | undefined {
   if (!societyId) {
@@ -462,12 +480,15 @@ export function buildChargenSelectableSkillSummary(input: {
 }
 
 export function syncChargenSelectionSkillRows(input: {
-  content: Pick<ChargenSelectionContentShape, "skills">;
+  content: Pick<ChargenSelectionContentShape, "skillGroups" | "skills">;
   progression: CharacterProgression;
 }): CharacterProgression {
   const selectedSkillIds = new Set([
     ...(input.progression.chargenSelections?.selectedSkillIds ?? []),
-    ...getResolvedSelectedSlotSkillIds(input.progression)
+    ...getResolvedSelectedSlotSkillIds({
+      progression: input.progression,
+      skillGroups: input.content.skillGroups
+    })
   ]);
   const selectedDefinitions = input.content.skills.filter((skill) => selectedSkillIds.has(skill.id));
   const nextSkills = [...input.progression.skills];
@@ -581,6 +602,14 @@ export function syncChargenMotherTongueSkillRow(input: {
   const motherTongueIndex = nextSkills.findIndex(
     (skill) => skill.skillId === MOTHER_TONGUE_SKILL_ID && skill.sourceTag === "mother-tongue"
   );
+  const legacyGenericLanguageRows = nextSkills
+    .map((skill, index) => ({ index, skill }))
+    .filter(
+      ({ skill }) =>
+        skill.skillId === MOTHER_TONGUE_SKILL_ID &&
+        skill.sourceTag !== "mother-tongue" &&
+        !skill.languageName
+    );
 
   if (!motherTongue.skill || !motherTongue.languageName) {
     if (motherTongueIndex < 0) {
@@ -617,20 +646,33 @@ export function syncChargenMotherTongueSkillRow(input: {
     languageName: motherTongue.languageName,
     skillId: MOTHER_TONGUE_SKILL_ID
   });
+  const legacyGenericLanguageSkill = legacyGenericLanguageRows[0]?.skill;
+  const legacyAdditionalPrimaryRanks = legacyGenericLanguageRows
+    .slice(1)
+    .reduce((total, row) => total + (row.skill.primaryRanks ?? 0), 0);
+  const legacyAdditionalSecondaryRanks = legacyGenericLanguageRows
+    .slice(1)
+    .reduce((total, row) => total + (row.skill.secondaryRanks ?? 0), 0);
   const baseSkill =
     motherTongueIndex >= 0
       ? nextSkills[motherTongueIndex]
       : matchingLanguageIndex >= 0
         ? nextSkills[matchingLanguageIndex]
-        : createEmptySkillProgressionRow(motherTongue.skill);
+        : legacyGenericLanguageSkill ?? createEmptySkillProgressionRow(motherTongue.skill);
   const syncedSkill = {
     ...baseSkill,
     category: motherTongue.skill.category,
     grantedRanks: motherTongue.startingLevel,
     groupId: motherTongue.skill.groupId,
     languageName: motherTongue.languageName,
+    primaryRanks: (baseSkill.primaryRanks ?? 0) + legacyAdditionalPrimaryRanks,
     ranks:
-      motherTongue.startingLevel + (baseSkill.primaryRanks ?? 0) + (baseSkill.secondaryRanks ?? 0),
+      motherTongue.startingLevel +
+      (baseSkill.primaryRanks ?? 0) +
+      legacyAdditionalPrimaryRanks +
+      (baseSkill.secondaryRanks ?? 0) +
+      legacyAdditionalSecondaryRanks,
+    secondaryRanks: (baseSkill.secondaryRanks ?? 0) + legacyAdditionalSecondaryRanks,
     sourceTag: "mother-tongue" as const
   };
 
@@ -642,8 +684,14 @@ export function syncChargenMotherTongueSkillRow(input: {
     nextSkills.push(syncedSkill);
   }
 
+  const legacyGenericLanguageIndexes = new Set(legacyGenericLanguageRows.map((row) => row.index));
+
   return {
     ...input.progression,
-    skills: nextSkills
+    skills: nextSkills.filter(
+      (skill, index) =>
+        !legacyGenericLanguageIndexes.has(index) ||
+        getCharacterSkillKey(skill) === getCharacterSkillKey(syncedSkill)
+    )
   };
 }

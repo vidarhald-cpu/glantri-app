@@ -342,4 +342,38 @@ describe("validateCanonicalContent", () => {
       `Skill "${firstSecondarySkill?.name}" (${firstSecondarySkill?.id}) references unknown specialization-of skill "missing-specialization-parent".`
     );
   });
+
+  it("normalizes away legacy language specializations", () => {
+    const normalizedContent = validateCanonicalContent({
+      ...defaultCanonicalContent,
+      skills: defaultCanonicalContent.skills.map((skill) =>
+        skill.id === "language"
+          ? {
+              ...skill,
+              allowsSpecializations: true
+            }
+          : skill
+      ),
+      specializations: [
+        ...defaultCanonicalContent.specializations,
+        {
+          id: "specific_language_specialization",
+          skillId: "language",
+          name: "Specific Language Specialization",
+          minimumGroupLevel: 1,
+          minimumParentLevel: 1,
+          sortOrder: Number.MAX_SAFE_INTEGER
+        }
+      ]
+    });
+
+    expect(normalizedContent.skills.find((skill) => skill.id === "language")?.allowsSpecializations).toBe(
+      false
+    );
+    expect(
+      normalizedContent.specializations.some(
+        (specialization) => specialization.skillId === "language"
+      )
+    ).toBe(false);
+  });
 });

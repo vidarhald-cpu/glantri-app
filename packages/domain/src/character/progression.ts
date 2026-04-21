@@ -74,7 +74,16 @@ export function normalizeCharacterSkillLanguageName(
   languageName: string | undefined
 ): string | undefined {
   const normalized = languageName?.trim();
-  return normalized ? normalized : undefined;
+
+  if (!normalized) {
+    return undefined;
+  }
+
+  if (normalized === "undefined" || normalized === "null") {
+    return undefined;
+  }
+
+  return normalized;
 }
 
 export function getCharacterSkillKey(

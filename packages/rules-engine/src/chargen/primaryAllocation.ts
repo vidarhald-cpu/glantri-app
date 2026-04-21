@@ -32,6 +32,7 @@ import { resolveEffectiveProfessionPackage } from "../professions/resolveEffecti
 import { calculateGroupLevel } from "../skills/calculateGroupLevel";
 import { calculateSpecializationLevel } from "../skills/calculateSpecializationLevel";
 import { evaluateSkillSelection } from "../skills/evaluateSkillSelection";
+import { getActiveSkillGroupIds } from "../skills/getActiveSkillGroupIds";
 import { selectBestSkillGroupContribution } from "../skills/selectBestSkillGroupContribution";
 import { STANDARD_CHARGEN_METHOD_POLICY } from "./policy";
 import {
@@ -49,6 +50,7 @@ const SECONDARY_SKILL_POINT_COST = 1;
 const NEW_SPECIALIZATION_COST = 4;
 const EXISTING_SPECIALIZATION_COST = 2;
 const LITERACY_SKILL_ID = "literacy";
+const LANGUAGE_SKILL_ID = "language";
 
 interface CanonicalContentShape {
   civilizations?: CivilizationDefinition[];
@@ -321,7 +323,9 @@ function recalculateProgression(progression: CharacterProgression): CharacterPro
       progression.secondaryPoolTotal ?? STANDARD_CHARGEN_METHOD_POLICY.secondaryPoolTotal,
     skillGroups: progression.skillGroups.map(normalizeGroup),
     skills: progression.skills.map(normalizeSkill),
-    specializations: progression.specializations.map(normalizeSpecialization)
+    specializations: progression.specializations
+      .map(normalizeSpecialization)
+      .filter((specialization) => specialization.skillId !== LANGUAGE_SKILL_ID)
   };
 }
 
@@ -1749,8 +1753,13 @@ export function buildChargenDraftView(input: {
     .flatMap((definition) => {
       const progressionSkillRows = getProgressionSkillRows(progression, definition.id);
       const groupIds = getSkillDefinitionGroupIds(definition);
+      const activeGroupIds = getActiveSkillGroupIds({
+        progression,
+        skill: definition,
+        skillGroups: input.content.skillGroups
+      });
       const bestContributingGroup = selectBestSkillGroupContribution(
-        groupIds
+        activeGroupIds
           .map((groupId) => {
             const groupView = groupViewById.get(groupId);
             const groupDefinition = getSkillGroupDefinition(input.content, groupId);
@@ -1832,7 +1841,11 @@ export function buildChargenDraftView(input: {
         : undefined;
       const groupView = parentSkillDefinition
         ? selectBestSkillGroupContribution(
-            getSkillDefinitionGroupIds(parentSkillDefinition)
+            getActiveSkillGroupIds({
+              progression,
+              skill: parentSkillDefinition,
+              skillGroups: input.content.skillGroups
+            })
               .map((groupId) => {
                 const groupView = groupViewById.get(groupId);
                 const groupDefinition = getSkillGroupDefinition(input.content, groupId);

@@ -968,6 +968,158 @@ describe("chargen purchase gate integration", () => {
     ]);
   });
 
+  it("migrates legacy generic Language rows into the concrete mother tongue entry", () => {
+    const draftView = buildChargenDraftView({
+      civilizationId: "glantri_civ",
+      content: motherTongueTestContent,
+      profile: {
+        distractionLevel: 0,
+        id: "profile-linguist",
+        label: "Linguist",
+        rolledStats: {
+          cha: 10,
+          com: 10,
+          con: 10,
+          dex: 10,
+          health: 10,
+          int: 10,
+          lck: 10,
+          pow: 10,
+          siz: 10,
+          str: 10,
+          will: 10
+        },
+        socialClassEducationValue: 12,
+        societyLevel: 0
+      },
+      progression: {
+        ...createChargenProgression(),
+        skills: [
+          {
+            category: "ordinary",
+            grantedRanks: 0,
+            groupId: "scholarly",
+            level: 0,
+            primaryRanks: 2,
+            ranks: 2,
+            secondaryRanks: 0,
+            skillId: "language"
+          }
+        ]
+      },
+      societyId: "glantri",
+      societyLevel: 1
+    });
+
+    expect(
+      draftView.skills
+        .filter((skill) => skill.skillId === "language")
+        .map((skill) => ({
+          languageName: skill.languageName,
+          sourceTag: skill.sourceTag,
+          specificSkillLevel: skill.specificSkillLevel
+        }))
+    ).toEqual([
+      {
+        languageName: "Common",
+        sourceTag: "mother-tongue",
+        specificSkillLevel: 14
+      }
+    ]);
+  });
+
+  it("repairs legacy undefined mother-tongue rows and strips legacy language specializations", () => {
+    const legacyLanguageContent = {
+      ...motherTongueTestContent,
+      specializations: [
+        {
+          id: "specific_language_specialization",
+          skillId: "language",
+          name: "Specific Language Specialization",
+          minimumGroupLevel: 1,
+          minimumParentLevel: 1,
+          sortOrder: 1
+        }
+      ],
+      skills: motherTongueTestContent.skills.map((skill) =>
+        skill.id === "language"
+          ? {
+              ...skill,
+              allowsSpecializations: true
+            }
+          : skill
+      )
+    };
+
+    const draftView = buildChargenDraftView({
+      civilizationId: "glantri_civ",
+      content: legacyLanguageContent,
+      professionId: "scribe",
+      profile: {
+        distractionLevel: 0,
+        id: "profile-linguist",
+        label: "Linguist",
+        rolledStats: {
+          cha: 10,
+          com: 10,
+          con: 10,
+          dex: 10,
+          health: 10,
+          int: 10,
+          lck: 10,
+          pow: 10,
+          siz: 10,
+          str: 10,
+          will: 10
+        },
+        socialClassEducationValue: 12,
+        societyLevel: 0
+      },
+      progression: {
+        ...createChargenProgression(),
+        specializations: [
+          {
+            level: 1,
+            ranks: 1,
+            secondaryRanks: 1,
+            skillId: "language",
+            specializationId: "specific_language_specialization"
+          }
+        ],
+        skills: [
+          {
+            category: "ordinary",
+            grantedRanks: 0,
+            groupId: "scholarly",
+            languageName: "undefined",
+            level: 0,
+            primaryRanks: 0,
+            ranks: 0,
+            secondaryRanks: 0,
+            skillId: "language",
+            sourceTag: "mother-tongue"
+          }
+        ]
+      },
+      societyId: "glantri",
+      societyLevel: 1
+    });
+    expect(
+      draftView.skills
+        .filter((skill) => skill.skillId === "language")
+        .map((skill) => ({
+          languageName: skill.languageName,
+          sourceTag: skill.sourceTag
+        }))
+    ).toEqual([
+      {
+        languageName: "Common",
+        sourceTag: "mother-tongue"
+      }
+    ]);
+    expect(draftView.specializations).toEqual([]);
+  });
+
   it("materializes multi-pick combat slot selections as ordinary weapon skill rows", () => {
     const combatPickerContent = validateCanonicalContent({
       skillGroups: [
@@ -1111,5 +1263,403 @@ describe("chargen purchase gate integration", () => {
     });
 
     expect(draftView.skills.map((skill) => skill.skillId).sort()).toEqual(["axe", "spear", "sword"]);
+  });
+
+  it("only grants combat group XP to fixed skills plus selected slot skills", () => {
+    const combatPickerContent = validateCanonicalContent({
+      skillGroups: [
+        {
+          id: "advanced_melee_training",
+          name: "Advanced Melee Training",
+          selectionSlots: [
+            {
+              candidateSkillIds: ["sword", "axe", "spear", "mace"],
+              chooseCount: 3,
+              id: "advanced_melee_weapons",
+              label: "Choose three melee weapon skills",
+              required: true
+            }
+          ],
+          skillMemberships: [
+            { relevance: "core", skillId: "dodge" },
+            { relevance: "core", skillId: "parry" },
+            { relevance: "core", skillId: "brawling" }
+          ],
+          sortOrder: 1
+        }
+      ],
+      skills: [
+        {
+          allowsSpecializations: false,
+          category: "ordinary",
+          dependencies: [],
+          dependencySkillIds: [],
+          groupId: "advanced_melee_training",
+          groupIds: ["advanced_melee_training"],
+          id: "dodge",
+          linkedStats: ["dex"],
+          name: "Dodge",
+          requiresLiteracy: "no",
+          sortOrder: 1
+        },
+        {
+          allowsSpecializations: false,
+          category: "ordinary",
+          dependencies: [],
+          dependencySkillIds: [],
+          groupId: "advanced_melee_training",
+          groupIds: ["advanced_melee_training"],
+          id: "parry",
+          linkedStats: ["dex"],
+          name: "Parry",
+          requiresLiteracy: "no",
+          sortOrder: 2
+        },
+        {
+          allowsSpecializations: false,
+          category: "ordinary",
+          dependencies: [],
+          dependencySkillIds: [],
+          groupId: "advanced_melee_training",
+          groupIds: ["advanced_melee_training"],
+          id: "brawling",
+          linkedStats: ["str"],
+          name: "Brawling",
+          requiresLiteracy: "no",
+          sortOrder: 3
+        },
+        {
+          allowsSpecializations: false,
+          category: "ordinary",
+          dependencies: [],
+          dependencySkillIds: [],
+          groupId: "advanced_melee_training",
+          groupIds: ["advanced_melee_training"],
+          id: "sword",
+          linkedStats: ["dex"],
+          name: "Sword",
+          requiresLiteracy: "no",
+          sortOrder: 4
+        },
+        {
+          allowsSpecializations: false,
+          category: "ordinary",
+          dependencies: [],
+          dependencySkillIds: [],
+          groupId: "advanced_melee_training",
+          groupIds: ["advanced_melee_training"],
+          id: "axe",
+          linkedStats: ["dex"],
+          name: "Axe",
+          requiresLiteracy: "no",
+          sortOrder: 5
+        },
+        {
+          allowsSpecializations: false,
+          category: "ordinary",
+          dependencies: [],
+          dependencySkillIds: [],
+          groupId: "advanced_melee_training",
+          groupIds: ["advanced_melee_training"],
+          id: "spear",
+          linkedStats: ["dex"],
+          name: "Spear",
+          requiresLiteracy: "no",
+          sortOrder: 6
+        },
+        {
+          allowsSpecializations: false,
+          category: "ordinary",
+          dependencies: [],
+          dependencySkillIds: [],
+          groupId: "advanced_melee_training",
+          groupIds: ["advanced_melee_training"],
+          id: "mace",
+          linkedStats: ["dex"],
+          name: "Mace",
+          requiresLiteracy: "no",
+          sortOrder: 7
+        }
+      ],
+      specializations: [],
+      professionFamilies: [{ id: "warrior", name: "Warrior" }],
+      professions: [{ familyId: "warrior", id: "captain", name: "Captain", subtypeName: "Captain" }],
+      professionSkills: [
+        {
+          grantType: "group",
+          isCore: true,
+          professionId: "warrior",
+          scope: "family",
+          skillGroupId: "advanced_melee_training"
+        }
+      ],
+      societyLevels: [
+        {
+          professionIds: ["captain"],
+          skillGroupIds: ["advanced_melee_training"],
+          skillIds: [],
+          socialClass: "Common",
+          societyId: "glantri",
+          societyLevel: 1,
+          societyName: "Glantri"
+        },
+        {
+          professionIds: ["captain"],
+          skillGroupIds: ["advanced_melee_training"],
+          skillIds: [],
+          socialClass: "Guild",
+          societyId: "glantri",
+          societyLevel: 2,
+          societyName: "Glantri"
+        },
+        {
+          professionIds: ["captain"],
+          skillGroupIds: ["advanced_melee_training"],
+          skillIds: [],
+          socialClass: "Patrician",
+          societyId: "glantri",
+          societyLevel: 3,
+          societyName: "Glantri"
+        },
+        {
+          professionIds: ["captain"],
+          skillGroupIds: ["advanced_melee_training"],
+          skillIds: [],
+          socialClass: "Noble",
+          societyId: "glantri",
+          societyLevel: 4,
+          societyName: "Glantri"
+        }
+      ]
+    });
+
+    const draftView = buildChargenDraftView({
+      content: combatPickerContent,
+      professionId: "captain",
+      progression: {
+        ...createChargenProgression(),
+        chargenSelections: {
+          selectedLanguageIds: [],
+          selectedGroupSlots: [
+            {
+              groupId: "advanced_melee_training",
+              selectedSkillIds: ["sword", "axe", "spear"],
+              slotId: "advanced_melee_weapons"
+            }
+          ],
+          selectedSkillIds: []
+        },
+        skillGroups: [
+          {
+            gms: 0,
+            grantedRanks: 0,
+            groupId: "advanced_melee_training",
+            primaryRanks: 2,
+            secondaryRanks: 0,
+            ranks: 2
+          }
+        ]
+      },
+      societyId: "glantri",
+      societyLevel: 1
+    });
+    const meleeGroup = draftView.groups.find((group) => group.groupId === "advanced_melee_training");
+
+    expect(
+      draftView.skills
+        .filter((skill) =>
+          ["dodge", "parry", "brawling", "sword", "axe", "spear"].includes(skill.skillId)
+        )
+        .map((skill) => ({
+          effectiveSkillNumber: skill.effectiveSkillNumber,
+          skillId: skill.skillId
+        }))
+        .sort((left, right) => left.skillId.localeCompare(right.skillId))
+    ).toEqual([
+      { effectiveSkillNumber: meleeGroup?.groupLevel ?? 0, skillId: "axe" },
+      { effectiveSkillNumber: meleeGroup?.groupLevel ?? 0, skillId: "brawling" },
+      { effectiveSkillNumber: meleeGroup?.groupLevel ?? 0, skillId: "dodge" },
+      { effectiveSkillNumber: meleeGroup?.groupLevel ?? 0, skillId: "parry" },
+      { effectiveSkillNumber: meleeGroup?.groupLevel ?? 0, skillId: "spear" },
+      { effectiveSkillNumber: meleeGroup?.groupLevel ?? 0, skillId: "sword" }
+    ]);
+    expect(draftView.skills.find((skill) => skill.skillId === "mace")).toBeUndefined();
+  });
+
+  it("caps combat slot group XP to the canonical choose count", () => {
+    const combatPickerContent = validateCanonicalContent({
+      skillGroups: [
+        {
+          id: "advanced_melee_training",
+          name: "Advanced Melee Training",
+          selectionSlots: [
+            {
+              candidateSkillIds: ["sword", "axe", "spear", "mace"],
+              chooseCount: 3,
+              id: "advanced_melee_weapons",
+              label: "Choose three melee weapon skills",
+              required: true
+            }
+          ],
+          skillMemberships: [{ relevance: "core", skillId: "dodge" }],
+          sortOrder: 1
+        }
+      ],
+      skills: [
+        {
+          allowsSpecializations: false,
+          category: "ordinary",
+          dependencies: [],
+          dependencySkillIds: [],
+          groupId: "advanced_melee_training",
+          groupIds: ["advanced_melee_training"],
+          id: "dodge",
+          linkedStats: ["dex"],
+          name: "Dodge",
+          requiresLiteracy: "no",
+          sortOrder: 1
+        },
+        {
+          allowsSpecializations: false,
+          category: "ordinary",
+          dependencies: [],
+          dependencySkillIds: [],
+          groupId: "advanced_melee_training",
+          groupIds: ["advanced_melee_training"],
+          id: "sword",
+          linkedStats: ["dex"],
+          name: "Sword",
+          requiresLiteracy: "no",
+          sortOrder: 2
+        },
+        {
+          allowsSpecializations: false,
+          category: "ordinary",
+          dependencies: [],
+          dependencySkillIds: [],
+          groupId: "advanced_melee_training",
+          groupIds: ["advanced_melee_training"],
+          id: "axe",
+          linkedStats: ["dex"],
+          name: "Axe",
+          requiresLiteracy: "no",
+          sortOrder: 3
+        },
+        {
+          allowsSpecializations: false,
+          category: "ordinary",
+          dependencies: [],
+          dependencySkillIds: [],
+          groupId: "advanced_melee_training",
+          groupIds: ["advanced_melee_training"],
+          id: "spear",
+          linkedStats: ["dex"],
+          name: "Spear",
+          requiresLiteracy: "no",
+          sortOrder: 4
+        },
+        {
+          allowsSpecializations: false,
+          category: "ordinary",
+          dependencies: [],
+          dependencySkillIds: [],
+          groupId: "advanced_melee_training",
+          groupIds: ["advanced_melee_training"],
+          id: "mace",
+          linkedStats: ["dex"],
+          name: "Mace",
+          requiresLiteracy: "no",
+          sortOrder: 5
+        }
+      ],
+      specializations: [],
+      professionFamilies: [{ id: "warrior", name: "Warrior" }],
+      professions: [{ familyId: "warrior", id: "captain", name: "Captain", subtypeName: "Captain" }],
+      professionSkills: [
+        {
+          grantType: "group",
+          isCore: true,
+          professionId: "warrior",
+          scope: "family",
+          skillGroupId: "advanced_melee_training"
+        }
+      ],
+      societyLevels: [
+        {
+          professionIds: ["captain"],
+          skillGroupIds: ["advanced_melee_training"],
+          skillIds: [],
+          socialClass: "Common",
+          societyId: "glantri",
+          societyLevel: 1,
+          societyName: "Glantri"
+        },
+        {
+          professionIds: ["captain"],
+          skillGroupIds: ["advanced_melee_training"],
+          skillIds: [],
+          socialClass: "Guild",
+          societyId: "glantri",
+          societyLevel: 2,
+          societyName: "Glantri"
+        },
+        {
+          professionIds: ["captain"],
+          skillGroupIds: ["advanced_melee_training"],
+          skillIds: [],
+          socialClass: "Patrician",
+          societyId: "glantri",
+          societyLevel: 3,
+          societyName: "Glantri"
+        },
+        {
+          professionIds: ["captain"],
+          skillGroupIds: ["advanced_melee_training"],
+          skillIds: [],
+          socialClass: "Noble",
+          societyId: "glantri",
+          societyLevel: 4,
+          societyName: "Glantri"
+        }
+      ]
+    });
+
+    const draftView = buildChargenDraftView({
+      content: combatPickerContent,
+      professionId: "captain",
+      progression: {
+        ...createChargenProgression(),
+        chargenSelections: {
+          selectedLanguageIds: [],
+          selectedGroupSlots: [
+            {
+              groupId: "advanced_melee_training",
+              selectedSkillIds: ["sword", "axe", "spear", "mace"],
+              slotId: "advanced_melee_weapons"
+            }
+          ],
+          selectedSkillIds: []
+        },
+        skillGroups: [
+          {
+            gms: 0,
+            grantedRanks: 0,
+            groupId: "advanced_melee_training",
+            primaryRanks: 2,
+            secondaryRanks: 0,
+            ranks: 2
+          }
+        ]
+      },
+      societyId: "glantri",
+      societyLevel: 1
+    });
+
+    expect(draftView.skills.find((skill) => skill.skillId === "mace")).toBeUndefined();
+    expect(
+      draftView.skills
+        .map((skill) => skill.skillId)
+        .sort((left, right) => left.localeCompare(right))
+    ).toEqual(["axe", "dodge", "spear", "sword"]);
   });
 });
