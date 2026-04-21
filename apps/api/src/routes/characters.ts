@@ -98,12 +98,6 @@ export const charactersRoutes: FastifyPluginAsync = async (app) => {
       return;
     }
 
-    if (!canEditCharacterInApi(user)) {
-      return reply.code(403).send({
-        error: "GM or admin role required."
-      });
-    }
-
     const characterId = (request.params as { id?: string }).id;
 
     if (!characterId) {
@@ -122,6 +116,18 @@ export const charactersRoutes: FastifyPluginAsync = async (app) => {
     }
 
     try {
+      const accessibleCharacter = await loadAccessibleCharacterInApi({
+        characterId,
+        characterService,
+        user
+      });
+
+      if (!accessibleCharacter) {
+        return reply.code(404).send({
+          error: "Character not found."
+        });
+      }
+
       const character = await characterService.saveExistingCharacter({
         build,
         characterId

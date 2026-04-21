@@ -120,6 +120,12 @@ export function setCharacterDistractionLevel(
   return nextBuild;
 }
 
+export function setCharacterName(build: CharacterBuild, value: string): CharacterBuild {
+  const nextBuild = cloneBuild(build);
+  nextBuild.name = value;
+  return nextBuild;
+}
+
 export function setCharacterTitle(build: CharacterBuild, value: string): CharacterBuild {
   const nextBuild = cloneBuild(build);
   nextBuild.profile.title = value;

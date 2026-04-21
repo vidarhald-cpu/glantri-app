@@ -14,6 +14,7 @@ import {
   removeCharacterSkill,
   setCharacterAge,
   setCharacterGender,
+  setCharacterName,
   setCharacterDistractionLevel,
   setCharacterCurrentStatValue,
   setCharacterNotes,
@@ -163,11 +164,13 @@ describe("characterEdit helpers", () => {
   });
 
   it("persists title, age, gender, and notes on the shared character profile", () => {
-    const withTitle = setCharacterTitle(baseBuild, "Sir");
+    const withName = setCharacterName(baseBuild, "Sir Rowan");
+    const withTitle = setCharacterTitle(withName, "Sir");
     const withAge = setCharacterAge(withTitle, "34");
     const withGender = setCharacterGender(withAge, "other");
     const withNotes = setCharacterNotes(withGender, "Keeps a ledger of favors.");
 
+    expect(withNotes.name).toBe("Sir Rowan");
     expect(withNotes.profile.title).toBe("Sir");
     expect(withNotes.profile.age).toBe("34");
     expect(withNotes.profile.gender).toBe("other");
