@@ -206,10 +206,6 @@ function getSkillRelevanceLabel(relevance: NpcArchetypeSkillRelevance): string {
   return "Other";
 }
 
-function buildTagStringFromValues(values: string[]): string {
-  return values.join(", ");
-}
-
 function formatPlayerFacingCategoryLabel(categoryId: PlayerFacingSkillBucketId): string {
   return (
     getPlayerFacingSkillBucketDefinitions().find((entry) => entry.id === categoryId)?.label ??
@@ -352,45 +348,6 @@ export default function TemplatesPageContent() {
     () => suggestedSkills.map((skill) => skill.id),
     [suggestedSkills]
   );
-  const allKnownTags = useMemo(() => {
-    return [...new Set(
-      templates.flatMap((template) => {
-        const archetypeSummary = parseHumanoidNpcArchetypeTemplate(template);
-        const metadata = getCampaignActorMetadata(template);
-        return archetypeSummary.tags ?? metadata.tags ?? [];
-      })
-    )].sort((left, right) => left.localeCompare(right));
-  }, [templates]);
-  const rawTagParts = archetypeDraft.tags
-    .split(",")
-    .map((tag) => tag.trim())
-    .filter(Boolean);
-  const pendingTagFragment = archetypeDraft.tags.trim().endsWith(",")
-    ? ""
-    : rawTagParts.at(-1) ?? "";
-  const selectedTagValues = useMemo(() => {
-    if (pendingTagFragment.length === 0) {
-      return rawTagParts;
-    }
-
-    return rawTagParts.slice(0, -1);
-  }, [pendingTagFragment, rawTagParts]);
-  const tagSuggestions = useMemo(() => {
-    const selectedTags = new Set(selectedTagValues);
-    const normalizedFragment = pendingTagFragment.toLowerCase();
-
-    return allKnownTags.filter((tag) => {
-      if (selectedTags.has(tag)) {
-        return false;
-      }
-
-      if (normalizedFragment.length === 0) {
-        return true;
-      }
-
-      return tag.toLowerCase().includes(normalizedFragment);
-    });
-  }, [allKnownTags, pendingTagFragment, selectedTagValues]);
   const skillFilterOptions = useMemo(
     () =>
       content
@@ -611,14 +568,6 @@ export default function TemplatesPageContent() {
     }));
     setShowAllSkillGroups(false);
     setSkillsFilterMode("selected-groups");
-  }
-
-  function handleApplyTagSuggestion(tag: string) {
-    const nextTags = [...new Set([...selectedTagValues, tag])];
-    updateDraft((current) => ({
-      ...current,
-      tags: buildTagStringFromValues(nextTags)
-    }));
   }
 
   function handleToggleSkillGroup(groupId: string) {
@@ -1049,29 +998,6 @@ export default function TemplatesPageContent() {
             </select>
           </label>
         </div>
-        {tagSuggestions.length > 0 ? (
-          <div style={{ display: "grid", gap: "0.35rem" }}>
-            <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>Tag suggestions</div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem" }}>
-              {tagSuggestions.slice(0, 8).map((tag) => (
-                <button
-                  key={tag}
-                  onClick={() => handleApplyTagSuggestion(tag)}
-                  style={{
-                    background: "#f6f5ef",
-                    border: "1px solid #d9ddd8",
-                    borderRadius: 999,
-                    padding: "0.25rem 0.65rem"
-                  }}
-                  type="button"
-                >
-                  {tag}
-                </button>
-              ))}
-            </div>
-          </div>
-        ) : null}
-
         <label style={{ display: "grid", gap: "0.25rem" }}>
           <span>Description</span>
           <textarea
@@ -1116,9 +1042,12 @@ export default function TemplatesPageContent() {
                   <strong>{society.societyName}</strong>
                   <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
                     {society.societyLevel ? `Society level ${society.societyLevel}` : "Society level pending"}
-                    {society.socialClasses.length > 0
-                      ? ` • ${society.socialClasses.join(", ")}`
-                      : ""}
+                  </div>
+                  <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
+                    Civilizations:{" "}
+                    {society.civilizationNames.length > 0
+                      ? society.civilizationNames.join(", ")
+                      : "None"}
                   </div>
                   {society.shortDescription ? (
                     <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>

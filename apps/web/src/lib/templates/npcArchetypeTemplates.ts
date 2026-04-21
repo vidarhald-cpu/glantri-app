@@ -15,11 +15,11 @@ import { resolveGlantriCharacterStats } from "@glantri/rules-engine";
 import type { EquipmentTemplate } from "@glantri/domain/equipment";
 
 export interface SocietyOption {
+  civilizationNames: string[];
   professionIds: string[];
   skillGroupIds: string[];
   skillIds: string[];
   shortDescription?: string;
-  socialClasses: string[];
   societyId: string;
   societyLevel?: number;
   societyName: string;
@@ -357,21 +357,37 @@ export function listSocietyOptions(content: CanonicalContent): SocietyOption[] {
   const societyDefinitionsById = new Map(
     (content.societies ?? []).map((society) => [society.id, society])
   );
+  const civilizationNamesBySocietyLevel = new Map<number, string[]>();
+
+  for (const civilization of content.civilizations ?? []) {
+    const existingNames = civilizationNamesBySocietyLevel.get(civilization.linkedSocietyLevel) ?? [];
+
+    if (!existingNames.includes(civilization.name)) {
+      civilizationNamesBySocietyLevel.set(civilization.linkedSocietyLevel, [
+        ...existingNames,
+        civilization.name
+      ]);
+    }
+  }
+
   const societies = new Map<string, SocietyOption>();
 
   for (const access of content.societyLevels) {
     const existing = societies.get(access.societyId);
     const societyDefinition = societyDefinitionsById.get(access.societyId);
+    const societyLevel = societyDefinition?.societyLevel;
+    const civilizationNames =
+      societyLevel !== undefined ? (civilizationNamesBySocietyLevel.get(societyLevel) ?? []) : [];
 
     if (!existing) {
       societies.set(access.societyId, {
+        civilizationNames,
         professionIds: [...access.professionIds],
         skillGroupIds: [...access.skillGroupIds],
         skillIds: [...access.skillIds],
         shortDescription: societyDefinition?.shortDescription,
-        socialClasses: access.socialClass ? [access.socialClass] : [],
         societyId: access.societyId,
-        societyLevel: societyDefinition?.societyLevel,
+        societyLevel,
         societyName: access.societyName
       });
       continue;
@@ -380,12 +396,6 @@ export function listSocietyOptions(content: CanonicalContent): SocietyOption[] {
     existing.professionIds = [...new Set([...existing.professionIds, ...access.professionIds])];
     existing.skillGroupIds = [...new Set([...existing.skillGroupIds, ...access.skillGroupIds])];
     existing.skillIds = [...new Set([...existing.skillIds, ...access.skillIds])];
-    existing.socialClasses = [
-      ...new Set([
-        ...existing.socialClasses,
-        ...(access.socialClass ? [access.socialClass] : [])
-      ])
-    ];
   }
 
   return [...societies.values()].sort((left, right) =>

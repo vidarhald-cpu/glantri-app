@@ -44,6 +44,36 @@ const content = {
       sourceSocietyId: "glantri"
     }
   ],
+  civilizations: [
+    {
+      historicalAnalogue: "Late medieval magocracy",
+      id: "glantri_civ",
+      linkedSocietyId: "glantri",
+      linkedSocietyLevel: 4,
+      motherTongueLanguageName: "Glantri",
+      name: "Principalities of Glantri",
+      notes: "Test civilization",
+      optionalLanguageNames: [],
+      period: "Current age",
+      shortDescription: "Courtly magical civilization",
+      spokenLanguageName: "Glantri",
+      writtenLanguageName: "Glantri"
+    },
+    {
+      historicalAnalogue: "Feudal kingdom",
+      id: "glantri_peer_civ",
+      linkedSocietyId: "other_society",
+      linkedSocietyLevel: 4,
+      motherTongueLanguageName: "Common",
+      name: "Thyatis",
+      notes: "Same society level should still appear",
+      optionalLanguageNames: [],
+      period: "Current age",
+      shortDescription: "Imperial peer civilization",
+      spokenLanguageName: "Common",
+      writtenLanguageName: "Common"
+    }
+  ],
   professionFamilies: [{ id: "military", name: "Military" }],
   professionSkills: [
     {
@@ -181,11 +211,11 @@ describe("npcArchetypeTemplates", () => {
   it("builds society and profession options from canonical content", () => {
     expect(listSocietyOptions(content)).toEqual([
       {
+        civilizationNames: ["Principalities of Glantri", "Thyatis"],
         professionIds: ["guard"],
         skillGroupIds: ["urban_watch"],
         skillIds: [],
         shortDescription: "Ranked feudal magocracy with courtly and urban institutions.",
-        socialClasses: ["Common"],
         societyId: "glantri",
         societyLevel: 4,
         societyName: "Glantri"
