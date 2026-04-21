@@ -60,8 +60,11 @@ export const glantriCharacteristicBlockSchema = z.object({
 });
 
 export const rolledCharacterProfileSchema = z.object({
+  age: z.string().optional(),
   id: z.string().min(1),
+  gender: z.enum(["male", "female", "other"]).optional(),
   label: z.string().min(1),
+  notes: z.string().optional(),
   description: z.string().optional(),
   distractionLevel: z.number().int().min(2).max(6),
   rolledStats: glantriCharacteristicBlockSchema,
@@ -70,7 +73,8 @@ export const rolledCharacterProfileSchema = z.object({
   socialClassResult: z.string().min(1).optional(),
   socialClassRoll: z.number().int().min(1).max(20).optional(),
   socialClassTableId: z.string().min(1).optional(),
-  societyLevel: z.number().int().nonnegative().default(0)
+  societyLevel: z.number().int().nonnegative().default(0),
+  title: z.string().optional()
 });
 
 export type GlantriCharacteristicKey = z.infer<typeof glantriCharacteristicKeySchema>;

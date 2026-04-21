@@ -53,6 +53,8 @@ export interface CharacterEditSkillRow {
   xp: number;
 }
 
+export type CharacterProfileGender = "male" | "female" | "other" | "";
+
 function clampStatValue(value: number): number {
   return Math.max(1, Math.min(25, Math.trunc(value)));
 }
@@ -115,6 +117,39 @@ export function setCharacterDistractionLevel(
 ): CharacterBuild {
   const nextBuild = cloneBuild(build);
   nextBuild.profile.distractionLevel = clampDistractionValue(value);
+  return nextBuild;
+}
+
+export function setCharacterTitle(build: CharacterBuild, value: string): CharacterBuild {
+  const nextBuild = cloneBuild(build);
+  nextBuild.profile.title = value;
+  return nextBuild;
+}
+
+export function setCharacterAge(build: CharacterBuild, value: string): CharacterBuild {
+  const nextBuild = cloneBuild(build);
+  nextBuild.profile.age = value;
+  return nextBuild;
+}
+
+export function setCharacterGender(
+  build: CharacterBuild,
+  value: CharacterProfileGender
+): CharacterBuild {
+  const nextBuild = cloneBuild(build);
+
+  if (value) {
+    nextBuild.profile.gender = value;
+  } else {
+    delete nextBuild.profile.gender;
+  }
+
+  return nextBuild;
+}
+
+export function setCharacterNotes(build: CharacterBuild, value: string): CharacterBuild {
+  const nextBuild = cloneBuild(build);
+  nextBuild.profile.notes = value;
   return nextBuild;
 }
 

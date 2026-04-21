@@ -12,10 +12,14 @@ import {
   buildCharacterEditStatRows,
   getCharacterEditSheetSummary,
   removeCharacterSkill,
+  setCharacterAge,
+  setCharacterGender,
   setCharacterDistractionLevel,
   setCharacterCurrentStatValue,
+  setCharacterNotes,
   setCharacterSkillGroupLevel,
-  setCharacterSkillXp
+  setCharacterSkillXp,
+  setCharacterTitle
 } from "./characterEdit";
 
 const skills: SkillDefinition[] = [
@@ -156,6 +160,21 @@ describe("characterEdit helpers", () => {
       label: "Distraction",
       originalValue: 5
     });
+  });
+
+  it("persists title, age, gender, and notes on the shared character profile", () => {
+    const withTitle = setCharacterTitle(baseBuild, "Sir");
+    const withAge = setCharacterAge(withTitle, "34");
+    const withGender = setCharacterGender(withAge, "other");
+    const withNotes = setCharacterNotes(withGender, "Keeps a ledger of favors.");
+
+    expect(withNotes.profile.title).toBe("Sir");
+    expect(withNotes.profile.age).toBe("34");
+    expect(withNotes.profile.gender).toBe("other");
+    expect(withNotes.profile.notes).toBe("Keeps a ledger of favors.");
+
+    const clearedGender = setCharacterGender(withNotes, "");
+    expect(clearedGender.profile.gender).toBeUndefined();
   });
 
   it("adds, updates, and removes skill/group progression while derived totals update", () => {

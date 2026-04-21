@@ -47,6 +47,14 @@ function getCharacterName(record: LocalCharacterRecord): string {
   return record.build.name.trim() || UNNAMED_CHARACTER_PLACEHOLDER;
 }
 
+function formatGenderLabel(gender: LocalCharacterRecord["build"]["profile"]["gender"]): string | null {
+  if (!gender) {
+    return null;
+  }
+
+  return gender.charAt(0).toUpperCase() + gender.slice(1);
+}
+
 function sortSkills(skills: SkillDefinition[]): SkillDefinition[] {
   return [...skills].sort((left, right) => left.sortOrder - right.sortOrder);
 }
@@ -263,11 +271,40 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
   const spentSkillPoints = sheetSummary.totalSkillPointsInvested;
   const remainingSkillPoints =
     sheetSummary.draftView.primaryPoolAvailable + sheetSummary.draftView.secondaryPoolAvailable;
+  const educationLevel = sheetSummary.draftView.education.theoreticalSkillCount;
+  const genderLabel = formatGenderLabel(record.build.profile.gender);
+  const profileDetails = [
+    record.build.profile.title?.trim()
+      ? { label: "Title", value: record.build.profile.title.trim() }
+      : null,
+    record.build.profile.age?.trim()
+      ? { label: "Age", value: record.build.profile.age.trim() }
+      : null,
+    genderLabel ? { label: "Gender", value: genderLabel } : null
+  ].filter((detail): detail is { label: string; value: string } => detail !== null);
+  const notes = record.build.profile.notes?.trim() ?? "";
 
   return (
     <section style={{ display: "grid", gap: "1rem", maxWidth: 1180 }}>
       <div>
         <h1 style={{ margin: 0 }}>Character Sheet — {getCharacterName(record)}</h1>
+        {profileDetails.length > 0 ? (
+          <div
+            style={{
+              color: "#5e5a50",
+              display: "flex",
+              flexWrap: "wrap",
+              gap: "0.5rem 1rem",
+              marginTop: "0.5rem"
+            }}
+          >
+            {profileDetails.map((detail) => (
+              <div key={detail.label}>
+                <strong>{detail.label}:</strong> {detail.value}
+              </div>
+            ))}
+          </div>
+        ) : null}
       </div>
 
       <section
@@ -369,6 +406,9 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
                 <div>No skill groups recorded.</div>
               )}
             </div>
+
+            <strong>Education</strong>
+            <div>{educationLevel}</div>
           </div>
         </section>
       </section>
@@ -455,6 +495,32 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
         ) : (
           <div>No current skills recorded.</div>
         )}
+      </section>
+
+      <section
+        style={{
+          background: "#f6f5ef",
+          border: "1px solid #d9ddd8",
+          borderRadius: 12,
+          display: "grid",
+          gap: "0.75rem",
+          padding: "1rem"
+        }}
+      >
+        <h2 style={{ margin: 0 }}>Notes</h2>
+        <div
+          style={{
+            background: "#fffdf8",
+            border: "1px solid #e7e2d7",
+            borderRadius: 10,
+            minHeight: 320,
+            overflow: "auto",
+            padding: "0.9rem",
+            whiteSpace: "pre-wrap"
+          }}
+        >
+          {notes || "No notes recorded yet."}
+        </div>
       </section>
     </section>
   );
