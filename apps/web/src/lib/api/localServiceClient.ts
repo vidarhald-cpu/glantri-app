@@ -32,6 +32,13 @@ export interface ServerCharacterRecord {
   id: string;
   level: number;
   name: string;
+  owner?:
+    | {
+        displayName?: string | null;
+        email: string;
+        id: string;
+      }
+    | null;
   ownerId?: string | null;
   updatedAt: string;
 }
@@ -217,12 +224,16 @@ export async function saveCharacterToServer(build: CharacterBuild): Promise<Serv
   return payload.character;
 }
 
-export async function loadMyServerCharacters(): Promise<ServerCharacterRecord[]> {
+export async function loadServerCharacters(): Promise<ServerCharacterRecord[]> {
   const payload = await sendJson<{ characters: ServerCharacterRecord[] }>("/characters", {
     method: "GET"
   });
 
   return payload.characters;
+}
+
+export async function loadMyServerCharacters(): Promise<ServerCharacterRecord[]> {
+  return loadServerCharacters();
 }
 
 export async function loadServerCharacterById(characterId: string): Promise<ServerCharacterRecord> {

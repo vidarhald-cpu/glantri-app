@@ -23,6 +23,8 @@ export async function loadServerCharacterEditContext(
 
   const localRecord = await localCharacterRepository.save({
     build: serverRecord.build,
+    creatorDisplayName: serverRecord.owner?.displayName ?? undefined,
+    creatorEmail: serverRecord.owner?.email ?? undefined,
     creatorId: serverRecord.ownerId ?? undefined,
     syncStatus: "synced",
     updatedAt: serverRecord.updatedAt

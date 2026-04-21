@@ -60,6 +60,7 @@ function createRepositoryStub(existingCharacter?: CharacterRecord | null) {
   const repository: CharacterRepository = {
     findById: async (id) => (existingCharacter && existingCharacter.id === id ? existingCharacter : null),
     findOwnedById: async () => null,
+    listAll: async () => (existingCharacter ? [existingCharacter] : []),
     listByOwner: async () => [],
     saveOwned: async (input) => {
       calls.saveOwned.push(input);
@@ -93,6 +94,26 @@ describe("CharacterService edit persistence", () => {
     const service = new CharacterService(createRepositoryStub(existingCharacter).repository);
 
     await expect(service.getCharacterById("character-1")).resolves.toEqual(existingCharacter);
+  });
+
+  it("lists all characters when no owner filter is provided", async () => {
+    const existingCharacter: CharacterRecord = {
+      build: baseBuild,
+      createdAt: "2026-04-14T00:00:00.000Z",
+      id: "character-1",
+      level: 2,
+      name: "Edited Character",
+      owner: {
+        displayName: "Player One",
+        email: "player@example.com",
+        id: "owner-1"
+      },
+      ownerId: "owner-1",
+      updatedAt: "2026-04-14T00:00:00.000Z"
+    };
+    const service = new CharacterService(createRepositoryStub(existingCharacter).repository);
+
+    await expect(service.listCharacters()).resolves.toEqual([existingCharacter]);
   });
 
   it("saves an edited character back through the database-backed path while preserving ownerId", async () => {

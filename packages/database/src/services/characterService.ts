@@ -38,8 +38,8 @@ export class CharacterService {
     });
   }
 
-  async listCharacters(ownerId: string): Promise<CharacterRecord[]> {
-    return this.repository.listByOwner(ownerId);
+  async listCharacters(ownerId?: string): Promise<CharacterRecord[]> {
+    return ownerId ? this.repository.listByOwner(ownerId) : this.repository.listAll();
   }
 
   async getCharacterById(characterId: string): Promise<CharacterRecord | null> {
