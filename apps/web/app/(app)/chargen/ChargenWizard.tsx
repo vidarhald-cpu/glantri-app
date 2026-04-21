@@ -154,9 +154,11 @@ interface SkillBrowseRow {
   evaluation: ReturnType<typeof evaluateSkillSelection>;
   isNormalAccess: boolean;
   metrics: SkillAllocationMetrics;
+  rowKey: string;
   skill: SkillDefinition;
   sourceLabels: string[];
   sourceTag?: "mother-tongue";
+  targetLanguageName?: string;
 }
 
 interface PlayerFacingNormalAccessSection {
@@ -540,8 +542,15 @@ export function getSkillAllocationMetrics(input: {
   draftView: ReturnType<typeof buildChargenDraftView>;
   profile: RolledCharacterProfile | undefined;
   skill: SkillDefinition;
+  targetLanguageName?: string;
 }): SkillAllocationMetrics {
   const skillView =
+    (input.targetLanguageName
+      ? input.draftView.skills.find(
+          (item) =>
+            item.skillId === input.skill.id && item.languageName === input.targetLanguageName
+        )
+      : undefined) ??
     input.draftView.skills.find(
       (item) => item.skillId === input.skill.id && item.sourceTag === "mother-tongue"
     ) ??
@@ -562,6 +571,66 @@ export function getSkillAllocationMetrics(input: {
     totalSkillLevel: avgStats + totalXp,
     totalXp
   };
+}
+
+export function buildConcreteLanguageBrowseRows(input: {
+  content: CanonicalContent;
+  draftView: ReturnType<typeof buildChargenDraftView>;
+  profile: RolledCharacterProfile | undefined;
+  progression: CharacterProgression;
+}): SkillBrowseRow[] {
+  const languageSkill = input.content.skills.find((skill) => skill.id === "language");
+
+  if (!languageSkill) {
+    return [];
+  }
+
+  return [...(input.content.languages ?? [])]
+    .sort((left, right) => left.name.localeCompare(right.name))
+    .map((language) => {
+      const skillView =
+        input.draftView.skills.find(
+          (item) => item.skillId === languageSkill.id && item.languageName === language.name
+        ) ??
+        input.draftView.skills.find(
+          (item) =>
+            item.skillId === languageSkill.id &&
+            item.sourceTag === "mother-tongue" &&
+            item.languageName === language.name
+        );
+      const rowKey = getCharacterSkillKey({
+        languageName: language.name,
+        skillId: languageSkill.id
+      });
+
+      return {
+        displayName: getSkillDisplayName({
+          languageName: language.name,
+          skill: languageSkill
+        }),
+        evaluation: evaluateSkillSelection({
+          content: input.content,
+          progression: input.progression,
+          target: {
+            skill: languageSkill,
+            targetType: "skill"
+          }
+        }),
+        isNormalAccess: false,
+        metrics: getSkillAllocationMetrics({
+          content: input.content,
+          draftView: input.draftView,
+          profile: input.profile,
+          skill: languageSkill,
+          targetLanguageName: language.name
+        }),
+        rowKey,
+        skill: languageSkill,
+        sourceLabels: [],
+        sourceTag: skillView?.sourceTag,
+        targetLanguageName: language.name
+      } satisfies SkillBrowseRow;
+    });
 }
 
 export default function ChargenWizard() {
@@ -809,6 +878,12 @@ export default function ChargenWizard() {
   const normalSkillGroups = sortedSkillGroups.filter((group) =>
     skillAccess.normalSkillGroupIds.includes(group.id)
   );
+  const concreteLanguageRows = buildConcreteLanguageBrowseRows({
+    content,
+    draftView,
+    profile: selectedProfile,
+    progression
+  });
   const languageSkillViews = draftView.skills
     .filter((skill) => skill.skillId === "language")
     .sort(
@@ -874,6 +949,7 @@ export default function ChargenWizard() {
           evaluation,
           isNormalAccess: skillAccess.normalSkillIds.includes(skill.id),
           metrics,
+          rowKey: skill.id,
           skill,
           sourceLabels: getSkillAccessSourceLabels(skillAccess.skillSources[skill.id]),
           sourceTag: skillView?.sourceTag
@@ -896,9 +972,12 @@ export default function ChargenWizard() {
         !(skillAccess.skillSources[row.skill.id]?.includes("society-foundational-skill") ?? false)
     )
   );
-  const visibleOtherSkillRows = otherSkills
-    .map((skill) => skillRowsById.get(skill.id))
-    .filter((row): row is SkillBrowseRow => row !== undefined)
+  const visibleOtherSkillRows = [
+    ...otherSkills
+      .map((skill) => skillRowsById.get(skill.id))
+      .filter((row): row is SkillBrowseRow => row !== undefined),
+    ...concreteLanguageRows
+  ]
     .filter((row) =>
       matchesSkillBrowseFilters({
         isAllowed: row.evaluation.isAllowed,
@@ -917,7 +996,9 @@ export default function ChargenWizard() {
   const otherSkillTypeOptions = playerFacingSkillBucketDefinitions.filter(
     (definition) =>
       definition.id !== "special-access" &&
-      otherSkills.some((skill) => getPlayerFacingSkillBucket(skill) === definition.id)
+      [...otherSkills, ...concreteLanguageRows.map((row) => row.skill)].some(
+        (skill) => getPlayerFacingSkillBucket(skill) === definition.id
+      )
   );
   const normalAccessSections: PlayerFacingNormalAccessSection[] = playerFacingSkillBucketDefinitions
     .map((definition) => ({
@@ -1688,12 +1769,12 @@ export default function ChargenWizard() {
         {input.rows.length > 0 ? (
           input.rows.map((row) => {
             const ruleStatusItems = getRuleStatusItems(row.evaluation);
-            const rowFeedback = rowActionFeedback[getRowActionFeedbackKey(row.skill.id, "skill")];
+            const rowFeedback = rowActionFeedback[getRowActionFeedbackKey(row.rowKey, "skill")];
             const skillType = getPlayerFacingSkillBucket(row.skill);
             const skillTypeLabel =
               playerFacingSkillBucketDefinitions.find((definition) => definition.id === skillType)
                 ?.label ?? skillType;
-            const isDetailOpen = expandedSkillDetails.includes(row.skill.id);
+            const isDetailOpen = expandedSkillDetails.includes(row.rowKey);
             const dependencySummaries = row.skill.dependencies.map((dependency) => {
               const dependencyRow = skillRowsById.get(dependency.skillId);
               const dependencySkill = content.skills.find((skill) => skill.id === dependency.skillId);
@@ -1707,7 +1788,7 @@ export default function ChargenWizard() {
 
             return (
               <div
-                key={row.skill.id}
+                key={row.rowKey}
                 style={{
                   borderTop: "1px solid #f0eadf",
                   display: "grid",
@@ -1737,14 +1818,14 @@ export default function ChargenWizard() {
                     </div>
                     <div style={{ display: "flex", flexWrap: "wrap", gap: "0.35rem" }}>
                       {input.showTypeBadge ? (
-                        <span key={`${row.skill.id}-${skillType}`} style={getBadgeStyle({ muted: true })}>
+                        <span key={`${row.rowKey}-${skillType}`} style={getBadgeStyle({ muted: true })}>
                           {skillTypeLabel}
                         </span>
                       ) : null}
                       {input.showOutsideNormalAccessBadge ? (
                         <span style={getBadgeStyle({ muted: true })}>Outside normal access</span>
                       ) : null}
-                      <button onClick={() => toggleSkillDetails(row.skill.id)} type="button">
+                      <button onClick={() => toggleSkillDetails(row.rowKey)} type="button">
                         {isDetailOpen ? "Hide details" : "Details"}
                       </button>
                     </div>
@@ -1757,7 +1838,9 @@ export default function ChargenWizard() {
                     <button
                       aria-label={`Add ${row.skill.name}`}
                       disabled={!skillAllocationContext || !row.evaluation.isAllowed}
-                      onClick={() => handleAllocate(row.skill.id, "skill")}
+                      onClick={() =>
+                        handleAllocate(row.skill.id, "skill", row.targetLanguageName)
+                      }
                       type="button"
                     >
                       +
@@ -1765,7 +1848,9 @@ export default function ChargenWizard() {
                     <button
                       aria-label={`Remove ${row.skill.name}`}
                       disabled={!skillAllocationContext}
-                      onClick={() => handleRemoveAllocation(row.skill.id, "skill")}
+                      onClick={() =>
+                        handleRemoveAllocation(row.skill.id, "skill", row.targetLanguageName)
+                      }
                       type="button"
                     >
                       -
@@ -1774,7 +1859,7 @@ export default function ChargenWizard() {
                 </div>
                 {ruleStatusItems.map((status) => (
                   <div
-                    key={`${row.skill.id}-${status.tone}-${status.message}`}
+                    key={`${row.rowKey}-${status.tone}-${status.message}`}
                     role="status"
                     style={{
                       color: getRuleStatusColor(status.tone),
@@ -1827,7 +1912,7 @@ export default function ChargenWizard() {
                       <div style={{ display: "grid", gap: "0.25rem" }}>
                         <strong style={{ fontSize: "0.85rem" }}>Prerequisites and support</strong>
                         {dependencySummaries.map(({ dependency, dependencyName, dependencyRow }) => (
-                          <div key={`${row.skill.id}-${dependency.skillId}`} style={{ fontSize: "0.82rem" }}>
+                          <div key={`${row.rowKey}-${dependency.skillId}`} style={{ fontSize: "0.82rem" }}>
                             {`${dependency.strength}. ${formatDependencyOwnershipSummary({
                               dependencyName,
                               directSkillLevel: dependencyRow?.metrics.skillXp ?? 0,

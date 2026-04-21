@@ -1,16 +1,19 @@
 import { describe, expect, it } from "vitest";
 
-import { validateCanonicalContent } from "@glantri/content";
-
 import {
+  allocateChargenPoint,
   buildChargenDraftView,
   buildChargenSkillAccessSummary,
   createChargenProgression
 } from "@glantri/rules-engine";
 
-import { getSkillAllocationMetrics, getSkillDisplayGroupId } from "./ChargenWizard";
+import {
+  buildConcreteLanguageBrowseRows,
+  getSkillAllocationMetrics,
+  getSkillDisplayGroupId
+} from "./ChargenWizard";
 
-const combatContent = validateCanonicalContent({
+const combatContent = {
   civilizations: [],
   languages: [],
   professionFamilies: [{ id: "warrior", name: "Warrior" }],
@@ -178,7 +181,133 @@ const combatContent = validateCanonicalContent({
     }
   ],
   specializations: []
-});
+};
+
+const languageContent = {
+  civilizations: [
+    {
+      historicalAnalogue: "Test analogue",
+      id: "glantri_civ",
+      linkedSocietyId: "glantri",
+      linkedSocietyLevel: 1,
+      motherTongueLanguageName: "Phoenician",
+      name: "Glantri",
+      optionalLanguageNames: ["Common", "Old Common"],
+      period: "Test period",
+      shortDescription: "Test civilization",
+      spokenLanguageName: "Phoenician",
+      writtenLanguageName: "Phoenician"
+    }
+  ],
+  languages: [
+    { id: "common_language", name: "Common", sourceSocietyId: "glantri" },
+    { id: "old_common_language", name: "Old Common", sourceSocietyId: "glantri" },
+    { id: "phoenician_language", name: "Phoenician", sourceSocietyId: "glantri" }
+  ],
+  professionFamilies: [{ id: "scholar", name: "Scholar" }],
+  professionSkills: [],
+  professions: [{ familyId: "scholar", id: "scribe", name: "Scribe", subtypeName: "Scribe" }],
+  skillGroups: [{ id: "scholarly", name: "Scholarly", sortOrder: 1 }],
+  skills: [
+    {
+      allowsSpecializations: false,
+      category: "ordinary",
+      dependencies: [],
+      dependencySkillIds: [],
+      groupId: "scholarly",
+      groupIds: ["scholarly"],
+      id: "literacy",
+      linkedStats: ["int"],
+      name: "Literacy",
+      requiresLiteracy: "no",
+      sortOrder: 1
+    },
+    {
+      allowsSpecializations: false,
+      category: "ordinary",
+      dependencies: [],
+      dependencySkillIds: [],
+      groupId: "scholarly",
+      groupIds: ["scholarly"],
+      id: "language",
+      isTheoretical: false,
+      linkedStats: ["int"],
+      name: "Language",
+      requiresLiteracy: "no",
+      societyLevel: 1,
+      sortOrder: 2
+    }
+  ],
+  societies: [
+    {
+      baselineLanguageIds: ["phoenician_language"],
+      id: "glantri",
+      name: "Glantri",
+      shortDescription: "Test society",
+      societyLevel: 1
+    }
+  ],
+  societyLevels: [
+    {
+      professionIds: ["scribe"],
+      skillGroupIds: ["scholarly"],
+      skillIds: [],
+      socialClass: "Common",
+      societyId: "glantri",
+      societyLevel: 1,
+      societyName: "Glantri"
+    },
+    {
+      professionIds: ["scribe"],
+      skillGroupIds: ["scholarly"],
+      skillIds: [],
+      socialClass: "Guild",
+      societyId: "glantri",
+      societyLevel: 2,
+      societyName: "Glantri"
+    },
+    {
+      professionIds: ["scribe"],
+      skillGroupIds: ["scholarly"],
+      skillIds: [],
+      socialClass: "Patrician",
+      societyId: "glantri",
+      societyLevel: 3,
+      societyName: "Glantri"
+    },
+    {
+      professionIds: ["scribe"],
+      skillGroupIds: ["scholarly"],
+      skillIds: [],
+      socialClass: "Noble",
+      societyId: "glantri",
+      societyLevel: 4,
+      societyName: "Glantri"
+    }
+  ],
+  specializations: []
+};
+
+const languageProfile = {
+  distractionLevel: 0,
+  id: "profile-linguist",
+  label: "Linguist",
+  rolledStats: {
+    cha: 10,
+    com: 10,
+    con: 10,
+    dex: 10,
+    health: 10,
+    int: 10,
+    lck: 10,
+    pow: 10,
+    siz: 10,
+    str: 10,
+    will: 10
+  },
+  socialClassEducationValue: 12,
+  societyLevel: 0 as const
+};
 
 describe("ChargenWizard combat allocation runtime helpers", () => {
   it("only assigns combat group rows to fixed skills plus selected slot weapons", () => {
@@ -296,5 +425,83 @@ describe("ChargenWizard combat allocation runtime helpers", () => {
     expect(swordMetrics.totalXp).toBe(swordMetrics.groupXp);
     expect(maceMetrics.groupXp).toBe(0);
     expect(maceMetrics.totalXp).toBe(0);
+  });
+});
+
+describe("ChargenWizard concrete language rows", () => {
+  it("builds all canonical languages as concrete buyable Language rows", () => {
+    const draftView = buildChargenDraftView({
+      civilizationId: "glantri_civ",
+      content: languageContent,
+      professionId: "scribe",
+      profile: languageProfile,
+      progression: createChargenProgression(),
+      societyId: "glantri",
+      societyLevel: 1
+    });
+
+    const rows = buildConcreteLanguageBrowseRows({
+      content: languageContent,
+      draftView,
+      profile: undefined,
+      progression: createChargenProgression()
+    });
+    expect(rows.map((row) => row.displayName)).toEqual([
+      "Language (Common)",
+      "Language (Old Common)",
+      "Language (Phoenician)"
+    ]);
+    expect(rows.map((row) => row.targetLanguageName)).toEqual([
+      "Common",
+      "Old Common",
+      "Phoenician"
+    ]);
+  });
+
+  it("targets purchases and metrics at the concrete language row", () => {
+    const purchased = allocateChargenPoint({
+      content: languageContent,
+      professionId: "scribe",
+      profile: languageProfile,
+      progression: createChargenProgression(),
+      societyId: "glantri",
+      societyLevel: 1,
+      targetId: "language",
+      targetLanguageName: "Old Common",
+      targetType: "skill"
+    });
+
+    expect(purchased.error).toBeUndefined();
+
+    const draftView = buildChargenDraftView({
+      civilizationId: "glantri_civ",
+      content: languageContent,
+      professionId: "scribe",
+      profile: languageProfile,
+      progression: purchased.progression,
+      societyId: "glantri",
+      societyLevel: 1
+    });
+    const languageSkill = languageContent.skills.find((skill) => skill.id === "language");
+
+    expect(languageSkill).toBeDefined();
+
+    const oldCommonMetrics = getSkillAllocationMetrics({
+      content: languageContent,
+      draftView,
+      profile: undefined,
+      skill: languageSkill!,
+      targetLanguageName: "Old Common"
+    });
+    const phoenicianMetrics = getSkillAllocationMetrics({
+      content: languageContent,
+      draftView,
+      profile: undefined,
+      skill: languageSkill!,
+      targetLanguageName: "Phoenician"
+    });
+    expect(oldCommonMetrics.flexibleXp).toBe(1);
+    expect(oldCommonMetrics.totalXp).toBe(1);
+    expect(phoenicianMetrics.totalXp).toBeGreaterThan(1);
   });
 });
