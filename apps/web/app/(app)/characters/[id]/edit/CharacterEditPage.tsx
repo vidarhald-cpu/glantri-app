@@ -20,6 +20,7 @@ import {
   buildCharacterEditStatRows,
   getCharacterEditSheetSummary,
   removeCharacterSkill,
+  setCharacterDistractionLevel,
   setCharacterCurrentStatValue,
   setCharacterOriginalStatValue,
   setCharacterSkillGroupLevel,
@@ -198,6 +199,12 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
     );
   }
 
+  function updateDistraction(value: string) {
+    setBuild((current) =>
+      current ? setCharacterDistractionLevel(current, parseWholeNumber(value)) : current
+    );
+  }
+
   function updateSkillGroup(groupId: string, value: string) {
     setBuild((current) =>
       current ? setCharacterSkillGroupLevel(current, groupId, parseWholeNumber(value)) : current
@@ -311,19 +318,31 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
                   <td style={{ padding: "0.6rem 0.75rem 0.6rem 0" }}>{row.label}</td>
                   <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>
                     <input
-                      onChange={(event) => updateOriginalStat(row.stat, event.target.value)}
+                      onChange={(event) =>
+                        row.stat === "distraction"
+                          ? updateDistraction(event.target.value)
+                          : updateOriginalStat(row.stat, event.target.value)
+                      }
                       style={numericInputStyle}
                       type="number"
                       value={row.originalValue}
                     />
                   </td>
                   <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>
-                    <input
-                      onChange={(event) => updateCurrentStat(row.stat, event.target.value)}
-                      style={numericInputStyle}
-                      type="number"
-                      value={row.currentValue}
-                    />
+                    {row.isDirectEdit ? (
+                      row.currentValue
+                    ) : (
+                      <input
+                        onChange={(event) => {
+                          if (row.stat !== "distraction") {
+                            updateCurrentStat(row.stat, event.target.value);
+                          }
+                        }}
+                        style={numericInputStyle}
+                        type="number"
+                        value={row.currentValue}
+                      />
+                    )}
                   </td>
                   <td style={{ padding: "0.6rem 0", textAlign: "right" }}>{row.gmValue}</td>
                 </tr>
@@ -446,7 +465,11 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
                     <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>{skill.totalXp}</td>
                     <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>{skill.total}</td>
                     <td style={{ padding: "0.6rem 0", textAlign: "right" }}>
-                      <button onClick={() => handleRemoveSkill(skill.skillId)} type="button">
+                      <button
+                        disabled={!skill.canRemoveDirectXp}
+                        onClick={() => handleRemoveSkill(skill.skillId)}
+                        type="button"
+                      >
                         Remove
                       </button>
                     </td>

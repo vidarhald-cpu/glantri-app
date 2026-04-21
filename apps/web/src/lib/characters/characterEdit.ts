@@ -29,9 +29,10 @@ export interface CharacterEditContentShape {
 export interface CharacterEditStatRow {
   currentValue: number;
   gmValue: number;
+  isDirectEdit?: boolean;
   label: string;
   originalValue: number;
-  stat: GlantriCharacteristicKey;
+  stat: GlantriCharacteristicKey | "distraction";
 }
 
 export interface CharacterEditSkillGroupRow {
@@ -41,6 +42,7 @@ export interface CharacterEditSkillGroupRow {
 }
 
 export interface CharacterEditSkillRow {
+  canRemoveDirectXp: boolean;
   groupXp: number;
   skillId: string;
   skillKey: string;
@@ -53,6 +55,10 @@ export interface CharacterEditSkillRow {
 
 function clampStatValue(value: number): number {
   return Math.max(1, Math.min(25, Math.trunc(value)));
+}
+
+function clampDistractionValue(value: number): number {
+  return Math.max(2, Math.min(6, Math.trunc(value)));
 }
 
 function cloneBuild(build: CharacterBuild): CharacterBuild {
@@ -101,6 +107,15 @@ export function setCharacterCurrentStatValue(
   const originalValue = build.profile.rolledStats[stat] ?? 0;
 
   return updateStatModifier(build, stat, nextCurrentValue - originalValue);
+}
+
+export function setCharacterDistractionLevel(
+  build: CharacterBuild,
+  value: number
+): CharacterBuild {
+  const nextBuild = cloneBuild(build);
+  nextBuild.profile.distractionLevel = clampDistractionValue(value);
+  return nextBuild;
 }
 
 export function setCharacterSkillGroupLevel(
@@ -220,22 +235,32 @@ export function buildCharacterEditStatRows(
   labels: Record<GlantriCharacteristicKey, string>,
   orderedStats: readonly GlantriCharacteristicKey[]
 ): CharacterEditStatRow[] {
-  return orderedStats.map((stat) => {
-    const originalValue = build.profile.rolledStats[stat];
-    const currentValue = sheetSummary.adjustedStats[stat] ?? originalValue;
-    const gmValue = getCharacteristicGm(stat, {
-      ...build.profile.rolledStats,
-      ...sheetSummary.adjustedStats
-    });
+  return [
+    ...orderedStats.map((stat) => {
+      const originalValue = build.profile.rolledStats[stat];
+      const currentValue = sheetSummary.adjustedStats[stat] ?? originalValue;
+      const gmValue = getCharacteristicGm(stat, {
+        ...build.profile.rolledStats,
+        ...sheetSummary.adjustedStats
+      });
 
-    return {
-      currentValue,
-      gmValue,
-      label: labels[stat],
-      originalValue,
-      stat
-    };
-  });
+      return {
+        currentValue,
+        gmValue,
+        label: labels[stat],
+        originalValue,
+        stat
+      };
+    }),
+    {
+      currentValue: build.profile.distractionLevel,
+      gmValue: build.profile.distractionLevel,
+      isDirectEdit: true,
+      label: "Distraction",
+      originalValue: build.profile.distractionLevel,
+      stat: "distraction" as const
+    }
+  ];
 }
 
 export function buildCharacterEditSkillGroupRows(input: {
@@ -288,30 +313,31 @@ export function buildCharacterEditSkillRows(input: {
   content: Pick<CharacterEditContentShape, "skills">;
   sheetSummary: CharacterSheetSummary;
 }): CharacterEditSkillRow[] {
-  return input.build.progression.skills
-    .map((entry) => {
-      const definition = input.content.skills.find((skill) => skill.id === entry.skillId);
-      const skillView = input.sheetSummary.draftView.skills.find(
-        (skill) =>
-          getCharacterSkillKey(skill) ===
-          getCharacterSkillKey({
-            languageName: entry.languageName,
-            skillId: entry.skillId
-          })
-      );
+  const directSkillKeys = new Set(
+    input.build.progression.skills.map((entry) =>
+      getCharacterSkillKey({
+        languageName: entry.languageName,
+        skillId: entry.skillId
+      })
+    )
+  );
 
-      if (!definition || !skillView) {
+  return input.sheetSummary.draftView.skills
+    .map((skillView) => {
+      const definition = input.content.skills.find((skill) => skill.id === skillView.skillId);
+
+      if (!definition) {
         return null;
       }
 
       return {
+        canRemoveDirectXp: directSkillKeys.has(skillView.skillKey),
         groupXp: skillView.groupLevel,
         skillId: definition.id,
-        skillKey: getCharacterSkillKey({
-          languageName: entry.languageName,
-          skillId: definition.id
-        }),
-        skillName: entry.languageName ? `${definition.name} (${entry.languageName})` : definition.name,
+        skillKey: skillView.skillKey,
+        skillName: skillView.languageName
+          ? `${definition.name} (${skillView.languageName})`
+          : definition.name,
         stats: skillView.linkedStatAverage,
         total: skillView.totalSkill,
         totalXp: skillView.effectiveSkillNumber,

@@ -12,6 +12,7 @@ import {
   buildCharacterEditStatRows,
   getCharacterEditSheetSummary,
   removeCharacterSkill,
+  setCharacterDistractionLevel,
   setCharacterCurrentStatValue,
   setCharacterSkillGroupLevel,
   setCharacterSkillXp
@@ -135,6 +136,28 @@ describe("characterEdit helpers", () => {
     });
   });
 
+  it("includes distraction in profile stat rows and persists distraction edits", () => {
+    const updatedBuild = setCharacterDistractionLevel(baseBuild, 5);
+    const summary = getCharacterEditSheetSummary(updatedBuild, content);
+    const rows = buildCharacterEditStatRows(
+      updatedBuild,
+      summary,
+      glantriCharacteristicLabels,
+      glantriCharacteristicOrder
+    );
+    const distractionRow = rows.find((row) => row.stat === "distraction");
+
+    expect(updatedBuild.profile.distractionLevel).toBe(5);
+    expect(summary.distractionLevel).toBe(5);
+    expect(distractionRow).toMatchObject({
+      currentValue: 5,
+      gmValue: 5,
+      isDirectEdit: true,
+      label: "Distraction",
+      originalValue: 5
+    });
+  });
+
   it("adds, updates, and removes skill/group progression while derived totals update", () => {
     const withGroup = setCharacterSkillGroupLevel(baseBuild, "awareness", 4);
     const withSkill = addCharacterSkill(withGroup, skills[0]);
@@ -198,6 +221,7 @@ describe("characterEdit helpers", () => {
       })
     ).toEqual([
       {
+        canRemoveDirectXp: true,
         groupXp: 4,
         skillId: "perception",
         skillKey: "perception",
@@ -206,6 +230,31 @@ describe("characterEdit helpers", () => {
         total: 19,
         totalXp: 7,
         xp: 3
+      }
+    ]);
+  });
+
+  it("materializes group-derived skills into the edit skill table even without direct skill rows", () => {
+    const withGroup = addCharacterSkillGroup(baseBuild, "awareness");
+    const summary = getCharacterEditSheetSummary(withGroup, content);
+
+    expect(
+      buildCharacterEditSkillRows({
+        build: withGroup,
+        content,
+        sheetSummary: summary
+      })
+    ).toEqual([
+      {
+        canRemoveDirectXp: false,
+        groupXp: 1,
+        skillId: "perception",
+        skillKey: "perception",
+        skillName: "Perception",
+        stats: 12,
+        total: 13,
+        totalXp: 1,
+        xp: 0
       }
     ]);
   });
