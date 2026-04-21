@@ -781,16 +781,49 @@ const societyLevels = rawBundle.societyTypes.flatMap((society) =>
   })
 );
 
-const languages = rawBundle.societyTypes.map((society) => ({
-  id: `${society.societyTypeId}_language`,
-  name: society.name,
-  notes:
-    "Provisional baseline language derived from the current society source. Replace with dedicated language content when the language system expands.",
-  sourceSocietyId: society.societyTypeId
-}));
+function buildLanguageId(name) {
+  return `${name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")}_language`;
+}
+
+const motherTongueBySocietyId = new Map(
+  CIVILIZATION_SEED_DEFINITIONS.map((civilization) => [
+    civilization.linkedSocietyId,
+    civilization.motherTongueLanguageName || civilization.spokenLanguageName
+  ])
+);
+
+const languageByName = new Map();
+
+for (const civilization of CIVILIZATION_SEED_DEFINITIONS) {
+  const languageNames = [
+    civilization.motherTongueLanguageName,
+    civilization.spokenLanguageName,
+    civilization.writtenLanguageName,
+    ...(civilization.optionalLanguageNames ?? [])
+  ].filter((name) => typeof name === "string" && name.trim().length > 0);
+
+  for (const languageName of languageNames) {
+    if (!languageByName.has(languageName)) {
+      languageByName.set(languageName, {
+        id: buildLanguageId(languageName),
+        name: languageName
+      });
+    }
+  }
+}
+
+const languages = [...languageByName.values()].sort((left, right) =>
+  left.name.localeCompare(right.name)
+);
 
 const societies = rawBundle.societyTypes.map((society) => ({
-  baselineLanguageIds: [`${society.societyTypeId}_language`],
+  baselineLanguageIds: motherTongueBySocietyId.has(society.societyTypeId)
+    ? [buildLanguageId(motherTongueBySocietyId.get(society.societyTypeId))]
+    : undefined,
   glantriExamples: society.glantriExamples || undefined,
   historicalReference: society.historicalReference || undefined,
   id: society.societyTypeId,

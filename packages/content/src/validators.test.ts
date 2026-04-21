@@ -100,6 +100,20 @@ describe("validateCanonicalContent", () => {
       spokenLanguageName: "Phoenician",
       writtenLanguageName: "Phoenician"
     });
+    expect(
+      defaultCanonicalContent.languages.some((language) => language.name === "Common")
+    ).toBe(true);
+    expect(
+      defaultCanonicalContent.languages.some((language) => language.name === "Old Common")
+    ).toBe(true);
+    expect(
+      defaultCanonicalContent.languages.some((language) => language.name === "Phoenician")
+    ).toBe(true);
+    expect(
+      defaultCanonicalContent.languages.some(
+        (language) => language.name === "Bronze Age palace state"
+      )
+    ).toBe(false);
   });
 
   it("fails clearly on duplicate society band rows", () => {

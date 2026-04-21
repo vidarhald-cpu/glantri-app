@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { defaultCanonicalContent } from "@glantri/content";
 import {
   allocateChargenPoint,
   buildChargenDraftView,
@@ -612,6 +613,42 @@ describe("ChargenWizard concrete language rows", () => {
     expect(rows.every((row) => row.skill.category === "ordinary")).toBe(true);
     expect(rows.every((row) => row.skill.categoryId === "language")).toBe(true);
     expect(rows.every((row) => getPlayerFacingSkillBucket(row.skill) === "language")).toBe(true);
+  });
+
+  it("uses canonical language names instead of society placeholder labels", () => {
+    const canonicalLanguageContent = {
+      ...languageContent,
+      languages: defaultCanonicalContent.languages.filter((language) =>
+        ["Common", "Old Common", "Phoenician"].includes(language.name)
+      )
+    };
+    const draftView = buildChargenDraftView({
+      civilizationId: "lankhmar",
+      content: canonicalLanguageContent,
+      professionId: "scribe",
+      profile: languageProfile,
+      progression: createChargenProgression(),
+      societyId: "imperial_classical_high_civ",
+      societyLevel: 1
+    });
+
+    const rows = buildConcreteLanguageBrowseRows({
+      content: canonicalLanguageContent,
+      draftView,
+      profile: undefined,
+      progression: createChargenProgression()
+    });
+
+    expect(rows.map((row) => row.displayName)).toEqual([
+      "Language (Common)",
+      "Language (Old Common)",
+      "Language (Phoenician)"
+    ]);
+    expect(
+      rows.some((row) =>
+        row.displayName.includes("Imperial classical / Hellenistic-Roman high civilization")
+      )
+    ).toBe(false);
   });
 
   it("targets purchases and metrics at the concrete language row", () => {

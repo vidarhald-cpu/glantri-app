@@ -225,70 +225,88 @@ export const generatedRepoLocalGlantriSeed = {
   ],
   "languages": [
     {
-      "id": "forager_ritual_tribal_language",
-      "name": "Forager / ritual-tribal",
-      "notes": "Provisional baseline language derived from the current society source. Replace with dedicated language content when the language system expands.",
-      "sourceSocietyId": "forager_ritual_tribal"
+      "id": "church_ologian_language",
+      "name": "Church Ologian"
     },
     {
-      "id": "pastoral_clan_nomadic_language",
-      "name": "Pastoral clan / nomadic warrior",
-      "notes": "Provisional baseline language derived from the current society source. Replace with dedicated language content when the language system expands.",
-      "sourceSocietyId": "pastoral_clan_nomadic"
+      "id": "common_language",
+      "name": "Common"
     },
     {
-      "id": "early_agrarian_proto_state_language",
-      "name": "Early agrarian chiefdom / proto-state",
-      "notes": "Provisional baseline language derived from the current society source. Replace with dedicated language content when the language system expands.",
-      "sourceSocietyId": "early_agrarian_proto_state"
+      "id": "cuneiform_language",
+      "name": "Cuneiform"
     },
     {
-      "id": "bronze_age_palace_state_language",
-      "name": "Bronze Age palace state",
-      "notes": "Provisional baseline language derived from the current society source. Replace with dedicated language content when the language system expands.",
-      "sourceSocietyId": "bronze_age_palace_state"
+      "id": "imperial_aramaic_language",
+      "name": "Imperial Aramaic"
     },
     {
-      "id": "temple_state_literate_language",
-      "name": "Temple-state / early literate agrarian state",
-      "notes": "Provisional baseline language derived from the current society source. Replace with dedicated language content when the language system expands.",
-      "sourceSocietyId": "temple_state_literate"
+      "id": "linear_b_language",
+      "name": "Linear B"
     },
     {
-      "id": "imperial_agrarian_bureaucracy_language",
-      "name": "Imperial agrarian bureaucracy",
-      "notes": "Provisional baseline language derived from the current society source. Replace with dedicated language content when the language system expands.",
-      "sourceSocietyId": "imperial_agrarian_bureaucracy"
+      "id": "mogrebi_language",
+      "name": "Mogrebi"
     },
     {
-      "id": "feudal_manorial_kingdom_language",
-      "name": "Feudal / manorial kingdom",
-      "notes": "Provisional baseline language derived from the current society source. Replace with dedicated language content when the language system expands.",
-      "sourceSocietyId": "feudal_manorial_kingdom"
+      "id": "mycenaean_greek_language",
+      "name": "Mycenaean Greek"
     },
     {
-      "id": "classical_polis_city_state_language",
-      "name": "Classical polis / city-state civilization",
-      "notes": "Provisional baseline language derived from the current society source. Replace with dedicated language content when the language system expands.",
-      "sourceSocietyId": "classical_polis_city_state"
+      "id": "n_kolian_language",
+      "name": "N'kolian"
     },
     {
-      "id": "imperial_classical_high_civ_language",
-      "name": "Imperial classical / Hellenistic-Roman high civilization",
-      "notes": "Provisional baseline language derived from the current society source. Replace with dedicated language content when the language system expands.",
-      "sourceSocietyId": "imperial_classical_high_civ"
+      "id": "old_common_language",
+      "name": "Old Common"
     },
     {
-      "id": "court_bureaucratic_empire_language",
-      "name": "Court-bureaucratic high medieval empire",
-      "notes": "Provisional baseline language derived from the current society source. Replace with dedicated language content when the language system expands.",
-      "sourceSocietyId": "court_bureaucratic_empire"
+      "id": "old_italic_language",
+      "name": "Old Italic"
     },
     {
-      "id": "renaissance_city_state_language",
-      "name": "Commercial renaissance city-state / principality",
-      "notes": "Provisional baseline language derived from the current society source. Replace with dedicated language content when the language system expands.",
-      "sourceSocietyId": "renaissance_city_state"
+      "id": "old_latin_language",
+      "name": "Old Latin"
+    },
+    {
+      "id": "old_persian_language",
+      "name": "Old Persian"
+    },
+    {
+      "id": "ologian_language",
+      "name": "Ologian"
+    },
+    {
+      "id": "phoenician_language",
+      "name": "Phoenician"
+    },
+    {
+      "id": "royal_n_kolian_language",
+      "name": "Royal N'kolian"
+    },
+    {
+      "id": "runic_scandian_language",
+      "name": "Runic Scandian"
+    },
+    {
+      "id": "sacred_mogrebi_language",
+      "name": "Sacred Mogrebi"
+    },
+    {
+      "id": "scandian_language",
+      "name": "Scandian"
+    },
+    {
+      "id": "scythian_language",
+      "name": "Scythian"
+    },
+    {
+      "id": "sumerian_language",
+      "name": "Sumerian"
+    },
+    {
+      "id": "tuu_language",
+      "name": "Tuu"
     }
   ],
   "skillGroups": [
@@ -10028,7 +10046,7 @@ export const generatedRepoLocalGlantriSeed = {
   "societies": [
     {
       "baselineLanguageIds": [
-        "forager_ritual_tribal_language"
+        "tuu_language"
       ],
       "historicalReference": "England/Stonehenge",
       "id": "forager_ritual_tribal",
@@ -10039,7 +10057,7 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "baselineLanguageIds": [
-        "pastoral_clan_nomadic_language"
+        "scythian_language"
       ],
       "glantriExamples": "Scandia",
       "historicalReference": "old Norse, England 600s",
@@ -10050,7 +10068,7 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "baselineLanguageIds": [
-        "early_agrarian_proto_state_language"
+        "old_latin_language"
       ],
       "historicalReference": "Ancient Sumer, Ancient crete",
       "id": "early_agrarian_proto_state",
@@ -10061,7 +10079,7 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "baselineLanguageIds": [
-        "bronze_age_palace_state_language"
+        "mycenaean_greek_language"
       ],
       "historicalReference": "Ancient Sumer, Ancient crete",
       "id": "bronze_age_palace_state",
@@ -10072,7 +10090,7 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "baselineLanguageIds": [
-        "temple_state_literate_language"
+        "sumerian_language"
       ],
       "historicalReference": "Ancient Sumer, Ancient crete",
       "id": "temple_state_literate",
@@ -10083,7 +10101,7 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "baselineLanguageIds": [
-        "imperial_agrarian_bureaucracy_language"
+        "old_persian_language"
       ],
       "historicalReference": "Ancient Egypt, newer kingdom",
       "id": "imperial_agrarian_bureaucracy",
@@ -10093,7 +10111,7 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "baselineLanguageIds": [
-        "feudal_manorial_kingdom_language"
+        "common_language"
       ],
       "glantriExamples": "Glantri",
       "historicalReference": "medevieal feudals",
@@ -10104,7 +10122,7 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "baselineLanguageIds": [
-        "classical_polis_city_state_language"
+        "old_common_language"
       ],
       "glantriExamples": "Scyria",
       "historicalReference": "Athens 300bc",
@@ -10115,7 +10133,7 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "baselineLanguageIds": [
-        "imperial_classical_high_civ_language"
+        "phoenician_language"
       ],
       "glantriExamples": "Thyasis",
       "historicalReference": "late rome, byszantine empire",
@@ -10126,7 +10144,7 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "baselineLanguageIds": [
-        "court_bureaucratic_empire_language"
+        "old_common_language"
       ],
       "glantriExamples": "Thyasis",
       "historicalReference": "late rome, byszantine empire",
@@ -10138,7 +10156,7 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "baselineLanguageIds": [
-        "renaissance_city_state_language"
+        "common_language"
       ],
       "glantriExamples": "Iest",
       "historicalReference": "italian city states",

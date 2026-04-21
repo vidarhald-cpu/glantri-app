@@ -5,6 +5,95 @@ const EXPECTED_SOCIETY_SCALE = [1, 2, 3, 4, 5, 6] as const;
 const MINIMUM_GROUP_SKILL_COUNT = 3;
 const MINIMUM_GROUP_SKILL_POINTS = 7;
 
+function slugifyLanguageName(name: string): string {
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+function buildCanonicalLanguageId(name: string): string {
+  return `${slugifyLanguageName(name)}_language`;
+}
+
+function isSocietyDerivedPlaceholderLanguage(input: {
+  language: CanonicalContent["languages"][number];
+  societiesById: Map<string, CanonicalContent["societies"][number]>;
+}): boolean {
+  if (!input.language.sourceSocietyId) {
+    return false;
+  }
+
+  const society = input.societiesById.get(input.language.sourceSocietyId);
+
+  return society?.name === input.language.name;
+}
+
+function normalizeLanguages(content: CanonicalContent): CanonicalContent {
+  if (content.civilizations.length === 0) {
+    return content;
+  }
+
+  const societiesById = new Map(content.societies.map((society) => [society.id, society]));
+  const preservedLanguages = content.languages.filter(
+    (language) => !isSocietyDerivedPlaceholderLanguage({ language, societiesById })
+  );
+  const languageByName = new Map(
+    preservedLanguages.map((language) => [language.name, { ...language }])
+  );
+  const canonicalNameBySocietyId = new Map<string, string>();
+
+  for (const civilization of content.civilizations) {
+    const canonicalNames = [
+      civilization.motherTongueLanguageName,
+      civilization.spokenLanguageName,
+      civilization.writtenLanguageName ?? undefined,
+      ...(civilization.optionalLanguageNames ?? [])
+    ].filter((name): name is string => Boolean(name?.trim()));
+
+    for (const languageName of canonicalNames) {
+      if (!languageByName.has(languageName)) {
+        languageByName.set(languageName, {
+          id: buildCanonicalLanguageId(languageName),
+          name: languageName
+        });
+      }
+    }
+
+    if (!canonicalNameBySocietyId.has(civilization.linkedSocietyId)) {
+      canonicalNameBySocietyId.set(
+        civilization.linkedSocietyId,
+        civilization.motherTongueLanguageName || civilization.spokenLanguageName
+      );
+    }
+  }
+
+  const normalizedLanguages = [...languageByName.values()].sort((left, right) =>
+    left.name.localeCompare(right.name)
+  );
+  const normalizedLanguageIdByName = new Map(
+    normalizedLanguages.map((language) => [language.name, language.id])
+  );
+
+  return {
+    ...content,
+    languages: normalizedLanguages,
+    societies: content.societies.map((society) => {
+      const canonicalBaselineName = canonicalNameBySocietyId.get(society.id);
+      const canonicalBaselineId =
+        canonicalBaselineName ? normalizedLanguageIdByName.get(canonicalBaselineName) : undefined;
+
+      return canonicalBaselineId
+        ? {
+            ...society,
+            baselineLanguageIds: [canonicalBaselineId]
+          }
+        : society;
+    })
+  };
+}
+
 export interface CanonicalContentWarning {
   code: string;
   detail: string;
@@ -543,7 +632,7 @@ function validateProfessionRelationships(content: CanonicalContent): CanonicalCo
 
 export function validateCanonicalContent(input: unknown): CanonicalContent {
   const parsedContent = canonicalContentSchema.parse(input);
-  const normalizedContent: CanonicalContent = {
+  const normalizedContent: CanonicalContent = normalizeLanguages({
     ...parsedContent,
     skills: parsedContent.skills.map((skill) =>
       skill.id === "language"
@@ -564,7 +653,7 @@ export function validateCanonicalContent(input: unknown): CanonicalContent {
       Array.isArray((input as { civilizations?: unknown[] }).civilizations)
         ? ((input as { civilizations: CanonicalContent["civilizations"] }).civilizations ?? [])
         : parsedContent.civilizations ?? []
-  };
+  });
 
   return validateProfessionRelationships(
     validateSkillRelationships(
