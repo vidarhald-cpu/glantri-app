@@ -120,6 +120,7 @@ export interface ChargenGroupView {
 
 export interface ChargenSkillView {
   category: "ordinary" | "secondary";
+  categoryId?: SkillDefinition["categoryId"];
   contributingGroupId?: string;
   // Canonical workbook-equivalent combat skill XP. This is the full skill XP
   // used by combat math, combining the best contributing group with direct
@@ -224,6 +225,7 @@ function createEmptyGroup(groupId: string): CharacterSkillGroup {
 function createEmptySkill(skill: SkillDefinition): CharacterSkill {
   return {
     category: skill.category,
+    categoryId: skill.categoryId,
     grantedRanks: 0,
     groupId: getSkillDefinitionGroupIds(skill)[0],
     level: 0,
@@ -267,6 +269,7 @@ function normalizeSkill(skill: CharacterSkill): CharacterSkill {
   return {
     ...skill,
     category: skill.category ?? "ordinary",
+    categoryId: skill.categoryId,
     grantedRanks,
     groupId: skill.groupId,
     languageName: normalizeCharacterSkillLanguageName(skill.languageName),
@@ -1802,6 +1805,7 @@ export function buildChargenDraftView(input: {
 
         const view: ChargenSkillView = {
           category: skill?.category ?? definition.category,
+          categoryId: skill?.categoryId ?? definition.categoryId,
           contributingGroupId: bestContributingGroup?.groupId,
           effectiveSkillNumber,
           groupId: resolvedGroupId,

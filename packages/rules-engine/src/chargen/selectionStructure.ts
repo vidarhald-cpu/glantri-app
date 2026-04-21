@@ -123,6 +123,7 @@ function sortSkillIds(content: ChargenSelectionContentShape, ids: string[]): str
 function createEmptySkillProgressionRow(skill: SkillDefinition) {
   return {
     category: skill.category,
+    categoryId: skill.categoryId,
     grantedRanks: 0,
     groupId: skill.groupId,
     languageName: undefined,

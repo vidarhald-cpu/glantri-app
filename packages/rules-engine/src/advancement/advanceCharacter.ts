@@ -107,6 +107,7 @@ function createEmptyGroup(groupId: string): CharacterSkillGroup {
 function createEmptySkill(skill: SkillDefinition): CharacterSkill {
   return {
     category: skill.category,
+    categoryId: skill.categoryId,
     grantedRanks: 0,
     groupId: getSkillGroupIds(skill)[0],
     level: 0,

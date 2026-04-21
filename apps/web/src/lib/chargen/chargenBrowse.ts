@@ -122,6 +122,11 @@ const PLAYER_FACING_SKILL_BUCKETS: PlayerFacingSkillBucketDefinition[] = [
     label: "Covert"
   },
   {
+    description: "Spoken and learned tongues represented as concrete Language (X) skills.",
+    id: "language",
+    label: "Language"
+  },
+  {
     description: "Literacy, scholarship, natural inquiry, and learned culture.",
     id: "knowledge",
     label: "Knowledge"

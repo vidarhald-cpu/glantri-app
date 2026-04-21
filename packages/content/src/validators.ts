@@ -543,12 +543,14 @@ function validateProfessionRelationships(content: CanonicalContent): CanonicalCo
 
 export function validateCanonicalContent(input: unknown): CanonicalContent {
   const parsedContent = canonicalContentSchema.parse(input);
-  const normalizedContent = {
+  const normalizedContent: CanonicalContent = {
     ...parsedContent,
     skills: parsedContent.skills.map((skill) =>
       skill.id === "language"
         ? {
             ...skill,
+            category: "ordinary",
+            categoryId: "language",
             allowsSpecializations: false
           }
         : skill
@@ -562,7 +564,7 @@ export function validateCanonicalContent(input: unknown): CanonicalContent {
       Array.isArray((input as { civilizations?: unknown[] }).civilizations)
         ? ((input as { civilizations: CanonicalContent["civilizations"] }).civilizations ?? [])
         : parsedContent.civilizations ?? []
-  } satisfies CanonicalContent;
+  };
 
   return validateProfessionRelationships(
     validateSkillRelationships(

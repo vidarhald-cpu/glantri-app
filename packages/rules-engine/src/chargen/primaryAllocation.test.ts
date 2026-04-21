@@ -173,6 +173,7 @@ const motherTongueTestContent = {
     {
       allowsSpecializations: true,
       category: "ordinary" as const,
+      categoryId: "language" as const,
       dependencies: [],
       dependencySkillIds: [],
       groupId: "scholarly",
@@ -797,6 +798,8 @@ describe("chargen purchase gate integration", () => {
     });
     const languageView = draftView.skills.find((skill) => skill.skillId === "language");
 
+    expect(languageView?.category).toBe("ordinary");
+    expect(languageView?.categoryId).toBe("language");
     expect(languageView?.languageName).toBe("Common");
     expect(languageView?.specificSkillLevel).toBe(12);
   });
@@ -834,6 +837,8 @@ describe("chargen purchase gate integration", () => {
     const motherTongueSkill = result.build?.progression.skills.find((skill) => skill.skillId === "language");
 
     expect(result.errors).toEqual([]);
+    expect(motherTongueSkill?.category).toBe("ordinary");
+    expect(motherTongueSkill?.categoryId).toBe("language");
     expect(motherTongueSkill?.languageName).toBe("Common");
     expect(motherTongueSkill?.grantedRanks).toBe(12);
     expect(motherTongueSkill?.sourceTag).toBe("mother-tongue");

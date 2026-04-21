@@ -147,6 +147,7 @@ export function addCharacterSkill(build: CharacterBuild, skill: SkillDefinition)
   const nextBuild = cloneBuild(build);
   nextBuild.progression.skills.push({
     category: skill.category,
+    categoryId: skill.categoryId,
     grantedRanks: 0,
     groupId: skill.groupIds[0] ?? skill.groupId,
     level: 0,
@@ -193,12 +194,14 @@ export function setCharacterSkillXp(
     existing.secondaryRanks = 0;
     existing.ranks = normalizedXp;
     existing.category = skill.category;
+    existing.categoryId = skill.categoryId;
     existing.groupId = skill.groupIds[0] ?? skill.groupId;
     return nextBuild;
   }
 
   nextBuild.progression.skills.push({
     category: skill.category,
+    categoryId: skill.categoryId,
     grantedRanks: 0,
     groupId: skill.groupIds[0] ?? skill.groupId,
     level: 0,

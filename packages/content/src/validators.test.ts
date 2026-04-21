@@ -285,6 +285,26 @@ describe("validateCanonicalContent", () => {
     expect(() => validateCanonicalContent(invalidContent)).toThrow();
   });
 
+  it("normalizes Language to the explicit language player-facing category", () => {
+    const normalizedContent = validateCanonicalContent({
+      ...defaultCanonicalContent,
+      skills: defaultCanonicalContent.skills.map((skill) =>
+        skill.id === "language"
+          ? {
+              ...skill,
+              category: "secondary",
+              categoryId: "knowledge"
+            }
+          : skill
+      )
+    });
+
+    expect(normalizedContent.skills.find((skill) => skill.id === "language")).toMatchObject({
+      category: "ordinary",
+      categoryId: "language"
+    });
+  });
+
   it("fails on invalid skill-group selection slot references", () => {
     expect(() =>
       validateCanonicalContent({

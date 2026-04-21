@@ -13,6 +13,7 @@ export const playerFacingSkillCategoryIdSchema = z.enum([
   "trade",
   "court-social",
   "covert",
+  "language",
   "knowledge",
   "mental",
   "mystical",
@@ -214,6 +215,7 @@ export const skillDefinitionSchema = z.preprocess(
     }
 
     const candidate = input as {
+      id?: unknown;
       dependencies?: unknown;
       dependencySkillIds?: unknown;
       categoryId?: unknown;
@@ -239,6 +241,8 @@ export const skillDefinitionSchema = z.preprocess(
       typeof candidate.categoryId === "string" && candidate.categoryId.length > 0
         ? candidate.categoryId
         : undefined;
+    const normalizedCategoryId =
+      candidate.id === "language" ? "language" : explicitCategoryId;
     const inferredCategoryId = inferPlayerFacingSkillCategoryIdFromGroupIds({
       groupId: String(normalizedGroupId ?? ""),
       groupIds: Array.isArray(normalizedGroupIds)
@@ -249,7 +253,7 @@ export const skillDefinitionSchema = z.preprocess(
 
     return {
       ...candidate,
-      categoryId: explicitCategoryId ?? inferredCategoryId,
+      categoryId: normalizedCategoryId ?? inferredCategoryId,
       dependencies: normalizedDependencies,
       dependencySkillIds: getRequiredDependencySkillIds(normalizedDependencies),
       groupId: normalizedGroupId,

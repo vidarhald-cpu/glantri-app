@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { playerFacingSkillCategoryIdSchema } from "../content/skills";
 
 const chargenModeSchema = z.enum(["standard"]);
 const skillCategorySchema = z.enum(["ordinary", "secondary"]);
@@ -21,6 +22,7 @@ export const characterSkillGroupSchema = z.object({
 
 export const characterSkillSchema = z.object({
   category: skillCategorySchema.default("ordinary"),
+  categoryId: playerFacingSkillCategoryIdSchema.optional(),
   grantedRanks: z.number().int().nonnegative().default(0),
   groupId: z.string().min(1),
   languageName: z.string().min(1).optional(),

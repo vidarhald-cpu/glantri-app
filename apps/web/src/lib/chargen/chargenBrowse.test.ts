@@ -165,4 +165,15 @@ describe("chargenBrowse helpers", () => {
       })
     ).toBe("fieldcraft");
   });
+
+  it("supports an explicit language player-facing category", () => {
+    expect(
+      getPlayerFacingSkillBucket({
+        categoryId: "language",
+        groupId: "language_group",
+        groupIds: ["language_group"],
+        id: "language"
+      })
+    ).toBe("language");
+  });
 });

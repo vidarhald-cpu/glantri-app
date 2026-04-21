@@ -6,6 +6,7 @@ import {
   buildChargenSkillAccessSummary,
   createChargenProgression
 } from "@glantri/rules-engine";
+import { getPlayerFacingSkillBucket } from "../../../src/lib/chargen/chargenBrowse";
 
 import {
   buildConcreteLanguageBrowseRows,
@@ -308,6 +309,7 @@ const languageContent = {
     {
       allowsSpecializations: false,
       category: "ordinary",
+      categoryId: "language",
       dependencies: [],
       dependencySkillIds: [],
       groupId: "scholarly",
@@ -321,6 +323,7 @@ const languageContent = {
     {
       allowsSpecializations: false,
       category: "ordinary",
+      categoryId: "language",
       dependencies: [],
       dependencySkillIds: [],
       groupId: "scholarly",
@@ -606,6 +609,9 @@ describe("ChargenWizard concrete language rows", () => {
       "Old Common",
       "Phoenician"
     ]);
+    expect(rows.every((row) => row.skill.category === "ordinary")).toBe(true);
+    expect(rows.every((row) => row.skill.categoryId === "language")).toBe(true);
+    expect(rows.every((row) => getPlayerFacingSkillBucket(row.skill) === "language")).toBe(true);
   });
 
   it("targets purchases and metrics at the concrete language row", () => {
