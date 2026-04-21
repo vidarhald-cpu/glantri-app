@@ -26,7 +26,6 @@ import type {
 } from "@glantri/domain";
 import {
   getCharacterSkillKey,
-  getSkillGroupIds,
   glantriCharacteristicLabels,
   glantriCharacteristicOrder
 } from "@glantri/domain";
@@ -52,7 +51,6 @@ import {
   STANDARD_CHARGEN_METHOD_POLICY,
   reviewChargenDraft,
   selectProfile,
-  selectBestSkillGroupContribution,
   spendSecondaryPoint,
   summarizeRolledProfile,
   getResolvedProfileStats,
@@ -190,7 +188,7 @@ function sortSkillGroups(groups: CanonicalContent["skillGroups"]): CanonicalCont
   return [...groups].sort((left, right) => left.sortOrder - right.sortOrder);
 }
 
-function getSkillDisplayGroupId(input: {
+export function getSkillDisplayGroupId(input: {
   content: CanonicalContent;
   draftView: ReturnType<typeof buildChargenDraftView>;
   skill: SkillDefinition;
@@ -205,30 +203,11 @@ function getSkillDisplayGroupId(input: {
     ) ??
     input.draftView.skills.find((candidate) => candidate.skillId === input.skill.id);
 
-  if (purchasedSkill?.contributingGroupId) {
-    return purchasedSkill.contributingGroupId;
+  if (purchasedSkill) {
+    return purchasedSkill.contributingGroupId ?? purchasedSkill.groupId;
   }
 
-  const normalGroupIdSet = new Set(input.skillAccess.normalSkillGroupIds);
-  const candidateGroupIds = getSkillGroupIds(input.skill).filter((groupId) => normalGroupIdSet.has(groupId));
-
-  if (candidateGroupIds.length === 0) {
-    return undefined;
-  }
-
-  return selectBestSkillGroupContribution(
-    candidateGroupIds.map((groupId) => {
-      const groupDefinition = input.content.skillGroups.find((group) => group.id === groupId);
-      const groupView = input.draftView.groups.find((group) => group.groupId === groupId);
-
-      return {
-        groupId,
-        groupLevel: groupView?.groupLevel ?? 0,
-        name: groupDefinition?.name ?? groupId,
-        sortOrder: groupDefinition?.sortOrder ?? Number.MAX_SAFE_INTEGER
-      };
-    })
-  )?.groupId;
+  return undefined;
 }
 
 function getSkillDisplayName(input: {
@@ -556,7 +535,7 @@ function getSkillLinkedStatAverage(
   return Math.floor(total / skill.linkedStats.length);
 }
 
-function getSkillAllocationMetrics(input: {
+export function getSkillAllocationMetrics(input: {
   content: CanonicalContent;
   draftView: ReturnType<typeof buildChargenDraftView>;
   profile: RolledCharacterProfile | undefined;
@@ -568,26 +547,7 @@ function getSkillAllocationMetrics(input: {
     ) ??
     input.draftView.skills.find((item) => item.skillId === input.skill.id && item.languageName) ??
     input.draftView.skills.find((item) => item.skillId === input.skill.id);
-  const bestContributingGroup = selectBestSkillGroupContribution(
-    getSkillGroupIds(input.skill)
-      .map((groupId) => {
-        const groupView = input.draftView.groups.find((group) => group.groupId === groupId);
-        const groupDefinition = input.content.skillGroups.find((group) => group.id === groupId);
-
-        if (!groupView || groupView.groupLevel <= 0) {
-          return null;
-        }
-
-        return {
-          groupId,
-          groupLevel: groupView.groupLevel,
-          name: groupDefinition?.name ?? groupId,
-          sortOrder: groupDefinition?.sortOrder ?? Number.MAX_SAFE_INTEGER
-        };
-      })
-      .filter((group): group is NonNullable<typeof group> => group !== null)
-  );
-  const groupXp = bestContributingGroup?.groupLevel ?? skillView?.groupLevel ?? 0;
+  const groupXp = skillView?.groupLevel ?? 0;
   const skillXp = skillView?.specificSkillLevel ?? 0;
   const avgStats = skillView?.linkedStatAverage ?? getSkillLinkedStatAverage(input.profile, input.skill);
   const totalXp = groupXp + skillXp;
