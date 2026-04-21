@@ -6,20 +6,23 @@ import { useEffect, useMemo, useState } from "react";
 import {
   addScenarioParticipantFromCharacterOnServer,
   loadJoinableScenarios,
-  loadMyServerCharacters
+  loadServerCharacters
 } from "../../../src/lib/api/localServiceClient";
 import { useSessionUser } from "../../../src/lib/auth/SessionUserContext";
 import {
+  canBrowseAllCharacterOwners,
+  buildCharacterBrowserOwnerOptions,
   buildCharacterBrowserEntries,
   filterCharacterBrowserEntries,
   type CharacterBrowserOwnerFilter,
+  type CharacterBrowserSourceFilter,
   type CharacterBrowserTypeFilter
 } from "../../../src/lib/characters/characterBrowser";
 import { LocalCharacterRepository } from "../../../src/lib/offline/repositories/localCharacterRepository";
 
 const localCharacterRepository = new LocalCharacterRepository();
 
-type ServerCharacterRecord = Awaited<ReturnType<typeof loadMyServerCharacters>>[number];
+type ServerCharacterRecord = Awaited<ReturnType<typeof loadServerCharacters>>[number];
 type JoinableScenarioOption = Awaited<ReturnType<typeof loadJoinableScenarios>>[number];
 
 export default function CharactersBrowser() {
@@ -32,6 +35,7 @@ export default function CharactersBrowser() {
   const [feedback, setFeedback] = useState<string>();
   const [loading, setLoading] = useState(true);
   const [ownerFilter, setOwnerFilter] = useState<CharacterBrowserOwnerFilter>("all");
+  const [sourceFilter, setSourceFilter] = useState<CharacterBrowserSourceFilter>("all");
   const [typeFilter, setTypeFilter] = useState<CharacterBrowserTypeFilter>("all");
   const [joiningCharacterId, setJoiningCharacterId] = useState<string>();
   const [joiningScenarioId, setJoiningScenarioId] = useState<string>();
@@ -39,89 +43,97 @@ export default function CharactersBrowser() {
   const [joinLoading, setJoinLoading] = useState(false);
   const [joinError, setJoinError] = useState<string>();
 
-  async function refreshCharacters() {
-    const records = await localCharacterRepository.listFinalized();
-    setLocalCharacters(records);
-  }
-
   useEffect(() => {
-    localCharacterRepository
-      .listFinalized()
-      .then((records) => setLocalCharacters(records))
-      .finally(() => {
-        setLoading(false);
-      });
-  }, []);
+    if (sessionLoading) {
+      return;
+    }
+
+    let cancelled = false;
+
+    async function hydrateCharacters() {
+      setLoading(true);
+
+      try {
+        const [records, serverRecords] = await Promise.all([
+          localCharacterRepository.listFinalized(),
+          currentUser ? loadServerCharacters() : Promise.resolve([])
+        ]);
+
+        if (cancelled) {
+          return;
+        }
+
+        setLocalCharacters(records);
+        setServerCharacters(serverRecords);
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+
+        setFeedback(error instanceof Error ? error.message : "Unable to load character browser.");
+        setServerCharacters([]);
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    }
+
+    void hydrateCharacters();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUser, sessionLoading]);
 
   const browserEntries = useMemo(
-    () => buildCharacterBrowserEntries(localCharacters, currentUser),
-    [currentUser, localCharacters]
+    () =>
+      buildCharacterBrowserEntries({
+        currentUser,
+        localRecords: localCharacters,
+        serverRecords: serverCharacters ?? []
+      }),
+    [currentUser, localCharacters, serverCharacters]
   );
   const visibleEntries = useMemo(
     () =>
       filterCharacterBrowserEntries(browserEntries, {
-        currentUser,
         ownerFilter,
+        sourceFilter,
         typeFilter
       }),
-    [browserEntries, currentUser, ownerFilter, typeFilter]
+    [browserEntries, ownerFilter, sourceFilter, typeFilter]
   );
-  const ownerFilterOptions = useMemo(() => {
-    const options: Array<{ label: string; value: CharacterBrowserOwnerFilter }> = [
-      { label: "All owners", value: "all" }
-    ];
+  const ownerFilterOptions = useMemo(
+    () => buildCharacterBrowserOwnerOptions(browserEntries),
+    [browserEntries]
+  );
+  const showOwnerFilter = canBrowseAllCharacterOwners(currentUser) && ownerFilterOptions.length > 1;
 
-    if (browserEntries.some((entry) => entry.ownershipState === "mine")) {
-      options.push({ label: "My characters", value: "mine" });
+  useEffect(() => {
+    if (!showOwnerFilter && ownerFilter !== "all") {
+      setOwnerFilter("all");
     }
+  }, [ownerFilter, showOwnerFilter]);
 
-    if (
-      browserEntries.some(
-        (entry) =>
-          entry.ownershipState === "mine" || entry.ownershipState === "recorded_owner"
-      )
-    ) {
-      options.push({ label: "Has recorded owner", value: "recorded_owner" });
-    }
-
-    if (browserEntries.some((entry) => entry.ownershipState === "no_recorded_owner")) {
-      options.push({ label: "No recorded owner", value: "no_recorded_owner" });
-    }
-
-    return options;
-  }, [browserEntries]);
-
-  async function handleLoadServerCharacters() {
+  async function handleRefreshServerCharacters() {
     if (!currentUser) {
-      setFeedback("Login required before loading server characters.");
+      setFeedback("Login required before loading server-backed characters.");
       return;
     }
 
     try {
-      const nextServerCharacters = await loadMyServerCharacters();
+      const nextServerCharacters = await loadServerCharacters();
       setServerCharacters(nextServerCharacters);
-
-      for (const character of nextServerCharacters) {
-        await localCharacterRepository.save({
-          build: character.build,
-          createdAt: character.createdAt,
-          creatorDisplayName: currentUser.displayName,
-          creatorEmail: currentUser.email,
-          creatorId: currentUser.id,
-          finalizedAt: character.createdAt,
-          syncStatus: "synced",
-          updatedAt: character.updatedAt
-        });
-      }
-
-      await refreshCharacters();
       setFeedback(
-        `Loaded ${nextServerCharacters.length} server character${
+        `Loaded ${nextServerCharacters.length} server-backed character${
           nextServerCharacters.length === 1 ? "" : "s"
-        } into the local browser.`
+        } into the browser.`
       );
     } catch (error) {
-      setFeedback(error instanceof Error ? error.message : "Unable to load server characters.");
+      setFeedback(
+        error instanceof Error ? error.message : "Unable to load server-backed characters."
+      );
     }
   }
 
@@ -260,19 +272,35 @@ export default function CharactersBrowser() {
                 </select>
               </label>
 
+              {showOwnerFilter ? (
+                <label style={{ display: "grid", gap: "0.25rem" }}>
+                  <span>Owner</span>
+                  <select
+                    onChange={(event) =>
+                      setOwnerFilter(event.target.value as CharacterBrowserOwnerFilter)
+                    }
+                    value={ownerFilter}
+                  >
+                    {ownerFilterOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
+
               <label style={{ display: "grid", gap: "0.25rem" }}>
-                <span>Owner</span>
+                <span>Source</span>
                 <select
                   onChange={(event) =>
-                    setOwnerFilter(event.target.value as CharacterBrowserOwnerFilter)
+                    setSourceFilter(event.target.value as CharacterBrowserSourceFilter)
                   }
-                  value={ownerFilter}
+                  value={sourceFilter}
                 >
-                  {ownerFilterOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
+                  <option value="all">All</option>
+                  <option value="server">Server-backed</option>
+                  <option value="local">Local-only</option>
                 </select>
               </label>
             </div>
@@ -481,18 +509,18 @@ export default function CharactersBrowser() {
             <div>
               <h2 style={{ margin: "0 0 0.25rem" }}>Server import</h2>
               <p style={{ margin: 0 }}>
-                Load server-backed characters into the local browser without replacing the finalized
-                local list.
+                Refresh the global server-backed character list shown above without changing local
+                characters or filters.
               </p>
             </div>
 
             <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
-              <button onClick={() => void handleLoadServerCharacters()} type="button">
-                Load my server characters
+              <button onClick={() => void handleRefreshServerCharacters()} type="button">
+                Refresh server-backed characters
               </button>
               <div>
                 {serverCharacters === undefined
-                  ? "Server characters have not been loaded in this view yet."
+                  ? "Server-backed characters have not been loaded in this view yet."
                   : `Last server load returned ${serverCharacters.length} character${
                       serverCharacters.length === 1 ? "" : "s"
                     }.`}
@@ -509,7 +537,7 @@ export default function CharactersBrowser() {
                   padding: "1rem"
                 }}
               >
-                No server characters were returned for this account.
+                No server-backed characters were returned.
               </div>
             ) : null}
           </section>

@@ -7,8 +7,11 @@ describe("characterEditAccess", () => {
     expect(canEditCharacterInApi({ roles: ["game_master"] })).toBe(true);
   });
 
-  it("blocks non-GM users from the server edit path", () => {
+  it("allows admin users to edit characters through the server path", () => {
+    expect(canEditCharacterInApi({ roles: ["admin"] })).toBe(true);
+  });
+
+  it("blocks normal players from the server edit path", () => {
     expect(canEditCharacterInApi({ roles: ["player"] })).toBe(false);
-    expect(canEditCharacterInApi({ roles: ["admin"] })).toBe(false);
   });
 });

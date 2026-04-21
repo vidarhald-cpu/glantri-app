@@ -16,7 +16,9 @@ export const charactersRoutes: FastifyPluginAsync = async (app) => {
       return;
     }
 
-    const characters = await characterService.listCharacters(user.id);
+    const characters = canEditCharacterInApi(user)
+      ? await characterService.listCharacters()
+      : await characterService.listCharacters(user.id);
 
     return {
       characters
@@ -96,7 +98,7 @@ export const charactersRoutes: FastifyPluginAsync = async (app) => {
 
     if (!canEditCharacterInApi(user)) {
       return reply.code(403).send({
-        error: "GM role required."
+        error: "GM or admin role required."
       });
     }
 
