@@ -211,6 +211,14 @@ export default function SocietiesAdminPage() {
           societyLevel: societyLevel.societyLevel
         }) === selectedRowId
     ) ??
+    content.societyLevels.find((societyLevel) => {
+      return (
+        createSocietyRowId({
+          societyId: societyLevel.societyId,
+          societyLevel: societyLevel.societyLevel
+        }) === rows[0]?.id
+      );
+    }) ??
     content.societyLevels
       .slice()
       .sort((left, right) => left.societyName.localeCompare(right.societyName) || left.societyLevel - right.societyLevel)[0];
@@ -298,7 +306,11 @@ export default function SocietiesAdminPage() {
 
         <div style={{ display: "grid", gap: "1rem" }}>
           <AdminPanel
-            subtitle="This inspector keeps the two concepts separate: society level 1–6 is the canonical culture scale, while access band L1–L4 is the row-specific access band that shapes reachable professions and downstream skill reach. Baseline languages, historical framing, and the profession → groups → skills fan stay together here for review."
+            subtitle={
+              selectedRow?.shortDescription?.trim() ||
+              selectedRow?.notes?.trim() ||
+              "No canonical society description recorded."
+            }
             title={`${selectedSocietyLevel.societyName} L${selectedSocietyLevel.societyLevel}`}
           >
             <div style={{ display: "grid", gap: "0.85rem" }}>

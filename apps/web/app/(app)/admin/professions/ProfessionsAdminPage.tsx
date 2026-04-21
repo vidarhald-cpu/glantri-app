@@ -8,9 +8,11 @@ import { downloadCsv } from "../../../../src/lib/admin/exporters";
 import { buildProfessionAdminRows } from "../../../../src/lib/admin/viewModels";
 import {
   AdminButton,
+  AdminField,
   AdminMetric,
   AdminPageIntro,
   AdminPanel,
+  AdminSelect,
   AdminTagList
 } from "../admin-ui";
 import ProfessionsWorkspaceTabs from "./ProfessionsWorkspaceTabs";
@@ -151,12 +153,59 @@ function ProfessionsReviewTable(props: {
 
 export default function ProfessionsAdminPage() {
   const { content } = useAdminContent();
-  const rows = buildProfessionAdminRows(content);
+  const allRows = buildProfessionAdminRows(content);
+  const [familyFilter, setFamilyFilter] = useState("all");
+  const [groupFilter, setGroupFilter] = useState("all");
   const [selectedProfessionId, setSelectedProfessionId] = useState<string>();
+  const familyOptions = [
+    "all",
+    ...new Set(allRows.map((row) => row.familyId).filter((value) => value.length > 0))
+  ].sort((left, right) => {
+    if (left === "all") {
+      return -1;
+    }
+
+    if (right === "all") {
+      return 1;
+    }
+
+    return (content.professionFamilies.find((family) => family.id === left)?.name ?? left).localeCompare(
+      content.professionFamilies.find((family) => family.id === right)?.name ?? right
+    );
+  });
+  const groupOptions = [
+    "all",
+    ...new Set(allRows.flatMap((row) => row.grantedSkillGroups))
+  ].sort((left, right) => {
+    if (left === "all") {
+      return -1;
+    }
+
+    if (right === "all") {
+      return 1;
+    }
+
+    return left.localeCompare(right);
+  });
+  const rows = allRows.filter((row) => {
+    if (familyFilter !== "all" && row.familyId !== familyFilter) {
+      return false;
+    }
+
+    if (groupFilter !== "all" && !row.grantedSkillGroups.includes(groupFilter)) {
+      return false;
+    }
+
+    return true;
+  });
+  const selectedVisibleRow = rows.find((row) => row.id === selectedProfessionId) ?? rows[0];
   const selectedProfession =
-    content.professions.find((profession) => profession.id === selectedProfessionId) ??
+    content.professions.find(
+      (profession) => profession.id === (selectedVisibleRow?.id ?? selectedProfessionId)
+    ) ??
     content.professions.slice().sort((left, right) => left.name.localeCompare(right.name))[0];
-  const selectedRow = rows.find((row) => row.id === selectedProfession.id);
+  const selectedRow =
+    selectedVisibleRow ?? allRows.find((row) => row.id === selectedProfession.id);
 
   useEffect(() => {
     if (!selectedProfessionId && rows[0]) {
@@ -221,6 +270,44 @@ export default function ProfessionsAdminPage() {
 
       <ProfessionsWorkspaceTabs />
 
+      <AdminPanel title="Review filters">
+        <div
+          style={{
+            display: "grid",
+            gap: "0.9rem",
+            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 280px))"
+          }}
+        >
+          <AdminField label="Family">
+            <AdminSelect
+              onChange={(event) => setFamilyFilter(event.target.value)}
+              value={familyFilter}
+            >
+              {familyOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option === "all"
+                    ? "All families"
+                    : content.professionFamilies.find((family) => family.id === option)?.name ?? option}
+                </option>
+              ))}
+            </AdminSelect>
+          </AdminField>
+
+          <AdminField label="Group">
+            <AdminSelect
+              onChange={(event) => setGroupFilter(event.target.value)}
+              value={groupFilter}
+            >
+              {groupOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option === "all" ? "All groups" : option}
+                </option>
+              ))}
+            </AdminSelect>
+          </AdminField>
+        </div>
+      </AdminPanel>
+
       <div style={{ display: "grid", gap: "1rem", gridTemplateColumns: "minmax(0, 2.2fr) minmax(340px, 1fr)" }}>
         <AdminPanel title="Profession Catalog">
           <ProfessionsReviewTable
@@ -232,7 +319,7 @@ export default function ProfessionsAdminPage() {
 
         <div style={{ display: "grid", gap: "1rem" }}>
           <AdminPanel
-            subtitle="This page surfaces profession packages as explicit core versus optional group grants, with access context and downstream group-to-skill reach kept together for review instead of being scattered across raw relation records."
+            subtitle={selectedProfession.description?.trim() || "No canonical profession description recorded."}
             title={selectedProfession.name}
           >
             <div style={{ display: "grid", gap: "0.85rem" }}>

@@ -1,5 +1,6 @@
 import type { FastifyPluginAsync } from "fastify";
 
+import type { AuthUser } from "@glantri/auth";
 import {
   CharacterEquipmentReadModelService,
   CharacterEquipmentWriteService,
@@ -243,7 +244,7 @@ function parseUpdateMetadataBody(body: unknown) {
 }
 
 async function requireAccessibleCharacter(
-  user: { id: string; roles: string[] },
+  user: Pick<AuthUser, "id" | "roles">,
   characterId: string
 ) {
   const character = await loadAccessibleCharacterInApi({

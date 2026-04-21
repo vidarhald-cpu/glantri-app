@@ -116,6 +116,7 @@ export interface ProfessionAdminRow {
   description: string;
   directSkillExceptions: string[];
   directlyGrantedSkills: string[];
+  familyId: string;
   familyName: string;
   groupFans: Array<{
     coreSkills: string[];
@@ -198,6 +199,9 @@ export interface SocietyAdminRow {
   societyLevel: number;
   totalEffectiveReachableSkills: number;
 }
+
+const LOW_WEIGHTED_GROUP_POINTS_THRESHOLD = 5;
+const HIGH_WEIGHTED_GROUP_POINTS_THRESHOLD = 12;
 
 export interface SocietyMatrixRow {
   baseEducation: string;
@@ -513,7 +517,7 @@ export function buildSkillAdminRows(content: CanonicalContent): SkillAdminRow[] 
   });
 
   return [...content.skills]
-    .sort((left, right) => left.sortOrder - right.sortOrder || left.name.localeCompare(right.name))
+    .sort((left, right) => left.name.localeCompare(right.name) || left.sortOrder - right.sortOrder)
     .map((skill) => {
       const groupIds = getSkillGroupIds(skill);
       const primaryGroupId = skill.groupId ?? groupIds[0];
@@ -620,7 +624,7 @@ export function buildSkillMatrixRows(content: CanonicalContent): SkillMatrixRow[
   const relationshipContext = buildSkillRelationshipContext(content);
 
   return [...content.skills]
-    .sort((left, right) => left.sortOrder - right.sortOrder || left.name.localeCompare(right.name))
+    .sort((left, right) => left.name.localeCompare(right.name) || left.sortOrder - right.sortOrder)
     .map((skill) => {
       const groupIds = getSkillGroupIds(skill);
       const dependencyNames = uniqueSorted(
@@ -1385,7 +1389,7 @@ export function buildSkillGroupAdminRows(content: CanonicalContent): SkillGroupA
   }
 
   return [...content.skillGroups]
-    .sort((left, right) => left.sortOrder - right.sortOrder || left.name.localeCompare(right.name))
+    .sort((left, right) => left.name.localeCompare(right.name) || left.sortOrder - right.sortOrder)
     .map((group) => {
       const memberships = getGroupMemberships(content, group.id);
       const fixedSkillRows = memberships
@@ -1435,6 +1439,21 @@ export function buildSkillGroupAdminRows(content: CanonicalContent): SkillGroupA
         .filter((name): name is string => Boolean(name))
         .sort((left, right) => left.localeCompare(right));
 
+      const weightedContentPoints = fixedSkillRows.reduce((sum, skill) => sum + skill.points, 0);
+      const warningDetails = [...(warningsByGroupId.get(group.id) ?? [])];
+
+      if (weightedContentPoints <= LOW_WEIGHTED_GROUP_POINTS_THRESHOLD) {
+        warningDetails.push(
+          `Weighted content points are ${weightedContentPoints}, which is at or below the low-size review threshold (${LOW_WEIGHTED_GROUP_POINTS_THRESHOLD}).`
+        );
+      }
+
+      if (weightedContentPoints >= HIGH_WEIGHTED_GROUP_POINTS_THRESHOLD) {
+        warningDetails.push(
+          `Weighted content points are ${weightedContentPoints}, which is at or above the high-size review threshold (${HIGH_WEIGHTED_GROUP_POINTS_THRESHOLD}).`
+        );
+      }
+
       return {
         allowedProfessions: uniqueSorted(allowedProfessions),
         coreSkills,
@@ -1451,8 +1470,8 @@ export function buildSkillGroupAdminRows(content: CanonicalContent): SkillGroupA
         selectionSlotCount: selectionSlots.length,
         selectionSlots,
         sortOrder: group.sortOrder,
-        warningDetails: warningsByGroupId.get(group.id) ?? [],
-        weightedContentPoints: fixedSkillRows.reduce((sum, skill) => sum + skill.points, 0)
+        warningDetails: uniqueSorted(warningDetails),
+        weightedContentPoints
       };
     });
 }
@@ -1460,6 +1479,9 @@ export function buildSkillGroupAdminRows(content: CanonicalContent): SkillGroupA
 export function buildProfessionAdminRows(content: CanonicalContent): ProfessionAdminRow[] {
   const familiesById = new Map(
     content.professionFamilies.map((family) => [family.id, family.name])
+  );
+  const professionsById = new Map(
+    content.professions.map((profession) => [profession.id, profession])
   );
   const societiesById = new Map(
     content.societies.map((society) => [society.id, society])
@@ -1514,9 +1536,7 @@ export function buildProfessionAdminRows(content: CanonicalContent): ProfessionA
           )
         };
       });
-    const professionDefinition = content.professions.find(
-      (candidate) => candidate.id === profession.id
-    );
+    const professionDefinition = professionsById.get(profession.id);
     const allowedSocietySlots = content.societyLevels
       .filter((societyLevel) => societyLevel.professionIds.includes(profession.id))
       .map((societyLevel) => ({
@@ -1542,6 +1562,7 @@ export function buildProfessionAdminRows(content: CanonicalContent): ProfessionA
       description: profession.description,
       directSkillExceptions: profession.directSkillExceptions,
       directlyGrantedSkills: profession.directlyGrantedSkills,
+      familyId: professionDefinition?.familyId ?? "",
       familyName: professionDefinition
         ? familiesById.get(professionDefinition.familyId) ?? professionDefinition.familyId
         : "",
@@ -1667,9 +1688,9 @@ export function buildSocietyAdminRows(content: CanonicalContent): SocietyAdminRo
   })
     .sort(
       (left, right) =>
+        left.society.localeCompare(right.society) ||
         (left.canonicalSocietyLevel ?? left.societyLevel) -
           (right.canonicalSocietyLevel ?? right.societyLevel) ||
-        left.society.localeCompare(right.society) ||
         left.societyLevel - right.societyLevel
     );
 }

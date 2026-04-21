@@ -13,6 +13,7 @@ import {
   AdminPanel,
   AdminTagList
 } from "../admin-ui";
+import SkillGroupsWorkspaceTabs from "./SkillGroupsWorkspaceTabs";
 
 function summarizeList(values: string[], maxItems = 3): string {
   if (values.length === 0) {
@@ -177,7 +178,8 @@ export default function SkillGroupsAdminPage() {
   const [selectedGroupId, setSelectedGroupId] = useState<string>();
   const selectedGroup =
     content.skillGroups.find((group) => group.id === selectedGroupId) ??
-    content.skillGroups.slice().sort((left, right) => left.sortOrder - right.sortOrder)[0];
+    content.skillGroups.find((group) => group.id === rows[0]?.id) ??
+    content.skillGroups.slice().sort((left, right) => left.name.localeCompare(right.name))[0];
   const selectedRow = rows.find((row) => row.id === selectedGroup.id);
 
   useEffect(() => {
@@ -229,6 +231,8 @@ export default function SkillGroupsAdminPage() {
         title="Skill Groups"
       />
 
+      <SkillGroupsWorkspaceTabs />
+
       <div style={{ display: "grid", gap: "1rem", gridTemplateColumns: "minmax(0, 2.2fr) minmax(340px, 1fr)" }}>
         <AdminPanel title="Group Catalog">
           <SkillGroupsReviewTable onInspect={setSelectedGroupId} rows={rows} selectedId={selectedGroup.id} />
@@ -236,7 +240,7 @@ export default function SkillGroupsAdminPage() {
 
         <div style={{ display: "grid", gap: "1rem" }}>
           <AdminPanel
-            subtitle="This inspection view separates fixed memberships from slot-based choices so combat training packages and future choice-driven groups read correctly. Relevance stays visible as supporting context rather than being confused with slot-based selection."
+            subtitle={selectedGroup.description?.trim() || "No canonical skill-group description recorded."}
             title={selectedGroup.name}
           >
             <div style={{ display: "grid", gap: "0.85rem" }}>
@@ -295,7 +299,7 @@ export default function SkillGroupsAdminPage() {
                     padding: "0.9rem 1rem"
                   }}
                 >
-                  No weak-group warnings for this skill group.
+                  No audit warnings for this skill group.
                 </div>
               )}
 

@@ -171,11 +171,12 @@ export default function SkillsAdminPage() {
       ),
     [allRows, skillCategoryFilter]
   );
-
+  const selectedVisibleRow = rows.find((row) => row.id === selectedSkillId) ?? rows[0];
   const selectedSkill =
-    content.skills.find((skill) => skill.id === selectedSkillId) ??
-    content.skills.slice().sort((left, right) => left.sortOrder - right.sortOrder)[0];
-  const selectedRow = allRows.find((row) => row.id === selectedSkill.id);
+    content.skills.find((skill) => skill.id === (selectedVisibleRow?.id ?? selectedSkillId)) ??
+    content.skills.slice().sort((left, right) => left.name.localeCompare(right.name))[0];
+  const selectedRow =
+    selectedVisibleRow ?? allRows.find((row) => row.id === selectedSkill.id);
 
   useEffect(() => {
     if (!selectedSkillId && rows[0]) {
@@ -270,7 +271,11 @@ export default function SkillsAdminPage() {
 
         <div style={{ display: "grid", gap: "1rem" }}>
           <AdminPanel
-            subtitle="This inspector keeps the explicit membership system readable at a glance: primary group, cross-listed memberships, player-facing skill category, and the structural links that shape broader profession and society reach."
+            subtitle={
+              selectedSkill.description?.trim() ||
+              selectedSkill.shortDescription?.trim() ||
+              "No canonical skill description recorded."
+            }
             title={selectedSkill.name}
           >
             <div style={{ display: "grid", gap: "0.85rem" }}>
