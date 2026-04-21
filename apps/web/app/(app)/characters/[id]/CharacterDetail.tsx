@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 import {
+  type CharacterBuild,
   getCharacterSkillKey,
   getSkillGroupIds,
   glantriCharacteristicLabels,
@@ -18,13 +19,24 @@ import {
   selectBestSkillGroupContribution,
 } from "@glantri/rules-engine";
 
+import { updateServerCharacter } from "../../../../src/lib/api/localServiceClient";
 import {
   getPlayerFacingSkillBucket,
   groupRowsBySkillType
 } from "../../../../src/lib/chargen/chargenBrowse";
+import {
+  setCharacterAge,
+  setCharacterGender,
+  setCharacterName,
+  setCharacterNotes,
+  setCharacterTitle
+} from "../../../../src/lib/characters/characterEdit";
 import { loadLocalCharacterContext } from "../../../../src/lib/characters/loadLocalCharacterContext";
 import type { LocalCharacterRecord } from "../../../../src/lib/offline/glantriDexie";
-import { UNNAMED_CHARACTER_PLACEHOLDER } from "../../../../src/lib/offline/repositories/localCharacterRepository";
+import {
+  LocalCharacterRepository,
+  UNNAMED_CHARACTER_PLACEHOLDER
+} from "../../../../src/lib/offline/repositories/localCharacterRepository";
 
 interface CharacterDetailProps {
   id: string;
@@ -43,16 +55,10 @@ interface CharacterSheetSkillRow {
   totalXp: number;
 }
 
-function getCharacterName(record: LocalCharacterRecord): string {
-  return record.build.name.trim() || UNNAMED_CHARACTER_PLACEHOLDER;
-}
+const localCharacterRepository = new LocalCharacterRepository();
 
-function formatGenderLabel(gender: LocalCharacterRecord["build"]["profile"]["gender"]): string | null {
-  if (!gender) {
-    return null;
-  }
-
-  return gender.charAt(0).toUpperCase() + gender.slice(1);
+function getCharacterName(build: CharacterBuild): string {
+  return build.name.trim() || UNNAMED_CHARACTER_PLACEHOLDER;
 }
 
 function sortSkills(skills: SkillDefinition[]): SkillDefinition[] {
@@ -87,8 +93,12 @@ function getProfessionFamilyName(
 }
 
 export default function CharacterDetail({ id }: CharacterDetailProps) {
+  const [build, setBuild] = useState<CharacterBuild>();
+  const [feedback, setFeedback] = useState<string>();
   const [loading, setLoading] = useState(true);
   const [record, setRecord] = useState<LocalCharacterRecord>();
+  const [savingIdentity, setSavingIdentity] = useState(false);
+  const [savingNotes, setSavingNotes] = useState(false);
   const [contentState, setContentState] = useState<
     Awaited<ReturnType<typeof loadLocalCharacterContext>>["content"] | undefined
   >();
@@ -104,6 +114,7 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
 
         setContentState(result.content);
         setRecord(result.record);
+        setBuild(result.record?.build);
       })
       .finally(() => {
         if (!cancelled) {
@@ -117,34 +128,34 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
   }, [id]);
 
   const profession = useMemo(() => {
-    if (!record || !contentState) {
+    if (!build || !contentState) {
       return undefined;
     }
 
-    return contentState.professions.find((item) => item.id === record.build.professionId);
-  }, [contentState, record]);
+    return contentState.professions.find((item) => item.id === build.professionId);
+  }, [build, contentState]);
 
   const sheetSummary = useMemo(() => {
-    if (!record || !contentState) {
+    if (!build || !contentState) {
       return undefined;
     }
 
     return buildCharacterSheetSummary({
-      build: record.build,
+      build,
       content: contentState
     });
-  }, [contentState, record]);
+  }, [build, contentState]);
 
   const profileStatRows = useMemo(() => {
-    if (!record || !sheetSummary) {
+    if (!build || !sheetSummary) {
       return [];
     }
 
     return glantriCharacteristicOrder.map((stat) => {
-      const originalValue = record.build.profile.rolledStats[stat];
+      const originalValue = build.profile.rolledStats[stat];
       const currentValue = sheetSummary.adjustedStats[stat] ?? originalValue;
       const gmValue = getCharacteristicGm(stat, {
-        ...record.build.profile.rolledStats,
+        ...build.profile.rolledStats,
         ...sheetSummary.adjustedStats
       });
 
@@ -156,10 +167,10 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
         originalValue
       };
     });
-  }, [record, sheetSummary]);
+  }, [build, sheetSummary]);
 
   const groupedSkillRows = useMemo(() => {
-    if (!contentState || !sheetSummary || !record) {
+    if (!contentState || !sheetSummary || !build) {
       return [];
     }
 
@@ -198,7 +209,7 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
 
             return {
               avgStats:
-                skillView.linkedStatAverage ?? getSkillLinkedStatAverage(record.build.profile, skill),
+                skillView.linkedStatAverage ?? getSkillLinkedStatAverage(build.profile, skill),
               skillGroupXp,
               skillId: skill.id,
               skillKey: getCharacterSkillKey({
@@ -211,7 +222,7 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
               stats: formatSkillStats(skill),
               totalSkillLevel:
                 skillView.totalSkill ??
-                getSkillLinkedStatAverage(record.build.profile, skill) + totalXp,
+                getSkillLinkedStatAverage(build.profile, skill) + totalXp,
               totalXp
             } satisfies CharacterSheetSkillRow;
           })
@@ -219,7 +230,7 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
       })
 
     return groupRowsBySkillType(rows);
-  }, [contentState, sheetSummary]);
+  }, [build, contentState, sheetSummary]);
 
   const skillGroupRows = useMemo(() => {
     if (!contentState || !sheetSummary) {
@@ -249,11 +260,70 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
       );
   }, [contentState, sheetSummary]);
 
+  async function persistBuild(nextBuild: CharacterBuild, successMessage: string) {
+    if (!record) {
+      return;
+    }
+
+    const savedServerRecord = await updateServerCharacter({
+      build: nextBuild,
+      characterId: id
+    });
+    const savedLocalRecord = await localCharacterRepository.save({
+      build: savedServerRecord.build,
+      creatorDisplayName: record.creatorDisplayName,
+      creatorEmail: record.creatorEmail,
+      creatorId: savedServerRecord.ownerId ?? record.creatorId,
+      createdAt: record.createdAt,
+      finalizedAt: record.finalizedAt,
+      syncStatus: "synced",
+      updatedAt: savedServerRecord.updatedAt
+    });
+
+    setRecord(savedLocalRecord);
+    setBuild(savedLocalRecord.build);
+    setFeedback(successMessage);
+  }
+
+  async function handleSaveIdentity() {
+    if (!build) {
+      return;
+    }
+
+    setSavingIdentity(true);
+    setFeedback(undefined);
+
+    try {
+      await persistBuild(build, "Identity details saved.");
+    } catch (error) {
+      setFeedback(error instanceof Error ? error.message : "Unable to save identity details.");
+    } finally {
+      setSavingIdentity(false);
+    }
+  }
+
+  async function handleSaveNotes() {
+    if (!build) {
+      return;
+    }
+
+    setSavingNotes(true);
+    setFeedback(undefined);
+
+    try {
+      await persistBuild(build, "Character notes saved.");
+    } catch (error) {
+      setFeedback(error instanceof Error ? error.message : "Unable to save character notes.");
+    } finally {
+      setSavingNotes(false);
+    }
+  }
+
   if (loading) {
     return <section>Loading character sheet...</section>;
   }
 
-  if (!record || !contentState || !sheetSummary) {
+  if (!record || !build || !contentState || !sheetSummary) {
     return (
       <section style={{ display: "grid", gap: "1rem", maxWidth: 720 }}>
         <h1 style={{ margin: 0 }}>Character not found</h1>
@@ -264,47 +334,20 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
 
   const professionFamilyName = getProfessionFamilyName(contentState, profession);
   const socialClassLabel =
-    record.build.socialClass ?? record.build.profile.socialClassResult ?? "Not set";
-  const socialClassNumber = record.build.profile.socialClassRoll;
+    build.socialClass ?? build.profile.socialClassResult ?? "Not set";
+  const socialClassNumber = build.profile.socialClassRoll;
   const socialClassSummary =
     socialClassNumber !== undefined ? `${socialClassLabel} (${socialClassNumber})` : socialClassLabel;
   const spentSkillPoints = sheetSummary.totalSkillPointsInvested;
   const remainingSkillPoints =
     sheetSummary.draftView.primaryPoolAvailable + sheetSummary.draftView.secondaryPoolAvailable;
   const educationLevel = sheetSummary.draftView.education.theoreticalSkillCount;
-  const genderLabel = formatGenderLabel(record.build.profile.gender);
-  const profileDetails = [
-    record.build.profile.title?.trim()
-      ? { label: "Title", value: record.build.profile.title.trim() }
-      : null,
-    record.build.profile.age?.trim()
-      ? { label: "Age", value: record.build.profile.age.trim() }
-      : null,
-    genderLabel ? { label: "Gender", value: genderLabel } : null
-  ].filter((detail): detail is { label: string; value: string } => detail !== null);
-  const notes = record.build.profile.notes?.trim() ?? "";
+  const notes = build.profile.notes ?? "";
 
   return (
     <section style={{ display: "grid", gap: "1rem", maxWidth: 1180 }}>
-      <div>
-        <h1 style={{ margin: 0 }}>Character Sheet — {getCharacterName(record)}</h1>
-        {profileDetails.length > 0 ? (
-          <div
-            style={{
-              color: "#5e5a50",
-              display: "flex",
-              flexWrap: "wrap",
-              gap: "0.5rem 1rem",
-              marginTop: "0.5rem"
-            }}
-          >
-            {profileDetails.map((detail) => (
-              <div key={detail.label}>
-                <strong>{detail.label}:</strong> {detail.value}
-              </div>
-            ))}
-          </div>
-        ) : null}
+      <div style={{ display: "grid", gap: "0.35rem" }}>
+        <h1 style={{ margin: 0 }}>Character Sheet — {getCharacterName(build)}</h1>
       </div>
 
       <section
@@ -374,8 +417,60 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
               rowGap: "0.6rem"
             }}
           >
-            <strong>Name</strong>
-            <div>{getCharacterName(record)}</div>
+            <strong>Character name</strong>
+            <input
+              id="character-sheet-name"
+              onChange={(event) =>
+                setBuild((current) => (current ? setCharacterName(current, event.target.value) : current))
+              }
+              style={{ fontSize: "1rem", padding: "0.55rem" }}
+              type="text"
+              value={build.name}
+            />
+
+            <strong>Title</strong>
+            <input
+              id="character-sheet-title"
+              onChange={(event) =>
+                setBuild((current) => (current ? setCharacterTitle(current, event.target.value) : current))
+              }
+              style={{ fontSize: "1rem", padding: "0.55rem" }}
+              type="text"
+              value={build.profile.title ?? ""}
+            />
+
+            <strong>Age</strong>
+            <input
+              id="character-sheet-age"
+              onChange={(event) =>
+                setBuild((current) => (current ? setCharacterAge(current, event.target.value) : current))
+              }
+              style={{ fontSize: "1rem", padding: "0.55rem" }}
+              type="text"
+              value={build.profile.age ?? ""}
+            />
+
+            <strong>Gender</strong>
+            <select
+              id="character-sheet-gender"
+              onChange={(event) =>
+                setBuild((current) =>
+                  current
+                    ? setCharacterGender(
+                        current,
+                        event.target.value as "" | "male" | "female" | "other"
+                      )
+                    : current
+                )
+              }
+              style={{ fontSize: "1rem", padding: "0.55rem" }}
+              value={build.profile.gender ?? ""}
+            >
+              <option value="">---</option>
+              <option value="male">male</option>
+              <option value="female">female</option>
+              <option value="other">other</option>
+            </select>
 
             <strong>Society</strong>
             <div>{sheetSummary.societyLabel ?? "Not set"}</div>
@@ -385,7 +480,7 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
 
             <strong>Profession</strong>
             <div>
-              {sheetSummary.professionName ?? record.build.professionId ?? "Not set"}
+              {sheetSummary.professionName ?? build.professionId ?? "Not set"}
               {professionFamilyName ? `, ${professionFamilyName}` : ""}
             </div>
 
@@ -409,6 +504,22 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
 
             <strong>Education</strong>
             <div>{educationLevel}</div>
+          </div>
+          <div
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              gap: "0.75rem",
+              justifyContent: "space-between",
+              marginTop: "1rem"
+            }}
+          >
+            <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
+              Personal information is edited and saved here on the Character Sheet.
+            </div>
+            <button disabled={savingIdentity} onClick={() => void handleSaveIdentity()} type="button">
+              {savingIdentity ? "Saving..." : "Save identity"}
+            </button>
           </div>
         </section>
       </section>
@@ -508,20 +619,37 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
         }}
       >
         <h2 style={{ margin: 0 }}>Notes</h2>
-        <div
+        <textarea
+          onChange={(event) =>
+            setBuild((current) => (current ? setCharacterNotes(current, event.target.value) : current))
+          }
+          placeholder="Player notes, reminders, and character details..."
           style={{
             background: "#fffdf8",
             border: "1px solid #e7e2d7",
             borderRadius: 10,
+            fontFamily: "inherit",
+            fontSize: "1rem",
             minHeight: 320,
             overflow: "auto",
             padding: "0.9rem",
-            whiteSpace: "pre-wrap"
+            resize: "vertical"
           }}
-        >
-          {notes || "No notes recorded yet."}
+          value={notes}
+        />
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem", justifyContent: "space-between" }}>
+          <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
+            Character notes stay separate from inventory notes.
+          </div>
+          <button disabled={savingNotes} onClick={() => void handleSaveNotes()} type="button">
+            {savingNotes ? "Saving..." : "Save notes"}
+          </button>
         </div>
       </section>
+
+      {feedback ? (
+        <div style={{ border: "1px solid #d9ddd8", borderRadius: 12, padding: "1rem" }}>{feedback}</div>
+      ) : null}
     </section>
   );
 }

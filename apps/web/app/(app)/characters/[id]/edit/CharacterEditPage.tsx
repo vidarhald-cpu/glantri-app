@@ -20,15 +20,11 @@ import {
   buildCharacterEditStatRows,
   getCharacterEditSheetSummary,
   removeCharacterSkill,
-  setCharacterAge,
-  setCharacterGender,
   setCharacterDistractionLevel,
   setCharacterCurrentStatValue,
-  setCharacterNotes,
   setCharacterOriginalStatValue,
   setCharacterSkillGroupLevel,
-  setCharacterSkillXp,
-  setCharacterTitle
+  setCharacterSkillXp
 } from "../../../../../src/lib/characters/characterEdit";
 import { loadServerCharacterEditContext } from "../../../../../src/lib/characters/loadServerCharacterEditContext";
 import type { LocalCharacterRecord } from "../../../../../src/lib/offline/glantriDexie";
@@ -209,22 +205,6 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
     );
   }
 
-  function updateTitle(value: string) {
-    setBuild((current) => (current ? setCharacterTitle(current, value) : current));
-  }
-
-  function updateAge(value: string) {
-    setBuild((current) => (current ? setCharacterAge(current, value) : current));
-  }
-
-  function updateGender(value: "" | "male" | "female" | "other") {
-    setBuild((current) => (current ? setCharacterGender(current, value) : current));
-  }
-
-  function updateNotes(value: string) {
-    setBuild((current) => (current ? setCharacterNotes(current, value) : current));
-  }
-
   function updateSkillGroup(groupId: string, value: string) {
     setBuild((current) =>
       current ? setCharacterSkillGroupLevel(current, groupId, parseWholeNumber(value)) : current
@@ -322,45 +302,22 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
           }}
         >
           <h2 style={{ margin: "0 0 0.75rem 0" }}>Identity</h2>
-          <div
-            style={{
-              alignItems: "center",
-              columnGap: "0.75rem",
-              display: "grid",
-              gridTemplateColumns: "minmax(110px, auto) minmax(0, 1fr)",
-              rowGap: "0.75rem"
-            }}
-          >
-            <label htmlFor="character-title">Title</label>
-            <input
-              id="character-title"
-              onChange={(event) => updateTitle(event.target.value)}
-              style={{ fontSize: "1rem", padding: "0.55rem" }}
-              type="text"
-              value={build.profile.title ?? ""}
-            />
-
-            <label htmlFor="character-age">Age</label>
-            <input
-              id="character-age"
-              onChange={(event) => updateAge(event.target.value)}
-              style={{ fontSize: "1rem", padding: "0.55rem" }}
-              type="text"
-              value={build.profile.age ?? ""}
-            />
-
-            <label htmlFor="character-gender">Gender</label>
-            <select
-              id="character-gender"
-              onChange={(event) => updateGender(event.target.value as "" | "male" | "female" | "other")}
-              style={{ fontSize: "1rem", padding: "0.55rem" }}
-              value={build.profile.gender ?? ""}
-            >
-              <option value="">---</option>
-              <option value="male">male</option>
-              <option value="female">female</option>
-              <option value="other">other</option>
-            </select>
+          <div style={{ color: "#5e5a50", display: "grid", gap: "0.6rem" }}>
+            <div>
+              <strong>Name:</strong> {build.name.trim() || "Unnamed Character"}
+            </div>
+            <div>
+              <strong>Title:</strong> {build.profile.title?.trim() || "—"}
+            </div>
+            <div>
+              <strong>Age:</strong> {build.profile.age?.trim() || "—"}
+            </div>
+            <div>
+              <strong>Gender:</strong> {build.profile.gender ?? "---"}
+            </div>
+            <div style={{ fontSize: "0.9rem" }}>
+              Personal information is edited on the Character Sheet, not in this GM progression editor.
+            </div>
           </div>
         </section>
 
@@ -569,12 +526,23 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
         }}
       >
         <h2 style={{ margin: 0 }}>Notes</h2>
-        <textarea
-          onChange={(event) => updateNotes(event.target.value)}
-          placeholder="Player notes, reminders, and character details..."
-          style={{ fontFamily: "inherit", fontSize: "1rem", minHeight: 320, padding: "0.75rem", resize: "vertical" }}
-          value={build.profile.notes ?? ""}
-        />
+        <div
+          style={{
+            background: "#fffdf8",
+            border: "1px solid #e7e2d7",
+            borderRadius: 10,
+            color: "#5e5a50",
+            minHeight: 320,
+            overflow: "auto",
+            padding: "0.9rem",
+            whiteSpace: "pre-wrap"
+          }}
+        >
+          {build.profile.notes?.trim() || "No character notes recorded."}
+        </div>
+        <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
+          Notes are edited on the Character Sheet so players have one clear save surface.
+        </div>
       </section>
 
       {feedback ? (
