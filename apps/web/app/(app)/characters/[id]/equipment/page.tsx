@@ -191,7 +191,7 @@ export default function CharacterEquipmentPage({ params }: CharacterEquipmentPag
         const message = error instanceof Error ? error.message : "Unable to load equipment.";
         setPageError(
           message === "Character not found."
-            ? "Character not found. This equipment page only works for characters that have been saved to the server."
+            ? "Character not found or not accessible from this account."
             : message
         );
       })

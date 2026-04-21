@@ -4,7 +4,7 @@ import { CharacterService, CharacterValidationError } from "@glantri/database";
 import { characterBuildSchema } from "@glantri/domain";
 
 import { requireAuthenticatedUser } from "../lib/sessionAuth";
-import { canEditCharacterInApi } from "../lib/characterEditAccess";
+import { canEditCharacterInApi, loadAccessibleCharacterInApi } from "../lib/characterEditAccess";
 
 const characterService = new CharacterService();
 
@@ -40,9 +40,11 @@ export const charactersRoutes: FastifyPluginAsync = async (app) => {
       });
     }
 
-    const character = canEditCharacterInApi(user)
-      ? await characterService.getCharacterById(characterId)
-      : await characterService.getOwnedCharacter(user.id, characterId);
+    const character = await loadAccessibleCharacterInApi({
+      characterId,
+      characterService,
+      user
+    });
 
     if (!character) {
       return reply.code(404).send({

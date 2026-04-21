@@ -597,7 +597,12 @@ export default function CharacterLoadoutPage({ params }: CharacterLoadoutPagePro
           return;
         }
 
-        setPageError(error instanceof Error ? error.message : "Unable to load loadout.");
+        const message = error instanceof Error ? error.message : "Unable to load loadout.";
+        setPageError(
+          message === "Character not found."
+            ? "Character not found or not accessible from this account."
+            : message
+        );
       })
       .finally(() => {
         if (!cancelled) {

@@ -15,7 +15,7 @@ import {
   StorageLocationTypeSchema
 } from "@glantri/domain/equipment";
 
-import { canEditCharacterInApi } from "../lib/characterEditAccess";
+import { loadAccessibleCharacterInApi } from "../lib/characterEditAccess";
 import { requireAuthenticatedUser } from "../lib/sessionAuth";
 
 const characterService = new CharacterService();
@@ -246,9 +246,11 @@ async function requireAccessibleCharacter(
   user: { id: string; roles: string[] },
   characterId: string
 ) {
-  const character = canEditCharacterInApi(user)
-    ? await characterService.getCharacterById(characterId)
-    : await characterService.getOwnedCharacter(user.id, characterId);
+  const character = await loadAccessibleCharacterInApi({
+    characterId,
+    characterService,
+    user
+  });
 
   if (!character) {
     throw new Error("Character not found.");
