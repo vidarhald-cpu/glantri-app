@@ -1,15 +1,12 @@
 "use client";
 
 import { use, useEffect, useMemo, useState, type ReactNode } from "react";
-import type { EncounterDefensePosture } from "@glantri/domain";
 import { getAccessTier, isWithYouLocation, type CarryMode } from "@glantri/domain/equipment";
 import {
   buildCharacterSheetSummary,
   defaultCombatAllocationState,
   lookupWorkbookPercentageAdjustment,
   lookupWorkbookSkillInitiativeModifier,
-  type CombatAllocationState,
-  type CombatParrySource,
 } from "@glantri/rules-engine";
 
 import { CombatStatePanel } from "../../../../../src/features/equipment/components/CombatStatePanel";
@@ -138,68 +135,6 @@ function WeaponControl(input: {
   );
 }
 
-function ParryAllocationControl(input: {
-  allocationValue: number;
-  label: string;
-  onAllocationChange: (value: number) => void;
-  onSourceChange: (value: string | null) => void;
-  options: Array<{ id: string; label: string }>;
-  sourceValue: string;
-}) {
-  return (
-    <div
-      style={{
-        background: "#f6f5ef",
-        border: "1px solid #d9ddd8",
-        borderRadius: 12,
-        display: "grid",
-        gap: "0.55rem",
-        padding: "0.75rem 0.85rem"
-      }}
-    >
-      <div>{input.label}</div>
-      <label style={{ display: "grid", gap: "0.35rem" }}>
-        <span style={{ color: "#5e5a50", fontSize: "0.9rem" }}>Source</span>
-        <select
-          onChange={(event) =>
-            input.onSourceChange(event.target.value.length > 0 ? event.target.value : null)
-          }
-          value={input.sourceValue}
-        >
-          {input.options.map((option) => (
-            <option key={option.id} value={option.id}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label style={{ display: "grid", gap: "0.35rem" }}>
-        <span style={{ color: "#5e5a50", fontSize: "0.9rem" }}>Allocated OB</span>
-        <input
-          onChange={(event) => input.onAllocationChange(Number(event.target.value) || 0)}
-          type="number"
-          value={input.allocationValue}
-        />
-      </label>
-    </div>
-  );
-}
-
-const defensePostureOptions: Array<{ label: string; value: EncounterDefensePosture }> = [
-  { label: "None", value: "none" },
-  { label: "Guard", value: "guard" },
-  { label: "Parry", value: "parry" },
-  { label: "Shield defense", value: "shield" },
-  { label: "Full defense", value: "full-defense" },
-];
-
-const combatActionOptions = [
-  { label: "None", value: "none" },
-  { label: "Attack", value: "attack" },
-  { label: "Move", value: "move" },
-  { label: "Hold", value: "hold" },
-] as const;
-
 function isBowOrTwoHandedTemplate(templateId: string | null, state: EquipmentFeatureState): boolean {
   if (!templateId) {
     return false;
@@ -212,30 +147,6 @@ function isBowOrTwoHandedTemplate(templateId: string | null, state: EquipmentFea
       template.weaponClass === "bow" ||
       template.tags.includes("bow"))
   );
-}
-
-function getParrySourceOptions(loadout: ReturnType<typeof getLoadoutEquipment>): Array<{
-  label: string;
-  value: CombatParrySource;
-}> {
-  const options: Array<{ label: string; value: CombatParrySource }> = [
-    { label: "None", value: "none" },
-    { label: "Unarmed", value: "unarmed" },
-  ];
-
-  if ("primary" in loadout && loadout.primary) {
-    options.push({ label: "Primary", value: "primary" });
-  }
-
-  if ("secondary" in loadout && loadout.secondary) {
-    options.push({ label: "Secondary", value: "secondary" });
-  }
-
-  if ("shield" in loadout && loadout.shield) {
-    options.push({ label: "Shield", value: "shield" });
-  }
-
-  return options;
 }
 
 function buildSelectableItemOptions(input: {
@@ -400,10 +311,7 @@ export default function CharacterLoadoutPage({ params }: CharacterLoadoutPagePro
   >(null);
   const [loading, setLoading] = useState(true);
   const [pageError, setPageError] = useState<string>();
-  const [combatAllocationInputs, setCombatAllocationInputs] = useState<CombatAllocationState>(
-    defaultCombatAllocationState
-  );
-  const [combatAction, setCombatAction] = useState<(typeof combatActionOptions)[number]["value"]>("none");
+  const combatAllocationInputs = defaultCombatAllocationState;
   const [throwingWeaponItemId, setThrowingWeaponItemId] = useState<string>("");
   const [errors, setErrors] = useState<
     Record<"armor" | "primary" | "secondary" | "missile" | "shield", string | undefined>
@@ -487,7 +395,6 @@ export default function CharacterLoadoutPage({ params }: CharacterLoadoutPagePro
         : null,
     [characterCombatInputs, combatAllocationInputs, id, state],
   );
-  const parrySourceOptions = useMemo(() => getParrySourceOptions(loadout), [loadout]);
   const throwingWeaponOptions = useMemo(
     () =>
       state
@@ -921,69 +828,6 @@ export default function CharacterLoadoutPage({ params }: CharacterLoadoutPagePro
               onChange={(itemId) => setThrowingWeaponItemId(itemId ?? "")}
               options={throwingWeaponOptions}
               value={throwingWeaponItemId}
-            />
-          </div>
-        </ControlSection>
-      ) : null}
-
-      {!loading && !pageError ? (
-        <ControlSection compact title="Combat actions">
-          <div
-            style={{
-              display: "grid",
-              gap: "0.6rem",
-              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))"
-            }}
-          >
-            <WeaponControl
-              label="Defence posture"
-              onChange={(value) =>
-                setCombatAllocationInputs((current) => ({
-                  ...current,
-                  defensePosture: (value ?? "none") as EncounterDefensePosture,
-                }))
-              }
-              options={defensePostureOptions.map((option) => ({
-                id: option.value,
-                label: option.label,
-              }))}
-              value={combatAllocationInputs.defensePosture}
-            />
-            <ParryAllocationControl
-              allocationValue={combatAllocationInputs.parry.allocatedOb ?? 0}
-              label="Parry allocation"
-              onAllocationChange={(value) =>
-                setCombatAllocationInputs((current) => ({
-                  ...current,
-                  parry: {
-                    ...current.parry,
-                    allocatedOb: value,
-                  },
-                }))
-              }
-              onSourceChange={(value) =>
-                setCombatAllocationInputs((current) => ({
-                  ...current,
-                  parry: {
-                    ...current.parry,
-                    source: (value ?? "none") as CombatParrySource,
-                  },
-                }))
-              }
-              options={parrySourceOptions.map((option) => ({
-                id: option.value,
-                label: option.label,
-              }))}
-              sourceValue={combatAllocationInputs.parry.source}
-            />
-            <WeaponControl
-              label="Combat action"
-              onChange={(value) => setCombatAction((value ?? "none") as (typeof combatActionOptions)[number]["value"])}
-              options={combatActionOptions.map((option) => ({
-                id: option.value,
-                label: option.label,
-              }))}
-              value={combatAction}
             />
           </div>
         </ControlSection>
