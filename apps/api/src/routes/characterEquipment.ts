@@ -15,6 +15,7 @@ import {
   StorageLocationTypeSchema
 } from "@glantri/domain/equipment";
 
+import { canEditCharacterInApi } from "../lib/characterEditAccess";
 import { requireAuthenticatedUser } from "../lib/sessionAuth";
 
 const characterService = new CharacterService();
@@ -241,11 +242,13 @@ function parseUpdateMetadataBody(body: unknown) {
   };
 }
 
-async function requireOwnedCharacter(
-  ownerId: string,
+async function requireAccessibleCharacter(
+  user: { id: string; roles: string[] },
   characterId: string
 ) {
-  const character = await characterService.getOwnedCharacter(ownerId, characterId);
+  const character = canEditCharacterInApi(user)
+    ? await characterService.getCharacterById(characterId)
+    : await characterService.getOwnedCharacter(user.id, characterId);
 
   if (!character) {
     throw new Error("Character not found.");
@@ -276,7 +279,7 @@ export const characterEquipmentRoutes: FastifyPluginAsync = async (app) => {
     const id = parseCharacterId(request.params);
 
     try {
-      await requireOwnedCharacter(user.id, id);
+      await requireAccessibleCharacter(user, id);
       await equipmentWriteService.ensureCharacterEquipmentInitialized(id);
 
       return {
@@ -306,7 +309,7 @@ export const characterEquipmentRoutes: FastifyPluginAsync = async (app) => {
 
     try {
       const body = parseMoveItemBody(request.body);
-      await requireOwnedCharacter(user.id, id);
+      await requireAccessibleCharacter(user, id);
       await equipmentWriteService.moveCharacterEquipmentItem(
         id,
         body.itemId,
@@ -347,7 +350,7 @@ export const characterEquipmentRoutes: FastifyPluginAsync = async (app) => {
 
     try {
       const body = parseCreateLocationBody(request.body);
-      await requireOwnedCharacter(user.id, id);
+      await requireAccessibleCharacter(user, id);
       await equipmentWriteService.createCharacterStorageLocation(
         id,
         body.name,
@@ -388,7 +391,7 @@ export const characterEquipmentRoutes: FastifyPluginAsync = async (app) => {
 
     try {
       const body = parseDeleteLocationBody(request.body);
-      await requireOwnedCharacter(user.id, id);
+      await requireAccessibleCharacter(user, id);
       await equipmentWriteService.removeCharacterStorageLocation(id, body.locationId);
 
       return {
@@ -424,7 +427,7 @@ export const characterEquipmentRoutes: FastifyPluginAsync = async (app) => {
 
     try {
       const body = parseBootstrapSampleBody(request.body);
-      await requireOwnedCharacter(user.id, id);
+      await requireAccessibleCharacter(user, id);
       await equipmentWriteService.bootstrapSampleCharacterEquipment(id, {
         overwrite: body.overwrite
       });
@@ -462,7 +465,7 @@ export const characterEquipmentRoutes: FastifyPluginAsync = async (app) => {
 
     try {
       const body = parseAddItemBody(request.body);
-      await requireOwnedCharacter(user.id, id);
+      await requireAccessibleCharacter(user, id);
       await equipmentWriteService.addCharacterEquipmentItem(id, body);
 
       return {
@@ -498,7 +501,7 @@ export const characterEquipmentRoutes: FastifyPluginAsync = async (app) => {
 
     try {
       const body = parseRemoveItemBody(request.body);
-      await requireOwnedCharacter(user.id, id);
+      await requireAccessibleCharacter(user, id);
       await equipmentWriteService.removeCharacterEquipmentItem(id, body.itemId);
 
       return {
@@ -534,7 +537,7 @@ export const characterEquipmentRoutes: FastifyPluginAsync = async (app) => {
 
     try {
       const body = parseUpdateQuantityBody(request.body);
-      await requireOwnedCharacter(user.id, id);
+      await requireAccessibleCharacter(user, id);
       await equipmentWriteService.updateCharacterEquipmentQuantity(id, body.itemId, body.quantity);
 
       return {
@@ -570,7 +573,7 @@ export const characterEquipmentRoutes: FastifyPluginAsync = async (app) => {
 
     try {
       const body = parseUpdateMetadataBody(request.body);
-      await requireOwnedCharacter(user.id, id);
+      await requireAccessibleCharacter(user, id);
       await equipmentWriteService.updateCharacterEquipmentMetadata(id, body.itemId, {
         conditionState: body.conditionState,
         displayName: body.displayName,
@@ -611,7 +614,7 @@ export const characterEquipmentRoutes: FastifyPluginAsync = async (app) => {
 
     try {
       const body = parseNullableItemIdBody(request.body);
-      await requireOwnedCharacter(user.id, id);
+      await requireAccessibleCharacter(user, id);
       await equipmentWriteService.setCharacterWornArmor(id, body.itemId);
 
       return {
@@ -643,7 +646,7 @@ export const characterEquipmentRoutes: FastifyPluginAsync = async (app) => {
 
     try {
       const body = parseNullableItemIdBody(request.body);
-      await requireOwnedCharacter(user.id, id);
+      await requireAccessibleCharacter(user, id);
       await equipmentWriteService.setCharacterReadyShield(id, body.itemId);
 
       return {
@@ -676,7 +679,7 @@ export const characterEquipmentRoutes: FastifyPluginAsync = async (app) => {
 
       try {
         const body = parseNullableItemIdBody(request.body);
-        await requireOwnedCharacter(user.id, id);
+      await requireAccessibleCharacter(user, id);
         await equipmentWriteService.setCharacterActiveWeapon(id, slot, body.itemId);
 
         return {
