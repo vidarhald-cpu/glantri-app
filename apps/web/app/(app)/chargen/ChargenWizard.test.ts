@@ -183,6 +183,12 @@ const combatContent = {
   specializations: []
 };
 
+const canonicalLanguages = [
+  { id: "common_language", name: "Common", sourceSocietyId: "glantri" },
+  { id: "old_common_language", name: "Old Common", sourceSocietyId: "glantri" },
+  { id: "phoenician_language", name: "Phoenician", sourceSocietyId: "glantri" }
+];
+
 const languageContent = {
   civilizations: [
     {
@@ -199,11 +205,7 @@ const languageContent = {
       writtenLanguageName: "Phoenician"
     }
   ],
-  languages: [
-    { id: "common_language", name: "Common", sourceSocietyId: "glantri" },
-    { id: "old_common_language", name: "Old Common", sourceSocietyId: "glantri" },
-    { id: "phoenician_language", name: "Phoenician", sourceSocietyId: "glantri" }
-  ],
+  languages: canonicalLanguages,
   professionFamilies: [{ id: "scholar", name: "Scholar" }],
   professionSkills: [],
   professions: [{ familyId: "scholar", id: "scribe", name: "Scribe", subtypeName: "Scribe" }],
@@ -441,7 +443,7 @@ describe("ChargenWizard concrete language rows", () => {
     });
 
     const rows = buildConcreteLanguageBrowseRows({
-      content: languageContent,
+      content: { ...languageContent, languages: canonicalLanguages },
       draftView,
       profile: undefined,
       progression: createChargenProgression()
@@ -460,7 +462,7 @@ describe("ChargenWizard concrete language rows", () => {
 
   it("targets purchases and metrics at the concrete language row", () => {
     const purchased = allocateChargenPoint({
-      content: languageContent,
+      content: { ...languageContent, languages: canonicalLanguages },
       professionId: "scribe",
       profile: languageProfile,
       progression: createChargenProgression(),
@@ -475,7 +477,7 @@ describe("ChargenWizard concrete language rows", () => {
 
     const draftView = buildChargenDraftView({
       civilizationId: "glantri_civ",
-      content: languageContent,
+      content: { ...languageContent, languages: canonicalLanguages },
       professionId: "scribe",
       profile: languageProfile,
       progression: purchased.progression,
@@ -487,14 +489,14 @@ describe("ChargenWizard concrete language rows", () => {
     expect(languageSkill).toBeDefined();
 
     const oldCommonMetrics = getSkillAllocationMetrics({
-      content: languageContent,
+      content: { ...languageContent, languages: canonicalLanguages },
       draftView,
       profile: undefined,
       skill: languageSkill!,
       targetLanguageName: "Old Common"
     });
     const phoenicianMetrics = getSkillAllocationMetrics({
-      content: languageContent,
+      content: { ...languageContent, languages: canonicalLanguages },
       draftView,
       profile: undefined,
       skill: languageSkill!,
