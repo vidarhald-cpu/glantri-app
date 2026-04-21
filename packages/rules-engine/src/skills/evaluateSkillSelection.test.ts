@@ -485,6 +485,128 @@ describe("evaluateSkillSelection", () => {
     expect(evaluation.blockingReasons).toHaveLength(0);
   });
 
+  it("does not treat unselected slot weapons as present through group XP", () => {
+    const contentWithCombatSlots = validateCanonicalContent({
+      ...testContent,
+      skillGroups: [
+        ...testContent.skillGroups,
+        {
+          id: "advanced_melee_training",
+          name: "Advanced Melee Training",
+          selectionSlots: [
+            {
+              candidateSkillIds: ["longsword", "battleaxe", "spear"],
+              chooseCount: 1,
+              id: "melee_weapon_choice",
+              label: "Choose one melee weapon",
+              required: true
+            }
+          ],
+          sortOrder: 4
+        }
+      ],
+      skills: [
+        ...testContent.skills,
+        {
+          allowsSpecializations: false,
+          category: "ordinary",
+          dependencies: [],
+          dependencySkillIds: [],
+          groupId: "advanced_melee_training",
+          groupIds: ["advanced_melee_training"],
+          id: "longsword",
+          linkedStats: ["str", "dex"],
+          name: "Longsword",
+          requiresLiteracy: "no",
+          sortOrder: 10
+        },
+        {
+          allowsSpecializations: false,
+          category: "ordinary",
+          dependencies: [
+            {
+              skillId: "battleaxe",
+              strength: "required"
+            }
+          ],
+          dependencySkillIds: ["battleaxe"],
+          groupId: "social",
+          groupIds: ["social"],
+          id: "axe_mastery",
+          linkedStats: ["str", "dex"],
+          name: "Axe Mastery",
+          requiresLiteracy: "no",
+          sortOrder: 11
+        },
+        {
+          allowsSpecializations: false,
+          category: "ordinary",
+          dependencies: [],
+          dependencySkillIds: [],
+          groupId: "advanced_melee_training",
+          groupIds: ["advanced_melee_training"],
+          id: "battleaxe",
+          linkedStats: ["str", "dex"],
+          name: "Battleaxe",
+          requiresLiteracy: "no",
+          sortOrder: 12
+        },
+        {
+          allowsSpecializations: false,
+          category: "ordinary",
+          dependencies: [],
+          dependencySkillIds: [],
+          groupId: "advanced_melee_training",
+          groupIds: ["advanced_melee_training"],
+          id: "spear",
+          linkedStats: ["str", "dex"],
+          name: "Spear",
+          requiresLiteracy: "no",
+          sortOrder: 13
+        }
+      ],
+      specializations: testContent.specializations
+    });
+
+    const evaluation = evaluateSkillSelection({
+      content: contentWithCombatSlots,
+      progression: {
+        ...createChargenProgression(),
+        chargenSelections: {
+          selectedGroupSlots: [
+            {
+              groupId: "advanced_melee_training",
+              selectedSkillIds: ["longsword"],
+              slotId: "melee_weapon_choice"
+            }
+          ],
+          selectedLanguageIds: [],
+          selectedSkillIds: []
+        },
+        skillGroups: [
+          {
+            gms: 0,
+            grantedRanks: 0,
+            groupId: "advanced_melee_training",
+            primaryRanks: 3,
+            ranks: 3,
+            secondaryRanks: 0
+          }
+        ],
+        skills: []
+      },
+      target: {
+        skill: contentWithCombatSlots.skills.find((skill) => skill.id === "axe_mastery")!,
+        targetType: "skill"
+      }
+    });
+
+    expect(evaluation.isAllowed).toBe(false);
+    expect(evaluation.blockingReasons.map((reason) => reason.code)).toEqual([
+      "missing-required-dependency"
+    ]);
+  });
+
   it("returns the correct mixed dependency state", () => {
     const evaluation = evaluateSkillSelection({
       content: testContent,

@@ -4,8 +4,8 @@ import type {
   SkillGroupDefinition,
   SkillSpecialization
 } from "@glantri/domain";
-import { getSkillGroupIds } from "@glantri/domain";
 import { calculateGroupLevel } from "./calculateGroupLevel";
+import { getActiveSkillGroupIds } from "./getActiveSkillGroupIds";
 import { selectBestSkillGroupContribution } from "./selectBestSkillGroupContribution";
 
 const LITERACY_SKILL_ID = "literacy";
@@ -103,7 +103,13 @@ function getEffectiveSkillLevel(input: {
   skill: SkillDefinition;
 }): number {
   const directRanks = getPurchasedSkillLevel(input.progression, input.skill.id);
-  const relevantGroupIds = new Set(getSkillGroupIds(input.skill));
+  const relevantGroupIds = new Set(
+    getActiveSkillGroupIds({
+      progression: input.progression,
+      skill: input.skill,
+      skillGroups: input.content.skillGroups
+    })
+  );
   const bestGroupContribution =
     selectBestSkillGroupContribution(
       input.progression.skillGroups

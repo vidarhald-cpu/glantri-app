@@ -1739,7 +1739,7 @@ export const generatedRepoLocalGlantriSeed = {
       "sortOrder": 10
     },
     {
-      "allowsSpecializations": true,
+      "allowsSpecializations": false,
       "category": "ordinary",
       "categoryId": "knowledge",
       "dependencies": [],
@@ -4813,15 +4813,6 @@ export const generatedRepoLocalGlantriSeed = {
     }
   ],
   "specializations": [
-    {
-      "description": "Mastery of one specific language. Best for scholars, diplomats, merchants, and elite specialists.",
-      "id": "specific_language",
-      "minimumGroupLevel": 6,
-      "minimumParentLevel": 6,
-      "name": "Specific Language",
-      "skillId": "language",
-      "sortOrder": 12
-    },
     {
       "description": "Apply etiquette within one specific culture or court tradition. Strong diplomat and court specialization.",
       "id": "etiquette_by_culture",

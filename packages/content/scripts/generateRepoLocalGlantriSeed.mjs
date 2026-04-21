@@ -521,7 +521,9 @@ const taxonomyGroupSources = rawBundle.taxonomyGroups.map((group, index) => ({
   sortOrder: trainingGroupSources.length + index + 1
 }));
 const skillGroupSources = [...trainingGroupSources, ...taxonomyGroupSources];
-const specializationRows = rawBundle.skills.filter((skill) => skill.tier === "specialization");
+const specializationRows = rawBundle.skills.filter(
+  (skill) => skill.tier === "specialization" && skill.skillId !== "specific_language"
+);
 const specializationParentIds = new Set(
   specializationRows
     .map((skill) => skill.specializationOfSkillId)
