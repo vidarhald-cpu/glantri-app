@@ -12,17 +12,12 @@ import {
 import {
   calculateBaseOB,
   type CharacterSheetSummary,
-  getWorkbookStatGm,
-} from "@glantri/rules-engine";
-import {
-  defaultCombatAllocationState,
-  getCombatDefensePostureLabel,
-  normalizeCombatAllocationState,
   type CombatAllocationState,
   type CombatParrySource,
-} from "../../../../../packages/rules-engine/src/combat/combatAllocationState";
-import type { CombatSessionState } from "../../../../../packages/rules-engine/src/combat/combatSessionState";
-import {
+  type CombatSessionState,
+  defaultCombatAllocationState,
+  getCombatDefensePostureLabel,
+  getWorkbookStatGm,
   calculateWorkbookBaseDb,
   calculateWorkbookCombinedParry,
   calculateWorkbookDefensePair,
@@ -32,7 +27,8 @@ import {
   calculateWorkbookProjectileOb,
   calculateWorkbookWeaponParry,
   lookupWorkbookToHitModifier,
-} from "../../../../../packages/rules-engine/src/combat/workbookCombatMath";
+  normalizeCombatAllocationState,
+} from "@glantri/rules-engine";
 
 import {
   getBackpackItems,

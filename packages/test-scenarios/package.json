@@ -8,6 +8,14 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./equipment/sampleCharacterEquipment": {
+      "types": "./dist/equipment/sampleCharacterEquipment.d.ts",
+      "default": "./dist/equipment/sampleCharacterEquipment.js"
+    },
+    "./equipment/sampleWeapons": {
+      "types": "./dist/equipment/sampleWeapons.d.ts",
+      "default": "./dist/equipment/sampleWeapons.js"
     }
   },
   "scripts": {
@@ -17,6 +25,7 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
+    "@glantri/content": "workspace:*",
     "@glantri/domain": "workspace:*",
     "@glantri/rules-engine": "workspace:*"
   }

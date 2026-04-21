@@ -2,13 +2,15 @@
   "$schema": "https://json.schemastore.org/tsconfig",
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
+    "paths": {},
     "declaration": true,
     "declarationMap": true,
-    "module": "CommonJS",
-    "moduleResolution": "Node",
+    "module": "Node16",
+    "moduleResolution": "Node16",
     "noEmit": false,
     "outDir": "dist",
     "sourceMap": true,
     "target": "ES2022"
-  }
+  },
+  "exclude": ["**/*.test.ts", "**/*.test.tsx", "**/__tests__/**"]
 }

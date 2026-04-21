@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { EquipmentItem, EquipmentTemplate, StorageLocation } from "@glantri/domain";
-import { equipmentTemplates } from "../../../../../packages/content/src/equipment";
+import { equipmentTemplates } from "@glantri/content/equipment";
 
 import {
   buildMeleeWeaponCatalogTable,

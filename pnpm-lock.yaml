@@ -204,6 +204,9 @@ importers:
 
   packages/test-scenarios:
     dependencies:
+      '@glantri/content':
+        specifier: workspace:*
+        version: link:../content
       '@glantri/domain':
         specifier: workspace:*
         version: link:../domain

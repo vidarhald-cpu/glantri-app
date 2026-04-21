@@ -7,7 +7,7 @@ import type {
   StorageLocation,
 } from "@glantri/domain";
 
-import { equipmentTemplates } from "../../../../../packages/content/src/equipment";
+import { equipmentTemplates } from "@glantri/content/equipment";
 import { buildWorkbookMovementSummary } from "./movementSummary";
 import type { CombatStateCharacterInputs } from "./combatStateDerivation";
 import type { EquipmentFeatureState } from "./types";

@@ -10,9 +10,11 @@ import type {
   SocietyLevelAccess
 } from "@glantri/domain";
 import { getCharacterSkillKey } from "@glantri/domain";
-
-import { buildCharacterSheetSummary, type CharacterSheetSummary } from "../../../../../packages/rules-engine/src/sheets/buildCharacterSheetSummary";
-import { getCharacteristicGm } from "../../../../../packages/rules-engine/src/stats/characteristicGms";
+import {
+  buildCharacterSheetSummary,
+  getCharacteristicGm,
+  type CharacterSheetSummary,
+} from "@glantri/rules-engine";
 
 export interface CharacterEditContentShape {
   professionFamilies: ProfessionFamilyDefinition[];

@@ -6,9 +6,9 @@ import type {
   EquipmentTemplate,
   StorageLocation
 } from "@glantri/domain";
+import { equipmentTemplates } from "@glantri/content/equipment";
 import { defaultCombatAllocationState } from "./combatAllocationState";
-import { equipmentTemplates } from "../../../../packages/content/src/equipment";
-import { deriveCombatStateSnapshot } from "../../../../apps/web/src/features/equipment/combatStateDerivation.ts";
+import { deriveCombatStateSnapshot } from "../../../../apps/web/src/features/equipment/combatStateDerivation";
 
 type EquipmentState = Parameters<typeof deriveCombatStateSnapshot>[0];
 type CharacterInputs = NonNullable<Parameters<typeof deriveCombatStateSnapshot>[2]>;

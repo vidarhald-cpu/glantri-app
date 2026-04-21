@@ -13,7 +13,7 @@ import {
   calculateWorkbookEncumbranceLevel,
   calculateWorkbookMovement,
   calculateWorkbookMovementModifier,
-} from "../../../../../packages/rules-engine/src/combat/workbookCombatMath";
+} from "@glantri/rules-engine";
 
 import { calculateWorkbookArmorEncumbrance } from "./armorSummary";
 import {

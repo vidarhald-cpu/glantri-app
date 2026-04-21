@@ -6,11 +6,12 @@ import type {
   EquipmentTemplate,
   StorageLocation,
 } from "@glantri/domain";
-import type { CombatAllocationState } from "../../../../../packages/rules-engine/src/combat/combatAllocationState";
-import { createCombatSession } from "../../../../../packages/rules-engine/src/combat/combatSessionState";
-import type { CharacterSheetSummary } from "@glantri/rules-engine";
-
-import { equipmentTemplates } from "../../../../../packages/content/src/equipment";
+import { equipmentTemplates } from "@glantri/content/equipment";
+import {
+  createCombatSession,
+  type CharacterSheetSummary,
+  type CombatAllocationState,
+} from "@glantri/rules-engine";
 import type { EquipmentFeatureState } from "./types";
 import {
   buildCombatStateCharacterInputs,

@@ -6,9 +6,8 @@ import type {
   EquipmentTemplate,
   StorageLocation,
 } from "@glantri/domain";
-
-import { equipmentTemplates } from "../../../../../packages/content/src/equipment";
-import { defaultCombatAllocationState } from "../../../../../packages/rules-engine/src/combat/combatAllocationState";
+import { equipmentTemplates } from "@glantri/content/equipment";
+import { defaultCombatAllocationState } from "@glantri/rules-engine";
 import { buildCombatStatePanelModel } from "./combatStatePanel";
 import type { CombatStateCharacterInputs } from "./combatStateDerivation";
 import type { EquipmentFeatureState } from "./types";

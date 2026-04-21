@@ -3,16 +3,14 @@
 import { use, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { EncounterDefensePosture } from "@glantri/domain";
 import { getAccessTier, isWithYouLocation, type CarryMode } from "@glantri/domain/equipment";
-import { buildCharacterSheetSummary } from "@glantri/rules-engine";
 import {
+  buildCharacterSheetSummary,
   defaultCombatAllocationState,
-  type CombatAllocationState,
-  type CombatParrySource,
-} from "../../../../../../../packages/rules-engine/src/combat/combatAllocationState";
-import {
   lookupWorkbookPercentageAdjustment,
   lookupWorkbookSkillInitiativeModifier,
-} from "../../../../../../../packages/rules-engine/src/combat/workbookCombatMath";
+  type CombatAllocationState,
+  type CombatParrySource,
+} from "@glantri/rules-engine";
 
 import { CombatStatePanel } from "../../../../../src/features/equipment/components/CombatStatePanel";
 import {

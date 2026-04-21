@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { armorTemplates } from "../../../../../packages/content/src/equipment/armorTemplates";
+import { armorTemplates } from "@glantri/content/equipment";
 import { buildCharacterArmorSummary, calculateWorkbookArmorEncumbrance } from "./armorSummary";
 
 const leatherJerkin = armorTemplates.find((template) => template.id === "armor-template-leather-jerkin") ?? null;
