@@ -183,6 +183,100 @@ const combatContent = {
   specializations: []
 };
 
+const overlappingProfessionContent = {
+  civilizations: [],
+  languages: [],
+  professionFamilies: [{ id: "scout_family", name: "Scout" }],
+  professionSkills: [
+    {
+      grantType: "group",
+      isCore: true,
+      professionId: "scout_family",
+      scope: "family",
+      skillGroupId: "fieldcraft"
+    },
+    {
+      grantType: "skill",
+      isCore: true,
+      professionId: "scout_family",
+      scope: "family",
+      skillId: "stealth"
+    }
+  ],
+  professions: [
+    { familyId: "scout_family", id: "pathfinder", name: "Pathfinder", subtypeName: "Pathfinder" }
+  ],
+  skillGroups: [{ id: "fieldcraft", name: "Fieldcraft", skillMemberships: [], sortOrder: 1 }],
+  skills: [
+    {
+      allowsSpecializations: false,
+      category: "ordinary",
+      dependencies: [],
+      dependencySkillIds: [],
+      groupId: "fieldcraft",
+      groupIds: ["fieldcraft"],
+      id: "stealth",
+      linkedStats: ["dex"],
+      name: "Stealth",
+      requiresLiteracy: "no",
+      sortOrder: 1
+    },
+    {
+      allowsSpecializations: false,
+      category: "ordinary",
+      dependencies: [],
+      dependencySkillIds: [],
+      groupId: "fieldcraft",
+      groupIds: ["fieldcraft"],
+      id: "tracking",
+      linkedStats: ["int"],
+      name: "Tracking",
+      requiresLiteracy: "no",
+      sortOrder: 2
+    }
+  ],
+  societies: [],
+  societyLevels: [
+    {
+      professionIds: ["pathfinder"],
+      skillGroupIds: ["fieldcraft"],
+      skillIds: [],
+      socialClass: "Common",
+      societyId: "glantri",
+      societyLevel: 1,
+      societyName: "Glantri"
+    },
+    {
+      professionIds: ["pathfinder"],
+      skillGroupIds: ["fieldcraft"],
+      skillIds: [],
+      socialClass: "Guild",
+      societyId: "glantri",
+      societyLevel: 2,
+      societyName: "Glantri"
+    },
+    {
+      professionIds: ["pathfinder"],
+      skillGroupIds: ["fieldcraft"],
+      skillIds: [],
+      socialClass: "Patrician",
+      societyId: "glantri",
+      societyLevel: 3,
+      societyName: "Glantri"
+    },
+    {
+      professionIds: ["pathfinder"],
+      skillGroupIds: ["fieldcraft"],
+      skillIds: [],
+      socialClass: "Noble",
+      societyId: "glantri",
+      societyLevel: 4,
+      societyName: "Glantri"
+    }
+  ],
+  specializations: []
+};
+
 const canonicalLanguages = [
   { id: "common_language", name: "Common", sourceSocietyId: "glantri" },
   { id: "old_common_language", name: "Old Common", sourceSocietyId: "glantri" },
@@ -427,6 +521,60 @@ describe("ChargenWizard combat allocation runtime helpers", () => {
     expect(swordMetrics.totalXp).toBe(swordMetrics.groupXp);
     expect(maceMetrics.groupXp).toBe(0);
     expect(maceMetrics.totalXp).toBe(0);
+  });
+});
+
+describe("ChargenWizard profession-group display priority", () => {
+  it("prefers a visible profession group over duplicated direct special-access display", () => {
+    const draftView = buildChargenDraftView({
+      content: overlappingProfessionContent,
+      professionId: "pathfinder",
+      progression: createChargenProgression(),
+      societyId: "glantri",
+      societyLevel: 1
+    });
+    const skillAccess = buildChargenSkillAccessSummary({
+      content: overlappingProfessionContent,
+      professionId: "pathfinder",
+      societyId: "glantri",
+      societyLevel: 1
+    });
+    const stealth = overlappingProfessionContent.skills.find((skill) => skill.id === "stealth");
+
+    expect(stealth).toBeDefined();
+
+    const stealthDisplayGroupId = getSkillDisplayGroupId({
+      content: overlappingProfessionContent,
+      draftView,
+      skill: stealth!,
+      skillAccess
+    });
+
+    const additionalAllowedSkills = overlappingProfessionContent.skills.filter(
+      (skill) =>
+        skillAccess.normalSkillIds.includes(skill.id) &&
+        getSkillDisplayGroupId({
+          content: overlappingProfessionContent,
+          draftView,
+          skill,
+          skillAccess
+        }) === undefined
+    );
+    const fieldcraftGroupSkillIds = overlappingProfessionContent.skills
+      .filter(
+        (skill) =>
+          getSkillDisplayGroupId({
+            content: overlappingProfessionContent,
+            draftView,
+            skill,
+            skillAccess
+          }) === "fieldcraft"
+      )
+      .map((skill) => skill.id);
+
+    expect(stealthDisplayGroupId).toBe("fieldcraft");
+    expect(fieldcraftGroupSkillIds).toContain("stealth");
+    expect(additionalAllowedSkills.map((skill) => skill.id)).not.toContain("stealth");
   });
 });
 

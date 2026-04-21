@@ -205,6 +205,35 @@ export function getSkillDisplayGroupId(input: {
     ) ??
     input.draftView.skills.find((candidate) => candidate.skillId === input.skill.id);
 
+  const canonicalVisibleGroupId = [
+    ...(input.skill.groupIds ?? []),
+    input.skill.groupId
+  ]
+    .filter((groupId): groupId is string => Boolean(groupId))
+    .find((groupId) => input.skillAccess.normalSkillGroupIds.includes(groupId));
+
+  if (canonicalVisibleGroupId) {
+    const canonicalVisibleGroup = input.content.skillGroups.find(
+      (group) => group.id === canonicalVisibleGroupId
+    );
+    const requiresMaterializedMembership =
+      (canonicalVisibleGroup?.selectionSlots?.length ?? 0) > 0;
+
+    if (!requiresMaterializedMembership) {
+      return canonicalVisibleGroupId;
+    }
+
+    if (
+      purchasedSkill &&
+      (purchasedSkill.contributingGroupId === canonicalVisibleGroupId ||
+        purchasedSkill.groupId === canonicalVisibleGroupId)
+    ) {
+      return canonicalVisibleGroupId;
+    }
+
+    return undefined;
+  }
+
   if (purchasedSkill) {
     return purchasedSkill.contributingGroupId ?? purchasedSkill.groupId;
   }
