@@ -58,7 +58,6 @@ import {
   type RolledProfileSummary
 } from "@glantri/rules-engine";
 
-import type { LocalCharacterRecord } from "../../../src/lib/offline/glantriDexie";
 import {
   filterProfessionBrowseItems,
   filterSpecializationBrowseItems,
@@ -279,14 +278,6 @@ function formatPlayerLabel(user: AuthUser | null | undefined): string {
   }
 
   return user.email;
-}
-
-function formatSavedCharacterCreator(record: LocalCharacterRecord): string {
-  if (record.creatorDisplayName && record.creatorEmail) {
-    return `${record.creatorDisplayName} (${record.creatorEmail})`;
-  }
-
-  return record.creatorDisplayName ?? record.creatorEmail ?? "Not recorded";
 }
 
 function formatActionError(error: string | undefined): string | undefined {
@@ -677,7 +668,6 @@ export default function ChargenWizard() {
   const [progression, setProgression] = useState<CharacterProgression>(createChargenProgression());
   const [rowActionFeedback, setRowActionFeedback] = useState<Record<string, string>>({});
   const [rolledProfiles, setRolledProfiles] = useState<RolledCharacterProfile[]>([]);
-  const [savedCharacters, setSavedCharacters] = useState<LocalCharacterRecord[]>([]);
   const [selectedProfileId, setSelectedProfileId] = useState<string>();
   const [selectedCivilizationId, setSelectedCivilizationId] = useState<string>();
   const [selectedProfessionId, setSelectedProfessionId] = useState<string>();
@@ -1147,9 +1137,8 @@ export default function ChargenWizard() {
     let cancelled = false;
 
     async function hydrate() {
-      const [cachedContent, existingCharacters, sessionUser] = await Promise.all([
+      const [cachedContent, sessionUser] = await Promise.all([
         contentCacheRepository.get(CONTENT_CACHE_KEY),
-        localCharacterRepository.listFinalized(),
         getCurrentSessionUser().catch(() => null)
       ]);
 
@@ -1165,7 +1154,6 @@ export default function ChargenWizard() {
         setContent(startingContent);
       }
 
-      setSavedCharacters(existingCharacters);
       setCurrentUser(sessionUser);
 
       setHydrated(true);
@@ -3914,41 +3902,6 @@ export default function ChargenWizard() {
             </button>
           </div>
         </div>
-      </section>
-
-      <section
-        style={{
-          background: "#fbfaf5",
-          border: "1px solid #d9ddd8",
-          borderRadius: 12,
-          display: "grid",
-          gap: "0.75rem",
-          padding: "1rem"
-        }}
-      >
-        <h2 style={{ margin: 0 }}>12. Saved local characters</h2>
-        {savedCharacters.length > 0 ? (
-          savedCharacters.map((character) => (
-            <div
-              key={character.id}
-              style={{
-                borderTop: "1px solid #e7e2d7",
-                display: "grid",
-                gap: "0.25rem",
-                paddingTop: "0.75rem"
-              }}
-            >
-              <strong>{character.build.name}</strong>
-              <div>Profile: {character.build.profile.label}</div>
-              <div>Profession: {character.build.professionId ?? "None"}</div>
-              <div>Social class: {character.build.socialClass ?? "None"}</div>
-              <div>Creator: {formatSavedCharacterCreator(character)}</div>
-              <div>Finalized: {character.finalizedAt}</div>
-            </div>
-          ))
-        ) : (
-          <div>No local characters have been finalized yet.</div>
-        )}
       </section>
 
       <style jsx>{`
