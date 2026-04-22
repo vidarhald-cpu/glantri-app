@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import type { CharacterBuild } from "../character/build";
+import { characterBuildSchema, type CharacterBuild } from "../character/build";
 
 const idSchema = z.string().min(1);
 const timestampSchema = z.string().min(1);
@@ -225,9 +225,12 @@ export const scenarioPlayerVisibleParticipantSchema = z.object({
 });
 
 export const scenarioPlayerControlledParticipantSchema = z.object({
+  build: characterBuildSchema.optional(),
+  characterId: idSchema.optional(),
   conditionCount: z.number().int().nonnegative(),
   currentHp: z.number().int(),
   displayName: z.string().min(1),
+  equipmentState: z.unknown().optional(),
   factionId: z.string().min(1).optional(),
   id: idSchema,
   maxHp: z.number().int().positive(),
@@ -545,9 +548,12 @@ export function buildScenarioPlayerProjection(input: {
     },
     controlledParticipant: controlledParticipant
       ? {
+          build: controlledParticipant.snapshot.build as CharacterBuild | undefined,
+          characterId: controlledParticipant.characterId,
           conditionCount: controlledParticipant.state.conditions.length,
           currentHp: controlledParticipant.state.health.currentHp,
           displayName: controlledParticipant.snapshot.displayName,
+          equipmentState: controlledParticipant.snapshot.equipmentState,
           factionId: controlledParticipant.factionId,
           id: controlledParticipant.id,
           maxHp: controlledParticipant.state.health.maxHp,

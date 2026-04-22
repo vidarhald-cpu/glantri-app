@@ -114,6 +114,7 @@ export default function ScenarioPlayerPageContent({
       <div style={{ display: "grid", gap: "0.5rem" }}>
         <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
           <Link href="/characters">Back to characters</Link>
+          <Link href="./combat">Open combat screen</Link>
         </div>
         <h1 style={{ margin: 0 }}>{projection.scenario.name}</h1>
         <p style={{ margin: 0 }}>
