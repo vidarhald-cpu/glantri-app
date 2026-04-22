@@ -1,50 +1,21 @@
 "use client";
 
-import { use, useEffect, useMemo, useState, type ReactNode } from "react";
-import { getAccessTier, isWithYouLocation, type CarryMode } from "@glantri/domain/equipment";
-import {
-  buildCharacterSheetSummary,
-  defaultCombatAllocationState,
-  lookupWorkbookPercentageAdjustment,
-  lookupWorkbookSkillInitiativeModifier,
-} from "@glantri/rules-engine";
+import { use, useEffect, useMemo, useState } from "react";
 
-import { CombatStatePanel } from "../../../../../src/features/equipment/components/CombatStatePanel";
+import { getEquipmentTemplateById } from "../../../../../src/features/equipment/equipmentSelectors";
 import {
-  buildCharacterArmorSummary,
-  getWorkbookCharacterSize,
-} from "../../../../../src/features/equipment/armorSummary";
-import {
-  buildCombatStatePanelModel,
-  type CombatStateDetailRow,
-  type CombatStateTableModel,
-} from "../../../../../src/features/equipment/combatStatePanel";
-import {
-  buildCombatStateCharacterInputs,
-  deriveCombatStateSnapshot,
-} from "../../../../../src/features/equipment/combatStateDerivation";
-import { buildLoadoutCombatStatsTable } from "../../../../../src/features/equipment/loadoutCombatStats";
-import {
-  buildLoadoutMeleeWeaponOptions,
-  buildLoadoutMissileWeaponOptions,
-  buildLoadoutThrowingWeaponOptions,
-  isValidLoadoutThrowingWeaponItem,
-} from "../../../../../src/features/equipment/loadoutWeaponOptions";
-import {
-  getCharacterArmorItems,
-  getCharacterShieldItems,
-  getEquipmentTemplateById,
-  getLoadoutEquipment,
-} from "../../../../../src/features/equipment/equipmentSelectors";
+  buildEquipmentLoadoutModuleModel,
+  EquipmentLoadoutModule
+} from "../../../../../src/features/equipment/loadoutModule";
+import { isValidLoadoutThrowingWeaponItem } from "../../../../../src/features/equipment/loadoutWeaponOptions";
 import type { EquipmentFeatureState } from "../../../../../src/features/equipment/types";
-import { lookupWorkbookCompositeAdjustment } from "../../../../../src/features/equipment/workbookCompositeTable";
 import {
   loadCharacterEquipmentState,
   setCharacterActiveMissileWeaponOnServer,
   setCharacterActivePrimaryWeaponOnServer,
   setCharacterActiveSecondaryWeaponOnServer,
   setCharacterReadyShieldOnServer,
-  setCharacterWornArmorOnServer,
+  setCharacterWornArmorOnServer
 } from "../../../../../src/lib/api/localServiceClient";
 import { loadLocalCharacterContext } from "../../../../../src/lib/characters/loadLocalCharacterContext";
 
@@ -56,83 +27,6 @@ interface CharacterLoadoutPageProps {
 
 function getCharacterName(name: string | undefined): string {
   return name?.trim() || "Unnamed character";
-}
-
-function getItemName(input: {
-  displayName?: string | null;
-  templateId?: string;
-  templateName?: string;
-}): string {
-  if (!input.templateId) {
-    return "None";
-  }
-
-  return input.displayName ?? input.templateName ?? "Unknown item";
-}
-
-function ControlSection(input: {
-  children: ReactNode;
-  compact?: boolean;
-  sticky?: boolean;
-  title: string;
-}) {
-  return (
-    <section
-      style={{
-        background: "#fbfaf5",
-        border: "1px solid #d9ddd8",
-        borderRadius: 12,
-        display: "grid",
-        gap: input.compact ? "0.65rem" : "0.9rem",
-        padding: input.compact ? "0.85rem" : "1rem",
-        position: input.sticky ? "sticky" : "static",
-        top: input.sticky ? "1rem" : undefined,
-        zIndex: input.sticky ? 10 : undefined
-      }}
-    >
-      <h2 style={{ margin: 0 }}>{input.title}</h2>
-      {input.children}
-    </section>
-  );
-}
-
-function WeaponControl(input: {
-  error?: string;
-  label: string;
-  onChange: (itemId: string | null) => void;
-  options: Array<{ id: string; label: string }>;
-  value: string;
-}) {
-  return (
-    <label
-      style={{
-        background: "#f6f5ef",
-        border: "1px solid #d9ddd8",
-        borderRadius: 12,
-        display: "grid",
-        gap: "0.25rem",
-        padding: "0.75rem 0.85rem"
-      }}
-    >
-      <span>{input.label}</span>
-      <select
-        onChange={(event) =>
-          input.onChange(event.target.value.length > 0 ? event.target.value : null)
-        }
-        value={input.value}
-      >
-        <option value="">None</option>
-        {input.options.map((option) => (
-          <option key={option.id} value={option.id}>
-            {option.label}
-          </option>
-        ))}
-      </select>
-      {input.error ? (
-        <span style={{ color: "#8b3a1a", fontSize: "0.8rem" }}>{input.error}</span>
-      ) : null}
-    </label>
-  );
 }
 
 function isBowOrTwoHandedTemplate(templateId: string | null, state: EquipmentFeatureState): boolean {
@@ -149,160 +43,6 @@ function isBowOrTwoHandedTemplate(templateId: string | null, state: EquipmentFea
   );
 }
 
-function buildSelectableItemOptions(input: {
-  items: Array<{
-    conditionState: string;
-    displayName?: string | null;
-    id: string;
-    storageAssignment: {
-      carryMode: CarryMode;
-    };
-    templateId: string;
-  }>;
-  state: EquipmentFeatureState;
-}) {
-  return input.items
-    .filter((item) => item.conditionState !== "broken" && item.conditionState !== "lost")
-    .map((item) => ({
-      id: item.id,
-      label: `${getItemName({
-        displayName: item.displayName,
-        templateId: item.templateId,
-        templateName: getEquipmentTemplateById(input.state, item.templateId)?.name,
-      })}${getAccessTier(item.storageAssignment.carryMode) === "slow" ? " (Backpack / slow)" : ""}`,
-    }))
-    .sort((left, right) => left.label.localeCompare(right.label));
-}
-
-type EncumbranceDependentSkillType = "combat" | "covert" | "physical";
-
-const ENCOMBRANCE_SKILL_TYPE_ORDER: EncumbranceDependentSkillType[] = [
-  "combat",
-  "covert",
-  "physical",
-];
-
-function getEncumbranceDependentSkillType(input: {
-  groupIds: string[];
-  skillGroups: Array<{ id: string; name: string }>;
-}): EncumbranceDependentSkillType | null {
-  const groupNames = input.groupIds
-    .map((groupId) => input.skillGroups.find((group) => group.id === groupId)?.name ?? null)
-    .filter((groupName): groupName is string => Boolean(groupName));
-
-  if (groupNames.includes("Combat")) {
-    return "combat";
-  }
-
-  if (
-    groupNames.includes("Stealth") ||
-    groupNames.includes("Security") ||
-    input.groupIds.some((groupId) => groupId.toLowerCase().includes("covert"))
-  ) {
-    return "covert";
-  }
-
-  if (groupNames.includes("Athletics")) {
-    return "physical";
-  }
-
-  return null;
-}
-
-function getWorkbookSkillBaseTotal(input: {
-  adjustedStats: Record<string, number>;
-  linkedStats: string[];
-  adjustedXp: number;
-}): number | null {
-  if (input.linkedStats.length === 0) {
-    return null;
-  }
-
-  const statValues = input.linkedStats
-    .map((stat) => input.adjustedStats[stat])
-    .filter((value): value is number => typeof value === "number");
-
-  if (statValues.length !== input.linkedStats.length) {
-    return null;
-  }
-
-  const average = Math.round(statValues.reduce((sum, value) => sum + value, 0) / statValues.length);
-  return average + input.adjustedXp;
-}
-
-function getWorkbookSkillEncumberedTotal(input: {
-  baseTotal: number;
-  movementModifier: number | null;
-}): number | null {
-  if (input.movementModifier == null) {
-    return null;
-  }
-
-  const adjustment = lookupWorkbookCompositeAdjustment(input.baseTotal, input.movementModifier);
-  if (adjustment == null) {
-    return null;
-  }
-
-  return input.baseTotal - adjustment;
-}
-
-function getWorkbookSkillInitiative(input: {
-  adjustedXp: number;
-  dexterityGm: number | null | undefined;
-}): number | null {
-  if (input.dexterityGm == null) {
-    return null;
-  }
-
-  const skillModifier = lookupWorkbookSkillInitiativeModifier(input.adjustedXp);
-  if (skillModifier == null) {
-    return null;
-  }
-
-  return input.dexterityGm + skillModifier;
-}
-
-function getRoundedLinkedStatAverage(
-  adjustedStats: Record<string, number>,
-  linkedStats: string[],
-): number | null {
-  if (linkedStats.length === 0) {
-    return null;
-  }
-
-  const values = linkedStats
-    .map((stat) => adjustedStats[stat])
-    .filter((value): value is number => typeof value === "number");
-
-  if (values.length !== linkedStats.length) {
-    return null;
-  }
-
-  return Math.round(values.reduce((sum, value) => sum + value, 0) / values.length);
-}
-
-function getWorkbookArmorAdjustedPerception(input: {
-  adjustedStats: Record<string, number>;
-  armorPerceptionModifier: number | null | undefined;
-  perceptionAdjustedXp: number;
-}): number | null {
-  const intValue = input.adjustedStats.int;
-  const powValue = input.adjustedStats.pow;
-  const lckValue = input.adjustedStats.lck;
-  if (intValue == null || powValue == null || lckValue == null) {
-    return null;
-  }
-
-  const basePerception = Math.round((intValue + powValue + lckValue) / 3) + input.perceptionAdjustedXp;
-  const modifier = input.armorPerceptionModifier ?? 0;
-  const adjustment = lookupWorkbookPercentageAdjustment(basePerception, Math.abs(modifier));
-  if (adjustment == null) {
-    return null;
-  }
-
-  return modifier > 0 ? basePerception + adjustment : basePerception - adjustment;
-}
-
 export default function CharacterLoadoutPage({ params }: CharacterLoadoutPageProps) {
   const { id } = use(params);
   const [state, setState] = useState<EquipmentFeatureState | null>(null);
@@ -311,273 +51,16 @@ export default function CharacterLoadoutPage({ params }: CharacterLoadoutPagePro
   >(null);
   const [loading, setLoading] = useState(true);
   const [pageError, setPageError] = useState<string>();
-  const combatAllocationInputs = defaultCombatAllocationState;
   const [throwingWeaponItemId, setThrowingWeaponItemId] = useState<string>("");
   const [errors, setErrors] = useState<
-    Record<"armor" | "primary" | "secondary" | "missile" | "shield", string | undefined>
+    Record<"armor" | "missile" | "primary" | "secondary" | "shield", string | undefined>
   >({
     armor: undefined,
     missile: undefined,
     primary: undefined,
     secondary: undefined,
-    shield: undefined,
+    shield: undefined
   });
-
-  const sheetSummary = useMemo(() => {
-    if (!characterContext?.content || !characterContext.record) {
-      return undefined;
-    }
-
-    return buildCharacterSheetSummary({
-      build: characterContext.record.build,
-      content: characterContext.content,
-    });
-  }, [characterContext]);
-  const characterCombatInputs = useMemo(() => {
-    if (!sheetSummary) {
-      return undefined;
-    }
-
-    return buildCombatStateCharacterInputs(sheetSummary);
-  }, [sheetSummary]);
-
-  const loadout = useMemo(() => (state ? getLoadoutEquipment(state, id) : {}), [state, id]);
-  const meleeWeaponOptions = useMemo(
-    () =>
-      state
-        ? buildLoadoutMeleeWeaponOptions({
-            characterId: id,
-            state,
-          })
-        : [],
-    [state, id]
-  );
-  const missileWeaponOptions = useMemo(
-    () =>
-      state
-        ? buildLoadoutMissileWeaponOptions({
-            characterId: id,
-            state,
-          })
-        : [],
-    [state, id]
-  );
-  const armorOptions = useMemo(
-    () =>
-      state
-        ? buildSelectableItemOptions({
-            items: getCharacterArmorItems(state, id).filter((item) => {
-              const location = state.locationsById[item.storageAssignment.locationId];
-              return location ? isWithYouLocation(location) : false;
-            }),
-            state,
-          })
-        : [],
-    [state, id]
-  );
-  const shieldOptions = useMemo(
-    () =>
-      state
-        ? buildSelectableItemOptions({
-            items: getCharacterShieldItems(state, id).filter((item) => {
-              const location = state.locationsById[item.storageAssignment.locationId];
-              return location ? isWithYouLocation(location) : false;
-            }),
-            state,
-          })
-        : [],
-    [state, id]
-  );
-  const combatSnapshot = useMemo(
-    () =>
-      state
-        ? deriveCombatStateSnapshot(state, id, characterCombatInputs, combatAllocationInputs)
-        : null,
-    [characterCombatInputs, combatAllocationInputs, id, state],
-  );
-  const throwingWeaponOptions = useMemo(
-    () =>
-      state
-        ? buildLoadoutThrowingWeaponOptions({
-            characterId: id,
-            state,
-          })
-        : [],
-    [id, state]
-  );
-  const wornArmorSummary = useMemo(() => {
-    if (!state || !characterContext?.record || !("armor" in loadout) || !loadout.armor) {
-      return null;
-    }
-
-    const armorTemplate = getEquipmentTemplateById(state, loadout.armor.templateId);
-    if (armorTemplate?.category !== "armor") {
-      return null;
-    }
-
-    return buildCharacterArmorSummary({
-      characterSize: getWorkbookCharacterSize(characterContext.record.build),
-      item: loadout.armor,
-      template: armorTemplate,
-    });
-  }, [characterContext, loadout, state]);
-  const workbookPerceptionValue = useMemo(() => {
-    if (!sheetSummary) {
-      return null;
-    }
-
-    const perceptionSkill = characterContext?.content?.skills.find(
-      (skill) => skill.name.toLowerCase() === "perception",
-    );
-    const perceptionAdjustedXp =
-      perceptionSkill
-        ? sheetSummary.draftView.skills.find((skill) => skill.skillId === perceptionSkill.id)
-            ?.effectiveSkillNumber ?? -3
-        : -3;
-
-    return getWorkbookArmorAdjustedPerception({
-      adjustedStats: sheetSummary.adjustedStats,
-      armorPerceptionModifier: wornArmorSummary?.perceptionModifier ?? 0,
-      perceptionAdjustedXp,
-    });
-  }, [characterContext, sheetSummary, wornArmorSummary]);
-  const combatStatePanelModel = useMemo(
-    () => {
-      if (!state) {
-        return null;
-      }
-
-      const baseModel = buildCombatStatePanelModel(
-        state,
-        id,
-        characterCombatInputs,
-        combatAllocationInputs,
-        throwingWeaponItemId || null,
-      );
-
-      const statsRows: CombatStateDetailRow[] = [
-        {
-          label: "Hitpoints",
-          value: characterContext?.record?.build.profile.rolledStats.health ?? "—",
-        },
-        {
-          label: "GMR",
-          value:
-            sheetSummary?.adjustedStats.pow != null && sheetSummary?.adjustedStats.lck != null
-              ? sheetSummary.adjustedStats.pow + sheetSummary.adjustedStats.lck - 3
-              : "—",
-        },
-      ];
-      const statsTable: CombatStateTableModel | undefined =
-        sheetSummary && characterContext?.content
-          ? buildLoadoutCombatStatsTable({
-              adjustedStats: sheetSummary.adjustedStats,
-              draftSkills: sheetSummary.draftView.skills,
-              skills: characterContext.content.skills,
-              workbookPerceptionValue,
-            })
-          : undefined;
-      return {
-        ...baseModel,
-        statsRows,
-        statsTable,
-      };
-    },
-    [
-      characterCombatInputs,
-      characterContext,
-      combatAllocationInputs,
-      id,
-      sheetSummary,
-      state,
-      throwingWeaponItemId,
-      workbookPerceptionValue,
-    ]
-  );
-  const selectedThrowingWeaponItem = useMemo(
-    () => (throwingWeaponItemId && state ? state.itemsById[throwingWeaponItemId] : undefined),
-    [state, throwingWeaponItemId],
-  );
-  const skillsSectionTable = useMemo<CombatStateTableModel | null>(() => {
-    if (!sheetSummary || !characterContext?.content || !characterCombatInputs || !combatSnapshot) {
-      return null;
-    }
-
-    const movementModifier =
-      typeof combatSnapshot.movementModifierSummary === "number"
-        ? combatSnapshot.movementModifierSummary
-        : null;
-
-    const rows = characterContext.content.skills
-      .map((skillDefinition) => {
-        const skillType = getEncumbranceDependentSkillType({
-          groupIds: skillDefinition.groupIds,
-          skillGroups: characterContext.content.skillGroups,
-        });
-        if (!skillType) {
-          return null;
-        }
-
-        const skillView = sheetSummary.draftView.skills.find(
-          (skill) => skill.skillId === skillDefinition.id,
-        );
-        if (!skillView || skillView.effectiveSkillNumber <= 0) {
-          return null;
-        }
-        const statAverage = getRoundedLinkedStatAverage(
-          sheetSummary.adjustedStats,
-          skillDefinition.linkedStats,
-        );
-
-        const baseTotal =
-          skillDefinition.name.toLowerCase() === "perception"
-            ? workbookPerceptionValue
-            : getWorkbookSkillBaseTotal({
-                adjustedStats: sheetSummary.adjustedStats,
-                linkedStats: skillDefinition.linkedStats,
-                adjustedXp: skillView.effectiveSkillNumber,
-              });
-        const encumbered =
-          baseTotal == null
-            ? null
-            : getWorkbookSkillEncumberedTotal({
-                baseTotal,
-                movementModifier,
-              });
-        const initiative = getWorkbookSkillInitiative({
-          adjustedXp: skillView.effectiveSkillNumber,
-          dexterityGm: characterCombatInputs.dexterityGm,
-        });
-
-        return {
-          initiative,
-          row: [
-            skillDefinition.name,
-            initiative ?? "—",
-            statAverage ?? "—",
-            skillView.effectiveSkillNumber,
-            baseTotal ?? "—",
-            encumbered ?? "—",
-          ],
-          skillType,
-          sortOrder: skillDefinition.sortOrder,
-        };
-      })
-      .filter((row): row is NonNullable<typeof row> => row !== null)
-      .sort((left, right) =>
-        ENCOMBRANCE_SKILL_TYPE_ORDER.indexOf(left.skillType) -
-          ENCOMBRANCE_SKILL_TYPE_ORDER.indexOf(right.skillType) ||
-        left.sortOrder - right.sortOrder ||
-        String(left.row[0]).localeCompare(String(right.row[0])),
-      )
-      .map((entry) => entry.row);
-
-    return {
-      title: "Encumbrance dependent skills",
-      columns: ["Skill", "Initiative", "Stat average", "XP", "Skill level", "Encumbered"],
-      rows,
-    };
-  }, [characterCombatInputs, characterContext, combatSnapshot, sheetSummary, workbookPerceptionValue]);
 
   useEffect(() => {
     let cancelled = false;
@@ -620,15 +103,34 @@ export default function CharacterLoadoutPage({ params }: CharacterLoadoutPagePro
       return;
     }
 
+    const selectedThrowingWeaponItem = state.itemsById[throwingWeaponItemId];
     if (
       !isValidLoadoutThrowingWeaponItem({
         item: selectedThrowingWeaponItem,
-        state,
+        state
       })
     ) {
       setThrowingWeaponItemId("");
     }
-  }, [selectedThrowingWeaponItem, state, throwingWeaponItemId]);
+  }, [state, throwingWeaponItemId]);
+
+  const model = useMemo(
+    () =>
+      buildEquipmentLoadoutModuleModel({
+        characterContext:
+          characterContext?.record && characterContext.content
+            ? {
+                content: characterContext.content,
+                record: characterContext.record
+              }
+            : null,
+        characterId: id,
+        errors,
+        state,
+        throwingWeaponItemId
+      }),
+    [characterContext, errors, id, state, throwingWeaponItemId]
+  );
 
   async function applySelection(input: {
     itemId: string | null;
@@ -642,10 +144,10 @@ export default function CharacterLoadoutPage({ params }: CharacterLoadoutPagePro
       const currentLoadout = state.activeLoadoutByCharacterId[id];
       const nextSelection = {
         armor: currentLoadout?.wornArmorItemId ?? null,
-        shield: currentLoadout?.readyShieldItemId ?? null,
+        missile: currentLoadout?.activeMissileWeaponItemId ?? null,
         primary: currentLoadout?.activePrimaryWeaponItemId ?? null,
         secondary: currentLoadout?.activeSecondaryWeaponItemId ?? null,
-        missile: currentLoadout?.activeMissileWeaponItemId ?? null,
+        shield: currentLoadout?.readyShieldItemId ?? null
       };
 
       nextSelection[input.kind] = input.itemId;
@@ -677,10 +179,7 @@ export default function CharacterLoadoutPage({ params }: CharacterLoadoutPagePro
         nextSelection.shield = null;
       }
 
-      if (
-        input.itemId &&
-        (input.kind === "shield" || input.kind === "secondary")
-      ) {
+      if (input.itemId && (input.kind === "shield" || input.kind === "secondary")) {
         const currentPrimaryTemplateId = state.itemsById[nextSelection.primary ?? ""]?.templateId ?? null;
         if (currentPrimaryTemplateId && isBowOrTwoHandedTemplate(currentPrimaryTemplateId, state)) {
           nextSelection.primary = null;
@@ -691,7 +190,7 @@ export default function CharacterLoadoutPage({ params }: CharacterLoadoutPagePro
 
       const queueOperation = (
         kind: "armor" | "primary" | "secondary" | "missile" | "shield",
-        itemId: string | null,
+        itemId: string | null
       ) => {
         const currentValue = currentLoadout
           ? kind === "armor"
@@ -718,7 +217,7 @@ export default function CharacterLoadoutPage({ params }: CharacterLoadoutPagePro
                 ? setCharacterActivePrimaryWeaponOnServer({ characterId: id, itemId })
                 : kind === "secondary"
                   ? setCharacterActiveSecondaryWeaponOnServer({ characterId: id, itemId })
-                  : setCharacterActiveMissileWeaponOnServer({ characterId: id, itemId }),
+                  : setCharacterActiveMissileWeaponOnServer({ characterId: id, itemId })
         );
       };
 
@@ -729,7 +228,6 @@ export default function CharacterLoadoutPage({ params }: CharacterLoadoutPagePro
       queueOperation("missile", nextSelection.missile);
 
       let nextState = state;
-
       for (const operation of operations) {
         nextState = await operation();
       }
@@ -737,14 +235,13 @@ export default function CharacterLoadoutPage({ params }: CharacterLoadoutPagePro
       setState(nextState);
       setErrors((current) => ({
         ...current,
-        [input.kind]: undefined,
+        [input.kind]: undefined
       }));
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to update loadout.";
-      console.warn(message);
       setErrors((current) => ({
         ...current,
-        [input.kind]: message,
+        [input.kind]: message
       }));
     }
   }
@@ -785,88 +282,22 @@ export default function CharacterLoadoutPage({ params }: CharacterLoadoutPagePro
       ) : null}
 
       {!loading && !pageError ? (
-        <ControlSection compact sticky title="Equipment choices">
-          <div
-            style={{
-              display: "grid",
-              gap: "0.6rem",
-              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))"
-            }}
-          >
-            <WeaponControl
-              error={errors.primary}
-              label="Primary weapon"
-              onChange={(itemId) => void applySelection({ itemId, kind: "primary" })}
-              options={meleeWeaponOptions}
-              value={"primary" in loadout ? loadout.primary?.id ?? "" : ""}
-            />
-            <WeaponControl
-              error={errors.shield}
-              label="Shield"
-              onChange={(itemId) => void applySelection({ itemId, kind: "shield" })}
-              options={shieldOptions}
-              value={"shield" in loadout ? loadout.shield?.id ?? "" : ""}
-            />
-            <WeaponControl
-              error={errors.armor}
-              label="Armor"
-              onChange={(itemId) => void applySelection({ itemId, kind: "armor" })}
-              options={armorOptions}
-              value={"armor" in loadout ? loadout.armor?.id ?? "" : ""}
-            />
-            <WeaponControl
-              error={errors.secondary}
-              label="Second hand weapon"
-              onChange={(itemId) => void applySelection({ itemId, kind: "secondary" })}
-              options={meleeWeaponOptions}
-              value={"secondary" in loadout ? loadout.secondary?.id ?? "" : ""}
-            />
-            <WeaponControl
-              error={errors.missile}
-              label="Missile weapon"
-              onChange={(itemId) => void applySelection({ itemId, kind: "missile" })}
-              options={missileWeaponOptions}
-              value={"missile" in loadout ? loadout.missile?.id ?? "" : ""}
-            />
-            <WeaponControl
-              label="Throwing weapon"
-              onChange={(itemId) => setThrowingWeaponItemId(itemId ?? "")}
-              options={throwingWeaponOptions}
-              value={throwingWeaponItemId}
-            />
-          </div>
-        </ControlSection>
-      ) : null}
+        <EquipmentLoadoutModule
+          mode="editable"
+          model={model}
+          onFieldChange={(fieldId, itemId) => {
+            if (fieldId === "throwing") {
+              setThrowingWeaponItemId(itemId ?? "");
+              return;
+            }
 
-      {!loading && !pageError && combatStatePanelModel ? (
-        <CombatStatePanel model={combatStatePanelModel} />
-      ) : null}
-
-      {!loading && !pageError && skillsSectionTable && skillsSectionTable.rows.length > 0 ? (
-        <ControlSection title="Encumbrance dependent skills">
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ borderCollapse: "collapse", minWidth: "100%", width: "100%" }}>
-              <thead>
-                <tr style={{ borderBottom: "1px solid #d9ddd8", textAlign: "left" }}>
-                  {skillsSectionTable.columns.map((column) => (
-                    <th key={column} style={{ padding: "0.5rem 0.75rem 0.5rem 0" }}>{column}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {skillsSectionTable.rows.map((row, rowIndex) => (
-                  <tr key={`${row[0]}-${rowIndex}`} style={{ borderBottom: rowIndex === skillsSectionTable.rows.length - 1 ? "none" : "1px solid #e6e6df" }}>
-                    {row.map((cell, cellIndex) => (
-                      <td key={`${rowIndex}-${cellIndex}`} style={{ padding: "0.6rem 0.75rem 0.6rem 0", verticalAlign: "top" }}>
-                        {cell}
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </ControlSection>
+            void applySelection({
+              itemId,
+              kind: fieldId
+            });
+          }}
+          stickyControls
+        />
       ) : null}
     </section>
   );

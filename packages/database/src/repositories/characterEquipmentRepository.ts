@@ -65,6 +65,8 @@ function mapEquipmentItem(record: {
   isStackable: boolean;
   locationId: string;
   carryMode: string;
+  previousLocationId: string | null;
+  previousCarryMode: string | null;
   material: string;
   notes: string | null;
   quality: string;
@@ -99,6 +101,13 @@ function mapEquipmentItem(record: {
       carryMode: record.carryMode,
       locationId: record.locationId,
     },
+    previousStorageAssignment:
+      record.previousLocationId && record.previousCarryMode
+        ? {
+            carryMode: record.previousCarryMode,
+            locationId: record.previousLocationId,
+          }
+        : null,
     templateId: record.templateId,
     valueOverride: record.valueOverride,
   });
@@ -233,6 +242,8 @@ export function createPrismaCharacterEquipmentRepository(): CharacterEquipmentRe
           isStackable: item.isStackable,
           locationId: item.storageAssignment.locationId,
           carryMode: item.storageAssignment.carryMode,
+          previousLocationId: item.previousStorageAssignment?.locationId ?? null,
+          previousCarryMode: item.previousStorageAssignment?.carryMode ?? null,
           material: item.material,
           notes: item.notes ?? null,
           quality: item.quality,
@@ -262,6 +273,8 @@ export function createPrismaCharacterEquipmentRepository(): CharacterEquipmentRe
           isStackable: item.isStackable,
           locationId: item.storageAssignment.locationId,
           carryMode: item.storageAssignment.carryMode,
+          previousLocationId: item.previousStorageAssignment?.locationId ?? null,
+          previousCarryMode: item.previousStorageAssignment?.carryMode ?? null,
           material: item.material,
           notes: item.notes ?? null,
           quality: item.quality,
@@ -297,6 +310,8 @@ export function createPrismaCharacterEquipmentRepository(): CharacterEquipmentRe
           carryMode: storageAssignment.carryMode,
           isEquipped: storageAssignment.carryMode === "equipped",
           locationId: storageAssignment.locationId,
+          previousLocationId: null,
+          previousCarryMode: null,
         },
         where: {
           characterId,

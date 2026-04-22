@@ -238,6 +238,8 @@ model CharacterEquipmentItem {
   quality               QualityType
   locationId            String
   carryMode             CarryMode
+  previousLocationId    String?
+  previousCarryMode     CarryMode?
   conditionState        ItemConditionState
   durabilityCurrent     Int?
   durabilityMax         Int?

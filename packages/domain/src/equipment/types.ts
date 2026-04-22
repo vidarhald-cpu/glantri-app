@@ -369,6 +369,7 @@ export interface EquipmentItem {
   material: MaterialType;
   quality: QualityType;
   storageAssignment: ItemStorageAssignment;
+  previousStorageAssignment?: ItemStorageAssignment | null;
   conditionState: ItemConditionState;
   durabilityCurrent?: number | null;
   durabilityMax?: number | null;

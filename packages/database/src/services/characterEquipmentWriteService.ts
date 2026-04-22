@@ -5,6 +5,7 @@ import {
   type EquipmentItem,
   type EquipmentItemInput,
   type ItemConditionState,
+  type ItemStorageAssignment,
   type LocationAvailabilityClass,
   type MaterialType,
   type QualityType,
@@ -118,6 +119,15 @@ function assertLocationBelongsToCharacter(
   }
 
   return location;
+}
+
+function assignmentsMatch(
+  left: ItemStorageAssignment | null | undefined,
+  right: ItemStorageAssignment | null | undefined,
+): boolean {
+  return (
+    left?.locationId === right?.locationId && left?.carryMode === right?.carryMode
+  );
 }
 
 function getReferencedLoadoutLabel(loadout: CharacterLoadout, itemId: string): string | null {
@@ -397,6 +407,12 @@ export class CharacterEquipmentWriteService {
     const updatedItem = EquipmentItemSchema.parse({
       ...item,
       isEquipped: carryMode === "equipped",
+      previousStorageAssignment:
+        carryMode === "equipped"
+          ? item.isEquipped
+            ? item.previousStorageAssignment ?? null
+            : item.storageAssignment
+          : null,
       storageAssignment: {
         carryMode,
         locationId,
@@ -423,10 +439,7 @@ export class CharacterEquipmentWriteService {
       }
     }
 
-    return this.repository.moveCharacterEquipmentItem(characterId, itemId, {
-      carryMode,
-      locationId,
-    });
+    return this.repository.updateCharacterEquipmentItem(updatedItem);
   }
 
   async removeCharacterEquipmentItem(
@@ -717,6 +730,56 @@ export class CharacterEquipmentWriteService {
     return location;
   }
 
+  private getRestoredStorageAssignment(
+    item: EquipmentItem,
+    locations: StorageLocation[],
+    fallbackAssignment: ItemStorageAssignment,
+  ): ItemStorageAssignment {
+    const previousAssignment = item.previousStorageAssignment;
+    if (!previousAssignment || previousAssignment.carryMode === "equipped") {
+      return fallbackAssignment;
+    }
+
+    const previousLocation = locations.find(
+      (location) => location.id === previousAssignment.locationId,
+    );
+
+    if (!previousLocation || previousLocation.characterId !== item.characterId) {
+      return fallbackAssignment;
+    }
+
+    return previousAssignment;
+  }
+
+  private buildEquippedLoadoutItem(
+    item: EquipmentItem,
+    targetAssignment: ItemStorageAssignment,
+  ): EquipmentItem {
+    const nextPreviousStorageAssignment =
+      item.storageAssignment.carryMode === "equipped"
+        ? item.previousStorageAssignment ?? null
+        : item.storageAssignment;
+
+    return EquipmentItemSchema.parse({
+      ...item,
+      isEquipped: targetAssignment.carryMode === "equipped",
+      previousStorageAssignment: nextPreviousStorageAssignment,
+      storageAssignment: targetAssignment,
+    });
+  }
+
+  private buildStoredLoadoutItem(
+    item: EquipmentItem,
+    destinationAssignment: ItemStorageAssignment,
+  ): EquipmentItem {
+    return EquipmentItemSchema.parse({
+      ...item,
+      isEquipped: destinationAssignment.carryMode === "equipped",
+      previousStorageAssignment: null,
+      storageAssignment: destinationAssignment,
+    });
+  }
+
   private async updateLoadoutSelection(
     characterId: string,
     kind: LoadoutSelectionKind,
@@ -758,11 +821,10 @@ export class CharacterEquipmentWriteService {
         throw new Error("Only items in with-you locations can be selected for loadout.");
       }
 
-      const updatedSelectedItem = EquipmentItemSchema.parse({
-        ...selectedItem,
-        isEquipped: targetAssignment.carryMode === "equipped",
-        storageAssignment: targetAssignment,
-      });
+      const updatedSelectedItem = this.buildEquippedLoadoutItem(
+        selectedItem,
+        targetAssignment,
+      );
 
       const selectedErrors = validateEquipmentItem(updatedSelectedItem);
       if (selectedErrors.length > 0) {
@@ -773,17 +835,20 @@ export class CharacterEquipmentWriteService {
 
       if (previousItem && previousItem.id !== selectedItem.id) {
         const selectedSourceAssignment = selectedItem.storageAssignment;
+        const restoredPreviousAssignment = this.getRestoredStorageAssignment(
+          previousItem,
+          snapshot.locations,
+          fallbackAssignment,
+        );
         const previousDestination =
-          selectedSourceAssignment.locationId === targetAssignment.locationId &&
-          selectedSourceAssignment.carryMode === targetAssignment.carryMode
-            ? fallbackAssignment
+          assignmentsMatch(selectedSourceAssignment, targetAssignment)
+            ? restoredPreviousAssignment
             : selectedSourceAssignment;
 
-        const updatedPreviousItem = EquipmentItemSchema.parse({
-          ...previousItem,
-          isEquipped: previousDestination.carryMode === "equipped",
-          storageAssignment: previousDestination,
-        });
+        const updatedPreviousItem = this.buildStoredLoadoutItem(
+          previousItem,
+          previousDestination,
+        );
 
         const previousErrors = validateEquipmentItem(updatedPreviousItem);
         if (previousErrors.length > 0) {
@@ -793,11 +858,10 @@ export class CharacterEquipmentWriteService {
         nextItemsById[previousItem.id] = updatedPreviousItem;
       }
     } else if (previousItem) {
-      const updatedPreviousItem = EquipmentItemSchema.parse({
-        ...previousItem,
-        isEquipped: false,
-        storageAssignment: fallbackAssignment,
-      });
+      const updatedPreviousItem = this.buildStoredLoadoutItem(
+        previousItem,
+        this.getRestoredStorageAssignment(previousItem, snapshot.locations, fallbackAssignment),
+      );
 
       const previousErrors = validateEquipmentItem(updatedPreviousItem);
       if (previousErrors.length > 0) {

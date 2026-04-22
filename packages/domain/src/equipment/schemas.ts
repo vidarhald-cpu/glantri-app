@@ -377,6 +377,7 @@ export const EquipmentItemSchema = z.object({
   material: MaterialTypeSchema,
   quality: QualityTypeSchema,
   storageAssignment: ItemStorageAssignmentSchema,
+  previousStorageAssignment: ItemStorageAssignmentSchema.nullable().optional(),
   conditionState: ItemConditionStateSchema,
   durabilityCurrent: z.number().int().nonnegative().nullable().optional(),
   durabilityMax: z.number().int().positive().nullable().optional(),
