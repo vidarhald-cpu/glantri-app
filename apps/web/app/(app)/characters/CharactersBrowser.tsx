@@ -218,7 +218,16 @@ export default function CharactersBrowser() {
       setFeedback(`Joined ${selectedScenario.scenarioName}.`);
       setJoiningCharacterId(undefined);
       setJoiningScenarioId(undefined);
-      router.push(`/campaigns/${selectedScenario.campaignId}/scenarios/${selectedScenario.scenarioId}`);
+      const canOpenGameMasterScenarioView = Boolean(
+        currentUser &&
+          (currentUser.roles.includes("game_master") || currentUser.roles.includes("admin"))
+      );
+
+      router.push(
+        canOpenGameMasterScenarioView
+          ? `/campaigns/${selectedScenario.campaignId}/scenarios/${selectedScenario.scenarioId}`
+          : `/campaigns/${selectedScenario.campaignId}/scenarios/${selectedScenario.scenarioId}/player`
+      );
     } catch (error) {
       setJoinError(error instanceof Error ? error.message : "Unable to join scenario.");
     }

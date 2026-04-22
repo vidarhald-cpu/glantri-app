@@ -214,6 +214,49 @@ export const reusableEntitySchema = z.object({
   updatedAt: timestampSchema
 });
 
+export const scenarioPlayerVisibleParticipantSchema = z.object({
+  displayName: z.string().min(1),
+  factionId: z.string().min(1).optional(),
+  id: idSchema,
+  isActive: z.boolean(),
+  isControlledByPlayer: z.boolean().default(false),
+  role: scenarioParticipantRoleSchema,
+  sourceType: scenarioParticipantSourceTypeSchema
+});
+
+export const scenarioPlayerControlledParticipantSchema = z.object({
+  conditionCount: z.number().int().nonnegative(),
+  currentHp: z.number().int(),
+  displayName: z.string().min(1),
+  factionId: z.string().min(1).optional(),
+  id: idSchema,
+  maxHp: z.number().int().positive(),
+  role: scenarioParticipantRoleSchema,
+  sourceType: scenarioParticipantSourceTypeSchema
+});
+
+export const scenarioPlayerProjectionSchema = z.object({
+  actionStub: z.object({
+    canDeclareActions: z.boolean().default(false),
+    message: z.string().min(1)
+  }),
+  controlledParticipant: scenarioPlayerControlledParticipantSchema.optional(),
+  controlledParticipantId: idSchema.optional(),
+  hasControlledParticipant: z.boolean().default(false),
+  scenario: z.object({
+    combatStatus: scenarioCombatStatusSchema.default("not_started"),
+    description: z.string().default(""),
+    id: idSchema,
+    kind: scenarioKindSchema,
+    name: z.string().min(1),
+    phase: z.union([z.literal(1), z.literal(2)]).default(1),
+    roundNumber: z.number().int().positive().default(1),
+    status: scenarioStatusSchema
+  }),
+  visibilityMode: z.literal("all_active_participants"),
+  visibleParticipants: z.array(scenarioPlayerVisibleParticipantSchema)
+});
+
 export type ScenarioVisibility = z.infer<typeof scenarioVisibilitySchema>;
 export type CampaignStatus = z.infer<typeof campaignStatusSchema>;
 export type ScenarioKind = z.infer<typeof scenarioKindSchema>;
@@ -241,6 +284,13 @@ export type ScenarioParticipant = z.infer<typeof scenarioParticipantSchema>;
 export type CampaignAsset = z.infer<typeof campaignAssetSchema>;
 export type ScenarioEventLog = z.infer<typeof scenarioEventLogSchema>;
 export type ReusableEntity = z.infer<typeof reusableEntitySchema>;
+export type ScenarioPlayerVisibleParticipant = z.infer<
+  typeof scenarioPlayerVisibleParticipantSchema
+>;
+export type ScenarioPlayerControlledParticipant = z.infer<
+  typeof scenarioPlayerControlledParticipantSchema
+>;
+export type ScenarioPlayerProjection = z.infer<typeof scenarioPlayerProjectionSchema>;
 
 function nowIsoString(): string {
   return new Date().toISOString();
@@ -435,4 +485,89 @@ export function createParticipantSnapshotFromEntity(input: {
       snapshotVersion: 1
     })
   };
+}
+
+function isPlayerControlledScenarioParticipant(input: {
+  participant: ScenarioParticipant;
+  userId: string;
+}): boolean {
+  return (
+    input.participant.isActive &&
+    input.participant.role === "player_character" &&
+    input.participant.controlledByUserId === input.userId
+  );
+}
+
+function buildScenarioPlayerVisibleParticipants(input: {
+  controlledParticipantId?: string;
+  participants: ScenarioParticipant[];
+}): ScenarioPlayerVisibleParticipant[] {
+  return input.participants
+    .filter((participant) => participant.isActive)
+    .map((participant) =>
+      scenarioPlayerVisibleParticipantSchema.parse({
+        displayName: participant.snapshot.displayName,
+        factionId: participant.factionId,
+        id: participant.id,
+        isActive: participant.isActive,
+        isControlledByPlayer: participant.id === input.controlledParticipantId,
+        role: participant.role,
+        sourceType: participant.sourceType
+      })
+    );
+}
+
+export function buildScenarioPlayerProjection(input: {
+  participants: ScenarioParticipant[];
+  scenario: Scenario;
+  userId: string;
+}): ScenarioPlayerProjection {
+  const controlledParticipant = input.participants.find((participant) =>
+    isPlayerControlledScenarioParticipant({
+      participant,
+      userId: input.userId
+    })
+  );
+
+  const visibleParticipants = controlledParticipant
+    ? buildScenarioPlayerVisibleParticipants({
+        controlledParticipantId: controlledParticipant.id,
+        participants: input.participants
+      })
+    : [];
+
+  return scenarioPlayerProjectionSchema.parse({
+    actionStub: {
+      canDeclareActions: false,
+      message: controlledParticipant
+        ? "Actions, movement, and interaction declarations will land here in the next scenario phase."
+        : "Once the GM assigns you an active character in this scenario, your action controls will appear here."
+    },
+    controlledParticipant: controlledParticipant
+      ? {
+          conditionCount: controlledParticipant.state.conditions.length,
+          currentHp: controlledParticipant.state.health.currentHp,
+          displayName: controlledParticipant.snapshot.displayName,
+          factionId: controlledParticipant.factionId,
+          id: controlledParticipant.id,
+          maxHp: controlledParticipant.state.health.maxHp,
+          role: controlledParticipant.role,
+          sourceType: controlledParticipant.sourceType
+        }
+      : undefined,
+    controlledParticipantId: controlledParticipant?.id,
+    hasControlledParticipant: Boolean(controlledParticipant),
+    scenario: {
+      combatStatus: input.scenario.liveState?.combatStatus ?? "not_started",
+      description: input.scenario.description,
+      id: input.scenario.id,
+      kind: input.scenario.kind,
+      name: input.scenario.name,
+      phase: input.scenario.liveState?.phase ?? 1,
+      roundNumber: input.scenario.liveState?.roundNumber ?? 1,
+      status: input.scenario.status
+    },
+    visibilityMode: "all_active_participants",
+    visibleParticipants
+  });
 }

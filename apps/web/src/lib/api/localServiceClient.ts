@@ -7,6 +7,7 @@ import type {
   Scenario,
   ScenarioEventLog,
   ScenarioLiveState,
+  ScenarioPlayerProjection,
   ScenarioParticipant,
   CharacterBuild
 } from "@glantri/domain";
@@ -478,6 +479,19 @@ export async function loadScenarioById(scenarioId: string): Promise<Scenario> {
   });
 
   return payload.scenario;
+}
+
+export async function loadScenarioPlayerProjection(
+  scenarioId: string
+): Promise<ScenarioPlayerProjection> {
+  const payload = await sendJson<{ projection: ScenarioPlayerProjection }>(
+    `/scenarios/${scenarioId}/player-projection`,
+    {
+      method: "GET"
+    }
+  );
+
+  return payload.projection;
 }
 
 export async function updateScenarioOnServer(input: {

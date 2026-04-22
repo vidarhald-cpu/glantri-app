@@ -2,6 +2,7 @@ import type { FastifyPluginAsync } from "fastify";
 
 import { CharacterService, ScenarioService } from "@glantri/database";
 import {
+  buildScenarioPlayerProjection,
   campaignAssetTypeSchema,
   campaignSettingsSchema,
   campaignStatusSchema,
@@ -536,6 +537,38 @@ export const scenariosRoutes: FastifyPluginAsync = async (app) => {
     } catch (error) {
       return reply.code(400).send({
         error: error instanceof Error ? error.message : "Unable to load scenario."
+      });
+    }
+  });
+
+  app.get("/scenarios/:scenarioId/player-projection", async (request, reply) => {
+    const user = await requireAuthenticatedUser(request, reply);
+
+    if (!user) {
+      return;
+    }
+
+    try {
+      const scenarioId = parseId(request.params, "scenarioId", "Scenario id");
+      const scenario = await scenarioService.getScenarioById(scenarioId);
+
+      if (!scenario) {
+        return reply.code(404).send({
+          error: "Scenario not found."
+        });
+      }
+
+      const participants = await scenarioService.listScenarioParticipants(scenarioId);
+      const projection = buildScenarioPlayerProjection({
+        participants,
+        scenario,
+        userId: user.id
+      });
+
+      return { projection };
+    } catch (error) {
+      return reply.code(400).send({
+        error: error instanceof Error ? error.message : "Unable to load scenario player projection."
       });
     }
   });
