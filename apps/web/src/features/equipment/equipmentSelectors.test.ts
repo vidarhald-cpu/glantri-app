@@ -4,6 +4,8 @@ import type { EquipmentItem, EquipmentTemplate, StorageLocation } from "@glantri
 import {
   getInventoryRows,
   getItemsGroupedForInventoryPage,
+  getPersonalLoadItems,
+  getPersonalEncumbranceTotal,
 } from "./equipmentSelectors";
 import type { EquipmentFeatureState } from "./types";
 
@@ -222,5 +224,32 @@ describe("equipmentSelectors inventory page grouping", () => {
       locationName: "Equipped",
       templateName: "Long sword",
     });
+  });
+
+  it("counts backpack load but excludes mount load from personal encumbrance totals", () => {
+    const state = createState();
+
+    expect(getPersonalLoadItems(state, characterId).map((item) => item.id)).toEqual([
+      "item-equipped",
+      "item-person",
+      "item-backpack",
+    ]);
+    expect(getPersonalEncumbranceTotal(state, characterId)).toBeCloseTo(6.5);
+
+    state.itemsById["item-mount"] = {
+      ...state.itemsById["item-mount"],
+      storageAssignment: {
+        carryMode: "backpack",
+        locationId: `${characterId}:loc-backpack`,
+      },
+    };
+
+    expect(getPersonalLoadItems(state, characterId).map((item) => item.id)).toEqual([
+      "item-equipped",
+      "item-person",
+      "item-backpack",
+      "item-mount",
+    ]);
+    expect(getPersonalEncumbranceTotal(state, characterId)).toBeCloseTo(12.6875);
   });
 });

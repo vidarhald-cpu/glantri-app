@@ -30,6 +30,39 @@ const locations: StorageLocation[] = [
     isAccessibleInEncounter: true,
     notes: null,
   },
+  {
+    id: `${characterId}:loc-person`,
+    characterId,
+    name: "On person",
+    type: "person_system",
+    availabilityClass: "with_you",
+    parentLocationId: null,
+    isMobile: true,
+    isAccessibleInEncounter: true,
+    notes: null,
+  },
+  {
+    id: `${characterId}:loc-backpack`,
+    characterId,
+    name: "Backpack",
+    type: "backpack_system",
+    availabilityClass: "with_you",
+    parentLocationId: null,
+    isMobile: true,
+    isAccessibleInEncounter: true,
+    notes: null,
+  },
+  {
+    id: `${characterId}:loc-mount`,
+    characterId,
+    name: "Mount",
+    type: "mount_system",
+    availabilityClass: "with_you",
+    parentLocationId: null,
+    isMobile: true,
+    isAccessibleInEncounter: false,
+    notes: null,
+  },
 ];
 
 const daggerItem: EquipmentItem = {
@@ -89,6 +122,43 @@ const bowItem: EquipmentItem = {
   material: "wood",
 };
 
+const ropeItem: EquipmentItem = {
+  ...daggerItem,
+  id: "gear-item-rope-on-person",
+  templateId: "gear-template-rope",
+  category: "gear",
+  material: "cloth",
+  isEquipped: false,
+  storageAssignment: {
+    locationId: `${characterId}:loc-person`,
+    carryMode: "on_person",
+  },
+};
+
+const rationItem: EquipmentItem = {
+  ...daggerItem,
+  id: "gear-item-rations-backpack",
+  templateId: "gear-template-rations",
+  category: "gear",
+  material: "cloth",
+  isEquipped: false,
+  storageAssignment: {
+    locationId: `${characterId}:loc-backpack`,
+    carryMode: "backpack",
+  },
+};
+
+const mountSpearItem: EquipmentItem = {
+  ...daggerItem,
+  id: "weapon-item-spear-mount",
+  templateId: "weapon-template-spear",
+  isEquipped: false,
+  storageAssignment: {
+    locationId: `${characterId}:loc-mount`,
+    carryMode: "mount",
+  },
+};
+
 const activeLoadout: CharacterLoadout = {
   id: `${characterId}:loadout-active`,
   characterId,
@@ -131,6 +201,9 @@ function createState(): EquipmentFeatureState {
       [shieldItem.id]: structuredClone(shieldItem),
       [armorItem.id]: structuredClone(armorItem),
       [bowItem.id]: structuredClone(bowItem),
+      [ropeItem.id]: structuredClone(ropeItem),
+      [rationItem.id]: structuredClone(rationItem),
+      [mountSpearItem.id]: structuredClone(mountSpearItem),
     },
     locationsById: indexById(structuredClone(locations)),
     activeLoadoutByCharacterId: {
@@ -220,5 +293,45 @@ describe("combatStatePanel throwing row reliability", () => {
       "Missile|Short bow",
       "Thrown|Dagger",
     ]);
+  });
+
+  it("uses all personal-load items for the encumbrance count while excluding mount items", () => {
+    const state = createState();
+    state.activeLoadoutByCharacterId[characterId] = {
+      ...state.activeLoadoutByCharacterId[characterId],
+      wornArmorItemId: armorItem.id,
+      readyShieldItemId: shieldItem.id,
+      activePrimaryWeaponItemId: longswordItem.id,
+      activeMissileWeaponItemId: bowItem.id,
+    };
+
+    const model = buildCombatStatePanelModel(
+      state,
+      characterId,
+      {
+        ...characterInputs,
+        brawlingCombatSkillXp: 9,
+        combatSkillXpByName: {
+          ...characterInputs.combatSkillXpByName,
+          "1-h edged": 15,
+          Bow: 6,
+          Brawling: 9,
+          Dodge: 15,
+          Parry: 11,
+        },
+        dodgeCombatSkillXp: 15,
+        parryCombatSkillXp: 11,
+      },
+      defaultCombatAllocationState,
+      daggerItem.id,
+    );
+
+    const encumbranceRow = model.capabilityRows.find(
+      (row) => row.label === "Enc/count/lvl",
+    )?.value;
+
+    expect(typeof encumbranceRow).toBe("string");
+    const [, countPart] = String(encumbranceRow).split(" / ");
+    expect(countPart).toBe("7");
   });
 });

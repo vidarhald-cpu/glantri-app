@@ -397,6 +397,15 @@ export function getBackpackItems(
   );
 }
 
+export function getPersonalLoadItems(
+  state: EquipmentFeatureState,
+  characterId: string,
+): EquipmentItem[] {
+  return getCharacterEquipmentItems(state, characterId).filter((item) =>
+    isPersonalCarryMode(item.storageAssignment.carryMode),
+  );
+}
+
 export function getStoredItems(
   state: EquipmentFeatureState,
   characterId: string,
@@ -460,7 +469,7 @@ export function getPersonalEncumbranceTotal(
   state: EquipmentFeatureState,
   characterId: string,
 ): number {
-  return getCharacterEquipmentItems(state, characterId).reduce((total, item) => {
+  return getPersonalLoadItems(state, characterId).reduce((total, item) => {
     const template = getEquipmentTemplateById(state, item.templateId);
     if (!template) {
       return total;

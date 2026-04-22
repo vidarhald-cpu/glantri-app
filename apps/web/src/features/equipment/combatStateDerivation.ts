@@ -33,6 +33,7 @@ import {
 import {
   getBackpackItems,
   getCharacterGearItems,
+  getPersonalLoadItems,
   getCharacterValuableItems,
   getEncounterAccessibleCoinQuantity,
   getEncounterAccessibleGearItems,
@@ -113,6 +114,7 @@ export interface DerivedCombatStateSnapshot {
   defenseSummary: string;
   loadNotes: string;
   personalEncumbrance: number;
+  personalItemCount: number;
   mountEncumbrance: number;
   gearCount: number;
   encounterAccessibleGearCount: number;
@@ -1275,11 +1277,11 @@ function buildCombinedDefenseRow(input: {
 function getPerceptionSummary(input: {
   allocationInputs: CombatStateAllocationInputs;
   backpackCount: number;
-  withYouCount: number;
+  personalItemCount: number;
 }): string {
   const perceptionModifier = input.allocationInputs.situationalModifiers.perception;
 
-  return `Current perception modifier ${formatSignedModifier(perceptionModifier)} from explicit live combat state; encumbrance-specific perception formula remains interim. Current carried state is ${input.withYouCount} with-you items, including ${input.backpackCount} in backpack.`;
+  return `Current perception modifier ${formatSignedModifier(perceptionModifier)} from explicit live combat state; encumbrance-specific perception formula remains interim. Current carried state is ${input.personalItemCount} personal-load items, including ${input.backpackCount} in backpack.`;
 }
 
 function getWorkbookDefenseCases(input: {
@@ -1472,6 +1474,7 @@ export function deriveCombatStateSnapshot(
   const resolvedAllocationInputs = normalizeCombatAllocationState(allocationInputs);
   const loadout = getLoadoutEquipment(state, characterId);
   const personalEncumbrance = getPersonalEncumbranceTotal(state, characterId);
+  const personalItemCount = getPersonalLoadItems(state, characterId).length;
   const mountEncumbrance = getMountEncumbranceTotal(state, characterId);
   const backpackCount = getBackpackItems(state, characterId).length;
   const gearCount = getCharacterGearItems(state, characterId).length;
@@ -1693,7 +1696,7 @@ export function deriveCombatStateSnapshot(
     perceptionSummary: getPerceptionSummary({
       allocationInputs: resolvedAllocationInputs,
       backpackCount,
-      withYouCount,
+      personalItemCount,
     }),
     defenseSummary: getDefenseSummary({
       allocationInputs: resolvedAllocationInputs,
@@ -1710,6 +1713,7 @@ export function deriveCombatStateSnapshot(
       secondaryTemplate: secondaryWeaponTemplate,
     }),
     personalEncumbrance: workbookMovement.personalEncumbrance ?? personalEncumbrance,
+    personalItemCount,
     mountEncumbrance,
     gearCount,
     encounterAccessibleGearCount,

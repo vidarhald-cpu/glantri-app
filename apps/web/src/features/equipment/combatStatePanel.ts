@@ -215,7 +215,7 @@ export function buildCombatStatePanelModel(
     },
     {
       label: "Enc/count/lvl",
-      value: `${getIntegerStyleDisplayValue(snapshot.personalEncumbrance)} / ${snapshot.gearCount} / ${snapshot.encumbranceLevel}`,
+      value: `${getIntegerStyleDisplayValue(snapshot.personalEncumbrance)} / ${snapshot.personalItemCount} / ${snapshot.encumbranceLevel}`,
     },
     { label: "Mov/mod", value: `${snapshot.movementSummary} / ${snapshot.movementModifierSummary}` },
   ];
