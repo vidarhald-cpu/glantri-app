@@ -9,6 +9,7 @@ import type {
 import { equipmentTemplates } from "@glantri/content/equipment";
 import { defaultCombatAllocationState } from "@glantri/rules-engine";
 import { buildCombatStatePanelModel } from "./combatStatePanel";
+import { getInventoryRows, getPersonalEncumbranceSummary } from "./equipmentSelectors";
 import type { CombatStateCharacterInputs } from "./combatStateDerivation";
 import type { EquipmentFeatureState } from "./types";
 
@@ -331,7 +332,16 @@ describe("combatStatePanel throwing row reliability", () => {
     )?.value;
 
     expect(typeof encumbranceRow).toBe("string");
-    const [, countPart] = String(encumbranceRow).split(" / ");
+    const [encPart, countPart] = String(encumbranceRow).split(" / ");
+    const inventoryTotal = getInventoryRows(state, characterId, characterInputs.size).reduce(
+      (total, row) => total + (row.effectiveEncumbrance ?? 0),
+      0,
+    );
+    const summary = getPersonalEncumbranceSummary(state, characterId, characterInputs.size);
+
+    expect(Number(encPart)).toBe(Math.round(inventoryTotal));
     expect(countPart).toBe("7");
+    expect(summary.totalEncumbrance).toBeCloseTo(inventoryTotal);
+    expect(summary.itemCount).toBe(7);
   });
 });

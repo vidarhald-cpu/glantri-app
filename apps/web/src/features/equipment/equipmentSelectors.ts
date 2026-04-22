@@ -144,16 +144,11 @@ export function getInventoryRows(
       template,
       characterSize,
     );
-    const effectiveEncumbrance =
-      isCarriedInventoryLocation(location)
-        ? template.category === "armor"
-          ? calculateWorkbookArmorEncumbrance({
-              characterSize: characterSize ?? null,
-              item,
-              template,
-            }) ?? getEffectiveEncumbrance(item, template)
-          : getEffectiveEncumbrance(item, template)
-        : null;
+    const effectiveEncumbrance = getInventoryEffectiveEncumbranceForItem(
+      state,
+      item,
+      characterSize,
+    );
 
     rows.push({
       itemId: item.id,
@@ -406,6 +401,58 @@ export function getPersonalLoadItems(
   );
 }
 
+export function getInventoryEffectiveEncumbranceForItem(
+  state: EquipmentFeatureState,
+  item: EquipmentItem,
+  characterSize?: number | null,
+): number | null {
+  const template = getEquipmentTemplateById(state, item.templateId);
+  if (!template) {
+    return null;
+  }
+
+  const location = state.locationsById[item.storageAssignment.locationId];
+  if (!isCarriedInventoryLocation(location)) {
+    return null;
+  }
+
+  if (template.category === "armor") {
+    return (
+      calculateWorkbookArmorEncumbrance({
+        characterSize: characterSize ?? null,
+        item,
+        template,
+      }) ?? getEffectiveEncumbrance(item, template)
+    );
+  }
+
+  return getEffectiveEncumbrance(item, template);
+}
+
+export interface PersonalEncumbranceSummary {
+  items: EquipmentItem[];
+  itemCount: number;
+  totalEncumbrance: number;
+}
+
+export function getPersonalEncumbranceSummary(
+  state: EquipmentFeatureState,
+  characterId: string,
+  characterSize?: number | null,
+): PersonalEncumbranceSummary {
+  const items = getPersonalLoadItems(state, characterId);
+
+  return {
+    items,
+    itemCount: items.length,
+    totalEncumbrance: items.reduce(
+      (total, item) =>
+        total + (getInventoryEffectiveEncumbranceForItem(state, item, characterSize) ?? 0),
+      0,
+    ),
+  };
+}
+
 export function getStoredItems(
   state: EquipmentFeatureState,
   characterId: string,
@@ -468,15 +515,9 @@ export function getEncounterAccessibleCoinQuantity(
 export function getPersonalEncumbranceTotal(
   state: EquipmentFeatureState,
   characterId: string,
+  characterSize?: number | null,
 ): number {
-  return getPersonalLoadItems(state, characterId).reduce((total, item) => {
-    const template = getEquipmentTemplateById(state, item.templateId);
-    if (!template) {
-      return total;
-    }
-
-    return total + getEffectiveEncumbrance(item, template);
-  }, 0);
+  return getPersonalEncumbranceSummary(state, characterId, characterSize).totalEncumbrance;
 }
 
 export function getMountEncumbranceTotal(

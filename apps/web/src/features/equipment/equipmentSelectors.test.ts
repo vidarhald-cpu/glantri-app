@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 import type { EquipmentItem, EquipmentTemplate, StorageLocation } from "@glantri/domain";
 
 import {
+  getInventoryEffectiveEncumbranceForItem,
   getInventoryRows,
   getItemsGroupedForInventoryPage,
   getPersonalLoadItems,
+  getPersonalEncumbranceSummary,
   getPersonalEncumbranceTotal,
 } from "./equipmentSelectors";
 import type { EquipmentFeatureState } from "./types";
@@ -234,7 +236,11 @@ describe("equipmentSelectors inventory page grouping", () => {
       "item-person",
       "item-backpack",
     ]);
-    expect(getPersonalEncumbranceTotal(state, characterId)).toBeCloseTo(6.5);
+    expect(getPersonalEncumbranceSummary(state, characterId, 6)).toMatchObject({
+      itemCount: 3,
+      totalEncumbrance: 6.5,
+    });
+    expect(getPersonalEncumbranceTotal(state, characterId, 6)).toBeCloseTo(6.5);
 
     state.itemsById["item-mount"] = {
       ...state.itemsById["item-mount"],
@@ -250,6 +256,26 @@ describe("equipmentSelectors inventory page grouping", () => {
       "item-backpack",
       "item-mount",
     ]);
-    expect(getPersonalEncumbranceTotal(state, characterId)).toBeCloseTo(12.6875);
+    expect(getPersonalEncumbranceSummary(state, characterId, 6)).toMatchObject({
+      itemCount: 4,
+      totalEncumbrance: 12.6875,
+    });
+    expect(getPersonalEncumbranceTotal(state, characterId, 6)).toBeCloseTo(12.6875);
+  });
+
+  it("uses the same encumbrance source as inventory rows", () => {
+    const state = createState();
+    const rows = getInventoryRows(state, characterId, 6);
+    const inventoryTotal = rows.reduce(
+      (total, row) => total + (row.effectiveEncumbrance ?? 0),
+      0,
+    );
+
+    expect(
+      getPersonalEncumbranceSummary(state, characterId, 6).totalEncumbrance,
+    ).toBeCloseTo(inventoryTotal);
+    expect(
+      getInventoryEffectiveEncumbranceForItem(state, state.itemsById["item-equipped"], 6),
+    ).toBe(4);
   });
 });

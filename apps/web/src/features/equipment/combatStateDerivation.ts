@@ -32,17 +32,14 @@ import {
 
 import {
   getBackpackItems,
-  getCharacterGearItems,
-  getPersonalLoadItems,
   getCharacterValuableItems,
   getEncounterAccessibleCoinQuantity,
   getEncounterAccessibleGearItems,
   getEncounterAccessibleValuableItems,
   getEquipmentTemplateById,
   getLoadoutEquipment,
-  getPersonalEncumbranceTotal,
+  getPersonalEncumbranceSummary,
   getStoredItems,
-  getWithYouItems,
 } from "./equipmentSelectors";
 import { buildWorkbookMovementSummary } from "./movementSummary";
 import type { EquipmentFeatureState } from "./types";
@@ -116,14 +113,12 @@ export interface DerivedCombatStateSnapshot {
   personalEncumbrance: number;
   personalItemCount: number;
   mountEncumbrance: number;
-  gearCount: number;
   encounterAccessibleGearCount: number;
   valuablesCount: number;
   encounterAccessibleValuablesCount: number;
   carriedCoinQuantity: number;
   backpackCount: number;
   storedCount: number;
-  withYouCount: number;
   wornArmorLabel: string;
   readyShieldLabel: string;
   activePrimaryLabel: string;
@@ -1473,18 +1468,21 @@ export function deriveCombatStateSnapshot(
 ): DerivedCombatStateSnapshot {
   const resolvedAllocationInputs = normalizeCombatAllocationState(allocationInputs);
   const loadout = getLoadoutEquipment(state, characterId);
-  const personalEncumbrance = getPersonalEncumbranceTotal(state, characterId);
-  const personalItemCount = getPersonalLoadItems(state, characterId).length;
+  const personalEncumbranceSummary = getPersonalEncumbranceSummary(
+    state,
+    characterId,
+    characterInputs?.size ?? null,
+  );
+  const personalEncumbrance = personalEncumbranceSummary.totalEncumbrance;
+  const personalItemCount = personalEncumbranceSummary.itemCount;
   const mountEncumbrance = getMountEncumbranceTotal(state, characterId);
   const backpackCount = getBackpackItems(state, characterId).length;
-  const gearCount = getCharacterGearItems(state, characterId).length;
   const encounterAccessibleGearCount = getEncounterAccessibleGearItems(state, characterId).length;
   const valuablesCount = getCharacterValuableItems(state, characterId).length;
   const encounterAccessibleValuablesCount =
     getEncounterAccessibleValuableItems(state, characterId).length;
   const carriedCoinQuantity = getEncounterAccessibleCoinQuantity(state, characterId);
   const storedCount = getStoredItems(state, characterId).length;
-  const withYouCount = getWithYouItems(state, characterId).length;
   const workbookMovement = buildWorkbookMovementSummary({
     characterId,
     characterInputs,
@@ -1715,14 +1713,12 @@ export function deriveCombatStateSnapshot(
     personalEncumbrance: workbookMovement.personalEncumbrance ?? personalEncumbrance,
     personalItemCount,
     mountEncumbrance,
-    gearCount,
     encounterAccessibleGearCount,
     valuablesCount,
     encounterAccessibleValuablesCount,
     carriedCoinQuantity,
     backpackCount,
     storedCount,
-    withYouCount,
     wornArmorLabel: getItemLabel(state, armorItem),
     readyShieldLabel: getItemLabel(state, shieldItem),
     activePrimaryLabel: getItemLabel(state, primaryItem),

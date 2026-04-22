@@ -1,9 +1,4 @@
 import {
-  getMaterialFactor,
-  getQualityFactor,
-  isPersonalCarryMode,
-  type ArmorTemplate,
-  type EquipmentItem,
   type EquipmentTemplate,
   type ShieldTemplate,
 } from "@glantri/domain";
@@ -15,11 +10,10 @@ import {
   calculateWorkbookMovementModifier,
 } from "@glantri/rules-engine";
 
-import { calculateWorkbookArmorEncumbrance } from "./armorSummary";
 import {
-  getCharacterEquipmentItems,
   getEquipmentTemplateById,
   getLoadoutEquipment,
+  getPersonalEncumbranceSummary,
 } from "./equipmentSelectors";
 import type { CombatStateCharacterInputs } from "./combatStateDerivation";
 import type { EquipmentFeatureState } from "./types";
@@ -35,38 +29,8 @@ export interface WorkbookMovementSummary {
   shieldMovementModifier: number | null;
 }
 
-function asArmorTemplate(template: EquipmentTemplate | undefined): ArmorTemplate | null {
-  return template?.category === "armor" ? template : null;
-}
-
 function asShieldTemplate(template: EquipmentTemplate | undefined): ShieldTemplate | null {
   return template?.category === "shield" ? template : null;
-}
-
-function getWorkbookPersonalItemEncumbrance(input: {
-  adjustedSize: number | null;
-  item: EquipmentItem;
-  template: EquipmentTemplate;
-}): number | null {
-  if (input.item.encumbranceOverride != null) {
-    return input.item.encumbranceOverride;
-  }
-
-  const armorTemplate = asArmorTemplate(input.template);
-  if (armorTemplate) {
-    return calculateWorkbookArmorEncumbrance({
-      characterSize: input.adjustedSize,
-      item: input.item,
-      template: armorTemplate,
-    });
-  }
-
-  return (
-    input.template.baseEncumbrance *
-    input.item.quantity *
-    getMaterialFactor(input.item.material) *
-    getQualityFactor(input.item.quality)
-  );
 }
 
 export function buildWorkbookMovementSummary(input: {
@@ -81,22 +45,11 @@ export function buildWorkbookMovementSummary(input: {
   const dexterityGm = input.characterInputs?.dexterityGm ?? null;
   const sizeGm = input.characterInputs?.sizeGm ?? null;
 
-  const personalEncumbrance = getCharacterEquipmentItems(input.state, input.characterId)
-    .filter((item) => isPersonalCarryMode(item.storageAssignment.carryMode))
-    .reduce((total, item) => {
-      const template = getEquipmentTemplateById(input.state, item.templateId);
-      if (!template) {
-        return total;
-      }
-
-      const value = getWorkbookPersonalItemEncumbrance({
-        adjustedSize: size,
-        item,
-        template,
-      });
-
-      return total + (value ?? 0);
-    }, 0);
+  const personalEncumbrance = getPersonalEncumbranceSummary(
+    input.state,
+    input.characterId,
+    size,
+  ).totalEncumbrance;
 
   if (
     strength == null ||
