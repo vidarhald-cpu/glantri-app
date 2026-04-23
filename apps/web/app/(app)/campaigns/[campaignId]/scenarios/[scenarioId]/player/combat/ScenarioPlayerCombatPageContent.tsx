@@ -253,13 +253,7 @@ export default function ScenarioPlayerCombatPageContent({
         </div>
       </section>
 
-      <PlaceholderSection
-        title="Situation"
-        description="Current scene context, threats, range, and immediate tactical summary will appear here in the next phase."
-      />
-
       <section style={{ display: "grid", gap: "1rem" }}>
-        <h2 style={{ margin: 0 }}>Loadout and combat state</h2>
         {projection.hasControlledParticipant ? (
           hasMountedLoadout ? (
             <EquipmentLoadoutModule mode="readonly" model={loadoutModel} />
@@ -283,6 +277,10 @@ export default function ScenarioPlayerCombatPageContent({
           gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
         }}
       >
+        <PlaceholderSection
+          title="Situation"
+          description="Current scene context, threats, range, and immediate tactical summary will appear here in the next phase."
+        />
         <PlaceholderSection
           title="Action selection"
           description="Attack, movement, skill use, speech, and other declared actions will be added here in a later phase."

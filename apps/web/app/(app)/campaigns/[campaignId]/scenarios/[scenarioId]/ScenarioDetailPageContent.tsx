@@ -282,10 +282,12 @@ export default function ScenarioDetailPageContent({
 
       <section style={{ border: "1px solid #d9ddd8", borderRadius: 12, display: "grid", gap: "0.75rem", padding: "1rem" }}>
         <h2 style={{ margin: 0 }}>Scenario summary</h2>
-        <p style={{ margin: 0 }}>
-          Scenarios sit inside a campaign and handle session-level setup, participant assignment,
-          visibility/state controls, and links onward to encounters.
-        </p>
+        {!embedded ? (
+          <p style={{ margin: 0 }}>
+            Scenarios sit inside a campaign and handle session-level setup, participant assignment,
+            visibility/state controls, and links onward to encounters.
+          </p>
+        ) : null}
         <input onChange={(event) => setScenarioName(event.target.value)} value={scenarioName} />
         <select
           onChange={(event) => setScenarioStatus(event.target.value as Scenario["status"])}
@@ -342,29 +344,31 @@ export default function ScenarioDetailPageContent({
         </div>
       </section>
 
-      <section
-        style={{
-          border: "1px solid #d9ddd8",
-          borderRadius: 12,
-          display: "grid",
-          gap: "0.75rem",
-          padding: "1rem"
-        }}
-      >
-        <h2 style={{ margin: 0 }}>Encounters</h2>
-        <p style={{ margin: 0 }}>
-          Encounter pages belong to this scenario. Use them for GM combat management, then hand
-          players the linked combat screen from encounter context.
-        </p>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
-          <Link href={`/campaigns/${campaignId}/scenarios/${scenarioId}/encounters`}>
-            Open encounter list
-          </Link>
-          <Link href={`/campaigns/${campaignId}/scenarios/${scenarioId}/player/combat`}>
-            Open player combat screen
-          </Link>
-        </div>
-      </section>
+      {!embedded ? (
+        <section
+          style={{
+            border: "1px solid #d9ddd8",
+            borderRadius: 12,
+            display: "grid",
+            gap: "0.75rem",
+            padding: "1rem"
+          }}
+        >
+          <h2 style={{ margin: 0 }}>Encounters</h2>
+          <p style={{ margin: 0 }}>
+            Encounter pages belong to this scenario. Use them for GM combat management, then hand
+            players the linked combat screen from encounter context.
+          </p>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
+            <Link href={`/campaigns/${campaignId}/scenarios/${scenarioId}/encounters`}>
+              Open encounter list
+            </Link>
+            <Link href={`/campaigns/${campaignId}/scenarios/${scenarioId}/player/combat`}>
+              Open player combat screen
+            </Link>
+          </div>
+        </section>
+      ) : null}
 
       <section style={{ border: "1px solid #d9ddd8", borderRadius: 12, display: "grid", gap: "0.75rem", padding: "1rem" }}>
         <h2 style={{ margin: 0 }}>Add participant from template or campaign NPC</h2>
