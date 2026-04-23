@@ -2,7 +2,11 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { characterBuildSchema, type ScenarioPlayerProjection } from "@glantri/domain";
+import {
+  characterBuildSchema,
+  type ScenarioParticipant,
+  type ScenarioPlayerProjection,
+} from "@glantri/domain";
 
 import {
   buildEquipmentLoadoutModuleModel,
@@ -11,7 +15,10 @@ import {
 import type { EquipmentFeatureState } from "../../../../../../../../src/features/equipment/types";
 import { useSessionUser } from "../../../../../../../../src/lib/auth/SessionUserContext";
 import { loadCanonicalContent } from "../../../../../../../../src/lib/content/loadCanonicalContent";
-import { loadScenarioPlayerProjection } from "../../../../../../../../src/lib/api/localServiceClient";
+import {
+  loadScenarioParticipants,
+  loadScenarioPlayerProjection,
+} from "../../../../../../../../src/lib/api/localServiceClient";
 
 interface ScenarioPlayerCombatPageContentProps {
   campaignId: string;
@@ -60,6 +67,8 @@ function PlaceholderSection(input: {
   );
 }
 
+const SYNTHETIC_PARTICIPANT_TIMESTAMP = new Date(0).toISOString();
+
 export default function ScenarioPlayerCombatPageContent({
   campaignId,
   embedded = false,
@@ -71,6 +80,11 @@ export default function ScenarioPlayerCombatPageContent({
   const [error, setError] = useState<string>();
   const [loading, setLoading] = useState(true);
   const [projection, setProjection] = useState<ScenarioPlayerProjection>();
+  const [selectableParticipants, setSelectableParticipants] = useState<ScenarioParticipant[]>([]);
+  const [selectedParticipantId, setSelectedParticipantId] = useState<string>("");
+  const isGameMaster = Boolean(
+    currentUser?.roles.includes("game_master") || currentUser?.roles.includes("admin")
+  );
 
   useEffect(() => {
     if (sessionLoading) {
@@ -90,9 +104,10 @@ export default function ScenarioPlayerCombatPageContent({
       setLoading(true);
 
       try {
-        const [nextProjection, nextContent] = await Promise.all([
+        const [nextProjection, nextContent, nextParticipants] = await Promise.all([
           loadScenarioPlayerProjection(scenarioId),
           loadCanonicalContent(),
+          isGameMaster ? loadScenarioParticipants(scenarioId) : Promise.resolve([]),
         ]);
 
         if (cancelled) {
@@ -101,6 +116,7 @@ export default function ScenarioPlayerCombatPageContent({
 
         setProjection(nextProjection);
         setContent(nextContent);
+        setSelectableParticipants(nextParticipants);
         setError(undefined);
       } catch (caughtError) {
         if (cancelled) {
@@ -124,17 +140,125 @@ export default function ScenarioPlayerCombatPageContent({
     return () => {
       cancelled = true;
     };
-  }, [currentUser, scenarioId, sessionLoading]);
+  }, [currentUser, isGameMaster, scenarioId, sessionLoading]);
+
+  const accessibleParticipants = useMemo(() => {
+    if (!projection) {
+      return [];
+    }
+
+    if (isGameMaster) {
+      return selectableParticipants.filter((participant) => participant.isActive);
+    }
+
+    if (!projection.controlledParticipant) {
+      return [];
+    }
+
+    return [
+      {
+        characterId: projection.controlledParticipant.characterId,
+        controlledByUserId: currentUser?.id,
+        createdAt: SYNTHETIC_PARTICIPANT_TIMESTAMP,
+        displayOrder: 0,
+        factionId: projection.controlledParticipant.factionId,
+        id: projection.controlledParticipant.id,
+        initiativeSlot: undefined,
+        isActive: true,
+        joinSource: "player_joined",
+        position: undefined,
+        role: projection.controlledParticipant.role,
+        roleTag: undefined,
+        scenarioId,
+        snapshot: {
+          build: projection.controlledParticipant.build,
+          displayName: projection.controlledParticipant.displayName,
+          equipmentState: projection.controlledParticipant.equipmentState
+        },
+        sourceType: projection.controlledParticipant.sourceType,
+        state: {
+          combat: {},
+          conditions: Array.from(
+            { length: projection.controlledParticipant.conditionCount },
+            (_, index) => ({
+              id: `condition-${index + 1}`,
+              label: `Condition ${index + 1}`
+            })
+          ),
+          equipment: {},
+          health: {
+            bleeding: 0,
+            currentHp: projection.controlledParticipant.currentHp,
+            dead: false,
+            maxHp: projection.controlledParticipant.maxHp,
+            unconscious: false,
+            wounds: 0
+          },
+          modifiers: [],
+          resources: {},
+          snapshotVersion: 1
+        },
+        tacticalGroupId: undefined,
+        updatedAt: SYNTHETIC_PARTICIPANT_TIMESTAMP,
+        visibilityOverrides: undefined
+      }
+    ];
+  }, [currentUser?.id, isGameMaster, projection, selectableParticipants]);
+
+  useEffect(() => {
+    if (accessibleParticipants.length === 0) {
+      setSelectedParticipantId("");
+      return;
+    }
+
+    const projectionControlledId = projection?.controlledParticipantId;
+    const preferredId =
+      accessibleParticipants.find((participant) => participant.id === projectionControlledId)?.id ??
+      accessibleParticipants[0]?.id;
+
+    setSelectedParticipantId((current) =>
+      accessibleParticipants.some((participant) => participant.id === current)
+        ? current
+        : (preferredId ?? "")
+    );
+  }, [accessibleParticipants, projection]);
+
+  const selectedParticipant = useMemo(
+    () =>
+      accessibleParticipants.find((participant) => participant.id === selectedParticipantId) ??
+      null,
+    [accessibleParticipants, selectedParticipantId]
+  );
+
+  const displayedParticipant = useMemo(() => {
+    if (!selectedParticipant) {
+      return projection?.controlledParticipant;
+    }
+
+    return {
+      build: selectedParticipant.snapshot.build,
+      characterId: selectedParticipant.characterId,
+      conditionCount: selectedParticipant.state.conditions.length,
+      currentHp: selectedParticipant.state.health.currentHp,
+      displayName: selectedParticipant.snapshot.displayName,
+      equipmentState: selectedParticipant.snapshot.equipmentState,
+      factionId: selectedParticipant.factionId,
+      id: selectedParticipant.id,
+      maxHp: selectedParticipant.state.health.maxHp,
+      role: selectedParticipant.role,
+      sourceType: selectedParticipant.sourceType,
+    };
+  }, [projection, selectedParticipant]);
 
   const controlledBuild = useMemo(() => {
-    const result = characterBuildSchema.safeParse(projection?.controlledParticipant?.build);
+    const result = characterBuildSchema.safeParse(displayedParticipant?.build);
     return result.success ? result.data : null;
-  }, [projection]);
+  }, [displayedParticipant]);
 
   const controlledEquipmentState = useMemo(() => {
-    const candidate = projection?.controlledParticipant?.equipmentState;
+    const candidate = displayedParticipant?.equipmentState;
     return isEquipmentFeatureState(candidate) ? candidate : null;
-  }, [projection]);
+  }, [displayedParticipant]);
 
   const loadoutModel = useMemo(
     () =>
@@ -148,11 +272,11 @@ export default function ScenarioPlayerCombatPageContent({
                 },
               }
             : null,
-        characterId: projection?.controlledParticipant?.characterId ?? "",
+        characterId: displayedParticipant?.characterId ?? "",
         state: controlledEquipmentState,
         throwingWeaponItemId: null,
       }),
-    [content, controlledBuild, controlledEquipmentState, projection]
+    [content, controlledBuild, controlledEquipmentState, displayedParticipant]
   );
 
   if (sessionLoading || loading) {
@@ -189,7 +313,7 @@ export default function ScenarioPlayerCombatPageContent({
   const hasMountedLoadout =
     Boolean(controlledBuild) &&
     Boolean(controlledEquipmentState) &&
-    Boolean(projection.controlledParticipant?.characterId);
+    Boolean(displayedParticipant?.characterId);
 
   return (
     <section style={{ display: "grid", gap: "1rem", maxWidth: 1200 }}>
@@ -206,6 +330,22 @@ export default function ScenarioPlayerCombatPageContent({
           Player-facing combat shell for the currently controlled scenario participant.
         </p>
         {encounterTitle ? <div>Encounter: {encounterTitle}</div> : null}
+        <label style={{ display: "grid", gap: "0.25rem", maxWidth: 360 }}>
+          <span>Participant</span>
+          <select
+            onChange={(event) => setSelectedParticipantId(event.target.value)}
+            value={selectedParticipantId}
+          >
+            {accessibleParticipants.length === 0 ? (
+              <option value="">No accessible participant</option>
+            ) : null}
+            {accessibleParticipants.map((participant) => (
+              <option key={participant.id} value={participant.id}>
+                {participant.snapshot.displayName} ({participant.role})
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
 
       <section
@@ -227,26 +367,24 @@ export default function ScenarioPlayerCombatPageContent({
 
         <div style={panelStyle}>
           <h2 style={{ margin: 0 }}>Character state</h2>
-          {projection.hasControlledParticipant && projection.controlledParticipant ? (
+          {displayedParticipant ? (
             <div style={{ display: "grid", gap: "0.5rem" }}>
-              <strong>{projection.controlledParticipant.displayName}</strong>
+              <strong>{displayedParticipant.displayName}</strong>
               <div>
-                Role: {projection.controlledParticipant.role} ·{" "}
-                {projection.controlledParticipant.sourceType}
+                Role: {displayedParticipant.role} · {displayedParticipant.sourceType}
               </div>
               <div>
-                HP: {projection.controlledParticipant.currentHp}/
-                {projection.controlledParticipant.maxHp}
+                HP: {displayedParticipant.currentHp}/{displayedParticipant.maxHp}
               </div>
-              <div>Conditions: {projection.controlledParticipant.conditionCount}</div>
-              <div>Faction: {projection.controlledParticipant.factionId ?? "Unassigned"}</div>
+              <div>Conditions: {displayedParticipant.conditionCount}</div>
+              <div>Faction: {displayedParticipant.factionId ?? "Unassigned"}</div>
             </div>
           ) : (
             <div style={{ display: "grid", gap: "0.5rem" }}>
-              <strong>No active character assigned</strong>
+              <strong>No accessible participant</strong>
               <div>
-                This account does not currently control an active player character in this
-                scenario. Ask the GM to assign one before using the combat screen.
+                This account does not currently have an accessible participant to inspect in this
+                scenario.
               </div>
             </div>
           )}
@@ -254,7 +392,7 @@ export default function ScenarioPlayerCombatPageContent({
       </section>
 
       <section style={{ display: "grid", gap: "1rem" }}>
-        {projection.hasControlledParticipant ? (
+        {displayedParticipant ? (
           hasMountedLoadout ? (
             <EquipmentLoadoutModule mode="readonly" model={loadoutModel} />
           ) : (
@@ -264,8 +402,8 @@ export default function ScenarioPlayerCombatPageContent({
           )
         ) : (
           <div style={panelStyle}>
-            The readonly combat/loadout panel will appear here once a controlled character is
-            assigned.
+            The readonly combat/loadout panel will appear here once an accessible participant is
+            available.
           </div>
         )}
       </section>

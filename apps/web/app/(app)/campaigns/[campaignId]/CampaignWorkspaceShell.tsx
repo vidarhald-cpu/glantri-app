@@ -172,59 +172,61 @@ export default function CampaignWorkspaceShell({
         })}
       </nav>
 
-      <section style={panelStyle}>
-        <div
-          style={{
-            display: "grid",
-            gap: "0.75rem",
-            gridTemplateColumns: "minmax(220px, 1fr) minmax(220px, 1fr) minmax(220px, 1fr)"
-          }}
-        >
-          <label style={{ display: "grid", gap: "0.25rem" }}>
-            <span>Campaign</span>
-            <input disabled value={workspaceState.activeCampaignId} />
-          </label>
-          <label style={{ display: "grid", gap: "0.25rem" }}>
-            <span>Scenario</span>
-            <select
-              disabled={loading || scenarios.length === 0}
-              onChange={(event) => {
-                window.location.href = buildWorkspaceHref({
-                  encounterId: null,
-                  scenarioId: event.target.value || null
-                });
-              }}
-              value={workspaceState.activeScenarioId ?? ""}
-            >
-              <option value="">Select scenario</option>
-              {scenarios.map((scenario) => (
-                <option key={scenario.id} value={scenario.id}>
-                  {scenario.name} ({scenario.kind}, {scenario.status})
-                </option>
-              ))}
-            </select>
-          </label>
-          <label style={{ display: "grid", gap: "0.25rem" }}>
-            <span>Encounter</span>
-            <select
-              disabled={!workspaceState.activeScenarioId}
-              onChange={(event) => {
-                window.location.href = buildWorkspaceHref({
-                  encounterId: event.target.value || null
-                });
-              }}
-              value={workspaceState.activeEncounterId ?? ""}
-            >
-              <option value="">Select encounter</option>
-              {activeScenarioEncounters.map((encounter) => (
-                <option key={encounter.id} value={encounter.id}>
-                  {encounter.title} ({encounter.status})
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-      </section>
+      {workspaceState.activeTab !== "player-encounter" ? (
+        <section style={panelStyle}>
+          <div
+            style={{
+              display: "grid",
+              gap: "0.75rem",
+              gridTemplateColumns: "minmax(220px, 1fr) minmax(220px, 1fr) minmax(220px, 1fr)"
+            }}
+          >
+            <label style={{ display: "grid", gap: "0.25rem" }}>
+              <span>Campaign</span>
+              <input disabled value={workspaceState.activeCampaignId} />
+            </label>
+            <label style={{ display: "grid", gap: "0.25rem" }}>
+              <span>Scenario</span>
+              <select
+                disabled={loading || scenarios.length === 0}
+                onChange={(event) => {
+                  window.location.href = buildWorkspaceHref({
+                    encounterId: null,
+                    scenarioId: event.target.value || null
+                  });
+                }}
+                value={workspaceState.activeScenarioId ?? ""}
+              >
+                <option value="">Select scenario</option>
+                {scenarios.map((scenario) => (
+                  <option key={scenario.id} value={scenario.id}>
+                    {scenario.name} ({scenario.kind}, {scenario.status})
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label style={{ display: "grid", gap: "0.25rem" }}>
+              <span>Encounter</span>
+              <select
+                disabled={!workspaceState.activeScenarioId}
+                onChange={(event) => {
+                  window.location.href = buildWorkspaceHref({
+                    encounterId: event.target.value || null
+                  });
+                }}
+                value={workspaceState.activeEncounterId ?? ""}
+              >
+                <option value="">Select encounter</option>
+                {activeScenarioEncounters.map((encounter) => (
+                  <option key={encounter.id} value={encounter.id}>
+                    {encounter.title} ({encounter.status})
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+        </section>
+      ) : null}
 
       {workspaceState.activeTab === "campaign" ? (
         <section style={{ display: "grid", gap: "1rem" }}>
