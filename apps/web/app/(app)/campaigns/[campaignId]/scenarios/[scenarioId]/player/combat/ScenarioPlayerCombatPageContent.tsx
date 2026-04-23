@@ -24,8 +24,11 @@ import {
 } from "../../../../../../../../src/lib/campaigns/playerEncounter";
 import { loadCanonicalContent } from "../../../../../../../../src/lib/content/loadCanonicalContent";
 import {
+  loadCharacterEquipmentState,
   loadScenarioParticipants,
   loadScenarioPlayerProjection,
+  loadServerCharacterById,
+  type ServerCharacterRecord,
 } from "../../../../../../../../src/lib/api/localServiceClient";
 
 interface ScenarioPlayerCombatPageContentProps {
@@ -136,6 +139,16 @@ export default function ScenarioPlayerCombatPageContent({
   const [error, setError] = useState<string>();
   const [loading, setLoading] = useState(true);
   const [projection, setProjection] = useState<ScenarioPlayerProjection>();
+  const [resolvedCharacterStateByParticipantId, setResolvedCharacterStateByParticipantId] =
+    useState<
+      Record<
+        string,
+        {
+          equipmentState: EquipmentFeatureState;
+          serverRecord: ServerCharacterRecord;
+        }
+      >
+    >({});
   const [selectableParticipants, setSelectableParticipants] = useState<ScenarioParticipant[]>([]);
   const [selectedParticipantId, setSelectedParticipantId] = useState<string>("");
   const [selectedActionId, setSelectedActionId] = useState<PlayerEncounterActionId | "">("attack");
@@ -259,25 +272,83 @@ export default function ScenarioPlayerCombatPageContent({
     [accessibleParticipants, selectedParticipantId]
   );
 
+  useEffect(() => {
+    const participantId = selectedParticipant?.id;
+    const selectedCharacterId = selectedParticipant?.characterId;
+
+    if (!selectedParticipant || !participantId || !selectedCharacterId) {
+      return;
+    }
+
+    const stableParticipantId: string = participantId;
+    const characterId: string = selectedCharacterId;
+
+    if (resolvedCharacterStateByParticipantId[stableParticipantId]) {
+      return;
+    }
+
+    let cancelled = false;
+
+    async function hydrateSelectedCharacterParticipant() {
+      try {
+        const [serverRecord, equipmentState] = await Promise.all([
+          loadServerCharacterById(characterId),
+          loadCharacterEquipmentState(characterId),
+        ]);
+
+        if (cancelled) {
+          return;
+        }
+
+        setResolvedCharacterStateByParticipantId((current) => ({
+          ...current,
+          [stableParticipantId]: {
+            equipmentState,
+            serverRecord,
+          },
+        }));
+      } catch (caughtError) {
+        if (cancelled) {
+          return;
+        }
+
+        setError(
+          caughtError instanceof Error
+            ? caughtError.message
+            : "Unable to load the selected participant character snapshot.",
+        );
+      }
+    }
+
+    void hydrateSelectedCharacterParticipant();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [resolvedCharacterStateByParticipantId, selectedParticipant]);
+
   const displayedParticipant = useMemo(() => {
     if (!selectedParticipant) {
       return projection?.controlledParticipant;
     }
 
+    const resolvedCharacterState = resolvedCharacterStateByParticipantId[selectedParticipant.id];
+
     return {
-      build: selectedParticipant.snapshot.build,
+      build: resolvedCharacterState?.serverRecord.build ?? selectedParticipant.snapshot.build,
       characterId: selectedParticipant.characterId,
       conditionCount: selectedParticipant.state.conditions.length,
       currentHp: selectedParticipant.state.health.currentHp,
       displayName: selectedParticipant.snapshot.displayName,
-      equipmentState: selectedParticipant.snapshot.equipmentState,
+      equipmentState:
+        resolvedCharacterState?.equipmentState ?? selectedParticipant.snapshot.equipmentState,
       factionId: selectedParticipant.factionId,
       id: selectedParticipant.id,
       maxHp: selectedParticipant.state.health.maxHp,
       role: selectedParticipant.role,
       sourceType: selectedParticipant.sourceType,
     };
-  }, [projection, selectedParticipant]);
+  }, [projection, resolvedCharacterStateByParticipantId, selectedParticipant]);
 
   const controlledBuild = useMemo(() => {
     const result = characterBuildSchema.safeParse(displayedParticipant?.build);
