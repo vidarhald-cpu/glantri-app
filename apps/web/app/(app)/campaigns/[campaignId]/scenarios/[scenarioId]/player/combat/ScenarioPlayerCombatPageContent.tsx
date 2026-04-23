@@ -151,20 +151,19 @@ export default function ScenarioPlayerCombatPageContent({
     >({});
   const [selectableParticipants, setSelectableParticipants] = useState<ScenarioParticipant[]>([]);
   const [selectedParticipantId, setSelectedParticipantId] = useState<string>("");
-  const [selectedActionId, setSelectedActionId] = useState<PlayerEncounterActionId | "">("attack");
+  const [selectedActionId, setSelectedActionId] = useState<PlayerEncounterActionId | "">("");
   const [selectedSecondaryActionId, setSelectedSecondaryActionId] = useState<
     PlayerEncounterActionId | ""
-  >("parry");
+  >("");
   const [selectedMovementId, setSelectedMovementId] = useState<PlayerEncounterMovementId | "">(
     "hold",
   );
   const [additionalActionNotes, setAdditionalActionNotes] = useState("");
-  const [rollResults, setRollResults] = useState<{
-    attack?: number;
-    crit?: number;
-    hitLocation?: number;
-    initiative?: number;
-  }>({});
+  const [actionRollResult, setActionRollResult] = useState<{
+    interpretedResult: string;
+    phaseLabel?: string;
+    value: number;
+  } | null>(null);
   const isGameMaster = Boolean(
     currentUser?.roles.includes("game_master") || currentUser?.roles.includes("admin")
   );
@@ -262,7 +261,7 @@ export default function ScenarioPlayerCombatPageContent({
   }, [accessibleParticipants, projection]);
 
   useEffect(() => {
-    setRollResults({});
+    setActionRollResult(null);
   }, [selectedParticipantId]);
 
   const selectedParticipant = useMemo(
@@ -483,6 +482,60 @@ export default function ScenarioPlayerCombatPageContent({
     selectedSecondaryActionId,
   ]);
 
+  const currentPhaseNumber = projection?.scenario.phase === 2 ? 2 : 1;
+  const phaseCards = [
+    {
+      description:
+        selectedActionId || selectedSecondaryActionId
+          ? `${phaseSummary.phaseOne} · ${getPlayerEncounterMovementLabel(selectedMovementId)}`
+          : "No action selected yet.",
+      phaseLabel: "Phase 1",
+      stats:
+        selectedActionId && selectedCombatReference
+          ? [
+              `Weapon: ${selectedCombatReference.selectedWeapon}`,
+              `Attack: ${selectedCombatReference.attackMode}`,
+              `OB: ${selectedCombatReference.ob}`,
+              `DB: ${selectedCombatReference.db}`,
+            ]
+          : [],
+      title: phaseSummary.phaseOne,
+    },
+    {
+      description:
+        selectedSecondaryActionId
+          ? `${phaseSummary.phaseTwo} · ${getPlayerEncounterMovementLabel(selectedMovementId)}`
+          : "Open",
+      phaseLabel: "Phase 2",
+      stats:
+        selectedSecondaryActionId && selectedCombatReference
+          ? [
+              `Weapon: ${selectedCombatReference.selectedWeapon}`,
+              `Parry: ${selectedCombatReference.parry}`,
+              `Movement: ${selectedCombatReference.movement}`,
+              `Enc: ${selectedCombatReference.encumbrance}`,
+            ]
+          : [],
+      title: phaseSummary.phaseTwo,
+    },
+  ] as const;
+
+  const activeActionButton = useMemo(() => {
+    if (!displayedParticipant || !selectedActionId) {
+      return {
+        enabled: false,
+        label: "Action",
+        phaseLabel: undefined,
+      };
+    }
+
+    return {
+      enabled: true,
+      label: "Initiative",
+      phaseLabel: `Phase ${currentPhaseNumber}`,
+    };
+  }, [currentPhaseNumber, displayedParticipant, selectedActionId]);
+
   if (sessionLoading || loading) {
     return <section>Loading player combat screen...</section>;
   }
@@ -552,7 +605,8 @@ export default function ScenarioPlayerCombatPageContent({
       <section
         style={{
           ...panelStyle,
-          gridTemplateColumns: "minmax(320px, 0.95fr) minmax(320px, 1.05fr)",
+          alignItems: "start",
+          gridTemplateColumns: "minmax(240px, 0.7fr) minmax(420px, 1.3fr)",
         }}
       >
         <div style={{ display: "grid", gap: "0.9rem" }}>
@@ -567,6 +621,7 @@ export default function ScenarioPlayerCombatPageContent({
                   }
                   value={selectedActionId}
                 >
+                  <option value="">Choose action</option>
                   {PLAYER_ENCOUNTER_ACTION_OPTIONS.map((option) => (
                     <option key={option.value} value={option.value}>
                       {option.label}
@@ -629,179 +684,129 @@ export default function ScenarioPlayerCombatPageContent({
         </div>
 
         <div style={{ display: "grid", gap: "0.9rem" }}>
-          <div style={{ display: "grid", gap: "0.5rem" }}>
-            <h2 style={{ margin: 0 }}>Round face</h2>
-            <div
-              style={{
-                display: "grid",
-                gap: "0.75rem",
-                gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
-              }}
-            >
-              <div
+          <div style={{ display: "grid", gap: "0.75rem", gridTemplateColumns: "1fr 1fr" }}>
+            {phaseCards.map((phaseCard) => (
+              <section
+                key={phaseCard.phaseLabel}
                 style={{
                   background: "#fffdf8",
                   border: "1px solid #d9ddd8",
                   borderRadius: 10,
                   display: "grid",
-                  gap: "0.25rem",
-                  padding: "0.75rem",
+                  gap: "0.5rem",
+                  minHeight: 210,
+                  padding: "0.85rem",
                 }}
               >
-                <strong>Phase 1</strong>
-                <div>{phaseSummary.phaseOne}</div>
-              </div>
-              <div
-                style={{
-                  background: "#fffdf8",
-                  border: "1px solid #d9ddd8",
-                  borderRadius: 10,
-                  display: "grid",
-                  gap: "0.25rem",
-                  padding: "0.75rem",
-                }}
-              >
-                <strong>Phase 2</strong>
-                <div>{phaseSummary.phaseTwo}</div>
-              </div>
-            </div>
-            <div style={{ color: "#5e5a50" }}>
-              Movement: {getPlayerEncounterMovementLabel(selectedMovementId)}
-            </div>
-            {additionalActionNotes.trim().length > 0 ? (
-              <div style={{ color: "#5e5a50" }}>Additional: {additionalActionNotes.trim()}</div>
-            ) : null}
+                <strong>{phaseCard.phaseLabel}</strong>
+                <div style={{ fontSize: "1.05rem", fontWeight: 600 }}>{phaseCard.title}</div>
+                <div style={{ color: "#5e5a50" }}>{phaseCard.description}</div>
+                {phaseCard.stats.length > 0 ? (
+                  <div style={{ display: "grid", gap: "0.25rem", fontSize: "0.95rem" }}>
+                    {phaseCard.stats.map((stat) => (
+                      <div key={stat}>{stat}</div>
+                    ))}
+                  </div>
+                ) : null}
+              </section>
+            ))}
           </div>
 
-          <div style={{ display: "grid", gap: "0.5rem" }}>
-            <h2 style={{ margin: 0 }}>Combat detail</h2>
-            {displayedParticipant ? (
+          <section
+            style={{
+              background: "#fffdf8",
+              border: "1px solid #d9ddd8",
+              borderRadius: 10,
+              display: "grid",
+              gap: "0.75rem",
+              gridTemplateColumns: "minmax(180px, 0.65fr) minmax(260px, 1.35fr)",
+              padding: "0.85rem",
+            }}
+          >
+            <div>
+              <button
+                disabled={!activeActionButton.enabled}
+                onClick={() =>
+                  setActionRollResult({
+                    interpretedResult: selectedCombatReference
+                      ? `${phaseSummary.phaseOne} with ${selectedCombatReference.selectedWeapon}`
+                      : phaseSummary.phaseOne,
+                    phaseLabel: activeActionButton.phaseLabel,
+                    value: rollDie(10),
+                  })
+                }
+                style={{
+                  background: activeActionButton.enabled ? "#ded4b1" : "#e4e0d6",
+                  border: "1px solid #bdb39a",
+                  borderRadius: 10,
+                  color: activeActionButton.enabled ? "#2f2415" : "#8a8477",
+                  cursor: activeActionButton.enabled ? "pointer" : "not-allowed",
+                  display: "grid",
+                  gap: "0.15rem",
+                  minHeight: 88,
+                  padding: "0.75rem 0.9rem",
+                  textAlign: "left",
+                  width: "100%",
+                }}
+                type="button"
+              >
+                <strong>{activeActionButton.label}</strong>
+                {activeActionButton.phaseLabel ? (
+                  <span style={{ fontSize: "0.9rem" }}>{activeActionButton.phaseLabel}</span>
+                ) : null}
+              </button>
+            </div>
+
+            <div style={{ display: "grid", gap: "0.45rem" }}>
+              <strong>Roll result</strong>
               <div
                 style={{
                   display: "grid",
-                  gap: "0.65rem",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+                  gap: "0.35rem",
+                  gridTemplateColumns: "minmax(100px, 0.35fr) minmax(180px, 1fr)",
                 }}
               >
-                <div>Character: {displayedParticipant.displayName}</div>
-                <div>Faction: {displayedParticipant.factionId ?? "Unassigned"}</div>
-                <div>
-                  HP: {displayedParticipant.currentHp}/{displayedParticipant.maxHp}
+                <div
+                  style={{
+                    alignItems: "center",
+                    background: "#f6f5ef",
+                    border: "1px solid #d9ddd8",
+                    borderRadius: 8,
+                    display: "flex",
+                    fontSize: "1.3rem",
+                    fontWeight: 700,
+                    justifyContent: "center",
+                    minHeight: 72,
+                  }}
+                >
+                  {actionRollResult?.value ?? "—"}
                 </div>
-                <div>Conditions: {displayedParticipant.conditionCount}</div>
-                <div>
-                  Round: {projection.scenario.roundNumber} · {projection.scenario.phase}
+                <div
+                  style={{
+                    background: "#f6f5ef",
+                    border: "1px solid #d9ddd8",
+                    borderRadius: 8,
+                    display: "grid",
+                    gap: "0.25rem",
+                    minHeight: 72,
+                    padding: "0.65rem 0.75rem",
+                  }}
+                >
+                  <div>{actionRollResult?.phaseLabel ?? "No active phase yet."}</div>
+                  <div style={{ color: "#5e5a50" }}>
+                    {actionRollResult?.interpretedResult ??
+                      "Select an action to activate the button and roll a result."}
+                  </div>
                 </div>
-                <div>Status: {projection.scenario.combatStatus}</div>
-                <div>Selected weapon: {selectedCombatReference?.selectedWeapon ?? "—"}</div>
-                <div>Attack mode: {selectedCombatReference?.attackMode ?? "—"}</div>
-                <div>Initiative: {selectedCombatReference?.initiative ?? "—"}</div>
-                <div>OB: {selectedCombatReference?.ob ?? "—"}</div>
-                <div>DB: {selectedCombatReference?.db ?? "—"}</div>
-                <div>Parry: {selectedCombatReference?.parry ?? "—"}</div>
-                <div>Movement: {selectedCombatReference?.movement ?? "—"}</div>
-                <div>Encumbrance: {selectedCombatReference?.encumbrance ?? "—"}</div>
               </div>
-            ) : (
-              <div style={{ color: "#5e5a50" }}>Combat detail will appear once a participant is selected.</div>
-            )}
-          </div>
-
-          <div style={{ display: "grid", gap: "0.5rem" }}>
-            <h2 style={{ margin: 0 }}>Player rolls</h2>
-            <div
-              style={{
-                display: "flex",
-                flexWrap: "wrap",
-                gap: "0.75rem",
-              }}
-            >
-              <button
-                onClick={() =>
-                  setRollResults((current) => ({ ...current, initiative: rollDie(10) }))
-                }
-                style={{ cursor: "pointer" }}
-                type="button"
-              >
-                Initiative
-              </button>
-              <button
-                onClick={() => setRollResults((current) => ({ ...current, attack: rollDie(100) }))}
-                style={{ cursor: "pointer" }}
-                type="button"
-              >
-                Attack roll
-              </button>
-              <button
-                onClick={() =>
-                  setRollResults((current) => ({ ...current, hitLocation: rollDie(100) }))
-                }
-                style={{ cursor: "pointer" }}
-                type="button"
-              >
-                Hit location roll
-              </button>
-              <button
-                onClick={() => setRollResults((current) => ({ ...current, crit: rollDie(100) }))}
-                style={{ cursor: "pointer" }}
-                type="button"
-              >
-                Crit roll
-              </button>
-            </div>
-            <div
-              style={{
-                display: "grid",
-                gap: "0.75rem",
-                gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
-              }}
-            >
-              <div
-                style={{
-                  background: "#fffdf8",
-                  border: "1px solid #d9ddd8",
-                  borderRadius: 10,
-                  padding: "0.75rem",
-                }}
-              >
-                <strong>Initiative</strong>
-                <div>{rollResults.initiative ?? "—"}</div>
-              </div>
-              <div
-                style={{
-                  background: "#fffdf8",
-                  border: "1px solid #d9ddd8",
-                  borderRadius: 10,
-                  padding: "0.75rem",
-                }}
-              >
-                <strong>Attack</strong>
-                <div>{rollResults.attack ?? "—"}</div>
-              </div>
-              <div
-                style={{
-                  background: "#fffdf8",
-                  border: "1px solid #d9ddd8",
-                  borderRadius: 10,
-                  padding: "0.75rem",
-                }}
-              >
-                <strong>Hit location</strong>
-                <div>{rollResults.hitLocation ?? "—"}</div>
-              </div>
-              <div
-                style={{
-                  background: "#fffdf8",
-                  border: "1px solid #d9ddd8",
-                  borderRadius: 10,
-                  padding: "0.75rem",
-                }}
-              >
-                <strong>Crit</strong>
-                <div>{rollResults.crit ?? "—"}</div>
+              <div style={{ color: "#5e5a50", fontSize: "0.95rem" }}>
+                Movement: {getPlayerEncounterMovementLabel(selectedMovementId)}
+                {additionalActionNotes.trim().length > 0
+                  ? ` · ${additionalActionNotes.trim()}`
+                  : ""}
               </div>
             </div>
-          </div>
+          </section>
         </div>
       </section>
 
