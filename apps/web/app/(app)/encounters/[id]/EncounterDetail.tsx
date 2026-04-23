@@ -30,7 +30,9 @@ import { LocalEncounterRepository } from "../../../../src/lib/offline/repositori
 import { UNNAMED_CHARACTER_PLACEHOLDER } from "../../../../src/lib/offline/repositories/localCharacterRepository";
 
 interface EncounterDetailProps {
+  campaignId?: string;
   id: string;
+  scenarioId?: string;
 }
 
 const localEncounterRepository = new LocalEncounterRepository();
@@ -71,7 +73,7 @@ function rollPercentile(): number {
   return Math.floor(Math.random() * 100) + 1;
 }
 
-export default function EncounterDetail({ id }: EncounterDetailProps) {
+export default function EncounterDetail({ campaignId, id, scenarioId }: EncounterDetailProps) {
   const [adHocName, setAdHocName] = useState("");
   const [characters, setCharacters] = useState<LocalCharacterRecord[]>([]);
   const [content, setContent] = useState<
@@ -123,6 +125,14 @@ export default function EncounterDetail({ id }: EncounterDetailProps) {
       session: encounter
     });
   }, [characters, content, encounter]);
+
+  const isNestedScenarioFlow = Boolean(campaignId && scenarioId);
+  const backHref = isNestedScenarioFlow
+    ? `/campaigns/${campaignId}/scenarios/${scenarioId}/encounters`
+    : "/encounters";
+  const playerCombatHref = isNestedScenarioFlow
+    ? `/campaigns/${campaignId}/scenarios/${scenarioId}/player/combat`
+    : undefined;
 
   async function persistEncounter(nextEncounter: EncounterSession, message?: string) {
     const savedEncounter = await localEncounterRepository.save(nextEncounter);
@@ -302,7 +312,24 @@ export default function EncounterDetail({ id }: EncounterDetailProps) {
     return (
       <section style={{ display: "grid", gap: "1rem", maxWidth: 720 }}>
         <h1 style={{ margin: 0 }}>Encounter not found</h1>
-        <Link href="/encounters">Back to encounters</Link>
+        <Link href={backHref}>
+          {isNestedScenarioFlow ? "Back to scenario encounters" : "Back to encounters"}
+        </Link>
+      </section>
+    );
+  }
+
+  if (
+    (campaignId && encounter.campaignId && encounter.campaignId !== campaignId) ||
+    (scenarioId && encounter.scenarioId && encounter.scenarioId !== scenarioId)
+  ) {
+    return (
+      <section style={{ display: "grid", gap: "1rem", maxWidth: 720 }}>
+        <h1 style={{ margin: 0 }}>Encounter not found</h1>
+        <div>This encounter does not belong to the current campaign/scenario flow.</div>
+        <Link href={backHref}>
+          {isNestedScenarioFlow ? "Back to scenario encounters" : "Back to encounters"}
+        </Link>
       </section>
     );
   }
@@ -312,14 +339,21 @@ export default function EncounterDetail({ id }: EncounterDetailProps) {
   return (
     <section style={{ display: "grid", gap: "1rem", maxWidth: 1040 }}>
       <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
-        <Link href="/encounters">Back to encounters</Link>
+        <Link href={backHref}>
+          {isNestedScenarioFlow ? "Back to scenario encounters" : "Back to encounters"}
+        </Link>
+        {isNestedScenarioFlow ? (
+          <Link href={`/campaigns/${campaignId}/scenarios/${scenarioId}`}>Back to scenario</Link>
+        ) : null}
+        {playerCombatHref ? <Link href={playerCombatHref}>Open player combat screen</Link> : null}
       </div>
 
       <div>
         <h1 style={{ marginBottom: "0.5rem" }}>{encounter.title}</h1>
         <p style={{ margin: 0 }}>
-          Local-first encounter shell with participant summaries, round declarations, manual turn
-          ordering, and position/orientation placeholders for future combat resolution work.
+          {isNestedScenarioFlow
+            ? "GM encounter management for this scenario, with round scaffolding, declarations, turn order, and the handoff point to the player combat screen."
+            : "Legacy local encounter shell with participant summaries, round declarations, manual turn ordering, and position/orientation placeholders for future combat resolution work."}
         </p>
       </div>
 

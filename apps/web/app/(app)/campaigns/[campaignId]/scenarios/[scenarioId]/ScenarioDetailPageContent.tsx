@@ -260,7 +260,15 @@ export default function ScenarioDetailPageContent({
   return (
     <section style={{ display: "grid", gap: "1rem", maxWidth: 980 }}>
       <div>
-        <Link href={`/campaigns/${campaignId}`}>Back to campaign</Link>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
+          <Link href={`/campaigns/${campaignId}`}>Back to campaign</Link>
+          <Link href={`/campaigns/${campaignId}/scenarios/${scenarioId}/encounters`}>
+            Open encounters
+          </Link>
+          <Link href={`/campaigns/${campaignId}/scenarios/${scenarioId}/player`}>
+            Open player scenario view
+          </Link>
+        </div>
         <h1 style={{ marginBottom: "0.5rem" }}>{scenario.name}</h1>
         <p style={{ margin: 0 }}>{scenario.description || "No description yet."}</p>
       </div>
@@ -270,6 +278,10 @@ export default function ScenarioDetailPageContent({
 
       <section style={{ border: "1px solid #d9ddd8", borderRadius: 12, display: "grid", gap: "0.75rem", padding: "1rem" }}>
         <h2 style={{ margin: 0 }}>Scenario summary</h2>
+        <p style={{ margin: 0 }}>
+          Scenarios sit inside a campaign and handle session-level setup, participant assignment,
+          visibility/state controls, and links onward to encounters.
+        </p>
         <input onChange={(event) => setScenarioName(event.target.value)} value={scenarioName} />
         <select
           onChange={(event) => setScenarioStatus(event.target.value as Scenario["status"])}
@@ -323,6 +335,30 @@ export default function ScenarioDetailPageContent({
           <button onClick={() => void handleUpdateLiveState()} type="button">
             Update live state
           </button>
+        </div>
+      </section>
+
+      <section
+        style={{
+          border: "1px solid #d9ddd8",
+          borderRadius: 12,
+          display: "grid",
+          gap: "0.75rem",
+          padding: "1rem"
+        }}
+      >
+        <h2 style={{ margin: 0 }}>Encounters</h2>
+        <p style={{ margin: 0 }}>
+          Encounter pages belong to this scenario. Use them for GM combat management, then hand
+          players the linked combat screen from encounter context.
+        </p>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
+          <Link href={`/campaigns/${campaignId}/scenarios/${scenarioId}/encounters`}>
+            Open encounter list
+          </Link>
+          <Link href={`/campaigns/${campaignId}/scenarios/${scenarioId}/player/combat`}>
+            Open player combat screen
+          </Link>
         </div>
       </section>
 

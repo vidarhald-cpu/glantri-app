@@ -224,6 +224,22 @@ export default function CampaignDetailPageContent({
         <p style={{ margin: 0 }}>{campaign.description || "No description yet."}</p>
       </div>
 
+      <section
+        style={{
+          background: "#f6f5ef",
+          border: "1px solid #d9ddd8",
+          borderRadius: 12,
+          display: "grid",
+          gap: "0.5rem",
+          padding: "1rem"
+        }}
+      >
+        <h2 style={{ margin: 0 }}>Campaign flow</h2>
+        <div>This page is the in-campaign home for overview, roster, NPCs, assets, and scenarios.</div>
+        <div>Scenarios belong to this campaign and handle session-level setup.</div>
+        <div>Encounters belong inside scenarios and lead onward to the player combat screen.</div>
+      </section>
+
       {error ? <div>{error}</div> : null}
       {feedback ? <div>{feedback}</div> : null}
 
@@ -258,6 +274,10 @@ export default function CampaignDetailPageContent({
 
       <section style={{ display: "grid", gap: "0.75rem" }}>
         <h2 style={{ margin: 0 }}>Scenarios</h2>
+        <p style={{ margin: 0 }}>
+          Open a scenario to manage participants, controller assignment, live state, and the
+          encounters that belong to that session.
+        </p>
         {scenarios.length > 0 ? (
           scenarios.map((scenario) => (
             <div
@@ -275,7 +295,12 @@ export default function CampaignDetailPageContent({
                 {scenario.kind} · {scenario.status}
               </div>
               <div>{scenario.description || "No description yet."}</div>
-              <Link href={`/campaigns/${campaignId}/scenarios/${scenario.id}`}>Open scenario</Link>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
+                <Link href={`/campaigns/${campaignId}/scenarios/${scenario.id}`}>Open scenario</Link>
+                <Link href={`/campaigns/${campaignId}/scenarios/${scenario.id}/encounters`}>
+                  Open encounters
+                </Link>
+              </div>
             </div>
           ))
         ) : (

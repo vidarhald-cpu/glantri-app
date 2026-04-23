@@ -161,12 +161,14 @@ export const encounterParticipantSchema = z.object({
 
 export const encounterSessionSchema = z.object({
   actionLog: z.array(encounterAttackResolutionSchema).default([]),
+  campaignId: idSchema.optional(),
   createdAt: z.string().min(1),
   currentRound: z.number().int().positive().default(1),
   currentTurnIndex: z.number().int().nonnegative().default(0),
   declarationsLocked: z.boolean().default(false),
   id: idSchema,
   participants: z.array(encounterParticipantSchema).default([]),
+  scenarioId: idSchema.optional(),
   status: encounterStatusSchema.default("setup"),
   title: z.string().min(1),
   turnOrderMode: encounterTurnOrderModeSchema.default("manual"),
