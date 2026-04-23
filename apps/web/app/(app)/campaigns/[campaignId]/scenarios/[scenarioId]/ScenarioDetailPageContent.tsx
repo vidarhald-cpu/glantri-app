@@ -7,9 +7,11 @@ import type { AuthUser } from "@glantri/auth";
 import type { ReusableEntity, Scenario, ScenarioEventLog, ScenarioParticipant } from "@glantri/domain";
 
 import {
+  addScenarioParticipantFromCharacterOnServer,
   addScenarioParticipantFromEntityOnServer,
   loadAuthUsers,
   loadCampaignEntities,
+  loadServerCharacters,
   loadTemplates,
   loadScenarioById,
   loadScenarioEventLogs,
@@ -23,6 +25,11 @@ import {
   getCampaignActorMetadata,
   splitCampaignActors
 } from "../../../../../../src/lib/campaigns/campaignActors";
+import type { ServerCharacterRecord } from "../../../../../../src/lib/api/localServiceClient";
+import {
+  getAvailableScenarioCharacters,
+  getScenarioCharacterDefaultControllerId,
+} from "../../../../../../src/lib/campaigns/scenarioCharacters";
 
 interface ScenarioDetailPageContentProps {
   campaignId: string;
@@ -42,6 +49,7 @@ export default function ScenarioDetailPageContent({
   const [feedback, setFeedback] = useState<string>();
   const [loading, setLoading] = useState(true);
   const [participants, setParticipants] = useState<ScenarioParticipant[]>([]);
+  const [playerCharacters, setPlayerCharacters] = useState<ServerCharacterRecord[]>([]);
   const [participantDrafts, setParticipantDrafts] = useState<
     Record<
       string,
@@ -59,6 +67,9 @@ export default function ScenarioDetailPageContent({
   const [templates, setTemplates] = useState<ReusableEntity[]>([]);
 
   const [selectedEntityId, setSelectedEntityId] = useState("");
+  const [selectedCharacterId, setSelectedCharacterId] = useState("");
+  const [selectedCharacterControllerId, setSelectedCharacterControllerId] = useState("");
+  const [selectedCharacterFactionId, setSelectedCharacterFactionId] = useState("");
   const [temporaryActorName, setTemporaryActorName] = useState("");
   const [participantRole, setParticipantRole] = useState<ScenarioParticipant["role"]>("npc");
 
@@ -70,6 +81,14 @@ export default function ScenarioDetailPageContent({
     NonNullable<Scenario["liveState"]>["combatStatus"]
   >("not_started");
   const splitEntities = useMemo(() => splitCampaignActors(entities, campaignId), [campaignId, entities]);
+  const availablePlayerCharacters = useMemo(
+    () =>
+      getAvailableScenarioCharacters({
+        characters: playerCharacters,
+        participants,
+      }),
+    [participants, playerCharacters],
+  );
   const usersById = useMemo(
     () => new Map(assignableUsers.map((user) => [user.id, user])),
     [assignableUsers]
@@ -93,13 +112,22 @@ export default function ScenarioDetailPageContent({
   }
 
   async function refreshScenario() {
-    const [nextScenario, nextParticipants, nextEntities, nextTemplates, nextEventLogs, nextUsers] = await Promise.all([
+    const [
+      nextScenario,
+      nextParticipants,
+      nextEntities,
+      nextTemplates,
+      nextEventLogs,
+      nextUsers,
+      nextPlayerCharacters,
+    ] = await Promise.all([
       loadScenarioById(scenarioId),
       loadScenarioParticipants(scenarioId),
       loadCampaignEntities(campaignId),
       loadTemplates(),
       loadScenarioEventLogs(scenarioId),
-      loadAuthUsers()
+      loadAuthUsers(),
+      loadServerCharacters(),
     ]);
 
     const globalTemplates = nextTemplates.filter(
@@ -128,6 +156,7 @@ export default function ScenarioDetailPageContent({
     setTemplates(globalTemplates);
     setEventLogs(nextEventLogs);
     setAssignableUsers(nextUsers);
+    setPlayerCharacters(nextPlayerCharacters);
     setSelectedEntityId((current) => current || globalTemplates[0]?.id || nextEntities[0]?.id || "");
     setScenarioName(nextScenario.name);
     setScenarioStatus(nextScenario.status);
@@ -143,6 +172,28 @@ export default function ScenarioDetailPageContent({
       })
       .finally(() => setLoading(false));
   }, [campaignId, scenarioId]);
+
+  useEffect(() => {
+    const preferredCharacter =
+      availablePlayerCharacters.find((character) => character.id === selectedCharacterId) ??
+      availablePlayerCharacters[0] ??
+      null;
+
+    if (!preferredCharacter) {
+      setSelectedCharacterId("");
+      setSelectedCharacterControllerId("");
+      return;
+    }
+
+    if (preferredCharacter.id !== selectedCharacterId) {
+      setSelectedCharacterId(preferredCharacter.id);
+      setSelectedCharacterControllerId(
+        getScenarioCharacterDefaultControllerId({
+          character: preferredCharacter,
+        }),
+      );
+    }
+  }, [availablePlayerCharacters, selectedCharacterId]);
 
   async function handleUpdateScenarioMetadata() {
     try {
@@ -211,6 +262,37 @@ export default function ScenarioDetailPageContent({
     } catch (caughtError) {
       setError(
         caughtError instanceof Error ? caughtError.message : "Unable to add scenario participant."
+      );
+    }
+  }
+
+  async function handleAddCharacterParticipant() {
+    if (!selectedCharacterId) {
+      setError("Choose a character to add.");
+      return;
+    }
+
+    try {
+      setError(undefined);
+      setFeedback(undefined);
+
+      const participant = await addScenarioParticipantFromCharacterOnServer({
+        characterId: selectedCharacterId,
+        controlledByUserId: selectedCharacterControllerId || null,
+        factionId: selectedCharacterFactionId.trim() || null,
+        joinSource: "gm_added",
+        role: "player_character",
+        scenarioId,
+      });
+
+      setFeedback(`Added player character ${participant.snapshot.displayName}.`);
+      setSelectedCharacterFactionId("");
+      await refreshScenario();
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Unable to add player character participant.",
       );
     }
   }
@@ -369,6 +451,89 @@ export default function ScenarioDetailPageContent({
           </div>
         </section>
       ) : null}
+
+      <section
+        style={{
+          border: "1px solid #d9ddd8",
+          borderRadius: 12,
+          display: "grid",
+          gap: "0.75rem",
+          padding: "1rem",
+        }}
+      >
+        <h2 style={{ margin: 0 }}>Add player character</h2>
+        <p style={{ margin: 0 }}>
+          Player characters come into the scenario directly from saved server-backed characters.
+        </p>
+        {availablePlayerCharacters.length > 0 ? (
+          <>
+            <label style={{ display: "grid", gap: "0.25rem" }}>
+              <span>Character</span>
+              <select
+                onChange={(event) => {
+                  const nextCharacter =
+                    availablePlayerCharacters.find(
+                      (character) => character.id === event.target.value,
+                    ) ?? null;
+                  setSelectedCharacterId(event.target.value);
+                  setSelectedCharacterControllerId(
+                    getScenarioCharacterDefaultControllerId({
+                      character: nextCharacter,
+                    }),
+                  );
+                }}
+                value={selectedCharacterId}
+              >
+                {availablePlayerCharacters.map((character) => (
+                  <option key={character.id} value={character.id}>
+                    {(character.build.name.trim() || character.name).trim()}
+                    {character.owner?.displayName || character.owner?.email
+                      ? ` (${character.owner?.displayName ?? character.owner?.email})`
+                      : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div
+              style={{
+                display: "grid",
+                gap: "0.75rem",
+                gridTemplateColumns: "minmax(220px, 1.25fr) minmax(160px, 1fr)",
+              }}
+            >
+              <label style={{ display: "grid", gap: "0.25rem" }}>
+                <span>Assigned controller</span>
+                <select
+                  onChange={(event) => setSelectedCharacterControllerId(event.target.value)}
+                  value={selectedCharacterControllerId}
+                >
+                  <option value="">GM / unassigned</option>
+                  {assignableUsers.map((user) => (
+                    <option key={user.id} value={user.id}>
+                      {user.displayName ? `${user.displayName} (${user.email})` : user.email}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label style={{ display: "grid", gap: "0.25rem" }}>
+                <span>Faction / side</span>
+                <input
+                  onChange={(event) => setSelectedCharacterFactionId(event.target.value)}
+                  type="text"
+                  value={selectedCharacterFactionId}
+                />
+              </label>
+            </div>
+            <div>
+              <button onClick={() => void handleAddCharacterParticipant()} type="button">
+                Add player character
+              </button>
+            </div>
+          </>
+        ) : (
+          <div>No available server-backed player characters remain to add to this scenario.</div>
+        )}
+      </section>
 
       <section style={{ border: "1px solid #d9ddd8", borderRadius: 12, display: "grid", gap: "0.75rem", padding: "1rem" }}>
         <h2 style={{ margin: 0 }}>Add participant from template or campaign NPC</h2>

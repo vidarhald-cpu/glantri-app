@@ -125,8 +125,6 @@ function PlaceholderSection(input: {
   );
 }
 
-const SYNTHETIC_PARTICIPANT_TIMESTAMP = new Date(0).toISOString();
-
 export default function ScenarioPlayerCombatPageContent({
   campaignId,
   embedded = false,
@@ -179,7 +177,7 @@ export default function ScenarioPlayerCombatPageContent({
         const [nextProjection, nextContent, nextParticipants] = await Promise.all([
           loadScenarioPlayerProjection(scenarioId),
           loadCanonicalContent(),
-          isGameMaster ? loadScenarioParticipants(scenarioId) : Promise.resolve([]),
+          loadScenarioParticipants(scenarioId),
         ]);
 
         if (cancelled) {
@@ -219,62 +217,17 @@ export default function ScenarioPlayerCombatPageContent({
       return [];
     }
 
-    if (isGameMaster) {
-      return selectableParticipants.filter((participant) => participant.isActive);
-    }
-
-    if (!projection.controlledParticipant) {
-      return [];
-    }
-
-    return [
-      {
-        characterId: projection.controlledParticipant.characterId,
-        controlledByUserId: currentUser?.id,
-        createdAt: SYNTHETIC_PARTICIPANT_TIMESTAMP,
-        displayOrder: 0,
-        factionId: projection.controlledParticipant.factionId,
-        id: projection.controlledParticipant.id,
-        initiativeSlot: undefined,
-        isActive: true,
-        joinSource: "player_joined",
-        position: undefined,
-        role: projection.controlledParticipant.role,
-        roleTag: undefined,
-        scenarioId,
-        snapshot: {
-          build: projection.controlledParticipant.build,
-          displayName: projection.controlledParticipant.displayName,
-          equipmentState: projection.controlledParticipant.equipmentState
-        },
-        sourceType: projection.controlledParticipant.sourceType,
-        state: {
-          combat: {},
-          conditions: Array.from(
-            { length: projection.controlledParticipant.conditionCount },
-            (_, index) => ({
-              id: `condition-${index + 1}`,
-              label: `Condition ${index + 1}`
-            })
-          ),
-          equipment: {},
-          health: {
-            bleeding: 0,
-            currentHp: projection.controlledParticipant.currentHp,
-            dead: false,
-            maxHp: projection.controlledParticipant.maxHp,
-            unconscious: false,
-            wounds: 0
-          },
-          modifiers: [],
-          resources: {},
-          snapshotVersion: 1
-        },
-        tacticalGroupId: undefined,
-        updatedAt: SYNTHETIC_PARTICIPANT_TIMESTAMP,
-        visibilityOverrides: undefined
+    return selectableParticipants.filter((participant) => {
+      if (!participant.isActive) {
+        return false;
       }
-    ];
+
+      if (isGameMaster) {
+        return true;
+      }
+
+      return participant.controlledByUserId === currentUser?.id;
+    });
   }, [currentUser?.id, isGameMaster, projection, selectableParticipants]);
 
   useEffect(() => {
