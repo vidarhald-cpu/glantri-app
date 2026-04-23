@@ -26,11 +26,13 @@ import {
 
 interface ScenarioDetailPageContentProps {
   campaignId: string;
+  embedded?: boolean;
   scenarioId: string;
 }
 
 export default function ScenarioDetailPageContent({
   campaignId,
+  embedded = false,
   scenarioId
 }: ScenarioDetailPageContentProps) {
   const [assignableUsers, setAssignableUsers] = useState<AuthUser[]>([]);
@@ -260,15 +262,17 @@ export default function ScenarioDetailPageContent({
   return (
     <section style={{ display: "grid", gap: "1rem", maxWidth: 980 }}>
       <div>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
-          <Link href={`/campaigns/${campaignId}`}>Back to campaign</Link>
-          <Link href={`/campaigns/${campaignId}/scenarios/${scenarioId}/encounters`}>
-            Open encounters
-          </Link>
-          <Link href={`/campaigns/${campaignId}/scenarios/${scenarioId}/player`}>
-            Open player scenario view
-          </Link>
-        </div>
+        {!embedded ? (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
+            <Link href={`/campaigns/${campaignId}`}>Back to campaign</Link>
+            <Link href={`/campaigns/${campaignId}/scenarios/${scenarioId}/encounters`}>
+              Open encounters
+            </Link>
+            <Link href={`/campaigns/${campaignId}/scenarios/${scenarioId}/player`}>
+              Open player scenario view
+            </Link>
+          </div>
+        ) : null}
         <h1 style={{ marginBottom: "0.5rem" }}>{scenario.name}</h1>
         <p style={{ margin: 0 }}>{scenario.description || "No description yet."}</p>
       </div>

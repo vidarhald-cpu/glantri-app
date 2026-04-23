@@ -15,6 +15,8 @@ import { loadScenarioPlayerProjection } from "../../../../../../../../src/lib/ap
 
 interface ScenarioPlayerCombatPageContentProps {
   campaignId: string;
+  embedded?: boolean;
+  encounterTitle?: string;
   scenarioId: string;
 }
 
@@ -60,6 +62,8 @@ function PlaceholderSection(input: {
 
 export default function ScenarioPlayerCombatPageContent({
   campaignId,
+  embedded = false,
+  encounterTitle,
   scenarioId,
 }: ScenarioPlayerCombatPageContentProps) {
   const { currentUser, loading: sessionLoading } = useSessionUser();
@@ -190,15 +194,18 @@ export default function ScenarioPlayerCombatPageContent({
   return (
     <section style={{ display: "grid", gap: "1rem", maxWidth: 1200 }}>
       <div style={{ display: "grid", gap: "0.5rem" }}>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
-          <Link href={`/campaigns/${campaignId}/scenarios/${scenarioId}/player`}>
-            Back to scenario view
-          </Link>
-        </div>
+        {!embedded ? (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
+            <Link href={`/campaigns/${campaignId}/scenarios/${scenarioId}/player`}>
+              Back to scenario view
+            </Link>
+          </div>
+        ) : null}
         <h1 style={{ margin: 0 }}>{projection.scenario.name} combat</h1>
         <p style={{ margin: 0 }}>
           Player-facing combat shell for the currently controlled scenario participant.
         </p>
+        {encounterTitle ? <div>Encounter: {encounterTitle}</div> : null}
       </div>
 
       <section

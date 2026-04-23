@@ -24,10 +24,14 @@ import {
 
 interface CampaignDetailPageContentProps {
   campaignId: string;
+  embedded?: boolean;
+  onWorkspaceScenariosChanged?: (scenarios: Scenario[]) => void;
 }
 
 export default function CampaignDetailPageContent({
-  campaignId
+  campaignId,
+  embedded = false,
+  onWorkspaceScenariosChanged
 }: CampaignDetailPageContentProps) {
   const [assets, setAssets] = useState<CampaignAsset[]>([]);
   const [campaign, setCampaign] = useState<Campaign | null>(null);
@@ -66,6 +70,7 @@ export default function CampaignDetailPageContent({
 
     setCampaign(nextCampaign);
     setScenarios(nextScenarios);
+    onWorkspaceScenariosChanged?.(nextScenarios);
     setEntities(nextEntities);
     setAssets(nextAssets);
     const globalTemplates = nextTemplates.filter(
@@ -219,7 +224,7 @@ export default function CampaignDetailPageContent({
   return (
     <section style={{ display: "grid", gap: "1rem", maxWidth: 980 }}>
       <div>
-        <Link href="/campaigns">Campaigns</Link>
+        {!embedded ? <Link href="/campaigns">Campaigns</Link> : null}
         <h1 style={{ marginBottom: "0.5rem" }}>{campaign.name}</h1>
         <p style={{ margin: 0 }}>{campaign.description || "No description yet."}</p>
       </div>

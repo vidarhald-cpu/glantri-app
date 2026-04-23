@@ -31,6 +31,7 @@ import { UNNAMED_CHARACTER_PLACEHOLDER } from "../../../../src/lib/offline/repos
 
 interface EncounterDetailProps {
   campaignId?: string;
+  embedded?: boolean;
   id: string;
   scenarioId?: string;
 }
@@ -73,7 +74,12 @@ function rollPercentile(): number {
   return Math.floor(Math.random() * 100) + 1;
 }
 
-export default function EncounterDetail({ campaignId, id, scenarioId }: EncounterDetailProps) {
+export default function EncounterDetail({
+  campaignId,
+  embedded = false,
+  id,
+  scenarioId
+}: EncounterDetailProps) {
   const [adHocName, setAdHocName] = useState("");
   const [characters, setCharacters] = useState<LocalCharacterRecord[]>([]);
   const [content, setContent] = useState<
@@ -338,15 +344,17 @@ export default function EncounterDetail({ campaignId, id, scenarioId }: Encounte
 
   return (
     <section style={{ display: "grid", gap: "1rem", maxWidth: 1040 }}>
-      <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
-        <Link href={backHref}>
-          {isNestedScenarioFlow ? "Back to scenario encounters" : "Back to encounters"}
-        </Link>
-        {isNestedScenarioFlow ? (
-          <Link href={`/campaigns/${campaignId}/scenarios/${scenarioId}`}>Back to scenario</Link>
-        ) : null}
-        {playerCombatHref ? <Link href={playerCombatHref}>Open player combat screen</Link> : null}
-      </div>
+      {!embedded ? (
+        <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
+          <Link href={backHref}>
+            {isNestedScenarioFlow ? "Back to scenario encounters" : "Back to encounters"}
+          </Link>
+          {isNestedScenarioFlow ? (
+            <Link href={`/campaigns/${campaignId}/scenarios/${scenarioId}`}>Back to scenario</Link>
+          ) : null}
+          {playerCombatHref ? <Link href={playerCombatHref}>Open player combat screen</Link> : null}
+        </div>
+      ) : null}
 
       <div>
         <h1 style={{ marginBottom: "0.5rem" }}>{encounter.title}</h1>

@@ -1,4 +1,4 @@
-import CampaignDetailPageContent from "./CampaignDetailPageContent";
+import CampaignWorkspaceShell from "./CampaignWorkspaceShell";
 
 interface CampaignDetailPageProps {
   params: Promise<{
@@ -9,5 +9,5 @@ interface CampaignDetailPageProps {
 export default async function CampaignDetailPage({ params }: CampaignDetailPageProps) {
   const { campaignId } = await params;
 
-  return <CampaignDetailPageContent campaignId={campaignId} />;
+  return <CampaignWorkspaceShell campaignId={campaignId} />;
 }
