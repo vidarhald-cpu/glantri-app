@@ -101,8 +101,58 @@ export const scenarioParticipantConditionSchema = z.object({
   notes: z.string().optional()
 });
 
+export const scenarioCombatModifierScopeSchema = z.enum(["until", "save"]);
+export const scenarioCombatModifierBucketSchema = z.enum([
+  "general",
+  "situation_ob_skill",
+  "situation_db"
+]);
+export const scenarioParticipantIncomingAttackSideSchema = z.enum([
+  "front",
+  "left",
+  "right",
+  "rear"
+]);
+export const scenarioParticipantParrySourceSchema = z.enum([
+  "auto",
+  "mainHand",
+  "offHand",
+  "shield"
+]);
+
+export const scenarioCombatModifierEntrySchema = z.object({
+  id: idSchema,
+  notes: z.string().optional(),
+  scope: scenarioCombatModifierScopeSchema.default("until"),
+  value: z.number().default(0)
+});
+
+export const scenarioParticipantCombatContextSchema = z.object({
+  incomingAttackSide: scenarioParticipantIncomingAttackSideSchema.optional(),
+  modifierBuckets: z
+    .object({
+      general: z.array(scenarioCombatModifierEntrySchema).default([]),
+      situationDb: z.array(scenarioCombatModifierEntrySchema).default([]),
+      situationObSkill: z.array(scenarioCombatModifierEntrySchema).default([])
+    })
+    .default({
+      general: [],
+      situationDb: [],
+      situationObSkill: []
+    }),
+  parrySource: scenarioParticipantParrySourceSchema.optional(),
+  selectedOpponentId: idSchema.optional()
+});
+
 export const scenarioParticipantStateSchema = z.object({
   combat: z.object({
+    combatContext: scenarioParticipantCombatContextSchema.default({
+      modifierBuckets: {
+        general: [],
+        situationDb: [],
+        situationObSkill: []
+      }
+    }),
     currentDistanceBand: z.string().min(1).optional(),
     engaged: z.boolean().default(false),
     initiativeRoll: z.number().int().optional(),
@@ -281,6 +331,16 @@ export type Scenario = z.infer<typeof scenarioSchema>;
 export type ScenarioParticipantPosition = z.infer<typeof scenarioParticipantPositionSchema>;
 export type ScenarioParticipantModifier = z.infer<typeof scenarioParticipantModifierSchema>;
 export type ScenarioParticipantCondition = z.infer<typeof scenarioParticipantConditionSchema>;
+export type ScenarioCombatModifierScope = z.infer<typeof scenarioCombatModifierScopeSchema>;
+export type ScenarioCombatModifierBucket = z.infer<typeof scenarioCombatModifierBucketSchema>;
+export type ScenarioParticipantIncomingAttackSide = z.infer<
+  typeof scenarioParticipantIncomingAttackSideSchema
+>;
+export type ScenarioParticipantParrySource = z.infer<typeof scenarioParticipantParrySourceSchema>;
+export type ScenarioCombatModifierEntry = z.infer<typeof scenarioCombatModifierEntrySchema>;
+export type ScenarioParticipantCombatContext = z.infer<
+  typeof scenarioParticipantCombatContextSchema
+>;
 export type ScenarioParticipantState = z.infer<typeof scenarioParticipantStateSchema>;
 export type ScenarioParticipantSnapshot = z.infer<typeof scenarioParticipantSnapshotSchema>;
 export type ScenarioParticipant = z.infer<typeof scenarioParticipantSchema>;

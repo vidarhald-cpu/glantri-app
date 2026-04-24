@@ -4,6 +4,11 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import {
   characterBuildSchema,
+  type ScenarioCombatModifierBucket,
+  type ScenarioCombatModifierEntry,
+  type ScenarioParticipantCombatContext,
+  type ScenarioParticipantIncomingAttackSide,
+  type ScenarioParticipantParrySource,
   type ScenarioParticipant,
   type ScenarioPlayerProjection,
 } from "@glantri/domain";
@@ -14,11 +19,18 @@ import {
 } from "../../../../../../../../src/features/equipment/loadoutModule";
 import type { EquipmentFeatureState } from "../../../../../../../../src/features/equipment/types";
 import { useSessionUser } from "../../../../../../../../src/lib/auth/SessionUserContext";
+import type { CombatAllocationState } from "@glantri/rules-engine";
 import {
   buildPlayerEncounterPhaseSummary,
+  createEmptyPlayerEncounterCombatContext,
+  evaluatePlayerEncounterParryLegality,
+  getPlayerEncounterCombatModifierTotals,
   getPlayerEncounterMovementLabel,
+  getPlayerEncounterParrySourceLabel,
+  PLAYER_ENCOUNTER_INCOMING_ATTACK_SIDE_OPTIONS,
   PLAYER_ENCOUNTER_ACTION_OPTIONS,
   PLAYER_ENCOUNTER_MOVEMENT_OPTIONS,
+  PLAYER_ENCOUNTER_PARRY_SOURCE_OPTIONS,
   type PlayerEncounterActionId,
   type PlayerEncounterMovementId,
 } from "../../../../../../../../src/lib/campaigns/playerEncounter";
@@ -28,6 +40,7 @@ import {
   loadScenarioParticipants,
   loadScenarioPlayerProjection,
   loadServerCharacterById,
+  updateScenarioParticipantStateOnServer,
   type ServerCharacterRecord,
 } from "../../../../../../../../src/lib/api/localServiceClient";
 
@@ -100,16 +113,36 @@ function getRelevantLoadoutFieldId(
   | "throwing"
   | null {
   switch (actionId) {
-    case "missile":
-      return "missile";
-    case "throw":
-      return "throwing";
-    case "attack":
-    case "parry":
+    case "attack_parry":
+    case "parry_attack":
+    case "double_attack":
+    case "feint_attack":
+    case "adjust_range_attack":
+    case "counterattack":
+    case "offensive_parry":
+    case "parry_disarm":
+    case "disarm":
+      return "primary";
+    case "observe_opponent":
+    case "break_off_engagement":
+    case "other":
       return "primary";
     default:
       return null;
   }
+}
+
+function hasDisplayValue(value: string): boolean {
+  return value.length > 0 && value !== "—";
+}
+
+function createModifierEntryDraft(): ScenarioCombatModifierEntry {
+  return {
+    id: `modifier-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    notes: "",
+    scope: "until",
+    value: 0,
+  };
 }
 
 function rollDie(sides: number): number {
@@ -159,6 +192,9 @@ export default function ScenarioPlayerCombatPageContent({
     "hold",
   );
   const [additionalActionNotes, setAdditionalActionNotes] = useState("");
+  const [combatContextDraft, setCombatContextDraft] =
+    useState<ScenarioParticipantCombatContext>(createEmptyPlayerEncounterCombatContext());
+  const [savingCombatContext, setSavingCombatContext] = useState(false);
   const [actionRollResult, setActionRollResult] = useState<{
     interpretedResult: string;
     phaseLabel?: string;
@@ -271,6 +307,28 @@ export default function ScenarioPlayerCombatPageContent({
     [accessibleParticipants, selectedParticipantId]
   );
 
+  const visibleOpponentOptions = useMemo(() => {
+    const visibleParticipantIds = new Set(projection?.visibleParticipants.map((participant) => participant.id) ?? []);
+
+    return selectableParticipants.filter((participant) => {
+      if (!participant.isActive || participant.id === selectedParticipantId) {
+        return false;
+      }
+
+      if (isGameMaster) {
+        return true;
+      }
+
+      return visibleParticipantIds.has(participant.id);
+    });
+  }, [isGameMaster, projection?.visibleParticipants, selectableParticipants, selectedParticipantId]);
+
+  useEffect(() => {
+    setCombatContextDraft(
+      selectedParticipant?.state.combat.combatContext ?? createEmptyPlayerEncounterCombatContext(),
+    );
+  }, [selectedParticipant]);
+
   useEffect(() => {
     const participantId = selectedParticipant?.id;
     const selectedCharacterId = selectedParticipant?.characterId;
@@ -359,6 +417,77 @@ export default function ScenarioPlayerCombatPageContent({
     return isEquipmentFeatureState(candidate) ? candidate : null;
   }, [displayedParticipant]);
 
+  const modifierTotals = useMemo(
+    () => getPlayerEncounterCombatModifierTotals(combatContextDraft),
+    [combatContextDraft],
+  );
+
+  const loadoutFieldValueMap = useMemo(
+    () =>
+      new Map<string, string>(
+        buildEquipmentLoadoutModuleModel({
+          characterContext:
+            content && controlledBuild
+              ? {
+                  content,
+                  record: {
+                    build: controlledBuild,
+                  },
+                }
+              : null,
+          characterId: displayedParticipant?.characterId ?? "",
+          state: controlledEquipmentState,
+          throwingWeaponItemId: null,
+        }).fields.map((field) => [field.id, field.value]),
+      ),
+    [content, controlledBuild, controlledEquipmentState, displayedParticipant],
+  );
+
+  const parryLegality = useMemo(
+    () =>
+      evaluatePlayerEncounterParryLegality({
+        actionId: selectedActionId,
+        attackSource: selectedActionId === "attack_parry" ? "mainHand" : undefined,
+        hasOffHandWeapon: Boolean(loadoutFieldValueMap.get("secondary")),
+        hasShield: Boolean(loadoutFieldValueMap.get("shield")),
+        hasSelectedOpponent: Boolean(combatContextDraft.selectedOpponentId),
+        incomingAttackSide: combatContextDraft.incomingAttackSide,
+        parrySource: combatContextDraft.parrySource,
+      }),
+    [
+      combatContextDraft.incomingAttackSide,
+      combatContextDraft.selectedOpponentId,
+      combatContextDraft.parrySource,
+      loadoutFieldValueMap,
+      selectedActionId,
+    ],
+  );
+
+  const combatAllocationInputs = useMemo<CombatAllocationState>(
+    () => ({
+      defensePosture:
+        selectedActionId === "attack_parry" && parryLegality.status === "legal" ? "parry" : "none",
+      parry: {
+        allocatedOb: null,
+        source:
+          parryLegality.resolvedParrySource === "shield"
+            ? "shield"
+            : parryLegality.resolvedParrySource === "offHand"
+              ? "secondary"
+              : parryLegality.resolvedParrySource === "mainHand"
+                ? "primary"
+                : "none",
+      },
+      situationalModifiers: {
+        attack: modifierTotals.attackTotal,
+        defense: modifierTotals.defenseTotal,
+        movement: 0,
+        perception: 0,
+      },
+    }),
+    [modifierTotals.attackTotal, modifierTotals.defenseTotal, parryLegality, selectedActionId],
+  );
+
   const loadoutModel = useMemo(
     () =>
       buildEquipmentLoadoutModuleModel({
@@ -372,10 +501,17 @@ export default function ScenarioPlayerCombatPageContent({
               }
             : null,
         characterId: displayedParticipant?.characterId ?? "",
+        combatAllocationInputs,
         state: controlledEquipmentState,
         throwingWeaponItemId: null,
       }),
-    [content, controlledBuild, controlledEquipmentState, displayedParticipant]
+    [
+      combatAllocationInputs,
+      content,
+      controlledBuild,
+      controlledEquipmentState,
+      displayedParticipant,
+    ],
   );
 
   const phaseSummary = useMemo(
@@ -387,8 +523,64 @@ export default function ScenarioPlayerCombatPageContent({
     [selectedActionId, selectedSecondaryActionId],
   );
 
+  function updateModifierBucket(
+    bucket: ScenarioCombatModifierBucket,
+    updater: (entries: ScenarioCombatModifierEntry[]) => ScenarioCombatModifierEntry[],
+  ) {
+    setCombatContextDraft((current) => ({
+      ...current,
+      modifierBuckets: {
+        ...current.modifierBuckets,
+        [bucket === "general"
+          ? "general"
+          : bucket === "situation_ob_skill"
+            ? "situationObSkill"
+            : "situationDb"]: updater(
+          bucket === "general"
+            ? current.modifierBuckets.general
+            : bucket === "situation_ob_skill"
+              ? current.modifierBuckets.situationObSkill
+              : current.modifierBuckets.situationDb,
+        ),
+      },
+    }));
+  }
+
+  async function saveCombatContext() {
+    if (!selectedParticipant) {
+      return;
+    }
+
+    setSavingCombatContext(true);
+
+    try {
+      const participant = await updateScenarioParticipantStateOnServer({
+        participantId: selectedParticipant.id,
+        scenarioId,
+        state: {
+          ...selectedParticipant.state,
+          combat: {
+            ...selectedParticipant.state.combat,
+            combatContext: combatContextDraft,
+          },
+        },
+      });
+
+      setSelectableParticipants((current) =>
+        current.map((entry) => (entry.id === participant.id ? participant : entry)),
+      );
+      setError(undefined);
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error ? caughtError.message : "Unable to save combat context.",
+      );
+    } finally {
+      setSavingCombatContext(false);
+    }
+  }
+
   const combatPanelModel = loadoutModel.combatStatePanelModel;
-  const loadoutFieldMap = useMemo(
+  const loadoutFieldDisplayMap = useMemo(
     () => new Map(loadoutModel.fields.map((field) => [field.id, field])),
     [loadoutModel.fields],
   );
@@ -404,7 +596,7 @@ export default function ScenarioPlayerCombatPageContent({
     ].filter((value): value is "missile" | "primary" | "secondary" | "throwing" => value !== null);
 
     const preferredWeaponLabels = preferredFieldIds
-      .map((fieldId) => loadoutFieldMap.get(fieldId)?.valueLabel)
+      .map((fieldId) => loadoutFieldDisplayMap.get(fieldId)?.valueLabel)
       .filter((value): value is string => Boolean(value) && value !== "None");
 
     const referenceRow =
@@ -427,21 +619,42 @@ export default function ScenarioPlayerCombatPageContent({
       combatPanelModel.capabilityRows.find((row) => row.label === "Mov/mod")?.value ?? "—";
     const encumbranceSummary =
       combatPanelModel.capabilityRows.find((row) => row.label === "Enc/count/lvl")?.value ?? "—";
+    const combinedRow =
+      combatPanelModel.weaponModeTable.rows.find(
+        (row) =>
+          getCombatTableCell({
+            columns: combatPanelModel.weaponModeTable.columns,
+            label: "Mode",
+            row,
+          }) === "Combined",
+      ) ?? null;
 
     if (!referenceRow) {
       return {
+        am: "—",
         attackMode: "—",
         db: "—",
+        combinedDb: "—",
+        combinedDm: "—",
+        crit: "—",
+        dmb: "—",
+        dm: "—",
         encumbrance: String(encumbranceSummary),
         initiative: "—",
         movement: String(movementSummary),
         ob: "—",
         parry: "—",
+        secondCrit: "—",
         selectedWeapon: "No ready weapon",
       };
     }
 
     return {
+      am: getCombatTableCell({
+        columns: combatPanelModel.weaponModeTable.columns,
+        label: "AM",
+        row: referenceRow,
+      }),
       attackMode: getCombatTableCell({
         columns: combatPanelModel.weaponModeTable.columns,
         label: "Attack 1",
@@ -450,6 +663,35 @@ export default function ScenarioPlayerCombatPageContent({
       db: getCombatTableCell({
         columns: combatPanelModel.weaponModeTable.columns,
         label: "DB",
+        row: referenceRow,
+      }),
+      combinedDb: combinedRow
+        ? getCombatTableCell({
+            columns: combatPanelModel.weaponModeTable.columns,
+            label: "DB",
+            row: combinedRow,
+          })
+        : "—",
+      combinedDm: combinedRow
+        ? getCombatTableCell({
+            columns: combatPanelModel.weaponModeTable.columns,
+            label: "DM",
+            row: combinedRow,
+          })
+        : "—",
+      crit: getCombatTableCell({
+        columns: combatPanelModel.weaponModeTable.columns,
+        label: "Crit 1",
+        row: referenceRow,
+      }),
+      dmb: getCombatTableCell({
+        columns: combatPanelModel.weaponModeTable.columns,
+        label: "DMB",
+        row: referenceRow,
+      }),
+      dm: getCombatTableCell({
+        columns: combatPanelModel.weaponModeTable.columns,
+        label: "DM",
         row: referenceRow,
       }),
       encumbrance: String(encumbranceSummary),
@@ -469,6 +711,11 @@ export default function ScenarioPlayerCombatPageContent({
         label: "Parry",
         row: referenceRow,
       }),
+      secondCrit: getCombatTableCell({
+        columns: combatPanelModel.weaponModeTable.columns,
+        label: "Sec",
+        row: referenceRow,
+      }),
       selectedWeapon: getCombatTableCell({
         columns: combatPanelModel.weaponModeTable.columns,
         label: "Weapon",
@@ -477,48 +724,113 @@ export default function ScenarioPlayerCombatPageContent({
     };
   }, [
     combatPanelModel,
-    loadoutFieldMap,
+    loadoutFieldDisplayMap,
     selectedActionId,
     selectedSecondaryActionId,
   ]);
 
   const currentPhaseNumber = projection?.scenario.phase === 2 ? 2 : 1;
-  const phaseCards = [
-    {
-      description:
-        selectedActionId || selectedSecondaryActionId
-          ? `${phaseSummary.phaseOne} · ${getPlayerEncounterMovementLabel(selectedMovementId)}`
-          : "No action selected yet.",
-      phaseLabel: "Phase 1",
-      stats:
-        selectedActionId && selectedCombatReference
-          ? [
-              `Weapon: ${selectedCombatReference.selectedWeapon}`,
-              `Attack: ${selectedCombatReference.attackMode}`,
-              `OB: ${selectedCombatReference.ob}`,
-              `DB: ${selectedCombatReference.db}`,
-            ]
-          : [],
-      title: phaseSummary.phaseOne,
-    },
-    {
-      description:
-        selectedSecondaryActionId
-          ? `${phaseSummary.phaseTwo} · ${getPlayerEncounterMovementLabel(selectedMovementId)}`
-          : "Open",
-      phaseLabel: "Phase 2",
-      stats:
-        selectedSecondaryActionId && selectedCombatReference
-          ? [
-              `Weapon: ${selectedCombatReference.selectedWeapon}`,
-              `Parry: ${selectedCombatReference.parry}`,
-              `Movement: ${selectedCombatReference.movement}`,
-              `Enc: ${selectedCombatReference.encumbrance}`,
-            ]
-          : [],
-      title: phaseSummary.phaseTwo,
-    },
-  ] as const;
+  const phaseCards = useMemo(() => {
+    if (selectedActionId === "attack_parry" && selectedCombatReference) {
+      const phaseTwoDb = hasDisplayValue(selectedCombatReference.combinedDb)
+        ? selectedCombatReference.combinedDb
+        : selectedCombatReference.db;
+      const phaseTwoDm = hasDisplayValue(selectedCombatReference.combinedDm)
+        ? selectedCombatReference.combinedDm
+        : selectedCombatReference.dm;
+      const combinedDefenseNote =
+        hasDisplayValue(selectedCombatReference.combinedDb) &&
+        selectedCombatReference.combinedDb !== selectedCombatReference.db
+          ? `Base DB ${selectedCombatReference.db}, Combined DB ${selectedCombatReference.combinedDb}`
+          : null;
+
+      return [
+        {
+          description: selectedCombatReference.selectedWeapon,
+          phaseLabel: "Phase 1",
+          stats: [
+            `I: ${selectedCombatReference.initiative}`,
+            `OB: ${selectedCombatReference.ob}`,
+            `DMB: ${selectedCombatReference.dmb}`,
+            `AM: ${selectedCombatReference.am}`,
+            `Max Crits: ${selectedCombatReference.crit}${
+              hasDisplayValue(selectedCombatReference.secondCrit)
+                ? ` / ${selectedCombatReference.secondCrit}`
+                : ""
+            }`,
+          ],
+          title: "Attack",
+        },
+        {
+          description:
+            parryLegality.status === "legal"
+              ? `${selectedCombatReference.selectedWeapon} defence via ${getPlayerEncounterParrySourceLabel(
+                  parryLegality.resolvedParrySource ?? "auto",
+                )}`
+              : `Parry status: ${parryLegality.reason}`,
+          phaseLabel: "Phase 2",
+          stats: [
+            `DB: ${phaseTwoDb}`,
+            `DM: ${phaseTwoDm}`,
+            `P: ${
+              parryLegality.status === "legal"
+                ? selectedCombatReference.parry
+                : parryLegality.status === "incomplete"
+                  ? "Incomplete context"
+                  : "Not legal"
+            }`,
+            ...(combinedDefenseNote ? [combinedDefenseNote] : []),
+          ],
+          title: "Parry",
+        },
+      ] as const;
+    }
+
+    return [
+      {
+        description:
+          selectedActionId || selectedSecondaryActionId
+            ? `${phaseSummary.phaseOne} · ${getPlayerEncounterMovementLabel(selectedMovementId)}`
+            : "No action selected yet.",
+        phaseLabel: "Phase 1",
+        stats:
+          selectedActionId && selectedCombatReference
+            ? [
+                `Weapon: ${selectedCombatReference.selectedWeapon}`,
+                `Attack: ${selectedCombatReference.attackMode}`,
+                `OB: ${selectedCombatReference.ob}`,
+                `DB: ${selectedCombatReference.db}`,
+              ]
+            : [],
+        title: phaseSummary.phaseOne,
+      },
+      {
+        description:
+          selectedSecondaryActionId
+            ? `${phaseSummary.phaseTwo} · ${getPlayerEncounterMovementLabel(selectedMovementId)}`
+            : "Open",
+        phaseLabel: "Phase 2",
+        stats:
+          selectedSecondaryActionId && selectedCombatReference
+            ? [
+                `Weapon: ${selectedCombatReference.selectedWeapon}`,
+                `Parry: ${selectedCombatReference.parry}`,
+                `Movement: ${selectedCombatReference.movement}`,
+                `Enc: ${selectedCombatReference.encumbrance}`,
+              ]
+            : [],
+        title: phaseSummary.phaseTwo,
+      },
+    ] as const;
+  }, [
+    phaseSummary.phaseOne,
+    phaseSummary.phaseTwo,
+    parryLegality,
+    selectedActionId,
+    selectedCombatReference,
+    selectedMovementId,
+    selectedSecondaryActionId,
+  ]);
 
   const activeActionButton = useMemo(() => {
     if (!displayedParticipant || !selectedActionId) {
@@ -674,6 +986,201 @@ export default function ScenarioPlayerCombatPageContent({
                   value={additionalActionNotes}
                 />
               </label>
+
+              <section
+                style={{
+                  background: "#fffdf8",
+                  border: "1px solid #d9ddd8",
+                  borderRadius: 10,
+                  display: "grid",
+                  gap: "0.6rem",
+                  padding: "0.75rem",
+                }}
+              >
+                <strong>Combat modifiers</strong>
+                {(
+                  [
+                    ["general", "General", combatContextDraft.modifierBuckets.general],
+                    [
+                      "situation_ob_skill",
+                      "Situation OB/Skill",
+                      combatContextDraft.modifierBuckets.situationObSkill,
+                    ],
+                    ["situation_db", "Situation DB", combatContextDraft.modifierBuckets.situationDb],
+                  ] as const
+                ).map(([bucketKey, label, entries]) => (
+                  <div key={bucketKey} style={{ display: "grid", gap: "0.35rem" }}>
+                    <div style={{ fontSize: "0.9rem", fontWeight: 600 }}>{label}</div>
+                    {entries.map((entry) => (
+                      <div
+                        key={entry.id}
+                        style={{
+                          display: "grid",
+                          gap: "0.35rem",
+                          gridTemplateColumns: "70px 88px minmax(0, 1fr) auto",
+                        }}
+                      >
+                        <input
+                          onChange={(event) =>
+                            updateModifierBucket(bucketKey, (current) =>
+                              current.map((currentEntry) =>
+                                currentEntry.id === entry.id
+                                  ? {
+                                      ...currentEntry,
+                                      value:
+                                        event.target.value.length > 0
+                                          ? Number(event.target.value)
+                                          : 0,
+                                    }
+                                  : currentEntry,
+                              ),
+                            )
+                          }
+                          type="number"
+                          value={entry.value}
+                        />
+                        <select
+                          onChange={(event) =>
+                            updateModifierBucket(bucketKey, (current) =>
+                              current.map((currentEntry) =>
+                                currentEntry.id === entry.id
+                                  ? {
+                                      ...currentEntry,
+                                      scope: event.target.value as "until" | "save",
+                                    }
+                                  : currentEntry,
+                              ),
+                            )
+                          }
+                          value={entry.scope}
+                        >
+                          <option value="until">Until</option>
+                          <option value="save">Save</option>
+                        </select>
+                        <input
+                          onChange={(event) =>
+                            updateModifierBucket(bucketKey, (current) =>
+                              current.map((currentEntry) =>
+                                currentEntry.id === entry.id
+                                  ? {
+                                      ...currentEntry,
+                                      notes: event.target.value,
+                                    }
+                                  : currentEntry,
+                              ),
+                            )
+                          }
+                          placeholder="Notes"
+                          type="text"
+                          value={entry.notes ?? ""}
+                        />
+                        <button
+                          onClick={() =>
+                            updateModifierBucket(bucketKey, (current) =>
+                              current.filter((currentEntry) => currentEntry.id !== entry.id),
+                            )
+                          }
+                          type="button"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ))}
+                    <button
+                      onClick={() =>
+                        updateModifierBucket(bucketKey, (current) => [
+                          ...current,
+                          createModifierEntryDraft(),
+                        ])
+                      }
+                      style={{ justifySelf: "start" }}
+                      type="button"
+                    >
+                      Add {label}
+                    </button>
+                  </div>
+                ))}
+                <div style={{ color: "#5e5a50", fontSize: "0.92rem" }}>
+                  General {modifierTotals.generalTotal} · Attack {modifierTotals.attackTotal} ·
+                  Defense {modifierTotals.defenseTotal}
+                </div>
+              </section>
+
+              {selectedActionId === "attack_parry" ? (
+                <section
+                  style={{
+                    background: "#fffdf8",
+                    border: "1px solid #d9ddd8",
+                    borderRadius: 10,
+                    display: "grid",
+                    gap: "0.6rem",
+                    padding: "0.75rem",
+                  }}
+                >
+                  <strong>Parry context</strong>
+                  <label style={{ display: "grid", gap: "0.25rem" }}>
+                    <span>Incoming attack side</span>
+                    <select
+                      onChange={(event) =>
+                        setCombatContextDraft((current) => ({
+                          ...current,
+                          incomingAttackSide:
+                            (event.target.value as ScenarioParticipantIncomingAttackSide) ||
+                            undefined,
+                        }))
+                      }
+                      value={combatContextDraft.incomingAttackSide ?? ""}
+                    >
+                      <option value="">Choose side</option>
+                      {PLAYER_ENCOUNTER_INCOMING_ATTACK_SIDE_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label style={{ display: "grid", gap: "0.25rem" }}>
+                    <span>Parry source</span>
+                    <select
+                      onChange={(event) =>
+                        setCombatContextDraft((current) => ({
+                          ...current,
+                          parrySource:
+                            (event.target.value as ScenarioParticipantParrySource) || undefined,
+                        }))
+                      }
+                      value={combatContextDraft.parrySource ?? ""}
+                    >
+                      <option value="">Choose source</option>
+                      {PLAYER_ENCOUNTER_PARRY_SOURCE_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <div style={{ color: "#5e5a50", fontSize: "0.92rem" }}>
+                    Parry status:{" "}
+                    {parryLegality.status === "legal"
+                      ? `Legal (${getPlayerEncounterParrySourceLabel(
+                          parryLegality.resolvedParrySource ?? "auto",
+                        )})`
+                      : parryLegality.status === "not_legal"
+                        ? `Not legal — ${parryLegality.reason}`
+                        : `Incomplete context (${parryLegality.reason})`}
+                  </div>
+                </section>
+              ) : null}
+
+              <div style={{ display: "flex", gap: "0.5rem", justifyContent: "space-between" }}>
+                <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
+                  Temporary editor: persisted to participant combat state for later GM-owned combat
+                  context.
+                </div>
+                <button disabled={savingCombatContext} onClick={() => void saveCombatContext()} type="button">
+                  {savingCombatContext ? "Saving..." : "Save combat context"}
+                </button>
+              </div>
             </>
           ) : (
             <div style={{ color: "#5e5a50" }}>
@@ -701,6 +1208,29 @@ export default function ScenarioPlayerCombatPageContent({
                 <strong>{phaseCard.phaseLabel}</strong>
                 <div style={{ fontSize: "1.05rem", fontWeight: 600 }}>{phaseCard.title}</div>
                 <div style={{ color: "#5e5a50" }}>{phaseCard.description}</div>
+                {selectedActionId === "attack_parry" &&
+                phaseCard.phaseLabel === "Phase 1" &&
+                selectedCombatReference ? (
+                  <label style={{ display: "grid", gap: "0.25rem" }}>
+                    <span>Opponent</span>
+                    <select
+                      onChange={(event) =>
+                        setCombatContextDraft((current) => ({
+                          ...current,
+                          selectedOpponentId: event.target.value || undefined,
+                        }))
+                      }
+                      value={combatContextDraft.selectedOpponentId ?? ""}
+                    >
+                      <option value="">Choose opponent</option>
+                      {visibleOpponentOptions.map((participant) => (
+                        <option key={participant.id} value={participant.id}>
+                          {participant.snapshot.displayName}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
                 {phaseCard.stats.length > 0 ? (
                   <div style={{ display: "grid", gap: "0.25rem", fontSize: "0.95rem" }}>
                     {phaseCard.stats.map((stat) => (
