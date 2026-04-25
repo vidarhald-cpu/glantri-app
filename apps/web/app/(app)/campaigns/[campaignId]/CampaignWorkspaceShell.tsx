@@ -14,6 +14,7 @@ import {
 import { useSessionUser } from "../../../../src/lib/auth/SessionUserContext";
 import { getCampaignWorkspaceSelectionKeys } from "../../../../src/lib/campaigns/RememberedCampaignWorkspaceEffect";
 import {
+  buildCampaignWorkspaceHref,
   buildCampaignWorkspaceTabs,
   resolveCampaignWorkspaceState,
   type CampaignWorkspaceTabId
@@ -131,6 +132,7 @@ export default function CampaignWorkspaceShell({
 
   function buildWorkspaceHref(partial: {
     encounterId?: string | null;
+    participantId?: string | null;
     scenarioId?: string | null;
     tab?: CampaignWorkspaceTabId | null;
   }): string {
@@ -154,8 +156,19 @@ export default function CampaignWorkspaceShell({
       nextParams.set("tab", partial.tab);
     }
 
-    const query = nextParams.toString();
-    return query ? `${pathname}?${query}` : pathname;
+    if (partial.participantId === null) {
+      nextParams.delete("participantId");
+    } else if (partial.participantId !== undefined) {
+      nextParams.set("participantId", partial.participantId);
+    }
+
+    return buildCampaignWorkspaceHref({
+      campaignId,
+      encounterId: nextParams.get("encounterId"),
+      participantId: nextParams.get("participantId"),
+      scenarioId: nextParams.get("scenarioId"),
+      tab: (nextParams.get("tab") as CampaignWorkspaceTabId | null) ?? undefined,
+    });
   }
 
   useEffect(() => {
@@ -183,6 +196,10 @@ export default function CampaignWorkspaceShell({
     const nextHref = buildWorkspaceHref({
       encounterId:
         searchParams.get("encounterId") ?? workspaceState.activeEncounterId ?? null,
+      participantId:
+        requestedTabFromUrl === "player-encounter" || workspaceState.activeTab === "player-encounter"
+          ? searchParams.get("participantId")
+          : null,
       scenarioId:
         searchParams.get("scenarioId") ?? workspaceState.activeScenarioId ?? null,
       tab: requestedTabFromUrl ?? workspaceState.activeTab,
@@ -372,6 +389,7 @@ export default function CampaignWorkspaceShell({
               encounterId={workspaceState.activeEncounterId}
               embedded
               encounterTitle={activeEncounter?.title}
+              participantId={searchParams.get("participantId") ?? undefined}
               scenarioId={workspaceState.activeScenarioId}
             />
           ) : (

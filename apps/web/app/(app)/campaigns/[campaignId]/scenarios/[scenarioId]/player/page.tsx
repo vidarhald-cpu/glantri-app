@@ -1,13 +1,22 @@
-import ScenarioPlayerPageContent from "./ScenarioPlayerPageContent";
+import { redirect } from "next/navigation";
+
+import { buildCampaignWorkspaceHref } from "../../../../../../../src/lib/campaigns/workspace";
 
 interface ScenarioPlayerPageProps {
   params: Promise<{
+    campaignId: string;
     scenarioId: string;
   }>;
 }
 
 export default async function ScenarioPlayerPage({ params }: ScenarioPlayerPageProps) {
-  const { scenarioId } = await params;
+  const { campaignId, scenarioId } = await params;
 
-  return <ScenarioPlayerPageContent scenarioId={scenarioId} />;
+  redirect(
+    buildCampaignWorkspaceHref({
+      campaignId,
+      scenarioId,
+      tab: "player-encounter",
+    }),
+  );
 }

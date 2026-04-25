@@ -1,8 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 
 import type { Campaign } from "@glantri/domain";
 
@@ -10,14 +9,9 @@ import {
   createCampaignOnServer,
   loadCampaigns
 } from "../../../src/lib/api/localServiceClient";
-import {
-  REMEMBERED_SELECTION_KEYS,
-  useRememberedSelection,
-} from "../../../src/lib/browser/rememberedSelection";
+import { buildCampaignWorkspaceHref } from "../../../src/lib/campaigns/workspace";
 
 export default function CampaignsPageContent() {
-  const router = useRouter();
-  const restoreAttemptedRef = useRef(false);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [error, setError] = useState<string>();
   const [feedback, setFeedback] = useState<string>();
@@ -25,9 +19,6 @@ export default function CampaignsPageContent() {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [allowPlayerSelfJoin, setAllowPlayerSelfJoin] = useState(false);
-  const rememberedCampaignSelection = useRememberedSelection(
-    REMEMBERED_SELECTION_KEYS.campaignId,
-  );
 
   async function refreshCampaigns() {
     const nextCampaigns = await loadCampaigns();
@@ -41,27 +32,6 @@ export default function CampaignsPageContent() {
       })
       .finally(() => setLoading(false));
   }, []);
-
-  useEffect(() => {
-    if (loading || !rememberedCampaignSelection.hydrated || restoreAttemptedRef.current) {
-      return;
-    }
-
-    restoreAttemptedRef.current = true;
-
-    const rememberedCampaignId = rememberedCampaignSelection.value;
-
-    if (!rememberedCampaignId) {
-      return;
-    }
-
-    if (campaigns.some((campaign) => campaign.id === rememberedCampaignId)) {
-      router.replace(`/campaigns/${rememberedCampaignId}`);
-      return;
-    }
-
-    rememberedCampaignSelection.setValue(undefined);
-  }, [campaigns, loading, rememberedCampaignSelection, router]);
 
   async function handleCreateCampaign() {
     try {
@@ -159,7 +129,14 @@ export default function CampaignsPageContent() {
                 Player self-join: {campaign.settings.allowPlayerSelfJoin ? "Enabled" : "Disabled"}
               </div>
               <div>
-                <Link href={`/campaigns/${campaign.id}`}>Open campaign</Link>
+                <Link
+                  href={buildCampaignWorkspaceHref({
+                    campaignId: campaign.id,
+                    tab: "campaign",
+                  })}
+                >
+                  Open campaign
+                </Link>
               </div>
             </div>
           ))}

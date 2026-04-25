@@ -7,7 +7,8 @@ describe("appNavigation", () => {
     expect(appNavigationLinks).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ href: "/auth", label: "Auth" }),
-        expect.objectContaining({ href: "/characters", label: "Characters" }),
+        expect.objectContaining({ href: "/characters/resume", label: "Characters" }),
+        expect.objectContaining({ href: "/campaigns/resume", label: "Campaigns" }),
       ]),
     );
   });

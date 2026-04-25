@@ -22,6 +22,7 @@ import {
   type CharacterBrowserSourceFilter,
   type CharacterBrowserTypeFilter
 } from "../../../src/lib/characters/characterBrowser";
+import { buildCampaignWorkspaceHref } from "../../../src/lib/campaigns/workspace";
 import { LocalCharacterRepository } from "../../../src/lib/offline/repositories/localCharacterRepository";
 
 const localCharacterRepository = new LocalCharacterRepository();
@@ -250,8 +251,16 @@ export default function CharactersBrowser() {
 
       router.push(
         canOpenGameMasterScenarioView
-          ? `/campaigns/${selectedScenario.campaignId}/scenarios/${selectedScenario.scenarioId}`
-          : `/campaigns/${selectedScenario.campaignId}/scenarios/${selectedScenario.scenarioId}/player`
+          ? buildCampaignWorkspaceHref({
+              campaignId: selectedScenario.campaignId,
+              scenarioId: selectedScenario.scenarioId,
+              tab: "scenario",
+            })
+          : buildCampaignWorkspaceHref({
+              campaignId: selectedScenario.campaignId,
+              scenarioId: selectedScenario.scenarioId,
+              tab: "player-encounter",
+            })
       );
     } catch (error) {
       setJoinError(error instanceof Error ? error.message : "Unable to join scenario.");

@@ -21,6 +21,7 @@ import {
   getCampaignActorMetadata,
   splitCampaignActors
 } from "../../../../src/lib/campaigns/campaignActors";
+import { buildCampaignWorkspaceHref } from "../../../../src/lib/campaigns/workspace";
 
 interface CampaignDetailPageContentProps {
   campaignId: string;
@@ -305,9 +306,23 @@ export default function CampaignDetailPageContent({
               </div>
               <div>{scenario.description || "No description yet."}</div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
-                <Link href={`/campaigns/${campaignId}/scenarios/${scenario.id}`}>Open scenario</Link>
-                <Link href={`/campaigns/${campaignId}/scenarios/${scenario.id}/encounters`}>
-                  Open encounters
+                <Link
+                  href={buildCampaignWorkspaceHref({
+                    campaignId,
+                    scenarioId: scenario.id,
+                    tab: "scenario",
+                  })}
+                >
+                  Open scenario
+                </Link>
+                <Link
+                  href={buildCampaignWorkspaceHref({
+                    campaignId,
+                    scenarioId: scenario.id,
+                    tab: "gm-encounter",
+                  })}
+                >
+                  Open GM encounter workspace
                 </Link>
               </div>
             </div>

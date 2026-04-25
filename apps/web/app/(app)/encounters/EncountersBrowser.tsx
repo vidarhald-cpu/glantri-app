@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import type { EncounterSession } from "@glantri/domain";
 import { createEncounterSession } from "@glantri/rules-engine";
 
+import { buildCampaignWorkspaceHref } from "../../../src/lib/campaigns/workspace";
 import { LocalEncounterRepository } from "../../../src/lib/offline/repositories/localEncounterRepository";
 
 const localEncounterRepository = new LocalEncounterRepository();
@@ -26,7 +27,11 @@ export default function EncountersBrowser({
 
   const isNestedScenarioFlow = Boolean(campaignId && scenarioId);
   const backHref = isNestedScenarioFlow
-    ? `/campaigns/${campaignId}/scenarios/${scenarioId}`
+    ? buildCampaignWorkspaceHref({
+        campaignId: campaignId as string,
+        scenarioId: scenarioId as string,
+        tab: "scenario",
+      })
     : "/campaigns";
 
   async function refreshEncounters() {
@@ -56,7 +61,12 @@ export default function EncountersBrowser({
 
   function getEncounterHref(encounter: EncounterSession): string {
     if (isNestedScenarioFlow) {
-      return `/campaigns/${campaignId}/scenarios/${scenarioId}/encounters/${encounter.id}`;
+      return buildCampaignWorkspaceHref({
+        campaignId: campaignId as string,
+        encounterId: encounter.id,
+        scenarioId: scenarioId as string,
+        tab: "gm-encounter",
+      });
     }
 
     return `/encounters/${encounter.id}`;

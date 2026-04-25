@@ -1,4 +1,6 @@
-import EncountersBrowser from "../../../../../encounters/EncountersBrowser";
+import { redirect } from "next/navigation";
+
+import { buildCampaignWorkspaceHref } from "../../../../../../../src/lib/campaigns/workspace";
 
 interface ScenarioEncountersPageProps {
   params: Promise<{
@@ -12,5 +14,11 @@ export default async function ScenarioEncountersPage({
 }: ScenarioEncountersPageProps) {
   const { campaignId, scenarioId } = await params;
 
-  return <EncountersBrowser campaignId={campaignId} scenarioId={scenarioId} />;
+  redirect(
+    buildCampaignWorkspaceHref({
+      campaignId,
+      scenarioId,
+      tab: "gm-encounter",
+    }),
+  );
 }

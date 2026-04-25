@@ -30,23 +30,4 @@ describe("CharactersSubmenu", () => {
       ]),
     );
   });
-
-  it("shows a resume link on the browser page when a remembered character exists", () => {
-    const items = buildCharactersSubmenuItems({
-      currentCharacterId: null,
-      isGameMaster: false,
-      pathname: "/characters",
-      rememberedCharacterId: "character-2",
-    });
-
-    expect(items).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          href: "/characters/character-2",
-          isActive: false,
-          label: "Resume last character",
-        }),
-      ]),
-    );
-  });
 });

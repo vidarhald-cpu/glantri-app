@@ -31,6 +31,7 @@ import {
   getAvailableScenarioCharacters,
   getScenarioCharacterDefaultControllerId,
 } from "../../../../../../src/lib/campaigns/scenarioCharacters";
+import { buildCampaignWorkspaceHref } from "../../../../../../src/lib/campaigns/workspace";
 
 interface ScenarioDetailPageContentProps {
   campaignId: string;
@@ -353,12 +354,31 @@ export default function ScenarioDetailPageContent({
       <div>
         {!embedded ? (
           <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
-            <Link href={`/campaigns/${campaignId}`}>Back to campaign</Link>
-            <Link href={`/campaigns/${campaignId}/scenarios/${scenarioId}/encounters`}>
-              Open encounters
+            <Link
+              href={buildCampaignWorkspaceHref({
+                campaignId,
+                tab: "campaign",
+              })}
+            >
+              Back to campaign
             </Link>
-            <Link href={`/campaigns/${campaignId}/scenarios/${scenarioId}/player`}>
-              Open player scenario view
+            <Link
+              href={buildCampaignWorkspaceHref({
+                campaignId,
+                scenarioId,
+                tab: "gm-encounter",
+              })}
+            >
+              Open GM encounter workspace
+            </Link>
+            <Link
+              href={buildCampaignWorkspaceHref({
+                campaignId,
+                scenarioId,
+                tab: "player-encounter",
+              })}
+            >
+              Open player encounter workspace
             </Link>
           </div>
         ) : null}
@@ -445,15 +465,27 @@ export default function ScenarioDetailPageContent({
         >
           <h2 style={{ margin: 0 }}>Encounters</h2>
           <p style={{ margin: 0 }}>
-            Encounter pages belong to this scenario. Use them for GM combat management, then hand
-            players the linked combat screen from encounter context.
+            Use the canonical workspace shell for GM and player encounter flow. If no encounter is
+            selected yet, the shell falls back to this scenario tab.
           </p>
           <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
-            <Link href={`/campaigns/${campaignId}/scenarios/${scenarioId}/encounters`}>
-              Open encounter list
+            <Link
+              href={buildCampaignWorkspaceHref({
+                campaignId,
+                scenarioId,
+                tab: "gm-encounter",
+              })}
+            >
+              Open GM encounter workspace
             </Link>
-            <Link href={`/campaigns/${campaignId}/scenarios/${scenarioId}/player/combat`}>
-              Open player combat screen
+            <Link
+              href={buildCampaignWorkspaceHref({
+                campaignId,
+                scenarioId,
+                tab: "player-encounter",
+              })}
+            >
+              Open player encounter workspace
             </Link>
           </div>
         </section>

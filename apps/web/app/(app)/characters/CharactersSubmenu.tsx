@@ -4,10 +4,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { useHasAnyRole } from "../../../src/lib/auth/SessionUserContext";
-import {
-  REMEMBERED_SELECTION_KEYS,
-  useRememberedSelection,
-} from "../../../src/lib/browser/rememberedSelection";
 
 interface CharactersSubmenuItem {
   href: string;
@@ -33,9 +29,8 @@ export function buildCharactersSubmenuItems(options: {
   currentCharacterId: string | null;
   isGameMaster: boolean;
   pathname: string;
-  rememberedCharacterId?: string | null;
 }): CharactersSubmenuItem[] {
-  const { currentCharacterId, isGameMaster, pathname, rememberedCharacterId } = options;
+  const { currentCharacterId, isGameMaster, pathname } = options;
   const items: Array<CharactersSubmenuItem | null> = [
     {
       href: "/characters",
@@ -48,12 +43,6 @@ export function buildCharactersSubmenuItems(options: {
           isActive: isCharacterSheetPath(pathname, currentCharacterId),
           label: "Character sheet"
         }
-      : rememberedCharacterId
-        ? {
-            href: `/characters/${rememberedCharacterId}`,
-            isActive: false,
-            label: "Resume last character"
-          }
       : null,
     currentCharacterId
       ? {
@@ -99,14 +88,10 @@ export default function CharactersSubmenu() {
   const pathname = usePathname();
   const currentCharacterId = getCurrentCharacterId(pathname);
   const isGameMaster = useHasAnyRole(["game_master"]);
-  const rememberedCharacterSelection = useRememberedSelection(
-    REMEMBERED_SELECTION_KEYS.characterId,
-  );
   const items = buildCharactersSubmenuItems({
     currentCharacterId,
     isGameMaster,
     pathname,
-    rememberedCharacterId: rememberedCharacterSelection.value,
   });
 
   return (

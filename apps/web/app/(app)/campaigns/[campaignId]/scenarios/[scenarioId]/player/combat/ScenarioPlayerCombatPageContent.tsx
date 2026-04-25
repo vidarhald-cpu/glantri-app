@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import {
   characterBuildSchema,
@@ -51,12 +52,14 @@ import {
   useRememberedSelection,
 } from "../../../../../../../../src/lib/browser/rememberedSelection";
 import RememberedCampaignWorkspaceEffect from "../../../../../../../../src/lib/campaigns/RememberedCampaignWorkspaceEffect";
+import { buildCampaignWorkspaceHref } from "../../../../../../../../src/lib/campaigns/workspace";
 
 interface ScenarioPlayerCombatPageContentProps {
   campaignId: string;
   encounterId?: string;
   embedded?: boolean;
   encounterTitle?: string;
+  participantId?: string;
   scenarioId: string;
 }
 
@@ -175,8 +178,12 @@ export default function ScenarioPlayerCombatPageContent({
   encounterId,
   embedded = false,
   encounterTitle,
+  participantId,
   scenarioId,
 }: ScenarioPlayerCombatPageContentProps) {
+  const pathname = usePathname();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const { currentUser, loading: sessionLoading } = useSessionUser();
   const [content, setContent] = useState<Awaited<ReturnType<typeof loadCanonicalContent>>>();
   const [error, setError] = useState<string>();
@@ -296,8 +303,10 @@ export default function ScenarioPlayerCombatPageContent({
     }
 
     const projectionControlledId = projection?.controlledParticipantId;
+    const explicitParticipantId = participantId;
     const rememberedParticipantId = rememberedParticipantSelection.value;
     const preferredId =
+      accessibleParticipants.find((participant) => participant.id === explicitParticipantId)?.id ??
       accessibleParticipants.find((participant) => participant.id === rememberedParticipantId)?.id ??
       accessibleParticipants.find((participant) => participant.id === projectionControlledId)?.id ??
       accessibleParticipants[0]?.id;
@@ -307,7 +316,13 @@ export default function ScenarioPlayerCombatPageContent({
         ? current
         : (preferredId ?? "")
     );
-  }, [accessibleParticipants, projection, rememberedParticipantSelection.hydrated, rememberedParticipantSelection.value]);
+  }, [
+    accessibleParticipants,
+    participantId,
+    projection,
+    rememberedParticipantSelection.hydrated,
+    rememberedParticipantSelection.value,
+  ]);
 
   useEffect(() => {
     if (!rememberedParticipantSelection.hydrated) {
@@ -316,6 +331,25 @@ export default function ScenarioPlayerCombatPageContent({
 
     rememberedParticipantSelection.setValue(selectedParticipantId || undefined);
   }, [rememberedParticipantSelection, selectedParticipantId]);
+
+  useEffect(() => {
+    const currentParticipantId = searchParams.get("participantId");
+    const nextParams = new URLSearchParams(searchParams.toString());
+
+    if (selectedParticipantId) {
+      nextParams.set("participantId", selectedParticipantId);
+    } else {
+      nextParams.delete("participantId");
+    }
+
+    const currentHref = searchParams.toString() ? `${pathname}?${searchParams.toString()}` : pathname;
+    const nextQuery = nextParams.toString();
+    const nextHref = nextQuery ? `${pathname}?${nextQuery}` : pathname;
+
+    if (currentParticipantId !== selectedParticipantId && currentHref !== nextHref) {
+      router.replace(nextHref);
+    }
+  }, [pathname, router, searchParams, selectedParticipantId]);
 
   useEffect(() => {
     setActionRollResult(null);
@@ -910,8 +944,14 @@ export default function ScenarioPlayerCombatPageContent({
       <div style={{ display: "grid", gap: "0.5rem" }}>
         {!embedded ? (
           <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
-            <Link href={`/campaigns/${campaignId}/scenarios/${scenarioId}/player`}>
-              Back to scenario view
+            <Link
+              href={buildCampaignWorkspaceHref({
+                campaignId,
+                scenarioId,
+                tab: "scenario",
+              })}
+            >
+              Back to scenario workspace
             </Link>
           </div>
         ) : null}

@@ -27,6 +27,7 @@ import {
 import { loadLocalEncounterContext } from "../../../../src/lib/encounters/loadLocalEncounterContext";
 import { addScenarioParticipantFromEntityOnServer } from "../../../../src/lib/api/localServiceClient";
 import RememberedCampaignWorkspaceEffect from "../../../../src/lib/campaigns/RememberedCampaignWorkspaceEffect";
+import { buildCampaignWorkspaceHref } from "../../../../src/lib/campaigns/workspace";
 import type { LocalCharacterRecord } from "../../../../src/lib/offline/glantriDexie";
 import { LocalEncounterRepository } from "../../../../src/lib/offline/repositories/localEncounterRepository";
 import { UNNAMED_CHARACTER_PLACEHOLDER } from "../../../../src/lib/offline/repositories/localCharacterRepository";
@@ -136,10 +137,19 @@ export default function EncounterDetail({
 
   const isNestedScenarioFlow = Boolean(campaignId && scenarioId);
   const backHref = isNestedScenarioFlow
-    ? `/campaigns/${campaignId}/scenarios/${scenarioId}/encounters`
+    ? buildCampaignWorkspaceHref({
+        campaignId: campaignId as string,
+        scenarioId: scenarioId as string,
+        tab: "scenario",
+      })
     : "/encounters";
   const playerCombatHref = isNestedScenarioFlow
-    ? `/campaigns/${campaignId}/scenarios/${scenarioId}/player/combat`
+    ? buildCampaignWorkspaceHref({
+        campaignId: campaignId as string,
+        encounterId: id,
+        scenarioId: scenarioId as string,
+        tab: "player-encounter",
+      })
     : undefined;
 
   async function persistEncounter(nextEncounter: EncounterSession, message?: string) {
@@ -374,10 +384,18 @@ export default function EncounterDetail({
       {!embedded ? (
         <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
           <Link href={backHref}>
-            {isNestedScenarioFlow ? "Back to scenario encounters" : "Back to encounters"}
+            {isNestedScenarioFlow ? "Back to scenario workspace" : "Back to encounters"}
           </Link>
           {isNestedScenarioFlow ? (
-            <Link href={`/campaigns/${campaignId}/scenarios/${scenarioId}`}>Back to scenario</Link>
+            <Link
+              href={buildCampaignWorkspaceHref({
+                campaignId: campaignId as string,
+                scenarioId: scenarioId as string,
+                tab: "scenario",
+              })}
+            >
+              Back to scenario
+            </Link>
           ) : null}
           {playerCombatHref ? <Link href={playerCombatHref}>Open player combat screen</Link> : null}
         </div>

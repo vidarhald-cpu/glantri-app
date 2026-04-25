@@ -1,4 +1,6 @@
-import ScenarioDetailPageContent from "./ScenarioDetailPageContent";
+import { redirect } from "next/navigation";
+
+import { buildCampaignWorkspaceHref } from "../../../../../../src/lib/campaigns/workspace";
 
 interface ScenarioDetailPageProps {
   params: Promise<{
@@ -10,5 +12,11 @@ interface ScenarioDetailPageProps {
 export default async function ScenarioDetailPage({ params }: ScenarioDetailPageProps) {
   const { campaignId, scenarioId } = await params;
 
-  return <ScenarioDetailPageContent campaignId={campaignId} scenarioId={scenarioId} />;
+  redirect(
+    buildCampaignWorkspaceHref({
+      campaignId,
+      scenarioId,
+      tab: "scenario",
+    }),
+  );
 }

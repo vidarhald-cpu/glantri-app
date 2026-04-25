@@ -18,12 +18,43 @@ export interface CampaignWorkspaceState {
   activeTab: CampaignWorkspaceTabId;
 }
 
+export interface CampaignWorkspaceHrefInput {
+  campaignId: string;
+  encounterId?: string | null;
+  participantId?: string | null;
+  scenarioId?: string | null;
+  tab?: CampaignWorkspaceTabId | null;
+}
+
 const orderedTabs: CampaignWorkspaceTab[] = [
   { id: "campaign", label: "Campaign" },
   { id: "scenario", label: "Scenario" },
   { id: "gm-encounter", label: "GM Encounter" },
   { id: "player-encounter", label: "Player Encounter" }
 ];
+
+export function buildCampaignWorkspaceHref(input: CampaignWorkspaceHrefInput): string {
+  const searchParams = new URLSearchParams();
+
+  if (input.tab) {
+    searchParams.set("tab", input.tab);
+  }
+
+  if (input.scenarioId) {
+    searchParams.set("scenarioId", input.scenarioId);
+  }
+
+  if (input.encounterId) {
+    searchParams.set("encounterId", input.encounterId);
+  }
+
+  if (input.participantId) {
+    searchParams.set("participantId", input.participantId);
+  }
+
+  const query = searchParams.toString();
+  return query ? `/campaigns/${input.campaignId}?${query}` : `/campaigns/${input.campaignId}`;
+}
 
 export function buildCampaignWorkspaceTabs(input: {
   canAccessGmEncounter: boolean;
