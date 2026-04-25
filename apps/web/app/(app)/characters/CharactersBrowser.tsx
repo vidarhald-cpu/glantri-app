@@ -30,6 +30,19 @@ const localCharacterRepository = new LocalCharacterRepository();
 type ServerCharacterRecord = Awaited<ReturnType<typeof loadServerCharacters>>[number];
 type JoinableScenarioOption = Awaited<ReturnType<typeof loadJoinableScenarios>>[number];
 
+async function loadCharacterBrowserSnapshot(currentUser: ReturnType<typeof useSessionUser>["currentUser"]) {
+  const serverRecords = currentUser ? await loadServerCharacters() : [];
+
+  await localCharacterRepository.reconcileSyncedRecords(serverRecords.map((record) => record.id));
+
+  const localRecords = await localCharacterRepository.listFinalized();
+
+  return {
+    localRecords,
+    serverRecords
+  };
+}
+
 export default function CharactersBrowser() {
   const router = useRouter();
   const { currentUser, loading: sessionLoading } = useSessionUser();
@@ -62,16 +75,13 @@ export default function CharactersBrowser() {
       setLoading(true);
 
       try {
-        const [records, serverRecords] = await Promise.all([
-          localCharacterRepository.listFinalized(),
-          currentUser ? loadServerCharacters() : Promise.resolve([])
-        ]);
+        const { localRecords, serverRecords } = await loadCharacterBrowserSnapshot(currentUser);
 
         if (cancelled) {
           return;
         }
 
-        setLocalCharacters(records);
+        setLocalCharacters(localRecords);
         setServerCharacters(serverRecords);
       } catch (error) {
         if (cancelled) {
@@ -149,7 +159,9 @@ export default function CharactersBrowser() {
     }
 
     try {
-      const nextServerCharacters = await loadServerCharacters();
+      const { localRecords, serverRecords: nextServerCharacters } =
+        await loadCharacterBrowserSnapshot(currentUser);
+      setLocalCharacters(localRecords);
       setServerCharacters(nextServerCharacters);
       setFeedback(
         `Loaded ${nextServerCharacters.length} server-backed character${

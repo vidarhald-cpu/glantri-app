@@ -138,6 +138,29 @@ describe("characterBrowser", () => {
     expect(entries.find((entry) => entry.id === "local-only")?.sourceLabel).toBe("Local-only");
   });
 
+  it("drops stale synced local records that no longer exist on the server", () => {
+    const entries = buildCharacterBrowserEntries({
+      currentUser,
+      localRecords: [
+        createLocalRecord({
+          creatorId: "player-1",
+          id: "stale-server-copy",
+          syncStatus: "synced",
+          updatedAt: "2026-04-09T10:00:00.000Z"
+        }),
+        createLocalRecord({
+          id: "local-only",
+          syncStatus: "local",
+          updatedAt: "2026-04-10T10:00:00.000Z"
+        })
+      ],
+      serverRecords: []
+    });
+
+    expect(entries.map((entry) => entry.id)).toEqual(["local-only"]);
+    expect(entries[0]?.sourceLabel).toBe("Local-only");
+  });
+
   it("builds owner options from distinct owners and filters by specific owner", () => {
     const entries = buildCharacterBrowserEntries({
       currentUser,

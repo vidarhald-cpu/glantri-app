@@ -146,8 +146,13 @@ function mergeCharacterRecords(input: {
   serverRecords: ServerCharacterRecord[];
 }): LocalCharacterRecord[] {
   const mergedById = new Map<string, LocalCharacterRecord>();
+  const serverRecordIds = new Set(input.serverRecords.map((record) => record.id));
 
   for (const localRecord of input.localRecords) {
+    if (localRecord.syncStatus === "synced" && !serverRecordIds.has(localRecord.id)) {
+      continue;
+    }
+
     mergedById.set(localRecord.id, localRecord);
   }
 

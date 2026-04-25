@@ -16,6 +16,19 @@ const localCharacterRepository = new LocalCharacterRepository();
 
 type ServerCharacterRecord = Awaited<ReturnType<typeof loadServerCharacters>>[number];
 
+async function loadCharacterBrowserSnapshot(currentUser: ReturnType<typeof useSessionUser>["currentUser"]) {
+  const serverRecords = currentUser ? await loadServerCharacters() : [];
+
+  await localCharacterRepository.reconcileSyncedRecords(serverRecords.map((record) => record.id));
+
+  const localRecords = await localCharacterRepository.listFinalized();
+
+  return {
+    localRecords,
+    serverRecords
+  };
+}
+
 export default function CharactersResumePageContent() {
   const router = useRouter();
   const { currentUser, loading: sessionLoading } = useSessionUser();
@@ -40,10 +53,7 @@ export default function CharactersResumePageContent() {
       setLoading(true);
 
       try {
-        const [localRecords, serverRecords] = await Promise.all([
-          localCharacterRepository.listFinalized(),
-          currentUser ? loadServerCharacters() : Promise.resolve([]),
-        ]);
+        const { localRecords, serverRecords } = await loadCharacterBrowserSnapshot(currentUser);
 
         if (cancelled) {
           return;
