@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import {
   addScenarioParticipantFromCharacterOnServer,
@@ -32,7 +32,6 @@ type JoinableScenarioOption = Awaited<ReturnType<typeof loadJoinableScenarios>>[
 export default function CharactersBrowser() {
   const router = useRouter();
   const { currentUser, loading: sessionLoading } = useSessionUser();
-  const restoreAttemptedRef = useRef(false);
   const [localCharacters, setLocalCharacters] = useState<
     Awaited<ReturnType<typeof localCharacterRepository.listFinalized>>
   >([]);
@@ -125,16 +124,9 @@ export default function CharactersBrowser() {
   }, [ownerFilter, showOwnerFilter]);
 
   useEffect(() => {
-    if (
-      loading ||
-      sessionLoading ||
-      !rememberedCharacterSelection.hydrated ||
-      restoreAttemptedRef.current
-    ) {
+    if (loading || sessionLoading || !rememberedCharacterSelection.hydrated) {
       return;
     }
-
-    restoreAttemptedRef.current = true;
 
     const rememberedCharacterId = rememberedCharacterSelection.value;
 
@@ -144,19 +136,10 @@ export default function CharactersBrowser() {
 
     const rememberedEntry = browserEntries.find((entry) => entry.id === rememberedCharacterId);
 
-    if (rememberedEntry?.canOpenSheet) {
-      router.replace(`/characters/${rememberedCharacterId}`);
-      return;
+    if (!rememberedEntry?.canOpenSheet) {
+      rememberedCharacterSelection.setValue(undefined);
     }
-
-    rememberedCharacterSelection.setValue(undefined);
-  }, [
-    browserEntries,
-    loading,
-    rememberedCharacterSelection,
-    router,
-    sessionLoading,
-  ]);
+  }, [browserEntries, loading, rememberedCharacterSelection, sessionLoading]);
 
   async function handleRefreshServerCharacters() {
     if (!currentUser) {

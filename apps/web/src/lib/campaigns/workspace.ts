@@ -33,6 +33,54 @@ export function buildCampaignWorkspaceTabs(input: {
   );
 }
 
+function resolveFallbackCampaignWorkspaceTab(input: {
+  activeEncounterId?: string;
+  activeScenarioId?: string;
+  canAccessGmEncounter: boolean;
+}): CampaignWorkspaceTabId {
+  if (input.activeEncounterId && input.activeScenarioId) {
+    return input.canAccessGmEncounter ? "gm-encounter" : "player-encounter";
+  }
+
+  if (input.activeScenarioId) {
+    return "scenario";
+  }
+
+  return "campaign";
+}
+
+function resolveRequestedCampaignWorkspaceTab(input: {
+  activeEncounterId?: string;
+  activeScenarioId?: string;
+  canAccessGmEncounter: boolean;
+  requestedTab?: string | null;
+}): CampaignWorkspaceTabId {
+  const fallbackTab = resolveFallbackCampaignWorkspaceTab({
+    activeEncounterId: input.activeEncounterId,
+    activeScenarioId: input.activeScenarioId,
+    canAccessGmEncounter: input.canAccessGmEncounter,
+  });
+
+  switch (input.requestedTab) {
+    case "campaign":
+      return "campaign";
+    case "scenario":
+      return input.activeScenarioId ? "scenario" : "campaign";
+    case "gm-encounter":
+      if (!input.activeScenarioId || !input.activeEncounterId) {
+        return fallbackTab;
+      }
+
+      return input.canAccessGmEncounter ? "gm-encounter" : "player-encounter";
+    case "player-encounter":
+      return input.activeScenarioId && input.activeEncounterId
+        ? "player-encounter"
+        : fallbackTab;
+    default:
+      return fallbackTab;
+  }
+}
+
 export function resolveCampaignWorkspaceState(input: {
   activeCampaignId: string;
   canAccessGmEncounter: boolean;
@@ -45,9 +93,6 @@ export function resolveCampaignWorkspaceState(input: {
   requestedTab?: string | null;
   scenarios: Scenario[];
 }): CampaignWorkspaceState {
-  const availableTabs = buildCampaignWorkspaceTabs({
-    canAccessGmEncounter: input.canAccessGmEncounter
-  });
   const requestedScenarioId = input.requestedScenarioId ?? input.rememberedScenarioId;
   const requestedEncounterId = input.requestedEncounterId ?? input.rememberedEncounterId;
   const requestedTab = input.requestedTab ?? input.rememberedTab;
@@ -64,16 +109,16 @@ export function resolveCampaignWorkspaceState(input: {
   )
     ? requestedEncounterId ?? undefined
     : undefined;
-  const activeRequestedTab = availableTabs.find((tab) => tab.id === requestedTab)?.id;
 
   return {
     activeCampaignId: input.activeCampaignId,
     activeEncounterId,
     activeScenarioId,
-    activeTab:
-      activeRequestedTab ??
-      (requestedTab === "gm-encounter" && !input.canAccessGmEncounter
-        ? "player-encounter"
-        : "campaign")
+    activeTab: resolveRequestedCampaignWorkspaceTab({
+      activeEncounterId,
+      activeScenarioId,
+      canAccessGmEncounter: input.canAccessGmEncounter,
+      requestedTab,
+    })
   };
 }

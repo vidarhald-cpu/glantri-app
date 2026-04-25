@@ -25,6 +25,7 @@ import {
   getCampaignActorMetadata,
   splitCampaignActors
 } from "../../../../../../src/lib/campaigns/campaignActors";
+import RememberedCampaignWorkspaceEffect from "../../../../../../src/lib/campaigns/RememberedCampaignWorkspaceEffect";
 import type { ServerCharacterRecord } from "../../../../../../src/lib/api/localServiceClient";
 import {
   getAvailableScenarioCharacters,
@@ -343,6 +344,12 @@ export default function ScenarioDetailPageContent({
 
   return (
     <section style={{ display: "grid", gap: "1rem", maxWidth: 980 }}>
+      <RememberedCampaignWorkspaceEffect
+        campaignId={campaignId}
+        encounterId={null}
+        scenarioId={scenarioId}
+        tab="scenario"
+      />
       <div>
         {!embedded ? (
           <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>

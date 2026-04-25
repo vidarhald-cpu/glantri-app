@@ -26,6 +26,7 @@ import {
 
 import { loadLocalEncounterContext } from "../../../../src/lib/encounters/loadLocalEncounterContext";
 import { addScenarioParticipantFromEntityOnServer } from "../../../../src/lib/api/localServiceClient";
+import RememberedCampaignWorkspaceEffect from "../../../../src/lib/campaigns/RememberedCampaignWorkspaceEffect";
 import type { LocalCharacterRecord } from "../../../../src/lib/offline/glantriDexie";
 import { LocalEncounterRepository } from "../../../../src/lib/offline/repositories/localEncounterRepository";
 import { UNNAMED_CHARACTER_PLACEHOLDER } from "../../../../src/lib/offline/repositories/localCharacterRepository";
@@ -362,6 +363,14 @@ export default function EncounterDetail({
 
   return (
     <section style={{ display: "grid", gap: "1rem", maxWidth: 1040 }}>
+      {isNestedScenarioFlow ? (
+        <RememberedCampaignWorkspaceEffect
+          campaignId={campaignId as string}
+          encounterId={id}
+          scenarioId={scenarioId as string}
+          tab="gm-encounter"
+        />
+      ) : null}
       {!embedded ? (
         <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
           <Link href={backHref}>

@@ -4,6 +4,10 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { useHasAnyRole } from "../../../src/lib/auth/SessionUserContext";
+import {
+  REMEMBERED_SELECTION_KEYS,
+  useRememberedSelection,
+} from "../../../src/lib/browser/rememberedSelection";
 
 interface CharactersSubmenuItem {
   href: string;
@@ -26,56 +30,63 @@ function isCharacterSheetPath(pathname: string, characterId: string): boolean {
 }
 
 export function buildCharactersSubmenuItems(options: {
-  characterId: string | null;
+  currentCharacterId: string | null;
   isGameMaster: boolean;
   pathname: string;
+  rememberedCharacterId?: string | null;
 }): CharactersSubmenuItem[] {
-  const { characterId, isGameMaster, pathname } = options;
+  const { currentCharacterId, isGameMaster, pathname, rememberedCharacterId } = options;
   const items: Array<CharactersSubmenuItem | null> = [
     {
       href: "/characters",
       isActive: pathname === "/characters",
       label: "Characters"
     },
-    characterId
+    currentCharacterId
       ? {
-          href: `/characters/${characterId}`,
-          isActive: isCharacterSheetPath(pathname, characterId),
+          href: `/characters/${currentCharacterId}`,
+          isActive: isCharacterSheetPath(pathname, currentCharacterId),
           label: "Character sheet"
         }
+      : rememberedCharacterId
+        ? {
+            href: `/characters/${rememberedCharacterId}`,
+            isActive: false,
+            label: "Resume last character"
+          }
       : null,
-    characterId
+    currentCharacterId
       ? {
-          href: `/characters/${characterId}/equipment`,
-          isActive: pathname === `/characters/${characterId}/equipment`,
+          href: `/characters/${currentCharacterId}/equipment`,
+          isActive: pathname === `/characters/${currentCharacterId}/equipment`,
           label: "Inventory by location"
         }
       : null,
-    characterId
+    currentCharacterId
       ? {
-          href: `/characters/${characterId}/weapons-shields-armor`,
-          isActive: pathname === `/characters/${characterId}/weapons-shields-armor`,
+          href: `/characters/${currentCharacterId}/weapons-shields-armor`,
+          isActive: pathname === `/characters/${currentCharacterId}/weapons-shields-armor`,
           label: "Weapons/Shields/Armor"
         }
       : null,
-    characterId
+    currentCharacterId
       ? {
-          href: `/characters/${characterId}/loadout`,
-          isActive: pathname === `/characters/${characterId}/loadout`,
+          href: `/characters/${currentCharacterId}/loadout`,
+          isActive: pathname === `/characters/${currentCharacterId}/loadout`,
           label: "Equip items"
         }
       : null,
-    characterId
+    currentCharacterId
       ? {
-          href: `/characters/${characterId}/advance`,
-          isActive: pathname === `/characters/${characterId}/advance`,
+          href: `/characters/${currentCharacterId}/advance`,
+          isActive: pathname === `/characters/${currentCharacterId}/advance`,
           label: "Advance Character"
         }
       : null,
-    characterId && isGameMaster
+    currentCharacterId && isGameMaster
       ? {
-          href: `/characters/${characterId}/edit`,
-          isActive: pathname === `/characters/${characterId}/edit`,
+          href: `/characters/${currentCharacterId}/edit`,
+          isActive: pathname === `/characters/${currentCharacterId}/edit`,
           label: "Edit Character"
         }
       : null
@@ -86,9 +97,17 @@ export function buildCharactersSubmenuItems(options: {
 
 export default function CharactersSubmenu() {
   const pathname = usePathname();
-  const characterId = getCurrentCharacterId(pathname);
+  const currentCharacterId = getCurrentCharacterId(pathname);
   const isGameMaster = useHasAnyRole(["game_master"]);
-  const items = buildCharactersSubmenuItems({ characterId, isGameMaster, pathname });
+  const rememberedCharacterSelection = useRememberedSelection(
+    REMEMBERED_SELECTION_KEYS.characterId,
+  );
+  const items = buildCharactersSubmenuItems({
+    currentCharacterId,
+    isGameMaster,
+    pathname,
+    rememberedCharacterId: rememberedCharacterSelection.value,
+  });
 
   return (
     <nav

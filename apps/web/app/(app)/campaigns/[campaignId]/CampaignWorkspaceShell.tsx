@@ -8,11 +8,11 @@ import type { EncounterSession, Scenario } from "@glantri/domain";
 
 import { loadCampaignScenarios } from "../../../../src/lib/api/localServiceClient";
 import {
-  buildRememberedScopedSelectionKey,
   REMEMBERED_SELECTION_KEYS,
   useRememberedSelection,
 } from "../../../../src/lib/browser/rememberedSelection";
 import { useSessionUser } from "../../../../src/lib/auth/SessionUserContext";
+import { getCampaignWorkspaceSelectionKeys } from "../../../../src/lib/campaigns/RememberedCampaignWorkspaceEffect";
 import {
   buildCampaignWorkspaceTabs,
   resolveCampaignWorkspaceState,
@@ -54,23 +54,18 @@ export default function CampaignWorkspaceShell({
   const rememberedCampaignSelection = useRememberedSelection(
     REMEMBERED_SELECTION_KEYS.campaignId,
   );
+  const workspaceSelectionKeys = useMemo(
+    () => getCampaignWorkspaceSelectionKeys(campaignId),
+    [campaignId],
+  );
   const rememberedScenarioSelection = useRememberedSelection(
-    buildRememberedScopedSelectionKey({
-      baseKey: REMEMBERED_SELECTION_KEYS.scenarioId,
-      scopeParts: [campaignId],
-    }),
+    workspaceSelectionKeys.scenarioId,
   );
   const rememberedEncounterSelection = useRememberedSelection(
-    buildRememberedScopedSelectionKey({
-      baseKey: REMEMBERED_SELECTION_KEYS.encounterId,
-      scopeParts: [campaignId],
-    }),
+    workspaceSelectionKeys.encounterId,
   );
   const rememberedWorkspaceTab = useRememberedSelection(
-    buildRememberedScopedSelectionKey({
-      baseKey: REMEMBERED_SELECTION_KEYS.workspaceTab,
-      scopeParts: [campaignId],
-    }),
+    workspaceSelectionKeys.workspaceTab,
   );
 
   async function refreshWorkspaceContext() {
@@ -374,6 +369,7 @@ export default function CampaignWorkspaceShell({
           {workspaceState.activeScenarioId && workspaceState.activeEncounterId ? (
             <ScenarioPlayerCombatPageContent
               campaignId={campaignId}
+              encounterId={workspaceState.activeEncounterId}
               embedded
               encounterTitle={activeEncounter?.title}
               scenarioId={workspaceState.activeScenarioId}

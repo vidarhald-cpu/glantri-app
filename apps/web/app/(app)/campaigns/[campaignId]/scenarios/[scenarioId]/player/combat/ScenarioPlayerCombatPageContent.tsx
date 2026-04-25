@@ -50,9 +50,11 @@ import {
   REMEMBERED_SELECTION_KEYS,
   useRememberedSelection,
 } from "../../../../../../../../src/lib/browser/rememberedSelection";
+import RememberedCampaignWorkspaceEffect from "../../../../../../../../src/lib/campaigns/RememberedCampaignWorkspaceEffect";
 
 interface ScenarioPlayerCombatPageContentProps {
   campaignId: string;
+  encounterId?: string;
   embedded?: boolean;
   encounterTitle?: string;
   scenarioId: string;
@@ -170,6 +172,7 @@ function PlaceholderSection(input: {
 
 export default function ScenarioPlayerCombatPageContent({
   campaignId,
+  encounterId,
   embedded = false,
   encounterTitle,
   scenarioId,
@@ -898,6 +901,12 @@ export default function ScenarioPlayerCombatPageContent({
 
   return (
     <section style={{ display: "grid", gap: "1rem", maxWidth: 1200 }}>
+      <RememberedCampaignWorkspaceEffect
+        campaignId={campaignId}
+        encounterId={encounterId}
+        scenarioId={scenarioId}
+        tab="player-encounter"
+      />
       <div style={{ display: "grid", gap: "0.5rem" }}>
         {!embedded ? (
           <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>

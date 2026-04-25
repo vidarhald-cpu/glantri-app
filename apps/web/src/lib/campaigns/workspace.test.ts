@@ -55,10 +55,10 @@ describe("campaign workspace", () => {
 
     expect(state.activeScenarioId).toBeUndefined();
     expect(state.activeEncounterId).toBeUndefined();
-    expect(state.activeTab).toBe("gm-encounter");
+    expect(state.activeTab).toBe("campaign");
   });
 
-  it("redirects a player away from the hidden GM tab while preserving other context", () => {
+  it("falls back to the deepest valid workspace state when a player cannot open the GM tab", () => {
     const state = resolveCampaignWorkspaceState({
       activeCampaignId: "camp-1",
       canAccessGmEncounter: false,
@@ -83,7 +83,7 @@ describe("campaign workspace", () => {
     });
 
     expect(state.activeScenarioId).toBe("scn-1");
-    expect(state.activeTab).toBe("player-encounter");
+    expect(state.activeTab).toBe("scenario");
   });
 
   it("restores remembered scenario, encounter, and tab when the URL does not specify them", () => {
@@ -132,5 +132,37 @@ describe("campaign workspace", () => {
     expect(state.activeScenarioId).toBe("scn-1");
     expect(state.activeEncounterId).toBe("enc-1");
     expect(state.activeTab).toBe("player-encounter");
+  });
+
+  it("falls back to the scenario tab when the encounter is missing but the scenario is still valid", () => {
+    const state = resolveCampaignWorkspaceState({
+      activeCampaignId: "camp-1",
+      canAccessGmEncounter: true,
+      encounters: [],
+      rememberedEncounterId: "enc-missing",
+      rememberedScenarioId: "scn-1",
+      rememberedTab: "player-encounter",
+      requestedEncounterId: null,
+      requestedScenarioId: null,
+      requestedTab: null,
+      scenarios: [
+        {
+          campaignId: "camp-1",
+          createdAt: "2026-04-23T00:00:00.000Z",
+          description: "",
+          gmUserId: "gm-1",
+          id: "scn-1",
+          kind: "mixed",
+          name: "Session one",
+          participantIds: [],
+          status: "draft",
+          updatedAt: "2026-04-23T00:00:00.000Z"
+        }
+      ]
+    });
+
+    expect(state.activeScenarioId).toBe("scn-1");
+    expect(state.activeEncounterId).toBeUndefined();
+    expect(state.activeTab).toBe("scenario");
   });
 });
