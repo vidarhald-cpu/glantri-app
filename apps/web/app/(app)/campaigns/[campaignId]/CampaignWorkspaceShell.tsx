@@ -12,6 +12,10 @@ import {
 } from "../../../../src/lib/browser/rememberedSelection";
 import { useSessionUser } from "../../../../src/lib/auth/SessionUserContext";
 import { canManageCampaignWorkspace, loadCampaignWorkspaceAccessForUser } from "../../../../src/lib/campaigns/access";
+import {
+  getCampaignWorkspaceVisibleEncounters,
+  getScenarioVisibleEncounters,
+} from "../../../../src/lib/campaigns/encounters";
 import { getCampaignWorkspaceSelectionKeys } from "../../../../src/lib/campaigns/RememberedCampaignWorkspaceEffect";
 import {
   buildCampaignWorkspaceHref,
@@ -77,17 +81,17 @@ export default function CampaignWorkspaceShell({
       user: currentUser,
     });
     const nextEncounters = await localEncounterRepository.list();
-    const scenarioIds = new Set(workspaceAccess.scenarios.map((scenario) => scenario.id));
+    const scenarioIds = workspaceAccess.scenarios.map((scenario) => scenario.id);
 
     setAccessibleCampaign(workspaceAccess.campaign ?? null);
     setAccessMode(workspaceAccess.accessMode);
     setScenarios(workspaceAccess.scenarios);
     setEncounters(
-      nextEncounters.filter(
-        (encounter) =>
-          (encounter.campaignId ? encounter.campaignId === campaignId : true) &&
-          (encounter.scenarioId ? scenarioIds.has(encounter.scenarioId) : true)
-      )
+      getCampaignWorkspaceVisibleEncounters({
+        campaignId,
+        encounters: nextEncounters,
+        scenarioIds,
+      }),
     );
   }
 
@@ -143,9 +147,10 @@ export default function CampaignWorkspaceShell({
     () => buildCampaignWorkspaceTabs({ canAccessGmEncounter }),
     [canAccessGmEncounter]
   );
-  const activeScenarioEncounters = encounters.filter(
-    (encounter) => encounter.scenarioId === workspaceState.activeScenarioId
-  );
+  const activeScenarioEncounters = getScenarioVisibleEncounters({
+    encounters,
+    scenarioId: workspaceState.activeScenarioId,
+  });
   const activeEncounter = activeScenarioEncounters.find(
     (encounter) => encounter.id === workspaceState.activeEncounterId
   );
@@ -408,7 +413,11 @@ export default function CampaignWorkspaceShell({
                 scenarioId={workspaceState.activeScenarioId}
               />
             ) : (
-              <ScenarioPlayerPageContent scenarioId={workspaceState.activeScenarioId} />
+              <ScenarioPlayerPageContent
+                campaignId={campaignId}
+                encounters={activeScenarioEncounters}
+                scenarioId={workspaceState.activeScenarioId}
+              />
             )
           ) : (
             <section style={panelStyle}>Open a scenario from the picker to load this tab.</section>

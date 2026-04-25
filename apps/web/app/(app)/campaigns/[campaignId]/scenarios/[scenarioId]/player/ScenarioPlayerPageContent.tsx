@@ -3,12 +3,16 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
-import type { ScenarioPlayerProjection } from "@glantri/domain";
+import type { EncounterSession, ScenarioPlayerProjection } from "@glantri/domain";
+
+import { buildCampaignWorkspaceHref } from "../../../../../../../src/lib/campaigns/workspace";
 
 import { loadScenarioPlayerProjection } from "../../../../../../../src/lib/api/localServiceClient";
 import { useSessionUser } from "../../../../../../../src/lib/auth/SessionUserContext";
 
 interface ScenarioPlayerPageContentProps {
+  campaignId?: string;
+  encounters?: EncounterSession[];
   scenarioId: string;
 }
 
@@ -22,6 +26,8 @@ const panelStyle = {
 } as const;
 
 export default function ScenarioPlayerPageContent({
+  campaignId,
+  encounters = [],
   scenarioId
 }: ScenarioPlayerPageContentProps) {
   const { currentUser, loading: sessionLoading } = useSessionUser();
@@ -211,6 +217,45 @@ export default function ScenarioPlayerPageContent({
           Future phases will add declaration hooks here for speech, movement, skill use, equipment
           interactions, and encounter actions.
         </div>
+      </section>
+
+      <section style={panelStyle}>
+        <h2 style={{ margin: 0 }}>Encounter access</h2>
+        {encounters.length > 0 ? (
+          <div style={{ display: "grid", gap: "0.6rem" }}>
+            {encounters.map((encounter) => (
+              <div
+                key={encounter.id}
+                style={{
+                  background: "#ffffff",
+                  border: "1px solid #ddd7c9",
+                  borderRadius: 10,
+                  display: "grid",
+                  gap: "0.25rem",
+                  padding: "0.75rem",
+                }}
+              >
+                <strong>{encounter.title}</strong>
+                <div>Status: {encounter.status}</div>
+                <div>Participants: {encounter.participants.length}</div>
+                {campaignId ? (
+                  <Link
+                    href={buildCampaignWorkspaceHref({
+                      campaignId,
+                      encounterId: encounter.id,
+                      scenarioId,
+                      tab: "player-encounter",
+                    })}
+                  >
+                    Open encounter
+                  </Link>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div>No accessible encounters are currently linked to this scenario.</div>
+        )}
       </section>
     </section>
   );
