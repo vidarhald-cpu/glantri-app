@@ -37,6 +37,16 @@ export function getCampaignWorkspaceSelectionKeys(campaignId: string) {
   return buildCampaignWorkspaceSelectionKeys(campaignId);
 }
 
+export function getPlayerEncounterParticipantSelectionKey(input: {
+  campaignId: string;
+  scenarioId: string;
+}) {
+  return buildRememberedScopedSelectionKey({
+    baseKey: REMEMBERED_SELECTION_KEYS.playerEncounterParticipantId,
+    scopeParts: [input.campaignId, input.scenarioId],
+  });
+}
+
 export default function RememberedCampaignWorkspaceEffect({
   campaignId,
   encounterId,

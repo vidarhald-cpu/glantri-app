@@ -8,8 +8,13 @@ import type { Campaign } from "@glantri/domain";
 import { loadCampaigns } from "../../../../src/lib/api/localServiceClient";
 import {
   REMEMBERED_SELECTION_KEYS,
+  readRememberedSelection,
   useRememberedSelection,
 } from "../../../../src/lib/browser/rememberedSelection";
+import {
+  getCampaignWorkspaceSelectionKeys,
+  getPlayerEncounterParticipantSelectionKey,
+} from "../../../../src/lib/campaigns/RememberedCampaignWorkspaceEffect";
 import { buildCampaignWorkspaceHref } from "../../../../src/lib/campaigns/workspace";
 
 export default function CampaignsResumePageContent() {
@@ -51,10 +56,33 @@ export default function CampaignsResumePageContent() {
     const rememberedCampaignId = rememberedCampaignSelection.value;
 
     if (rememberedCampaignId && campaigns.some((campaign) => campaign.id === rememberedCampaignId)) {
+      const workspaceSelectionKeys = getCampaignWorkspaceSelectionKeys(rememberedCampaignId);
+      const rememberedScenarioId = readRememberedSelection(workspaceSelectionKeys.scenarioId);
+      const rememberedEncounterId = readRememberedSelection(workspaceSelectionKeys.encounterId);
+      const rememberedTab = readRememberedSelection(workspaceSelectionKeys.workspaceTab);
+      const rememberedParticipantId = rememberedScenarioId
+        ? readRememberedSelection(
+            getPlayerEncounterParticipantSelectionKey({
+              campaignId: rememberedCampaignId,
+              scenarioId: rememberedScenarioId,
+            }),
+          )
+        : undefined;
+
       router.replace(
         buildCampaignWorkspaceHref({
           campaignId: rememberedCampaignId,
-          tab: "campaign",
+          encounterId: rememberedEncounterId,
+          participantId:
+            rememberedTab === "player-encounter" ? rememberedParticipantId : undefined,
+          scenarioId: rememberedScenarioId,
+          tab:
+            rememberedTab === "campaign" ||
+            rememberedTab === "scenario" ||
+            rememberedTab === "gm-encounter" ||
+            rememberedTab === "player-encounter"
+              ? rememberedTab
+              : "campaign",
         }),
       );
       return;

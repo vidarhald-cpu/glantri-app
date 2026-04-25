@@ -4,6 +4,10 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { useHasAnyRole } from "../../../src/lib/auth/SessionUserContext";
+import {
+  REMEMBERED_SELECTION_KEYS,
+  useRememberedSelection,
+} from "../../../src/lib/browser/rememberedSelection";
 
 interface CharactersSubmenuItem {
   href: string;
@@ -29,53 +33,55 @@ export function buildCharactersSubmenuItems(options: {
   currentCharacterId: string | null;
   isGameMaster: boolean;
   pathname: string;
+  rememberedCharacterId?: string | null;
 }): CharactersSubmenuItem[] {
-  const { currentCharacterId, isGameMaster, pathname } = options;
+  const effectiveCharacterId = options.currentCharacterId ?? options.rememberedCharacterId ?? null;
+  const { isGameMaster, pathname } = options;
   const items: Array<CharactersSubmenuItem | null> = [
     {
       href: "/characters",
       isActive: pathname === "/characters",
       label: "Characters"
     },
-    currentCharacterId
+    effectiveCharacterId
       ? {
-          href: `/characters/${currentCharacterId}`,
-          isActive: isCharacterSheetPath(pathname, currentCharacterId),
+          href: `/characters/${effectiveCharacterId}`,
+          isActive: isCharacterSheetPath(pathname, effectiveCharacterId),
           label: "Character sheet"
         }
       : null,
-    currentCharacterId
+    effectiveCharacterId
       ? {
-          href: `/characters/${currentCharacterId}/equipment`,
-          isActive: pathname === `/characters/${currentCharacterId}/equipment`,
+          href: `/characters/${effectiveCharacterId}/equipment`,
+          isActive: pathname === `/characters/${effectiveCharacterId}/equipment`,
           label: "Inventory by location"
         }
       : null,
-    currentCharacterId
+    effectiveCharacterId
       ? {
-          href: `/characters/${currentCharacterId}/weapons-shields-armor`,
-          isActive: pathname === `/characters/${currentCharacterId}/weapons-shields-armor`,
+          href: `/characters/${effectiveCharacterId}/weapons-shields-armor`,
+          isActive: pathname === `/characters/${effectiveCharacterId}/weapons-shields-armor`,
           label: "Weapons/Shields/Armor"
         }
       : null,
-    currentCharacterId
+    effectiveCharacterId
       ? {
-          href: `/characters/${currentCharacterId}/loadout`,
-          isActive: pathname === `/characters/${currentCharacterId}/loadout`,
+          href: `/characters/${effectiveCharacterId}/loadout`,
+          isActive: pathname === `/characters/${effectiveCharacterId}/loadout`,
           label: "Equip items"
         }
       : null,
-    currentCharacterId
+    effectiveCharacterId
       ? {
-          href: `/characters/${currentCharacterId}/advance`,
-          isActive: pathname === `/characters/${currentCharacterId}/advance`,
+          href: `/characters/${effectiveCharacterId}/advance`,
+          isActive: pathname === `/characters/${effectiveCharacterId}/advance`,
           label: "Advance Character"
         }
       : null,
-    currentCharacterId && isGameMaster
+    effectiveCharacterId && isGameMaster
       ? {
-          href: `/characters/${currentCharacterId}/edit`,
-          isActive: pathname === `/characters/${currentCharacterId}/edit`,
+          href: `/characters/${effectiveCharacterId}/edit`,
+          isActive: pathname === `/characters/${effectiveCharacterId}/edit`,
           label: "Edit Character"
         }
       : null
@@ -88,10 +94,14 @@ export default function CharactersSubmenu() {
   const pathname = usePathname();
   const currentCharacterId = getCurrentCharacterId(pathname);
   const isGameMaster = useHasAnyRole(["game_master"]);
+  const rememberedCharacterSelection = useRememberedSelection(
+    REMEMBERED_SELECTION_KEYS.characterId,
+  );
   const items = buildCharactersSubmenuItems({
     currentCharacterId,
     isGameMaster,
     pathname,
+    rememberedCharacterId: rememberedCharacterSelection.value,
   });
 
   return (

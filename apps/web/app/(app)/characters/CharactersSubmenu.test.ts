@@ -30,4 +30,22 @@ describe("CharactersSubmenu", () => {
       ]),
     );
   });
+
+  it("shows character subtabs on the browser page when a remembered character exists", () => {
+    const items = buildCharactersSubmenuItems({
+      currentCharacterId: null,
+      isGameMaster: false,
+      pathname: "/characters",
+      rememberedCharacterId: "character-1",
+    });
+
+    expect(items.map((item) => item.href)).toEqual([
+      "/characters",
+      "/characters/character-1",
+      "/characters/character-1/equipment",
+      "/characters/character-1/weapons-shields-armor",
+      "/characters/character-1/loadout",
+      "/characters/character-1/advance",
+    ]);
+  });
 });
