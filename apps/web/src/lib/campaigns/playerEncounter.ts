@@ -76,6 +76,14 @@ export const PLAYER_ENCOUNTER_ACTION_OPTIONS: PlayerEncounterOption<PlayerEncoun
   { label: "Other", value: "other" },
 ];
 
+export function isPlayerEncounterActionId(value: unknown): value is PlayerEncounterActionId {
+  if (typeof value !== "string") {
+    return false;
+  }
+
+  return PLAYER_ENCOUNTER_ACTION_OPTIONS.some((option) => option.value === value);
+}
+
 export const PLAYER_ENCOUNTER_MOVEMENT_OPTIONS: PlayerEncounterOption<PlayerEncounterMovementId>[] =
   [
     { label: "Hold position", value: "hold" },

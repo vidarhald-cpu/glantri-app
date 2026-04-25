@@ -30,6 +30,7 @@ import {
   getPlayerEncounterMovementLabel,
   getPlayerEncounterOpponentParticipants,
   getPlayerEncounterParrySourceLabel,
+  isPlayerEncounterActionId,
   PLAYER_ENCOUNTER_INCOMING_ATTACK_SIDE_OPTIONS,
   PLAYER_ENCOUNTER_ACTION_OPTIONS,
   PLAYER_ENCOUNTER_MOVEMENT_OPTIONS,
@@ -373,6 +374,14 @@ export default function ScenarioPlayerCombatPageContent({
   }, [isGameMaster, projection?.visibleParticipants, selectableParticipants, selectedParticipantId]);
 
   useEffect(() => {
+    setSelectedActionId(
+      isPlayerEncounterActionId(selectedParticipant?.state.combat.lastDeclaredActionId)
+        ? selectedParticipant.state.combat.lastDeclaredActionId
+        : "",
+    );
+    setSelectedSecondaryActionId("");
+    setSelectedMovementId("hold");
+    setAdditionalActionNotes("");
     setCombatContextDraft(
       selectedParticipant?.state.combat.combatContext ?? createEmptyPlayerEncounterCombatContext(),
     );
@@ -611,6 +620,7 @@ export default function ScenarioPlayerCombatPageContent({
           combat: {
             ...selectedParticipant.state.combat,
             combatContext: combatContextDraft,
+            lastDeclaredActionId: selectedActionId || undefined,
           },
         },
       });
