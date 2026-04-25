@@ -3,35 +3,41 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
-import type { Campaign } from "@glantri/domain";
-
 import {
   createCampaignOnServer,
-  loadCampaigns
+  type AccessibleCampaignRecord,
 } from "../../../src/lib/api/localServiceClient";
+import { useSessionUser } from "../../../src/lib/auth/SessionUserContext";
+import { canManageCampaignWorkspace, loadCampaignBrowserRecordsForUser } from "../../../src/lib/campaigns/access";
 import { buildCampaignWorkspaceHref } from "../../../src/lib/campaigns/workspace";
 
 export default function CampaignsPageContent() {
-  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const { currentUser, loading: sessionLoading } = useSessionUser();
+  const [campaigns, setCampaigns] = useState<AccessibleCampaignRecord[]>([]);
   const [error, setError] = useState<string>();
   const [feedback, setFeedback] = useState<string>();
   const [loading, setLoading] = useState(true);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [allowPlayerSelfJoin, setAllowPlayerSelfJoin] = useState(false);
+  const canManageCampaigns = canManageCampaignWorkspace(currentUser);
 
   async function refreshCampaigns() {
-    const nextCampaigns = await loadCampaigns();
+    const nextCampaigns = await loadCampaignBrowserRecordsForUser(currentUser);
     setCampaigns(nextCampaigns);
   }
 
   useEffect(() => {
+    if (sessionLoading) {
+      return;
+    }
+
     refreshCampaigns()
       .catch((caughtError) => {
         setError(caughtError instanceof Error ? caughtError.message : "Unable to load campaigns.");
       })
       .finally(() => setLoading(false));
-  }, []);
+  }, [currentUser, sessionLoading]);
 
   async function handleCreateCampaign() {
     try {
@@ -68,50 +74,52 @@ export default function CampaignsPageContent() {
         </p>
       </div>
 
-      <section
-        style={{
-          border: "1px solid #d9ddd8",
-          borderRadius: 12,
-          display: "grid",
-          gap: "0.75rem",
-          padding: "1rem"
-        }}
-      >
-        <h2 style={{ margin: 0 }}>Create campaign</h2>
-        <input
-          onChange={(event) => setName(event.target.value)}
-          placeholder="Campaign name"
-          value={name}
-        />
-        <textarea
-          onChange={(event) => setDescription(event.target.value)}
-          placeholder="Description"
-          rows={3}
-          value={description}
-        />
-        <label style={{ alignItems: "center", display: "flex", gap: "0.5rem" }}>
+      {canManageCampaigns ? (
+        <section
+          style={{
+            border: "1px solid #d9ddd8",
+            borderRadius: 12,
+            display: "grid",
+            gap: "0.75rem",
+            padding: "1rem"
+          }}
+        >
+          <h2 style={{ margin: 0 }}>Create campaign</h2>
           <input
-            checked={allowPlayerSelfJoin}
-            onChange={(event) => setAllowPlayerSelfJoin(event.target.checked)}
-            type="checkbox"
+            onChange={(event) => setName(event.target.value)}
+            placeholder="Campaign name"
+            value={name}
           />
-          Allow player self-join
-        </label>
-        <div>
-          <button onClick={() => void handleCreateCampaign()} type="button">
-            Create campaign
-          </button>
-        </div>
-      </section>
+          <textarea
+            onChange={(event) => setDescription(event.target.value)}
+            placeholder="Description"
+            rows={3}
+            value={description}
+          />
+          <label style={{ alignItems: "center", display: "flex", gap: "0.5rem" }}>
+            <input
+              checked={allowPlayerSelfJoin}
+              onChange={(event) => setAllowPlayerSelfJoin(event.target.checked)}
+              type="checkbox"
+            />
+            Allow player self-join
+          </label>
+          <div>
+            <button onClick={() => void handleCreateCampaign()} type="button">
+              Create campaign
+            </button>
+          </div>
+        </section>
+      ) : null}
 
       {error ? <div>{error}</div> : null}
       {feedback ? <div>{feedback}</div> : null}
 
-      {loading ? (
+      {sessionLoading || loading ? (
         <div>Loading campaigns...</div>
       ) : campaigns.length > 0 ? (
         <div style={{ display: "grid", gap: "0.75rem" }}>
-          {campaigns.map((campaign) => (
+          {campaigns.map(({ campaign, scenarios }) => (
             <div
               key={campaign.id}
               style={{
@@ -128,6 +136,14 @@ export default function CampaignsPageContent() {
               <div>
                 Player self-join: {campaign.settings.allowPlayerSelfJoin ? "Enabled" : "Disabled"}
               </div>
+              {!canManageCampaigns ? (
+                <div>
+                  Accessible scenarios:{" "}
+                  {scenarios.length > 0
+                    ? scenarios.map((scenario) => scenario.name).join(", ")
+                    : "None"}
+                </div>
+              ) : null}
               <div>
                 <Link
                   href={buildCampaignWorkspaceHref({
@@ -150,7 +166,7 @@ export default function CampaignsPageContent() {
             padding: "1rem"
           }}
         >
-          No campaigns yet.
+          {canManageCampaigns ? "No campaigns yet." : "No accessible campaigns yet."}
         </div>
       )}
     </section>

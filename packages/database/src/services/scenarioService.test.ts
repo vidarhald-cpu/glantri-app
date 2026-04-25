@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type {
+  Campaign,
   CharacterBuild,
   ReusableEntity,
   Scenario,
@@ -70,6 +71,7 @@ function createCharacterRecord(input: {
 }
 
 function createScenarioRepositoryStub() {
+  const campaigns: Campaign[] = [];
   const scenario: Scenario = {
     campaignId: "campaign-1",
     createdAt: "2026-04-21T00:00:00.000Z",
@@ -90,11 +92,13 @@ function createScenarioRepositoryStub() {
     getCampaignById: async () => null,
     listCampaignsByGameMaster: async () => [],
     listCampaignsAllowingPlayerSelfJoin: async () => [],
+    listCampaignsByPlayerAccess: async () => campaigns,
     createScenario: async () => {
       throw new Error("Not implemented in test stub.");
     },
     getScenarioById: async (scenarioId) => (scenarioId === scenario.id ? scenario : null),
     listScenariosByCampaign: async () => [],
+    listScenariosByCampaignPlayerAccess: async () => [],
     updateScenario: async () => {
       throw new Error("Not implemented in test stub.");
     },
@@ -198,7 +202,7 @@ function createScenarioRepositoryStub() {
     listScenarioEventLogs: async () => eventLogs
   };
 
-  return { eventLogs, participants, repository, scenario };
+  return { campaigns, eventLogs, participants, repository, scenario };
 }
 
 describe("ScenarioService controller assignment", () => {
@@ -357,5 +361,57 @@ describe("ScenarioService controller assignment", () => {
     });
 
     expect(first.controlledByUserId).toBe("user-1");
+  });
+});
+
+describe("ScenarioService access listing", () => {
+  it("returns player-accessible campaigns from controlled or owned active player-character participants", async () => {
+    const { repository } = createScenarioRepositoryStub();
+    const expectedCampaigns: Campaign[] = [
+      {
+        createdAt: "2026-04-21T00:00:00.000Z",
+        description: "Accessible",
+        gmUserId: "gm-1",
+        id: "campaign-1",
+        name: "Campaign One",
+        settings: {
+          allowPlayerSelfJoin: false,
+          defaultVisibility: "hidden",
+        },
+        slug: "campaign-one",
+        status: "active",
+        updatedAt: "2026-04-21T00:00:00.000Z",
+      },
+    ];
+    repository.listCampaignsByPlayerAccess = async (userId) =>
+      userId === "player-1" ? expectedCampaigns : [];
+    repository.listScenariosByCampaignPlayerAccess = async (campaignId, userId) =>
+      campaignId === "campaign-1" && userId === "player-1"
+        ? [
+            {
+              campaignId: "campaign-1",
+              createdAt: "2026-04-21T00:00:00.000Z",
+              description: "Accessible scenario",
+              id: "scenario-1",
+              kind: "combat",
+              name: "Arena Bout",
+              status: "live",
+              updatedAt: "2026-04-21T00:00:00.000Z",
+            },
+          ]
+        : [];
+
+    const service = new ScenarioService(repository);
+
+    await expect(service.listCampaignsByPlayerAccess("player-1")).resolves.toEqual(expectedCampaigns);
+    await expect(
+      service.listScenariosByCampaignPlayerAccess("campaign-1", "player-1"),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        campaignId: "campaign-1",
+        id: "scenario-1",
+        name: "Arena Bout",
+      }),
+    ]);
   });
 });

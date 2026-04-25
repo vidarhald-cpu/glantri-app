@@ -218,6 +218,7 @@ export interface ScenarioRepository {
   getCampaignById(campaignId: string): Promise<Campaign | null>;
   listCampaignsByGameMaster(gmUserId: string): Promise<Campaign[]>;
   listCampaignsAllowingPlayerSelfJoin(): Promise<Campaign[]>;
+  listCampaignsByPlayerAccess(userId: string): Promise<Campaign[]>;
   createScenario(input: {
     campaignId: string;
     description: string;
@@ -228,6 +229,7 @@ export interface ScenarioRepository {
   }): Promise<Scenario>;
   getScenarioById(scenarioId: string): Promise<Scenario | null>;
   listScenariosByCampaign(campaignId: string): Promise<Scenario[]>;
+  listScenariosByCampaignPlayerAccess(campaignId: string, userId: string): Promise<Scenario[]>;
   updateScenario(input: {
     description?: string;
     kind?: Scenario["kind"];
@@ -364,6 +366,33 @@ export function createPrismaScenarioRepository(): ScenarioRepository {
 
       return records.map(mapCampaign);
     },
+    async listCampaignsByPlayerAccess(userId) {
+      const records = await prisma.campaign.findMany({
+        orderBy: { updatedAt: "desc" },
+        where: {
+          scenarios: {
+            some: {
+              participants: {
+                some: {
+                  isActive: true,
+                  role: "player_character",
+                  OR: [
+                    { controlledByUserId: userId },
+                    {
+                      character: {
+                        ownerId: userId,
+                      },
+                    },
+                  ],
+                },
+              },
+            },
+          },
+        },
+      });
+
+      return records.map(mapCampaign);
+    },
     async createScenario(input) {
       const record = await prisma.scenario.create({
         data: {
@@ -389,6 +418,30 @@ export function createPrismaScenarioRepository(): ScenarioRepository {
       const records = await prisma.scenario.findMany({
         orderBy: { createdAt: "desc" },
         where: { campaignId }
+      });
+
+      return records.map(mapScenario);
+    },
+    async listScenariosByCampaignPlayerAccess(campaignId, userId) {
+      const records = await prisma.scenario.findMany({
+        orderBy: { createdAt: "desc" },
+        where: {
+          campaignId,
+          participants: {
+            some: {
+              isActive: true,
+              role: "player_character",
+              OR: [
+                { controlledByUserId: userId },
+                {
+                  character: {
+                    ownerId: userId,
+                  },
+                },
+              ],
+            },
+          },
+        },
       });
 
       return records.map(mapScenario);

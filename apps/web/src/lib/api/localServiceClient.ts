@@ -53,6 +53,11 @@ export interface JoinableScenarioRecord {
   status: Scenario["status"];
 }
 
+export interface AccessibleCampaignRecord {
+  campaign: Campaign;
+  scenarios: Scenario[];
+}
+
 export interface ApiErrorPayload {
   error?: string;
   issues?: string[];
@@ -285,6 +290,17 @@ export async function loadCampaigns(): Promise<Campaign[]> {
   return payload.campaigns;
 }
 
+export async function loadAccessibleCampaigns(): Promise<AccessibleCampaignRecord[]> {
+  const payload = await sendJson<{ accessibleCampaigns: AccessibleCampaignRecord[] }>(
+    "/campaigns/accessible",
+    {
+      method: "GET",
+    },
+  );
+
+  return payload.accessibleCampaigns;
+}
+
 export async function loadTemplates(): Promise<ReusableEntity[]> {
   const payload = await sendJson<{ templates: ReusableEntity[] }>("/templates", {
     method: "GET"
@@ -367,6 +383,19 @@ export async function loadCampaignById(campaignId: string): Promise<Campaign> {
   });
 
   return payload.campaign;
+}
+
+export async function loadAccessibleCampaignById(
+  campaignId: string,
+): Promise<AccessibleCampaignRecord> {
+  const payload = await sendJson<{ accessibleCampaign: AccessibleCampaignRecord }>(
+    `/campaigns/accessible/${campaignId}`,
+    {
+      method: "GET",
+    },
+  );
+
+  return payload.accessibleCampaign;
 }
 
 export async function loadCampaignScenarios(campaignId: string): Promise<Scenario[]> {

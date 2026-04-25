@@ -3,33 +3,40 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
-import type { Campaign } from "@glantri/domain";
-
-import { loadCampaigns } from "../../../../src/lib/api/localServiceClient";
+import type { AccessibleCampaignRecord } from "../../../../src/lib/api/localServiceClient";
+import { useSessionUser } from "../../../../src/lib/auth/SessionUserContext";
 import {
   REMEMBERED_SELECTION_KEYS,
   readRememberedSelection,
   useRememberedSelection,
 } from "../../../../src/lib/browser/rememberedSelection";
 import {
+  loadCampaignBrowserRecordsForUser,
+  resolveCampaignResumeDestination,
+} from "../../../../src/lib/campaigns/access";
+import {
   getCampaignWorkspaceSelectionKeys,
   getPlayerEncounterParticipantSelectionKey,
 } from "../../../../src/lib/campaigns/RememberedCampaignWorkspaceEffect";
-import { buildCampaignWorkspaceHref } from "../../../../src/lib/campaigns/workspace";
 
 export default function CampaignsResumePageContent() {
   const router = useRouter();
+  const { currentUser, loading: sessionLoading } = useSessionUser();
   const restoreAttemptedRef = useRef(false);
-  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [campaigns, setCampaigns] = useState<AccessibleCampaignRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const rememberedCampaignSelection = useRememberedSelection(
     REMEMBERED_SELECTION_KEYS.campaignId,
   );
 
   useEffect(() => {
+    if (sessionLoading) {
+      return;
+    }
+
     let cancelled = false;
 
-    loadCampaigns()
+    loadCampaignBrowserRecordsForUser(currentUser)
       .then((records) => {
         if (!cancelled) {
           setCampaigns(records);
@@ -44,10 +51,15 @@ export default function CampaignsResumePageContent() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [currentUser, sessionLoading]);
 
   useEffect(() => {
-    if (loading || !rememberedCampaignSelection.hydrated || restoreAttemptedRef.current) {
+    if (
+      sessionLoading ||
+      loading ||
+      !rememberedCampaignSelection.hydrated ||
+      restoreAttemptedRef.current
+    ) {
       return;
     }
 
@@ -55,12 +67,20 @@ export default function CampaignsResumePageContent() {
 
     const rememberedCampaignId = rememberedCampaignSelection.value;
 
-    if (rememberedCampaignId && campaigns.some((campaign) => campaign.id === rememberedCampaignId)) {
-      const workspaceSelectionKeys = getCampaignWorkspaceSelectionKeys(rememberedCampaignId);
-      const rememberedScenarioId = readRememberedSelection(workspaceSelectionKeys.scenarioId);
-      const rememberedEncounterId = readRememberedSelection(workspaceSelectionKeys.encounterId);
-      const rememberedTab = readRememberedSelection(workspaceSelectionKeys.workspaceTab);
-      const rememberedParticipantId = rememberedScenarioId
+    const workspaceSelectionKeys = rememberedCampaignId
+      ? getCampaignWorkspaceSelectionKeys(rememberedCampaignId)
+      : null;
+    const rememberedScenarioId = workspaceSelectionKeys
+      ? readRememberedSelection(workspaceSelectionKeys.scenarioId)
+      : undefined;
+    const rememberedEncounterId = workspaceSelectionKeys
+      ? readRememberedSelection(workspaceSelectionKeys.encounterId)
+      : undefined;
+    const rememberedTab = workspaceSelectionKeys
+      ? readRememberedSelection(workspaceSelectionKeys.workspaceTab)
+      : undefined;
+    const rememberedParticipantId =
+      rememberedCampaignId && rememberedScenarioId
         ? readRememberedSelection(
             getPlayerEncounterParticipantSelectionKey({
               campaignId: rememberedCampaignId,
@@ -69,31 +89,21 @@ export default function CampaignsResumePageContent() {
           )
         : undefined;
 
-      router.replace(
-        buildCampaignWorkspaceHref({
-          campaignId: rememberedCampaignId,
-          encounterId: rememberedEncounterId,
-          participantId:
-            rememberedTab === "player-encounter" ? rememberedParticipantId : undefined,
-          scenarioId: rememberedScenarioId,
-          tab:
-            rememberedTab === "campaign" ||
-            rememberedTab === "scenario" ||
-            rememberedTab === "gm-encounter" ||
-            rememberedTab === "player-encounter"
-              ? rememberedTab
-              : "campaign",
-        }),
-      );
-      return;
-    }
+    const destination = resolveCampaignResumeDestination({
+      accessibleCampaigns: campaigns,
+      rememberedCampaignId,
+      rememberedEncounterId,
+      rememberedParticipantId,
+      rememberedScenarioId,
+      rememberedTab,
+    });
 
-    if (rememberedCampaignId) {
+    if (destination.clearRememberedCampaign) {
       rememberedCampaignSelection.setValue(undefined);
     }
 
-    router.replace("/campaigns");
-  }, [campaigns, loading, rememberedCampaignSelection, router]);
+    router.replace(destination.href);
+  }, [campaigns, currentUser, loading, rememberedCampaignSelection, router, sessionLoading]);
 
   return <section>Opening campaigns...</section>;
 }

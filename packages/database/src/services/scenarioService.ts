@@ -75,6 +75,10 @@ export class ScenarioService {
     return this.repository.listCampaignsAllowingPlayerSelfJoin();
   }
 
+  async listCampaignsByPlayerAccess(userId: string): Promise<Campaign[]> {
+    return this.repository.listCampaignsByPlayerAccess(userId);
+  }
+
   async getCampaignById(campaignId: string): Promise<Campaign | null> {
     return this.repository.getCampaignById(campaignId);
   }
@@ -99,6 +103,10 @@ export class ScenarioService {
 
   async listScenariosByCampaign(campaignId: string): Promise<Scenario[]> {
     return this.repository.listScenariosByCampaign(campaignId);
+  }
+
+  async listScenariosByCampaignPlayerAccess(campaignId: string, userId: string): Promise<Scenario[]> {
+    return this.repository.listScenariosByCampaignPlayerAccess(campaignId, userId);
   }
 
   async getScenarioById(scenarioId: string): Promise<Scenario | null> {

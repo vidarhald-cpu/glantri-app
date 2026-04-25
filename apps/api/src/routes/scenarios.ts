@@ -276,6 +276,68 @@ export const scenariosRoutes: FastifyPluginAsync = async (app) => {
     return { campaigns };
   });
 
+  app.get("/campaigns/accessible", async (request, reply) => {
+    const user = await requireAuthenticatedUser(request, reply);
+
+    if (!user) {
+      return;
+    }
+
+    try {
+      const campaigns = await scenarioService.listCampaignsByPlayerAccess(user.id);
+      const accessibleCampaigns = await Promise.all(
+        campaigns.map(async (campaign) => ({
+          campaign,
+          scenarios: await scenarioService.listScenariosByCampaignPlayerAccess(campaign.id, user.id),
+        })),
+      );
+
+      return { accessibleCampaigns };
+    } catch (error) {
+      return reply.code(400).send({
+        error: error instanceof Error ? error.message : "Unable to load accessible campaigns.",
+      });
+    }
+  });
+
+  app.get("/campaigns/accessible/:campaignId", async (request, reply) => {
+    const user = await requireAuthenticatedUser(request, reply);
+
+    if (!user) {
+      return;
+    }
+
+    try {
+      const campaignId = parseId(request.params, "campaignId", "Campaign id");
+      const campaign = await scenarioService.getCampaignById(campaignId);
+
+      if (!campaign) {
+        return reply.code(404).send({
+          error: "Campaign not found.",
+        });
+      }
+
+      const scenarios = await scenarioService.listScenariosByCampaignPlayerAccess(campaignId, user.id);
+
+      if (scenarios.length === 0) {
+        return reply.code(404).send({
+          error: "Campaign not found.",
+        });
+      }
+
+      return {
+        accessibleCampaign: {
+          campaign,
+          scenarios,
+        },
+      };
+    } catch (error) {
+      return reply.code(400).send({
+        error: error instanceof Error ? error.message : "Unable to load accessible campaign.",
+      });
+    }
+  });
+
   app.post("/campaigns", async (request, reply) => {
     const user = await requireAdminUser(request, reply);
 
