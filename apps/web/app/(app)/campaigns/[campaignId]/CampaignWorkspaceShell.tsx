@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import type { Campaign, EncounterSession, Scenario } from "@glantri/domain";
 
+import { loadScenarioEncounters } from "../../../../src/lib/api/localServiceClient";
 import {
   REMEMBERED_SELECTION_KEYS,
   useRememberedSelection,
@@ -23,7 +24,6 @@ import {
   resolveCampaignWorkspaceState,
   type CampaignWorkspaceTabId
 } from "../../../../src/lib/campaigns/workspace";
-import { LocalEncounterRepository } from "../../../../src/lib/offline/repositories/localEncounterRepository";
 import EncounterDetail from "../../encounters/[id]/EncounterDetail";
 import CampaignDetailPageContent from "./CampaignDetailPageContent";
 import ScenarioDetailPageContent from "./scenarios/[scenarioId]/ScenarioDetailPageContent";
@@ -33,8 +33,6 @@ import ScenarioPlayerCombatPageContent from "./scenarios/[scenarioId]/player/com
 interface CampaignWorkspaceShellProps {
   campaignId: string;
 }
-
-const localEncounterRepository = new LocalEncounterRepository();
 
 const panelStyle = {
   border: "1px solid #d9ddd8",
@@ -80,8 +78,11 @@ export default function CampaignWorkspaceShell({
       campaignId,
       user: currentUser,
     });
-    const nextEncounters = await localEncounterRepository.list();
     const scenarioIds = workspaceAccess.scenarios.map((scenario) => scenario.id);
+    const encounterGroups = await Promise.all(
+      workspaceAccess.scenarios.map((scenario) => loadScenarioEncounters(scenario.id)),
+    );
+    const nextEncounters = encounterGroups.flat();
 
     setAccessibleCampaign(workspaceAccess.campaign ?? null);
     setAccessMode(workspaceAccess.accessMode);

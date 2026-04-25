@@ -3,6 +3,7 @@ import type { CanonicalContent } from "@glantri/content";
 import type {
   Campaign,
   CampaignAsset,
+  EncounterSession,
   ReusableEntity,
   Scenario,
   ScenarioEventLog,
@@ -571,6 +572,56 @@ export async function loadScenarioParticipants(scenarioId: string): Promise<Scen
   );
 
   return payload.participants;
+}
+
+export async function loadScenarioEncounters(scenarioId: string): Promise<EncounterSession[]> {
+  const payload = await sendJson<{ encounters: EncounterSession[] }>(
+    `/scenarios/${scenarioId}/encounters`,
+    {
+      method: "GET",
+    },
+  );
+
+  return payload.encounters;
+}
+
+export async function createEncounterOnServer(input: {
+  scenarioId: string;
+  session: EncounterSession;
+}): Promise<EncounterSession> {
+  const payload = await sendJson<{ encounter: EncounterSession }>(
+    `/scenarios/${input.scenarioId}/encounters`,
+    {
+      body: JSON.stringify({
+        session: input.session,
+      }),
+      method: "POST",
+    },
+  );
+
+  return payload.encounter;
+}
+
+export async function loadEncounterById(encounterId: string): Promise<EncounterSession> {
+  const payload = await sendJson<{ encounter: EncounterSession }>(`/encounters/${encounterId}`, {
+    method: "GET",
+  });
+
+  return payload.encounter;
+}
+
+export async function updateEncounterOnServer(input: {
+  encounterId: string;
+  session: EncounterSession;
+}): Promise<EncounterSession> {
+  const payload = await sendJson<{ encounter: EncounterSession }>(`/encounters/${input.encounterId}`, {
+    body: JSON.stringify({
+      session: input.session,
+    }),
+    method: "PUT",
+  });
+
+  return payload.encounter;
 }
 
 export async function addScenarioParticipantFromCharacterOnServer(input: {

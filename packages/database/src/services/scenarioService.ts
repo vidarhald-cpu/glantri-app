@@ -113,6 +113,31 @@ export class ScenarioService {
     return this.repository.getScenarioById(scenarioId);
   }
 
+  async userHasPlayerScenarioAccess(input: { scenarioId: string; userId: string }): Promise<boolean> {
+    const participants = await this.repository.listScenarioParticipants(input.scenarioId);
+
+    for (const participant of participants) {
+      if (!participant.isActive || participant.role !== "player_character") {
+        continue;
+      }
+
+      if (participant.controlledByUserId === input.userId) {
+        return true;
+      }
+
+      if (!participant.characterId) {
+        continue;
+      }
+
+      const character = await this.characterService.getCharacterById(participant.characterId);
+      if (character?.ownerId === input.userId) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
   async updateScenario(input: {
     description?: string;
     kind?: Scenario["kind"];

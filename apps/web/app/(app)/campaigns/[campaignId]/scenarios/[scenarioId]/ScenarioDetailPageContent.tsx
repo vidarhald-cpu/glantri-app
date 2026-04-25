@@ -4,14 +4,23 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 import type { AuthUser } from "@glantri/auth";
-import type { ReusableEntity, Scenario, ScenarioEventLog, ScenarioParticipant } from "@glantri/domain";
+import type {
+  EncounterSession,
+  ReusableEntity,
+  Scenario,
+  ScenarioEventLog,
+  ScenarioParticipant,
+} from "@glantri/domain";
+import { createEncounterSession } from "@glantri/rules-engine";
 
 import {
   addScenarioParticipantFromCharacterOnServer,
   addScenarioParticipantFromEntityOnServer,
+  createEncounterOnServer,
   loadAuthUsers,
   loadCampaignEntities,
   loadServerCharacters,
+  loadScenarioEncounters,
   loadTemplates,
   loadScenarioById,
   loadScenarioEventLogs,
@@ -45,6 +54,7 @@ export default function ScenarioDetailPageContent({
   scenarioId
 }: ScenarioDetailPageContentProps) {
   const [assignableUsers, setAssignableUsers] = useState<AuthUser[]>([]);
+  const [encounters, setEncounters] = useState<EncounterSession[]>([]);
   const [entities, setEntities] = useState<ReusableEntity[]>([]);
   const [error, setError] = useState<string>();
   const [eventLogs, setEventLogs] = useState<ScenarioEventLog[]>([]);
@@ -74,6 +84,7 @@ export default function ScenarioDetailPageContent({
   const [selectedCharacterFactionId, setSelectedCharacterFactionId] = useState("");
   const [temporaryActorName, setTemporaryActorName] = useState("");
   const [participantRole, setParticipantRole] = useState<ScenarioParticipant["role"]>("npc");
+  const [encounterTitle, setEncounterTitle] = useState("");
 
   const [scenarioName, setScenarioName] = useState("");
   const [scenarioStatus, setScenarioStatus] = useState<Scenario["status"]>("draft");
@@ -120,6 +131,7 @@ export default function ScenarioDetailPageContent({
       nextEntities,
       nextTemplates,
       nextEventLogs,
+      nextEncounters,
       nextUsers,
       nextPlayerCharacters,
     ] = await Promise.all([
@@ -128,6 +140,7 @@ export default function ScenarioDetailPageContent({
       loadCampaignEntities(campaignId),
       loadTemplates(),
       loadScenarioEventLogs(scenarioId),
+      loadScenarioEncounters(scenarioId),
       loadAuthUsers(),
       loadServerCharacters(),
     ]);
@@ -157,6 +170,7 @@ export default function ScenarioDetailPageContent({
     setEntities(nextEntities);
     setTemplates(globalTemplates);
     setEventLogs(nextEventLogs);
+    setEncounters(nextEncounters);
     setAssignableUsers(nextUsers);
     setPlayerCharacters(nextPlayerCharacters);
     setSelectedEntityId((current) => current || globalTemplates[0]?.id || nextEntities[0]?.id || "");
@@ -165,6 +179,30 @@ export default function ScenarioDetailPageContent({
     setRoundNumber(String(nextScenario.liveState?.roundNumber ?? 1));
     setPhase(String(nextScenario.liveState?.phase ?? 1) as "1" | "2");
     setCombatStatus(nextScenario.liveState?.combatStatus ?? "not_started");
+  }
+
+  async function handleCreateEncounter() {
+    try {
+      setError(undefined);
+      setFeedback(undefined);
+
+      const encounter = await createEncounterOnServer({
+        scenarioId,
+        session: {
+          ...createEncounterSession(encounterTitle.trim()),
+          campaignId,
+          scenarioId,
+        },
+      });
+
+      setEncounterTitle("");
+      setFeedback(`Created encounter ${encounter.title}.`);
+      await refreshScenario();
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error ? caughtError.message : "Unable to create encounter.",
+      );
+    }
   }
 
   useEffect(() => {
@@ -453,43 +491,82 @@ export default function ScenarioDetailPageContent({
         </div>
       </section>
 
-      {!embedded ? (
-        <section
-          style={{
-            border: "1px solid #d9ddd8",
-            borderRadius: 12,
-            display: "grid",
-            gap: "0.75rem",
-            padding: "1rem"
-          }}
-        >
+      <section
+        style={{
+          border: "1px solid #d9ddd8",
+          borderRadius: 12,
+          display: "grid",
+          gap: "0.75rem",
+          padding: "1rem"
+        }}
+      >
           <h2 style={{ margin: 0 }}>Encounters</h2>
           <p style={{ margin: 0 }}>
-            Use the canonical workspace shell for GM and player encounter flow. If no encounter is
-            selected yet, the shell falls back to this scenario tab.
+            Canonical encounters are now shared server-backed scenario records. Create them here,
+            then open GM or player encounter workspace on the same shared encounter.
           </p>
           <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
-            <Link
-              href={buildCampaignWorkspaceHref({
-                campaignId,
-                scenarioId,
-                tab: "gm-encounter",
-              })}
+            <input
+              onChange={(event) => setEncounterTitle(event.target.value)}
+              placeholder="Arena clash"
+              style={{ minWidth: 260, padding: "0.5rem" }}
+              type="text"
+              value={encounterTitle}
+            />
+            <button
+              disabled={encounterTitle.trim().length === 0}
+              onClick={() => void handleCreateEncounter()}
+              type="button"
             >
-              Open GM encounter workspace
-            </Link>
-            <Link
-              href={buildCampaignWorkspaceHref({
-                campaignId,
-                scenarioId,
-                tab: "player-encounter",
-              })}
-            >
-              Open player encounter workspace
-            </Link>
+              Create encounter
+            </button>
           </div>
-        </section>
-      ) : null}
+          {encounters.length > 0 ? (
+            <div style={{ display: "grid", gap: "0.75rem" }}>
+              {encounters.map((encounter) => (
+                <div
+                  key={encounter.id}
+                  style={{
+                    background: "#ffffff",
+                    border: "1px solid #ddd7c9",
+                    borderRadius: 10,
+                    display: "grid",
+                    gap: "0.35rem",
+                    padding: "0.75rem",
+                  }}
+                >
+                  <strong>{encounter.title}</strong>
+                  <div>Status: {encounter.status}</div>
+                  <div>Participants: {encounter.participants.length}</div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
+                    <Link
+                      href={buildCampaignWorkspaceHref({
+                        campaignId,
+                        encounterId: encounter.id,
+                        scenarioId,
+                        tab: "gm-encounter",
+                      })}
+                    >
+                      Open GM encounter workspace
+                    </Link>
+                    <Link
+                      href={buildCampaignWorkspaceHref({
+                        campaignId,
+                        encounterId: encounter.id,
+                        scenarioId,
+                        tab: "player-encounter",
+                      })}
+                    >
+                      Open player encounter workspace
+                    </Link>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div>No encounters have been created for this scenario yet.</div>
+          )}
+      </section>
 
       <section
         style={{

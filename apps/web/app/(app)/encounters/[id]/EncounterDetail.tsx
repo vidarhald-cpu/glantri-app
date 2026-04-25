@@ -24,21 +24,24 @@ import {
   updateEncounterParticipantTurnData
 } from "@glantri/rules-engine";
 
-import { loadLocalEncounterContext } from "../../../../src/lib/encounters/loadLocalEncounterContext";
 import {
   addScenarioParticipantFromEntityOnServer,
+  loadEncounterById,
   loadScenarioById,
+  loadServerCharacters,
   loadScenarioParticipants,
+  updateEncounterOnServer,
+  type ServerCharacterRecord,
 } from "../../../../src/lib/api/localServiceClient";
 import {
   buildGmEncounterParticipantRows,
   deriveGmEncounterControlState,
 } from "../../../../src/lib/campaigns/gmEncounter";
+import { loadCanonicalContent } from "../../../../src/lib/content/loadCanonicalContent";
 import RememberedCampaignWorkspaceEffect from "../../../../src/lib/campaigns/RememberedCampaignWorkspaceEffect";
 import { buildCampaignWorkspaceHref } from "../../../../src/lib/campaigns/workspace";
-import type { LocalCharacterRecord } from "../../../../src/lib/offline/glantriDexie";
 import { LocalEncounterRepository } from "../../../../src/lib/offline/repositories/localEncounterRepository";
-import { UNNAMED_CHARACTER_PLACEHOLDER } from "../../../../src/lib/offline/repositories/localCharacterRepository";
+import { LocalCharacterRepository, UNNAMED_CHARACTER_PLACEHOLDER } from "../../../../src/lib/offline/repositories/localCharacterRepository";
 
 interface EncounterDetailProps {
   campaignId?: string;
@@ -48,6 +51,7 @@ interface EncounterDetailProps {
 }
 
 const localEncounterRepository = new LocalEncounterRepository();
+const localCharacterRepository = new LocalCharacterRepository();
 const ACTION_OPTIONS = [
   { label: "No declaration", value: "none" },
   { label: "Attack", value: "attack" },
@@ -77,8 +81,10 @@ const DEFENSE_FOCUS_OPTIONS = [
   { label: "Shield side", value: "shield-side" }
 ] as const;
 
-function getCharacterName(record: LocalCharacterRecord): string {
-  return record.build.name.trim() || UNNAMED_CHARACTER_PLACEHOLDER;
+type EncounterCharacterRecord = Pick<ServerCharacterRecord, "build" | "id" | "name">;
+
+function getCharacterName(record: EncounterCharacterRecord): string {
+  return record.build.name.trim() || record.name.trim() || UNNAMED_CHARACTER_PLACEHOLDER;
 }
 
 function rollPercentile(): number {
@@ -92,10 +98,8 @@ export default function EncounterDetail({
   scenarioId
 }: EncounterDetailProps) {
   const [adHocName, setAdHocName] = useState("");
-  const [characters, setCharacters] = useState<LocalCharacterRecord[]>([]);
-  const [content, setContent] = useState<
-    Awaited<ReturnType<typeof loadLocalEncounterContext>>["content"] | undefined
-  >();
+  const [characters, setCharacters] = useState<EncounterCharacterRecord[]>([]);
+  const [content, setContent] = useState<Awaited<ReturnType<typeof loadCanonicalContent>>>();
   const [encounter, setEncounter] = useState<EncounterSession>();
   const [feedback, setFeedback] = useState<string>();
   const [loading, setLoading] = useState(true);
@@ -105,8 +109,43 @@ export default function EncounterDetail({
 
   useEffect(() => {
     let cancelled = false;
+    const loadContext = async () => {
+      if (campaignId && scenarioId) {
+        const [nextCharacters, nextContent, nextEncounter] = await Promise.all([
+          loadServerCharacters(),
+          loadCanonicalContent(),
+          loadEncounterById(id),
+        ]);
 
-    loadLocalEncounterContext(id)
+        return {
+          characters: nextCharacters.map((character) => ({
+            build: character.build,
+            id: character.id,
+            name: character.name,
+          })),
+          content: nextContent,
+          encounter: nextEncounter,
+        };
+      }
+
+      const [nextCharacters, nextContent, nextEncounter] = await Promise.all([
+        localCharacterRepository.list(),
+        loadCanonicalContent(),
+        localEncounterRepository.get(id),
+      ]);
+
+      return {
+        characters: nextCharacters.map((character) => ({
+          build: character.build,
+          id: character.id,
+          name: character.build.name,
+        })),
+        content: nextContent,
+        encounter: nextEncounter,
+      };
+    };
+
+    loadContext()
       .then((result) => {
         if (cancelled) {
           return;
@@ -126,7 +165,7 @@ export default function EncounterDetail({
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [campaignId, id, scenarioId]);
 
   useEffect(() => {
     if (!scenarioId) {
@@ -220,7 +259,13 @@ export default function EncounterDetail({
     : undefined;
 
   async function persistEncounter(nextEncounter: EncounterSession, message?: string) {
-    const savedEncounter = await localEncounterRepository.save(nextEncounter);
+    const savedEncounter =
+      campaignId && scenarioId
+        ? await updateEncounterOnServer({
+            encounterId: nextEncounter.id,
+            session: nextEncounter,
+          })
+        : await localEncounterRepository.save(nextEncounter);
     setEncounter(savedEncounter);
 
     if (message) {

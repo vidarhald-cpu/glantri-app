@@ -166,10 +166,19 @@ model Weapon {
 }
 
 model Encounter {
-  id        String   @id @default(cuid())
-  name      String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id              String   @id @default(cuid())
+  name            String
+  campaignId      String?
+  scenarioId      String?
+  status          String   @default("setup")
+  sessionJson     Json?
+  createdByUserId String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([campaignId])
+  @@index([scenarioId])
+  @@index([scenarioId, updatedAt])
 }
 
 model User {

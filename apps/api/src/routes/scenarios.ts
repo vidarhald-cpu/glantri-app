@@ -1,11 +1,12 @@
 import type { FastifyPluginAsync } from "fastify";
 
-import { CharacterService, ScenarioService } from "@glantri/database";
+import { CharacterService, EncounterService, ScenarioService } from "@glantri/database";
 import {
   buildScenarioPlayerProjection,
   campaignAssetTypeSchema,
   campaignSettingsSchema,
   campaignStatusSchema,
+  encounterSessionSchema,
   reusableEntityKindSchema,
   scenarioKindSchema,
   scenarioLiveStateSchema,
@@ -20,6 +21,7 @@ import { requireAdminUser, requireAuthenticatedUser } from "../lib/sessionAuth";
 import { canEditCharacterInApi } from "../lib/characterEditAccess";
 
 const characterService = new CharacterService();
+const encounterService = new EncounterService();
 const scenarioService = new ScenarioService();
 
 function parseId(params: unknown, key: string, label: string): string {
@@ -86,6 +88,52 @@ function parseRequiredString(
   }
 
   return value;
+}
+
+async function resolveScenarioWorkspaceAccess(input: {
+  scenarioId: string;
+  userId: string;
+  userRoles: string[];
+}): Promise<
+  | {
+      campaignId: string;
+      mode: "gm" | "player";
+    }
+  | null
+> {
+  const scenario = await scenarioService.getScenarioById(input.scenarioId);
+
+  if (!scenario) {
+    return null;
+  }
+
+  const campaign = await scenarioService.getCampaignById(scenario.campaignId);
+
+  if (!campaign) {
+    return null;
+  }
+
+  const isAdmin = input.userRoles.includes("admin");
+  const isGameMaster = input.userRoles.includes("game_master");
+
+  if (isAdmin || (isGameMaster && campaign.gmUserId === input.userId)) {
+    return {
+      campaignId: campaign.id,
+      mode: "gm",
+    };
+  }
+
+  const hasPlayerAccess = await scenarioService.userHasPlayerScenarioAccess({
+    scenarioId: input.scenarioId,
+    userId: input.userId,
+  });
+
+  return hasPlayerAccess
+    ? {
+        campaignId: campaign.id,
+        mode: "player",
+      }
+    : null;
 }
 
 function parseOptionalNullableString(
@@ -713,6 +761,151 @@ export const scenariosRoutes: FastifyPluginAsync = async (app) => {
     } catch (error) {
       return reply.code(400).send({
         error: error instanceof Error ? error.message : "Unable to update scenario live state."
+      });
+    }
+  });
+
+  app.get("/scenarios/:scenarioId/encounters", async (request, reply) => {
+    const user = await requireAuthenticatedUser(request, reply);
+
+    if (!user) {
+      return;
+    }
+
+    try {
+      const scenarioId = parseId(request.params, "scenarioId", "Scenario id");
+      const access = await resolveScenarioWorkspaceAccess({
+        scenarioId,
+        userId: user.id,
+        userRoles: user.roles,
+      });
+
+      if (!access) {
+        return reply.code(404).send({
+          error: "Scenario not found.",
+        });
+      }
+
+      const encounters = await encounterService.listEncountersByScenario(scenarioId);
+
+      return { encounters };
+    } catch (error) {
+      return reply.code(400).send({
+        error: error instanceof Error ? error.message : "Unable to list encounters.",
+      });
+    }
+  });
+
+  app.post("/scenarios/:scenarioId/encounters", async (request, reply) => {
+    const user = await requireAdminUser(request, reply);
+
+    if (!user) {
+      return;
+    }
+
+    try {
+      const scenarioId = parseId(request.params, "scenarioId", "Scenario id");
+      const access = await resolveScenarioWorkspaceAccess({
+        scenarioId,
+        userId: user.id,
+        userRoles: user.roles,
+      });
+
+      if (!access || access.mode !== "gm") {
+        return reply.code(404).send({
+          error: "Scenario not found.",
+        });
+      }
+
+      const body = parseBodyObject(request.body, "Encounter payload");
+      const encounter = await encounterService.createEncounter({
+        createdByUserId: user.id,
+        session: encounterSessionSchema.parse(body.session),
+      });
+
+      return { encounter };
+    } catch (error) {
+      return reply.code(400).send({
+        error: error instanceof Error ? error.message : "Unable to create encounter.",
+      });
+    }
+  });
+
+  app.get("/encounters/:encounterId", async (request, reply) => {
+    const user = await requireAuthenticatedUser(request, reply);
+
+    if (!user) {
+      return;
+    }
+
+    try {
+      const encounterId = parseId(request.params, "encounterId", "Encounter id");
+      const encounter = await encounterService.getEncounterById(encounterId);
+
+      if (!encounter?.scenarioId) {
+        return reply.code(404).send({
+          error: "Encounter not found.",
+        });
+      }
+
+      const access = await resolveScenarioWorkspaceAccess({
+        scenarioId: encounter.scenarioId,
+        userId: user.id,
+        userRoles: user.roles,
+      });
+
+      if (!access) {
+        return reply.code(404).send({
+          error: "Encounter not found.",
+        });
+      }
+
+      return { encounter };
+    } catch (error) {
+      return reply.code(400).send({
+        error: error instanceof Error ? error.message : "Unable to load encounter.",
+      });
+    }
+  });
+
+  app.put("/encounters/:encounterId", async (request, reply) => {
+    const user = await requireAdminUser(request, reply);
+
+    if (!user) {
+      return;
+    }
+
+    try {
+      const encounterId = parseId(request.params, "encounterId", "Encounter id");
+      const existingEncounter = await encounterService.getEncounterById(encounterId);
+
+      if (!existingEncounter?.scenarioId) {
+        return reply.code(404).send({
+          error: "Encounter not found.",
+        });
+      }
+
+      const access = await resolveScenarioWorkspaceAccess({
+        scenarioId: existingEncounter.scenarioId,
+        userId: user.id,
+        userRoles: user.roles,
+      });
+
+      if (!access || access.mode !== "gm") {
+        return reply.code(404).send({
+          error: "Encounter not found.",
+        });
+      }
+
+      const body = parseBodyObject(request.body, "Encounter payload");
+      const encounter = await encounterService.updateEncounter(
+        encounterSessionSchema.parse(body.session),
+      );
+
+      return { encounter };
+    } catch (error) {
+      return reply.code(400).send({
+        error: error instanceof Error ? error.message : "Unable to update encounter.",
       });
     }
   });
