@@ -45,6 +45,11 @@ import {
   updateScenarioParticipantStateOnServer,
   type ServerCharacterRecord,
 } from "../../../../../../../../src/lib/api/localServiceClient";
+import {
+  buildRememberedScopedSelectionKey,
+  REMEMBERED_SELECTION_KEYS,
+  useRememberedSelection,
+} from "../../../../../../../../src/lib/browser/rememberedSelection";
 
 interface ScenarioPlayerCombatPageContentProps {
   campaignId: string;
@@ -205,6 +210,12 @@ export default function ScenarioPlayerCombatPageContent({
   const isGameMaster = Boolean(
     currentUser?.roles.includes("game_master") || currentUser?.roles.includes("admin")
   );
+  const rememberedParticipantSelection = useRememberedSelection(
+    buildRememberedScopedSelectionKey({
+      baseKey: REMEMBERED_SELECTION_KEYS.playerEncounterParticipantId,
+      scopeParts: [campaignId, scenarioId],
+    }),
+  );
 
   useEffect(() => {
     if (sessionLoading) {
@@ -276,13 +287,15 @@ export default function ScenarioPlayerCombatPageContent({
   }, [currentUser?.id, isGameMaster, projection, selectableParticipants]);
 
   useEffect(() => {
-    if (accessibleParticipants.length === 0) {
+    if (accessibleParticipants.length === 0 || !rememberedParticipantSelection.hydrated) {
       setSelectedParticipantId("");
       return;
     }
 
     const projectionControlledId = projection?.controlledParticipantId;
+    const rememberedParticipantId = rememberedParticipantSelection.value;
     const preferredId =
+      accessibleParticipants.find((participant) => participant.id === rememberedParticipantId)?.id ??
       accessibleParticipants.find((participant) => participant.id === projectionControlledId)?.id ??
       accessibleParticipants[0]?.id;
 
@@ -291,7 +304,15 @@ export default function ScenarioPlayerCombatPageContent({
         ? current
         : (preferredId ?? "")
     );
-  }, [accessibleParticipants, projection]);
+  }, [accessibleParticipants, projection, rememberedParticipantSelection.hydrated, rememberedParticipantSelection.value]);
+
+  useEffect(() => {
+    if (!rememberedParticipantSelection.hydrated) {
+      return;
+    }
+
+    rememberedParticipantSelection.setValue(selectedParticipantId || undefined);
+  }, [rememberedParticipantSelection, selectedParticipantId]);
 
   useEffect(() => {
     setActionRollResult(null);

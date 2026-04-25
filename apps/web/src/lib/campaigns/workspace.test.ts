@@ -85,4 +85,52 @@ describe("campaign workspace", () => {
     expect(state.activeScenarioId).toBe("scn-1");
     expect(state.activeTab).toBe("player-encounter");
   });
+
+  it("restores remembered scenario, encounter, and tab when the URL does not specify them", () => {
+    const state = resolveCampaignWorkspaceState({
+      activeCampaignId: "camp-1",
+      canAccessGmEncounter: true,
+      encounters: [
+        {
+          actionLog: [],
+          campaignId: "camp-1",
+          createdAt: "2026-04-23T00:00:00.000Z",
+          currentRound: 1,
+          currentTurnIndex: 0,
+          declarationsLocked: false,
+          id: "enc-1",
+          participants: [],
+          scenarioId: "scn-1",
+          status: "setup",
+          title: "Gate skirmish",
+          turnOrderMode: "manual",
+          updatedAt: "2026-04-23T00:00:00.000Z"
+        }
+      ],
+      rememberedEncounterId: "enc-1",
+      rememberedScenarioId: "scn-1",
+      rememberedTab: "player-encounter",
+      requestedEncounterId: null,
+      requestedScenarioId: null,
+      requestedTab: null,
+      scenarios: [
+        {
+          campaignId: "camp-1",
+          createdAt: "2026-04-23T00:00:00.000Z",
+          description: "",
+          gmUserId: "gm-1",
+          id: "scn-1",
+          kind: "mixed",
+          name: "Session one",
+          participantIds: [],
+          status: "draft",
+          updatedAt: "2026-04-23T00:00:00.000Z"
+        }
+      ]
+    });
+
+    expect(state.activeScenarioId).toBe("scn-1");
+    expect(state.activeEncounterId).toBe("enc-1");
+    expect(state.activeTab).toBe("player-encounter");
+  });
 });

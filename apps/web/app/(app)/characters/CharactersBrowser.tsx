@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
   addScenarioParticipantFromCharacterOnServer,
@@ -9,6 +9,10 @@ import {
   loadServerCharacters
 } from "../../../src/lib/api/localServiceClient";
 import { useSessionUser } from "../../../src/lib/auth/SessionUserContext";
+import {
+  REMEMBERED_SELECTION_KEYS,
+  useRememberedSelection,
+} from "../../../src/lib/browser/rememberedSelection";
 import {
   canBrowseAllCharacterOwners,
   buildCharacterBrowserOwnerOptions,
@@ -28,6 +32,7 @@ type JoinableScenarioOption = Awaited<ReturnType<typeof loadJoinableScenarios>>[
 export default function CharactersBrowser() {
   const router = useRouter();
   const { currentUser, loading: sessionLoading } = useSessionUser();
+  const restoreAttemptedRef = useRef(false);
   const [localCharacters, setLocalCharacters] = useState<
     Awaited<ReturnType<typeof localCharacterRepository.listFinalized>>
   >([]);
@@ -42,6 +47,9 @@ export default function CharactersBrowser() {
   const [joinableScenarios, setJoinableScenarios] = useState<JoinableScenarioOption[]>();
   const [joinLoading, setJoinLoading] = useState(false);
   const [joinError, setJoinError] = useState<string>();
+  const rememberedCharacterSelection = useRememberedSelection(
+    REMEMBERED_SELECTION_KEYS.characterId,
+  );
 
   useEffect(() => {
     if (sessionLoading) {
@@ -115,6 +123,40 @@ export default function CharactersBrowser() {
       setOwnerFilter("all");
     }
   }, [ownerFilter, showOwnerFilter]);
+
+  useEffect(() => {
+    if (
+      loading ||
+      sessionLoading ||
+      !rememberedCharacterSelection.hydrated ||
+      restoreAttemptedRef.current
+    ) {
+      return;
+    }
+
+    restoreAttemptedRef.current = true;
+
+    const rememberedCharacterId = rememberedCharacterSelection.value;
+
+    if (!rememberedCharacterId) {
+      return;
+    }
+
+    const rememberedEntry = browserEntries.find((entry) => entry.id === rememberedCharacterId);
+
+    if (rememberedEntry?.canOpenSheet) {
+      router.replace(`/characters/${rememberedCharacterId}`);
+      return;
+    }
+
+    rememberedCharacterSelection.setValue(undefined);
+  }, [
+    browserEntries,
+    loading,
+    rememberedCharacterSelection,
+    router,
+    sessionLoading,
+  ]);
 
   async function handleRefreshServerCharacters() {
     if (!currentUser) {
@@ -234,6 +276,7 @@ export default function CharactersBrowser() {
   }
 
   function handleOpenCharacter(characterId: string) {
+    rememberedCharacterSelection.setValue(characterId);
     router.push(`/characters/${characterId}`);
   }
 

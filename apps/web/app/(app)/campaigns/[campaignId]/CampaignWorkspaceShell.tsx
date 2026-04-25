@@ -1,12 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 import type { EncounterSession, Scenario } from "@glantri/domain";
 
 import { loadCampaignScenarios } from "../../../../src/lib/api/localServiceClient";
+import {
+  buildRememberedScopedSelectionKey,
+  REMEMBERED_SELECTION_KEYS,
+  useRememberedSelection,
+} from "../../../../src/lib/browser/rememberedSelection";
 import { useSessionUser } from "../../../../src/lib/auth/SessionUserContext";
 import {
   buildCampaignWorkspaceTabs,
@@ -37,6 +42,7 @@ export default function CampaignWorkspaceShell({
   campaignId
 }: CampaignWorkspaceShellProps) {
   const pathname = usePathname();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const { currentUser } = useSessionUser();
   const [encounters, setEncounters] = useState<EncounterSession[]>([]);
@@ -44,6 +50,27 @@ export default function CampaignWorkspaceShell({
   const [scenarios, setScenarios] = useState<Scenario[]>([]);
   const canAccessGmEncounter = Boolean(
     currentUser?.roles.includes("game_master") || currentUser?.roles.includes("admin")
+  );
+  const rememberedCampaignSelection = useRememberedSelection(
+    REMEMBERED_SELECTION_KEYS.campaignId,
+  );
+  const rememberedScenarioSelection = useRememberedSelection(
+    buildRememberedScopedSelectionKey({
+      baseKey: REMEMBERED_SELECTION_KEYS.scenarioId,
+      scopeParts: [campaignId],
+    }),
+  );
+  const rememberedEncounterSelection = useRememberedSelection(
+    buildRememberedScopedSelectionKey({
+      baseKey: REMEMBERED_SELECTION_KEYS.encounterId,
+      scopeParts: [campaignId],
+    }),
+  );
+  const rememberedWorkspaceTab = useRememberedSelection(
+    buildRememberedScopedSelectionKey({
+      baseKey: REMEMBERED_SELECTION_KEYS.workspaceTab,
+      scopeParts: [campaignId],
+    }),
   );
 
   async function refreshWorkspaceContext() {
@@ -76,12 +103,24 @@ export default function CampaignWorkspaceShell({
         activeCampaignId: campaignId,
         canAccessGmEncounter,
         encounters,
+        rememberedEncounterId: rememberedEncounterSelection.value,
+        rememberedScenarioId: rememberedScenarioSelection.value,
+        rememberedTab: rememberedWorkspaceTab.value,
         requestedEncounterId: searchParams.get("encounterId"),
         requestedScenarioId: searchParams.get("scenarioId"),
         requestedTab: searchParams.get("tab"),
         scenarios
       }),
-    [campaignId, canAccessGmEncounter, encounters, scenarios, searchParams]
+    [
+      campaignId,
+      canAccessGmEncounter,
+      encounters,
+      rememberedEncounterSelection.value,
+      rememberedScenarioSelection.value,
+      rememberedWorkspaceTab.value,
+      scenarios,
+      searchParams,
+    ]
   );
 
   const tabs = useMemo(
@@ -123,6 +162,66 @@ export default function CampaignWorkspaceShell({
     const query = nextParams.toString();
     return query ? `${pathname}?${query}` : pathname;
   }
+
+  useEffect(() => {
+    rememberedCampaignSelection.setValue(campaignId);
+  }, [campaignId, rememberedCampaignSelection]);
+
+  useEffect(() => {
+    if (
+      !rememberedScenarioSelection.hydrated ||
+      !rememberedEncounterSelection.hydrated ||
+      !rememberedWorkspaceTab.hydrated
+    ) {
+      return;
+    }
+
+    if (!searchParams.get("scenarioId") && rememberedScenarioSelection.value && !workspaceState.activeScenarioId) {
+      rememberedScenarioSelection.setValue(undefined);
+    }
+
+    if (!searchParams.get("encounterId") && rememberedEncounterSelection.value && !workspaceState.activeEncounterId) {
+      rememberedEncounterSelection.setValue(undefined);
+    }
+
+    const requestedTabFromUrl = tabs.find((tab) => tab.id === searchParams.get("tab"))?.id;
+    const nextHref = buildWorkspaceHref({
+      encounterId:
+        searchParams.get("encounterId") ?? workspaceState.activeEncounterId ?? null,
+      scenarioId:
+        searchParams.get("scenarioId") ?? workspaceState.activeScenarioId ?? null,
+      tab: requestedTabFromUrl ?? workspaceState.activeTab,
+    });
+    const currentHref = searchParams.toString() ? `${pathname}?${searchParams.toString()}` : pathname;
+
+    if (nextHref !== currentHref) {
+      router.replace(nextHref);
+    }
+  }, [
+    buildWorkspaceHref,
+    pathname,
+    rememberedEncounterSelection,
+    rememberedScenarioSelection,
+    rememberedWorkspaceTab.hydrated,
+    router,
+    searchParams,
+    tabs,
+    workspaceState.activeEncounterId,
+    workspaceState.activeScenarioId,
+    workspaceState.activeTab,
+  ]);
+
+  useEffect(() => {
+    rememberedScenarioSelection.setValue(workspaceState.activeScenarioId);
+  }, [rememberedScenarioSelection, workspaceState.activeScenarioId]);
+
+  useEffect(() => {
+    rememberedEncounterSelection.setValue(workspaceState.activeEncounterId);
+  }, [rememberedEncounterSelection, workspaceState.activeEncounterId]);
+
+  useEffect(() => {
+    rememberedWorkspaceTab.setValue(workspaceState.activeTab);
+  }, [rememberedWorkspaceTab, workspaceState.activeTab]);
 
   return (
     <section style={{ display: "grid", gap: "1rem", maxWidth: 1240 }}>

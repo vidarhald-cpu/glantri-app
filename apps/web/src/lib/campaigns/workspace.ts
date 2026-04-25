@@ -37,6 +37,9 @@ export function resolveCampaignWorkspaceState(input: {
   activeCampaignId: string;
   canAccessGmEncounter: boolean;
   encounters: EncounterSession[];
+  rememberedEncounterId?: string | null;
+  rememberedScenarioId?: string | null;
+  rememberedTab?: string | null;
   requestedEncounterId?: string | null;
   requestedScenarioId?: string | null;
   requestedTab?: string | null;
@@ -45,28 +48,31 @@ export function resolveCampaignWorkspaceState(input: {
   const availableTabs = buildCampaignWorkspaceTabs({
     canAccessGmEncounter: input.canAccessGmEncounter
   });
+  const requestedScenarioId = input.requestedScenarioId ?? input.rememberedScenarioId;
+  const requestedEncounterId = input.requestedEncounterId ?? input.rememberedEncounterId;
+  const requestedTab = input.requestedTab ?? input.rememberedTab;
   const activeScenarioId = input.scenarios.some(
-    (scenario) => scenario.id === input.requestedScenarioId
+    (scenario) => scenario.id === requestedScenarioId
   )
-    ? input.requestedScenarioId ?? undefined
+    ? requestedScenarioId ?? undefined
     : undefined;
   const activeEncounterId = input.encounters.some(
     (encounter) =>
       Boolean(activeScenarioId) &&
-      encounter.id === input.requestedEncounterId &&
+      encounter.id === requestedEncounterId &&
       encounter.scenarioId === activeScenarioId
   )
-    ? input.requestedEncounterId ?? undefined
+    ? requestedEncounterId ?? undefined
     : undefined;
-  const requestedTab = availableTabs.find((tab) => tab.id === input.requestedTab)?.id;
+  const activeRequestedTab = availableTabs.find((tab) => tab.id === requestedTab)?.id;
 
   return {
     activeCampaignId: input.activeCampaignId,
     activeEncounterId,
     activeScenarioId,
     activeTab:
-      requestedTab ??
-      (input.requestedTab === "gm-encounter" && !input.canAccessGmEncounter
+      activeRequestedTab ??
+      (requestedTab === "gm-encounter" && !input.canAccessGmEncounter
         ? "player-encounter"
         : "campaign")
   };
