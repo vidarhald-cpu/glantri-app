@@ -1,12 +1,51 @@
+import type { ScenarioParticipant } from "@glantri/domain";
+
 import { describe, expect, it } from "vitest";
 
 import {
   buildPlayerEncounterPhaseSummary,
   createEmptyPlayerEncounterCombatContext,
   evaluatePlayerEncounterParryLegality,
+  getPlayerEncounterAccessibleParticipants,
   getPlayerEncounterCombatModifierTotals,
   getPlayerEncounterMovementLabel,
+  getPlayerEncounterOpponentParticipants,
 } from "./playerEncounter";
+
+function createScenarioParticipant(
+  overrides: Partial<ScenarioParticipant> = {},
+): ScenarioParticipant {
+  return {
+    createdAt: "2026-04-25T10:00:00.000Z",
+    id: overrides.id ?? "participant-1",
+    isActive: overrides.isActive ?? true,
+    joinSource: overrides.joinSource ?? "gm_added",
+    role: overrides.role ?? "npc",
+    scenarioId: overrides.scenarioId ?? "scenario-1",
+    snapshot: overrides.snapshot ?? {
+      displayName: overrides.id ?? "Participant 1",
+    },
+    sourceType: overrides.sourceType ?? "entity",
+    state:
+      overrides.state ??
+      ({
+        combat: {},
+        conditions: [],
+        health: {
+          currentHp: 10,
+          dead: false,
+          maxHp: 10,
+          unconscious: false,
+          wounds: 0,
+        },
+        modifiers: [],
+        resources: {},
+        snapshotVersion: 1,
+      } satisfies ScenarioParticipant["state"]),
+    updatedAt: "2026-04-25T10:00:00.000Z",
+    ...overrides,
+  };
+}
 
 describe("playerEncounter", () => {
   it("maps primary and secondary actions into round phases", () => {
@@ -172,5 +211,110 @@ describe("playerEncounter", () => {
         situationObSkill: [],
       },
     });
+  });
+
+  it("includes active NPC/entity participants in accessible GM selections", () => {
+    const participants = [
+      createScenarioParticipant({
+        id: "pc-1",
+        role: "player_character",
+        sourceType: "character",
+      }),
+      createScenarioParticipant({
+        id: "npc-1",
+        role: "npc",
+        sourceType: "entity",
+      }),
+      createScenarioParticipant({
+        id: "monster-1",
+        isActive: false,
+        role: "monster",
+        sourceType: "entity",
+      }),
+    ];
+
+    expect(
+      getPlayerEncounterAccessibleParticipants({
+        currentUserId: "gm-1",
+        isGameMaster: true,
+        participants,
+      }).map((participant) => participant.id),
+    ).toEqual(["pc-1", "npc-1"]);
+  });
+
+  it("includes active NPC/entity opponents and excludes self", () => {
+    const participants = [
+      createScenarioParticipant({
+        controlledByUserId: "player-1",
+        id: "pc-1",
+        role: "player_character",
+        sourceType: "character",
+      }),
+      createScenarioParticipant({
+        id: "npc-1",
+        role: "npc",
+        sourceType: "entity",
+      }),
+      createScenarioParticipant({
+        id: "animal-1",
+        role: "animal",
+        sourceType: "entity",
+      }),
+      createScenarioParticipant({
+        id: "inactive-npc",
+        isActive: false,
+        role: "npc",
+        sourceType: "entity",
+      }),
+    ];
+
+    expect(
+      getPlayerEncounterOpponentParticipants({
+        currentUserId: "gm-1",
+        isGameMaster: true,
+        participants,
+        selectedParticipantId: "pc-1",
+      }).map((participant) => participant.id),
+    ).toEqual(["npc-1", "animal-1"]);
+  });
+
+  it("keeps player opponent visibility on the projected active participant list", () => {
+    const participants = [
+      createScenarioParticipant({
+        controlledByUserId: "player-1",
+        id: "pc-1",
+        role: "player_character",
+        sourceType: "character",
+      }),
+      createScenarioParticipant({
+        id: "npc-1",
+        role: "npc",
+        sourceType: "entity",
+      }),
+      createScenarioParticipant({
+        id: "npc-2",
+        role: "npc",
+        sourceType: "entity",
+      }),
+    ];
+
+    expect(
+      getPlayerEncounterOpponentParticipants({
+        currentUserId: "player-1",
+        isGameMaster: false,
+        participants,
+        projectionVisibleParticipants: [
+          {
+            displayName: "NPC 1",
+            id: "npc-1",
+            isActive: true,
+            isControlledByPlayer: false,
+            role: "npc",
+            sourceType: "entity",
+          },
+        ],
+        selectedParticipantId: "pc-1",
+      }).map((participant) => participant.id),
+    ).toEqual(["npc-1"]);
   });
 });

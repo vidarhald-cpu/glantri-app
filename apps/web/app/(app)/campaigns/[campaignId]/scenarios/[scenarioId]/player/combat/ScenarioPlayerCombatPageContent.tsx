@@ -24,8 +24,10 @@ import {
   buildPlayerEncounterPhaseSummary,
   createEmptyPlayerEncounterCombatContext,
   evaluatePlayerEncounterParryLegality,
+  getPlayerEncounterAccessibleParticipants,
   getPlayerEncounterCombatModifierTotals,
   getPlayerEncounterMovementLabel,
+  getPlayerEncounterOpponentParticipants,
   getPlayerEncounterParrySourceLabel,
   PLAYER_ENCOUNTER_INCOMING_ATTACK_SIDE_OPTIONS,
   PLAYER_ENCOUNTER_ACTION_OPTIONS,
@@ -265,16 +267,11 @@ export default function ScenarioPlayerCombatPageContent({
       return [];
     }
 
-    return selectableParticipants.filter((participant) => {
-      if (!participant.isActive) {
-        return false;
-      }
-
-      if (isGameMaster) {
-        return true;
-      }
-
-      return participant.controlledByUserId === currentUser?.id;
+    return getPlayerEncounterAccessibleParticipants({
+      currentUserId: currentUser?.id,
+      isGameMaster,
+      participants: selectableParticipants,
+      projectionVisibleParticipants: projection.visibleParticipants,
     });
   }, [currentUser?.id, isGameMaster, projection, selectableParticipants]);
 
@@ -308,18 +305,12 @@ export default function ScenarioPlayerCombatPageContent({
   );
 
   const visibleOpponentOptions = useMemo(() => {
-    const visibleParticipantIds = new Set(projection?.visibleParticipants.map((participant) => participant.id) ?? []);
-
-    return selectableParticipants.filter((participant) => {
-      if (!participant.isActive || participant.id === selectedParticipantId) {
-        return false;
-      }
-
-      if (isGameMaster) {
-        return true;
-      }
-
-      return visibleParticipantIds.has(participant.id);
+    return getPlayerEncounterOpponentParticipants({
+      currentUserId: currentUser?.id,
+      isGameMaster,
+      participants: selectableParticipants,
+      projectionVisibleParticipants: projection?.visibleParticipants,
+      selectedParticipantId,
     });
   }, [isGameMaster, projection?.visibleParticipants, selectableParticipants, selectedParticipantId]);
 

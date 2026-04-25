@@ -3,6 +3,8 @@ import type {
   ScenarioParticipantCombatContext,
   ScenarioParticipantIncomingAttackSide,
   ScenarioParticipantParrySource,
+  ScenarioParticipant,
+  ScenarioPlayerVisibleParticipant,
 } from "@glantri/domain";
 
 export type PlayerEncounterActionId =
@@ -49,6 +51,14 @@ export interface PlayerEncounterParryLegalityResult {
   reason: string;
   resolvedParrySource?: Exclude<ScenarioParticipantParrySource, "auto">;
   status: "incomplete" | "legal" | "not_legal";
+}
+
+export interface PlayerEncounterParticipantAccessInput {
+  currentUserId?: string;
+  isGameMaster: boolean;
+  participants: ScenarioParticipant[];
+  projectionVisibleParticipants?: ScenarioPlayerVisibleParticipant[];
+  selectedParticipantId?: string;
 }
 
 export const PLAYER_ENCOUNTER_ACTION_OPTIONS: PlayerEncounterOption<PlayerEncounterActionId>[] = [
@@ -229,6 +239,42 @@ export function getPlayerEncounterParrySourceLabel(
     PLAYER_ENCOUNTER_PARRY_SOURCE_OPTIONS.find((option) => option.value === parrySource)?.label ??
     "Parry source"
   );
+}
+
+export function getPlayerEncounterAccessibleParticipants(
+  input: Omit<PlayerEncounterParticipantAccessInput, "selectedParticipantId">,
+): ScenarioParticipant[] {
+  return input.participants.filter((participant) => {
+    if (!participant.isActive) {
+      return false;
+    }
+
+    if (input.isGameMaster) {
+      return true;
+    }
+
+    return participant.controlledByUserId === input.currentUserId;
+  });
+}
+
+export function getPlayerEncounterOpponentParticipants(
+  input: PlayerEncounterParticipantAccessInput,
+): ScenarioParticipant[] {
+  const visibleParticipantIds = new Set(
+    input.projectionVisibleParticipants?.map((participant) => participant.id) ?? [],
+  );
+
+  return input.participants.filter((participant) => {
+    if (!participant.isActive || participant.id === input.selectedParticipantId) {
+      return false;
+    }
+
+    if (input.isGameMaster) {
+      return true;
+    }
+
+    return visibleParticipantIds.has(participant.id);
+  });
 }
 
 export function buildPlayerEncounterPhaseSummary(input: {

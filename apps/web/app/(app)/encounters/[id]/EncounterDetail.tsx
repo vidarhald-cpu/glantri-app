@@ -25,6 +25,7 @@ import {
 } from "@glantri/rules-engine";
 
 import { loadLocalEncounterContext } from "../../../../src/lib/encounters/loadLocalEncounterContext";
+import { addScenarioParticipantFromEntityOnServer } from "../../../../src/lib/api/localServiceClient";
 import type { LocalCharacterRecord } from "../../../../src/lib/offline/glantriDexie";
 import { LocalEncounterRepository } from "../../../../src/lib/offline/repositories/localEncounterRepository";
 import { UNNAMED_CHARACTER_PLACEHOLDER } from "../../../../src/lib/offline/repositories/localCharacterRepository";
@@ -178,12 +179,29 @@ export default function EncounterDetail({
       return;
     }
 
+    const trimmedName = adHocName.trim();
+
+    if (isNestedScenarioFlow && scenarioId) {
+      await addScenarioParticipantFromEntityOnServer({
+        entityInput: {
+          kind: "npc",
+          name: trimmedName
+        },
+        isTemporary: true,
+        joinSource: "gm_added",
+        role: "npc",
+        scenarioId
+      });
+    }
+
     await persistEncounter(
       addAdHocParticipant({
-        label: adHocName,
+        label: trimmedName,
         session: encounter
       }),
-      `Added ${adHocName.trim()} to the encounter.`
+      isNestedScenarioFlow
+        ? `Added ${trimmedName} to the encounter and scenario participants.`
+        : `Added ${trimmedName} to the encounter.`
     );
     setAdHocName("");
   }
