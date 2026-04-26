@@ -308,9 +308,19 @@ describe("characterEdit helpers", () => {
   });
 
   it("adds, updates, and removes skill/group progression while derived totals update", () => {
-    const withGroup = setCharacterSkillGroupLevel(baseBuild, "awareness", 4);
+    const withGroup = setCharacterSkillGroupLevel({
+      build: baseBuild,
+      content,
+      groupId: "awareness",
+      level: 4
+    });
     const withSkill = addCharacterSkill(withGroup, skills[0]);
-    const withXp = setCharacterSkillXp(withSkill, skills[0], 3);
+    const withXp = setCharacterSkillXp({
+      build: withSkill,
+      content,
+      skill: skills[0],
+      xp: 3
+    });
     const summary = getCharacterEditSheetSummary(withXp, content);
     const perception = summary.draftView.skills.find((skill) => skill.skillId === "perception");
     const removed = removeCharacterSkill(withXp, "perception");
@@ -325,7 +335,12 @@ describe("characterEdit helpers", () => {
   });
 
   it("shows only groups with positive current XP and lets hidden groups be added back", () => {
-    const withAwareness = setCharacterSkillGroupLevel(baseBuild, "awareness", 4);
+    const withAwareness = setCharacterSkillGroupLevel({
+      build: baseBuild,
+      content,
+      groupId: "awareness",
+      level: 4
+    });
     const summary = getCharacterEditSheetSummary(withAwareness, content);
 
     expect(
@@ -345,7 +360,11 @@ describe("characterEdit helpers", () => {
       { groupId: "medicine_group", level: 0, name: "Medicine" }
     ]);
 
-    const withAddedHiddenGroup = addCharacterSkillGroup(withAwareness, "martial");
+    const withAddedHiddenGroup = addCharacterSkillGroup({
+      build: withAwareness,
+      content,
+      groupId: "martial"
+    });
     const updatedSummary = getCharacterEditSheetSummary(withAddedHiddenGroup, content);
 
     expect(
@@ -360,9 +379,19 @@ describe("characterEdit helpers", () => {
   });
 
   it("builds skill rows with Group XP, direct XP, Total XP, and Total from the draft view", () => {
-    const withGroup = setCharacterSkillGroupLevel(baseBuild, "awareness", 4);
+    const withGroup = setCharacterSkillGroupLevel({
+      build: baseBuild,
+      content,
+      groupId: "awareness",
+      level: 4
+    });
     const withSkill = addCharacterSkill(withGroup, skills[0]);
-    const withXp = setCharacterSkillXp(withSkill, skills[0], 3);
+    const withXp = setCharacterSkillXp({
+      build: withSkill,
+      content,
+      skill: skills[0],
+      xp: 3
+    });
     const summary = getCharacterEditSheetSummary(withXp, content);
 
     expect(
@@ -388,7 +417,11 @@ describe("characterEdit helpers", () => {
   });
 
   it("materializes group-derived skills into the edit skill table even without direct skill rows", () => {
-    const withGroup = addCharacterSkillGroup(baseBuild, "awareness");
+    const withGroup = addCharacterSkillGroup({
+      build: baseBuild,
+      content,
+      groupId: "awareness"
+    });
     const summary = getCharacterEditSheetSummary(withGroup, content);
 
     expect(
@@ -413,9 +446,14 @@ describe("characterEdit helpers", () => {
     ]);
   });
 
-  it("keeps derived-only skills visible in the edit rows and preserves direct XP when the source changes", () => {
+  it("keeps relationship-granted skills visible and does not reduce committed grants when the source changes", () => {
     const withMedicine = addCharacterSkill(baseBuild, skills[2]);
-    const medicineTen = setCharacterSkillXp(withMedicine, skills[2], 10);
+    const medicineTen = setCharacterSkillXp({
+      build: withMedicine,
+      content,
+      skill: skills[2],
+      xp: 10
+    });
     const derivedSummary = getCharacterEditSheetSummary(medicineTen, content);
 
     expect(
@@ -427,13 +465,18 @@ describe("characterEdit helpers", () => {
     ).toMatchObject({
       canRemoveDirectXp: false,
       derivedXp: 10,
-      derivedSourceLabel: "Derived from Medicine",
+      derivedSourceLabel: "Granted from Medicine",
       totalXp: 10,
       xp: 0
     });
 
     const withFirstAid = addCharacterSkill(medicineTen, skills[3]);
-    const firstAidThirteen = setCharacterSkillXp(withFirstAid, skills[3], 13);
+    const firstAidThirteen = setCharacterSkillXp({
+      build: withFirstAid,
+      content,
+      skill: skills[3],
+      xp: 13
+    });
     const stackedSummary = getCharacterEditSheetSummary(firstAidThirteen, content);
 
     expect(
@@ -445,12 +488,17 @@ describe("characterEdit helpers", () => {
     ).toMatchObject({
       canRemoveDirectXp: true,
       derivedXp: 10,
-      derivedSourceLabel: "Derived from Medicine",
+      derivedSourceLabel: "Granted from Medicine",
       totalXp: 23,
       xp: 13
     });
 
-    const medicineFour = setCharacterSkillXp(firstAidThirteen, skills[2], 4);
+    const medicineFour = setCharacterSkillXp({
+      build: firstAidThirteen,
+      content,
+      skill: skills[2],
+      xp: 4
+    });
     const updatedSummary = getCharacterEditSheetSummary(medicineFour, content);
 
     expect(
@@ -460,13 +508,18 @@ describe("characterEdit helpers", () => {
         sheetSummary: updatedSummary
       }).find((row) => row.skillId === "first_aid")
     ).toMatchObject({
-      derivedXp: 4,
-      derivedSourceLabel: "Derived from Medicine",
-      totalXp: 17,
+      derivedXp: 10,
+      derivedSourceLabel: "Granted from Medicine",
+      totalXp: 23,
       xp: 13
     });
 
-    const medicineZero = setCharacterSkillXp(baseBuild, skills[2], 0);
+    const medicineZero = setCharacterSkillXp({
+      build: baseBuild,
+      content,
+      skill: skills[2],
+      xp: 0
+    });
     const clearedSummary = getCharacterEditSheetSummary(medicineZero, content);
 
     expect(
@@ -479,7 +532,12 @@ describe("characterEdit helpers", () => {
   });
 
   it("shows ordinary cross-training and specialization-bridge labels in edit rows", () => {
-    const bowBuild = setCharacterSkillXp(addCharacterSkill(baseBuild, skills[4]), skills[4], 10);
+    const bowBuild = setCharacterSkillXp({
+      build: addCharacterSkill(baseBuild, skills[4]),
+      content,
+      skill: skills[4],
+      xp: 10
+    });
     const bowSummary = getCharacterEditSheetSummary(bowBuild, content);
     const bowRows = buildCharacterEditSkillRows({
       build: bowBuild,
@@ -488,7 +546,7 @@ describe("characterEdit helpers", () => {
     });
 
     expect(bowRows.find((row) => row.skillId === "crossbow")).toMatchObject({
-      derivedSourceLabel: "Derived from Bow",
+      derivedSourceLabel: "Granted from Bow",
       derivedXp: 5,
       totalXp: 5
     });
@@ -498,7 +556,12 @@ describe("characterEdit helpers", () => {
       totalXp: 5
     });
 
-    const crossbowBuild = setCharacterSkillXp(addCharacterSkill(baseBuild, skills[5]), skills[5], 10);
+    const crossbowBuild = setCharacterSkillXp({
+      build: addCharacterSkill(baseBuild, skills[5]),
+      content,
+      skill: skills[5],
+      xp: 10
+    });
     const crossbowSummary = getCharacterEditSheetSummary(crossbowBuild, content);
 
     expect(
@@ -508,7 +571,7 @@ describe("characterEdit helpers", () => {
         sheetSummary: crossbowSummary
       }).find((row) => row.skillId === "bow")
     ).toMatchObject({
-      derivedSourceLabel: "Derived from Crossbow",
+      derivedSourceLabel: "Granted from Crossbow",
       derivedXp: 5,
       totalXp: 5
     });
@@ -587,16 +650,17 @@ describe("characterEdit helpers", () => {
     );
   });
 
-  it("allows visible specialization-bridge rows to be directly adjusted and keeps direct XP when the source later drops", () => {
+  it("allows visible specialization-bridge rows to be directly adjusted without reducing committed bridge grants later", () => {
     const bridgeContent = {
       ...content,
       specializations: [fencingSpecialization]
     };
-    const sourcedBuild = setCharacterSkillXp(
-      addCharacterSkill(baseBuild, skills[7]),
-      skills[7],
-      8
-    );
+    const sourcedBuild = setCharacterSkillXp({
+      build: addCharacterSkill(baseBuild, skills[7]),
+      content: bridgeContent,
+      skill: skills[7],
+      xp: 8
+    });
     const sourcedSummary = getCharacterEditSheetSummary(sourcedBuild, bridgeContent);
     const sourcedRows = buildCharacterEditSpecializationRows({
       build: sourcedBuild,
@@ -639,7 +703,12 @@ describe("characterEdit helpers", () => {
       xp: 2
     });
 
-    const loweredSource = setCharacterSkillXp(addedDirect.build, skills[7], 5);
+    const loweredSource = setCharacterSkillXp({
+      build: addedDirect.build,
+      content: bridgeContent,
+      skill: skills[7],
+      xp: 5
+    });
     const loweredSummary = getCharacterEditSheetSummary(loweredSource, bridgeContent);
     const loweredRow = buildCharacterEditSpecializationRows({
       build: loweredSource,
@@ -651,8 +720,8 @@ describe("characterEdit helpers", () => {
       blockingMessage: "Fencing requires 1-h edged level 6 or higher (current 5).",
       canDecreaseDirectXp: true,
       canIncreaseDirectXp: false,
-      derivedXp: 0,
-      total: 2,
+      derivedXp: 3,
+      total: 5,
       xp: 2
     });
   });

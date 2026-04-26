@@ -11,6 +11,7 @@ import type {
 } from "@glantri/domain";
 import { getCharacterSkillKey } from "@glantri/domain";
 import {
+  applyRelationshipMinimumGrants,
   buildCharacterSheetSummary,
   evaluateSkillSelection,
   getCharacteristicGm,
@@ -179,18 +180,27 @@ export function setCharacterNotes(build: CharacterBuild, value: string): Charact
 }
 
 export function setCharacterSkillGroupLevel(
-  build: CharacterBuild,
-  groupId: string,
-  level: number
+  input: {
+    build: CharacterBuild;
+    content: Pick<CharacterEditContentShape, "skillGroups" | "skills" | "specializations">;
+    groupId: string;
+    level: number;
+  }
 ): CharacterBuild {
-  const nextBuild = cloneBuild(build);
-  const normalizedLevel = Math.max(0, Math.trunc(level));
-  const existing = nextBuild.progression.skillGroups.find((group) => group.groupId === groupId);
+  const nextBuild = cloneBuild(input.build);
+  const normalizedLevel = Math.max(0, Math.trunc(input.level));
+  const existing = nextBuild.progression.skillGroups.find(
+    (group) => group.groupId === input.groupId
+  );
 
   if (normalizedLevel <= 0) {
     nextBuild.progression.skillGroups = nextBuild.progression.skillGroups.filter(
-      (group) => group.groupId !== groupId
+      (group) => group.groupId !== input.groupId
     );
+    nextBuild.progression = applyRelationshipMinimumGrants({
+      content: input.content,
+      progression: nextBuild.progression
+    });
     return nextBuild;
   }
 
@@ -205,12 +215,16 @@ export function setCharacterSkillGroupLevel(
   nextBuild.progression.skillGroups.push({
     gms: 0,
     grantedRanks: 0,
-    groupId,
+    groupId: input.groupId,
     primaryRanks: normalizedLevel,
     ranks: normalizedLevel,
     secondaryRanks: 0
   });
 
+  nextBuild.progression = applyRelationshipMinimumGrants({
+    content: input.content,
+    progression: nextBuild.progression
+  });
   return nextBuild;
 }
 
@@ -235,8 +249,19 @@ export function addCharacterSkill(build: CharacterBuild, skill: SkillDefinition)
   return nextBuild;
 }
 
-export function addCharacterSkillGroup(build: CharacterBuild, groupId: string): CharacterBuild {
-  return setCharacterSkillGroupLevel(build, groupId, 1);
+export function addCharacterSkillGroup(
+  input: {
+    build: CharacterBuild;
+    content: Pick<CharacterEditContentShape, "skillGroups" | "skills" | "specializations">;
+    groupId: string;
+  }
+): CharacterBuild {
+  return setCharacterSkillGroupLevel({
+    build: input.build,
+    content: input.content,
+    groupId: input.groupId,
+    level: 1
+  });
 }
 
 export function removeCharacterSkill(build: CharacterBuild, skillId: string): CharacterBuild {
@@ -248,18 +273,27 @@ export function removeCharacterSkill(build: CharacterBuild, skillId: string): Ch
 }
 
 export function setCharacterSkillXp(
-  build: CharacterBuild,
-  skill: SkillDefinition,
-  xp: number
+  input: {
+    build: CharacterBuild;
+    content: Pick<CharacterEditContentShape, "skillGroups" | "skills" | "specializations">;
+    skill: SkillDefinition;
+    xp: number;
+  }
 ): CharacterBuild {
-  const nextBuild = cloneBuild(build);
-  const normalizedXp = Math.max(0, Math.trunc(xp));
-  const existing = nextBuild.progression.skills.find((entry) => entry.skillId === skill.id);
+  const nextBuild = cloneBuild(input.build);
+  const normalizedXp = Math.max(0, Math.trunc(input.xp));
+  const existing = nextBuild.progression.skills.find(
+    (entry) => entry.skillId === input.skill.id
+  );
 
   if (normalizedXp <= 0 && existing) {
     existing.primaryRanks = 0;
     existing.secondaryRanks = 0;
-    existing.ranks = 0;
+    existing.ranks = existing.grantedRanks ?? 0;
+    nextBuild.progression = applyRelationshipMinimumGrants({
+      content: input.content,
+      progression: nextBuild.progression
+    });
     return nextBuild;
   }
 
@@ -267,31 +301,43 @@ export function setCharacterSkillXp(
     const grantedRanks = existing.grantedRanks ?? 0;
     existing.primaryRanks = Math.max(0, normalizedXp - grantedRanks);
     existing.secondaryRanks = 0;
-    existing.ranks = normalizedXp;
-    existing.category = skill.category;
-    existing.categoryId = skill.categoryId;
-    existing.groupId = skill.groupIds[0] ?? skill.groupId;
+    existing.ranks =
+      grantedRanks +
+      existing.primaryRanks +
+      (existing.relationshipGrantedRanks ?? 0);
+    existing.category = input.skill.category;
+    existing.categoryId = input.skill.categoryId;
+    existing.groupId = input.skill.groupIds[0] ?? input.skill.groupId;
+    nextBuild.progression = applyRelationshipMinimumGrants({
+      content: input.content,
+      progression: nextBuild.progression
+    });
     return nextBuild;
   }
 
   nextBuild.progression.skills.push({
-    category: skill.category,
-    categoryId: skill.categoryId,
+    category: input.skill.category,
+    categoryId: input.skill.categoryId,
     grantedRanks: 0,
-    groupId: skill.groupIds[0] ?? skill.groupId,
+    groupId: input.skill.groupIds[0] ?? input.skill.groupId,
     level: 0,
     primaryRanks: normalizedXp,
     ranks: normalizedXp,
+    relationshipGrantedRanks: 0,
     secondaryRanks: 0,
-    skillId: skill.id
+    skillId: input.skill.id
   });
 
+  nextBuild.progression = applyRelationshipMinimumGrants({
+    content: input.content,
+    progression: nextBuild.progression
+  });
   return nextBuild;
 }
 
 export function setCharacterSpecializationXp(input: {
   build: CharacterBuild;
-  content: Pick<CharacterEditContentShape, "skillGroups" | "skills">;
+  content: Pick<CharacterEditContentShape, "skillGroups" | "skills" | "specializations">;
   specialization: SkillSpecialization;
   xp: number;
 }): {
@@ -327,24 +373,37 @@ export function setCharacterSpecializationXp(input: {
     nextBuild.progression.specializations = nextBuild.progression.specializations.filter(
       (entry) => entry.specializationId !== input.specialization.id
     );
+    nextBuild.progression = applyRelationshipMinimumGrants({
+      content: input.content,
+      progression: nextBuild.progression
+    });
     return { build: nextBuild };
   }
 
   if (existing) {
     existing.secondaryRanks = normalizedXp;
-    existing.ranks = normalizedXp;
+    existing.ranks = normalizedXp + (existing.relationshipGrantedRanks ?? 0);
     existing.skillId = input.specialization.skillId;
+    nextBuild.progression = applyRelationshipMinimumGrants({
+      content: input.content,
+      progression: nextBuild.progression
+    });
     return { build: nextBuild };
   }
 
   nextBuild.progression.specializations.push({
     level: 0,
     ranks: normalizedXp,
+    relationshipGrantedRanks: 0,
     secondaryRanks: normalizedXp,
     skillId: input.specialization.skillId,
     specializationId: input.specialization.id
   });
 
+  nextBuild.progression = applyRelationshipMinimumGrants({
+    content: input.content,
+    progression: nextBuild.progression
+  });
   return { build: nextBuild };
 }
 
@@ -433,12 +492,14 @@ export function buildCharacterEditSkillRows(input: {
   sheetSummary: CharacterSheetSummary;
 }): CharacterEditSkillRow[] {
   const directSkillKeys = new Set(
-    input.build.progression.skills.map((entry) =>
-      getCharacterSkillKey({
-        languageName: entry.languageName,
-        skillId: entry.skillId
-      })
-    )
+    input.build.progression.skills
+      .filter((entry) => (entry.primaryRanks ?? 0) + (entry.secondaryRanks ?? 0) > 0)
+      .map((entry) =>
+        getCharacterSkillKey({
+          languageName: entry.languageName,
+          skillId: entry.skillId
+        })
+      )
   );
 
   const rows = input.sheetSummary.draftView.skills
@@ -451,10 +512,10 @@ export function buildCharacterEditSkillRows(input: {
 
       return {
         canRemoveDirectXp: directSkillKeys.has(skillView.skillKey),
-        derivedXp: skillView.derivedSkillLevel ?? 0,
+        derivedXp: skillView.relationshipGrantedSkillLevel ?? 0,
         derivedSourceLabel: formatDerivedSkillSourceLabel({
-          sourceSkillName: skillView.derivedSourceSkillName,
-          sourceType: skillView.derivedSourceType
+          sourceSkillName: skillView.relationshipSourceSkillName,
+          sourceType: skillView.relationshipSourceType
         }),
         groupXp: skillView.groupLevel,
         skillId: definition.id,
@@ -508,10 +569,10 @@ export function buildCharacterEditSpecializationRows(input: {
       canDecreaseDirectXp: (specializationView.secondaryRanks ?? 0) > 0,
       canIncreaseDirectXp: evaluation.isAllowed,
       derivedSourceLabel: formatDerivedSkillSourceLabel({
-        sourceSkillName: specializationView.derivedSourceSkillName,
-        sourceType: specializationView.derivedSourceType
+        sourceSkillName: specializationView.relationshipGrantedSourceSkillName,
+        sourceType: specializationView.relationshipGrantedSourceType
       }),
-      derivedXp: specializationView.derivedSpecializationLevel ?? 0,
+      derivedXp: specializationView.relationshipGrantedSpecializationLevel ?? 0,
       parentSkillName: specializationView.parentSkillName,
       parentSkillXp,
       requiredParentLevel: definition.minimumParentLevel,

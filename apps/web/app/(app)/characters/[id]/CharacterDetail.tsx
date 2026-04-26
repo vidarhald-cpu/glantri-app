@@ -486,7 +486,7 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
                     fontSize: "0.8rem",
                     gap: "0.75rem",
                     gridTemplateColumns:
-                      "minmax(180px, 2fr) minmax(120px, 1.2fr) repeat(6, minmax(72px, 88px))",
+                      "minmax(180px, 2fr) minmax(120px, 1.2fr) repeat(5, minmax(72px, 88px))",
                     padding: "0.75rem 1rem"
                   }}
                 >
@@ -495,7 +495,6 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
                   <strong>Avg stats</strong>
                   <strong>Skill group XP</strong>
                   <strong>Owned XP</strong>
-                  <strong>Derived XP</strong>
                   <strong>Total XP</strong>
                   <strong>Total skill level</strong>
                 </div>
@@ -505,13 +504,13 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
                     key={skill.skillKey}
                     style={{
                       borderTop: "1px solid #f0eadf",
-                      display: "grid",
-                      gap: "0.75rem",
-                      gridTemplateColumns:
-                        "minmax(180px, 2fr) minmax(120px, 1.2fr) repeat(6, minmax(72px, 88px))",
-                      padding: "0.75rem 1rem"
-                    }}
-                  >
+                    display: "grid",
+                    gap: "0.75rem",
+                    gridTemplateColumns:
+                        "minmax(180px, 2fr) minmax(120px, 1.2fr) repeat(5, minmax(72px, 88px))",
+                    padding: "0.75rem 1rem"
+                  }}
+                >
                     <div>
                       <div>{skill.skillName}</div>
                       {skill.derivedSourceLabel ? (
@@ -524,7 +523,6 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
                     <div>{skill.avgStats}</div>
                     <div>{skill.skillGroupXp}</div>
                     <div>{skill.skillXp}</div>
-                    <div>{skill.derivedXp}</div>
                     <div>{skill.totalXp}</div>
                     <div>{skill.totalSkillLevel}</div>
                   </div>
@@ -558,14 +556,13 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
                   display: "grid",
                   fontSize: "0.8rem",
                   gap: "0.75rem",
-                  gridTemplateColumns: "minmax(180px, 2fr) minmax(140px, 1.5fr) repeat(3, minmax(72px, 88px))",
+                  gridTemplateColumns: "minmax(180px, 2fr) minmax(140px, 1.5fr) repeat(2, minmax(72px, 88px))",
                   padding: "0.75rem 1rem"
                 }}
               >
                 <strong>Specialization</strong>
                 <strong>Parent skill</strong>
                 <strong>Owned XP</strong>
-                <strong>Derived XP</strong>
                 <strong>Total</strong>
               </div>
 
@@ -576,7 +573,7 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
                     borderTop: "1px solid #f0eadf",
                     display: "grid",
                     gap: "0.75rem",
-                    gridTemplateColumns: "minmax(180px, 2fr) minmax(140px, 1.5fr) repeat(3, minmax(72px, 88px))",
+                    gridTemplateColumns: "minmax(180px, 2fr) minmax(140px, 1.5fr) repeat(2, minmax(72px, 88px))",
                     padding: "0.75rem 1rem"
                   }}
                 >
@@ -590,7 +587,6 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
                   </div>
                   <div>{specialization.parentSkillName}</div>
                   <div>{specialization.xp}</div>
-                  <div>{specialization.derivedXp}</div>
                   <div>{specialization.total}</div>
                 </div>
               ))}

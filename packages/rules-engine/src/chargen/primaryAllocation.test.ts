@@ -132,7 +132,7 @@ const chargenTestContent = validateCanonicalContent({
 });
 
 describe("derived skill relationships in chargen drafts", () => {
-  it("materializes derived skills in the draft view and stacks owned XP on top of the best derived grant", () => {
+  it("previews relationship minimum grants by raising a lower skill up to the best minimum", () => {
     const derivedSkillContent = validateCanonicalContent({
       skillGroups: [
         {
@@ -254,14 +254,14 @@ describe("derived skill relationships in chargen drafts", () => {
     });
 
     expect(draftView.skills.find((skill) => skill.skillId === "medicine")).toMatchObject({
-      derivedSkillLevel: 0,
       effectiveSkillNumber: 10,
+      relationshipGrantedSkillLevel: 0,
       specificSkillLevel: 10
     });
     expect(draftView.skills.find((skill) => skill.skillId === "first_aid")).toMatchObject({
-      derivedSkillLevel: 10,
-      derivedSourceSkillId: "medicine",
-      effectiveSkillNumber: 13,
+      effectiveSkillNumber: 10,
+      relationshipGrantedSkillLevel: 7,
+      relationshipSourceSkillId: "medicine",
       specificSkillLevel: 3
     });
   });
@@ -434,15 +434,15 @@ describe("derived skill relationships in chargen drafts", () => {
     });
 
     expect(draftView.skills.find((skill) => skill.skillId === "longbow")).toMatchObject({
-      derivedSkillLevel: 5,
-      derivedSourceSkillId: "bow",
-      derivedSourceType: "specialization-bridge-parent",
-      effectiveSkillNumber: 5
+      effectiveSkillNumber: 5,
+      relationshipGrantedSkillLevel: 5,
+      relationshipSourceSkillId: "bow",
+      relationshipSourceType: "specialization-bridge-parent"
     });
     expect(draftView.specializations.find((specialization) => specialization.specializationId === "fencing")).toMatchObject({
-      derivedSourceSkillId: "one_handed_edged",
-      derivedSourceType: "specialization-bridge-parent",
-      derivedSpecializationLevel: 5,
+      relationshipGrantedSourceSkillId: "one_handed_edged",
+      relationshipGrantedSourceType: "specialization-bridge-parent",
+      relationshipGrantedSpecializationLevel: 5,
       specializationLevel: 5
     });
     expect(draftView.secondaryPoolAvailable).toBe(0);

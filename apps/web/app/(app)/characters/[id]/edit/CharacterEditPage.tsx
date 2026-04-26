@@ -220,16 +220,23 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
 
   function updateSkillGroup(groupId: string, value: string) {
     setBuild((current) =>
-      current ? setCharacterSkillGroupLevel(current, groupId, parseWholeNumber(value)) : current
+      current && content
+        ? setCharacterSkillGroupLevel({
+            build: current,
+            content,
+            groupId,
+            level: parseWholeNumber(value)
+          })
+        : current
     );
   }
 
   function handleAddSkillGroup() {
-    if (!build || !selectedSkillGroupId) {
+    if (!build || !content || !selectedSkillGroupId) {
       return;
     }
 
-    setBuild(addCharacterSkillGroup(build, selectedSkillGroupId));
+    setBuild(addCharacterSkillGroup({ build, content, groupId: selectedSkillGroupId }));
     setSelectedSkillGroupId("");
   }
 
@@ -245,7 +252,14 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
     }
 
     setBuild((current) =>
-      current ? setCharacterSkillXp(current, definition, parseWholeNumber(value)) : current
+      current && content
+        ? setCharacterSkillXp({
+            build: current,
+            content,
+            skill: definition,
+            xp: parseWholeNumber(value)
+          })
+        : current
     );
   }
 
@@ -525,7 +539,7 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
                 <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Stats</th>
                 <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Group XP</th>
                 <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Owned XP</th>
-                <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Derived XP</th>
+                <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Granted XP</th>
                 <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Total XP</th>
                 <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Total</th>
                 <th style={{ padding: "0.5rem 0", textAlign: "right" }}>Remove</th>
@@ -600,7 +614,7 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
                 <th style={{ padding: "0.5rem 0.75rem 0.5rem 0" }}>Specialization</th>
                 <th style={{ padding: "0.5rem 0.75rem" }}>Parent skill</th>
                 <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Owned XP</th>
-                <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Derived XP</th>
+                <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Granted XP</th>
                 <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Total</th>
                 <th style={{ padding: "0.5rem 0", textAlign: "right" }}>Adjust</th>
               </tr>

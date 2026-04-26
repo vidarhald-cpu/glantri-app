@@ -575,7 +575,7 @@ export function getSkillAllocationMetrics(input: {
       input.draftView.skills.find((item) => item.skillId === input.skill.id && item.languageName) ??
       input.draftView.skills.find((item) => item.skillId === input.skill.id);
   const groupXp = skillView?.groupLevel ?? 0;
-  const derivedXp = skillView?.derivedSkillLevel ?? 0;
+  const derivedXp = skillView?.relationshipGrantedSkillLevel ?? 0;
   const skillXp = skillView?.specificSkillLevel ?? 0;
   const avgStats = skillView?.linkedStatAverage ?? getSkillLinkedStatAverage(input.profile, input.skill);
   const totalXp = groupXp + skillXp + derivedXp;
@@ -651,8 +651,8 @@ export function buildConcreteLanguageBrowseRows(input: {
 
       return {
         derivedSourceLabel: formatDerivedSkillSourceLabel({
-          sourceSkillName: skillView?.derivedSourceSkillName,
-          sourceType: skillView?.derivedSourceType
+          sourceSkillName: skillView?.relationshipSourceSkillName,
+          sourceType: skillView?.relationshipSourceType
         }),
         displayName: getSkillDisplayName({
           languageName: language.name,
@@ -992,8 +992,8 @@ export default function ChargenWizard() {
         skill.id,
         {
           derivedSourceLabel: formatDerivedSkillSourceLabel({
-            sourceSkillName: skillView?.derivedSourceSkillName,
-            sourceType: skillView?.derivedSourceType
+            sourceSkillName: skillView?.relationshipSourceSkillName,
+            sourceType: skillView?.relationshipSourceType
           }),
           displayName: getSkillDisplayName({
             languageName: skillView?.languageName,
@@ -1105,7 +1105,7 @@ export default function ChargenWizard() {
 
           return {
             avgStats: skillView.linkedStatAverage,
-            derivedSkillXp: skillView.derivedSkillLevel ?? 0,
+            derivedSkillXp: skillView.relationshipGrantedSkillLevel ?? 0,
             literacyWarning: skillView.literacyWarning,
             skillType: getPlayerFacingSkillBucket(skill),
             skillGroupXp: skillView.groupLevel,
@@ -1153,11 +1153,12 @@ export default function ChargenWizard() {
       return {
         derivedSourceLabel: specializationView
           ? formatDerivedSkillSourceLabel({
-              sourceSkillName: specializationView.derivedSourceSkillName,
-              sourceType: specializationView.derivedSourceType
+              sourceSkillName: specializationView.relationshipGrantedSourceSkillName,
+              sourceType: specializationView.relationshipGrantedSourceType
             })
           : undefined,
-        derivedSpecializationLevel: specializationView?.derivedSpecializationLevel ?? 0,
+        derivedSpecializationLevel:
+          specializationView?.relationshipGrantedSpecializationLevel ?? 0,
         evaluation,
         parentSkillLevel: (parentMetrics?.groupXp ?? 0) + (parentMetrics?.skillXp ?? 0),
         parentSkillName: parentSkill?.name ?? specialization.skillId,
@@ -1958,7 +1959,7 @@ export default function ChargenWizard() {
                         Group-derived value {row.metrics.groupXp}
                       </span>
                       <span style={getBadgeStyle({ muted: true })}>
-                        Skill-derived value {row.metrics.derivedXp}
+                        Relationship grant preview {row.metrics.derivedXp}
                       </span>
                       <span style={getBadgeStyle({ muted: true })}>
                         Effective total {row.metrics.totalXp}
@@ -3597,7 +3598,7 @@ export default function ChargenWizard() {
                       <div>{row.secondaryRanks}</div>
                       {row.derivedSpecializationLevel > 0 ? (
                         <div style={{ color: "#5e5a50", fontSize: "0.8rem" }}>
-                          +{row.derivedSpecializationLevel} derived
+                          +{row.derivedSpecializationLevel} grant preview
                         </div>
                       ) : null}
                     </div>
@@ -3812,7 +3813,7 @@ export default function ChargenWizard() {
                   <strong>Avg stats</strong>
                   <strong>Skill group XP</strong>
                   <strong>Owned XP</strong>
-                  <strong>Derived XP</strong>
+                  <strong>Grant preview</strong>
                   <strong>Total XP</strong>
                   <strong>Total skill level</strong>
                 </div>

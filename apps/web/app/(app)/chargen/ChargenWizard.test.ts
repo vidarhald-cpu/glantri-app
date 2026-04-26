@@ -841,9 +841,9 @@ describe("ChargenWizard combat allocation runtime helpers", () => {
     });
 
     expect(draftView.skills.find((skill) => skill.skillId === "two_handed_edged")).toMatchObject({
-      derivedSkillLevel: 7,
-      derivedSourceSkillName: "1-h edged",
-      effectiveSkillNumber: 17
+      effectiveSkillNumber: 17,
+      relationshipGrantedSkillLevel: 7,
+      relationshipSourceSkillName: "1-h edged"
     });
   });
 

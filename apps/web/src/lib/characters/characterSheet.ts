@@ -105,7 +105,7 @@ export function buildCharacterSheetSkillRows(input: {
         .map((skillView) => {
           const skillGroupXp = bestContributingGroup?.groupLevel ?? skillView.groupLevel ?? 0;
           const skillXp = skillView.specificSkillLevel ?? 0;
-          const derivedXp = skillView.derivedSkillLevel ?? 0;
+          const derivedXp = skillView.relationshipGrantedSkillLevel ?? 0;
           const totalXp = skillView.effectiveSkillNumber ?? skillGroupXp + skillXp + derivedXp;
 
           if (totalXp <= 0) {
@@ -116,8 +116,8 @@ export function buildCharacterSheetSkillRows(input: {
             avgStats:
               skillView.linkedStatAverage ?? getSkillLinkedStatAverage(input.build.profile, skill),
             derivedSourceLabel: formatDerivedSkillSourceLabel({
-              sourceSkillName: skillView.derivedSourceSkillName,
-              sourceType: skillView.derivedSourceType
+              sourceSkillName: skillView.relationshipSourceSkillName,
+              sourceType: skillView.relationshipSourceType
             }),
             derivedXp,
             skillGroupXp,
@@ -158,10 +158,10 @@ export function buildCharacterSheetSpecializationRows(input: {
 
       return {
         derivedSourceLabel: formatDerivedSkillSourceLabel({
-          sourceSkillName: specializationView.derivedSourceSkillName,
-          sourceType: specializationView.derivedSourceType
+          sourceSkillName: specializationView.relationshipGrantedSourceSkillName,
+          sourceType: specializationView.relationshipGrantedSourceType
         }),
-        derivedXp: specializationView.derivedSpecializationLevel ?? 0,
+        derivedXp: specializationView.relationshipGrantedSpecializationLevel ?? 0,
         parentSkillName: specializationView.parentSkillName,
         specializationId: definition.id,
         specializationName: definition.name,

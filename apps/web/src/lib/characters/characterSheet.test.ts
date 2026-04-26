@@ -191,7 +191,7 @@ describe("buildCharacterSheetSkillRows", () => {
     const firstAidRow = groupedRows.flatMap((group) => group.rows).find((row) => row.skillId === "first_aid");
 
     expect(firstAidRow).toMatchObject({
-      derivedSourceLabel: "Derived from Medicine",
+      derivedSourceLabel: "Granted from Medicine",
       derivedXp: 10,
       totalXp: 10
     });
@@ -227,7 +227,7 @@ describe("buildCharacterSheetSkillRows", () => {
     }).flatMap((group) => group.rows);
 
     expect(rows.find((row) => row.skillId === "crossbow")).toMatchObject({
-      derivedSourceLabel: "Derived from Bow",
+      derivedSourceLabel: "Granted from Bow",
       derivedXp: 5,
       totalXp: 5
     });

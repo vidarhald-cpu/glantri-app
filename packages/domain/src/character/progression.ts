@@ -27,6 +27,17 @@ export const characterSkillSchema = z.object({
   groupId: z.string().min(1),
   languageName: z.string().min(1).optional(),
   primaryRanks: z.number().int().nonnegative().default(0),
+  relationshipGrantedRanks: z.number().int().nonnegative().optional(),
+  relationshipGrantSourceName: z.string().min(1).optional(),
+  relationshipGrantSourceSkillId: z.string().min(1).optional(),
+  relationshipGrantSourceType: z
+    .enum([
+      "explicit",
+      "melee-cross-training",
+      "specialization-bridge-child",
+      "specialization-bridge-parent"
+    ])
+    .optional(),
   secondaryRanks: z.number().int().nonnegative().default(0),
   skillId: z.string().min(1),
   ranks: z.number().int().nonnegative().default(0),
@@ -35,6 +46,17 @@ export const characterSkillSchema = z.object({
 });
 
 export const characterSpecializationSchema = z.object({
+  relationshipGrantedRanks: z.number().int().nonnegative().optional(),
+  relationshipGrantSourceName: z.string().min(1).optional(),
+  relationshipGrantSourceSkillId: z.string().min(1).optional(),
+  relationshipGrantSourceType: z
+    .enum([
+      "explicit",
+      "melee-cross-training",
+      "specialization-bridge-child",
+      "specialization-bridge-parent"
+    ])
+    .optional(),
   specializationId: z.string().min(1),
   skillId: z.string().min(1),
   secondaryRanks: z.number().int().nonnegative().default(0),

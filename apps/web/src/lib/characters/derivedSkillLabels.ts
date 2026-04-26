@@ -18,5 +18,5 @@ export function formatDerivedSkillSourceLabel(input: {
     return `Specialized from ${input.sourceSkillName}`;
   }
 
-  return `Derived from ${input.sourceSkillName}`;
+  return `Granted from ${input.sourceSkillName}`;
 }

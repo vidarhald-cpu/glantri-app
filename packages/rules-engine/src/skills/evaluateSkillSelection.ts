@@ -4,9 +4,7 @@ import type {
   SkillGroupDefinition,
   SkillSpecialization
 } from "@glantri/domain";
-import { calculateGroupLevel } from "./calculateGroupLevel";
-import { getActiveSkillGroupIds } from "./getActiveSkillGroupIds";
-import { selectBestSkillGroupContribution } from "./selectBestSkillGroupContribution";
+import { getSkillNonRelationshipBaseLevel } from "./deriveSkillRelationships";
 
 const LITERACY_SKILL_ID = "literacy";
 
@@ -112,36 +110,7 @@ function getNonDerivedSkillBaseLevel(input: {
   progression: CharacterProgression;
   skill: SkillDefinition;
 }): number {
-  const directRanks = getPurchasedSkillLevel(input.progression, input.skill.id);
-  const relevantGroupIds = new Set(
-    getActiveSkillGroupIds({
-      progression: input.progression,
-      skill: input.skill,
-      skillGroups: input.content.skillGroups
-    })
-  );
-  const bestGroupContribution =
-    selectBestSkillGroupContribution(
-      input.progression.skillGroups
-        .filter((group) => group.ranks > 0 && relevantGroupIds.has(group.groupId))
-        .map((group) => {
-          const definition = input.content.skillGroups?.find(
-            (skillGroup) => skillGroup.id === group.groupId
-          );
-
-          return {
-            groupId: group.groupId,
-            groupLevel: calculateGroupLevel({
-              gms: group.gms,
-              ranks: group.ranks
-            }),
-            name: definition?.name ?? group.groupId,
-            sortOrder: definition?.sortOrder ?? Number.MAX_SAFE_INTEGER
-          };
-        })
-    )?.groupLevel ?? 0;
-
-  return directRanks + bestGroupContribution;
+  return getSkillNonRelationshipBaseLevel(input);
 }
 
 function createEmptyEvaluation(): SkillSelectionEvaluationResult {

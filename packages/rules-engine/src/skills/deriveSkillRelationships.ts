@@ -1,8 +1,16 @@
 import type {
+  CharacterProgression,
+  CharacterSkill,
+  CharacterSpecialization,
   MeleeCrossTraining,
   SkillDefinition,
+  SkillGroupDefinition,
   SkillSpecialization
 } from "@glantri/domain";
+
+import { calculateGroupLevel } from "./calculateGroupLevel";
+import { getActiveSkillGroupIds } from "./getActiveSkillGroupIds";
+import { selectBestSkillGroupContribution } from "./selectBestSkillGroupContribution";
 
 type SpecializationBridge = NonNullable<SkillDefinition["specializationBridge"]>;
 
@@ -26,6 +34,32 @@ export interface DerivedSpecializationGrantResult {
   sourceSkillName: string;
   sourceType: "specialization-bridge-parent";
   xp: number;
+}
+
+export interface ResolvedSkillRelationshipGrant {
+  currentRelationshipGrantedRanks: number;
+  minimumXp: number;
+  previewAdditionalRanks: number;
+  relationshipGrantedRanks: number;
+  sourceSkillId?: string;
+  sourceSkillName?: string;
+  sourceType?: SkillRelationshipSourceType;
+}
+
+export interface ResolvedSpecializationRelationshipGrant {
+  currentRelationshipGrantedRanks: number;
+  minimumXp: number;
+  previewAdditionalRanks: number;
+  relationshipGrantedRanks: number;
+  sourceSkillId?: string;
+  sourceSkillName?: string;
+  sourceType?: "specialization-bridge-parent";
+}
+
+interface RelationshipContentShape {
+  skillGroups?: SkillGroupDefinition[];
+  skills: SkillDefinition[];
+  specializations?: SkillSpecialization[];
 }
 
 export function getMeleeCrossTrainingFactor(input: {
@@ -130,6 +164,207 @@ function shouldReplaceSpecializationGrant(
   }
 
   return candidate.sourceSkillId.localeCompare(current.sourceSkillId) < 0;
+}
+
+function getOwnedSkillRows(
+  progression: CharacterProgression,
+  skillId: string
+): CharacterSkill[] {
+  return progression.skills.filter((skill) => skill.skillId === skillId && !skill.languageName);
+}
+
+function getBestActiveGroupContribution(input: {
+  content: Pick<RelationshipContentShape, "skillGroups">;
+  progression: CharacterProgression;
+  skill: SkillDefinition;
+}): number {
+  const activeGroupIds = new Set(
+    getActiveSkillGroupIds({
+      progression: input.progression,
+      skill: input.skill,
+      skillGroups: input.content.skillGroups
+    })
+  );
+  const contributions = input.progression.skillGroups
+    .filter((group) => group.ranks > 0 && activeGroupIds.has(group.groupId))
+    .map((group) => {
+      const definition = input.content.skillGroups?.find(
+        (candidate) => candidate.id === group.groupId
+      );
+
+      return {
+        groupId: group.groupId,
+        groupLevel: calculateGroupLevel({
+          gms: group.gms ?? 0,
+          ranks: group.ranks
+        }),
+        name: definition?.name ?? group.groupId,
+        sortOrder: definition?.sortOrder ?? Number.MAX_SAFE_INTEGER
+      };
+    });
+
+  return selectBestSkillGroupContribution(contributions)?.groupLevel ?? 0;
+}
+
+export function getSkillNonRelationshipBaseLevel(input: {
+  content: Pick<RelationshipContentShape, "skillGroups">;
+  progression: CharacterProgression;
+  skill: SkillDefinition;
+}): number {
+  const groupContribution = getBestActiveGroupContribution(input);
+  const bestOwnedRowTotal = getOwnedSkillRows(input.progression, input.skill.id).reduce(
+    (highest, row) =>
+      Math.max(
+        highest,
+        (row.grantedRanks ?? 0) + (row.primaryRanks ?? 0) + (row.secondaryRanks ?? 0)
+      ),
+    0
+  );
+
+  return groupContribution + bestOwnedRowTotal;
+}
+
+function getExistingSkillRelationshipGrantedRanks(
+  progression: CharacterProgression,
+  skillId: string
+): number {
+  return getOwnedSkillRows(progression, skillId).reduce(
+    (highest, row) => Math.max(highest, row.relationshipGrantedRanks ?? 0),
+    0
+  );
+}
+
+function getCurrentSkillOwnedTotal(
+  progression: CharacterProgression,
+  skillId: string
+): number {
+  return getOwnedSkillRows(progression, skillId).reduce(
+    (highest, row) =>
+      Math.max(
+        highest,
+        (row.grantedRanks ?? 0) + (row.primaryRanks ?? 0) + (row.secondaryRanks ?? 0)
+      ),
+    0
+  );
+}
+
+function getSpecializationNonRelationshipBaseLevel(
+  progression: CharacterProgression,
+  specializationId: string
+): number {
+  const specialization = progression.specializations.find(
+    (item) => item.specializationId === specializationId
+  );
+
+  return specialization?.secondaryRanks ?? 0;
+}
+
+function getExistingSpecializationRelationshipGrantedRanks(
+  progression: CharacterProgression,
+  specializationId: string
+): number {
+  return (
+    progression.specializations.find((item) => item.specializationId === specializationId)
+      ?.relationshipGrantedRanks ?? 0
+  );
+}
+
+function getCurrentSpecializationOwnedTotal(
+  progression: CharacterProgression,
+  specializationId: string
+): number {
+  return (
+    progression.specializations.find((item) => item.specializationId === specializationId)
+      ?.secondaryRanks ?? 0
+  );
+}
+
+function createEmptySkillRow(skill: SkillDefinition): CharacterSkill {
+  return {
+    category: skill.category,
+    categoryId: skill.categoryId,
+    grantedRanks: 0,
+    groupId: skill.groupIds[0] ?? skill.groupId,
+    level: 0,
+    primaryRanks: 0,
+    ranks: 0,
+    relationshipGrantedRanks: 0,
+    secondaryRanks: 0,
+    skillId: skill.id
+  };
+}
+
+function createEmptySpecializationRow(
+  specialization: SkillSpecialization
+): CharacterSpecialization {
+  return {
+    level: 0,
+    ranks: 0,
+    relationshipGrantedRanks: 0,
+    secondaryRanks: 0,
+    skillId: specialization.skillId,
+    specializationId: specialization.id
+  };
+}
+
+function ensureSkillRow(
+  progression: CharacterProgression,
+  skill: SkillDefinition
+): CharacterSkill {
+  const existing = progression.skills.find(
+    (row) => row.skillId === skill.id && !row.languageName
+  );
+
+  if (existing) {
+    return existing;
+  }
+
+  const created = createEmptySkillRow(skill);
+  progression.skills.push(created);
+  return created;
+}
+
+function ensureSpecializationRow(
+  progression: CharacterProgression,
+  specialization: SkillSpecialization
+): CharacterSpecialization {
+  const existing = progression.specializations.find(
+    (row) => row.specializationId === specialization.id
+  );
+
+  if (existing) {
+    return existing;
+  }
+
+  const created = createEmptySpecializationRow(specialization);
+  progression.specializations.push(created);
+  return created;
+}
+
+function normalizeSkillRow(skill: CharacterSkill): CharacterSkill {
+  const grantedRanks = skill.grantedRanks ?? 0;
+  const primaryRanks = skill.primaryRanks ?? 0;
+  const relationshipGrantedRanks = skill.relationshipGrantedRanks ?? 0;
+  const secondaryRanks = skill.secondaryRanks ?? 0;
+
+  skill.grantedRanks = grantedRanks;
+  skill.primaryRanks = primaryRanks;
+  skill.relationshipGrantedRanks = relationshipGrantedRanks;
+  skill.secondaryRanks = secondaryRanks;
+  skill.ranks = grantedRanks + primaryRanks + relationshipGrantedRanks + secondaryRanks;
+  return skill;
+}
+
+function normalizeSpecializationRow(
+  specialization: CharacterSpecialization
+): CharacterSpecialization {
+  const relationshipGrantedRanks = specialization.relationshipGrantedRanks ?? 0;
+  const secondaryRanks = specialization.secondaryRanks ?? 0;
+
+  specialization.relationshipGrantedRanks = relationshipGrantedRanks;
+  specialization.secondaryRanks = secondaryRanks;
+  specialization.ranks = relationshipGrantedRanks + secondaryRanks;
+  return specialization;
 }
 
 export function deriveBestSkillRelationships(input: {
@@ -293,7 +528,8 @@ export function deriveBestSkillRelationships(input: {
 
   for (const sourceSpecialization of specializations) {
     const bridge = sourceSpecialization.specializationBridge;
-    const sourceBaseXp = input.specializationBaseXpBySpecializationId?.get(sourceSpecialization.id) ?? 0;
+    const sourceBaseXp =
+      input.specializationBaseXpBySpecializationId?.get(sourceSpecialization.id) ?? 0;
 
     if (!bridge || sourceBaseXp <= 0) {
       continue;
@@ -326,6 +562,173 @@ export function deriveBestSkillRelationships(input: {
     bestDerivedBySkillId,
     bestDerivedBySpecializationId
   };
+}
+
+export function resolveRelationshipMinimumGrants(input: {
+  content: RelationshipContentShape;
+  progression: CharacterProgression;
+}): {
+  bySkillId: Map<string, ResolvedSkillRelationshipGrant>;
+  bySpecializationId: Map<string, ResolvedSpecializationRelationshipGrant>;
+  skillBaseXpBySkillId: Map<string, number>;
+  specializationBaseXpBySpecializationId: Map<string, number>;
+} {
+  const skillBaseXpBySkillId = new Map(
+    input.content.skills.map((skill) => [
+      skill.id,
+      getSkillNonRelationshipBaseLevel({
+        content: input.content,
+        progression: input.progression,
+        skill
+      })
+    ])
+  );
+  const specializationBaseXpBySpecializationId = new Map(
+    (input.content.specializations ?? []).map((specialization) => [
+      specialization.id,
+      getSpecializationNonRelationshipBaseLevel(input.progression, specialization.id)
+    ])
+  );
+  const minimums = deriveBestSkillRelationships({
+    skillBaseXpBySkillId,
+    skills: input.content.skills,
+    specializationBaseXpBySpecializationId,
+    specializations: input.content.specializations
+  });
+  const bySkillId = new Map<string, ResolvedSkillRelationshipGrant>();
+  const bySpecializationId = new Map<string, ResolvedSpecializationRelationshipGrant>();
+
+  for (const skill of input.content.skills) {
+    const bestMinimum = minimums.bestDerivedBySkillId.get(skill.id);
+    const currentOwnedTotal = getCurrentSkillOwnedTotal(input.progression, skill.id);
+    const currentRelationshipGrantedRanks = getExistingSkillRelationshipGrantedRanks(
+      input.progression,
+      skill.id
+    );
+    const currentRealTotal = currentOwnedTotal + currentRelationshipGrantedRanks;
+    const minimumXp = bestMinimum?.xp ?? 0;
+    const neededAdditionalRanks = Math.max(0, minimumXp - currentRealTotal);
+    const relationshipGrantedRanks = currentRelationshipGrantedRanks + neededAdditionalRanks;
+    const previewAdditionalRanks = Math.max(
+      0,
+      relationshipGrantedRanks - currentRelationshipGrantedRanks
+    );
+
+    if (relationshipGrantedRanks <= 0 && !bestMinimum) {
+      continue;
+    }
+
+    bySkillId.set(skill.id, {
+      currentRelationshipGrantedRanks,
+      minimumXp,
+      previewAdditionalRanks,
+      relationshipGrantedRanks,
+      sourceSkillId: bestMinimum?.sourceSkillId,
+      sourceSkillName: bestMinimum?.sourceSkillName,
+      sourceType: bestMinimum?.sourceType
+    });
+  }
+
+  for (const specialization of input.content.specializations ?? []) {
+    const bestMinimum = minimums.bestDerivedBySpecializationId.get(specialization.id);
+    const currentOwnedTotal = getCurrentSpecializationOwnedTotal(
+      input.progression,
+      specialization.id
+    );
+    const currentRelationshipGrantedRanks =
+      getExistingSpecializationRelationshipGrantedRanks(
+        input.progression,
+        specialization.id
+      );
+    const currentRealTotal = currentOwnedTotal + currentRelationshipGrantedRanks;
+    const minimumXp = bestMinimum?.xp ?? 0;
+    const neededAdditionalRanks = Math.max(0, minimumXp - currentRealTotal);
+    const relationshipGrantedRanks = currentRelationshipGrantedRanks + neededAdditionalRanks;
+    const previewAdditionalRanks = Math.max(
+      0,
+      relationshipGrantedRanks - currentRelationshipGrantedRanks
+    );
+
+    if (relationshipGrantedRanks <= 0 && !bestMinimum) {
+      continue;
+    }
+
+    bySpecializationId.set(specialization.id, {
+      currentRelationshipGrantedRanks,
+      minimumXp,
+      previewAdditionalRanks,
+      relationshipGrantedRanks,
+      sourceSkillId: bestMinimum?.sourceSkillId,
+      sourceSkillName: bestMinimum?.sourceSkillName,
+      sourceType: bestMinimum?.sourceType
+    });
+  }
+
+  return {
+    bySkillId,
+    bySpecializationId,
+    skillBaseXpBySkillId,
+    specializationBaseXpBySpecializationId
+  };
+}
+
+export function applyRelationshipMinimumGrants(input: {
+  content: RelationshipContentShape;
+  progression: CharacterProgression;
+}): CharacterProgression {
+  const progression = structuredClone(input.progression);
+  const resolved = resolveRelationshipMinimumGrants({
+    content: input.content,
+    progression
+  });
+
+  for (const skill of input.content.skills) {
+    const grant = resolved.bySkillId.get(skill.id);
+
+    if (!grant || grant.relationshipGrantedRanks <= 0) {
+      continue;
+    }
+
+    const row = ensureSkillRow(progression, skill);
+    row.relationshipGrantedRanks = Math.max(
+      row.relationshipGrantedRanks ?? 0,
+      grant.relationshipGrantedRanks
+    );
+
+    if (grant.sourceSkillId && grant.sourceSkillName && grant.sourceType) {
+      row.relationshipGrantSourceSkillId = grant.sourceSkillId;
+      row.relationshipGrantSourceName = grant.sourceSkillName;
+      row.relationshipGrantSourceType = grant.sourceType;
+    }
+
+    normalizeSkillRow(row);
+  }
+
+  for (const specialization of input.content.specializations ?? []) {
+    const grant = resolved.bySpecializationId.get(specialization.id);
+
+    if (!grant || grant.relationshipGrantedRanks <= 0) {
+      continue;
+    }
+
+    const row = ensureSpecializationRow(progression, specialization);
+    row.relationshipGrantedRanks = Math.max(
+      row.relationshipGrantedRanks ?? 0,
+      grant.relationshipGrantedRanks
+    );
+
+    if (grant.sourceSkillId && grant.sourceSkillName && grant.sourceType) {
+      row.relationshipGrantSourceSkillId = grant.sourceSkillId;
+      row.relationshipGrantSourceName = grant.sourceSkillName;
+      row.relationshipGrantSourceType = grant.sourceType;
+    }
+
+    normalizeSpecializationRow(row);
+  }
+
+  progression.skills = progression.skills.map(normalizeSkillRow);
+  progression.specializations = progression.specializations.map(normalizeSpecializationRow);
+  return progression;
 }
 
 export function deriveBestSkillRelationshipXp(input: {

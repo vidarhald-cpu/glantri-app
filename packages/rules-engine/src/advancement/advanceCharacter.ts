@@ -16,6 +16,7 @@ import { getSkillGroupIds } from "@glantri/domain";
 
 import { calculateGroupLevel } from "../skills/calculateGroupLevel";
 import { calculateSpecializationLevel } from "../skills/calculateSpecializationLevel";
+import { applyRelationshipMinimumGrants } from "../skills/deriveSkillRelationships";
 import { selectBestSkillGroupContribution } from "../skills/selectBestSkillGroupContribution";
 import {
   buildChargenDraftView,
@@ -113,6 +114,7 @@ function createEmptySkill(skill: SkillDefinition): CharacterSkill {
     level: 0,
     primaryRanks: 0,
     ranks: 0,
+    relationshipGrantedRanks: 0,
     secondaryRanks: 0,
     skillId: skill.id
   };
@@ -124,6 +126,7 @@ function createEmptySpecialization(
   return {
     level: 0,
     ranks: 0,
+    relationshipGrantedRanks: 0,
     secondaryRanks: 0,
     skillId: specialization.skillId,
     specializationId: specialization.id
@@ -381,7 +384,12 @@ export function spendAdvancementPoint(
     const group = ensureGroupExists(progression, input.targetId);
     group.primaryRanks += 1;
     group.ranks = group.grantedRanks + group.primaryRanks + group.secondaryRanks;
-    build.progression = normalizeChargenProgression(progression);
+    build.progression = normalizeChargenProgression(
+      applyRelationshipMinimumGrants({
+        content: input.content,
+        progression
+      })
+    );
 
     return {
       advancementPointsSpent: input.advancementPointsSpent + cost,
@@ -456,8 +464,17 @@ export function spendAdvancementPoint(
       skill.primaryRanks += 1;
     }
 
-    skill.ranks = skill.grantedRanks + skill.primaryRanks + skill.secondaryRanks;
-    build.progression = normalizeChargenProgression(progression);
+    skill.ranks =
+      skill.grantedRanks +
+      skill.primaryRanks +
+      (skill.relationshipGrantedRanks ?? 0) +
+      skill.secondaryRanks;
+    build.progression = normalizeChargenProgression(
+      applyRelationshipMinimumGrants({
+        content: input.content,
+        progression
+      })
+    );
 
     return {
       advancementPointsSpent: input.advancementPointsSpent + cost,
@@ -541,9 +558,15 @@ export function spendAdvancementPoint(
 
   const specialization = ensureSpecializationExists(progression, specializationDefinition);
   specialization.secondaryRanks += 1;
-  specialization.ranks = specialization.secondaryRanks;
+  specialization.ranks =
+    specialization.secondaryRanks + (specialization.relationshipGrantedRanks ?? 0);
   specialization.skillId = specializationDefinition.skillId;
-  build.progression = normalizeChargenProgression(progression);
+  build.progression = normalizeChargenProgression(
+    applyRelationshipMinimumGrants({
+      content: input.content,
+      progression
+    })
+  );
 
   return {
     advancementPointsSpent: input.advancementPointsSpent + cost,
