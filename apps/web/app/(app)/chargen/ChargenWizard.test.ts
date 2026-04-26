@@ -510,6 +510,79 @@ const hiddenOtherSkillContent = {
   specializations: []
 };
 
+const directGrantedSkillContent = {
+  civilizations: [],
+  languages: [],
+  professionFamilies: [{ id: "envoy_family", name: "Envoy" }],
+  professionSkills: [
+    {
+      grantType: "skill" as const,
+      isCore: true,
+      professionId: "envoy_family",
+      scope: "family" as const,
+      skillId: "etiquette"
+    }
+  ],
+  professions: [{ familyId: "envoy_family", id: "envoy", name: "Envoy", subtypeName: "Envoy" }],
+  skillGroups: [{ id: "courtly", name: "Courtly", sortOrder: 1 }],
+  skills: [
+    {
+      allowsSpecializations: false,
+      category: "ordinary" as const,
+      categoryId: "court-social" as const,
+      dependencies: [],
+      dependencySkillIds: [],
+      groupId: "courtly",
+      groupIds: ["courtly"],
+      id: "etiquette",
+      linkedStats: ["com"],
+      name: "Etiquette",
+      requiresLiteracy: "no" as const,
+      sortOrder: 1
+    }
+  ],
+  societies: [],
+  societyLevels: [
+    {
+      professionIds: ["envoy"],
+      skillGroupIds: [],
+      skillIds: [],
+      socialClass: "Common",
+      societyId: "glantri",
+      societyLevel: 1,
+      societyName: "Glantri"
+    },
+    {
+      professionIds: ["envoy"],
+      skillGroupIds: [],
+      skillIds: [],
+      socialClass: "Guild",
+      societyId: "glantri",
+      societyLevel: 2,
+      societyName: "Glantri"
+    },
+    {
+      professionIds: ["envoy"],
+      skillGroupIds: [],
+      skillIds: [],
+      socialClass: "Patrician",
+      societyId: "glantri",
+      societyLevel: 3,
+      societyName: "Glantri"
+    },
+    {
+      professionIds: ["envoy"],
+      skillGroupIds: [],
+      skillIds: [],
+      socialClass: "Noble",
+      societyId: "glantri",
+      societyLevel: 4,
+      societyName: "Glantri"
+    }
+  ],
+  specializations: []
+};
+
 function createProgressionWithOtherSkillCandidate() {
   return {
     ...createChargenProgression()
@@ -914,6 +987,96 @@ describe("ChargenWizard concrete language rows", () => {
         content: hiddenOtherSkillContent,
         draftView: secondDraftView,
         profile: undefined,
+        skill: etiquetteSkill!
+      }).totalXp
+    ).toBe(2);
+  });
+
+  it("keeps direct granted skills visible in their granted section after purchase", () => {
+    const startingProgression = createChargenProgression();
+    const firstPurchase = allocateChargenPoint({
+      content: directGrantedSkillContent,
+      professionId: "envoy",
+      profile: languageProfile,
+      progression: startingProgression,
+      societyId: "glantri",
+      societyLevel: 1,
+      targetId: "etiquette",
+      targetType: "skill"
+    });
+
+    expect(firstPurchase.error).toBeUndefined();
+
+    const firstDraftView = buildChargenDraftView({
+      content: directGrantedSkillContent,
+      professionId: "envoy",
+      profile: languageProfile,
+      progression: firstPurchase.progression,
+      societyId: "glantri",
+      societyLevel: 1
+    });
+    const etiquetteSkill = directGrantedSkillContent.skills.find((skill) => skill.id === "etiquette");
+    const skillAccess = buildChargenSkillAccessSummary({
+      content: directGrantedSkillContent,
+      professionId: "envoy",
+      societyId: "glantri",
+      societyLevel: 1
+    });
+
+    expect(etiquetteSkill).toBeDefined();
+    expect(skillAccess.normalSkillIds).toContain("etiquette");
+    expect(
+      getSkillDisplayGroupId({
+        content: directGrantedSkillContent,
+        draftView: firstDraftView,
+        skill: etiquetteSkill!,
+        skillAccess
+      })
+    ).toBeUndefined();
+    expect(
+      getSkillAllocationMetrics({
+        content: directGrantedSkillContent,
+        draftView: firstDraftView,
+        profile: languageProfile,
+        skill: etiquetteSkill!
+      }).totalXp
+    ).toBe(1);
+
+    const secondPurchase = allocateChargenPoint({
+      content: directGrantedSkillContent,
+      professionId: "envoy",
+      profile: languageProfile,
+      progression: firstPurchase.progression,
+      societyId: "glantri",
+      societyLevel: 1,
+      targetId: "etiquette",
+      targetType: "skill"
+    });
+
+    expect(secondPurchase.error).toBeUndefined();
+
+    const secondDraftView = buildChargenDraftView({
+      content: directGrantedSkillContent,
+      professionId: "envoy",
+      profile: languageProfile,
+      progression: secondPurchase.progression,
+      societyId: "glantri",
+      societyLevel: 1
+    });
+
+    expect(
+      getSkillDisplayGroupId({
+        content: directGrantedSkillContent,
+        draftView: secondDraftView,
+        skill: etiquetteSkill!,
+        skillAccess
+      })
+    ).toBeUndefined();
+    expect(
+      getSkillAllocationMetrics({
+        content: directGrantedSkillContent,
+        draftView: secondDraftView,
+        profile: languageProfile,
         skill: etiquetteSkill!
       }).totalXp
     ).toBe(2);

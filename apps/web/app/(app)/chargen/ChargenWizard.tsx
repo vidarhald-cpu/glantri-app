@@ -229,8 +229,8 @@ export function getSkillDisplayGroupId(input: {
     return undefined;
   }
 
-  if (purchasedSkill && input.skillAccess.normalSkillIds.includes(input.skill.id)) {
-    return purchasedSkill.contributingGroupId ?? purchasedSkill.groupId;
+  if (purchasedSkill?.contributingGroupId && input.skillAccess.normalSkillIds.includes(input.skill.id)) {
+    return purchasedSkill.contributingGroupId;
   }
 
   return undefined;
