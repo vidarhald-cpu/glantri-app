@@ -1,7 +1,7 @@
 import { collectCanonicalContentWarnings, type CanonicalContent } from "@glantri/content";
 import { equipmentTemplates } from "@glantri/content/equipment";
 import { getPlayerFacingSkillCategoryId, getSkillGroupIds } from "@glantri/domain";
-import { resolveEffectiveProfessionPackage } from "@glantri/rules-engine";
+import { getMeleeCrossTrainingFactor, resolveEffectiveProfessionPackage } from "@glantri/rules-engine";
 import type { ArmorTemplate, GearTemplate, ShieldTemplate, ValuableTemplate, WeaponTemplate } from "@glantri/domain";
 
 import {
@@ -38,6 +38,11 @@ export interface SkillAdminRow {
     sourceSkillId: string;
     sourceSkillName: string;
   }>;
+  incomingMeleeCrossTraining: Array<{
+    factorPercent: number;
+    sourceSkillId: string;
+    sourceSkillName: string;
+  }>;
   meleeCrossTraining?:
     | {
         attackStyle: string;
@@ -52,9 +57,14 @@ export interface SkillAdminRow {
     targetSkillId: string;
     targetSkillName: string;
   }>;
+  outgoingMeleeCrossTraining: Array<{
+    factorPercent: number;
+    targetSkillId: string;
+    targetSkillName: string;
+  }>;
   primaryGroup: string;
   professionNames: string[];
-  relationshipIndicators: string[];
+  relationshipSummaryBadges: string[];
   secondaryOf: string;
   skillCategory: string;
   shortDescription: string;
@@ -492,9 +502,11 @@ export function buildSkillRelationshipSummary(input: {
     return {
       hasSkillRelationships: false,
       incomingDerivedGrants: [],
+      incomingMeleeCrossTraining: [],
       meleeCrossTraining: undefined,
       outgoingDerivedGrants: [],
-      relationshipIndicators: []
+      outgoingMeleeCrossTraining: [],
+      relationshipSummaryBadges: []
     };
   }
 
@@ -526,6 +538,58 @@ export function buildSkillRelationshipSummary(input: {
         left.factorPercent - right.factorPercent
     );
 
+  const outgoingMeleeCrossTraining = input.content.skills
+    .filter((candidate) => candidate.id !== skill.id)
+    .flatMap((candidate) => {
+      const factor = getMeleeCrossTrainingFactor({
+        source: skill.meleeCrossTraining,
+        target: candidate.meleeCrossTraining
+      });
+
+      if (factor <= 0) {
+        return [];
+      }
+
+      return [
+        {
+          factorPercent: Math.floor(factor * 100),
+          targetSkillId: candidate.id,
+          targetSkillName: candidate.name
+        }
+      ];
+    })
+    .sort(
+      (left, right) =>
+        right.factorPercent - left.factorPercent ||
+        left.targetSkillName.localeCompare(right.targetSkillName)
+    );
+
+  const incomingMeleeCrossTraining = input.content.skills
+    .filter((candidate) => candidate.id !== skill.id)
+    .flatMap((candidate) => {
+      const factor = getMeleeCrossTrainingFactor({
+        source: candidate.meleeCrossTraining,
+        target: skill.meleeCrossTraining
+      });
+
+      if (factor <= 0) {
+        return [];
+      }
+
+      return [
+        {
+          factorPercent: Math.floor(factor * 100),
+          sourceSkillId: candidate.id,
+          sourceSkillName: candidate.name
+        }
+      ];
+    })
+    .sort(
+      (left, right) =>
+        right.factorPercent - left.factorPercent ||
+        left.sourceSkillName.localeCompare(right.sourceSkillName)
+    );
+
   const meleeCrossTraining = skill.meleeCrossTraining
     ? {
         attackStyle: skill.meleeCrossTraining.attackStyle,
@@ -533,18 +597,29 @@ export function buildSkillRelationshipSummary(input: {
       }
     : undefined;
 
-  const relationshipIndicators = [
-    ...(outgoingDerivedGrants.length > 0 ? ["derived-out"] : []),
-    ...(incomingDerivedGrants.length > 0 ? ["derived-in"] : []),
-    ...(meleeCrossTraining ? ["melee-map"] : [])
+  const relationshipSummaryBadges = [
+    ...(outgoingDerivedGrants.length > 0 ? [`Grants ${outgoingDerivedGrants.length}`] : []),
+    ...(incomingDerivedGrants.length > 0 ? [`Receives ${incomingDerivedGrants.length}`] : []),
+    ...(outgoingMeleeCrossTraining.length > 0
+      ? [`Cross-trains ${outgoingMeleeCrossTraining.length}`]
+      : []),
+    ...(incomingMeleeCrossTraining.length > 0
+      ? [`Cross-trained from ${incomingMeleeCrossTraining.length}`]
+      : [])
   ];
 
   return {
-    hasSkillRelationships: relationshipIndicators.length > 0,
+    hasSkillRelationships:
+      outgoingDerivedGrants.length > 0 ||
+      incomingDerivedGrants.length > 0 ||
+      outgoingMeleeCrossTraining.length > 0 ||
+      incomingMeleeCrossTraining.length > 0,
     incomingDerivedGrants,
+    incomingMeleeCrossTraining,
     meleeCrossTraining,
     outgoingDerivedGrants,
-    relationshipIndicators
+    outgoingMeleeCrossTraining,
+    relationshipSummaryBadges
   };
 }
 
@@ -690,14 +765,16 @@ export function buildSkillAdminRows(content: CanonicalContent): SkillAdminRow[] 
         hasSkillRelationships: relationshipSummary.hasSkillRelationships,
         id: skill.id,
         incomingDerivedGrants: relationshipSummary.incomingDerivedGrants,
+        incomingMeleeCrossTraining: relationshipSummary.incomingMeleeCrossTraining,
         meleeCrossTraining: relationshipSummary.meleeCrossTraining,
         name: skill.name,
         optionalGroupCount: optionalGroupNames.length,
         optionalGroupNames,
         outgoingDerivedGrants: relationshipSummary.outgoingDerivedGrants,
+        outgoingMeleeCrossTraining: relationshipSummary.outgoingMeleeCrossTraining,
         primaryGroup,
         professionNames,
-        relationshipIndicators: relationshipSummary.relationshipIndicators,
+        relationshipSummaryBadges: relationshipSummary.relationshipSummaryBadges,
         secondaryOf: skill.secondaryOfSkillId
           ? skillsById.get(skill.secondaryOfSkillId)?.name ?? skill.secondaryOfSkillId
           : "",

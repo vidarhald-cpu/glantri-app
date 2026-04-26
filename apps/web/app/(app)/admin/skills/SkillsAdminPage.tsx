@@ -28,6 +28,21 @@ function summarizeList(values: string[], maxItems = 3): string {
   return `${values.slice(0, maxItems).join(", ")} +${values.length - maxItems} more`;
 }
 
+function formatRelationshipList(
+  values: string[],
+  maxItems = 2
+): string {
+  if (values.length === 0) {
+    return "None";
+  }
+
+  if (values.length <= maxItems) {
+    return values.join(", ");
+  }
+
+  return `${values.slice(0, maxItems).join(", ")} +${values.length - maxItems} more`;
+}
+
 function renderClampedCell(text: string, lines = 2) {
   return (
     <span
@@ -139,17 +154,9 @@ function SkillsReviewTable(props: {
                   : <span style={{ color: "#8a7e63" }}>None</span>}
               </div>
               <div style={{ color: "#2e2619", padding: "0.9rem 0.8rem" }}>
-                {row.relationshipIndicators.length > 0 ? (
+                {row.relationshipSummaryBadges.length > 0 ? (
                   renderClampedCell(
-                    row.relationshipIndicators
-                      .map((indicator) =>
-                        indicator === "derived-out"
-                          ? "Outgoing grant"
-                          : indicator === "derived-in"
-                            ? "Incoming grant"
-                            : "Melee map"
-                      )
-                      .join(", "),
+                    formatRelationshipList(row.relationshipSummaryBadges, 2),
                     2
                   )
                 ) : (
@@ -492,6 +499,34 @@ export default function SkillsAdminPage() {
                     {selectedRow?.meleeCrossTraining
                       ? `${selectedRow.meleeCrossTraining.handClass} / ${selectedRow.meleeCrossTraining.attackStyle}`
                       : "None"}
+                  </div>
+                  <div>
+                    <strong>Melee cross-training targets:</strong>
+                    {(selectedRow?.outgoingMeleeCrossTraining.length ?? 0) > 0 ? (
+                      <AdminTagList
+                        values={(selectedRow?.outgoingMeleeCrossTraining ?? []).map(
+                          (grant) => `${grant.targetSkillName} (${grant.factorPercent}%)`
+                        )}
+                      />
+                    ) : (
+                      <div style={{ color: "#8a7e63", marginTop: "0.25rem" }}>
+                        No melee cross-training targets are currently resolved.
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <strong>Melee cross-training sources:</strong>
+                    {(selectedRow?.incomingMeleeCrossTraining.length ?? 0) > 0 ? (
+                      <AdminTagList
+                        values={(selectedRow?.incomingMeleeCrossTraining ?? []).map(
+                          (grant) => `${grant.sourceSkillName} (${grant.factorPercent}%)`
+                        )}
+                      />
+                    ) : (
+                      <div style={{ color: "#8a7e63", marginTop: "0.25rem" }}>
+                        No melee cross-training sources are currently resolved.
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

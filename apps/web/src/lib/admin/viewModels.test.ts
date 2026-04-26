@@ -122,6 +122,10 @@ const content = {
       groupIds: ["high_group"],
       id: "beta_skill",
       linkedStats: ["dex"],
+      meleeCrossTraining: {
+        attackStyle: "strike",
+        handClass: "one-handed"
+      },
       name: "Beta Skill",
       requiresLiteracy: "no",
       societyLevel: 1,
@@ -251,6 +255,13 @@ describe("admin view models", () => {
         handClass: "one-handed"
       }
     });
+    expect(alphaRow?.outgoingMeleeCrossTraining).toEqual([
+      {
+        factorPercent: 75,
+        targetSkillId: "beta_skill",
+        targetSkillName: "Beta Skill"
+      }
+    ]);
     expect(alphaRow?.outgoingDerivedGrants).toEqual([
       {
         factorPercent: 100,
@@ -275,6 +286,14 @@ describe("admin view models", () => {
       })
     ).toMatchObject({
       hasSkillRelationships: true,
+      incomingMeleeCrossTraining: [],
+      outgoingMeleeCrossTraining: [
+        {
+          factorPercent: 75,
+          targetSkillId: "beta_skill",
+          targetSkillName: "Beta Skill"
+        }
+      ],
       outgoingDerivedGrants: [
         {
           factorPercent: 100,
@@ -282,7 +301,7 @@ describe("admin view models", () => {
           targetSkillName: "Beta Skill"
         }
       ],
-      relationshipIndicators: ["derived-out", "melee-map"]
+      relationshipSummaryBadges: ["Grants 1", "Cross-trains 1"]
     });
   });
 

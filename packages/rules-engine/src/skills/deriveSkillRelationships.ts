@@ -8,7 +8,7 @@ export interface DerivedSkillGrantResult {
   xp: number;
 }
 
-function getMeleeCrossTrainingFactor(input: {
+export function getMeleeCrossTrainingFactor(input: {
   source: MeleeCrossTraining | undefined;
   target: MeleeCrossTraining | undefined;
 }): number {
