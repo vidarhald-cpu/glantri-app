@@ -8,9 +8,13 @@ import { chargenRoutes } from "./routes/chargen";
 import { contentRoutes } from "./routes/content";
 import { syncRoutes } from "./routes/sync";
 
+const isProduction = process.env.NODE_ENV === "production";
+
 export function buildApiServer() {
   const app = Fastify({
-    logger: true
+    logger: {
+      level: process.env.LOG_LEVEL ?? (isProduction ? "info" : "debug")
+    }
   });
 
   applyLocalCors(app);

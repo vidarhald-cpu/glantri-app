@@ -1,5 +1,33 @@
 import type { ChargenSkillAccessSource } from "@glantri/rules-engine";
 
+type PlayerFacingSkillBucketId = "ordinary" | "secondary" | "special-access";
+
+export type SkillBrowseTypeFilter = "all" | PlayerFacingSkillBucketId;
+
+export interface PlayerFacingSkillBucketDefinition {
+  description: string;
+  id: PlayerFacingSkillBucketId;
+  label: string;
+}
+
+const PLAYER_FACING_BUCKET_DEFINITIONS: PlayerFacingSkillBucketDefinition[] = [
+  {
+    description: "Skills accessible through your profession and society connections",
+    id: "ordinary",
+    label: "Primary Skills"
+  },
+  {
+    description: "Secondary skills derived from investing in primary skills",
+    id: "secondary",
+    label: "Secondary Skills"
+  },
+  {
+    description: "Theoretical and esoteric skills with unique or limited access requirements",
+    id: "special-access",
+    label: "Special Access"
+  }
+];
+
 export interface ProfessionBrowseItem {
   description?: string;
   familyName: string;
@@ -74,6 +102,8 @@ export function matchesSkillBrowseFilters(input: {
   isOwned: boolean;
   name: string;
   search: string;
+  skillType?: PlayerFacingSkillBucketId;
+  skillTypeFilter?: SkillBrowseTypeFilter;
   visibilityFilter: SkillVisibilityFilter;
 }): boolean {
   const normalizedSearch = input.search.trim().toLowerCase();
@@ -81,6 +111,10 @@ export function matchesSkillBrowseFilters(input: {
     normalizedSearch.length === 0 || input.name.toLowerCase().includes(normalizedSearch);
 
   if (!matchesSearch) {
+    return false;
+  }
+
+  if (input.skillTypeFilter && input.skillTypeFilter !== "all" && input.skillType !== input.skillTypeFilter) {
     return false;
   }
 
@@ -126,4 +160,87 @@ export function filterSpecializationBrowseItems<T extends SpecializationBrowseIt
 
     return input.includeBlocked || isRelevantSpecializationBrowseItem(item);
   });
+}
+
+export function getPlayerFacingSkillBucketDefinitions(): PlayerFacingSkillBucketDefinition[] {
+  return PLAYER_FACING_BUCKET_DEFINITIONS;
+}
+
+export function getPlayerFacingSkillBucket(
+  skill: {
+    category?: "ordinary" | "secondary";
+    groupId: string;
+    groupIds: string[];
+    id: string;
+    isTheoretical?: boolean;
+    secondaryOfSkillId?: string;
+  },
+  options?: { preferDirectProfession?: boolean }
+): PlayerFacingSkillBucketId {
+  if (skill.category === "secondary" || skill.secondaryOfSkillId !== undefined) {
+    return "secondary";
+  }
+
+  if (skill.isTheoretical && !options?.preferDirectProfession) {
+    return "special-access";
+  }
+
+  return "ordinary";
+}
+
+export function mergeSkillBrowseRowsBySkillId<T extends { skill: { id: string } }>(
+  rows: T[]
+): T[] {
+  const seen = new Set<string>();
+
+  return rows.filter((row) => {
+    if (seen.has(row.skill.id)) {
+      return false;
+    }
+
+    seen.add(row.skill.id);
+    return true;
+  });
+}
+
+export function groupRowsBySkillType<T extends { skillType: PlayerFacingSkillBucketId }>(
+  rows: T[]
+): { bucketId: PlayerFacingSkillBucketId; label: string; rows: T[] }[] {
+  const bucketMap = new Map<PlayerFacingSkillBucketId, T[]>();
+
+  for (const row of rows) {
+    const existing = bucketMap.get(row.skillType);
+
+    if (existing) {
+      existing.push(row);
+    } else {
+      bucketMap.set(row.skillType, [row]);
+    }
+  }
+
+  return PLAYER_FACING_BUCKET_DEFINITIONS.filter((def) => bucketMap.has(def.id)).map((def) => ({
+    bucketId: def.id,
+    label: def.label,
+    rows: bucketMap.get(def.id)!
+  }));
+}
+
+export function formatDependencyOwnershipSummary(input: {
+  dependencyName: string;
+  directSkillLevel: number;
+  effectiveSkillLevel: number;
+}): string {
+  if (input.effectiveSkillLevel === 0) {
+    return `${input.dependencyName}: Not owned`;
+  }
+
+  if (input.directSkillLevel === 0) {
+    return `${input.dependencyName}: Level ${input.effectiveSkillLevel} (via group)`;
+  }
+
+  if (input.directSkillLevel < input.effectiveSkillLevel) {
+    return `${input.dependencyName}: Level ${input.effectiveSkillLevel} (${input.directSkillLevel} direct + group)`;
+  }
+
+  return `${input.dependencyName}: Level ${input.effectiveSkillLevel}`;
 }

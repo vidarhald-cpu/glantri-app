@@ -1,7 +1,6 @@
 import type {
   CarryMode,
   CharacterLoadout,
-  EquipmentItem,
   StorageLocation,
   StorageLocationType,
 } from "@glantri/domain/equipment";

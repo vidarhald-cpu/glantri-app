@@ -49,7 +49,7 @@ export function getInventoryRows(
   const items = getCharacterEquipmentItems(state, characterId);
 
   return items
-    .map((item) => {
+    .map((item): InventoryRow | null => {
       const template = state.templates.weaponsById[item.templateId];
       if (!template) {
         return null;
