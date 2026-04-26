@@ -12,6 +12,7 @@ import type {
 import { getCharacterSkillKey } from "@glantri/domain";
 import {
   buildCharacterSheetSummary,
+  evaluateSkillSelection,
   getCharacteristicGm,
   type CharacterSheetSummary,
 } from "@glantri/rules-engine";
@@ -57,9 +58,14 @@ export interface CharacterEditSkillRow {
 }
 
 export interface CharacterEditSpecializationRow {
+  blockingMessage?: string;
+  canDecreaseDirectXp: boolean;
+  canIncreaseDirectXp: boolean;
   derivedSourceLabel: string | undefined;
   derivedXp: number;
   parentSkillName: string;
+  parentSkillXp: number;
+  requiredParentLevel: number;
   specializationId: string;
   specializationName: string;
   total: number;
@@ -283,6 +289,65 @@ export function setCharacterSkillXp(
   return nextBuild;
 }
 
+export function setCharacterSpecializationXp(input: {
+  build: CharacterBuild;
+  content: Pick<CharacterEditContentShape, "skillGroups" | "skills">;
+  specialization: SkillSpecialization;
+  xp: number;
+}): {
+  build: CharacterBuild;
+  error?: string;
+} {
+  const nextBuild = cloneBuild(input.build);
+  const normalizedXp = Math.max(0, Math.trunc(input.xp));
+  const existing = nextBuild.progression.specializations.find(
+    (entry) => entry.specializationId === input.specialization.id
+  );
+  const currentXp = existing?.secondaryRanks ?? 0;
+
+  if (normalizedXp > currentXp) {
+    const evaluation = evaluateSkillSelection({
+      content: input.content,
+      progression: nextBuild.progression,
+      target: {
+        specialization: input.specialization,
+        targetType: "specialization"
+      }
+    });
+
+    if (!evaluation.isAllowed) {
+      return {
+        build: input.build,
+        error: evaluation.blockingReasons[0]?.message ?? "Specialization purchase is blocked."
+      };
+    }
+  }
+
+  if (normalizedXp <= 0) {
+    nextBuild.progression.specializations = nextBuild.progression.specializations.filter(
+      (entry) => entry.specializationId !== input.specialization.id
+    );
+    return { build: nextBuild };
+  }
+
+  if (existing) {
+    existing.secondaryRanks = normalizedXp;
+    existing.ranks = normalizedXp;
+    existing.skillId = input.specialization.skillId;
+    return { build: nextBuild };
+  }
+
+  nextBuild.progression.specializations.push({
+    level: 0,
+    ranks: normalizedXp,
+    secondaryRanks: normalizedXp,
+    skillId: input.specialization.skillId,
+    specializationId: input.specialization.id
+  });
+
+  return { build: nextBuild };
+}
+
 export function buildCharacterEditStatRows(
   build: CharacterBuild,
   sheetSummary: CharacterSheetSummary,
@@ -409,34 +474,55 @@ export function buildCharacterEditSkillRows(input: {
 }
 
 export function buildCharacterEditSpecializationRows(input: {
-  content: Pick<CharacterEditContentShape, "specializations">;
+  build: CharacterBuild;
+  content: Pick<CharacterEditContentShape, "skillGroups" | "skills" | "specializations">;
   sheetSummary: CharacterSheetSummary;
 }): CharacterEditSpecializationRow[] {
-  return input.sheetSummary.draftView.specializations
-    .map((specializationView) => {
-      const definition = input.content.specializations.find(
-        (specialization) => specialization.id === specializationView.specializationId
-      );
+  const rows: CharacterEditSpecializationRow[] = [];
 
-      if (!definition) {
-        return null;
+  for (const specializationView of input.sheetSummary.draftView.specializations) {
+    const definition = input.content.specializations.find(
+      (specialization) => specialization.id === specializationView.specializationId
+    );
+
+    if (!definition) {
+      continue;
+    }
+
+    const evaluation = evaluateSkillSelection({
+      content: input.content,
+      progression: input.build.progression,
+      target: {
+        specialization: definition,
+        targetType: "specialization"
       }
+    });
+    const parentSkillView = input.sheetSummary.draftView.skills.find(
+      (skillView) => skillView.skillId === definition.skillId && !skillView.languageName
+    );
+    const parentSkillXp =
+      (parentSkillView?.groupLevel ?? 0) + (parentSkillView?.specificSkillLevel ?? 0);
 
-      return {
-        derivedSourceLabel: formatDerivedSkillSourceLabel({
-          sourceSkillName: specializationView.derivedSourceSkillName,
-          sourceType: specializationView.derivedSourceType
-        }),
-        derivedXp: specializationView.derivedSpecializationLevel ?? 0,
-        parentSkillName: specializationView.parentSkillName,
-        specializationId: definition.id,
-        specializationName: definition.name,
-        total: specializationView.effectiveSpecializationNumber,
-        xp: specializationView.secondaryRanks
-      };
-    })
-    .filter((row): row is CharacterEditSpecializationRow => row !== null)
-    .sort((left, right) => left.specializationName.localeCompare(right.specializationName));
+    rows.push({
+      blockingMessage: evaluation.blockingReasons[0]?.message,
+      canDecreaseDirectXp: (specializationView.secondaryRanks ?? 0) > 0,
+      canIncreaseDirectXp: evaluation.isAllowed,
+      derivedSourceLabel: formatDerivedSkillSourceLabel({
+        sourceSkillName: specializationView.derivedSourceSkillName,
+        sourceType: specializationView.derivedSourceType
+      }),
+      derivedXp: specializationView.derivedSpecializationLevel ?? 0,
+      parentSkillName: specializationView.parentSkillName,
+      parentSkillXp,
+      requiredParentLevel: definition.minimumParentLevel,
+      specializationId: definition.id,
+      specializationName: definition.name,
+      total: specializationView.effectiveSpecializationNumber,
+      xp: specializationView.secondaryRanks ?? 0
+    });
+  }
+
+  return rows.sort((left, right) => left.specializationName.localeCompare(right.specializationName));
 }
 
 export function getCharacterEditSheetSummary(

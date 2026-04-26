@@ -215,6 +215,19 @@ const testContent = validateCanonicalContent({
         reverseFactor: 1,
         threshold: 6
       }
+    },
+    {
+      id: "one_handed_edged",
+      groupId: "combat",
+      groupIds: ["combat"],
+      name: "1-h edged",
+      linkedStats: ["dex", "dex"],
+      dependencies: [],
+      dependencySkillIds: [],
+      category: "ordinary",
+      requiresLiteracy: "no",
+      sortOrder: 13,
+      allowsSpecializations: true
     }
   ],
   specializations: [
@@ -233,6 +246,20 @@ const testContent = validateCanonicalContent({
       minimumGroupLevel: 1,
       minimumParentLevel: 1,
       sortOrder: 2
+    },
+    {
+      id: "fencing",
+      skillId: "one_handed_edged",
+      name: "Fencing",
+      minimumGroupLevel: 6,
+      minimumParentLevel: 6,
+      sortOrder: 3,
+      specializationBridge: {
+        parentExcessOffset: 5,
+        parentSkillId: "one_handed_edged",
+        reverseFactor: 1,
+        threshold: 6
+      }
     }
   ],
   professionFamilies: [],
@@ -528,6 +555,31 @@ describe("evaluateSkillSelection", () => {
     expect(evaluation.blockingReasons.map((reason) => reason.code)).toEqual([
       "missing-specialization-parent-skill"
     ]);
+  });
+
+  it("allows a specialization-bridge specialization when the parent base meets the threshold and rejects derived-only parent XP", () => {
+    const allowed = evaluateSkillSelection({
+      content: testContent,
+      progression: buildProgression({ one_handed_edged: 8 }),
+      target: {
+        specialization: getSpecialization("fencing"),
+        targetType: "specialization"
+      }
+    });
+    const derivedOnly = evaluateSkillSelection({
+      content: testContent,
+      progression: buildProgression({ longbow: 20 }),
+      target: {
+        specialization: getSpecialization("fencing"),
+        targetType: "specialization"
+      }
+    });
+
+    expect(allowed.isAllowed).toBe(true);
+    expect(derivedOnly.isAllowed).toBe(false);
+    expect(derivedOnly.blockingReasons[0]?.code).toBe(
+      "missing-specialization-parent-skill"
+    );
   });
 
   it("blocks a specialization when the parent skill level is too low", () => {

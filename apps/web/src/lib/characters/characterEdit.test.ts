@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import type { CharacterBuild, SkillDefinition, SkillGroupDefinition } from "@glantri/domain";
+import type {
+  CharacterBuild,
+  SkillDefinition,
+  SkillGroupDefinition,
+  SkillSpecialization
+} from "@glantri/domain";
 import { glantriCharacteristicLabels, glantriCharacteristicOrder } from "@glantri/domain";
 
 import {
@@ -19,6 +24,7 @@ import {
   setCharacterDistractionLevel,
   setCharacterCurrentStatValue,
   setCharacterNotes,
+  setCharacterSpecializationXp,
   setCharacterSkillGroupLevel,
   setCharacterSkillXp,
   setCharacterTitle
@@ -138,6 +144,21 @@ const skills: SkillDefinition[] = [
       reverseFactor: 1,
       threshold: 6
     }
+  },
+  {
+    allowsSpecializations: false,
+    category: "ordinary",
+    dependencies: [],
+    dependencySkillIds: [],
+    groupId: "martial",
+    groupIds: ["martial"],
+    id: "one_handed_edged",
+    isTheoretical: false,
+    linkedStats: ["dex"],
+    name: "1-h edged",
+    requiresLiteracy: "no",
+    societyLevel: 1,
+    sortOrder: 8
   }
 ];
 
@@ -209,6 +230,21 @@ const content = {
   skills,
   societyLevels: [],
   specializations: []
+};
+
+const fencingSpecialization: SkillSpecialization = {
+  id: "fencing",
+  minimumGroupLevel: 6,
+  minimumParentLevel: 6,
+  name: "Fencing",
+  skillId: "one_handed_edged",
+  sortOrder: 1,
+  specializationBridge: {
+    parentExcessOffset: 5,
+    parentSkillId: "one_handed_edged",
+    reverseFactor: 1,
+    threshold: 6
+  }
 };
 
 describe("characterEdit helpers", () => {
@@ -517,6 +553,7 @@ describe("characterEdit helpers", () => {
       ]
     });
     const rows = buildCharacterEditSpecializationRows({
+      build,
       content: {
         ...content,
         specializations: [
@@ -548,5 +585,75 @@ describe("characterEdit helpers", () => {
         xp: 0
       })
     );
+  });
+
+  it("allows visible specialization-bridge rows to be directly adjusted and keeps direct XP when the source later drops", () => {
+    const bridgeContent = {
+      ...content,
+      specializations: [fencingSpecialization]
+    };
+    const sourcedBuild = setCharacterSkillXp(
+      addCharacterSkill(baseBuild, skills[7]),
+      skills[7],
+      8
+    );
+    const sourcedSummary = getCharacterEditSheetSummary(sourcedBuild, bridgeContent);
+    const sourcedRows = buildCharacterEditSpecializationRows({
+      build: sourcedBuild,
+      content: bridgeContent,
+      sheetSummary: sourcedSummary
+    });
+
+    expect(sourcedRows).toContainEqual(
+      expect.objectContaining({
+        canIncreaseDirectXp: true,
+        derivedSourceLabel: "Specialized from 1-h edged",
+        derivedXp: 3,
+        parentSkillName: "1-h edged",
+        requiredParentLevel: 6,
+        specializationName: "Fencing",
+        total: 3,
+        xp: 0
+      })
+    );
+
+    const addedDirect = setCharacterSpecializationXp({
+      build: sourcedBuild,
+      content: bridgeContent,
+      specialization: fencingSpecialization,
+      xp: 2
+    });
+
+    expect(addedDirect.error).toBeUndefined();
+
+    const addedSummary = getCharacterEditSheetSummary(addedDirect.build, bridgeContent);
+    const addedRow = buildCharacterEditSpecializationRows({
+      build: addedDirect.build,
+      content: bridgeContent,
+      sheetSummary: addedSummary
+    }).find((row) => row.specializationId === "fencing");
+
+    expect(addedRow).toMatchObject({
+      derivedXp: 3,
+      total: 5,
+      xp: 2
+    });
+
+    const loweredSource = setCharacterSkillXp(addedDirect.build, skills[7], 5);
+    const loweredSummary = getCharacterEditSheetSummary(loweredSource, bridgeContent);
+    const loweredRow = buildCharacterEditSpecializationRows({
+      build: loweredSource,
+      content: bridgeContent,
+      sheetSummary: loweredSummary
+    }).find((row) => row.specializationId === "fencing");
+
+    expect(loweredRow).toMatchObject({
+      blockingMessage: "Fencing requires 1-h edged level 6 or higher (current 5).",
+      canDecreaseDirectXp: true,
+      canIncreaseDirectXp: false,
+      derivedXp: 0,
+      total: 2,
+      xp: 2
+    });
   });
 });

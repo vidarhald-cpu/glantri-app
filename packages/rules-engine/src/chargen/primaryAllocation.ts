@@ -1728,26 +1728,28 @@ export function spendSecondaryPoint(input: SpendSecondaryPointInput): SpendPoint
     };
   }
 
-  const allowedParentGroupIds = getSkillDefinitionGroupIds(parentSkillDefinition).filter((groupId) =>
-    allowedGroupIds.includes(groupId)
-  );
+  if (!specializationDefinition.specializationBridge) {
+    const allowedParentGroupIds = getSkillDefinitionGroupIds(parentSkillDefinition).filter((groupId) =>
+      allowedGroupIds.includes(groupId)
+    );
 
-  if (allowedParentGroupIds.length === 0) {
-    return {
-      error: "That specialization is not exactly one society level above the current character.",
-      progression,
-      warnings
-    };
-  }
+    if (allowedParentGroupIds.length === 0) {
+      return {
+        error: "That specialization is not exactly one society level above the current character.",
+        progression,
+        warnings
+      };
+    }
 
-  const parentGroup = getBestPurchasedParentGroup(input.content, progression, parentSkillDefinition);
+    const parentGroup = getBestPurchasedParentGroup(input.content, progression, parentSkillDefinition);
 
-  if (!parentGroup) {
-    return {
-      error: "Acquire the parent group before purchasing a specialization.",
-      progression,
-      warnings
-    };
+    if (!parentGroup) {
+      return {
+        error: "Acquire the parent group before purchasing a specialization.",
+        progression,
+        warnings
+      };
+    }
   }
 
   const specialization = ensureSpecializationExists(progression, specializationDefinition);

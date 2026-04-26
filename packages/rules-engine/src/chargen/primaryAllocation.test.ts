@@ -445,6 +445,134 @@ describe("derived skill relationships in chargen drafts", () => {
       specializationLevel: 5
     });
   });
+
+  it("allows specialization-bridge purchases without the legacy society-level specialization block when the bridge parent gate is satisfied", () => {
+    const bridgePurchaseContent = validateCanonicalContent({
+      skillGroups: [
+        {
+          id: "combat_group",
+          name: "Combat",
+          sortOrder: 1
+        }
+      ],
+      skills: [
+        {
+          allowsSpecializations: true,
+          category: "ordinary",
+          dependencies: [],
+          dependencySkillIds: [],
+          groupId: "combat_group",
+          groupIds: ["combat_group"],
+          id: "one_handed_edged",
+          linkedStats: ["dex"],
+          name: "1-h edged",
+          requiresLiteracy: "no",
+          sortOrder: 1
+        }
+      ],
+      specializations: [
+        {
+          id: "fencing",
+          minimumGroupLevel: 6,
+          minimumParentLevel: 6,
+          name: "Fencing",
+          skillId: "one_handed_edged",
+          sortOrder: 1,
+          specializationBridge: {
+            parentExcessOffset: 5,
+            parentSkillId: "one_handed_edged",
+            reverseFactor: 1,
+            threshold: 6
+          }
+        }
+      ],
+      professionFamilies: [],
+      professions: [],
+      professionSkills: [],
+      societyLevels: [
+        {
+          professionIds: [],
+          skillGroupIds: [],
+          skillIds: [],
+          socialClass: "Common",
+          societyId: "glantri",
+          societyLevel: 1,
+          societyName: "Glantri"
+        },
+        {
+          professionIds: [],
+          skillGroupIds: [],
+          skillIds: [],
+          socialClass: "Guild",
+          societyId: "glantri",
+          societyLevel: 2,
+          societyName: "Glantri"
+        },
+        {
+          professionIds: [],
+          skillGroupIds: [],
+          skillIds: [],
+          socialClass: "Patrician",
+          societyId: "glantri",
+          societyLevel: 3,
+          societyName: "Glantri"
+        },
+        {
+          professionIds: [],
+          skillGroupIds: [],
+          skillIds: [],
+          socialClass: "Noble",
+          societyId: "glantri",
+          societyLevel: 4,
+          societyName: "Glantri"
+        }
+      ]
+    });
+    const progression = createChargenProgression();
+    progression.secondaryPoolTotal = 10;
+    progression.skillGroups = [
+      {
+        gms: 0,
+        grantedRanks: 0,
+        groupId: "combat_group",
+        primaryRanks: 8,
+        ranks: 8,
+        secondaryRanks: 0
+      }
+    ];
+    progression.skills = [
+      {
+        category: "ordinary",
+        grantedRanks: 0,
+        groupId: "combat_group",
+        level: 8,
+        primaryRanks: 8,
+        ranks: 8,
+        secondaryRanks: 0,
+        skillId: "one_handed_edged"
+      }
+    ];
+
+    const result = spendSecondaryPoint({
+      content: bridgePurchaseContent,
+      progression,
+      societyId: "glantri",
+      societyLevel: 1,
+      targetId: "fencing",
+      targetType: "specialization"
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(result.progression.specializations).toContainEqual(
+      expect.objectContaining({
+        ranks: 1,
+        secondaryRanks: 1,
+        skillId: "one_handed_edged",
+        specializationId: "fencing"
+      })
+    );
+    expect(result.warnings).toEqual([]);
+  });
 });
 
 const motherTongueTestContent = {

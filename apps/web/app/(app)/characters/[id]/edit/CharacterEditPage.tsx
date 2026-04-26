@@ -24,6 +24,7 @@ import {
   setCharacterDistractionLevel,
   setCharacterCurrentStatValue,
   setCharacterOriginalStatValue,
+  setCharacterSpecializationXp,
   setCharacterSkillGroupLevel,
   setCharacterSkillXp
 } from "../../../../../src/lib/characters/characterEdit";
@@ -143,15 +144,16 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
     });
   }, [build, content, sheetSummary]);
   const specializationRows = useMemo(() => {
-    if (!sheetSummary) {
+    if (!build || !content || !sheetSummary) {
       return [];
     }
 
     return buildCharacterEditSpecializationRows({
+      build,
       content,
       sheetSummary
     });
-  }, [content, sheetSummary]);
+  }, [build, content, sheetSummary]);
 
   const availableSkills = useMemo(() => {
     if (!build || !content) {
@@ -266,6 +268,48 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
     setBuild((current) => (current ? removeCharacterSkill(current, skillId) : current));
   }
 
+  function adjustSpecialization(specializationId: string, delta: number) {
+    if (!content) {
+      return;
+    }
+
+    const definition = content.specializations.find(
+      (specialization) => specialization.id === specializationId
+    );
+    const currentRow = specializationRows.find(
+      (specialization) => specialization.specializationId === specializationId
+    );
+
+    if (!definition || !currentRow) {
+      return;
+    }
+
+    setBuild((current) => {
+      if (!current) {
+        return current;
+      }
+
+      const result = setCharacterSpecializationXp({
+        build: current,
+        content,
+        specialization: definition,
+        xp: currentRow.xp + delta
+      });
+
+      if (result.error) {
+        setFeedback(result.error);
+        return current;
+      }
+
+      setFeedback(
+        delta > 0
+          ? `Added 1 direct XP to ${definition.name}.`
+          : `Removed 1 direct XP from ${definition.name}.`
+      );
+      return result.build;
+    });
+  }
+
   if (loading) {
     return <section>Loading character editor...</section>;
   }
@@ -285,8 +329,8 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
         <div>
           <h1 style={{ margin: 0 }}>Character Edit — {getCharacterName(record)}</h1>
           <p style={{ margin: "0.5rem 0 0 0" }}>
-            GM-only editing for stats, skill groups, and skill XP. Totals update from the live
-            sheet summary as you edit.
+            GM-only editing for stats, skill groups, skill XP, and specialization XP. Totals update
+            from the live sheet summary as you edit.
           </p>
         </div>
         <div style={{ display: "flex", gap: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
@@ -558,6 +602,7 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
                 <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Owned XP</th>
                 <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Derived XP</th>
                 <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Total</th>
+                <th style={{ padding: "0.5rem 0", textAlign: "right" }}>Adjust</th>
               </tr>
             </thead>
             <tbody>
@@ -572,19 +617,63 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
                         </div>
                       ) : null}
                     </td>
-                    <td style={{ padding: "0.6rem 0.75rem" }}>{specialization.parentSkillName}</td>
+                    <td style={{ padding: "0.6rem 0.75rem" }}>
+                      <div>{specialization.parentSkillName}</div>
+                      <div style={{ color: "#5e5a50", fontSize: "0.82rem" }}>
+                        Requires level {specialization.requiredParentLevel}
+                      </div>
+                      <div style={{ color: "#5e5a50", fontSize: "0.82rem" }}>
+                        Current parent level {specialization.parentSkillXp}
+                      </div>
+                    </td>
                     <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>{specialization.xp}</td>
                     <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>{specialization.derivedXp}</td>
                     <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>{specialization.total}</td>
+                    <td style={{ padding: "0.6rem 0", textAlign: "right" }}>
+                      <div
+                        style={{
+                          alignItems: "center",
+                          display: "inline-flex",
+                          gap: "0.4rem",
+                          justifyContent: "flex-end"
+                        }}
+                      >
+                        <button
+                          disabled={!specialization.canIncreaseDirectXp}
+                          onClick={() => adjustSpecialization(specialization.specializationId, 1)}
+                          type="button"
+                        >
+                          +
+                        </button>
+                        <button
+                          disabled={!specialization.canDecreaseDirectXp}
+                          onClick={() => adjustSpecialization(specialization.specializationId, -1)}
+                          type="button"
+                        >
+                          -
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan={5} style={{ padding: "0.75rem 0" }}>
+                  <td colSpan={6} style={{ padding: "0.75rem 0" }}>
                     No specialization rows yet.
                   </td>
                 </tr>
               )}
+              {specializationRows.length > 0
+                ? specializationRows
+                    .filter((specialization) => specialization.blockingMessage)
+                    .map((specialization) => (
+                      <tr key={`${specialization.specializationId}-status`}>
+                        <td colSpan={6} style={{ color: "#8f5a00", fontSize: "0.85rem", padding: "0 0 0.75rem 0" }}>
+                          {specialization.specializationName}: {specialization.blockingMessage}
+                        </td>
+                      </tr>
+                    ))
+                : null}
             </tbody>
           </table>
         </div>

@@ -398,7 +398,7 @@ function evaluateSpecializationGate(input: {
     };
   }
 
-  if (!parentSkill.allowsSpecializations) {
+  if (!input.specialization.specializationBridge && !parentSkill.allowsSpecializations) {
     return {
       advisories: [],
       blockingReasons: [
@@ -414,7 +414,7 @@ function evaluateSpecializationGate(input: {
     };
   }
 
-  const parentLevel = getEffectiveSkillLevel({
+  const parentLevel = getNonDerivedSkillBaseLevel({
     content: input.content,
     progression: input.progression,
     skill: parentSkill
