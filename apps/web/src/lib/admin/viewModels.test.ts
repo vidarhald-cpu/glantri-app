@@ -4,6 +4,7 @@ import type { CanonicalContent } from "@glantri/content";
 
 import {
   buildProfessionAdminRows,
+  buildSkillRelationshipSummary,
   buildSkillAdminRows,
   buildSkillGroupAdminRows,
   buildSocietyAdminRows
@@ -95,11 +96,16 @@ const content = {
       categoryId: "craft",
       dependencies: [],
       dependencySkillIds: [],
+      derivedGrants: [{ factor: 1, skillId: "beta_skill" }],
       description: "Alpha description",
       groupId: "high_group",
       groupIds: ["high_group"],
       id: "alpha_skill",
       linkedStats: ["dex"],
+      meleeCrossTraining: {
+        attackStyle: "slash",
+        handClass: "one-handed"
+      },
       name: "Alpha Skill",
       requiresLiteracy: "no",
       shortDescription: "Alpha short",
@@ -231,6 +237,53 @@ describe("admin view models", () => {
       "Gamma Skill",
       "Zeta Skill"
     ]);
+  });
+
+  it("surfaces outgoing, incoming, and melee relationship metadata in skill admin rows", () => {
+    const rows = buildSkillAdminRows(content);
+    const alphaRow = rows.find((row) => row.id === "alpha_skill");
+    const betaRow = rows.find((row) => row.id === "beta_skill");
+
+    expect(alphaRow).toMatchObject({
+      hasSkillRelationships: true,
+      meleeCrossTraining: {
+        attackStyle: "slash",
+        handClass: "one-handed"
+      }
+    });
+    expect(alphaRow?.outgoingDerivedGrants).toEqual([
+      {
+        factorPercent: 100,
+        targetSkillId: "beta_skill",
+        targetSkillName: "Beta Skill"
+      }
+    ]);
+    expect(betaRow?.incomingDerivedGrants).toEqual([
+      {
+        factorPercent: 100,
+        sourceSkillId: "alpha_skill",
+        sourceSkillName: "Alpha Skill"
+      }
+    ]);
+  });
+
+  it("builds a normalized relationship summary from the current enriched content", () => {
+    expect(
+      buildSkillRelationshipSummary({
+        content,
+        skillId: "alpha_skill"
+      })
+    ).toMatchObject({
+      hasSkillRelationships: true,
+      outgoingDerivedGrants: [
+        {
+          factorPercent: 100,
+          targetSkillId: "beta_skill",
+          targetSkillName: "Beta Skill"
+        }
+      ],
+      relationshipIndicators: ["derived-out", "melee-map"]
+    });
   });
 
   it("adds low and high weighted-point warnings to skill-group review rows", () => {

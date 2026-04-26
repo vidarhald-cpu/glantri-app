@@ -47,7 +47,7 @@ function renderClampedCell(text: string, lines = 2) {
 }
 
 const skillsReviewGridTemplate =
-  "minmax(11rem, 0.95fr) minmax(20rem, 1.75fr) 5.5rem minmax(9rem, 0.9fr) minmax(10rem, 0.95fr) minmax(9rem, 0.85fr) minmax(10rem, 0.9fr) minmax(10rem, 0.85fr) 5.5rem";
+  "minmax(11rem, 0.95fr) minmax(20rem, 1.75fr) 5.5rem minmax(9rem, 0.9fr) minmax(10rem, 0.95fr) minmax(9rem, 0.85fr) minmax(9rem, 0.8fr) minmax(10rem, 0.9fr) minmax(10rem, 0.85fr) 5.5rem";
 
 function SkillsReviewTable(props: {
   onInspect: (rowId: string) => void;
@@ -80,7 +80,7 @@ function SkillsReviewTable(props: {
             zIndex: 2
           }}
         >
-          {["Skill", "Description", "Type", "Skill category", "Primary Group", "Cross-listed", "Professions", "Dependencies", "Inspect"].map(
+          {["Skill", "Description", "Type", "Skill category", "Primary Group", "Cross-listed", "Relations", "Professions", "Dependencies", "Inspect"].map(
             (header) => (
               <div
                 key={header}
@@ -117,6 +117,11 @@ function SkillsReviewTable(props: {
             >
               <div style={{ padding: "0.9rem 0.8rem" }}>
                 <div style={{ color: "#2e2619", fontWeight: 700 }}>{row.name}</div>
+                {row.hasSkillRelationships ? (
+                  <div style={{ color: "#7a6f5a", fontSize: "0.78rem", marginTop: "0.2rem" }}>
+                    Relationship metadata
+                  </div>
+                ) : null}
               </div>
               <div style={{ color: "#2e2619", padding: "0.9rem 0.8rem" }}>
                 {row.shortDescription ? renderClampedCell(row.shortDescription, 2) : <span style={{ color: "#8a7e63" }}>None</span>}
@@ -132,6 +137,24 @@ function SkillsReviewTable(props: {
                 {row.optionalGroupCount > 0
                   ? renderClampedCell(summarizeList(row.optionalGroupNames, 2), 2)
                   : <span style={{ color: "#8a7e63" }}>None</span>}
+              </div>
+              <div style={{ color: "#2e2619", padding: "0.9rem 0.8rem" }}>
+                {row.relationshipIndicators.length > 0 ? (
+                  renderClampedCell(
+                    row.relationshipIndicators
+                      .map((indicator) =>
+                        indicator === "derived-out"
+                          ? "Outgoing grant"
+                          : indicator === "derived-in"
+                            ? "Incoming grant"
+                            : "Melee map"
+                      )
+                      .join(", "),
+                    2
+                  )
+                ) : (
+                  <span style={{ color: "#8a7e63" }}>None</span>
+                )}
               </div>
               <div style={{ color: "#2e2619", padding: "0.9rem 0.8rem" }}>
                 {renderClampedCell(summarizeList(row.professionNames, 3), 2)}
@@ -301,6 +324,7 @@ export default function SkillsAdminPage() {
                 <div><strong>Cross-listed groups:</strong> {selectedRow?.optionalGroupNames.join(", ") || "None"}</div>
                 <div><strong>Characteristics:</strong> {selectedRow?.characteristics || "None"}</div>
                 <div><strong>Type:</strong> {selectedRow?.skillType}</div>
+                <div><strong>Relationship metadata:</strong> {selectedRow?.hasSkillRelationships ? "Present" : "None"}</div>
               </div>
 
               <div>
@@ -428,6 +452,48 @@ export default function SkillsAdminPage() {
                     This marks access for main skill-point spending, not a free grant.
                   </div>
                 ) : null}
+              </div>
+
+              <div>
+                <div style={{ color: "#5f543a", fontSize: "0.85rem", fontWeight: 700, marginBottom: "0.35rem", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                  Relationship metadata
+                </div>
+                <div style={{ display: "grid", gap: "0.65rem" }}>
+                  <div>
+                    <strong>Derived grants from this skill:</strong>
+                    {(selectedRow?.outgoingDerivedGrants.length ?? 0) > 0 ? (
+                      <AdminTagList
+                        values={(selectedRow?.outgoingDerivedGrants ?? []).map(
+                          (grant) => `${grant.targetSkillName} (${grant.factorPercent}%)`
+                        )}
+                      />
+                    ) : (
+                      <div style={{ color: "#8a7e63", marginTop: "0.25rem" }}>
+                        No outgoing derived grants are currently surfaced.
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <strong>Derived grants to this skill:</strong>
+                    {(selectedRow?.incomingDerivedGrants.length ?? 0) > 0 ? (
+                      <AdminTagList
+                        values={(selectedRow?.incomingDerivedGrants ?? []).map(
+                          (grant) => `${grant.sourceSkillName} (${grant.factorPercent}%)`
+                        )}
+                      />
+                    ) : (
+                      <div style={{ color: "#8a7e63", marginTop: "0.25rem" }}>
+                        No incoming derived grants are currently surfaced.
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <strong>Melee cross-training metadata:</strong>{" "}
+                    {selectedRow?.meleeCrossTraining
+                      ? `${selectedRow.meleeCrossTraining.handClass} / ${selectedRow.meleeCrossTraining.attackStyle}`
+                      : "None"}
+                  </div>
+                </div>
               </div>
 
               <div>

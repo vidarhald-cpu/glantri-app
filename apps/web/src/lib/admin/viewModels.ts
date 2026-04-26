@@ -31,12 +31,30 @@ export interface SkillAdminRow {
     societyName: string;
   }>;
   groupNames: string[];
+  hasSkillRelationships: boolean;
   id: string;
+  incomingDerivedGrants: Array<{
+    factorPercent: number;
+    sourceSkillId: string;
+    sourceSkillName: string;
+  }>;
+  meleeCrossTraining?:
+    | {
+        attackStyle: string;
+        handClass: string;
+      }
+    | undefined;
   name: string;
   optionalGroupCount: number;
   optionalGroupNames: string[];
+  outgoingDerivedGrants: Array<{
+    factorPercent: number;
+    targetSkillId: string;
+    targetSkillName: string;
+  }>;
   primaryGroup: string;
   professionNames: string[];
+  relationshipIndicators: string[];
   secondaryOf: string;
   skillCategory: string;
   shortDescription: string;
@@ -463,6 +481,73 @@ function buildSkillRelationshipContext(content: CanonicalContent) {
   };
 }
 
+export function buildSkillRelationshipSummary(input: {
+  content: CanonicalContent;
+  skillId: string;
+}) {
+  const skillsById = new Map(input.content.skills.map((skill) => [skill.id, skill]));
+  const skill = skillsById.get(input.skillId);
+
+  if (!skill) {
+    return {
+      hasSkillRelationships: false,
+      incomingDerivedGrants: [],
+      meleeCrossTraining: undefined,
+      outgoingDerivedGrants: [],
+      relationshipIndicators: []
+    };
+  }
+
+  const outgoingDerivedGrants = (skill.derivedGrants ?? [])
+    .map((grant) => ({
+      factorPercent: Math.floor(grant.factor * 100),
+      targetSkillId: grant.skillId,
+      targetSkillName: skillsById.get(grant.skillId)?.name ?? grant.skillId
+    }))
+    .sort(
+      (left, right) =>
+        left.targetSkillName.localeCompare(right.targetSkillName) ||
+        left.factorPercent - right.factorPercent
+    );
+
+  const incomingDerivedGrants = input.content.skills
+    .flatMap((candidate) =>
+      (candidate.derivedGrants ?? [])
+        .filter((grant) => grant.skillId === skill.id)
+        .map((grant) => ({
+          factorPercent: Math.floor(grant.factor * 100),
+          sourceSkillId: candidate.id,
+          sourceSkillName: candidate.name
+        }))
+    )
+    .sort(
+      (left, right) =>
+        left.sourceSkillName.localeCompare(right.sourceSkillName) ||
+        left.factorPercent - right.factorPercent
+    );
+
+  const meleeCrossTraining = skill.meleeCrossTraining
+    ? {
+        attackStyle: skill.meleeCrossTraining.attackStyle,
+        handClass: skill.meleeCrossTraining.handClass
+      }
+    : undefined;
+
+  const relationshipIndicators = [
+    ...(outgoingDerivedGrants.length > 0 ? ["derived-out"] : []),
+    ...(incomingDerivedGrants.length > 0 ? ["derived-in"] : []),
+    ...(meleeCrossTraining ? ["melee-map"] : [])
+  ];
+
+  return {
+    hasSkillRelationships: relationshipIndicators.length > 0,
+    incomingDerivedGrants,
+    meleeCrossTraining,
+    outgoingDerivedGrants,
+    relationshipIndicators
+  };
+}
+
 export function buildAdminOverviewStats(content: CanonicalContent): AdminOverviewStats {
   const meleeWeaponCount = equipmentTemplates.filter(
     (template): template is WeaponTemplate =>
@@ -519,6 +604,10 @@ export function buildSkillAdminRows(content: CanonicalContent): SkillAdminRow[] 
   return [...content.skills]
     .sort((left, right) => left.name.localeCompare(right.name) || left.sortOrder - right.sortOrder)
     .map((skill) => {
+      const relationshipSummary = buildSkillRelationshipSummary({
+        content,
+        skillId: skill.id
+      });
       const groupIds = getSkillGroupIds(skill);
       const primaryGroupId = skill.groupId ?? groupIds[0];
       const primaryGroup = primaryGroupId
@@ -598,12 +687,17 @@ export function buildSkillAdminRows(content: CanonicalContent): SkillAdminRow[] 
         foundationalAccessMatrixRows,
         foundationalAccessSlots,
         groupNames: groupIds.map((groupId) => skillGroupsById.get(groupId)?.name ?? groupId),
+        hasSkillRelationships: relationshipSummary.hasSkillRelationships,
         id: skill.id,
+        incomingDerivedGrants: relationshipSummary.incomingDerivedGrants,
+        meleeCrossTraining: relationshipSummary.meleeCrossTraining,
         name: skill.name,
         optionalGroupCount: optionalGroupNames.length,
         optionalGroupNames,
+        outgoingDerivedGrants: relationshipSummary.outgoingDerivedGrants,
         primaryGroup,
         professionNames,
+        relationshipIndicators: relationshipSummary.relationshipIndicators,
         secondaryOf: skill.secondaryOfSkillId
           ? skillsById.get(skill.secondaryOfSkillId)?.name ?? skill.secondaryOfSkillId
           : "",
