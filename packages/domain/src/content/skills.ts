@@ -24,6 +24,9 @@ export const playerFacingSkillCategoryIdSchema = z.enum([
 const skillSocietyLevelSchema = z.number().int().min(1).max(6);
 const skillDependencyStrengthSchema = z.enum(["required", "recommended", "helpful"]);
 const skillGroupSkillRelevanceSchema = z.enum(["core", "optional"]);
+const derivedSkillGrantFactorSchema = z.number().min(0);
+const meleeWeaponHandClassSchema = z.enum(["one-handed", "two-handed"]);
+const meleeWeaponAttackStyleSchema = z.enum(["strike", "slash", "thrust"]);
 
 const LEGACY_PLAYER_FACING_SKILL_CATEGORY_BY_GROUP_ID: Partial<
   Record<string, PlayerFacingSkillCategoryId>
@@ -208,6 +211,16 @@ export const skillDependencySchema = z.object({
   strength: skillDependencyStrengthSchema.default("required")
 });
 
+export const derivedSkillGrantSchema = z.object({
+  factor: derivedSkillGrantFactorSchema,
+  skillId: idSchema
+});
+
+export const meleeCrossTrainingSchema = z.object({
+  attackStyle: meleeWeaponAttackStyleSchema,
+  handClass: meleeWeaponHandClassSchema
+});
+
 export const skillDefinitionSchema = z.preprocess(
   (input) => {
     if (typeof input !== "object" || input === null) {
@@ -278,7 +291,9 @@ export const skillDefinitionSchema = z.preprocess(
     categoryId: playerFacingSkillCategoryIdSchema.optional(),
     requiresLiteracy: literacyRequirementSchema.default("no"),
     sortOrder: z.number().int().default(0),
-    allowsSpecializations: z.boolean().default(false)
+    allowsSpecializations: z.boolean().default(false),
+    derivedGrants: z.array(derivedSkillGrantSchema).optional(),
+    meleeCrossTraining: meleeCrossTrainingSchema.optional()
   })
 );
 
@@ -420,6 +435,8 @@ export type SkillGroupSelectionSlot = z.infer<typeof skillGroupSelectionSlotSche
 export type SkillGroupDefinition = z.infer<typeof skillGroupDefinitionSchema>;
 export type SkillDefinition = z.infer<typeof skillDefinitionSchema>;
 export type SkillDependency = z.infer<typeof skillDependencySchema>;
+export type DerivedSkillGrant = z.infer<typeof derivedSkillGrantSchema>;
+export type MeleeCrossTraining = z.infer<typeof meleeCrossTrainingSchema>;
 export type SkillSpecialization = z.infer<typeof skillSpecializationSchema>;
 export type SocietyLevelAccess = z.infer<typeof societyLevelAccessSchema>;
 export type SocietyBandSkillAccess = z.infer<typeof societyBandSkillAccessSchema>;
@@ -431,6 +448,8 @@ export type SkillCategory = z.infer<typeof skillCategorySchema>;
 export type PlayerFacingSkillCategoryId = z.infer<typeof playerFacingSkillCategoryIdSchema>;
 export type SkillDependencyStrength = z.infer<typeof skillDependencyStrengthSchema>;
 export type SkillGroupSkillRelevance = z.infer<typeof skillGroupSkillRelevanceSchema>;
+export type MeleeWeaponHandClass = z.infer<typeof meleeWeaponHandClassSchema>;
+export type MeleeWeaponAttackStyle = z.infer<typeof meleeWeaponAttackStyleSchema>;
 
 export function getSkillDependencies(
   skill: Pick<SkillDefinition, "dependencies">

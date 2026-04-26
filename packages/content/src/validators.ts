@@ -1,4 +1,5 @@
 import { canonicalContentSchema, type CanonicalContent } from "./types";
+import { applySkillRelationshipMetadata } from "./skillRelationshipMetadata";
 
 const EXPECTED_SOCIAL_BANDS = [1, 2, 3, 4] as const;
 const EXPECTED_SOCIETY_SCALE = [1, 2, 3, 4, 5, 6] as const;
@@ -441,6 +442,19 @@ function validateSkillRelationships(content: CanonicalContent): CanonicalContent
         `Skill "${skill.name}" (${skill.id}) references unknown specialization-of skill "${skill.specializationOfSkillId}".`
       );
     }
+
+    for (const grant of skill.derivedGrants ?? []) {
+      if (grant.skillId === skill.id) {
+        issues.push(`Skill "${skill.name}" (${skill.id}) cannot derive itself.`);
+        continue;
+      }
+
+      if (!skillIds.has(grant.skillId)) {
+        issues.push(
+          `Skill "${skill.name}" (${skill.id}) references unknown derived skill "${grant.skillId}".`
+        );
+      }
+    }
   }
 
   for (const group of content.skillGroups) {
@@ -634,7 +648,7 @@ export function validateCanonicalContent(input: unknown): CanonicalContent {
   const parsedContent = canonicalContentSchema.parse(input);
   const normalizedContent: CanonicalContent = normalizeLanguages({
     ...parsedContent,
-    skills: parsedContent.skills.map((skill) =>
+    skills: applySkillRelationshipMetadata(parsedContent.skills).map((skill) =>
       skill.id === "language"
         ? {
             ...skill,

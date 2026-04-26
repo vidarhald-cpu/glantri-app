@@ -410,4 +410,21 @@ describe("validateCanonicalContent", () => {
       )
     ).toBe(false);
   });
+
+  it("applies manual skill relationship metadata for explicit and melee-derived skills", () => {
+    expect(defaultCanonicalContent.skills.find((skill) => skill.id === "medicine")?.derivedGrants).toEqual([
+      {
+        factor: 1,
+        skillId: "first_aid"
+      }
+    ]);
+    expect(
+      defaultCanonicalContent.skills.find((skill) => skill.id === "one_handed_edged")
+        ?.meleeCrossTraining
+    ).toEqual({
+      attackStyle: "slash",
+      handClass: "one-handed"
+    });
+    expect(defaultCanonicalContent.skills.find((skill) => skill.id === "history")?.derivedGrants ?? []).toEqual([]);
+  });
 });

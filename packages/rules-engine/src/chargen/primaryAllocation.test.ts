@@ -130,6 +130,142 @@ const chargenTestContent = validateCanonicalContent({
   ]
 });
 
+describe("derived skill relationships in chargen drafts", () => {
+  it("materializes derived skills in the draft view and stacks owned XP on top of the best derived grant", () => {
+    const derivedSkillContent = validateCanonicalContent({
+      skillGroups: [
+        {
+          id: "medicine_group",
+          name: "Medicine",
+          sortOrder: 1
+        }
+      ],
+      skills: [
+        {
+          allowsSpecializations: false,
+          category: "ordinary",
+          dependencies: [],
+          dependencySkillIds: [],
+          derivedGrants: [{ factor: 1, skillId: "first_aid" }],
+          groupId: "medicine_group",
+          groupIds: ["medicine_group"],
+          id: "medicine",
+          linkedStats: ["int"],
+          name: "Medicine",
+          requiresLiteracy: "no",
+          sortOrder: 1
+        },
+        {
+          allowsSpecializations: false,
+          category: "ordinary",
+          dependencies: [],
+          dependencySkillIds: [],
+          groupId: "medicine_group",
+          groupIds: ["medicine_group"],
+          id: "first_aid",
+          linkedStats: ["int"],
+          name: "First aid",
+          requiresLiteracy: "no",
+          sortOrder: 2
+        }
+      ],
+      specializations: [],
+      professionFamilies: [{ id: "scholar", name: "Scholar" }],
+      professions: [{ id: "physician", familyId: "scholar", name: "Physician", subtypeName: "Physician" }],
+      professionSkills: [
+        {
+          grantType: "group",
+          isCore: true,
+          professionId: "scholar",
+          scope: "family",
+          skillGroupId: "medicine_group"
+        }
+      ],
+      societyLevels: [
+        {
+          professionIds: ["physician"],
+          skillGroupIds: ["medicine_group"],
+          skillIds: [],
+          socialClass: "Common",
+          societyId: "glantri",
+          societyLevel: 1,
+          societyName: "Glantri"
+        },
+        {
+          professionIds: ["physician"],
+          skillGroupIds: ["medicine_group"],
+          skillIds: [],
+          socialClass: "Guild",
+          societyId: "glantri",
+          societyLevel: 2,
+          societyName: "Glantri"
+        },
+        {
+          professionIds: ["physician"],
+          skillGroupIds: ["medicine_group"],
+          skillIds: [],
+          socialClass: "Patrician",
+          societyId: "glantri",
+          societyLevel: 3,
+          societyName: "Glantri"
+        },
+        {
+          professionIds: ["physician"],
+          skillGroupIds: ["medicine_group"],
+          skillIds: [],
+          socialClass: "Noble",
+          societyId: "glantri",
+          societyLevel: 4,
+          societyName: "Glantri"
+        }
+      ]
+    });
+    const progression = createChargenProgression();
+    progression.skills = [
+      {
+        category: "ordinary",
+        grantedRanks: 0,
+        groupId: "medicine_group",
+        level: 10,
+        primaryRanks: 10,
+        ranks: 10,
+        secondaryRanks: 0,
+        skillId: "medicine"
+      },
+      {
+        category: "ordinary",
+        grantedRanks: 0,
+        groupId: "medicine_group",
+        level: 3,
+        primaryRanks: 3,
+        ranks: 3,
+        secondaryRanks: 0,
+        skillId: "first_aid"
+      }
+    ];
+
+    const draftView = buildChargenDraftView({
+      content: derivedSkillContent,
+      professionId: "physician",
+      progression,
+      societyId: "glantri",
+      societyLevel: 1
+    });
+
+    expect(draftView.skills.find((skill) => skill.skillId === "medicine")).toMatchObject({
+      derivedSkillLevel: 0,
+      effectiveSkillNumber: 10,
+      specificSkillLevel: 10
+    });
+    expect(draftView.skills.find((skill) => skill.skillId === "first_aid")).toMatchObject({
+      derivedSkillLevel: 10,
+      derivedSourceSkillId: "medicine",
+      effectiveSkillNumber: 13,
+      specificSkillLevel: 3
+    });
+  });
+});
+
 const motherTongueTestContent = {
   ...chargenTestContent,
   civilizations: [
