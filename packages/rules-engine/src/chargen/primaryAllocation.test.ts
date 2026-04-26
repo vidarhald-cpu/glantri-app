@@ -264,6 +264,187 @@ describe("derived skill relationships in chargen drafts", () => {
       specificSkillLevel: 3
     });
   });
+
+  it("materializes specialization-bridge skills and specialization children from parent base XP", () => {
+    const bridgeContent = validateCanonicalContent({
+      skillGroups: [
+        {
+          id: "combat_group",
+          name: "Combat",
+          sortOrder: 1
+        }
+      ],
+      skills: [
+        {
+          allowsSpecializations: false,
+          category: "ordinary",
+          dependencies: [],
+          dependencySkillIds: [],
+          groupId: "combat_group",
+          groupIds: ["combat_group"],
+          id: "bow",
+          linkedStats: ["dex"],
+          name: "Bow",
+          requiresLiteracy: "no",
+          sortOrder: 1
+        },
+        {
+          allowsSpecializations: false,
+          category: "ordinary",
+          dependencies: [],
+          dependencySkillIds: [],
+          groupId: "combat_group",
+          groupIds: ["combat_group"],
+          id: "crossbow",
+          linkedStats: ["dex"],
+          name: "Crossbow",
+          requiresLiteracy: "no",
+          sortOrder: 2
+        },
+        {
+          allowsSpecializations: false,
+          category: "secondary",
+          dependencies: [],
+          dependencySkillIds: [],
+          groupId: "combat_group",
+          groupIds: ["combat_group"],
+          id: "longbow",
+          linkedStats: ["dex"],
+          name: "Longbow",
+          requiresLiteracy: "no",
+          sortOrder: 3,
+          specializationBridge: {
+            parentExcessOffset: 5,
+            parentSkillId: "bow",
+            reverseFactor: 1,
+            threshold: 6
+          }
+        },
+        {
+          allowsSpecializations: false,
+          category: "ordinary",
+          dependencies: [],
+          dependencySkillIds: [],
+          groupId: "combat_group",
+          groupIds: ["combat_group"],
+          id: "one_handed_edged",
+          linkedStats: ["dex"],
+          name: "1-h edged",
+          requiresLiteracy: "no",
+          sortOrder: 4
+        }
+      ],
+      specializations: [
+        {
+          id: "fencing",
+          minimumGroupLevel: 6,
+          minimumParentLevel: 6,
+          name: "Fencing",
+          skillId: "one_handed_edged",
+          sortOrder: 1,
+          specializationBridge: {
+            parentExcessOffset: 5,
+            parentSkillId: "one_handed_edged",
+            reverseFactor: 1,
+            threshold: 6
+          }
+        }
+      ],
+      professionFamilies: [{ id: "soldier", name: "Soldier" }],
+      professions: [{ id: "soldier", familyId: "soldier", name: "Soldier", subtypeName: "Soldier" }],
+      professionSkills: [
+        {
+          grantType: "group",
+          isCore: true,
+          professionId: "soldier",
+          scope: "family",
+          skillGroupId: "combat_group"
+        }
+      ],
+      societyLevels: [
+        {
+          professionIds: ["soldier"],
+          skillGroupIds: ["combat_group"],
+          skillIds: [],
+          socialClass: "Common",
+          societyId: "glantri",
+          societyLevel: 1,
+          societyName: "Glantri"
+        },
+        {
+          professionIds: ["soldier"],
+          skillGroupIds: ["combat_group"],
+          skillIds: [],
+          socialClass: "Guild",
+          societyId: "glantri",
+          societyLevel: 2,
+          societyName: "Glantri"
+        },
+        {
+          professionIds: ["soldier"],
+          skillGroupIds: ["combat_group"],
+          skillIds: [],
+          socialClass: "Patrician",
+          societyId: "glantri",
+          societyLevel: 3,
+          societyName: "Glantri"
+        },
+        {
+          professionIds: ["soldier"],
+          skillGroupIds: ["combat_group"],
+          skillIds: [],
+          socialClass: "Noble",
+          societyId: "glantri",
+          societyLevel: 4,
+          societyName: "Glantri"
+        }
+      ]
+    });
+    const progression = createChargenProgression();
+    progression.skills = [
+      {
+        category: "ordinary",
+        grantedRanks: 0,
+        groupId: "combat_group",
+        level: 10,
+        primaryRanks: 10,
+        ranks: 10,
+        secondaryRanks: 0,
+        skillId: "bow"
+      },
+      {
+        category: "ordinary",
+        grantedRanks: 0,
+        groupId: "combat_group",
+        level: 10,
+        primaryRanks: 10,
+        ranks: 10,
+        secondaryRanks: 0,
+        skillId: "one_handed_edged"
+      }
+    ];
+
+    const draftView = buildChargenDraftView({
+      content: bridgeContent,
+      professionId: "soldier",
+      progression,
+      societyId: "glantri",
+      societyLevel: 1
+    });
+
+    expect(draftView.skills.find((skill) => skill.skillId === "longbow")).toMatchObject({
+      derivedSkillLevel: 5,
+      derivedSourceSkillId: "bow",
+      derivedSourceType: "specialization-bridge-parent",
+      effectiveSkillNumber: 5
+    });
+    expect(draftView.specializations.find((specialization) => specialization.specializationId === "fencing")).toMatchObject({
+      derivedSourceSkillId: "one_handed_edged",
+      derivedSourceType: "specialization-bridge-parent",
+      derivedSpecializationLevel: 5,
+      specializationLevel: 5
+    });
+  });
 });
 
 const motherTongueTestContent = {

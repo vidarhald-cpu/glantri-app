@@ -192,6 +192,75 @@ const content = {
       requiresLiteracy: "no",
       societyLevel: 1,
       sortOrder: 7
+    },
+    {
+      allowsSpecializations: false,
+      category: "ordinary",
+      categoryId: "combat",
+      dependencies: [],
+      dependencySkillIds: [],
+      groupId: "high_group",
+      groupIds: ["high_group"],
+      id: "one_handed_edged",
+      linkedStats: ["dex"],
+      name: "1-h edged",
+      requiresLiteracy: "no",
+      societyLevel: 1,
+      sortOrder: 8
+    },
+    {
+      allowsSpecializations: false,
+      category: "ordinary",
+      categoryId: "combat",
+      dependencies: [],
+      dependencySkillIds: [],
+      derivedGrants: [{ factor: 0.5, skillId: "crossbow" }],
+      groupId: "high_group",
+      groupIds: ["high_group"],
+      id: "bow",
+      linkedStats: ["dex"],
+      name: "Bow",
+      requiresLiteracy: "no",
+      societyLevel: 1,
+      sortOrder: 9
+    },
+    {
+      allowsSpecializations: false,
+      category: "ordinary",
+      categoryId: "combat",
+      dependencies: [],
+      dependencySkillIds: [],
+      derivedGrants: [{ factor: 0.5, skillId: "bow" }],
+      groupId: "high_group",
+      groupIds: ["high_group"],
+      id: "crossbow",
+      linkedStats: ["dex"],
+      name: "Crossbow",
+      requiresLiteracy: "no",
+      societyLevel: 1,
+      sortOrder: 10
+    },
+    {
+      allowsSpecializations: false,
+      category: "secondary",
+      categoryId: "combat",
+      dependencies: [],
+      dependencySkillIds: [],
+      groupId: "high_group",
+      groupIds: ["high_group"],
+      id: "longbow",
+      linkedStats: ["dex"],
+      name: "Longbow",
+      requiresLiteracy: "no",
+      societyLevel: 2,
+      sortOrder: 11,
+      specializationBridge: {
+        parentExcessOffset: 5,
+        parentSkillId: "bow",
+        reverseFactor: 1,
+        threshold: 6
+      },
+      specializationOfSkillId: "bow"
     }
   ],
   societies: [
@@ -229,18 +298,37 @@ const content = {
       societyName: "Alpha Society"
     }
   ],
-  specializations: []
+  specializations: [
+    {
+      id: "fencing",
+      minimumGroupLevel: 6,
+      minimumParentLevel: 6,
+      name: "Fencing",
+      skillId: "one_handed_edged",
+      sortOrder: 1,
+      specializationBridge: {
+        parentExcessOffset: 5,
+        parentSkillId: "one_handed_edged",
+        reverseFactor: 1,
+        threshold: 6
+      }
+    }
+  ]
 } as unknown as CanonicalContent;
 
 describe("admin view models", () => {
   it("sorts skills alphabetically for the catalog rows", () => {
     expect(buildSkillAdminRows(content).map((row) => row.name)).toEqual([
+      "1-h edged",
       "Alpha Skill",
       "Beta Skill",
+      "Bow",
+      "Crossbow",
       "Delta Skill",
       "Epsilon Skill",
       "Eta Skill",
       "Gamma Skill",
+      "Longbow",
       "Zeta Skill"
     ]);
   });
@@ -311,6 +399,46 @@ describe("admin view models", () => {
       ],
       relationshipSummaryBadges: ["Grants 1", "Cross-trains 1", "Cross-trained from 1"]
     });
+  });
+
+  it("surfaces specialization-bridge relationships for parent and child skills", () => {
+    const rows = buildSkillAdminRows(content);
+    const bowRow = rows.find((row) => row.id === "bow");
+    const longbowRow = rows.find((row) => row.id === "longbow");
+    const edgedRow = rows.find((row) => row.id === "one_handed_edged");
+
+    expect(bowRow?.outgoingDerivedGrants).toEqual([
+      {
+        factorPercent: 50,
+        targetSkillId: "crossbow",
+        targetSkillName: "Crossbow"
+      }
+    ]);
+    expect(bowRow?.outgoingSpecializationBridges).toEqual([
+      {
+        parentExcessOffset: 5,
+        reverseFactorPercent: 100,
+        targetName: "Longbow",
+        targetType: "skill",
+        threshold: 6
+      }
+    ]);
+    expect(longbowRow?.incomingSpecializationBridges).toEqual([
+      {
+        factorPercent: 100,
+        sourceName: "Bow",
+        sourceType: "skill"
+      }
+    ]);
+    expect(edgedRow?.outgoingSpecializationBridges).toEqual([
+      {
+        parentExcessOffset: 5,
+        reverseFactorPercent: 100,
+        targetName: "Fencing",
+        targetType: "specialization",
+        threshold: 6
+      }
+    ]);
   });
 
   it("adds low and high weighted-point warnings to skill-group review rows", () => {

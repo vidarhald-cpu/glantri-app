@@ -528,6 +528,36 @@ export default function SkillsAdminPage() {
                       </div>
                     )}
                   </div>
+                  <div>
+                    <strong>Specialization bridge targets:</strong>
+                    {(selectedRow?.outgoingSpecializationBridges.length ?? 0) > 0 ? (
+                      <AdminTagList
+                        values={(selectedRow?.outgoingSpecializationBridges ?? []).map(
+                          (bridge) =>
+                            `${bridge.targetName} (${bridge.targetType === "specialization" ? "specialization" : "skill"}: 100% above ${bridge.parentExcessOffset}, starts at ${bridge.threshold}, reverse ${bridge.reverseFactorPercent}%)`
+                        )}
+                      />
+                    ) : (
+                      <div style={{ color: "#8a7e63", marginTop: "0.25rem" }}>
+                        No specialization bridge targets are currently resolved.
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <strong>Specialization bridge sources:</strong>
+                    {(selectedRow?.incomingSpecializationBridges.length ?? 0) > 0 ? (
+                      <AdminTagList
+                        values={(selectedRow?.incomingSpecializationBridges ?? []).map(
+                          (bridge) =>
+                            `${bridge.sourceName} (${bridge.sourceType === "specialization" ? "specialization" : "skill"}: ${bridge.factorPercent}%)`
+                        )}
+                      />
+                    ) : (
+                      <div style={{ color: "#8a7e63", marginTop: "0.25rem" }}>
+                        No specialization bridge sources are currently resolved.
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 

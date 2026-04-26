@@ -31,7 +31,10 @@ import { calculateEducation, type EducationBreakdown } from "../education/calcul
 import { resolveEffectiveProfessionPackage } from "../professions/resolveEffectiveProfessionPackage";
 import { calculateGroupLevel } from "../skills/calculateGroupLevel";
 import { calculateSpecializationLevel } from "../skills/calculateSpecializationLevel";
-import { deriveBestSkillRelationshipXp } from "../skills/deriveSkillRelationships";
+import {
+  deriveBestSkillRelationships,
+  type SkillRelationshipSourceType
+} from "../skills/deriveSkillRelationships";
 import { evaluateSkillSelection } from "../skills/evaluateSkillSelection";
 import { getActiveSkillGroupIds } from "../skills/getActiveSkillGroupIds";
 import { selectBestSkillGroupContribution } from "../skills/selectBestSkillGroupContribution";
@@ -126,7 +129,7 @@ export interface ChargenSkillView {
   derivedSkillLevel?: number;
   derivedSourceSkillId?: string;
   derivedSourceSkillName?: string;
-  derivedSourceType?: "explicit" | "melee-cross-training";
+  derivedSourceType?: SkillRelationshipSourceType;
   // Canonical workbook-equivalent combat skill XP. This is the full skill XP
   // used by combat math, combining the best contributing group with direct
   // skill ranks, before any linked-stat average is added.
@@ -184,6 +187,10 @@ export function getChargenSkillContributionForGroup(input: {
 }
 
 export interface ChargenSpecializationView {
+  derivedSourceSkillId?: string;
+  derivedSourceSkillName?: string;
+  derivedSourceType?: "specialization-bridge-parent";
+  derivedSpecializationLevel?: number;
   effectiveSpecializationNumber: number;
   name: string;
   parentSkillName: string;
@@ -1840,10 +1847,39 @@ export function buildChargenDraftView(input: {
       return [definition.id, (bestContributingGroup?.groupLevel ?? 0) + directSkillXp];
     })
   );
-  const derivedXpBySkillId = deriveBestSkillRelationshipXp({
-    ownedXpBySkillId,
-    skills: input.content.skills
+  const specializationBaseXpBySpecializationId = new Map<string, number>(
+    input.content.specializations.map((definition) => {
+      const progressionSpecialization = progression.specializations.find(
+        (specialization) => specialization.specializationId === definition.id
+      );
+      const parentSkillDefinition = getSkillById(input.content, definition.skillId);
+      const groupLevel = parentSkillDefinition
+        ? (getBestActiveGroupContribution({
+            content: input.content,
+            groupViewById,
+            progression,
+            skill: parentSkillDefinition
+          })?.groupLevel ?? 0)
+        : 0;
+      const specializationRanks = progressionSpecialization?.ranks ?? 0;
+
+      return [
+        definition.id,
+        calculateSpecializationLevel({
+          groupLevel,
+          specializationLevel: specializationRanks
+        })
+      ];
+    })
+  );
+  const derivedRelationships = deriveBestSkillRelationships({
+    skillBaseXpBySkillId: ownedXpBySkillId,
+    skills: input.content.skills,
+    specializationBaseXpBySpecializationId,
+    specializations: input.content.specializations
   });
+  const derivedXpBySkillId = derivedRelationships.bestDerivedBySkillId;
+  const derivedXpBySpecializationId = derivedRelationships.bestDerivedBySpecializationId;
 
   const skills = input.content.skills
     .flatMap((definition) => {
@@ -1920,8 +1956,18 @@ export function buildChargenDraftView(input: {
     );
 
   const specializations = progression.specializations
-    .map((specialization) => {
-      const definition = getSpecializationById(input.content, specialization.specializationId);
+    .map((specialization) => specialization.specializationId)
+    .concat(
+      input.content.specializations
+        .filter((definition) => (derivedXpBySpecializationId.get(definition.id)?.xp ?? 0) > 0)
+        .map((definition) => definition.id)
+    )
+    .filter((specializationId, index, specializationIds) => specializationIds.indexOf(specializationId) === index)
+    .map((specializationId) => {
+      const progressionSpecialization = progression.specializations.find(
+        (specialization) => specialization.specializationId === specializationId
+      );
+      const definition = getSpecializationById(input.content, specializationId);
       const parentSkillDefinition = definition
         ? getSkillById(input.content, definition.skillId)
         : undefined;
@@ -1951,20 +1997,28 @@ export function buildChargenDraftView(input: {
           )
         : undefined;
 
-      if (!definition || !parentSkillDefinition || !groupView) {
+      if (!definition || !parentSkillDefinition) {
         return null;
       }
 
+      const derivedBridgeGrant = derivedXpBySpecializationId.get(definition.id);
+      const derivedSpecializationLevel = derivedBridgeGrant?.xp ?? 0;
+      const specializationLevel = progressionSpecialization?.ranks ?? 0;
+
       const view: ChargenSpecializationView = {
         effectiveSpecializationNumber: calculateSpecializationLevel({
-          groupLevel: groupView.groupLevel,
-          specializationLevel: specialization.ranks
+          groupLevel: groupView?.groupLevel ?? 0,
+          specializationLevel: specializationLevel + derivedSpecializationLevel
         }),
+        derivedSourceSkillId: derivedBridgeGrant?.sourceSkillId,
+        derivedSourceSkillName: derivedBridgeGrant?.sourceSkillName,
+        derivedSourceType: derivedBridgeGrant?.sourceType,
+        derivedSpecializationLevel,
         name: definition.name,
         parentSkillName: parentSkillDefinition.name,
-        secondaryRanks: specialization.secondaryRanks,
-        specializationId: specialization.specializationId,
-        specializationLevel: specialization.ranks
+        secondaryRanks: progressionSpecialization?.secondaryRanks ?? 0,
+        specializationId: definition.id,
+        specializationLevel: specializationLevel + derivedSpecializationLevel
       };
 
       return view;

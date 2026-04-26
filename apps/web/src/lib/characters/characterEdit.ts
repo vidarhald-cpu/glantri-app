@@ -56,6 +56,16 @@ export interface CharacterEditSkillRow {
   xp: number;
 }
 
+export interface CharacterEditSpecializationRow {
+  derivedSourceLabel: string | undefined;
+  derivedXp: number;
+  parentSkillName: string;
+  specializationId: string;
+  specializationName: string;
+  total: number;
+  xp: number;
+}
+
 export type CharacterProfileGender = "male" | "female" | "other" | "";
 
 function clampStatValue(value: number): number {
@@ -396,6 +406,37 @@ export function buildCharacterEditSkillRows(input: {
     .filter((row): row is CharacterEditSkillRow => row !== null);
 
   return rows.sort((left, right) => left.skillName.localeCompare(right.skillName));
+}
+
+export function buildCharacterEditSpecializationRows(input: {
+  content: Pick<CharacterEditContentShape, "specializations">;
+  sheetSummary: CharacterSheetSummary;
+}): CharacterEditSpecializationRow[] {
+  return input.sheetSummary.draftView.specializations
+    .map((specializationView) => {
+      const definition = input.content.specializations.find(
+        (specialization) => specialization.id === specializationView.specializationId
+      );
+
+      if (!definition) {
+        return null;
+      }
+
+      return {
+        derivedSourceLabel: formatDerivedSkillSourceLabel({
+          sourceSkillName: specializationView.derivedSourceSkillName,
+          sourceType: specializationView.derivedSourceType
+        }),
+        derivedXp: specializationView.derivedSpecializationLevel ?? 0,
+        parentSkillName: specializationView.parentSkillName,
+        specializationId: definition.id,
+        specializationName: definition.name,
+        total: specializationView.effectiveSpecializationNumber,
+        xp: specializationView.secondaryRanks
+      };
+    })
+    .filter((row): row is CharacterEditSpecializationRow => row !== null)
+    .sort((left, right) => left.specializationName.localeCompare(right.specializationName));
 }
 
 export function getCharacterEditSheetSummary(

@@ -46,6 +46,8 @@ export type SkillSelectionEvaluationReasonCode =
   | "missing-helpful-dependency"
   | "missing-required-literacy"
   | "missing-recommended-literacy"
+  | "missing-specialization-bridge-parent-skill"
+  | "specialization-bridge-parent-skill-too-low"
   | "invalid-specialization-parent-skill"
   | "missing-specialization-parent-skill"
   | "specialization-parent-disallows-specializations"
@@ -98,6 +100,14 @@ function getPurchasedSkillLevel(
 }
 
 function getEffectiveSkillLevel(input: {
+  content: SkillSelectionContentShape;
+  progression: CharacterProgression;
+  skill: SkillDefinition;
+}): number {
+  return getNonDerivedSkillBaseLevel(input);
+}
+
+function getNonDerivedSkillBaseLevel(input: {
   content: SkillSelectionContentShape;
   progression: CharacterProgression;
   skill: SkillDefinition;
@@ -296,6 +306,75 @@ function evaluateLiteracyRequirement(input: {
   };
 }
 
+function evaluateSkillSpecializationBridge(input: {
+  content: SkillSelectionContentShape;
+  progression: CharacterProgression;
+  skill: SkillDefinition;
+}): SkillSelectionEvaluationResult {
+  const bridge = input.skill.specializationBridge;
+
+  if (!bridge) {
+    return createEmptyEvaluation();
+  }
+
+  const parentSkill = getSkillDefinitionById(input.content, bridge.parentSkillId);
+
+  if (!parentSkill) {
+    return {
+      advisories: [],
+      blockingReasons: [
+        {
+          code: "missing-specialization-bridge-parent-skill",
+          message: `${input.skill.name} requires ${bridge.parentSkillId}.`,
+          skillId: bridge.parentSkillId
+        }
+      ],
+      isAllowed: false,
+      warnings: []
+    };
+  }
+
+  const parentBaseLevel = getNonDerivedSkillBaseLevel({
+    content: input.content,
+    progression: input.progression,
+    skill: parentSkill
+  });
+
+  if (parentBaseLevel <= 0) {
+    return {
+      advisories: [],
+      blockingReasons: [
+        {
+          code: "missing-specialization-bridge-parent-skill",
+          message: `${input.skill.name} requires ${parentSkill.name}.`,
+          skillId: parentSkill.id
+        }
+      ],
+      isAllowed: false,
+      warnings: []
+    };
+  }
+
+  if (parentBaseLevel < bridge.threshold) {
+    return {
+      advisories: [],
+      blockingReasons: [
+        {
+          code: "specialization-bridge-parent-skill-too-low",
+          currentLevel: parentBaseLevel,
+          message: `${input.skill.name} requires ${parentSkill.name} level ${bridge.threshold} or higher (current ${parentBaseLevel}).`,
+          requiredLevel: bridge.threshold,
+          skillId: parentSkill.id
+        }
+      ],
+      isAllowed: false,
+      warnings: []
+    };
+  }
+
+  return createEmptyEvaluation();
+}
+
 function evaluateSpecializationGate(input: {
   content: SkillSelectionContentShape;
   progression: CharacterProgression;
@@ -389,6 +468,11 @@ export function evaluateSkillSelection(
   if (input.target.targetType === "skill") {
     return mergeEvaluations(
       evaluateSkillDependencies({
+        content: input.content,
+        progression: input.progression,
+        skill: input.target.skill
+      }),
+      evaluateSkillSpecializationBridge({
         content: input.content,
         progression: input.progression,
         skill: input.target.skill

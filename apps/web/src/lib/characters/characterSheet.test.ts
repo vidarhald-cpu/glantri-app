@@ -3,7 +3,10 @@ import { describe, expect, it } from "vitest";
 import type { CharacterBuild, SkillDefinition, SkillGroupDefinition } from "@glantri/domain";
 import { buildCharacterSheetSummary } from "@glantri/rules-engine";
 
-import { buildCharacterSheetSkillRows } from "./characterSheet";
+import {
+  buildCharacterSheetSkillRows,
+  buildCharacterSheetSpecializationRows
+} from "./characterSheet";
 
 const skills: SkillDefinition[] = [
   {
@@ -36,6 +39,59 @@ const skills: SkillDefinition[] = [
     requiresLiteracy: "no",
     societyLevel: 1,
     sortOrder: 2
+  },
+  {
+    allowsSpecializations: false,
+    category: "ordinary",
+    dependencies: [],
+    dependencySkillIds: [],
+    derivedGrants: [{ factor: 0.5, skillId: "crossbow" }],
+    groupId: "combat_group",
+    groupIds: ["combat_group"],
+    id: "bow",
+    isTheoretical: false,
+    linkedStats: ["dex"],
+    name: "Bow",
+    requiresLiteracy: "no",
+    societyLevel: 1,
+    sortOrder: 3
+  },
+  {
+    allowsSpecializations: false,
+    category: "ordinary",
+    dependencies: [],
+    dependencySkillIds: [],
+    derivedGrants: [{ factor: 0.5, skillId: "bow" }],
+    groupId: "combat_group",
+    groupIds: ["combat_group"],
+    id: "crossbow",
+    isTheoretical: false,
+    linkedStats: ["dex"],
+    name: "Crossbow",
+    requiresLiteracy: "no",
+    societyLevel: 1,
+    sortOrder: 4
+  },
+  {
+    allowsSpecializations: false,
+    category: "secondary",
+    dependencies: [],
+    dependencySkillIds: [],
+    groupId: "combat_group",
+    groupIds: ["combat_group"],
+    id: "longbow",
+    isTheoretical: false,
+    linkedStats: ["dex"],
+    name: "Longbow",
+    requiresLiteracy: "no",
+    societyLevel: 1,
+    sortOrder: 5,
+    specializationBridge: {
+      parentExcessOffset: 5,
+      parentSkillId: "bow",
+      reverseFactor: 1,
+      threshold: 6
+    }
   }
 ];
 
@@ -45,6 +101,12 @@ const skillGroups: SkillGroupDefinition[] = [
     id: "medicine_group",
     name: "Medicine",
     sortOrder: 1
+  },
+  {
+    description: "Combat",
+    id: "combat_group",
+    name: "Combat",
+    sortOrder: 2
   }
 ];
 
@@ -133,5 +195,104 @@ describe("buildCharacterSheetSkillRows", () => {
       derivedXp: 10,
       totalXp: 10
     });
+  });
+
+  it("shows cross-trained and specialization-bridge skills on the sheet", () => {
+    const build: CharacterBuild = {
+      ...baseBuild,
+      progression: {
+        ...baseBuild.progression,
+        skills: [
+          {
+            category: "ordinary",
+            grantedRanks: 0,
+            groupId: "combat_group",
+            level: 10,
+            primaryRanks: 10,
+            ranks: 10,
+            secondaryRanks: 0,
+            skillId: "bow"
+          }
+        ]
+      }
+    };
+    const sheetSummary = buildCharacterSheetSummary({
+      build,
+      content
+    });
+    const rows = buildCharacterSheetSkillRows({
+      build,
+      content,
+      sheetSummary
+    }).flatMap((group) => group.rows);
+
+    expect(rows.find((row) => row.skillId === "crossbow")).toMatchObject({
+      derivedSourceLabel: "Derived from Bow",
+      derivedXp: 5,
+      totalXp: 5
+    });
+    expect(rows.find((row) => row.skillId === "longbow")).toMatchObject({
+      derivedSourceLabel: "Specialized from Bow",
+      derivedXp: 5,
+      totalXp: 5
+    });
+  });
+
+  it("shows specialization-bridge specializations on the sheet", () => {
+    const contentWithSpecialization = {
+      ...content,
+      specializations: [
+        {
+          id: "longbow_style",
+          minimumGroupLevel: 6,
+          minimumParentLevel: 6,
+          name: "Longbow Style",
+          skillId: "bow",
+          sortOrder: 1,
+          specializationBridge: {
+            parentExcessOffset: 5,
+            parentSkillId: "bow",
+            reverseFactor: 1,
+            threshold: 6
+          }
+        }
+      ]
+    };
+    const build: CharacterBuild = {
+      ...baseBuild,
+      progression: {
+        ...baseBuild.progression,
+        skills: [
+          {
+            category: "ordinary",
+            grantedRanks: 0,
+            groupId: "combat_group",
+            level: 10,
+            primaryRanks: 10,
+            ranks: 10,
+            secondaryRanks: 0,
+            skillId: "bow"
+          }
+        ]
+      }
+    };
+    const sheetSummary = buildCharacterSheetSummary({
+      build,
+      content: contentWithSpecialization
+    });
+    const rows = buildCharacterSheetSpecializationRows({
+      content: contentWithSpecialization,
+      sheetSummary
+    });
+
+    expect(rows).toContainEqual(
+      expect.objectContaining({
+        derivedSourceLabel: "Specialized from Bow",
+        derivedXp: 5,
+        specializationName: "Longbow Style",
+        total: 5,
+        xp: 0
+      })
+    );
   });
 });

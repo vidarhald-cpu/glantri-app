@@ -43,6 +43,11 @@ export interface SkillAdminRow {
     sourceSkillId: string;
     sourceSkillName: string;
   }>;
+  incomingSpecializationBridges: Array<{
+    factorPercent: number;
+    sourceName: string;
+    sourceType: "skill" | "specialization";
+  }>;
   meleeCrossTraining?:
     | {
         attackStyle: string;
@@ -61,6 +66,13 @@ export interface SkillAdminRow {
     factorPercent: number;
     targetSkillId: string;
     targetSkillName: string;
+  }>;
+  outgoingSpecializationBridges: Array<{
+    parentExcessOffset: number;
+    reverseFactorPercent: number;
+    targetName: string;
+    targetType: "skill" | "specialization";
+    threshold: number;
   }>;
   primaryGroup: string;
   professionNames: string[];
@@ -535,9 +547,11 @@ export function buildSkillRelationshipSummary(input: {
       hasSkillRelationships: false,
       incomingDerivedGrants: [],
       incomingMeleeCrossTraining: [],
+      incomingSpecializationBridges: [],
       meleeCrossTraining: undefined,
       outgoingDerivedGrants: [],
       outgoingMeleeCrossTraining: [],
+      outgoingSpecializationBridges: [],
       relationshipSummaryBadges: []
     };
   }
@@ -629,6 +643,61 @@ export function buildSkillRelationshipSummary(input: {
       }
     : undefined;
 
+  const outgoingSpecializationBridges = [
+    ...input.content.skills
+      .filter((candidate) => candidate.specializationBridge?.parentSkillId === skill.id)
+      .map((candidate) => ({
+        parentExcessOffset: candidate.specializationBridge!.parentExcessOffset,
+        reverseFactorPercent: Math.floor(candidate.specializationBridge!.reverseFactor * 100),
+        targetName: candidate.name,
+        targetType: "skill" as const,
+        threshold: candidate.specializationBridge!.threshold
+      })),
+    ...input.content.specializations
+      .filter((candidate) => candidate.specializationBridge?.parentSkillId === skill.id)
+      .map((candidate) => ({
+        parentExcessOffset: candidate.specializationBridge!.parentExcessOffset,
+        reverseFactorPercent: Math.floor(candidate.specializationBridge!.reverseFactor * 100),
+        targetName: candidate.name,
+        targetType: "specialization" as const,
+        threshold: candidate.specializationBridge!.threshold
+      }))
+  ].sort(
+    (left, right) =>
+      left.targetName.localeCompare(right.targetName) ||
+      left.threshold - right.threshold
+  );
+
+  const incomingSpecializationBridges = [
+    ...(skill.specializationBridge
+      ? [
+          {
+            factorPercent: Math.floor(skill.specializationBridge.reverseFactor * 100),
+            sourceName: skillsById.get(skill.specializationBridge.parentSkillId)?.name ?? skill.specializationBridge.parentSkillId,
+            sourceType: "skill" as const
+          }
+        ]
+      : []),
+    ...input.content.skills
+      .filter((candidate) => candidate.specializationBridge?.parentSkillId === skill.id)
+      .map((candidate) => ({
+        factorPercent: Math.floor(candidate.specializationBridge!.reverseFactor * 100),
+        sourceName: candidate.name,
+        sourceType: "skill" as const
+      })),
+    ...input.content.specializations
+      .filter((candidate) => candidate.specializationBridge?.parentSkillId === skill.id)
+      .map((candidate) => ({
+        factorPercent: Math.floor(candidate.specializationBridge!.reverseFactor * 100),
+        sourceName: candidate.name,
+        sourceType: "specialization" as const
+      }))
+  ].sort(
+    (left, right) =>
+      left.sourceName.localeCompare(right.sourceName) ||
+      left.factorPercent - right.factorPercent
+  );
+
   const relationshipSummaryBadges = [
     ...(outgoingDerivedGrants.length > 0 ? [`Grants ${outgoingDerivedGrants.length}`] : []),
     ...(incomingDerivedGrants.length > 0 ? [`Receives ${incomingDerivedGrants.length}`] : []),
@@ -637,6 +706,12 @@ export function buildSkillRelationshipSummary(input: {
       : []),
     ...(incomingMeleeCrossTraining.length > 0
       ? [`Cross-trained from ${incomingMeleeCrossTraining.length}`]
+      : []),
+    ...(outgoingSpecializationBridges.length > 0
+      ? [`Specializes ${outgoingSpecializationBridges.length}`]
+      : []),
+    ...(incomingSpecializationBridges.length > 0
+      ? [`Specialized from ${incomingSpecializationBridges.length}`]
       : [])
   ];
 
@@ -645,12 +720,16 @@ export function buildSkillRelationshipSummary(input: {
       outgoingDerivedGrants.length > 0 ||
       incomingDerivedGrants.length > 0 ||
       outgoingMeleeCrossTraining.length > 0 ||
-      incomingMeleeCrossTraining.length > 0,
+      incomingMeleeCrossTraining.length > 0 ||
+      outgoingSpecializationBridges.length > 0 ||
+      incomingSpecializationBridges.length > 0,
     incomingDerivedGrants,
     incomingMeleeCrossTraining,
+    incomingSpecializationBridges,
     meleeCrossTraining,
     outgoingDerivedGrants,
     outgoingMeleeCrossTraining,
+    outgoingSpecializationBridges,
     relationshipSummaryBadges
   };
 }
@@ -798,12 +877,14 @@ export function buildSkillAdminRows(content: CanonicalContent): SkillAdminRow[] 
         id: skill.id,
         incomingDerivedGrants: relationshipSummary.incomingDerivedGrants,
         incomingMeleeCrossTraining: relationshipSummary.incomingMeleeCrossTraining,
+        incomingSpecializationBridges: relationshipSummary.incomingSpecializationBridges,
         meleeCrossTraining: relationshipSummary.meleeCrossTraining,
         name: skill.name,
         optionalGroupCount: optionalGroupNames.length,
         optionalGroupNames,
         outgoingDerivedGrants: relationshipSummary.outgoingDerivedGrants,
         outgoingMeleeCrossTraining: relationshipSummary.outgoingMeleeCrossTraining,
+        outgoingSpecializationBridges: relationshipSummary.outgoingSpecializationBridges,
         primaryGroup,
         professionNames,
         relationshipSummaryBadges: relationshipSummary.relationshipSummaryBadges,

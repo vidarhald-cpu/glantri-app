@@ -27,6 +27,12 @@ const skillGroupSkillRelevanceSchema = z.enum(["core", "optional"]);
 const derivedSkillGrantFactorSchema = z.number().min(0);
 const meleeWeaponHandClassSchema = z.enum(["one-handed", "two-handed"]);
 const meleeWeaponAttackStyleSchema = z.enum(["strike", "slash", "thrust"]);
+export const specializationBridgeSchema = z.object({
+  parentExcessOffset: z.number().int().nonnegative(),
+  parentSkillId: idSchema,
+  reverseFactor: derivedSkillGrantFactorSchema,
+  threshold: z.number().int().nonnegative()
+});
 
 const LEGACY_PLAYER_FACING_SKILL_CATEGORY_BY_GROUP_ID: Partial<
   Record<string, PlayerFacingSkillCategoryId>
@@ -293,7 +299,8 @@ export const skillDefinitionSchema = z.preprocess(
     sortOrder: z.number().int().default(0),
     allowsSpecializations: z.boolean().default(false),
     derivedGrants: z.array(derivedSkillGrantSchema).optional(),
-    meleeCrossTraining: meleeCrossTrainingSchema.optional()
+    meleeCrossTraining: meleeCrossTrainingSchema.optional(),
+    specializationBridge: specializationBridgeSchema.optional()
   })
 );
 
@@ -323,7 +330,8 @@ export const skillSpecializationSchema = z.preprocess(
     description: z.string().optional(),
     minimumGroupLevel: z.number().int().nonnegative().default(11),
     minimumParentLevel: z.number().int().nonnegative().default(11),
-    sortOrder: z.number().int().default(0)
+    sortOrder: z.number().int().default(0),
+    specializationBridge: specializationBridgeSchema.optional()
   })
 );
 

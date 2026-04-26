@@ -16,6 +16,7 @@ import {
   buildAvailableCharacterEditSkillGroups,
   buildCharacterEditSkillGroupRows,
   buildCharacterEditSkillRows,
+  buildCharacterEditSpecializationRows,
   addCharacterSkill,
   buildCharacterEditStatRows,
   getCharacterEditSheetSummary,
@@ -141,6 +142,16 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
       sheetSummary
     });
   }, [build, content, sheetSummary]);
+  const specializationRows = useMemo(() => {
+    if (!sheetSummary) {
+      return [];
+    }
+
+    return buildCharacterEditSpecializationRows({
+      content,
+      sheetSummary
+    });
+  }, [content, sheetSummary]);
 
   const availableSkills = useMemo(() => {
     if (!build || !content) {
@@ -516,6 +527,61 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
                 <tr>
                   <td colSpan={8} style={{ padding: "0.75rem 0" }}>
                     No progression skill rows yet.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section
+        style={{
+          background: "#fbfaf5",
+          border: "1px solid #d9ddd8",
+          borderRadius: 12,
+          display: "grid",
+          gap: "1rem",
+          padding: "1rem"
+        }}
+      >
+        <div style={{ display: "flex", gap: "0.75rem", justifyContent: "space-between", flexWrap: "wrap" }}>
+          <h2 style={{ margin: 0 }}>Specializations</h2>
+        </div>
+
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ borderCollapse: "collapse", width: "100%" }}>
+            <thead>
+              <tr style={{ borderBottom: "1px solid #d9ddd8", textAlign: "left" }}>
+                <th style={{ padding: "0.5rem 0.75rem 0.5rem 0" }}>Specialization</th>
+                <th style={{ padding: "0.5rem 0.75rem" }}>Parent skill</th>
+                <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Owned XP</th>
+                <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Derived XP</th>
+                <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {specializationRows.length > 0 ? (
+                specializationRows.map((specialization) => (
+                  <tr key={specialization.specializationId} style={{ borderBottom: "1px solid #eee8dc" }}>
+                    <td style={{ padding: "0.6rem 0.75rem 0.6rem 0" }}>
+                      <div>{specialization.specializationName}</div>
+                      {specialization.derivedSourceLabel ? (
+                        <div style={{ color: "#5e5a50", fontSize: "0.82rem" }}>
+                          {specialization.derivedSourceLabel}
+                        </div>
+                      ) : null}
+                    </td>
+                    <td style={{ padding: "0.6rem 0.75rem" }}>{specialization.parentSkillName}</td>
+                    <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>{specialization.xp}</td>
+                    <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>{specialization.derivedXp}</td>
+                    <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>{specialization.total}</td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={5} style={{ padding: "0.75rem 0" }}>
+                    No specialization rows yet.
                   </td>
                 </tr>
               )}

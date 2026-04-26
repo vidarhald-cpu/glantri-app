@@ -22,7 +22,10 @@ import {
   setCharacterNotes,
   setCharacterTitle
 } from "../../../../src/lib/characters/characterEdit";
-import { buildCharacterSheetSkillRows } from "../../../../src/lib/characters/characterSheet";
+import {
+  buildCharacterSheetSkillRows,
+  buildCharacterSheetSpecializationRows
+} from "../../../../src/lib/characters/characterSheet";
 import { loadLocalCharacterContext } from "../../../../src/lib/characters/loadLocalCharacterContext";
 import type { LocalCharacterRecord } from "../../../../src/lib/offline/glantriDexie";
 import {
@@ -138,6 +141,16 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
       sheetSummary
     });
   }, [build, contentState, sheetSummary]);
+  const specializationRows = useMemo(() => {
+    if (!contentState || !sheetSummary) {
+      return [];
+    }
+
+    return buildCharacterSheetSpecializationRows({
+      content: contentState,
+      sheetSummary
+    });
+  }, [contentState, sheetSummary]);
 
   const skillGroupRows = useMemo(() => {
     if (!contentState || !sheetSummary) {
@@ -521,6 +534,70 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
           </div>
         ) : (
           <div>No current skills recorded.</div>
+        )}
+      </section>
+
+      <section
+        style={{
+          background: "#fbfaf5",
+          border: "1px solid #d9ddd8",
+          borderRadius: 12,
+          display: "grid",
+          gap: "1rem",
+          padding: "1rem"
+        }}
+      >
+        <h2 style={{ margin: 0 }}>Specializations</h2>
+        {specializationRows.length > 0 ? (
+          <div style={{ overflowX: "auto" }}>
+            <div style={{ border: "1px solid #e7e2d7", borderRadius: 10, overflow: "hidden" }}>
+              <div
+                style={{
+                  borderBottom: "1px solid #e7e2d7",
+                  color: "#5e5a50",
+                  display: "grid",
+                  fontSize: "0.8rem",
+                  gap: "0.75rem",
+                  gridTemplateColumns: "minmax(180px, 2fr) minmax(140px, 1.5fr) repeat(3, minmax(72px, 88px))",
+                  padding: "0.75rem 1rem"
+                }}
+              >
+                <strong>Specialization</strong>
+                <strong>Parent skill</strong>
+                <strong>Owned XP</strong>
+                <strong>Derived XP</strong>
+                <strong>Total</strong>
+              </div>
+
+              {specializationRows.map((specialization) => (
+                <div
+                  key={specialization.specializationId}
+                  style={{
+                    borderTop: "1px solid #f0eadf",
+                    display: "grid",
+                    gap: "0.75rem",
+                    gridTemplateColumns: "minmax(180px, 2fr) minmax(140px, 1.5fr) repeat(3, minmax(72px, 88px))",
+                    padding: "0.75rem 1rem"
+                  }}
+                >
+                  <div>
+                    <div>{specialization.specializationName}</div>
+                    {specialization.derivedSourceLabel ? (
+                      <div style={{ color: "#5e5a50", fontSize: "0.82rem" }}>
+                        {specialization.derivedSourceLabel}
+                      </div>
+                    ) : null}
+                  </div>
+                  <div>{specialization.parentSkillName}</div>
+                  <div>{specialization.xp}</div>
+                  <div>{specialization.derivedXp}</div>
+                  <div>{specialization.total}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div>No specialization rows recorded.</div>
         )}
       </section>
 

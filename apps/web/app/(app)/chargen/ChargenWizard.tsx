@@ -1151,8 +1151,15 @@ export default function ChargenWizard() {
       });
 
       return {
+        derivedSourceLabel: specializationView
+          ? formatDerivedSkillSourceLabel({
+              sourceSkillName: specializationView.derivedSourceSkillName,
+              sourceType: specializationView.derivedSourceType
+            })
+          : undefined,
+        derivedSpecializationLevel: specializationView?.derivedSpecializationLevel ?? 0,
         evaluation,
-        parentSkillLevel: parentMetrics?.totalXp ?? 0,
+        parentSkillLevel: (parentMetrics?.groupXp ?? 0) + (parentMetrics?.skillXp ?? 0),
         parentSkillName: parentSkill?.name ?? specialization.skillId,
         secondaryRanks: specializationView?.secondaryRanks ?? 0,
         specialization,
@@ -3573,6 +3580,11 @@ export default function ChargenWizard() {
                         <span>{row.specialization.name}</span>
                         <span style={getBadgeStyle({ muted: true })}>Specialization</span>
                       </div>
+                      {row.derivedSourceLabel ? (
+                        <div style={{ color: "#5e5a50", fontSize: "0.8rem" }}>
+                          {row.derivedSourceLabel}
+                        </div>
+                      ) : null}
                     </div>
                     <div>
                       <div>{row.parentSkillName}</div>
@@ -3581,7 +3593,14 @@ export default function ChargenWizard() {
                       </div>
                     </div>
                     <div>{row.parentSkillLevel}</div>
-                    <div>{row.secondaryRanks}</div>
+                    <div>
+                      <div>{row.secondaryRanks}</div>
+                      {row.derivedSpecializationLevel > 0 ? (
+                        <div style={{ color: "#5e5a50", fontSize: "0.8rem" }}>
+                          +{row.derivedSpecializationLevel} derived
+                        </div>
+                      ) : null}
+                    </div>
                     <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
                       <button
                         aria-label={`Add ${row.specialization.name}`}

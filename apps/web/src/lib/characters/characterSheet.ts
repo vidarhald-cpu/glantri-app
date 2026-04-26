@@ -3,7 +3,8 @@ import {
   getSkillGroupIds,
   type CharacterBuild,
   type GlantriCharacteristicKey,
-  type SkillDefinition
+  type SkillDefinition,
+  type SkillSpecialization
 } from "@glantri/domain";
 import {
   selectBestSkillGroupContribution,
@@ -14,6 +15,7 @@ import { getPlayerFacingSkillBucket, groupRowsBySkillType } from "../chargen/cha
 import { formatDerivedSkillSourceLabel } from "./derivedSkillLabels";
 
 export interface CharacterSheetContentShape {
+  specializations: SkillSpecialization[];
   skillGroups: Array<{
     id: string;
     name: string;
@@ -35,6 +37,16 @@ export interface CharacterSheetSkillRow {
   stats: string;
   totalSkillLevel: number;
   totalXp: number;
+}
+
+export interface CharacterSheetSpecializationRow {
+  derivedSourceLabel: string | undefined;
+  derivedXp: number;
+  parentSkillName: string;
+  specializationId: string;
+  specializationName: string;
+  total: number;
+  xp: number;
 }
 
 function sortSkills(skills: SkillDefinition[]): SkillDefinition[] {
@@ -128,4 +140,35 @@ export function buildCharacterSheetSkillRows(input: {
     });
 
   return groupRowsBySkillType(rows);
+}
+
+export function buildCharacterSheetSpecializationRows(input: {
+  content: Pick<CharacterSheetContentShape, "specializations">;
+  sheetSummary: CharacterSheetSummary;
+}): CharacterSheetSpecializationRow[] {
+  return input.sheetSummary.draftView.specializations
+    .map((specializationView) => {
+      const definition = input.content.specializations.find(
+        (specialization) => specialization.id === specializationView.specializationId
+      );
+
+      if (!definition) {
+        return null;
+      }
+
+      return {
+        derivedSourceLabel: formatDerivedSkillSourceLabel({
+          sourceSkillName: specializationView.derivedSourceSkillName,
+          sourceType: specializationView.derivedSourceType
+        }),
+        derivedXp: specializationView.derivedSpecializationLevel ?? 0,
+        parentSkillName: specializationView.parentSkillName,
+        specializationId: definition.id,
+        specializationName: definition.name,
+        total: specializationView.effectiveSpecializationNumber,
+        xp: specializationView.secondaryRanks
+      } satisfies CharacterSheetSpecializationRow;
+    })
+    .filter((row): row is CharacterSheetSpecializationRow => row !== null)
+    .sort((left, right) => left.specializationName.localeCompare(right.specializationName));
 }

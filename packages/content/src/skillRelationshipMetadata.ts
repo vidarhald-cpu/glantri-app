@@ -1,8 +1,29 @@
-import type { SkillDefinition } from "@glantri/domain";
+import type { SkillDefinition, SkillSpecialization } from "@glantri/domain";
 
-type SkillRelationshipMetadata = Pick<SkillDefinition, "derivedGrants" | "meleeCrossTraining">;
+type SkillRelationshipMetadata = Pick<
+  SkillDefinition,
+  "derivedGrants" | "meleeCrossTraining" | "specializationBridge" | "specializationOfSkillId"
+>;
+
+type SpecializationRelationshipMetadata = Pick<SkillSpecialization, "specializationBridge">;
 
 const skillRelationshipMetadataById: Record<string, SkillRelationshipMetadata> = {
+  bow: {
+    derivedGrants: [
+      {
+        factor: 0.5,
+        skillId: "crossbow"
+      }
+    ]
+  },
+  crossbow: {
+    derivedGrants: [
+      {
+        factor: 0.5,
+        skillId: "bow"
+      }
+    ]
+  },
   medicine: {
     derivedGrants: [
       {
@@ -19,6 +40,15 @@ const skillRelationshipMetadataById: Record<string, SkillRelationshipMetadata> =
       attackStyle: "thrust",
       handClass: "two-handed"
     }
+  },
+  longbow: {
+    specializationBridge: {
+      parentExcessOffset: 5,
+      parentSkillId: "bow",
+      reverseFactor: 1,
+      threshold: 6
+    },
+    specializationOfSkillId: "bow"
   },
   one_handed_concussion_axe: {
     meleeCrossTraining: {
@@ -52,6 +82,17 @@ const skillRelationshipMetadataById: Record<string, SkillRelationshipMetadata> =
   }
 };
 
+const specializationRelationshipMetadataById: Record<string, SpecializationRelationshipMetadata> = {
+  fencing: {
+    specializationBridge: {
+      parentExcessOffset: 5,
+      parentSkillId: "one_handed_edged",
+      reverseFactor: 1,
+      threshold: 6
+    }
+  }
+};
+
 export function applySkillRelationshipMetadata(
   skills: SkillDefinition[]
 ): SkillDefinition[] {
@@ -62,14 +103,38 @@ export function applySkillRelationshipMetadata(
       return {
         ...skill,
         derivedGrants: skill.derivedGrants ?? [],
-        meleeCrossTraining: skill.meleeCrossTraining
+        meleeCrossTraining: skill.meleeCrossTraining,
+        specializationBridge: skill.specializationBridge,
+        specializationOfSkillId: skill.specializationOfSkillId
       };
     }
 
     return {
       ...skill,
       derivedGrants: metadata.derivedGrants ?? skill.derivedGrants ?? [],
-      meleeCrossTraining: metadata.meleeCrossTraining ?? skill.meleeCrossTraining
+      meleeCrossTraining: metadata.meleeCrossTraining ?? skill.meleeCrossTraining,
+      specializationBridge: metadata.specializationBridge ?? skill.specializationBridge,
+      specializationOfSkillId: metadata.specializationOfSkillId ?? skill.specializationOfSkillId
+    };
+  });
+}
+
+export function applySpecializationRelationshipMetadata(
+  specializations: SkillSpecialization[]
+): SkillSpecialization[] {
+  return specializations.map((specialization) => {
+    const metadata = specializationRelationshipMetadataById[specialization.id];
+
+    if (!metadata) {
+      return {
+        ...specialization,
+        specializationBridge: specialization.specializationBridge
+      };
+    }
+
+    return {
+      ...specialization,
+      specializationBridge: metadata.specializationBridge ?? specialization.specializationBridge
     };
   });
 }

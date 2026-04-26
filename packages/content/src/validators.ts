@@ -1,5 +1,8 @@
 import { canonicalContentSchema, type CanonicalContent } from "./types";
-import { applySkillRelationshipMetadata } from "./skillRelationshipMetadata";
+import {
+  applySkillRelationshipMetadata,
+  applySpecializationRelationshipMetadata
+} from "./skillRelationshipMetadata";
 
 const EXPECTED_SOCIAL_BANDS = [1, 2, 3, 4] as const;
 const EXPECTED_SOCIETY_SCALE = [1, 2, 3, 4, 5, 6] as const;
@@ -658,7 +661,7 @@ export function validateCanonicalContent(input: unknown): CanonicalContent {
           }
         : skill
     ),
-    specializations: parsedContent.specializations.filter(
+    specializations: applySpecializationRelationshipMetadata(parsedContent.specializations).filter(
       (specialization) => specialization.skillId !== "language"
     ),
     civilizations:
