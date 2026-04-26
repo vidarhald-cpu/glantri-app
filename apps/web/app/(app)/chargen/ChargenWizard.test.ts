@@ -5,12 +5,14 @@ import {
   allocateChargenPoint,
   buildChargenDraftView,
   buildChargenSkillAccessSummary,
-  createChargenProgression
+  createChargenProgression,
+  removeChargenPoint
 } from "@glantri/rules-engine";
 import { getPlayerFacingSkillBucket } from "../../../src/lib/chargen/chargenBrowse";
 
 import {
   buildConcreteLanguageBrowseRows,
+  getGroupScopedSkillAllocationMetrics,
   getSkillAllocationMetrics,
   getSkillDisplayGroupId
 } from "./ChargenWizard";
@@ -583,6 +585,112 @@ const directGrantedSkillContent = {
   specializations: []
 };
 
+const overlappingOfficerTrainingContent = {
+  civilizations: [],
+  languages: [],
+  professionFamilies: [{ id: "officer_family", name: "Officer" }],
+  professionSkills: [
+    {
+      grantType: "group" as const,
+      isCore: true,
+      professionId: "officer_family",
+      scope: "family" as const,
+      skillGroupId: "officer_training"
+    }
+  ],
+  professions: [
+    { familyId: "officer_family", id: "officer", name: "Officer", subtypeName: "Officer" }
+  ],
+  skillGroups: [
+    { id: "basic_awareness", name: "Basic Awareness", sortOrder: 1 },
+    { id: "officer_training", name: "Officer Training", sortOrder: 2 }
+  ],
+  skills: [
+    {
+      allowsSpecializations: false,
+      category: "ordinary" as const,
+      categoryId: "leadership" as const,
+      dependencies: [],
+      dependencySkillIds: [],
+      groupId: "basic_awareness",
+      groupIds: ["basic_awareness", "officer_training"],
+      id: "perception",
+      linkedStats: ["int"],
+      name: "Perception",
+      requiresLiteracy: "no" as const,
+      sortOrder: 1
+    },
+    {
+      allowsSpecializations: false,
+      category: "ordinary" as const,
+      categoryId: "leadership" as const,
+      dependencies: [],
+      dependencySkillIds: [],
+      groupId: "officer_training",
+      groupIds: ["officer_training"],
+      id: "tactics",
+      linkedStats: ["int"],
+      name: "Tactics",
+      requiresLiteracy: "no" as const,
+      sortOrder: 2
+    },
+    {
+      allowsSpecializations: false,
+      category: "ordinary" as const,
+      categoryId: "leadership" as const,
+      dependencies: [],
+      dependencySkillIds: [],
+      groupId: "officer_training",
+      groupIds: ["officer_training"],
+      id: "captaincy",
+      linkedStats: ["pow"],
+      name: "Captaincy",
+      requiresLiteracy: "no" as const,
+      sortOrder: 3
+    }
+  ],
+  societies: [],
+  societyLevels: [
+    {
+      professionIds: ["officer"],
+      skillGroupIds: ["officer_training"],
+      skillIds: [],
+      socialClass: "Common",
+      societyId: "glantri",
+      societyLevel: 1,
+      societyName: "Glantri"
+    },
+    {
+      professionIds: ["officer"],
+      skillGroupIds: ["officer_training"],
+      skillIds: [],
+      socialClass: "Guild",
+      societyId: "glantri",
+      societyLevel: 2,
+      societyName: "Glantri"
+    },
+    {
+      professionIds: ["officer"],
+      skillGroupIds: ["officer_training"],
+      skillIds: [],
+      socialClass: "Patrician",
+      societyId: "glantri",
+      societyLevel: 3,
+      societyName: "Glantri"
+    },
+    {
+      professionIds: ["officer"],
+      skillGroupIds: ["officer_training"],
+      skillIds: [],
+      socialClass: "Noble",
+      societyId: "glantri",
+      societyLevel: 4,
+      societyName: "Glantri"
+    }
+  ],
+  specializations: []
+};
+
 function createProgressionWithOtherSkillCandidate() {
   return {
     ...createChargenProgression()
@@ -1080,6 +1188,138 @@ describe("ChargenWizard concrete language rows", () => {
         skill: etiquetteSkill!
       }).totalXp
     ).toBe(2);
+  });
+
+  it("keeps package group totals and per-skill group XP in sync for overlapping Officer Training skills", () => {
+    const startingProgression = {
+      ...createChargenProgression(),
+      skillGroups: [
+        {
+          gms: 0,
+          grantedRanks: 0,
+          groupId: "basic_awareness",
+          primaryRanks: 2,
+          ranks: 2,
+          secondaryRanks: 0
+        }
+      ]
+    };
+    const perception = overlappingOfficerTrainingContent.skills.find((skill) => skill.id === "perception");
+    const tactics = overlappingOfficerTrainingContent.skills.find((skill) => skill.id === "tactics");
+    const captaincy = overlappingOfficerTrainingContent.skills.find((skill) => skill.id === "captaincy");
+
+    expect(perception).toBeDefined();
+    expect(tactics).toBeDefined();
+    expect(captaincy).toBeDefined();
+
+    const initialDraftView = buildChargenDraftView({
+      content: overlappingOfficerTrainingContent,
+      professionId: "officer",
+      profile: languageProfile,
+      progression: startingProgression,
+      societyId: "glantri",
+      societyLevel: 1
+    });
+
+    expect(
+      getSkillAllocationMetrics({
+        content: overlappingOfficerTrainingContent,
+        draftView: initialDraftView,
+        profile: languageProfile,
+        skill: perception!
+      }).groupXp
+    ).toBeGreaterThan(0);
+    expect(
+      getGroupScopedSkillAllocationMetrics({
+        content: overlappingOfficerTrainingContent,
+        draftView: initialDraftView,
+        groupId: "officer_training",
+        profile: languageProfile,
+        progression: startingProgression,
+        skill: perception!
+      }).groupXp
+    ).toBe(0);
+
+    const afterBuy = allocateChargenPoint({
+      content: overlappingOfficerTrainingContent,
+      professionId: "officer",
+      progression: startingProgression,
+      societyId: "glantri",
+      societyLevel: 1,
+      targetId: "officer_training",
+      targetType: "group"
+    });
+
+    expect(afterBuy.error).toBeUndefined();
+
+    const purchasedDraftView = buildChargenDraftView({
+      content: overlappingOfficerTrainingContent,
+      professionId: "officer",
+      profile: languageProfile,
+      progression: afterBuy.progression,
+      societyId: "glantri",
+      societyLevel: 1
+    });
+    const officerGroupAfterBuy = purchasedDraftView.groups.find(
+      (group) => group.groupId === "officer_training"
+    );
+
+    expect(officerGroupAfterBuy?.totalRanks).toBe(1);
+
+    for (const skill of [perception!, tactics!, captaincy!]) {
+      expect(
+        getGroupScopedSkillAllocationMetrics({
+          content: overlappingOfficerTrainingContent,
+          draftView: purchasedDraftView,
+          groupId: "officer_training",
+          profile: languageProfile,
+          progression: afterBuy.progression,
+          skill
+        }).groupXp
+      ).toBe(officerGroupAfterBuy?.groupLevel ?? 0);
+    }
+
+    const afterRemove = removeChargenPoint({
+      content: overlappingOfficerTrainingContent,
+      professionId: "officer",
+      progression: afterBuy.progression,
+      societyId: "glantri",
+      societyLevel: 1,
+      targetId: "officer_training",
+      targetType: "group"
+    });
+
+    expect(afterRemove.error).toBeUndefined();
+
+    const removedDraftView = buildChargenDraftView({
+      content: overlappingOfficerTrainingContent,
+      professionId: "officer",
+      profile: languageProfile,
+      progression: afterRemove.progression,
+      societyId: "glantri",
+      societyLevel: 1
+    });
+
+    for (const skill of [perception!, tactics!, captaincy!]) {
+      expect(
+        getGroupScopedSkillAllocationMetrics({
+          content: overlappingOfficerTrainingContent,
+          draftView: removedDraftView,
+          groupId: "officer_training",
+          profile: languageProfile,
+          progression: afterRemove.progression,
+          skill
+        }).groupXp
+      ).toBe(0);
+    }
+    expect(
+      getSkillAllocationMetrics({
+        content: overlappingOfficerTrainingContent,
+        draftView: removedDraftView,
+        profile: languageProfile,
+        skill: perception!
+      }).groupXp
+    ).toBeGreaterThan(0);
   });
 
   it("only applies granted language XP to the exact granted language row", () => {

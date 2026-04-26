@@ -147,6 +147,37 @@ export function getCombatSkillXp(skill: Pick<ChargenSkillView, "effectiveSkillNu
   return skill.effectiveSkillNumber;
 }
 
+export function getChargenSkillContributionForGroup(input: {
+  content: CanonicalContentShape;
+  groupId: string;
+  progression: CharacterProgression;
+  skill: SkillDefinition;
+}): number {
+  const progression = recalculateProgression(structuredClone(input.progression));
+  const activeGroupIds = new Set(
+    getActiveSkillGroupIds({
+      progression,
+      skill: input.skill,
+      skillGroups: input.content.skillGroups
+    })
+  );
+
+  if (!activeGroupIds.has(input.groupId)) {
+    return 0;
+  }
+
+  const group = progression.skillGroups.find((candidate) => candidate.groupId === input.groupId);
+
+  if (!group || group.ranks <= 0) {
+    return 0;
+  }
+
+  return calculateGroupLevel({
+    gms: group.gms,
+    ranks: group.ranks
+  });
+}
+
 export interface ChargenSpecializationView {
   effectiveSpecializationNumber: number;
   name: string;

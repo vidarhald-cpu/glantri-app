@@ -45,6 +45,7 @@ import {
   evaluateSkillSelection,
   finalizeChargenDraft,
   generateProfiles,
+  getChargenSkillContributionForGroup,
   removeChargenPoint,
   removeSecondaryPoint,
   resolveEffectiveProfessionPackage,
@@ -583,6 +584,32 @@ export function getSkillAllocationMetrics(input: {
     ordinaryXp: skillView?.primaryRanks ?? 0,
     skillXp,
     totalSkillLevel: avgStats + totalXp,
+    totalXp
+  };
+}
+
+export function getGroupScopedSkillAllocationMetrics(input: {
+  content: CanonicalContent;
+  draftView: ReturnType<typeof buildChargenDraftView>;
+  groupId: string;
+  profile: RolledCharacterProfile | undefined;
+  progression: CharacterProgression;
+  skill: SkillDefinition;
+  targetLanguageName?: string;
+}): SkillAllocationMetrics {
+  const metrics = getSkillAllocationMetrics(input);
+  const groupXp = getChargenSkillContributionForGroup({
+    content: input.content,
+    groupId: input.groupId,
+    progression: input.progression,
+    skill: input.skill
+  });
+  const totalXp = groupXp + metrics.skillXp;
+
+  return {
+    ...metrics,
+    groupXp,
+    totalSkillLevel: metrics.avgStats + totalXp,
     totalXp
   };
 }
@@ -3187,7 +3214,26 @@ export default function ChargenWizard() {
                           const groupSkillRows = sortSkills(
                             content.skills.filter((skill) => skillDisplayGroupIds.get(skill.id) === group.id)
                           )
-                            .map((skill) => skillRowsById.get(skill.id))
+                            .map((skill) => {
+                              const row = skillRowsById.get(skill.id);
+
+                              if (!row) {
+                                return undefined;
+                              }
+
+                              return {
+                                ...row,
+                                metrics: getGroupScopedSkillAllocationMetrics({
+                                  content,
+                                  draftView,
+                                  groupId: group.id,
+                                  profile: selectedProfile,
+                                  progression,
+                                  skill: row.skill,
+                                  targetLanguageName: row.targetLanguageName
+                                })
+                              };
+                            })
                             .filter((row): row is SkillBrowseRow => row !== undefined);
                           const visibleSkillRows = mergeSkillBrowseRowsBySkillId(groupSkillRows);
                           const hasOwnedContent =
