@@ -7,6 +7,7 @@ import {
   buildChargenDraftView,
   createChargenProgression,
   finalizeChargenDraft,
+  getSecondaryPurchaseCostForSpecialization,
   reviewChargenDraft,
   spendPrimaryPoint,
   spendSecondaryPoint
@@ -444,6 +445,7 @@ describe("derived skill relationships in chargen drafts", () => {
       derivedSpecializationLevel: 5,
       specializationLevel: 5
     });
+    expect(draftView.secondaryPoolAvailable).toBe(0);
   });
 
   it("allows specialization-bridge purchases without the legacy society-level specialization block when the bridge parent gate is satisfied", () => {
@@ -572,6 +574,212 @@ describe("derived skill relationships in chargen drafts", () => {
       })
     );
     expect(result.warnings).toEqual([]);
+  });
+
+  it("does not count derived specialization XP as flexible-point spend and charges bridge specialization purchases from direct ranks only", () => {
+    const bridgePurchaseContent = validateCanonicalContent({
+      skillGroups: [
+        {
+          id: "combat_group",
+          name: "Combat",
+          sortOrder: 1
+        }
+      ],
+      skills: [
+        {
+          allowsSpecializations: true,
+          category: "ordinary",
+          dependencies: [],
+          dependencySkillIds: [],
+          groupId: "combat_group",
+          groupIds: ["combat_group"],
+          id: "one_handed_edged",
+          linkedStats: ["dex"],
+          name: "1-h edged",
+          requiresLiteracy: "no",
+          sortOrder: 1
+        }
+      ],
+      specializations: [
+        {
+          id: "fencing",
+          minimumGroupLevel: 6,
+          minimumParentLevel: 6,
+          name: "Fencing",
+          skillId: "one_handed_edged",
+          sortOrder: 1,
+          specializationBridge: {
+            parentExcessOffset: 5,
+            parentSkillId: "one_handed_edged",
+            reverseFactor: 1,
+            threshold: 6
+          }
+        }
+      ],
+      professionFamilies: [],
+      professions: [],
+      professionSkills: [],
+      societyLevels: [
+        {
+          professionIds: [],
+          skillGroupIds: [],
+          skillIds: [],
+          socialClass: "Common",
+          societyId: "glantri",
+          societyLevel: 1,
+          societyName: "Glantri"
+        },
+        {
+          professionIds: [],
+          skillGroupIds: [],
+          skillIds: [],
+          socialClass: "Guild",
+          societyId: "glantri",
+          societyLevel: 2,
+          societyName: "Glantri"
+        },
+        {
+          professionIds: [],
+          skillGroupIds: [],
+          skillIds: [],
+          socialClass: "Patrician",
+          societyId: "glantri",
+          societyLevel: 3,
+          societyName: "Glantri"
+        },
+        {
+          professionIds: [],
+          skillGroupIds: [],
+          skillIds: [],
+          socialClass: "Noble",
+          societyId: "glantri",
+          societyLevel: 4,
+          societyName: "Glantri"
+        }
+      ]
+    });
+    const progression = createChargenProgression();
+    progression.secondaryPoolTotal = 33;
+    progression.skillGroups = [
+      {
+        gms: 0,
+        grantedRanks: 0,
+        groupId: "combat_group",
+        primaryRanks: 6,
+        ranks: 6,
+        secondaryRanks: 0
+      }
+    ];
+    progression.skills = [
+      {
+        category: "ordinary",
+        grantedRanks: 0,
+        groupId: "combat_group",
+        level: 6,
+        primaryRanks: 6,
+        ranks: 6,
+        secondaryRanks: 0,
+        skillId: "one_handed_edged"
+      }
+    ];
+    const flexibleProfile = {
+      distractionLevel: 0,
+      id: "profile-fencer",
+      label: "Fencer",
+      rolledStats: {
+        cha: 10,
+        com: 10,
+        con: 10,
+        dex: 10,
+        health: 10,
+        int: 20,
+        lck: 13,
+        pow: 10,
+        siz: 10,
+        str: 10,
+        will: 10
+      },
+      societyLevel: 0
+    };
+
+    const beforeDraft = buildChargenDraftView({
+      content: bridgePurchaseContent,
+      professionId: undefined,
+      profile: flexibleProfile,
+      progression,
+      societyId: "glantri",
+      societyLevel: 1
+    });
+
+    expect(beforeDraft.secondaryPoolAvailable).toBe(33);
+    expect(beforeDraft.specializations.find((specialization) => specialization.specializationId === "fencing")).toMatchObject({
+      secondaryRanks: 0
+    });
+    expect(progression.secondaryPoolSpent).toBe(0);
+    expect(
+      getSecondaryPurchaseCostForSpecialization(progression, bridgePurchaseContent.specializations[0]!)
+    ).toBe(4);
+
+    const firstPurchase = spendSecondaryPoint({
+      content: bridgePurchaseContent,
+      progression,
+      societyId: "glantri",
+      societyLevel: 1,
+      targetId: "fencing",
+      targetType: "specialization"
+    });
+
+    expect(firstPurchase.error).toBeUndefined();
+    expect(firstPurchase.spentCost).toBe(4);
+    expect(firstPurchase.progression.secondaryPoolSpent).toBe(4);
+
+    const afterFirstDraft = buildChargenDraftView({
+      content: bridgePurchaseContent,
+      professionId: undefined,
+      profile: flexibleProfile,
+      progression: firstPurchase.progression,
+      societyId: "glantri",
+      societyLevel: 1
+    });
+
+    expect(afterFirstDraft.secondaryPoolAvailable).toBe(29);
+    expect(afterFirstDraft.specializations.find((specialization) => specialization.specializationId === "fencing")).toMatchObject({
+      secondaryRanks: 1,
+      effectiveSpecializationNumber: expect.any(Number)
+    });
+    expect(
+      getSecondaryPurchaseCostForSpecialization(
+        firstPurchase.progression,
+        bridgePurchaseContent.specializations[0]!
+      )
+    ).toBe(2);
+
+    const secondPurchase = spendSecondaryPoint({
+      content: bridgePurchaseContent,
+      progression: firstPurchase.progression,
+      societyId: "glantri",
+      societyLevel: 1,
+      targetId: "fencing",
+      targetType: "specialization"
+    });
+
+    expect(secondPurchase.error).toBeUndefined();
+    expect(secondPurchase.spentCost).toBe(2);
+    expect(secondPurchase.progression.secondaryPoolSpent).toBe(6);
+
+    const exhausted = spendSecondaryPoint({
+      content: bridgePurchaseContent,
+      progression: {
+        ...progression,
+        secondaryPoolSpent: 33
+      },
+      societyId: "glantri",
+      societyLevel: 1,
+      targetId: "fencing",
+      targetType: "specialization"
+    });
+
+    expect(exhausted.error).toBe("Not enough secondary points remaining for that specialization purchase.");
   });
 });
 

@@ -1602,7 +1602,7 @@ export function removeSecondaryPoint(input: SpendSecondaryPointInput): SpendPoin
 
   specialization.secondaryRanks -= 1;
   specialization.ranks = specialization.secondaryRanks;
-  const refundedCost = getSpecializationSpendCost(specialization.ranks > 0);
+  const refundedCost = getSpecializationSpendCost(specialization.secondaryRanks > 0);
   progression.secondaryPoolSpent = Math.max(0, progression.secondaryPoolSpent - refundedCost);
 
   return {
@@ -1753,7 +1753,7 @@ export function spendSecondaryPoint(input: SpendSecondaryPointInput): SpendPoint
   }
 
   const specialization = ensureSpecializationExists(progression, specializationDefinition);
-  const cost = getSpecializationSpendCost(specialization.ranks > 0);
+  const cost = getSpecializationSpendCost(specialization.secondaryRanks > 0);
 
   if (progression.secondaryPoolSpent + cost > progression.secondaryPoolTotal) {
     return {
@@ -2314,7 +2314,7 @@ export function getSecondaryPurchaseCostForSpecialization(
   const specialization = progression.specializations.find(
     (item) => item.specializationId === specializationDefinition.id
   );
-  return getSpecializationSpendCost(Boolean(specialization && specialization.ranks > 0));
+  return getSpecializationSpendCost(Boolean(specialization && specialization.secondaryRanks > 0));
 }
 
 export function getAllowedPrimaryGroupIds(
