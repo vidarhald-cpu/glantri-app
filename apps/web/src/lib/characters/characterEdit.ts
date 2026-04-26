@@ -15,6 +15,7 @@ import {
   getCharacteristicGm,
   type CharacterSheetSummary,
 } from "@glantri/rules-engine";
+import { formatDerivedSkillSourceLabel } from "./derivedSkillLabels";
 
 export interface CharacterEditContentShape {
   professionFamilies: ProfessionFamilyDefinition[];
@@ -43,6 +44,8 @@ export interface CharacterEditSkillGroupRow {
 
 export interface CharacterEditSkillRow {
   canRemoveDirectXp: boolean;
+  derivedXp: number;
+  derivedSourceLabel: string | undefined;
   groupXp: number;
   skillId: string;
   skillKey: string;
@@ -363,7 +366,7 @@ export function buildCharacterEditSkillRows(input: {
     )
   );
 
-  return input.sheetSummary.draftView.skills
+  const rows = input.sheetSummary.draftView.skills
     .map((skillView) => {
       const definition = input.content.skills.find((skill) => skill.id === skillView.skillId);
 
@@ -373,6 +376,11 @@ export function buildCharacterEditSkillRows(input: {
 
       return {
         canRemoveDirectXp: directSkillKeys.has(skillView.skillKey),
+        derivedXp: skillView.derivedSkillLevel ?? 0,
+        derivedSourceLabel: formatDerivedSkillSourceLabel({
+          sourceSkillName: skillView.derivedSourceSkillName,
+          sourceType: skillView.derivedSourceType
+        }),
         groupXp: skillView.groupLevel,
         skillId: definition.id,
         skillKey: skillView.skillKey,
@@ -385,8 +393,9 @@ export function buildCharacterEditSkillRows(input: {
         xp: skillView.specificSkillLevel
       };
     })
-    .filter((row): row is CharacterEditSkillRow => row !== null)
-    .sort((left, right) => left.skillName.localeCompare(right.skillName));
+    .filter((row): row is CharacterEditSkillRow => row !== null);
+
+  return rows.sort((left, right) => left.skillName.localeCompare(right.skillName));
 }
 
 export function getCharacterEditSheetSummary(

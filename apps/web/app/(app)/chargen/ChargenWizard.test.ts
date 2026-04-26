@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { defaultCanonicalContent } from "@glantri/content";
+import { defaultCanonicalContent, validateCanonicalContent } from "@glantri/content";
 import {
   allocateChargenPoint,
   buildChargenDraftView,
@@ -727,6 +727,126 @@ function getOtherSkillIds(input: {
 }
 
 describe("ChargenWizard combat allocation runtime helpers", () => {
+  it("materializes cross-trained melee skills in chargen when the source only has group XP", () => {
+    const meleeDerivedContent = validateCanonicalContent({
+      civilizations: [],
+      languages: [],
+      professionFamilies: [{ id: "warrior", name: "Warrior" }],
+      professionSkills: [
+        {
+          grantType: "group",
+          isCore: true,
+          professionId: "warrior",
+          scope: "family",
+          skillGroupId: "combat_group"
+        }
+      ],
+      professions: [{ familyId: "warrior", id: "soldier", name: "Soldier", subtypeName: "Soldier" }],
+      skillGroups: [{ id: "combat_group", name: "Combat", sortOrder: 1 }],
+      skills: [
+        {
+          allowsSpecializations: false,
+          category: "ordinary",
+          dependencies: [],
+          dependencySkillIds: [],
+          groupId: "combat_group",
+          groupIds: ["combat_group"],
+          id: "one_handed_edged",
+          linkedStats: ["dex"],
+          meleeCrossTraining: {
+            attackStyle: "slash",
+            handClass: "one-handed"
+          },
+          name: "1-h edged",
+          requiresLiteracy: "no",
+          sortOrder: 1
+        },
+        {
+          allowsSpecializations: false,
+          category: "ordinary",
+          dependencies: [],
+          dependencySkillIds: [],
+          groupId: "combat_group",
+          groupIds: ["combat_group"],
+          id: "two_handed_edged",
+          linkedStats: ["dex"],
+          meleeCrossTraining: {
+            attackStyle: "slash",
+            handClass: "two-handed"
+          },
+          name: "2-h edged",
+          requiresLiteracy: "no",
+          sortOrder: 2
+        }
+      ],
+      societies: [],
+      societyLevels: [
+        {
+          professionIds: ["soldier"],
+          skillGroupIds: ["combat_group"],
+          skillIds: [],
+          socialClass: "Common",
+          societyId: "glantri",
+          societyLevel: 1,
+          societyName: "Glantri"
+        },
+        {
+          professionIds: ["soldier"],
+          skillGroupIds: ["combat_group"],
+          skillIds: [],
+          socialClass: "Guild",
+          societyId: "glantri",
+          societyLevel: 2,
+          societyName: "Glantri"
+        },
+        {
+          professionIds: ["soldier"],
+          skillGroupIds: ["combat_group"],
+          skillIds: [],
+          socialClass: "Patrician",
+          societyId: "glantri",
+          societyLevel: 3,
+          societyName: "Glantri"
+        },
+        {
+          professionIds: ["soldier"],
+          skillGroupIds: ["combat_group"],
+          skillIds: [],
+          socialClass: "Noble",
+          societyId: "glantri",
+          societyLevel: 4,
+          societyName: "Glantri"
+        }
+      ],
+      specializations: []
+    });
+    const progression = createChargenProgression();
+    progression.skillGroups = [
+      {
+        gms: 0,
+        grantedRanks: 0,
+        groupId: "combat_group",
+        primaryRanks: 10,
+        ranks: 10,
+        secondaryRanks: 0
+      }
+    ];
+
+    const draftView = buildChargenDraftView({
+      content: meleeDerivedContent,
+      professionId: "soldier",
+      progression,
+      societyId: "glantri",
+      societyLevel: 1
+    });
+
+    expect(draftView.skills.find((skill) => skill.skillId === "two_handed_edged")).toMatchObject({
+      derivedSkillLevel: 7,
+      derivedSourceSkillName: "1-h edged",
+      effectiveSkillNumber: 17
+    });
+  });
+
   it("only assigns combat group rows to fixed skills plus selected slot weapons", () => {
     const draftView = buildChargenDraftView({
       content: combatContent,

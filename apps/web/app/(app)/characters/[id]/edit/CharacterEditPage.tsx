@@ -469,7 +469,8 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
                 <th style={{ padding: "0.5rem 0.75rem 0.5rem 0" }}>Skill</th>
                 <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Stats</th>
                 <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Group XP</th>
-                <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>XP</th>
+                <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Owned XP</th>
+                <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Derived XP</th>
                 <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Total XP</th>
                 <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Total</th>
                 <th style={{ padding: "0.5rem 0", textAlign: "right" }}>Remove</th>
@@ -479,7 +480,14 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
               {skillRows.length > 0 ? (
                 skillRows.map((skill) => (
                   <tr key={skill.skillKey} style={{ borderBottom: "1px solid #eee8dc" }}>
-                    <td style={{ padding: "0.6rem 0.75rem 0.6rem 0" }}>{skill.skillName}</td>
+                    <td style={{ padding: "0.6rem 0.75rem 0.6rem 0" }}>
+                      <div>{skill.skillName}</div>
+                      {skill.derivedSourceLabel ? (
+                        <div style={{ color: "#5e5a50", fontSize: "0.82rem" }}>
+                          {skill.derivedSourceLabel}
+                        </div>
+                      ) : null}
+                    </td>
                     <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>{skill.stats}</td>
                     <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>{skill.groupXp}</td>
                     <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>
@@ -490,6 +498,7 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
                         value={skill.xp}
                       />
                     </td>
+                    <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>{skill.derivedXp}</td>
                     <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>{skill.totalXp}</td>
                     <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>{skill.total}</td>
                     <td style={{ padding: "0.6rem 0", textAlign: "right" }}>
@@ -505,7 +514,7 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
                 ))
               ) : (
                 <tr>
-                  <td colSpan={7} style={{ padding: "0.75rem 0" }}>
+                  <td colSpan={8} style={{ padding: "0.75rem 0" }}>
                     No progression skill rows yet.
                   </td>
                 </tr>

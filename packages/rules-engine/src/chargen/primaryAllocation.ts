@@ -31,6 +31,7 @@ import { calculateEducation, type EducationBreakdown } from "../education/calcul
 import { resolveEffectiveProfessionPackage } from "../professions/resolveEffectiveProfessionPackage";
 import { calculateGroupLevel } from "../skills/calculateGroupLevel";
 import { calculateSpecializationLevel } from "../skills/calculateSpecializationLevel";
+import { deriveBestSkillRelationshipXp } from "../skills/deriveSkillRelationships";
 import { evaluateSkillSelection } from "../skills/evaluateSkillSelection";
 import { getActiveSkillGroupIds } from "../skills/getActiveSkillGroupIds";
 import { selectBestSkillGroupContribution } from "../skills/selectBestSkillGroupContribution";
@@ -122,6 +123,10 @@ export interface ChargenSkillView {
   category: "ordinary" | "secondary";
   categoryId?: SkillDefinition["categoryId"];
   contributingGroupId?: string;
+  derivedSkillLevel?: number;
+  derivedSourceSkillId?: string;
+  derivedSourceSkillName?: string;
+  derivedSourceType?: "explicit" | "melee-cross-training";
   // Canonical workbook-equivalent combat skill XP. This is the full skill XP
   // used by combat math, combining the best contributing group with direct
   // skill ranks, before any linked-stat average is added.
@@ -598,6 +603,44 @@ function getBestPurchasedParentGroup(
   );
 
   return candidates.find((candidate) => candidate.contribution.groupId === bestContribution?.groupId)?.group;
+}
+
+function getBestActiveGroupContribution(input: {
+  content: CanonicalContentShape;
+  groupViewById: Map<string, ChargenGroupView>;
+  progression: CharacterProgression;
+  skill: SkillDefinition;
+}):
+  | {
+      groupId: string;
+      groupLevel: number;
+      name: string;
+      sortOrder: number;
+    }
+  | undefined {
+  return selectBestSkillGroupContribution(
+    getActiveSkillGroupIds({
+      progression: input.progression,
+      skill: input.skill,
+      skillGroups: input.content.skillGroups
+    })
+      .map((groupId) => {
+        const groupView = input.groupViewById.get(groupId);
+        const groupDefinition = getSkillGroupDefinition(input.content, groupId);
+
+        if (!groupView) {
+          return null;
+        }
+
+        return {
+          groupId,
+          groupLevel: groupView.groupLevel,
+          name: groupView.name,
+          sortOrder: groupDefinition?.sortOrder ?? Number.MAX_SAFE_INTEGER
+        };
+      })
+      .filter(isDefined)
+  );
 }
 
 function getSpecializationById(
@@ -1782,42 +1825,45 @@ export function buildChargenDraftView(input: {
     })
     .sort((left, right) => left.name.localeCompare(right.name));
   const groupViewById = new Map(groups.map((group) => [group.groupId, group]));
+  const ownedXpBySkillId = new Map<string, number>(
+    input.content.skills.map((definition) => {
+      const bestContributingGroup = getBestActiveGroupContribution({
+        content: input.content,
+        groupViewById,
+        progression,
+        skill: definition
+      });
+      const directSkillXp = getProgressionSkillRows(progression, definition.id)
+        .filter((skill) => !skill.languageName)
+        .reduce((sum, skill) => sum + skill.ranks, 0);
+
+      return [definition.id, (bestContributingGroup?.groupLevel ?? 0) + directSkillXp];
+    })
+  );
+  const derivedXpBySkillId = deriveBestSkillRelationshipXp({
+    ownedXpBySkillId,
+    skills: input.content.skills
+  });
 
   const skills = input.content.skills
     .flatMap((definition) => {
       const progressionSkillRows = getProgressionSkillRows(progression, definition.id);
       const groupIds = getSkillDefinitionGroupIds(definition);
-      const activeGroupIds = getActiveSkillGroupIds({
+      const bestContributingGroup = getBestActiveGroupContribution({
+        content: input.content,
+        groupViewById,
         progression,
-        skill: definition,
-        skillGroups: input.content.skillGroups
+        skill: definition
       });
-      const bestContributingGroup = selectBestSkillGroupContribution(
-        activeGroupIds
-          .map((groupId) => {
-            const groupView = groupViewById.get(groupId);
-            const groupDefinition = getSkillGroupDefinition(input.content, groupId);
-
-            if (!groupView) {
-              return null;
-            }
-
-            return {
-              groupId,
-              groupLevel: groupView.groupLevel,
-              name: groupView.name,
-              sortOrder: groupDefinition?.sortOrder ?? Number.MAX_SAFE_INTEGER
-            };
-          })
-          .filter(isDefined)
-      );
       const fallbackGroupId = getBestGroupIdByDefinitionOrder(input.content, groupIds);
       const resolvedGroupId = bestContributingGroup?.groupId ?? fallbackGroupId;
       const groupContribution = bestContributingGroup?.groupLevel ?? 0;
+      const derivedSkillGrant = derivedXpBySkillId.get(definition.id);
+      const derivedSkillLevel = derivedSkillGrant?.xp ?? 0;
       const skillRows =
         progressionSkillRows.length > 0
           ? progressionSkillRows
-          : groupContribution > 0
+          : groupContribution > 0 || derivedSkillLevel > 0
             ? [undefined]
             : [];
 
@@ -1827,7 +1873,8 @@ export function buildChargenDraftView(input: {
 
       return skillRows.map((skill) => {
         const specificSkillLevel = skill?.ranks ?? 0;
-        const effectiveSkillNumber = groupContribution + specificSkillLevel;
+        const rowDerivedSkillLevel = skill?.languageName ? 0 : derivedSkillLevel;
+        const effectiveSkillNumber = groupContribution + specificSkillLevel + rowDerivedSkillLevel;
         const linkedStatAverage = getLinkedStatAverage(input.profile, definition);
         const literacyWarning =
           definition.requiresLiteracy === "recommended" && !hasLiteracy(progression)
@@ -1838,6 +1885,10 @@ export function buildChargenDraftView(input: {
           category: skill?.category ?? definition.category,
           categoryId: skill?.categoryId ?? definition.categoryId,
           contributingGroupId: bestContributingGroup?.groupId,
+          derivedSkillLevel: rowDerivedSkillLevel,
+          derivedSourceSkillId: skill?.languageName ? undefined : derivedSkillGrant?.sourceSkillId,
+          derivedSourceSkillName: skill?.languageName ? undefined : derivedSkillGrant?.sourceSkillName,
+          derivedSourceType: skill?.languageName ? undefined : derivedSkillGrant?.sourceType,
           effectiveSkillNumber,
           groupId: resolvedGroupId,
           groupIds,

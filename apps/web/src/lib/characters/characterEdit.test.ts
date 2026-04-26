@@ -53,6 +53,37 @@ const skills: SkillDefinition[] = [
     requiresLiteracy: "no",
     societyLevel: 1,
     sortOrder: 2
+  },
+  {
+    allowsSpecializations: false,
+    category: "ordinary",
+    dependencies: [],
+    dependencySkillIds: [],
+    derivedGrants: [{ factor: 1, skillId: "first_aid" }],
+    groupId: "medicine_group",
+    groupIds: ["medicine_group"],
+    id: "medicine",
+    isTheoretical: false,
+    linkedStats: ["int"],
+    name: "Medicine",
+    requiresLiteracy: "no",
+    societyLevel: 1,
+    sortOrder: 3
+  },
+  {
+    allowsSpecializations: false,
+    category: "ordinary",
+    dependencies: [],
+    dependencySkillIds: [],
+    groupId: "medicine_group",
+    groupIds: ["medicine_group"],
+    id: "first_aid",
+    isTheoretical: false,
+    linkedStats: ["int"],
+    name: "First aid",
+    requiresLiteracy: "no",
+    societyLevel: 1,
+    sortOrder: 4
   }
 ];
 
@@ -68,6 +99,12 @@ const skillGroups: SkillGroupDefinition[] = [
     id: "martial",
     name: "Martial",
     sortOrder: 2
+  },
+  {
+    description: "Medicine",
+    id: "medicine_group",
+    name: "Medicine",
+    sortOrder: 3
   }
 ];
 
@@ -213,7 +250,10 @@ describe("characterEdit helpers", () => {
         content,
         sheetSummary: summary
       })
-    ).toEqual([{ groupId: "martial", level: 0, name: "Martial" }]);
+    ).toEqual([
+      { groupId: "martial", level: 0, name: "Martial" },
+      { groupId: "medicine_group", level: 0, name: "Medicine" }
+    ]);
 
     const withAddedHiddenGroup = addCharacterSkillGroup(withAwareness, "martial");
     const updatedSummary = getCharacterEditSheetSummary(withAddedHiddenGroup, content);
@@ -244,6 +284,7 @@ describe("characterEdit helpers", () => {
     ).toEqual([
       {
         canRemoveDirectXp: true,
+        derivedXp: 0,
         groupXp: 4,
         skillId: "perception",
         skillKey: "perception",
@@ -269,6 +310,7 @@ describe("characterEdit helpers", () => {
     ).toEqual([
       {
         canRemoveDirectXp: false,
+        derivedXp: 0,
         groupXp: 1,
         skillId: "perception",
         skillKey: "perception",
@@ -279,5 +321,70 @@ describe("characterEdit helpers", () => {
         xp: 0
       }
     ]);
+  });
+
+  it("keeps derived-only skills visible in the edit rows and preserves direct XP when the source changes", () => {
+    const withMedicine = addCharacterSkill(baseBuild, skills[2]);
+    const medicineTen = setCharacterSkillXp(withMedicine, skills[2], 10);
+    const derivedSummary = getCharacterEditSheetSummary(medicineTen, content);
+
+    expect(
+      buildCharacterEditSkillRows({
+        build: medicineTen,
+        content,
+        sheetSummary: derivedSummary
+      }).find((row) => row.skillId === "first_aid")
+    ).toMatchObject({
+      canRemoveDirectXp: false,
+      derivedXp: 10,
+      derivedSourceLabel: "Derived from Medicine",
+      totalXp: 10,
+      xp: 0
+    });
+
+    const withFirstAid = addCharacterSkill(medicineTen, skills[3]);
+    const firstAidThirteen = setCharacterSkillXp(withFirstAid, skills[3], 13);
+    const stackedSummary = getCharacterEditSheetSummary(firstAidThirteen, content);
+
+    expect(
+      buildCharacterEditSkillRows({
+        build: firstAidThirteen,
+        content,
+        sheetSummary: stackedSummary
+      }).find((row) => row.skillId === "first_aid")
+    ).toMatchObject({
+      canRemoveDirectXp: true,
+      derivedXp: 10,
+      derivedSourceLabel: "Derived from Medicine",
+      totalXp: 23,
+      xp: 13
+    });
+
+    const medicineFour = setCharacterSkillXp(firstAidThirteen, skills[2], 4);
+    const updatedSummary = getCharacterEditSheetSummary(medicineFour, content);
+
+    expect(
+      buildCharacterEditSkillRows({
+        build: medicineFour,
+        content,
+        sheetSummary: updatedSummary
+      }).find((row) => row.skillId === "first_aid")
+    ).toMatchObject({
+      derivedXp: 4,
+      derivedSourceLabel: "Derived from Medicine",
+      totalXp: 17,
+      xp: 13
+    });
+
+    const medicineZero = setCharacterSkillXp(baseBuild, skills[2], 0);
+    const clearedSummary = getCharacterEditSheetSummary(medicineZero, content);
+
+    expect(
+      buildCharacterEditSkillRows({
+        build: medicineZero,
+        content,
+        sheetSummary: clearedSummary
+      }).find((row) => row.skillId === "first_aid")
+    ).toBeUndefined();
   });
 });

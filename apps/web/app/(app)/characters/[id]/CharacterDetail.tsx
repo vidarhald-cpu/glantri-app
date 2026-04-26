@@ -5,25 +5,16 @@ import { useEffect, useMemo, useState } from "react";
 
 import {
   type CharacterBuild,
-  getCharacterSkillKey,
-  getSkillGroupIds,
   glantriCharacteristicLabels,
   glantriCharacteristicOrder,
-  type GlantriCharacteristicKey,
   type ProfessionDefinition,
-  type SkillDefinition
 } from "@glantri/domain";
 import {
   buildCharacterSheetSummary,
   getCharacteristicGm,
-  selectBestSkillGroupContribution,
 } from "@glantri/rules-engine";
 
 import { updateServerCharacter } from "../../../../src/lib/api/localServiceClient";
-import {
-  getPlayerFacingSkillBucket,
-  groupRowsBySkillType
-} from "../../../../src/lib/chargen/chargenBrowse";
 import {
   setCharacterAge,
   setCharacterGender,
@@ -31,6 +22,7 @@ import {
   setCharacterNotes,
   setCharacterTitle
 } from "../../../../src/lib/characters/characterEdit";
+import { buildCharacterSheetSkillRows } from "../../../../src/lib/characters/characterSheet";
 import { loadLocalCharacterContext } from "../../../../src/lib/characters/loadLocalCharacterContext";
 import type { LocalCharacterRecord } from "../../../../src/lib/offline/glantriDexie";
 import {
@@ -42,43 +34,10 @@ interface CharacterDetailProps {
   id: string;
 }
 
-interface CharacterSheetSkillRow {
-  avgStats: number;
-  skillGroupXp: number;
-  skillId: string;
-  skillKey: string;
-  skillName: string;
-  skillType: ReturnType<typeof getPlayerFacingSkillBucket>;
-  skillXp: number;
-  stats: string;
-  totalSkillLevel: number;
-  totalXp: number;
-}
-
 const localCharacterRepository = new LocalCharacterRepository();
 
 function getCharacterName(build: CharacterBuild): string {
   return build.name.trim() || UNNAMED_CHARACTER_PLACEHOLDER;
-}
-
-function sortSkills(skills: SkillDefinition[]): SkillDefinition[] {
-  return [...skills].sort((left, right) => left.sortOrder - right.sortOrder);
-}
-
-function formatSkillStats(skill: SkillDefinition): string {
-  return [...new Set(skill.linkedStats)].map((stat) => stat.toUpperCase()).join(" / ");
-}
-
-function getSkillLinkedStatAverage(
-  profile: LocalCharacterRecord["build"]["profile"],
-  skill: SkillDefinition
-): number {
-  const total = skill.linkedStats.reduce(
-    (sum, stat) => sum + (profile.rolledStats[stat as GlantriCharacteristicKey] ?? 0),
-    0
-  );
-
-  return Math.floor(total / skill.linkedStats.length);
 }
 
 function getProfessionFamilyName(
@@ -173,63 +132,11 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
     if (!contentState || !sheetSummary || !build) {
       return [];
     }
-
-    const rows = sortSkills(contentState.skills)
-      .flatMap((skill) => {
-        const matchingViews = sheetSummary.draftView.skills.filter((item) => item.skillId === skill.id);
-        const bestContributingGroup = selectBestSkillGroupContribution(
-          getSkillGroupIds(skill)
-            .map((groupId) => {
-              const groupView = sheetSummary.draftView.groups.find((group) => group.groupId === groupId);
-              const groupDefinition = contentState.skillGroups.find((group) => group.id === groupId);
-
-              if (!groupView || groupView.groupLevel <= 0) {
-                return null;
-              }
-
-              return {
-                groupId,
-                groupLevel: groupView.groupLevel,
-                name: groupDefinition?.name ?? groupId,
-                sortOrder: groupDefinition?.sortOrder ?? Number.MAX_SAFE_INTEGER
-              };
-            })
-            .filter((group): group is NonNullable<typeof group> => group !== null)
-        );
-
-        return matchingViews
-          .map((skillView) => {
-            const skillGroupXp = bestContributingGroup?.groupLevel ?? skillView.groupLevel ?? 0;
-            const skillXp = skillView.specificSkillLevel ?? 0;
-            const totalXp = skillGroupXp + skillXp;
-
-            if (totalXp <= 0) {
-              return null;
-            }
-
-            return {
-              avgStats:
-                skillView.linkedStatAverage ?? getSkillLinkedStatAverage(build.profile, skill),
-              skillGroupXp,
-              skillId: skill.id,
-              skillKey: getCharacterSkillKey({
-                languageName: skillView.languageName,
-                skillId: skill.id
-              }),
-              skillName: skillView.languageName ? `${skill.name} (${skillView.languageName})` : skill.name,
-              skillType: getPlayerFacingSkillBucket(skill),
-              skillXp,
-              stats: formatSkillStats(skill),
-              totalSkillLevel:
-                skillView.totalSkill ??
-                getSkillLinkedStatAverage(build.profile, skill) + totalXp,
-              totalXp
-            } satisfies CharacterSheetSkillRow;
-          })
-          .filter((row): row is CharacterSheetSkillRow => row !== null);
-      })
-
-    return groupRowsBySkillType(rows);
+    return buildCharacterSheetSkillRows({
+      build,
+      content: contentState,
+      sheetSummary
+    });
   }, [build, contentState, sheetSummary]);
 
   const skillGroupRows = useMemo(() => {
@@ -566,7 +473,7 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
                     fontSize: "0.8rem",
                     gap: "0.75rem",
                     gridTemplateColumns:
-                      "minmax(180px, 2fr) minmax(120px, 1.2fr) repeat(5, minmax(72px, 88px))",
+                      "minmax(180px, 2fr) minmax(120px, 1.2fr) repeat(6, minmax(72px, 88px))",
                     padding: "0.75rem 1rem"
                   }}
                 >
@@ -574,7 +481,8 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
                   <strong>Stats</strong>
                   <strong>Avg stats</strong>
                   <strong>Skill group XP</strong>
-                  <strong>Skill XP</strong>
+                  <strong>Owned XP</strong>
+                  <strong>Derived XP</strong>
                   <strong>Total XP</strong>
                   <strong>Total skill level</strong>
                 </div>
@@ -587,15 +495,23 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
                       display: "grid",
                       gap: "0.75rem",
                       gridTemplateColumns:
-                        "minmax(180px, 2fr) minmax(120px, 1.2fr) repeat(5, minmax(72px, 88px))",
+                        "minmax(180px, 2fr) minmax(120px, 1.2fr) repeat(6, minmax(72px, 88px))",
                       padding: "0.75rem 1rem"
                     }}
                   >
-                    <div>{skill.skillName}</div>
+                    <div>
+                      <div>{skill.skillName}</div>
+                      {skill.derivedSourceLabel ? (
+                        <div style={{ color: "#5e5a50", fontSize: "0.82rem" }}>
+                          {skill.derivedSourceLabel}
+                        </div>
+                      ) : null}
+                    </div>
                     <div>{skill.stats}</div>
                     <div>{skill.avgStats}</div>
                     <div>{skill.skillGroupXp}</div>
                     <div>{skill.skillXp}</div>
+                    <div>{skill.derivedXp}</div>
                     <div>{skill.totalXp}</div>
                     <div>{skill.totalSkillLevel}</div>
                   </div>

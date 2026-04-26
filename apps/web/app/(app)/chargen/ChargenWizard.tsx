@@ -29,6 +29,7 @@ import {
   glantriCharacteristicLabels,
   glantriCharacteristicOrder
 } from "@glantri/domain";
+import { formatDerivedSkillSourceLabel } from "../../../src/lib/characters/derivedSkillLabels";
 import {
   applyProfessionGrants,
   buildChargenLanguageSelectionSummary,
@@ -150,6 +151,7 @@ interface RuleStatusItem {
 }
 
 interface SkillBrowseRow {
+  derivedSourceLabel?: string;
   displayName: string;
   evaluation: ReturnType<typeof evaluateSkillSelection>;
   isNormalAccess: boolean;
@@ -512,6 +514,7 @@ interface RolledProfileCardModel {
 
 interface SkillAllocationMetrics {
   avgStats: number;
+  derivedXp: number;
   flexibleXp: number;
   groupXp: number;
   literacyWarning?: string;
@@ -572,12 +575,14 @@ export function getSkillAllocationMetrics(input: {
       input.draftView.skills.find((item) => item.skillId === input.skill.id && item.languageName) ??
       input.draftView.skills.find((item) => item.skillId === input.skill.id);
   const groupXp = skillView?.groupLevel ?? 0;
+  const derivedXp = skillView?.derivedSkillLevel ?? 0;
   const skillXp = skillView?.specificSkillLevel ?? 0;
   const avgStats = skillView?.linkedStatAverage ?? getSkillLinkedStatAverage(input.profile, input.skill);
-  const totalXp = groupXp + skillXp;
+  const totalXp = groupXp + skillXp + derivedXp;
 
   return {
     avgStats,
+    derivedXp,
     flexibleXp: skillView?.secondaryRanks ?? 0,
     groupXp,
     literacyWarning: skillView?.literacyWarning,
@@ -604,7 +609,7 @@ export function getGroupScopedSkillAllocationMetrics(input: {
     progression: input.progression,
     skill: input.skill
   });
-  const totalXp = groupXp + metrics.skillXp;
+  const totalXp = groupXp + metrics.skillXp + metrics.derivedXp;
 
   return {
     ...metrics,
@@ -645,6 +650,10 @@ export function buildConcreteLanguageBrowseRows(input: {
       });
 
       return {
+        derivedSourceLabel: formatDerivedSkillSourceLabel({
+          sourceSkillName: skillView?.derivedSourceSkillName,
+          sourceType: skillView?.derivedSourceType
+        }),
         displayName: getSkillDisplayName({
           languageName: language.name,
           skill: languageSkill
@@ -982,6 +991,10 @@ export default function ChargenWizard() {
       return [
         skill.id,
         {
+          derivedSourceLabel: formatDerivedSkillSourceLabel({
+            sourceSkillName: skillView?.derivedSourceSkillName,
+            sourceType: skillView?.derivedSourceType
+          }),
           displayName: getSkillDisplayName({
             languageName: skillView?.languageName,
             skill
@@ -1092,6 +1105,7 @@ export default function ChargenWizard() {
 
           return {
             avgStats: skillView.linkedStatAverage,
+            derivedSkillXp: skillView.derivedSkillLevel ?? 0,
             literacyWarning: skillView.literacyWarning,
             skillType: getPlayerFacingSkillBucket(skill),
             skillGroupXp: skillView.groupLevel,
@@ -1792,7 +1806,7 @@ export default function ChargenWizard() {
             fontSize: "0.8rem",
             gap: "0.75rem",
             gridTemplateColumns:
-              "minmax(180px, 2fr) repeat(4, minmax(72px, 84px)) minmax(150px, 1fr)",
+              "minmax(180px, 2fr) repeat(5, minmax(72px, 84px)) minmax(150px, 1fr)",
             padding: "0.75rem 1rem"
           }}
         >
@@ -1800,6 +1814,7 @@ export default function ChargenWizard() {
           <strong>Group XP</strong>
           <strong>Ordinary</strong>
           <strong>Flexible</strong>
+          <strong>Derived</strong>
           <strong>Total XP</strong>
           <strong>Actions</strong>
         </div>
@@ -1840,7 +1855,7 @@ export default function ChargenWizard() {
                     display: "grid",
                     gap: "0.75rem",
                     gridTemplateColumns:
-                      "minmax(180px, 2fr) repeat(4, minmax(72px, 84px)) minmax(150px, 1fr)"
+                      "minmax(180px, 2fr) repeat(5, minmax(72px, 84px)) minmax(150px, 1fr)"
                   }}
                 >
                   <div style={{ display: "grid", gap: "0.35rem" }}>
@@ -1871,6 +1886,7 @@ export default function ChargenWizard() {
                   <div>{row.metrics.groupXp}</div>
                   <div>{row.metrics.ordinaryXp}</div>
                   <div>{row.metrics.flexibleXp}</div>
+                  <div>{row.metrics.derivedXp}</div>
                   <div>{row.metrics.totalXp}</div>
                   <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
                     <button
@@ -1929,15 +1945,23 @@ export default function ChargenWizard() {
                     ) : null}
                     <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
                       <span style={getBadgeStyle({ muted: true })}>
-                        Direct ranks {row.metrics.skillXp}
+                        Owned XP {row.metrics.skillXp}
                       </span>
                       <span style={getBadgeStyle({ muted: true })}>
                         Group-derived value {row.metrics.groupXp}
                       </span>
                       <span style={getBadgeStyle({ muted: true })}>
+                        Skill-derived value {row.metrics.derivedXp}
+                      </span>
+                      <span style={getBadgeStyle({ muted: true })}>
                         Effective total {row.metrics.totalXp}
                       </span>
                     </div>
+                    {row.derivedSourceLabel ? (
+                      <div style={{ color: "#5e5a50", fontSize: "0.82rem" }}>
+                        {row.derivedSourceLabel}
+                      </div>
+                    ) : null}
                     <div style={{ color: "#5e5a50", fontSize: "0.82rem" }}>
                       Access:{" "}
                       {row.sourceLabels.length > 0
@@ -3760,7 +3784,7 @@ export default function ChargenWizard() {
                     fontSize: "0.8rem",
                     gap: "0.75rem",
                     gridTemplateColumns:
-                      "minmax(180px, 2fr) minmax(120px, 1.2fr) repeat(5, minmax(72px, 88px))",
+                      "minmax(180px, 2fr) minmax(120px, 1.2fr) repeat(6, minmax(72px, 88px))",
                     padding: "0.75rem 1rem"
                   }}
                 >
@@ -3768,7 +3792,8 @@ export default function ChargenWizard() {
                   <strong>Stats</strong>
                   <strong>Avg stats</strong>
                   <strong>Skill group XP</strong>
-                  <strong>Skill XP</strong>
+                  <strong>Owned XP</strong>
+                  <strong>Derived XP</strong>
                   <strong>Total XP</strong>
                   <strong>Total skill level</strong>
                 </div>
@@ -3781,7 +3806,7 @@ export default function ChargenWizard() {
                       display: "grid",
                       gap: "0.75rem",
                       gridTemplateColumns:
-                        "minmax(180px, 2fr) minmax(120px, 1.2fr) repeat(5, minmax(72px, 88px))",
+                        "minmax(180px, 2fr) minmax(120px, 1.2fr) repeat(6, minmax(72px, 88px))",
                       padding: "0.75rem 1rem"
                     }}
                   >
@@ -3797,6 +3822,7 @@ export default function ChargenWizard() {
                     <div>{skill.avgStats}</div>
                     <div>{skill.skillGroupXp}</div>
                     <div>{skill.skillXp}</div>
+                    <div>{skill.derivedSkillXp}</div>
                     <div>{skill.totalXp}</div>
                     <div>{skill.totalSkillLevel}</div>
                   </div>
