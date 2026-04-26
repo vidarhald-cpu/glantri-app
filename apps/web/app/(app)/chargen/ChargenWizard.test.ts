@@ -409,6 +409,142 @@ const languageProfile = {
   societyLevel: 0 as const
 };
 
+const commonMotherTongueLanguageContent = {
+  ...languageContent,
+  civilizations: [
+    {
+      historicalAnalogue: "Test analogue",
+      id: "glantri_common_civ",
+      linkedSocietyId: "glantri",
+      linkedSocietyLevel: 1,
+      motherTongueLanguageName: "Common",
+      name: "Common Tongue Glantri",
+      optionalLanguageNames: ["Old Common"],
+      period: "Test period",
+      shortDescription: "Test civilization",
+      spokenLanguageName: "Common",
+      writtenLanguageName: "Common"
+    }
+  ],
+  languages: canonicalLanguages,
+  societies: [
+    {
+      baselineLanguageIds: ["common_language"],
+      id: "glantri",
+      name: "Glantri",
+      shortDescription: "Test society",
+      societyLevel: 1
+    }
+  ]
+};
+
+const education11LanguageProfile = {
+  ...languageProfile,
+  socialClassEducationValue: 11
+};
+
+const hiddenOtherSkillContent = {
+  civilizations: [],
+  languages: [],
+  professionFamilies: [{ id: "courtier_family", name: "Courtier" }],
+  professionSkills: [],
+  professions: [
+    { familyId: "courtier_family", id: "attendant", name: "Attendant", subtypeName: "Attendant" }
+  ],
+  skillGroups: [{ id: "courtly", name: "Courtly", sortOrder: 1 }],
+  skills: [
+    {
+      allowsSpecializations: false,
+      category: "ordinary" as const,
+      categoryId: "court-social" as const,
+      dependencies: [],
+      dependencySkillIds: [],
+      groupId: "courtly",
+      groupIds: ["courtly"],
+      id: "etiquette",
+      linkedStats: ["com"],
+      name: "Etiquette",
+      requiresLiteracy: "no" as const,
+      sortOrder: 1
+    }
+  ],
+  societies: [],
+  societyLevels: [
+    {
+      professionIds: ["attendant"],
+      skillGroupIds: [],
+      skillIds: [],
+      socialClass: "Common",
+      societyId: "glantri",
+      societyLevel: 1,
+      societyName: "Glantri"
+    },
+    {
+      professionIds: ["attendant"],
+      skillGroupIds: ["courtly"],
+      skillIds: [],
+      socialClass: "Guild",
+      societyId: "glantri",
+      societyLevel: 2,
+      societyName: "Glantri"
+    },
+    {
+      professionIds: ["attendant"],
+      skillGroupIds: ["courtly"],
+      skillIds: [],
+      socialClass: "Patrician",
+      societyId: "glantri",
+      societyLevel: 3,
+      societyName: "Glantri"
+    },
+    {
+      professionIds: ["attendant"],
+      skillGroupIds: ["courtly"],
+      skillIds: [],
+      socialClass: "Noble",
+      societyId: "glantri",
+      societyLevel: 4,
+      societyName: "Glantri"
+    }
+  ],
+  specializations: []
+};
+
+function createProgressionWithOtherSkillCandidate() {
+  return {
+    ...createChargenProgression()
+  };
+}
+
+function getOtherSkillIds(input: {
+  content: Parameters<typeof buildChargenSkillAccessSummary>[0]["content"];
+  draftView: ReturnType<typeof buildChargenDraftView>;
+  professionId: string;
+  societyId: string;
+  societyLevel: number;
+}): string[] {
+  const skillAccess = buildChargenSkillAccessSummary({
+    content: input.content,
+    professionId: input.professionId,
+    societyId: input.societyId,
+    societyLevel: input.societyLevel
+  });
+
+  return input.content.skills
+    .filter(
+      (skill) =>
+        skill.id !== "language" &&
+        getSkillDisplayGroupId({
+          content: input.content,
+          draftView: input.draftView,
+          skill,
+          skillAccess
+        }) === undefined &&
+        !skillAccess.normalSkillIds.includes(skill.id)
+    )
+    .map((skill) => skill.id);
+}
+
 describe("ChargenWizard combat allocation runtime helpers", () => {
   it("only assigns combat group rows to fixed skills plus selected slot weapons", () => {
     const draftView = buildChargenDraftView({
@@ -696,5 +832,183 @@ describe("ChargenWizard concrete language rows", () => {
     expect(oldCommonMetrics.flexibleXp).toBe(1);
     expect(oldCommonMetrics.totalXp).toBe(1);
     expect(phoenicianMetrics.totalXp).toBeGreaterThan(1);
+  });
+
+  it("keeps invested other-skill rows visible so the same row can be purchased again", () => {
+    const startingProgression = createProgressionWithOtherSkillCandidate();
+    const firstPurchase = allocateChargenPoint({
+      content: hiddenOtherSkillContent,
+      professionId: "attendant",
+      profile: languageProfile,
+      progression: startingProgression,
+      societyId: "glantri",
+      societyLevel: 1,
+      targetId: "etiquette",
+      targetType: "skill"
+    });
+
+    expect(firstPurchase.error).toBeUndefined();
+
+    const firstDraftView = buildChargenDraftView({
+      content: hiddenOtherSkillContent,
+      professionId: "attendant",
+      profile: languageProfile,
+      progression: firstPurchase.progression,
+      societyId: "glantri",
+      societyLevel: 1
+    });
+    const etiquetteSkill = hiddenOtherSkillContent.skills.find((skill) => skill.id === "etiquette");
+
+    expect(etiquetteSkill).toBeDefined();
+    expect(
+      getOtherSkillIds({
+        content: hiddenOtherSkillContent,
+        draftView: firstDraftView,
+        professionId: "attendant",
+        societyId: "glantri",
+        societyLevel: 1
+      })
+    ).toContain("etiquette");
+    expect(
+      getSkillAllocationMetrics({
+        content: hiddenOtherSkillContent,
+        draftView: firstDraftView,
+        profile: undefined,
+        skill: etiquetteSkill!
+      }).totalXp
+    ).toBe(1);
+
+    const secondPurchase = allocateChargenPoint({
+      content: hiddenOtherSkillContent,
+      professionId: "attendant",
+      profile: languageProfile,
+      progression: firstPurchase.progression,
+      societyId: "glantri",
+      societyLevel: 1,
+      targetId: "etiquette",
+      targetType: "skill"
+    });
+
+    expect(secondPurchase.error).toBeUndefined();
+
+    const secondDraftView = buildChargenDraftView({
+      content: hiddenOtherSkillContent,
+      professionId: "attendant",
+      profile: languageProfile,
+      progression: secondPurchase.progression,
+      societyId: "glantri",
+      societyLevel: 1
+    });
+
+    expect(
+      getOtherSkillIds({
+        content: hiddenOtherSkillContent,
+        draftView: secondDraftView,
+        professionId: "attendant",
+        societyId: "glantri",
+        societyLevel: 1
+      })
+    ).toContain("etiquette");
+    expect(
+      getSkillAllocationMetrics({
+        content: hiddenOtherSkillContent,
+        draftView: secondDraftView,
+        profile: undefined,
+        skill: etiquetteSkill!
+      }).totalXp
+    ).toBe(2);
+  });
+
+  it("only applies granted language XP to the exact granted language row", () => {
+    const draftView = buildChargenDraftView({
+      civilizationId: "glantri_common_civ",
+      content: commonMotherTongueLanguageContent,
+      professionId: "scribe",
+      profile: education11LanguageProfile,
+      progression: {
+        ...createChargenProgression(),
+        skills: [
+          {
+            category: "ordinary",
+            categoryId: "language",
+            grantedRanks: 2,
+            groupId: "scholarly",
+            languageName: "Old Common",
+            level: 0,
+            primaryRanks: 0,
+            ranks: 2,
+            secondaryRanks: 0,
+            skillId: "language"
+          }
+        ]
+      },
+      societyId: "glantri",
+      societyLevel: 1
+    });
+    const languageSkill = commonMotherTongueLanguageContent.skills.find(
+      (skill) => skill.id === "language"
+    );
+
+    expect(languageSkill).toBeDefined();
+
+    const commonMetrics = getSkillAllocationMetrics({
+      content: commonMotherTongueLanguageContent,
+      draftView,
+      profile: undefined,
+      skill: languageSkill!,
+      targetLanguageName: "Common"
+    });
+    const oldCommonMetrics = getSkillAllocationMetrics({
+      content: commonMotherTongueLanguageContent,
+      draftView,
+      profile: undefined,
+      skill: languageSkill!,
+      targetLanguageName: "Old Common"
+    });
+    const phoenicianMetrics = getSkillAllocationMetrics({
+      content: commonMotherTongueLanguageContent,
+      draftView,
+      profile: undefined,
+      skill: languageSkill!,
+      targetLanguageName: "Phoenician"
+    });
+
+    expect(commonMetrics.totalXp).toBe(11);
+    expect(oldCommonMetrics.totalXp).toBe(2);
+    expect(phoenicianMetrics.totalXp).toBe(0);
+
+    const firstPhoenicianPurchase = allocateChargenPoint({
+      content: commonMotherTongueLanguageContent,
+      professionId: "scribe",
+      profile: education11LanguageProfile,
+      progression: createChargenProgression(),
+      societyId: "glantri",
+      societyLevel: 1,
+      targetId: "language",
+      targetLanguageName: "Phoenician",
+      targetType: "skill"
+    });
+
+    expect(firstPhoenicianPurchase.error).toBeUndefined();
+
+    const purchasedDraftView = buildChargenDraftView({
+      civilizationId: "glantri_common_civ",
+      content: commonMotherTongueLanguageContent,
+      professionId: "scribe",
+      profile: education11LanguageProfile,
+      progression: firstPhoenicianPurchase.progression,
+      societyId: "glantri",
+      societyLevel: 1
+    });
+
+    expect(
+      getSkillAllocationMetrics({
+        content: commonMotherTongueLanguageContent,
+        draftView: purchasedDraftView,
+        profile: undefined,
+        skill: languageSkill!,
+        targetLanguageName: "Phoenician"
+      }).totalXp
+    ).toBe(1);
   });
 });

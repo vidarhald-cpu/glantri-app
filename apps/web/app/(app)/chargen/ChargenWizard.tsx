@@ -222,18 +222,14 @@ export function getSkillDisplayGroupId(input: {
       return canonicalVisibleGroupId;
     }
 
-    if (
-      purchasedSkill &&
-      (purchasedSkill.contributingGroupId === canonicalVisibleGroupId ||
-        purchasedSkill.groupId === canonicalVisibleGroupId)
-    ) {
+    if (purchasedSkill?.contributingGroupId === canonicalVisibleGroupId) {
       return canonicalVisibleGroupId;
     }
 
     return undefined;
   }
 
-  if (purchasedSkill) {
+  if (purchasedSkill && input.skillAccess.normalSkillIds.includes(input.skill.id)) {
     return purchasedSkill.contributingGroupId ?? purchasedSkill.groupId;
   }
 
@@ -564,18 +560,16 @@ export function getSkillAllocationMetrics(input: {
   skill: SkillDefinition;
   targetLanguageName?: string;
 }): SkillAllocationMetrics {
-  const skillView =
-    (input.targetLanguageName
-      ? input.draftView.skills.find(
-          (item) =>
-            item.skillId === input.skill.id && item.languageName === input.targetLanguageName
-        )
-      : undefined) ??
-    input.draftView.skills.find(
-      (item) => item.skillId === input.skill.id && item.sourceTag === "mother-tongue"
-    ) ??
-    input.draftView.skills.find((item) => item.skillId === input.skill.id && item.languageName) ??
-    input.draftView.skills.find((item) => item.skillId === input.skill.id);
+  const skillView = input.targetLanguageName
+    ? input.draftView.skills.find(
+        (item) =>
+          item.skillId === input.skill.id && item.languageName === input.targetLanguageName
+      )
+    : input.draftView.skills.find(
+        (item) => item.skillId === input.skill.id && item.sourceTag === "mother-tongue"
+      ) ??
+      input.draftView.skills.find((item) => item.skillId === input.skill.id && item.languageName) ??
+      input.draftView.skills.find((item) => item.skillId === input.skill.id);
   const groupXp = skillView?.groupLevel ?? 0;
   const skillXp = skillView?.specificSkillLevel ?? 0;
   const avgStats = skillView?.linkedStatAverage ?? getSkillLinkedStatAverage(input.profile, input.skill);
