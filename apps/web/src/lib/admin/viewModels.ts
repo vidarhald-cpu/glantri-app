@@ -108,6 +108,12 @@ export interface SkillAuditIssue {
 
 export interface SkillGroupAdminRow {
   allowedProfessions: string[];
+  associatedProfessionLinks: Array<{
+    familyId: string;
+    familyName: string;
+    professionId: string;
+    professionName: string;
+  }>;
   coreSkills: string[];
   fixedSkills: Array<{
     name: string;
@@ -128,6 +134,7 @@ export interface SkillGroupAdminRow {
     required: boolean;
   }>;
   sortOrder: number;
+  visibleProfessionFamilyIds: string[];
   warningDetails: string[];
   weightedContentPoints: number;
 }
@@ -260,6 +267,31 @@ export interface SocietyAuditIssue {
   severity: AuditSeverity;
   societyRowId: string;
   societyRowName: string;
+}
+
+export function getProfessionFamilyName(content: CanonicalContent, familyId: string): string {
+  return content.professionFamilies.find((family) => family.id === familyId)?.name ?? familyId;
+}
+
+export function buildProfessionFamilyFilterOptions(
+  content: CanonicalContent,
+  familyIds: Iterable<string>
+): string[] {
+  return ["all", ...new Set(Array.from(familyIds).filter((value) => value.length > 0))].sort(
+    (left, right) => {
+      if (left === "all") {
+        return -1;
+      }
+
+      if (right === "all") {
+        return 1;
+      }
+
+      return getProfessionFamilyName(content, left).localeCompare(
+        getProfessionFamilyName(content, right)
+      );
+    }
+  );
 }
 
 export interface ProfessionAccessRow {
@@ -1562,6 +1594,30 @@ export function buildSkillGroupAdminRows(content: CanonicalContent): SkillGroupA
   return [...content.skillGroups]
     .sort((left, right) => left.name.localeCompare(right.name) || left.sortOrder - right.sortOrder)
     .map((group) => {
+      const associatedProfessionLinks = content.professionSkills
+        .filter((professionSkill) => professionSkill.skillGroupId === group.id)
+        .map((professionSkill) => {
+          const profession = content.professions.find(
+            (candidate) => candidate.id === professionSkill.professionId
+          );
+
+          if (!profession) {
+            return undefined;
+          }
+
+          return {
+            familyId: profession.familyId,
+            familyName: getProfessionFamilyName(content, profession.familyId),
+            professionId: profession.id,
+            professionName: profession.name
+          };
+        })
+        .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry))
+        .sort(
+          (left, right) =>
+            left.familyName.localeCompare(right.familyName) ||
+            left.professionName.localeCompare(right.professionName)
+        );
       const memberships = getGroupMemberships(content, group.id);
       const fixedSkillRows = memberships
         .map((membership) => {
@@ -1627,6 +1683,7 @@ export function buildSkillGroupAdminRows(content: CanonicalContent): SkillGroupA
 
       return {
         allowedProfessions: uniqueSorted(allowedProfessions),
+        associatedProfessionLinks,
         coreSkills,
         fixedSkills: fixedSkillRows.map((skill) => ({
           name: skill.name,
@@ -1641,6 +1698,9 @@ export function buildSkillGroupAdminRows(content: CanonicalContent): SkillGroupA
         selectionSlotCount: selectionSlots.length,
         selectionSlots,
         sortOrder: group.sortOrder,
+        visibleProfessionFamilyIds: uniqueSorted(
+          associatedProfessionLinks.map((link) => link.familyId)
+        ),
         warningDetails: uniqueSorted(warningDetails),
         weightedContentPoints
       };

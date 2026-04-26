@@ -5,7 +5,11 @@ import { useEffect, useState } from "react";
 
 import { useAdminContent } from "../../../../src/lib/admin/AdminContentContext";
 import { downloadCsv } from "../../../../src/lib/admin/exporters";
-import { buildProfessionAdminRows } from "../../../../src/lib/admin/viewModels";
+import {
+  buildProfessionAdminRows,
+  buildProfessionFamilyFilterOptions,
+  getProfessionFamilyName
+} from "../../../../src/lib/admin/viewModels";
 import {
   AdminButton,
   AdminField,
@@ -157,22 +161,10 @@ export default function ProfessionsAdminPage() {
   const [familyFilter, setFamilyFilter] = useState("all");
   const [groupFilter, setGroupFilter] = useState("all");
   const [selectedProfessionId, setSelectedProfessionId] = useState<string>();
-  const familyOptions = [
-    "all",
-    ...new Set(allRows.map((row) => row.familyId).filter((value) => value.length > 0))
-  ].sort((left, right) => {
-    if (left === "all") {
-      return -1;
-    }
-
-    if (right === "all") {
-      return 1;
-    }
-
-    return (content.professionFamilies.find((family) => family.id === left)?.name ?? left).localeCompare(
-      content.professionFamilies.find((family) => family.id === right)?.name ?? right
-    );
-  });
+  const familyOptions = buildProfessionFamilyFilterOptions(
+    content,
+    allRows.map((row) => row.familyId)
+  );
   const groupOptions = [
     "all",
     ...new Set(allRows.flatMap((row) => row.grantedSkillGroups))
@@ -287,7 +279,7 @@ export default function ProfessionsAdminPage() {
                 <option key={option} value={option}>
                   {option === "all"
                     ? "All families"
-                    : content.professionFamilies.find((family) => family.id === option)?.name ?? option}
+                    : getProfessionFamilyName(content, option)}
                 </option>
               ))}
             </AdminSelect>

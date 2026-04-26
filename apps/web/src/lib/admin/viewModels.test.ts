@@ -3,10 +3,12 @@ import { describe, expect, it } from "vitest";
 import type { CanonicalContent } from "@glantri/content";
 
 import {
+  buildProfessionFamilyFilterOptions,
   buildProfessionAdminRows,
   buildSkillRelationshipSummary,
   buildSkillAdminRows,
   buildSkillGroupAdminRows,
+  getProfessionFamilyName,
   buildSocietyAdminRows
 } from "./viewModels";
 
@@ -286,7 +288,13 @@ describe("admin view models", () => {
       })
     ).toMatchObject({
       hasSkillRelationships: true,
-      incomingMeleeCrossTraining: [],
+      incomingMeleeCrossTraining: [
+        {
+          factorPercent: 75,
+          sourceSkillId: "beta_skill",
+          sourceSkillName: "Beta Skill"
+        }
+      ],
       outgoingMeleeCrossTraining: [
         {
           factorPercent: 75,
@@ -301,7 +309,7 @@ describe("admin view models", () => {
           targetSkillName: "Beta Skill"
         }
       ],
-      relationshipSummaryBadges: ["Grants 1", "Cross-trains 1"]
+      relationshipSummaryBadges: ["Grants 1", "Cross-trains 1", "Cross-trained from 1"]
     });
   });
 
@@ -312,6 +320,32 @@ describe("admin view models", () => {
 
     expect(lowGroup?.warningDetails.some((warning) => warning.includes("low-size review threshold (5)"))).toBe(true);
     expect(highGroup?.warningDetails.some((warning) => warning.includes("high-size review threshold (12)"))).toBe(true);
+  });
+
+  it("surfaces family-aware profession links for skill-group filtering", () => {
+    const rows = buildSkillGroupAdminRows(content);
+    const lowGroup = rows.find((row) => row.id === "low_group");
+    const highGroup = rows.find((row) => row.id === "high_group");
+
+    expect(lowGroup?.visibleProfessionFamilyIds).toEqual(["craft"]);
+    expect(lowGroup?.associatedProfessionLinks).toEqual([
+      {
+        familyId: "craft",
+        familyName: "Craft",
+        professionId: "alpha_prof",
+        professionName: "Alpha Profession"
+      }
+    ]);
+    expect(highGroup?.visibleProfessionFamilyIds).toEqual(["martial"]);
+  });
+
+  it("builds the shared profession-family filter options in display-name order", () => {
+    expect(buildProfessionFamilyFilterOptions(content, ["martial", "craft", ""])).toEqual([
+      "all",
+      "craft",
+      "martial"
+    ]);
+    expect(getProfessionFamilyName(content, "martial")).toBe("Martial");
   });
 
   it("sorts professions alphabetically for the catalog rows", () => {

@@ -5,12 +5,18 @@ import { useEffect, useState } from "react";
 
 import { useAdminContent } from "../../../../src/lib/admin/AdminContentContext";
 import { downloadCsv } from "../../../../src/lib/admin/exporters";
-import { buildSkillGroupAdminRows } from "../../../../src/lib/admin/viewModels";
+import {
+  buildProfessionFamilyFilterOptions,
+  buildSkillGroupAdminRows,
+  getProfessionFamilyName
+} from "../../../../src/lib/admin/viewModels";
 import {
   AdminButton,
+  AdminField,
   AdminMetric,
   AdminPageIntro,
   AdminPanel,
+  AdminSelect,
   AdminTagList
 } from "../admin-ui";
 import SkillGroupsWorkspaceTabs from "./SkillGroupsWorkspaceTabs";
@@ -174,13 +180,28 @@ function SkillGroupsReviewTable(props: {
 
 export default function SkillGroupsAdminPage() {
   const { content } = useAdminContent();
-  const rows = buildSkillGroupAdminRows(content);
+  const allRows = buildSkillGroupAdminRows(content);
+  const [familyFilter, setFamilyFilter] = useState("all");
   const [selectedGroupId, setSelectedGroupId] = useState<string>();
+  const familyOptions = buildProfessionFamilyFilterOptions(
+    content,
+    allRows.flatMap((row) => row.visibleProfessionFamilyIds)
+  );
+  const rows = allRows.filter((row) => {
+    if (familyFilter !== "all" && !row.visibleProfessionFamilyIds.includes(familyFilter)) {
+      return false;
+    }
+
+    return true;
+  });
+  const selectedVisibleRow = rows.find((row) => row.id === selectedGroupId) ?? rows[0];
   const selectedGroup =
-    content.skillGroups.find((group) => group.id === selectedGroupId) ??
-    content.skillGroups.find((group) => group.id === rows[0]?.id) ??
+    content.skillGroups.find((group) => group.id === (selectedVisibleRow?.id ?? selectedGroupId)) ??
     content.skillGroups.slice().sort((left, right) => left.name.localeCompare(right.name))[0];
-  const selectedRow = rows.find((row) => row.id === selectedGroup.id);
+  const selectedRow = selectedVisibleRow ?? allRows.find((row) => row.id === selectedGroup?.id);
+  const visibleProfessionLinks = (selectedRow?.associatedProfessionLinks ?? []).filter((link) =>
+    familyFilter === "all" ? true : link.familyId === familyFilter
+  );
 
   useEffect(() => {
     if (!selectedGroupId && rows[0]) {
@@ -233,12 +254,36 @@ export default function SkillGroupsAdminPage() {
 
       <SkillGroupsWorkspaceTabs />
 
+      <AdminPanel title="Review filters">
+        <div
+          style={{
+            display: "grid",
+            gap: "0.9rem",
+            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 280px))"
+          }}
+        >
+          <AdminField label="Profession family">
+            <AdminSelect
+              onChange={(event) => setFamilyFilter(event.target.value)}
+              value={familyFilter}
+            >
+              {familyOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option === "all" ? "All families" : getProfessionFamilyName(content, option)}
+                </option>
+              ))}
+            </AdminSelect>
+          </AdminField>
+        </div>
+      </AdminPanel>
+
       <div style={{ display: "grid", gap: "1rem", gridTemplateColumns: "minmax(0, 2.2fr) minmax(340px, 1fr)" }}>
         <AdminPanel title="Group Catalog">
-          <SkillGroupsReviewTable onInspect={setSelectedGroupId} rows={rows} selectedId={selectedGroup.id} />
+          <SkillGroupsReviewTable onInspect={setSelectedGroupId} rows={rows} selectedId={selectedGroup?.id} />
         </AdminPanel>
 
         <div style={{ display: "grid", gap: "1rem" }}>
+          {selectedGroup && selectedRow ? (
           <AdminPanel
             subtitle={selectedGroup.description?.trim() || "No canonical skill-group description recorded."}
             title={selectedGroup.name}
@@ -358,8 +403,18 @@ export default function SkillGroupsAdminPage() {
                   <div style={{ color: "#5f543a", fontSize: "0.85rem", fontWeight: 700, marginBottom: "0.35rem", textTransform: "uppercase", letterSpacing: "0.08em" }}>
                     Professions using this group
                   </div>
-                  {selectedRow?.allowedProfessions.length ? (
-                    <AdminTagList values={selectedRow.allowedProfessions} />
+                  {visibleProfessionLinks.length ? (
+                    <AdminTagList
+                      values={visibleProfessionLinks.map((link) =>
+                        familyFilter === "all"
+                          ? `${link.professionName} (${link.familyName})`
+                          : link.professionName
+                      )}
+                    />
+                  ) : selectedRow.allowedProfessions.length ? (
+                    <div style={{ color: "#8a7e63" }}>
+                      No professions from the selected family currently grant this group.
+                    </div>
                   ) : (
                     <div style={{ color: "#8a7e63" }}>No profession currently grants this group.</div>
                   )}
@@ -375,6 +430,13 @@ export default function SkillGroupsAdminPage() {
               </div>
             </div>
           </AdminPanel>
+          ) : (
+            <AdminPanel title="Skill group details">
+              <div style={{ color: "#6d624d" }}>
+                No skill groups match the current family filter.
+              </div>
+            </AdminPanel>
+          )}
         </div>
       </div>
     </section>
