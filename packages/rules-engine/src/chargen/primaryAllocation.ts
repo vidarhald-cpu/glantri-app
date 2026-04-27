@@ -985,39 +985,49 @@ export function allocateChargenPoint(input: AllocateChargenPointInput): SpendPoi
   }
 
   const pool = chooseChargenPool({
-    cost: 1,
+    cost: getSkillSpendCost(
+      skillDefinition,
+      Boolean(
+        getTargetedProgressionSkillRow({
+          progression,
+          skillId: input.targetId,
+          targetLanguageName: input.targetLanguageName
+        })?.ranks
+      )
+    ),
     normalAccess,
     profile: input.profile,
     progression
   });
 
+  const skill = ensureSkillExists(progression, skillDefinition, {
+    languageName: input.targetLanguageName
+  });
+  const cost = getSkillSpendCost(skillDefinition, skill.ranks > 0);
+
   if (!pool) {
-      return {
+    return {
       error: normalAccess
-        ? "No ordinary or flexible points remain for this skill."
+        ? `No ordinary or flexible points remain for this skill. Cost: ${cost}.`
         : "No flexible points remain for this other skill.",
       progression,
       warnings
     };
   }
 
-  const skill = ensureSkillExists(progression, skillDefinition, {
-    languageName: input.targetLanguageName
-  });
-
   if (pool === "primary") {
     skill.primaryRanks += 1;
-    progression.primaryPoolSpent += 1;
+    progression.primaryPoolSpent += cost;
   } else {
     skill.secondaryRanks += 1;
-    progression.secondaryPoolSpent += 1;
+    progression.secondaryPoolSpent += cost;
   }
 
   skill.ranks = skill.grantedRanks + skill.primaryRanks + skill.secondaryRanks;
 
   return {
     progression: recalculateProgression(progression),
-    spentCost: 1,
+    spentCost: cost,
     warnings
   };
 }
@@ -1522,19 +1532,21 @@ export function removeChargenPoint(
     };
   }
 
+  const refundedCost = getSkillSpendCost(skillDefinition, skill.ranks - 1 > 0);
+
   if (skill.secondaryRanks > 0) {
     skill.secondaryRanks -= 1;
-    progression.secondaryPoolSpent = Math.max(0, progression.secondaryPoolSpent - 1);
+    progression.secondaryPoolSpent = Math.max(0, progression.secondaryPoolSpent - refundedCost);
   } else {
     skill.primaryRanks -= 1;
-    progression.primaryPoolSpent = Math.max(0, progression.primaryPoolSpent - 1);
+    progression.primaryPoolSpent = Math.max(0, progression.primaryPoolSpent - refundedCost);
   }
 
   skill.ranks = skill.grantedRanks + skill.primaryRanks + skill.secondaryRanks;
 
   return {
     progression: cleanupProgression(progression),
-    spentCost: 1,
+    spentCost: refundedCost,
     warnings
   };
 }

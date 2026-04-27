@@ -6,15 +6,18 @@ import {
   buildChargenDraftView,
   buildChargenSkillAccessSummary,
   createChargenProgression,
+  evaluateSkillSelection,
   removeChargenPoint
 } from "@glantri/rules-engine";
 import { getPlayerFacingSkillBucket } from "../../../src/lib/chargen/chargenBrowse";
 
 import {
   buildConcreteLanguageBrowseRows,
+  getSkillRowMessages,
   getGroupScopedSkillAllocationMetrics,
   getSkillAllocationMetrics,
   getSkillDisplayGroupId,
+  getSpecializationRowMessages,
   getSpecializationPurchaseState
 } from "./ChargenWizard";
 
@@ -1116,6 +1119,196 @@ describe("ChargenWizard combat allocation runtime helpers", () => {
     });
   });
 
+  it("shows one coherent bridge gate message for blocked specialization rows without duplicating the live blocker", () => {
+    const bridgeContent = validateCanonicalContent({
+      skillGroups: [{ id: "combat_group", name: "Combat", sortOrder: 1 }],
+      skills: [
+        {
+          allowsSpecializations: true,
+          category: "ordinary",
+          dependencies: [],
+          dependencySkillIds: [],
+          groupId: "combat_group",
+          groupIds: ["combat_group"],
+          id: "one_handed_edged",
+          linkedStats: ["dex"],
+          name: "1-h edged",
+          requiresLiteracy: "no",
+          sortOrder: 1
+        }
+      ],
+      specializations: [
+        {
+          id: "fencing",
+          minimumGroupLevel: 6,
+          minimumParentLevel: 6,
+          name: "Fencing",
+          skillId: "one_handed_edged",
+          sortOrder: 1,
+          specializationBridge: {
+            parentExcessOffset: 5,
+            parentSkillId: "one_handed_edged",
+            reverseFactor: 1,
+            threshold: 6
+          }
+        }
+      ],
+      professionFamilies: [{ id: "warrior", name: "Warrior" }],
+      professionSkills: [],
+      professions: [{ familyId: "warrior", id: "soldier", name: "Soldier", subtypeName: "Soldier" }],
+      societies: [],
+      societyBandSkillAccess: [],
+      societyLevels: [
+        {
+          professionIds: ["soldier"],
+          skillGroupIds: ["combat_group"],
+          skillIds: [],
+          socialClass: "Common",
+          societyId: "glantri",
+          societyLevel: 1,
+          societyName: "Glantri"
+        },
+        { professionIds: [], skillGroupIds: [], skillIds: [], socialClass: "Common", societyId: "glantri", societyLevel: 2, societyName: "Glantri" },
+        { professionIds: [], skillGroupIds: [], skillIds: [], socialClass: "Common", societyId: "glantri", societyLevel: 3, societyName: "Glantri" },
+        { professionIds: [], skillGroupIds: [], skillIds: [], socialClass: "Common", societyId: "glantri", societyLevel: 4, societyName: "Glantri" }
+      ]
+    });
+    const progression = createChargenProgression();
+    progression.skillGroups = [
+      {
+        gms: 0,
+        grantedRanks: 0,
+        groupId: "combat_group",
+        primaryRanks: 5,
+        ranks: 5,
+        secondaryRanks: 0
+      }
+    ];
+
+    const evaluation = evaluateSkillSelection({
+      content: bridgeContent,
+      progression,
+      target: {
+        specialization: bridgeContent.specializations[0]!,
+        targetType: "specialization"
+      }
+    });
+    const purchaseState = getSpecializationPurchaseState({
+      skillAllocationContext: {
+        content: bridgeContent,
+        professionId: "soldier",
+        profile: languageProfile,
+        progression,
+        societyId: "glantri",
+        societyLevel: 1
+      },
+      specializationId: "fencing"
+    });
+
+    const rowMessages = getSpecializationRowMessages({
+      evaluation,
+      persistedRowFeedback: "Fencing requires 1-h edged level 6 or higher (current 5).",
+      purchaseState
+    });
+
+    expect(rowMessages.feedback).toBeUndefined();
+    expect(rowMessages.statusItems).toHaveLength(1);
+    expect(rowMessages.statusItems[0]?.message).toBe(
+      "Fencing requires 1-h edged level 6 or higher (current 5)."
+    );
+  });
+
+  it("suppresses overlapping dependency text when a bridge skill already explains the parent requirement", () => {
+    const longbowContent = validateCanonicalContent({
+      skillGroups: [{ id: "missile_group", name: "Missile", sortOrder: 1 }],
+      skills: [
+        {
+          allowsSpecializations: false,
+          category: "ordinary",
+          dependencies: [],
+          dependencySkillIds: [],
+          groupId: "missile_group",
+          groupIds: ["missile_group"],
+          id: "bow",
+          linkedStats: ["dex"],
+          name: "Bow",
+          requiresLiteracy: "no",
+          sortOrder: 1
+        },
+        {
+          allowsSpecializations: false,
+          category: "ordinary",
+          dependencies: [],
+          dependencySkillIds: [],
+          groupId: "missile_group",
+          groupIds: ["missile_group"],
+          id: "crossbow",
+          linkedStats: ["dex"],
+          name: "Crossbow",
+          requiresLiteracy: "no",
+          sortOrder: 2
+        },
+        {
+          allowsSpecializations: false,
+          category: "ordinary",
+          dependencies: [{ skillId: "bow", strength: "helpful" }],
+          dependencySkillIds: ["bow"],
+          groupId: "missile_group",
+          groupIds: ["missile_group"],
+          id: "longbow",
+          linkedStats: ["dex"],
+          name: "Longbow",
+          requiresLiteracy: "no",
+          sortOrder: 3,
+          specializationBridge: {
+            parentExcessOffset: 5,
+            parentSkillId: "bow",
+            reverseFactor: 1,
+            threshold: 6
+          }
+        }
+      ],
+      specializations: [],
+      professionFamilies: [{ id: "warrior", name: "Warrior" }],
+      professionSkills: [],
+      professions: [{ familyId: "warrior", id: "archer", name: "Archer", subtypeName: "Archer" }],
+      societies: [],
+      societyBandSkillAccess: [],
+      societyLevels: [
+        {
+          professionIds: ["archer"],
+          skillGroupIds: ["missile_group"],
+          skillIds: [],
+          socialClass: "Common",
+          societyId: "glantri",
+          societyLevel: 1,
+          societyName: "Glantri"
+        },
+        { professionIds: [], skillGroupIds: [], skillIds: [], socialClass: "Common", societyId: "glantri", societyLevel: 2, societyName: "Glantri" },
+        { professionIds: [], skillGroupIds: [], skillIds: [], socialClass: "Common", societyId: "glantri", societyLevel: 3, societyName: "Glantri" },
+        { professionIds: [], skillGroupIds: [], skillIds: [], socialClass: "Common", societyId: "glantri", societyLevel: 4, societyName: "Glantri" }
+      ]
+    });
+
+    const rowMessages = getSkillRowMessages({
+      evaluation: evaluateSkillSelection({
+        content: longbowContent,
+        progression: createChargenProgression(),
+        target: {
+          skill: longbowContent.skills.find((skill) => skill.id === "longbow")!,
+          targetType: "skill"
+        }
+      }),
+      persistedRowFeedback: undefined,
+      skill: longbowContent.skills.find((skill) => skill.id === "longbow")!
+    });
+
+    expect(rowMessages.feedback).toBeUndefined();
+    expect(rowMessages.statusItems.map((item) => item.message)).toEqual([
+      "Longbow requires Bow."
+    ]);
+  });
+
   it("only assigns combat group rows to fixed skills plus selected slot weapons", () => {
     const draftView = buildChargenDraftView({
       content: combatContent,
@@ -1802,5 +1995,139 @@ describe("ChargenWizard concrete language rows", () => {
         targetLanguageName: "Phoenician"
       }).totalXp
     ).toBe(1);
+  });
+
+  it("uses the restored ordinary-skill pricing for normal-access and outside-access chargen purchases", () => {
+    const pricingContent = validateCanonicalContent({
+      skillGroups: [
+        { id: "fieldcraft", name: "Fieldcraft", sortOrder: 1 },
+        { id: "courtly", name: "Courtly", sortOrder: 2 }
+      ],
+      skills: [
+        {
+          allowsSpecializations: false,
+          category: "ordinary",
+          dependencies: [],
+          dependencySkillIds: [],
+          groupId: "fieldcraft",
+          groupIds: ["fieldcraft"],
+          id: "stealth",
+          linkedStats: ["dex"],
+          name: "Stealth",
+          requiresLiteracy: "no",
+          sortOrder: 1
+        },
+        {
+          allowsSpecializations: false,
+          category: "ordinary",
+          dependencies: [],
+          dependencySkillIds: [],
+          groupId: "fieldcraft",
+          groupIds: ["fieldcraft"],
+          id: "tracking",
+          linkedStats: ["int"],
+          name: "Tracking",
+          requiresLiteracy: "no",
+          sortOrder: 2
+        },
+        {
+          allowsSpecializations: false,
+          category: "ordinary",
+          dependencies: [],
+          dependencySkillIds: [],
+          groupId: "courtly",
+          groupIds: ["courtly"],
+          id: "etiquette",
+          linkedStats: ["cha"],
+          name: "Etiquette",
+          requiresLiteracy: "no",
+          sortOrder: 3
+        },
+        {
+          allowsSpecializations: false,
+          category: "secondary",
+          dependencies: [],
+          dependencySkillIds: [],
+          groupId: "courtly",
+          groupIds: ["courtly"],
+          id: "streetwise",
+          linkedStats: ["int"],
+          name: "Streetwise",
+          requiresLiteracy: "no",
+          sortOrder: 4
+        }
+      ],
+      specializations: [],
+      professionFamilies: [{ id: "scout", name: "Scout" }],
+      professionSkills: [
+        {
+          grantType: "group",
+          isCore: true,
+          professionId: "scout",
+          scope: "family",
+          skillGroupId: "fieldcraft"
+        }
+      ],
+      professions: [{ familyId: "scout", id: "pathfinder", name: "Pathfinder", subtypeName: "Pathfinder" }],
+      societies: [],
+      societyBandSkillAccess: [],
+      societyLevels: [
+        {
+          professionIds: ["pathfinder"],
+          skillGroupIds: ["fieldcraft"],
+          skillIds: [],
+          socialClass: "Common",
+          societyId: "glantri",
+          societyLevel: 1,
+          societyName: "Glantri"
+        },
+        { professionIds: [], skillGroupIds: [], skillIds: [], socialClass: "Common", societyId: "glantri", societyLevel: 2, societyName: "Glantri" },
+        { professionIds: [], skillGroupIds: [], skillIds: [], socialClass: "Common", societyId: "glantri", societyLevel: 3, societyName: "Glantri" },
+        { professionIds: [], skillGroupIds: [], skillIds: [], socialClass: "Common", societyId: "glantri", societyLevel: 4, societyName: "Glantri" }
+      ]
+    });
+
+    const normalAccessPurchase = allocateChargenPoint({
+      content: pricingContent,
+      professionId: "pathfinder",
+      profile: languageProfile,
+      progression: createChargenProgression(),
+      societyId: "glantri",
+      societyLevel: 1,
+      targetId: "stealth",
+      targetType: "skill"
+    });
+    const outsideOrdinaryPurchase = allocateChargenPoint({
+      content: pricingContent,
+      professionId: "pathfinder",
+      profile: languageProfile,
+      progression: createChargenProgression(),
+      societyId: "glantri",
+      societyLevel: 1,
+      targetId: "etiquette",
+      targetType: "skill"
+    });
+    const outsideSecondaryPurchase = allocateChargenPoint({
+      content: pricingContent,
+      professionId: "pathfinder",
+      profile: languageProfile,
+      progression: createChargenProgression(),
+      societyId: "glantri",
+      societyLevel: 1,
+      targetId: "streetwise",
+      targetType: "skill"
+    });
+
+    expect(normalAccessPurchase.spentCost).toBe(4);
+    expect(normalAccessPurchase.progression.primaryPoolSpent).toBe(4);
+    expect(normalAccessPurchase.progression.secondaryPoolSpent).toBe(0);
+
+    expect(outsideOrdinaryPurchase.spentCost).toBe(4);
+    expect(outsideOrdinaryPurchase.progression.primaryPoolSpent).toBe(0);
+    expect(outsideOrdinaryPurchase.progression.secondaryPoolSpent).toBe(4);
+
+    expect(outsideSecondaryPurchase.spentCost).toBe(2);
+    expect(outsideSecondaryPurchase.progression.primaryPoolSpent).toBe(0);
+    expect(outsideSecondaryPurchase.progression.secondaryPoolSpent).toBe(2);
   });
 });

@@ -454,6 +454,99 @@ function getRuleStatusItems(input: {
   ];
 }
 
+function dedupeRuleStatusItems(items: RuleStatusItem[]): RuleStatusItem[] {
+  const seen = new Set<string>();
+
+  return items.filter((item) => {
+    const key = `${item.tone}:${item.code ?? ""}:${item.message}`;
+
+    if (seen.has(key)) {
+      return false;
+    }
+
+    seen.add(key);
+    return true;
+  });
+}
+
+function suppressBridgeOverlapStatusItems(input: {
+  bridgeParentSkillId?: string;
+  items: RuleStatusItem[];
+}): RuleStatusItem[] {
+  if (!input.bridgeParentSkillId) {
+    return input.items;
+  }
+
+  return input.items.filter((item) => {
+    if (item.skillId !== input.bridgeParentSkillId) {
+      return true;
+    }
+
+    return ![
+      "missing-required-dependency",
+      "missing-recommended-dependency",
+      "missing-helpful-dependency"
+    ].includes(item.code ?? "");
+  });
+}
+
+export function getSkillRowMessages(input: {
+  persistedRowFeedback?: string;
+  skill: SkillDefinition;
+  evaluation: ReturnType<typeof evaluateSkillSelection>;
+}): {
+  feedback?: string;
+  statusItems: RuleStatusItem[];
+} {
+  const statusItems = suppressBridgeOverlapStatusItems({
+    bridgeParentSkillId: input.skill.specializationBridge?.parentSkillId,
+    items: dedupeRuleStatusItems(getRuleStatusItems(input.evaluation))
+  });
+  const feedback = input.persistedRowFeedback;
+
+  if (!feedback) {
+    return { statusItems };
+  }
+
+  if (statusItems.some((item) => item.message === feedback)) {
+    return { statusItems };
+  }
+
+  return {
+    feedback,
+    statusItems
+  };
+}
+
+export function getSpecializationRowMessages(input: {
+  evaluation: ReturnType<typeof evaluateSkillSelection>;
+  persistedRowFeedback?: string;
+  purchaseState: {
+    canAllocate: boolean;
+    nextCost?: number;
+    previewMessage?: string;
+  };
+}): {
+  feedback?: string;
+  statusItems: RuleStatusItem[];
+} {
+  const statusItems = dedupeRuleStatusItems(getRuleStatusItems(input.evaluation));
+  const feedback = input.purchaseState.previewMessage ?? input.persistedRowFeedback;
+
+  if (!feedback) {
+    return { statusItems };
+  }
+
+  if (statusItems.some((item) => item.message === feedback)) {
+    return { statusItems };
+  }
+
+  return {
+    feedback,
+    statusItems
+  };
+}
+
 function getSocialBand(roll: number): SocialBand {
   if (roll <= 10) {
     return 1;
@@ -1881,8 +1974,11 @@ export default function ChargenWizard() {
 
         {input.rows.length > 0 ? (
           input.rows.map((row) => {
-            const ruleStatusItems = getRuleStatusItems(row.evaluation);
-            const rowFeedback = rowActionFeedback[getRowActionFeedbackKey(row.rowKey, "skill")];
+            const { feedback: rowFeedback, statusItems: ruleStatusItems } = getSkillRowMessages({
+              evaluation: row.evaluation,
+              persistedRowFeedback: rowActionFeedback[getRowActionFeedbackKey(row.rowKey, "skill")],
+              skill: row.skill
+            });
             const skillType = getPlayerFacingSkillBucket(row.skill);
             const skillTypeLabel =
               playerFacingSkillBucketDefinitions.find((definition) => definition.id === skillType)
@@ -3599,16 +3695,18 @@ export default function ChargenWizard() {
             </div>
 
             {visibleSpecializationRows.map((row) => {
-              const ruleStatusItems = getRuleStatusItems(row.evaluation);
               const purchaseState = getSpecializationPurchaseState({
                 skillAllocationContext,
                 specializationId: row.specialization.id
               });
-              const rowFeedback = purchaseState.previewMessage
-                ? rowActionFeedback[
+              const { feedback: rowFeedback, statusItems: ruleStatusItems } =
+                getSpecializationRowMessages({
+                  evaluation: row.evaluation,
+                  persistedRowFeedback: rowActionFeedback[
                     getRowActionFeedbackKey(row.specialization.id, "specialization")
-                  ] ?? purchaseState.previewMessage
-                : undefined;
+                  ],
+                  purchaseState
+                });
 
               return (
                 <div
