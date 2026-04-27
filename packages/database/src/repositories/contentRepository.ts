@@ -51,7 +51,7 @@ export function createPrismaContentRepository(): ContentRepository {
       return record ? mapSnapshotRecord(record) : null;
     },
     async saveWithOptimisticRevision(input) {
-      return prisma.$transaction(async (transaction) => {
+      return prisma.$transaction(async (transaction: Prisma.TransactionClient) => {
         const existing = await transaction.canonicalContentSnapshot.findUnique({
           where: {
             key: input.key
@@ -67,7 +67,7 @@ export function createPrismaContentRepository(): ContentRepository {
 
           const created = await transaction.canonicalContentSnapshot.create({
             data: {
-              content: input.content as Prisma.InputJsonValue,
+              content: input.content as never,
               key: input.key,
               revision: 1
             }
@@ -87,7 +87,7 @@ export function createPrismaContentRepository(): ContentRepository {
 
         const updated = await transaction.canonicalContentSnapshot.update({
           data: {
-            content: input.content as Prisma.InputJsonValue,
+            content: input.content as never,
             revision: existing.revision + 1
           },
           where: {
