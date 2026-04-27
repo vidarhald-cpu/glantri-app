@@ -387,12 +387,7 @@ export function buildChargenSelectableSkillSummary(input: {
   const skillsById = new Map(input.content.skills.map((skill) => [skill.id, skill]));
   const groupById = new Map(input.content.skillGroups.map((group) => [group.id, group]));
   const storedGroupSlotSelections = getStoredGroupSlotSelections(input.progression);
-  const ownedGroupIds = new Set(
-    input.progression.skillGroups
-      .filter((group) => (group.ranks ?? 0) > 0 || (group.grantedRanks ?? 0) > 0)
-      .map((group) => group.groupId)
-  );
-  const selectionSlots = allowedGroupIds.filter((groupId) => ownedGroupIds.has(groupId)).flatMap((groupId) => {
+  const selectionSlots = allowedGroupIds.flatMap((groupId) => {
     const group = groupById.get(groupId);
 
     return (group?.selectionSlots ?? []).map((slot) => {

@@ -287,6 +287,35 @@ describe("selectionStructure", () => {
     expect(summary.selectedSkillIds).toEqual(["spear", "leadership"]);
   });
 
+  it("exposes group selection slots before the group has been purchased", () => {
+    const summary = buildChargenSelectableSkillSummary({
+      content,
+      professionId: "guard",
+      progression: {
+        ...progression,
+        chargenSelections: {
+          selectedGroupSlots: [],
+          selectedLanguageIds: [],
+          selectedSkillIds: []
+        },
+        skillGroups: []
+      },
+      societyId: "glantri",
+      societyLevel: 1
+    });
+
+    expect(summary.selectionSlots).toHaveLength(1);
+    expect(summary.selectionSlots[0]).toMatchObject({
+      candidateSkillIds: ["spear"],
+      groupId: "field_soldiering",
+      isSatisfied: false,
+      selectedSkillIds: [],
+      slotId: "melee_choice"
+    });
+    expect(summary.coreSkillIds).toEqual(["shield_use"]);
+    expect(summary.selectableSkillIds).toEqual(["leadership", "literacy"]);
+  });
+
   it("only exposes foundational skills when society-band access grants them", () => {
     const accessibleSummary = buildChargenSelectableSkillSummary({
       content,

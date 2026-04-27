@@ -223,8 +223,12 @@ export function getSkillDisplayGroupId(input: {
     );
     const requiresMaterializedMembership =
       (canonicalVisibleGroup?.selectionSlots?.length ?? 0) > 0;
+    const isFixedGroupMembership =
+      canonicalVisibleGroup?.skillMemberships?.some(
+        (membership) => membership.skillId === input.skill.id
+      ) ?? false;
 
-    if (!requiresMaterializedMembership) {
+    if (!requiresMaterializedMembership || isFixedGroupMembership) {
       return canonicalVisibleGroupId;
     }
 

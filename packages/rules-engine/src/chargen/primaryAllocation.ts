@@ -2245,7 +2245,17 @@ export function reviewChargenDraft(
     societyLevel: input.societyLevel
   });
 
+  const ownedGroupIds = new Set(
+    progression.skillGroups
+      .filter((group) => (group.ranks ?? 0) > 0 || (group.grantedRanks ?? 0) > 0)
+      .map((group) => group.groupId)
+  );
+
   for (const slot of selectableSkillSummary.selectionSlots) {
+    if (!ownedGroupIds.has(slot.groupId)) {
+      continue;
+    }
+
     if (slot.required && !slot.isSatisfied) {
       errorSet.add(`${slot.groupName}: ${slot.label}.`);
     }

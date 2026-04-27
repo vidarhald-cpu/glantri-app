@@ -1415,6 +1415,44 @@ describe("ChargenWizard combat allocation runtime helpers", () => {
     });
   });
 
+  it("keeps fixed combat group skills visible before a weapon slot is selected", () => {
+    const draftView = buildChargenDraftView({
+      content: combatContent,
+      professionId: "captain",
+      progression: createChargenProgression(),
+      societyId: "glantri",
+      societyLevel: 1
+    });
+    const skillAccess = buildChargenSkillAccessSummary({
+      content: combatContent,
+      professionId: "captain",
+      societyId: "glantri",
+      societyLevel: 1
+    });
+
+    const displayGroupIds = Object.fromEntries(
+      combatContent.skills.map((skill) => [
+        skill.id,
+        getSkillDisplayGroupId({
+          content: combatContent,
+          draftView,
+          skill,
+          skillAccess
+        })
+      ])
+    );
+
+    expect(displayGroupIds).toEqual({
+      axe: undefined,
+      brawling: "advanced_melee_training",
+      dodge: "advanced_melee_training",
+      mace: undefined,
+      parry: "advanced_melee_training",
+      spear: undefined,
+      sword: undefined
+    });
+  });
+
   it("uses materialized draft rows for group xp instead of recomputing all candidate groups", () => {
     const draftView = buildChargenDraftView({
       content: combatContent,
