@@ -136,14 +136,9 @@ const skills: SkillDefinition[] = [
     linkedStats: ["dex"],
     name: "Longbow",
     requiresLiteracy: "no",
+    specializationOfSkillId: "bow",
     societyLevel: 1,
-    sortOrder: 7,
-    specializationBridge: {
-      parentExcessOffset: 5,
-      parentSkillId: "bow",
-      reverseFactor: 1,
-      threshold: 6
-    }
+    sortOrder: 7
   },
   {
     allowsSpecializations: false,
@@ -229,7 +224,22 @@ const content = {
   skillGroups,
   skills,
   societyLevels: [],
-  specializations: []
+  specializations: [
+    {
+      id: "longbow",
+      minimumGroupLevel: 6,
+      minimumParentLevel: 6,
+      name: "Longbow",
+      skillId: "bow",
+      sortOrder: 7,
+      specializationBridge: {
+        parentExcessOffset: 5,
+        parentSkillId: "bow",
+        reverseFactor: 1,
+        threshold: 6
+      }
+    }
+  ]
 };
 
 const fencingSpecialization: SkillSpecialization = {
@@ -550,11 +560,6 @@ describe("characterEdit helpers", () => {
       derivedXp: 5,
       totalXp: 5
     });
-    expect(bowRows.find((row) => row.skillId === "longbow")).toMatchObject({
-      derivedSourceLabel: "Specialized from Bow",
-      derivedXp: 5,
-      totalXp: 5
-    });
 
     const crossbowBuild = setCharacterSkillXp({
       build: addCharacterSkill(baseBuild, skills[5]),
@@ -596,46 +601,10 @@ describe("characterEdit helpers", () => {
         ]
       }
     };
-    const summary = getCharacterEditSheetSummary(build, {
-      ...content,
-      specializations: [
-        {
-          id: "longbow_style",
-          minimumGroupLevel: 6,
-          minimumParentLevel: 6,
-          name: "Longbow Style",
-          skillId: "bow",
-          sortOrder: 1,
-          specializationBridge: {
-            parentExcessOffset: 5,
-            parentSkillId: "bow",
-            reverseFactor: 1,
-            threshold: 6
-          }
-        }
-      ]
-    });
+    const summary = getCharacterEditSheetSummary(build, content);
     const rows = buildCharacterEditSpecializationRows({
       build,
-      content: {
-        ...content,
-        specializations: [
-          {
-            id: "longbow_style",
-            minimumGroupLevel: 6,
-            minimumParentLevel: 6,
-            name: "Longbow Style",
-            skillId: "bow",
-            sortOrder: 1,
-            specializationBridge: {
-              parentExcessOffset: 5,
-              parentSkillId: "bow",
-              reverseFactor: 1,
-              threshold: 6
-            }
-          }
-        ]
-      },
+      content,
       sheetSummary: summary
     });
 
@@ -643,7 +612,7 @@ describe("characterEdit helpers", () => {
       expect.objectContaining({
         derivedSourceLabel: "Specialized from Bow",
         derivedXp: 5,
-        specializationName: "Longbow Style",
+        specializationName: "Longbow",
         total: 5,
         xp: 0
       })

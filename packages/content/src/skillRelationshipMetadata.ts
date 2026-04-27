@@ -113,16 +113,20 @@ export function applySkillRelationshipMetadata(
       ...skill,
       derivedGrants: metadata.derivedGrants ?? skill.derivedGrants ?? [],
       meleeCrossTraining: metadata.meleeCrossTraining ?? skill.meleeCrossTraining,
-      specializationBridge: metadata.specializationBridge ?? skill.specializationBridge,
+      specializationBridge:
+        (metadata.specializationOfSkillId ?? skill.specializationOfSkillId)
+          ? undefined
+          : metadata.specializationBridge ?? skill.specializationBridge,
       specializationOfSkillId: metadata.specializationOfSkillId ?? skill.specializationOfSkillId
     };
   });
 }
 
 export function applySpecializationRelationshipMetadata(
-  specializations: SkillSpecialization[]
+  specializations: SkillSpecialization[],
+  skills: SkillDefinition[]
 ): SkillSpecialization[] {
-  return specializations.map((specialization) => {
+  const normalizedSpecializations = specializations.map((specialization) => {
     const metadata = specializationRelationshipMetadataById[specialization.id];
 
     if (!metadata) {
@@ -137,4 +141,37 @@ export function applySpecializationRelationshipMetadata(
       specializationBridge: metadata.specializationBridge ?? specialization.specializationBridge
     };
   });
+
+  const existingIds = new Set(normalizedSpecializations.map((specialization) => specialization.id));
+  const syntheticSpecializations: SkillSpecialization[] = skills.reduce<SkillSpecialization[]>(
+    (specializations, skill) => {
+      if (!skill.specializationOfSkillId || existingIds.has(skill.id)) {
+        return specializations;
+      }
+
+      const metadataBridge =
+        skill.specializationBridge ??
+        skillRelationshipMetadataById[skill.id]?.specializationBridge;
+
+      if (!metadataBridge) {
+        return specializations;
+      }
+
+      specializations.push({
+        description: skill.description,
+        id: skill.id,
+        minimumGroupLevel: metadataBridge.threshold,
+        minimumParentLevel: metadataBridge.threshold,
+        name: skill.name,
+        skillId: skill.specializationOfSkillId,
+        sortOrder: skill.sortOrder,
+        specializationBridge: metadataBridge
+      });
+
+      return specializations;
+    },
+    []
+  );
+
+  return [...normalizedSpecializations, ...syntheticSpecializations];
 }

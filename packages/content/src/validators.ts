@@ -649,19 +649,25 @@ function validateProfessionRelationships(content: CanonicalContent): CanonicalCo
 
 export function validateCanonicalContent(input: unknown): CanonicalContent {
   const parsedContent = canonicalContentSchema.parse(input);
+  const normalizedSkills: CanonicalContent["skills"] = applySkillRelationshipMetadata(
+    parsedContent.skills
+  ).map((skill): CanonicalContent["skills"][number] =>
+    skill.id === "language"
+      ? {
+          ...skill,
+          category: "ordinary",
+          categoryId: "language",
+          allowsSpecializations: false
+        }
+      : skill
+  );
   const normalizedContent: CanonicalContent = normalizeLanguages({
     ...parsedContent,
-    skills: applySkillRelationshipMetadata(parsedContent.skills).map((skill) =>
-      skill.id === "language"
-        ? {
-            ...skill,
-            category: "ordinary",
-            categoryId: "language",
-            allowsSpecializations: false
-          }
-        : skill
-    ),
-    specializations: applySpecializationRelationshipMetadata(parsedContent.specializations).filter(
+    skills: normalizedSkills,
+    specializations: applySpecializationRelationshipMetadata(
+      parsedContent.specializations,
+      normalizedSkills
+    ).filter(
       (specialization) => specialization.skillId !== "language"
     ),
     civilizations:

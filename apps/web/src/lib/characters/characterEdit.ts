@@ -506,7 +506,7 @@ export function buildCharacterEditSkillRows(input: {
     .map((skillView) => {
       const definition = input.content.skills.find((skill) => skill.id === skillView.skillId);
 
-      if (!definition) {
+      if (!definition || definition.specializationOfSkillId) {
         return null;
       }
 

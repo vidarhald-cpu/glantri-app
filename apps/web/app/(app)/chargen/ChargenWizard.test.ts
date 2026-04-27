@@ -13,7 +13,6 @@ import { getPlayerFacingSkillBucket } from "../../../src/lib/chargen/chargenBrow
 
 import {
   buildConcreteLanguageBrowseRows,
-  getSkillRowMessages,
   getGroupScopedSkillAllocationMetrics,
   getSkillAllocationMetrics,
   getSkillDisplayGroupId,
@@ -1218,6 +1217,37 @@ describe("ChargenWizard combat allocation runtime helpers", () => {
     );
   });
 
+  it("collapses duplicate specialization requirement text even when it arrives through multiple rule channels", () => {
+    const rowMessages = getSpecializationRowMessages({
+      evaluation: {
+        advisories: [],
+        blockingReasons: [
+          {
+            code: "missing-specialization-parent-skill",
+            message: "Augury requires Omen Reading."
+          }
+        ],
+        isAllowed: false,
+        warnings: [
+          {
+            code: "missing-required-dependency",
+            message: "Augury requires Omen Reading."
+          }
+        ]
+      },
+      persistedRowFeedback: "Augury requires Omen Reading.",
+      purchaseState: {
+        canAllocate: false,
+        previewMessage: undefined
+      }
+    });
+
+    expect(rowMessages.feedback).toBeUndefined();
+    expect(rowMessages.statusItems.map((item) => item.message)).toEqual([
+      "Augury requires Omen Reading."
+    ]);
+  });
+
   it("suppresses overlapping dependency text when a bridge skill already explains the parent requirement", () => {
     const longbowContent = validateCanonicalContent({
       skillGroups: [{ id: "missile_group", name: "Missile", sortOrder: 1 }],
@@ -1260,6 +1290,17 @@ describe("ChargenWizard combat allocation runtime helpers", () => {
           name: "Longbow",
           requiresLiteracy: "no",
           sortOrder: 3,
+          specializationOfSkillId: "bow"
+        }
+      ],
+      specializations: [
+        {
+          id: "longbow",
+          minimumGroupLevel: 6,
+          minimumParentLevel: 6,
+          name: "Longbow",
+          skillId: "bow",
+          sortOrder: 1,
           specializationBridge: {
             parentExcessOffset: 5,
             parentSkillId: "bow",
@@ -1268,7 +1309,6 @@ describe("ChargenWizard combat allocation runtime helpers", () => {
           }
         }
       ],
-      specializations: [],
       professionFamilies: [{ id: "warrior", name: "Warrior" }],
       professionSkills: [],
       professions: [{ familyId: "warrior", id: "archer", name: "Archer", subtypeName: "Archer" }],
@@ -1290,17 +1330,22 @@ describe("ChargenWizard combat allocation runtime helpers", () => {
       ]
     });
 
-    const rowMessages = getSkillRowMessages({
+    const rowMessages = getSpecializationRowMessages({
       evaluation: evaluateSkillSelection({
         content: longbowContent,
         progression: createChargenProgression(),
         target: {
-          skill: longbowContent.skills.find((skill) => skill.id === "longbow")!,
-          targetType: "skill"
+          specialization: longbowContent.specializations.find(
+            (specialization) => specialization.id === "longbow"
+          )!,
+          targetType: "specialization"
         }
       }),
       persistedRowFeedback: undefined,
-      skill: longbowContent.skills.find((skill) => skill.id === "longbow")!
+      purchaseState: {
+        canAllocate: false,
+        previewMessage: undefined
+      }
     });
 
     expect(rowMessages.feedback).toBeUndefined();

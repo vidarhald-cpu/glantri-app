@@ -689,6 +689,18 @@ function getSkillSpendCost(skill: SkillDefinition, exists: boolean): number {
   return exists ? baseCost : baseCost * 2;
 }
 
+function getSkillDirectRanks(skill: CharacterSkill | undefined): number {
+  if (!skill) {
+    return 0;
+  }
+
+  return (skill.primaryRanks ?? 0) + (skill.secondaryRanks ?? 0);
+}
+
+function hasExistingDirectSkillPurchase(skill: CharacterSkill | undefined): boolean {
+  return getSkillDirectRanks(skill) > 0;
+}
+
 function getGroupSpendCost(exists: boolean): number {
   return exists ? GROUP_POINT_COST : GROUP_POINT_COST * 2;
 }
@@ -984,26 +996,16 @@ export function allocateChargenPoint(input: AllocateChargenPointInput): SpendPoi
     };
   }
 
+  const skill = ensureSkillExists(progression, skillDefinition, {
+    languageName: input.targetLanguageName
+  });
+  const cost = getSkillSpendCost(skillDefinition, hasExistingDirectSkillPurchase(skill));
   const pool = chooseChargenPool({
-    cost: getSkillSpendCost(
-      skillDefinition,
-      Boolean(
-        getTargetedProgressionSkillRow({
-          progression,
-          skillId: input.targetId,
-          targetLanguageName: input.targetLanguageName
-        })?.ranks
-      )
-    ),
+    cost,
     normalAccess,
     profile: input.profile,
     progression
   });
-
-  const skill = ensureSkillExists(progression, skillDefinition, {
-    languageName: input.targetLanguageName
-  });
-  const cost = getSkillSpendCost(skillDefinition, skill.ranks > 0);
 
   if (!pool) {
     return {
@@ -1117,7 +1119,7 @@ export function spendPrimaryPoint(input: SpendPrimaryPointInput): SpendPointResu
   const skill = ensureSkillExists(progression, skillDefinition, {
     languageName: input.targetLanguageName
   });
-  const cost = getSkillSpendCost(skillDefinition, skill.ranks > 0);
+  const cost = getSkillSpendCost(skillDefinition, hasExistingDirectSkillPurchase(skill));
 
   if (progression.primaryPoolSpent + cost > progression.primaryPoolTotal) {
     return {
@@ -1444,7 +1446,7 @@ export function removePrimaryPoint(input: SpendPrimaryPointInput): SpendPointRes
 
   skill.primaryRanks -= 1;
   skill.ranks = skill.grantedRanks + skill.primaryRanks + skill.secondaryRanks;
-  const refundedCost = getSkillSpendCost(skillDefinition, skill.ranks > 0);
+  const refundedCost = getSkillSpendCost(skillDefinition, hasExistingDirectSkillPurchase(skill));
   progression.primaryPoolSpent = Math.max(0, progression.primaryPoolSpent - refundedCost);
 
   return {
@@ -1532,17 +1534,22 @@ export function removeChargenPoint(
     };
   }
 
-  const refundedCost = getSkillSpendCost(skillDefinition, skill.ranks - 1 > 0);
+  const usedSecondaryPool = skill.secondaryRanks > 0;
 
-  if (skill.secondaryRanks > 0) {
+  if (usedSecondaryPool) {
     skill.secondaryRanks -= 1;
-    progression.secondaryPoolSpent = Math.max(0, progression.secondaryPoolSpent - refundedCost);
   } else {
     skill.primaryRanks -= 1;
-    progression.primaryPoolSpent = Math.max(0, progression.primaryPoolSpent - refundedCost);
   }
 
   skill.ranks = skill.grantedRanks + skill.primaryRanks + skill.secondaryRanks;
+  const refundedCost = getSkillSpendCost(skillDefinition, hasExistingDirectSkillPurchase(skill));
+
+  if (usedSecondaryPool) {
+    progression.secondaryPoolSpent = Math.max(0, progression.secondaryPoolSpent - refundedCost);
+  } else {
+    progression.primaryPoolSpent = Math.max(0, progression.primaryPoolSpent - refundedCost);
+  }
 
   return {
     progression: cleanupProgression(progression),
@@ -1597,7 +1604,7 @@ export function removeSecondaryPoint(input: SpendSecondaryPointInput): SpendPoin
 
     skill.secondaryRanks -= 1;
     skill.ranks = skill.grantedRanks + skill.primaryRanks + skill.secondaryRanks;
-    const refundedCost = getSkillSpendCost(skillDefinition, skill.ranks > 0);
+    const refundedCost = getSkillSpendCost(skillDefinition, hasExistingDirectSkillPurchase(skill));
     progression.secondaryPoolSpent = Math.max(0, progression.secondaryPoolSpent - refundedCost);
 
     return {
@@ -1695,7 +1702,7 @@ export function spendSecondaryPoint(input: SpendSecondaryPointInput): SpendPoint
     const skill = ensureSkillExists(progression, skillDefinition, {
       languageName: input.targetLanguageName
     });
-    const cost = getSkillSpendCost(skillDefinition, skill.ranks > 0);
+    const cost = getSkillSpendCost(skillDefinition, hasExistingDirectSkillPurchase(skill));
 
     if (
       progression.secondaryPoolSpent + cost >
@@ -1883,6 +1890,10 @@ export function buildChargenDraftView(input: {
 
   const skills = input.content.skills
     .flatMap((definition) => {
+      if (definition.specializationOfSkillId) {
+        return [];
+      }
+
       const progressionSkillRows = getProgressionSkillRows(progression, definition.id);
       const groupIds = getSkillDefinitionGroupIds(definition);
       const bestContributingGroup = getBestActiveGroupContribution({
@@ -2349,7 +2360,7 @@ export function getPrimaryPurchaseCostForSkill(
   skillDefinition: SkillDefinition
 ): number {
   const skill = getPreferredProgressionSkillRow(progression, skillDefinition.id);
-  return getSkillSpendCost(skillDefinition, Boolean(skill && skill.ranks > 0));
+  return getSkillSpendCost(skillDefinition, hasExistingDirectSkillPurchase(skill));
 }
 
 export function getSecondaryPurchaseCostForSkill(
@@ -2357,7 +2368,7 @@ export function getSecondaryPurchaseCostForSkill(
   skillDefinition: SkillDefinition
 ): number {
   const skill = getPreferredProgressionSkillRow(progression, skillDefinition.id);
-  return getSkillSpendCost(skillDefinition, Boolean(skill && skill.ranks > 0));
+  return getSkillSpendCost(skillDefinition, hasExistingDirectSkillPurchase(skill));
 }
 
 export function getSecondaryPurchaseCostForSpecialization(

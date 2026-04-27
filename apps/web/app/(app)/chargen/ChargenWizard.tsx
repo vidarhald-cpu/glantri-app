@@ -458,7 +458,7 @@ function dedupeRuleStatusItems(items: RuleStatusItem[]): RuleStatusItem[] {
   const seen = new Set<string>();
 
   return items.filter((item) => {
-    const key = `${item.tone}:${item.code ?? ""}:${item.message}`;
+    const key = normalizeRuleMessageMeaning(item.message);
 
     if (seen.has(key)) {
       return false;
@@ -467,6 +467,14 @@ function dedupeRuleStatusItems(items: RuleStatusItem[]): RuleStatusItem[] {
     seen.add(key);
     return true;
   });
+}
+
+function normalizeRuleMessageMeaning(message: string): string {
+  return message
+    .trim()
+    .replace(/\s+/g, " ")
+    .replace(/[.]+$/g, "")
+    .toLowerCase();
 }
 
 function suppressBridgeOverlapStatusItems(input: {
@@ -508,7 +516,11 @@ export function getSkillRowMessages(input: {
     return { statusItems };
   }
 
-  if (statusItems.some((item) => item.message === feedback)) {
+  if (
+    statusItems.some(
+      (item) => normalizeRuleMessageMeaning(item.message) === normalizeRuleMessageMeaning(feedback)
+    )
+  ) {
     return { statusItems };
   }
 
@@ -537,7 +549,11 @@ export function getSpecializationRowMessages(input: {
     return { statusItems };
   }
 
-  if (statusItems.some((item) => item.message === feedback)) {
+  if (
+    statusItems.some(
+      (item) => normalizeRuleMessageMeaning(item.message) === normalizeRuleMessageMeaning(feedback)
+    )
+  ) {
     return { statusItems };
   }
 
@@ -1066,9 +1082,12 @@ export default function ChargenWizard() {
       : {
           normalSkillGroupIds: [],
           normalSkillIds: [],
-          otherSkillIds: content.skills.map((skill) => skill.id),
+          otherSkillIds: content.skills
+            .filter((skill) => !skill.specializationOfSkillId)
+            .map((skill) => skill.id),
           skillSources: {}
         };
+  const visibleSkillDefinitions = content.skills.filter((skill) => !skill.specializationOfSkillId);
   const normalSkillGroups = sortedSkillGroups.filter((group) =>
     skillAccess.normalSkillGroupIds.includes(group.id)
   );
@@ -1086,7 +1105,7 @@ export default function ChargenWizard() {
         (left.languageName ?? "").localeCompare(right.languageName ?? "")
     );
   const skillDisplayGroupIds = new Map(
-    content.skills.map((skill) => [
+    visibleSkillDefinitions.map((skill) => [
       skill.id,
       getSkillDisplayGroupId({
         content,
@@ -1097,7 +1116,7 @@ export default function ChargenWizard() {
     ])
   );
   const additionalAllowedSkills = sortSkills(
-    content.skills.filter(
+    visibleSkillDefinitions.filter(
       (skill) =>
         skill.id !== "language" &&
         skillAccess.normalSkillIds.includes(skill.id) &&
@@ -1105,7 +1124,7 @@ export default function ChargenWizard() {
     )
   );
   const otherSkills = sortSkills(
-    content.skills.filter(
+    visibleSkillDefinitions.filter(
       (skill) =>
         skill.id !== "language" &&
         skillDisplayGroupIds.get(skill.id) === undefined &&
@@ -1113,7 +1132,7 @@ export default function ChargenWizard() {
     )
   );
   const skillRowsById = new Map<string, SkillBrowseRow>(
-    sortSkills(content.skills).map((skill) => {
+    sortSkills(visibleSkillDefinitions).map((skill) => {
       const skillView =
         draftView.skills.find((item) => item.skillId === skill.id && item.sourceTag === "mother-tongue") ??
         draftView.skills.find((item) => item.skillId === skill.id && item.languageName) ??
@@ -1238,6 +1257,7 @@ export default function ChargenWizard() {
     [coreProfessionSections.length, Boolean(specialAccessSection)]
   );
   const playerSkillTableRows = sortSkills(content.skills)
+    .filter((skill) => !skill.specializationOfSkillId)
     .flatMap((skill) => {
       const matchingViews = draftView.skills.filter((item) => item.skillId === skill.id);
       const views = matchingViews.length > 0 ? matchingViews : [];
@@ -4012,6 +4032,79 @@ export default function ChargenWizard() {
           </div>
         ) : (
           <div>No skills in the draft yet.</div>
+        )}
+      </section>
+
+      <section
+        style={{
+          background: "#fbfaf5",
+          border: "1px solid #d9ddd8",
+          borderRadius: 12,
+          display: "grid",
+          gap: "1rem",
+          padding: "1rem"
+        }}
+      >
+        <h2 style={{ margin: 0 }}>9b. Specialization Table</h2>
+        {draftView.specializations.length > 0 ? (
+          <div
+            style={{
+              border: "1px solid #e7e2d7",
+              borderRadius: 10,
+              overflowX: "auto"
+            }}
+          >
+            <div
+              style={{
+                borderBottom: "1px solid #e7e2d7",
+                color: "#5e5a50",
+                display: "grid",
+                fontSize: "0.8rem",
+                gap: "0.75rem",
+                gridTemplateColumns:
+                  "minmax(180px, 2fr) minmax(160px, 1.6fr) repeat(3, minmax(80px, 92px))",
+                padding: "0.75rem 1rem"
+              }}
+            >
+              <strong>Specialization</strong>
+              <strong>Parent skill</strong>
+              <strong>Direct XP</strong>
+              <strong>Grant preview</strong>
+              <strong>Total</strong>
+            </div>
+
+            {draftView.specializations.map((specialization) => (
+              <div
+                key={specialization.specializationId}
+                style={{
+                  borderTop: "1px solid #f0eadf",
+                  display: "grid",
+                  gap: "0.75rem",
+                  gridTemplateColumns:
+                    "minmax(180px, 2fr) minmax(160px, 1.6fr) repeat(3, minmax(80px, 92px))",
+                  padding: "0.75rem 1rem"
+                }}
+              >
+                <div>
+                  <div>{specialization.name}</div>
+                  {specialization.relationshipGrantedSourceSkillName ? (
+                    <div style={{ color: "#5e5a50", fontSize: "0.8rem" }}>
+                      {formatDerivedSkillSourceLabel({
+                        sourceSkillName: specialization.relationshipGrantedSourceSkillName,
+                        sourceType: specialization.relationshipGrantedSourceType
+                      })}
+                    </div>
+                  ) : null}
+                </div>
+                <div>{specialization.parentSkillName}</div>
+                <div>{specialization.secondaryRanks}</div>
+                <div>{specialization.relationshipGrantedPreviewLevel ?? 0}</div>
+                <div>{specialization.effectiveSpecializationNumber}</div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div>No specializations in the draft yet.</div>
         )}
       </section>
 

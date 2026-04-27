@@ -80,6 +80,10 @@ export function buildCharacterSheetSkillRows(input: {
 }> {
   const rows = sortSkills(input.content.skills)
     .flatMap((skill) => {
+      if (skill.specializationOfSkillId) {
+        return [];
+      }
+
       const matchingViews = input.sheetSummary.draftView.skills.filter((item) => item.skillId === skill.id);
       const bestContributingGroup = selectBestSkillGroupContribution(
         getSkillGroupIds(skill)

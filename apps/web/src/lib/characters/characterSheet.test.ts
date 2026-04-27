@@ -84,16 +84,56 @@ const skills: SkillDefinition[] = [
     linkedStats: ["dex"],
     name: "Longbow",
     requiresLiteracy: "no",
+    specializationOfSkillId: "bow",
     societyLevel: 1,
-    sortOrder: 5,
-    specializationBridge: {
-      parentExcessOffset: 5,
-      parentSkillId: "bow",
-      reverseFactor: 1,
-      threshold: 6
-    }
+    sortOrder: 5
+  },
+  {
+    allowsSpecializations: false,
+    category: "ordinary",
+    dependencies: [],
+    dependencySkillIds: [],
+    groupId: "combat_group",
+    groupIds: ["combat_group"],
+    id: "one_handed_edged",
+    isTheoretical: false,
+    linkedStats: ["dex"],
+    name: "1-h edged",
+    requiresLiteracy: "no",
+    societyLevel: 1,
+    sortOrder: 6
   }
 ];
+
+const longbowSpecialization = {
+  id: "longbow",
+  minimumGroupLevel: 6,
+  minimumParentLevel: 6,
+  name: "Longbow",
+  skillId: "bow",
+  sortOrder: 5,
+  specializationBridge: {
+    parentExcessOffset: 5,
+    parentSkillId: "bow",
+    reverseFactor: 1,
+    threshold: 6
+  }
+};
+
+const fencingSpecialization = {
+  id: "fencing",
+  minimumGroupLevel: 6,
+  minimumParentLevel: 6,
+  name: "Fencing",
+  skillId: "one_handed_edged",
+  sortOrder: 6,
+  specializationBridge: {
+    parentExcessOffset: 5,
+    parentSkillId: "one_handed_edged",
+    reverseFactor: 1,
+    threshold: 6
+  }
+};
 
 const skillGroups: SkillGroupDefinition[] = [
   {
@@ -156,7 +196,7 @@ const content = {
   skillGroups,
   skills,
   societyLevels: [],
-  specializations: []
+  specializations: [longbowSpecialization, fencingSpecialization]
 };
 
 describe("buildCharacterSheetSkillRows", () => {
@@ -231,33 +271,9 @@ describe("buildCharacterSheetSkillRows", () => {
       derivedXp: 5,
       totalXp: 5
     });
-    expect(rows.find((row) => row.skillId === "longbow")).toMatchObject({
-      derivedSourceLabel: "Specialized from Bow",
-      derivedXp: 5,
-      totalXp: 5
-    });
   });
 
   it("shows specialization-bridge specializations on the sheet", () => {
-    const contentWithSpecialization = {
-      ...content,
-      specializations: [
-        {
-          id: "longbow_style",
-          minimumGroupLevel: 6,
-          minimumParentLevel: 6,
-          name: "Longbow Style",
-          skillId: "bow",
-          sortOrder: 1,
-          specializationBridge: {
-            parentExcessOffset: 5,
-            parentSkillId: "bow",
-            reverseFactor: 1,
-            threshold: 6
-          }
-        }
-      ]
-    };
     const build: CharacterBuild = {
       ...baseBuild,
       progression: {
@@ -278,10 +294,10 @@ describe("buildCharacterSheetSkillRows", () => {
     };
     const sheetSummary = buildCharacterSheetSummary({
       build,
-      content: contentWithSpecialization
+      content
     });
     const rows = buildCharacterSheetSpecializationRows({
-      content: contentWithSpecialization,
+      content,
       sheetSummary
     });
 
@@ -289,9 +305,58 @@ describe("buildCharacterSheetSkillRows", () => {
       expect.objectContaining({
         derivedSourceLabel: "Specialized from Bow",
         derivedXp: 5,
-        specializationName: "Longbow Style",
+        specializationName: "Longbow",
         total: 5,
         xp: 0
+      })
+    );
+  });
+
+  it("keeps directly purchased specializations visible on the sheet alongside relationship grants", () => {
+    const build: CharacterBuild = {
+      ...baseBuild,
+      progression: {
+        ...baseBuild.progression,
+        skills: [
+          {
+            category: "ordinary",
+            grantedRanks: 0,
+            groupId: "combat_group",
+            level: 8,
+            primaryRanks: 8,
+            ranks: 8,
+            secondaryRanks: 0,
+            skillId: "one_handed_edged"
+          }
+        ],
+        specializations: [
+          {
+            level: 5,
+            ranks: 5,
+            relationshipGrantedRanks: 3,
+            secondaryRanks: 2,
+            skillId: "one_handed_edged",
+            specializationId: "fencing"
+          }
+        ]
+      }
+    };
+    const sheetSummary = buildCharacterSheetSummary({
+      build,
+      content
+    });
+    const rows = buildCharacterSheetSpecializationRows({
+      content,
+      sheetSummary
+    });
+
+    expect(rows).toContainEqual(
+      expect.objectContaining({
+        derivedSourceLabel: "Specialized from 1-h edged",
+        derivedXp: 3,
+        specializationName: "Fencing",
+        total: 5,
+        xp: 2
       })
     );
   });

@@ -7,6 +7,8 @@ import {
   buildChargenDraftView,
   createChargenProgression,
   finalizeChargenDraft,
+  getPrimaryPurchaseCostForSkill,
+  getSecondaryPurchaseCostForSkill,
   getSecondaryPurchaseCostForSpecialization,
   reviewChargenDraft,
   spendPrimaryPoint,
@@ -266,7 +268,7 @@ describe("derived skill relationships in chargen drafts", () => {
     });
   });
 
-  it("materializes specialization-bridge skills and specialization children from parent base XP", () => {
+  it("materializes specialization-bridge specializations from parent base XP without surfacing proxy skills as ordinary rows", () => {
     const bridgeContent = validateCanonicalContent({
       skillGroups: [
         {
@@ -314,12 +316,7 @@ describe("derived skill relationships in chargen drafts", () => {
           name: "Longbow",
           requiresLiteracy: "no",
           sortOrder: 3,
-          specializationBridge: {
-            parentExcessOffset: 5,
-            parentSkillId: "bow",
-            reverseFactor: 1,
-            threshold: 6
-          }
+          specializationOfSkillId: "bow"
         },
         {
           allowsSpecializations: false,
@@ -337,12 +334,26 @@ describe("derived skill relationships in chargen drafts", () => {
       ],
       specializations: [
         {
+          id: "longbow",
+          minimumGroupLevel: 6,
+          minimumParentLevel: 6,
+          name: "Longbow",
+          skillId: "bow",
+          sortOrder: 1,
+          specializationBridge: {
+            parentExcessOffset: 5,
+            parentSkillId: "bow",
+            reverseFactor: 1,
+            threshold: 6
+          }
+        },
+        {
           id: "fencing",
           minimumGroupLevel: 6,
           minimumParentLevel: 6,
           name: "Fencing",
           skillId: "one_handed_edged",
-          sortOrder: 1,
+          sortOrder: 2,
           specializationBridge: {
             parentExcessOffset: 5,
             parentSkillId: "one_handed_edged",
@@ -433,11 +444,14 @@ describe("derived skill relationships in chargen drafts", () => {
       societyLevel: 1
     });
 
-    expect(draftView.skills.find((skill) => skill.skillId === "longbow")).toMatchObject({
-      effectiveSkillNumber: 5,
-      relationshipGrantedSkillLevel: 5,
-      relationshipSourceSkillId: "bow",
-      relationshipSourceType: "specialization-bridge-parent"
+    expect(draftView.skills.find((skill) => skill.skillId === "longbow")).toBeUndefined();
+    expect(
+      draftView.specializations.find((specialization) => specialization.specializationId === "longbow")
+    ).toMatchObject({
+      relationshipGrantedSourceSkillId: "bow",
+      relationshipGrantedSourceType: "specialization-bridge-parent",
+      relationshipGrantedSpecializationLevel: 5,
+      specializationLevel: 5
     });
     expect(draftView.specializations.find((specialization) => specialization.specializationId === "fencing")).toMatchObject({
       relationshipGrantedSourceSkillId: "one_handed_edged",
@@ -446,6 +460,52 @@ describe("derived skill relationships in chargen drafts", () => {
       specializationLevel: 5
     });
     expect(draftView.secondaryPoolAvailable).toBe(0);
+  });
+
+  it("uses direct purchased state rather than relationship grants when deriving ordinary skill purchase cost", () => {
+    const progression = createChargenProgression();
+    progression.skills = [
+      {
+        category: "ordinary",
+        grantedRanks: 0,
+        groupId: "scholarly",
+        level: 8,
+        primaryRanks: 0,
+        ranks: 8,
+        relationshipGrantedRanks: 8,
+        secondaryRanks: 0,
+        skillId: "lore"
+      }
+    ];
+
+    expect(
+      getPrimaryPurchaseCostForSkill(progression, chargenTestContent.skills.find((skill) => skill.id === "lore")!)
+    ).toBe(4);
+    expect(
+      getSecondaryPurchaseCostForSkill(
+        progression,
+        chargenTestContent.skills.find((skill) => skill.id === "lore")!
+      )
+    ).toBe(4);
+
+    const purchased = spendPrimaryPoint({
+      content: chargenTestContent,
+      professionId: "scribe",
+      progression,
+      societyId: "glantri",
+      societyLevel: 1,
+      targetId: "lore",
+      targetType: "skill"
+    });
+
+    expect(purchased.error).toBeUndefined();
+    expect(purchased.spentCost).toBe(4);
+    expect(
+      getPrimaryPurchaseCostForSkill(
+        purchased.progression,
+        chargenTestContent.skills.find((skill) => skill.id === "lore")!
+      )
+    ).toBe(2);
   });
 
   it("allows specialization-bridge purchases without the legacy society-level specialization block when the bridge parent gate is satisfied", () => {

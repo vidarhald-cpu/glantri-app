@@ -12,7 +12,11 @@ function createSkill(
     Partial<
       Pick<
         SkillDefinition,
-        "category" | "derivedGrants" | "meleeCrossTraining" | "specializationBridge"
+        | "category"
+        | "derivedGrants"
+        | "meleeCrossTraining"
+        | "specializationBridge"
+        | "specializationOfSkillId"
       >
     >
 ): SkillDefinition {
@@ -33,7 +37,8 @@ function createSkill(
     requiresLiteracy: "no",
     societyLevel: 1,
     sortOrder: 1,
-    specializationBridge: skill.specializationBridge
+    specializationBridge: skill.specializationBridge,
+    specializationOfSkillId: skill.specializationOfSkillId
   };
 }
 
@@ -196,6 +201,14 @@ describe("deriveBestSkillRelationshipXp", () => {
         id: "longbow",
         linkedStats: ["dex"],
         name: "Longbow",
+        specializationOfSkillId: "bow"
+      })
+    ];
+    const specializations = [
+      createSpecialization({
+        id: "longbow",
+        name: "Longbow",
+        skillId: "bow",
         specializationBridge: {
           parentExcessOffset: 5,
           parentSkillId: "bow",
@@ -206,16 +219,18 @@ describe("deriveBestSkillRelationshipXp", () => {
     ];
 
     expect(
-      deriveBestSkillRelationshipXp({
-        ownedXpBySkillId: new Map([["bow", 6]]),
-        skills
-      }).get("longbow")?.xp
+      deriveBestSkillRelationships({
+        skillBaseXpBySkillId: new Map([["bow", 6]]),
+        skills,
+        specializations
+      }).bestDerivedBySpecializationId.get("longbow")?.xp
     ).toBe(1);
     expect(
-      deriveBestSkillRelationshipXp({
-        ownedXpBySkillId: new Map([["bow", 10]]),
-        skills
-      }).get("longbow")?.xp
+      deriveBestSkillRelationships({
+        skillBaseXpBySkillId: new Map([["bow", 10]]),
+        skills,
+        specializations
+      }).bestDerivedBySpecializationId.get("longbow")?.xp
     ).toBe(5);
   });
 
@@ -234,6 +249,14 @@ describe("deriveBestSkillRelationshipXp", () => {
         id: "longbow",
         linkedStats: ["dex"],
         name: "Longbow",
+        specializationOfSkillId: "bow"
+      })
+    ];
+    const specializations = [
+      createSpecialization({
+        id: "longbow",
+        name: "Longbow",
+        skillId: "bow",
         specializationBridge: {
           parentExcessOffset: 5,
           parentSkillId: "bow",
@@ -244,10 +267,12 @@ describe("deriveBestSkillRelationshipXp", () => {
     ];
 
     expect(
-      deriveBestSkillRelationshipXp({
-        ownedXpBySkillId: new Map([["longbow", 7]]),
-        skills
-      }).get("bow")
+      deriveBestSkillRelationships({
+        skillBaseXpBySkillId: new Map(),
+        skills,
+        specializationBaseXpBySpecializationId: new Map([["longbow", 7]]),
+        specializations
+      }).bestDerivedBySkillId.get("bow")
     ).toMatchObject({
       sourceSkillId: "longbow",
       sourceType: "specialization-bridge-child",
@@ -314,12 +339,7 @@ describe("deriveBestSkillRelationshipXp", () => {
         id: "longbow",
         linkedStats: ["dex"],
         name: "Longbow",
-        specializationBridge: {
-          parentExcessOffset: 5,
-          parentSkillId: "bow",
-          reverseFactor: 1,
-          threshold: 6
-        }
+        specializationOfSkillId: "bow"
       }),
       createSkill({
         derivedGrants: [{ factor: 1, skillId: "crossbow" }],
@@ -330,14 +350,28 @@ describe("deriveBestSkillRelationshipXp", () => {
         name: "Crossbow"
       })
     ];
+    const specializations = [
+      createSpecialization({
+        id: "longbow",
+        name: "Longbow",
+        skillId: "bow",
+        specializationBridge: {
+          parentExcessOffset: 5,
+          parentSkillId: "bow",
+          reverseFactor: 1,
+          threshold: 6
+        }
+      })
+    ];
 
-    const result = deriveBestSkillRelationshipXp({
-      ownedXpBySkillId: new Map([["bow", 10]]),
-      skills
+    const result = deriveBestSkillRelationships({
+      skillBaseXpBySkillId: new Map([["bow", 10]]),
+      skills,
+      specializations
     });
 
-    expect(result.get("longbow")?.xp).toBe(5);
-    expect(result.has("crossbow")).toBe(false);
+    expect(result.bestDerivedBySpecializationId.get("longbow")?.xp).toBe(5);
+    expect(result.bestDerivedBySkillId.has("crossbow")).toBe(false);
   });
 
   it("keeps only the single best derived grant for each target", () => {
@@ -363,6 +397,14 @@ describe("deriveBestSkillRelationshipXp", () => {
         id: "longbow",
         linkedStats: ["dex"],
         name: "Longbow",
+        specializationOfSkillId: "bow"
+      })
+    ];
+    const specializations = [
+      createSpecialization({
+        id: "longbow",
+        name: "Longbow",
+        skillId: "bow",
         specializationBridge: {
           parentExcessOffset: 5,
           parentSkillId: "bow",
@@ -372,15 +414,14 @@ describe("deriveBestSkillRelationshipXp", () => {
       })
     ];
 
-    const result = deriveBestSkillRelationshipXp({
-      ownedXpBySkillId: new Map([
-        ["crossbow", 10],
-        ["longbow", 7]
-      ]),
-      skills
+    const result = deriveBestSkillRelationships({
+      skillBaseXpBySkillId: new Map([["crossbow", 10]]),
+      skills,
+      specializationBaseXpBySpecializationId: new Map([["longbow", 7]]),
+      specializations
     });
 
-    expect(result.get("bow")).toMatchObject({
+    expect(result.bestDerivedBySkillId.get("bow")).toMatchObject({
       sourceSkillId: "longbow",
       xp: 7
     });

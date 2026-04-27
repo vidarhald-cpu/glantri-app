@@ -443,7 +443,9 @@ export function deriveBestSkillRelationships(input: {
     }
 
     for (const childSkill of input.skills.filter(
-      (skill) => skill.specializationBridge?.parentSkillId === sourceSkill.id
+      (skill) =>
+        !skill.specializationOfSkillId &&
+        skill.specializationBridge?.parentSkillId === sourceSkill.id
     )) {
       const grantedXp = getSpecializationBridgeParentFactor({
         bridge: childSkill.specializationBridge!,
@@ -499,7 +501,7 @@ export function deriveBestSkillRelationships(input: {
     const bridge = sourceSkill.specializationBridge;
     const sourceBaseXp = input.skillBaseXpBySkillId.get(sourceSkill.id) ?? 0;
 
-    if (!bridge || sourceBaseXp <= 0) {
+    if (!bridge || sourceSkill.specializationOfSkillId || sourceBaseXp <= 0) {
       continue;
     }
 
