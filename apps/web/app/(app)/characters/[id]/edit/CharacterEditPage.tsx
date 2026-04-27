@@ -551,9 +551,9 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
                   <tr key={skill.skillKey} style={{ borderBottom: "1px solid #eee8dc" }}>
                     <td style={{ padding: "0.6rem 0.75rem 0.6rem 0" }}>
                       <div>{skill.skillName}</div>
-                      {skill.derivedSourceLabel ? (
+                      {skill.grantedSourceLabel ? (
                         <div style={{ color: "#5e5a50", fontSize: "0.82rem" }}>
-                          {skill.derivedSourceLabel}
+                          {skill.grantedSourceLabel}
                         </div>
                       ) : null}
                     </td>
@@ -567,7 +567,7 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
                         value={skill.xp}
                       />
                     </td>
-                    <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>{skill.derivedXp}</td>
+                    <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>{skill.grantedXp}</td>
                     <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>{skill.totalXp}</td>
                     <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>{skill.total}</td>
                     <td style={{ padding: "0.6rem 0", textAlign: "right" }}>
@@ -625,9 +625,9 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
                   <tr key={specialization.specializationId} style={{ borderBottom: "1px solid #eee8dc" }}>
                     <td style={{ padding: "0.6rem 0.75rem 0.6rem 0" }}>
                       <div>{specialization.specializationName}</div>
-                      {specialization.derivedSourceLabel ? (
+                      {specialization.grantedSourceLabel ? (
                         <div style={{ color: "#5e5a50", fontSize: "0.82rem" }}>
-                          {specialization.derivedSourceLabel}
+                          {specialization.grantedSourceLabel}
                         </div>
                       ) : null}
                     </td>
@@ -641,7 +641,7 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
                       </div>
                     </td>
                     <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>{specialization.xp}</td>
-                    <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>{specialization.derivedXp}</td>
+                    <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>{specialization.grantedXp}</td>
                     <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>{specialization.total}</td>
                     <td style={{ padding: "0.6rem 0", textAlign: "right" }}>
                       <div

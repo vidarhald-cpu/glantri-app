@@ -231,8 +231,8 @@ describe("buildCharacterSheetSkillRows", () => {
     const firstAidRow = groupedRows.flatMap((group) => group.rows).find((row) => row.skillId === "first_aid");
 
     expect(firstAidRow).toMatchObject({
-      derivedSourceLabel: "Granted from Medicine",
-      derivedXp: 10,
+      grantedSourceLabel: "Granted from Medicine",
+      grantedXp: 10,
       totalXp: 10
     });
   });
@@ -267,8 +267,8 @@ describe("buildCharacterSheetSkillRows", () => {
     }).flatMap((group) => group.rows);
 
     expect(rows.find((row) => row.skillId === "crossbow")).toMatchObject({
-      derivedSourceLabel: "Granted from Bow",
-      derivedXp: 5,
+      grantedSourceLabel: "Granted from Bow",
+      grantedXp: 5,
       totalXp: 5
     });
   });
@@ -303,8 +303,8 @@ describe("buildCharacterSheetSkillRows", () => {
 
     expect(rows).toContainEqual(
       expect.objectContaining({
-        derivedSourceLabel: "Specialized from Bow",
-        derivedXp: 5,
+        grantedSourceLabel: "Specialized from Bow",
+        grantedXp: 5,
         specializationName: "Longbow",
         total: 5,
         xp: 0
@@ -352,8 +352,8 @@ describe("buildCharacterSheetSkillRows", () => {
 
     expect(rows).toContainEqual(
       expect.objectContaining({
-        derivedSourceLabel: "Specialized from 1-h edged",
-        derivedXp: 3,
+        grantedSourceLabel: "Specialized from 1-h edged",
+        grantedXp: 3,
         specializationName: "Fencing",
         total: 5,
         xp: 2

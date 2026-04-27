@@ -513,9 +513,9 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
                 >
                     <div>
                       <div>{skill.skillName}</div>
-                      {skill.derivedSourceLabel ? (
+                      {skill.grantedSourceLabel ? (
                         <div style={{ color: "#5e5a50", fontSize: "0.82rem" }}>
-                          {skill.derivedSourceLabel}
+                          {skill.grantedSourceLabel}
                         </div>
                       ) : null}
                     </div>
@@ -579,9 +579,9 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
                 >
                   <div>
                     <div>{specialization.specializationName}</div>
-                    {specialization.derivedSourceLabel ? (
+                    {specialization.grantedSourceLabel ? (
                       <div style={{ color: "#5e5a50", fontSize: "0.82rem" }}>
-                        {specialization.derivedSourceLabel}
+                        {specialization.grantedSourceLabel}
                       </div>
                     ) : null}
                   </div>

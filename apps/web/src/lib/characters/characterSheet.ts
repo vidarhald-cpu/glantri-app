@@ -26,8 +26,8 @@ export interface CharacterSheetContentShape {
 
 export interface CharacterSheetSkillRow {
   avgStats: number;
-  derivedSourceLabel: string | undefined;
-  derivedXp: number;
+  grantedSourceLabel: string | undefined;
+  grantedXp: number;
   skillGroupXp: number;
   skillId: string;
   skillKey: string;
@@ -40,8 +40,8 @@ export interface CharacterSheetSkillRow {
 }
 
 export interface CharacterSheetSpecializationRow {
-  derivedSourceLabel: string | undefined;
-  derivedXp: number;
+  grantedSourceLabel: string | undefined;
+  grantedXp: number;
   parentSkillName: string;
   specializationId: string;
   specializationName: string;
@@ -109,8 +109,8 @@ export function buildCharacterSheetSkillRows(input: {
         .map((skillView) => {
           const skillGroupXp = bestContributingGroup?.groupLevel ?? skillView.groupLevel ?? 0;
           const skillXp = skillView.specificSkillLevel ?? 0;
-          const derivedXp = skillView.relationshipGrantedSkillLevel ?? 0;
-          const totalXp = skillView.effectiveSkillNumber ?? skillGroupXp + skillXp + derivedXp;
+          const grantedXp = skillView.relationshipGrantedSkillLevel ?? 0;
+          const totalXp = skillView.effectiveSkillNumber ?? skillGroupXp + skillXp + grantedXp;
 
           if (totalXp <= 0) {
             return null;
@@ -119,11 +119,11 @@ export function buildCharacterSheetSkillRows(input: {
           return {
             avgStats:
               skillView.linkedStatAverage ?? getSkillLinkedStatAverage(input.build.profile, skill),
-            derivedSourceLabel: formatDerivedSkillSourceLabel({
+            grantedSourceLabel: formatDerivedSkillSourceLabel({
               sourceSkillName: skillView.relationshipSourceSkillName,
               sourceType: skillView.relationshipSourceType
             }),
-            derivedXp,
+            grantedXp,
             skillGroupXp,
             skillId: skill.id,
             skillKey: getCharacterSkillKey({
@@ -161,11 +161,11 @@ export function buildCharacterSheetSpecializationRows(input: {
       }
 
       return {
-        derivedSourceLabel: formatDerivedSkillSourceLabel({
+        grantedSourceLabel: formatDerivedSkillSourceLabel({
           sourceSkillName: specializationView.relationshipGrantedSourceSkillName,
           sourceType: specializationView.relationshipGrantedSourceType
         }),
-        derivedXp: specializationView.relationshipGrantedSpecializationLevel ?? 0,
+        grantedXp: specializationView.relationshipGrantedSpecializationLevel ?? 0,
         parentSkillName: specializationView.parentSkillName,
         specializationId: definition.id,
         specializationName: definition.name,

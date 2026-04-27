@@ -46,8 +46,8 @@ export interface CharacterEditSkillGroupRow {
 
 export interface CharacterEditSkillRow {
   canRemoveDirectXp: boolean;
-  derivedXp: number;
-  derivedSourceLabel: string | undefined;
+  grantedXp: number;
+  grantedSourceLabel: string | undefined;
   groupXp: number;
   skillId: string;
   skillKey: string;
@@ -62,8 +62,8 @@ export interface CharacterEditSpecializationRow {
   blockingMessage?: string;
   canDecreaseDirectXp: boolean;
   canIncreaseDirectXp: boolean;
-  derivedSourceLabel: string | undefined;
-  derivedXp: number;
+  grantedSourceLabel: string | undefined;
+  grantedXp: number;
   parentSkillName: string;
   parentSkillXp: number;
   requiredParentLevel: number;
@@ -512,8 +512,8 @@ export function buildCharacterEditSkillRows(input: {
 
       return {
         canRemoveDirectXp: directSkillKeys.has(skillView.skillKey),
-        derivedXp: skillView.relationshipGrantedSkillLevel ?? 0,
-        derivedSourceLabel: formatDerivedSkillSourceLabel({
+        grantedXp: skillView.relationshipGrantedSkillLevel ?? 0,
+        grantedSourceLabel: formatDerivedSkillSourceLabel({
           sourceSkillName: skillView.relationshipSourceSkillName,
           sourceType: skillView.relationshipSourceType
         }),
@@ -568,11 +568,11 @@ export function buildCharacterEditSpecializationRows(input: {
       blockingMessage: evaluation.blockingReasons[0]?.message,
       canDecreaseDirectXp: (specializationView.secondaryRanks ?? 0) > 0,
       canIncreaseDirectXp: evaluation.isAllowed,
-      derivedSourceLabel: formatDerivedSkillSourceLabel({
+      grantedSourceLabel: formatDerivedSkillSourceLabel({
         sourceSkillName: specializationView.relationshipGrantedSourceSkillName,
         sourceType: specializationView.relationshipGrantedSourceType
       }),
-      derivedXp: specializationView.relationshipGrantedSpecializationLevel ?? 0,
+      grantedXp: specializationView.relationshipGrantedSpecializationLevel ?? 0,
       parentSkillName: specializationView.parentSkillName,
       parentSkillXp,
       requiredParentLevel: definition.minimumParentLevel,

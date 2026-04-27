@@ -413,7 +413,7 @@ describe("characterEdit helpers", () => {
     ).toEqual([
       {
         canRemoveDirectXp: true,
-        derivedXp: 0,
+        grantedXp: 0,
         groupXp: 4,
         skillId: "perception",
         skillKey: "perception",
@@ -443,7 +443,7 @@ describe("characterEdit helpers", () => {
     ).toEqual([
       {
         canRemoveDirectXp: false,
-        derivedXp: 0,
+        grantedXp: 0,
         groupXp: 1,
         skillId: "perception",
         skillKey: "perception",
@@ -474,8 +474,8 @@ describe("characterEdit helpers", () => {
       }).find((row) => row.skillId === "first_aid")
     ).toMatchObject({
       canRemoveDirectXp: false,
-      derivedXp: 10,
-      derivedSourceLabel: "Granted from Medicine",
+      grantedXp: 10,
+      grantedSourceLabel: "Granted from Medicine",
       totalXp: 10,
       xp: 0
     });
@@ -497,8 +497,8 @@ describe("characterEdit helpers", () => {
       }).find((row) => row.skillId === "first_aid")
     ).toMatchObject({
       canRemoveDirectXp: true,
-      derivedXp: 10,
-      derivedSourceLabel: "Granted from Medicine",
+      grantedXp: 10,
+      grantedSourceLabel: "Granted from Medicine",
       totalXp: 23,
       xp: 13
     });
@@ -518,8 +518,8 @@ describe("characterEdit helpers", () => {
         sheetSummary: updatedSummary
       }).find((row) => row.skillId === "first_aid")
     ).toMatchObject({
-      derivedXp: 10,
-      derivedSourceLabel: "Granted from Medicine",
+      grantedXp: 10,
+      grantedSourceLabel: "Granted from Medicine",
       totalXp: 23,
       xp: 13
     });
@@ -556,8 +556,8 @@ describe("characterEdit helpers", () => {
     });
 
     expect(bowRows.find((row) => row.skillId === "crossbow")).toMatchObject({
-      derivedSourceLabel: "Granted from Bow",
-      derivedXp: 5,
+      grantedSourceLabel: "Granted from Bow",
+      grantedXp: 5,
       totalXp: 5
     });
 
@@ -576,8 +576,8 @@ describe("characterEdit helpers", () => {
         sheetSummary: crossbowSummary
       }).find((row) => row.skillId === "bow")
     ).toMatchObject({
-      derivedSourceLabel: "Granted from Crossbow",
-      derivedXp: 5,
+      grantedSourceLabel: "Granted from Crossbow",
+      grantedXp: 5,
       totalXp: 5
     });
   });
@@ -610,8 +610,8 @@ describe("characterEdit helpers", () => {
 
     expect(rows).toContainEqual(
       expect.objectContaining({
-        derivedSourceLabel: "Specialized from Bow",
-        derivedXp: 5,
+        grantedSourceLabel: "Specialized from Bow",
+        grantedXp: 5,
         specializationName: "Longbow",
         total: 5,
         xp: 0
@@ -640,8 +640,8 @@ describe("characterEdit helpers", () => {
     expect(sourcedRows).toContainEqual(
       expect.objectContaining({
         canIncreaseDirectXp: true,
-        derivedSourceLabel: "Specialized from 1-h edged",
-        derivedXp: 3,
+        grantedSourceLabel: "Specialized from 1-h edged",
+        grantedXp: 3,
         parentSkillName: "1-h edged",
         requiredParentLevel: 6,
         specializationName: "Fencing",
@@ -667,7 +667,7 @@ describe("characterEdit helpers", () => {
     }).find((row) => row.specializationId === "fencing");
 
     expect(addedRow).toMatchObject({
-      derivedXp: 3,
+      grantedXp: 3,
       total: 5,
       xp: 2
     });
@@ -689,7 +689,7 @@ describe("characterEdit helpers", () => {
       blockingMessage: "Fencing requires 1-h edged level 6 or higher (current 5).",
       canDecreaseDirectXp: true,
       canIncreaseDirectXp: false,
-      derivedXp: 3,
+      grantedXp: 3,
       total: 5,
       xp: 2
     });

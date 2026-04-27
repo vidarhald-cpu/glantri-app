@@ -47,6 +47,8 @@ import {
   finalizeChargenDraft,
   generateProfiles,
   getChargenSkillContributionForGroup,
+  getPrimaryPurchaseCostForSkill,
+  getSecondaryPurchaseCostForSkill,
   getSecondaryPurchaseCostForSpecialization,
   removeChargenPoint,
   removeSecondaryPoint,
@@ -152,7 +154,7 @@ interface RuleStatusItem {
 }
 
 interface SkillBrowseRow {
-  derivedSourceLabel?: string;
+  grantedSourceLabel?: string;
   displayName: string;
   evaluation: ReturnType<typeof evaluateSkillSelection>;
   isNormalAccess: boolean;
@@ -361,6 +363,16 @@ export function getSpecializationPurchaseState(input: {
         )
       : undefined
   };
+}
+
+function getOrdinarySkillNextCost(input: {
+  isNormalAccess: boolean;
+  progression: CharacterProgression;
+  skill: SkillDefinition;
+}): number {
+  return input.isNormalAccess
+    ? getPrimaryPurchaseCostForSkill(input.progression, input.skill)
+    : getSecondaryPurchaseCostForSkill(input.progression, input.skill);
 }
 
 function formatSocietyBandLabels(society: SocietyOption): string {
@@ -675,7 +687,7 @@ interface RolledProfileCardModel {
 
 interface SkillAllocationMetrics {
   avgStats: number;
-  derivedXp: number;
+  grantedXp: number;
   flexibleXp: number;
   groupXp: number;
   literacyWarning?: string;
@@ -736,14 +748,14 @@ export function getSkillAllocationMetrics(input: {
       input.draftView.skills.find((item) => item.skillId === input.skill.id && item.languageName) ??
       input.draftView.skills.find((item) => item.skillId === input.skill.id);
   const groupXp = skillView?.groupLevel ?? 0;
-  const derivedXp = skillView?.relationshipGrantedSkillLevel ?? 0;
+  const grantedXp = skillView?.relationshipGrantedSkillLevel ?? 0;
   const skillXp = skillView?.specificSkillLevel ?? 0;
   const avgStats = skillView?.linkedStatAverage ?? getSkillLinkedStatAverage(input.profile, input.skill);
-  const totalXp = groupXp + skillXp + derivedXp;
+  const totalXp = groupXp + skillXp + grantedXp;
 
   return {
     avgStats,
-    derivedXp,
+    grantedXp,
     flexibleXp: skillView?.secondaryRanks ?? 0,
     groupXp,
     literacyWarning: skillView?.literacyWarning,
@@ -770,7 +782,7 @@ export function getGroupScopedSkillAllocationMetrics(input: {
     progression: input.progression,
     skill: input.skill
   });
-  const totalXp = groupXp + metrics.skillXp + metrics.derivedXp;
+  const totalXp = groupXp + metrics.skillXp + metrics.grantedXp;
 
   return {
     ...metrics,
@@ -811,7 +823,7 @@ export function buildConcreteLanguageBrowseRows(input: {
       });
 
       return {
-        derivedSourceLabel: formatDerivedSkillSourceLabel({
+        grantedSourceLabel: formatDerivedSkillSourceLabel({
           sourceSkillName: skillView?.relationshipSourceSkillName,
           sourceType: skillView?.relationshipSourceType
         }),
@@ -1155,10 +1167,10 @@ export default function ChargenWizard() {
       return [
         skill.id,
         {
-          derivedSourceLabel: formatDerivedSkillSourceLabel({
-            sourceSkillName: skillView?.relationshipSourceSkillName,
-            sourceType: skillView?.relationshipSourceType
-          }),
+        grantedSourceLabel: formatDerivedSkillSourceLabel({
+          sourceSkillName: skillView?.relationshipSourceSkillName,
+          sourceType: skillView?.relationshipSourceType
+        }),
           displayName: getSkillDisplayName({
             languageName: skillView?.languageName,
             skill
@@ -1270,7 +1282,7 @@ export default function ChargenWizard() {
 
           return {
             avgStats: skillView.linkedStatAverage,
-            derivedSkillXp: skillView.relationshipGrantedSkillLevel ?? 0,
+            grantedSkillXp: skillView.relationshipGrantedSkillLevel ?? 0,
             literacyWarning: skillView.literacyWarning,
             skillType: getPlayerFacingSkillBucket(skill),
             skillGroupXp: skillView.groupLevel,
@@ -1316,13 +1328,13 @@ export default function ChargenWizard() {
       });
 
       return {
-        derivedSourceLabel: specializationView
+        grantedSourceLabel: specializationView
           ? formatDerivedSkillSourceLabel({
               sourceSkillName: specializationView.relationshipGrantedSourceSkillName,
               sourceType: specializationView.relationshipGrantedSourceType
             })
           : undefined,
-        derivedSpecializationLevel:
+        grantedSpecializationLevel:
           specializationView?.relationshipGrantedSpecializationLevel ?? 0,
         evaluation,
         parentSkillLevel: (parentMetrics?.groupXp ?? 0) + (parentMetrics?.skillXp ?? 0),
@@ -1987,7 +1999,7 @@ export default function ChargenWizard() {
           <strong>Group XP</strong>
           <strong>Ordinary</strong>
           <strong>Flexible</strong>
-          <strong>Derived</strong>
+          <strong>Granted</strong>
           <strong>Total XP</strong>
           <strong>Actions</strong>
         </div>
@@ -2004,6 +2016,11 @@ export default function ChargenWizard() {
               playerFacingSkillBucketDefinitions.find((definition) => definition.id === skillType)
                 ?.label ?? skillType;
             const isDetailOpen = expandedSkillDetails.includes(row.rowKey);
+            const nextCost = getOrdinarySkillNextCost({
+              isNormalAccess: row.isNormalAccess,
+              progression,
+              skill: row.skill
+            });
             const dependencySummaries = row.skill.dependencies.map((dependency) => {
               const dependencyRow = skillRowsById.get(dependency.skillId);
               const dependencySkill = content.skills.find((skill) => skill.id === dependency.skillId);
@@ -2058,11 +2075,14 @@ export default function ChargenWizard() {
                         {isDetailOpen ? "Hide details" : "Details"}
                       </button>
                     </div>
+                    <div style={{ color: "#5e5a50", fontSize: "0.8rem" }}>
+                      Next cost {nextCost} {row.isNormalAccess ? "ordinary/flexible" : "flexible"} points
+                    </div>
                   </div>
                   <div>{row.metrics.groupXp}</div>
                   <div>{row.metrics.ordinaryXp}</div>
                   <div>{row.metrics.flexibleXp}</div>
-                  <div>{row.metrics.derivedXp}</div>
+                  <div>{row.metrics.grantedXp}</div>
                   <div>{row.metrics.totalXp}</div>
                   <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
                     <button
@@ -2127,15 +2147,15 @@ export default function ChargenWizard() {
                         Group-derived value {row.metrics.groupXp}
                       </span>
                       <span style={getBadgeStyle({ muted: true })}>
-                        Relationship grant preview {row.metrics.derivedXp}
+                        Relationship grant preview {row.metrics.grantedXp}
                       </span>
                       <span style={getBadgeStyle({ muted: true })}>
                         Effective total {row.metrics.totalXp}
                       </span>
                     </div>
-                    {row.derivedSourceLabel ? (
+                    {row.grantedSourceLabel ? (
                       <div style={{ color: "#5e5a50", fontSize: "0.82rem" }}>
-                        {row.derivedSourceLabel}
+                        {row.grantedSourceLabel}
                       </div>
                     ) : null}
                     <div style={{ color: "#5e5a50", fontSize: "0.82rem" }}>
@@ -3636,10 +3656,11 @@ export default function ChargenWizard() {
               borderRadius: 12,
               display: "grid",
               gap: "1rem",
+              order: 8,
               padding: "1rem"
             }}
           >
-        <h2 style={{ margin: 0 }}>7. Specializations</h2>
+        <h2 style={{ margin: 0 }}>8. Specializations</h2>
 
         <div style={{ fontSize: "0.95rem" }}>
           Specializations use flexible points and are gated by the parent skill. The default list
@@ -3756,9 +3777,9 @@ export default function ChargenWizard() {
                         <span>{row.specialization.name}</span>
                         <span style={getBadgeStyle({ muted: true })}>Specialization</span>
                       </div>
-                      {row.derivedSourceLabel ? (
+                      {row.grantedSourceLabel ? (
                         <div style={{ color: "#5e5a50", fontSize: "0.8rem" }}>
-                          {row.derivedSourceLabel}
+                          {row.grantedSourceLabel}
                         </div>
                       ) : null}
                       {purchaseState.nextCost !== undefined ? (
@@ -3776,9 +3797,9 @@ export default function ChargenWizard() {
                     <div>{row.parentSkillLevel}</div>
                     <div>
                       <div>{row.secondaryRanks}</div>
-                      {row.derivedSpecializationLevel > 0 ? (
+                      {row.grantedSpecializationLevel > 0 ? (
                         <div style={{ color: "#5e5a50", fontSize: "0.8rem" }}>
-                          +{row.derivedSpecializationLevel} grant preview
+                          +{row.grantedSpecializationLevel} grant preview
                         </div>
                       ) : null}
                     </div>
@@ -3838,10 +3859,11 @@ export default function ChargenWizard() {
               borderRadius: 12,
               display: "grid",
               gap: "0.75rem",
+              order: 7,
               padding: "1rem"
             }}
           >
-        <h2 style={{ margin: 0 }}>8. Other skills</h2>
+        <h2 style={{ margin: 0 }}>7. Other skills</h2>
         <div style={{ display: "grid", gap: "0.75rem" }}>
             <div
               style={{
@@ -3942,6 +3964,7 @@ export default function ChargenWizard() {
           borderRadius: 12,
           display: "grid",
           gap: "1rem",
+          order: 9,
           padding: "1rem"
         }}
       >
@@ -4022,7 +4045,7 @@ export default function ChargenWizard() {
                     <div>{skill.avgStats}</div>
                     <div>{skill.skillGroupXp}</div>
                     <div>{skill.skillXp}</div>
-                    <div>{skill.derivedSkillXp}</div>
+                    <div>{skill.grantedSkillXp}</div>
                     <div>{skill.totalXp}</div>
                     <div>{skill.totalSkillLevel}</div>
                   </div>
@@ -4042,6 +4065,7 @@ export default function ChargenWizard() {
           borderRadius: 12,
           display: "grid",
           gap: "1rem",
+          order: 10,
           padding: "1rem"
         }}
       >
@@ -4115,6 +4139,7 @@ export default function ChargenWizard() {
           borderRadius: 12,
           display: "grid",
           gap: "1rem",
+          order: 11,
           padding: "1rem"
         }}
       >
@@ -4196,6 +4221,7 @@ export default function ChargenWizard() {
           borderRadius: 12,
           display: "grid",
           gap: "0.75rem",
+          order: 12,
           padding: "1rem"
         }}
       >
