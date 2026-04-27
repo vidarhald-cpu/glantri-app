@@ -840,6 +840,14 @@ export function getFlexiblePoolTotal(
   return (resolvedStats.int ?? 0) + (resolvedStats.lck ?? 0);
 }
 
+function getAvailableFlexiblePoolTotal(input: {
+  profile: RolledCharacterProfile | undefined;
+  progression: CharacterProgression;
+}): number {
+  const profileDrivenTotal = getFlexiblePoolTotal(input.profile);
+  return profileDrivenTotal > 0 ? profileDrivenTotal : input.progression.secondaryPoolTotal;
+}
+
 export function createChargenProgression(mode: ChargenMode = "standard"): CharacterProgression {
   return recalculateProgression({
     chargenMode: mode,
@@ -1677,7 +1685,13 @@ export function spendSecondaryPoint(input: SpendSecondaryPointInput): SpendPoint
     });
     const cost = getSkillSpendCost(skillDefinition, skill.ranks > 0);
 
-    if (progression.secondaryPoolSpent + cost > progression.secondaryPoolTotal) {
+    if (
+      progression.secondaryPoolSpent + cost >
+      getAvailableFlexiblePoolTotal({
+        profile: input.profile,
+        progression
+      })
+    ) {
       return {
         error: "Not enough secondary points remaining for that skill purchase.",
         progression,
@@ -1744,7 +1758,8 @@ export function spendSecondaryPoint(input: SpendSecondaryPointInput): SpendPoint
 
     if (allowedParentGroupIds.length === 0) {
       return {
-        error: "That specialization is not exactly one society level above the current character.",
+        error:
+          "This specialization is outside the current society/profession access for its parent skill.",
         progression,
         warnings
       };
@@ -1764,7 +1779,13 @@ export function spendSecondaryPoint(input: SpendSecondaryPointInput): SpendPoint
   const specialization = ensureSpecializationExists(progression, specializationDefinition);
   const cost = getSpecializationSpendCost(specialization.secondaryRanks > 0);
 
-  if (progression.secondaryPoolSpent + cost > progression.secondaryPoolTotal) {
+  if (
+    progression.secondaryPoolSpent + cost >
+    getAvailableFlexiblePoolTotal({
+      profile: input.profile,
+      progression
+    })
+  ) {
     return {
       error: "Not enough secondary points remaining for that specialization purchase.",
       progression,

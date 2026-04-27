@@ -14,7 +14,8 @@ import {
   buildConcreteLanguageBrowseRows,
   getGroupScopedSkillAllocationMetrics,
   getSkillAllocationMetrics,
-  getSkillDisplayGroupId
+  getSkillDisplayGroupId,
+  getSpecializationPurchaseState
 } from "./ChargenWizard";
 
 const combatContent = {
@@ -844,6 +845,274 @@ describe("ChargenWizard combat allocation runtime helpers", () => {
       effectiveSkillNumber: 17,
       relationshipGrantedSkillLevel: 7,
       relationshipSourceSkillName: "1-h edged"
+    });
+  });
+
+  it("keeps Fencing purchasable when flexible points remain and a bridge grant preview is present", () => {
+    const bridgeContent = validateCanonicalContent({
+      skillGroups: [
+        {
+          id: "combat_group",
+          name: "Combat",
+          sortOrder: 1
+        }
+      ],
+      skills: [
+        {
+          allowsSpecializations: true,
+          category: "ordinary",
+          dependencies: [],
+          dependencySkillIds: [],
+          groupId: "combat_group",
+          groupIds: ["combat_group"],
+          id: "one_handed_edged",
+          linkedStats: ["dex"],
+          name: "1-h edged",
+          requiresLiteracy: "no",
+          sortOrder: 1
+        }
+      ],
+      specializations: [
+        {
+          id: "fencing",
+          minimumGroupLevel: 6,
+          minimumParentLevel: 6,
+          name: "Fencing",
+          skillId: "one_handed_edged",
+          sortOrder: 1,
+          specializationBridge: {
+            parentExcessOffset: 5,
+            parentSkillId: "one_handed_edged",
+            reverseFactor: 1,
+            threshold: 6
+          }
+        }
+      ],
+      professionFamilies: [{ id: "warrior", name: "Warrior" }],
+      professionSkills: [],
+      professions: [{ familyId: "warrior", id: "soldier", name: "Soldier", subtypeName: "Soldier" }],
+      societies: [],
+      societyBandSkillAccess: [],
+      societyLevels: [
+        {
+          professionIds: ["soldier"],
+          skillGroupIds: ["combat_group"],
+          skillIds: [],
+          socialClass: "Common",
+          societyId: "glantri",
+          societyLevel: 1,
+          societyName: "Glantri"
+        },
+        {
+          professionIds: [],
+          skillGroupIds: [],
+          skillIds: [],
+          socialClass: "Common",
+          societyId: "glantri",
+          societyLevel: 2,
+          societyName: "Glantri"
+        },
+        {
+          professionIds: [],
+          skillGroupIds: [],
+          skillIds: [],
+          socialClass: "Common",
+          societyId: "glantri",
+          societyLevel: 3,
+          societyName: "Glantri"
+        },
+        {
+          professionIds: [],
+          skillGroupIds: [],
+          skillIds: [],
+          socialClass: "Common",
+          societyId: "glantri",
+          societyLevel: 4,
+          societyName: "Glantri"
+        }
+      ]
+    });
+    const profile = {
+      distractionLevel: 0,
+      id: "profile-fencer",
+      label: "Fencer",
+      rolledStats: {
+        cha: 10,
+        com: 10,
+        con: 10,
+        dex: 10,
+        health: 10,
+        int: 20,
+        lck: 13,
+        pow: 10,
+        siz: 10,
+        str: 10,
+        will: 10
+      },
+      societyLevel: 0
+    };
+    const progression = createChargenProgression();
+    progression.skillGroups = [
+      {
+        gms: 0,
+        grantedRanks: 0,
+        groupId: "combat_group",
+        primaryRanks: 6,
+        ranks: 6,
+        secondaryRanks: 0
+      }
+    ];
+    const draftView = buildChargenDraftView({
+      content: bridgeContent,
+      professionId: "soldier",
+      profile,
+      progression,
+      societyId: "glantri",
+      societyLevel: 1
+    });
+    const purchaseState = getSpecializationPurchaseState({
+      skillAllocationContext: {
+        content: bridgeContent,
+        professionId: "soldier",
+        profile,
+        progression,
+        societyId: "glantri",
+        societyLevel: 1
+      },
+      specializationId: "fencing"
+    });
+
+    expect(draftView.secondaryPoolAvailable).toBe(33);
+    expect(draftView.specializations.find((item) => item.specializationId === "fencing")).toMatchObject({
+      relationshipGrantedPreviewLevel: 1
+    });
+    expect(purchaseState).toMatchObject({
+      canAllocate: true,
+      nextCost: 4
+    });
+  });
+
+  it("surfaces the real specialization blocker text instead of the legacy society-level wording", () => {
+    const content = validateCanonicalContent({
+      skillGroups: [
+        {
+          id: "surgery_group",
+          name: "Surgery Group",
+          sortOrder: 1
+        }
+      ],
+      skills: [
+        {
+          allowsSpecializations: true,
+          category: "ordinary",
+          dependencies: [],
+          dependencySkillIds: [],
+          groupId: "surgery_group",
+          groupIds: ["surgery_group"],
+          id: "medicine",
+          linkedStats: ["int"],
+          name: "Medicine",
+          requiresLiteracy: "no",
+          sortOrder: 1
+        },
+        {
+          allowsSpecializations: false,
+          category: "ordinary",
+          dependencies: [],
+          dependencySkillIds: [],
+          groupId: "surgery_group",
+          groupIds: ["surgery_group"],
+          id: "first_aid",
+          linkedStats: ["int"],
+          name: "First Aid",
+          requiresLiteracy: "no",
+          sortOrder: 2
+        }
+      ],
+      specializations: [
+        {
+          id: "surgery",
+          minimumGroupLevel: 6,
+          minimumParentLevel: 6,
+          name: "Surgery",
+          skillId: "medicine",
+          sortOrder: 1
+        }
+      ],
+      professionFamilies: [{ id: "scholar", name: "Scholar" }],
+      professionSkills: [],
+      professions: [{ familyId: "scholar", id: "physician", name: "Physician", subtypeName: "Physician" }],
+      societies: [],
+      societyBandSkillAccess: [],
+      societyLevels: [
+        {
+          professionIds: ["physician"],
+          skillGroupIds: [],
+          skillIds: [],
+          socialClass: "Common",
+          societyId: "glantri",
+          societyLevel: 1,
+          societyName: "Glantri"
+        },
+        {
+          professionIds: [],
+          skillGroupIds: [],
+          skillIds: [],
+          socialClass: "Common",
+          societyId: "glantri",
+          societyLevel: 2,
+          societyName: "Glantri"
+        },
+        {
+          professionIds: [],
+          skillGroupIds: [],
+          skillIds: [],
+          socialClass: "Common",
+          societyId: "glantri",
+          societyLevel: 3,
+          societyName: "Glantri"
+        },
+        {
+          professionIds: [],
+          skillGroupIds: [],
+          skillIds: [],
+          socialClass: "Common",
+          societyId: "glantri",
+          societyLevel: 4,
+          societyName: "Glantri"
+        }
+      ]
+    });
+    const progression = createChargenProgression();
+    progression.skills = [
+      {
+        category: "ordinary",
+        grantedRanks: 0,
+        groupId: "surgery_group",
+        level: 6,
+        primaryRanks: 0,
+        ranks: 6,
+        relationshipGrantedRanks: 0,
+        secondaryRanks: 6,
+        skillId: "medicine"
+      }
+    ];
+
+    const purchaseState = getSpecializationPurchaseState({
+      skillAllocationContext: {
+        content,
+        professionId: "physician",
+        profile: undefined,
+        progression,
+        societyId: "glantri",
+        societyLevel: 1
+      },
+      specializationId: "surgery"
+    });
+
+    expect(purchaseState).toMatchObject({
+      canAllocate: false,
+      previewMessage: "This specialization is outside the current society/profession access for its parent skill."
     });
   });
 

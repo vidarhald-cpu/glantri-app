@@ -404,6 +404,7 @@ describe("admin view models", () => {
   it("surfaces specialization-bridge relationships for parent and child skills", () => {
     const rows = buildSkillAdminRows(content);
     const bowRow = rows.find((row) => row.id === "bow");
+    const crossbowRow = rows.find((row) => row.id === "crossbow");
     const longbowRow = rows.find((row) => row.id === "longbow");
     const edgedRow = rows.find((row) => row.id === "one_handed_edged");
 
@@ -430,6 +431,21 @@ describe("admin view models", () => {
         sourceType: "skill"
       }
     ]);
+    expect(crossbowRow?.incomingDerivedGrants).toEqual([
+      {
+        factorPercent: 50,
+        sourceSkillId: "bow",
+        sourceSkillName: "Bow"
+      }
+    ]);
+    expect(crossbowRow?.outgoingDerivedGrants).toEqual([
+      {
+        factorPercent: 50,
+        targetSkillId: "bow",
+        targetSkillName: "Bow"
+      }
+    ]);
+    expect(edgedRow?.relationshipSummaryBadges).toContain("Specializes 1");
     expect(edgedRow?.outgoingSpecializationBridges).toEqual([
       {
         parentExcessOffset: 5,

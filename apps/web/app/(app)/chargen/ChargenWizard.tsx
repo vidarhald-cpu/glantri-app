@@ -47,6 +47,7 @@ import {
   finalizeChargenDraft,
   generateProfiles,
   getChargenSkillContributionForGroup,
+  getSecondaryPurchaseCostForSpecialization,
   removeChargenPoint,
   removeSecondaryPoint,
   resolveEffectiveProfessionPackage,
@@ -309,6 +310,57 @@ function formatActionError(error: string | undefined): string | undefined {
 
 function formatPreviewList(values: string[]): string {
   return values.length > 0 ? values.join(", ") : "None";
+}
+
+export function getSpecializationPurchaseState(input: {
+  specializationId: string;
+  skillAllocationContext:
+    | {
+        content: CanonicalContent;
+        professionId: string;
+        profile: RolledCharacterProfile | undefined;
+        progression: CharacterProgression;
+        societyId: string | undefined;
+        societyLevel: number;
+      }
+    | undefined;
+}): {
+  canAllocate: boolean;
+  nextCost?: number;
+  previewMessage?: string;
+} {
+  if (!input.skillAllocationContext) {
+    return {
+      canAllocate: false
+    };
+  }
+
+  const result = spendSecondaryPoint({
+    ...input.skillAllocationContext,
+    targetId: input.specializationId,
+    targetType: "specialization"
+  });
+
+  if (result.error) {
+    return {
+      canAllocate: false,
+      previewMessage: formatActionError(result.error) ?? result.error
+    };
+  }
+
+  const specializationDefinition = input.skillAllocationContext.content.specializations.find(
+    (specialization) => specialization.id === input.specializationId
+  );
+
+  return {
+    canAllocate: true,
+    nextCost: specializationDefinition
+      ? getSecondaryPurchaseCostForSpecialization(
+          input.skillAllocationContext.progression,
+          specializationDefinition
+        )
+      : undefined
+  };
 }
 
 function formatSocietyBandLabels(society: SocietyOption): string {
@@ -3548,10 +3600,15 @@ export default function ChargenWizard() {
 
             {visibleSpecializationRows.map((row) => {
               const ruleStatusItems = getRuleStatusItems(row.evaluation);
-              const rowFeedback =
-                rowActionFeedback[
-                  getRowActionFeedbackKey(row.specialization.id, "specialization")
-                ];
+              const purchaseState = getSpecializationPurchaseState({
+                skillAllocationContext,
+                specializationId: row.specialization.id
+              });
+              const rowFeedback = purchaseState.previewMessage
+                ? rowActionFeedback[
+                    getRowActionFeedbackKey(row.specialization.id, "specialization")
+                  ] ?? purchaseState.previewMessage
+                : undefined;
 
               return (
                 <div
@@ -3586,6 +3643,11 @@ export default function ChargenWizard() {
                           {row.derivedSourceLabel}
                         </div>
                       ) : null}
+                      {purchaseState.nextCost !== undefined ? (
+                        <div style={{ color: "#5e5a50", fontSize: "0.8rem" }}>
+                          Next cost {purchaseState.nextCost} flexible points
+                        </div>
+                      ) : null}
                     </div>
                     <div>
                       <div>{row.parentSkillName}</div>
@@ -3605,7 +3667,7 @@ export default function ChargenWizard() {
                     <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
                       <button
                         aria-label={`Add ${row.specialization.name}`}
-                        disabled={!skillAllocationContext || !row.evaluation.isAllowed}
+                        disabled={!purchaseState.canAllocate}
                         onClick={() => handleAllocateSpecialization(row.specialization.id)}
                         type="button"
                       >

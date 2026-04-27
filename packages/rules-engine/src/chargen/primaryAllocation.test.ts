@@ -576,7 +576,7 @@ describe("derived skill relationships in chargen drafts", () => {
     expect(result.warnings).toEqual([]);
   });
 
-  it("does not count derived specialization XP as flexible-point spend and charges bridge specialization purchases from direct ranks only", () => {
+  it("does not count derived specialization XP as flexible-point spend and uses the same profile-based flexible pool as the page summary", () => {
     const bridgePurchaseContent = validateCanonicalContent({
       skillGroups: [
         {
@@ -659,7 +659,6 @@ describe("derived skill relationships in chargen drafts", () => {
       ]
     });
     const progression = createChargenProgression();
-    progression.secondaryPoolTotal = 33;
     progression.skillGroups = [
       {
         gms: 0,
@@ -722,6 +721,7 @@ describe("derived skill relationships in chargen drafts", () => {
 
     const firstPurchase = spendSecondaryPoint({
       content: bridgePurchaseContent,
+      profile: flexibleProfile,
       progression,
       societyId: "glantri",
       societyLevel: 1,
@@ -756,6 +756,7 @@ describe("derived skill relationships in chargen drafts", () => {
 
     const secondPurchase = spendSecondaryPoint({
       content: bridgePurchaseContent,
+      profile: flexibleProfile,
       progression: firstPurchase.progression,
       societyId: "glantri",
       societyLevel: 1,
@@ -769,6 +770,7 @@ describe("derived skill relationships in chargen drafts", () => {
 
     const exhausted = spendSecondaryPoint({
       content: bridgePurchaseContent,
+      profile: flexibleProfile,
       progression: {
         ...progression,
         secondaryPoolSpent: 33
@@ -780,6 +782,112 @@ describe("derived skill relationships in chargen drafts", () => {
     });
 
     expect(exhausted.error).toBe("Not enough secondary points remaining for that specialization purchase.");
+  });
+
+  it("returns a clearer legacy specialization access message for non-bridge rows", () => {
+    const content = validateCanonicalContent({
+      skillGroups: [
+        {
+          id: "medicine_group",
+          name: "Medicine",
+          sortOrder: 1
+        }
+      ],
+      skills: [
+        {
+          allowsSpecializations: true,
+          category: "ordinary",
+          dependencies: [],
+          dependencySkillIds: [],
+          derivedGrants: [],
+          groupId: "medicine_group",
+          groupIds: ["medicine_group"],
+          id: "surgery_parent",
+          linkedStats: ["int"],
+          name: "Surgery Parent",
+          requiresLiteracy: "no",
+          sortOrder: 1
+        }
+      ],
+      specializations: [
+        {
+          id: "surgery",
+          minimumGroupLevel: 6,
+          minimumParentLevel: 6,
+          name: "Surgery",
+          skillId: "surgery_parent",
+          sortOrder: 1
+        }
+      ],
+      professionFamilies: [],
+      professions: [],
+      professionSkills: [],
+      societyLevels: [
+        {
+          professionIds: [],
+          skillGroupIds: [],
+          skillIds: [],
+          socialClass: "Common",
+          societyId: "glantri",
+          societyLevel: 1,
+          societyName: "Glantri"
+        },
+        {
+          professionIds: [],
+          skillGroupIds: [],
+          skillIds: [],
+          socialClass: "Guild",
+          societyId: "glantri",
+          societyLevel: 2,
+          societyName: "Glantri"
+        },
+        {
+          professionIds: [],
+          skillGroupIds: [],
+          skillIds: [],
+          socialClass: "Patrician",
+          societyId: "glantri",
+          societyLevel: 3,
+          societyName: "Glantri"
+        },
+        {
+          professionIds: [],
+          skillGroupIds: [],
+          skillIds: [],
+          socialClass: "Noble",
+          societyId: "glantri",
+          societyLevel: 4,
+          societyName: "Glantri"
+        }
+      ]
+    });
+
+    const result = spendSecondaryPoint({
+      content,
+      progression: {
+        ...createChargenProgression(),
+        skills: [
+          {
+            category: "ordinary",
+            grantedRanks: 0,
+            groupId: "medicine_group",
+            level: 6,
+            primaryRanks: 6,
+            ranks: 6,
+            secondaryRanks: 0,
+            skillId: "surgery_parent"
+          }
+        ]
+      },
+      targetId: "surgery",
+      targetType: "specialization",
+      societyId: "glantri",
+      societyLevel: 1
+    });
+
+    expect(result.error).toBe(
+      "This specialization is outside the current society/profession access for its parent skill."
+    );
   });
 });
 
