@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { CanonicalContent } from "@glantri/content";
+import { defaultCanonicalContent, type CanonicalContent } from "@glantri/content";
 
 import {
   buildProfessionFamilyFilterOptions,
@@ -254,12 +254,6 @@ const content = {
       requiresLiteracy: "no",
       societyLevel: 2,
       sortOrder: 11,
-      specializationBridge: {
-        parentExcessOffset: 5,
-        parentSkillId: "bow",
-        reverseFactor: 1,
-        threshold: 6
-      },
       specializationOfSkillId: "bow"
     }
   ],
@@ -300,6 +294,20 @@ const content = {
   ],
   specializations: [
     {
+      id: "longbow",
+      minimumGroupLevel: 6,
+      minimumParentLevel: 6,
+      name: "Longbow",
+      skillId: "bow",
+      sortOrder: 11,
+      specializationBridge: {
+        parentExcessOffset: 5,
+        parentSkillId: "bow",
+        reverseFactor: 1,
+        threshold: 6
+      }
+    },
+    {
       id: "fencing",
       minimumGroupLevel: 6,
       minimumParentLevel: 6,
@@ -327,6 +335,7 @@ describe("admin view models", () => {
       "Delta Skill",
       "Epsilon Skill",
       "Eta Skill",
+      "Fencing",
       "Gamma Skill",
       "Longbow",
       "Zeta Skill"
@@ -420,7 +429,7 @@ describe("admin view models", () => {
         parentExcessOffset: 5,
         reverseFactorPercent: 100,
         targetName: "Longbow",
-        targetType: "skill",
+        targetType: "specialization",
         threshold: 6
       }
     ]);
@@ -453,6 +462,52 @@ describe("admin view models", () => {
         targetName: "Fencing",
         targetType: "specialization",
         threshold: 6
+      }
+    ]);
+  });
+
+  it("includes specialization-only entries in the skill admin catalog", () => {
+    const rows = buildSkillAdminRows(content);
+    const fencingRow = rows.find((row) => row.id === "fencing");
+
+    expect(fencingRow).toMatchObject({
+      id: "fencing",
+      name: "Fencing",
+      primaryGroup: "Z Heavy Group",
+      skillCategory: "combat",
+      skillType: "specialization",
+      specializationOf: "1-h edged"
+    });
+    expect(fencingRow?.incomingSpecializationBridges).toEqual([
+      {
+        factorPercent: 100,
+        sourceName: "1-h edged",
+        sourceType: "skill"
+      }
+    ]);
+  });
+
+  it("surfaces default Glantri Fencing and Longbow specialization relationships in admin rows", () => {
+    const rows = buildSkillAdminRows(defaultCanonicalContent);
+    const fencingRow = rows.find((row) => row.id === "fencing");
+    const longbowRow = rows.find((row) => row.id === "longbow");
+
+    expect(fencingRow).toMatchObject({
+      name: "Fencing",
+      skillCategory: "combat",
+      skillType: "specialization",
+      specializationOf: "1-h edged"
+    });
+    expect(longbowRow).toMatchObject({
+      name: "Longbow",
+      skillCategory: "combat",
+      specializationOf: "Bow"
+    });
+    expect(longbowRow?.incomingSpecializationBridges).toEqual([
+      {
+        factorPercent: 100,
+        sourceName: "Bow",
+        sourceType: "skill"
       }
     ]);
   });

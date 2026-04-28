@@ -202,11 +202,10 @@ export default function SkillsAdminPage() {
     [allRows, skillCategoryFilter]
   );
   const selectedVisibleRow = rows.find((row) => row.id === selectedSkillId) ?? rows[0];
-  const selectedSkill =
-    content.skills.find((skill) => skill.id === (selectedVisibleRow?.id ?? selectedSkillId)) ??
-    content.skills.slice().sort((left, right) => left.name.localeCompare(right.name))[0];
   const selectedRow =
-    selectedVisibleRow ?? allRows.find((row) => row.id === selectedSkill.id);
+    selectedVisibleRow ??
+    allRows.find((row) => row.id === selectedSkillId) ??
+    allRows.slice().sort((left, right) => left.name.localeCompare(right.name))[0];
 
   useEffect(() => {
     if (!selectedSkillId && rows[0]) {
@@ -214,13 +213,7 @@ export default function SkillsAdminPage() {
     }
   }, [rows, selectedSkillId]);
 
-  useEffect(() => {
-    if (selectedSkill) {
-      setSelectedSkillId(selectedSkill.id);
-    }
-  }, [selectedSkill]);
-
-  if (!selectedSkill) {
+  if (!selectedRow) {
     return (
       <AdminPanel title="Skills">
         <div>No skill definitions are available in the current canonical content.</div>
@@ -296,21 +289,21 @@ export default function SkillsAdminPage() {
           subtitle="The table centers the canonical skill model rather than derived profession or society reach. Select a skill to inspect its structure, category, and rule-facing relationships."
           title="Skill Catalog"
         >
-          <SkillsReviewTable onInspect={setSelectedSkillId} rows={rows} selectedId={selectedSkill.id} />
+          <SkillsReviewTable onInspect={setSelectedSkillId} rows={rows} selectedId={selectedRow.id} />
         </AdminPanel>
 
         <div style={{ display: "grid", gap: "1rem" }}>
           <AdminPanel
             subtitle={
-              selectedSkill.description?.trim() ||
-              selectedSkill.shortDescription?.trim() ||
+              selectedRow.description.trim() ||
+              selectedRow.shortDescription.trim() ||
               "No canonical skill description recorded."
             }
-            title={selectedSkill.name}
+            title={selectedRow.name}
           >
             <div style={{ display: "grid", gap: "0.85rem" }}>
               <div style={{ display: "grid", gap: "0.75rem", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))" }}>
-                <AdminMetric label="Society level" value={`L${selectedRow?.societyLevel ?? selectedSkill.societyLevel}`} />
+                <AdminMetric label="Society level" value={`L${selectedRow.societyLevel}`} />
                 <AdminMetric label="Cross-listed groups" value={selectedRow?.optionalGroupCount ?? 0} />
                 <AdminMetric label="Professions" value={selectedRow?.professionNames.length ?? 0} />
                 <AdminMetric label="Foundational access" value={selectedRow?.foundationalAccessBandsSummary ?? "—"} />
@@ -435,8 +428,8 @@ export default function SkillsAdminPage() {
                                   }}
                                   title={
                                     isAccessible
-                                      ? `${selectedSkill.name} is accessible for main skill-point spending in ${societyRow.societyName} at band L${accessBand}.`
-                                      : `${selectedSkill.name} is not accessible in ${societyRow.societyName} at band L${accessBand}.`
+                                      ? `${selectedRow.name} is accessible for main skill-point spending in ${societyRow.societyName} at band L${accessBand}.`
+                                      : `${selectedRow.name} is not accessible in ${societyRow.societyName} at band L${accessBand}.`
                                   }
                                 >
                                   <span style={{ fontWeight: isAccessible ? 700 : 500 }}>
@@ -527,6 +520,9 @@ export default function SkillsAdminPage() {
                         No melee cross-training sources are currently resolved.
                       </div>
                     )}
+                  </div>
+                  <div>
+                    <strong>Parent specialization:</strong> {selectedRow?.specializationOf || "None"}
                   </div>
                   <div>
                     <strong>Specialization bridge targets:</strong>

@@ -1,6 +1,10 @@
 import { collectCanonicalContentWarnings, type CanonicalContent } from "@glantri/content";
 import { equipmentTemplates } from "@glantri/content/equipment";
-import { getPlayerFacingSkillCategoryId, getSkillGroupIds } from "@glantri/domain";
+import {
+  getPlayerFacingSkillCategoryId,
+  getSkillGroupIds,
+  type SkillDefinition
+} from "@glantri/domain";
 import { getMeleeCrossTrainingFactor, resolveEffectiveProfessionPackage } from "@glantri/rules-engine";
 import type { ArmorTemplate, GearTemplate, ShieldTemplate, ValuableTemplate, WeaponTemplate } from "@glantri/domain";
 
@@ -78,6 +82,7 @@ export interface SkillAdminRow {
   professionNames: string[];
   relationshipSummaryBadges: string[];
   secondaryOf: string;
+  description: string;
   skillCategory: string;
   shortDescription: string;
   skillType: string;
@@ -540,9 +545,13 @@ export function buildSkillRelationshipSummary(input: {
   skillId: string;
 }) {
   const skillsById = new Map(input.content.skills.map((skill) => [skill.id, skill]));
+  const specializationsById = new Map(
+    input.content.specializations.map((specialization) => [specialization.id, specialization])
+  );
   const skill = skillsById.get(input.skillId);
+  const specialization = specializationsById.get(input.skillId);
 
-  if (!skill) {
+  if (!skill && !specialization) {
     return {
       hasSkillRelationships: false,
       incomingDerivedGrants: [],
@@ -555,6 +564,45 @@ export function buildSkillRelationshipSummary(input: {
       relationshipSummaryBadges: []
     };
   }
+
+  if (!skill && specialization) {
+    const parentSkill = skillsById.get(specialization.skillId);
+    const incomingSpecializationBridges = specialization.specializationBridge
+      ? [
+          {
+            factorPercent: Math.floor(specialization.specializationBridge.reverseFactor * 100),
+            sourceName:
+              skillsById.get(specialization.specializationBridge.parentSkillId)?.name ??
+              specialization.specializationBridge.parentSkillId,
+            sourceType: "skill" as const
+          }
+        ]
+      : [];
+    const relationshipSummaryBadges = [
+      ...(incomingSpecializationBridges.length > 0
+        ? [`Specialized from ${incomingSpecializationBridges.length}`]
+        : []),
+      ...(parentSkill ? [`Parent ${parentSkill.name}`] : [])
+    ];
+
+    return {
+      hasSkillRelationships: incomingSpecializationBridges.length > 0,
+      incomingDerivedGrants: [],
+      incomingMeleeCrossTraining: [],
+      incomingSpecializationBridges,
+      meleeCrossTraining: undefined,
+      outgoingDerivedGrants: [],
+      outgoingMeleeCrossTraining: [],
+      outgoingSpecializationBridges: [],
+      relationshipSummaryBadges
+    };
+  }
+
+  if (!skill) {
+    throw new Error(`Missing skill row for relationship summary "${input.skillId}".`);
+  }
+
+  const correspondingSpecializationBridge = specialization?.specializationBridge;
 
   const outgoingDerivedGrants = (skill.derivedGrants ?? [])
     .map((grant) => ({
@@ -669,11 +717,16 @@ export function buildSkillRelationshipSummary(input: {
   );
 
   const incomingSpecializationBridges = [
-    ...(skill.specializationBridge
+    ...(skill.specializationBridge ?? correspondingSpecializationBridge
       ? [
           {
-            factorPercent: Math.floor(skill.specializationBridge.reverseFactor * 100),
-            sourceName: skillsById.get(skill.specializationBridge.parentSkillId)?.name ?? skill.specializationBridge.parentSkillId,
+            factorPercent: Math.floor(
+              (skill.specializationBridge ?? correspondingSpecializationBridge)!.reverseFactor * 100
+            ),
+            sourceName:
+              skillsById.get(
+                (skill.specializationBridge ?? correspondingSpecializationBridge)!.parentSkillId
+              )?.name ?? (skill.specializationBridge ?? correspondingSpecializationBridge)!.parentSkillId,
             sourceType: "skill" as const
           }
         ]
@@ -787,9 +840,7 @@ export function buildSkillAdminRows(content: CanonicalContent): SkillAdminRow[] 
     };
   });
 
-  return [...content.skills]
-    .sort((left, right) => left.name.localeCompare(right.name) || left.sortOrder - right.sortOrder)
-    .map((skill) => {
+  function buildSkillRow(skill: SkillDefinition): SkillAdminRow {
       const relationshipSummary = buildSkillRelationshipSummary({
         content,
         skillId: skill.id
@@ -891,6 +942,7 @@ export function buildSkillAdminRows(content: CanonicalContent): SkillAdminRow[] 
         secondaryOf: skill.secondaryOfSkillId
           ? skillsById.get(skill.secondaryOfSkillId)?.name ?? skill.secondaryOfSkillId
           : "",
+        description: skill.description ?? "",
         skillCategory: getPlayerFacingSkillCategoryId(skill),
         shortDescription: skill.shortDescription ?? "",
         skillType: skill.category,
@@ -901,7 +953,83 @@ export function buildSkillAdminRows(content: CanonicalContent): SkillAdminRow[] 
           : "",
         theoretical: skill.isTheoretical
       };
+  }
+
+  function buildSpecializationOnlyRow(
+    specialization: CanonicalContent["specializations"][number]
+  ): SkillAdminRow | null {
+    const parentSkill = skillsById.get(specialization.skillId);
+
+    if (!parentSkill) {
+      return null;
+    }
+
+    const relationshipSummary = buildSkillRelationshipSummary({
+      content,
+      skillId: specialization.id
     });
+    const groupIds = getSkillGroupIds(parentSkill);
+    const primaryGroupId = parentSkill.groupId ?? groupIds[0];
+    const primaryGroup = primaryGroupId
+      ? skillGroupsById.get(primaryGroupId)?.name ?? primaryGroupId
+      : "";
+    const optionalGroupNames = uniqueSorted(
+      groupIds
+        .filter((groupId) => groupId !== primaryGroupId)
+        .map((groupId) => skillGroupsById.get(groupId)?.name ?? groupId)
+    );
+    const professionNames = uniqueSorted(
+      professionPackages
+        .filter((professionPackage) =>
+          professionPackage.reachableSkillIds.includes(parentSkill.id)
+        )
+        .map((professionPackage) => professionPackage.name)
+    );
+
+    return {
+      characteristics: formatCharacteristicList(parentSkill.linkedStats),
+      dependencies: [parentSkill.name],
+      description: specialization.description ?? "",
+      foundationalAccessBandsSummary: "—",
+      foundationalAccessMatrixRows: [],
+      foundationalAccessSlots: [],
+      groupNames: groupIds.map((groupId) => skillGroupsById.get(groupId)?.name ?? groupId),
+      hasSkillRelationships: relationshipSummary.hasSkillRelationships,
+      id: specialization.id,
+      incomingDerivedGrants: relationshipSummary.incomingDerivedGrants,
+      incomingMeleeCrossTraining: relationshipSummary.incomingMeleeCrossTraining,
+      incomingSpecializationBridges: relationshipSummary.incomingSpecializationBridges,
+      meleeCrossTraining: relationshipSummary.meleeCrossTraining,
+      name: specialization.name,
+      optionalGroupCount: optionalGroupNames.length,
+      optionalGroupNames,
+      outgoingDerivedGrants: relationshipSummary.outgoingDerivedGrants,
+      outgoingMeleeCrossTraining: relationshipSummary.outgoingMeleeCrossTraining,
+      outgoingSpecializationBridges: relationshipSummary.outgoingSpecializationBridges,
+      primaryGroup,
+      professionNames,
+      relationshipSummaryBadges: relationshipSummary.relationshipSummaryBadges,
+      secondaryOf: "",
+      skillCategory: getPlayerFacingSkillCategoryId(parentSkill),
+      shortDescription: specialization.description ?? "",
+      skillType: "specialization",
+      societyLevel: specialization.minimumParentLevel,
+      sortOrder: specialization.sortOrder,
+      specializationOf: parentSkill.name,
+      theoretical: parentSkill.isTheoretical
+    };
+  }
+
+  const skillRows = content.skills.map(buildSkillRow);
+  const skillIds = new Set(content.skills.map((skill) => skill.id));
+  const specializationRows = content.specializations
+    .filter((specialization) => !skillIds.has(specialization.id))
+    .map(buildSpecializationOnlyRow)
+    .filter((row): row is SkillAdminRow => row !== null);
+
+  return [...skillRows, ...specializationRows].sort(
+    (left, right) => left.name.localeCompare(right.name) || left.sortOrder - right.sortOrder
+  );
 }
 
 export function buildSkillMatrixRows(content: CanonicalContent): SkillMatrixRow[] {
