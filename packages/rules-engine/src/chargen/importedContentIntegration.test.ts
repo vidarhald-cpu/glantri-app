@@ -74,7 +74,7 @@ describe("imported content chargen integration", () => {
     }
 
     expect(purchase?.error).toBeUndefined();
-    expect(purchase?.spentCost).toBe(4);
+    expect(purchase?.spentCost).toBe(2);
   });
 
   it("allows at least one imported secondary skill purchase through chargen", () => {
@@ -115,7 +115,7 @@ describe("imported content chargen integration", () => {
     }
 
     expect(purchase?.error).toBeUndefined();
-    expect(purchase?.spentCost).toBe(2);
+    expect(purchase?.spentCost).toBe(1);
   });
 
   it("allows at least one imported specialization purchase through chargen when the gate is satisfied", () => {

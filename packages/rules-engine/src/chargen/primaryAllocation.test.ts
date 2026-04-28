@@ -4,9 +4,11 @@ import { validateCanonicalContent } from "@glantri/content";
 import type { CharacterProgression } from "@glantri/domain";
 
 import {
+  allocateChargenPoint,
   buildChargenDraftView,
   createChargenProgression,
   finalizeChargenDraft,
+  getPrimaryPurchaseCostForGroup,
   getPrimaryPurchaseCostForSkill,
   getSecondaryPurchaseCostForSkill,
   getSecondaryPurchaseCostForSpecialization,
@@ -462,7 +464,7 @@ describe("derived skill relationships in chargen drafts", () => {
     expect(draftView.secondaryPoolAvailable).toBe(0);
   });
 
-  it("uses direct purchased state rather than relationship grants when deriving ordinary skill purchase cost", () => {
+  it("uses individual skill pricing rather than relationship grants when deriving ordinary skill purchase cost", () => {
     const progression = createChargenProgression();
     progression.skills = [
       {
@@ -480,13 +482,13 @@ describe("derived skill relationships in chargen drafts", () => {
 
     expect(
       getPrimaryPurchaseCostForSkill(progression, chargenTestContent.skills.find((skill) => skill.id === "lore")!)
-    ).toBe(4);
+    ).toBe(2);
     expect(
       getSecondaryPurchaseCostForSkill(
         progression,
         chargenTestContent.skills.find((skill) => skill.id === "lore")!
       )
-    ).toBe(4);
+    ).toBe(2);
 
     const purchased = spendPrimaryPoint({
       content: chargenTestContent,
@@ -499,13 +501,123 @@ describe("derived skill relationships in chargen drafts", () => {
     });
 
     expect(purchased.error).toBeUndefined();
-    expect(purchased.spentCost).toBe(4);
+    expect(purchased.spentCost).toBe(2);
     expect(
       getPrimaryPurchaseCostForSkill(
         purchased.progression,
         chargenTestContent.skills.find((skill) => skill.id === "lore")!
       )
     ).toBe(2);
+  });
+
+  it("keeps group purchase pricing separate from child skill pricing", () => {
+    const progression = {
+      ...createChargenProgression(),
+      skillGroups: [
+        {
+          gms: 0,
+          grantedRanks: 0,
+          groupId: "scholarly",
+          primaryRanks: 1,
+          ranks: 1,
+          secondaryRanks: 0
+        }
+      ]
+    };
+    const literacy = chargenTestContent.skills.find((skill) => skill.id === "literacy")!;
+
+    expect(getPrimaryPurchaseCostForGroup(progression, "scholarly")).toBe(4);
+    expect(getPrimaryPurchaseCostForSkill(progression, literacy)).toBe(2);
+
+    const groupPurchase = allocateChargenPoint({
+      content: chargenTestContent,
+      professionId: "scribe",
+      progression,
+      societyId: "glantri",
+      societyLevel: 1,
+      targetId: "scholarly",
+      targetType: "group"
+    });
+    const skillPurchase = allocateChargenPoint({
+      content: chargenTestContent,
+      professionId: "scribe",
+      progression,
+      societyId: "glantri",
+      societyLevel: 1,
+      targetId: "literacy",
+      targetType: "skill"
+    });
+
+    expect(groupPurchase.error).toBeUndefined();
+    expect(groupPurchase.spentCost).toBe(4);
+    expect(skillPurchase.error).toBeUndefined();
+    expect(skillPurchase.spentCost).toBe(2);
+  });
+
+  it("uses individual skill pricing for other skills outside normal group access", () => {
+    const otherSkillContent = validateCanonicalContent({
+      ...chargenTestContent,
+      skillGroups: [
+        ...chargenTestContent.skillGroups,
+        {
+          id: "courtly",
+          name: "Courtly",
+          sortOrder: 2
+        }
+      ],
+      skills: [
+        ...chargenTestContent.skills,
+        {
+          allowsSpecializations: false,
+          category: "ordinary",
+          dependencies: [],
+          dependencySkillIds: [],
+          groupId: "courtly",
+          groupIds: ["courtly"],
+          id: "etiquette",
+          linkedStats: ["cha"],
+          name: "Etiquette",
+          requiresLiteracy: "no",
+          sortOrder: 4
+        }
+      ]
+    });
+    const progression = createChargenProgression();
+    const ordinaryOtherSkill = otherSkillContent.skills.find((skill) => skill.id === "etiquette")!;
+
+    expect(getSecondaryPurchaseCostForSkill(progression, ordinaryOtherSkill)).toBe(2);
+
+    const purchase = allocateChargenPoint({
+      content: otherSkillContent,
+      professionId: "scribe",
+      profile: {
+        distractionLevel: 0,
+        id: "profile-flexible",
+        label: "Flexible",
+        rolledStats: {
+          cha: 10,
+          com: 10,
+          con: 10,
+          dex: 10,
+          health: 10,
+          int: 10,
+          lck: 10,
+          pow: 10,
+          siz: 10,
+          str: 10,
+          will: 10
+        },
+        societyLevel: 0
+      },
+      progression,
+      societyId: "glantri",
+      societyLevel: 1,
+      targetId: "etiquette",
+      targetType: "skill"
+    });
+
+    expect(purchase.error).toBeUndefined();
+    expect(purchase.spentCost).toBe(2);
   });
 
   it("allows specialization-bridge purchases without the legacy society-level specialization block when the bridge parent gate is satisfied", () => {

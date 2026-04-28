@@ -2202,16 +2202,16 @@ describe("ChargenWizard concrete language rows", () => {
       targetType: "skill"
     });
 
-    expect(normalAccessPurchase.spentCost).toBe(4);
-    expect(normalAccessPurchase.progression.primaryPoolSpent).toBe(4);
+    expect(normalAccessPurchase.spentCost).toBe(2);
+    expect(normalAccessPurchase.progression.primaryPoolSpent).toBe(2);
     expect(normalAccessPurchase.progression.secondaryPoolSpent).toBe(0);
 
-    expect(outsideOrdinaryPurchase.spentCost).toBe(4);
+    expect(outsideOrdinaryPurchase.spentCost).toBe(2);
     expect(outsideOrdinaryPurchase.progression.primaryPoolSpent).toBe(0);
-    expect(outsideOrdinaryPurchase.progression.secondaryPoolSpent).toBe(4);
+    expect(outsideOrdinaryPurchase.progression.secondaryPoolSpent).toBe(2);
 
-    expect(outsideSecondaryPurchase.spentCost).toBe(2);
+    expect(outsideSecondaryPurchase.spentCost).toBe(1);
     expect(outsideSecondaryPurchase.progression.primaryPoolSpent).toBe(0);
-    expect(outsideSecondaryPurchase.progression.secondaryPoolSpent).toBe(2);
+    expect(outsideSecondaryPurchase.progression.secondaryPoolSpent).toBe(1);
   });
 });
