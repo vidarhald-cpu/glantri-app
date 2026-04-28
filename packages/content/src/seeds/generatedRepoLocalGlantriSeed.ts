@@ -624,6 +624,10 @@ export const generatedRepoLocalGlantriSeed = {
         {
           "relevance": "core",
           "skillId": "search"
+        },
+        {
+          "relevance": "core",
+          "skillId": "trap_handling"
         }
       ],
       "selectionSlots": [],
@@ -649,27 +653,6 @@ export const generatedRepoLocalGlantriSeed = {
       ],
       "selectionSlots": [],
       "sortOrder": 16
-    },
-    {
-      "description": "Technical intrusion and trap-handling.",
-      "id": "trap_and_intrusion_work",
-      "name": "Trap and Intrusion Work",
-      "skillMemberships": [
-        {
-          "relevance": "optional",
-          "skillId": "search"
-        },
-        {
-          "relevance": "core",
-          "skillId": "trap_handling"
-        },
-        {
-          "relevance": "optional",
-          "skillId": "lockpicking"
-        }
-      ],
-      "selectionSlots": [],
-      "sortOrder": 17
     },
     {
       "description": "Rural stealth, concealment, and ambush skills.",
@@ -1037,6 +1020,10 @@ export const generatedRepoLocalGlantriSeed = {
         {
           "relevance": "optional",
           "skillId": "parry"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "mounted_combat"
         }
       ],
       "selectionSlots": [],
@@ -1044,8 +1031,8 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "description": "Practical field-combat adaptation package.",
-      "id": "field_soldiering",
-      "name": "Field Soldiering",
+      "id": "veteran_soldiering",
+      "name": "Veteran Soldiering",
       "skillMemberships": [
         {
           "relevance": "optional",
@@ -1058,73 +1045,39 @@ export const generatedRepoLocalGlantriSeed = {
         {
           "relevance": "core",
           "skillId": "battlefield_awareness"
+        },
+        {
+          "relevance": "core",
+          "skillId": "combat_experience"
         }
       ],
       "selectionSlots": [],
       "sortOrder": 33
     },
     {
-      "description": "Hardened battlefield survival and veteran composure package.",
-      "id": "veteran_soldiering",
-      "name": "Veteran Soldiering",
-      "skillMemberships": [
-        {
-          "relevance": "core",
-          "skillId": "combat_experience"
-        },
-        {
-          "relevance": "optional",
-          "skillId": "battlefield_awareness"
-        },
-        {
-          "relevance": "optional",
-          "skillId": "perception"
-        }
-      ],
-      "selectionSlots": [],
-      "sortOrder": 34
-    },
-    {
       "description": "Battlefield leadership and control package.",
-      "id": "officer_training",
-      "name": "Officer Training",
-      "skillMemberships": [
-        {
-          "relevance": "core",
-          "skillId": "tactics"
-        },
-        {
-          "relevance": "core",
-          "skillId": "captaincy"
-        },
-        {
-          "relevance": "optional",
-          "skillId": "perception"
-        }
-      ],
-      "selectionSlots": [],
-      "sortOrder": 35
-    },
-    {
-      "description": "Seasoned military command under pressure.",
       "id": "veteran_leadership",
       "name": "Veteran Leadership",
       "skillMemberships": [
         {
-          "relevance": "optional",
+          "relevance": "core",
+          "skillId": "tactics"
+        },
+        {
+          "relevance": "core",
           "skillId": "captaincy"
         },
         {
           "relevance": "optional",
-          "skillId": "combat_experience"
+          "skillId": "perception"
         },
         {
           "relevance": "optional",
-          "skillId": "tactics"
+          "skillId": "combat_experience"
         }
       ],
       "selectionSlots": [],
-      "sortOrder": 36
+      "sortOrder": 35
     },
     {
       "description": "Animal care, training, riding, and related work.",
@@ -2986,8 +2939,7 @@ export const generatedRepoLocalGlantriSeed = {
       "groupIds": [
         "basic_missile_training",
         "advanced_missile_training",
-        "officer_training",
-        "field_soldiering",
+        "veteran_leadership",
         "veteran_soldiering",
         "security",
         "military_group",
@@ -3466,7 +3418,6 @@ export const generatedRepoLocalGlantriSeed = {
       "groupId": "covert_entry",
       "groupIds": [
         "covert_entry",
-        "trap_and_intrusion_work",
         "security"
       ],
       "id": "search",
@@ -3524,9 +3475,9 @@ export const generatedRepoLocalGlantriSeed = {
         "search"
       ],
       "description": "Detect, avoid, disarm, or set traps and trigger mechanisms. Useful narrow technical secondary.",
-      "groupId": "trap_and_intrusion_work",
+      "groupId": "covert_entry",
       "groupIds": [
-        "trap_and_intrusion_work",
+        "covert_entry",
         "security"
       ],
       "id": "trap_handling",
@@ -3558,7 +3509,6 @@ export const generatedRepoLocalGlantriSeed = {
       "groupId": "covert_entry",
       "groupIds": [
         "covert_entry",
-        "trap_and_intrusion_work",
         "security"
       ],
       "id": "lockpicking",
@@ -4286,7 +4236,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
+        "veteran_soldiering",
         "combat_group"
       ],
       "id": "dodge",
@@ -4679,9 +4629,8 @@ export const generatedRepoLocalGlantriSeed = {
         "perception"
       ],
       "description": "Read immediate battlefield danger, openings, movement, and changing threats under pressure. Military layer above general Perception.",
-      "groupId": "field_soldiering",
+      "groupId": "veteran_soldiering",
       "groupIds": [
-        "field_soldiering",
         "veteran_soldiering",
         "military_group"
       ],
@@ -4743,7 +4692,8 @@ export const generatedRepoLocalGlantriSeed = {
       "groupId": "combat_group",
       "groupIds": [
         "combat_group",
-        "military_group"
+        "military_group",
+        "mounted_warrior_training"
       ],
       "id": "mounted_combat",
       "isTheoretical": false,
@@ -4773,9 +4723,8 @@ export const generatedRepoLocalGlantriSeed = {
       ],
       "dependencySkillIds": [],
       "description": "Understand battlefield positioning, timing, coordination, and practical combat plans. Officer and planner skill distinct from direct troop-control.",
-      "groupId": "officer_training",
+      "groupId": "veteran_leadership",
       "groupIds": [
-        "officer_training",
         "veteran_leadership",
         "military_group"
       ],
@@ -4811,9 +4760,8 @@ export const generatedRepoLocalGlantriSeed = {
       ],
       "dependencySkillIds": [],
       "description": "Captaincy Lead fighters, maintain order, and get people to act coherently under pressure. Practical troop-control and morale skill; distinct from Tactics.",
-      "groupId": "officer_training",
+      "groupId": "veteran_leadership",
       "groupIds": [
-        "officer_training",
         "veteran_leadership",
         "military_group"
       ],
@@ -6030,7 +5978,7 @@ export const generatedRepoLocalGlantriSeed = {
       "professionId": "thief_infiltrator",
       "ranks": 0,
       "scope": "family",
-      "skillGroupId": "trap_and_intrusion_work"
+      "skillGroupId": "covert_entry"
     },
     {
       "grantType": "group",
@@ -6151,14 +6099,6 @@ export const generatedRepoLocalGlantriSeed = {
       "ranks": 0,
       "scope": "family",
       "skillGroupId": "veteran_soldiering"
-    },
-    {
-      "grantType": "group",
-      "isCore": false,
-      "professionId": "soldier",
-      "ranks": 0,
-      "scope": "family",
-      "skillGroupId": "officer_training"
     },
     {
       "grantType": "group",
@@ -6553,14 +6493,6 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "search"
     },
     {
-      "grantType": "group",
-      "isCore": false,
-      "professionId": "burglar",
-      "ranks": 0,
-      "scope": "profession",
-      "skillGroupId": "trap_and_intrusion_work"
-    },
-    {
       "grantType": "secondary-skill",
       "isCore": false,
       "professionId": "burglar",
@@ -6718,7 +6650,7 @@ export const generatedRepoLocalGlantriSeed = {
       "professionId": "cavalry_mounted_retainer",
       "ranks": 0,
       "scope": "profession",
-      "skillGroupId": "officer_training"
+      "skillGroupId": "veteran_leadership"
     },
     {
       "grantType": "group",
@@ -7206,7 +7138,7 @@ export const generatedRepoLocalGlantriSeed = {
       "professionId": "caravan_guard",
       "ranks": 0,
       "scope": "profession",
-      "skillGroupId": "field_soldiering"
+      "skillGroupId": "veteran_soldiering"
     },
     {
       "grantType": "ordinary-skill",
@@ -7422,7 +7354,7 @@ export const generatedRepoLocalGlantriSeed = {
       "professionId": "clan_warriors",
       "ranks": 0,
       "scope": "profession",
-      "skillGroupId": "field_soldiering"
+      "skillGroupId": "veteran_soldiering"
     },
     {
       "grantType": "secondary-skill",
@@ -8390,7 +8322,7 @@ export const generatedRepoLocalGlantriSeed = {
       "professionId": "light_infantry",
       "ranks": 0,
       "scope": "profession",
-      "skillGroupId": "field_soldiering"
+      "skillGroupId": "veteran_soldiering"
     },
     {
       "grantType": "secondary-skill",
@@ -8486,7 +8418,7 @@ export const generatedRepoLocalGlantriSeed = {
       "professionId": "military_officer",
       "ranks": 0,
       "scope": "profession",
-      "skillGroupId": "officer_training"
+      "skillGroupId": "veteran_leadership"
     },
     {
       "grantType": "ordinary-skill",
@@ -8503,14 +8435,6 @@ export const generatedRepoLocalGlantriSeed = {
       "ranks": 0,
       "scope": "profession",
       "skillId": "tactics"
-    },
-    {
-      "grantType": "group",
-      "isCore": false,
-      "professionId": "military_officer",
-      "ranks": 0,
-      "scope": "profession",
-      "skillGroupId": "veteran_leadership"
     },
     {
       "grantType": "ordinary-skill",
@@ -9737,14 +9661,6 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "search"
     },
     {
-      "grantType": "group",
-      "isCore": false,
-      "professionId": "thief",
-      "ranks": 0,
-      "scope": "profession",
-      "skillGroupId": "trap_and_intrusion_work"
-    },
-    {
       "grantType": "ordinary-skill",
       "isCore": false,
       "professionId": "thief",
@@ -10221,9 +10137,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -10298,9 +10212,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -10375,9 +10287,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -10452,9 +10362,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -10529,9 +10437,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -10633,7 +10539,6 @@ export const generatedRepoLocalGlantriSeed = {
         "transport_and_caravan_work",
         "covert_entry",
         "street_theft",
-        "trap_and_intrusion_work",
         "fieldcraft_stealth",
         "athletic_conditioning",
         "social_reading",
@@ -10646,9 +10551,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -10751,7 +10654,6 @@ export const generatedRepoLocalGlantriSeed = {
         "transport_and_caravan_work",
         "covert_entry",
         "street_theft",
-        "trap_and_intrusion_work",
         "fieldcraft_stealth",
         "athletic_conditioning",
         "social_reading",
@@ -10764,9 +10666,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -10869,7 +10769,6 @@ export const generatedRepoLocalGlantriSeed = {
         "transport_and_caravan_work",
         "covert_entry",
         "street_theft",
-        "trap_and_intrusion_work",
         "fieldcraft_stealth",
         "athletic_conditioning",
         "social_reading",
@@ -10882,9 +10781,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -10960,9 +10857,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -11064,7 +10959,6 @@ export const generatedRepoLocalGlantriSeed = {
         "transport_and_caravan_work",
         "covert_entry",
         "street_theft",
-        "trap_and_intrusion_work",
         "fieldcraft_stealth",
         "athletic_conditioning",
         "social_reading",
@@ -11077,9 +10971,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -11182,7 +11074,6 @@ export const generatedRepoLocalGlantriSeed = {
         "transport_and_caravan_work",
         "covert_entry",
         "street_theft",
-        "trap_and_intrusion_work",
         "fieldcraft_stealth",
         "athletic_conditioning",
         "social_reading",
@@ -11195,9 +11086,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -11300,7 +11189,6 @@ export const generatedRepoLocalGlantriSeed = {
         "transport_and_caravan_work",
         "covert_entry",
         "street_theft",
-        "trap_and_intrusion_work",
         "fieldcraft_stealth",
         "athletic_conditioning",
         "social_reading",
@@ -11313,9 +11201,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -11391,9 +11277,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -11495,7 +11379,6 @@ export const generatedRepoLocalGlantriSeed = {
         "transport_and_caravan_work",
         "covert_entry",
         "street_theft",
-        "trap_and_intrusion_work",
         "fieldcraft_stealth",
         "athletic_conditioning",
         "social_reading",
@@ -11508,9 +11391,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -11630,7 +11511,6 @@ export const generatedRepoLocalGlantriSeed = {
         "transport_and_caravan_work",
         "covert_entry",
         "street_theft",
-        "trap_and_intrusion_work",
         "fieldcraft_stealth",
         "athletic_conditioning",
         "social_reading",
@@ -11645,9 +11525,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -11768,7 +11646,6 @@ export const generatedRepoLocalGlantriSeed = {
         "transport_and_caravan_work",
         "covert_entry",
         "street_theft",
-        "trap_and_intrusion_work",
         "fieldcraft_stealth",
         "athletic_conditioning",
         "social_reading",
@@ -11783,9 +11660,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -11862,9 +11737,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -11966,7 +11839,6 @@ export const generatedRepoLocalGlantriSeed = {
         "transport_and_caravan_work",
         "covert_entry",
         "street_theft",
-        "trap_and_intrusion_work",
         "fieldcraft_stealth",
         "athletic_conditioning",
         "social_reading",
@@ -11979,9 +11851,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -12101,7 +11971,6 @@ export const generatedRepoLocalGlantriSeed = {
         "transport_and_caravan_work",
         "covert_entry",
         "street_theft",
-        "trap_and_intrusion_work",
         "fieldcraft_stealth",
         "athletic_conditioning",
         "social_reading",
@@ -12116,9 +11985,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -12239,7 +12106,6 @@ export const generatedRepoLocalGlantriSeed = {
         "transport_and_caravan_work",
         "covert_entry",
         "street_theft",
-        "trap_and_intrusion_work",
         "fieldcraft_stealth",
         "athletic_conditioning",
         "social_reading",
@@ -12254,9 +12120,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -12333,9 +12197,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -12437,7 +12299,6 @@ export const generatedRepoLocalGlantriSeed = {
         "transport_and_caravan_work",
         "covert_entry",
         "street_theft",
-        "trap_and_intrusion_work",
         "fieldcraft_stealth",
         "athletic_conditioning",
         "social_reading",
@@ -12450,9 +12311,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -12572,7 +12431,6 @@ export const generatedRepoLocalGlantriSeed = {
         "transport_and_caravan_work",
         "covert_entry",
         "street_theft",
-        "trap_and_intrusion_work",
         "fieldcraft_stealth",
         "athletic_conditioning",
         "social_reading",
@@ -12587,9 +12445,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -12721,7 +12577,6 @@ export const generatedRepoLocalGlantriSeed = {
         "transport_and_caravan_work",
         "covert_entry",
         "street_theft",
-        "trap_and_intrusion_work",
         "fieldcraft_stealth",
         "athletic_conditioning",
         "social_reading",
@@ -12737,9 +12592,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -12816,9 +12669,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -12920,7 +12771,6 @@ export const generatedRepoLocalGlantriSeed = {
         "transport_and_caravan_work",
         "covert_entry",
         "street_theft",
-        "trap_and_intrusion_work",
         "fieldcraft_stealth",
         "athletic_conditioning",
         "social_reading",
@@ -12933,9 +12783,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -13055,7 +12903,6 @@ export const generatedRepoLocalGlantriSeed = {
         "transport_and_caravan_work",
         "covert_entry",
         "street_theft",
-        "trap_and_intrusion_work",
         "fieldcraft_stealth",
         "athletic_conditioning",
         "social_reading",
@@ -13070,9 +12917,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -13204,7 +13049,6 @@ export const generatedRepoLocalGlantriSeed = {
         "transport_and_caravan_work",
         "covert_entry",
         "street_theft",
-        "trap_and_intrusion_work",
         "fieldcraft_stealth",
         "athletic_conditioning",
         "social_reading",
@@ -13220,9 +13064,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -13299,9 +13141,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -13403,7 +13243,6 @@ export const generatedRepoLocalGlantriSeed = {
         "transport_and_caravan_work",
         "covert_entry",
         "street_theft",
-        "trap_and_intrusion_work",
         "fieldcraft_stealth",
         "athletic_conditioning",
         "social_reading",
@@ -13416,9 +13255,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -13538,7 +13375,6 @@ export const generatedRepoLocalGlantriSeed = {
         "transport_and_caravan_work",
         "covert_entry",
         "street_theft",
-        "trap_and_intrusion_work",
         "fieldcraft_stealth",
         "athletic_conditioning",
         "social_reading",
@@ -13553,9 +13389,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -13687,7 +13521,6 @@ export const generatedRepoLocalGlantriSeed = {
         "transport_and_caravan_work",
         "covert_entry",
         "street_theft",
-        "trap_and_intrusion_work",
         "fieldcraft_stealth",
         "athletic_conditioning",
         "social_reading",
@@ -13703,9 +13536,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -13782,9 +13613,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -13886,7 +13715,6 @@ export const generatedRepoLocalGlantriSeed = {
         "transport_and_caravan_work",
         "covert_entry",
         "street_theft",
-        "trap_and_intrusion_work",
         "fieldcraft_stealth",
         "athletic_conditioning",
         "social_reading",
@@ -13899,9 +13727,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -14021,7 +13847,6 @@ export const generatedRepoLocalGlantriSeed = {
         "transport_and_caravan_work",
         "covert_entry",
         "street_theft",
-        "trap_and_intrusion_work",
         "fieldcraft_stealth",
         "athletic_conditioning",
         "social_reading",
@@ -14036,9 +13861,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -14170,7 +13993,6 @@ export const generatedRepoLocalGlantriSeed = {
         "transport_and_caravan_work",
         "covert_entry",
         "street_theft",
-        "trap_and_intrusion_work",
         "fieldcraft_stealth",
         "athletic_conditioning",
         "social_reading",
@@ -14186,9 +14008,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -14265,9 +14085,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -14369,7 +14187,6 @@ export const generatedRepoLocalGlantriSeed = {
         "transport_and_caravan_work",
         "covert_entry",
         "street_theft",
-        "trap_and_intrusion_work",
         "fieldcraft_stealth",
         "athletic_conditioning",
         "social_reading",
@@ -14382,9 +14199,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -14504,7 +14319,6 @@ export const generatedRepoLocalGlantriSeed = {
         "transport_and_caravan_work",
         "covert_entry",
         "street_theft",
-        "trap_and_intrusion_work",
         "fieldcraft_stealth",
         "athletic_conditioning",
         "social_reading",
@@ -14519,9 +14333,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -14653,7 +14465,6 @@ export const generatedRepoLocalGlantriSeed = {
         "transport_and_caravan_work",
         "covert_entry",
         "street_theft",
-        "trap_and_intrusion_work",
         "fieldcraft_stealth",
         "athletic_conditioning",
         "social_reading",
@@ -14669,9 +14480,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -14748,9 +14557,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -14852,7 +14659,6 @@ export const generatedRepoLocalGlantriSeed = {
         "transport_and_caravan_work",
         "covert_entry",
         "street_theft",
-        "trap_and_intrusion_work",
         "fieldcraft_stealth",
         "athletic_conditioning",
         "social_reading",
@@ -14865,9 +14671,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -14987,7 +14791,6 @@ export const generatedRepoLocalGlantriSeed = {
         "transport_and_caravan_work",
         "covert_entry",
         "street_theft",
-        "trap_and_intrusion_work",
         "fieldcraft_stealth",
         "athletic_conditioning",
         "social_reading",
@@ -15002,9 +14805,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -15136,7 +14937,6 @@ export const generatedRepoLocalGlantriSeed = {
         "transport_and_caravan_work",
         "covert_entry",
         "street_theft",
-        "trap_and_intrusion_work",
         "fieldcraft_stealth",
         "athletic_conditioning",
         "social_reading",
@@ -15152,9 +14952,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",

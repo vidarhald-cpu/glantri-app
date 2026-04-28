@@ -2,6 +2,8 @@ import { z } from "zod";
 import {
   inferPlayerFacingSkillCategoryIdFromGroupIds,
   normalizePlayerFacingSkillCategoryId,
+  normalizeSkillGroupId,
+  normalizeSkillGroupIds,
   playerFacingSkillCategoryIdSchema
 } from "../content/skills";
 
@@ -9,20 +11,48 @@ const chargenModeSchema = z.enum(["standard"]);
 const skillCategorySchema = z.enum(["ordinary", "secondary"]);
 const characterSkillSourceSchema = z.enum(["mother-tongue"]);
 const chargenSelectionIdsSchema = z.array(z.string().min(1)).default([]);
-const characterChargenGroupSlotSelectionSchema = z.object({
-  groupId: z.string().min(1),
-  selectedSkillIds: chargenSelectionIdsSchema,
-  slotId: z.string().min(1)
-});
+const characterChargenGroupSlotSelectionSchema = z.preprocess(
+  (input) => {
+    if (typeof input !== "object" || input === null) {
+      return input;
+    }
 
-export const characterSkillGroupSchema = z.object({
-  groupId: z.string().min(1),
-  grantedRanks: z.number().int().nonnegative().default(0),
-  primaryRanks: z.number().int().nonnegative().default(0),
-  secondaryRanks: z.number().int().nonnegative().default(0),
-  ranks: z.number().int().nonnegative().default(0),
-  gms: z.number().int().default(0)
-});
+    const candidate = input as { groupId?: unknown };
+
+    return {
+      ...candidate,
+      groupId: normalizeSkillGroupId(candidate.groupId) ?? candidate.groupId
+    };
+  },
+  z.object({
+    groupId: z.string().min(1),
+    selectedSkillIds: chargenSelectionIdsSchema,
+    slotId: z.string().min(1)
+  })
+);
+
+export const characterSkillGroupSchema = z.preprocess(
+  (input) => {
+    if (typeof input !== "object" || input === null) {
+      return input;
+    }
+
+    const candidate = input as { groupId?: unknown };
+
+    return {
+      ...candidate,
+      groupId: normalizeSkillGroupId(candidate.groupId) ?? candidate.groupId
+    };
+  },
+  z.object({
+    groupId: z.string().min(1),
+    grantedRanks: z.number().int().nonnegative().default(0),
+    primaryRanks: z.number().int().nonnegative().default(0),
+    secondaryRanks: z.number().int().nonnegative().default(0),
+    ranks: z.number().int().nonnegative().default(0),
+    gms: z.number().int().default(0)
+  })
+);
 
 const LEGACY_LEADERSHIP_CATEGORY_BY_SKILL_ID: Record<string, string> = {
   captaincy: "military",
@@ -45,6 +75,19 @@ function normalizeCharacterSkillCategoryInput(input: unknown): unknown {
     groupIds?: unknown;
     skillId?: unknown;
   };
+  const normalizedGroupIds = normalizeSkillGroupIds(
+    Array.isArray(candidate.groupIds)
+      ? candidate.groupIds
+      : candidate.groupId !== undefined
+        ? [candidate.groupId]
+        : undefined
+  );
+  const normalizedGroupId = normalizeSkillGroupId(candidate.groupId) ?? normalizedGroupIds[0];
+  const normalizedCandidate = {
+    ...candidate,
+    groupId: normalizedGroupId ?? candidate.groupId,
+    groupIds: normalizedGroupIds.length > 0 ? normalizedGroupIds : undefined
+  };
   const categoryId =
     typeof candidate.categoryId === "string" && candidate.categoryId.length > 0
       ? candidate.categoryId
@@ -54,22 +97,18 @@ function normalizeCharacterSkillCategoryInput(input: unknown): unknown {
 
   if (normalizedCategoryId) {
     return {
-      ...candidate,
+      ...normalizedCandidate,
       categoryId: normalizedCategoryId
     };
   }
 
   if (normalizedCategoryKey !== "leadership") {
-    return input;
+    return normalizedCandidate;
   }
 
-  const groupIds = Array.isArray(candidate.groupIds)
-    ? candidate.groupIds.filter((groupId): groupId is string => typeof groupId === "string")
-    : [];
-  const groupId = typeof candidate.groupId === "string" ? candidate.groupId : groupIds[0];
   const inferredCategoryId = inferPlayerFacingSkillCategoryIdFromGroupIds({
-    groupId,
-    groupIds
+    groupId: normalizedGroupId,
+    groupIds: normalizedGroupIds
   });
   const skillCategoryId =
     typeof candidate.skillId === "string"
@@ -77,7 +116,7 @@ function normalizeCharacterSkillCategoryInput(input: unknown): unknown {
       : undefined;
 
   return {
-    ...candidate,
+    ...normalizedCandidate,
     categoryId:
       inferredCategoryId === "special-access"
         ? skillCategoryId ?? "social"
@@ -92,6 +131,7 @@ export const characterSkillSchema = z.preprocess(
     categoryId: playerFacingSkillCategoryIdSchema.optional(),
     grantedRanks: z.number().int().nonnegative().default(0),
     groupId: z.string().min(1),
+    groupIds: z.array(z.string().min(1)).optional(),
     languageName: z.string().min(1).optional(),
     primaryRanks: z.number().int().nonnegative().default(0),
     relationshipGrantedRanks: z.number().int().nonnegative().optional(),

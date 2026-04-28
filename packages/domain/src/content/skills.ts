@@ -40,6 +40,31 @@ export function normalizePlayerFacingSkillCategoryId(input: string | undefined):
 
   return normalized;
 }
+
+const SKILL_GROUP_ID_ALIASES: Record<string, string> = {
+  field_soldiering: "veteran_soldiering",
+  officer_training: "veteran_leadership",
+  trap_and_intrusion_work: "covert_entry"
+};
+
+export function normalizeSkillGroupId(input: unknown): string | undefined {
+  if (typeof input !== "string" || input.length === 0) {
+    return undefined;
+  }
+
+  const normalized = input.trim().replace(/-/g, "_");
+  return SKILL_GROUP_ID_ALIASES[normalized] ?? normalized;
+}
+
+export function normalizeSkillGroupIds(input: readonly unknown[] | undefined): string[] {
+  return [
+    ...new Set(
+      (input ?? [])
+        .map(normalizeSkillGroupId)
+        .filter((groupId): groupId is string => Boolean(groupId))
+    )
+  ];
+}
 const skillSocietyLevelSchema = z.number().int().min(1).max(6);
 const skillDependencyStrengthSchema = z.enum(["required", "recommended", "helpful"]);
 const skillGroupSkillRelevanceSchema = z.enum(["core", "optional"]);
@@ -263,17 +288,13 @@ export const skillDefinitionSchema = z.preprocess(
       recommendedDependencySkillIds?: unknown;
     };
 
-    const normalizedGroupIds = Array.isArray(candidate.groupIds)
+    const rawGroupIds = Array.isArray(candidate.groupIds)
       ? candidate.groupIds
       : candidate.groupId !== undefined
         ? [candidate.groupId]
         : undefined;
-    const normalizedGroupId =
-      candidate.groupId !== undefined
-        ? candidate.groupId
-        : Array.isArray(candidate.groupIds)
-          ? candidate.groupIds[0]
-          : undefined;
+    const normalizedGroupIds = normalizeSkillGroupIds(rawGroupIds);
+    const normalizedGroupId = normalizeSkillGroupId(candidate.groupId) ?? normalizedGroupIds[0];
     const normalizedDependencies = normalizeSkillDependencies(candidate);
     const explicitCategoryId = normalizePlayerFacingSkillCategoryId(
       typeof candidate.categoryId === "string" && candidate.categoryId.length > 0
@@ -296,7 +317,7 @@ export const skillDefinitionSchema = z.preprocess(
       dependencies: normalizedDependencies,
       dependencySkillIds: getRequiredDependencySkillIds(normalizedDependencies),
       groupId: normalizedGroupId,
-      groupIds: normalizedGroupIds
+      groupIds: normalizedGroupIds.length > 0 ? normalizedGroupIds : rawGroupIds
     };
   },
   z.object({
@@ -364,15 +385,18 @@ export const societyLevelAccessSchema = z.preprocess(
     const candidate = input as {
       label?: unknown;
       societyName?: unknown;
+      skillGroupIds?: unknown;
     };
-
-    if (candidate.societyName !== undefined || candidate.label === undefined) {
-      return input;
-    }
 
     return {
       ...candidate,
-      societyName: candidate.label
+      skillGroupIds: Array.isArray(candidate.skillGroupIds)
+        ? normalizeSkillGroupIds(candidate.skillGroupIds)
+        : candidate.skillGroupIds,
+      societyName:
+        candidate.societyName !== undefined || candidate.label === undefined
+          ? candidate.societyName
+          : candidate.label
     };
   },
   z.object({
@@ -516,9 +540,11 @@ export function getSkillGroupIds(skill: Pick<SkillDefinition, "groupId" | "group
 export function inferPlayerFacingSkillCategoryIdFromGroupIds(
   skill: Pick<SkillDefinition, "groupId" | "groupIds"> | { groupId?: string; groupIds?: string[] }
 ): PlayerFacingSkillCategoryId {
+  const primaryGroupId = normalizeSkillGroupId(skill.groupId);
+  const groupIds = normalizeSkillGroupIds(skill.groupIds ?? []);
   const orderedGroupIds = [
-    ...(skill.groupId ? [skill.groupId] : []),
-    ...((skill.groupIds ?? []).filter((groupId) => groupId !== skill.groupId) as string[])
+    ...(primaryGroupId ? [primaryGroupId] : []),
+    ...groupIds.filter((groupId) => groupId !== primaryGroupId)
   ];
 
   for (const groupId of orderedGroupIds) {

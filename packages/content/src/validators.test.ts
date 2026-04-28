@@ -86,6 +86,49 @@ describe("validateCanonicalContent", () => {
     );
   });
 
+  it("merges retired skill groups into canonical target groups", () => {
+    const groupById = new Map(
+      defaultCanonicalContent.skillGroups.map((group) => [group.id, group])
+    );
+    const membershipsFor = (groupId: string) =>
+      groupById.get(groupId)?.skillMemberships?.map((membership) => membership.skillId) ?? [];
+    const groupGrantKeys = defaultCanonicalContent.professionSkills
+      .filter((grant) => grant.grantType === "group")
+      .map((grant) => `${grant.professionId}:${grant.scope}:${grant.skillGroupId}`);
+
+    expect(groupById.has("field_soldiering")).toBe(false);
+    expect(groupById.has("officer_training")).toBe(false);
+    expect(groupById.has("trap_and_intrusion_work")).toBe(false);
+    expect(membershipsFor("veteran_soldiering")).toEqual(
+      expect.arrayContaining([
+        "battlefield_awareness",
+        "combat_experience",
+        "dodge",
+        "perception"
+      ])
+    );
+    expect(membershipsFor("veteran_leadership")).toEqual(
+      expect.arrayContaining(["captaincy", "combat_experience", "perception", "tactics"])
+    );
+    expect(membershipsFor("covert_entry")).toEqual(
+      expect.arrayContaining(["hide", "lockpicking", "search", "stealth", "trap_handling"])
+    );
+    expect(membershipsFor("mounted_warrior_training")).toEqual(
+      expect.arrayContaining([
+        "dodge",
+        "lance",
+        "mounted_combat",
+        "one_handed_edged",
+        "parry",
+        "riding"
+      ])
+    );
+    expect(groupGrantKeys.some((key) => key.endsWith(":field_soldiering"))).toBe(false);
+    expect(groupGrantKeys.some((key) => key.endsWith(":officer_training"))).toBe(false);
+    expect(groupGrantKeys.some((key) => key.endsWith(":trap_and_intrusion_work"))).toBe(false);
+    expect(new Set(groupGrantKeys).size).toBe(groupGrantKeys.length);
+  });
+
   it("includes the updated civilization language naming and Lankhmar seed entry", () => {
     expect(
       defaultCanonicalContent.civilizations.find((civilization) => civilization.id === "glantri")
@@ -318,7 +361,7 @@ describe("validateCanonicalContent", () => {
     };
 
     expect(() => validateCanonicalContent(invalidContent)).toThrow(
-      `Skill "${firstSkill.name}" (${firstSkill.id}) references unknown skill group "missing-group".`
+      `Skill "${firstSkill.name}" (${firstSkill.id}) references unknown skill group "missing_group".`
     );
   });
 

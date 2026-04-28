@@ -106,6 +106,20 @@ const PLAYER_FACING_SKILL_CATEGORY_BY_GROUP_ID = {
   wilderness_group: "fieldcraft"
 };
 
+const SKILL_GROUP_ID_ALIASES = {
+  field_soldiering: "veteran_soldiering",
+  officer_training: "veteran_leadership",
+  trap_and_intrusion_work: "covert_entry"
+};
+
+function normalizeSkillGroupId(groupId) {
+  return SKILL_GROUP_ID_ALIASES[groupId] ?? groupId;
+}
+
+function normalizeSkillGroupIds(groupIds) {
+  return [...new Set(groupIds.map(normalizeSkillGroupId))];
+}
+
 const PLAYER_FACING_SKILL_CATEGORY_BY_SKILL_ID = {
   banking: "trade",
   captaincy: "military",
@@ -189,6 +203,10 @@ const FIXED_SKILL_MEMBERSHIPS_BY_GROUP_ID = {
   advanced_missile_training: []
 };
 
+const ADDITIONAL_TRAINING_GROUP_IDS_BY_SKILL_ID = {
+  mounted_combat: ["mounted_warrior_training"]
+};
+
 const GROUP_DESCRIPTION_OVERRIDES = {
   basic_melee_training: "Dodge, parry, and brawling plus one required melee weapon skill.",
   advanced_melee_training: "Dodge, parry, and brawling plus three required melee weapon skills.",
@@ -213,6 +231,16 @@ const EXTRA_GROUP_IDS_BY_SKILL_ID = (() => {
 
   for (const [groupId, skillIds] of Object.entries(FIXED_SKILL_MEMBERSHIPS_BY_GROUP_ID)) {
     for (const skillId of skillIds) {
+      const existingGroupIds = result[skillId] ?? [];
+
+      if (!existingGroupIds.includes(groupId)) {
+        result[skillId] = [...existingGroupIds, groupId];
+      }
+    }
+  }
+
+  for (const [skillId, groupIds] of Object.entries(ADDITIONAL_TRAINING_GROUP_IDS_BY_SKILL_ID)) {
+    for (const groupId of groupIds) {
       const existingGroupIds = result[skillId] ?? [];
 
       if (!existingGroupIds.includes(groupId)) {
@@ -527,7 +555,7 @@ function getLiteracyRequirement(dependencies) {
 
 const trainingGroupSources = rawBundle.trainingGroups.map((group, index) => ({
   description: group.shortDescription || undefined,
-  id: group.trainingGroupId,
+  id: normalizeSkillGroupId(group.trainingGroupId),
   name: group.name,
   skillIds: parseJsonLike(group.skillIds),
   sortOrder: index + 1
@@ -540,7 +568,25 @@ const taxonomyGroupSources = rawBundle.taxonomyGroups.map((group, index) => ({
   skillIds: parseJsonLike(group.skillIds),
   sortOrder: trainingGroupSources.length + index + 1
 }));
-const skillGroupSources = [...trainingGroupSources, ...taxonomyGroupSources];
+const skillGroupSources = [...trainingGroupSources, ...taxonomyGroupSources].reduce(
+  (groups, group) => {
+    const existing = groups.find((candidate) => candidate.id === group.id);
+
+    if (!existing) {
+      groups.push({
+        ...group,
+        skillIds: [...group.skillIds]
+      });
+      return groups;
+    }
+
+    existing.skillIds = [...new Set([...existing.skillIds, ...group.skillIds])];
+    existing.sortOrder = Math.min(existing.sortOrder, group.sortOrder);
+
+    return groups;
+  },
+  []
+);
 const specializationRows = rawBundle.skills.filter(
   (skill) => skill.tier === "specialization" && skill.skillId !== "specific_language"
 );
@@ -553,7 +599,7 @@ const specializationParentIds = new Set(
 const skills = rawBundle.skills
   .filter((skill) => skill.tier !== "specialization")
   .map((skill) => {
-    const trainingGroupIds = parseJsonLike(skill.trainingGroupIds);
+    const trainingGroupIds = normalizeSkillGroupIds(parseJsonLike(skill.trainingGroupIds));
     const taxonomyGroupIds = parseJsonLike(skill.taxonomyGroupIds);
     const groupIds = orderCanonicalSkillGroupIds(
       skill.skillId,
@@ -677,9 +723,9 @@ function createSkillGrant(skillId, professionId, scope, isCore) {
   };
 }
 
-const professionSkills = [
+const professionSkillSources = [
   ...rawBundle.professionFamilies.flatMap((family) => [
-    ...parseJsonLike(family.coreTrainingGroupIds).map((groupId) => ({
+    ...normalizeSkillGroupIds(parseJsonLike(family.coreTrainingGroupIds)).map((groupId) => ({
       grantType: "group",
       isCore: true,
       professionId: family.professionFamilyId,
@@ -690,7 +736,7 @@ const professionSkills = [
     ...parseJsonLike(family.coreSkillIds)
       .map((skillId) => createSkillGrant(skillId, family.professionFamilyId, "family", true))
       .filter(Boolean),
-    ...parseJsonLike(family.favoredTrainingGroupIds).map((groupId) => ({
+    ...normalizeSkillGroupIds(parseJsonLike(family.favoredTrainingGroupIds)).map((groupId) => ({
       grantType: "group",
       isCore: false,
       professionId: family.professionFamilyId,
@@ -703,7 +749,7 @@ const professionSkills = [
       .filter(Boolean)
   ]),
   ...rawBundle.professionSubtypes.flatMap((subtype) => [
-    ...parseJsonLike(subtype.addedCoreTrainingGroupIds).map((groupId) => ({
+    ...normalizeSkillGroupIds(parseJsonLike(subtype.addedCoreTrainingGroupIds)).map((groupId) => ({
       grantType: "group",
       isCore: true,
       professionId: subtype.professionSubtypeId,
@@ -714,7 +760,7 @@ const professionSkills = [
     ...parseJsonLike(subtype.addedCoreSkillIds)
       .map((skillId) => createSkillGrant(skillId, subtype.professionSubtypeId, "profession", true))
       .filter(Boolean),
-    ...parseJsonLike(subtype.addedFavoredTrainingGroupIds).map((groupId) => ({
+    ...normalizeSkillGroupIds(parseJsonLike(subtype.addedFavoredTrainingGroupIds)).map((groupId) => ({
       grantType: "group",
       isCore: false,
       professionId: subtype.professionSubtypeId,
@@ -727,12 +773,39 @@ const professionSkills = [
       .filter(Boolean)
   ])
 ];
+const professionSkills = [
+  ...professionSkillSources
+    .reduce((byKey, grant) => {
+      const key =
+        grant.grantType === "group"
+          ? `${grant.professionId}:${grant.scope}:group:${grant.skillGroupId}`
+          : `${grant.professionId}:${grant.scope}:${grant.grantType}:${grant.skillId}`;
+      const existing = byKey.get(key);
+
+      if (!existing) {
+        byKey.set(key, grant);
+        return byKey;
+      }
+
+      byKey.set(key, {
+        ...existing,
+        isCore: existing.isCore || grant.isCore
+      });
+
+      return byKey;
+    }, new Map())
+    .values()
+];
 
 const skillGroups = skillGroupSources.map((group) => ({
   description: GROUP_DESCRIPTION_OVERRIDES[group.id] ?? group.description,
   id: group.id,
-  name: group.name,
+  name:
+    rawBundle.trainingGroups.find((sourceGroup) => sourceGroup.trainingGroupId === group.id)?.name ??
+    group.name,
   skillMemberships: (FIXED_SKILL_MEMBERSHIPS_BY_GROUP_ID[group.id] ?? group.skillIds)
+    .concat(group.id === "mounted_warrior_training" ? ["mounted_combat"] : [])
+    .filter((skillId, index, skillIds) => skillIds.indexOf(skillId) === index)
     .filter((skillId) => skillsById.has(skillId))
     .map((skillId) => ({
       relevance: skillsById.get(skillId)?.groupId === group.id ? "core" : "optional",
@@ -747,16 +820,7 @@ const skillGroups = skillGroupSources.map((group) => ({
 
 const groupMinSocietyLevel = new Map();
 
-for (const group of trainingGroupSources) {
-  const skillIds = group.skillIds;
-  const minLevel = skillIds
-    .map((skillId) => skillsById.get(skillId)?.societyLevel ?? 6)
-    .reduce((lowest, level) => Math.min(lowest, level), 6);
-
-  groupMinSocietyLevel.set(group.id, minLevel);
-}
-
-for (const group of taxonomyGroupSources) {
+for (const group of skillGroupSources) {
   const skillIds = group.skillIds;
   const minLevel = skillIds
     .map((skillId) => {
