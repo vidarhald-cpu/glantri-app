@@ -59,10 +59,25 @@ describe("validateCanonicalContent", () => {
     expect(categoryBySkillId.get("captaincy")).toBe("military");
     expect(categoryBySkillId.get("tactics")).toBe("military");
     expect(categoryBySkillId.get("insight")).toBe("social");
-    expect(categoryBySkillId.get("intrigue")).toBe("social");
+    expect(categoryBySkillId.get("courtly_protocol")).toBe("high-society");
+    expect(categoryBySkillId.get("etiquette")).toBe("high-society");
+    expect(categoryBySkillId.get("heraldry")).toBe("high-society");
+    expect(categoryBySkillId.get("intrigue")).toBe("high-society");
+    expect(categoryBySkillId.get("singing")).toBe("performance");
+    expect(categoryBySkillId.get("music")).toBe("performance");
+    expect(categoryBySkillId.get("dancing")).toBe("performance");
+    expect(categoryBySkillId.get("acting")).toBe("performance");
+    expect(categoryBySkillId.get("storytelling")).toBe("performance");
     expect(categoryBySkillId.get("social_perception")).toBe("social");
+    expect([...categoryBySkillId.values()]).toContain("social");
     expect([...categoryBySkillId.values()]).not.toContain("court-social");
     expect([...categoryBySkillId.values()]).not.toContain("leadership");
+    expect(defaultCanonicalContent.specializations.find(
+      (specialization) => specialization.id === "etiquette_by_culture"
+    )).toMatchObject({
+      name: "Etiquette by Culture",
+      skillId: "etiquette"
+    });
     expect(defaultCanonicalContent.languages.map((language) => language.name)).toEqual(
       expect.arrayContaining(["Common", "Old Common"])
     );

@@ -107,7 +107,17 @@ const PLAYER_FACING_SKILL_BUCKETS: PlayerFacingSkillBucketDefinition[] = [
     label: "Trade"
   },
   {
-    description: "Etiquette, influence, performance, and social reading.",
+    description: "Courtly manners, rank, heraldry, ceremony, and elite intrigue.",
+    id: "high-society",
+    label: "High Society"
+  },
+  {
+    description: "Song, music, dance, acting, and spoken performance.",
+    id: "performance",
+    label: "Performance"
+  },
+  {
+    description: "Influence, social reading, and interpersonal maneuvering.",
     id: "social",
     label: "Social"
   },

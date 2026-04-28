@@ -51,10 +51,18 @@ describe("chargenBrowse helpers", () => {
     const definitions = getPlayerFacingSkillBucketDefinitions();
 
     expect(definitions.map((definition) => definition.label)).toContain("Social");
+    expect(definitions.map((definition) => definition.label)).toContain("High Society");
+    expect(definitions.map((definition) => definition.label)).toContain("Performance");
     expect(definitions.map((definition) => definition.label)).not.toContain("Court / Social");
     expect(definitions.map((definition) => definition.label)).not.toContain("Leadership");
     expect(getPlayerFacingSkillBucket({ categoryId: "court-social", id: "etiquette" })).toBe(
       "social"
+    );
+    expect(getPlayerFacingSkillBucket({ categoryId: "high-society", id: "etiquette" })).toBe(
+      "high-society"
+    );
+    expect(getPlayerFacingSkillBucket({ categoryId: "performance", id: "singing" })).toBe(
+      "performance"
     );
     expect(
       getPlayerFacingSkillBucket({

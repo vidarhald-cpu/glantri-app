@@ -512,6 +512,23 @@ describe("admin view models", () => {
     ]);
   });
 
+  it("surfaces default Glantri Etiquette by Culture under the parent High Society category", () => {
+    const rows = buildSkillAdminRows(defaultCanonicalContent);
+    const etiquetteRow = rows.find((row) => row.id === "etiquette");
+    const specializationRow = rows.find((row) => row.id === "etiquette_by_culture");
+
+    expect(etiquetteRow).toMatchObject({
+      name: "Etiquette",
+      skillCategory: "high-society"
+    });
+    expect(specializationRow).toMatchObject({
+      name: "Etiquette by Culture",
+      skillCategory: "high-society",
+      skillType: "specialization",
+      specializationOf: "Etiquette"
+    });
+  });
+
   it("adds low and high weighted-point warnings to skill-group review rows", () => {
     const rows = buildSkillGroupAdminRows(content);
     const lowGroup = rows.find((row) => row.id === "low_group");

@@ -2369,7 +2369,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
-      "categoryId": "social",
+      "categoryId": "high-society",
       "dependencies": [
         {
           "skillId": "insight",
@@ -2474,7 +2474,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": true,
       "category": "ordinary",
-      "categoryId": "social",
+      "categoryId": "high-society",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Know expected manners, forms of respect, and socially correct behavior. Broad elite-social core.",
@@ -2498,7 +2498,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
-      "categoryId": "social",
+      "categoryId": "high-society",
       "dependencies": [
         {
           "skillId": "etiquette",
@@ -2529,7 +2529,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
-      "categoryId": "social",
+      "categoryId": "high-society",
       "dependencies": [
         {
           "skillId": "etiquette",
@@ -2686,7 +2686,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
-      "categoryId": "social",
+      "categoryId": "performance",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Use the voice for song, pitch, rhythm, and expression. Broad expressive and social primary.",
@@ -2710,7 +2710,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
-      "categoryId": "social",
+      "categoryId": "performance",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Dancing Perform structured or improvised movement for ritual, celebration, or display. Broad expressive and social primary.",
@@ -2734,7 +2734,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
-      "categoryId": "social",
+      "categoryId": "performance",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Hold attention through spoken narrative, pacing, memory, and dramatic delivery. Strong oral-performance core.",
@@ -2758,7 +2758,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
-      "categoryId": "social",
+      "categoryId": "performance",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Play or perform structured instrumental music. Performance profession core.",
@@ -2782,7 +2782,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
-      "categoryId": "social",
+      "categoryId": "performance",
       "dependencies": [
         {
           "skillId": "storytelling",
@@ -2811,7 +2811,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "secondary",
-      "categoryId": "social",
+      "categoryId": "performance",
       "dependencies": [
         {
           "skillId": "language",
@@ -2840,7 +2840,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
-      "categoryId": "social",
+      "categoryId": "performance",
       "dependencies": [
         {
           "skillId": "language",
