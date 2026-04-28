@@ -119,7 +119,7 @@ const content = {
     {
       allowsSpecializations: false,
       category: "ordinary" as const,
-      categoryId: "leadership" as const,
+      categoryId: "social" as const,
       dependencies: [],
       dependencySkillIds: [],
       groupId: "urban_watch",

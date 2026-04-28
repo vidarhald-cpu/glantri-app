@@ -87,11 +87,6 @@ const PLAYER_FACING_SKILL_BUCKETS: PlayerFacingSkillBucketDefinition[] = [
     label: "Military"
   },
   {
-    description: "Command, tactics, authority, and coordinated action.",
-    id: "leadership",
-    label: "Leadership"
-  },
-  {
     description: "Travel, stealthy movement, animals, survival, and field utility.",
     id: "fieldcraft",
     label: "Fieldcraft"
@@ -112,9 +107,9 @@ const PLAYER_FACING_SKILL_BUCKETS: PlayerFacingSkillBucketDefinition[] = [
     label: "Trade"
   },
   {
-    description: "Etiquette, influence, performance, and elite social reading.",
-    id: "court-social",
-    label: "Court / Social"
+    description: "Etiquette, influence, performance, and social reading.",
+    id: "social",
+    label: "Social"
   },
   {
     description: "Infiltration, security work, theft, and deception.",

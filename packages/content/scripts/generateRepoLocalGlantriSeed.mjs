@@ -65,13 +65,13 @@ const PLAYER_FACING_SKILL_CATEGORY_BY_GROUP_ID = {
   civic_learning: "knowledge",
   combat_group: "combat",
   commercial_administration: "trade",
-  courtly_formation: "court-social",
+  courtly_formation: "social",
   covert_entry: "covert",
   craft_group: "craft",
   defensive_soldiering: "military",
   field_soldiering: "military",
   fieldcraft_stealth: "fieldcraft",
-  formal_performance: "court-social",
+  formal_performance: "social",
   healing_practice: "healing",
   herb_and_remedy_craft: "healing",
   humanities: "knowledge",
@@ -87,23 +87,35 @@ const PLAYER_FACING_SKILL_CATEGORY_BY_GROUP_ID = {
   mounted_service: "fieldcraft",
   mounted_warrior_training: "combat",
   mystical_group: "mystical",
-  officer_training: "leadership",
+  officer_training: "military",
   omen_and_ritual_practice: "mystical",
   operations: "military",
-  performance_basics: "court-social",
+  performance_basics: "social",
   physical_science: "knowledge",
-  political_acumen: "leadership",
+  political_acumen: "social",
   sacred_learning: "knowledge",
   security: "covert",
-  social_reading: "court-social",
+  social_reading: "social",
   stealth_group: "covert",
   street_theft: "covert",
   technical_measurement: "knowledge",
   transport_and_caravan_work: "trade",
   trap_and_intrusion_work: "covert",
-  veteran_leadership: "leadership",
+  veteran_leadership: "military",
   veteran_soldiering: "military",
   wilderness_group: "fieldcraft"
+};
+
+const PLAYER_FACING_SKILL_CATEGORY_BY_SKILL_ID = {
+  banking: "trade",
+  captaincy: "military",
+  gambling: "social",
+  insight: "social",
+  intrigue: "social",
+  seduction: "social",
+  social_perception: "social",
+  tactics: "military",
+  teamstering: "fieldcraft"
 };
 
 const MELEE_WEAPON_SKILL_IDS = [
@@ -554,7 +566,9 @@ const skills = rawBundle.skills
     return {
       allowsSpecializations: specializationParentIds.has(skill.skillId),
       category: skill.tier === "secondary" ? "secondary" : "ordinary",
-      categoryId: inferPlayerFacingSkillCategoryId(groupIds),
+      categoryId:
+        PLAYER_FACING_SKILL_CATEGORY_BY_SKILL_ID[skill.skillId] ??
+        inferPlayerFacingSkillCategoryId(groupIds),
       dependencies,
       dependencySkillIds: dependencies
         .filter((dependency) => dependency.strength === "required")

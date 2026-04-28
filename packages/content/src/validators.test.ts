@@ -47,6 +47,30 @@ describe("validateCanonicalContent", () => {
     ).toBe(true);
   });
 
+  it("resolves the cleaned player-facing skill categories in default content", () => {
+    const categoryBySkillId = new Map(
+      defaultCanonicalContent.skills.map((skill) => [skill.id, skill.categoryId])
+    );
+
+    expect(categoryBySkillId.get("teamstering")).toBe("fieldcraft");
+    expect(categoryBySkillId.get("seduction")).toBe("social");
+    expect(categoryBySkillId.get("banking")).toBe("trade");
+    expect(categoryBySkillId.get("gambling")).toBe("social");
+    expect(categoryBySkillId.get("captaincy")).toBe("military");
+    expect(categoryBySkillId.get("tactics")).toBe("military");
+    expect(categoryBySkillId.get("insight")).toBe("social");
+    expect(categoryBySkillId.get("intrigue")).toBe("social");
+    expect(categoryBySkillId.get("social_perception")).toBe("social");
+    expect([...categoryBySkillId.values()]).not.toContain("court-social");
+    expect([...categoryBySkillId.values()]).not.toContain("leadership");
+    expect(defaultCanonicalContent.languages.map((language) => language.name)).toEqual(
+      expect.arrayContaining(["Common", "Old Common"])
+    );
+    expect(defaultCanonicalContent.skills.some((skill) => skill.id === "specific_language")).toBe(
+      false
+    );
+  });
+
   it("includes the updated civilization language naming and Lankhmar seed entry", () => {
     expect(
       defaultCanonicalContent.civilizations.find((civilization) => civilization.id === "glantri")

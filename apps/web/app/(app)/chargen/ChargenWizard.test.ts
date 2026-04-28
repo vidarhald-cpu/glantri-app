@@ -461,7 +461,7 @@ const hiddenOtherSkillContent = {
     {
       allowsSpecializations: false,
       category: "ordinary" as const,
-      categoryId: "court-social" as const,
+      categoryId: "social" as const,
       dependencies: [],
       dependencySkillIds: [],
       groupId: "courtly",
@@ -534,7 +534,7 @@ const directGrantedSkillContent = {
     {
       allowsSpecializations: false,
       category: "ordinary" as const,
-      categoryId: "court-social" as const,
+      categoryId: "social" as const,
       dependencies: [],
       dependencySkillIds: [],
       groupId: "courtly",
@@ -612,7 +612,7 @@ const overlappingOfficerTrainingContent = {
     {
       allowsSpecializations: false,
       category: "ordinary" as const,
-      categoryId: "leadership" as const,
+      categoryId: "military" as const,
       dependencies: [],
       dependencySkillIds: [],
       groupId: "basic_awareness",
@@ -626,7 +626,7 @@ const overlappingOfficerTrainingContent = {
     {
       allowsSpecializations: false,
       category: "ordinary" as const,
-      categoryId: "leadership" as const,
+      categoryId: "military" as const,
       dependencies: [],
       dependencySkillIds: [],
       groupId: "officer_training",
@@ -640,7 +640,7 @@ const overlappingOfficerTrainingContent = {
     {
       allowsSpecializations: false,
       category: "ordinary" as const,
-      categoryId: "leadership" as const,
+      categoryId: "military" as const,
       dependencies: [],
       dependencySkillIds: [],
       groupId: "officer_training",
@@ -1587,6 +1587,7 @@ describe("ChargenWizard concrete language rows", () => {
       "Language (Old Common)",
       "Language (Phoenician)"
     ]);
+    expect(rows.map((row) => row.displayName)).not.toContain("Language");
     expect(rows.map((row) => row.targetLanguageName)).toEqual([
       "Common",
       "Old Common",

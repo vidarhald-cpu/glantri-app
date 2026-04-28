@@ -133,7 +133,7 @@ const content = {
     {
       allowsSpecializations: false,
       category: "ordinary",
-      categoryId: "leadership",
+      categoryId: "social",
       dependencies: [],
       dependencySkillIds: [],
       groupId: "urban_watch",
@@ -494,7 +494,7 @@ describe("npcArchetypeTemplates", () => {
     });
     expect(npc.skills).toEqual([
       {
-        categoryId: "leadership",
+        categoryId: "social",
         groupIds: ["urban_watch"],
         isCore: true,
         skillId: "leadership",

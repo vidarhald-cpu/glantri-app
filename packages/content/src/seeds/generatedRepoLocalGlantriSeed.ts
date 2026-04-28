@@ -2241,7 +2241,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "secondary",
-      "categoryId": "military",
+      "categoryId": "social",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Gambling Understand games of chance, betting behavior, and risk-taking. Flavorful, broad social/practical skill.",
@@ -2298,7 +2298,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
-      "categoryId": "military",
+      "categoryId": "trade",
       "dependencies": [
         {
           "skillId": "literacy",
@@ -2369,7 +2369,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
-      "categoryId": "leadership",
+      "categoryId": "social",
       "dependencies": [
         {
           "skillId": "insight",
@@ -2474,7 +2474,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": true,
       "category": "ordinary",
-      "categoryId": "court-social",
+      "categoryId": "social",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Know expected manners, forms of respect, and socially correct behavior. Broad elite-social core.",
@@ -2498,7 +2498,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
-      "categoryId": "court-social",
+      "categoryId": "social",
       "dependencies": [
         {
           "skillId": "etiquette",
@@ -2529,7 +2529,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
-      "categoryId": "court-social",
+      "categoryId": "social",
       "dependencies": [
         {
           "skillId": "etiquette",
@@ -2560,7 +2560,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
-      "categoryId": "leadership",
+      "categoryId": "social",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Read mood, intention, sincerity, fear, uncertainty, or emotional state. Broad social-reading core.",
@@ -2585,7 +2585,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "secondary",
-      "categoryId": "leadership",
+      "categoryId": "social",
       "dependencies": [
         {
           "skillId": "insight",
@@ -2617,7 +2617,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "secondary",
-      "categoryId": "court-social",
+      "categoryId": "social",
       "dependencies": [
         {
           "skillId": "insight",
@@ -2652,7 +2652,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "secondary",
-      "categoryId": "knowledge",
+      "categoryId": "social",
       "dependencies": [
         {
           "skillId": "insight",
@@ -2686,7 +2686,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
-      "categoryId": "court-social",
+      "categoryId": "social",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Use the voice for song, pitch, rhythm, and expression. Broad expressive and social primary.",
@@ -2710,7 +2710,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
-      "categoryId": "court-social",
+      "categoryId": "social",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Dancing Perform structured or improvised movement for ritual, celebration, or display. Broad expressive and social primary.",
@@ -2734,7 +2734,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
-      "categoryId": "court-social",
+      "categoryId": "social",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Hold attention through spoken narrative, pacing, memory, and dramatic delivery. Strong oral-performance core.",
@@ -2758,7 +2758,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
-      "categoryId": "court-social",
+      "categoryId": "social",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Play or perform structured instrumental music. Performance profession core.",
@@ -2782,7 +2782,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
-      "categoryId": "court-social",
+      "categoryId": "social",
       "dependencies": [
         {
           "skillId": "storytelling",
@@ -2811,7 +2811,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "secondary",
-      "categoryId": "court-social",
+      "categoryId": "social",
       "dependencies": [
         {
           "skillId": "language",
@@ -2840,7 +2840,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
-      "categoryId": "court-social",
+      "categoryId": "social",
       "dependencies": [
         {
           "skillId": "language",
@@ -3129,7 +3129,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
-      "categoryId": "trade",
+      "categoryId": "fieldcraft",
       "dependencies": [
         {
           "skillId": "animal_care",
@@ -4760,7 +4760,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
-      "categoryId": "leadership",
+      "categoryId": "military",
       "dependencies": [
         {
           "skillId": "perception",
@@ -4794,7 +4794,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
-      "categoryId": "leadership",
+      "categoryId": "military",
       "dependencies": [
         {
           "skillId": "insight",

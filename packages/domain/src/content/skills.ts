@@ -6,12 +6,11 @@ const skillCategorySchema = z.enum(["ordinary", "secondary"]);
 export const playerFacingSkillCategoryIdSchema = z.enum([
   "combat",
   "military",
-  "leadership",
   "fieldcraft",
   "maritime",
   "healing",
   "trade",
-  "court-social",
+  "social",
   "covert",
   "language",
   "knowledge",
@@ -21,6 +20,22 @@ export const playerFacingSkillCategoryIdSchema = z.enum([
   "physical",
   "special-access"
 ]);
+
+function normalizePlayerFacingSkillCategoryId(input: string | undefined): string | undefined {
+  if (!input) {
+    return undefined;
+  }
+
+  if (input === "court-social") {
+    return "social";
+  }
+
+  if (input === "leadership") {
+    return undefined;
+  }
+
+  return input;
+}
 const skillSocietyLevelSchema = z.number().int().min(1).max(6);
 const skillDependencyStrengthSchema = z.enum(["required", "recommended", "helpful"]);
 const skillGroupSkillRelevanceSchema = z.enum(["core", "optional"]);
@@ -48,13 +63,13 @@ const LEGACY_PLAYER_FACING_SKILL_CATEGORY_BY_GROUP_ID: Partial<
   civic_learning: "knowledge",
   combat_group: "combat",
   commercial_administration: "trade",
-  courtly_formation: "court-social",
+  courtly_formation: "social",
   covert_entry: "covert",
   craft_group: "craft",
   defensive_soldiering: "military",
   field_soldiering: "military",
   fieldcraft_stealth: "fieldcraft",
-  formal_performance: "court-social",
+  formal_performance: "social",
   healing_practice: "healing",
   herb_and_remedy_craft: "healing",
   humanities: "knowledge",
@@ -70,21 +85,21 @@ const LEGACY_PLAYER_FACING_SKILL_CATEGORY_BY_GROUP_ID: Partial<
   mounted_service: "fieldcraft",
   mounted_warrior_training: "combat",
   mystical_group: "mystical",
-  officer_training: "leadership",
+  officer_training: "military",
   omen_and_ritual_practice: "mystical",
   operations: "military",
-  performance_basics: "court-social",
+  performance_basics: "social",
   physical_science: "knowledge",
-  political_acumen: "leadership",
+  political_acumen: "social",
   sacred_learning: "knowledge",
   security: "covert",
-  social_reading: "court-social",
+  social_reading: "social",
   stealth_group: "covert",
   street_theft: "covert",
   technical_measurement: "knowledge",
   transport_and_caravan_work: "trade",
   trap_and_intrusion_work: "covert",
-  veteran_leadership: "leadership",
+  veteran_leadership: "military",
   veteran_soldiering: "military",
   wilderness_group: "fieldcraft"
 };
@@ -256,10 +271,11 @@ export const skillDefinitionSchema = z.preprocess(
           ? candidate.groupIds[0]
           : undefined;
     const normalizedDependencies = normalizeSkillDependencies(candidate);
-    const explicitCategoryId =
+    const explicitCategoryId = normalizePlayerFacingSkillCategoryId(
       typeof candidate.categoryId === "string" && candidate.categoryId.length > 0
         ? candidate.categoryId
-        : undefined;
+        : undefined
+    );
     const normalizedCategoryId =
       candidate.id === "language" ? "language" : explicitCategoryId;
     const inferredCategoryId = inferPlayerFacingSkillCategoryIdFromGroupIds({
@@ -522,7 +538,11 @@ export function getPlayerFacingSkillCategoryId(
   }
 
   if (typeof skill.categoryId === "string" && skill.categoryId.length > 0) {
-    return skill.categoryId as PlayerFacingSkillCategoryId;
+    const normalizedCategoryId = normalizePlayerFacingSkillCategoryId(skill.categoryId);
+
+    if (normalizedCategoryId) {
+      return normalizedCategoryId as PlayerFacingSkillCategoryId;
+    }
   }
 
   return inferPlayerFacingSkillCategoryIdFromGroupIds(skill);

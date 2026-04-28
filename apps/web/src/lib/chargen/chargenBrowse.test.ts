@@ -5,6 +5,7 @@ import {
   filterSpecializationBrowseItems,
   getSkillAccessSourceLabels,
   getPlayerFacingSkillBucket,
+  getPlayerFacingSkillBucketDefinitions,
   isRelevantSpecializationBrowseItem,
   matchesSkillBrowseFilters
 } from "./chargenBrowse";
@@ -44,6 +45,25 @@ describe("chargenBrowse helpers", () => {
         "profession-group"
       ])
     ).toEqual(["Direct profession skill", "Profession group", "Society access"]);
+  });
+
+  it("surfaces Social as the player-facing social bucket and normalizes old category ids", () => {
+    const definitions = getPlayerFacingSkillBucketDefinitions();
+
+    expect(definitions.map((definition) => definition.label)).toContain("Social");
+    expect(definitions.map((definition) => definition.label)).not.toContain("Court / Social");
+    expect(definitions.map((definition) => definition.label)).not.toContain("Leadership");
+    expect(getPlayerFacingSkillBucket({ categoryId: "court-social", id: "etiquette" })).toBe(
+      "social"
+    );
+    expect(
+      getPlayerFacingSkillBucket({
+        categoryId: "leadership",
+        groupId: "officer_training",
+        groupIds: ["officer_training"],
+        id: "captaincy"
+      })
+    ).toBe("military");
   });
 
   it("matches skill browse filters for owned, blocked, and purchasable rows", () => {
