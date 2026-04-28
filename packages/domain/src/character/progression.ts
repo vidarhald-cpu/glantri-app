@@ -1,5 +1,9 @@
 import { z } from "zod";
-import { playerFacingSkillCategoryIdSchema } from "../content/skills";
+import {
+  inferPlayerFacingSkillCategoryIdFromGroupIds,
+  normalizePlayerFacingSkillCategoryId,
+  playerFacingSkillCategoryIdSchema
+} from "../content/skills";
 
 const chargenModeSchema = z.enum(["standard"]);
 const skillCategorySchema = z.enum(["ordinary", "secondary"]);
@@ -20,30 +24,94 @@ export const characterSkillGroupSchema = z.object({
   gms: z.number().int().default(0)
 });
 
-export const characterSkillSchema = z.object({
-  category: skillCategorySchema.default("ordinary"),
-  categoryId: playerFacingSkillCategoryIdSchema.optional(),
-  grantedRanks: z.number().int().nonnegative().default(0),
-  groupId: z.string().min(1),
-  languageName: z.string().min(1).optional(),
-  primaryRanks: z.number().int().nonnegative().default(0),
-  relationshipGrantedRanks: z.number().int().nonnegative().optional(),
-  relationshipGrantSourceName: z.string().min(1).optional(),
-  relationshipGrantSourceSkillId: z.string().min(1).optional(),
-  relationshipGrantSourceType: z
-    .enum([
-      "explicit",
-      "melee-cross-training",
-      "specialization-bridge-child",
-      "specialization-bridge-parent"
-    ])
-    .optional(),
-  secondaryRanks: z.number().int().nonnegative().default(0),
-  skillId: z.string().min(1),
-  ranks: z.number().int().nonnegative().default(0),
-  level: z.number().int().default(0),
-  sourceTag: characterSkillSourceSchema.optional()
-});
+const LEGACY_LEADERSHIP_CATEGORY_BY_SKILL_ID: Record<string, string> = {
+  captaincy: "military",
+  insight: "social",
+  intrigue: "social",
+  social_perception: "social",
+  tactics: "military",
+  teamster: "fieldcraft",
+  teamstering: "fieldcraft"
+};
+
+function normalizeCharacterSkillCategoryInput(input: unknown): unknown {
+  if (typeof input !== "object" || input === null) {
+    return input;
+  }
+
+  const candidate = input as {
+    categoryId?: unknown;
+    groupId?: unknown;
+    groupIds?: unknown;
+    skillId?: unknown;
+  };
+  const categoryId =
+    typeof candidate.categoryId === "string" && candidate.categoryId.length > 0
+      ? candidate.categoryId
+      : undefined;
+  const normalizedCategoryKey = categoryId?.trim().toLowerCase().replace(/[\s_]+/g, "-");
+  const normalizedCategoryId = normalizePlayerFacingSkillCategoryId(categoryId);
+
+  if (normalizedCategoryId) {
+    return {
+      ...candidate,
+      categoryId: normalizedCategoryId
+    };
+  }
+
+  if (normalizedCategoryKey !== "leadership") {
+    return input;
+  }
+
+  const groupIds = Array.isArray(candidate.groupIds)
+    ? candidate.groupIds.filter((groupId): groupId is string => typeof groupId === "string")
+    : [];
+  const groupId = typeof candidate.groupId === "string" ? candidate.groupId : groupIds[0];
+  const inferredCategoryId = inferPlayerFacingSkillCategoryIdFromGroupIds({
+    groupId,
+    groupIds
+  });
+  const skillCategoryId =
+    typeof candidate.skillId === "string"
+      ? LEGACY_LEADERSHIP_CATEGORY_BY_SKILL_ID[candidate.skillId]
+      : undefined;
+
+  return {
+    ...candidate,
+    categoryId:
+      inferredCategoryId === "special-access"
+        ? skillCategoryId ?? "social"
+        : inferredCategoryId
+  };
+}
+
+export const characterSkillSchema = z.preprocess(
+  normalizeCharacterSkillCategoryInput,
+  z.object({
+    category: skillCategorySchema.default("ordinary"),
+    categoryId: playerFacingSkillCategoryIdSchema.optional(),
+    grantedRanks: z.number().int().nonnegative().default(0),
+    groupId: z.string().min(1),
+    languageName: z.string().min(1).optional(),
+    primaryRanks: z.number().int().nonnegative().default(0),
+    relationshipGrantedRanks: z.number().int().nonnegative().optional(),
+    relationshipGrantSourceName: z.string().min(1).optional(),
+    relationshipGrantSourceSkillId: z.string().min(1).optional(),
+    relationshipGrantSourceType: z
+      .enum([
+        "explicit",
+        "melee-cross-training",
+        "specialization-bridge-child",
+        "specialization-bridge-parent"
+      ])
+      .optional(),
+    secondaryRanks: z.number().int().nonnegative().default(0),
+    skillId: z.string().min(1),
+    ranks: z.number().int().nonnegative().default(0),
+    level: z.number().int().default(0),
+    sourceTag: characterSkillSourceSchema.optional()
+  })
+);
 
 export const characterSpecializationSchema = z.object({
   relationshipGrantedRanks: z.number().int().nonnegative().optional(),

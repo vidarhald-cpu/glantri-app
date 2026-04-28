@@ -21,20 +21,22 @@ export const playerFacingSkillCategoryIdSchema = z.enum([
   "special-access"
 ]);
 
-function normalizePlayerFacingSkillCategoryId(input: string | undefined): string | undefined {
+export function normalizePlayerFacingSkillCategoryId(input: string | undefined): string | undefined {
   if (!input) {
     return undefined;
   }
 
-  if (input === "court-social") {
+  const normalized = input.trim().toLowerCase().replace(/[\s_]+/g, "-");
+
+  if (normalized === "court-social") {
     return "social";
   }
 
-  if (input === "leadership") {
+  if (normalized === "leadership") {
     return undefined;
   }
 
-  return input;
+  return normalized;
 }
 const skillSocietyLevelSchema = z.number().int().min(1).max(6);
 const skillDependencyStrengthSchema = z.enum(["required", "recommended", "helpful"]);
