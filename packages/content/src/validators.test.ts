@@ -186,10 +186,10 @@ describe("validateCanonicalContent", () => {
     }
 
     expect(groupIdsFor("watchman")).toEqual(
-      expect.arrayContaining(["basic_melee_training", "defensive_soldiering", "civic_learning"])
+      expect.arrayContaining(["basic_melee_training", "defensive_soldiering", "watch_civic_guard"])
     );
     expect(groupIdsFor("jailer")).toEqual(
-      expect.arrayContaining(["basic_melee_training", "defensive_soldiering", "civic_learning"])
+      expect.arrayContaining(["basic_melee_training", "defensive_soldiering", "watch_civic_guard"])
     );
     expect(groupIdsFor("cavalry")).toEqual(
       expect.arrayContaining(["mounted_warrior_training", "veteran_soldiering"])
@@ -208,6 +208,100 @@ describe("validateCanonicalContent", () => {
     expect(groupIdsFor("military_officer").length).toBeGreaterThan(
       groupIdsFor("tribal_warrior").length
     );
+  });
+
+  it("gives civic guard professions a watch-focused skill group without officer training", () => {
+    const groupById = new Map(
+      defaultCanonicalContent.skillGroups.map((group) => [group.id, group])
+    );
+    const professionById = new Map(
+      defaultCanonicalContent.professions.map((profession) => [profession.id, profession])
+    );
+    const grantsFor = (professionId: string) => {
+      const profession = professionById.get(professionId);
+
+      return defaultCanonicalContent.professionSkills.filter(
+        (grant) =>
+          (grant.scope === "family" && grant.professionId === profession?.familyId) ||
+          (grant.scope === "profession" && grant.professionId === professionId)
+      );
+    };
+    const groupIdsFor = (professionId: string) =>
+      grantsFor(professionId)
+        .filter((grant) => grant.grantType === "group" && grant.skillGroupId)
+        .map((grant) => grant.skillGroupId ?? "");
+    const directOnlySkillIdsFor = (professionId: string) => {
+      const groupIds = groupIdsFor(professionId);
+      const skillIdsFromGroups = defaultCanonicalContent.skills
+        .filter((skill) =>
+          (skill.groupIds ?? [skill.groupId]).some((groupId) => groupIds.includes(groupId))
+        )
+        .map((skill) => skill.id);
+      const directSkillIds = grantsFor(professionId)
+        .filter((grant) => grant.grantType !== "group" && grant.skillId)
+        .map((grant) => grant.skillId ?? "");
+
+      return directSkillIds.filter((skillId) => !skillIdsFromGroups.includes(skillId));
+    };
+    const skillReachFor = (professionId: string) => {
+      const groupIds = groupIdsFor(professionId);
+      const skillIdsFromGroups = defaultCanonicalContent.skills
+        .filter((skill) =>
+          (skill.groupIds ?? [skill.groupId]).some((groupId) => groupIds.includes(groupId))
+        )
+        .map((skill) => skill.id);
+
+      return new Set([...skillIdsFromGroups, ...directOnlySkillIdsFor(professionId)]).size;
+    };
+
+    const watchGroup = groupById.get("watch_civic_guard");
+    const watchMembershipIds =
+      watchGroup?.skillMemberships?.map((membership) => membership.skillId) ?? [];
+
+    expect(watchGroup).toMatchObject({
+      id: "watch_civic_guard",
+      name: "Watch / Civic Guard"
+    });
+    expect(watchMembershipIds).toEqual(
+      expect.arrayContaining([
+        "perception",
+        "search",
+        "law",
+        "insight",
+        "social_perception"
+      ])
+    );
+    expect(watchMembershipIds).not.toContain("parry");
+    expect(watchMembershipIds).not.toContain("dodge");
+    expect(watchMembershipIds).not.toContain("brawling");
+    expect(watchMembershipIds).not.toContain("one_handed_edged");
+    expect(watchMembershipIds).not.toContain("one_handed_concussion_axe");
+    expect(watchMembershipIds).not.toContain("two_handed_edged");
+    expect(watchMembershipIds).not.toContain("two_handed_concussion_axe");
+    expect(watchMembershipIds).not.toContain("polearms");
+    expect(watchMembershipIds).not.toContain("lance");
+    expect(watchMembershipIds).not.toContain("captaincy");
+    expect(watchMembershipIds).not.toContain("tactics");
+    expect(watchMembershipIds).not.toContain("veteran_leadership");
+
+    for (const professionId of ["watchman", "jailer"]) {
+      const groupIds = groupIdsFor(professionId);
+
+      expect(groupIds).toEqual(
+        expect.arrayContaining([
+          "basic_melee_training",
+          "defensive_soldiering",
+          "watch_civic_guard"
+        ])
+      );
+      expect(groupIds).not.toContain("veteran_leadership");
+      expect(new Set(groupIds).size).toBe(groupIds.length);
+      expect(groupIds.length).toBeGreaterThanOrEqual(2);
+      expect(skillReachFor(professionId)).toBeGreaterThan(10);
+    }
+
+    expect(directOnlySkillIdsFor("watchman")).not.toContain("search");
+    expect(directOnlySkillIdsFor("jailer")).not.toContain("perception");
   });
 
   it("restricts informal warrior availability to low-society low-class grids", () => {

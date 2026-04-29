@@ -1681,6 +1681,35 @@ export const generatedRepoLocalGlantriSeed = {
       ],
       "selectionSlots": [],
       "sortOrder": 51
+    },
+    {
+      "description": "Observation, search, basic law, and defensive procedure for civic watch and detention work.",
+      "id": "watch_civic_guard",
+      "name": "Watch / Civic Guard",
+      "skillMemberships": [
+        {
+          "relevance": "optional",
+          "skillId": "perception"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "search"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "law"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "insight"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "social_perception"
+        }
+      ],
+      "selectionSlots": [],
+      "sortOrder": 52
     }
   ],
   "skills": [
@@ -1849,7 +1878,8 @@ export const generatedRepoLocalGlantriSeed = {
       "groupId": "civic_learning",
       "groupIds": [
         "civic_learning",
-        "humanities"
+        "humanities",
+        "watch_civic_guard"
       ],
       "id": "law",
       "isTheoretical": true,
@@ -2521,7 +2551,8 @@ export const generatedRepoLocalGlantriSeed = {
       "groupIds": [
         "political_acumen",
         "social_reading",
-        "humanities"
+        "humanities",
+        "watch_civic_guard"
       ],
       "id": "insight",
       "isTheoretical": false,
@@ -2553,7 +2584,8 @@ export const generatedRepoLocalGlantriSeed = {
       "groupIds": [
         "political_acumen",
         "social_reading",
-        "humanities"
+        "humanities",
+        "watch_civic_guard"
       ],
       "id": "social_perception",
       "isTheoretical": false,
@@ -2943,7 +2975,8 @@ export const generatedRepoLocalGlantriSeed = {
         "veteran_soldiering",
         "security",
         "military_group",
-        "mental_group"
+        "mental_group",
+        "watch_civic_guard"
       ],
       "id": "perception",
       "isTheoretical": false,
@@ -3418,7 +3451,8 @@ export const generatedRepoLocalGlantriSeed = {
       "groupId": "covert_entry",
       "groupIds": [
         "covert_entry",
-        "security"
+        "security",
+        "watch_civic_guard"
       ],
       "id": "search",
       "isTheoretical": false,
@@ -8101,14 +8135,6 @@ export const generatedRepoLocalGlantriSeed = {
       "skillGroupId": "basic_melee_training"
     },
     {
-      "grantType": "ordinary-skill",
-      "isCore": true,
-      "professionId": "jailer",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "perception"
-    },
-    {
       "grantType": "group",
       "isCore": false,
       "professionId": "jailer",
@@ -8122,31 +8148,7 @@ export const generatedRepoLocalGlantriSeed = {
       "professionId": "jailer",
       "ranks": 0,
       "scope": "profession",
-      "skillGroupId": "civic_learning"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "jailer",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "insight"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "jailer",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "search"
-    },
-    {
-      "grantType": "secondary-skill",
-      "isCore": false,
-      "professionId": "jailer",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "parry"
+      "skillGroupId": "watch_civic_guard"
     },
     {
       "grantType": "group",
@@ -9685,14 +9687,6 @@ export const generatedRepoLocalGlantriSeed = {
       "skillGroupId": "basic_melee_training"
     },
     {
-      "grantType": "ordinary-skill",
-      "isCore": true,
-      "professionId": "watchman",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "perception"
-    },
-    {
       "grantType": "group",
       "isCore": false,
       "professionId": "watchman",
@@ -9706,15 +9700,7 @@ export const generatedRepoLocalGlantriSeed = {
       "professionId": "watchman",
       "ranks": 0,
       "scope": "profession",
-      "skillGroupId": "civic_learning"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "watchman",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "search"
+      "skillGroupId": "watch_civic_guard"
     },
     {
       "grantType": "ordinary-skill",
@@ -10103,7 +10089,8 @@ export const generatedRepoLocalGlantriSeed = {
         "military_group",
         "craft_group",
         "mental_group",
-        "wilderness_group"
+        "wilderness_group",
+        "watch_civic_guard"
       ],
       "skillIds": [],
       "socialClass": "Common Folk",
@@ -10178,7 +10165,8 @@ export const generatedRepoLocalGlantriSeed = {
         "military_group",
         "craft_group",
         "mental_group",
-        "wilderness_group"
+        "wilderness_group",
+        "watch_civic_guard"
       ],
       "skillIds": [],
       "socialClass": "Trades and Guilds",
@@ -10251,7 +10239,8 @@ export const generatedRepoLocalGlantriSeed = {
         "military_group",
         "craft_group",
         "mental_group",
-        "wilderness_group"
+        "wilderness_group",
+        "watch_civic_guard"
       ],
       "skillIds": [],
       "socialClass": "Established Households",
@@ -10324,7 +10313,8 @@ export const generatedRepoLocalGlantriSeed = {
         "military_group",
         "craft_group",
         "mental_group",
-        "wilderness_group"
+        "wilderness_group",
+        "watch_civic_guard"
       ],
       "skillIds": [],
       "socialClass": "Court and Elite",
@@ -10399,7 +10389,8 @@ export const generatedRepoLocalGlantriSeed = {
         "military_group",
         "craft_group",
         "mental_group",
-        "wilderness_group"
+        "wilderness_group",
+        "watch_civic_guard"
       ],
       "skillIds": [],
       "socialClass": "Common Folk",
@@ -10514,7 +10505,8 @@ export const generatedRepoLocalGlantriSeed = {
         "craft_group",
         "mental_group",
         "mystical_group",
-        "wilderness_group"
+        "wilderness_group",
+        "watch_civic_guard"
       ],
       "skillIds": [],
       "socialClass": "Trades and Guilds",
@@ -10627,7 +10619,8 @@ export const generatedRepoLocalGlantriSeed = {
         "craft_group",
         "mental_group",
         "mystical_group",
-        "wilderness_group"
+        "wilderness_group",
+        "watch_civic_guard"
       ],
       "skillIds": [],
       "socialClass": "Established Households",
@@ -10740,7 +10733,8 @@ export const generatedRepoLocalGlantriSeed = {
         "craft_group",
         "mental_group",
         "mystical_group",
-        "wilderness_group"
+        "wilderness_group",
+        "watch_civic_guard"
       ],
       "skillIds": [],
       "socialClass": "Court and Elite",
@@ -10815,7 +10809,8 @@ export const generatedRepoLocalGlantriSeed = {
         "military_group",
         "craft_group",
         "mental_group",
-        "wilderness_group"
+        "wilderness_group",
+        "watch_civic_guard"
       ],
       "skillIds": [],
       "socialClass": "Common Folk",
@@ -10930,7 +10925,8 @@ export const generatedRepoLocalGlantriSeed = {
         "craft_group",
         "mental_group",
         "mystical_group",
-        "wilderness_group"
+        "wilderness_group",
+        "watch_civic_guard"
       ],
       "skillIds": [],
       "socialClass": "Trades and Guilds",
@@ -11043,7 +11039,8 @@ export const generatedRepoLocalGlantriSeed = {
         "craft_group",
         "mental_group",
         "mystical_group",
-        "wilderness_group"
+        "wilderness_group",
+        "watch_civic_guard"
       ],
       "skillIds": [],
       "socialClass": "Established Households",
@@ -11156,7 +11153,8 @@ export const generatedRepoLocalGlantriSeed = {
         "craft_group",
         "mental_group",
         "mystical_group",
-        "wilderness_group"
+        "wilderness_group",
+        "watch_civic_guard"
       ],
       "skillIds": [],
       "socialClass": "Court and Elite",
@@ -11229,7 +11227,8 @@ export const generatedRepoLocalGlantriSeed = {
         "military_group",
         "craft_group",
         "mental_group",
-        "wilderness_group"
+        "wilderness_group",
+        "watch_civic_guard"
       ],
       "skillIds": [],
       "socialClass": "Common Folk",
@@ -11342,7 +11341,8 @@ export const generatedRepoLocalGlantriSeed = {
         "craft_group",
         "mental_group",
         "mystical_group",
-        "wilderness_group"
+        "wilderness_group",
+        "watch_civic_guard"
       ],
       "skillIds": [],
       "socialClass": "Trades and Guilds",
@@ -11475,7 +11475,8 @@ export const generatedRepoLocalGlantriSeed = {
         "craft_group",
         "mental_group",
         "mystical_group",
-        "wilderness_group"
+        "wilderness_group",
+        "watch_civic_guard"
       ],
       "skillIds": [],
       "socialClass": "Established Households",
@@ -11608,7 +11609,8 @@ export const generatedRepoLocalGlantriSeed = {
         "craft_group",
         "mental_group",
         "mystical_group",
-        "wilderness_group"
+        "wilderness_group",
+        "watch_civic_guard"
       ],
       "skillIds": [],
       "socialClass": "Court and Elite",
@@ -11681,7 +11683,8 @@ export const generatedRepoLocalGlantriSeed = {
         "military_group",
         "craft_group",
         "mental_group",
-        "wilderness_group"
+        "wilderness_group",
+        "watch_civic_guard"
       ],
       "skillIds": [],
       "socialClass": "Common Folk",
@@ -11794,7 +11797,8 @@ export const generatedRepoLocalGlantriSeed = {
         "craft_group",
         "mental_group",
         "mystical_group",
-        "wilderness_group"
+        "wilderness_group",
+        "watch_civic_guard"
       ],
       "skillIds": [],
       "socialClass": "Trades and Guilds",
@@ -11927,7 +11931,8 @@ export const generatedRepoLocalGlantriSeed = {
         "craft_group",
         "mental_group",
         "mystical_group",
-        "wilderness_group"
+        "wilderness_group",
+        "watch_civic_guard"
       ],
       "skillIds": [],
       "socialClass": "Established Households",
@@ -12060,7 +12065,8 @@ export const generatedRepoLocalGlantriSeed = {
         "craft_group",
         "mental_group",
         "mystical_group",
-        "wilderness_group"
+        "wilderness_group",
+        "watch_civic_guard"
       ],
       "skillIds": [],
       "socialClass": "Court and Elite",
@@ -12133,7 +12139,8 @@ export const generatedRepoLocalGlantriSeed = {
         "military_group",
         "craft_group",
         "mental_group",
-        "wilderness_group"
+        "wilderness_group",
+        "watch_civic_guard"
       ],
       "skillIds": [],
       "socialClass": "Common Folk",
@@ -12246,7 +12253,8 @@ export const generatedRepoLocalGlantriSeed = {
         "craft_group",
         "mental_group",
         "mystical_group",
-        "wilderness_group"
+        "wilderness_group",
+        "watch_civic_guard"
       ],
       "skillIds": [],
       "socialClass": "Trades and Guilds",
@@ -12379,7 +12387,8 @@ export const generatedRepoLocalGlantriSeed = {
         "craft_group",
         "mental_group",
         "mystical_group",
-        "wilderness_group"
+        "wilderness_group",
+        "watch_civic_guard"
       ],
       "skillIds": [],
       "socialClass": "Established Households",
@@ -12524,7 +12533,8 @@ export const generatedRepoLocalGlantriSeed = {
         "craft_group",
         "mental_group",
         "mystical_group",
-        "wilderness_group"
+        "wilderness_group",
+        "watch_civic_guard"
       ],
       "skillIds": [],
       "socialClass": "Court and Elite",
@@ -12597,7 +12607,8 @@ export const generatedRepoLocalGlantriSeed = {
         "military_group",
         "craft_group",
         "mental_group",
-        "wilderness_group"
+        "wilderness_group",
+        "watch_civic_guard"
       ],
       "skillIds": [],
       "socialClass": "Common Folk",
@@ -12710,7 +12721,8 @@ export const generatedRepoLocalGlantriSeed = {
         "craft_group",
         "mental_group",
         "mystical_group",
-        "wilderness_group"
+        "wilderness_group",
+        "watch_civic_guard"
       ],
       "skillIds": [],
       "socialClass": "Trades and Guilds",
@@ -12843,7 +12855,8 @@ export const generatedRepoLocalGlantriSeed = {
         "craft_group",
         "mental_group",
         "mystical_group",
-        "wilderness_group"
+        "wilderness_group",
+        "watch_civic_guard"
       ],
       "skillIds": [],
       "socialClass": "Established Households",
@@ -12988,7 +13001,8 @@ export const generatedRepoLocalGlantriSeed = {
         "craft_group",
         "mental_group",
         "mystical_group",
-        "wilderness_group"
+        "wilderness_group",
+        "watch_civic_guard"
       ],
       "skillIds": [],
       "socialClass": "Court and Elite",
@@ -13061,7 +13075,8 @@ export const generatedRepoLocalGlantriSeed = {
         "military_group",
         "craft_group",
         "mental_group",
-        "wilderness_group"
+        "wilderness_group",
+        "watch_civic_guard"
       ],
       "skillIds": [],
       "socialClass": "Common Folk",
@@ -13174,7 +13189,8 @@ export const generatedRepoLocalGlantriSeed = {
         "craft_group",
         "mental_group",
         "mystical_group",
-        "wilderness_group"
+        "wilderness_group",
+        "watch_civic_guard"
       ],
       "skillIds": [],
       "socialClass": "Trades and Guilds",
@@ -13307,7 +13323,8 @@ export const generatedRepoLocalGlantriSeed = {
         "craft_group",
         "mental_group",
         "mystical_group",
-        "wilderness_group"
+        "wilderness_group",
+        "watch_civic_guard"
       ],
       "skillIds": [],
       "socialClass": "Established Households",
@@ -13452,7 +13469,8 @@ export const generatedRepoLocalGlantriSeed = {
         "craft_group",
         "mental_group",
         "mystical_group",
-        "wilderness_group"
+        "wilderness_group",
+        "watch_civic_guard"
       ],
       "skillIds": [],
       "socialClass": "Court and Elite",
@@ -13525,7 +13543,8 @@ export const generatedRepoLocalGlantriSeed = {
         "military_group",
         "craft_group",
         "mental_group",
-        "wilderness_group"
+        "wilderness_group",
+        "watch_civic_guard"
       ],
       "skillIds": [],
       "socialClass": "Common Folk",
@@ -13638,7 +13657,8 @@ export const generatedRepoLocalGlantriSeed = {
         "craft_group",
         "mental_group",
         "mystical_group",
-        "wilderness_group"
+        "wilderness_group",
+        "watch_civic_guard"
       ],
       "skillIds": [],
       "socialClass": "Trades and Guilds",
@@ -13771,7 +13791,8 @@ export const generatedRepoLocalGlantriSeed = {
         "craft_group",
         "mental_group",
         "mystical_group",
-        "wilderness_group"
+        "wilderness_group",
+        "watch_civic_guard"
       ],
       "skillIds": [],
       "socialClass": "Established Households",
@@ -13916,7 +13937,8 @@ export const generatedRepoLocalGlantriSeed = {
         "craft_group",
         "mental_group",
         "mystical_group",
-        "wilderness_group"
+        "wilderness_group",
+        "watch_civic_guard"
       ],
       "skillIds": [],
       "socialClass": "Court and Elite",
@@ -13989,7 +14011,8 @@ export const generatedRepoLocalGlantriSeed = {
         "military_group",
         "craft_group",
         "mental_group",
-        "wilderness_group"
+        "wilderness_group",
+        "watch_civic_guard"
       ],
       "skillIds": [],
       "socialClass": "Common Folk",
@@ -14102,7 +14125,8 @@ export const generatedRepoLocalGlantriSeed = {
         "craft_group",
         "mental_group",
         "mystical_group",
-        "wilderness_group"
+        "wilderness_group",
+        "watch_civic_guard"
       ],
       "skillIds": [],
       "socialClass": "Trades and Guilds",
@@ -14235,7 +14259,8 @@ export const generatedRepoLocalGlantriSeed = {
         "craft_group",
         "mental_group",
         "mystical_group",
-        "wilderness_group"
+        "wilderness_group",
+        "watch_civic_guard"
       ],
       "skillIds": [],
       "socialClass": "Established Households",
@@ -14380,7 +14405,8 @@ export const generatedRepoLocalGlantriSeed = {
         "craft_group",
         "mental_group",
         "mystical_group",
-        "wilderness_group"
+        "wilderness_group",
+        "watch_civic_guard"
       ],
       "skillIds": [],
       "socialClass": "Court and Elite",
@@ -14453,7 +14479,8 @@ export const generatedRepoLocalGlantriSeed = {
         "military_group",
         "craft_group",
         "mental_group",
-        "wilderness_group"
+        "wilderness_group",
+        "watch_civic_guard"
       ],
       "skillIds": [],
       "socialClass": "Common Folk",
@@ -14566,7 +14593,8 @@ export const generatedRepoLocalGlantriSeed = {
         "craft_group",
         "mental_group",
         "mystical_group",
-        "wilderness_group"
+        "wilderness_group",
+        "watch_civic_guard"
       ],
       "skillIds": [],
       "socialClass": "Trades and Guilds",
@@ -14699,7 +14727,8 @@ export const generatedRepoLocalGlantriSeed = {
         "craft_group",
         "mental_group",
         "mystical_group",
-        "wilderness_group"
+        "wilderness_group",
+        "watch_civic_guard"
       ],
       "skillIds": [],
       "socialClass": "Established Households",
@@ -14844,7 +14873,8 @@ export const generatedRepoLocalGlantriSeed = {
         "craft_group",
         "mental_group",
         "mystical_group",
-        "wilderness_group"
+        "wilderness_group",
+        "watch_civic_guard"
       ],
       "skillIds": [],
       "socialClass": "Court and Elite",

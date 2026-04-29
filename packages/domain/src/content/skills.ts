@@ -130,6 +130,7 @@ const LEGACY_PLAYER_FACING_SKILL_CATEGORY_BY_GROUP_ID: Partial<
   trap_and_intrusion_work: "covert",
   veteran_leadership: "military",
   veteran_soldiering: "military",
+  watch_civic_guard: "social",
   wilderness_group: "fieldcraft"
 };
 

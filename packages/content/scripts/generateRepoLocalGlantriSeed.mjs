@@ -103,6 +103,7 @@ const PLAYER_FACING_SKILL_CATEGORY_BY_GROUP_ID = {
   trap_and_intrusion_work: "covert",
   veteran_leadership: "military",
   veteran_soldiering: "military",
+  watch_civic_guard: "social",
   wilderness_group: "fieldcraft"
 };
 
@@ -200,7 +201,8 @@ const FIXED_SKILL_MEMBERSHIPS_BY_GROUP_ID = {
   basic_melee_training: ["dodge", "parry", "brawling"],
   advanced_melee_training: ["dodge", "parry", "brawling"],
   basic_missile_training: [],
-  advanced_missile_training: []
+  advanced_missile_training: [],
+  watch_civic_guard: ["perception", "search", "law", "insight", "social_perception"]
 };
 
 const ADDITIONAL_TRAINING_GROUP_IDS_BY_SKILL_ID = {
@@ -211,7 +213,9 @@ const GROUP_DESCRIPTION_OVERRIDES = {
   basic_melee_training: "Dodge, parry, and brawling plus one required melee weapon skill.",
   advanced_melee_training: "Dodge, parry, and brawling plus three required melee weapon skills.",
   basic_missile_training: "One required missile weapon skill.",
-  advanced_missile_training: "Three required missile weapon skills."
+  advanced_missile_training: "Three required missile weapon skills.",
+  watch_civic_guard:
+    "Observation, search, basic law, and defensive procedure for civic watch and detention work."
 };
 
 const PROFESSION_FAMILY_GRANT_OVERRIDES = {
@@ -254,8 +258,9 @@ const PROFESSION_SUBTYPE_GRANT_OVERRIDES = {
     addedCoreTrainingGroupIds: ["advanced_melee_training"]
   },
   jailer: {
-    addedCoreSkillIds: ["perception"],
-    addedFavoredTrainingGroupIds: ["defensive_soldiering", "civic_learning"]
+    addedCoreSkillIds: [],
+    addedFavoredSkillIds: [],
+    addedFavoredTrainingGroupIds: ["defensive_soldiering", "watch_civic_guard"]
   },
   light_infantry: {
     addedFavoredTrainingGroupIds: []
@@ -273,8 +278,9 @@ const PROFESSION_SUBTYPE_GRANT_OVERRIDES = {
     addedFavoredTrainingGroupIds: ["mounted_service", "fieldcraft_stealth"]
   },
   watchman: {
-    addedFavoredSkillIds: ["search"],
-    addedFavoredTrainingGroupIds: ["defensive_soldiering", "civic_learning"]
+    addedCoreSkillIds: [],
+    addedFavoredSkillIds: [],
+    addedFavoredTrainingGroupIds: ["defensive_soldiering", "watch_civic_guard"]
   }
 };
 
@@ -643,7 +649,20 @@ const taxonomyGroupSources = rawBundle.taxonomyGroups.map((group, index) => ({
   skillIds: parseJsonLike(group.skillIds),
   sortOrder: trainingGroupSources.length + index + 1
 }));
-const skillGroupSources = [...trainingGroupSources, ...taxonomyGroupSources].reduce(
+const generatedTrainingGroupSources = [
+  {
+    description: GROUP_DESCRIPTION_OVERRIDES.watch_civic_guard,
+    id: "watch_civic_guard",
+    name: "Watch / Civic Guard",
+    skillIds: FIXED_SKILL_MEMBERSHIPS_BY_GROUP_ID.watch_civic_guard,
+    sortOrder: trainingGroupSources.length + taxonomyGroupSources.length + 1
+  }
+];
+const skillGroupSources = [
+  ...trainingGroupSources,
+  ...taxonomyGroupSources,
+  ...generatedTrainingGroupSources
+].reduce(
   (groups, group) => {
     const existing = groups.find((candidate) => candidate.id === group.id);
 
