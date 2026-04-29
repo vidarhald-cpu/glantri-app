@@ -129,6 +129,87 @@ describe("validateCanonicalContent", () => {
     expect(new Set(groupGrantKeys).size).toBe(groupGrantKeys.length);
   });
 
+  it("keeps broad soldier grants separate from officer command education", () => {
+    const affectedOrdinaryProfessionIds = [
+      "tribal_warrior",
+      "clan_warriors",
+      "levy_infantry",
+      "caravan_guard",
+      "watchman",
+      "jailer",
+      "light_infantry",
+      "heavy_infantry",
+      "cavalry",
+      "cavalry_mounted_retainer",
+      "bodyguard",
+      "gladiator",
+      "outrider_scout",
+      "champion"
+    ];
+    const soldierFamily = defaultCanonicalContent.professionFamilies.find(
+      (family) => family.id === "soldier"
+    );
+    const grantsFor = (professionId: string) => {
+      const profession = defaultCanonicalContent.professions.find(
+        (candidate) => candidate.id === professionId
+      );
+
+      return defaultCanonicalContent.professionSkills.filter(
+        (grant) =>
+          (grant.scope === "family" && grant.professionId === profession?.familyId) ||
+          (grant.scope === "profession" && grant.professionId === professionId)
+      );
+    };
+    const groupIdsFor = (professionId: string) =>
+      grantsFor(professionId)
+        .filter((grant) => grant.grantType === "group")
+        .map((grant) => grant.skillGroupId);
+    const skillIdsFor = (professionId: string) =>
+      grantsFor(professionId)
+        .filter((grant) => grant.skillId)
+        .map((grant) => grant.skillId);
+
+    expect(soldierFamily).toBeDefined();
+    expect(groupIdsFor("tribal_warrior")).toEqual(
+      expect.arrayContaining(["basic_melee_training", "veteran_soldiering"])
+    );
+
+    for (const professionId of affectedOrdinaryProfessionIds) {
+      const groupIds = groupIdsFor(professionId);
+      const skillIds = skillIdsFor(professionId);
+
+      expect(groupIds).not.toContain("veteran_leadership");
+      expect(skillIds).not.toContain("captaincy");
+      expect(skillIds).not.toContain("tactics");
+      expect(new Set(groupIds).size).toBe(groupIds.length);
+      expect(groupIds.length).toBeGreaterThanOrEqual(2);
+    }
+
+    expect(groupIdsFor("watchman")).toEqual(
+      expect.arrayContaining(["basic_melee_training", "defensive_soldiering", "civic_learning"])
+    );
+    expect(groupIdsFor("jailer")).toEqual(
+      expect.arrayContaining(["basic_melee_training", "defensive_soldiering", "civic_learning"])
+    );
+    expect(groupIdsFor("cavalry")).toEqual(
+      expect.arrayContaining(["mounted_warrior_training", "veteran_soldiering"])
+    );
+    expect(groupIdsFor("military_officer")).toEqual(
+      expect.arrayContaining([
+        "basic_melee_training",
+        "defensive_soldiering",
+        "veteran_leadership",
+        "veteran_soldiering"
+      ])
+    );
+    expect(skillIdsFor("military_officer")).toEqual(
+      expect.arrayContaining(["captaincy", "tactics"])
+    );
+    expect(groupIdsFor("military_officer").length).toBeGreaterThan(
+      groupIdsFor("tribal_warrior").length
+    );
+  });
+
   it("includes the updated civilization language naming and Lankhmar seed entry", () => {
     expect(
       defaultCanonicalContent.civilizations.find((civilization) => civilization.id === "glantri")

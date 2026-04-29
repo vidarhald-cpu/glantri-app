@@ -214,6 +214,70 @@ const GROUP_DESCRIPTION_OVERRIDES = {
   advanced_missile_training: "Three required missile weapon skills."
 };
 
+const PROFESSION_FAMILY_GRANT_OVERRIDES = {
+  soldier: {
+    favoredSkillIds: [
+      "perception",
+      "formation_fighting",
+      "riding",
+      "battlefield_awareness",
+      "first_aid",
+      "weapon_maintenance"
+    ],
+    favoredTrainingGroupIds: ["veteran_soldiering"]
+  }
+};
+
+const PROFESSION_SUBTYPE_GRANT_OVERRIDES = {
+  bodyguard: {
+    addedFavoredSkillIds: ["insight"],
+    addedFavoredTrainingGroupIds: []
+  },
+  caravan_guard: {
+    addedFavoredTrainingGroupIds: []
+  },
+  cavalry: {
+    addedFavoredSkillIds: ["animal_care", "battlefield_awareness"],
+    addedFavoredTrainingGroupIds: []
+  },
+  cavalry_mounted_retainer: {
+    addedFavoredTrainingGroupIds: []
+  },
+  champion: {
+    addedFavoredSkillIds: ["brawling"],
+    addedFavoredTrainingGroupIds: []
+  },
+  clan_warriors: {
+    addedFavoredTrainingGroupIds: []
+  },
+  gladiator: {
+    addedCoreTrainingGroupIds: ["advanced_melee_training"]
+  },
+  jailer: {
+    addedCoreSkillIds: ["perception"],
+    addedFavoredTrainingGroupIds: ["defensive_soldiering", "civic_learning"]
+  },
+  light_infantry: {
+    addedFavoredTrainingGroupIds: []
+  },
+  military_officer: {
+    addedCoreTrainingGroupIds: [
+      "basic_melee_training",
+      "defensive_soldiering",
+      "veteran_leadership"
+    ],
+    addedFavoredTrainingGroupIds: ["civic_learning"]
+  },
+  outrider_scout: {
+    addedCoreTrainingGroupIds: ["basic_missile_training"],
+    addedFavoredTrainingGroupIds: ["mounted_service", "fieldcraft_stealth"]
+  },
+  watchman: {
+    addedFavoredSkillIds: ["search"],
+    addedFavoredTrainingGroupIds: ["defensive_soldiering", "civic_learning"]
+  }
+};
+
 const EXTRA_GROUP_IDS_BY_SKILL_ID = (() => {
   const result = {};
 
@@ -723,9 +787,17 @@ function createSkillGrant(skillId, professionId, scope, isCore) {
   };
 }
 
+function getProfessionFamilyField(family, fieldName) {
+  return PROFESSION_FAMILY_GRANT_OVERRIDES[family.professionFamilyId]?.[fieldName] ?? parseJsonLike(family[fieldName]);
+}
+
+function getProfessionSubtypeField(subtype, fieldName) {
+  return PROFESSION_SUBTYPE_GRANT_OVERRIDES[subtype.professionSubtypeId]?.[fieldName] ?? parseJsonLike(subtype[fieldName]);
+}
+
 const professionSkillSources = [
   ...rawBundle.professionFamilies.flatMap((family) => [
-    ...normalizeSkillGroupIds(parseJsonLike(family.coreTrainingGroupIds)).map((groupId) => ({
+    ...normalizeSkillGroupIds(getProfessionFamilyField(family, "coreTrainingGroupIds")).map((groupId) => ({
       grantType: "group",
       isCore: true,
       professionId: family.professionFamilyId,
@@ -733,10 +805,10 @@ const professionSkillSources = [
       scope: "family",
       skillGroupId: groupId
     })),
-    ...parseJsonLike(family.coreSkillIds)
+    ...getProfessionFamilyField(family, "coreSkillIds")
       .map((skillId) => createSkillGrant(skillId, family.professionFamilyId, "family", true))
       .filter(Boolean),
-    ...normalizeSkillGroupIds(parseJsonLike(family.favoredTrainingGroupIds)).map((groupId) => ({
+    ...normalizeSkillGroupIds(getProfessionFamilyField(family, "favoredTrainingGroupIds")).map((groupId) => ({
       grantType: "group",
       isCore: false,
       professionId: family.professionFamilyId,
@@ -744,12 +816,12 @@ const professionSkillSources = [
       scope: "family",
       skillGroupId: groupId
     })),
-    ...parseJsonLike(family.favoredSkillIds)
+    ...getProfessionFamilyField(family, "favoredSkillIds")
       .map((skillId) => createSkillGrant(skillId, family.professionFamilyId, "family", false))
       .filter(Boolean)
   ]),
   ...rawBundle.professionSubtypes.flatMap((subtype) => [
-    ...normalizeSkillGroupIds(parseJsonLike(subtype.addedCoreTrainingGroupIds)).map((groupId) => ({
+    ...normalizeSkillGroupIds(getProfessionSubtypeField(subtype, "addedCoreTrainingGroupIds")).map((groupId) => ({
       grantType: "group",
       isCore: true,
       professionId: subtype.professionSubtypeId,
@@ -757,10 +829,10 @@ const professionSkillSources = [
       scope: "profession",
       skillGroupId: groupId
     })),
-    ...parseJsonLike(subtype.addedCoreSkillIds)
+    ...getProfessionSubtypeField(subtype, "addedCoreSkillIds")
       .map((skillId) => createSkillGrant(skillId, subtype.professionSubtypeId, "profession", true))
       .filter(Boolean),
-    ...normalizeSkillGroupIds(parseJsonLike(subtype.addedFavoredTrainingGroupIds)).map((groupId) => ({
+    ...normalizeSkillGroupIds(getProfessionSubtypeField(subtype, "addedFavoredTrainingGroupIds")).map((groupId) => ({
       grantType: "group",
       isCore: false,
       professionId: subtype.professionSubtypeId,
@@ -768,7 +840,7 @@ const professionSkillSources = [
       scope: "profession",
       skillGroupId: groupId
     })),
-    ...parseJsonLike(subtype.addedFavoredSkillIds)
+    ...getProfessionSubtypeField(subtype, "addedFavoredSkillIds")
       .map((skillId) => createSkillGrant(skillId, subtype.professionSubtypeId, "profession", false))
       .filter(Boolean)
   ])

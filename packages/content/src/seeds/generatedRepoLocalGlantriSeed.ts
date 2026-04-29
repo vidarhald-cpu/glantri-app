@@ -6101,14 +6101,6 @@ export const generatedRepoLocalGlantriSeed = {
       "skillGroupId": "veteran_soldiering"
     },
     {
-      "grantType": "group",
-      "isCore": false,
-      "professionId": "soldier",
-      "ranks": 0,
-      "scope": "family",
-      "skillGroupId": "veteran_leadership"
-    },
-    {
       "grantType": "ordinary-skill",
       "isCore": false,
       "professionId": "soldier",
@@ -6139,22 +6131,6 @@ export const generatedRepoLocalGlantriSeed = {
       "ranks": 0,
       "scope": "family",
       "skillId": "battlefield_awareness"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "soldier",
-      "ranks": 0,
-      "scope": "family",
-      "skillId": "tactics"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "soldier",
-      "ranks": 0,
-      "scope": "family",
-      "skillId": "captaincy"
     },
     {
       "grantType": "secondary-skill",
@@ -6645,22 +6621,6 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "perception"
     },
     {
-      "grantType": "group",
-      "isCore": false,
-      "professionId": "cavalry_mounted_retainer",
-      "ranks": 0,
-      "scope": "profession",
-      "skillGroupId": "veteran_leadership"
-    },
-    {
-      "grantType": "group",
-      "isCore": false,
-      "professionId": "cavalry_mounted_retainer",
-      "ranks": 0,
-      "scope": "profession",
-      "skillGroupId": "veteran_soldiering"
-    },
-    {
       "grantType": "ordinary-skill",
       "isCore": false,
       "professionId": "cavalry_mounted_retainer",
@@ -6965,28 +6925,12 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "battlefield_awareness"
     },
     {
-      "grantType": "group",
-      "isCore": false,
-      "professionId": "bodyguard",
-      "ranks": 0,
-      "scope": "profession",
-      "skillGroupId": "veteran_soldiering"
-    },
-    {
       "grantType": "ordinary-skill",
       "isCore": false,
       "professionId": "bodyguard",
       "ranks": 0,
       "scope": "profession",
       "skillId": "insight"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "bodyguard",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "captaincy"
     },
     {
       "grantType": "group",
@@ -7133,14 +7077,6 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "perception"
     },
     {
-      "grantType": "group",
-      "isCore": false,
-      "professionId": "caravan_guard",
-      "ranks": 0,
-      "scope": "profession",
-      "skillGroupId": "veteran_soldiering"
-    },
-    {
       "grantType": "ordinary-skill",
       "isCore": false,
       "professionId": "caravan_guard",
@@ -7189,14 +7125,6 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "mounted_combat"
     },
     {
-      "grantType": "group",
-      "isCore": false,
-      "professionId": "cavalry",
-      "ranks": 0,
-      "scope": "profession",
-      "skillGroupId": "veteran_soldiering"
-    },
-    {
       "grantType": "ordinary-skill",
       "isCore": false,
       "professionId": "cavalry",
@@ -7211,14 +7139,6 @@ export const generatedRepoLocalGlantriSeed = {
       "ranks": 0,
       "scope": "profession",
       "skillId": "battlefield_awareness"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "cavalry",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "captaincy"
     },
     {
       "grantType": "group",
@@ -7245,28 +7165,12 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "battlefield_awareness"
     },
     {
-      "grantType": "group",
-      "isCore": false,
-      "professionId": "champion",
-      "ranks": 0,
-      "scope": "profession",
-      "skillGroupId": "veteran_soldiering"
-    },
-    {
       "grantType": "secondary-skill",
       "isCore": false,
       "professionId": "champion",
       "ranks": 0,
       "scope": "profession",
       "skillId": "brawling"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "champion",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "captaincy"
     },
     {
       "grantType": "group",
@@ -7347,14 +7251,6 @@ export const generatedRepoLocalGlantriSeed = {
       "ranks": 0,
       "scope": "profession",
       "skillId": "one_handed_concussion_axe"
-    },
-    {
-      "grantType": "group",
-      "isCore": false,
-      "professionId": "clan_warriors",
-      "ranks": 0,
-      "scope": "profession",
-      "skillGroupId": "veteran_soldiering"
     },
     {
       "grantType": "secondary-skill",
@@ -7855,6 +7751,14 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "grantType": "group",
       "isCore": true,
+      "professionId": "gladiator",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "advanced_melee_training"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
       "professionId": "healer",
       "ranks": 0,
       "scope": "profession",
@@ -8205,12 +8109,20 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "perception"
     },
     {
-      "grantType": "ordinary-skill",
-      "isCore": true,
+      "grantType": "group",
+      "isCore": false,
       "professionId": "jailer",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "captaincy"
+      "skillGroupId": "defensive_soldiering"
+    },
+    {
+      "grantType": "group",
+      "isCore": false,
+      "professionId": "jailer",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "civic_learning"
     },
     {
       "grantType": "ordinary-skill",
@@ -8317,14 +8229,6 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "dodge"
     },
     {
-      "grantType": "group",
-      "isCore": false,
-      "professionId": "light_infantry",
-      "ranks": 0,
-      "scope": "profession",
-      "skillGroupId": "veteran_soldiering"
-    },
-    {
       "grantType": "secondary-skill",
       "isCore": false,
       "professionId": "light_infantry",
@@ -8418,6 +8322,22 @@ export const generatedRepoLocalGlantriSeed = {
       "professionId": "military_officer",
       "ranks": 0,
       "scope": "profession",
+      "skillGroupId": "basic_melee_training"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "military_officer",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "defensive_soldiering"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "military_officer",
+      "ranks": 0,
+      "scope": "profession",
       "skillGroupId": "veteran_leadership"
     },
     {
@@ -8435,6 +8355,14 @@ export const generatedRepoLocalGlantriSeed = {
       "ranks": 0,
       "scope": "profession",
       "skillId": "tactics"
+    },
+    {
+      "grantType": "group",
+      "isCore": false,
+      "professionId": "military_officer",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "civic_learning"
     },
     {
       "grantType": "ordinary-skill",
@@ -8683,6 +8611,30 @@ export const generatedRepoLocalGlantriSeed = {
       "ranks": 0,
       "scope": "profession",
       "skillId": "law"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "outrider_scout",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "basic_missile_training"
+    },
+    {
+      "grantType": "group",
+      "isCore": false,
+      "professionId": "outrider_scout",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "mounted_service"
+    },
+    {
+      "grantType": "group",
+      "isCore": false,
+      "professionId": "outrider_scout",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "fieldcraft_stealth"
     },
     {
       "grantType": "group",
@@ -9749,12 +9701,12 @@ export const generatedRepoLocalGlantriSeed = {
       "skillGroupId": "defensive_soldiering"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": false,
       "professionId": "watchman",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "search"
+      "skillGroupId": "civic_learning"
     },
     {
       "grantType": "ordinary-skill",
@@ -9762,7 +9714,7 @@ export const generatedRepoLocalGlantriSeed = {
       "professionId": "watchman",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "captaincy"
+      "skillId": "search"
     },
     {
       "grantType": "ordinary-skill",
