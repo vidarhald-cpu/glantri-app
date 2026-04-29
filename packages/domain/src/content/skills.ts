@@ -128,6 +128,7 @@ const LEGACY_PLAYER_FACING_SKILL_CATEGORY_BY_GROUP_ID: Partial<
   technical_measurement: "knowledge",
   transport_and_caravan_work: "trade",
   trap_and_intrusion_work: "covert",
+  route_security: "fieldcraft",
   veteran_leadership: "military",
   veteran_soldiering: "military",
   watch_civic_guard: "social",

@@ -101,6 +101,7 @@ const PLAYER_FACING_SKILL_CATEGORY_BY_GROUP_ID = {
   technical_measurement: "knowledge",
   transport_and_caravan_work: "trade",
   trap_and_intrusion_work: "covert",
+  route_security: "fieldcraft",
   veteran_leadership: "military",
   veteran_soldiering: "military",
   watch_civic_guard: "social",
@@ -202,6 +203,7 @@ const FIXED_SKILL_MEMBERSHIPS_BY_GROUP_ID = {
   advanced_melee_training: ["dodge", "parry", "brawling"],
   basic_missile_training: [],
   advanced_missile_training: [],
+  route_security: ["perception", "search", "riding", "animal_care", "teamstering", "first_aid"],
   watch_civic_guard: ["perception", "search", "law", "insight", "social_perception"]
 };
 
@@ -214,6 +216,8 @@ const GROUP_DESCRIPTION_OVERRIDES = {
   advanced_melee_training: "Dodge, parry, and brawling plus three required melee weapon skills.",
   basic_missile_training: "One required missile weapon skill.",
   advanced_missile_training: "Three required missile weapon skills.",
+  route_security:
+    "Road awareness, animal handling, search, and practical care for guarding overland routes.",
   watch_civic_guard:
     "Observation, search, basic law, and defensive procedure for civic watch and detention work."
 };
@@ -238,7 +242,9 @@ const PROFESSION_SUBTYPE_GRANT_OVERRIDES = {
     addedFavoredTrainingGroupIds: []
   },
   caravan_guard: {
-    addedFavoredTrainingGroupIds: []
+    addedCoreSkillIds: [],
+    addedFavoredSkillIds: ["throwing"],
+    addedFavoredTrainingGroupIds: ["route_security"]
   },
   cavalry: {
     addedFavoredSkillIds: ["animal_care", "battlefield_awareness"],
@@ -651,11 +657,18 @@ const taxonomyGroupSources = rawBundle.taxonomyGroups.map((group, index) => ({
 }));
 const generatedTrainingGroupSources = [
   {
+    description: GROUP_DESCRIPTION_OVERRIDES.route_security,
+    id: "route_security",
+    name: "Route Security",
+    skillIds: FIXED_SKILL_MEMBERSHIPS_BY_GROUP_ID.route_security,
+    sortOrder: trainingGroupSources.length + taxonomyGroupSources.length + 1
+  },
+  {
     description: GROUP_DESCRIPTION_OVERRIDES.watch_civic_guard,
     id: "watch_civic_guard",
     name: "Watch / Civic Guard",
     skillIds: FIXED_SKILL_MEMBERSHIPS_BY_GROUP_ID.watch_civic_guard,
-    sortOrder: trainingGroupSources.length + taxonomyGroupSources.length + 1
+    sortOrder: trainingGroupSources.length + taxonomyGroupSources.length + 2
   }
 ];
 const skillGroupSources = [
