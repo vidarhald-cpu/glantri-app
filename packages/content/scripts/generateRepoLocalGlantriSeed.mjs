@@ -96,6 +96,7 @@ const PLAYER_FACING_SKILL_CATEGORY_BY_GROUP_ID = {
   political_acumen: "social",
   sacred_learning: "knowledge",
   security: "covert",
+  ship_command: "maritime",
   social_reading: "social",
   stealth_group: "covert",
   street_theft: "covert",
@@ -212,6 +213,15 @@ const FIXED_SKILL_MEMBERSHIPS_BY_GROUP_ID = {
   basic_missile_training: [],
   advanced_missile_training: [],
   route_security: ["perception", "search", "riding", "animal_care", "teamstering", "first_aid"],
+  ship_command: [
+    "captaincy",
+    "sailing",
+    "navigation",
+    "perception",
+    "insight",
+    "oratory",
+    "administration"
+  ],
   watch_civic_guard: ["perception", "search", "law", "insight", "social_perception"]
 };
 
@@ -228,6 +238,8 @@ const GROUP_DESCRIPTION_OVERRIDES = {
   advanced_missile_training: "Three required missile weapon skills.",
   route_security:
     "Road awareness, animal handling, search, and practical care for guarding overland routes.",
+  ship_command:
+    "Vessel command, navigation oversight, crew coordination, and shipboard judgment.",
   watch_civic_guard:
     "Observation, search, basic law, and defensive procedure for civic watch and detention work."
 };
@@ -307,6 +319,12 @@ const PROFESSION_SUBTYPE_GRANT_OVERRIDES = {
   outrider_scout: {
     addedCoreTrainingGroupIds: ["basic_missile_training"],
     addedFavoredTrainingGroupIds: ["mounted_service", "fieldcraft_stealth"]
+  },
+  ships_officer: {
+    addedCoreSkillIds: [],
+    addedCoreTrainingGroupIds: ["ship_command"],
+    addedFavoredSkillIds: [],
+    addedFavoredTrainingGroupIds: []
   },
   watchman: {
     addedCoreSkillIds: [],
@@ -696,11 +714,18 @@ const generatedTrainingGroupSources = [
     sortOrder: trainingGroupSources.length + taxonomyGroupSources.length + 2
   },
   {
+    description: GROUP_DESCRIPTION_OVERRIDES.ship_command,
+    id: "ship_command",
+    name: "Ship Command",
+    skillIds: FIXED_SKILL_MEMBERSHIPS_BY_GROUP_ID.ship_command,
+    sortOrder: trainingGroupSources.length + taxonomyGroupSources.length + 3
+  },
+  {
     description: GROUP_DESCRIPTION_OVERRIDES.watch_civic_guard,
     id: "watch_civic_guard",
     name: "Watch / Civic Guard",
     skillIds: FIXED_SKILL_MEMBERSHIPS_BY_GROUP_ID.watch_civic_guard,
-    sortOrder: trainingGroupSources.length + taxonomyGroupSources.length + 3
+    sortOrder: trainingGroupSources.length + taxonomyGroupSources.length + 4
   }
 ];
 const skillGroupSources = [

@@ -1745,6 +1745,43 @@ export const generatedRepoLocalGlantriSeed = {
       "sortOrder": 53
     },
     {
+      "description": "Vessel command, navigation oversight, crew coordination, and shipboard judgment.",
+      "id": "ship_command",
+      "name": "Ship Command",
+      "skillMemberships": [
+        {
+          "relevance": "optional",
+          "skillId": "captaincy"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "sailing"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "navigation"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "perception"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "insight"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "oratory"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "administration"
+        }
+      ],
+      "selectionSlots": [],
+      "sortOrder": 54
+    },
+    {
       "description": "Observation, search, basic law, and defensive procedure for civic watch and detention work.",
       "id": "watch_civic_guard",
       "name": "Watch / Civic Guard",
@@ -1771,7 +1808,7 @@ export const generatedRepoLocalGlantriSeed = {
         }
       ],
       "selectionSlots": [],
-      "sortOrder": 54
+      "sortOrder": 55
     }
   ],
   "skills": [
@@ -2397,7 +2434,8 @@ export const generatedRepoLocalGlantriSeed = {
       "groupId": "commercial_administration",
       "groupIds": [
         "commercial_administration",
-        "operations"
+        "operations",
+        "ship_command"
       ],
       "id": "administration",
       "isTheoretical": true,
@@ -2614,6 +2652,7 @@ export const generatedRepoLocalGlantriSeed = {
         "political_acumen",
         "social_reading",
         "humanities",
+        "ship_command",
         "watch_civic_guard"
       ],
       "id": "insight",
@@ -2907,7 +2946,8 @@ export const generatedRepoLocalGlantriSeed = {
       "groupIds": [
         "formal_performance",
         "performance_group",
-        "arena_training"
+        "arena_training",
+        "ship_command"
       ],
       "id": "oratory",
       "isTheoretical": false,
@@ -3042,6 +3082,7 @@ export const generatedRepoLocalGlantriSeed = {
         "mental_group",
         "arena_training",
         "route_security",
+        "ship_command",
         "watch_civic_guard"
       ],
       "id": "perception",
@@ -3252,7 +3293,8 @@ export const generatedRepoLocalGlantriSeed = {
       "groupIds": [
         "maritime_crew_training",
         "maritime_navigation",
-        "wilderness_group"
+        "wilderness_group",
+        "ship_command"
       ],
       "id": "sailing",
       "isTheoretical": false,
@@ -3287,7 +3329,8 @@ export const generatedRepoLocalGlantriSeed = {
       "groupId": "maritime_navigation",
       "groupIds": [
         "maritime_navigation",
-        "wilderness_group"
+        "wilderness_group",
+        "ship_command"
       ],
       "id": "navigation",
       "isTheoretical": true,
@@ -4870,7 +4913,8 @@ export const generatedRepoLocalGlantriSeed = {
       "groupId": "veteran_leadership",
       "groupIds": [
         "veteran_leadership",
-        "military_group"
+        "military_group",
+        "ship_command"
       ],
       "id": "captaincy",
       "isTheoretical": false,
@@ -9234,55 +9278,7 @@ export const generatedRepoLocalGlantriSeed = {
       "professionId": "ships_officer",
       "ranks": 0,
       "scope": "profession",
-      "skillGroupId": "maritime_crew_training"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": true,
-      "professionId": "ships_officer",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "sailing"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": true,
-      "professionId": "ships_officer",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "captaincy"
-    },
-    {
-      "grantType": "group",
-      "isCore": false,
-      "professionId": "ships_officer",
-      "ranks": 0,
-      "scope": "profession",
-      "skillGroupId": "maritime_navigation"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "ships_officer",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "navigation"
-    },
-    {
-      "grantType": "secondary-skill",
-      "isCore": false,
-      "professionId": "ships_officer",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "ropework"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "ships_officer",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "perception"
+      "skillGroupId": "ship_command"
     },
     {
       "grantType": "ordinary-skill",
@@ -10162,6 +10158,7 @@ export const generatedRepoLocalGlantriSeed = {
         "wilderness_group",
         "arena_training",
         "route_security",
+        "ship_command",
         "watch_civic_guard"
       ],
       "skillIds": [],
@@ -10240,6 +10237,7 @@ export const generatedRepoLocalGlantriSeed = {
         "wilderness_group",
         "arena_training",
         "route_security",
+        "ship_command",
         "watch_civic_guard"
       ],
       "skillIds": [],
@@ -10316,6 +10314,7 @@ export const generatedRepoLocalGlantriSeed = {
         "wilderness_group",
         "arena_training",
         "route_security",
+        "ship_command",
         "watch_civic_guard"
       ],
       "skillIds": [],
@@ -10392,6 +10391,7 @@ export const generatedRepoLocalGlantriSeed = {
         "wilderness_group",
         "arena_training",
         "route_security",
+        "ship_command",
         "watch_civic_guard"
       ],
       "skillIds": [],
@@ -10470,6 +10470,7 @@ export const generatedRepoLocalGlantriSeed = {
         "wilderness_group",
         "arena_training",
         "route_security",
+        "ship_command",
         "watch_civic_guard"
       ],
       "skillIds": [],
@@ -10588,6 +10589,7 @@ export const generatedRepoLocalGlantriSeed = {
         "wilderness_group",
         "arena_training",
         "route_security",
+        "ship_command",
         "watch_civic_guard"
       ],
       "skillIds": [],
@@ -10704,6 +10706,7 @@ export const generatedRepoLocalGlantriSeed = {
         "wilderness_group",
         "arena_training",
         "route_security",
+        "ship_command",
         "watch_civic_guard"
       ],
       "skillIds": [],
@@ -10820,6 +10823,7 @@ export const generatedRepoLocalGlantriSeed = {
         "wilderness_group",
         "arena_training",
         "route_security",
+        "ship_command",
         "watch_civic_guard"
       ],
       "skillIds": [],
@@ -10898,6 +10902,7 @@ export const generatedRepoLocalGlantriSeed = {
         "wilderness_group",
         "arena_training",
         "route_security",
+        "ship_command",
         "watch_civic_guard"
       ],
       "skillIds": [],
@@ -11016,6 +11021,7 @@ export const generatedRepoLocalGlantriSeed = {
         "wilderness_group",
         "arena_training",
         "route_security",
+        "ship_command",
         "watch_civic_guard"
       ],
       "skillIds": [],
@@ -11132,6 +11138,7 @@ export const generatedRepoLocalGlantriSeed = {
         "wilderness_group",
         "arena_training",
         "route_security",
+        "ship_command",
         "watch_civic_guard"
       ],
       "skillIds": [],
@@ -11248,6 +11255,7 @@ export const generatedRepoLocalGlantriSeed = {
         "wilderness_group",
         "arena_training",
         "route_security",
+        "ship_command",
         "watch_civic_guard"
       ],
       "skillIds": [],
@@ -11324,6 +11332,7 @@ export const generatedRepoLocalGlantriSeed = {
         "wilderness_group",
         "arena_training",
         "route_security",
+        "ship_command",
         "watch_civic_guard"
       ],
       "skillIds": [],
@@ -11440,6 +11449,7 @@ export const generatedRepoLocalGlantriSeed = {
         "wilderness_group",
         "arena_training",
         "route_security",
+        "ship_command",
         "watch_civic_guard"
       ],
       "skillIds": [],
@@ -11576,6 +11586,7 @@ export const generatedRepoLocalGlantriSeed = {
         "wilderness_group",
         "arena_training",
         "route_security",
+        "ship_command",
         "watch_civic_guard"
       ],
       "skillIds": [],
@@ -11712,6 +11723,7 @@ export const generatedRepoLocalGlantriSeed = {
         "wilderness_group",
         "arena_training",
         "route_security",
+        "ship_command",
         "watch_civic_guard"
       ],
       "skillIds": [],
@@ -11788,6 +11800,7 @@ export const generatedRepoLocalGlantriSeed = {
         "wilderness_group",
         "arena_training",
         "route_security",
+        "ship_command",
         "watch_civic_guard"
       ],
       "skillIds": [],
@@ -11904,6 +11917,7 @@ export const generatedRepoLocalGlantriSeed = {
         "wilderness_group",
         "arena_training",
         "route_security",
+        "ship_command",
         "watch_civic_guard"
       ],
       "skillIds": [],
@@ -12040,6 +12054,7 @@ export const generatedRepoLocalGlantriSeed = {
         "wilderness_group",
         "arena_training",
         "route_security",
+        "ship_command",
         "watch_civic_guard"
       ],
       "skillIds": [],
@@ -12176,6 +12191,7 @@ export const generatedRepoLocalGlantriSeed = {
         "wilderness_group",
         "arena_training",
         "route_security",
+        "ship_command",
         "watch_civic_guard"
       ],
       "skillIds": [],
@@ -12252,6 +12268,7 @@ export const generatedRepoLocalGlantriSeed = {
         "wilderness_group",
         "arena_training",
         "route_security",
+        "ship_command",
         "watch_civic_guard"
       ],
       "skillIds": [],
@@ -12368,6 +12385,7 @@ export const generatedRepoLocalGlantriSeed = {
         "wilderness_group",
         "arena_training",
         "route_security",
+        "ship_command",
         "watch_civic_guard"
       ],
       "skillIds": [],
@@ -12504,6 +12522,7 @@ export const generatedRepoLocalGlantriSeed = {
         "wilderness_group",
         "arena_training",
         "route_security",
+        "ship_command",
         "watch_civic_guard"
       ],
       "skillIds": [],
@@ -12652,6 +12671,7 @@ export const generatedRepoLocalGlantriSeed = {
         "wilderness_group",
         "arena_training",
         "route_security",
+        "ship_command",
         "watch_civic_guard"
       ],
       "skillIds": [],
@@ -12728,6 +12748,7 @@ export const generatedRepoLocalGlantriSeed = {
         "wilderness_group",
         "arena_training",
         "route_security",
+        "ship_command",
         "watch_civic_guard"
       ],
       "skillIds": [],
@@ -12844,6 +12865,7 @@ export const generatedRepoLocalGlantriSeed = {
         "wilderness_group",
         "arena_training",
         "route_security",
+        "ship_command",
         "watch_civic_guard"
       ],
       "skillIds": [],
@@ -12980,6 +13002,7 @@ export const generatedRepoLocalGlantriSeed = {
         "wilderness_group",
         "arena_training",
         "route_security",
+        "ship_command",
         "watch_civic_guard"
       ],
       "skillIds": [],
@@ -13128,6 +13151,7 @@ export const generatedRepoLocalGlantriSeed = {
         "wilderness_group",
         "arena_training",
         "route_security",
+        "ship_command",
         "watch_civic_guard"
       ],
       "skillIds": [],
@@ -13204,6 +13228,7 @@ export const generatedRepoLocalGlantriSeed = {
         "wilderness_group",
         "arena_training",
         "route_security",
+        "ship_command",
         "watch_civic_guard"
       ],
       "skillIds": [],
@@ -13320,6 +13345,7 @@ export const generatedRepoLocalGlantriSeed = {
         "wilderness_group",
         "arena_training",
         "route_security",
+        "ship_command",
         "watch_civic_guard"
       ],
       "skillIds": [],
@@ -13456,6 +13482,7 @@ export const generatedRepoLocalGlantriSeed = {
         "wilderness_group",
         "arena_training",
         "route_security",
+        "ship_command",
         "watch_civic_guard"
       ],
       "skillIds": [],
@@ -13604,6 +13631,7 @@ export const generatedRepoLocalGlantriSeed = {
         "wilderness_group",
         "arena_training",
         "route_security",
+        "ship_command",
         "watch_civic_guard"
       ],
       "skillIds": [],
@@ -13680,6 +13708,7 @@ export const generatedRepoLocalGlantriSeed = {
         "wilderness_group",
         "arena_training",
         "route_security",
+        "ship_command",
         "watch_civic_guard"
       ],
       "skillIds": [],
@@ -13796,6 +13825,7 @@ export const generatedRepoLocalGlantriSeed = {
         "wilderness_group",
         "arena_training",
         "route_security",
+        "ship_command",
         "watch_civic_guard"
       ],
       "skillIds": [],
@@ -13932,6 +13962,7 @@ export const generatedRepoLocalGlantriSeed = {
         "wilderness_group",
         "arena_training",
         "route_security",
+        "ship_command",
         "watch_civic_guard"
       ],
       "skillIds": [],
@@ -14080,6 +14111,7 @@ export const generatedRepoLocalGlantriSeed = {
         "wilderness_group",
         "arena_training",
         "route_security",
+        "ship_command",
         "watch_civic_guard"
       ],
       "skillIds": [],
@@ -14156,6 +14188,7 @@ export const generatedRepoLocalGlantriSeed = {
         "wilderness_group",
         "arena_training",
         "route_security",
+        "ship_command",
         "watch_civic_guard"
       ],
       "skillIds": [],
@@ -14272,6 +14305,7 @@ export const generatedRepoLocalGlantriSeed = {
         "wilderness_group",
         "arena_training",
         "route_security",
+        "ship_command",
         "watch_civic_guard"
       ],
       "skillIds": [],
@@ -14408,6 +14442,7 @@ export const generatedRepoLocalGlantriSeed = {
         "wilderness_group",
         "arena_training",
         "route_security",
+        "ship_command",
         "watch_civic_guard"
       ],
       "skillIds": [],
@@ -14556,6 +14591,7 @@ export const generatedRepoLocalGlantriSeed = {
         "wilderness_group",
         "arena_training",
         "route_security",
+        "ship_command",
         "watch_civic_guard"
       ],
       "skillIds": [],
@@ -14632,6 +14668,7 @@ export const generatedRepoLocalGlantriSeed = {
         "wilderness_group",
         "arena_training",
         "route_security",
+        "ship_command",
         "watch_civic_guard"
       ],
       "skillIds": [],
@@ -14748,6 +14785,7 @@ export const generatedRepoLocalGlantriSeed = {
         "wilderness_group",
         "arena_training",
         "route_security",
+        "ship_command",
         "watch_civic_guard"
       ],
       "skillIds": [],
@@ -14884,6 +14922,7 @@ export const generatedRepoLocalGlantriSeed = {
         "wilderness_group",
         "arena_training",
         "route_security",
+        "ship_command",
         "watch_civic_guard"
       ],
       "skillIds": [],
@@ -15032,6 +15071,7 @@ export const generatedRepoLocalGlantriSeed = {
         "wilderness_group",
         "arena_training",
         "route_security",
+        "ship_command",
         "watch_civic_guard"
       ],
       "skillIds": [],

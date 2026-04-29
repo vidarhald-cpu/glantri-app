@@ -517,6 +517,125 @@ describe("validateCanonicalContent", () => {
     expect(routeMembershipIds).not.toContain("veteran_leadership");
   });
 
+  it("gives Ships Officer maritime command training without promoting ordinary sailors", () => {
+    const groupById = new Map(
+      defaultCanonicalContent.skillGroups.map((group) => [group.id, group])
+    );
+    const professionById = new Map(
+      defaultCanonicalContent.professions.map((profession) => [profession.id, profession])
+    );
+    const grantsFor = (professionId: string) => {
+      const profession = professionById.get(professionId);
+
+      return defaultCanonicalContent.professionSkills.filter(
+        (grant) =>
+          (grant.scope === "family" && grant.professionId === profession?.familyId) ||
+          (grant.scope === "profession" && grant.professionId === professionId)
+      );
+    };
+    const groupIdsFor = (professionId: string) =>
+      grantsFor(professionId)
+        .filter((grant) => grant.grantType === "group" && grant.skillGroupId)
+        .map((grant) => grant.skillGroupId ?? "");
+    const directSkillIdsFor = (professionId: string) =>
+      grantsFor(professionId)
+        .filter((grant) => grant.grantType !== "group" && grant.skillId)
+        .map((grant) => grant.skillId ?? "");
+    const directOnlySkillIdsFor = (professionId: string) => {
+      const groupIds = groupIdsFor(professionId);
+      const skillIdsFromGroups = defaultCanonicalContent.skills
+        .filter((skill) =>
+          (skill.groupIds ?? [skill.groupId]).some((groupId) => groupIds.includes(groupId))
+        )
+        .map((skill) => skill.id);
+
+      return directSkillIdsFor(professionId).filter(
+        (skillId) => !skillIdsFromGroups.includes(skillId)
+      );
+    };
+    const skillReachFor = (professionId: string) => {
+      const groupIds = groupIdsFor(professionId);
+      const skillIdsFromGroups = defaultCanonicalContent.skills
+        .filter((skill) =>
+          (skill.groupIds ?? [skill.groupId]).some((groupId) => groupIds.includes(groupId))
+        )
+        .map((skill) => skill.id);
+
+      return new Set([...skillIdsFromGroups, ...directOnlySkillIdsFor(professionId)]).size;
+    };
+
+    const shipCommandGroup = groupById.get("ship_command");
+    const shipCommandMembershipIds =
+      shipCommandGroup?.skillMemberships?.map((membership) => membership.skillId) ?? [];
+    const shipsOfficerGroupIds = groupIdsFor("ships_officer");
+
+    expect(shipCommandGroup).toMatchObject({
+      id: "ship_command",
+      name: "Ship Command"
+    });
+    expect(shipCommandMembershipIds).toEqual(
+      expect.arrayContaining([
+        "captaincy",
+        "sailing",
+        "navigation",
+        "perception",
+        "insight",
+        "oratory",
+        "administration"
+      ])
+    );
+    expect(shipCommandMembershipIds).not.toContain("veteran_leadership");
+    expect(shipCommandMembershipIds).not.toContain("tactics");
+    expect(shipCommandMembershipIds).not.toContain("dodge");
+    expect(shipCommandMembershipIds).not.toContain("brawling");
+    expect(shipCommandMembershipIds).not.toContain("parry");
+    expect(shipCommandMembershipIds).not.toContain("one_handed_edged");
+    expect(shipCommandMembershipIds).not.toContain("one_handed_concussion_axe");
+    expect(shipCommandMembershipIds).not.toContain("two_handed_edged");
+    expect(shipCommandMembershipIds).not.toContain("two_handed_concussion_axe");
+    expect(shipCommandMembershipIds).not.toContain("polearms");
+    expect(shipCommandMembershipIds).not.toContain("lance");
+
+    expect(shipsOfficerGroupIds).toEqual(
+      expect.arrayContaining(["maritime_crew_training", "maritime_navigation", "ship_command"])
+    );
+    expect(shipsOfficerGroupIds).not.toContain("veteran_leadership");
+    expect(new Set(shipsOfficerGroupIds).size).toBe(shipsOfficerGroupIds.length);
+    expect(skillReachFor("ships_officer")).toBeGreaterThan(10);
+    expect(directOnlySkillIdsFor("ships_officer")).toEqual(
+      expect.arrayContaining(["language", "trading"])
+    );
+    expect(directOnlySkillIdsFor("ships_officer")).not.toContain("captaincy");
+    expect(directOnlySkillIdsFor("ships_officer")).not.toContain("navigation");
+    expect(directOnlySkillIdsFor("ships_officer")).not.toContain("perception");
+
+    for (const ordinarySailorId of ["sailor", "deck_sailor", "fisher"]) {
+      expect(groupIdsFor(ordinarySailorId)).not.toContain("ship_command");
+    }
+
+    const watchMembershipIds =
+      groupById.get("watch_civic_guard")?.skillMemberships?.map((membership) => membership.skillId) ??
+      [];
+    const routeMembershipIds =
+      groupById.get("route_security")?.skillMemberships?.map((membership) => membership.skillId) ??
+      [];
+    const arenaMembershipIds =
+      groupById.get("arena_training")?.skillMemberships?.map((membership) => membership.skillId) ??
+      [];
+
+    expect(watchMembershipIds).not.toContain("parry");
+    expect(routeMembershipIds).not.toContain("captaincy");
+    expect(routeMembershipIds).not.toContain("tactics");
+    expect(routeMembershipIds).not.toContain("veteran_leadership");
+    expect(arenaMembershipIds).not.toContain("dodge");
+    expect(arenaMembershipIds).not.toContain("brawling");
+    expect(arenaMembershipIds).not.toContain("parry");
+    expect(arenaMembershipIds).not.toContain("captaincy");
+    expect(arenaMembershipIds).not.toContain("tactics");
+    expect(arenaMembershipIds).not.toContain("veteran_leadership");
+    expect(arenaMembershipIds).not.toContain("formation_fighting");
+  });
+
   it("restricts informal warrior availability to low-society low-class grids", () => {
     const canonicalSocietyLevelById = new Map(
       defaultCanonicalContent.societies.map((society) => [society.id, society.societyLevel])

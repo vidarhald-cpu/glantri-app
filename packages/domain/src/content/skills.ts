@@ -123,6 +123,7 @@ const LEGACY_PLAYER_FACING_SKILL_CATEGORY_BY_GROUP_ID: Partial<
   political_acumen: "social",
   sacred_learning: "knowledge",
   security: "covert",
+  ship_command: "maritime",
   social_reading: "social",
   stealth_group: "covert",
   street_theft: "covert",
