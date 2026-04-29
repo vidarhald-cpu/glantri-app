@@ -210,6 +210,51 @@ describe("validateCanonicalContent", () => {
     );
   });
 
+  it("restricts informal warrior availability to low-society low-class grids", () => {
+    const canonicalSocietyLevelById = new Map(
+      defaultCanonicalContent.societies.map((society) => [society.id, society.societyLevel])
+    );
+    const allowedRowsFor = (professionId: string) =>
+      defaultCanonicalContent.societyLevels.filter((societyLevel) =>
+        societyLevel.professionIds.includes(professionId)
+      );
+    const canonicalSocietyLevelsFor = (professionId: string) => [
+      ...new Set(
+        allowedRowsFor(professionId)
+          .map((societyLevel) => canonicalSocietyLevelById.get(societyLevel.societyId))
+          .filter((societyLevel): societyLevel is number => typeof societyLevel === "number")
+      )
+    ].sort((left, right) => left - right);
+    const classBandsFor = (professionId: string) => [
+      ...new Set(allowedRowsFor(professionId).map((societyLevel) => societyLevel.societyLevel))
+    ].sort((left, right) => left - right);
+
+    expect(canonicalSocietyLevelsFor("tribal_warrior")).toEqual([1, 2]);
+    expect(classBandsFor("tribal_warrior")).toEqual([1, 2]);
+    expect(canonicalSocietyLevelsFor("clan_warriors")).toEqual([1, 2]);
+    expect(classBandsFor("clan_warriors")).toEqual([1, 2]);
+    expect(
+      allowedRowsFor("tribal_warrior").some(
+        (societyLevel) => (canonicalSocietyLevelById.get(societyLevel.societyId) ?? 0) >= 3
+      )
+    ).toBe(false);
+    expect(
+      allowedRowsFor("clan_warriors").some(
+        (societyLevel) => (canonicalSocietyLevelById.get(societyLevel.societyId) ?? 0) >= 3
+      )
+    ).toBe(false);
+    expect(allowedRowsFor("tribal_warrior").some((societyLevel) => societyLevel.societyLevel >= 3))
+      .toBe(false);
+    expect(allowedRowsFor("clan_warriors").some((societyLevel) => societyLevel.societyLevel >= 3))
+      .toBe(false);
+    expect(canonicalSocietyLevelsFor("military_officer")).toEqual([4, 5, 6]);
+    expect(classBandsFor("military_officer")).toEqual([4]);
+
+    for (const societyLevel of defaultCanonicalContent.societyLevels) {
+      expect(new Set(societyLevel.professionIds).size).toBe(societyLevel.professionIds.length);
+    }
+  });
+
   it("includes the updated civilization language naming and Lankhmar seed entry", () => {
     expect(
       defaultCanonicalContent.civilizations.find((civilization) => civilization.id === "glantri")

@@ -278,6 +278,17 @@ const PROFESSION_SUBTYPE_GRANT_OVERRIDES = {
   }
 };
 
+const PROFESSION_AVAILABILITY_OVERRIDES = {
+  clan_warriors: {
+    maxClassBand: 2,
+    maxSocietyLevel: 2
+  },
+  tribal_warrior: {
+    maxClassBand: 2,
+    maxSocietyLevel: 2
+  }
+};
+
 const EXTRA_GROUP_IDS_BY_SKILL_ID = (() => {
   const result = {};
 
@@ -905,8 +916,32 @@ for (const group of skillGroupSources) {
   groupMinSocietyLevel.set(group.id, minLevel);
 }
 
+function isProfessionAvailableInSocietyBand({
+  classBand,
+  professionId,
+  societyLevel
+}) {
+  const override = PROFESSION_AVAILABILITY_OVERRIDES[professionId];
+
+  if (!override) {
+    return true;
+  }
+
+  if (override.maxSocietyLevel !== undefined && societyLevel > override.maxSocietyLevel) {
+    return false;
+  }
+
+  if (override.maxClassBand !== undefined && classBand > override.maxClassBand) {
+    return false;
+  }
+
+  return true;
+}
+
 const societyLevels = rawBundle.societyTypes.flatMap((society) =>
   BAND_METADATA.map((band, index) => {
+    const classBand = index + 1;
+    const canonicalSocietyLevel = Number(society.level || 1);
     const effectiveAccessLevel = Math.min(Number(society.level || 1), band.threshold);
 
     return {
@@ -924,7 +959,14 @@ const societyLevels = rawBundle.societyTypes.flatMap((society) =>
             (candidate) => candidate.professionSubtypeId === profession.id
           );
 
-          return Number(sourceProfession?.minimumSocietyLevel || 1) <= effectiveAccessLevel;
+          return (
+            Number(sourceProfession?.minimumSocietyLevel || 1) <= effectiveAccessLevel &&
+            isProfessionAvailableInSocietyBand({
+              classBand,
+              professionId: profession.id,
+              societyLevel: canonicalSocietyLevel
+            })
+          );
         })
         .map((profession) => profession.id),
       skillGroupIds: skillGroups
@@ -933,7 +975,7 @@ const societyLevels = rawBundle.societyTypes.flatMap((society) =>
       skillIds: [],
       socialClass: band.label,
       societyId: society.societyTypeId,
-      societyLevel: index + 1,
+      societyLevel: classBand,
       societyName: society.name
     };
   })
