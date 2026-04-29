@@ -1683,6 +1683,35 @@ export const generatedRepoLocalGlantriSeed = {
       "sortOrder": 51
     },
     {
+      "description": "Arena awareness, showmanship, professional discipline, and practical weapon upkeep.",
+      "id": "arena_training",
+      "name": "Arena Training",
+      "skillMemberships": [
+        {
+          "relevance": "optional",
+          "skillId": "combat_experience"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "perception"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "acting"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "oratory"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "weapon_maintenance"
+        }
+      ],
+      "selectionSlots": [],
+      "sortOrder": 52
+    },
+    {
       "description": "Road awareness, animal handling, search, and practical care for guarding overland routes.",
       "id": "route_security",
       "name": "Route Security",
@@ -1713,7 +1742,7 @@ export const generatedRepoLocalGlantriSeed = {
         }
       ],
       "selectionSlots": [],
-      "sortOrder": 52
+      "sortOrder": 53
     },
     {
       "description": "Observation, search, basic law, and defensive procedure for civic watch and detention work.",
@@ -1742,7 +1771,7 @@ export const generatedRepoLocalGlantriSeed = {
         }
       ],
       "selectionSlots": [],
-      "sortOrder": 53
+      "sortOrder": 54
     }
   ],
   "skills": [
@@ -2812,7 +2841,8 @@ export const generatedRepoLocalGlantriSeed = {
       "groupId": "formal_performance",
       "groupIds": [
         "formal_performance",
-        "performance_group"
+        "performance_group",
+        "arena_training"
       ],
       "id": "acting",
       "isTheoretical": false,
@@ -2876,7 +2906,8 @@ export const generatedRepoLocalGlantriSeed = {
       "groupId": "formal_performance",
       "groupIds": [
         "formal_performance",
-        "performance_group"
+        "performance_group",
+        "arena_training"
       ],
       "id": "oratory",
       "isTheoretical": false,
@@ -3009,6 +3040,7 @@ export const generatedRepoLocalGlantriSeed = {
         "security",
         "military_group",
         "mental_group",
+        "arena_training",
         "route_security",
         "watch_civic_guard"
       ],
@@ -3974,7 +4006,8 @@ export const generatedRepoLocalGlantriSeed = {
       "groupId": "craft_group",
       "groupIds": [
         "craft_group",
-        "military_group"
+        "military_group",
+        "arena_training"
       ],
       "id": "weapon_maintenance",
       "isTheoretical": false,
@@ -4674,7 +4707,8 @@ export const generatedRepoLocalGlantriSeed = {
       "groupIds": [
         "veteran_soldiering",
         "veteran_leadership",
-        "military_group"
+        "military_group",
+        "arena_training"
       ],
       "id": "combat_experience",
       "isTheoretical": false,
@@ -5029,6 +5063,11 @@ export const generatedRepoLocalGlantriSeed = {
       "description": "Martial professional trained for armed combat, defense, and battlefield survival. Broad military family; subtype varies strongly. Real melee training normally includes attack skill plus Dodge and Parry.",
       "id": "soldier",
       "name": "Soldier"
+    },
+    {
+      "description": "Arena-focused combat performer family for staged personal fighting rather than battlefield soldiering.",
+      "id": "arena_fighter",
+      "name": "Arena Fighter"
     }
   ],
   "professions": [
@@ -5307,7 +5346,7 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "description": "Gladiator source-listed occupation subtype. Source-listed occupation retained in the pack and awaiting deeper rule-detail refinement if needed.",
-      "familyId": "soldier",
+      "familyId": "arena_fighter",
       "id": "gladiator",
       "name": "Gladiator",
       "subtypeName": "Gladiator"
@@ -7815,6 +7854,14 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "grantType": "group",
+      "isCore": false,
+      "professionId": "gladiator",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "arena_training"
+    },
+    {
+      "grantType": "group",
       "isCore": true,
       "professionId": "healer",
       "ranks": 0,
@@ -10113,6 +10160,7 @@ export const generatedRepoLocalGlantriSeed = {
         "craft_group",
         "mental_group",
         "wilderness_group",
+        "arena_training",
         "route_security",
         "watch_civic_guard"
       ],
@@ -10190,6 +10238,7 @@ export const generatedRepoLocalGlantriSeed = {
         "craft_group",
         "mental_group",
         "wilderness_group",
+        "arena_training",
         "route_security",
         "watch_civic_guard"
       ],
@@ -10265,6 +10314,7 @@ export const generatedRepoLocalGlantriSeed = {
         "craft_group",
         "mental_group",
         "wilderness_group",
+        "arena_training",
         "route_security",
         "watch_civic_guard"
       ],
@@ -10340,6 +10390,7 @@ export const generatedRepoLocalGlantriSeed = {
         "craft_group",
         "mental_group",
         "wilderness_group",
+        "arena_training",
         "route_security",
         "watch_civic_guard"
       ],
@@ -10417,6 +10468,7 @@ export const generatedRepoLocalGlantriSeed = {
         "craft_group",
         "mental_group",
         "wilderness_group",
+        "arena_training",
         "route_security",
         "watch_civic_guard"
       ],
@@ -10534,6 +10586,7 @@ export const generatedRepoLocalGlantriSeed = {
         "mental_group",
         "mystical_group",
         "wilderness_group",
+        "arena_training",
         "route_security",
         "watch_civic_guard"
       ],
@@ -10649,6 +10702,7 @@ export const generatedRepoLocalGlantriSeed = {
         "mental_group",
         "mystical_group",
         "wilderness_group",
+        "arena_training",
         "route_security",
         "watch_civic_guard"
       ],
@@ -10764,6 +10818,7 @@ export const generatedRepoLocalGlantriSeed = {
         "mental_group",
         "mystical_group",
         "wilderness_group",
+        "arena_training",
         "route_security",
         "watch_civic_guard"
       ],
@@ -10841,6 +10896,7 @@ export const generatedRepoLocalGlantriSeed = {
         "craft_group",
         "mental_group",
         "wilderness_group",
+        "arena_training",
         "route_security",
         "watch_civic_guard"
       ],
@@ -10958,6 +11014,7 @@ export const generatedRepoLocalGlantriSeed = {
         "mental_group",
         "mystical_group",
         "wilderness_group",
+        "arena_training",
         "route_security",
         "watch_civic_guard"
       ],
@@ -11073,6 +11130,7 @@ export const generatedRepoLocalGlantriSeed = {
         "mental_group",
         "mystical_group",
         "wilderness_group",
+        "arena_training",
         "route_security",
         "watch_civic_guard"
       ],
@@ -11188,6 +11246,7 @@ export const generatedRepoLocalGlantriSeed = {
         "mental_group",
         "mystical_group",
         "wilderness_group",
+        "arena_training",
         "route_security",
         "watch_civic_guard"
       ],
@@ -11263,6 +11322,7 @@ export const generatedRepoLocalGlantriSeed = {
         "craft_group",
         "mental_group",
         "wilderness_group",
+        "arena_training",
         "route_security",
         "watch_civic_guard"
       ],
@@ -11378,6 +11438,7 @@ export const generatedRepoLocalGlantriSeed = {
         "mental_group",
         "mystical_group",
         "wilderness_group",
+        "arena_training",
         "route_security",
         "watch_civic_guard"
       ],
@@ -11513,6 +11574,7 @@ export const generatedRepoLocalGlantriSeed = {
         "mental_group",
         "mystical_group",
         "wilderness_group",
+        "arena_training",
         "route_security",
         "watch_civic_guard"
       ],
@@ -11648,6 +11710,7 @@ export const generatedRepoLocalGlantriSeed = {
         "mental_group",
         "mystical_group",
         "wilderness_group",
+        "arena_training",
         "route_security",
         "watch_civic_guard"
       ],
@@ -11723,6 +11786,7 @@ export const generatedRepoLocalGlantriSeed = {
         "craft_group",
         "mental_group",
         "wilderness_group",
+        "arena_training",
         "route_security",
         "watch_civic_guard"
       ],
@@ -11838,6 +11902,7 @@ export const generatedRepoLocalGlantriSeed = {
         "mental_group",
         "mystical_group",
         "wilderness_group",
+        "arena_training",
         "route_security",
         "watch_civic_guard"
       ],
@@ -11973,6 +12038,7 @@ export const generatedRepoLocalGlantriSeed = {
         "mental_group",
         "mystical_group",
         "wilderness_group",
+        "arena_training",
         "route_security",
         "watch_civic_guard"
       ],
@@ -12108,6 +12174,7 @@ export const generatedRepoLocalGlantriSeed = {
         "mental_group",
         "mystical_group",
         "wilderness_group",
+        "arena_training",
         "route_security",
         "watch_civic_guard"
       ],
@@ -12183,6 +12250,7 @@ export const generatedRepoLocalGlantriSeed = {
         "craft_group",
         "mental_group",
         "wilderness_group",
+        "arena_training",
         "route_security",
         "watch_civic_guard"
       ],
@@ -12298,6 +12366,7 @@ export const generatedRepoLocalGlantriSeed = {
         "mental_group",
         "mystical_group",
         "wilderness_group",
+        "arena_training",
         "route_security",
         "watch_civic_guard"
       ],
@@ -12433,6 +12502,7 @@ export const generatedRepoLocalGlantriSeed = {
         "mental_group",
         "mystical_group",
         "wilderness_group",
+        "arena_training",
         "route_security",
         "watch_civic_guard"
       ],
@@ -12580,6 +12650,7 @@ export const generatedRepoLocalGlantriSeed = {
         "mental_group",
         "mystical_group",
         "wilderness_group",
+        "arena_training",
         "route_security",
         "watch_civic_guard"
       ],
@@ -12655,6 +12726,7 @@ export const generatedRepoLocalGlantriSeed = {
         "craft_group",
         "mental_group",
         "wilderness_group",
+        "arena_training",
         "route_security",
         "watch_civic_guard"
       ],
@@ -12770,6 +12842,7 @@ export const generatedRepoLocalGlantriSeed = {
         "mental_group",
         "mystical_group",
         "wilderness_group",
+        "arena_training",
         "route_security",
         "watch_civic_guard"
       ],
@@ -12905,6 +12978,7 @@ export const generatedRepoLocalGlantriSeed = {
         "mental_group",
         "mystical_group",
         "wilderness_group",
+        "arena_training",
         "route_security",
         "watch_civic_guard"
       ],
@@ -13052,6 +13126,7 @@ export const generatedRepoLocalGlantriSeed = {
         "mental_group",
         "mystical_group",
         "wilderness_group",
+        "arena_training",
         "route_security",
         "watch_civic_guard"
       ],
@@ -13127,6 +13202,7 @@ export const generatedRepoLocalGlantriSeed = {
         "craft_group",
         "mental_group",
         "wilderness_group",
+        "arena_training",
         "route_security",
         "watch_civic_guard"
       ],
@@ -13242,6 +13318,7 @@ export const generatedRepoLocalGlantriSeed = {
         "mental_group",
         "mystical_group",
         "wilderness_group",
+        "arena_training",
         "route_security",
         "watch_civic_guard"
       ],
@@ -13377,6 +13454,7 @@ export const generatedRepoLocalGlantriSeed = {
         "mental_group",
         "mystical_group",
         "wilderness_group",
+        "arena_training",
         "route_security",
         "watch_civic_guard"
       ],
@@ -13524,6 +13602,7 @@ export const generatedRepoLocalGlantriSeed = {
         "mental_group",
         "mystical_group",
         "wilderness_group",
+        "arena_training",
         "route_security",
         "watch_civic_guard"
       ],
@@ -13599,6 +13678,7 @@ export const generatedRepoLocalGlantriSeed = {
         "craft_group",
         "mental_group",
         "wilderness_group",
+        "arena_training",
         "route_security",
         "watch_civic_guard"
       ],
@@ -13714,6 +13794,7 @@ export const generatedRepoLocalGlantriSeed = {
         "mental_group",
         "mystical_group",
         "wilderness_group",
+        "arena_training",
         "route_security",
         "watch_civic_guard"
       ],
@@ -13849,6 +13930,7 @@ export const generatedRepoLocalGlantriSeed = {
         "mental_group",
         "mystical_group",
         "wilderness_group",
+        "arena_training",
         "route_security",
         "watch_civic_guard"
       ],
@@ -13996,6 +14078,7 @@ export const generatedRepoLocalGlantriSeed = {
         "mental_group",
         "mystical_group",
         "wilderness_group",
+        "arena_training",
         "route_security",
         "watch_civic_guard"
       ],
@@ -14071,6 +14154,7 @@ export const generatedRepoLocalGlantriSeed = {
         "craft_group",
         "mental_group",
         "wilderness_group",
+        "arena_training",
         "route_security",
         "watch_civic_guard"
       ],
@@ -14186,6 +14270,7 @@ export const generatedRepoLocalGlantriSeed = {
         "mental_group",
         "mystical_group",
         "wilderness_group",
+        "arena_training",
         "route_security",
         "watch_civic_guard"
       ],
@@ -14321,6 +14406,7 @@ export const generatedRepoLocalGlantriSeed = {
         "mental_group",
         "mystical_group",
         "wilderness_group",
+        "arena_training",
         "route_security",
         "watch_civic_guard"
       ],
@@ -14468,6 +14554,7 @@ export const generatedRepoLocalGlantriSeed = {
         "mental_group",
         "mystical_group",
         "wilderness_group",
+        "arena_training",
         "route_security",
         "watch_civic_guard"
       ],
@@ -14543,6 +14630,7 @@ export const generatedRepoLocalGlantriSeed = {
         "craft_group",
         "mental_group",
         "wilderness_group",
+        "arena_training",
         "route_security",
         "watch_civic_guard"
       ],
@@ -14658,6 +14746,7 @@ export const generatedRepoLocalGlantriSeed = {
         "mental_group",
         "mystical_group",
         "wilderness_group",
+        "arena_training",
         "route_security",
         "watch_civic_guard"
       ],
@@ -14793,6 +14882,7 @@ export const generatedRepoLocalGlantriSeed = {
         "mental_group",
         "mystical_group",
         "wilderness_group",
+        "arena_training",
         "route_security",
         "watch_civic_guard"
       ],
@@ -14940,6 +15030,7 @@ export const generatedRepoLocalGlantriSeed = {
         "mental_group",
         "mystical_group",
         "wilderness_group",
+        "arena_training",
         "route_security",
         "watch_civic_guard"
       ],

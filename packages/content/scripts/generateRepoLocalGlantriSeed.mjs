@@ -58,6 +58,7 @@ const PLAYER_FACING_SKILL_CATEGORY_BY_GROUP_ID = {
   advanced_missile_training: "combat",
   animal_handling: "fieldcraft",
   animal_husbandry: "fieldcraft",
+  arena_training: "performance",
   athletic_conditioning: "physical",
   athletics: "physical",
   basic_melee_training: "combat",
@@ -201,6 +202,13 @@ const SKILL_GROUP_SELECTION_SLOTS_BY_ID = {
 const FIXED_SKILL_MEMBERSHIPS_BY_GROUP_ID = {
   basic_melee_training: ["dodge", "parry", "brawling"],
   advanced_melee_training: ["dodge", "parry", "brawling"],
+  arena_training: [
+    "combat_experience",
+    "perception",
+    "acting",
+    "oratory",
+    "weapon_maintenance"
+  ],
   basic_missile_training: [],
   advanced_missile_training: [],
   route_security: ["perception", "search", "riding", "animal_care", "teamstering", "first_aid"],
@@ -214,6 +222,8 @@ const ADDITIONAL_TRAINING_GROUP_IDS_BY_SKILL_ID = {
 const GROUP_DESCRIPTION_OVERRIDES = {
   basic_melee_training: "Dodge, parry, and brawling plus one required melee weapon skill.",
   advanced_melee_training: "Dodge, parry, and brawling plus three required melee weapon skills.",
+  arena_training:
+    "Arena awareness, showmanship, professional discipline, and practical weapon upkeep.",
   basic_missile_training: "One required missile weapon skill.",
   advanced_missile_training: "Three required missile weapon skills.",
   route_security:
@@ -234,6 +244,19 @@ const PROFESSION_FAMILY_GRANT_OVERRIDES = {
     ],
     favoredTrainingGroupIds: ["veteran_soldiering"]
   }
+};
+
+const GENERATED_PROFESSION_FAMILIES = [
+  {
+    description:
+      "Arena-focused combat performer family for staged personal fighting rather than battlefield soldiering.",
+    id: "arena_fighter",
+    name: "Arena Fighter"
+  }
+];
+
+const PROFESSION_SUBTYPE_FAMILY_ID_OVERRIDES = {
+  gladiator: "arena_fighter"
 };
 
 const PROFESSION_SUBTYPE_GRANT_OVERRIDES = {
@@ -261,7 +284,9 @@ const PROFESSION_SUBTYPE_GRANT_OVERRIDES = {
     addedFavoredTrainingGroupIds: []
   },
   gladiator: {
-    addedCoreTrainingGroupIds: ["advanced_melee_training"]
+    addedCoreTrainingGroupIds: ["advanced_melee_training"],
+    addedFavoredSkillIds: [],
+    addedFavoredTrainingGroupIds: ["arena_training"]
   },
   jailer: {
     addedCoreSkillIds: [],
@@ -657,18 +682,25 @@ const taxonomyGroupSources = rawBundle.taxonomyGroups.map((group, index) => ({
 }));
 const generatedTrainingGroupSources = [
   {
+    description: GROUP_DESCRIPTION_OVERRIDES.arena_training,
+    id: "arena_training",
+    name: "Arena Training",
+    skillIds: FIXED_SKILL_MEMBERSHIPS_BY_GROUP_ID.arena_training,
+    sortOrder: trainingGroupSources.length + taxonomyGroupSources.length + 1
+  },
+  {
     description: GROUP_DESCRIPTION_OVERRIDES.route_security,
     id: "route_security",
     name: "Route Security",
     skillIds: FIXED_SKILL_MEMBERSHIPS_BY_GROUP_ID.route_security,
-    sortOrder: trainingGroupSources.length + taxonomyGroupSources.length + 1
+    sortOrder: trainingGroupSources.length + taxonomyGroupSources.length + 2
   },
   {
     description: GROUP_DESCRIPTION_OVERRIDES.watch_civic_guard,
     id: "watch_civic_guard",
     name: "Watch / Civic Guard",
     skillIds: FIXED_SKILL_MEMBERSHIPS_BY_GROUP_ID.watch_civic_guard,
-    sortOrder: trainingGroupSources.length + taxonomyGroupSources.length + 2
+    sortOrder: trainingGroupSources.length + taxonomyGroupSources.length + 3
   }
 ];
 const skillGroupSources = [
@@ -799,15 +831,20 @@ const specializations = specializationRows
   }));
 const specializationIds = new Set(specializations.map((specialization) => specialization.id));
 
-const professionFamilies = rawBundle.professionFamilies.map((family) => ({
-  description: normalizeText(family.shortDescription, family.contextNotes) || undefined,
-  id: family.professionFamilyId,
-  name: family.name
-}));
+const professionFamilies = [
+  ...rawBundle.professionFamilies.map((family) => ({
+    description: normalizeText(family.shortDescription, family.contextNotes) || undefined,
+    id: family.professionFamilyId,
+    name: family.name
+  })),
+  ...GENERATED_PROFESSION_FAMILIES
+];
 
 const professions = rawBundle.professionSubtypes.map((subtype) => ({
   description: normalizeText(subtype.shortDescription, subtype.contextNotes) || undefined,
-  familyId: subtype.professionFamilyId,
+  familyId:
+    PROFESSION_SUBTYPE_FAMILY_ID_OVERRIDES[subtype.professionSubtypeId] ??
+    subtype.professionFamilyId,
   id: subtype.professionSubtypeId,
   name: subtype.name,
   subtypeName: subtype.name

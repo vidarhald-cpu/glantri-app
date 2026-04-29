@@ -85,6 +85,7 @@ const LEGACY_PLAYER_FACING_SKILL_CATEGORY_BY_GROUP_ID: Partial<
   advanced_missile_training: "combat",
   animal_handling: "fieldcraft",
   animal_husbandry: "fieldcraft",
+  arena_training: "performance",
   athletic_conditioning: "physical",
   athletics: "physical",
   basic_melee_training: "combat",
