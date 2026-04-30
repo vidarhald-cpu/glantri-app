@@ -342,6 +342,62 @@ const GENERATED_PROFESSION_SUBTYPES = [
     shortDescription:
       "Commander in an organized urban watch or civic guard, responsible for patrols, detention staff, gate guards, and civic security detachments.",
     name: "City Watch Officer"
+  },
+  {
+    addedCoreSkillIds: [],
+    addedCoreTrainingGroupIds: [
+      "civic_learning",
+      "commercial_administration",
+      "literate_foundation"
+    ],
+    addedFavoredSkillIds: [],
+    addedFavoredTrainingGroupIds: ["route_security", "defensive_soldiering"],
+    minimumSocietyLevel: 4,
+    professionFamilyId: "military_security",
+    professionSubtypeId: "quartermaster",
+    shortDescription:
+      "Military logistics official responsible for stores, equipment, pay, provisions, transport, and operational support.",
+    name: "Quartermaster"
+  },
+  {
+    addedCoreSkillIds: [],
+    addedCoreTrainingGroupIds: [
+      "veteran_leadership",
+      "civic_learning",
+      "literate_foundation",
+      "veteran_soldiering"
+    ],
+    addedFavoredSkillIds: [],
+    addedFavoredTrainingGroupIds: [
+      "courtly_formation",
+      "commercial_administration",
+      "political_acumen"
+    ],
+    minimumSocietyLevel: 5,
+    professionFamilyId: "military_security",
+    professionSubtypeId: "staff_officer",
+    shortDescription:
+      "Formal military staff and planning officer trained for literate administration, orders, records, and support to command.",
+    name: "Staff Officer"
+  },
+  {
+    addedCoreSkillIds: [],
+    addedCoreTrainingGroupIds: [
+      "basic_melee_training",
+      "defensive_soldiering",
+      "veteran_soldiering",
+      "veteran_leadership",
+      "civic_learning",
+      "literate_foundation"
+    ],
+    addedFavoredSkillIds: [],
+    addedFavoredTrainingGroupIds: ["courtly_formation", "political_acumen"],
+    minimumSocietyLevel: 6,
+    professionFamilyId: "military_security",
+    professionSubtypeId: "imperial_officer",
+    shortDescription:
+      "High-state bureaucratic line officer trained through elite institutions, military basics, law, administration, court culture, and formal command.",
+    name: "Imperial / Bureaucratic Officer"
   }
 ];
 
@@ -428,6 +484,10 @@ const PROFESSION_AVAILABILITY_OVERRIDES = {
     classBands: [2, 3],
     societyLevels: [3, 4, 5]
   },
+  imperial_officer: {
+    classBands: [4],
+    societyLevels: [6]
+  },
   jailer: {
     classBands: [2, 3],
     societyLevels: [3, 4, 5]
@@ -439,6 +499,14 @@ const PROFESSION_AVAILABILITY_OVERRIDES = {
   militia_fighter: {
     classBands: [1, 2, 3],
     societyLevels: [1, 2, 3]
+  },
+  quartermaster: {
+    classBands: [3, 4],
+    societyLevels: [4, 5, 6]
+  },
+  staff_officer: {
+    classBands: [4],
+    societyLevels: [5, 6]
   },
   tribal_warrior: {
     classBands: [1, 2],
