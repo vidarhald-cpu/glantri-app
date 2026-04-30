@@ -309,6 +309,39 @@ const GENERATED_PROFESSION_SUBTYPES = [
     shortDescription:
       "Professional fort, town, or garrison soldier with organized melee, defensive, and soldiering training.",
     name: "Garrison Soldier"
+  },
+  {
+    addedCoreSkillIds: [],
+    addedCoreTrainingGroupIds: [
+      "basic_melee_training",
+      "basic_missile_training",
+      "defensive_soldiering",
+      "veteran_soldiering"
+    ],
+    addedFavoredSkillIds: [],
+    addedFavoredTrainingGroupIds: ["veteran_leadership"],
+    minimumSocietyLevel: 3,
+    professionFamilyId: "military_security",
+    professionSubtypeId: "veteran_sergeant",
+    shortDescription:
+      "Experienced squad, patrol, or garrison-section leader with practical authority and soldiering experience rather than formal officer education.",
+    name: "Veteran Sergeant"
+  },
+  {
+    addedCoreSkillIds: [],
+    addedCoreTrainingGroupIds: ["basic_melee_training", "watch_civic_guard"],
+    addedFavoredSkillIds: [],
+    addedFavoredTrainingGroupIds: [
+      "defensive_soldiering",
+      "veteran_leadership",
+      "civic_learning"
+    ],
+    minimumSocietyLevel: 4,
+    professionFamilyId: "military_security",
+    professionSubtypeId: "city_watch_officer",
+    shortDescription:
+      "Commander in an organized urban watch or civic guard, responsible for patrols, detention staff, gate guards, and civic security detachments.",
+    name: "City Watch Officer"
   }
 ];
 
@@ -387,6 +420,10 @@ const PROFESSION_AVAILABILITY_OVERRIDES = {
     classBands: [2, 3],
     societyLevels: [3, 4, 5]
   },
+  city_watch_officer: {
+    classBands: [3, 4],
+    societyLevels: [4, 5, 6]
+  },
   heavy_infantry: {
     classBands: [2, 3],
     societyLevels: [3, 4, 5]
@@ -410,6 +447,10 @@ const PROFESSION_AVAILABILITY_OVERRIDES = {
   village_guard: {
     classBands: [1, 2],
     societyLevels: [1, 2]
+  },
+  veteran_sergeant: {
+    classBands: [3],
+    societyLevels: [3, 4, 5]
   },
   watchman: {
     classBands: [2, 3],

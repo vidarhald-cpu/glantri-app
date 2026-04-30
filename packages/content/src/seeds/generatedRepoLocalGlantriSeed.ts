@@ -5735,6 +5735,20 @@ export const generatedRepoLocalGlantriSeed = {
       "id": "garrison_soldier",
       "name": "Garrison Soldier",
       "subtypeName": "Garrison Soldier"
+    },
+    {
+      "description": "Experienced squad, patrol, or garrison-section leader with practical authority and soldiering experience rather than formal officer education.",
+      "familyId": "military_security",
+      "id": "veteran_sergeant",
+      "name": "Veteran Sergeant",
+      "subtypeName": "Veteran Sergeant"
+    },
+    {
+      "description": "Commander in an organized urban watch or civic guard, responsible for patrols, detention staff, gate guards, and civic security detachments.",
+      "familyId": "military_security",
+      "id": "city_watch_officer",
+      "name": "City Watch Officer",
+      "subtypeName": "City Watch Officer"
     }
   ],
   "professionSkills": [
@@ -9905,6 +9919,86 @@ export const generatedRepoLocalGlantriSeed = {
       "ranks": 0,
       "scope": "profession",
       "skillGroupId": "veteran_soldiering"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "veteran_sergeant",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "basic_melee_training"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "veteran_sergeant",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "basic_missile_training"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "veteran_sergeant",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "defensive_soldiering"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "veteran_sergeant",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "veteran_soldiering"
+    },
+    {
+      "grantType": "group",
+      "isCore": false,
+      "professionId": "veteran_sergeant",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "veteran_leadership"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "city_watch_officer",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "basic_melee_training"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "city_watch_officer",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "watch_civic_guard"
+    },
+    {
+      "grantType": "group",
+      "isCore": false,
+      "professionId": "city_watch_officer",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "defensive_soldiering"
+    },
+    {
+      "grantType": "group",
+      "isCore": false,
+      "professionId": "city_watch_officer",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "veteran_leadership"
+    },
+    {
+      "grantType": "group",
+      "isCore": false,
+      "professionId": "city_watch_officer",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "civic_learning"
     }
   ],
   "societyBandSkillAccess": [
@@ -11636,7 +11730,8 @@ export const generatedRepoLocalGlantriSeed = {
         "watchman",
         "woodcutter",
         "militia_fighter",
-        "garrison_soldier"
+        "garrison_soldier",
+        "veteran_sergeant"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -12106,7 +12201,8 @@ export const generatedRepoLocalGlantriSeed = {
         "watchman",
         "woodcutter",
         "militia_fighter",
-        "garrison_soldier"
+        "garrison_soldier",
+        "veteran_sergeant"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -12573,7 +12669,9 @@ export const generatedRepoLocalGlantriSeed = {
         "torturer",
         "watchman",
         "woodcutter",
-        "garrison_soldier"
+        "garrison_soldier",
+        "veteran_sergeant",
+        "city_watch_officer"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -12716,7 +12814,8 @@ export const generatedRepoLocalGlantriSeed = {
         "tax_collector",
         "thief",
         "torturer",
-        "woodcutter"
+        "woodcutter",
+        "city_watch_officer"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -13052,7 +13151,9 @@ export const generatedRepoLocalGlantriSeed = {
         "torturer",
         "watchman",
         "woodcutter",
-        "garrison_soldier"
+        "garrison_soldier",
+        "veteran_sergeant",
+        "city_watch_officer"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -13195,7 +13296,8 @@ export const generatedRepoLocalGlantriSeed = {
         "tax_collector",
         "thief",
         "torturer",
-        "woodcutter"
+        "woodcutter",
+        "city_watch_officer"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -13528,7 +13630,9 @@ export const generatedRepoLocalGlantriSeed = {
         "torturer",
         "watchman",
         "woodcutter",
-        "garrison_soldier"
+        "garrison_soldier",
+        "veteran_sergeant",
+        "city_watch_officer"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -13671,7 +13775,8 @@ export const generatedRepoLocalGlantriSeed = {
         "tax_collector",
         "thief",
         "torturer",
-        "woodcutter"
+        "woodcutter",
+        "city_watch_officer"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -14004,7 +14109,9 @@ export const generatedRepoLocalGlantriSeed = {
         "torturer",
         "watchman",
         "woodcutter",
-        "garrison_soldier"
+        "garrison_soldier",
+        "veteran_sergeant",
+        "city_watch_officer"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -14147,7 +14254,8 @@ export const generatedRepoLocalGlantriSeed = {
         "tax_collector",
         "thief",
         "torturer",
-        "woodcutter"
+        "woodcutter",
+        "city_watch_officer"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -14480,7 +14588,9 @@ export const generatedRepoLocalGlantriSeed = {
         "torturer",
         "watchman",
         "woodcutter",
-        "garrison_soldier"
+        "garrison_soldier",
+        "veteran_sergeant",
+        "city_watch_officer"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -14623,7 +14733,8 @@ export const generatedRepoLocalGlantriSeed = {
         "tax_collector",
         "thief",
         "torturer",
-        "woodcutter"
+        "woodcutter",
+        "city_watch_officer"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -14948,7 +15059,8 @@ export const generatedRepoLocalGlantriSeed = {
         "student",
         "thief",
         "torturer",
-        "woodcutter"
+        "woodcutter",
+        "city_watch_officer"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -15091,7 +15203,8 @@ export const generatedRepoLocalGlantriSeed = {
         "tax_collector",
         "thief",
         "torturer",
-        "woodcutter"
+        "woodcutter",
+        "city_watch_officer"
       ],
       "skillGroupIds": [
         "literate_foundation",
