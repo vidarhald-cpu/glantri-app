@@ -398,10 +398,35 @@ const GENERATED_PROFESSION_SUBTYPES = [
     shortDescription:
       "High-state bureaucratic line officer trained through elite institutions, military basics, law, administration, court culture, and formal command.",
     name: "Imperial / Bureaucratic Officer"
+  },
+  {
+    addedCoreSkillIds: [],
+    addedCoreTrainingGroupIds: [
+      "mounted_warrior_training",
+      "veteran_soldiering",
+      "veteran_leadership"
+    ],
+    addedFavoredSkillIds: [],
+    addedFavoredTrainingGroupIds: [
+      "defensive_soldiering",
+      "civic_learning",
+      "courtly_formation"
+    ],
+    minimumSocietyLevel: 4,
+    professionFamilyId: "military_security",
+    professionSubtypeId: "cavalry_officer",
+    shortDescription:
+      "Mounted unit commander for cavalry patrols, household mounted troops, or formal cavalry detachments.",
+    name: "Cavalry Officer"
   }
 ];
 
+const PROFESSION_SUBTYPE_NAME_OVERRIDES = {
+  cavalry_mounted_retainer: "Mounted Retainer"
+};
+
 const PROFESSION_SUBTYPE_FAMILY_ID_OVERRIDES = {
+  cavalry_mounted_retainer: "military_security",
   gladiator: "arena_fighter"
 };
 
@@ -416,11 +441,15 @@ const PROFESSION_SUBTYPE_GRANT_OVERRIDES = {
     addedFavoredTrainingGroupIds: ["route_security"]
   },
   cavalry: {
+    addedCoreTrainingGroupIds: ["mounted_warrior_training", "basic_melee_training"],
     addedFavoredSkillIds: ["animal_care", "battlefield_awareness"],
-    addedFavoredTrainingGroupIds: []
+    addedFavoredTrainingGroupIds: ["defensive_soldiering"]
   },
   cavalry_mounted_retainer: {
-    addedFavoredTrainingGroupIds: []
+    addedCoreSkillIds: [],
+    addedCoreTrainingGroupIds: ["mounted_warrior_training", "mounted_service"],
+    addedFavoredSkillIds: [],
+    addedFavoredTrainingGroupIds: ["courtly_formation", "route_security"]
   },
   champion: {
     addedFavoredSkillIds: ["brawling"],
@@ -477,6 +506,18 @@ const PROFESSION_AVAILABILITY_OVERRIDES = {
     societyLevels: [3, 4, 5]
   },
   city_watch_officer: {
+    classBands: [3, 4],
+    societyLevels: [4, 5, 6]
+  },
+  cavalry: {
+    classBands: [2, 3],
+    societyLevels: [3, 4, 5]
+  },
+  cavalry_mounted_retainer: {
+    classBands: [2, 3],
+    societyLevels: [2, 3, 4]
+  },
+  cavalry_officer: {
     classBands: [3, 4],
     societyLevels: [4, 5, 6]
   },
@@ -1058,8 +1099,8 @@ const professions = professionSourceSubtypes.map((subtype) => ({
     PROFESSION_SUBTYPE_FAMILY_ID_OVERRIDES[subtype.professionSubtypeId] ??
     subtype.professionFamilyId,
   id: subtype.professionSubtypeId,
-  name: subtype.name,
-  subtypeName: subtype.name
+  name: PROFESSION_SUBTYPE_NAME_OVERRIDES[subtype.professionSubtypeId] ?? subtype.name,
+  subtypeName: PROFESSION_SUBTYPE_NAME_OVERRIDES[subtype.professionSubtypeId] ?? subtype.name
 }));
 
 function createSkillGrant(skillId, professionId, scope, isCore) {

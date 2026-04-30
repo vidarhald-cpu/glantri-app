@@ -1099,6 +1099,146 @@ describe("validateCanonicalContent", () => {
     }
   });
 
+  it("separates mounted retainer, cavalry, and cavalry officer packages", () => {
+    const canonicalSocietyLevelById = new Map(
+      defaultCanonicalContent.societies.map((society) => [society.id, society.societyLevel])
+    );
+    const professionById = new Map(
+      defaultCanonicalContent.professions.map((profession) => [profession.id, profession])
+    );
+    const grantsFor = (professionId: string) => {
+      const profession = professionById.get(professionId);
+
+      return defaultCanonicalContent.professionSkills.filter(
+        (grant) =>
+          (grant.scope === "family" && grant.professionId === profession?.familyId) ||
+          (grant.scope === "profession" && grant.professionId === professionId)
+      );
+    };
+    const groupIdsFor = (professionId: string) =>
+      grantsFor(professionId)
+        .filter((grant) => grant.grantType === "group" && grant.skillGroupId)
+        .map((grant) => grant.skillGroupId ?? "");
+    const directSkillIdsFor = (professionId: string) =>
+      grantsFor(professionId)
+        .filter((grant) => grant.grantType !== "group" && grant.skillId)
+        .map((grant) => grant.skillId ?? "");
+    const skillReachFor = (professionId: string) => {
+      const groupIds = groupIdsFor(professionId);
+      const skillIdsFromGroups = defaultCanonicalContent.skills
+        .filter((skill) =>
+          (skill.groupIds ?? [skill.groupId]).some((groupId) => groupIds.includes(groupId))
+        )
+        .map((skill) => skill.id);
+      const directOnlySkillIds = directSkillIdsFor(professionId).filter(
+        (skillId) => !skillIdsFromGroups.includes(skillId)
+      );
+
+      return new Set([...skillIdsFromGroups, ...directOnlySkillIds]).size;
+    };
+    const allowedRowsFor = (professionId: string) =>
+      defaultCanonicalContent.societyLevels.filter((societyLevel) =>
+        societyLevel.professionIds.includes(professionId)
+      );
+    const canonicalSocietyLevelsFor = (professionId: string) => [
+      ...new Set(
+        allowedRowsFor(professionId)
+          .map((societyLevel) => canonicalSocietyLevelById.get(societyLevel.societyId))
+          .filter((societyLevel): societyLevel is number => typeof societyLevel === "number")
+      )
+    ].sort((left, right) => left - right);
+    const classBandsFor = (professionId: string) => [
+      ...new Set(allowedRowsFor(professionId).map((societyLevel) => societyLevel.societyLevel))
+    ].sort((left, right) => left - right);
+    const expectNoOfficerEducation = (professionId: string) => {
+      expect(groupIdsFor(professionId)).not.toContain("veteran_leadership");
+      expect(directSkillIdsFor(professionId)).not.toContain("captaincy");
+      expect(directSkillIdsFor(professionId)).not.toContain("tactics");
+    };
+
+    expect(professionById.get("cavalry")).toMatchObject({
+      familyId: "soldier",
+      name: "Cavalry"
+    });
+    expect(canonicalSocietyLevelsFor("cavalry")).toEqual([3, 4, 5]);
+    expect(classBandsFor("cavalry")).toEqual([2, 3]);
+    expect(groupIdsFor("cavalry")).toEqual(
+      expect.arrayContaining([
+        "mounted_warrior_training",
+        "veteran_soldiering",
+        "basic_melee_training",
+        "defensive_soldiering"
+      ])
+    );
+    expectNoOfficerEducation("cavalry");
+    expect(skillReachFor("cavalry")).toBeGreaterThanOrEqual(14);
+    expect(skillReachFor("cavalry")).toBeLessThanOrEqual(18);
+
+    expect(professionById.get("cavalry_mounted_retainer")).toMatchObject({
+      familyId: "military_security",
+      name: "Mounted Retainer"
+    });
+    expect(canonicalSocietyLevelsFor("cavalry_mounted_retainer")).toEqual([2, 3, 4]);
+    expect(classBandsFor("cavalry_mounted_retainer")).toEqual([2, 3]);
+    expect(groupIdsFor("cavalry_mounted_retainer")).toEqual(
+      expect.arrayContaining([
+        "mounted_warrior_training",
+        "mounted_service",
+        "courtly_formation",
+        "route_security"
+      ])
+    );
+    expect(groupIdsFor("cavalry_mounted_retainer")).not.toContain("veteran_soldiering");
+    expect(groupIdsFor("cavalry_mounted_retainer")).not.toEqual(groupIdsFor("cavalry"));
+    expectNoOfficerEducation("cavalry_mounted_retainer");
+    expect(skillReachFor("cavalry_mounted_retainer")).toBeGreaterThanOrEqual(14);
+    expect(skillReachFor("cavalry_mounted_retainer")).toBeLessThanOrEqual(18);
+
+    expect(professionById.get("cavalry_officer")).toMatchObject({
+      familyId: "military_security",
+      name: "Cavalry Officer"
+    });
+    expect(canonicalSocietyLevelsFor("cavalry_officer")).toEqual([4, 5, 6]);
+    expect(classBandsFor("cavalry_officer")).toEqual([3, 4]);
+    expect(groupIdsFor("cavalry_officer")).toEqual(
+      expect.arrayContaining([
+        "mounted_warrior_training",
+        "veteran_soldiering",
+        "veteran_leadership",
+        "defensive_soldiering",
+        "civic_learning",
+        "courtly_formation"
+      ])
+    );
+    expect(directSkillIdsFor("cavalry_officer")).toEqual([]);
+    expect(groupIdsFor("cavalry_officer")).not.toEqual(groupIdsFor("military_officer"));
+    expect(skillReachFor("cavalry_officer")).toBeGreaterThanOrEqual(18);
+    expect(skillReachFor("cavalry_officer")).toBeLessThanOrEqual(24);
+
+    expect(canonicalSocietyLevelsFor("military_officer")).toEqual([4, 5, 6]);
+    expect(classBandsFor("military_officer")).toEqual([4]);
+    expect(canonicalSocietyLevelsFor("veteran_sergeant")).toEqual([3, 4, 5]);
+    expect(classBandsFor("veteran_sergeant")).toEqual([3]);
+
+    for (const professionId of [
+      "village_guard",
+      "militia_fighter",
+      "garrison_soldier",
+      "watchman",
+      "jailer",
+      "levy_infantry",
+      "heavy_infantry",
+      "cavalry",
+      "cavalry_mounted_retainer"
+    ]) {
+      expectNoOfficerEducation(professionId);
+    }
+
+    for (const societyLevel of defaultCanonicalContent.societyLevels) {
+      expect(new Set(societyLevel.professionIds).size).toBe(societyLevel.professionIds.length);
+    }
+  });
+
   it("includes the updated civilization language naming and Lankhmar seed entry", () => {
     expect(
       defaultCanonicalContent.civilizations.find((civilization) => civilization.id === "glantri")
