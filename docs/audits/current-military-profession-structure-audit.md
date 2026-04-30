@@ -1,14 +1,15 @@
 # Current Military Profession Structure Audit
 
-Date: 2026-04-29
+Date: 2026-04-30
 
-Scope: read-only audit of the current repo-local/generated Glantri profession catalog for soldier, guard, warrior, militia, policing, naval military, scout, cavalry, bodyguard, officer, and command-adjacent roles.
+Scope: read-only audit of the current repo-local/generated Glantri profession catalog after the recent military, guard, route-security, arena, and maritime-command cleanup passes.
 
-No content changes are proposed as implemented changes in this document.
+No profession/content changes are implemented by this document.
 
 ## A. Method And Data Sources
 
 Files and read models inspected:
+
 - `packages/content/src/seeds/generatedRepoLocalGlantriSeed.ts`
 - `packages/content/scripts/generateRepoLocalGlantriSeed.mjs`
 - `data/import/glantri_content_pack_full_2026-03-30_norm7/content_bundle.json`
@@ -16,291 +17,289 @@ Files and read models inspected:
 - `apps/web/src/lib/admin/viewModels.ts`
 - `packages/domain/src/content/skills.ts`
 - `packages/domain/src/profession/professions.ts`
+- Existing reports in `docs/audits/`
 
 Society level:
+
 - Canonical society level comes from `content.societies[*].societyLevel`.
-- Profession minimum society level comes from imported profession subtype rows in `content_bundle.json`.
-- Current generated `societyLevels[*].professionIds` include a profession when the society/access-band effective level is high enough.
+- Current generated availability comes from `content.societyLevels[*].professionIds`, joined to canonical society through `societyId`.
+- Recent generated overrides now constrain `tribal_warrior` and `clan_warriors` to society levels 1-2.
 
-Class level / allowed grid:
-- `content.societyLevels[*].societyLevel` is the social/access band, not the canonical society level.
-- Current class labels are:
-  - Class 1: Common Folk
-  - Class 2: Trades and Guilds
-  - Class 3: Established Households
-  - Class 4: Court and Elite
-- Admin reads allowed slots from `societyLevels[*].professionIds`, then joins canonical society level through the society id.
+Class band:
 
-Skill groups and extra grants:
-- Profession package grants are resolved with `resolveEffectiveProfessionPackage`.
-- Family and subtype grants are combined into core and favored tiers.
-- Group reach is computed from skills whose `groupIds` include a granted group.
-- Direct skill exceptions are direct profession/family skill grants not already reachable through granted groups.
+- `content.societyLevels[*].societyLevel` is the access/class band, not the canonical society level.
+- Current class bands are:
+- Class 1: Common Folk
+- Class 2: Trades and Guilds
+- Class 3: Established Households
+- Class 4: Court and Elite
+- Recent generated overrides now constrain `tribal_warrior` and `clan_warriors` to class bands 1-2.
+
+Skill groups and direct grants:
+
+- Profession package grants were read from generated `professionSkills`.
+- Effective package logic matches `resolveEffectiveProfessionPackage`: family grants plus subtype grants, split into group grants and direct skill grants.
+- Direct-only skills are direct grants not already reachable through granted groups.
 
 Skill reach:
-- The existing app has a clear skill-reach metric.
-- The rules-engine returns core/favored reachable skill ids in `resolveEffectiveProfessionPackage`.
-- Admin combines core/favored reachable ids into a unique `totalReachableSkills`.
-- This report uses that same unique reachable skill count as "skill reach."
 
-Weighted group size:
-- Admin treats ordinary skills as 2 weighted points and secondary skills as 1 weighted point.
-- This report uses that existing weighting as a proxy for whether a skill group is substantial.
-- Many current combat groups are selection-slot groups with low fixed weighted points, so their effective value is understated unless selection slots are considered separately.
+- The existing app has a clear skill-reach metric: unique skills reachable from effective core/favored groups plus direct-only skills.
+- This report uses that same effective unique reachable-skill count.
 
-## B. Current Military Profession Table
+Meaningful groups:
 
-| Profession id | Profession name | Current society levels | Current class bands | Military role category | Skill groups | Meaningful group count | Overlapping groups? | Direct extra skills | Direct count | Skill reach | Soldier or commander? | Initial verdict |
-|---|---|---|---|---|---|---:|---|---|---:|---:|---|---|
-| `tribal_warrior` | Tribal Warrior | L1-L6 | 1,2,3,4 | Informal fighter / clan warrior | Basic Melee Training; Veteran Soldiering | 2 | Basic Melee is small/slot-based; Veteran Soldiering overlaps perception/combat awareness flavor | Perception; Riding; Weapon Maintenance; First aid; Brawling; Throwing; Bow; Formation Fighting | 8 | 18 | Soldier | Mechanically healthy reach, but too available upward. Restrict from high-society default grids or make culture-specific. |
-| `clan_warriors` | Clan Warriors | L1-L6 | 1,2,3,4 | Informal fighter / clan warrior | Basic Melee Training; Veteran Soldiering | 2 | Same overlap as Tribal Warrior | Perception; Riding; Weapon Maintenance; First aid; Throwing; Bow; Formation Fighting | 7 | 18 | Soldier | Same issue as Tribal Warrior; especially odd in level-5/6 contexts. |
-| `levy_infantry` | Levy Infantry | L2-L6 | 2,3,4 | Militia / levy | Basic Melee Training; Defensive Soldiering; Veteran Soldiering | 3 | Basic + Defensive both small combat foundations; acceptable together | Perception; Riding; Weapon Maintenance; First aid; 1-h conc./axe; Polearms; Formation Fighting | 7 | 16 | Soldier | Good militia/infantry row, but should not necessarily remain universal through L6. |
-| `caravan_guard` | Caravan Guard | L2-L6 | 2,3,4 | Guard / route security | Basic Melee Training; Veteran Soldiering | 2 | Weak concept coverage; no travel/security group beyond direct skills | Perception; Riding; Weapon Maintenance; First aid; Throwing; Formation Fighting | 6 | 17 | Soldier/guard | Needs a Caravan/Route Guard group later or Mounted Service/Transport support. |
-| `watchman` | Watchman | L2-L6 | 2,3,4 | Guard / policing / watch | Basic Melee Training; Civic Learning; Defensive Soldiering; Veteran Soldiering | 4 | Civic Learning is useful; soldiering may be too military for simple watch | Perception; Riding; Search; Weapon Maintenance; First aid | 5 | 21 | Soldier/guard | Much better after command split. Could use a dedicated Watch/Guard group and Law. |
-| `jailer` | Jailer | L2-L6 | 2,3,4 | Guard / policing / watch | Basic Melee Training; Civic Learning; Defensive Soldiering; Veteran Soldiering | 4 | Similar to Watchman | Perception; Insight; Riding; Search; Weapon Maintenance; First aid | 6 | 22 | Soldier/guard | Good reach. Needs Law/Administration/Detention group more than riding/soldiering. |
-| `light_infantry` | Light Infantry | L2-L6 | 2,3,4 | Ordinary soldier | Basic Missile Training; Veteran Soldiering | 2 | Basic Missile has no fixed weighted skills because it is slot-based | Riding; Weapon Maintenance; First aid; Throwing; Bow; Formation Fighting | 6 | 13 | Soldier | Acceptable reach, but group structure depends too much on direct Bow/Throwing. |
-| `heavy_infantry` | Heavy Infantry | L2-L6 | 2,3,4 | Ordinary soldier | Basic Melee Training; Defensive Soldiering; Veteran Soldiering | 3 | Solid infantry concept | Riding; Weapon Maintenance; First aid; 1-h conc./axe; Polearms; Formation Fighting | 6 | 16 | Soldier | Coherent, though high-society availability should perhaps become Professional Soldier/Garrison Soldier. |
-| `cavalry` | Cavalry | L2-L6 | 2,3,4 | Cavalry / mounted soldier | Mounted Warrior Training; Veteran Soldiering | 2 | Good thematic pairing | Perception; Animal care; Riding; Weapon Maintenance; First aid; Formation Fighting | 6 | 13 | Soldier | Good concept, but low reach for formal cavalry and too broad through L6. |
-| `cavalry_mounted_retainer` | Cavalry / Mounted Retainer | L2-L6 | 2,3,4 | Cavalry / mounted soldier | Mounted Warrior Training; Veteran Soldiering | 2 | Nearly duplicates Cavalry | Perception; Animal care; Riding; Weapon Maintenance; First aid; Formation Fighting | 6 | 13 | Soldier | Redundant with Cavalry unless social context is made explicit. |
-| `bodyguard` | Bodyguard | L2-L6 | 2,3,4 | Bodyguard / elite guard | Advanced Melee Training; Veteran Soldiering | 2 | Advanced Melee is slot-based/small | Perception; Battlefield Awareness; Insight; Riding; Weapon Maintenance; First aid; Formation Fighting | 7 | 17 | Soldier/guard | Strong martial row; may need Social Perception/Protocol for elite guard variants. |
-| `gladiator` | Gladiator | L2-L6 | 2,3,4 | Arena fighter / combat specialist | Advanced Melee Training; Veteran Soldiering | 2 | Veteran Soldiering is battlefield-themed and may not fit arena-only concept | Riding; Weapon Maintenance; First aid; Formation Fighting | 4 | 16 | Soldier, not commander | No longer has command markers, good. Needs an Arena/Gladiator group later. |
-| `outrider_scout` | Outrider/Scout | L2-L6 | 2,3,4 | Scout / outrider | Basic Missile Training; Fieldcraft Stealth; Mounted Service; Veteran Soldiering | 4 | Good spread; Basic Missile remains slot-based | Weapon Maintenance; First aid; Formation Fighting | 3 | 18 | Soldier/scout | One of the better rebuilt packages. Could later add tracking/survival if available. |
-| `champion` | Champion | L3-L6 | 3,4 | Bodyguard / elite fighter | Advanced Melee Training; Veteran Soldiering | 2 | Similar to Bodyguard/Gladiator | Perception; Battlefield Awareness; Riding; Weapon Maintenance; First aid; Brawling; Formation Fighting | 7 | 16 | Elite soldier, not commander | Good elite fighter, not currently an officer. Could split court champion vs military champion later. |
-| `military_officer` | Military Officer | L4-L6 | 4 | Commander / officer | Basic Melee Training; Civic Learning; Defensive Soldiering; Veteran Leadership; Veteran Soldiering | 5 | Good breadth; some overlap between soldiering/leadership | Administration; Oratory; Riding; Weapon Maintenance; First aid; Formation Fighting | 6 | 24 | Commander | Strong current land-command path. Still lacks formal Logistics/Strategy skill if those become canonical. |
-| `ships_officer` | Ships Officer | L3-L6 | 3,4 | Naval military / ship command | Maritime Crew Training; Maritime Navigation | 2 | Appropriate, but not explicitly military | Captaincy; Language; Trading; Insight; Perception; Ropework; Boat Handling | 7 | 10 | Commander | Reach is low for command; many direct grants suggest a Ship Command group. |
-| `deck_sailor` | Deck Sailor | L2-L6 | 2,3,4 | Naval worker / possible naval military base | Maritime Crew Training; Maritime Navigation | 2 | Appropriate maritime overlap | Language; Trading; Insight; Ropework; Boat Handling; Swim | 6 | 9 | Soldier-equivalent support | Below suggested low-level threshold. Likely okay as nonmilitary sailor, but weak if used as naval military. |
-| `sailor` | Sailor | L2-L6 | 2,3,4 | Naval worker / possible naval military base | Maritime Crew Training; Maritime Navigation | 2 | Appropriate | Language; Bargaining; Trading; Insight; Ropework; Boat Handling; Swim | 7 | 10 | Soldier-equivalent support | At low threshold. Not a military role unless armed/naval groups are added. |
-| `fisher` | Fisher | L1-L6 | 1,2,3,4 | Maritime civilian, military-adjacent only | Maritime Crew Training; Maritime Navigation | 2 | Navigation may be high for generic fisher | Language; Trading; Insight; Ropework; Boat Handling; Swim | 6 | 9 | Civilian | Should not count as naval military coverage. |
-| `assassin` | Assassin | L3-L6 | 3,4 | Military/security-adjacent clandestine | Covert Entry; Fieldcraft Stealth; Street Theft | 3 | Good covert spread | Disguise; Etiquette; Detect Lies; Poison Lore; 1-h edged | 5 | 13 | Not soldier/commander | Useful for state violence, but not military coverage. |
-| `spy` | Spy | L3-L6 | 3,4 | Military/security-adjacent intelligence | Covert Entry; Fieldcraft Stealth; Political Acumen; Street Theft | 4 | Good social/covert spread | Disguise; Etiquette; Detect Lies | 3 | 14 | Not soldier/commander | Good intelligence role. Should remain separate from soldier/officer coverage. |
-| `bounty_hunter` | Bounty Hunter | L2-L6 | 2,3,4 | Guard / policing adjacent | Covert Entry; Fieldcraft Stealth; Street Theft | 3 | More criminal/covert than lawful guard | Perception; Etiquette; Detect Lies; Brawling; 1-h edged; Captaincy | 6 | 14 | Policing-adjacent, not commander | Captaincy is suspicious here; role wants pursuit/legal/fieldcraft more than command. |
+- This audit treats a group as meaningful when it contributes a coherent profession package, even when a combat group is partly selection-slot based.
+- Recent generated contextual groups now include `watch_civic_guard`, `route_security`, `arena_training`, and `ship_command`.
 
-## C. Society-Level Coverage Summary
+## B. Current Military/Security Profession Table
 
-| Society level | Ordinary fighter/soldier/guard roles present | Veteran soldier roles present | Commander/officer roles present | Missing roles | Inappropriate roles / scaling comments |
-|---:|---|---|---|---|---|
-| 1 | Tribal Warrior; Clan Warriors; Fisher | Informal warriors have Veteran Soldiering | None | Village guard, militia leader, raider/warband leader | Fisher is maritime civilian; Tribal/Clan are plausible here. |
-| 2 | Levy Infantry; Caravan Guard; Watchman; Jailer; Light Infantry; Heavy Infantry; Cavalry; Retainer; Bodyguard; Gladiator; Outrider; Sailor roles | Most Soldier-family rows include Veteran Soldiering | None | Village Guard, Militia Fighter, informal War Leader | Some roles are advanced for L2: formal Cavalry, Heavy Infantry, Watchman/Jailer if institutional. |
-| 3 | Adds Champion, Assassin, Spy, Ships Officer | Champion and most soldiers remain available | Ships Officer only | Town Guard, Garrison Soldier, Sergeant, Watch Officer | Good mid-level breadth, but no land command until L4. |
-| 4 | Adds Military Officer | All lower soldier roles remain available | Military Officer, Ships Officer | City Watch Officer, Veteran Sergeant, Cavalry Officer | Land officer exists and is rich enough. Low-level tribal/clan roles still appear in L4 societies. |
-| 5 | Same as L4 | Same as L4 | Military Officer, Ships Officer | Staff Officer, Quartermaster, Strategist, Elite Guard Officer | Education does not scale upward because no L5-specific military rows exist. Low-level roles remain over-available. |
-| 6 | Same as L4/L5 | Same as L4/L5 | Military Officer, Ships Officer | Imperial/Bureaucratic Officer, Staff Officer, Military Strategist | Current L6 has no distinct high-civilization military path; Tribal/Clan rows are most suspicious here. |
+| Profession id | Name | Society levels | Class bands | Role category | Groups | Meaningful groups | Direct grants | Direct-only after groups | Reach | Command education? | Combat/foundation? | Initial verdict |
+|---|---|---:|---:|---|---|---:|---|---|---:|---|---|---|
+| `tribal_warrior` | Tribal Warrior | 1-2 | 1-2 | Informal fighter / tribal warrior | Veteran Soldiering; Basic Melee Training | 2 | Perception; Formation Fighting; Riding; Battlefield Awareness; First aid; Weapon Maintenance; Brawling; Throwing; Bow | Formation Fighting; Riding; First aid; Weapon Maintenance; Throwing; Bow | 18 | No | Yes | Correctly constrained now. Still has high reach and some direct-grant patchwork; acceptable pending a low-society warband package. |
+| `clan_warriors` | Clan Warriors | 1-2 | 1-2 | Informal fighter / clan warrior | Veteran Soldiering; Basic Melee Training | 2 | Perception; Formation Fighting; Riding; Battlefield Awareness; First aid; Weapon Maintenance; 1-h conc./axe; Throwing; Bow | Formation Fighting; Riding; First aid; Weapon Maintenance; Throwing; Bow | 18 | No | Yes | Correctly constrained now. Consider singular rename and a cleaner clan/warband group later. |
+| `levy_infantry` | Levy Infantry | 2-6 | 2-4 | Militia / levy infantry | Veteran Soldiering; Basic Melee Training; Defensive Soldiering | 3 | Perception; Formation Fighting; Riding; Battlefield Awareness; First aid; Weapon Maintenance; Polearms; 1-h conc./axe | Riding; First aid; Weapon Maintenance | 16 | No | Yes | Cleaner after officer split. Still too broadly available upward unless treated as default low/mid soldier filler. |
+| `caravan_guard` | Caravan Guard | 2-6 | 2-4 | Route guard / caravan security | Veteran Soldiering; Basic Melee Training; Route Security | 3 | Perception; Formation Fighting; Riding; Battlefield Awareness; First aid; Weapon Maintenance; Throwing | Formation Fighting; Weapon Maintenance; Throwing | 20 | No | Yes | Much improved. Could later split road patrol/route warden from mercantile caravan guard. |
+| `watchman` | Watchman | 2-6 | 2-4 | Civic guard / policing | Veteran Soldiering; Basic Melee Training; Defensive Soldiering; Watch / Civic Guard | 4 | Perception; Formation Fighting; Riding; Battlefield Awareness; First aid; Weapon Maintenance | Riding; First aid; Weapon Maintenance | 20 | No | Yes | Much improved. Watch group now carries civic/search/law flavor; remaining Soldier-family direct riding is not ideal. |
+| `jailer` | Jailer | 2-6 | 2-4 | Detention / civic security | Veteran Soldiering; Basic Melee Training; Defensive Soldiering; Watch / Civic Guard | 4 | Perception; Formation Fighting; Riding; Battlefield Awareness; First aid; Weapon Maintenance | Riding; First aid; Weapon Maintenance | 20 | No | Yes | Improved, but still inherits riding from Soldier family. Later detention-specific group could replace broad soldier flavor. |
+| `light_infantry` | Light Infantry | 2-6 | 2-4 | Ordinary soldier / skirmisher | Veteran Soldiering; Basic Missile Training | 2 | Perception; Formation Fighting; Riding; Battlefield Awareness; First aid; Weapon Maintenance; Dodge; Throwing; Bow | Formation Fighting; Riding; First aid; Weapon Maintenance | 13 | No | Yes | Viable but thin. Basic Missile is slot-based, so displayed reach understates weapon choice. Consider Scout/Skirmisher group later. |
+| `heavy_infantry` | Heavy Infantry | 2-6 | 2-4 | Ordinary soldier / formation infantry | Veteran Soldiering; Basic Melee Training; Defensive Soldiering | 3 | Perception; Formation Fighting; Riding; Battlefield Awareness; First aid; Weapon Maintenance; Parry; Polearms; 1-h conc./axe | Riding; First aid; Weapon Maintenance | 16 | No | Yes | Coherent package. May be too formal for level 2 in some societies and too generic for levels 5-6. |
+| `cavalry` | Cavalry | 2-6 | 2-4 | Mounted soldier | Veteran Soldiering; Mounted Warrior Training | 2 | Perception; Formation Fighting; Riding; Battlefield Awareness; First aid; Weapon Maintenance; Mounted Combat; Animal care | Formation Fighting; First aid; Weapon Maintenance; Animal care | 13 | No | Yes | Coherent but low reach for formal cavalry. Likely needs society/class constraints or a future cavalry officer path. |
+| `cavalry_mounted_retainer` | Cavalry / Mounted Retainer | 2-6 | 2-4 | Mounted retainer / cavalry | Veteran Soldiering; Mounted Warrior Training | 2 | Perception; Formation Fighting; Riding; Battlefield Awareness; First aid; Weapon Maintenance; Animal care | Formation Fighting; First aid; Weapon Maintenance; Animal care | 13 | No | Yes | Near-duplicate of Cavalry. Keep only if social role differs; otherwise rename/restrict. |
+| `bodyguard` | Bodyguard | 2-6 | 2-4 | Bodyguard / elite guard | Veteran Soldiering; Advanced Melee Training | 2 | Perception; Formation Fighting; Riding; Battlefield Awareness; First aid; Weapon Maintenance; Insight | Formation Fighting; Riding; First aid; Weapon Maintenance; Insight | 17 | No | Yes | Good martial reach, but concept wants Social Reading/Watch/Elite Guard coverage more than Riding. |
+| `gladiator` | Gladiator | 2-6 | 2-4 | Arena fighter | Advanced Melee Training; Arena Training | 2 | None | None | 14 | No | Yes | Much cleaner after arena-family split. Consider society/class limits or cultural entertainment treatment later. |
+| `outrider_scout` | Outrider/Scout | 2-6 | 2-4 | Scout / outrider | Veteran Soldiering; Basic Missile Training; Mounted Service; Fieldcraft Stealth | 4 | Perception; Formation Fighting; Riding; Battlefield Awareness; First aid; Weapon Maintenance | Formation Fighting; First aid; Weapon Maintenance | 18 | No | Yes | Strong package. Still inherits Formation Fighting from Soldier family; acceptable for now. |
+| `champion` | Champion | 3-6 | 3-4 | Elite fighter / champion | Veteran Soldiering; Advanced Melee Training | 2 | Perception; Formation Fighting; Riding; Battlefield Awareness; First aid; Weapon Maintenance; Brawling | Formation Fighting; Riding; First aid; Weapon Maintenance | 16 | No | Yes | Good elite fighter, not officer. Needs conceptual split: court champion, duelist, or military champion. |
+| `military_officer` | Military Officer | 4-6 | 4 | Land officer / commander | Veteran Soldiering; Basic Melee Training; Defensive Soldiering; Veteran Leadership; Civic Learning | 5 | Perception; Formation Fighting; Riding; Battlefield Awareness; First aid; Weapon Maintenance; Captaincy; Tactics; Oratory; Administration; Law; Combat Experience | Riding; First aid; Weapon Maintenance; Oratory; Administration | 24 | Yes | Yes | Strong and correctly class-gated. Still the only land officer path for levels 4-6. |
+| `ships_officer` | Ships Officer | 3-6 | 3-4 | Maritime command / ship officer | Maritime Crew Training; Maritime Navigation; Ship Command | 3 | Boat Handling; Ropework; Language; Trading; Insight | Language; Trading | 12 | Yes | Yes, maritime | Improved, but reach remains low for a formal command role. Good candidate for later naval/officer pass. |
+| `sailor` | Sailor | 2-6 | 2-4 | Maritime worker / naval base | Maritime Crew Training; Maritime Navigation | 2 | Boat Handling; Ropework; Language; Trading; Insight; Sailing; Swim; Bargaining | Language; Trading; Insight; Swim; Bargaining | 10 | No | Maritime | Civilian/crew role; do not count as military unless naval combat/security package is added. |
+| `deck_sailor` | Deck Sailor | 2-6 | 2-4 | Maritime worker / naval base | Maritime Crew Training; Maritime Navigation | 2 | Boat Handling; Ropework; Language; Trading; Insight; Swim | Language; Trading; Insight; Swim | 9 | No | Maritime | Below low-level target; probably okay as civilian support, weak as naval military. |
+| `fisher` | Fisher | 1-6 | 1-4 | Maritime civilian | Maritime Crew Training; Maritime Navigation | 2 | Boat Handling; Ropework; Language; Trading; Insight; Sailing; Navigation; Swim | Language; Trading; Insight; Swim | 9 | No | Maritime | Should not count as military coverage. Availability through all levels is fine as civilian, not as formal profession scaling. |
+| `bounty_hunter` | Bounty Hunter | 2-6 | 2-4 | Pursuit / coercive security-adjacent | Street Theft; Covert Entry; Fieldcraft Stealth | 3 | Detect Lies; Etiquette; Conceal Object; Camouflage; Search; Perception; Stealth; Captaincy; 1-h edged; Brawling | Detect Lies; Etiquette; Perception; Captaincy; 1-h edged; Brawling | 14 | Suspicious Captaincy only | No coherent guard foundation | Security-adjacent but not military. Captaincy looks wrong; future pursuit/legal group recommended. |
+| `assassin` | Assassin | 3-6 | 3-4 | Clandestine violence / intelligence-adjacent | Street Theft; Covert Entry; Fieldcraft Stealth | 3 | Detect Lies; Etiquette; Conceal Object; Camouflage; Stealth; Disguise; Search; Poison Lore; 1-h edged | Detect Lies; Etiquette; Disguise; Poison Lore; 1-h edged | 13 | No | No | Military-adjacent only. Do not count as soldier/guard coverage. |
+| `spy` | Spy | 3-6 | 3-4 | Intelligence / state security-adjacent | Street Theft; Covert Entry; Fieldcraft Stealth; Political Acumen | 4 | Detect Lies; Etiquette; Conceal Object; Camouflage; Disguise; Intrigue; Stealth; Search | Detect Lies; Etiquette; Disguise | 14 | No | No | Useful high-class security-adjacent role, but not a military profession. |
 
-Main society-level finding:
-- The current grid is minimum-level-only. That is useful mechanically, but it means archaic/informal roles remain available in advanced societies unless a max-level, society-type, or allowed-grid override is added.
-- Education does not meaningfully scale past level 4 for military roles because `military_officer` is the only land command path and remains the same at L4-L6.
+## C. Society-Level Review
 
-## D. Class-Level Coverage Summary
-
-| Class level | Military/guard professions available | Commander/officer professions available | Too low / too high class | Missing paths |
+| Society level | Present roles | Missing roles | Inappropriate or suspicious roles | Education scaling comments |
 |---:|---|---|---|---|
-| 1 Common Folk | Tribal Warrior; Clan Warriors; Fisher | None | Tribal/Clan are plausible; Fisher should not count as military | Village guard, militia, raider |
-| 2 Trades and Guilds | All L2 soldier/guard/maritime rows: Levy, guards, infantry, cavalry, bodyguard, jailer/watchman, sailors | None | Cavalry/Heavy Infantry may be too formal for class 2 in some societies | Militia fighter, caravan guard is good; add local guard |
-| 3 Established Households | Adds Champion, Assassin, Spy, Ships Officer | Ships Officer | Ships Officer as class 3 is plausible; Assassin/Spy are not soldier coverage | Sergeant, town guard captain, garrison soldier |
-| 4 Court and Elite | Adds Military Officer | Military Officer; Ships Officer | Officer class placement is good; Noble/court command paths are outside this soldier audit | High-class staff officer, elite guard officer, cavalry officer |
+| 1 | Tribal Warrior; Clan Warriors; Fisher | Village Guard; Militia Fighter; Warband Leader | Fisher is civilian, not military. | Low-society informal fighters are now correctly constrained. No formal command path exists, which is mostly correct. |
+| 2 | Levy Infantry; Caravan Guard; Watchman; Jailer; Light Infantry; Heavy Infantry; Cavalry; Mounted Retainer; Bodyguard; Gladiator; Outrider/Scout; Sailor/Deck/Fisher; Bounty Hunter | Village Guard; Militia Fighter; Road Patrol; simple Town Guard | Heavy Infantry, Cavalry, Watchman/Jailer may be too formal for some L2 societies. Gladiator may be cultural/urban rather than universal. | Reach is healthy, but many rows are inherited upward and still share Soldier-family direct flavor. |
+| 3 | Adds Champion; Ships Officer; Assassin; Spy | Garrison Soldier; Veteran Sergeant; Town Guard; City Watchman; Watch Officer | Assassin/Spy should not be counted as guard/soldier coverage. | Ships Officer is now coherent but still reach 12. Land command still absent until L4. |
+| 4 | Adds Military Officer | City Watch Officer; Cavalry Officer; Quartermaster; Veteran Sergeant | Many L2 roles still appear as normal options in L4 societies. | Military Officer is strong, but it is the only land officer path. |
+| 5 | Same as L4 plus inherited lower roles | Staff Officer; Quartermaster; Imperial/Bureaucratic Officer; Elite Guard Officer; Military Strategist | Levy Infantry, Cavalry, Jailer/Watchman, Gladiator, etc. remain available by upward minimum-level behavior. | Education does not scale enough. High-level societies need richer formal military/staff paths. |
+| 6 | Same as L5 | Imperial Officer; Staff Officer; Elite Guard Officer; Palace Guard Officer; Logistics Commander | Same inherited lower roles; no L6-specific command path. | Level 6 remains underbuilt for formal military bureaucracy. |
 
-Class-level finding:
-- Command/officer access is now correctly class 3-4 for naval and class 4 for land officer.
-- High-class slots lack multiple formal military command choices.
-- Low-class slots have fighters but not a clean militia/guard path distinct from Tribal/Clan.
+Specific society-level findings:
 
-## E. Skill Group Quality Review
+- `tribal_warrior` and `clan_warriors` are now properly constrained to S1-S2 and C1-C2.
+- `levy_infantry`, `heavy_infantry`, `cavalry`, `watchman`, `jailer`, `caravan_guard`, `bodyguard`, `champion`, and `gladiator` still appear upward through high societies.
+- Some upward availability is fine, but advanced societies should not rely on the same L2 roles as their main military catalog.
+- L5-L6 remain the biggest gap: there are no dedicated staff, logistics, elite guard officer, or imperial/bureaucratic officer paths.
 
-| Profession | At least two non-overlapping groups? | Group quality notes | Suggested group changes |
-|---|---|---|---|
-| Tribal Warrior | Barely | Basic Melee is slot-based/small; Veteran Soldiering is advanced-sounding for tribal baseline. | Consider Basic Missile or Fieldcraft group; consider renaming Veteran Soldiering use to Field Soldiering-like concept later. |
-| Clan Warriors | Barely | Same as Tribal Warrior. | Same as above; restrict to low society/culture. |
-| Levy Infantry | Yes | Basic Melee + Defensive + Veteran Soldiering is coherent. | If available, replace Veteran Soldiering with a lower Drill/Formation group for true levy. |
-| Caravan Guard | Barely | Lacks travel/route/security group coverage. | Add Mounted Service or Transport/Caravan Work; later create Route Security. |
-| Watchman | Yes | Civic + Defensive + Basic Melee works. | Later create Watch/Guard group including Search, Law, Perception. |
-| Jailer | Yes | Civic + Defensive works; soldiering is somewhat broad. | Later create Detention/Security group. |
-| Light Infantry | Barely | Basic Missile has 0 fixed weighted points because it is selection-slot based. | Add Fieldcraft Stealth or Defensive Soldiering depending concept. |
-| Heavy Infantry | Yes | Coherent formation infantry set. | Good current package. |
-| Cavalry | Yes | Mounted Warrior Training is substantial; Veteran Soldiering supports battlefield context. | Good, but may need class/society restriction. |
-| Mounted Retainer | Yes | Same as Cavalry; too similar. | Differentiate with Courtly Formation or Household Service if retained. |
-| Bodyguard | Barely | Advanced Melee is slot-based/small; Veteran Soldiering helps. | Add Social Reading/Insight or Defensive Soldiering for guard concept. |
-| Gladiator | Barely | No arena-specific group; Veteran Soldiering may be conceptually off. | Add future Arena Combat group. |
-| Outrider/Scout | Yes | Good mix of missile, mounted, stealth, soldiering. | Good current package. |
-| Champion | Barely | Similar to Bodyguard/Gladiator. | Add Courtly Formation or Advanced Melee expansion depending concept. |
-| Military Officer | Yes | Strong group breadth and appropriate foundation plus command. | Good; later add Logistics/Staff if created. |
-| Ships Officer | Barely | Maritime groups are good but command is direct-skill heavy. | Add future Ship Command group. |
-| Sailor/Deck/Fisher | Barely/No for military use | Maritime groups are civilian/work focused. | Do not count as military unless naval combat/security group is added. |
-| Assassin/Spy/Bounty Hunter | Yes | Covert groups are coherent. | Keep separate from military coverage; Bounty Hunter may need Law/Pursuit group. |
+## D. Class-Band Review
 
-Group-size finding:
-- Several combat groups are intentionally slot-based and look small by weighted fixed memberships:
-  - Basic Melee Training: 3
-  - Advanced Melee Training: 3
-  - Basic Missile Training: 0
-  - Defensive Soldiering: 3
-- This makes the "at least 6 weighted points" heuristic hard to apply without counting required selection slots.
-- Mounted Warrior Training is healthier at 7 weighted points.
-- Veteran Leadership is 7 weighted points.
+| Class band | Current military/security availability | Officer/commander access | Too low / too high concerns | Missing paths |
+|---:|---|---|---|---|
+| 1 | Tribal Warrior; Clan Warriors; Fisher | None | Correct for informal roles. Fisher is civilian. | Village Guard; Militia Fighter; informal Warband Leader. |
+| 2 | Most ordinary soldier/guard roles: Levy, Caravan Guard, Watchman, Jailer, Infantry, Cavalry, Bodyguard, Gladiator, Outrider, Sailors, Bounty Hunter | None clear | Cavalry, Heavy Infantry, Bodyguard, Watchman/Jailer may be too institutional or equipment-heavy for some C2 contexts. | Village Guard, Road Patrol, Militia Fighter, Garrison Recruit. |
+| 3 | Adds Champion, Ships Officer, Assassin, Spy | Ships Officer | Ships Officer C3-C4 is plausible. Champion is okay if elite fighter, not officer. | Veteran Sergeant, Town Guard, City Watch Officer junior path. |
+| 4 | Adds Military Officer | Military Officer; Ships Officer | Land officer is correctly C4. Many ordinary rows still remain available to C4. | Staff Officer, Quartermaster, Cavalry Officer, Elite Guard Officer. |
 
-## F. Extra Skill Grant Review
+Class-band findings:
 
-Direct grants that are justified:
-- Watchman/Jailer: Perception and Search are sensible.
-- Military Officer: Administration and Oratory are sensible; Law is no longer direct after the recent current generated state, but would be justified.
-- Ships Officer: Captaincy, Sailing/Navigation-adjacent direct skills are sensible.
-- Outrider/Scout: Weapon Maintenance/First Aid are acceptable, though not distinctive.
-- Cavalry: Animal Care and Perception are useful flavor.
+- Officers are mostly class-gated appropriately: `military_officer` is C4, `ships_officer` is C3-C4.
+- Ordinary soldiers/guards are broadly C2-C4. This is usable as an interim model, but it makes elite/court bands show too many basic occupations.
+- Classes 3-4 need more specialist and commander options before constraining ordinary rows further.
 
-Direct grants that compensate for missing groups:
-- Tribal Warrior / Clan Warriors direct Bow, Throwing, Brawling suggest a low-society Warband/Skirmisher group.
-- Caravan Guard direct Riding, Throwing, First Aid suggest Route Security / Caravan Guard group.
-- Light Infantry direct Bow/Throwing suggest Basic Missile selection is not materialized enough in reach/points.
-- Bodyguard/Champion direct Insight/Battlefield Awareness/Brawling suggest Elite Guard or Duelist/Retainer groups.
-- Ships Officer direct Captaincy + many maritime skills suggest Ship Command group.
-- Bounty Hunter direct Captaincy is questionable; pursuit/legal/coercive skills suggest Pursuit or Warrant Officer group.
+## E. Constraint Candidates
 
-Repeated patterns suggesting future groups:
-- `Perception + Search + Law/Civic + Basic Melee/Defensive` = Watch / Civic Guard.
-- `Riding + Perception + Fieldcraft + Missile` = Outrider / Scout.
-- `Captaincy + Tactics + Administration + Oratory + Law` = Officer Staff / Command.
-- `Captaincy + Sailing + Navigation + Ropework/Boat Handling` = Ship Command.
-- `Brawling + melee weapon + performance/arena style` = Arena Fighter / Gladiator.
+| Profession | Current availability | Proposed availability | Reason | Risk | Replacement needed first? |
+|---|---|---|---|---|---|
+| `levy_infantry` | S2-S6, C2-C4 | S2-S4, C1-C3 or C2-C3 | Levy is less plausible as default high-society/court profession. | Could leave L5-L6 with too few ordinary soldier rows. | Yes: Garrison Soldier / Professional Soldier. |
+| `heavy_infantry` | S2-S6, C2-C4 | S3-S5, C2-C3; elite variants C3-C4 | Formal heavy infantry should start later or be society-specific. | Could remove a useful core infantry role from L2. | Yes: Militia Fighter / Garrison Soldier. |
+| `cavalry` | S2-S6, C2-C4 | S3-S5, C3-C4 | Formal cavalry is equipment/socially restricted. | Mounted societies may need low-society cavalry analogues. | Yes: Mounted Warrior / Cavalry Officer split. |
+| `cavalry_mounted_retainer` | S2-S6, C2-C4 | S2-S4, C2-C3, or rename as Mounted Retainer | Currently duplicates Cavalry. | Losing a useful mounted household role. | Maybe: Mounted Retainer can remain if renamed. |
+| `watchman` | S2-S6, C2-C4 | S3-S5, C2-C3; high variants replaced by Watch Officer | Urban/institutional watch is not universal low/high role. | Could remove civic guard coverage from S2. | Yes: Village Guard / Town Guard. |
+| `jailer` | S2-S6, C2-C4 | S3-S5, C2-C3; high variants replaced by Watch Officer/Prison Official | Institutional detention needs civic state support. | Could reduce security coverage. | Yes: Village Guard / City Watch Officer. |
+| `caravan_guard` | S2-S6, C2-C4 | S2-S5, C2-C3; C4 as Route Warden/Officer later | Route security is plausible broadly but less elite. | High societies still need road patrol/security. | Maybe: Route Warden. |
+| `bodyguard` | S2-S6, C2-C4 | S2-S6, C2-C4, but split Elite Guard at high classes | Bodyguard is plausible broadly, but elite/court bodyguard needs social skills. | Low risk if left unchanged. | Later: Elite Guard / Elite Guard Officer. |
+| `gladiator` | S2-S6, C2-C4 | S2-S5, C2-C3, culture/urban as needed | Arena profession is urban/cultural, not universal. | Could remove a fun combat role from many builds. | No, can be culture/background later. |
+| `champion` | S3-S6, C3-C4 | S3-S6, C3-C4, but clarify court vs military champion | Good elite fighter, not commander. | Low. | Maybe: Duelist / Elite Guard. |
+| `ships_officer` | S3-S6, C3-C4 | Keep for now | New `ship_command` makes it coherent. | Low. | Later: Warship Officer if naval military grows. |
+| `bounty_hunter` | S2-S6, C2-C4 | Keep but remove/rework Captaincy later | Security-adjacent but current command marker is odd. | Medium if used in chargen tests. | Later: Pursuit/Warrant group. |
+| `fisher` | S1-S6, C1-C4 | No military constraint needed; treat as civilian | It should not count as naval coverage. | None. | No. |
 
-## G. Skill Reach Review
+## F. New Profession Gap Analysis
 
-Existing app skill reach metric:
-- Unique reachable skills across core and favored tiers after resolving profession family and subtype grants.
-- This report uses the same value Admin calls `totalReachableSkills`.
+| Proposed profession | Society range | Class bands | Role category | Concept | Suggested groups | Direct skills only if needed | Reach target | Replaces/complements | Priority |
+|---|---|---|---|---|---|---|---:|---|---|
+| Village Guard | S1-S2 | C1-C2 | Guard / policing | Local household, gate, or village security. | Basic Melee Training; Watch / Civic Guard or lighter Village Watch group | Perception or Search only if group absent | 10-14 | Complements Watchman/Jailer; allows restricting them upward. | High |
+| Militia Fighter | S1-S3 | C1-C3 | Militia / levy | Part-time local defender. | Basic Melee Training; Basic Missile Training; Defensive Soldiering | First aid; Formation Fighting | 10-15 | Complements Levy Infantry; supports low/mid gaps. | High |
+| Warband Leader | S1-S2 | C2-C3 | Informal command | Clan/tribal small-unit leader. | Basic Melee Training; Veteran Soldiering or low command group | Oratory; Captaincy only if low-command intended | 12-16 | Complements Tribal/Clan; avoids formal officer skills. | Medium |
+| Town Guard | S3-S4 | C2-C3 | Guard / policing | Organized town security. | Basic Melee Training; Defensive Soldiering; Watch / Civic Guard | Law if not already covered | 14-18 | Lets Watchman become more specific. | High |
+| Garrison Soldier | S3-S5 | C2-C3 | Ordinary soldier | Professional fort/town soldier. | Basic Melee Training; Defensive Soldiering; Veteran Soldiering | Weapon Maintenance; First Aid | 15-18 | Replaces upward Levy/Heavy Infantry generic use. | High |
+| Veteran Sergeant | S3-S5 | C3 | Small-unit leader | Experienced troop leader, not formal officer. | Veteran Soldiering; Defensive Soldiering; limited Leadership/Command group | Captaincy or Tactics, not both unless justified | 16-20 | Bridges soldiers and officers. | High |
+| City Watch Officer | S4-S6 | C3-C4 | Policing command | Officer of urban watch/security. | Watch / Civic Guard; Veteran Leadership or Civic Command group | Law; Administration; Oratory | 16-22 | Enables constraining Watchman/Jailer. | High |
+| Cavalry Officer | S4-S6 | C3-C4 | Mounted officer | Mounted unit commander. | Mounted Warrior Training; Veteran Soldiering; Veteran Leadership | Captaincy; Tactics; Heraldry | 18-22 | Complements Cavalry / Mounted Retainer. | Medium |
+| Quartermaster | S4-S6 | C3-C4 | Logistics / staff | Supply, equipment, pay, movement, stores. | Commercial Administration; Civic Learning; Operations | Weapon Maintenance; Bookkeeping | 16-22 | Adds non-combat military staff path. | High |
+| Staff Officer | S5-S6 | C4 | Staff / command | Literate/bureaucratic planning officer. | Veteran Leadership; Civic Learning; Courtly Formation or Operations | Tactics; Administration; Law | 18-24 | Complements Military Officer at high society. | High |
+| Imperial/Bureaucratic Officer | S6 | C4 | High-state officer | Roman/imperial officer shaped by bureaucracy. | Veteran Leadership; Civic Learning; Courtly Formation; Literate Foundation | Captaincy; Tactics; Administration; Law; Heraldry | 20-26 | Replaces generic L6 reliance on L4 Military Officer. | Medium |
+| Elite Guard Officer | S5-S6 | C4 | Elite guard / court military | Palace/household guard commander. | Veteran Leadership; Defensive Soldiering; Courtly Formation; Watch / Civic Guard | Insight; Heraldry; Etiquette | 18-24 | Complements Bodyguard/Champion. | Medium |
+| Warship Officer | S4-S6 | C3-C4 | Naval command | Military naval officer, distinct from merchant Ships Officer. | Maritime Crew Training; Maritime Navigation; Ship Command | Tactics only if naval tactics exists later | 16-22 | Complements Ships Officer. | Low until naval combat pass. |
+| Route Warden / Road Patrol | S3-S5 | C2-C3 | Route security / state patrol | State road patrol, toll/security enforcement. | Route Security; Watch / Civic Guard; Basic Missile Training | Law; Riding | 14-18 | Complements Caravan Guard. | Medium |
 
-Below low-level target of roughly 10:
-- Deck Sailor: 9
-- Fisher: 9
+## G. Skill Group Quality Review
+
+Recent cleanup improvements:
+
+- `Watch / Civic Guard` now gives Watchman/Jailer a civic/search/law package without Parry.
+- `Route Security` now gives Caravan Guard a road-security package without officer skills.
+- `Arena Training` now gives Gladiator arena context without Dodge/Brawling/Parry/weapon duplication.
+- `Ship Command` now gives Ships Officer a maritime command package without land `Veteran Leadership`.
+- Ordinary soldier roles no longer inherit broad `Veteran Leadership`, Captaincy, and Tactics.
+
+Remaining group-quality issues:
+
+- Soldier-family direct grants still leak `Riding`, `First aid`, and `Weapon Maintenance` into many roles where they are not concept-specific.
+- `Veteran Soldiering` is still broad and may be too advanced-sounding for `tribal_warrior`, `clan_warriors`, and true levy roles.
+- `Basic Missile Training` is selection-slot based and has low fixed-membership reach, so light infantry may look thinner than intended.
+- Cavalry and Mounted Retainer are still too similar.
+- Bodyguard and Champion still lack an elite/court guard or duelist-style context group.
+- Ships Officer improved, but reach 12 is still low for a command role.
+
+## H. Extra Direct Grant Review
+
+Direct grants that remain justified:
+
+- `ships_officer`: `language` and `trading` are useful maritime officer flavor after group coverage.
+- `gladiator`: now none, which is clean.
+- `caravan_guard`: `throwing` and `weapon_maintenance` are useful flavor; `formation_fighting` is inherited and less clearly route-security oriented.
+- `military_officer`: `oratory` and `administration` are justified officer flavor.
+
+Direct grants that suggest future cleanup:
+
+- Soldier-family `riding` appears in Watchman/Jailer/Bodyguard/Infantry where it is not always appropriate.
+- Soldier-family `formation_fighting` appears in Caravan Guard, Watchman/Jailer, Bodyguard, Champion, and Outrider; some of these are not formation troops.
+- `bounty_hunter` has `captaincy`, which is suspicious and should probably become Law/Pursuit/Tracking-style coverage instead.
+- `bodyguard` and `champion` direct `insight`/`brawling` patterns suggest a future Elite Guard, Duelist, or Personal Guard group.
+
+## I. Skill Reach Review
+
+Below low-level target around 10:
+
+- `deck_sailor`: 9
+- `fisher`: 9
 
 At low threshold:
-- Sailor: 10
-- Ships Officer: 10
 
-Above low-level target but potentially underbuilt for formal/high roles:
-- Cavalry: 13
-- Mounted Retainer: 13
-- Light Infantry: 13
-- Bounty Hunter: 14
-- Spy: 14
-- Ships Officer: 10 is the largest concern among command roles.
+- `sailor`: 10
 
-Healthy reach:
-- Tribal Warrior: 18
-- Clan Warriors: 18
-- Levy Infantry: 16
-- Watchman: 21
-- Jailer: 22
-- Outrider/Scout: 18
-- Military Officer: 24
+Low for formal/command expectations:
 
-Low-society roles that may be overbuilt:
-- Tribal Warrior and Clan Warriors reach 18 and remain available through L6.
-- Their reach is mechanically healthy but conceptually too universal.
+- `ships_officer`: 12, improved but still below the preferred 15+ for formal command.
+- `cavalry`: 13 and `cavalry_mounted_retainer`: 13, low for formal/high-society cavalry.
+- `light_infantry`: 13, acceptable but thin.
+- `gladiator`: 14, acceptable after cleanup.
 
-High-society roles that are underbuilt:
-- Ships Officer has only 10 reach despite being a command role.
-- Military Officer is healthy at 24, but it is the only land command path at L4-L6.
-- No L5/L6 staff, logistics, strategy, elite guard officer, or imperial officer path exists yet.
+Healthy:
 
-Likely causes:
-- Some low-level rows inherit robust Soldier-family Veteran Soldiering plus many direct grants.
-- Some formal command rows lack dedicated command/logistics groups and rely on direct skills.
-- Selection-slot groups are undervalued by the fixed weighted group-size heuristic.
+- `military_officer`: 24
+- `watchman`: 20
+- `jailer`: 20
+- `caravan_guard`: 20
+- `outrider_scout`: 18
+- `tribal_warrior` and `clan_warriors`: 18, now constrained to low society/class bands.
 
-## H. Recommended Changes, Not Implemented
+Main reach conclusion:
 
-### Remove From Allowed Grid / Restrict Society Level
+- The worst mechanical gap is no longer ordinary guards; it is high-society/formal command breadth.
+- Ships Officer needs either a richer command package later or a separate `Warship Officer`.
+- L5-L6 military career diversity remains weak despite healthy `military_officer` reach.
 
-- Restrict `tribal_warrior` and `clan_warriors` to low-society or culture-specific grids instead of allowing them generally through L6.
-- Do not count `fisher`, `deck_sailor`, or generic `sailor` as naval military coverage unless a naval military group is added.
-- Keep `assassin` and `spy` as clandestine/security-adjacent, not soldier/officer coverage.
+## J. Recommended Changes, Not Implemented
 
-### Move To Different Society Level
+### 1. Constraints That Can Probably Be Applied Soon
 
-- Consider moving formal `cavalry` and `heavy_infantry` from L2 to L3 or L4 unless they represent simpler low-society versions.
-- Consider keeping `cavalry_mounted_retainer` at L2 only if it is explicitly a household/retainer path, not formal cavalry.
-- Consider moving `watchman`/`jailer` to L3 in formal civic societies, while adding a simpler L1/L2 village guard path.
+- Keep `tribal_warrior` and `clan_warriors` constrained as they are.
+- Consider restricting `fisher` from any future military/security rollups; leave availability as civilian.
+- Consider removing or replacing `captaincy` from `bounty_hunter`; this is a content cleanup, not a grid constraint.
 
-### Move To Different Class Level
+### 2. Constraints That Need Replacement Professions First
 
-- Keep `military_officer` class 4.
-- Keep `ships_officer` class 3-4 or move command-heavy variants to class 4.
-- Consider `cavalry` at class 3-4 and `mounted_retainer` at class 2-3.
-- Keep ordinary guards and militia at classes 1-3.
+- Restrict `levy_infantry` upward only after adding `Garrison Soldier` or `Professional Soldier`.
+- Restrict `watchman`/`jailer` upward only after adding `Town Guard` and `City Watch Officer`.
+- Restrict `cavalry`/`mounted_retainer` only after deciding whether both remain and adding `Cavalry Officer`.
+- Restrict `heavy_infantry` only after adding a mid/high formal soldier path.
 
-### Split Soldier vs Commander Path
+### 3. New Low/Mid Soldier And Guard Professions
 
-- The recent command split is structurally correct.
-- Next split should be within experienced troops:
-  - Veteran Soldier
-  - Veteran Sergeant / small-unit leader
-  - Officer / commander
-- Avoid giving Veteran Leadership to all veteran soldiers.
+- Add `Village Guard`.
+- Add `Militia Fighter`.
+- Add `Town Guard`.
+- Add `Garrison Soldier`.
+- Add `Veteran Sergeant`.
 
-### Add / Remove Skill Group
+### 4. New Officer/Commander Professions
 
-- Add or reuse a Watch/Guard group for Watchman and Jailer.
-- Add Route Security or Caravan Guard group for Caravan Guard.
-- Add Ship Command for Ships Officer.
-- Add Arena Fighter / Gladiator group for Gladiator.
-- Add Staff/Logistics group if Logistics or Military Strategy become canonical skills.
+- Add `City Watch Officer`.
+- Add `Cavalry Officer`.
+- Add `Quartermaster`.
+- Add `Staff Officer`.
+- Add `Imperial/Bureaucratic Officer`.
+- Add `Elite Guard Officer`.
 
-### Replace Direct Skill Grants With A New Group
+### 5. Naval/Maritime Military Pass
 
-- Replace repeated `Perception + Search + Civic/Law` direct patterns with Watch/Guard.
-- Replace repeated `Captaincy + Administration + Oratory + Law` direct patterns with Officer Staff.
-- Replace repeated maritime command direct grants with Ship Command.
-- Replace low-society weapon direct grants with Warband/Skirmisher.
+- Keep `ships_officer` as generic maritime command for now.
+- Later decide whether it is merchant/naval/both.
+- If naval combat becomes important, add `Warship Officer` and possibly a naval tactics group instead of putting land `Tactics` into `ship_command`.
 
-### Add New Profession Later
+### 6. Direct-Grant Cleanup
 
-- Village Guard, Militia Fighter, Warband Leader.
-- Town Guard, Garrison Soldier.
-- Veteran Sergeant.
-- City Watch Officer.
-- Cavalry Officer.
-- Quartermaster.
-- Staff Officer.
-- Imperial/Bureaucratic Officer.
-- Elite Guard Officer.
+- Review Soldier-family direct grants after replacement professions exist.
+- Move repeated direct patterns into coherent groups where possible.
+- Avoid removing direct grants before replacement groups are available, because several roles currently rely on them for reach.
 
-### Rename / Reconceptualize Profession
+## K. Proposed Implementation Batches
 
-- Rename `clan_warriors` to singular `Clan Warrior` or `Clan Warband Member`.
-- Split or merge `cavalry` and `cavalry_mounted_retainer`.
-- Rework `gladiator` as arena-specific rather than Soldier-family battlefield-adjacent.
-- Clarify whether `champion` is a courtly champion, arena champion, household elite fighter, or battlefield champion.
+1. Safe cleanup now:
+- Keep current low-society constraints.
+- Remove/rework suspicious `bounty_hunter` Captaincy if desired.
+- Add no broad grid restrictions yet.
 
-## I. Proposed Implementation Batches
+2. Low/mid coverage:
+- Add Village Guard, Militia Fighter, Town Guard, and Garrison Soldier.
+- Then restrict Watchman/Jailer/Levy/Heavy Infantry more confidently.
 
-1. Allowed-grid / society / class corrections
-   - Add or model society/class restrictions before adding many new professions.
-   - Decide whether professions need maximum society level, society-type tags, or explicit allowlists.
-   - Restrict Tribal/Clan roles from generic L5/L6 availability.
+3. Small-unit command:
+- Add Veteran Sergeant and Warband Leader.
+- Keep Veteran Leadership reserved for true commanders/officers.
 
-2. Skill-group coverage corrections
-   - Add or reuse group coverage for Watch/Guard, Caravan/Route Security, Ship Command, Arena Fighter, and possibly Warband/Skirmisher.
-   - Rebalance groups so each profession has at least two meaningful groups without relying on many direct grants.
+4. Formal command:
+- Add City Watch Officer, Cavalry Officer, Quartermaster, Staff Officer.
+- Add Imperial/Bureaucratic Officer or equivalent L6 command path.
 
-3. Direct-grant cleanup
-   - Remove direct grants that duplicate group coverage.
-   - Keep direct grants for flavor or specialization.
-   - Move repeated patterns into groups.
+5. Naval pass:
+- Decide whether Ships Officer is merchant, naval, or both.
+- Add Warship Officer only if naval military coverage needs a separate path.
 
-4. New skill groups if needed
-   - Watch / Civic Guard.
-   - Ship Command.
-   - Officer Staff / Logistics.
-   - Arena Fighter.
-   - Warband / Skirmisher.
+6. Final direct-grant cleanup:
+- Revisit Soldier-family direct grants.
+- Replace repeated direct-grant patterns with groups.
+- Tighten class/society availability once replacements exist.
 
-5. New officer / staff / high-society military professions
-   - Add a small number of targeted high-level roles after the grid model is clear.
-   - Start with Veteran Sergeant, City Watch Officer, Quartermaster, Staff Officer, and Imperial/Bureaucratic Officer.
+## Top 5 Recommended Next Implementation Decisions
 
-## Decisions Needed Before Implementation
+1. Decide whether to add `Village Guard` and `Town Guard` before constraining `watchman` and `jailer`.
+2. Decide whether `levy_infantry` and `heavy_infantry` should remain available through S6 or be replaced upward by `Garrison Soldier`.
+3. Decide whether `cavalry` and `cavalry_mounted_retainer` should both remain, and if so what society/class distinction separates them.
+4. Decide whether `ships_officer` is merchant command, naval command, or both before adding `Warship Officer`.
+5. Decide whether to clean `bounty_hunter` now by removing Captaincy or wait for a pursuit/legal-security group.
 
-- Should profession availability support a maximum society level, or should all filtering be done through explicit allowed-grid entries?
-- Should low-society cultural roles like Tribal Warrior and Clan Warrior remain visible in advanced societies as background/culture choices?
-- Should class level be hard-gated for officers, or advisory with society/campaign overrides?
-- Should naval command be part of the same military profession family cleanup, or handled as a separate maritime pass?
-- Should group weighted size count required selection slots, so Basic Melee / Basic Missile / Advanced Melee stop looking artificially small?
+## Design Questions Requiring Approval
+
+- Should high-society availability use max society/class constraints broadly, or should advanced societies keep all lower professions as default options?
+- Should culture/background/foreign professions be modeled separately so roles like Gladiator, Tribal Warrior, and Clan Warrior can appear outside their default society bands when fictionally appropriate?
+- Should `Veteran Soldiering` be split into a lower `Field Soldiering`/`Common Soldiering` package and a true veteran package later?
+- Should `Ship Command` remain merchant/naval-neutral, or should naval command receive separate Tactics-like support in a later content pass?
+- Should Bounty Hunter be treated as lawful/security-adjacent or as a thief/infiltrator subtype with coercive flavor?
