@@ -139,6 +139,9 @@ describe("validateCanonicalContent", () => {
       "jailer",
       "light_infantry",
       "heavy_infantry",
+      "village_guard",
+      "militia_fighter",
+      "garrison_soldier",
       "cavalry",
       "cavalry_mounted_retainer",
       "bodyguard",
@@ -675,6 +678,146 @@ describe("validateCanonicalContent", () => {
       .toBe(false);
     expect(canonicalSocietyLevelsFor("military_officer")).toEqual([4, 5, 6]);
     expect(classBandsFor("military_officer")).toEqual([4]);
+
+    for (const societyLevel of defaultCanonicalContent.societyLevels) {
+      expect(new Set(societyLevel.professionIds).size).toBe(societyLevel.professionIds.length);
+    }
+  });
+
+  it("adds low and mid military coverage with constrained availability and no command leakage", () => {
+    const canonicalSocietyLevelById = new Map(
+      defaultCanonicalContent.societies.map((society) => [society.id, society.societyLevel])
+    );
+    const professionById = new Map(
+      defaultCanonicalContent.professions.map((profession) => [profession.id, profession])
+    );
+    const grantsFor = (professionId: string) => {
+      const profession = professionById.get(professionId);
+
+      return defaultCanonicalContent.professionSkills.filter(
+        (grant) =>
+          (grant.scope === "family" && grant.professionId === profession?.familyId) ||
+          (grant.scope === "profession" && grant.professionId === professionId)
+      );
+    };
+    const groupIdsFor = (professionId: string) =>
+      grantsFor(professionId)
+        .filter((grant) => grant.grantType === "group" && grant.skillGroupId)
+        .map((grant) => grant.skillGroupId ?? "");
+    const directSkillIdsFor = (professionId: string) =>
+      grantsFor(professionId)
+        .filter((grant) => grant.grantType !== "group" && grant.skillId)
+        .map((grant) => grant.skillId ?? "");
+    const skillReachFor = (professionId: string) => {
+      const groupIds = groupIdsFor(professionId);
+      const skillIdsFromGroups = defaultCanonicalContent.skills
+        .filter((skill) =>
+          (skill.groupIds ?? [skill.groupId]).some((groupId) => groupIds.includes(groupId))
+        )
+        .map((skill) => skill.id);
+      const directOnlySkillIds = directSkillIdsFor(professionId).filter(
+        (skillId) => !skillIdsFromGroups.includes(skillId)
+      );
+
+      return new Set([...skillIdsFromGroups, ...directOnlySkillIds]).size;
+    };
+    const allowedRowsFor = (professionId: string) =>
+      defaultCanonicalContent.societyLevels.filter((societyLevel) =>
+        societyLevel.professionIds.includes(professionId)
+      );
+    const canonicalSocietyLevelsFor = (professionId: string) => [
+      ...new Set(
+        allowedRowsFor(professionId)
+          .map((societyLevel) => canonicalSocietyLevelById.get(societyLevel.societyId))
+          .filter((societyLevel): societyLevel is number => typeof societyLevel === "number")
+      )
+    ].sort((left, right) => left - right);
+    const classBandsFor = (professionId: string) => [
+      ...new Set(allowedRowsFor(professionId).map((societyLevel) => societyLevel.societyLevel))
+    ].sort((left, right) => left - right);
+    const expectNoCommandEducation = (professionId: string) => {
+      expect(groupIdsFor(professionId)).not.toContain("veteran_leadership");
+      expect(directSkillIdsFor(professionId)).not.toContain("captaincy");
+      expect(directSkillIdsFor(professionId)).not.toContain("tactics");
+    };
+
+    expect(professionById.get("village_guard")).toMatchObject({
+      familyId: "military_security",
+      name: "Village Guard"
+    });
+    expect(groupIdsFor("village_guard")).toEqual(
+      expect.arrayContaining([
+        "basic_melee_training",
+        "watch_civic_guard",
+        "defensive_soldiering"
+      ])
+    );
+    expect(directSkillIdsFor("village_guard")).toEqual([]);
+    expect(canonicalSocietyLevelsFor("village_guard")).toEqual([1, 2]);
+    expect(classBandsFor("village_guard")).toEqual([1, 2]);
+
+    expect(professionById.get("militia_fighter")).toMatchObject({
+      familyId: "military_security",
+      name: "Militia Fighter"
+    });
+    expect(groupIdsFor("militia_fighter")).toEqual(
+      expect.arrayContaining([
+        "basic_melee_training",
+        "basic_missile_training",
+        "defensive_soldiering"
+      ])
+    );
+    expect(directSkillIdsFor("militia_fighter")).toEqual([]);
+    expect(canonicalSocietyLevelsFor("militia_fighter")).toEqual([1, 2, 3]);
+    expect(classBandsFor("militia_fighter")).toEqual([1, 2, 3]);
+
+    expect(professionById.get("garrison_soldier")).toMatchObject({
+      familyId: "military_security",
+      name: "Garrison Soldier"
+    });
+    expect(groupIdsFor("garrison_soldier")).toEqual(
+      expect.arrayContaining([
+        "basic_melee_training",
+        "defensive_soldiering",
+        "veteran_soldiering"
+      ])
+    );
+    expect(directSkillIdsFor("garrison_soldier")).toEqual([]);
+    expect(canonicalSocietyLevelsFor("garrison_soldier")).toEqual([3, 4, 5]);
+    expect(classBandsFor("garrison_soldier")).toEqual([2, 3]);
+
+    for (const professionId of ["village_guard", "militia_fighter", "garrison_soldier"]) {
+      const groupIds = groupIdsFor(professionId);
+
+      expectNoCommandEducation(professionId);
+      expect(groupIds.length).toBeGreaterThanOrEqual(2);
+      expect(new Set(groupIds).size).toBe(groupIds.length);
+      expect(skillReachFor(professionId)).toBeGreaterThan(10);
+    }
+
+    expect(canonicalSocietyLevelsFor("watchman")).toEqual([3, 4, 5]);
+    expect(classBandsFor("watchman")).toEqual([2, 3]);
+    expect(canonicalSocietyLevelsFor("jailer")).toEqual([3, 4, 5]);
+    expect(classBandsFor("jailer")).toEqual([2, 3]);
+    expect(canonicalSocietyLevelsFor("levy_infantry")).toEqual([2, 3, 4]);
+    expect(classBandsFor("levy_infantry")).toEqual([1, 2, 3]);
+    expect(canonicalSocietyLevelsFor("heavy_infantry")).toEqual([3, 4, 5]);
+    expect(classBandsFor("heavy_infantry")).toEqual([2, 3]);
+    expect(canonicalSocietyLevelsFor("military_officer")).toEqual([4, 5, 6]);
+    expect(classBandsFor("military_officer")).toEqual([4]);
+    expect(canonicalSocietyLevelsFor("tribal_warrior")).toEqual([1, 2]);
+    expect(classBandsFor("tribal_warrior")).toEqual([1, 2]);
+    expect(canonicalSocietyLevelsFor("clan_warriors")).toEqual([1, 2]);
+    expect(classBandsFor("clan_warriors")).toEqual([1, 2]);
+
+    for (const professionId of [
+      "watchman",
+      "jailer",
+      "levy_infantry",
+      "heavy_infantry"
+    ]) {
+      expectNoCommandEducation(professionId);
+    }
 
     for (const societyLevel of defaultCanonicalContent.societyLevels) {
       expect(new Set(societyLevel.professionIds).size).toBe(societyLevel.professionIds.length);

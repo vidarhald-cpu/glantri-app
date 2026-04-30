@@ -5112,6 +5112,11 @@ export const generatedRepoLocalGlantriSeed = {
       "description": "Arena-focused combat performer family for staged personal fighting rather than battlefield soldiering.",
       "id": "arena_fighter",
       "name": "Arena Fighter"
+    },
+    {
+      "description": "Focused low and mid military/security professions whose training is defined by subtype packages rather than broad Soldier-family defaults.",
+      "id": "military_security",
+      "name": "Military / Security"
     }
   ],
   "professions": [
@@ -5709,6 +5714,27 @@ export const generatedRepoLocalGlantriSeed = {
       "id": "woodcutter",
       "name": "Woodcutter",
       "subtypeName": "Woodcutter"
+    },
+    {
+      "description": "Local village, manor, gate, or storehouse guard focused on everyday security and basic civic order.",
+      "familyId": "military_security",
+      "id": "village_guard",
+      "name": "Village Guard",
+      "subtypeName": "Village Guard"
+    },
+    {
+      "description": "Part-time local defender or levy fighter with basic melee, missile, and defensive drill.",
+      "familyId": "military_security",
+      "id": "militia_fighter",
+      "name": "Militia Fighter",
+      "subtypeName": "Militia Fighter"
+    },
+    {
+      "description": "Professional fort, town, or garrison soldier with organized melee, defensive, and soldiering training.",
+      "familyId": "military_security",
+      "id": "garrison_soldier",
+      "name": "Garrison Soldier",
+      "subtypeName": "Garrison Soldier"
     }
   ],
   "professionSkills": [
@@ -9807,6 +9833,78 @@ export const generatedRepoLocalGlantriSeed = {
       "ranks": 0,
       "scope": "profession",
       "skillId": "leatherworking"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "village_guard",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "basic_melee_training"
+    },
+    {
+      "grantType": "group",
+      "isCore": false,
+      "professionId": "village_guard",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "watch_civic_guard"
+    },
+    {
+      "grantType": "group",
+      "isCore": false,
+      "professionId": "village_guard",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "defensive_soldiering"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "militia_fighter",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "basic_melee_training"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "militia_fighter",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "basic_missile_training"
+    },
+    {
+      "grantType": "group",
+      "isCore": false,
+      "professionId": "militia_fighter",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "defensive_soldiering"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "garrison_soldier",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "basic_melee_training"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "garrison_soldier",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "defensive_soldiering"
+    },
+    {
+      "grantType": "group",
+      "isCore": false,
+      "professionId": "garrison_soldier",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "veteran_soldiering"
     }
   ],
   "societyBandSkillAccess": [
@@ -10117,7 +10215,9 @@ export const generatedRepoLocalGlantriSeed = {
         "prospector",
         "shaman",
         "street_thug",
-        "woodcutter"
+        "woodcutter",
+        "village_guard",
+        "militia_fighter"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -10196,7 +10296,9 @@ export const generatedRepoLocalGlantriSeed = {
         "prospector",
         "shaman",
         "street_thug",
-        "woodcutter"
+        "woodcutter",
+        "village_guard",
+        "militia_fighter"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -10273,7 +10375,8 @@ export const generatedRepoLocalGlantriSeed = {
         "prospector",
         "shaman",
         "street_thug",
-        "woodcutter"
+        "woodcutter",
+        "militia_fighter"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -10409,6 +10512,7 @@ export const generatedRepoLocalGlantriSeed = {
         "herdsman_subtype",
         "folk_performer",
         "tribal_warrior",
+        "levy_infantry",
         "bandit",
         "beggar",
         "clan_warriors",
@@ -10429,7 +10533,9 @@ export const generatedRepoLocalGlantriSeed = {
         "prospector",
         "shaman",
         "street_thug",
-        "woodcutter"
+        "woodcutter",
+        "village_guard",
+        "militia_fighter"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -10515,14 +10621,12 @@ export const generatedRepoLocalGlantriSeed = {
         "fixer",
         "gladiator",
         "healer",
-        "heavy_infantry",
         "herbalist",
         "herder",
         "hermit",
         "homemaker",
         "hunter",
         "inn_keeper",
-        "jailer",
         "light_infantry",
         "merchant",
         "messenger",
@@ -10542,8 +10646,9 @@ export const generatedRepoLocalGlantriSeed = {
         "street_thug",
         "thief",
         "torturer",
-        "watchman",
-        "woodcutter"
+        "woodcutter",
+        "village_guard",
+        "militia_fighter"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -10632,14 +10737,12 @@ export const generatedRepoLocalGlantriSeed = {
         "fixer",
         "gladiator",
         "healer",
-        "heavy_infantry",
         "herbalist",
         "herder",
         "hermit",
         "homemaker",
         "hunter",
         "inn_keeper",
-        "jailer",
         "light_infantry",
         "merchant",
         "messenger",
@@ -10659,8 +10762,8 @@ export const generatedRepoLocalGlantriSeed = {
         "street_thug",
         "thief",
         "torturer",
-        "watchman",
-        "woodcutter"
+        "woodcutter",
+        "militia_fighter"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -10726,7 +10829,6 @@ export const generatedRepoLocalGlantriSeed = {
         "herdsman_subtype",
         "burglar",
         "folk_performer",
-        "levy_infantry",
         "cavalry_mounted_retainer",
         "animal_trainer",
         "bandit",
@@ -10749,14 +10851,12 @@ export const generatedRepoLocalGlantriSeed = {
         "fixer",
         "gladiator",
         "healer",
-        "heavy_infantry",
         "herbalist",
         "herder",
         "hermit",
         "homemaker",
         "hunter",
         "inn_keeper",
-        "jailer",
         "light_infantry",
         "merchant",
         "messenger",
@@ -10776,7 +10876,6 @@ export const generatedRepoLocalGlantriSeed = {
         "street_thug",
         "thief",
         "torturer",
-        "watchman",
         "woodcutter"
       ],
       "skillGroupIds": [
@@ -10841,6 +10940,7 @@ export const generatedRepoLocalGlantriSeed = {
         "herdsman_subtype",
         "folk_performer",
         "tribal_warrior",
+        "levy_infantry",
         "bandit",
         "beggar",
         "clan_warriors",
@@ -10861,7 +10961,9 @@ export const generatedRepoLocalGlantriSeed = {
         "prospector",
         "shaman",
         "street_thug",
-        "woodcutter"
+        "woodcutter",
+        "village_guard",
+        "militia_fighter"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -10947,14 +11049,12 @@ export const generatedRepoLocalGlantriSeed = {
         "fixer",
         "gladiator",
         "healer",
-        "heavy_infantry",
         "herbalist",
         "herder",
         "hermit",
         "homemaker",
         "hunter",
         "inn_keeper",
-        "jailer",
         "light_infantry",
         "merchant",
         "messenger",
@@ -10974,8 +11074,9 @@ export const generatedRepoLocalGlantriSeed = {
         "street_thug",
         "thief",
         "torturer",
-        "watchman",
-        "woodcutter"
+        "woodcutter",
+        "village_guard",
+        "militia_fighter"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -11064,14 +11165,12 @@ export const generatedRepoLocalGlantriSeed = {
         "fixer",
         "gladiator",
         "healer",
-        "heavy_infantry",
         "herbalist",
         "herder",
         "hermit",
         "homemaker",
         "hunter",
         "inn_keeper",
-        "jailer",
         "light_infantry",
         "merchant",
         "messenger",
@@ -11091,8 +11190,8 @@ export const generatedRepoLocalGlantriSeed = {
         "street_thug",
         "thief",
         "torturer",
-        "watchman",
-        "woodcutter"
+        "woodcutter",
+        "militia_fighter"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -11158,7 +11257,6 @@ export const generatedRepoLocalGlantriSeed = {
         "herdsman_subtype",
         "burglar",
         "folk_performer",
-        "levy_infantry",
         "cavalry_mounted_retainer",
         "animal_trainer",
         "bandit",
@@ -11181,14 +11279,12 @@ export const generatedRepoLocalGlantriSeed = {
         "fixer",
         "gladiator",
         "healer",
-        "heavy_infantry",
         "herbalist",
         "herder",
         "hermit",
         "homemaker",
         "hunter",
         "inn_keeper",
-        "jailer",
         "light_infantry",
         "merchant",
         "messenger",
@@ -11208,7 +11304,6 @@ export const generatedRepoLocalGlantriSeed = {
         "street_thug",
         "thief",
         "torturer",
-        "watchman",
         "woodcutter"
       ],
       "skillGroupIds": [
@@ -11272,6 +11367,7 @@ export const generatedRepoLocalGlantriSeed = {
         "folk_healer",
         "herdsman_subtype",
         "folk_performer",
+        "levy_infantry",
         "bandit",
         "beggar",
         "crafter",
@@ -11291,7 +11387,8 @@ export const generatedRepoLocalGlantriSeed = {
         "prospector",
         "shaman",
         "street_thug",
-        "woodcutter"
+        "woodcutter",
+        "militia_fighter"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -11403,7 +11500,9 @@ export const generatedRepoLocalGlantriSeed = {
         "thief",
         "torturer",
         "watchman",
-        "woodcutter"
+        "woodcutter",
+        "militia_fighter",
+        "garrison_soldier"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -11535,7 +11634,9 @@ export const generatedRepoLocalGlantriSeed = {
         "thief",
         "torturer",
         "watchman",
-        "woodcutter"
+        "woodcutter",
+        "militia_fighter",
+        "garrison_soldier"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -11608,7 +11709,6 @@ export const generatedRepoLocalGlantriSeed = {
         "herdsman_subtype",
         "burglar",
         "folk_performer",
-        "levy_infantry",
         "cavalry_mounted_retainer",
         "actor",
         "animal_trainer",
@@ -11635,14 +11735,12 @@ export const generatedRepoLocalGlantriSeed = {
         "fixer",
         "gladiator",
         "healer",
-        "heavy_infantry",
         "herbalist",
         "herder",
         "hermit",
         "homemaker",
         "hunter",
         "inn_keeper",
-        "jailer",
         "light_infantry",
         "master_craftsmen",
         "merchant",
@@ -11671,7 +11769,6 @@ export const generatedRepoLocalGlantriSeed = {
         "student",
         "thief",
         "torturer",
-        "watchman",
         "woodcutter"
       ],
       "skillGroupIds": [
@@ -11740,6 +11837,7 @@ export const generatedRepoLocalGlantriSeed = {
         "folk_healer",
         "herdsman_subtype",
         "folk_performer",
+        "levy_infantry",
         "bandit",
         "beggar",
         "crafter",
@@ -11759,7 +11857,8 @@ export const generatedRepoLocalGlantriSeed = {
         "prospector",
         "shaman",
         "street_thug",
-        "woodcutter"
+        "woodcutter",
+        "militia_fighter"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -11871,7 +11970,9 @@ export const generatedRepoLocalGlantriSeed = {
         "thief",
         "torturer",
         "watchman",
-        "woodcutter"
+        "woodcutter",
+        "militia_fighter",
+        "garrison_soldier"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -12003,7 +12104,9 @@ export const generatedRepoLocalGlantriSeed = {
         "thief",
         "torturer",
         "watchman",
-        "woodcutter"
+        "woodcutter",
+        "militia_fighter",
+        "garrison_soldier"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -12076,7 +12179,6 @@ export const generatedRepoLocalGlantriSeed = {
         "herdsman_subtype",
         "burglar",
         "folk_performer",
-        "levy_infantry",
         "cavalry_mounted_retainer",
         "actor",
         "animal_trainer",
@@ -12103,14 +12205,12 @@ export const generatedRepoLocalGlantriSeed = {
         "fixer",
         "gladiator",
         "healer",
-        "heavy_infantry",
         "herbalist",
         "herder",
         "hermit",
         "homemaker",
         "hunter",
         "inn_keeper",
-        "jailer",
         "light_infantry",
         "master_craftsmen",
         "merchant",
@@ -12139,7 +12239,6 @@ export const generatedRepoLocalGlantriSeed = {
         "student",
         "thief",
         "torturer",
-        "watchman",
         "woodcutter"
       ],
       "skillGroupIds": [
@@ -12208,6 +12307,7 @@ export const generatedRepoLocalGlantriSeed = {
         "folk_healer",
         "herdsman_subtype",
         "folk_performer",
+        "levy_infantry",
         "bandit",
         "beggar",
         "crafter",
@@ -12339,7 +12439,8 @@ export const generatedRepoLocalGlantriSeed = {
         "thief",
         "torturer",
         "watchman",
-        "woodcutter"
+        "woodcutter",
+        "garrison_soldier"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -12471,7 +12572,8 @@ export const generatedRepoLocalGlantriSeed = {
         "thief",
         "torturer",
         "watchman",
-        "woodcutter"
+        "woodcutter",
+        "garrison_soldier"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -12546,7 +12648,6 @@ export const generatedRepoLocalGlantriSeed = {
         "herdsman_subtype",
         "burglar",
         "folk_performer",
-        "levy_infantry",
         "cavalry_mounted_retainer",
         "actor",
         "animal_trainer",
@@ -12575,7 +12676,6 @@ export const generatedRepoLocalGlantriSeed = {
         "fixer",
         "gladiator",
         "healer",
-        "heavy_infantry",
         "herald",
         "herbalist",
         "herder",
@@ -12583,7 +12683,6 @@ export const generatedRepoLocalGlantriSeed = {
         "homemaker",
         "hunter",
         "inn_keeper",
-        "jailer",
         "lawyer",
         "light_infantry",
         "master_craftsmen",
@@ -12617,7 +12716,6 @@ export const generatedRepoLocalGlantriSeed = {
         "tax_collector",
         "thief",
         "torturer",
-        "watchman",
         "woodcutter"
       ],
       "skillGroupIds": [
@@ -12688,6 +12786,7 @@ export const generatedRepoLocalGlantriSeed = {
         "folk_healer",
         "herdsman_subtype",
         "folk_performer",
+        "levy_infantry",
         "bandit",
         "beggar",
         "crafter",
@@ -12819,7 +12918,8 @@ export const generatedRepoLocalGlantriSeed = {
         "thief",
         "torturer",
         "watchman",
-        "woodcutter"
+        "woodcutter",
+        "garrison_soldier"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -12951,7 +13051,8 @@ export const generatedRepoLocalGlantriSeed = {
         "thief",
         "torturer",
         "watchman",
-        "woodcutter"
+        "woodcutter",
+        "garrison_soldier"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -13026,7 +13127,6 @@ export const generatedRepoLocalGlantriSeed = {
         "herdsman_subtype",
         "burglar",
         "folk_performer",
-        "levy_infantry",
         "cavalry_mounted_retainer",
         "actor",
         "animal_trainer",
@@ -13055,7 +13155,6 @@ export const generatedRepoLocalGlantriSeed = {
         "fixer",
         "gladiator",
         "healer",
-        "heavy_infantry",
         "herald",
         "herbalist",
         "herder",
@@ -13063,7 +13162,6 @@ export const generatedRepoLocalGlantriSeed = {
         "homemaker",
         "hunter",
         "inn_keeper",
-        "jailer",
         "lawyer",
         "light_infantry",
         "master_craftsmen",
@@ -13097,7 +13195,6 @@ export const generatedRepoLocalGlantriSeed = {
         "tax_collector",
         "thief",
         "torturer",
-        "watchman",
         "woodcutter"
       ],
       "skillGroupIds": [
@@ -13248,7 +13345,6 @@ export const generatedRepoLocalGlantriSeed = {
         "herdsman_subtype",
         "burglar",
         "folk_performer",
-        "levy_infantry",
         "cavalry_mounted_retainer",
         "animal_trainer",
         "bandit",
@@ -13299,7 +13395,8 @@ export const generatedRepoLocalGlantriSeed = {
         "thief",
         "torturer",
         "watchman",
-        "woodcutter"
+        "woodcutter",
+        "garrison_soldier"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -13367,7 +13464,6 @@ export const generatedRepoLocalGlantriSeed = {
         "herdsman_subtype",
         "burglar",
         "folk_performer",
-        "levy_infantry",
         "cavalry_mounted_retainer",
         "actor",
         "animal_trainer",
@@ -13431,7 +13527,8 @@ export const generatedRepoLocalGlantriSeed = {
         "thief",
         "torturer",
         "watchman",
-        "woodcutter"
+        "woodcutter",
+        "garrison_soldier"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -13506,7 +13603,6 @@ export const generatedRepoLocalGlantriSeed = {
         "herdsman_subtype",
         "burglar",
         "folk_performer",
-        "levy_infantry",
         "cavalry_mounted_retainer",
         "actor",
         "animal_trainer",
@@ -13535,7 +13631,6 @@ export const generatedRepoLocalGlantriSeed = {
         "fixer",
         "gladiator",
         "healer",
-        "heavy_infantry",
         "herald",
         "herbalist",
         "herder",
@@ -13543,7 +13638,6 @@ export const generatedRepoLocalGlantriSeed = {
         "homemaker",
         "hunter",
         "inn_keeper",
-        "jailer",
         "lawyer",
         "light_infantry",
         "master_craftsmen",
@@ -13577,7 +13671,6 @@ export const generatedRepoLocalGlantriSeed = {
         "tax_collector",
         "thief",
         "torturer",
-        "watchman",
         "woodcutter"
       ],
       "skillGroupIds": [
@@ -13728,7 +13821,6 @@ export const generatedRepoLocalGlantriSeed = {
         "herdsman_subtype",
         "burglar",
         "folk_performer",
-        "levy_infantry",
         "cavalry_mounted_retainer",
         "animal_trainer",
         "bandit",
@@ -13779,7 +13871,8 @@ export const generatedRepoLocalGlantriSeed = {
         "thief",
         "torturer",
         "watchman",
-        "woodcutter"
+        "woodcutter",
+        "garrison_soldier"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -13847,7 +13940,6 @@ export const generatedRepoLocalGlantriSeed = {
         "herdsman_subtype",
         "burglar",
         "folk_performer",
-        "levy_infantry",
         "cavalry_mounted_retainer",
         "actor",
         "animal_trainer",
@@ -13911,7 +14003,8 @@ export const generatedRepoLocalGlantriSeed = {
         "thief",
         "torturer",
         "watchman",
-        "woodcutter"
+        "woodcutter",
+        "garrison_soldier"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -13986,7 +14079,6 @@ export const generatedRepoLocalGlantriSeed = {
         "herdsman_subtype",
         "burglar",
         "folk_performer",
-        "levy_infantry",
         "cavalry_mounted_retainer",
         "actor",
         "animal_trainer",
@@ -14015,7 +14107,6 @@ export const generatedRepoLocalGlantriSeed = {
         "fixer",
         "gladiator",
         "healer",
-        "heavy_infantry",
         "herald",
         "herbalist",
         "herder",
@@ -14023,7 +14114,6 @@ export const generatedRepoLocalGlantriSeed = {
         "homemaker",
         "hunter",
         "inn_keeper",
-        "jailer",
         "lawyer",
         "light_infantry",
         "master_craftsmen",
@@ -14057,7 +14147,6 @@ export const generatedRepoLocalGlantriSeed = {
         "tax_collector",
         "thief",
         "torturer",
-        "watchman",
         "woodcutter"
       ],
       "skillGroupIds": [
@@ -14208,7 +14297,6 @@ export const generatedRepoLocalGlantriSeed = {
         "herdsman_subtype",
         "burglar",
         "folk_performer",
-        "levy_infantry",
         "cavalry_mounted_retainer",
         "animal_trainer",
         "bandit",
@@ -14259,7 +14347,8 @@ export const generatedRepoLocalGlantriSeed = {
         "thief",
         "torturer",
         "watchman",
-        "woodcutter"
+        "woodcutter",
+        "garrison_soldier"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -14327,7 +14416,6 @@ export const generatedRepoLocalGlantriSeed = {
         "herdsman_subtype",
         "burglar",
         "folk_performer",
-        "levy_infantry",
         "cavalry_mounted_retainer",
         "actor",
         "animal_trainer",
@@ -14391,7 +14479,8 @@ export const generatedRepoLocalGlantriSeed = {
         "thief",
         "torturer",
         "watchman",
-        "woodcutter"
+        "woodcutter",
+        "garrison_soldier"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -14466,7 +14555,6 @@ export const generatedRepoLocalGlantriSeed = {
         "herdsman_subtype",
         "burglar",
         "folk_performer",
-        "levy_infantry",
         "cavalry_mounted_retainer",
         "actor",
         "animal_trainer",
@@ -14495,7 +14583,6 @@ export const generatedRepoLocalGlantriSeed = {
         "fixer",
         "gladiator",
         "healer",
-        "heavy_infantry",
         "herald",
         "herbalist",
         "herder",
@@ -14503,7 +14590,6 @@ export const generatedRepoLocalGlantriSeed = {
         "homemaker",
         "hunter",
         "inn_keeper",
-        "jailer",
         "lawyer",
         "light_infantry",
         "master_craftsmen",
@@ -14537,7 +14623,6 @@ export const generatedRepoLocalGlantriSeed = {
         "tax_collector",
         "thief",
         "torturer",
-        "watchman",
         "woodcutter"
       ],
       "skillGroupIds": [
@@ -14688,7 +14773,6 @@ export const generatedRepoLocalGlantriSeed = {
         "herdsman_subtype",
         "burglar",
         "folk_performer",
-        "levy_infantry",
         "cavalry_mounted_retainer",
         "animal_trainer",
         "bandit",
@@ -14711,14 +14795,12 @@ export const generatedRepoLocalGlantriSeed = {
         "fixer",
         "gladiator",
         "healer",
-        "heavy_infantry",
         "herbalist",
         "herder",
         "hermit",
         "homemaker",
         "hunter",
         "inn_keeper",
-        "jailer",
         "light_infantry",
         "merchant",
         "messenger",
@@ -14738,7 +14820,6 @@ export const generatedRepoLocalGlantriSeed = {
         "street_thug",
         "thief",
         "torturer",
-        "watchman",
         "woodcutter"
       ],
       "skillGroupIds": [
@@ -14807,7 +14888,6 @@ export const generatedRepoLocalGlantriSeed = {
         "herdsman_subtype",
         "burglar",
         "folk_performer",
-        "levy_infantry",
         "cavalry_mounted_retainer",
         "actor",
         "animal_trainer",
@@ -14834,14 +14914,12 @@ export const generatedRepoLocalGlantriSeed = {
         "fixer",
         "gladiator",
         "healer",
-        "heavy_infantry",
         "herbalist",
         "herder",
         "hermit",
         "homemaker",
         "hunter",
         "inn_keeper",
-        "jailer",
         "light_infantry",
         "master_craftsmen",
         "merchant",
@@ -14870,7 +14948,6 @@ export const generatedRepoLocalGlantriSeed = {
         "student",
         "thief",
         "torturer",
-        "watchman",
         "woodcutter"
       ],
       "skillGroupIds": [
@@ -14946,7 +15023,6 @@ export const generatedRepoLocalGlantriSeed = {
         "herdsman_subtype",
         "burglar",
         "folk_performer",
-        "levy_infantry",
         "cavalry_mounted_retainer",
         "actor",
         "animal_trainer",
@@ -14975,7 +15051,6 @@ export const generatedRepoLocalGlantriSeed = {
         "fixer",
         "gladiator",
         "healer",
-        "heavy_infantry",
         "herald",
         "herbalist",
         "herder",
@@ -14983,7 +15058,6 @@ export const generatedRepoLocalGlantriSeed = {
         "homemaker",
         "hunter",
         "inn_keeper",
-        "jailer",
         "lawyer",
         "light_infantry",
         "master_craftsmen",
@@ -15017,7 +15091,6 @@ export const generatedRepoLocalGlantriSeed = {
         "tax_collector",
         "thief",
         "torturer",
-        "watchman",
         "woodcutter"
       ],
       "skillGroupIds": [

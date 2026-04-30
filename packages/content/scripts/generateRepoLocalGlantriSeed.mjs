@@ -264,6 +264,51 @@ const GENERATED_PROFESSION_FAMILIES = [
       "Arena-focused combat performer family for staged personal fighting rather than battlefield soldiering.",
     id: "arena_fighter",
     name: "Arena Fighter"
+  },
+  {
+    description:
+      "Focused low and mid military/security professions whose training is defined by subtype packages rather than broad Soldier-family defaults.",
+    id: "military_security",
+    name: "Military / Security"
+  }
+];
+
+const GENERATED_PROFESSION_SUBTYPES = [
+  {
+    addedCoreSkillIds: [],
+    addedCoreTrainingGroupIds: ["basic_melee_training"],
+    addedFavoredSkillIds: [],
+    addedFavoredTrainingGroupIds: ["watch_civic_guard", "defensive_soldiering"],
+    minimumSocietyLevel: 1,
+    professionFamilyId: "military_security",
+    professionSubtypeId: "village_guard",
+    shortDescription:
+      "Local village, manor, gate, or storehouse guard focused on everyday security and basic civic order.",
+    name: "Village Guard"
+  },
+  {
+    addedCoreSkillIds: [],
+    addedCoreTrainingGroupIds: ["basic_melee_training", "basic_missile_training"],
+    addedFavoredSkillIds: [],
+    addedFavoredTrainingGroupIds: ["defensive_soldiering"],
+    minimumSocietyLevel: 1,
+    professionFamilyId: "military_security",
+    professionSubtypeId: "militia_fighter",
+    shortDescription:
+      "Part-time local defender or levy fighter with basic melee, missile, and defensive drill.",
+    name: "Militia Fighter"
+  },
+  {
+    addedCoreSkillIds: [],
+    addedCoreTrainingGroupIds: ["basic_melee_training", "defensive_soldiering"],
+    addedFavoredSkillIds: [],
+    addedFavoredTrainingGroupIds: ["veteran_soldiering"],
+    minimumSocietyLevel: 3,
+    professionFamilyId: "military_security",
+    professionSubtypeId: "garrison_soldier",
+    shortDescription:
+      "Professional fort, town, or garrison soldier with organized melee, defensive, and soldiering training.",
+    name: "Garrison Soldier"
   }
 ];
 
@@ -335,12 +380,40 @@ const PROFESSION_SUBTYPE_GRANT_OVERRIDES = {
 
 const PROFESSION_AVAILABILITY_OVERRIDES = {
   clan_warriors: {
-    maxClassBand: 2,
-    maxSocietyLevel: 2
+    classBands: [1, 2],
+    societyLevels: [1, 2]
+  },
+  garrison_soldier: {
+    classBands: [2, 3],
+    societyLevels: [3, 4, 5]
+  },
+  heavy_infantry: {
+    classBands: [2, 3],
+    societyLevels: [3, 4, 5]
+  },
+  jailer: {
+    classBands: [2, 3],
+    societyLevels: [3, 4, 5]
+  },
+  levy_infantry: {
+    classBands: [1, 2, 3],
+    societyLevels: [2, 3, 4]
+  },
+  militia_fighter: {
+    classBands: [1, 2, 3],
+    societyLevels: [1, 2, 3]
   },
   tribal_warrior: {
-    maxClassBand: 2,
-    maxSocietyLevel: 2
+    classBands: [1, 2],
+    societyLevels: [1, 2]
+  },
+  village_guard: {
+    classBands: [1, 2],
+    societyLevels: [1, 2]
+  },
+  watchman: {
+    classBands: [2, 3],
+    societyLevels: [3, 4, 5]
   }
 };
 
@@ -865,7 +938,12 @@ const professionFamilies = [
   ...GENERATED_PROFESSION_FAMILIES
 ];
 
-const professions = rawBundle.professionSubtypes.map((subtype) => ({
+const professionSourceSubtypes = [
+  ...rawBundle.professionSubtypes,
+  ...GENERATED_PROFESSION_SUBTYPES
+];
+
+const professions = professionSourceSubtypes.map((subtype) => ({
   description: normalizeText(subtype.shortDescription, subtype.contextNotes) || undefined,
   familyId:
     PROFESSION_SUBTYPE_FAMILY_ID_OVERRIDES[subtype.professionSubtypeId] ??
@@ -925,7 +1003,7 @@ const professionSkillSources = [
       .map((skillId) => createSkillGrant(skillId, family.professionFamilyId, "family", false))
       .filter(Boolean)
   ]),
-  ...rawBundle.professionSubtypes.flatMap((subtype) => [
+  ...professionSourceSubtypes.flatMap((subtype) => [
     ...normalizeSkillGroupIds(getProfessionSubtypeField(subtype, "addedCoreTrainingGroupIds")).map((groupId) => ({
       grantType: "group",
       isCore: true,
@@ -1012,10 +1090,28 @@ for (const group of skillGroupSources) {
 
 function isProfessionAvailableInSocietyBand({
   classBand,
+  effectiveAccessLevel,
   professionId,
+  sourceMinimumSocietyLevel,
   societyLevel
 }) {
   const override = PROFESSION_AVAILABILITY_OVERRIDES[professionId];
+
+  if (override?.societyLevels && !override.societyLevels.includes(societyLevel)) {
+    return false;
+  }
+
+  if (override?.classBands && !override.classBands.includes(classBand)) {
+    return false;
+  }
+
+  if (override?.societyLevels || override?.classBands) {
+    return true;
+  }
+
+  if (sourceMinimumSocietyLevel > effectiveAccessLevel) {
+    return false;
+  }
 
   if (!override) {
     return true;
@@ -1049,18 +1145,17 @@ const societyLevels = rawBundle.societyTypes.flatMap((society) =>
       ),
       professionIds: professions
         .filter((profession) => {
-          const sourceProfession = rawBundle.professionSubtypes.find(
+          const sourceProfession = professionSourceSubtypes.find(
             (candidate) => candidate.professionSubtypeId === profession.id
           );
 
-          return (
-            Number(sourceProfession?.minimumSocietyLevel || 1) <= effectiveAccessLevel &&
-            isProfessionAvailableInSocietyBand({
-              classBand,
-              professionId: profession.id,
-              societyLevel: canonicalSocietyLevel
-            })
-          );
+          return isProfessionAvailableInSocietyBand({
+            classBand,
+            effectiveAccessLevel,
+            professionId: profession.id,
+            sourceMinimumSocietyLevel: Number(sourceProfession?.minimumSocietyLevel || 1),
+            societyLevel: canonicalSocietyLevel
+          });
         })
         .map((profession) => profession.id),
       skillGroupIds: skillGroups
