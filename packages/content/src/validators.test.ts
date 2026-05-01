@@ -322,19 +322,50 @@ describe("validateCanonicalContent", () => {
   it("normalizes retired active skill group definitions before validating legacy snapshots", () => {
     const legacyContent = {
       ...defaultCanonicalContent,
+      skills: defaultCanonicalContent.skills.map((skill) =>
+        skill.id === "dodge"
+          ? {
+              ...skill,
+              groupIds: [
+                ...new Set([
+                  ...skill.groupIds,
+                  "defensive_soldiering",
+                  "veteran_soldiering"
+                ])
+              ]
+            }
+          : skill.id === "parry"
+            ? {
+                ...skill,
+                groupIds: [...new Set([...skill.groupIds, "defensive_soldiering"])]
+              }
+            : skill
+      ),
       skillGroups: [
         ...defaultCanonicalContent.skillGroups.map((group) =>
-          group.id === "veteran_soldiering"
+          group.id === "defensive_soldiering"
             ? {
                 ...group,
-                skillMemberships: group.skillMemberships?.map((membership) =>
-                  membership.skillId === "battlefield_awareness"
-                    ? {
-                        ...membership,
-                        relevance: "optional" as const
-                      }
-                    : membership
-                )
+                skillMemberships: [
+                  ...(group.skillMemberships ?? []),
+                  { skillId: "dodge", relevance: "optional" as const },
+                  { skillId: "parry", relevance: "optional" as const }
+                ]
+              }
+            : group.id === "veteran_soldiering"
+            ? {
+                ...group,
+                skillMemberships: [
+                  ...(group.skillMemberships?.map((membership) =>
+                    membership.skillId === "battlefield_awareness"
+                      ? {
+                          ...membership,
+                          relevance: "optional" as const
+                        }
+                      : membership
+                  ) ?? []),
+                  { skillId: "dodge", relevance: "optional" as const }
+                ]
               }
             : group.id === "veteran_leadership"
               ? {
@@ -407,9 +438,26 @@ describe("validateCanonicalContent", () => {
       id: "covert_entry",
       name: "Covert Entry"
     });
+    expect([...membershipBySkillIdFor("defensive_soldiering").keys()]).toEqual([
+      "formation_fighting",
+      "battlefield_awareness",
+      "perception",
+      "self_control",
+      "first_aid"
+    ]);
+    expect([...membershipBySkillIdFor("defensive_soldiering").keys()].filter((skillId) =>
+      ["dodge", "parry", "brawling"].includes(skillId)
+    )).toEqual([]);
     expect(membershipBySkillIdFor("veteran_soldiering").get("battlefield_awareness")).toMatchObject({
       relevance: "core"
     });
+    expect([...membershipBySkillIdFor("veteran_soldiering").keys()]).toEqual([
+      "combat_experience",
+      "battlefield_awareness",
+      "perception",
+      "first_aid",
+      "weapon_maintenance"
+    ]);
     expect([...membershipBySkillIdFor("veteran_soldiering").keys()].filter((skillId) =>
       ["dodge", "parry", "brawling"].includes(skillId)
     )).toEqual([]);
@@ -421,6 +469,12 @@ describe("validateCanonicalContent", () => {
     });
     expect([...membershipBySkillIdFor("covert_entry").keys()]).toEqual(
       expect.arrayContaining(["search", "trap_handling", "lockpicking"])
+    );
+    expect(normalizedContent.skills.find((skill) => skill.id === "dodge")?.groupIds).not.toEqual(
+      expect.arrayContaining(["defensive_soldiering", "veteran_soldiering"])
+    );
+    expect(normalizedContent.skills.find((skill) => skill.id === "parry")?.groupIds).not.toEqual(
+      expect.arrayContaining(["defensive_soldiering"])
     );
   });
 
@@ -475,8 +529,8 @@ describe("validateCanonicalContent", () => {
       .toThrow(/contains Parry without Dodge and melee weapon context/);
     expect(() => validateCanonicalContent(withGroupMembership("watch_civic_guard", "dodge")))
       .toThrow(/contains Dodge outside a coherent melee\/defensive combat package/);
-    expect(() => validateCanonicalContent(withGroupMembership("defensive_soldiering", "brawling")))
-      .toThrow(/Military-support skill group/);
+    expect(() => validateCanonicalContent(withGroupMembership("watch_civic_guard", "brawling")))
+      .toThrow(/contains Brawling outside a coherent melee combat package/);
     expect(() => validateCanonicalContent(withGroupMembership("route_security", "bow")))
       .toThrow(/contains weapon skills or weapon-choice slots/);
   });

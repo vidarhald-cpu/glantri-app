@@ -62,6 +62,23 @@ const CANONICAL_SKILL_GROUP_NAMES: Partial<Record<string, string>> = {
   veteran_soldiering: "Veteran Soldiering"
 };
 
+const CANONICAL_SKILL_GROUP_MEMBERSHIPS: Partial<Record<string, string[]>> = {
+  defensive_soldiering: [
+    "formation_fighting",
+    "battlefield_awareness",
+    "perception",
+    "self_control",
+    "first_aid"
+  ],
+  veteran_soldiering: [
+    "combat_experience",
+    "battlefield_awareness",
+    "perception",
+    "first_aid",
+    "weapon_maintenance"
+  ]
+};
+
 const REMOVED_SKILL_GROUP_IDS_BY_SKILL_ID: Partial<Record<string, string[]>> = {
   dodge: [
     "basic_missile_training",
@@ -182,6 +199,23 @@ function normalizeLanguages(content: CanonicalContent): CanonicalContent {
 function normalizeSkillGroups(content: CanonicalContent): CanonicalContent {
   const skillsById = new Map(content.skills.map((skill) => [skill.id, skill]));
   const groupsById = new Map<string, CanonicalContent["skillGroups"][number]>();
+  const normalizeMembershipsForGroup = (
+    groupId: string,
+    memberships: NonNullable<CanonicalContent["skillGroups"][number]["skillMemberships"]>
+  ): NonNullable<CanonicalContent["skillGroups"][number]["skillMemberships"]> => {
+    const canonicalMembershipSkillIds = CANONICAL_SKILL_GROUP_MEMBERSHIPS[groupId];
+
+    if (!canonicalMembershipSkillIds) {
+      return memberships;
+    }
+
+    return canonicalMembershipSkillIds
+      .filter((skillId) => skillsById.get(skillId)?.groupIds.includes(groupId))
+      .map((skillId) => ({
+        skillId,
+        relevance: "optional" as const
+      }));
+  };
 
   for (const group of content.skillGroups) {
     const normalizedGroupId = normalizeSkillGroupId(group.id) ?? group.id;
@@ -229,19 +263,21 @@ function normalizeSkillGroups(content: CanonicalContent): CanonicalContent {
       })),
       skillMemberships: [
         ...new Map(
-          (group.skillMemberships ?? []).map((membership) => {
-            const skill = skillsById.get(membership.skillId);
-            const relevance: "core" | "optional" =
-              skill?.groupId === group.id ? "core" : "optional";
+          normalizeMembershipsForGroup(group.id, group.skillMemberships ?? []).map(
+            (membership) => {
+              const skill = skillsById.get(membership.skillId);
+              const relevance: "core" | "optional" =
+                skill?.groupId === group.id ? "core" : "optional";
 
-            return [
-              membership.skillId,
-              {
-                ...membership,
-                relevance
-              }
-            ];
-          })
+              return [
+                membership.skillId,
+                {
+                  ...membership,
+                  relevance
+                }
+              ];
+            }
+          )
         ).values()
       ]
     }))
