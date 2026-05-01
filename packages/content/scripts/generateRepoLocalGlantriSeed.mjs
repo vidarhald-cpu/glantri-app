@@ -411,6 +411,27 @@ const GENERATED_PROFESSION_SUBTYPES = [
     shortDescription:
       "Mounted unit commander for cavalry patrols, household mounted troops, or formal cavalry detachments.",
     name: "Cavalry Officer"
+  },
+  {
+    addedCoreSkillIds: [],
+    addedCoreTrainingGroupIds: [
+      "watch_civic_guard",
+      "basic_melee_training",
+      "defensive_soldiering",
+      "courtly_formation"
+    ],
+    addedFavoredSkillIds: [],
+    addedFavoredTrainingGroupIds: [
+      "veteran_soldiering",
+      "veteran_leadership",
+      "political_acumen"
+    ],
+    minimumSocietyLevel: 5,
+    professionFamilyId: "military_security",
+    professionSubtypeId: "elite_guard_officer",
+    shortDescription:
+      "Commander of palace, household, noble, or elite guard details, combining court security, protection, and command foundations.",
+    name: "Elite Guard Officer"
   }
 ];
 
@@ -419,14 +440,22 @@ const PROFESSION_SUBTYPE_NAME_OVERRIDES = {
 };
 
 const PROFESSION_SUBTYPE_FAMILY_ID_OVERRIDES = {
+  bodyguard: "military_security",
   cavalry_mounted_retainer: "military_security",
+  champion: "military_security",
   gladiator: "arena_fighter"
 };
 
 const PROFESSION_SUBTYPE_GRANT_OVERRIDES = {
   bodyguard: {
-    addedFavoredSkillIds: ["insight"],
-    addedFavoredTrainingGroupIds: []
+    addedCoreSkillIds: [],
+    addedCoreTrainingGroupIds: [
+      "advanced_melee_training",
+      "watch_civic_guard",
+      "defensive_soldiering"
+    ],
+    addedFavoredSkillIds: [],
+    addedFavoredTrainingGroupIds: ["courtly_formation"]
   },
   bounty_hunter: {
     addedCoreTrainingGroupIds: [],
@@ -450,8 +479,10 @@ const PROFESSION_SUBTYPE_GRANT_OVERRIDES = {
     addedFavoredTrainingGroupIds: ["courtly_formation", "route_security"]
   },
   champion: {
-    addedFavoredSkillIds: ["brawling"],
-    addedFavoredTrainingGroupIds: []
+    addedCoreSkillIds: [],
+    addedCoreTrainingGroupIds: ["advanced_melee_training", "arena_training"],
+    addedFavoredSkillIds: [],
+    addedFavoredTrainingGroupIds: ["courtly_formation"]
   },
   clan_warriors: {
     addedFavoredTrainingGroupIds: []
@@ -502,6 +533,10 @@ const PROFESSION_AVAILABILITY_OVERRIDES = {
   garrison_soldier: {
     classBands: [2, 3],
     societyLevels: [3, 4, 5]
+  },
+  elite_guard_officer: {
+    classBands: [4],
+    societyLevels: [5, 6]
   },
   city_watch_officer: {
     classBands: [3, 4],

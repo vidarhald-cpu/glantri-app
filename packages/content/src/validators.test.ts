@@ -1256,6 +1256,158 @@ describe("validateCanonicalContent", () => {
     }
   });
 
+  it("separates bodyguard, champion, and elite guard officer packages", () => {
+    const canonicalSocietyLevelById = new Map(
+      defaultCanonicalContent.societies.map((society) => [society.id, society.societyLevel])
+    );
+    const professionById = new Map(
+      defaultCanonicalContent.professions.map((profession) => [profession.id, profession])
+    );
+    const groupById = new Map(
+      defaultCanonicalContent.skillGroups.map((group) => [group.id, group])
+    );
+    const grantsFor = (professionId: string) => {
+      const profession = professionById.get(professionId);
+
+      return defaultCanonicalContent.professionSkills.filter(
+        (grant) =>
+          (grant.scope === "family" && grant.professionId === profession?.familyId) ||
+          (grant.scope === "profession" && grant.professionId === professionId)
+      );
+    };
+    const groupIdsFor = (professionId: string) =>
+      grantsFor(professionId)
+        .filter((grant) => grant.grantType === "group" && grant.skillGroupId)
+        .map((grant) => grant.skillGroupId ?? "");
+    const directSkillIdsFor = (professionId: string) =>
+      grantsFor(professionId)
+        .filter((grant) => grant.grantType !== "group" && grant.skillId)
+        .map((grant) => grant.skillId ?? "");
+    const skillReachFor = (professionId: string) => {
+      const groupIds = groupIdsFor(professionId);
+      const skillIdsFromGroups = defaultCanonicalContent.skills
+        .filter((skill) =>
+          (skill.groupIds ?? [skill.groupId]).some((groupId) => groupIds.includes(groupId))
+        )
+        .map((skill) => skill.id);
+      const directOnlySkillIds = directSkillIdsFor(professionId).filter(
+        (skillId) => !skillIdsFromGroups.includes(skillId)
+      );
+
+      return new Set([...skillIdsFromGroups, ...directOnlySkillIds]).size;
+    };
+    const allowedRowsFor = (professionId: string) =>
+      defaultCanonicalContent.societyLevels.filter((societyLevel) =>
+        societyLevel.professionIds.includes(professionId)
+      );
+    const canonicalSocietyLevelsFor = (professionId: string) => [
+      ...new Set(
+        allowedRowsFor(professionId)
+          .map((societyLevel) => canonicalSocietyLevelById.get(societyLevel.societyId))
+          .filter((societyLevel): societyLevel is number => typeof societyLevel === "number")
+      )
+    ].sort((left, right) => left - right);
+    const classBandsFor = (professionId: string) => [
+      ...new Set(allowedRowsFor(professionId).map((societyLevel) => societyLevel.societyLevel))
+    ].sort((left, right) => left - right);
+    const expectNoDirectCommandEducation = (professionId: string) => {
+      expect(directSkillIdsFor(professionId)).not.toContain("captaincy");
+      expect(directSkillIdsFor(professionId)).not.toContain("tactics");
+    };
+
+    expect(professionById.get("bodyguard")).toMatchObject({
+      familyId: "military_security",
+      name: "Bodyguard"
+    });
+    expect(groupIdsFor("bodyguard")).toEqual(
+      expect.arrayContaining([
+        "advanced_melee_training",
+        "watch_civic_guard",
+        "defensive_soldiering",
+        "courtly_formation"
+      ])
+    );
+    expect(groupIdsFor("bodyguard")).not.toContain("veteran_leadership");
+    expect(groupIdsFor("bodyguard")).not.toContain("veteran_soldiering");
+    expect(directSkillIdsFor("bodyguard")).toEqual([]);
+    expect(skillReachFor("bodyguard")).toBeGreaterThanOrEqual(14);
+    expect(skillReachFor("bodyguard")).toBeLessThanOrEqual(18);
+
+    expect(professionById.get("champion")).toMatchObject({
+      familyId: "military_security",
+      name: "Champion"
+    });
+    expect(groupIdsFor("champion")).toEqual(
+      expect.arrayContaining(["advanced_melee_training", "arena_training", "courtly_formation"])
+    );
+    expect(groupIdsFor("champion")).not.toContain("veteran_leadership");
+    expect(groupIdsFor("champion")).not.toContain("veteran_soldiering");
+    expect(directSkillIdsFor("champion")).toEqual([]);
+    expect(directSkillIdsFor("champion")).not.toContain("brawling");
+    expect(skillReachFor("champion")).toBeGreaterThanOrEqual(14);
+    expect(skillReachFor("champion")).toBeLessThanOrEqual(18);
+
+    expect(professionById.get("elite_guard_officer")).toMatchObject({
+      familyId: "military_security",
+      name: "Elite Guard Officer"
+    });
+    expect(canonicalSocietyLevelsFor("elite_guard_officer")).toEqual([5, 6]);
+    expect(classBandsFor("elite_guard_officer")).toEqual([4]);
+    expect(groupIdsFor("elite_guard_officer")).toEqual(
+      expect.arrayContaining([
+        "watch_civic_guard",
+        "basic_melee_training",
+        "defensive_soldiering",
+        "courtly_formation",
+        "veteran_soldiering",
+        "veteran_leadership",
+        "political_acumen"
+      ])
+    );
+    expect(directSkillIdsFor("elite_guard_officer")).toEqual([]);
+    expect(groupIdsFor("elite_guard_officer")).not.toEqual(groupIdsFor("military_officer"));
+    expect(groupIdsFor("elite_guard_officer")).not.toEqual(groupIdsFor("city_watch_officer"));
+    expect(skillReachFor("elite_guard_officer")).toBeGreaterThanOrEqual(18);
+    expect(skillReachFor("elite_guard_officer")).toBeLessThanOrEqual(24);
+
+    expect(canonicalSocietyLevelsFor("military_officer")).toEqual([4, 5, 6]);
+    expect(classBandsFor("military_officer")).toEqual([4]);
+    expect(canonicalSocietyLevelsFor("city_watch_officer")).toEqual([4, 5, 6]);
+    expect(classBandsFor("city_watch_officer")).toEqual([3, 4]);
+    expectNoDirectCommandEducation("bodyguard");
+    expectNoDirectCommandEducation("champion");
+    expect(groupIdsFor("cavalry")).not.toContain("veteran_leadership");
+    expect(groupIdsFor("cavalry_mounted_retainer")).not.toContain("veteran_leadership");
+    expect(groupIdsFor("cavalry_officer")).toEqual(
+      expect.arrayContaining(["mounted_warrior_training", "veteran_leadership"])
+    );
+    expect(directSkillIdsFor("bounty_hunter")).not.toContain("captaincy");
+    expect(groupIdsFor("bounty_hunter")).not.toContain("veteran_leadership");
+
+    expect(
+      groupById.get("watch_civic_guard")?.skillMemberships?.map((membership) => membership.skillId)
+    ).not.toContain("parry");
+    const arenaTrainingSkillIds =
+      groupById.get("arena_training")?.skillMemberships?.map((membership) => membership.skillId) ??
+      [];
+    for (const forbiddenSkillId of [
+      "dodge",
+      "brawling",
+      "parry",
+      "one_handed_edged",
+      "captaincy",
+      "tactics",
+      "veteran_leadership",
+      "formation_fighting"
+    ]) {
+      expect(arenaTrainingSkillIds).not.toContain(forbiddenSkillId);
+    }
+
+    for (const societyLevel of defaultCanonicalContent.societyLevels) {
+      expect(new Set(societyLevel.professionIds).size).toBe(societyLevel.professionIds.length);
+    }
+  });
+
   it("keeps Bounty Hunter as pursuit security without command education", () => {
     const professionById = new Map(
       defaultCanonicalContent.professions.map((profession) => [profession.id, profession])

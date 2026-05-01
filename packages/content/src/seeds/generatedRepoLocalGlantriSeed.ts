@@ -5248,7 +5248,7 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "description": "Protective combat specialist focused on keeping a client or patron alive in dangerous situations. Protective martial specialist serving an individual, household, or patron.",
-      "familyId": "soldier",
+      "familyId": "military_security",
       "id": "bodyguard",
       "name": "Bodyguard",
       "subtypeName": "Bodyguard"
@@ -5283,7 +5283,7 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "description": "Elite personal combat specialist known for superior martial skill and reputation. Fits dueling, elite retainer, household, arena, or heroic combat cultures.",
-      "familyId": "soldier",
+      "familyId": "military_security",
       "id": "champion",
       "name": "Champion",
       "subtypeName": "Champion"
@@ -5777,6 +5777,13 @@ export const generatedRepoLocalGlantriSeed = {
       "id": "cavalry_officer",
       "name": "Cavalry Officer",
       "subtypeName": "Cavalry Officer"
+    },
+    {
+      "description": "Commander of palace, household, noble, or elite guard details, combining court security, protection, and command foundations.",
+      "familyId": "military_security",
+      "id": "elite_guard_officer",
+      "name": "Elite Guard Officer",
+      "subtypeName": "Elite Guard Officer"
     }
   ],
   "professionSkills": [
@@ -7085,28 +7092,28 @@ export const generatedRepoLocalGlantriSeed = {
       "skillGroupId": "advanced_melee_training"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": true,
       "professionId": "bodyguard",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "perception"
+      "skillGroupId": "watch_civic_guard"
     },
     {
-      "grantType": "secondary-skill",
+      "grantType": "group",
       "isCore": true,
       "professionId": "bodyguard",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "battlefield_awareness"
+      "skillGroupId": "defensive_soldiering"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": false,
       "professionId": "bodyguard",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "insight"
+      "skillGroupId": "courtly_formation"
     },
     {
       "grantType": "ordinary-skill",
@@ -7285,28 +7292,20 @@ export const generatedRepoLocalGlantriSeed = {
       "skillGroupId": "advanced_melee_training"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": true,
       "professionId": "champion",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "perception"
+      "skillGroupId": "arena_training"
     },
     {
-      "grantType": "secondary-skill",
-      "isCore": true,
-      "professionId": "champion",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "battlefield_awareness"
-    },
-    {
-      "grantType": "secondary-skill",
+      "grantType": "group",
       "isCore": false,
       "professionId": "champion",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "brawling"
+      "skillGroupId": "courtly_formation"
     },
     {
       "grantType": "group",
@@ -10171,6 +10170,62 @@ export const generatedRepoLocalGlantriSeed = {
       "ranks": 0,
       "scope": "profession",
       "skillGroupId": "courtly_formation"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "elite_guard_officer",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "watch_civic_guard"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "elite_guard_officer",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "basic_melee_training"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "elite_guard_officer",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "defensive_soldiering"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "elite_guard_officer",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "courtly_formation"
+    },
+    {
+      "grantType": "group",
+      "isCore": false,
+      "professionId": "elite_guard_officer",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "veteran_soldiering"
+    },
+    {
+      "grantType": "group",
+      "isCore": false,
+      "professionId": "elite_guard_officer",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "veteran_leadership"
+    },
+    {
+      "grantType": "group",
+      "isCore": false,
+      "professionId": "elite_guard_officer",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "political_acumen"
     }
   ],
   "societyBandSkillAccess": [
@@ -13941,7 +13996,8 @@ export const generatedRepoLocalGlantriSeed = {
         "city_watch_officer",
         "quartermaster",
         "staff_officer",
-        "cavalry_officer"
+        "cavalry_officer",
+        "elite_guard_officer"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -14421,7 +14477,8 @@ export const generatedRepoLocalGlantriSeed = {
         "city_watch_officer",
         "quartermaster",
         "staff_officer",
-        "cavalry_officer"
+        "cavalry_officer",
+        "elite_guard_officer"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -14901,7 +14958,8 @@ export const generatedRepoLocalGlantriSeed = {
         "city_watch_officer",
         "quartermaster",
         "staff_officer",
-        "cavalry_officer"
+        "cavalry_officer",
+        "elite_guard_officer"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -15371,7 +15429,8 @@ export const generatedRepoLocalGlantriSeed = {
         "quartermaster",
         "staff_officer",
         "imperial_officer",
-        "cavalry_officer"
+        "cavalry_officer",
+        "elite_guard_officer"
       ],
       "skillGroupIds": [
         "literate_foundation",
