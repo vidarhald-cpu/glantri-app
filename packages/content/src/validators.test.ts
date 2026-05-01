@@ -2037,6 +2037,214 @@ describe("validateCanonicalContent", () => {
     }
   });
 
+  it("adds elite commercial and guild professions without constraining ordinary trade options", () => {
+    const canonicalSocietyLevelById = new Map(
+      defaultCanonicalContent.societies.map((society) => [society.id, society.societyLevel])
+    );
+    const professionById = new Map(
+      defaultCanonicalContent.professions.map((profession) => [profession.id, profession])
+    );
+    const grantsFor = (professionId: string) => {
+      const profession = professionById.get(professionId);
+
+      return defaultCanonicalContent.professionSkills.filter(
+        (grant) =>
+          (grant.scope === "family" && grant.professionId === profession?.familyId) ||
+          (grant.scope === "profession" && grant.professionId === professionId)
+      );
+    };
+    const groupIdsFor = (professionId: string) => [
+      ...new Set(
+        grantsFor(professionId)
+          .filter((grant) => grant.grantType === "group" && grant.skillGroupId)
+          .map((grant) => grant.skillGroupId ?? "")
+      )
+    ];
+    const directSkillIdsFor = (professionId: string) => [
+      ...new Set(
+        grantsFor(professionId)
+          .filter((grant) => grant.grantType !== "group" && grant.skillId)
+          .map((grant) => grant.skillId ?? "")
+      )
+    ];
+    const directOnlySkillIdsFor = (professionId: string) => {
+      const groupIds = groupIdsFor(professionId);
+      const skillIdsFromGroups = defaultCanonicalContent.skills
+        .filter((skill) =>
+          (skill.groupIds ?? [skill.groupId]).some((groupId) => groupIds.includes(groupId))
+        )
+        .map((skill) => skill.id);
+
+      return directSkillIdsFor(professionId).filter(
+        (skillId) => !skillIdsFromGroups.includes(skillId)
+      );
+    };
+    const skillReachFor = (professionId: string) => {
+      const groupIds = groupIdsFor(professionId);
+      const skillIdsFromGroups = defaultCanonicalContent.skills
+        .filter((skill) =>
+          (skill.groupIds ?? [skill.groupId]).some((groupId) => groupIds.includes(groupId))
+        )
+        .map((skill) => skill.id);
+
+      return new Set([...skillIdsFromGroups, ...directOnlySkillIdsFor(professionId)]).size;
+    };
+    const allowedRowsFor = (professionId: string) =>
+      defaultCanonicalContent.societyLevels.filter((societyLevel) =>
+        societyLevel.professionIds.includes(professionId)
+      );
+    const canonicalSocietyLevelsFor = (professionId: string) => [
+      ...new Set(
+        allowedRowsFor(professionId)
+          .map((societyLevel) => canonicalSocietyLevelById.get(societyLevel.societyId))
+          .filter((societyLevel): societyLevel is number => typeof societyLevel === "number")
+      )
+    ].sort((left, right) => left - right);
+    const classBandsFor = (professionId: string) => [
+      ...new Set(allowedRowsFor(professionId).map((societyLevel) => societyLevel.societyLevel))
+    ].sort((left, right) => left - right);
+    const packageSignatureFor = (professionId: string) =>
+      JSON.stringify({
+        directOnlySkillIds: directOnlySkillIdsFor(professionId).sort(),
+        groupIds: groupIdsFor(professionId).sort()
+      });
+
+    expect(professionById.get("guild_master")).toMatchObject({
+      familyId: "merchant_trader",
+      name: "Guild Master"
+    });
+    expect(canonicalSocietyLevelsFor("guild_master")).toEqual([4, 5, 6]);
+    expect(classBandsFor("guild_master")).toEqual([3, 4]);
+    expect(groupIdsFor("guild_master")).toEqual(
+      expect.arrayContaining([
+        "craft_group",
+        "mercantile_practice",
+        "commercial_administration",
+        "civic_learning",
+        "political_acumen"
+      ])
+    );
+    expect(skillReachFor("guild_master")).toBeGreaterThanOrEqual(16);
+    expect(packageSignatureFor("guild_master")).not.toEqual(packageSignatureFor("master_craftsmen"));
+
+    expect(professionById.get("merchant_factor")).toMatchObject({
+      familyId: "merchant_trader",
+      name: "Merchant Factor"
+    });
+    expect(canonicalSocietyLevelsFor("merchant_factor")).toEqual([4, 5, 6]);
+    expect(classBandsFor("merchant_factor")).toEqual([3, 4]);
+    expect(groupIdsFor("merchant_factor")).toEqual(
+      expect.arrayContaining([
+        "mercantile_practice",
+        "commercial_administration",
+        "operations",
+        "civic_learning",
+        "political_acumen",
+        "social_reading"
+      ])
+    );
+    expect(directOnlySkillIdsFor("merchant_factor")).toEqual(["language", "etiquette"]);
+    expect(skillReachFor("merchant_factor")).toBeGreaterThanOrEqual(15);
+    expect(packageSignatureFor("merchant_factor")).not.toEqual(packageSignatureFor("merchant"));
+    expect(packageSignatureFor("merchant_factor")).not.toEqual(packageSignatureFor("fixer"));
+
+    expect(professionById.get("banker_moneylender")).toMatchObject({
+      familyId: "merchant_trader",
+      name: "Banker / Moneylender"
+    });
+    expect(canonicalSocietyLevelsFor("banker_moneylender")).toEqual([4, 5, 6]);
+    expect(classBandsFor("banker_moneylender")).toEqual([3, 4]);
+    expect(groupIdsFor("banker_moneylender")).toEqual(
+      expect.arrayContaining([
+        "commercial_administration",
+        "mercantile_practice",
+        "operations",
+        "civic_learning",
+        "social_reading"
+      ])
+    );
+    expect(directOnlySkillIdsFor("banker_moneylender")).toEqual([]);
+    expect(skillReachFor("banker_moneylender")).toBeGreaterThanOrEqual(15);
+
+    expect(professionById.get("great_merchant")).toMatchObject({
+      familyId: "merchant_trader",
+      name: "Great Merchant"
+    });
+    expect(canonicalSocietyLevelsFor("great_merchant")).toEqual([5, 6]);
+    expect(classBandsFor("great_merchant")).toEqual([4]);
+    expect(groupIdsFor("great_merchant")).toEqual(
+      expect.arrayContaining([
+        "mercantile_practice",
+        "commercial_administration",
+        "operations",
+        "political_acumen",
+        "courtly_formation",
+        "civic_learning"
+      ])
+    );
+    expect(directOnlySkillIdsFor("great_merchant")).toEqual(["language"]);
+    expect(skillReachFor("great_merchant")).toBeGreaterThan(skillReachFor("merchant"));
+
+    for (const professionId of [
+      "farmer",
+      "herder",
+      "peddler",
+      "local_trader",
+      "merchant",
+      "inn_keeper",
+      "fisher",
+      "docker"
+    ]) {
+      expect(professionById.has(professionId)).toBe(true);
+      expect(allowedRowsFor(professionId).length).toBeGreaterThan(0);
+    }
+
+    expect(canonicalSocietyLevelsFor("peddler")).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(classBandsFor("peddler")).toEqual([1, 2, 3, 4]);
+    expect(canonicalSocietyLevelsFor("local_trader")).toEqual([2, 3, 4, 5, 6]);
+    expect(classBandsFor("local_trader")).toEqual([2, 3, 4]);
+    expect(canonicalSocietyLevelsFor("merchant")).toEqual([2, 3, 4, 5, 6]);
+    expect(classBandsFor("merchant")).toEqual([2, 3, 4]);
+
+    expect(professionById.get("smuggler")).toMatchObject({
+      familyId: "illicit_trader",
+      name: "Smuggler"
+    });
+    expect(groupIdsFor("smuggler")).toEqual(
+      expect.arrayContaining(["smuggling_illicit_trade", "covert_entry"])
+    );
+    expect(groupIdsFor("smuggler")).not.toContain("mercantile_practice");
+    expect(directSkillIdsFor("chariot_driver")).not.toContain("captaincy");
+    expect(groupIdsFor("master_craftsmen")).toEqual(
+      expect.arrayContaining(["technical_measurement", "craft_group"])
+    );
+    expect(groupIdsFor("builder_master_mason")).toEqual(
+      expect.arrayContaining(["technical_measurement", "craft_group"])
+    );
+
+    for (const ordinaryTradeProfessionId of [
+      "guild_master",
+      "merchant_factor",
+      "banker_moneylender",
+      "great_merchant",
+      "local_trader",
+      "peddler",
+      "merchant",
+      "inn_keeper",
+      "homemaker",
+      "prostitute",
+      "fixer"
+    ]) {
+      expect(groupIdsFor(ordinaryTradeProfessionId)).not.toContain("veteran_leadership");
+      expect(directSkillIdsFor(ordinaryTradeProfessionId)).not.toContain("captaincy");
+      expect(directSkillIdsFor(ordinaryTradeProfessionId)).not.toContain("tactics");
+    }
+
+    for (const societyLevel of defaultCanonicalContent.societyLevels) {
+      expect(new Set(societyLevel.professionIds).size).toBe(societyLevel.professionIds.length);
+    }
+  });
+
   it("includes the updated civilization language naming and Lankhmar seed entry", () => {
     expect(
       defaultCanonicalContent.civilizations.find((civilization) => civilization.id === "glantri")

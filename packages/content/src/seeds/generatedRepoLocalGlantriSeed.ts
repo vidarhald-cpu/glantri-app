@@ -5822,6 +5822,34 @@ export const generatedRepoLocalGlantriSeed = {
       "id": "elite_guard_officer",
       "name": "Elite Guard Officer",
       "subtypeName": "Elite Guard Officer"
+    },
+    {
+      "description": "Senior guild official or master workshop owner with craft authority, commercial administration, and civic influence.",
+      "familyId": "merchant_trader",
+      "id": "guild_master",
+      "name": "Guild Master",
+      "subtypeName": "Guild Master"
+    },
+    {
+      "description": "Agent of a merchant house, guild, estate, or trading company who handles contracts, goods, credit, and negotiation.",
+      "familyId": "merchant_trader",
+      "id": "merchant_factor",
+      "name": "Merchant Factor",
+      "subtypeName": "Merchant Factor"
+    },
+    {
+      "description": "Finance professional focused on credit, debt, contracts, ledgers, valuation, and commercial risk.",
+      "familyId": "merchant_trader",
+      "id": "banker_moneylender",
+      "name": "Banker / Moneylender",
+      "subtypeName": "Banker / Moneylender"
+    },
+    {
+      "description": "Major merchant-house owner, financier, or trade magnate with commercial, civic, and political power.",
+      "familyId": "merchant_trader",
+      "id": "great_merchant",
+      "name": "Great Merchant",
+      "subtypeName": "Great Merchant"
     }
   ],
   "professionSkills": [
@@ -10208,6 +10236,206 @@ export const generatedRepoLocalGlantriSeed = {
       "ranks": 0,
       "scope": "profession",
       "skillGroupId": "political_acumen"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "guild_master",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "craft_group"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "guild_master",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "mercantile_practice"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "guild_master",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "commercial_administration"
+    },
+    {
+      "grantType": "group",
+      "isCore": false,
+      "professionId": "guild_master",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "civic_learning"
+    },
+    {
+      "grantType": "group",
+      "isCore": false,
+      "professionId": "guild_master",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "political_acumen"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "merchant_factor",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "mercantile_practice"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "merchant_factor",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "commercial_administration"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "merchant_factor",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "operations"
+    },
+    {
+      "grantType": "ordinary-skill",
+      "isCore": true,
+      "professionId": "merchant_factor",
+      "ranks": 0,
+      "scope": "profession",
+      "skillId": "language"
+    },
+    {
+      "grantType": "ordinary-skill",
+      "isCore": true,
+      "professionId": "merchant_factor",
+      "ranks": 0,
+      "scope": "profession",
+      "skillId": "etiquette"
+    },
+    {
+      "grantType": "group",
+      "isCore": false,
+      "professionId": "merchant_factor",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "civic_learning"
+    },
+    {
+      "grantType": "group",
+      "isCore": false,
+      "professionId": "merchant_factor",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "political_acumen"
+    },
+    {
+      "grantType": "group",
+      "isCore": false,
+      "professionId": "merchant_factor",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "social_reading"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "banker_moneylender",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "commercial_administration"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "banker_moneylender",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "mercantile_practice"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "banker_moneylender",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "operations"
+    },
+    {
+      "grantType": "group",
+      "isCore": false,
+      "professionId": "banker_moneylender",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "civic_learning"
+    },
+    {
+      "grantType": "group",
+      "isCore": false,
+      "professionId": "banker_moneylender",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "social_reading"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "great_merchant",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "mercantile_practice"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "great_merchant",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "commercial_administration"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "great_merchant",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "operations"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "great_merchant",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "political_acumen"
+    },
+    {
+      "grantType": "ordinary-skill",
+      "isCore": true,
+      "professionId": "great_merchant",
+      "ranks": 0,
+      "scope": "profession",
+      "skillId": "language"
+    },
+    {
+      "grantType": "group",
+      "isCore": false,
+      "professionId": "great_merchant",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "courtly_formation"
+    },
+    {
+      "grantType": "group",
+      "isCore": false,
+      "professionId": "great_merchant",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "civic_learning"
     }
   ],
   "societyBandSkillAccess": [
@@ -12800,7 +13028,10 @@ export const generatedRepoLocalGlantriSeed = {
         "veteran_sergeant",
         "city_watch_officer",
         "quartermaster",
-        "cavalry_officer"
+        "cavalry_officer",
+        "guild_master",
+        "merchant_factor",
+        "banker_moneylender"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -12937,7 +13168,10 @@ export const generatedRepoLocalGlantriSeed = {
         "woodcutter",
         "city_watch_officer",
         "quartermaster",
-        "cavalry_officer"
+        "cavalry_officer",
+        "guild_master",
+        "merchant_factor",
+        "banker_moneylender"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -13271,7 +13505,10 @@ export const generatedRepoLocalGlantriSeed = {
         "veteran_sergeant",
         "city_watch_officer",
         "quartermaster",
-        "cavalry_officer"
+        "cavalry_officer",
+        "guild_master",
+        "merchant_factor",
+        "banker_moneylender"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -13408,7 +13645,10 @@ export const generatedRepoLocalGlantriSeed = {
         "woodcutter",
         "city_watch_officer",
         "quartermaster",
-        "cavalry_officer"
+        "cavalry_officer",
+        "guild_master",
+        "merchant_factor",
+        "banker_moneylender"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -13734,7 +13974,10 @@ export const generatedRepoLocalGlantriSeed = {
         "veteran_sergeant",
         "city_watch_officer",
         "quartermaster",
-        "cavalry_officer"
+        "cavalry_officer",
+        "guild_master",
+        "merchant_factor",
+        "banker_moneylender"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -13873,7 +14116,11 @@ export const generatedRepoLocalGlantriSeed = {
         "quartermaster",
         "staff_officer",
         "cavalry_officer",
-        "elite_guard_officer"
+        "elite_guard_officer",
+        "guild_master",
+        "merchant_factor",
+        "banker_moneylender",
+        "great_merchant"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -14199,7 +14446,10 @@ export const generatedRepoLocalGlantriSeed = {
         "veteran_sergeant",
         "city_watch_officer",
         "quartermaster",
-        "cavalry_officer"
+        "cavalry_officer",
+        "guild_master",
+        "merchant_factor",
+        "banker_moneylender"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -14338,7 +14588,11 @@ export const generatedRepoLocalGlantriSeed = {
         "quartermaster",
         "staff_officer",
         "cavalry_officer",
-        "elite_guard_officer"
+        "elite_guard_officer",
+        "guild_master",
+        "merchant_factor",
+        "banker_moneylender",
+        "great_merchant"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -14664,7 +14918,10 @@ export const generatedRepoLocalGlantriSeed = {
         "veteran_sergeant",
         "city_watch_officer",
         "quartermaster",
-        "cavalry_officer"
+        "cavalry_officer",
+        "guild_master",
+        "merchant_factor",
+        "banker_moneylender"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -14803,7 +15060,11 @@ export const generatedRepoLocalGlantriSeed = {
         "quartermaster",
         "staff_officer",
         "cavalry_officer",
-        "elite_guard_officer"
+        "elite_guard_officer",
+        "guild_master",
+        "merchant_factor",
+        "banker_moneylender",
+        "great_merchant"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -15111,7 +15372,10 @@ export const generatedRepoLocalGlantriSeed = {
         "woodcutter",
         "city_watch_officer",
         "quartermaster",
-        "cavalry_officer"
+        "cavalry_officer",
+        "guild_master",
+        "merchant_factor",
+        "banker_moneylender"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -15251,7 +15515,11 @@ export const generatedRepoLocalGlantriSeed = {
         "staff_officer",
         "imperial_officer",
         "cavalry_officer",
-        "elite_guard_officer"
+        "elite_guard_officer",
+        "guild_master",
+        "merchant_factor",
+        "banker_moneylender",
+        "great_merchant"
       ],
       "skillGroupIds": [
         "literate_foundation",

@@ -463,6 +463,71 @@ const GENERATED_PROFESSION_SUBTYPES = [
     shortDescription:
       "Commander of palace, household, noble, or elite guard details, combining court security, protection, and command foundations.",
     name: "Elite Guard Officer"
+  },
+  {
+    addedCoreSkillIds: [],
+    addedCoreTrainingGroupIds: [
+      "craft_group",
+      "mercantile_practice",
+      "commercial_administration"
+    ],
+    addedFavoredSkillIds: [],
+    addedFavoredTrainingGroupIds: ["civic_learning", "political_acumen"],
+    minimumSocietyLevel: 4,
+    professionFamilyId: "merchant_trader",
+    professionSubtypeId: "guild_master",
+    shortDescription:
+      "Senior guild official or master workshop owner with craft authority, commercial administration, and civic influence.",
+    name: "Guild Master"
+  },
+  {
+    addedCoreSkillIds: ["language", "etiquette"],
+    addedCoreTrainingGroupIds: [
+      "mercantile_practice",
+      "commercial_administration",
+      "operations"
+    ],
+    addedFavoredSkillIds: [],
+    addedFavoredTrainingGroupIds: ["civic_learning", "political_acumen", "social_reading"],
+    minimumSocietyLevel: 4,
+    professionFamilyId: "merchant_trader",
+    professionSubtypeId: "merchant_factor",
+    shortDescription:
+      "Agent of a merchant house, guild, estate, or trading company who handles contracts, goods, credit, and negotiation.",
+    name: "Merchant Factor"
+  },
+  {
+    addedCoreSkillIds: [],
+    addedCoreTrainingGroupIds: [
+      "commercial_administration",
+      "mercantile_practice",
+      "operations"
+    ],
+    addedFavoredSkillIds: [],
+    addedFavoredTrainingGroupIds: ["civic_learning", "social_reading"],
+    minimumSocietyLevel: 4,
+    professionFamilyId: "merchant_trader",
+    professionSubtypeId: "banker_moneylender",
+    shortDescription:
+      "Finance professional focused on credit, debt, contracts, ledgers, valuation, and commercial risk.",
+    name: "Banker / Moneylender"
+  },
+  {
+    addedCoreSkillIds: ["language"],
+    addedCoreTrainingGroupIds: [
+      "mercantile_practice",
+      "commercial_administration",
+      "operations",
+      "political_acumen"
+    ],
+    addedFavoredSkillIds: [],
+    addedFavoredTrainingGroupIds: ["courtly_formation", "civic_learning"],
+    minimumSocietyLevel: 5,
+    professionFamilyId: "merchant_trader",
+    professionSubtypeId: "great_merchant",
+    shortDescription:
+      "Major merchant-house owner, financier, or trade magnate with commercial, civic, and political power.",
+    name: "Great Merchant"
   }
 ];
 
@@ -652,6 +717,10 @@ const PROFESSION_AVAILABILITY_OVERRIDES = {
     classBands: [1, 2, 3],
     societyLevels: [1, 2, 3, 4]
   },
+  banker_moneylender: {
+    classBands: [3, 4],
+    societyLevels: [4, 5, 6]
+  },
   beggar: {
     classBands: [1, 2, 3],
     societyLevels: [1, 2, 3, 4, 5, 6]
@@ -663,6 +732,14 @@ const PROFESSION_AVAILABILITY_OVERRIDES = {
   garrison_soldier: {
     classBands: [2, 3],
     societyLevels: [3, 4, 5]
+  },
+  great_merchant: {
+    classBands: [4],
+    societyLevels: [5, 6]
+  },
+  guild_master: {
+    classBands: [3, 4],
+    societyLevels: [4, 5, 6]
   },
   elite_guard_officer: {
     classBands: [4],
@@ -703,6 +780,10 @@ const PROFESSION_AVAILABILITY_OVERRIDES = {
   militia_fighter: {
     classBands: [1, 2, 3],
     societyLevels: [1, 2, 3]
+  },
+  merchant_factor: {
+    classBands: [3, 4],
+    societyLevels: [4, 5, 6]
   },
   pickpocket: {
     classBands: [2, 3],
