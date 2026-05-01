@@ -315,6 +315,108 @@ describe("validateCanonicalContent", () => {
     expect(new Set(groupGrantKeys).size).toBe(groupGrantKeys.length);
   });
 
+  it("normalizes retired active skill group definitions before validating legacy snapshots", () => {
+    const legacyContent = {
+      ...defaultCanonicalContent,
+      skillGroups: [
+        ...defaultCanonicalContent.skillGroups.map((group) =>
+          group.id === "veteran_soldiering"
+            ? {
+                ...group,
+                skillMemberships: group.skillMemberships?.map((membership) =>
+                  membership.skillId === "battlefield_awareness"
+                    ? {
+                        ...membership,
+                        relevance: "optional" as const
+                      }
+                    : membership
+                )
+              }
+            : group.id === "veteran_leadership"
+              ? {
+                  ...group,
+                  skillMemberships: group.skillMemberships?.map((membership) =>
+                    membership.skillId === "captaincy" || membership.skillId === "tactics"
+                      ? {
+                          ...membership,
+                          relevance: "optional" as const
+                        }
+                      : membership
+                  )
+                }
+              : group
+        ),
+        {
+          id: "trap_and_intrusion_work",
+          name: "Trap and Intrusion Work",
+          skillMemberships: [
+            { skillId: "search", relevance: "optional" as const },
+            { skillId: "trap_handling", relevance: "optional" as const },
+            { skillId: "lockpicking", relevance: "optional" as const }
+          ],
+          sortOrder: 1000
+        },
+        {
+          id: "field_soldiering",
+          name: "Field Soldiering",
+          skillMemberships: [
+            { skillId: "dodge", relevance: "optional" as const },
+            { skillId: "perception", relevance: "optional" as const },
+            { skillId: "battlefield_awareness", relevance: "optional" as const }
+          ],
+          sortOrder: 1001
+        },
+        {
+          id: "officer_training",
+          name: "Officer Training",
+          skillMemberships: [
+            { skillId: "tactics", relevance: "optional" as const },
+            { skillId: "captaincy", relevance: "optional" as const },
+            { skillId: "perception", relevance: "optional" as const }
+          ],
+          sortOrder: 1002
+        }
+      ]
+    };
+
+    const normalizedContent = validateCanonicalContent(legacyContent);
+    const groupById = new Map(normalizedContent.skillGroups.map((group) => [group.id, group]));
+    const membershipBySkillIdFor = (groupId: string) =>
+      new Map(
+        groupById
+          .get(groupId)
+          ?.skillMemberships?.map((membership) => [membership.skillId, membership]) ?? []
+      );
+
+    expect(groupById.has("field_soldiering")).toBe(false);
+    expect(groupById.has("officer_training")).toBe(false);
+    expect(groupById.has("trap_and_intrusion_work")).toBe(false);
+    expect(groupById.get("veteran_soldiering")).toMatchObject({
+      id: "veteran_soldiering",
+      name: "Veteran Soldiering"
+    });
+    expect(groupById.get("veteran_leadership")).toMatchObject({
+      id: "veteran_leadership",
+      name: "Veteran Leadership"
+    });
+    expect(groupById.get("covert_entry")).toMatchObject({
+      id: "covert_entry",
+      name: "Covert Entry"
+    });
+    expect(membershipBySkillIdFor("veteran_soldiering").get("battlefield_awareness")).toMatchObject({
+      relevance: "core"
+    });
+    expect(membershipBySkillIdFor("veteran_leadership").get("captaincy")).toMatchObject({
+      relevance: "core"
+    });
+    expect(membershipBySkillIdFor("veteran_leadership").get("tactics")).toMatchObject({
+      relevance: "core"
+    });
+    expect([...membershipBySkillIdFor("covert_entry").keys()]).toEqual(
+      expect.arrayContaining(["search", "trap_handling", "lockpicking"])
+    );
+  });
+
   it("keeps broad soldier grants separate from officer command education", () => {
     const affectedOrdinaryProfessionIds = [
       "tribal_warrior",

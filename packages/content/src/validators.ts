@@ -1,3 +1,5 @@
+import { normalizeSkillGroupId } from "@glantri/domain";
+
 import { canonicalContentSchema, type CanonicalContent } from "./types";
 import {
   applySkillRelationshipMetadata,
@@ -8,6 +10,12 @@ const EXPECTED_SOCIAL_BANDS = [1, 2, 3, 4] as const;
 const EXPECTED_SOCIETY_SCALE = [1, 2, 3, 4, 5, 6] as const;
 const MINIMUM_GROUP_SKILL_COUNT = 3;
 const MINIMUM_GROUP_SKILL_POINTS = 7;
+
+const CANONICAL_SKILL_GROUP_NAMES: Partial<Record<string, string>> = {
+  covert_entry: "Covert Entry",
+  veteran_leadership: "Veteran Leadership",
+  veteran_soldiering: "Veteran Soldiering"
+};
 
 function slugifyLanguageName(name: string): string {
   return name
@@ -95,6 +103,69 @@ function normalizeLanguages(content: CanonicalContent): CanonicalContent {
           }
         : society;
     })
+  };
+}
+
+function normalizeSkillGroups(content: CanonicalContent): CanonicalContent {
+  const skillsById = new Map(content.skills.map((skill) => [skill.id, skill]));
+  const groupsById = new Map<string, CanonicalContent["skillGroups"][number]>();
+
+  for (const group of content.skillGroups) {
+    const normalizedGroupId = normalizeSkillGroupId(group.id) ?? group.id;
+    const existing = groupsById.get(normalizedGroupId);
+    const normalizedGroup = {
+      ...group,
+      id: normalizedGroupId,
+      name: CANONICAL_SKILL_GROUP_NAMES[normalizedGroupId] ?? group.name
+    };
+
+    if (!existing) {
+      groupsById.set(normalizedGroupId, normalizedGroup);
+      continue;
+    }
+
+    groupsById.set(normalizedGroupId, {
+      ...existing,
+      description: existing.description ?? normalizedGroup.description,
+      name: CANONICAL_SKILL_GROUP_NAMES[normalizedGroupId] ?? existing.name,
+      selectionSlots: [
+        ...(existing.selectionSlots ?? []),
+        ...(normalizedGroup.selectionSlots ?? [])
+      ],
+      skillMemberships: [
+        ...(existing.skillMemberships ?? []),
+        ...(normalizedGroup.skillMemberships ?? [])
+      ],
+      sortOrder: Math.min(existing.sortOrder, normalizedGroup.sortOrder)
+    });
+  }
+
+  return {
+    ...content,
+    skillGroups: [...groupsById.values()].map((group) => ({
+      ...group,
+      selectionSlots: (group.selectionSlots ?? []).map((slot) => ({
+        ...slot,
+        candidateSkillIds: [...new Set(slot.candidateSkillIds)]
+      })),
+      skillMemberships: [
+        ...new Map(
+          (group.skillMemberships ?? []).map((membership) => {
+            const skill = skillsById.get(membership.skillId);
+            const relevance: "core" | "optional" =
+              skill?.groupId === group.id ? "core" : "optional";
+
+            return [
+              membership.skillId,
+              {
+                ...membership,
+                relevance
+              }
+            ];
+          })
+        ).values()
+      ]
+    }))
   };
 }
 
@@ -661,7 +732,7 @@ export function validateCanonicalContent(input: unknown): CanonicalContent {
         }
       : skill
   );
-  const normalizedContent: CanonicalContent = normalizeLanguages({
+  const normalizedContent: CanonicalContent = normalizeSkillGroups(normalizeLanguages({
     ...parsedContent,
     skills: normalizedSkills,
     specializations: applySpecializationRelationshipMetadata(
@@ -676,7 +747,7 @@ export function validateCanonicalContent(input: unknown): CanonicalContent {
       Array.isArray((input as { civilizations?: unknown[] }).civilizations)
         ? ((input as { civilizations: CanonicalContent["civilizations"] }).civilizations ?? [])
         : parsedContent.civilizations ?? []
-  });
+  }));
 
   return validateProfessionRelationships(
     validateSkillRelationships(
