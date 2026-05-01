@@ -2569,6 +2569,226 @@ describe("validateCanonicalContent", () => {
     }
   });
 
+  it("improves scholar, bureaucratic, religion, and healing packages without broad constraints", () => {
+    const professionById = new Map(
+      defaultCanonicalContent.professions.map((profession) => [profession.id, profession])
+    );
+    const groupById = new Map(
+      defaultCanonicalContent.skillGroups.map((group) => [group.id, group])
+    );
+    const canonicalSocietyLevelById = new Map(
+      defaultCanonicalContent.societies.map((society) => [society.id, society.societyLevel])
+    );
+    const allowedRowsFor = (professionId: string) =>
+      defaultCanonicalContent.societyLevels.filter((societyLevel) =>
+        societyLevel.professionIds.includes(professionId)
+      );
+    const canonicalSocietyLevelsFor = (professionId: string) => [
+      ...new Set(
+        allowedRowsFor(professionId)
+          .map((societyLevel) => canonicalSocietyLevelById.get(societyLevel.societyId))
+          .filter((societyLevel): societyLevel is number => typeof societyLevel === "number")
+      )
+    ].sort((left, right) => left - right);
+    const classBandsFor = (professionId: string) => [
+      ...new Set(allowedRowsFor(professionId).map((societyLevel) => societyLevel.societyLevel))
+    ].sort((left, right) => left - right);
+    const grantsFor = (professionId: string) => {
+      const profession = professionById.get(professionId);
+
+      return defaultCanonicalContent.professionSkills.filter(
+        (grant) =>
+          (grant.scope === "family" && grant.professionId === profession?.familyId) ||
+          (grant.scope === "profession" && grant.professionId === professionId)
+      );
+    };
+    const groupIdsFor = (professionId: string) => [
+      ...new Set(
+        grantsFor(professionId)
+          .filter((grant) => grant.grantType === "group" && grant.skillGroupId)
+          .map((grant) => grant.skillGroupId ?? "")
+      )
+    ];
+    const directSkillIdsFor = (professionId: string) => [
+      ...new Set(
+        grantsFor(professionId)
+          .filter((grant) => grant.grantType !== "group" && grant.skillId)
+          .map((grant) => grant.skillId ?? "")
+      )
+    ];
+    const directOnlySkillIdsFor = (professionId: string) => {
+      const groupIds = groupIdsFor(professionId);
+      const skillIdsFromGroups = defaultCanonicalContent.skills
+        .filter((skill) =>
+          (skill.groupIds ?? [skill.groupId]).some((groupId) => groupIds.includes(groupId))
+        )
+        .map((skill) => skill.id);
+
+      return directSkillIdsFor(professionId).filter(
+        (skillId) => !skillIdsFromGroups.includes(skillId)
+      );
+    };
+    const skillReachFor = (professionId: string) => {
+      const groupIds = groupIdsFor(professionId);
+      const skillIdsFromGroups = defaultCanonicalContent.skills
+        .filter((skill) =>
+          (skill.groupIds ?? [skill.groupId]).some((groupId) => groupIds.includes(groupId))
+        )
+        .map((skill) => skill.id);
+
+      return new Set([...skillIdsFromGroups, ...directOnlySkillIdsFor(professionId)]).size;
+    };
+    const groupSkillIdsFor = (groupId: string) =>
+      groupById.get(groupId)?.skillMemberships?.map((membership) => membership.skillId) ?? [];
+    const expectNoCommandLeak = (professionId: string) => {
+      expect(groupIdsFor(professionId)).not.toContain("veteran_leadership");
+      expect(directSkillIdsFor(professionId)).not.toEqual(
+        expect.arrayContaining(["captaincy", "tactics", "veteran_leadership"])
+      );
+    };
+
+    expect(groupSkillIdsFor("scholarly_formation")).toEqual([
+      "history",
+      "philosophy",
+      "rhetorical_composition",
+      "memory"
+    ]);
+    expect(groupSkillIdsFor("scholarly_formation")).not.toEqual(
+      expect.arrayContaining(["theology", "etiquette", "courtly_protocol"])
+    );
+    expect(groupSkillIdsFor("legal_practice")).toEqual([
+      "law",
+      "oratory",
+      "bureaucratic_writing",
+      "rhetorical_composition",
+      "insight"
+    ]);
+    expect(groupSkillIdsFor("fiscal_administration")).toEqual([
+      "administration",
+      "bookkeeping",
+      "law",
+      "bargaining",
+      "appraisal"
+    ]);
+    expect(groupSkillIdsFor("temple_service")).toEqual([
+      "theology",
+      "ritual_interpretation",
+      "administration",
+      "oratory",
+      "etiquette"
+    ]);
+    expect(groupSkillIdsFor("mortuary_practice")).toEqual([
+      "medicine",
+      "pharmacy",
+      "ritual_interpretation",
+      "theology",
+      "concentration"
+    ]);
+
+    expect(groupIdsFor("scribe")).toEqual(
+      expect.arrayContaining([
+        "literate_foundation",
+        "civic_learning",
+        "commercial_administration",
+        "scholarly_formation"
+      ])
+    );
+    expect(groupIdsFor("student")).toEqual(
+      expect.arrayContaining(["literate_foundation", "scholarly_formation", "mental_discipline"])
+    );
+    expect(groupIdsFor("philosopher")).toEqual(
+      expect.arrayContaining(["scholarly_formation", "mental_discipline", "social_reading"])
+    );
+    expect(groupIdsFor("scribe")).not.toEqual(groupIdsFor("student"));
+    expect(groupIdsFor("student")).not.toEqual(groupIdsFor("philosopher"));
+    expect(directOnlySkillIdsFor("scribe")).toEqual([]);
+    expect(directOnlySkillIdsFor("student")).toEqual([]);
+    expect(directOnlySkillIdsFor("philosopher")).toEqual([]);
+
+    expect(groupIdsFor("lawyer")).toEqual(
+      expect.arrayContaining(["legal_practice", "scholarly_formation", "courtly_formation"])
+    );
+    expect(groupIdsFor("tax_collector")).toEqual(
+      expect.arrayContaining(["fiscal_administration", "commercial_administration"])
+    );
+    expect(groupIdsFor("court_scribe_clerk")).toEqual(
+      expect.arrayContaining(["commercial_administration", "courtly_formation"])
+    );
+    expect(groupIdsFor("bureaucrat")).toEqual(
+      expect.arrayContaining(["fiscal_administration", "legal_practice", "courtly_formation"])
+    );
+    expect(canonicalSocietyLevelsFor("lawyer")).toEqual([4, 5, 6]);
+    expect(classBandsFor("lawyer")).toEqual([4]);
+    expect(canonicalSocietyLevelsFor("tax_collector")).toEqual([4, 5, 6]);
+    expect(classBandsFor("tax_collector")).toEqual([4]);
+    expect(canonicalSocietyLevelsFor("court_scribe_clerk")).toEqual([4, 5, 6]);
+    expect(classBandsFor("court_scribe_clerk")).toEqual([4]);
+    expect(canonicalSocietyLevelsFor("bureaucrat")).toEqual([4, 5, 6]);
+    expect(classBandsFor("bureaucrat")).toEqual([4]);
+
+    expect(groupIdsFor("temple_scribe")).toEqual(
+      expect.arrayContaining(["sacred_learning", "temple_service", "scholarly_formation"])
+    );
+    expect(groupIdsFor("priest")).toEqual(
+      expect.arrayContaining(["sacred_learning", "omen_and_ritual_practice", "temple_service"])
+    );
+    expect(groupIdsFor("embalmer")).toEqual(
+      expect.arrayContaining(["mortuary_practice", "sacred_learning"])
+    );
+    expect(groupIdsFor("mourner")).toEqual(
+      expect.arrayContaining(["performance_basics", "omen_and_ritual_practice", "temple_service"])
+    );
+    expect(groupIdsFor("mourner")).not.toContain("mortuary_practice");
+
+    expect(groupIdsFor("folk_healer")).toEqual(
+      expect.arrayContaining(["healing_practice", "herb_and_remedy_craft", "social_reading"])
+    );
+    expect(groupIdsFor("healer")).toEqual(
+      expect.arrayContaining(["healing_practice", "herb_and_remedy_craft", "mental_discipline"])
+    );
+    expect(groupIdsFor("herbalist")).toEqual(
+      expect.arrayContaining(["herb_and_remedy_craft", "mercantile_practice"])
+    );
+    expect(groupIdsFor("folk_healer")).not.toEqual(groupIdsFor("healer"));
+    expect(groupIdsFor("healer")).not.toEqual(groupIdsFor("herbalist"));
+    expect(canonicalSocietyLevelsFor("folk_healer")).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(classBandsFor("folk_healer")).toEqual([1, 2, 3, 4]);
+
+    for (const professionId of [
+      "scribe",
+      "student",
+      "philosopher",
+      "temple_scribe",
+      "court_scribe_clerk",
+      "bureaucrat",
+      "lawyer",
+      "tax_collector",
+      "folk_healer",
+      "healer",
+      "herbalist",
+      "shaman",
+      "soothsayer",
+      "priest",
+      "mourner",
+      "embalmer"
+    ]) {
+      expect(skillReachFor(professionId)).toBeGreaterThanOrEqual(10);
+      expectNoCommandLeak(professionId);
+    }
+
+    expect(groupIdsFor("herder")).toEqual(expect.arrayContaining(["pastoral_work"]));
+    expect(groupIdsFor("guild_master")).toEqual(
+      expect.arrayContaining(["mercantile_practice", "commercial_administration"])
+    );
+    expect(groupIdsFor("great_merchant")).toEqual(
+      expect.arrayContaining(["mercantile_practice", "commercial_administration"])
+    );
+
+    for (const societyLevel of defaultCanonicalContent.societyLevels) {
+      expect(new Set(societyLevel.professionIds).size).toBe(societyLevel.professionIds.length);
+    }
+  });
+
   it("includes the updated civilization language naming and Lankhmar seed entry", () => {
     expect(
       defaultCanonicalContent.civilizations.find((civilization) => civilization.id === "glantri")

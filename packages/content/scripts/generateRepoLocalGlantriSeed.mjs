@@ -79,15 +79,18 @@ const PLAYER_FACING_SKILL_CATEGORY_BY_GROUP_ID = {
   formal_performance: "performance",
   farm_household_work: "fieldcraft",
   forestry_resource_work: "fieldcraft",
+  fiscal_administration: "trade",
   healing_practice: "healing",
   herb_and_remedy_craft: "healing",
   humanities: "knowledge",
   learned_natural_inquiry: "knowledge",
+  legal_practice: "knowledge",
   literate_foundation: "knowledge",
   maritime_crew_training: "maritime",
   maritime_navigation: "maritime",
   medicine_group: "healing",
   mining_extraction: "craft",
+  mortuary_practice: "healing",
   mental_discipline: "mental",
   mental_group: "mental",
   mercantile_practice: "trade",
@@ -103,6 +106,7 @@ const PLAYER_FACING_SKILL_CATEGORY_BY_GROUP_ID = {
   physical_science: "knowledge",
   political_acumen: "social",
   sacred_learning: "knowledge",
+  scholarly_formation: "knowledge",
   security: "covert",
   ship_command: "maritime",
   smuggling_illicit_trade: "covert",
@@ -110,6 +114,7 @@ const PLAYER_FACING_SKILL_CATEGORY_BY_GROUP_ID = {
   stealth_group: "covert",
   street_theft: "covert",
   technical_measurement: "knowledge",
+  temple_service: "knowledge",
   transport_and_caravan_work: "trade",
   trap_and_intrusion_work: "covert",
   route_security: "fieldcraft",
@@ -285,6 +290,7 @@ const FIXED_SKILL_MEMBERSHIPS_BY_GROUP_ID = {
     "carpentry",
     "first_aid"
   ],
+  fiscal_administration: ["administration", "bookkeeping", "law", "bargaining", "appraisal"],
   forestry_resource_work: [
     "perception",
     "search",
@@ -303,6 +309,14 @@ const FIXED_SKILL_MEMBERSHIPS_BY_GROUP_ID = {
     "stoneworking",
     "mechanics",
     "first_aid"
+  ],
+  legal_practice: ["law", "oratory", "bureaucratic_writing", "rhetorical_composition", "insight"],
+  mortuary_practice: [
+    "medicine",
+    "pharmacy",
+    "ritual_interpretation",
+    "theology",
+    "concentration"
   ],
   pastoral_work: ["perception", "search", "animal_care", "herding", "riding", "first_aid"],
   route_security: ["perception", "search", "riding", "animal_care", "teamstering", "first_aid"],
@@ -325,6 +339,8 @@ const FIXED_SKILL_MEMBERSHIPS_BY_GROUP_ID = {
     "appraisal",
     "insight"
   ],
+  scholarly_formation: ["history", "philosophy", "rhetorical_composition", "memory"],
+  temple_service: ["theology", "ritual_interpretation", "administration", "oratory", "etiquette"],
   watch_civic_guard: ["perception", "search", "law", "insight", "social_perception"]
 };
 
@@ -348,10 +364,16 @@ const GROUP_DESCRIPTION_OVERRIDES = {
     "Two chosen craft specialties for master artisan and guild-level craft training.",
   farm_household_work:
     "Household production, animal care, basic repair, and practical rural self-sufficiency.",
+  fiscal_administration:
+    "Tax, ledgers, valuation, accounts, and fiscal office work.",
   forestry_resource_work:
     "Woodland resource work, climbing, searching, rough labor, and basic timber craft.",
+  legal_practice:
+    "Law, documents, advocacy, formal argument, and legal judgment.",
   mining_extraction:
     "Underground and quarry work, stone handling, searching, mechanics, and practical safety.",
+  mortuary_practice:
+    "Funerary preparation, ritual body care, remedy handling, and mortuary discipline.",
   pastoral_work:
     "Herd movement, watchfulness, animal care, and practical field care for grazing work.",
   advanced_missile_training: "Three required missile weapon skills.",
@@ -361,16 +383,32 @@ const GROUP_DESCRIPTION_OVERRIDES = {
     "Vessel command, navigation oversight, crew coordination, and shipboard judgment.",
   smuggling_illicit_trade:
     "Concealment, route movement, trading, and social judgment for moving restricted goods.",
+  scholarly_formation:
+    "Formal study, learned argument, memory, and intellectual tradition.",
+  temple_service:
+    "Practical religious office, temple administration, public ritual, and formal religious service.",
   watch_civic_guard:
     "Observation, search, basic law, and defensive procedure for civic watch and detention work."
 };
 
 const PROFESSION_FAMILY_GRANT_OVERRIDES = {
+  healer: {
+    coreSkillIds: [],
+    coreTrainingGroupIds: ["healing_practice"],
+    favoredSkillIds: [],
+    favoredTrainingGroupIds: ["herb_and_remedy_craft"]
+  },
   merchant_trader: {
     coreSkillIds: [],
     coreTrainingGroupIds: [],
     favoredSkillIds: [],
     favoredTrainingGroupIds: []
+  },
+  scholar_scribe: {
+    coreSkillIds: [],
+    coreTrainingGroupIds: ["literate_foundation"],
+    favoredSkillIds: [],
+    favoredTrainingGroupIds: ["civic_learning"]
   },
   soldier: {
     favoredSkillIds: [],
@@ -722,6 +760,17 @@ const PROFESSION_SUBTYPE_GRANT_OVERRIDES = {
     addedFavoredSkillIds: [],
     addedFavoredTrainingGroupIds: ["route_security"]
   },
+  bureaucrat: {
+    addedCoreSkillIds: [],
+    addedCoreTrainingGroupIds: [
+      "literate_foundation",
+      "civic_learning",
+      "commercial_administration",
+      "fiscal_administration"
+    ],
+    addedFavoredSkillIds: [],
+    addedFavoredTrainingGroupIds: ["legal_practice", "courtly_formation"]
+  },
   builder_master_mason: {
     addedCoreSkillIds: [],
     addedCoreTrainingGroupIds: [
@@ -754,6 +803,17 @@ const PROFESSION_SUBTYPE_GRANT_OVERRIDES = {
     addedFavoredSkillIds: [],
     addedFavoredTrainingGroupIds: ["courtly_formation"]
   },
+  court_scribe_clerk: {
+    addedCoreSkillIds: [],
+    addedCoreTrainingGroupIds: [
+      "literate_foundation",
+      "civic_learning",
+      "commercial_administration",
+      "courtly_formation"
+    ],
+    addedFavoredSkillIds: [],
+    addedFavoredTrainingGroupIds: ["scholarly_formation"]
+  },
   chariot_driver: {
     addedCoreSkillIds: [],
     addedCoreTrainingGroupIds: ["transport_and_caravan_work"],
@@ -775,11 +835,23 @@ const PROFESSION_SUBTYPE_GRANT_OVERRIDES = {
     addedFavoredSkillIds: ["language", "etiquette", "banking"],
     addedFavoredTrainingGroupIds: ["political_acumen"]
   },
+  folk_healer: {
+    addedCoreSkillIds: [],
+    addedCoreTrainingGroupIds: ["healing_practice", "herb_and_remedy_craft"],
+    addedFavoredSkillIds: ["concentration"],
+    addedFavoredTrainingGroupIds: ["social_reading"]
+  },
   farmer: {
     addedCoreSkillIds: [],
     addedCoreTrainingGroupIds: ["animal_husbandry", "farm_household_work"],
     addedFavoredSkillIds: [],
     addedFavoredTrainingGroupIds: []
+  },
+  embalmer: {
+    addedCoreSkillIds: [],
+    addedCoreTrainingGroupIds: ["healing_practice", "herb_and_remedy_craft", "mortuary_practice"],
+    addedFavoredSkillIds: [],
+    addedFavoredTrainingGroupIds: ["sacred_learning"]
   },
   fisher: {
     addedCoreSkillIds: [],
@@ -823,6 +895,24 @@ const PROFESSION_SUBTYPE_GRANT_OVERRIDES = {
     addedCoreTrainingGroupIds: ["animal_handling", "pastoral_work"],
     addedFavoredSkillIds: [],
     addedFavoredTrainingGroupIds: []
+  },
+  healer: {
+    addedCoreSkillIds: [],
+    addedCoreTrainingGroupIds: ["healing_practice", "herb_and_remedy_craft"],
+    addedFavoredSkillIds: [],
+    addedFavoredTrainingGroupIds: ["mental_discipline"]
+  },
+  herbalist: {
+    addedCoreSkillIds: [],
+    addedCoreTrainingGroupIds: ["herb_and_remedy_craft", "healing_practice"],
+    addedFavoredSkillIds: ["concentration"],
+    addedFavoredTrainingGroupIds: ["mercantile_practice"]
+  },
+  lawyer: {
+    addedCoreSkillIds: [],
+    addedCoreTrainingGroupIds: ["literate_foundation", "civic_learning", "legal_practice"],
+    addedFavoredSkillIds: [],
+    addedFavoredTrainingGroupIds: ["scholarly_formation", "courtly_formation", "social_reading"]
   },
   military_officer: {
     addedCoreTrainingGroupIds: [
@@ -876,6 +966,28 @@ const PROFESSION_SUBTYPE_GRANT_OVERRIDES = {
     addedFavoredSkillIds: ["insight"],
     addedFavoredTrainingGroupIds: ["mounted_service", "social_reading"]
   },
+  mourner: {
+    addedCoreSkillIds: [],
+    addedCoreTrainingGroupIds: ["performance_basics", "omen_and_ritual_practice"],
+    addedFavoredSkillIds: [],
+    addedFavoredTrainingGroupIds: ["temple_service"]
+  },
+  philosopher: {
+    addedCoreSkillIds: [],
+    addedCoreTrainingGroupIds: [
+      "literate_foundation",
+      "scholarly_formation",
+      "mental_discipline"
+    ],
+    addedFavoredSkillIds: [],
+    addedFavoredTrainingGroupIds: ["civic_learning", "social_reading"]
+  },
+  priest: {
+    addedCoreSkillIds: [],
+    addedCoreTrainingGroupIds: ["sacred_learning", "omen_and_ritual_practice", "temple_service"],
+    addedFavoredSkillIds: [],
+    addedFavoredTrainingGroupIds: ["literate_foundation", "civic_learning", "healing_practice"]
+  },
   prostitute: {
     addedCoreSkillIds: ["seduction"],
     addedCoreTrainingGroupIds: ["mercantile_practice", "social_reading"],
@@ -894,11 +1006,73 @@ const PROFESSION_SUBTYPE_GRANT_OVERRIDES = {
     addedFavoredSkillIds: [],
     addedFavoredTrainingGroupIds: []
   },
+  scribe: {
+    addedCoreSkillIds: [],
+    addedCoreTrainingGroupIds: [
+      "literate_foundation",
+      "civic_learning",
+      "commercial_administration"
+    ],
+    addedFavoredSkillIds: [],
+    addedFavoredTrainingGroupIds: ["scholarly_formation"]
+  },
+  shaman: {
+    addedCoreSkillIds: [],
+    addedCoreTrainingGroupIds: [
+      "omen_and_ritual_practice",
+      "healing_practice",
+      "herb_and_remedy_craft"
+    ],
+    addedFavoredSkillIds: ["insight"],
+    addedFavoredTrainingGroupIds: ["mental_discipline"]
+  },
   smuggler: {
     addedCoreSkillIds: [],
     addedCoreTrainingGroupIds: ["smuggling_illicit_trade"],
     addedFavoredSkillIds: ["language"],
     addedFavoredTrainingGroupIds: ["covert_entry"]
+  },
+  soothsayer: {
+    addedCoreSkillIds: ["astrology"],
+    addedCoreTrainingGroupIds: [
+      "omen_and_ritual_practice",
+      "healing_practice",
+      "herb_and_remedy_craft"
+    ],
+    addedFavoredSkillIds: [],
+    addedFavoredTrainingGroupIds: ["mental_discipline", "social_reading"]
+  },
+  student: {
+    addedCoreSkillIds: [],
+    addedCoreTrainingGroupIds: [
+      "literate_foundation",
+      "civic_learning",
+      "scholarly_formation"
+    ],
+    addedFavoredSkillIds: [],
+    addedFavoredTrainingGroupIds: ["mental_discipline"]
+  },
+  tax_collector: {
+    addedCoreSkillIds: [],
+    addedCoreTrainingGroupIds: [
+      "literate_foundation",
+      "civic_learning",
+      "commercial_administration",
+      "fiscal_administration"
+    ],
+    addedFavoredSkillIds: [],
+    addedFavoredTrainingGroupIds: ["social_reading", "courtly_formation"]
+  },
+  temple_scribe: {
+    addedCoreSkillIds: [],
+    addedCoreTrainingGroupIds: [
+      "literate_foundation",
+      "civic_learning",
+      "sacred_learning",
+      "temple_service"
+    ],
+    addedFavoredSkillIds: [],
+    addedFavoredTrainingGroupIds: ["scholarly_formation"]
   },
   watchman: {
     addedCoreSkillIds: [],
@@ -1505,6 +1679,41 @@ const generatedTrainingGroupSources = [
     name: "Mining / Extraction",
     skillIds: FIXED_SKILL_MEMBERSHIPS_BY_GROUP_ID.mining_extraction,
     sortOrder: trainingGroupSources.length + taxonomyGroupSources.length + 13
+  },
+  {
+    description: GROUP_DESCRIPTION_OVERRIDES.scholarly_formation,
+    id: "scholarly_formation",
+    name: "Scholarly Formation",
+    skillIds: FIXED_SKILL_MEMBERSHIPS_BY_GROUP_ID.scholarly_formation,
+    sortOrder: trainingGroupSources.length + taxonomyGroupSources.length + 14
+  },
+  {
+    description: GROUP_DESCRIPTION_OVERRIDES.legal_practice,
+    id: "legal_practice",
+    name: "Legal Practice",
+    skillIds: FIXED_SKILL_MEMBERSHIPS_BY_GROUP_ID.legal_practice,
+    sortOrder: trainingGroupSources.length + taxonomyGroupSources.length + 15
+  },
+  {
+    description: GROUP_DESCRIPTION_OVERRIDES.fiscal_administration,
+    id: "fiscal_administration",
+    name: "Fiscal Administration",
+    skillIds: FIXED_SKILL_MEMBERSHIPS_BY_GROUP_ID.fiscal_administration,
+    sortOrder: trainingGroupSources.length + taxonomyGroupSources.length + 16
+  },
+  {
+    description: GROUP_DESCRIPTION_OVERRIDES.temple_service,
+    id: "temple_service",
+    name: "Temple Service",
+    skillIds: FIXED_SKILL_MEMBERSHIPS_BY_GROUP_ID.temple_service,
+    sortOrder: trainingGroupSources.length + taxonomyGroupSources.length + 17
+  },
+  {
+    description: GROUP_DESCRIPTION_OVERRIDES.mortuary_practice,
+    id: "mortuary_practice",
+    name: "Mortuary Practice",
+    skillIds: FIXED_SKILL_MEMBERSHIPS_BY_GROUP_ID.mortuary_practice,
+    sortOrder: trainingGroupSources.length + taxonomyGroupSources.length + 18
   }
 ];
 const skillGroupSources = [

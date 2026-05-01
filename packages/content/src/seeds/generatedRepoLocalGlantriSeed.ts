@@ -2106,6 +2106,147 @@ export const generatedRepoLocalGlantriSeed = {
       ],
       "selectionSlots": [],
       "sortOrder": 64
+    },
+    {
+      "description": "Formal study, learned argument, memory, and intellectual tradition.",
+      "id": "scholarly_formation",
+      "name": "Scholarly Formation",
+      "skillMemberships": [
+        {
+          "relevance": "optional",
+          "skillId": "history"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "philosophy"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "rhetorical_composition"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "memory"
+        }
+      ],
+      "selectionSlots": [],
+      "sortOrder": 65
+    },
+    {
+      "description": "Law, documents, advocacy, formal argument, and legal judgment.",
+      "id": "legal_practice",
+      "name": "Legal Practice",
+      "skillMemberships": [
+        {
+          "relevance": "optional",
+          "skillId": "law"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "oratory"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "bureaucratic_writing"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "rhetorical_composition"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "insight"
+        }
+      ],
+      "selectionSlots": [],
+      "sortOrder": 66
+    },
+    {
+      "description": "Tax, ledgers, valuation, accounts, and fiscal office work.",
+      "id": "fiscal_administration",
+      "name": "Fiscal Administration",
+      "skillMemberships": [
+        {
+          "relevance": "optional",
+          "skillId": "administration"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "bookkeeping"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "law"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "bargaining"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "appraisal"
+        }
+      ],
+      "selectionSlots": [],
+      "sortOrder": 67
+    },
+    {
+      "description": "Practical religious office, temple administration, public ritual, and formal religious service.",
+      "id": "temple_service",
+      "name": "Temple Service",
+      "skillMemberships": [
+        {
+          "relevance": "optional",
+          "skillId": "theology"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "ritual_interpretation"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "administration"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "oratory"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "etiquette"
+        }
+      ],
+      "selectionSlots": [],
+      "sortOrder": 68
+    },
+    {
+      "description": "Funerary preparation, ritual body care, remedy handling, and mortuary discipline.",
+      "id": "mortuary_practice",
+      "name": "Mortuary Practice",
+      "skillMemberships": [
+        {
+          "relevance": "optional",
+          "skillId": "medicine"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "pharmacy"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "ritual_interpretation"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "theology"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "concentration"
+        }
+      ],
+      "selectionSlots": [],
+      "sortOrder": 69
     }
   ],
   "skills": [
@@ -2178,7 +2319,8 @@ export const generatedRepoLocalGlantriSeed = {
       "groupIds": [
         "literate_foundation",
         "sacred_learning",
-        "humanities"
+        "humanities",
+        "scholarly_formation"
       ],
       "id": "history",
       "isTheoretical": true,
@@ -2211,7 +2353,9 @@ export const generatedRepoLocalGlantriSeed = {
       "groupId": "sacred_learning",
       "groupIds": [
         "sacred_learning",
-        "humanities"
+        "humanities",
+        "mortuary_practice",
+        "temple_service"
       ],
       "id": "theology",
       "isTheoretical": true,
@@ -2245,7 +2389,8 @@ export const generatedRepoLocalGlantriSeed = {
       "description": "Use structured reasoning about ethics, logic, metaphysics, and knowledge. High-culture intellectual skill.",
       "groupId": "humanities",
       "groupIds": [
-        "humanities"
+        "humanities",
+        "scholarly_formation"
       ],
       "id": "philosophy",
       "isTheoretical": true,
@@ -2275,6 +2420,8 @@ export const generatedRepoLocalGlantriSeed = {
       "groupIds": [
         "civic_learning",
         "humanities",
+        "fiscal_administration",
+        "legal_practice",
         "watch_civic_guard"
       ],
       "id": "law",
@@ -2315,7 +2462,8 @@ export const generatedRepoLocalGlantriSeed = {
       "groupIds": [
         "civic_learning",
         "commercial_administration",
-        "operations"
+        "operations",
+        "legal_practice"
       ],
       "id": "bureaucratic_writing",
       "isTheoretical": true,
@@ -2355,7 +2503,9 @@ export const generatedRepoLocalGlantriSeed = {
       "groupId": "civic_learning",
       "groupIds": [
         "civic_learning",
-        "humanities"
+        "humanities",
+        "legal_practice",
+        "scholarly_formation"
       ],
       "id": "rhetorical_composition",
       "isTheoretical": true,
@@ -2606,6 +2756,7 @@ export const generatedRepoLocalGlantriSeed = {
       "groupIds": [
         "mercantile_practice",
         "operations",
+        "fiscal_administration",
         "smuggling_illicit_trade"
       ],
       "id": "bargaining",
@@ -2736,7 +2887,9 @@ export const generatedRepoLocalGlantriSeed = {
       "groupIds": [
         "commercial_administration",
         "operations",
-        "ship_command"
+        "fiscal_administration",
+        "ship_command",
+        "temple_service"
       ],
       "id": "administration",
       "isTheoretical": true,
@@ -2808,7 +2961,8 @@ export const generatedRepoLocalGlantriSeed = {
       "groupId": "commercial_administration",
       "groupIds": [
         "commercial_administration",
-        "operations"
+        "operations",
+        "fiscal_administration"
       ],
       "id": "bookkeeping",
       "isTheoretical": false,
@@ -2842,6 +2996,7 @@ export const generatedRepoLocalGlantriSeed = {
       "groupIds": [
         "mercantile_practice",
         "operations",
+        "fiscal_administration",
         "smuggling_illicit_trade"
       ],
       "id": "appraisal",
@@ -2866,7 +3021,8 @@ export const generatedRepoLocalGlantriSeed = {
       "groupId": "courtly_formation",
       "groupIds": [
         "courtly_formation",
-        "humanities"
+        "humanities",
+        "temple_service"
       ],
       "id": "etiquette",
       "isTheoretical": true,
@@ -2954,6 +3110,7 @@ export const generatedRepoLocalGlantriSeed = {
         "political_acumen",
         "social_reading",
         "humanities",
+        "legal_practice",
         "ship_command",
         "smuggling_illicit_trade",
         "watch_civic_guard"
@@ -3250,7 +3407,9 @@ export const generatedRepoLocalGlantriSeed = {
         "formal_performance",
         "performance_group",
         "arena_training",
-        "ship_command"
+        "legal_practice",
+        "ship_command",
+        "temple_service"
       ],
       "id": "oratory",
       "isTheoretical": false,
@@ -3274,7 +3433,8 @@ export const generatedRepoLocalGlantriSeed = {
       "groupId": "mental_discipline",
       "groupIds": [
         "mental_discipline",
-        "mental_group"
+        "mental_group",
+        "mortuary_practice"
       ],
       "id": "concentration",
       "isTheoretical": false,
@@ -3298,7 +3458,8 @@ export const generatedRepoLocalGlantriSeed = {
       "groupId": "mental_discipline",
       "groupIds": [
         "mental_discipline",
-        "mental_group"
+        "mental_group",
+        "scholarly_formation"
       ],
       "id": "memory",
       "isTheoretical": false,
@@ -4437,7 +4598,8 @@ export const generatedRepoLocalGlantriSeed = {
       "groupId": "healing_practice",
       "groupIds": [
         "healing_practice",
-        "medicine_group"
+        "medicine_group",
+        "mortuary_practice"
       ],
       "id": "medicine",
       "isTheoretical": true,
@@ -4561,7 +4723,8 @@ export const generatedRepoLocalGlantriSeed = {
       "groupId": "herb_and_remedy_craft",
       "groupIds": [
         "herb_and_remedy_craft",
-        "medicine_group"
+        "medicine_group",
+        "mortuary_practice"
       ],
       "id": "pharmacy",
       "isTheoretical": false,
@@ -4681,7 +4844,9 @@ export const generatedRepoLocalGlantriSeed = {
       "groupIds": [
         "sacred_learning",
         "omen_and_ritual_practice",
-        "mystical_group"
+        "mystical_group",
+        "mortuary_practice",
+        "temple_service"
       ],
       "id": "ritual_interpretation",
       "isTheoretical": true,
@@ -6197,67 +6362,11 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "grantType": "group",
-      "isCore": true,
+      "isCore": false,
       "professionId": "scholar_scribe",
       "ranks": 0,
       "scope": "family",
       "skillGroupId": "civic_learning"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "scholar_scribe",
-      "ranks": 0,
-      "scope": "family",
-      "skillId": "history"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "scholar_scribe",
-      "ranks": 0,
-      "scope": "family",
-      "skillId": "theology"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "scholar_scribe",
-      "ranks": 0,
-      "scope": "family",
-      "skillId": "administration"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "scholar_scribe",
-      "ranks": 0,
-      "scope": "family",
-      "skillId": "philosophy"
-    },
-    {
-      "grantType": "secondary-skill",
-      "isCore": false,
-      "professionId": "scholar_scribe",
-      "ranks": 0,
-      "scope": "family",
-      "skillId": "rhetorical_composition"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "scholar_scribe",
-      "ranks": 0,
-      "scope": "family",
-      "skillId": "law"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "scholar_scribe",
-      "ranks": 0,
-      "scope": "family",
-      "skillId": "etiquette"
     },
     {
       "grantType": "group",
@@ -6325,7 +6434,7 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "grantType": "group",
-      "isCore": false,
+      "isCore": true,
       "professionId": "healer",
       "ranks": 0,
       "scope": "family",
@@ -6338,46 +6447,6 @@ export const generatedRepoLocalGlantriSeed = {
       "ranks": 0,
       "scope": "family",
       "skillGroupId": "herb_and_remedy_craft"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "healer",
-      "ranks": 0,
-      "scope": "family",
-      "skillId": "theology"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "healer",
-      "ranks": 0,
-      "scope": "family",
-      "skillId": "concentration"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "healer",
-      "ranks": 0,
-      "scope": "family",
-      "skillId": "medicine"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "healer",
-      "ranks": 0,
-      "scope": "family",
-      "skillId": "administration"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "healer",
-      "ranks": 0,
-      "scope": "family",
-      "skillId": "etiquette"
     },
     {
       "grantType": "group",
@@ -6652,12 +6721,36 @@ export const generatedRepoLocalGlantriSeed = {
       "skillGroupId": "veteran_soldiering"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": true,
       "professionId": "temple_scribe",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "theology"
+      "skillGroupId": "literate_foundation"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "temple_scribe",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "civic_learning"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "temple_scribe",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "sacred_learning"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "temple_scribe",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "temple_service"
     },
     {
       "grantType": "group",
@@ -6665,71 +6758,47 @@ export const generatedRepoLocalGlantriSeed = {
       "professionId": "temple_scribe",
       "ranks": 0,
       "scope": "profession",
-      "skillGroupId": "sacred_learning"
+      "skillGroupId": "scholarly_formation"
     },
     {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "temple_scribe",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "ritual_interpretation"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "temple_scribe",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "divination"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "temple_scribe",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "history"
-    },
-    {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": true,
       "professionId": "court_scribe_clerk",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "administration"
+      "skillGroupId": "literate_foundation"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "court_scribe_clerk",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "civic_learning"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "court_scribe_clerk",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "commercial_administration"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "court_scribe_clerk",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "courtly_formation"
+    },
+    {
+      "grantType": "group",
       "isCore": false,
       "professionId": "court_scribe_clerk",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "etiquette"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "court_scribe_clerk",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "courtly_protocol"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "court_scribe_clerk",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "law"
-    },
-    {
-      "grantType": "secondary-skill",
-      "isCore": false,
-      "professionId": "court_scribe_clerk",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "bureaucratic_writing"
+      "skillGroupId": "scholarly_formation"
     },
     {
       "grantType": "group",
@@ -6804,24 +6873,8 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "social_perception"
     },
     {
-      "grantType": "ordinary-skill",
-      "isCore": true,
-      "professionId": "folk_healer",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "herb_lore"
-    },
-    {
-      "grantType": "secondary-skill",
-      "isCore": true,
-      "professionId": "folk_healer",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "first_aid"
-    },
-    {
       "grantType": "group",
-      "isCore": false,
+      "isCore": true,
       "professionId": "folk_healer",
       "ranks": 0,
       "scope": "profession",
@@ -6829,19 +6882,19 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "grantType": "group",
-      "isCore": false,
+      "isCore": true,
       "professionId": "folk_healer",
       "ranks": 0,
       "scope": "profession",
       "skillGroupId": "herb_and_remedy_craft"
     },
     {
-      "grantType": "secondary-skill",
+      "grantType": "group",
       "isCore": false,
       "professionId": "folk_healer",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "nursing"
+      "skillGroupId": "social_reading"
     },
     {
       "grantType": "ordinary-skill",
@@ -6849,15 +6902,7 @@ export const generatedRepoLocalGlantriSeed = {
       "professionId": "folk_healer",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "poison_lore"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "folk_healer",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "insight"
+      "skillId": "concentration"
     },
     {
       "grantType": "group",
@@ -7433,6 +7478,14 @@ export const generatedRepoLocalGlantriSeed = {
       "professionId": "bureaucrat",
       "ranks": 0,
       "scope": "profession",
+      "skillGroupId": "literate_foundation"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "bureaucrat",
+      "ranks": 0,
+      "scope": "profession",
       "skillGroupId": "civic_learning"
     },
     {
@@ -7444,52 +7497,28 @@ export const generatedRepoLocalGlantriSeed = {
       "skillGroupId": "commercial_administration"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": true,
       "professionId": "bureaucrat",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "administration"
+      "skillGroupId": "fiscal_administration"
     },
     {
-      "grantType": "secondary-skill",
-      "isCore": true,
-      "professionId": "bureaucrat",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "bureaucratic_writing"
-    },
-    {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": false,
       "professionId": "bureaucrat",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "law"
+      "skillGroupId": "legal_practice"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": false,
       "professionId": "bureaucrat",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "bookkeeping"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "bureaucrat",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "etiquette"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "bureaucrat",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "history"
+      "skillGroupId": "courtly_formation"
     },
     {
       "grantType": "group",
@@ -7868,44 +7897,28 @@ export const generatedRepoLocalGlantriSeed = {
       "skillGroupId": "healing_practice"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": true,
       "professionId": "embalmer",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "medicine"
+      "skillGroupId": "herb_and_remedy_craft"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": true,
       "professionId": "embalmer",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "pharmacy"
+      "skillGroupId": "mortuary_practice"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": false,
       "professionId": "embalmer",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "theology"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "embalmer",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "poison_lore"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "embalmer",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "history"
+      "skillGroupId": "sacred_learning"
     },
     {
       "grantType": "group",
@@ -8092,52 +8105,12 @@ export const generatedRepoLocalGlantriSeed = {
       "skillGroupId": "herb_and_remedy_craft"
     },
     {
-      "grantType": "ordinary-skill",
-      "isCore": true,
-      "professionId": "healer",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "medicine"
-    },
-    {
-      "grantType": "secondary-skill",
-      "isCore": true,
-      "professionId": "healer",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "first_aid"
-    },
-    {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": false,
       "professionId": "healer",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "herb_lore"
-    },
-    {
-      "grantType": "secondary-skill",
-      "isCore": false,
-      "professionId": "healer",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "nursing"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "healer",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "pharmacy"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "healer",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "poison_lore"
+      "skillGroupId": "mental_discipline"
     },
     {
       "grantType": "group",
@@ -8252,20 +8225,12 @@ export const generatedRepoLocalGlantriSeed = {
       "skillGroupId": "herb_and_remedy_craft"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": true,
       "professionId": "herbalist",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "herb_lore"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": true,
-      "professionId": "herbalist",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "pharmacy"
+      "skillGroupId": "healing_practice"
     },
     {
       "grantType": "group",
@@ -8273,15 +8238,7 @@ export const generatedRepoLocalGlantriSeed = {
       "professionId": "herbalist",
       "ranks": 0,
       "scope": "profession",
-      "skillGroupId": "healing_practice"
-    },
-    {
-      "grantType": "secondary-skill",
-      "isCore": false,
-      "professionId": "herbalist",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "first_aid"
+      "skillGroupId": "mercantile_practice"
     },
     {
       "grantType": "ordinary-skill",
@@ -8289,15 +8246,7 @@ export const generatedRepoLocalGlantriSeed = {
       "professionId": "herbalist",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "poison_lore"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "herbalist",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "medicine"
+      "skillId": "concentration"
     },
     {
       "grantType": "group",
@@ -8513,55 +8462,47 @@ export const generatedRepoLocalGlantriSeed = {
       "professionId": "lawyer",
       "ranks": 0,
       "scope": "profession",
+      "skillGroupId": "literate_foundation"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "lawyer",
+      "ranks": 0,
+      "scope": "profession",
       "skillGroupId": "civic_learning"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": true,
       "professionId": "lawyer",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "law"
+      "skillGroupId": "legal_practice"
     },
     {
-      "grantType": "ordinary-skill",
-      "isCore": true,
-      "professionId": "lawyer",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "oratory"
-    },
-    {
-      "grantType": "secondary-skill",
+      "grantType": "group",
       "isCore": false,
       "professionId": "lawyer",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "rhetorical_composition"
+      "skillGroupId": "scholarly_formation"
     },
     {
-      "grantType": "secondary-skill",
+      "grantType": "group",
       "isCore": false,
       "professionId": "lawyer",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "bureaucratic_writing"
+      "skillGroupId": "courtly_formation"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": false,
       "professionId": "lawyer",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "insight"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "lawyer",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "etiquette"
+      "skillGroupId": "social_reading"
     },
     {
       "grantType": "group",
@@ -8852,20 +8793,12 @@ export const generatedRepoLocalGlantriSeed = {
       "skillGroupId": "performance_basics"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": true,
       "professionId": "mourner",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "singing"
-    },
-    {
-      "grantType": "secondary-skill",
-      "isCore": true,
-      "professionId": "mourner",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "recitation"
+      "skillGroupId": "omen_and_ritual_practice"
     },
     {
       "grantType": "group",
@@ -8873,31 +8806,7 @@ export const generatedRepoLocalGlantriSeed = {
       "professionId": "mourner",
       "ranks": 0,
       "scope": "profession",
-      "skillGroupId": "omen_and_ritual_practice"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "mourner",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "theology"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "mourner",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "ritual_interpretation"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "mourner",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "history"
+      "skillGroupId": "temple_service"
     },
     {
       "grantType": "group",
@@ -9126,6 +9035,46 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "grantType": "group",
       "isCore": true,
+      "professionId": "philosopher",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "literate_foundation"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "philosopher",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "scholarly_formation"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "philosopher",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "mental_discipline"
+    },
+    {
+      "grantType": "group",
+      "isCore": false,
+      "professionId": "philosopher",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "civic_learning"
+    },
+    {
+      "grantType": "group",
+      "isCore": false,
+      "professionId": "philosopher",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "social_reading"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
       "professionId": "pickpocket",
       "ranks": 0,
       "scope": "profession",
@@ -9252,52 +9201,36 @@ export const generatedRepoLocalGlantriSeed = {
       "skillGroupId": "omen_and_ritual_practice"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": true,
       "professionId": "priest",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "theology"
+      "skillGroupId": "temple_service"
     },
     {
-      "grantType": "ordinary-skill",
-      "isCore": true,
-      "professionId": "priest",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "ritual_interpretation"
-    },
-    {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": false,
       "professionId": "priest",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "history"
+      "skillGroupId": "literate_foundation"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": false,
       "professionId": "priest",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "divination"
+      "skillGroupId": "civic_learning"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": false,
       "professionId": "priest",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "literacy"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "priest",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "oratory"
+      "skillGroupId": "healing_practice"
     },
     {
       "grantType": "ordinary-skill",
@@ -9476,20 +9409,20 @@ export const generatedRepoLocalGlantriSeed = {
       "skillGroupId": "literate_foundation"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": true,
       "professionId": "scribe",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "literacy"
+      "skillGroupId": "civic_learning"
     },
     {
-      "grantType": "secondary-skill",
+      "grantType": "group",
       "isCore": true,
       "professionId": "scribe",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "bureaucratic_writing"
+      "skillGroupId": "commercial_administration"
     },
     {
       "grantType": "group",
@@ -9497,31 +9430,7 @@ export const generatedRepoLocalGlantriSeed = {
       "professionId": "scribe",
       "ranks": 0,
       "scope": "profession",
-      "skillGroupId": "civic_learning"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "scribe",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "history"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "scribe",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "theology"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "scribe",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "administration"
+      "skillGroupId": "scholarly_formation"
     },
     {
       "grantType": "group",
@@ -9532,24 +9441,8 @@ export const generatedRepoLocalGlantriSeed = {
       "skillGroupId": "omen_and_ritual_practice"
     },
     {
-      "grantType": "ordinary-skill",
-      "isCore": true,
-      "professionId": "shaman",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "divination"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": true,
-      "professionId": "shaman",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "ritual_interpretation"
-    },
-    {
       "grantType": "group",
-      "isCore": false,
+      "isCore": true,
       "professionId": "shaman",
       "ranks": 0,
       "scope": "profession",
@@ -9557,35 +9450,19 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "grantType": "group",
-      "isCore": false,
+      "isCore": true,
       "professionId": "shaman",
       "ranks": 0,
       "scope": "profession",
       "skillGroupId": "herb_and_remedy_craft"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": false,
       "professionId": "shaman",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "theology"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "shaman",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "herb_lore"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "shaman",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "concentration"
+      "skillGroupId": "mental_discipline"
     },
     {
       "grantType": "ordinary-skill",
@@ -9676,44 +9553,44 @@ export const generatedRepoLocalGlantriSeed = {
       "skillGroupId": "omen_and_ritual_practice"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": true,
       "professionId": "soothsayer",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "divination"
+      "skillGroupId": "healing_practice"
     },
     {
-      "grantType": "secondary-skill",
+      "grantType": "group",
       "isCore": true,
       "professionId": "soothsayer",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "omen_reading"
+      "skillGroupId": "herb_and_remedy_craft"
     },
     {
       "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "soothsayer",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "ritual_interpretation"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
+      "isCore": true,
       "professionId": "soothsayer",
       "ranks": 0,
       "scope": "profession",
       "skillId": "astrology"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": false,
       "professionId": "soothsayer",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "insight"
+      "skillGroupId": "mental_discipline"
+    },
+    {
+      "grantType": "group",
+      "isCore": false,
+      "professionId": "soothsayer",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "social_reading"
     },
     {
       "grantType": "group",
@@ -9828,20 +9705,20 @@ export const generatedRepoLocalGlantriSeed = {
       "skillGroupId": "literate_foundation"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": true,
       "professionId": "student",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "literacy"
+      "skillGroupId": "civic_learning"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": true,
       "professionId": "student",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "language"
+      "skillGroupId": "scholarly_formation"
     },
     {
       "grantType": "group",
@@ -9849,31 +9726,15 @@ export const generatedRepoLocalGlantriSeed = {
       "professionId": "student",
       "ranks": 0,
       "scope": "profession",
-      "skillGroupId": "civic_learning"
+      "skillGroupId": "mental_discipline"
     },
     {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "student",
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "tax_collector",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "history"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "student",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "theology"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "student",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "philosophy"
+      "skillGroupId": "literate_foundation"
     },
     {
       "grantType": "group",
@@ -9892,52 +9753,28 @@ export const generatedRepoLocalGlantriSeed = {
       "skillGroupId": "commercial_administration"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": true,
       "professionId": "tax_collector",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "administration"
+      "skillGroupId": "fiscal_administration"
     },
     {
-      "grantType": "ordinary-skill",
-      "isCore": true,
-      "professionId": "tax_collector",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "bookkeeping"
-    },
-    {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": false,
       "professionId": "tax_collector",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "law"
+      "skillGroupId": "social_reading"
     },
     {
-      "grantType": "secondary-skill",
+      "grantType": "group",
       "isCore": false,
       "professionId": "tax_collector",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "bureaucratic_writing"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "tax_collector",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "insight"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "tax_collector",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "bargaining"
+      "skillGroupId": "courtly_formation"
     },
     {
       "grantType": "group",
@@ -11049,7 +10886,11 @@ export const generatedRepoLocalGlantriSeed = {
         "farm_household_work",
         "coastal_fishing",
         "forestry_resource_work",
-        "mining_extraction"
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Common Folk",
@@ -11135,7 +10976,11 @@ export const generatedRepoLocalGlantriSeed = {
         "farm_household_work",
         "coastal_fishing",
         "forestry_resource_work",
-        "mining_extraction"
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Trades and Guilds",
@@ -11218,7 +11063,11 @@ export const generatedRepoLocalGlantriSeed = {
         "farm_household_work",
         "coastal_fishing",
         "forestry_resource_work",
-        "mining_extraction"
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Established Households",
@@ -11291,7 +11140,11 @@ export const generatedRepoLocalGlantriSeed = {
         "farm_household_work",
         "coastal_fishing",
         "forestry_resource_work",
-        "mining_extraction"
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Court and Elite",
@@ -11378,7 +11231,11 @@ export const generatedRepoLocalGlantriSeed = {
         "farm_household_work",
         "coastal_fishing",
         "forestry_resource_work",
-        "mining_extraction"
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Common Folk",
@@ -11501,7 +11358,12 @@ export const generatedRepoLocalGlantriSeed = {
         "farm_household_work",
         "coastal_fishing",
         "forestry_resource_work",
-        "mining_extraction"
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "temple_service",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Trades and Guilds",
@@ -11621,7 +11483,12 @@ export const generatedRepoLocalGlantriSeed = {
         "farm_household_work",
         "coastal_fishing",
         "forestry_resource_work",
-        "mining_extraction"
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "temple_service",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Established Households",
@@ -11724,7 +11591,12 @@ export const generatedRepoLocalGlantriSeed = {
         "farm_household_work",
         "coastal_fishing",
         "forestry_resource_work",
-        "mining_extraction"
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "temple_service",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Court and Elite",
@@ -11811,7 +11683,11 @@ export const generatedRepoLocalGlantriSeed = {
         "farm_household_work",
         "coastal_fishing",
         "forestry_resource_work",
-        "mining_extraction"
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Common Folk",
@@ -11934,7 +11810,12 @@ export const generatedRepoLocalGlantriSeed = {
         "farm_household_work",
         "coastal_fishing",
         "forestry_resource_work",
-        "mining_extraction"
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "temple_service",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Trades and Guilds",
@@ -12054,7 +11935,12 @@ export const generatedRepoLocalGlantriSeed = {
         "farm_household_work",
         "coastal_fishing",
         "forestry_resource_work",
-        "mining_extraction"
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "temple_service",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Established Households",
@@ -12157,7 +12043,12 @@ export const generatedRepoLocalGlantriSeed = {
         "farm_household_work",
         "coastal_fishing",
         "forestry_resource_work",
-        "mining_extraction"
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "temple_service",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Court and Elite",
@@ -12241,7 +12132,11 @@ export const generatedRepoLocalGlantriSeed = {
         "farm_household_work",
         "coastal_fishing",
         "forestry_resource_work",
-        "mining_extraction"
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Common Folk",
@@ -12366,7 +12261,12 @@ export const generatedRepoLocalGlantriSeed = {
         "farm_household_work",
         "coastal_fishing",
         "forestry_resource_work",
-        "mining_extraction"
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "temple_service",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Trades and Guilds",
@@ -12512,7 +12412,12 @@ export const generatedRepoLocalGlantriSeed = {
         "farm_household_work",
         "coastal_fishing",
         "forestry_resource_work",
-        "mining_extraction"
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "temple_service",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Established Households",
@@ -12635,7 +12540,12 @@ export const generatedRepoLocalGlantriSeed = {
         "farm_household_work",
         "coastal_fishing",
         "forestry_resource_work",
-        "mining_extraction"
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "temple_service",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Court and Elite",
@@ -12719,7 +12629,11 @@ export const generatedRepoLocalGlantriSeed = {
         "farm_household_work",
         "coastal_fishing",
         "forestry_resource_work",
-        "mining_extraction"
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Common Folk",
@@ -12844,7 +12758,12 @@ export const generatedRepoLocalGlantriSeed = {
         "farm_household_work",
         "coastal_fishing",
         "forestry_resource_work",
-        "mining_extraction"
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "temple_service",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Trades and Guilds",
@@ -12990,7 +12909,12 @@ export const generatedRepoLocalGlantriSeed = {
         "farm_household_work",
         "coastal_fishing",
         "forestry_resource_work",
-        "mining_extraction"
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "temple_service",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Established Households",
@@ -13113,7 +13037,12 @@ export const generatedRepoLocalGlantriSeed = {
         "farm_household_work",
         "coastal_fishing",
         "forestry_resource_work",
-        "mining_extraction"
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "temple_service",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Court and Elite",
@@ -13196,7 +13125,11 @@ export const generatedRepoLocalGlantriSeed = {
         "farm_household_work",
         "coastal_fishing",
         "forestry_resource_work",
-        "mining_extraction"
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Common Folk",
@@ -13320,7 +13253,12 @@ export const generatedRepoLocalGlantriSeed = {
         "farm_household_work",
         "coastal_fishing",
         "forestry_resource_work",
-        "mining_extraction"
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "temple_service",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Trades and Guilds",
@@ -13471,7 +13409,12 @@ export const generatedRepoLocalGlantriSeed = {
         "farm_household_work",
         "coastal_fishing",
         "forestry_resource_work",
-        "mining_extraction"
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "temple_service",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Established Households",
@@ -13612,7 +13555,12 @@ export const generatedRepoLocalGlantriSeed = {
         "farm_household_work",
         "coastal_fishing",
         "forestry_resource_work",
-        "mining_extraction"
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "temple_service",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Court and Elite",
@@ -13695,7 +13643,11 @@ export const generatedRepoLocalGlantriSeed = {
         "farm_household_work",
         "coastal_fishing",
         "forestry_resource_work",
-        "mining_extraction"
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Common Folk",
@@ -13819,7 +13771,12 @@ export const generatedRepoLocalGlantriSeed = {
         "farm_household_work",
         "coastal_fishing",
         "forestry_resource_work",
-        "mining_extraction"
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "temple_service",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Trades and Guilds",
@@ -13970,7 +13927,12 @@ export const generatedRepoLocalGlantriSeed = {
         "farm_household_work",
         "coastal_fishing",
         "forestry_resource_work",
-        "mining_extraction"
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "temple_service",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Established Households",
@@ -14111,7 +14073,12 @@ export const generatedRepoLocalGlantriSeed = {
         "farm_household_work",
         "coastal_fishing",
         "forestry_resource_work",
-        "mining_extraction"
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "temple_service",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Court and Elite",
@@ -14192,7 +14159,11 @@ export const generatedRepoLocalGlantriSeed = {
         "farm_household_work",
         "coastal_fishing",
         "forestry_resource_work",
-        "mining_extraction"
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Common Folk",
@@ -14313,7 +14284,12 @@ export const generatedRepoLocalGlantriSeed = {
         "farm_household_work",
         "coastal_fishing",
         "forestry_resource_work",
-        "mining_extraction"
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "temple_service",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Trades and Guilds",
@@ -14461,7 +14437,12 @@ export const generatedRepoLocalGlantriSeed = {
         "farm_household_work",
         "coastal_fishing",
         "forestry_resource_work",
-        "mining_extraction"
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "temple_service",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Established Households",
@@ -14605,7 +14586,12 @@ export const generatedRepoLocalGlantriSeed = {
         "farm_household_work",
         "coastal_fishing",
         "forestry_resource_work",
-        "mining_extraction"
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "temple_service",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Court and Elite",
@@ -14686,7 +14672,11 @@ export const generatedRepoLocalGlantriSeed = {
         "farm_household_work",
         "coastal_fishing",
         "forestry_resource_work",
-        "mining_extraction"
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Common Folk",
@@ -14807,7 +14797,12 @@ export const generatedRepoLocalGlantriSeed = {
         "farm_household_work",
         "coastal_fishing",
         "forestry_resource_work",
-        "mining_extraction"
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "temple_service",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Trades and Guilds",
@@ -14955,7 +14950,12 @@ export const generatedRepoLocalGlantriSeed = {
         "farm_household_work",
         "coastal_fishing",
         "forestry_resource_work",
-        "mining_extraction"
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "temple_service",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Established Households",
@@ -15099,7 +15099,12 @@ export const generatedRepoLocalGlantriSeed = {
         "farm_household_work",
         "coastal_fishing",
         "forestry_resource_work",
-        "mining_extraction"
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "temple_service",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Court and Elite",
@@ -15180,7 +15185,11 @@ export const generatedRepoLocalGlantriSeed = {
         "farm_household_work",
         "coastal_fishing",
         "forestry_resource_work",
-        "mining_extraction"
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Common Folk",
@@ -15301,7 +15310,12 @@ export const generatedRepoLocalGlantriSeed = {
         "farm_household_work",
         "coastal_fishing",
         "forestry_resource_work",
-        "mining_extraction"
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "temple_service",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Trades and Guilds",
@@ -15449,7 +15463,12 @@ export const generatedRepoLocalGlantriSeed = {
         "farm_household_work",
         "coastal_fishing",
         "forestry_resource_work",
-        "mining_extraction"
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "temple_service",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Established Households",
@@ -15593,7 +15612,12 @@ export const generatedRepoLocalGlantriSeed = {
         "farm_household_work",
         "coastal_fishing",
         "forestry_resource_work",
-        "mining_extraction"
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "temple_service",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Court and Elite",
@@ -15671,7 +15695,11 @@ export const generatedRepoLocalGlantriSeed = {
         "farm_household_work",
         "coastal_fishing",
         "forestry_resource_work",
-        "mining_extraction"
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Common Folk",
@@ -15779,7 +15807,12 @@ export const generatedRepoLocalGlantriSeed = {
         "farm_household_work",
         "coastal_fishing",
         "forestry_resource_work",
-        "mining_extraction"
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "temple_service",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Trades and Guilds",
@@ -15913,7 +15946,12 @@ export const generatedRepoLocalGlantriSeed = {
         "farm_household_work",
         "coastal_fishing",
         "forestry_resource_work",
-        "mining_extraction"
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "temple_service",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Established Households",
@@ -16058,7 +16096,12 @@ export const generatedRepoLocalGlantriSeed = {
         "farm_household_work",
         "coastal_fishing",
         "forestry_resource_work",
-        "mining_extraction"
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "temple_service",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Court and Elite",
