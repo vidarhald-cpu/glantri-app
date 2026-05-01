@@ -1239,6 +1239,107 @@ describe("validateCanonicalContent", () => {
     }
   });
 
+  it("keeps Bounty Hunter as pursuit security without command education", () => {
+    const professionById = new Map(
+      defaultCanonicalContent.professions.map((profession) => [profession.id, profession])
+    );
+    const groupById = new Map(
+      defaultCanonicalContent.skillGroups.map((group) => [group.id, group])
+    );
+    const grantsFor = (professionId: string) => {
+      const profession = professionById.get(professionId);
+
+      return defaultCanonicalContent.professionSkills.filter(
+        (grant) =>
+          (grant.scope === "family" && grant.professionId === profession?.familyId) ||
+          (grant.scope === "profession" && grant.professionId === professionId)
+      );
+    };
+    const groupIdsFor = (professionId: string) =>
+      grantsFor(professionId)
+        .filter((grant) => grant.grantType === "group" && grant.skillGroupId)
+        .map((grant) => grant.skillGroupId ?? "");
+    const directSkillIdsFor = (professionId: string) =>
+      grantsFor(professionId)
+        .filter((grant) => grant.grantType !== "group" && grant.skillId)
+        .map((grant) => grant.skillId ?? "");
+    const skillReachFor = (professionId: string) => {
+      const groupIds = groupIdsFor(professionId);
+      const skillIdsFromGroups = defaultCanonicalContent.skills
+        .filter((skill) =>
+          (skill.groupIds ?? [skill.groupId]).some((groupId) => groupIds.includes(groupId))
+        )
+        .map((skill) => skill.id);
+      const directOnlySkillIds = directSkillIdsFor(professionId).filter(
+        (skillId) => !skillIdsFromGroups.includes(skillId)
+      );
+
+      return new Set([...skillIdsFromGroups, ...directOnlySkillIds]).size;
+    };
+    const expectNoOfficerEducation = (professionId: string) => {
+      expect(groupIdsFor(professionId)).not.toContain("veteran_leadership");
+      expect(directSkillIdsFor(professionId)).not.toContain("captaincy");
+      expect(directSkillIdsFor(professionId)).not.toContain("tactics");
+    };
+
+    expect(professionById.get("bounty_hunter")).toMatchObject({
+      familyId: "thief_infiltrator",
+      name: "Bounty Hunter"
+    });
+    expect(groupIdsFor("bounty_hunter")).toEqual(
+      expect.arrayContaining([
+        "street_theft",
+        "covert_entry",
+        "fieldcraft_stealth",
+        "watch_civic_guard"
+      ])
+    );
+    expect(new Set(groupIdsFor("bounty_hunter")).size).toBe(groupIdsFor("bounty_hunter").length);
+    expect(directSkillIdsFor("bounty_hunter")).toEqual(
+      expect.arrayContaining(["detect_lies", "search", "perception"])
+    );
+    expect(directSkillIdsFor("bounty_hunter")).not.toContain("one_handed_edged");
+    expect(directSkillIdsFor("bounty_hunter")).not.toContain("brawling");
+    expectNoOfficerEducation("bounty_hunter");
+    expect(skillReachFor("bounty_hunter")).toBeGreaterThanOrEqual(10);
+
+    expectNoOfficerEducation("cavalry");
+    expectNoOfficerEducation("cavalry_mounted_retainer");
+    expect(groupIdsFor("cavalry_officer")).toEqual(
+      expect.arrayContaining(["mounted_warrior_training", "veteran_leadership"])
+    );
+
+    expect(
+      groupById.get("watch_civic_guard")?.skillMemberships?.map((membership) => membership.skillId)
+    ).not.toContain("parry");
+    const routeSecuritySkillIds =
+      groupById.get("route_security")?.skillMemberships?.map((membership) => membership.skillId) ??
+      [];
+    const arenaTrainingSkillIds =
+      groupById.get("arena_training")?.skillMemberships?.map((membership) => membership.skillId) ??
+      [];
+
+    for (const forbiddenSkillId of ["captaincy", "tactics", "veteran_leadership"]) {
+      expect(routeSecuritySkillIds).not.toContain(forbiddenSkillId);
+    }
+    for (const forbiddenSkillId of [
+      "dodge",
+      "brawling",
+      "parry",
+      "one_handed_edged",
+      "captaincy",
+      "tactics",
+      "veteran_leadership",
+      "formation_fighting"
+    ]) {
+      expect(arenaTrainingSkillIds).not.toContain(forbiddenSkillId);
+    }
+
+    for (const ordinarySailorId of ["sailor", "deck_sailor", "fisher"]) {
+      expect(groupIdsFor(ordinarySailorId)).not.toContain("ship_command");
+    }
+  });
+
   it("includes the updated civilization language naming and Lankhmar seed entry", () => {
     expect(
       defaultCanonicalContent.civilizations.find((civilization) => civilization.id === "glantri")

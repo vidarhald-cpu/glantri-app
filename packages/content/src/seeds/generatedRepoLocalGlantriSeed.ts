@@ -7157,22 +7157,6 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "insight"
     },
     {
-      "grantType": "group",
-      "isCore": true,
-      "professionId": "bounty_hunter",
-      "ranks": 0,
-      "scope": "profession",
-      "skillGroupId": "covert_entry"
-    },
-    {
-      "grantType": "group",
-      "isCore": true,
-      "professionId": "bounty_hunter",
-      "ranks": 0,
-      "scope": "profession",
-      "skillGroupId": "fieldcraft_stealth"
-    },
-    {
       "grantType": "ordinary-skill",
       "isCore": true,
       "professionId": "bounty_hunter",
@@ -7189,36 +7173,12 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "perception"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": false,
       "professionId": "bounty_hunter",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "stealth"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "bounty_hunter",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "captaincy"
-    },
-    {
-      "grantType": "secondary-skill",
-      "isCore": false,
-      "professionId": "bounty_hunter",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "one_handed_edged"
-    },
-    {
-      "grantType": "secondary-skill",
-      "isCore": false,
-      "professionId": "bounty_hunter",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "brawling"
+      "skillGroupId": "watch_civic_guard"
     },
     {
       "grantType": "group",

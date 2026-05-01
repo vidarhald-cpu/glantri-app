@@ -435,6 +435,11 @@ const PROFESSION_SUBTYPE_GRANT_OVERRIDES = {
     addedFavoredSkillIds: ["insight"],
     addedFavoredTrainingGroupIds: []
   },
+  bounty_hunter: {
+    addedCoreTrainingGroupIds: [],
+    addedFavoredSkillIds: [],
+    addedFavoredTrainingGroupIds: ["watch_civic_guard"]
+  },
   caravan_guard: {
     addedCoreSkillIds: [],
     addedFavoredSkillIds: ["throwing"],
