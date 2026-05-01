@@ -1850,6 +1850,81 @@ export const generatedRepoLocalGlantriSeed = {
       ],
       "selectionSlots": [],
       "sortOrder": 56
+    },
+    {
+      "description": "A chosen craft specialty for common artisan training.",
+      "id": "craft_specialty",
+      "name": "Craft Specialty",
+      "skillMemberships": [],
+      "selectionSlots": [
+        {
+          "candidateSkillIds": [
+            "pottery",
+            "weaving",
+            "leatherworking",
+            "carpentry",
+            "tailoring",
+            "baking",
+            "brewing",
+            "stoneworking",
+            "smithing",
+            "weapon_maintenance"
+          ],
+          "chooseCount": 1,
+          "id": "craft_specialty_choice",
+          "label": "Choose one craft specialty",
+          "required": true
+        }
+      ],
+      "sortOrder": 57
+    },
+    {
+      "description": "Two chosen craft specialties for master artisan and guild-level craft training.",
+      "id": "craft_specialty_advanced",
+      "name": "Advanced Craft Specialty",
+      "skillMemberships": [],
+      "selectionSlots": [
+        {
+          "candidateSkillIds": [
+            "pottery",
+            "weaving",
+            "leatherworking",
+            "carpentry",
+            "tailoring",
+            "baking",
+            "brewing",
+            "stoneworking",
+            "smithing",
+            "weapon_maintenance"
+          ],
+          "chooseCount": 2,
+          "id": "advanced_craft_specialty_choices",
+          "label": "Choose two craft specialties",
+          "required": true
+        }
+      ],
+      "sortOrder": 58
+    },
+    {
+      "description": "Construction specialty choices for master builders and masons.",
+      "id": "construction_specialty",
+      "name": "Construction Specialty",
+      "skillMemberships": [],
+      "selectionSlots": [
+        {
+          "candidateSkillIds": [
+            "stoneworking",
+            "carpentry",
+            "smithing",
+            "mechanics"
+          ],
+          "chooseCount": 2,
+          "id": "construction_specialty_choices",
+          "label": "Choose two construction specialties",
+          "required": true
+        }
+      ],
+      "sortOrder": 59
     }
   ],
   "skills": [
@@ -2323,7 +2398,8 @@ export const generatedRepoLocalGlantriSeed = {
       "description": "Understand simple machines, force transfer, moving parts, and practical mechanisms. Applied technical skill for devices, structural motion, simple machines, and engineering problem-solving.",
       "groupId": "physical_science",
       "groupIds": [
-        "physical_science"
+        "physical_science",
+        "construction_specialty"
       ],
       "id": "mechanics",
       "isTheoretical": false,
@@ -3880,7 +3956,9 @@ export const generatedRepoLocalGlantriSeed = {
       "description": "Shape, fire, and finish clay vessels and ceramic goods. Very early settled craft.",
       "groupId": "craft_group",
       "groupIds": [
-        "craft_group"
+        "craft_group",
+        "craft_specialty",
+        "craft_specialty_advanced"
       ],
       "id": "pottery",
       "isTheoretical": false,
@@ -3903,7 +3981,9 @@ export const generatedRepoLocalGlantriSeed = {
       "description": "Produce woven cloth, bands, and simple textiles. Very early settled craft.",
       "groupId": "craft_group",
       "groupIds": [
-        "craft_group"
+        "craft_group",
+        "craft_specialty",
+        "craft_specialty_advanced"
       ],
       "id": "weaving",
       "isTheoretical": false,
@@ -3926,7 +4006,9 @@ export const generatedRepoLocalGlantriSeed = {
       "description": "Cut, cure, shape, and repair leather goods and hide equipment. Broad practical craft core.",
       "groupId": "craft_group",
       "groupIds": [
-        "craft_group"
+        "craft_group",
+        "craft_specialty",
+        "craft_specialty_advanced"
       ],
       "id": "leatherworking",
       "isTheoretical": false,
@@ -3949,7 +4031,10 @@ export const generatedRepoLocalGlantriSeed = {
       "description": "Make and repair wooden structures, fittings, tools, and objects. Broad craft core.",
       "groupId": "craft_group",
       "groupIds": [
-        "craft_group"
+        "craft_group",
+        "craft_specialty",
+        "craft_specialty_advanced",
+        "construction_specialty"
       ],
       "id": "carpentry",
       "isTheoretical": false,
@@ -3977,7 +4062,9 @@ export const generatedRepoLocalGlantriSeed = {
       "description": "Cut, fit, alter, and finish garments. Attractive support craft.",
       "groupId": "craft_group",
       "groupIds": [
-        "craft_group"
+        "craft_group",
+        "craft_specialty",
+        "craft_specialty_advanced"
       ],
       "id": "tailoring",
       "isTheoretical": false,
@@ -4000,7 +4087,9 @@ export const generatedRepoLocalGlantriSeed = {
       "description": "Prepare and bake bread and staple oven foods reliably. Useful domestic and provisioning secondary.",
       "groupId": "craft_group",
       "groupIds": [
-        "craft_group"
+        "craft_group",
+        "craft_specialty",
+        "craft_specialty_advanced"
       ],
       "id": "baking",
       "isTheoretical": false,
@@ -4023,7 +4112,9 @@ export const generatedRepoLocalGlantriSeed = {
       "description": "Produce fermented drink from grain, fruit, honey, or similar materials. Useful domestic and commercial secondary.",
       "groupId": "craft_group",
       "groupIds": [
-        "craft_group"
+        "craft_group",
+        "craft_specialty",
+        "craft_specialty_advanced"
       ],
       "id": "brewing",
       "isTheoretical": false,
@@ -4046,7 +4137,10 @@ export const generatedRepoLocalGlantriSeed = {
       "description": "Cut, dress, shape, and fit stone for tools, structures, and finishes. Strong structural craft core.",
       "groupId": "craft_group",
       "groupIds": [
-        "craft_group"
+        "craft_group",
+        "craft_specialty",
+        "craft_specialty_advanced",
+        "construction_specialty"
       ],
       "id": "stoneworking",
       "isTheoretical": false,
@@ -4069,7 +4163,10 @@ export const generatedRepoLocalGlantriSeed = {
       "description": "Forge, shape, and repair metal tools, fittings, and simple equipment. Broad metalworking core.",
       "groupId": "craft_group",
       "groupIds": [
-        "craft_group"
+        "craft_group",
+        "craft_specialty",
+        "craft_specialty_advanced",
+        "construction_specialty"
       ],
       "id": "smithing",
       "isTheoretical": false,
@@ -4099,6 +4196,8 @@ export const generatedRepoLocalGlantriSeed = {
       "groupIds": [
         "craft_group",
         "military_group",
+        "craft_specialty",
+        "craft_specialty_advanced",
         "arena_training"
       ],
       "id": "weapon_maintenance",
@@ -5173,6 +5272,11 @@ export const generatedRepoLocalGlantriSeed = {
       "name": "Social Companion"
     },
     {
+      "description": "Craft and guild professions whose package is defined by common foundations plus chosen craft specialties.",
+      "id": "craft_guild",
+      "name": "Craft / Guild"
+    },
+    {
       "description": "Focused low and mid military/security professions whose training is defined by subtype packages rather than broad Soldier-family defaults.",
       "id": "military_security",
       "name": "Military / Security"
@@ -5216,7 +5320,7 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "description": "Construction specialist focused on durable works and physical building. Emphasizes stone, timber, layout, and practical site work.",
-      "familyId": "engineer_builder",
+      "familyId": "craft_guild",
       "id": "builder_master_mason",
       "name": "Builder / Master Mason",
       "subtypeName": "Builder / Master Mason"
@@ -5377,7 +5481,7 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "description": "General artisan subtype covering trained making, repair, and workshop practice. Broad catch-all craft subtype when a more specific building, smithing, or production role is not needed.",
-      "familyId": "engineer_builder",
+      "familyId": "craft_guild",
       "id": "crafter",
       "name": "Crafter",
       "subtypeName": "Crafter"
@@ -5524,7 +5628,7 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "description": "Master Craftsmen source-listed occupation subtype. Source-listed occupation retained in the pack and awaiting deeper rule-detail refinement if needed.",
-      "familyId": "engineer_builder",
+      "familyId": "craft_guild",
       "id": "master_craftsmen",
       "name": "Master Craftsmen",
       "subtypeName": "Master Craftsmen"
@@ -6531,7 +6635,31 @@ export const generatedRepoLocalGlantriSeed = {
       "professionId": "builder_master_mason",
       "ranks": 0,
       "scope": "profession",
-      "skillGroupId": "craft_group"
+      "skillGroupId": "technical_measurement"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "builder_master_mason",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "construction_specialty"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "builder_master_mason",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "commercial_administration"
+    },
+    {
+      "grantType": "group",
+      "isCore": false,
+      "professionId": "builder_master_mason",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "civic_learning"
     },
     {
       "grantType": "group",
@@ -7486,44 +7614,20 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "intrigue"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": true,
       "professionId": "crafter",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "carpentry"
+      "skillGroupId": "technical_measurement"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": true,
       "professionId": "crafter",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "leatherworking"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "crafter",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "weaving"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "crafter",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "pottery"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "crafter",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "smithing"
+      "skillGroupId": "craft_specialty"
     },
     {
       "grantType": "secondary-skill",
@@ -8387,7 +8491,31 @@ export const generatedRepoLocalGlantriSeed = {
       "professionId": "master_craftsmen",
       "ranks": 0,
       "scope": "profession",
-      "skillGroupId": "craft_group"
+      "skillGroupId": "craft_specialty_advanced"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "master_craftsmen",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "mercantile_practice"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "master_craftsmen",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "commercial_administration"
+    },
+    {
+      "grantType": "group",
+      "isCore": false,
+      "professionId": "master_craftsmen",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "technical_measurement"
     },
     {
       "grantType": "group",
@@ -10788,7 +10916,9 @@ export const generatedRepoLocalGlantriSeed = {
         "route_security",
         "ship_command",
         "smuggling_illicit_trade",
-        "watch_civic_guard"
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced"
       ],
       "skillIds": [],
       "socialClass": "Common Folk",
@@ -10867,7 +10997,9 @@ export const generatedRepoLocalGlantriSeed = {
         "route_security",
         "ship_command",
         "smuggling_illicit_trade",
-        "watch_civic_guard"
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced"
       ],
       "skillIds": [],
       "socialClass": "Trades and Guilds",
@@ -10943,7 +11075,9 @@ export const generatedRepoLocalGlantriSeed = {
         "route_security",
         "ship_command",
         "smuggling_illicit_trade",
-        "watch_civic_guard"
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced"
       ],
       "skillIds": [],
       "socialClass": "Established Households",
@@ -11009,7 +11143,9 @@ export const generatedRepoLocalGlantriSeed = {
         "route_security",
         "ship_command",
         "smuggling_illicit_trade",
-        "watch_civic_guard"
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced"
       ],
       "skillIds": [],
       "socialClass": "Court and Elite",
@@ -11089,7 +11225,9 @@ export const generatedRepoLocalGlantriSeed = {
         "route_security",
         "ship_command",
         "smuggling_illicit_trade",
-        "watch_civic_guard"
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced"
       ],
       "skillIds": [],
       "socialClass": "Common Folk",
@@ -11204,7 +11342,10 @@ export const generatedRepoLocalGlantriSeed = {
         "route_security",
         "ship_command",
         "smuggling_illicit_trade",
-        "watch_civic_guard"
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced",
+        "construction_specialty"
       ],
       "skillIds": [],
       "socialClass": "Trades and Guilds",
@@ -11316,7 +11457,10 @@ export const generatedRepoLocalGlantriSeed = {
         "route_security",
         "ship_command",
         "smuggling_illicit_trade",
-        "watch_civic_guard"
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced",
+        "construction_specialty"
       ],
       "skillIds": [],
       "socialClass": "Established Households",
@@ -11411,7 +11555,10 @@ export const generatedRepoLocalGlantriSeed = {
         "route_security",
         "ship_command",
         "smuggling_illicit_trade",
-        "watch_civic_guard"
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced",
+        "construction_specialty"
       ],
       "skillIds": [],
       "socialClass": "Court and Elite",
@@ -11491,7 +11638,9 @@ export const generatedRepoLocalGlantriSeed = {
         "route_security",
         "ship_command",
         "smuggling_illicit_trade",
-        "watch_civic_guard"
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced"
       ],
       "skillIds": [],
       "socialClass": "Common Folk",
@@ -11606,7 +11755,10 @@ export const generatedRepoLocalGlantriSeed = {
         "route_security",
         "ship_command",
         "smuggling_illicit_trade",
-        "watch_civic_guard"
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced",
+        "construction_specialty"
       ],
       "skillIds": [],
       "socialClass": "Trades and Guilds",
@@ -11718,7 +11870,10 @@ export const generatedRepoLocalGlantriSeed = {
         "route_security",
         "ship_command",
         "smuggling_illicit_trade",
-        "watch_civic_guard"
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced",
+        "construction_specialty"
       ],
       "skillIds": [],
       "socialClass": "Established Households",
@@ -11813,7 +11968,10 @@ export const generatedRepoLocalGlantriSeed = {
         "route_security",
         "ship_command",
         "smuggling_illicit_trade",
-        "watch_civic_guard"
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced",
+        "construction_specialty"
       ],
       "skillIds": [],
       "socialClass": "Court and Elite",
@@ -11890,7 +12048,9 @@ export const generatedRepoLocalGlantriSeed = {
         "route_security",
         "ship_command",
         "smuggling_illicit_trade",
-        "watch_civic_guard"
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced"
       ],
       "skillIds": [],
       "socialClass": "Common Folk",
@@ -12007,7 +12167,10 @@ export const generatedRepoLocalGlantriSeed = {
         "route_security",
         "ship_command",
         "smuggling_illicit_trade",
-        "watch_civic_guard"
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced",
+        "construction_specialty"
       ],
       "skillIds": [],
       "socialClass": "Trades and Guilds",
@@ -12145,7 +12308,10 @@ export const generatedRepoLocalGlantriSeed = {
         "route_security",
         "ship_command",
         "smuggling_illicit_trade",
-        "watch_civic_guard"
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced",
+        "construction_specialty"
       ],
       "skillIds": [],
       "socialClass": "Established Households",
@@ -12260,7 +12426,10 @@ export const generatedRepoLocalGlantriSeed = {
         "route_security",
         "ship_command",
         "smuggling_illicit_trade",
-        "watch_civic_guard"
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced",
+        "construction_specialty"
       ],
       "skillIds": [],
       "socialClass": "Court and Elite",
@@ -12337,7 +12506,9 @@ export const generatedRepoLocalGlantriSeed = {
         "route_security",
         "ship_command",
         "smuggling_illicit_trade",
-        "watch_civic_guard"
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced"
       ],
       "skillIds": [],
       "socialClass": "Common Folk",
@@ -12454,7 +12625,10 @@ export const generatedRepoLocalGlantriSeed = {
         "route_security",
         "ship_command",
         "smuggling_illicit_trade",
-        "watch_civic_guard"
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced",
+        "construction_specialty"
       ],
       "skillIds": [],
       "socialClass": "Trades and Guilds",
@@ -12592,7 +12766,10 @@ export const generatedRepoLocalGlantriSeed = {
         "route_security",
         "ship_command",
         "smuggling_illicit_trade",
-        "watch_civic_guard"
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced",
+        "construction_specialty"
       ],
       "skillIds": [],
       "socialClass": "Established Households",
@@ -12707,7 +12884,10 @@ export const generatedRepoLocalGlantriSeed = {
         "route_security",
         "ship_command",
         "smuggling_illicit_trade",
-        "watch_civic_guard"
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced",
+        "construction_specialty"
       ],
       "skillIds": [],
       "socialClass": "Court and Elite",
@@ -12783,7 +12963,9 @@ export const generatedRepoLocalGlantriSeed = {
         "route_security",
         "ship_command",
         "smuggling_illicit_trade",
-        "watch_civic_guard"
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced"
       ],
       "skillIds": [],
       "socialClass": "Common Folk",
@@ -12899,7 +13081,10 @@ export const generatedRepoLocalGlantriSeed = {
         "route_security",
         "ship_command",
         "smuggling_illicit_trade",
-        "watch_civic_guard"
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced",
+        "construction_specialty"
       ],
       "skillIds": [],
       "socialClass": "Trades and Guilds",
@@ -13042,7 +13227,10 @@ export const generatedRepoLocalGlantriSeed = {
         "route_security",
         "ship_command",
         "smuggling_illicit_trade",
-        "watch_civic_guard"
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced",
+        "construction_specialty"
       ],
       "skillIds": [],
       "socialClass": "Established Households",
@@ -13175,7 +13363,10 @@ export const generatedRepoLocalGlantriSeed = {
         "route_security",
         "ship_command",
         "smuggling_illicit_trade",
-        "watch_civic_guard"
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced",
+        "construction_specialty"
       ],
       "skillIds": [],
       "socialClass": "Court and Elite",
@@ -13251,7 +13442,9 @@ export const generatedRepoLocalGlantriSeed = {
         "route_security",
         "ship_command",
         "smuggling_illicit_trade",
-        "watch_civic_guard"
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced"
       ],
       "skillIds": [],
       "socialClass": "Common Folk",
@@ -13367,7 +13560,10 @@ export const generatedRepoLocalGlantriSeed = {
         "route_security",
         "ship_command",
         "smuggling_illicit_trade",
-        "watch_civic_guard"
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced",
+        "construction_specialty"
       ],
       "skillIds": [],
       "socialClass": "Trades and Guilds",
@@ -13510,7 +13706,10 @@ export const generatedRepoLocalGlantriSeed = {
         "route_security",
         "ship_command",
         "smuggling_illicit_trade",
-        "watch_civic_guard"
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced",
+        "construction_specialty"
       ],
       "skillIds": [],
       "socialClass": "Established Households",
@@ -13643,7 +13842,10 @@ export const generatedRepoLocalGlantriSeed = {
         "route_security",
         "ship_command",
         "smuggling_illicit_trade",
-        "watch_civic_guard"
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced",
+        "construction_specialty"
       ],
       "skillIds": [],
       "socialClass": "Court and Elite",
@@ -13717,7 +13919,9 @@ export const generatedRepoLocalGlantriSeed = {
         "route_security",
         "ship_command",
         "smuggling_illicit_trade",
-        "watch_civic_guard"
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced"
       ],
       "skillIds": [],
       "socialClass": "Common Folk",
@@ -13830,7 +14034,10 @@ export const generatedRepoLocalGlantriSeed = {
         "route_security",
         "ship_command",
         "smuggling_illicit_trade",
-        "watch_civic_guard"
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced",
+        "construction_specialty"
       ],
       "skillIds": [],
       "socialClass": "Trades and Guilds",
@@ -13970,7 +14177,10 @@ export const generatedRepoLocalGlantriSeed = {
         "route_security",
         "ship_command",
         "smuggling_illicit_trade",
-        "watch_civic_guard"
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced",
+        "construction_specialty"
       ],
       "skillIds": [],
       "socialClass": "Established Households",
@@ -14106,7 +14316,10 @@ export const generatedRepoLocalGlantriSeed = {
         "route_security",
         "ship_command",
         "smuggling_illicit_trade",
-        "watch_civic_guard"
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced",
+        "construction_specialty"
       ],
       "skillIds": [],
       "socialClass": "Court and Elite",
@@ -14180,7 +14393,9 @@ export const generatedRepoLocalGlantriSeed = {
         "route_security",
         "ship_command",
         "smuggling_illicit_trade",
-        "watch_civic_guard"
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced"
       ],
       "skillIds": [],
       "socialClass": "Common Folk",
@@ -14293,7 +14508,10 @@ export const generatedRepoLocalGlantriSeed = {
         "route_security",
         "ship_command",
         "smuggling_illicit_trade",
-        "watch_civic_guard"
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced",
+        "construction_specialty"
       ],
       "skillIds": [],
       "socialClass": "Trades and Guilds",
@@ -14433,7 +14651,10 @@ export const generatedRepoLocalGlantriSeed = {
         "route_security",
         "ship_command",
         "smuggling_illicit_trade",
-        "watch_civic_guard"
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced",
+        "construction_specialty"
       ],
       "skillIds": [],
       "socialClass": "Established Households",
@@ -14569,7 +14790,10 @@ export const generatedRepoLocalGlantriSeed = {
         "route_security",
         "ship_command",
         "smuggling_illicit_trade",
-        "watch_civic_guard"
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced",
+        "construction_specialty"
       ],
       "skillIds": [],
       "socialClass": "Court and Elite",
@@ -14643,7 +14867,9 @@ export const generatedRepoLocalGlantriSeed = {
         "route_security",
         "ship_command",
         "smuggling_illicit_trade",
-        "watch_civic_guard"
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced"
       ],
       "skillIds": [],
       "socialClass": "Common Folk",
@@ -14756,7 +14982,10 @@ export const generatedRepoLocalGlantriSeed = {
         "route_security",
         "ship_command",
         "smuggling_illicit_trade",
-        "watch_civic_guard"
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced",
+        "construction_specialty"
       ],
       "skillIds": [],
       "socialClass": "Trades and Guilds",
@@ -14896,7 +15125,10 @@ export const generatedRepoLocalGlantriSeed = {
         "route_security",
         "ship_command",
         "smuggling_illicit_trade",
-        "watch_civic_guard"
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced",
+        "construction_specialty"
       ],
       "skillIds": [],
       "socialClass": "Established Households",
@@ -15032,7 +15264,10 @@ export const generatedRepoLocalGlantriSeed = {
         "route_security",
         "ship_command",
         "smuggling_illicit_trade",
-        "watch_civic_guard"
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced",
+        "construction_specialty"
       ],
       "skillIds": [],
       "socialClass": "Court and Elite",
@@ -15103,7 +15338,9 @@ export const generatedRepoLocalGlantriSeed = {
         "route_security",
         "ship_command",
         "smuggling_illicit_trade",
-        "watch_civic_guard"
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced"
       ],
       "skillIds": [],
       "socialClass": "Common Folk",
@@ -15203,7 +15440,10 @@ export const generatedRepoLocalGlantriSeed = {
         "route_security",
         "ship_command",
         "smuggling_illicit_trade",
-        "watch_civic_guard"
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced",
+        "construction_specialty"
       ],
       "skillIds": [],
       "socialClass": "Trades and Guilds",
@@ -15329,7 +15569,10 @@ export const generatedRepoLocalGlantriSeed = {
         "route_security",
         "ship_command",
         "smuggling_illicit_trade",
-        "watch_civic_guard"
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced",
+        "construction_specialty"
       ],
       "skillIds": [],
       "socialClass": "Established Households",
@@ -15466,7 +15709,10 @@ export const generatedRepoLocalGlantriSeed = {
         "route_security",
         "ship_command",
         "smuggling_illicit_trade",
-        "watch_civic_guard"
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced",
+        "construction_specialty"
       ],
       "skillIds": [],
       "socialClass": "Court and Elite",

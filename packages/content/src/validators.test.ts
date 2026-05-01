@@ -1859,6 +1859,9 @@ describe("validateCanonicalContent", () => {
     const professionById = new Map(
       defaultCanonicalContent.professions.map((profession) => [profession.id, profession])
     );
+    const groupById = new Map(
+      defaultCanonicalContent.skillGroups.map((group) => [group.id, group])
+    );
     const grantsFor = (professionId: string) => {
       const profession = professionById.get(professionId);
 
@@ -2011,12 +2014,75 @@ describe("validateCanonicalContent", () => {
     expect(groupIdsFor("smuggler")).not.toContain("commercial_administration");
     expect(directOnlySkillIdsFor("smuggler")).toEqual(["language"]);
 
-    for (const professionId of ["master_craftsmen", "builder_master_mason"]) {
-      expect(groupIdsFor(professionId)).toEqual(
-        expect.arrayContaining(["technical_measurement", "craft_group"])
-      );
-      expect(skillReachFor(professionId)).toBeGreaterThanOrEqual(12);
-    }
+    expect(professionById.get("crafter")).toMatchObject({ familyId: "craft_guild" });
+    expect(professionById.get("master_craftsmen")).toMatchObject({ familyId: "craft_guild" });
+    expect(professionById.get("builder_master_mason")).toMatchObject({
+      familyId: "craft_guild"
+    });
+    expect(groupIdsFor("crafter")).toEqual(
+      expect.arrayContaining(["technical_measurement", "craft_specialty"])
+    );
+    expect(groupIdsFor("master_craftsmen")).toEqual(
+      expect.arrayContaining([
+        "technical_measurement",
+        "craft_specialty_advanced",
+        "mercantile_practice",
+        "commercial_administration"
+      ])
+    );
+    expect(groupIdsFor("builder_master_mason")).toEqual(
+      expect.arrayContaining([
+        "technical_measurement",
+        "construction_specialty",
+        "commercial_administration",
+        "civic_learning"
+      ])
+    );
+    expect(groupIdsFor("crafter")).not.toContain("craft_group");
+    expect(groupIdsFor("master_craftsmen")).not.toContain("craft_group");
+    expect(groupIdsFor("builder_master_mason")).not.toContain("craft_group");
+    expect(directSkillIdsFor("crafter")).toEqual([]);
+    expect(directSkillIdsFor("master_craftsmen")).toEqual([]);
+    expect(directSkillIdsFor("builder_master_mason")).toEqual([]);
+    expect(skillReachFor("crafter")).toBeGreaterThanOrEqual(10);
+    expect(skillReachFor("master_craftsmen")).toBeGreaterThan(skillReachFor("crafter"));
+    expect(skillReachFor("builder_master_mason")).toBeGreaterThanOrEqual(12);
+
+    const craftSpecialtySlot = groupById.get("craft_specialty")?.selectionSlots?.[0];
+    const advancedCraftSpecialtySlot =
+      groupById.get("craft_specialty_advanced")?.selectionSlots?.[0];
+    const constructionSpecialtySlot =
+      groupById.get("construction_specialty")?.selectionSlots?.[0];
+
+    expect(groupById.get("craft_specialty")?.skillMemberships).toEqual([]);
+    expect(groupById.get("craft_specialty_advanced")?.skillMemberships).toEqual([]);
+    expect(groupById.get("construction_specialty")?.skillMemberships).toEqual([]);
+    expect(craftSpecialtySlot).toMatchObject({
+      chooseCount: 1,
+      id: "craft_specialty_choice",
+      required: true
+    });
+    expect(craftSpecialtySlot?.candidateSkillIds).toEqual(
+      expect.arrayContaining(["smithing", "carpentry", "leatherworking", "weaving", "pottery"])
+    );
+    expect(advancedCraftSpecialtySlot).toMatchObject({
+      chooseCount: 2,
+      id: "advanced_craft_specialty_choices",
+      required: true
+    });
+    expect(advancedCraftSpecialtySlot?.candidateSkillIds).toEqual(
+      craftSpecialtySlot?.candidateSkillIds
+    );
+    expect(constructionSpecialtySlot).toMatchObject({
+      chooseCount: 2,
+      id: "construction_specialty_choices",
+      required: true
+    });
+    expect(constructionSpecialtySlot?.candidateSkillIds).toEqual(
+      expect.arrayContaining(["stoneworking", "carpentry", "smithing", "mechanics"])
+    );
+    expect(constructionSpecialtySlot?.candidateSkillIds).not.toContain("brewing");
+    expect(constructionSpecialtySlot?.candidateSkillIds).not.toContain("weaving");
 
     expect(groupIdsFor("chariot_driver")).toEqual(
       expect.arrayContaining([
@@ -2244,10 +2310,10 @@ describe("validateCanonicalContent", () => {
     expect(groupIdsFor("smuggler")).not.toContain("mercantile_practice");
     expect(directSkillIdsFor("chariot_driver")).not.toContain("captaincy");
     expect(groupIdsFor("master_craftsmen")).toEqual(
-      expect.arrayContaining(["technical_measurement", "craft_group"])
+      expect.arrayContaining(["technical_measurement", "craft_specialty_advanced"])
     );
     expect(groupIdsFor("builder_master_mason")).toEqual(
-      expect.arrayContaining(["technical_measurement", "craft_group"])
+      expect.arrayContaining(["technical_measurement", "construction_specialty"])
     );
 
     for (const ordinaryTradeProfessionId of [

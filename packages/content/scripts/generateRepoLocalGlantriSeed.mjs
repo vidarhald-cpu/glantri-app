@@ -68,6 +68,9 @@ const PLAYER_FACING_SKILL_CATEGORY_BY_GROUP_ID = {
   commercial_administration: "trade",
   courtly_formation: "high-society",
   covert_entry: "covert",
+  construction_specialty: "craft",
+  craft_specialty: "craft",
+  craft_specialty_advanced: "craft",
   craft_group: "craft",
   defensive_soldiering: "military",
   field_soldiering: "military",
@@ -162,6 +165,26 @@ const MISSILE_WEAPON_SKILL_IDS = [
   "crossbow"
 ];
 
+const CRAFT_SPECIALTY_SKILL_IDS = [
+  "pottery",
+  "weaving",
+  "leatherworking",
+  "carpentry",
+  "tailoring",
+  "baking",
+  "brewing",
+  "stoneworking",
+  "smithing",
+  "weapon_maintenance"
+];
+
+const CONSTRUCTION_SPECIALTY_SKILL_IDS = [
+  "stoneworking",
+  "carpentry",
+  "smithing",
+  "mechanics"
+];
+
 const SKILL_GROUP_SELECTION_SLOTS_BY_ID = {
   basic_melee_training: [
     {
@@ -196,6 +219,33 @@ const SKILL_GROUP_SELECTION_SLOTS_BY_ID = {
       chooseCount: 3,
       id: "advanced_missile_weapon_choices",
       label: "Choose three missile weapon skills",
+      required: true
+    }
+  ],
+  craft_specialty: [
+    {
+      candidateSkillIds: CRAFT_SPECIALTY_SKILL_IDS,
+      chooseCount: 1,
+      id: "craft_specialty_choice",
+      label: "Choose one craft specialty",
+      required: true
+    }
+  ],
+  craft_specialty_advanced: [
+    {
+      candidateSkillIds: CRAFT_SPECIALTY_SKILL_IDS,
+      chooseCount: 2,
+      id: "advanced_craft_specialty_choices",
+      label: "Choose two craft specialties",
+      required: true
+    }
+  ],
+  construction_specialty: [
+    {
+      candidateSkillIds: CONSTRUCTION_SPECIALTY_SKILL_IDS,
+      chooseCount: 2,
+      id: "construction_specialty_choices",
+      label: "Choose two construction specialties",
       required: true
     }
   ]
@@ -246,6 +296,12 @@ const GROUP_DESCRIPTION_OVERRIDES = {
   arena_training:
     "Arena awareness, showmanship, professional discipline, and practical weapon upkeep.",
   basic_missile_training: "One required missile weapon skill.",
+  construction_specialty:
+    "Construction specialty choices for master builders and masons.",
+  craft_specialty:
+    "A chosen craft specialty for common artisan training.",
+  craft_specialty_advanced:
+    "Two chosen craft specialties for master artisan and guild-level craft training.",
   advanced_missile_training: "Three required missile weapon skills.",
   route_security:
     "Road awareness, animal handling, search, and practical care for guarding overland routes.",
@@ -288,6 +344,12 @@ const GENERATED_PROFESSION_FAMILIES = [
       "Social and performance-oriented companion roles distinct from elite courtly influence offices.",
     id: "social_companion",
     name: "Social Companion"
+  },
+  {
+    description:
+      "Craft and guild professions whose package is defined by common foundations plus chosen craft specialties.",
+    id: "craft_guild",
+    name: "Craft / Guild"
   },
   {
     description:
@@ -551,9 +613,12 @@ const RETIRED_PROFESSION_SUBTYPE_IDS = new Set(Object.keys(PROFESSION_SUBTYPE_ID
 
 const PROFESSION_SUBTYPE_FAMILY_ID_OVERRIDES = {
   bodyguard: "military_security",
+  builder_master_mason: "craft_guild",
   cavalry_mounted_retainer: "military_security",
   champion: "military_security",
+  crafter: "craft_guild",
   gladiator: "arena_fighter",
+  master_craftsmen: "craft_guild",
   prostitute_courtesan: "social_companion",
   smuggler: "illicit_trader"
 };
@@ -579,9 +644,13 @@ const PROFESSION_SUBTYPE_GRANT_OVERRIDES = {
   },
   builder_master_mason: {
     addedCoreSkillIds: [],
-    addedCoreTrainingGroupIds: ["craft_group"],
+    addedCoreTrainingGroupIds: [
+      "technical_measurement",
+      "construction_specialty",
+      "commercial_administration"
+    ],
     addedFavoredSkillIds: [],
-    addedFavoredTrainingGroupIds: []
+    addedFavoredTrainingGroupIds: ["civic_learning"]
   },
   caravan_guard: {
     addedCoreSkillIds: [],
@@ -612,6 +681,12 @@ const PROFESSION_SUBTYPE_GRANT_OVERRIDES = {
     addedFavoredTrainingGroupIds: ["mounted_service", "route_security"]
   },
   clan_warriors: {
+    addedFavoredTrainingGroupIds: []
+  },
+  crafter: {
+    addedCoreSkillIds: [],
+    addedCoreTrainingGroupIds: ["technical_measurement", "craft_specialty"],
+    addedFavoredSkillIds: [],
     addedFavoredTrainingGroupIds: []
   },
   fixer: {
@@ -661,9 +736,13 @@ const PROFESSION_SUBTYPE_GRANT_OVERRIDES = {
   },
   master_craftsmen: {
     addedCoreSkillIds: [],
-    addedCoreTrainingGroupIds: ["craft_group"],
+    addedCoreTrainingGroupIds: [
+      "craft_specialty_advanced",
+      "mercantile_practice",
+      "commercial_administration"
+    ],
     addedFavoredSkillIds: [],
-    addedFavoredTrainingGroupIds: []
+    addedFavoredTrainingGroupIds: ["technical_measurement"]
   },
   merchant: {
     addedCoreSkillIds: ["language"],
@@ -1248,6 +1327,27 @@ const generatedTrainingGroupSources = [
     name: "Watch / Civic Guard",
     skillIds: FIXED_SKILL_MEMBERSHIPS_BY_GROUP_ID.watch_civic_guard,
     sortOrder: trainingGroupSources.length + taxonomyGroupSources.length + 5
+  },
+  {
+    description: GROUP_DESCRIPTION_OVERRIDES.craft_specialty,
+    id: "craft_specialty",
+    name: "Craft Specialty",
+    skillIds: [],
+    sortOrder: trainingGroupSources.length + taxonomyGroupSources.length + 6
+  },
+  {
+    description: GROUP_DESCRIPTION_OVERRIDES.craft_specialty_advanced,
+    id: "craft_specialty_advanced",
+    name: "Advanced Craft Specialty",
+    skillIds: [],
+    sortOrder: trainingGroupSources.length + taxonomyGroupSources.length + 7
+  },
+  {
+    description: GROUP_DESCRIPTION_OVERRIDES.construction_specialty,
+    id: "construction_specialty",
+    name: "Construction Specialty",
+    skillIds: [],
+    sortOrder: trainingGroupSources.length + taxonomyGroupSources.length + 8
   }
 ];
 const skillGroupSources = [
@@ -1527,7 +1627,14 @@ const skillGroups = skillGroupSources.map((group) => ({
 const groupMinSocietyLevel = new Map();
 
 for (const group of skillGroupSources) {
-  const skillIds = group.skillIds;
+  const skillIds = [
+    ...new Set([
+      ...group.skillIds,
+      ...(SKILL_GROUP_SELECTION_SLOTS_BY_ID[group.id] ?? []).flatMap(
+        (slot) => slot.candidateSkillIds
+      )
+    ])
+  ];
   const minLevel = skillIds
     .map((skillId) => {
       const skill = skillsById.get(skillId);
