@@ -5900,86 +5900,6 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "grantType": "group",
       "isCore": true,
-      "professionId": "merchant_trader",
-      "ranks": 0,
-      "scope": "family",
-      "skillGroupId": "mercantile_practice"
-    },
-    {
-      "grantType": "group",
-      "isCore": false,
-      "professionId": "merchant_trader",
-      "ranks": 0,
-      "scope": "family",
-      "skillGroupId": "commercial_administration"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "merchant_trader",
-      "ranks": 0,
-      "scope": "family",
-      "skillId": "language"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "merchant_trader",
-      "ranks": 0,
-      "scope": "family",
-      "skillId": "etiquette"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "merchant_trader",
-      "ranks": 0,
-      "scope": "family",
-      "skillId": "teamstering"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "merchant_trader",
-      "ranks": 0,
-      "scope": "family",
-      "skillId": "riding"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "merchant_trader",
-      "ranks": 0,
-      "scope": "family",
-      "skillId": "sailing"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "merchant_trader",
-      "ranks": 0,
-      "scope": "family",
-      "skillId": "banking"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "merchant_trader",
-      "ranks": 0,
-      "scope": "family",
-      "skillId": "insight"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "merchant_trader",
-      "ranks": 0,
-      "scope": "family",
-      "skillId": "appraisal"
-    },
-    {
-      "grantType": "group",
-      "isCore": true,
       "professionId": "courtier_diplomat",
       "ranks": 0,
       "scope": "family",
@@ -6450,28 +6370,36 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "bureaucratic_writing"
     },
     {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "local_trader",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "mercantile_practice"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "local_trader",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "commercial_administration"
+    },
+    {
       "grantType": "ordinary-skill",
       "isCore": true,
       "professionId": "local_trader",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "bookkeeping"
+      "skillId": "language"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": false,
       "professionId": "local_trader",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "teamstering"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "local_trader",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "animal_care"
+      "skillGroupId": "social_reading"
     },
     {
       "grantType": "ordinary-skill",
@@ -6575,31 +6503,7 @@ export const generatedRepoLocalGlantriSeed = {
       "professionId": "builder_master_mason",
       "ranks": 0,
       "scope": "profession",
-      "skillGroupId": "technical_measurement"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": true,
-      "professionId": "builder_master_mason",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "stoneworking"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": true,
-      "professionId": "builder_master_mason",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "carpentry"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "builder_master_mason",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "administration"
+      "skillGroupId": "craft_group"
     },
     {
       "grantType": "group",
@@ -7362,22 +7266,6 @@ export const generatedRepoLocalGlantriSeed = {
       "skillGroupId": "transport_and_caravan_work"
     },
     {
-      "grantType": "ordinary-skill",
-      "isCore": true,
-      "professionId": "chariot_driver",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "teamstering"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": true,
-      "professionId": "chariot_driver",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "animal_care"
-    },
-    {
       "grantType": "group",
       "isCore": false,
       "professionId": "chariot_driver",
@@ -7386,20 +7274,12 @@ export const generatedRepoLocalGlantriSeed = {
       "skillGroupId": "mounted_service"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": false,
       "professionId": "chariot_driver",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "riding"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "chariot_driver",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "captaincy"
+      "skillGroupId": "route_security"
     },
     {
       "grantType": "secondary-skill",
@@ -7887,23 +7767,15 @@ export const generatedRepoLocalGlantriSeed = {
       "professionId": "fixer",
       "ranks": 0,
       "scope": "profession",
+      "skillGroupId": "commercial_administration"
+    },
+    {
+      "grantType": "group",
+      "isCore": false,
+      "professionId": "fixer",
+      "ranks": 0,
+      "scope": "profession",
       "skillGroupId": "political_acumen"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": true,
-      "professionId": "fixer",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "bargaining"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": true,
-      "professionId": "fixer",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "insight"
     },
     {
       "grantType": "ordinary-skill",
@@ -7911,7 +7783,7 @@ export const generatedRepoLocalGlantriSeed = {
       "professionId": "fixer",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "intrigue"
+      "skillId": "language"
     },
     {
       "grantType": "ordinary-skill",
@@ -7927,7 +7799,7 @@ export const generatedRepoLocalGlantriSeed = {
       "professionId": "fixer",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "trading"
+      "skillId": "banking"
     },
     {
       "grantType": "group",
@@ -8228,6 +8100,30 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "grantType": "group",
       "isCore": true,
+      "professionId": "homemaker",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "craft_group"
+    },
+    {
+      "grantType": "group",
+      "isCore": false,
+      "professionId": "homemaker",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "social_reading"
+    },
+    {
+      "grantType": "ordinary-skill",
+      "isCore": false,
+      "professionId": "homemaker",
+      "ranks": 0,
+      "scope": "profession",
+      "skillId": "bargaining"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
       "professionId": "hunter",
       "ranks": 0,
       "scope": "profession",
@@ -8280,6 +8176,46 @@ export const generatedRepoLocalGlantriSeed = {
       "ranks": 0,
       "scope": "profession",
       "skillId": "search"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "inn_keeper",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "mercantile_practice"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "inn_keeper",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "commercial_administration"
+    },
+    {
+      "grantType": "ordinary-skill",
+      "isCore": true,
+      "professionId": "inn_keeper",
+      "ranks": 0,
+      "scope": "profession",
+      "skillId": "baking"
+    },
+    {
+      "grantType": "ordinary-skill",
+      "isCore": true,
+      "professionId": "inn_keeper",
+      "ranks": 0,
+      "scope": "profession",
+      "skillId": "brewing"
+    },
+    {
+      "grantType": "group",
+      "isCore": false,
+      "professionId": "inn_keeper",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "social_reading"
     },
     {
       "grantType": "group",
@@ -8420,30 +8356,22 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "grantType": "group",
       "isCore": true,
+      "professionId": "master_craftsmen",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "craft_group"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
       "professionId": "merchant",
       "ranks": 0,
       "scope": "profession",
       "skillGroupId": "mercantile_practice"
     },
     {
-      "grantType": "ordinary-skill",
-      "isCore": true,
-      "professionId": "merchant",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "trading"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": true,
-      "professionId": "merchant",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "bargaining"
-    },
-    {
       "grantType": "group",
-      "isCore": false,
+      "isCore": true,
       "professionId": "merchant",
       "ranks": 0,
       "scope": "profession",
@@ -8451,35 +8379,35 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "merchant",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "appraisal"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "merchant",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "bookkeeping"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
+      "isCore": true,
       "professionId": "merchant",
       "ranks": 0,
       "scope": "profession",
       "skillId": "language"
     },
     {
+      "grantType": "group",
+      "isCore": false,
+      "professionId": "merchant",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "transport_and_caravan_work"
+    },
+    {
       "grantType": "ordinary-skill",
       "isCore": false,
       "professionId": "merchant",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "teamstering"
+      "skillId": "banking"
+    },
+    {
+      "grantType": "ordinary-skill",
+      "isCore": false,
+      "professionId": "merchant",
+      "ranks": 0,
+      "scope": "profession",
+      "skillId": "insight"
     },
     {
       "grantType": "group",
@@ -8810,36 +8738,36 @@ export const generatedRepoLocalGlantriSeed = {
       "skillGroupId": "mercantile_practice"
     },
     {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "peddler",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "transport_and_caravan_work"
+    },
+    {
       "grantType": "ordinary-skill",
       "isCore": true,
       "professionId": "peddler",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "bargaining"
+      "skillId": "language"
     },
     {
-      "grantType": "ordinary-skill",
-      "isCore": true,
-      "professionId": "peddler",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "trading"
-    },
-    {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": false,
       "professionId": "peddler",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "teamstering"
+      "skillGroupId": "mounted_service"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": false,
       "professionId": "peddler",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "animal_care"
+      "skillGroupId": "social_reading"
     },
     {
       "grantType": "ordinary-skill",
@@ -9104,6 +9032,46 @@ export const generatedRepoLocalGlantriSeed = {
       "ranks": 0,
       "scope": "profession",
       "skillId": "run"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "prostitute",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "mercantile_practice"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "prostitute",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "social_reading"
+    },
+    {
+      "grantType": "secondary-skill",
+      "isCore": true,
+      "professionId": "prostitute",
+      "ranks": 0,
+      "scope": "profession",
+      "skillId": "seduction"
+    },
+    {
+      "grantType": "group",
+      "isCore": false,
+      "professionId": "prostitute",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "performance_basics"
+    },
+    {
+      "grantType": "ordinary-skill",
+      "isCore": false,
+      "professionId": "prostitute",
+      "ranks": 0,
+      "scope": "profession",
+      "skillId": "bargaining"
     },
     {
       "grantType": "group",

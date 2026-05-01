@@ -258,6 +258,12 @@ const GROUP_DESCRIPTION_OVERRIDES = {
 };
 
 const PROFESSION_FAMILY_GRANT_OVERRIDES = {
+  merchant_trader: {
+    coreSkillIds: [],
+    coreTrainingGroupIds: [],
+    favoredSkillIds: [],
+    favoredTrainingGroupIds: []
+  },
   soldier: {
     favoredSkillIds: [],
     favoredTrainingGroupIds: ["veteran_soldiering"]
@@ -506,6 +512,12 @@ const PROFESSION_SUBTYPE_GRANT_OVERRIDES = {
   burglar: {
     addedCoreTrainingGroupIds: ["security"]
   },
+  builder_master_mason: {
+    addedCoreSkillIds: [],
+    addedCoreTrainingGroupIds: ["craft_group"],
+    addedFavoredSkillIds: [],
+    addedFavoredTrainingGroupIds: []
+  },
   caravan_guard: {
     addedCoreSkillIds: [],
     addedFavoredSkillIds: ["throwing"],
@@ -528,13 +540,37 @@ const PROFESSION_SUBTYPE_GRANT_OVERRIDES = {
     addedFavoredSkillIds: [],
     addedFavoredTrainingGroupIds: ["courtly_formation"]
   },
+  chariot_driver: {
+    addedCoreSkillIds: [],
+    addedCoreTrainingGroupIds: ["transport_and_caravan_work"],
+    addedFavoredSkillIds: ["throwing"],
+    addedFavoredTrainingGroupIds: ["mounted_service", "route_security"]
+  },
   clan_warriors: {
     addedFavoredTrainingGroupIds: []
+  },
+  fixer: {
+    addedCoreSkillIds: [],
+    addedCoreTrainingGroupIds: ["mercantile_practice", "commercial_administration"],
+    addedFavoredSkillIds: ["language", "etiquette", "banking"],
+    addedFavoredTrainingGroupIds: ["political_acumen"]
   },
   gladiator: {
     addedCoreTrainingGroupIds: ["advanced_melee_training"],
     addedFavoredSkillIds: [],
     addedFavoredTrainingGroupIds: ["arena_training"]
+  },
+  homemaker: {
+    addedCoreSkillIds: [],
+    addedCoreTrainingGroupIds: ["craft_group"],
+    addedFavoredSkillIds: ["bargaining"],
+    addedFavoredTrainingGroupIds: ["social_reading"]
+  },
+  inn_keeper: {
+    addedCoreSkillIds: ["baking", "brewing"],
+    addedCoreTrainingGroupIds: ["mercantile_practice", "commercial_administration"],
+    addedFavoredSkillIds: [],
+    addedFavoredTrainingGroupIds: ["social_reading"]
   },
   jailer: {
     addedCoreSkillIds: [],
@@ -552,9 +588,39 @@ const PROFESSION_SUBTYPE_GRANT_OVERRIDES = {
     ],
     addedFavoredTrainingGroupIds: ["civic_learning"]
   },
+  local_trader: {
+    addedCoreSkillIds: ["language"],
+    addedCoreTrainingGroupIds: ["mercantile_practice", "commercial_administration"],
+    addedFavoredSkillIds: [],
+    addedFavoredTrainingGroupIds: ["social_reading"]
+  },
+  master_craftsmen: {
+    addedCoreSkillIds: [],
+    addedCoreTrainingGroupIds: ["craft_group"],
+    addedFavoredSkillIds: [],
+    addedFavoredTrainingGroupIds: []
+  },
+  merchant: {
+    addedCoreSkillIds: ["language"],
+    addedCoreTrainingGroupIds: ["mercantile_practice", "commercial_administration"],
+    addedFavoredSkillIds: ["banking", "insight"],
+    addedFavoredTrainingGroupIds: ["transport_and_caravan_work"]
+  },
   outrider_scout: {
     addedCoreTrainingGroupIds: ["basic_missile_training"],
     addedFavoredTrainingGroupIds: ["mounted_service", "fieldcraft_stealth"]
+  },
+  peddler: {
+    addedCoreSkillIds: ["language"],
+    addedCoreTrainingGroupIds: ["mercantile_practice", "transport_and_caravan_work"],
+    addedFavoredSkillIds: ["insight"],
+    addedFavoredTrainingGroupIds: ["mounted_service", "social_reading"]
+  },
+  prostitute: {
+    addedCoreSkillIds: ["seduction"],
+    addedCoreTrainingGroupIds: ["mercantile_practice", "social_reading"],
+    addedFavoredSkillIds: ["bargaining"],
+    addedFavoredTrainingGroupIds: ["performance_basics"]
   },
   prostitute_courtesan: {
     addedCoreSkillIds: ["seduction"],
