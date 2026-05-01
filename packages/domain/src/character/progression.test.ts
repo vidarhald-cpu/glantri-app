@@ -130,4 +130,13 @@ describe("character progression compatibility", () => {
       "covert_entry"
     );
   });
+
+  it("normalizes retired duplicate performer profession ids in persisted character builds", () => {
+    const parsed = characterBuildSchema.parse({
+      ...baseBuild,
+      professionId: "entertainers_singer_musician"
+    });
+
+    expect(parsed.professionId).toBe("musician");
+  });
 });

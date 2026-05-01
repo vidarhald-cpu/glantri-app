@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { normalizeProfessionId } from "../profession/professions";
 import { characterEquipmentSchema } from "./equipment";
 import { characterProgressionSchema } from "./progression";
 import { rolledCharacterProfileSchema } from "./profiles";
@@ -12,7 +13,10 @@ export const characterBuildSchema = z.object({
   profile: rolledCharacterProfileSchema,
   progression: characterProgressionSchema,
   statModifiers: z.record(z.string(), z.number().int()).optional(),
-  professionId: z.string().min(1).optional(),
+  professionId: z.preprocess(
+    (value) => normalizeProfessionId(value) ?? value,
+    z.string().min(1).optional()
+  ),
   socialClass: z.string().min(1).optional(),
   societyId: z.string().min(1).optional(),
   societyLevel: z.number().int().nonnegative().optional()

@@ -6,6 +6,20 @@ const idSchema = z.string().min(1);
 const professionGrantTypeSchema = z.enum(["group", "ordinary-skill", "secondary-skill"]);
 const professionGrantScopeSchema = z.enum(["family", "profession"]);
 
+const retiredProfessionIdAliases: Record<string, string> = {
+  entertainers_dancer_acrobat: "dancer_acrobat",
+  entertainers_singer_musician: "musician",
+  entertainers_trickster_fool: "entertainer"
+};
+
+export function normalizeProfessionId(input: unknown): string | undefined {
+  if (typeof input !== "string" || input.length === 0) {
+    return undefined;
+  }
+
+  return retiredProfessionIdAliases[input] ?? input;
+}
+
 export const professionFamilyDefinitionSchema = z.object({
   id: idSchema,
   name: z.string().min(1),

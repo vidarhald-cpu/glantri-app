@@ -86,6 +86,84 @@ describe("validateCanonicalContent", () => {
     );
   });
 
+  it("retires duplicate generated performer variants while preserving canonical performers", () => {
+    const retiredPerformerIds = [
+      "entertainers_dancer_acrobat",
+      "entertainers_singer_musician",
+      "entertainers_trickster_fool"
+    ];
+    const canonicalPerformerIds = [
+      "actor",
+      "dancer_acrobat",
+      "entertainer",
+      "folk_performer",
+      "mourner",
+      "musician"
+    ];
+    const canonicalSocietyLevelById = new Map(
+      defaultCanonicalContent.societies.map((society) => [society.id, society.societyLevel])
+    );
+    const allowedRowsFor = (professionId: string) =>
+      defaultCanonicalContent.societyLevels.filter((societyLevel) =>
+        societyLevel.professionIds.includes(professionId)
+      );
+    const canonicalSocietyLevelsFor = (professionId: string) => [
+      ...new Set(
+        allowedRowsFor(professionId)
+          .map((societyLevel) => canonicalSocietyLevelById.get(societyLevel.societyId))
+          .filter((societyLevel): societyLevel is number => typeof societyLevel === "number")
+      )
+    ].sort((left, right) => left - right);
+    const classBandsFor = (professionId: string) => [
+      ...new Set(allowedRowsFor(professionId).map((societyLevel) => societyLevel.societyLevel))
+    ].sort((left, right) => left - right);
+    const categoryBySkillId = new Map(
+      defaultCanonicalContent.skills.map((skill) => [skill.id, skill.categoryId])
+    );
+
+    for (const retiredProfessionId of retiredPerformerIds) {
+      expect(
+        defaultCanonicalContent.professions.some(
+          (profession) => profession.id === retiredProfessionId
+        )
+      ).toBe(false);
+      expect(allowedRowsFor(retiredProfessionId)).toEqual([]);
+      expect(
+        defaultCanonicalContent.professionSkills.some(
+          (grant) => grant.professionId === retiredProfessionId
+        )
+      ).toBe(false);
+    }
+
+    for (const professionId of canonicalPerformerIds) {
+      expect(
+        defaultCanonicalContent.professions.some((profession) => profession.id === professionId)
+      ).toBe(true);
+      expect(allowedRowsFor(professionId).length).toBeGreaterThan(0);
+    }
+
+    expect(canonicalSocietyLevelsFor("entertainer")).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(classBandsFor("entertainer")).toEqual([1, 2, 3, 4]);
+    expect(canonicalSocietyLevelsFor("folk_performer")).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(classBandsFor("folk_performer")).toEqual([1, 2, 3, 4]);
+    expect(canonicalSocietyLevelsFor("dancer_acrobat")).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(classBandsFor("dancer_acrobat")).toEqual([1, 2, 3, 4]);
+    expect(canonicalSocietyLevelsFor("musician")).toEqual([2, 3, 4, 5, 6]);
+    expect(classBandsFor("musician")).toEqual([2, 3, 4]);
+    expect(canonicalSocietyLevelsFor("actor")).toEqual([3, 4, 5, 6]);
+    expect(classBandsFor("actor")).toEqual([3, 4]);
+    expect(canonicalSocietyLevelsFor("mourner")).toEqual([2, 3, 4, 5, 6]);
+    expect(classBandsFor("mourner")).toEqual([2, 3, 4]);
+    expect(categoryBySkillId.get("singing")).toBe("performance");
+    expect(categoryBySkillId.get("music")).toBe("performance");
+    expect(categoryBySkillId.get("dancing")).toBe("performance");
+    expect(categoryBySkillId.get("acting")).toBe("performance");
+    expect(categoryBySkillId.get("storytelling")).toBe("performance");
+    expect(defaultCanonicalContent.skills.some((skill) => skill.id === "specific_language")).toBe(
+      false
+    );
+  });
+
   it("merges retired skill groups into canonical target groups", () => {
     const groupById = new Map(
       defaultCanonicalContent.skillGroups.map((group) => [group.id, group])

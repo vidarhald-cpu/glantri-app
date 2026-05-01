@@ -439,6 +439,14 @@ const PROFESSION_SUBTYPE_NAME_OVERRIDES = {
   cavalry_mounted_retainer: "Mounted Retainer"
 };
 
+const PROFESSION_SUBTYPE_ID_ALIASES = {
+  entertainers_dancer_acrobat: "dancer_acrobat",
+  entertainers_singer_musician: "musician",
+  entertainers_trickster_fool: "entertainer"
+};
+
+const RETIRED_PROFESSION_SUBTYPE_IDS = new Set(Object.keys(PROFESSION_SUBTYPE_ID_ALIASES));
+
 const PROFESSION_SUBTYPE_FAMILY_ID_OVERRIDES = {
   bodyguard: "military_security",
   cavalry_mounted_retainer: "military_security",
@@ -1124,7 +1132,7 @@ const professionFamilies = [
 const professionSourceSubtypes = [
   ...rawBundle.professionSubtypes,
   ...GENERATED_PROFESSION_SUBTYPES
-];
+].filter((subtype) => !RETIRED_PROFESSION_SUBTYPE_IDS.has(subtype.professionSubtypeId));
 
 const professions = professionSourceSubtypes.map((subtype) => ({
   description: normalizeText(subtype.shortDescription, subtype.contextNotes) || undefined,
