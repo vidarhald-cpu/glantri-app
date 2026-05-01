@@ -6326,54 +6326,6 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "soldier",
-      "ranks": 0,
-      "scope": "family",
-      "skillId": "perception"
-    },
-    {
-      "grantType": "secondary-skill",
-      "isCore": false,
-      "professionId": "soldier",
-      "ranks": 0,
-      "scope": "family",
-      "skillId": "formation_fighting"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "soldier",
-      "ranks": 0,
-      "scope": "family",
-      "skillId": "riding"
-    },
-    {
-      "grantType": "secondary-skill",
-      "isCore": false,
-      "professionId": "soldier",
-      "ranks": 0,
-      "scope": "family",
-      "skillId": "battlefield_awareness"
-    },
-    {
-      "grantType": "secondary-skill",
-      "isCore": false,
-      "professionId": "soldier",
-      "ranks": 0,
-      "scope": "family",
-      "skillId": "first_aid"
-    },
-    {
-      "grantType": "secondary-skill",
-      "isCore": false,
-      "professionId": "soldier",
-      "ranks": 0,
-      "scope": "family",
-      "skillId": "weapon_maintenance"
-    },
-    {
-      "grantType": "ordinary-skill",
       "isCore": true,
       "professionId": "temple_scribe",
       "ranks": 0,
@@ -8387,6 +8339,14 @@ export const generatedRepoLocalGlantriSeed = {
       "ranks": 0,
       "scope": "profession",
       "skillId": "dodge"
+    },
+    {
+      "grantType": "group",
+      "isCore": false,
+      "professionId": "light_infantry",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "defensive_soldiering"
     },
     {
       "grantType": "secondary-skill",

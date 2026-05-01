@@ -171,8 +171,18 @@ describe("validateCanonicalContent", () => {
       grantsFor(professionId)
         .filter((grant) => grant.skillId)
         .map((grant) => grant.skillId);
+    const familySkillIdsFor = (professionFamilyId: string) =>
+      defaultCanonicalContent.professionSkills
+        .filter(
+          (grant) =>
+            grant.scope === "family" &&
+            grant.professionId === professionFamilyId &&
+            grant.skillId
+        )
+        .map((grant) => grant.skillId);
 
     expect(soldierFamily).toBeDefined();
+    expect(familySkillIdsFor("soldier")).toEqual([]);
     expect(groupIdsFor("tribal_warrior")).toEqual(
       expect.arrayContaining(["basic_melee_training", "veteran_soldiering"])
     );
@@ -211,6 +221,13 @@ describe("validateCanonicalContent", () => {
     expect(groupIdsFor("military_officer").length).toBeGreaterThan(
       groupIdsFor("tribal_warrior").length
     );
+
+    expect(skillIdsFor("watchman")).not.toContain("riding");
+    expect(skillIdsFor("jailer")).not.toContain("riding");
+    expect(skillIdsFor("caravan_guard")).not.toContain("formation_fighting");
+    expect(skillIdsFor("bodyguard")).not.toContain("formation_fighting");
+    expect(skillIdsFor("champion")).not.toContain("formation_fighting");
+    expect(skillIdsFor("heavy_infantry")).toContain("formation_fighting");
   });
 
   it("gives civic guard professions a watch-focused skill group without officer training", () => {
@@ -393,9 +410,9 @@ describe("validateCanonicalContent", () => {
     expect(new Set(caravanGroupIds).size).toBe(caravanGroupIds.length);
     expect(caravanGroupIds.length).toBeGreaterThanOrEqual(2);
     expect(skillReachFor("caravan_guard")).toBeGreaterThan(10);
-    expect(directOnlySkillIdsFor("caravan_guard")).toEqual(
-      expect.arrayContaining(["formation_fighting", "throwing", "weapon_maintenance"])
-    );
+    expect(directOnlySkillIdsFor("caravan_guard")).toEqual(["throwing"]);
+    expect(directOnlySkillIdsFor("caravan_guard")).not.toContain("formation_fighting");
+    expect(directOnlySkillIdsFor("caravan_guard")).not.toContain("weapon_maintenance");
     expect(directOnlySkillIdsFor("caravan_guard")).not.toContain("perception");
     expect(directOnlySkillIdsFor("caravan_guard")).not.toContain("riding");
     expect(directOnlySkillIdsFor("caravan_guard")).not.toContain("first_aid");

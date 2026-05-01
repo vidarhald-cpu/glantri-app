@@ -246,14 +246,7 @@ const GROUP_DESCRIPTION_OVERRIDES = {
 
 const PROFESSION_FAMILY_GRANT_OVERRIDES = {
   soldier: {
-    favoredSkillIds: [
-      "perception",
-      "formation_fighting",
-      "riding",
-      "battlefield_awareness",
-      "first_aid",
-      "weapon_maintenance"
-    ],
+    favoredSkillIds: [],
     favoredTrainingGroupIds: ["veteran_soldiering"]
   }
 };
@@ -474,7 +467,7 @@ const PROFESSION_SUBTYPE_GRANT_OVERRIDES = {
     addedFavoredTrainingGroupIds: ["defensive_soldiering", "watch_civic_guard"]
   },
   light_infantry: {
-    addedFavoredTrainingGroupIds: []
+    addedFavoredTrainingGroupIds: ["defensive_soldiering"]
   },
   military_officer: {
     addedCoreTrainingGroupIds: [
