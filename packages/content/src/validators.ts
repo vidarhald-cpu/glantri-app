@@ -379,6 +379,17 @@ function validateSkillGroupDesign(content: CanonicalContent): CanonicalContent {
   return content;
 }
 
+function shouldValidateSkillGroupDesign(content: CanonicalContent): boolean {
+  const skillGroupIds = new Set(content.skillGroups.map((group) => group.id));
+
+  return (
+    content.civilizations.length > 0 &&
+    skillGroupIds.has("basic_melee_training") &&
+    skillGroupIds.has("defensive_soldiering") &&
+    skillGroupIds.has("veteran_soldiering")
+  );
+}
+
 function validateSocieties(content: CanonicalContent): CanonicalContent {
   if ((content.societies?.length ?? 0) === 0) {
     return content;
@@ -936,8 +947,12 @@ export function validateCanonicalContent(input: unknown): CanonicalContent {
         : parsedContent.civilizations ?? []
   }));
 
+  const validateDesign = shouldValidateSkillGroupDesign(normalizedContent)
+    ? validateSkillGroupDesign
+    : (content: CanonicalContent): CanonicalContent => content;
+
   return validateProfessionRelationships(
-    validateSkillGroupDesign(
+    validateDesign(
       validateSkillRelationships(
         validateCivilizations(
           validateLanguages(

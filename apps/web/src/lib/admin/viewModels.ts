@@ -183,6 +183,8 @@ export interface ProfessionAdminRow {
   notes: string;
   optionalSkillGroups: string[];
   reachableGroupSkills: string[];
+  societyStageLevels: number[];
+  societyStageSummary: string;
   totalReachableSkills: number;
 }
 
@@ -425,6 +427,10 @@ function summarizeAccessBands(bands: number[]): string {
   ranges.push(rangeStart === previous ? `L${rangeStart}` : `L${rangeStart}-L${previous}`);
 
   return ranges.join(", ");
+}
+
+function summarizeSocietyStages(levels: number[]): string {
+  return summarizeAccessBands(levels).replaceAll("L", "S");
 }
 
 function getAuditSeverityRank(severity: AuditSeverity): number {
@@ -1992,6 +1998,13 @@ export function buildProfessionAdminRows(content: CanonicalContent): ProfessionA
           left.accessBand - right.accessBand ||
           left.socialClass.localeCompare(right.socialClass)
       );
+    const societyStageLevels = [
+      ...new Set(
+        allowedSocietySlots
+          .map((slot) => slot.canonicalSocietyLevel)
+          .filter((level): level is number => typeof level === "number")
+      )
+    ].sort((left, right) => left - right);
 
     return {
       allowedSocietyEntries: profession.allowedSocietyEntries,
@@ -2027,9 +2040,29 @@ export function buildProfessionAdminRows(content: CanonicalContent): ProfessionA
         groupGrants.filter((grant) => !grant.isCore).map((grant) => grant.name)
       ),
       reachableGroupSkills: profession.reachableGroupSkills,
+      societyStageLevels,
+      societyStageSummary: summarizeSocietyStages(societyStageLevels),
       totalReachableSkills: profession.totalReachableSkills
     };
   });
+}
+
+export function filterProfessionAdminRowsBySocietyStage(
+  rows: ProfessionAdminRow[],
+  societyStage: "all" | number | string
+): ProfessionAdminRow[] {
+  if (societyStage === "all") {
+    return rows;
+  }
+
+  const parsedSocietyStage =
+    typeof societyStage === "number" ? societyStage : Number(societyStage);
+
+  if (!Number.isInteger(parsedSocietyStage)) {
+    return rows;
+  }
+
+  return rows.filter((row) => row.societyStageLevels.includes(parsedSocietyStage));
 }
 
 export function buildSocietyAdminRows(content: CanonicalContent): SocietyAdminRow[] {

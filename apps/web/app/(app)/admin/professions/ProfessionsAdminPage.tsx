@@ -8,6 +8,7 @@ import { downloadCsv } from "../../../../src/lib/admin/exporters";
 import {
   buildProfessionAdminRows,
   buildProfessionFamilyFilterOptions,
+  filterProfessionAdminRowsBySocietyStage,
   getProfessionFamilyName
 } from "../../../../src/lib/admin/viewModels";
 import {
@@ -49,6 +50,10 @@ function renderClampedCell(text: string, lines = 2) {
       {text}
     </span>
   );
+}
+
+function formatSocietyStageFilterLabel(value: string) {
+  return value === "all" ? "All society levels" : `Level ${value}`;
 }
 
 const professionsReviewGridTemplate =
@@ -136,7 +141,10 @@ function ProfessionsReviewTable(props: {
                 {renderClampedCell(summarizeList(row.optionalSkillGroups, 3), 2)}
               </div>
               <div style={{ color: "#2e2619", padding: "0.9rem 0.8rem" }}>
-                {renderClampedCell(summarizeList(row.allowedSocietyEntries, 2), 2)}
+                {renderClampedCell(
+                  `${row.societyStageSummary} · ${summarizeList(row.allowedSocietyEntries, 2)}`,
+                  2
+                )}
               </div>
               <div style={{ color: "#2e2619", padding: "0.9rem 0.8rem" }}>{row.totalReachableSkills}</div>
               <div style={{ padding: "0.75rem 0.8rem" }}>
@@ -160,6 +168,7 @@ export default function ProfessionsAdminPage() {
   const allRows = buildProfessionAdminRows(content);
   const [familyFilter, setFamilyFilter] = useState("all");
   const [groupFilter, setGroupFilter] = useState("all");
+  const [societyStageFilter, setSocietyStageFilter] = useState("all");
   const [selectedProfessionId, setSelectedProfessionId] = useState<string>();
   const familyOptions = buildProfessionFamilyFilterOptions(
     content,
@@ -179,7 +188,7 @@ export default function ProfessionsAdminPage() {
 
     return left.localeCompare(right);
   });
-  const rows = allRows.filter((row) => {
+  const rows = filterProfessionAdminRowsBySocietyStage(allRows, societyStageFilter).filter((row) => {
     if (familyFilter !== "all" && row.familyId !== familyFilter) {
       return false;
     }
@@ -297,6 +306,23 @@ export default function ProfessionsAdminPage() {
               ))}
             </AdminSelect>
           </AdminField>
+
+          <AdminField label="Society level">
+            <AdminSelect
+              onChange={(event) => setSocietyStageFilter(event.target.value)}
+              value={societyStageFilter}
+            >
+              {["all", "1", "2", "3", "4", "5", "6"].map((option) => (
+                <option key={option} value={option}>
+                  {formatSocietyStageFilterLabel(option)}
+                </option>
+              ))}
+            </AdminSelect>
+          </AdminField>
+        </div>
+        <div style={{ color: "#5f543a", fontSize: "0.92rem", marginTop: "0.9rem" }}>
+          Showing {rows.length} of {allRows.length} professions
+          {societyStageFilter === "all" ? "" : ` available at society stage ${societyStageFilter}`}.
         </div>
       </AdminPanel>
 

@@ -8,6 +8,7 @@ import {
   buildSkillRelationshipSummary,
   buildSkillAdminRows,
   buildSkillGroupAdminRows,
+  filterProfessionAdminRowsBySocietyStage,
   getProfessionFamilyName,
   buildSocietyAdminRows
 } from "./viewModels";
@@ -569,6 +570,60 @@ describe("admin view models", () => {
       "Alpha Profession",
       "Zulu Profession"
     ]);
+  });
+
+  it("computes profession society-stage availability from canonical society data", () => {
+    const rows = buildProfessionAdminRows(content);
+    const alpha = rows.find((row) => row.id === "alpha_prof");
+    const bravo = rows.find((row) => row.id === "bravo_prof");
+
+    expect(alpha?.societyStageLevels).toEqual([1]);
+    expect(alpha?.societyStageSummary).toBe("S1");
+    expect(alpha?.allowedSocietySlots).toEqual([
+      {
+        accessBand: 1,
+        canonicalSocietyLevel: 1,
+        socialClass: "Common",
+        societyName: "Alpha Society"
+      }
+    ]);
+    expect(bravo?.societyStageLevels).toEqual([2]);
+    expect(bravo?.societyStageSummary).toBe("S2");
+    expect(bravo?.allowedSocietySlots).toEqual([
+      {
+        accessBand: 2,
+        canonicalSocietyLevel: 2,
+        socialClass: "Elite",
+        societyName: "Zulu Society"
+      }
+    ]);
+  });
+
+  it("filters profession rows by actual society stage rather than social class band", () => {
+    const rows = buildProfessionAdminRows(defaultCanonicalContent);
+    const stageOneIds = filterProfessionAdminRowsBySocietyStage(rows, 1).map((row) => row.id);
+    const stageSixIds = filterProfessionAdminRowsBySocietyStage(rows, 6).map((row) => row.id);
+    const allIds = filterProfessionAdminRowsBySocietyStage(rows, "all").map((row) => row.id);
+    const tribalWarrior = rows.find((row) => row.id === "tribal_warrior");
+    const imperialOfficer = rows.find((row) => row.id === "imperial_officer");
+    const farmer = rows.find((row) => row.id === "farmer");
+
+    expect(allIds.length).toBe(rows.length);
+    expect(tribalWarrior?.societyStageLevels).toEqual([1, 2]);
+    expect(tribalWarrior?.allowedSocietySlots.map((slot) => slot.accessBand)).toEqual(
+      expect.arrayContaining([1, 2])
+    );
+    expect(stageOneIds).toContain("tribal_warrior");
+    expect(stageSixIds).not.toContain("tribal_warrior");
+
+    expect(imperialOfficer?.societyStageLevels).toEqual([6]);
+    expect(imperialOfficer?.allowedSocietySlots.map((slot) => slot.accessBand)).toEqual([4]);
+    expect(stageOneIds).not.toContain("imperial_officer");
+    expect(stageSixIds).toContain("imperial_officer");
+
+    expect(farmer?.societyStageLevels).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(stageOneIds).toContain("farmer");
+    expect(stageSixIds).toContain("farmer");
   });
 
   it("sorts society review rows alphabetically by society name", () => {
