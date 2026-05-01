@@ -251,3 +251,70 @@ Recommended next implementation pass:
 - Decide whether `farmer` and `fisher` need focused low-status packages or just reach tuning.
 - Move `woodcutter` and `miner` away from one-group/direct-heavy technical packages if suitable existing groups can be reused.
 - Leave broader C4 tightening for after those packages are healthier.
+
+## K. Follow-Up After Rural / Local / Survival Cleanup
+
+Date: 2026-05-01
+
+Scope: short read-only follow-up after the focused rural/local/resource cleanup pass. No content changes are implemented by this section.
+
+### A. Rural / Local Cleanup Summary
+
+The rural/local/resource weak spot identified above has been materially improved.
+
+Recent generated-content changes now in the current repo-local canonical seed:
+
+- Added `pastoral_work`.
+- Added `farm_household_work`.
+- Added `coastal_fishing`.
+- Added `forestry_resource_work`.
+- Added `mining_extraction`.
+- Added lightweight generated families `rural_local_service`, `maritime_labor`, and `resource_labor`.
+- Improved `herder`, `herdsman_subtype`, `messenger`, `animal_trainer`, `farmer`, `fisher`, `woodcutter`, and `miner`.
+- No inspected focus role gained `Veteran Leadership`, `Captaincy`, `Tactics`, or isolated combat skills.
+
+### B. Updated Reach Table
+
+| Profession | Family | Current groups | Direct grants | Reach | Verdict |
+|---|---|---|---|---:|---|
+| `herder` | `herdsman_rider` | Pastoral Work; Animal Husbandry; Mounted Service; Transport and Caravan Work | Bargaining | 10 | Good enough. General grazing/herd labor now clears the low-role floor. |
+| `herdsman_subtype` | `herdsman_rider` | Animal Handling; Pastoral Work; Animal Husbandry; Mounted Service; Transport and Caravan Work | Bargaining | 11 | Good enough. Now distinct from Herder as a stronger herd manager / animal-handling role. |
+| `messenger` | `rural_local_service` | Mounted Service; Transport and Caravan Work; Athletic Conditioning; Route Security | Language | 13 | Good. Now reads as travel, roads, speed, and route competence rather than generic animal trade. |
+| `animal_trainer` | `herdsman_rider` | Animal Husbandry; Animal Handling; Mounted Service; Transport and Caravan Work; Route Security | Bargaining | 11 | Good enough. Skilled animal role now clears the target without becoming noble/court-specific. |
+| `farmer` | `herdsman_rider` | Animal Husbandry; Farm / Household Work; Mounted Service; Transport and Caravan Work | Bargaining | 11 | Good enough. Still low-status/local, but no longer mechanically too weak. |
+| `fisher` | `maritime_labor` | Maritime Crew Training; Coastal Fishing; Mercantile Practice | None | 10 | Good enough. Better local/coastal package and no longer depends on broad Maritime Navigation. |
+| `woodcutter` | `resource_labor` | Technical Measurement; Forestry / Resource Work | None | 10 | Good enough. No longer a one-group/direct-heavy technical package. |
+| `miner` | `resource_labor` | Technical Measurement; Mining / Extraction | None | 11 | Good enough. No longer a one-group/direct-heavy technical package. |
+
+### C. Remaining Rural / Local Issues
+
+- `herder` and `herdsman_subtype` are now mechanically distinguished, so they no longer require an immediate alias/merge. A later naming pass could still decide whether `herdsman_subtype` should get a cleaner id.
+- The new groups are narrow and coherent enough for current testing. `pastoral_work`, `farm_household_work`, `coastal_fishing`, `forestry_resource_work`, and `mining_extraction` each represent skills naturally learned together and avoid command/combat leakage.
+- `farmer`, `herder`, `fisher`, `woodcutter`, and similar ordinary rural roles may still need class-4/high-society availability review later, but package weakness should no longer block that decision.
+- `hunter`, `prospector`, and `hermit` were not changed in the focused cleanup. They remain playable; any future work there should be optional refinement rather than urgent repair.
+
+### D. Updated Global Recommendation
+
+The global catalog remains good enough for current chargen testing, and the case is stronger after this cleanup.
+
+The biggest prior low-roll concern was weak rural/local reach. That is now resolved for the eight focus roles: none of them falls below reach 10. Low-status characters have credible rural, local, trade, craft, martial, criminal, service, performance, and healing paths.
+
+The main remaining grid issue is now class-4/high-society crowding, not low-roll playability. C4 still includes several ordinary or common-service roles that may eventually need constraints, renamed elite interpretations, or replacement professions before final balancing.
+
+### E. Recommended Next Area
+
+Recommended next audit/implementation area: scholar/literate/bureaucratic.
+
+Reason:
+
+- Many C4 scholarly/bureaucratic roles remain under the high-status reach target.
+- Several rely heavily on direct grants rather than richer group packages.
+- The area directly affects high-society quality and class-3 upward mobility into bureaucracy, law, clerical administration, education, and state service.
+
+Next-best alternatives:
+
+- Religion/healing, if the priority is formal clergy and healing hierarchy.
+- Maritime/transport, if the priority is naval command, ship factors, dockmasters, and ordinary crew/fisher distinction.
+- Service/household/performance, if the priority is reducing C4 crowding among ordinary performer/service roles.
+
+Final-grid/class constraints should wait until at least one more high-status package area is cleaned up, because constraints are safer when strong replacements already exist.
