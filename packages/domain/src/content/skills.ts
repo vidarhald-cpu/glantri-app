@@ -124,6 +124,7 @@ const LEGACY_PLAYER_FACING_SKILL_CATEGORY_BY_GROUP_ID: Partial<
   sacred_learning: "knowledge",
   security: "covert",
   ship_command: "maritime",
+  smuggling_illicit_trade: "covert",
   social_reading: "social",
   stealth_group: "covert",
   street_theft: "covert",

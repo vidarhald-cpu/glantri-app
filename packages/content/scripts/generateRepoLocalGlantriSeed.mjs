@@ -97,6 +97,7 @@ const PLAYER_FACING_SKILL_CATEGORY_BY_GROUP_ID = {
   sacred_learning: "knowledge",
   security: "covert",
   ship_command: "maritime",
+  smuggling_illicit_trade: "covert",
   social_reading: "social",
   stealth_group: "covert",
   street_theft: "covert",
@@ -222,6 +223,16 @@ const FIXED_SKILL_MEMBERSHIPS_BY_GROUP_ID = {
     "oratory",
     "administration"
   ],
+  smuggling_illicit_trade: [
+    "conceal_object",
+    "stealth",
+    "trading",
+    "bargaining",
+    "teamstering",
+    "sailing",
+    "appraisal",
+    "insight"
+  ],
   watch_civic_guard: ["perception", "search", "law", "insight", "social_perception"]
 };
 
@@ -240,6 +251,8 @@ const GROUP_DESCRIPTION_OVERRIDES = {
     "Road awareness, animal handling, search, and practical care for guarding overland routes.",
   ship_command:
     "Vessel command, navigation oversight, crew coordination, and shipboard judgment.",
+  smuggling_illicit_trade:
+    "Concealment, route movement, trading, and social judgment for moving restricted goods.",
   watch_civic_guard:
     "Observation, search, basic law, and defensive procedure for civic watch and detention work."
 };
@@ -257,6 +270,12 @@ const GENERATED_PROFESSION_FAMILIES = [
       "Arena-focused combat performer family for staged personal fighting rather than battlefield soldiering.",
     id: "arena_fighter",
     name: "Arena Fighter"
+  },
+  {
+    description:
+      "Illicit trade and contraband-moving professions whose package is narrower than ordinary merchant work.",
+    id: "illicit_trader",
+    name: "Illicit Trader"
   },
   {
     description:
@@ -464,7 +483,8 @@ const PROFESSION_SUBTYPE_FAMILY_ID_OVERRIDES = {
   cavalry_mounted_retainer: "military_security",
   champion: "military_security",
   gladiator: "arena_fighter",
-  prostitute_courtesan: "social_companion"
+  prostitute_courtesan: "social_companion",
+  smuggler: "illicit_trader"
 };
 
 const PROFESSION_SUBTYPE_GRANT_OVERRIDES = {
@@ -482,6 +502,9 @@ const PROFESSION_SUBTYPE_GRANT_OVERRIDES = {
     addedCoreTrainingGroupIds: [],
     addedFavoredSkillIds: [],
     addedFavoredTrainingGroupIds: ["watch_civic_guard"]
+  },
+  burglar: {
+    addedCoreTrainingGroupIds: ["security"]
   },
   caravan_guard: {
     addedCoreSkillIds: [],
@@ -545,6 +568,12 @@ const PROFESSION_SUBTYPE_GRANT_OVERRIDES = {
     addedFavoredSkillIds: [],
     addedFavoredTrainingGroupIds: []
   },
+  smuggler: {
+    addedCoreSkillIds: [],
+    addedCoreTrainingGroupIds: ["smuggling_illicit_trade"],
+    addedFavoredSkillIds: ["language"],
+    addedFavoredTrainingGroupIds: ["covert_entry"]
+  },
   watchman: {
     addedCoreSkillIds: [],
     addedFavoredSkillIds: [],
@@ -553,6 +582,14 @@ const PROFESSION_SUBTYPE_GRANT_OVERRIDES = {
 };
 
 const PROFESSION_AVAILABILITY_OVERRIDES = {
+  bandit: {
+    classBands: [1, 2, 3],
+    societyLevels: [1, 2, 3, 4]
+  },
+  beggar: {
+    classBands: [1, 2, 3],
+    societyLevels: [1, 2, 3, 4, 5, 6]
+  },
   clan_warriors: {
     classBands: [1, 2],
     societyLevels: [1, 2]
@@ -601,6 +638,10 @@ const PROFESSION_AVAILABILITY_OVERRIDES = {
     classBands: [1, 2, 3],
     societyLevels: [1, 2, 3]
   },
+  pickpocket: {
+    classBands: [2, 3],
+    societyLevels: [2, 3, 4, 5]
+  },
   prostitute_courtesan: {
     classBands: [2, 3],
     societyLevels: [2, 3, 4, 5]
@@ -612,6 +653,10 @@ const PROFESSION_AVAILABILITY_OVERRIDES = {
   staff_officer: {
     classBands: [4],
     societyLevels: [5, 6]
+  },
+  street_thug: {
+    classBands: [1, 2, 3],
+    societyLevels: [1, 2, 3, 4, 5]
   },
   tribal_warrior: {
     classBands: [1, 2],
@@ -1008,11 +1053,18 @@ const generatedTrainingGroupSources = [
     sortOrder: trainingGroupSources.length + taxonomyGroupSources.length + 3
   },
   {
+    description: GROUP_DESCRIPTION_OVERRIDES.smuggling_illicit_trade,
+    id: "smuggling_illicit_trade",
+    name: "Smuggling / Illicit Trade",
+    skillIds: FIXED_SKILL_MEMBERSHIPS_BY_GROUP_ID.smuggling_illicit_trade,
+    sortOrder: trainingGroupSources.length + taxonomyGroupSources.length + 4
+  },
+  {
     description: GROUP_DESCRIPTION_OVERRIDES.watch_civic_guard,
     id: "watch_civic_guard",
     name: "Watch / Civic Guard",
     skillIds: FIXED_SKILL_MEMBERSHIPS_BY_GROUP_ID.watch_civic_guard,
-    sortOrder: trainingGroupSources.length + taxonomyGroupSources.length + 4
+    sortOrder: trainingGroupSources.length + taxonomyGroupSources.length + 5
   }
 ];
 const skillGroupSources = [

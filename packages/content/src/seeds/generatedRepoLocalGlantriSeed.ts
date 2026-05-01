@@ -1782,6 +1782,47 @@ export const generatedRepoLocalGlantriSeed = {
       "sortOrder": 54
     },
     {
+      "description": "Concealment, route movement, trading, and social judgment for moving restricted goods.",
+      "id": "smuggling_illicit_trade",
+      "name": "Smuggling / Illicit Trade",
+      "skillMemberships": [
+        {
+          "relevance": "optional",
+          "skillId": "conceal_object"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "stealth"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "trading"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "bargaining"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "teamstering"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "sailing"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "appraisal"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "insight"
+        }
+      ],
+      "selectionSlots": [],
+      "sortOrder": 55
+    },
+    {
       "description": "Observation, search, basic law, and defensive procedure for civic watch and detention work.",
       "id": "watch_civic_guard",
       "name": "Watch / Civic Guard",
@@ -1808,7 +1849,7 @@ export const generatedRepoLocalGlantriSeed = {
         }
       ],
       "selectionSlots": [],
-      "sortOrder": 55
+      "sortOrder": 56
     }
   ],
   "skills": [
@@ -2306,7 +2347,8 @@ export const generatedRepoLocalGlantriSeed = {
       "groupId": "mercantile_practice",
       "groupIds": [
         "mercantile_practice",
-        "operations"
+        "operations",
+        "smuggling_illicit_trade"
       ],
       "id": "bargaining",
       "isTheoretical": false,
@@ -2363,7 +2405,8 @@ export const generatedRepoLocalGlantriSeed = {
       "groupIds": [
         "mercantile_practice",
         "transport_and_caravan_work",
-        "operations"
+        "operations",
+        "smuggling_illicit_trade"
       ],
       "id": "trading",
       "isTheoretical": false,
@@ -2540,7 +2583,8 @@ export const generatedRepoLocalGlantriSeed = {
       "groupId": "mercantile_practice",
       "groupIds": [
         "mercantile_practice",
-        "operations"
+        "operations",
+        "smuggling_illicit_trade"
       ],
       "id": "appraisal",
       "isTheoretical": false,
@@ -2653,6 +2697,7 @@ export const generatedRepoLocalGlantriSeed = {
         "social_reading",
         "humanities",
         "ship_command",
+        "smuggling_illicit_trade",
         "watch_civic_guard"
       ],
       "id": "insight",
@@ -3237,7 +3282,8 @@ export const generatedRepoLocalGlantriSeed = {
         "transport_and_caravan_work",
         "animal_handling",
         "wilderness_group",
-        "route_security"
+        "route_security",
+        "smuggling_illicit_trade"
       ],
       "id": "teamstering",
       "isTheoretical": false,
@@ -3294,7 +3340,8 @@ export const generatedRepoLocalGlantriSeed = {
         "maritime_crew_training",
         "maritime_navigation",
         "wilderness_group",
-        "ship_command"
+        "ship_command",
+        "smuggling_illicit_trade"
       ],
       "id": "sailing",
       "isTheoretical": false,
@@ -3594,7 +3641,8 @@ export const generatedRepoLocalGlantriSeed = {
       "groupId": "street_theft",
       "groupIds": [
         "street_theft",
-        "security"
+        "security",
+        "smuggling_illicit_trade"
       ],
       "id": "conceal_object",
       "isTheoretical": false,
@@ -3711,7 +3759,8 @@ export const generatedRepoLocalGlantriSeed = {
         "covert_entry",
         "street_theft",
         "fieldcraft_stealth",
-        "stealth_group"
+        "stealth_group",
+        "smuggling_illicit_trade"
       ],
       "id": "stealth",
       "isTheoretical": false,
@@ -5114,6 +5163,11 @@ export const generatedRepoLocalGlantriSeed = {
       "name": "Arena Fighter"
     },
     {
+      "description": "Illicit trade and contraband-moving professions whose package is narrower than ordinary merchant work.",
+      "id": "illicit_trader",
+      "name": "Illicit Trader"
+    },
+    {
       "description": "Social and performance-oriented companion roles distinct from elite courtly influence offices.",
       "id": "social_companion",
       "name": "Social Companion"
@@ -5631,7 +5685,7 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "description": "Illicit trader moving goods across borders, tolls, law, or social restrictions. Commercial-criminal subtype balancing trade skill with concealment and route knowledge.",
-      "familyId": "merchant_trader",
+      "familyId": "illicit_trader",
       "id": "smuggler",
       "name": "Smuggler",
       "subtypeName": "Smuggler"
@@ -6617,7 +6671,7 @@ export const generatedRepoLocalGlantriSeed = {
       "professionId": "burglar",
       "ranks": 0,
       "scope": "profession",
-      "skillGroupId": "covert_entry"
+      "skillGroupId": "security"
     },
     {
       "grantType": "ordinary-skill",
@@ -6634,6 +6688,14 @@ export const generatedRepoLocalGlantriSeed = {
       "ranks": 0,
       "scope": "profession",
       "skillId": "search"
+    },
+    {
+      "grantType": "group",
+      "isCore": false,
+      "professionId": "burglar",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "covert_entry"
     },
     {
       "grantType": "secondary-skill",
@@ -9313,31 +9375,15 @@ export const generatedRepoLocalGlantriSeed = {
       "professionId": "smuggler",
       "ranks": 0,
       "scope": "profession",
-      "skillGroupId": "mercantile_practice"
+      "skillGroupId": "smuggling_illicit_trade"
     },
     {
-      "grantType": "ordinary-skill",
-      "isCore": true,
-      "professionId": "smuggler",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "trading"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": true,
-      "professionId": "smuggler",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "bargaining"
-    },
-    {
-      "grantType": "secondary-skill",
+      "grantType": "group",
       "isCore": false,
       "professionId": "smuggler",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "conceal_object"
+      "skillGroupId": "covert_entry"
     },
     {
       "grantType": "ordinary-skill",
@@ -9345,23 +9391,7 @@ export const generatedRepoLocalGlantriSeed = {
       "professionId": "smuggler",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "stealth"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "smuggler",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "sailing"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "smuggler",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "teamstering"
+      "skillId": "language"
     },
     {
       "grantType": "group",
@@ -10561,6 +10591,7 @@ export const generatedRepoLocalGlantriSeed = {
         "arena_training",
         "route_security",
         "ship_command",
+        "smuggling_illicit_trade",
         "watch_civic_guard"
       ],
       "skillIds": [],
@@ -10639,6 +10670,7 @@ export const generatedRepoLocalGlantriSeed = {
         "arena_training",
         "route_security",
         "ship_command",
+        "smuggling_illicit_trade",
         "watch_civic_guard"
       ],
       "skillIds": [],
@@ -10714,6 +10746,7 @@ export const generatedRepoLocalGlantriSeed = {
         "arena_training",
         "route_security",
         "ship_command",
+        "smuggling_illicit_trade",
         "watch_civic_guard"
       ],
       "skillIds": [],
@@ -10730,8 +10763,6 @@ export const generatedRepoLocalGlantriSeed = {
         "folk_healer",
         "herdsman_subtype",
         "folk_performer",
-        "bandit",
-        "beggar",
         "crafter",
         "dancer_acrobat",
         "entertainer",
@@ -10745,7 +10776,6 @@ export const generatedRepoLocalGlantriSeed = {
         "peddler",
         "prospector",
         "shaman",
-        "street_thug",
         "woodcutter"
       ],
       "skillGroupIds": [
@@ -10788,6 +10818,7 @@ export const generatedRepoLocalGlantriSeed = {
         "arena_training",
         "route_security",
         "ship_command",
+        "smuggling_illicit_trade",
         "watch_civic_guard"
       ],
       "skillIds": [],
@@ -10867,6 +10898,7 @@ export const generatedRepoLocalGlantriSeed = {
         "arena_training",
         "route_security",
         "ship_command",
+        "smuggling_illicit_trade",
         "watch_civic_guard"
       ],
       "skillIds": [],
@@ -10981,6 +11013,7 @@ export const generatedRepoLocalGlantriSeed = {
         "arena_training",
         "route_security",
         "ship_command",
+        "smuggling_illicit_trade",
         "watch_civic_guard"
       ],
       "skillIds": [],
@@ -11092,6 +11125,7 @@ export const generatedRepoLocalGlantriSeed = {
         "arena_training",
         "route_security",
         "ship_command",
+        "smuggling_illicit_trade",
         "watch_civic_guard"
       ],
       "skillIds": [],
@@ -11112,8 +11146,6 @@ export const generatedRepoLocalGlantriSeed = {
         "burglar",
         "folk_performer",
         "animal_trainer",
-        "bandit",
-        "beggar",
         "bodyguard",
         "bounty_hunter",
         "caravan_guard",
@@ -11142,14 +11174,12 @@ export const generatedRepoLocalGlantriSeed = {
         "musician",
         "outrider_scout",
         "peddler",
-        "pickpocket",
         "prospector",
         "prostitute",
         "sailor",
         "shaman",
         "smuggler",
         "soothsayer",
-        "street_thug",
         "thief",
         "torturer",
         "woodcutter"
@@ -11199,6 +11229,7 @@ export const generatedRepoLocalGlantriSeed = {
         "arena_training",
         "route_security",
         "ship_command",
+        "smuggling_illicit_trade",
         "watch_civic_guard"
       ],
       "skillIds": [],
@@ -11278,6 +11309,7 @@ export const generatedRepoLocalGlantriSeed = {
         "arena_training",
         "route_security",
         "ship_command",
+        "smuggling_illicit_trade",
         "watch_civic_guard"
       ],
       "skillIds": [],
@@ -11392,6 +11424,7 @@ export const generatedRepoLocalGlantriSeed = {
         "arena_training",
         "route_security",
         "ship_command",
+        "smuggling_illicit_trade",
         "watch_civic_guard"
       ],
       "skillIds": [],
@@ -11503,6 +11536,7 @@ export const generatedRepoLocalGlantriSeed = {
         "arena_training",
         "route_security",
         "ship_command",
+        "smuggling_illicit_trade",
         "watch_civic_guard"
       ],
       "skillIds": [],
@@ -11523,8 +11557,6 @@ export const generatedRepoLocalGlantriSeed = {
         "burglar",
         "folk_performer",
         "animal_trainer",
-        "bandit",
-        "beggar",
         "bodyguard",
         "bounty_hunter",
         "caravan_guard",
@@ -11553,14 +11585,12 @@ export const generatedRepoLocalGlantriSeed = {
         "musician",
         "outrider_scout",
         "peddler",
-        "pickpocket",
         "prospector",
         "prostitute",
         "sailor",
         "shaman",
         "smuggler",
         "soothsayer",
-        "street_thug",
         "thief",
         "torturer",
         "woodcutter"
@@ -11610,6 +11640,7 @@ export const generatedRepoLocalGlantriSeed = {
         "arena_training",
         "route_security",
         "ship_command",
+        "smuggling_illicit_trade",
         "watch_civic_guard"
       ],
       "skillIds": [],
@@ -11686,6 +11717,7 @@ export const generatedRepoLocalGlantriSeed = {
         "arena_training",
         "route_security",
         "ship_command",
+        "smuggling_illicit_trade",
         "watch_civic_guard"
       ],
       "skillIds": [],
@@ -11802,6 +11834,7 @@ export const generatedRepoLocalGlantriSeed = {
         "arena_training",
         "route_security",
         "ship_command",
+        "smuggling_illicit_trade",
         "watch_civic_guard"
       ],
       "skillIds": [],
@@ -11939,6 +11972,7 @@ export const generatedRepoLocalGlantriSeed = {
         "arena_training",
         "route_security",
         "ship_command",
+        "smuggling_illicit_trade",
         "watch_civic_guard"
       ],
       "skillIds": [],
@@ -11963,8 +11997,6 @@ export const generatedRepoLocalGlantriSeed = {
         "actor",
         "animal_trainer",
         "assassin",
-        "bandit",
-        "beggar",
         "bodyguard",
         "bounty_hunter",
         "caravan_guard",
@@ -11998,7 +12030,6 @@ export const generatedRepoLocalGlantriSeed = {
         "peddler",
         "personal_servant",
         "philosopher",
-        "pickpocket",
         "priest",
         "prospector",
         "prostitute",
@@ -12010,7 +12041,6 @@ export const generatedRepoLocalGlantriSeed = {
         "smuggler",
         "soothsayer",
         "spy",
-        "street_thug",
         "student",
         "thief",
         "torturer",
@@ -12066,6 +12096,7 @@ export const generatedRepoLocalGlantriSeed = {
         "arena_training",
         "route_security",
         "ship_command",
+        "smuggling_illicit_trade",
         "watch_civic_guard"
       ],
       "skillIds": [],
@@ -12142,6 +12173,7 @@ export const generatedRepoLocalGlantriSeed = {
         "arena_training",
         "route_security",
         "ship_command",
+        "smuggling_illicit_trade",
         "watch_civic_guard"
       ],
       "skillIds": [],
@@ -12258,6 +12290,7 @@ export const generatedRepoLocalGlantriSeed = {
         "arena_training",
         "route_security",
         "ship_command",
+        "smuggling_illicit_trade",
         "watch_civic_guard"
       ],
       "skillIds": [],
@@ -12395,6 +12428,7 @@ export const generatedRepoLocalGlantriSeed = {
         "arena_training",
         "route_security",
         "ship_command",
+        "smuggling_illicit_trade",
         "watch_civic_guard"
       ],
       "skillIds": [],
@@ -12419,8 +12453,6 @@ export const generatedRepoLocalGlantriSeed = {
         "actor",
         "animal_trainer",
         "assassin",
-        "bandit",
-        "beggar",
         "bodyguard",
         "bounty_hunter",
         "caravan_guard",
@@ -12454,7 +12486,6 @@ export const generatedRepoLocalGlantriSeed = {
         "peddler",
         "personal_servant",
         "philosopher",
-        "pickpocket",
         "priest",
         "prospector",
         "prostitute",
@@ -12466,7 +12497,6 @@ export const generatedRepoLocalGlantriSeed = {
         "smuggler",
         "soothsayer",
         "spy",
-        "street_thug",
         "student",
         "thief",
         "torturer",
@@ -12522,6 +12552,7 @@ export const generatedRepoLocalGlantriSeed = {
         "arena_training",
         "route_security",
         "ship_command",
+        "smuggling_illicit_trade",
         "watch_civic_guard"
       ],
       "skillIds": [],
@@ -12597,6 +12628,7 @@ export const generatedRepoLocalGlantriSeed = {
         "arena_training",
         "route_security",
         "ship_command",
+        "smuggling_illicit_trade",
         "watch_civic_guard"
       ],
       "skillIds": [],
@@ -12712,6 +12744,7 @@ export const generatedRepoLocalGlantriSeed = {
         "arena_training",
         "route_security",
         "ship_command",
+        "smuggling_illicit_trade",
         "watch_civic_guard"
       ],
       "skillIds": [],
@@ -12851,6 +12884,7 @@ export const generatedRepoLocalGlantriSeed = {
         "arena_training",
         "route_security",
         "ship_command",
+        "smuggling_illicit_trade",
         "watch_civic_guard"
       ],
       "skillIds": [],
@@ -12877,8 +12911,6 @@ export const generatedRepoLocalGlantriSeed = {
         "actor",
         "animal_trainer",
         "assassin",
-        "bandit",
-        "beggar",
         "bodyguard",
         "bounty_hunter",
         "bureaucrat",
@@ -12918,7 +12950,6 @@ export const generatedRepoLocalGlantriSeed = {
         "peddler",
         "personal_servant",
         "philosopher",
-        "pickpocket",
         "politician",
         "priest",
         "prospector",
@@ -12931,7 +12962,6 @@ export const generatedRepoLocalGlantriSeed = {
         "smuggler",
         "soothsayer",
         "spy",
-        "street_thug",
         "student",
         "tax_collector",
         "thief",
@@ -12993,6 +13023,7 @@ export const generatedRepoLocalGlantriSeed = {
         "arena_training",
         "route_security",
         "ship_command",
+        "smuggling_illicit_trade",
         "watch_civic_guard"
       ],
       "skillIds": [],
@@ -13068,6 +13099,7 @@ export const generatedRepoLocalGlantriSeed = {
         "arena_training",
         "route_security",
         "ship_command",
+        "smuggling_illicit_trade",
         "watch_civic_guard"
       ],
       "skillIds": [],
@@ -13183,6 +13215,7 @@ export const generatedRepoLocalGlantriSeed = {
         "arena_training",
         "route_security",
         "ship_command",
+        "smuggling_illicit_trade",
         "watch_civic_guard"
       ],
       "skillIds": [],
@@ -13322,6 +13355,7 @@ export const generatedRepoLocalGlantriSeed = {
         "arena_training",
         "route_security",
         "ship_command",
+        "smuggling_illicit_trade",
         "watch_civic_guard"
       ],
       "skillIds": [],
@@ -13348,8 +13382,6 @@ export const generatedRepoLocalGlantriSeed = {
         "actor",
         "animal_trainer",
         "assassin",
-        "bandit",
-        "beggar",
         "bodyguard",
         "bounty_hunter",
         "bureaucrat",
@@ -13389,7 +13421,6 @@ export const generatedRepoLocalGlantriSeed = {
         "peddler",
         "personal_servant",
         "philosopher",
-        "pickpocket",
         "politician",
         "priest",
         "prospector",
@@ -13402,7 +13433,6 @@ export const generatedRepoLocalGlantriSeed = {
         "smuggler",
         "soothsayer",
         "spy",
-        "street_thug",
         "student",
         "tax_collector",
         "thief",
@@ -13464,6 +13494,7 @@ export const generatedRepoLocalGlantriSeed = {
         "arena_training",
         "route_security",
         "ship_command",
+        "smuggling_illicit_trade",
         "watch_civic_guard"
       ],
       "skillIds": [],
@@ -13480,7 +13511,6 @@ export const generatedRepoLocalGlantriSeed = {
         "folk_healer",
         "herdsman_subtype",
         "folk_performer",
-        "bandit",
         "beggar",
         "crafter",
         "dancer_acrobat",
@@ -13538,6 +13568,7 @@ export const generatedRepoLocalGlantriSeed = {
         "arena_training",
         "route_security",
         "ship_command",
+        "smuggling_illicit_trade",
         "watch_civic_guard"
       ],
       "skillIds": [],
@@ -13558,7 +13589,6 @@ export const generatedRepoLocalGlantriSeed = {
         "burglar",
         "folk_performer",
         "animal_trainer",
-        "bandit",
         "beggar",
         "bodyguard",
         "bounty_hunter",
@@ -13651,6 +13681,7 @@ export const generatedRepoLocalGlantriSeed = {
         "arena_training",
         "route_security",
         "ship_command",
+        "smuggling_illicit_trade",
         "watch_civic_guard"
       ],
       "skillIds": [],
@@ -13675,7 +13706,6 @@ export const generatedRepoLocalGlantriSeed = {
         "actor",
         "animal_trainer",
         "assassin",
-        "bandit",
         "beggar",
         "bodyguard",
         "bounty_hunter",
@@ -13788,6 +13818,7 @@ export const generatedRepoLocalGlantriSeed = {
         "arena_training",
         "route_security",
         "ship_command",
+        "smuggling_illicit_trade",
         "watch_civic_guard"
       ],
       "skillIds": [],
@@ -13814,8 +13845,6 @@ export const generatedRepoLocalGlantriSeed = {
         "actor",
         "animal_trainer",
         "assassin",
-        "bandit",
-        "beggar",
         "bodyguard",
         "bounty_hunter",
         "bureaucrat",
@@ -13855,7 +13884,6 @@ export const generatedRepoLocalGlantriSeed = {
         "peddler",
         "personal_servant",
         "philosopher",
-        "pickpocket",
         "politician",
         "priest",
         "prospector",
@@ -13868,7 +13896,6 @@ export const generatedRepoLocalGlantriSeed = {
         "smuggler",
         "soothsayer",
         "spy",
-        "street_thug",
         "student",
         "tax_collector",
         "thief",
@@ -13932,6 +13959,7 @@ export const generatedRepoLocalGlantriSeed = {
         "arena_training",
         "route_security",
         "ship_command",
+        "smuggling_illicit_trade",
         "watch_civic_guard"
       ],
       "skillIds": [],
@@ -13948,7 +13976,6 @@ export const generatedRepoLocalGlantriSeed = {
         "folk_healer",
         "herdsman_subtype",
         "folk_performer",
-        "bandit",
         "beggar",
         "crafter",
         "dancer_acrobat",
@@ -14006,6 +14033,7 @@ export const generatedRepoLocalGlantriSeed = {
         "arena_training",
         "route_security",
         "ship_command",
+        "smuggling_illicit_trade",
         "watch_civic_guard"
       ],
       "skillIds": [],
@@ -14026,7 +14054,6 @@ export const generatedRepoLocalGlantriSeed = {
         "burglar",
         "folk_performer",
         "animal_trainer",
-        "bandit",
         "beggar",
         "bodyguard",
         "bounty_hunter",
@@ -14119,6 +14146,7 @@ export const generatedRepoLocalGlantriSeed = {
         "arena_training",
         "route_security",
         "ship_command",
+        "smuggling_illicit_trade",
         "watch_civic_guard"
       ],
       "skillIds": [],
@@ -14143,7 +14171,6 @@ export const generatedRepoLocalGlantriSeed = {
         "actor",
         "animal_trainer",
         "assassin",
-        "bandit",
         "beggar",
         "bodyguard",
         "bounty_hunter",
@@ -14256,6 +14283,7 @@ export const generatedRepoLocalGlantriSeed = {
         "arena_training",
         "route_security",
         "ship_command",
+        "smuggling_illicit_trade",
         "watch_civic_guard"
       ],
       "skillIds": [],
@@ -14282,8 +14310,6 @@ export const generatedRepoLocalGlantriSeed = {
         "actor",
         "animal_trainer",
         "assassin",
-        "bandit",
-        "beggar",
         "bodyguard",
         "bounty_hunter",
         "bureaucrat",
@@ -14323,7 +14349,6 @@ export const generatedRepoLocalGlantriSeed = {
         "peddler",
         "personal_servant",
         "philosopher",
-        "pickpocket",
         "politician",
         "priest",
         "prospector",
@@ -14336,7 +14361,6 @@ export const generatedRepoLocalGlantriSeed = {
         "smuggler",
         "soothsayer",
         "spy",
-        "street_thug",
         "student",
         "tax_collector",
         "thief",
@@ -14400,6 +14424,7 @@ export const generatedRepoLocalGlantriSeed = {
         "arena_training",
         "route_security",
         "ship_command",
+        "smuggling_illicit_trade",
         "watch_civic_guard"
       ],
       "skillIds": [],
@@ -14416,7 +14441,6 @@ export const generatedRepoLocalGlantriSeed = {
         "folk_healer",
         "herdsman_subtype",
         "folk_performer",
-        "bandit",
         "beggar",
         "crafter",
         "dancer_acrobat",
@@ -14474,6 +14498,7 @@ export const generatedRepoLocalGlantriSeed = {
         "arena_training",
         "route_security",
         "ship_command",
+        "smuggling_illicit_trade",
         "watch_civic_guard"
       ],
       "skillIds": [],
@@ -14494,7 +14519,6 @@ export const generatedRepoLocalGlantriSeed = {
         "burglar",
         "folk_performer",
         "animal_trainer",
-        "bandit",
         "beggar",
         "bodyguard",
         "bounty_hunter",
@@ -14587,6 +14611,7 @@ export const generatedRepoLocalGlantriSeed = {
         "arena_training",
         "route_security",
         "ship_command",
+        "smuggling_illicit_trade",
         "watch_civic_guard"
       ],
       "skillIds": [],
@@ -14611,7 +14636,6 @@ export const generatedRepoLocalGlantriSeed = {
         "actor",
         "animal_trainer",
         "assassin",
-        "bandit",
         "beggar",
         "bodyguard",
         "bounty_hunter",
@@ -14724,6 +14748,7 @@ export const generatedRepoLocalGlantriSeed = {
         "arena_training",
         "route_security",
         "ship_command",
+        "smuggling_illicit_trade",
         "watch_civic_guard"
       ],
       "skillIds": [],
@@ -14750,8 +14775,6 @@ export const generatedRepoLocalGlantriSeed = {
         "actor",
         "animal_trainer",
         "assassin",
-        "bandit",
-        "beggar",
         "bodyguard",
         "bounty_hunter",
         "bureaucrat",
@@ -14791,7 +14814,6 @@ export const generatedRepoLocalGlantriSeed = {
         "peddler",
         "personal_servant",
         "philosopher",
-        "pickpocket",
         "politician",
         "priest",
         "prospector",
@@ -14804,7 +14826,6 @@ export const generatedRepoLocalGlantriSeed = {
         "smuggler",
         "soothsayer",
         "spy",
-        "street_thug",
         "student",
         "tax_collector",
         "thief",
@@ -14868,6 +14889,7 @@ export const generatedRepoLocalGlantriSeed = {
         "arena_training",
         "route_security",
         "ship_command",
+        "smuggling_illicit_trade",
         "watch_civic_guard"
       ],
       "skillIds": [],
@@ -14884,7 +14906,6 @@ export const generatedRepoLocalGlantriSeed = {
         "folk_healer",
         "herdsman_subtype",
         "folk_performer",
-        "bandit",
         "beggar",
         "crafter",
         "dancer_acrobat",
@@ -14899,7 +14920,6 @@ export const generatedRepoLocalGlantriSeed = {
         "peddler",
         "prospector",
         "shaman",
-        "street_thug",
         "woodcutter"
       ],
       "skillGroupIds": [
@@ -14942,6 +14962,7 @@ export const generatedRepoLocalGlantriSeed = {
         "arena_training",
         "route_security",
         "ship_command",
+        "smuggling_illicit_trade",
         "watch_civic_guard"
       ],
       "skillIds": [],
@@ -14962,7 +14983,6 @@ export const generatedRepoLocalGlantriSeed = {
         "burglar",
         "folk_performer",
         "animal_trainer",
-        "bandit",
         "beggar",
         "bodyguard",
         "bounty_hunter",
@@ -14992,14 +15012,12 @@ export const generatedRepoLocalGlantriSeed = {
         "musician",
         "outrider_scout",
         "peddler",
-        "pickpocket",
         "prospector",
         "prostitute",
         "sailor",
         "shaman",
         "smuggler",
         "soothsayer",
-        "street_thug",
         "thief",
         "torturer",
         "woodcutter"
@@ -15049,6 +15067,7 @@ export const generatedRepoLocalGlantriSeed = {
         "arena_training",
         "route_security",
         "ship_command",
+        "smuggling_illicit_trade",
         "watch_civic_guard"
       ],
       "skillIds": [],
@@ -15073,7 +15092,6 @@ export const generatedRepoLocalGlantriSeed = {
         "actor",
         "animal_trainer",
         "assassin",
-        "bandit",
         "beggar",
         "bodyguard",
         "bounty_hunter",
@@ -15108,7 +15126,6 @@ export const generatedRepoLocalGlantriSeed = {
         "peddler",
         "personal_servant",
         "philosopher",
-        "pickpocket",
         "priest",
         "prospector",
         "prostitute",
@@ -15120,7 +15137,6 @@ export const generatedRepoLocalGlantriSeed = {
         "smuggler",
         "soothsayer",
         "spy",
-        "street_thug",
         "student",
         "thief",
         "torturer",
@@ -15179,6 +15195,7 @@ export const generatedRepoLocalGlantriSeed = {
         "arena_training",
         "route_security",
         "ship_command",
+        "smuggling_illicit_trade",
         "watch_civic_guard"
       ],
       "skillIds": [],
@@ -15205,8 +15222,6 @@ export const generatedRepoLocalGlantriSeed = {
         "actor",
         "animal_trainer",
         "assassin",
-        "bandit",
-        "beggar",
         "bodyguard",
         "bounty_hunter",
         "bureaucrat",
@@ -15246,7 +15261,6 @@ export const generatedRepoLocalGlantriSeed = {
         "peddler",
         "personal_servant",
         "philosopher",
-        "pickpocket",
         "politician",
         "priest",
         "prospector",
@@ -15259,7 +15273,6 @@ export const generatedRepoLocalGlantriSeed = {
         "smuggler",
         "soothsayer",
         "spy",
-        "street_thug",
         "student",
         "tax_collector",
         "thief",
@@ -15324,6 +15337,7 @@ export const generatedRepoLocalGlantriSeed = {
         "arena_training",
         "route_security",
         "ship_command",
+        "smuggling_illicit_trade",
         "watch_civic_guard"
       ],
       "skillIds": [],
