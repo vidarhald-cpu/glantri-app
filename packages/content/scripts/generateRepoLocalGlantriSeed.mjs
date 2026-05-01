@@ -260,6 +260,12 @@ const GENERATED_PROFESSION_FAMILIES = [
   },
   {
     description:
+      "Social and performance-oriented companion roles distinct from elite courtly influence offices.",
+    id: "social_companion",
+    name: "Social Companion"
+  },
+  {
+    description:
       "Focused low and mid military/security professions whose training is defined by subtype packages rather than broad Soldier-family defaults.",
     id: "military_security",
     name: "Military / Security"
@@ -436,7 +442,13 @@ const GENERATED_PROFESSION_SUBTYPES = [
 ];
 
 const PROFESSION_SUBTYPE_NAME_OVERRIDES = {
-  cavalry_mounted_retainer: "Mounted Retainer"
+  cavalry_mounted_retainer: "Mounted Retainer",
+  prostitute_courtesan: "Companion"
+};
+
+const PROFESSION_SUBTYPE_DESCRIPTION_OVERRIDES = {
+  prostitute_courtesan:
+    "Social and performance-oriented companion in urban or patronage settings, distinct from elite courtly courtesans."
 };
 
 const PROFESSION_SUBTYPE_ID_ALIASES = {
@@ -451,7 +463,8 @@ const PROFESSION_SUBTYPE_FAMILY_ID_OVERRIDES = {
   bodyguard: "military_security",
   cavalry_mounted_retainer: "military_security",
   champion: "military_security",
-  gladiator: "arena_fighter"
+  gladiator: "arena_fighter",
+  prostitute_courtesan: "social_companion"
 };
 
 const PROFESSION_SUBTYPE_GRANT_OVERRIDES = {
@@ -520,6 +533,12 @@ const PROFESSION_SUBTYPE_GRANT_OVERRIDES = {
     addedCoreTrainingGroupIds: ["basic_missile_training"],
     addedFavoredTrainingGroupIds: ["mounted_service", "fieldcraft_stealth"]
   },
+  prostitute_courtesan: {
+    addedCoreSkillIds: ["seduction"],
+    addedCoreTrainingGroupIds: ["social_reading", "performance_basics"],
+    addedFavoredSkillIds: ["bargaining"],
+    addedFavoredTrainingGroupIds: ["formal_performance"]
+  },
   ships_officer: {
     addedCoreSkillIds: [],
     addedCoreTrainingGroupIds: ["ship_command"],
@@ -581,6 +600,10 @@ const PROFESSION_AVAILABILITY_OVERRIDES = {
   militia_fighter: {
     classBands: [1, 2, 3],
     societyLevels: [1, 2, 3]
+  },
+  prostitute_courtesan: {
+    classBands: [2, 3],
+    societyLevels: [2, 3, 4, 5]
   },
   quartermaster: {
     classBands: [3, 4],
@@ -1135,7 +1158,9 @@ const professionSourceSubtypes = [
 ].filter((subtype) => !RETIRED_PROFESSION_SUBTYPE_IDS.has(subtype.professionSubtypeId));
 
 const professions = professionSourceSubtypes.map((subtype) => ({
-  description: normalizeText(subtype.shortDescription, subtype.contextNotes) || undefined,
+  description:
+    PROFESSION_SUBTYPE_DESCRIPTION_OVERRIDES[subtype.professionSubtypeId] ??
+    (normalizeText(subtype.shortDescription, subtype.contextNotes) || undefined),
   familyId:
     PROFESSION_SUBTYPE_FAMILY_ID_OVERRIDES[subtype.professionSubtypeId] ??
     subtype.professionFamilyId,

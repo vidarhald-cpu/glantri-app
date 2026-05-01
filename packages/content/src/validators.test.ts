@@ -164,6 +164,114 @@ describe("validateCanonicalContent", () => {
     );
   });
 
+  it("distinguishes Companion from elite Courtesan without duplicating high-society slots", () => {
+    const canonicalSocietyLevelById = new Map(
+      defaultCanonicalContent.societies.map((society) => [society.id, society.societyLevel])
+    );
+    const professionById = new Map(
+      defaultCanonicalContent.professions.map((profession) => [profession.id, profession])
+    );
+    const grantsFor = (professionId: string) => {
+      const profession = professionById.get(professionId);
+
+      return defaultCanonicalContent.professionSkills.filter(
+        (grant) =>
+          (grant.scope === "family" && grant.professionId === profession?.familyId) ||
+          (grant.scope === "profession" && grant.professionId === professionId)
+      );
+    };
+    const groupIdsFor = (professionId: string) => [
+      ...new Set(
+        grantsFor(professionId)
+          .filter((grant) => grant.grantType === "group" && grant.skillGroupId)
+          .map((grant) => grant.skillGroupId ?? "")
+      )
+    ];
+    const directSkillIdsFor = (professionId: string) => [
+      ...new Set(
+        grantsFor(professionId)
+          .filter((grant) => grant.grantType !== "group" && grant.skillId)
+          .map((grant) => grant.skillId ?? "")
+      )
+    ];
+    const skillReachFor = (professionId: string) => {
+      const groupIds = groupIdsFor(professionId);
+      const skillIdsFromGroups = defaultCanonicalContent.skills
+        .filter((skill) =>
+          (skill.groupIds ?? [skill.groupId]).some((groupId) => groupIds.includes(groupId))
+        )
+        .map((skill) => skill.id);
+
+      return new Set([...skillIdsFromGroups, ...directSkillIdsFor(professionId)]).size;
+    };
+    const allowedRowsFor = (professionId: string) =>
+      defaultCanonicalContent.societyLevels.filter((societyLevel) =>
+        societyLevel.professionIds.includes(professionId)
+      );
+    const canonicalSocietyLevelsFor = (professionId: string) => [
+      ...new Set(
+        allowedRowsFor(professionId)
+          .map((societyLevel) => canonicalSocietyLevelById.get(societyLevel.societyId))
+          .filter((societyLevel): societyLevel is number => typeof societyLevel === "number")
+      )
+    ].sort((left, right) => left - right);
+    const classBandsFor = (professionId: string) => [
+      ...new Set(allowedRowsFor(professionId).map((societyLevel) => societyLevel.societyLevel))
+    ].sort((left, right) => left - right);
+    const categoryBySkillId = new Map(
+      defaultCanonicalContent.skills.map((skill) => [skill.id, skill.categoryId])
+    );
+
+    expect(
+      defaultCanonicalContent.professionFamilies.some((family) => family.id === "social_companion")
+    ).toBe(true);
+    expect(professionById.get("courtesan")).toMatchObject({
+      familyId: "courtier_diplomat",
+      id: "courtesan",
+      name: "Courtesan"
+    });
+    expect(professionById.get("prostitute_courtesan")).toMatchObject({
+      familyId: "social_companion",
+      id: "prostitute_courtesan",
+      name: "Companion"
+    });
+
+    expect(canonicalSocietyLevelsFor("courtesan")).toEqual([4, 5, 6]);
+    expect(classBandsFor("courtesan")).toEqual([4]);
+    expect(groupIdsFor("courtesan")).toEqual(
+      expect.arrayContaining(["courtly_formation", "political_acumen"])
+    );
+
+    expect(canonicalSocietyLevelsFor("prostitute_courtesan")).toEqual([2, 3, 4, 5]);
+    expect(classBandsFor("prostitute_courtesan")).toEqual([2, 3]);
+    expect(groupIdsFor("prostitute_courtesan")).toEqual(
+      expect.arrayContaining(["social_reading", "performance_basics", "formal_performance"])
+    );
+    expect(groupIdsFor("prostitute_courtesan")).not.toContain("courtly_formation");
+    expect(groupIdsFor("prostitute_courtesan")).not.toContain("political_acumen");
+    expect(directSkillIdsFor("prostitute_courtesan")).toEqual(["seduction", "bargaining"]);
+    expect(skillReachFor("prostitute_courtesan")).toBeGreaterThanOrEqual(10);
+
+    for (const societyLevel of defaultCanonicalContent.societyLevels) {
+      const canonicalSocietyLevel = canonicalSocietyLevelById.get(societyLevel.societyId);
+
+      if (canonicalSocietyLevel && canonicalSocietyLevel >= 4 && societyLevel.societyLevel === 4) {
+        expect(
+          societyLevel.professionIds.includes("courtesan") &&
+            societyLevel.professionIds.includes("prostitute_courtesan")
+        ).toBe(false);
+      }
+    }
+
+    expect(categoryBySkillId.get("seduction")).toBe("social");
+    expect(categoryBySkillId.get("social_perception")).toBe("social");
+    expect(categoryBySkillId.get("acting")).toBe("performance");
+    expect(categoryBySkillId.get("etiquette")).toBe("high-society");
+    expect(defaultCanonicalContent.skills.some((skill) => skill.id === "specific_language")).toBe(
+      false
+    );
+  });
+
   it("merges retired skill groups into canonical target groups", () => {
     const groupById = new Map(
       defaultCanonicalContent.skillGroups.map((group) => [group.id, group])

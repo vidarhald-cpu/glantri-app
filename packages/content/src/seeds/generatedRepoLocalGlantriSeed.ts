@@ -5114,6 +5114,11 @@ export const generatedRepoLocalGlantriSeed = {
       "name": "Arena Fighter"
     },
     {
+      "description": "Social and performance-oriented companion roles distinct from elite courtly influence offices.",
+      "id": "social_companion",
+      "name": "Social Companion"
+    },
+    {
       "description": "Focused low and mid military/security professions whose training is defined by subtype packages rather than broad Soldier-family defaults.",
       "id": "military_security",
       "name": "Military / Security"
@@ -5583,11 +5588,11 @@ export const generatedRepoLocalGlantriSeed = {
       "subtypeName": "Prostitute"
     },
     {
-      "description": "Sexual-social specialist whose role ranges from survival trade to elite influence depending context. Handled here as the courtly/high-social end of the source label; lower-end prostitution can be modeled more simply in play.",
-      "familyId": "courtier_diplomat",
+      "description": "Social and performance-oriented companion in urban or patronage settings, distinct from elite courtly courtesans.",
+      "familyId": "social_companion",
       "id": "prostitute_courtesan",
-      "name": "Prostitute – Courtesan",
-      "subtypeName": "Prostitute – Courtesan"
+      "name": "Companion",
+      "subtypeName": "Companion"
     },
     {
       "description": "General seafaring worker trained in ordinary shipboard labor, vessel routine, and waterborne travel. This is the generic sailor subtype beneath more specialized navigators and officers. It fits commercial, military, and fishing vessels.",
@@ -9039,6 +9044,22 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "run"
     },
     {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "prostitute_courtesan",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "social_reading"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "prostitute_courtesan",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "performance_basics"
+    },
+    {
       "grantType": "secondary-skill",
       "isCore": true,
       "professionId": "prostitute_courtesan",
@@ -9047,12 +9068,12 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "seduction"
     },
     {
-      "grantType": "ordinary-skill",
-      "isCore": true,
+      "grantType": "group",
+      "isCore": false,
       "professionId": "prostitute_courtesan",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "insight"
+      "skillGroupId": "formal_performance"
     },
     {
       "grantType": "ordinary-skill",
@@ -9061,22 +9082,6 @@ export const generatedRepoLocalGlantriSeed = {
       "ranks": 0,
       "scope": "profession",
       "skillId": "bargaining"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "prostitute_courtesan",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "etiquette"
-    },
-    {
-      "grantType": "secondary-skill",
-      "isCore": false,
-      "professionId": "prostitute_courtesan",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "detect_lies"
     },
     {
       "grantType": "group",
@@ -11140,7 +11145,6 @@ export const generatedRepoLocalGlantriSeed = {
         "pickpocket",
         "prospector",
         "prostitute",
-        "prostitute_courtesan",
         "sailor",
         "shaman",
         "smuggler",
@@ -11552,7 +11556,6 @@ export const generatedRepoLocalGlantriSeed = {
         "pickpocket",
         "prospector",
         "prostitute",
-        "prostitute_courtesan",
         "sailor",
         "shaman",
         "smuggler",
@@ -11999,7 +12002,6 @@ export const generatedRepoLocalGlantriSeed = {
         "priest",
         "prospector",
         "prostitute",
-        "prostitute_courtesan",
         "sailor",
         "scribe",
         "shaman",
@@ -12456,7 +12458,6 @@ export const generatedRepoLocalGlantriSeed = {
         "priest",
         "prospector",
         "prostitute",
-        "prostitute_courtesan",
         "sailor",
         "scribe",
         "shaman",
@@ -12922,7 +12923,6 @@ export const generatedRepoLocalGlantriSeed = {
         "priest",
         "prospector",
         "prostitute",
-        "prostitute_courtesan",
         "sailor",
         "scribe",
         "shaman",
@@ -13394,7 +13394,6 @@ export const generatedRepoLocalGlantriSeed = {
         "priest",
         "prospector",
         "prostitute",
-        "prostitute_courtesan",
         "sailor",
         "scribe",
         "shaman",
@@ -13861,7 +13860,6 @@ export const generatedRepoLocalGlantriSeed = {
         "priest",
         "prospector",
         "prostitute",
-        "prostitute_courtesan",
         "sailor",
         "scribe",
         "shaman",
@@ -14330,7 +14328,6 @@ export const generatedRepoLocalGlantriSeed = {
         "priest",
         "prospector",
         "prostitute",
-        "prostitute_courtesan",
         "sailor",
         "scribe",
         "shaman",
@@ -14799,7 +14796,6 @@ export const generatedRepoLocalGlantriSeed = {
         "priest",
         "prospector",
         "prostitute",
-        "prostitute_courtesan",
         "sailor",
         "scribe",
         "shaman",
@@ -14999,7 +14995,6 @@ export const generatedRepoLocalGlantriSeed = {
         "pickpocket",
         "prospector",
         "prostitute",
-        "prostitute_courtesan",
         "sailor",
         "shaman",
         "smuggler",
@@ -15117,7 +15112,6 @@ export const generatedRepoLocalGlantriSeed = {
         "priest",
         "prospector",
         "prostitute",
-        "prostitute_courtesan",
         "sailor",
         "scribe",
         "shaman",
@@ -15257,7 +15251,6 @@ export const generatedRepoLocalGlantriSeed = {
         "priest",
         "prospector",
         "prostitute",
-        "prostitute_courtesan",
         "sailor",
         "scribe",
         "shaman",
