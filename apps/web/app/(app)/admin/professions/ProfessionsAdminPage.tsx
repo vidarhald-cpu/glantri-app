@@ -483,13 +483,6 @@ export default function ProfessionsAdminPage() {
                 </div>
               </div>
 
-              <div>
-                <div style={{ color: "#5f543a", fontSize: "0.78rem", fontWeight: 700, marginBottom: "0.35rem", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                  Detailed access rows
-                </div>
-                <AdminTagList values={selectedRow?.allowedSocietyEntries ?? []} />
-              </div>
-
               <div style={{ display: "grid", gap: "0.75rem" }}>
                 <div style={{ color: "#5f543a", fontSize: "0.85rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em" }}>
                   Group to skill fan
@@ -534,6 +527,13 @@ export default function ProfessionsAdminPage() {
                 ) : (
                   <div style={{ color: "#8a7e63" }}>No skill-group grants are modeled for this profession.</div>
                 )}
+              </div>
+
+              <div>
+                <div style={{ color: "#5f543a", fontSize: "0.78rem", fontWeight: 700, marginBottom: "0.35rem", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                  Detailed access rows
+                </div>
+                <AdminTagList values={selectedRow?.allowedSocietyEntries ?? []} />
               </div>
 
               <div style={{ color: "#5f543a", fontSize: "0.92rem", lineHeight: 1.5 }}>
