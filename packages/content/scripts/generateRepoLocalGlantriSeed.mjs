@@ -273,6 +273,13 @@ const FIXED_SKILL_MEMBERSHIPS_BY_GROUP_ID = {
   ],
   basic_missile_training: [],
   advanced_missile_training: [],
+  defensive_soldiering: [
+    "formation_fighting",
+    "battlefield_awareness",
+    "perception",
+    "self_control",
+    "first_aid"
+  ],
   coastal_fishing: [
     "perception",
     "search",
@@ -341,11 +348,28 @@ const FIXED_SKILL_MEMBERSHIPS_BY_GROUP_ID = {
   ],
   scholarly_formation: ["history", "philosophy", "rhetorical_composition", "memory"],
   temple_service: ["theology", "ritual_interpretation", "administration", "oratory", "etiquette"],
+  veteran_soldiering: [
+    "combat_experience",
+    "battlefield_awareness",
+    "perception",
+    "first_aid",
+    "weapon_maintenance"
+  ],
   watch_civic_guard: ["perception", "search", "law", "insight", "social_perception"]
 };
 
 const ADDITIONAL_TRAINING_GROUP_IDS_BY_SKILL_ID = {
   mounted_combat: ["mounted_warrior_training"]
+};
+
+const EXCLUDED_TRAINING_GROUP_IDS_BY_SKILL_ID = {
+  dodge: [
+    "basic_missile_training",
+    "advanced_missile_training",
+    "defensive_soldiering",
+    "veteran_soldiering"
+  ],
+  parry: ["defensive_soldiering", "veteran_soldiering"]
 };
 
 const GROUP_DESCRIPTION_OVERRIDES = {
@@ -354,6 +378,8 @@ const GROUP_DESCRIPTION_OVERRIDES = {
   arena_training:
     "Arena awareness, showmanship, professional discipline, and practical weapon upkeep.",
   basic_missile_training: "One required missile weapon skill.",
+  defensive_soldiering:
+    "Formation discipline, battlefield awareness, self-control, and practical aid for defensive service.",
   coastal_fishing:
     "Coastal provisioning, boat handling, search, and practical safety for local fishers.",
   construction_specialty:
@@ -387,6 +413,8 @@ const GROUP_DESCRIPTION_OVERRIDES = {
     "Formal study, learned argument, memory, and intellectual tradition.",
   temple_service:
     "Practical religious office, temple administration, public ritual, and formal religious service.",
+  veteran_soldiering:
+    "Combat experience, battlefield awareness, field care, and equipment upkeep for experienced soldiers.",
   watch_civic_guard:
     "Observation, search, basic law, and defensive procedure for civic watch and detention work."
 };
@@ -882,6 +910,9 @@ const PROFESSION_SUBTYPE_GRANT_OVERRIDES = {
     addedFavoredTrainingGroupIds: ["defensive_soldiering", "watch_civic_guard"]
   },
   light_infantry: {
+    addedCoreSkillIds: [],
+    addedCoreTrainingGroupIds: ["basic_missile_training", "basic_melee_training"],
+    addedFavoredSkillIds: [],
     addedFavoredTrainingGroupIds: ["defensive_soldiering"]
   },
   herder: {
@@ -1555,6 +1586,16 @@ function orderCanonicalSkillGroupIds(skillId, groupIds) {
   return groupIds;
 }
 
+function removeExcludedSkillGroupIds(skillId, groupIds) {
+  const excludedGroupIds = new Set(EXCLUDED_TRAINING_GROUP_IDS_BY_SKILL_ID[skillId] ?? []);
+
+  if (excludedGroupIds.size === 0) {
+    return groupIds;
+  }
+
+  return groupIds.filter((groupId) => !excludedGroupIds.has(groupId));
+}
+
 function getLiteracyRequirement(dependencies) {
   const literacyDependency = dependencies.find((dependency) => dependency.skillId === "literacy");
 
@@ -1755,13 +1796,13 @@ const skills = rawBundle.skills
     const taxonomyGroupIds = parseJsonLike(skill.taxonomyGroupIds);
     const groupIds = orderCanonicalSkillGroupIds(
       skill.skillId,
-      [
+      removeExcludedSkillGroupIds(skill.skillId, [
         ...new Set([
           ...trainingGroupIds,
           ...taxonomyGroupIds,
           ...(EXTRA_GROUP_IDS_BY_SKILL_ID[skill.skillId] ?? [])
         ])
-      ]
+      ])
     );
     const dependencies = parseJsonLike(skill.dependencyRules).map((dependency) => ({
       skillId: dependency.skillId,

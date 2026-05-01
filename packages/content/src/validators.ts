@@ -17,6 +17,34 @@ const CANONICAL_SKILL_GROUP_NAMES: Partial<Record<string, string>> = {
   veteran_soldiering: "Veteran Soldiering"
 };
 
+const REMOVED_SKILL_GROUP_IDS_BY_SKILL_ID: Partial<Record<string, string[]>> = {
+  dodge: [
+    "basic_missile_training",
+    "advanced_missile_training",
+    "defensive_soldiering",
+    "veteran_soldiering"
+  ],
+  parry: ["defensive_soldiering", "veteran_soldiering"]
+};
+
+function removeRetiredSkillGroupMemberships(
+  skill: CanonicalContent["skills"][number]
+): CanonicalContent["skills"][number] {
+  const removedGroupIds = new Set(REMOVED_SKILL_GROUP_IDS_BY_SKILL_ID[skill.id] ?? []);
+
+  if (removedGroupIds.size === 0) {
+    return skill;
+  }
+
+  const groupIds = skill.groupIds.filter((groupId) => !removedGroupIds.has(groupId));
+
+  return {
+    ...skill,
+    groupId: groupIds.includes(skill.groupId) ? skill.groupId : (groupIds[0] ?? skill.groupId),
+    groupIds
+  };
+}
+
 function slugifyLanguageName(name: string): string {
   return name
     .trim()
@@ -112,11 +140,17 @@ function normalizeSkillGroups(content: CanonicalContent): CanonicalContent {
 
   for (const group of content.skillGroups) {
     const normalizedGroupId = normalizeSkillGroupId(group.id) ?? group.id;
+    const isRetiredAliasGroup = normalizedGroupId !== group.id;
     const existing = groupsById.get(normalizedGroupId);
     const normalizedGroup = {
       ...group,
       id: normalizedGroupId,
-      name: CANONICAL_SKILL_GROUP_NAMES[normalizedGroupId] ?? group.name
+      name: CANONICAL_SKILL_GROUP_NAMES[normalizedGroupId] ?? group.name,
+      skillMemberships: isRetiredAliasGroup
+        ? (group.skillMemberships ?? []).filter((membership) =>
+            skillsById.get(membership.skillId)?.groupIds.includes(normalizedGroupId)
+          )
+        : group.skillMemberships
     };
 
     if (!existing) {
@@ -722,16 +756,19 @@ export function validateCanonicalContent(input: unknown): CanonicalContent {
   const parsedContent = canonicalContentSchema.parse(input);
   const normalizedSkills: CanonicalContent["skills"] = applySkillRelationshipMetadata(
     parsedContent.skills
-  ).map((skill): CanonicalContent["skills"][number] =>
-    skill.id === "language"
-      ? {
-          ...skill,
-          category: "ordinary",
-          categoryId: "language",
-          allowsSpecializations: false
-        }
-      : skill
-  );
+  ).map((skill): CanonicalContent["skills"][number] => {
+    const normalizedSkill =
+      skill.id === "language"
+        ? {
+            ...skill,
+            category: "ordinary" as const,
+            categoryId: "language" as const,
+            allowsSpecializations: false
+          }
+        : skill;
+
+    return removeRetiredSkillGroupMemberships(normalizedSkill);
+  });
   const normalizedContent: CanonicalContent = normalizeSkillGroups(normalizeLanguages({
     ...parsedContent,
     skills: normalizedSkills,

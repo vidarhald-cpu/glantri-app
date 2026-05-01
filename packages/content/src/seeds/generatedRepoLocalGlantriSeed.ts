@@ -976,21 +976,29 @@ export const generatedRepoLocalGlantriSeed = {
       "sortOrder": 30
     },
     {
-      "description": "Defensive discipline and line-fighting package.",
+      "description": "Formation discipline, battlefield awareness, self-control, and practical aid for defensive service.",
       "id": "defensive_soldiering",
       "name": "Defensive Soldiering",
       "skillMemberships": [
         {
-          "relevance": "optional",
-          "skillId": "parry"
-        },
-        {
-          "relevance": "optional",
-          "skillId": "dodge"
-        },
-        {
           "relevance": "core",
           "skillId": "formation_fighting"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "battlefield_awareness"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "perception"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "self_control"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "first_aid"
         }
       ],
       "selectionSlots": [],
@@ -1030,25 +1038,29 @@ export const generatedRepoLocalGlantriSeed = {
       "sortOrder": 32
     },
     {
-      "description": "Practical field-combat adaptation package.",
+      "description": "Combat experience, battlefield awareness, field care, and equipment upkeep for experienced soldiers.",
       "id": "veteran_soldiering",
       "name": "Veteran Soldiering",
       "skillMemberships": [
         {
-          "relevance": "optional",
-          "skillId": "dodge"
-        },
-        {
-          "relevance": "optional",
-          "skillId": "perception"
+          "relevance": "core",
+          "skillId": "combat_experience"
         },
         {
           "relevance": "core",
           "skillId": "battlefield_awareness"
         },
         {
-          "relevance": "core",
-          "skillId": "combat_experience"
+          "relevance": "optional",
+          "skillId": "perception"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "first_aid"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "weapon_maintenance"
         }
       ],
       "selectionSlots": [],
@@ -3484,6 +3496,7 @@ export const generatedRepoLocalGlantriSeed = {
       "groupIds": [
         "mental_discipline",
         "mental_group",
+        "defensive_soldiering",
         "forestry_resource_work",
         "mining_extraction"
       ],
@@ -3547,6 +3560,7 @@ export const generatedRepoLocalGlantriSeed = {
         "military_group",
         "mental_group",
         "arena_training",
+        "defensive_soldiering",
         "coastal_fishing",
         "forestry_resource_work",
         "mining_extraction",
@@ -4569,7 +4583,8 @@ export const generatedRepoLocalGlantriSeed = {
         "military_group",
         "craft_specialty",
         "craft_specialty_advanced",
-        "arena_training"
+        "arena_training",
+        "veteran_soldiering"
       ],
       "id": "weapon_maintenance",
       "isTheoretical": false,
@@ -4624,12 +4639,14 @@ export const generatedRepoLocalGlantriSeed = {
       "groupIds": [
         "healing_practice",
         "medicine_group",
+        "defensive_soldiering",
         "coastal_fishing",
         "farm_household_work",
         "forestry_resource_work",
         "mining_extraction",
         "pastoral_work",
-        "route_security"
+        "route_security",
+        "veteran_soldiering"
       ],
       "id": "first_aid",
       "isTheoretical": false,
@@ -4908,12 +4925,8 @@ export const generatedRepoLocalGlantriSeed = {
       "groupId": "basic_melee_training",
       "groupIds": [
         "basic_melee_training",
-        "basic_missile_training",
         "advanced_melee_training",
-        "advanced_missile_training",
-        "defensive_soldiering",
         "mounted_warrior_training",
-        "veteran_soldiering",
         "combat_group"
       ],
       "id": "dodge",
@@ -4939,7 +4952,6 @@ export const generatedRepoLocalGlantriSeed = {
       "groupIds": [
         "basic_melee_training",
         "advanced_melee_training",
-        "defensive_soldiering",
         "mounted_warrior_training",
         "combat_group"
       ],
@@ -5310,7 +5322,8 @@ export const generatedRepoLocalGlantriSeed = {
       "groupId": "veteran_soldiering",
       "groupIds": [
         "veteran_soldiering",
-        "military_group"
+        "military_group",
+        "defensive_soldiering"
       ],
       "id": "battlefield_awareness",
       "isTheoretical": false,
@@ -8513,20 +8526,12 @@ export const generatedRepoLocalGlantriSeed = {
       "skillGroupId": "basic_missile_training"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": true,
       "professionId": "light_infantry",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "perception"
-    },
-    {
-      "grantType": "secondary-skill",
-      "isCore": true,
-      "professionId": "light_infantry",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "dodge"
+      "skillGroupId": "basic_melee_training"
     },
     {
       "grantType": "group",
@@ -8535,30 +8540,6 @@ export const generatedRepoLocalGlantriSeed = {
       "ranks": 0,
       "scope": "profession",
       "skillGroupId": "defensive_soldiering"
-    },
-    {
-      "grantType": "secondary-skill",
-      "isCore": false,
-      "professionId": "light_infantry",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "throwing"
-    },
-    {
-      "grantType": "secondary-skill",
-      "isCore": false,
-      "professionId": "light_infantry",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "bow"
-    },
-    {
-      "grantType": "secondary-skill",
-      "isCore": false,
-      "professionId": "light_infantry",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "battlefield_awareness"
     },
     {
       "grantType": "group",
