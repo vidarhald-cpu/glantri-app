@@ -68,6 +68,7 @@ const PLAYER_FACING_SKILL_CATEGORY_BY_GROUP_ID = {
   commercial_administration: "trade",
   courtly_formation: "high-society",
   covert_entry: "covert",
+  coastal_fishing: "maritime",
   construction_specialty: "craft",
   craft_specialty: "craft",
   craft_specialty_advanced: "craft",
@@ -76,6 +77,8 @@ const PLAYER_FACING_SKILL_CATEGORY_BY_GROUP_ID = {
   field_soldiering: "military",
   fieldcraft_stealth: "fieldcraft",
   formal_performance: "performance",
+  farm_household_work: "fieldcraft",
+  forestry_resource_work: "fieldcraft",
   healing_practice: "healing",
   herb_and_remedy_craft: "healing",
   humanities: "knowledge",
@@ -84,6 +87,7 @@ const PLAYER_FACING_SKILL_CATEGORY_BY_GROUP_ID = {
   maritime_crew_training: "maritime",
   maritime_navigation: "maritime",
   medicine_group: "healing",
+  mining_extraction: "craft",
   mental_discipline: "mental",
   mental_group: "mental",
   mercantile_practice: "trade",
@@ -95,6 +99,7 @@ const PLAYER_FACING_SKILL_CATEGORY_BY_GROUP_ID = {
   omen_and_ritual_practice: "mystical",
   operations: "military",
   performance_basics: "performance",
+  pastoral_work: "fieldcraft",
   physical_science: "knowledge",
   political_acumen: "social",
   sacred_learning: "knowledge",
@@ -263,6 +268,43 @@ const FIXED_SKILL_MEMBERSHIPS_BY_GROUP_ID = {
   ],
   basic_missile_training: [],
   advanced_missile_training: [],
+  coastal_fishing: [
+    "perception",
+    "search",
+    "sailing",
+    "ropework",
+    "boat_handling",
+    "swim",
+    "first_aid"
+  ],
+  farm_household_work: [
+    "animal_care",
+    "herding",
+    "baking",
+    "brewing",
+    "carpentry",
+    "first_aid"
+  ],
+  forestry_resource_work: [
+    "perception",
+    "search",
+    "climb",
+    "run",
+    "self_control",
+    "carpentry",
+    "first_aid"
+  ],
+  mining_extraction: [
+    "perception",
+    "search",
+    "climb",
+    "run",
+    "self_control",
+    "stoneworking",
+    "mechanics",
+    "first_aid"
+  ],
+  pastoral_work: ["perception", "search", "animal_care", "herding", "riding", "first_aid"],
   route_security: ["perception", "search", "riding", "animal_care", "teamstering", "first_aid"],
   ship_command: [
     "captaincy",
@@ -296,12 +338,22 @@ const GROUP_DESCRIPTION_OVERRIDES = {
   arena_training:
     "Arena awareness, showmanship, professional discipline, and practical weapon upkeep.",
   basic_missile_training: "One required missile weapon skill.",
+  coastal_fishing:
+    "Coastal provisioning, boat handling, search, and practical safety for local fishers.",
   construction_specialty:
     "Construction specialty choices for master builders and masons.",
   craft_specialty:
     "A chosen craft specialty for common artisan training.",
   craft_specialty_advanced:
     "Two chosen craft specialties for master artisan and guild-level craft training.",
+  farm_household_work:
+    "Household production, animal care, basic repair, and practical rural self-sufficiency.",
+  forestry_resource_work:
+    "Woodland resource work, climbing, searching, rough labor, and basic timber craft.",
+  mining_extraction:
+    "Underground and quarry work, stone handling, searching, mechanics, and practical safety.",
+  pastoral_work:
+    "Herd movement, watchfulness, animal care, and practical field care for grazing work.",
   advanced_missile_training: "Three required missile weapon skills.",
   route_security:
     "Road awareness, animal handling, search, and practical care for guarding overland routes.",
@@ -350,6 +402,24 @@ const GENERATED_PROFESSION_FAMILIES = [
       "Craft and guild professions whose package is defined by common foundations plus chosen craft specialties.",
     id: "craft_guild",
     name: "Craft / Guild"
+  },
+  {
+    description:
+      "Rural and local service professions with focused route, household, and practical field packages.",
+    id: "rural_local_service",
+    name: "Rural / Local Service"
+  },
+  {
+    description:
+      "Maritime labor and coastal provisioning professions distinct from ship command and full navigation careers.",
+    id: "maritime_labor",
+    name: "Maritime Labor"
+  },
+  {
+    description:
+      "Resource labor professions such as woodland and extraction work, separated from technical engineering roles.",
+    id: "resource_labor",
+    name: "Resource Labor"
   },
   {
     description:
@@ -617,10 +687,14 @@ const PROFESSION_SUBTYPE_FAMILY_ID_OVERRIDES = {
   cavalry_mounted_retainer: "military_security",
   champion: "military_security",
   crafter: "craft_guild",
+  fisher: "maritime_labor",
   gladiator: "arena_fighter",
   master_craftsmen: "craft_guild",
+  messenger: "rural_local_service",
+  miner: "resource_labor",
   prostitute_courtesan: "social_companion",
-  smuggler: "illicit_trader"
+  smuggler: "illicit_trader",
+  woodcutter: "resource_labor"
 };
 
 const PROFESSION_SUBTYPE_GRANT_OVERRIDES = {
@@ -641,6 +715,12 @@ const PROFESSION_SUBTYPE_GRANT_OVERRIDES = {
   },
   burglar: {
     addedCoreTrainingGroupIds: ["security"]
+  },
+  animal_trainer: {
+    addedCoreSkillIds: [],
+    addedCoreTrainingGroupIds: ["animal_husbandry", "animal_handling"],
+    addedFavoredSkillIds: [],
+    addedFavoredTrainingGroupIds: ["route_security"]
   },
   builder_master_mason: {
     addedCoreSkillIds: [],
@@ -695,6 +775,18 @@ const PROFESSION_SUBTYPE_GRANT_OVERRIDES = {
     addedFavoredSkillIds: ["language", "etiquette", "banking"],
     addedFavoredTrainingGroupIds: ["political_acumen"]
   },
+  farmer: {
+    addedCoreSkillIds: [],
+    addedCoreTrainingGroupIds: ["animal_husbandry", "farm_household_work"],
+    addedFavoredSkillIds: [],
+    addedFavoredTrainingGroupIds: []
+  },
+  fisher: {
+    addedCoreSkillIds: [],
+    addedCoreTrainingGroupIds: ["maritime_crew_training", "coastal_fishing"],
+    addedFavoredSkillIds: [],
+    addedFavoredTrainingGroupIds: ["mercantile_practice"]
+  },
   gladiator: {
     addedCoreTrainingGroupIds: ["advanced_melee_training"],
     addedFavoredSkillIds: [],
@@ -719,6 +811,18 @@ const PROFESSION_SUBTYPE_GRANT_OVERRIDES = {
   },
   light_infantry: {
     addedFavoredTrainingGroupIds: ["defensive_soldiering"]
+  },
+  herder: {
+    addedCoreSkillIds: [],
+    addedCoreTrainingGroupIds: ["pastoral_work"],
+    addedFavoredSkillIds: [],
+    addedFavoredTrainingGroupIds: []
+  },
+  herdsman_subtype: {
+    addedCoreSkillIds: [],
+    addedCoreTrainingGroupIds: ["animal_handling", "pastoral_work"],
+    addedFavoredSkillIds: [],
+    addedFavoredTrainingGroupIds: []
   },
   military_officer: {
     addedCoreTrainingGroupIds: [
@@ -749,6 +853,18 @@ const PROFESSION_SUBTYPE_GRANT_OVERRIDES = {
     addedCoreTrainingGroupIds: ["mercantile_practice", "commercial_administration"],
     addedFavoredSkillIds: ["banking", "insight"],
     addedFavoredTrainingGroupIds: ["transport_and_caravan_work"]
+  },
+  messenger: {
+    addedCoreSkillIds: ["language"],
+    addedCoreTrainingGroupIds: ["mounted_service", "transport_and_caravan_work"],
+    addedFavoredSkillIds: [],
+    addedFavoredTrainingGroupIds: ["route_security", "athletic_conditioning"]
+  },
+  miner: {
+    addedCoreSkillIds: [],
+    addedCoreTrainingGroupIds: ["technical_measurement", "mining_extraction"],
+    addedFavoredSkillIds: [],
+    addedFavoredTrainingGroupIds: []
   },
   outrider_scout: {
     addedCoreTrainingGroupIds: ["basic_missile_training"],
@@ -788,6 +904,12 @@ const PROFESSION_SUBTYPE_GRANT_OVERRIDES = {
     addedCoreSkillIds: [],
     addedFavoredSkillIds: [],
     addedFavoredTrainingGroupIds: ["defensive_soldiering", "watch_civic_guard"]
+  },
+  woodcutter: {
+    addedCoreSkillIds: [],
+    addedCoreTrainingGroupIds: ["technical_measurement", "forestry_resource_work"],
+    addedFavoredSkillIds: [],
+    addedFavoredTrainingGroupIds: []
   }
 };
 
@@ -1348,6 +1470,41 @@ const generatedTrainingGroupSources = [
     name: "Construction Specialty",
     skillIds: [],
     sortOrder: trainingGroupSources.length + taxonomyGroupSources.length + 8
+  },
+  {
+    description: GROUP_DESCRIPTION_OVERRIDES.pastoral_work,
+    id: "pastoral_work",
+    name: "Pastoral Work",
+    skillIds: FIXED_SKILL_MEMBERSHIPS_BY_GROUP_ID.pastoral_work,
+    sortOrder: trainingGroupSources.length + taxonomyGroupSources.length + 9
+  },
+  {
+    description: GROUP_DESCRIPTION_OVERRIDES.farm_household_work,
+    id: "farm_household_work",
+    name: "Farm / Household Work",
+    skillIds: FIXED_SKILL_MEMBERSHIPS_BY_GROUP_ID.farm_household_work,
+    sortOrder: trainingGroupSources.length + taxonomyGroupSources.length + 10
+  },
+  {
+    description: GROUP_DESCRIPTION_OVERRIDES.coastal_fishing,
+    id: "coastal_fishing",
+    name: "Coastal Fishing",
+    skillIds: FIXED_SKILL_MEMBERSHIPS_BY_GROUP_ID.coastal_fishing,
+    sortOrder: trainingGroupSources.length + taxonomyGroupSources.length + 11
+  },
+  {
+    description: GROUP_DESCRIPTION_OVERRIDES.forestry_resource_work,
+    id: "forestry_resource_work",
+    name: "Forestry / Resource Work",
+    skillIds: FIXED_SKILL_MEMBERSHIPS_BY_GROUP_ID.forestry_resource_work,
+    sortOrder: trainingGroupSources.length + taxonomyGroupSources.length + 12
+  },
+  {
+    description: GROUP_DESCRIPTION_OVERRIDES.mining_extraction,
+    id: "mining_extraction",
+    name: "Mining / Extraction",
+    skillIds: FIXED_SKILL_MEMBERSHIPS_BY_GROUP_ID.mining_extraction,
+    sortOrder: trainingGroupSources.length + taxonomyGroupSources.length + 13
   }
 ];
 const skillGroupSources = [

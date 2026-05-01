@@ -2339,6 +2339,236 @@ describe("validateCanonicalContent", () => {
     }
   });
 
+  it("improves rural, local, and resource profession packages without command leakage", () => {
+    const professionById = new Map(
+      defaultCanonicalContent.professions.map((profession) => [profession.id, profession])
+    );
+    const groupById = new Map(
+      defaultCanonicalContent.skillGroups.map((group) => [group.id, group])
+    );
+    const canonicalSocietyLevelById = new Map(
+      defaultCanonicalContent.societies.map((society) => [society.id, society.societyLevel])
+    );
+    const allowedRowsFor = (professionId: string) =>
+      defaultCanonicalContent.societyLevels.filter((societyLevel) =>
+        societyLevel.professionIds.includes(professionId)
+      );
+    const canonicalSocietyLevelsFor = (professionId: string) => [
+      ...new Set(
+        allowedRowsFor(professionId)
+          .map((societyLevel) => canonicalSocietyLevelById.get(societyLevel.societyId))
+          .filter((societyLevel): societyLevel is number => typeof societyLevel === "number")
+      )
+    ].sort((left, right) => left - right);
+    const classBandsFor = (professionId: string) => [
+      ...new Set(allowedRowsFor(professionId).map((societyLevel) => societyLevel.societyLevel))
+    ].sort((left, right) => left - right);
+    const grantsFor = (professionId: string) => {
+      const profession = professionById.get(professionId);
+
+      return defaultCanonicalContent.professionSkills.filter(
+        (grant) =>
+          (grant.scope === "family" && grant.professionId === profession?.familyId) ||
+          (grant.scope === "profession" && grant.professionId === professionId)
+      );
+    };
+    const groupIdsFor = (professionId: string) => [
+      ...new Set(
+        grantsFor(professionId)
+          .filter((grant) => grant.grantType === "group" && grant.skillGroupId)
+          .map((grant) => grant.skillGroupId ?? "")
+      )
+    ];
+    const directSkillIdsFor = (professionId: string) => [
+      ...new Set(
+        grantsFor(professionId)
+          .filter((grant) => grant.grantType !== "group" && grant.skillId)
+          .map((grant) => grant.skillId ?? "")
+      )
+    ];
+    const directOnlySkillIdsFor = (professionId: string) => {
+      const groupIds = groupIdsFor(professionId);
+      const skillIdsFromGroups = defaultCanonicalContent.skills
+        .filter((skill) =>
+          (skill.groupIds ?? [skill.groupId]).some((groupId) => groupIds.includes(groupId))
+        )
+        .map((skill) => skill.id);
+
+      return directSkillIdsFor(professionId).filter(
+        (skillId) => !skillIdsFromGroups.includes(skillId)
+      );
+    };
+    const skillReachFor = (professionId: string) => {
+      const groupIds = groupIdsFor(professionId);
+      const skillIdsFromGroups = defaultCanonicalContent.skills
+        .filter((skill) =>
+          (skill.groupIds ?? [skill.groupId]).some((groupId) => groupIds.includes(groupId))
+        )
+        .map((skill) => skill.id);
+
+      return new Set([...skillIdsFromGroups, ...directOnlySkillIdsFor(professionId)]).size;
+    };
+    const groupSkillIdsFor = (groupId: string) =>
+      groupById.get(groupId)?.skillMemberships?.map((membership) => membership.skillId) ?? [];
+    const expectNoCommandOrCombatLeak = (professionId: string) => {
+      expect(groupIdsFor(professionId)).not.toContain("veteran_leadership");
+      expect(directSkillIdsFor(professionId)).not.toEqual(
+        expect.arrayContaining([
+          "captaincy",
+          "tactics",
+          "veteran_leadership",
+          "dodge",
+          "parry",
+          "brawling",
+          "one_handed_edged",
+          "one_handed_concussion_axe",
+          "two_handed_edged",
+          "two_handed_concussion_axe",
+          "polearms",
+          "lance",
+          "throwing",
+          "sling",
+          "bow",
+          "longbow",
+          "crossbow"
+        ])
+      );
+    };
+
+    expect(groupSkillIdsFor("pastoral_work")).toEqual([
+      "perception",
+      "search",
+      "animal_care",
+      "herding",
+      "riding",
+      "first_aid"
+    ]);
+    expect(groupSkillIdsFor("farm_household_work")).toEqual([
+      "animal_care",
+      "herding",
+      "baking",
+      "brewing",
+      "carpentry",
+      "first_aid"
+    ]);
+    expect(groupSkillIdsFor("coastal_fishing")).toEqual([
+      "perception",
+      "search",
+      "sailing",
+      "ropework",
+      "boat_handling",
+      "swim",
+      "first_aid"
+    ]);
+    expect(groupSkillIdsFor("forestry_resource_work")).toEqual([
+      "perception",
+      "search",
+      "climb",
+      "run",
+      "self_control",
+      "carpentry",
+      "first_aid"
+    ]);
+    expect(groupSkillIdsFor("mining_extraction")).toEqual([
+      "perception",
+      "search",
+      "climb",
+      "run",
+      "self_control",
+      "stoneworking",
+      "mechanics",
+      "first_aid"
+    ]);
+
+    expect(professionById.get("herder")).toMatchObject({ familyId: "herdsman_rider" });
+    expect(professionById.get("herdsman_subtype")).toMatchObject({
+      familyId: "herdsman_rider",
+      name: "Herdsman"
+    });
+    expect(groupIdsFor("herder")).toEqual(
+      expect.arrayContaining(["animal_husbandry", "pastoral_work"])
+    );
+    expect(groupIdsFor("herdsman_subtype")).toEqual(
+      expect.arrayContaining(["animal_handling", "pastoral_work"])
+    );
+    expect(groupIdsFor("herdsman_subtype")).not.toEqual(groupIdsFor("herder"));
+    expect(skillReachFor("herder")).toBeGreaterThanOrEqual(10);
+    expect(skillReachFor("herdsman_subtype")).toBeGreaterThan(skillReachFor("herder"));
+
+    expect(professionById.get("messenger")).toMatchObject({
+      familyId: "rural_local_service",
+      name: "Messenger"
+    });
+    expect(groupIdsFor("messenger")).toEqual(
+      expect.arrayContaining([
+        "mounted_service",
+        "transport_and_caravan_work",
+        "route_security",
+        "athletic_conditioning"
+      ])
+    );
+    expect(directOnlySkillIdsFor("messenger")).toEqual(["language"]);
+    expect(skillReachFor("messenger")).toBeGreaterThanOrEqual(10);
+
+    expect(groupIdsFor("animal_trainer")).toEqual(
+      expect.arrayContaining(["animal_husbandry", "animal_handling", "route_security"])
+    );
+    expect(skillReachFor("animal_trainer")).toBeGreaterThanOrEqual(10);
+
+    expect(groupIdsFor("farmer")).toEqual(
+      expect.arrayContaining(["animal_husbandry", "farm_household_work"])
+    );
+    expect(skillReachFor("farmer")).toBeGreaterThanOrEqual(10);
+
+    expect(professionById.get("fisher")).toMatchObject({ familyId: "maritime_labor" });
+    expect(groupIdsFor("fisher")).toEqual(
+      expect.arrayContaining(["maritime_crew_training", "coastal_fishing"])
+    );
+    expect(groupIdsFor("fisher")).not.toContain("maritime_navigation");
+    expect(skillReachFor("fisher")).toBeGreaterThanOrEqual(10);
+
+    expect(professionById.get("woodcutter")).toMatchObject({ familyId: "resource_labor" });
+    expect(groupIdsFor("woodcutter")).toEqual([
+      "technical_measurement",
+      "forestry_resource_work"
+    ]);
+    expect(directOnlySkillIdsFor("woodcutter")).toEqual([]);
+    expect(skillReachFor("woodcutter")).toBeGreaterThanOrEqual(10);
+
+    expect(professionById.get("miner")).toMatchObject({ familyId: "resource_labor" });
+    expect(groupIdsFor("miner")).toEqual(["technical_measurement", "mining_extraction"]);
+    expect(directOnlySkillIdsFor("miner")).toEqual([]);
+    expect(skillReachFor("miner")).toBeGreaterThanOrEqual(10);
+
+    for (const professionId of [
+      "herder",
+      "herdsman_subtype",
+      "messenger",
+      "animal_trainer",
+      "farmer",
+      "fisher",
+      "woodcutter",
+      "miner"
+    ]) {
+      expect(allowedRowsFor(professionId).length).toBeGreaterThan(0);
+      expect(canonicalSocietyLevelsFor(professionId).length).toBeGreaterThan(0);
+      expect(classBandsFor(professionId).some((classBand) => classBand <= 2)).toBe(true);
+      expectNoCommandOrCombatLeak(professionId);
+    }
+
+    expect(groupIdsFor("smuggler")).toEqual(
+      expect.arrayContaining(["smuggling_illicit_trade", "covert_entry"])
+    );
+    expect(directSkillIdsFor("chariot_driver")).not.toContain("captaincy");
+    expect(groupIdsFor("guild_master")).toEqual(
+      expect.arrayContaining(["mercantile_practice", "commercial_administration"])
+    );
+
+    for (const societyLevel of defaultCanonicalContent.societyLevels) {
+      expect(new Set(societyLevel.professionIds).size).toBe(societyLevel.professionIds.length);
+    }
+  });
+
   it("includes the updated civilization language naming and Lankhmar seed entry", () => {
     expect(
       defaultCanonicalContent.civilizations.find((civilization) => civilization.id === "glantri")

@@ -1925,6 +1925,187 @@ export const generatedRepoLocalGlantriSeed = {
         }
       ],
       "sortOrder": 59
+    },
+    {
+      "description": "Herd movement, watchfulness, animal care, and practical field care for grazing work.",
+      "id": "pastoral_work",
+      "name": "Pastoral Work",
+      "skillMemberships": [
+        {
+          "relevance": "optional",
+          "skillId": "perception"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "search"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "animal_care"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "herding"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "riding"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "first_aid"
+        }
+      ],
+      "selectionSlots": [],
+      "sortOrder": 60
+    },
+    {
+      "description": "Household production, animal care, basic repair, and practical rural self-sufficiency.",
+      "id": "farm_household_work",
+      "name": "Farm / Household Work",
+      "skillMemberships": [
+        {
+          "relevance": "optional",
+          "skillId": "animal_care"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "herding"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "baking"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "brewing"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "carpentry"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "first_aid"
+        }
+      ],
+      "selectionSlots": [],
+      "sortOrder": 61
+    },
+    {
+      "description": "Coastal provisioning, boat handling, search, and practical safety for local fishers.",
+      "id": "coastal_fishing",
+      "name": "Coastal Fishing",
+      "skillMemberships": [
+        {
+          "relevance": "optional",
+          "skillId": "perception"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "search"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "sailing"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "ropework"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "boat_handling"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "swim"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "first_aid"
+        }
+      ],
+      "selectionSlots": [],
+      "sortOrder": 62
+    },
+    {
+      "description": "Woodland resource work, climbing, searching, rough labor, and basic timber craft.",
+      "id": "forestry_resource_work",
+      "name": "Forestry / Resource Work",
+      "skillMemberships": [
+        {
+          "relevance": "optional",
+          "skillId": "perception"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "search"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "climb"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "run"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "self_control"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "carpentry"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "first_aid"
+        }
+      ],
+      "selectionSlots": [],
+      "sortOrder": 63
+    },
+    {
+      "description": "Underground and quarry work, stone handling, searching, mechanics, and practical safety.",
+      "id": "mining_extraction",
+      "name": "Mining / Extraction",
+      "skillMemberships": [
+        {
+          "relevance": "optional",
+          "skillId": "perception"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "search"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "climb"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "run"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "self_control"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "stoneworking"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "mechanics"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "first_aid"
+        }
+      ],
+      "selectionSlots": [],
+      "sortOrder": 64
     }
   ],
   "skills": [
@@ -2399,7 +2580,8 @@ export const generatedRepoLocalGlantriSeed = {
       "groupId": "physical_science",
       "groupIds": [
         "physical_science",
-        "construction_specialty"
+        "construction_specialty",
+        "mining_extraction"
       ],
       "id": "mechanics",
       "isTheoretical": false,
@@ -3140,7 +3322,9 @@ export const generatedRepoLocalGlantriSeed = {
       "groupId": "mental_discipline",
       "groupIds": [
         "mental_discipline",
-        "mental_group"
+        "mental_group",
+        "forestry_resource_work",
+        "mining_extraction"
       ],
       "id": "self_control",
       "isTheoretical": false,
@@ -3202,6 +3386,10 @@ export const generatedRepoLocalGlantriSeed = {
         "military_group",
         "mental_group",
         "arena_training",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction",
+        "pastoral_work",
         "route_security",
         "ship_command",
         "watch_civic_guard"
@@ -3232,6 +3420,8 @@ export const generatedRepoLocalGlantriSeed = {
         "transport_and_caravan_work",
         "animal_handling",
         "wilderness_group",
+        "farm_household_work",
+        "pastoral_work",
         "route_security"
       ],
       "id": "animal_care",
@@ -3295,7 +3485,9 @@ export const generatedRepoLocalGlantriSeed = {
       "groupIds": [
         "animal_husbandry",
         "animal_handling",
-        "wilderness_group"
+        "wilderness_group",
+        "farm_household_work",
+        "pastoral_work"
       ],
       "id": "herding",
       "isTheoretical": false,
@@ -3327,6 +3519,7 @@ export const generatedRepoLocalGlantriSeed = {
         "mounted_warrior_training",
         "animal_handling",
         "wilderness_group",
+        "pastoral_work",
         "route_security"
       ],
       "id": "riding",
@@ -3416,6 +3609,7 @@ export const generatedRepoLocalGlantriSeed = {
         "maritime_crew_training",
         "maritime_navigation",
         "wilderness_group",
+        "coastal_fishing",
         "ship_command",
         "smuggling_illicit_trade"
       ],
@@ -3482,7 +3676,8 @@ export const generatedRepoLocalGlantriSeed = {
       "groupId": "maritime_crew_training",
       "groupIds": [
         "maritime_crew_training",
-        "wilderness_group"
+        "wilderness_group",
+        "coastal_fishing"
       ],
       "id": "ropework",
       "isTheoretical": false,
@@ -3511,7 +3706,8 @@ export const generatedRepoLocalGlantriSeed = {
       "groupId": "maritime_crew_training",
       "groupIds": [
         "maritime_crew_training",
-        "wilderness_group"
+        "wilderness_group",
+        "coastal_fishing"
       ],
       "id": "boat_handling",
       "isTheoretical": false,
@@ -3535,7 +3731,9 @@ export const generatedRepoLocalGlantriSeed = {
       "groupId": "athletic_conditioning",
       "groupIds": [
         "athletic_conditioning",
-        "athletics"
+        "athletics",
+        "forestry_resource_work",
+        "mining_extraction"
       ],
       "id": "climb",
       "isTheoretical": false,
@@ -3559,7 +3757,9 @@ export const generatedRepoLocalGlantriSeed = {
       "groupId": "athletic_conditioning",
       "groupIds": [
         "athletic_conditioning",
-        "athletics"
+        "athletics",
+        "forestry_resource_work",
+        "mining_extraction"
       ],
       "id": "run",
       "isTheoretical": false,
@@ -3606,7 +3806,8 @@ export const generatedRepoLocalGlantriSeed = {
       "description": "Swim Move safely and effectively through water. Broad physical survival and adventure core.",
       "groupId": "athletics",
       "groupIds": [
-        "athletics"
+        "athletics",
+        "coastal_fishing"
       ],
       "id": "swim",
       "isTheoretical": false,
@@ -3687,6 +3888,10 @@ export const generatedRepoLocalGlantriSeed = {
       "groupIds": [
         "covert_entry",
         "security",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction",
+        "pastoral_work",
         "route_security",
         "watch_civic_guard"
       ],
@@ -4034,7 +4239,9 @@ export const generatedRepoLocalGlantriSeed = {
         "craft_group",
         "craft_specialty",
         "craft_specialty_advanced",
-        "construction_specialty"
+        "construction_specialty",
+        "farm_household_work",
+        "forestry_resource_work"
       ],
       "id": "carpentry",
       "isTheoretical": false,
@@ -4089,7 +4296,8 @@ export const generatedRepoLocalGlantriSeed = {
       "groupIds": [
         "craft_group",
         "craft_specialty",
-        "craft_specialty_advanced"
+        "craft_specialty_advanced",
+        "farm_household_work"
       ],
       "id": "baking",
       "isTheoretical": false,
@@ -4114,7 +4322,8 @@ export const generatedRepoLocalGlantriSeed = {
       "groupIds": [
         "craft_group",
         "craft_specialty",
-        "craft_specialty_advanced"
+        "craft_specialty_advanced",
+        "farm_household_work"
       ],
       "id": "brewing",
       "isTheoretical": false,
@@ -4140,7 +4349,8 @@ export const generatedRepoLocalGlantriSeed = {
         "craft_group",
         "craft_specialty",
         "craft_specialty_advanced",
-        "construction_specialty"
+        "construction_specialty",
+        "mining_extraction"
       ],
       "id": "stoneworking",
       "isTheoretical": false,
@@ -4252,6 +4462,11 @@ export const generatedRepoLocalGlantriSeed = {
       "groupIds": [
         "healing_practice",
         "medicine_group",
+        "coastal_fishing",
+        "farm_household_work",
+        "forestry_resource_work",
+        "mining_extraction",
+        "pastoral_work",
         "route_security"
       ],
       "id": "first_aid",
@@ -5277,6 +5492,21 @@ export const generatedRepoLocalGlantriSeed = {
       "name": "Craft / Guild"
     },
     {
+      "description": "Rural and local service professions with focused route, household, and practical field packages.",
+      "id": "rural_local_service",
+      "name": "Rural / Local Service"
+    },
+    {
+      "description": "Maritime labor and coastal provisioning professions distinct from ship command and full navigation careers.",
+      "id": "maritime_labor",
+      "name": "Maritime Labor"
+    },
+    {
+      "description": "Resource labor professions such as woodland and extraction work, separated from technical engineering roles.",
+      "id": "resource_labor",
+      "name": "Resource Labor"
+    },
+    {
       "description": "Focused low and mid military/security professions whose training is defined by subtype packages rather than broad Soldier-family defaults.",
       "id": "military_security",
       "name": "Military / Security"
@@ -5523,7 +5753,7 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "description": "Water-working livelihood subtype focused on practical fishing, nets, boats, and local waters. Lower-threshold maritime subtype for coastal, river, and lake communities.",
-      "familyId": "sailor_navigator",
+      "familyId": "maritime_labor",
       "id": "fisher",
       "name": "Fisher",
       "subtypeName": "Fisher"
@@ -5642,7 +5872,7 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "description": "Messenger source-listed occupation subtype. Source-listed occupation retained in the pack and awaiting deeper rule-detail refinement if needed.",
-      "familyId": "herdsman_rider",
+      "familyId": "rural_local_service",
       "id": "messenger",
       "name": "Messenger",
       "subtypeName": "Messenger"
@@ -5656,7 +5886,7 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "description": "Extractive labor specialist working underground or in exposed deposits to obtain stone or metal-bearing material. Heavy practical subtype tied to labor, geology-by-experience, and dangerous extraction work.",
-      "familyId": "engineer_builder",
+      "familyId": "resource_labor",
       "id": "miner",
       "name": "Miner",
       "subtypeName": "Miner"
@@ -5852,7 +6082,7 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "description": "Practical rural labor subtype specializing in timber cutting, woodland work, and heavy manual extraction. Best treated as a rough craft/labor profession rather than a full engineer or builder in the learned sense.",
-      "familyId": "engineer_builder",
+      "familyId": "resource_labor",
       "id": "woodcutter",
       "name": "Woodcutter",
       "subtypeName": "Woodcutter"
@@ -6699,31 +6929,15 @@ export const generatedRepoLocalGlantriSeed = {
       "professionId": "herdsman_subtype",
       "ranks": 0,
       "scope": "profession",
-      "skillGroupId": "animal_husbandry"
+      "skillGroupId": "animal_handling"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": true,
       "professionId": "herdsman_subtype",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "herding"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": true,
-      "professionId": "herdsman_subtype",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "animal_care"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "herdsman_subtype",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "bargaining"
+      "skillGroupId": "pastoral_work"
     },
     {
       "grantType": "group",
@@ -6990,20 +7204,12 @@ export const generatedRepoLocalGlantriSeed = {
       "skillGroupId": "animal_husbandry"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": true,
       "professionId": "animal_trainer",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "animal_training"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": true,
-      "professionId": "animal_trainer",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "animal_care"
+      "skillGroupId": "animal_handling"
     },
     {
       "grantType": "group",
@@ -7011,31 +7217,7 @@ export const generatedRepoLocalGlantriSeed = {
       "professionId": "animal_trainer",
       "ranks": 0,
       "scope": "profession",
-      "skillGroupId": "mounted_service"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "animal_trainer",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "riding"
-    },
-    {
-      "grantType": "secondary-skill",
-      "isCore": false,
-      "professionId": "animal_trainer",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "falconry"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "animal_trainer",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "herding"
+      "skillGroupId": "route_security"
     },
     {
       "grantType": "group",
@@ -7798,44 +7980,12 @@ export const generatedRepoLocalGlantriSeed = {
       "skillGroupId": "animal_husbandry"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": true,
       "professionId": "farmer",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "animal_care"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": true,
-      "professionId": "farmer",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "herding"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "farmer",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "baking"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "farmer",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "brewing"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "farmer",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "teamstering"
+      "skillGroupId": "farm_household_work"
     },
     {
       "grantType": "group",
@@ -7846,44 +7996,20 @@ export const generatedRepoLocalGlantriSeed = {
       "skillGroupId": "maritime_crew_training"
     },
     {
-      "grantType": "secondary-skill",
+      "grantType": "group",
       "isCore": true,
       "professionId": "fisher",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "boat_handling"
+      "skillGroupId": "coastal_fishing"
     },
     {
-      "grantType": "ordinary-skill",
-      "isCore": true,
-      "professionId": "fisher",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "sailing"
-    },
-    {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": false,
       "professionId": "fisher",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "navigation"
-    },
-    {
-      "grantType": "secondary-skill",
-      "isCore": false,
-      "professionId": "fisher",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "swim"
-    },
-    {
-      "grantType": "secondary-skill",
-      "isCore": false,
-      "professionId": "fisher",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "ropework"
+      "skillGroupId": "mercantile_practice"
     },
     {
       "grantType": "group",
@@ -8172,6 +8298,14 @@ export const generatedRepoLocalGlantriSeed = {
       "ranks": 0,
       "scope": "profession",
       "skillId": "medicine"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "herder",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "pastoral_work"
     },
     {
       "grantType": "group",
@@ -8568,6 +8702,46 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "grantType": "group",
       "isCore": true,
+      "professionId": "messenger",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "mounted_service"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "messenger",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "transport_and_caravan_work"
+    },
+    {
+      "grantType": "ordinary-skill",
+      "isCore": true,
+      "professionId": "messenger",
+      "ranks": 0,
+      "scope": "profession",
+      "skillId": "language"
+    },
+    {
+      "grantType": "group",
+      "isCore": false,
+      "professionId": "messenger",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "route_security"
+    },
+    {
+      "grantType": "group",
+      "isCore": false,
+      "professionId": "messenger",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "athletic_conditioning"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
       "professionId": "military_officer",
       "ranks": 0,
       "scope": "profession",
@@ -8654,44 +8828,20 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "combat_experience"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": true,
       "professionId": "miner",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "stoneworking"
+      "skillGroupId": "technical_measurement"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": true,
       "professionId": "miner",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "self_control"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "miner",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "run"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "miner",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "climb"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "miner",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "smithing"
+      "skillGroupId": "mining_extraction"
     },
     {
       "grantType": "group",
@@ -9910,44 +10060,20 @@ export const generatedRepoLocalGlantriSeed = {
       "skillGroupId": "watch_civic_guard"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": true,
       "professionId": "woodcutter",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "carpentry"
+      "skillGroupId": "technical_measurement"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": true,
       "professionId": "woodcutter",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "run"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "woodcutter",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "climb"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "woodcutter",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "self_control"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "woodcutter",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "leatherworking"
+      "skillGroupId": "forestry_resource_work"
     },
     {
       "grantType": "group",
@@ -10918,7 +11044,12 @@ export const generatedRepoLocalGlantriSeed = {
         "smuggling_illicit_trade",
         "watch_civic_guard",
         "craft_specialty",
-        "craft_specialty_advanced"
+        "craft_specialty_advanced",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction"
       ],
       "skillIds": [],
       "socialClass": "Common Folk",
@@ -10999,7 +11130,12 @@ export const generatedRepoLocalGlantriSeed = {
         "smuggling_illicit_trade",
         "watch_civic_guard",
         "craft_specialty",
-        "craft_specialty_advanced"
+        "craft_specialty_advanced",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction"
       ],
       "skillIds": [],
       "socialClass": "Trades and Guilds",
@@ -11077,7 +11213,12 @@ export const generatedRepoLocalGlantriSeed = {
         "smuggling_illicit_trade",
         "watch_civic_guard",
         "craft_specialty",
-        "craft_specialty_advanced"
+        "craft_specialty_advanced",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction"
       ],
       "skillIds": [],
       "socialClass": "Established Households",
@@ -11145,7 +11286,12 @@ export const generatedRepoLocalGlantriSeed = {
         "smuggling_illicit_trade",
         "watch_civic_guard",
         "craft_specialty",
-        "craft_specialty_advanced"
+        "craft_specialty_advanced",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction"
       ],
       "skillIds": [],
       "socialClass": "Court and Elite",
@@ -11227,7 +11373,12 @@ export const generatedRepoLocalGlantriSeed = {
         "smuggling_illicit_trade",
         "watch_civic_guard",
         "craft_specialty",
-        "craft_specialty_advanced"
+        "craft_specialty_advanced",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction"
       ],
       "skillIds": [],
       "socialClass": "Common Folk",
@@ -11345,7 +11496,12 @@ export const generatedRepoLocalGlantriSeed = {
         "watch_civic_guard",
         "craft_specialty",
         "craft_specialty_advanced",
-        "construction_specialty"
+        "construction_specialty",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction"
       ],
       "skillIds": [],
       "socialClass": "Trades and Guilds",
@@ -11460,7 +11616,12 @@ export const generatedRepoLocalGlantriSeed = {
         "watch_civic_guard",
         "craft_specialty",
         "craft_specialty_advanced",
-        "construction_specialty"
+        "construction_specialty",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction"
       ],
       "skillIds": [],
       "socialClass": "Established Households",
@@ -11558,7 +11719,12 @@ export const generatedRepoLocalGlantriSeed = {
         "watch_civic_guard",
         "craft_specialty",
         "craft_specialty_advanced",
-        "construction_specialty"
+        "construction_specialty",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction"
       ],
       "skillIds": [],
       "socialClass": "Court and Elite",
@@ -11640,7 +11806,12 @@ export const generatedRepoLocalGlantriSeed = {
         "smuggling_illicit_trade",
         "watch_civic_guard",
         "craft_specialty",
-        "craft_specialty_advanced"
+        "craft_specialty_advanced",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction"
       ],
       "skillIds": [],
       "socialClass": "Common Folk",
@@ -11758,7 +11929,12 @@ export const generatedRepoLocalGlantriSeed = {
         "watch_civic_guard",
         "craft_specialty",
         "craft_specialty_advanced",
-        "construction_specialty"
+        "construction_specialty",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction"
       ],
       "skillIds": [],
       "socialClass": "Trades and Guilds",
@@ -11873,7 +12049,12 @@ export const generatedRepoLocalGlantriSeed = {
         "watch_civic_guard",
         "craft_specialty",
         "craft_specialty_advanced",
-        "construction_specialty"
+        "construction_specialty",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction"
       ],
       "skillIds": [],
       "socialClass": "Established Households",
@@ -11971,7 +12152,12 @@ export const generatedRepoLocalGlantriSeed = {
         "watch_civic_guard",
         "craft_specialty",
         "craft_specialty_advanced",
-        "construction_specialty"
+        "construction_specialty",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction"
       ],
       "skillIds": [],
       "socialClass": "Court and Elite",
@@ -12050,7 +12236,12 @@ export const generatedRepoLocalGlantriSeed = {
         "smuggling_illicit_trade",
         "watch_civic_guard",
         "craft_specialty",
-        "craft_specialty_advanced"
+        "craft_specialty_advanced",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction"
       ],
       "skillIds": [],
       "socialClass": "Common Folk",
@@ -12170,7 +12361,12 @@ export const generatedRepoLocalGlantriSeed = {
         "watch_civic_guard",
         "craft_specialty",
         "craft_specialty_advanced",
-        "construction_specialty"
+        "construction_specialty",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction"
       ],
       "skillIds": [],
       "socialClass": "Trades and Guilds",
@@ -12311,7 +12507,12 @@ export const generatedRepoLocalGlantriSeed = {
         "watch_civic_guard",
         "craft_specialty",
         "craft_specialty_advanced",
-        "construction_specialty"
+        "construction_specialty",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction"
       ],
       "skillIds": [],
       "socialClass": "Established Households",
@@ -12429,7 +12630,12 @@ export const generatedRepoLocalGlantriSeed = {
         "watch_civic_guard",
         "craft_specialty",
         "craft_specialty_advanced",
-        "construction_specialty"
+        "construction_specialty",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction"
       ],
       "skillIds": [],
       "socialClass": "Court and Elite",
@@ -12508,7 +12714,12 @@ export const generatedRepoLocalGlantriSeed = {
         "smuggling_illicit_trade",
         "watch_civic_guard",
         "craft_specialty",
-        "craft_specialty_advanced"
+        "craft_specialty_advanced",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction"
       ],
       "skillIds": [],
       "socialClass": "Common Folk",
@@ -12628,7 +12839,12 @@ export const generatedRepoLocalGlantriSeed = {
         "watch_civic_guard",
         "craft_specialty",
         "craft_specialty_advanced",
-        "construction_specialty"
+        "construction_specialty",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction"
       ],
       "skillIds": [],
       "socialClass": "Trades and Guilds",
@@ -12769,7 +12985,12 @@ export const generatedRepoLocalGlantriSeed = {
         "watch_civic_guard",
         "craft_specialty",
         "craft_specialty_advanced",
-        "construction_specialty"
+        "construction_specialty",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction"
       ],
       "skillIds": [],
       "socialClass": "Established Households",
@@ -12887,7 +13108,12 @@ export const generatedRepoLocalGlantriSeed = {
         "watch_civic_guard",
         "craft_specialty",
         "craft_specialty_advanced",
-        "construction_specialty"
+        "construction_specialty",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction"
       ],
       "skillIds": [],
       "socialClass": "Court and Elite",
@@ -12965,7 +13191,12 @@ export const generatedRepoLocalGlantriSeed = {
         "smuggling_illicit_trade",
         "watch_civic_guard",
         "craft_specialty",
-        "craft_specialty_advanced"
+        "craft_specialty_advanced",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction"
       ],
       "skillIds": [],
       "socialClass": "Common Folk",
@@ -13084,7 +13315,12 @@ export const generatedRepoLocalGlantriSeed = {
         "watch_civic_guard",
         "craft_specialty",
         "craft_specialty_advanced",
-        "construction_specialty"
+        "construction_specialty",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction"
       ],
       "skillIds": [],
       "socialClass": "Trades and Guilds",
@@ -13230,7 +13466,12 @@ export const generatedRepoLocalGlantriSeed = {
         "watch_civic_guard",
         "craft_specialty",
         "craft_specialty_advanced",
-        "construction_specialty"
+        "construction_specialty",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction"
       ],
       "skillIds": [],
       "socialClass": "Established Households",
@@ -13366,7 +13607,12 @@ export const generatedRepoLocalGlantriSeed = {
         "watch_civic_guard",
         "craft_specialty",
         "craft_specialty_advanced",
-        "construction_specialty"
+        "construction_specialty",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction"
       ],
       "skillIds": [],
       "socialClass": "Court and Elite",
@@ -13444,7 +13690,12 @@ export const generatedRepoLocalGlantriSeed = {
         "smuggling_illicit_trade",
         "watch_civic_guard",
         "craft_specialty",
-        "craft_specialty_advanced"
+        "craft_specialty_advanced",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction"
       ],
       "skillIds": [],
       "socialClass": "Common Folk",
@@ -13563,7 +13814,12 @@ export const generatedRepoLocalGlantriSeed = {
         "watch_civic_guard",
         "craft_specialty",
         "craft_specialty_advanced",
-        "construction_specialty"
+        "construction_specialty",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction"
       ],
       "skillIds": [],
       "socialClass": "Trades and Guilds",
@@ -13709,7 +13965,12 @@ export const generatedRepoLocalGlantriSeed = {
         "watch_civic_guard",
         "craft_specialty",
         "craft_specialty_advanced",
-        "construction_specialty"
+        "construction_specialty",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction"
       ],
       "skillIds": [],
       "socialClass": "Established Households",
@@ -13845,7 +14106,12 @@ export const generatedRepoLocalGlantriSeed = {
         "watch_civic_guard",
         "craft_specialty",
         "craft_specialty_advanced",
-        "construction_specialty"
+        "construction_specialty",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction"
       ],
       "skillIds": [],
       "socialClass": "Court and Elite",
@@ -13921,7 +14187,12 @@ export const generatedRepoLocalGlantriSeed = {
         "smuggling_illicit_trade",
         "watch_civic_guard",
         "craft_specialty",
-        "craft_specialty_advanced"
+        "craft_specialty_advanced",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction"
       ],
       "skillIds": [],
       "socialClass": "Common Folk",
@@ -14037,7 +14308,12 @@ export const generatedRepoLocalGlantriSeed = {
         "watch_civic_guard",
         "craft_specialty",
         "craft_specialty_advanced",
-        "construction_specialty"
+        "construction_specialty",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction"
       ],
       "skillIds": [],
       "socialClass": "Trades and Guilds",
@@ -14180,7 +14456,12 @@ export const generatedRepoLocalGlantriSeed = {
         "watch_civic_guard",
         "craft_specialty",
         "craft_specialty_advanced",
-        "construction_specialty"
+        "construction_specialty",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction"
       ],
       "skillIds": [],
       "socialClass": "Established Households",
@@ -14319,7 +14600,12 @@ export const generatedRepoLocalGlantriSeed = {
         "watch_civic_guard",
         "craft_specialty",
         "craft_specialty_advanced",
-        "construction_specialty"
+        "construction_specialty",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction"
       ],
       "skillIds": [],
       "socialClass": "Court and Elite",
@@ -14395,7 +14681,12 @@ export const generatedRepoLocalGlantriSeed = {
         "smuggling_illicit_trade",
         "watch_civic_guard",
         "craft_specialty",
-        "craft_specialty_advanced"
+        "craft_specialty_advanced",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction"
       ],
       "skillIds": [],
       "socialClass": "Common Folk",
@@ -14511,7 +14802,12 @@ export const generatedRepoLocalGlantriSeed = {
         "watch_civic_guard",
         "craft_specialty",
         "craft_specialty_advanced",
-        "construction_specialty"
+        "construction_specialty",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction"
       ],
       "skillIds": [],
       "socialClass": "Trades and Guilds",
@@ -14654,7 +14950,12 @@ export const generatedRepoLocalGlantriSeed = {
         "watch_civic_guard",
         "craft_specialty",
         "craft_specialty_advanced",
-        "construction_specialty"
+        "construction_specialty",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction"
       ],
       "skillIds": [],
       "socialClass": "Established Households",
@@ -14793,7 +15094,12 @@ export const generatedRepoLocalGlantriSeed = {
         "watch_civic_guard",
         "craft_specialty",
         "craft_specialty_advanced",
-        "construction_specialty"
+        "construction_specialty",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction"
       ],
       "skillIds": [],
       "socialClass": "Court and Elite",
@@ -14869,7 +15175,12 @@ export const generatedRepoLocalGlantriSeed = {
         "smuggling_illicit_trade",
         "watch_civic_guard",
         "craft_specialty",
-        "craft_specialty_advanced"
+        "craft_specialty_advanced",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction"
       ],
       "skillIds": [],
       "socialClass": "Common Folk",
@@ -14985,7 +15296,12 @@ export const generatedRepoLocalGlantriSeed = {
         "watch_civic_guard",
         "craft_specialty",
         "craft_specialty_advanced",
-        "construction_specialty"
+        "construction_specialty",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction"
       ],
       "skillIds": [],
       "socialClass": "Trades and Guilds",
@@ -15128,7 +15444,12 @@ export const generatedRepoLocalGlantriSeed = {
         "watch_civic_guard",
         "craft_specialty",
         "craft_specialty_advanced",
-        "construction_specialty"
+        "construction_specialty",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction"
       ],
       "skillIds": [],
       "socialClass": "Established Households",
@@ -15267,7 +15588,12 @@ export const generatedRepoLocalGlantriSeed = {
         "watch_civic_guard",
         "craft_specialty",
         "craft_specialty_advanced",
-        "construction_specialty"
+        "construction_specialty",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction"
       ],
       "skillIds": [],
       "socialClass": "Court and Elite",
@@ -15340,7 +15666,12 @@ export const generatedRepoLocalGlantriSeed = {
         "smuggling_illicit_trade",
         "watch_civic_guard",
         "craft_specialty",
-        "craft_specialty_advanced"
+        "craft_specialty_advanced",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction"
       ],
       "skillIds": [],
       "socialClass": "Common Folk",
@@ -15443,7 +15774,12 @@ export const generatedRepoLocalGlantriSeed = {
         "watch_civic_guard",
         "craft_specialty",
         "craft_specialty_advanced",
-        "construction_specialty"
+        "construction_specialty",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction"
       ],
       "skillIds": [],
       "socialClass": "Trades and Guilds",
@@ -15572,7 +15908,12 @@ export const generatedRepoLocalGlantriSeed = {
         "watch_civic_guard",
         "craft_specialty",
         "craft_specialty_advanced",
-        "construction_specialty"
+        "construction_specialty",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction"
       ],
       "skillIds": [],
       "socialClass": "Established Households",
@@ -15712,7 +16053,12 @@ export const generatedRepoLocalGlantriSeed = {
         "watch_civic_guard",
         "craft_specialty",
         "craft_specialty_advanced",
-        "construction_specialty"
+        "construction_specialty",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction"
       ],
       "skillIds": [],
       "socialClass": "Court and Elite",
