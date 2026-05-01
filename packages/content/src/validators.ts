@@ -10,6 +10,51 @@ const EXPECTED_SOCIAL_BANDS = [1, 2, 3, 4] as const;
 const EXPECTED_SOCIETY_SCALE = [1, 2, 3, 4, 5, 6] as const;
 const MINIMUM_GROUP_SKILL_COUNT = 3;
 const MINIMUM_GROUP_SKILL_POINTS = 7;
+const MINIMUM_DESIGN_GROUP_SKILL_POINTS = 6;
+
+const RETIRED_SKILL_GROUP_IDS = [
+  "field_soldiering",
+  "officer_training",
+  "trap_and_intrusion_work"
+] as const;
+
+const COMBAT_FUNDAMENTAL_SKILL_IDS = ["dodge", "parry", "brawling"] as const;
+const MELEE_WEAPON_SKILL_IDS = [
+  "one_handed_edged",
+  "one_handed_concussion_axe",
+  "two_handed_edged",
+  "two_handed_concussion_axe",
+  "polearms",
+  "lance"
+] as const;
+const MISSILE_WEAPON_SKILL_IDS = ["throwing", "sling", "bow", "longbow", "crossbow"] as const;
+const WEAPON_SKILL_IDS = [...MELEE_WEAPON_SKILL_IDS, ...MISSILE_WEAPON_SKILL_IDS] as const;
+
+const ALLOWED_SMALL_SKILL_GROUP_REASONS: Partial<Record<string, string>> = {
+  civic_learning: "Focused civic literacy and law foundation.",
+  commercial_administration: "Focused ledger and office-administration foundation.",
+  fieldcraft_stealth: "Focused stealth/camouflage fieldcraft cluster.",
+  formal_performance: "Focused formal stage/oratory performance cluster.",
+  healing_practice: "Focused practical healing foundation.",
+  maritime_crew_training: "Focused shipboard crew baseline.",
+  omen_and_ritual_practice: "Focused divination and ritual-reading cluster.",
+  political_acumen: "Focused social-political reading cluster.",
+  social_reading: "Focused social perception cluster.",
+  stealth_group: "Broad stealth taxonomy group retained for compatibility.",
+  street_theft: "Focused petty theft and concealment cluster."
+};
+
+const ALLOWED_WEAPON_PACKAGE_REASONS: Partial<Record<string, string>> = {
+  advanced_melee_training: "Coherent melee package with Dodge, Parry, Brawling, and melee weapon choices.",
+  advanced_missile_training: "Weapon-choice missile package.",
+  basic_melee_training: "Coherent melee package with Dodge, Parry, Brawling, and a melee weapon choice.",
+  basic_missile_training: "Weapon-choice missile package.",
+  combat_group: "Broad combat taxonomy group.",
+  mounted_warrior_training: "Coherent mounted combat package with Dodge, Parry, and fixed mounted weapons."
+};
+
+const MILITARY_SUPPORT_GROUP_IDS = ["defensive_soldiering", "veteran_soldiering"] as const;
+const OFFICER_COMMAND_SKILL_IDS = ["captaincy", "tactics"] as const;
 
 const CANONICAL_SKILL_GROUP_NAMES: Partial<Record<string, string>> = {
   covert_entry: "Covert Entry",
@@ -227,6 +272,111 @@ function getSkillIdsForGroup(content: CanonicalContent, groupId: string): string
   return content.skills
     .filter((skill) => skill.groupIds.includes(groupId))
     .map((skill) => skill.id);
+}
+
+function getSelectionSlotSkillIdsForGroup(
+  group: CanonicalContent["skillGroups"][number]
+): string[] {
+  return (group.selectionSlots ?? []).flatMap((slot) => slot.candidateSkillIds);
+}
+
+function getWeightedSkillPointsForGroup(
+  content: CanonicalContent,
+  group: CanonicalContent["skillGroups"][number]
+): number {
+  const skillIds = getSkillIdsForGroup(content, group.id);
+
+  return skillIds.reduce((total, skillId) => {
+    const skill = content.skills.find((candidate) => candidate.id === skillId);
+
+    return total + (skill ? getSkillPointWeight(skill) : 0);
+  }, 0);
+}
+
+function hasAnySkillId(candidateSkillIds: string[], targetSkillIds: readonly string[]): boolean {
+  return candidateSkillIds.some((skillId) => targetSkillIds.includes(skillId));
+}
+
+function validateSkillGroupDesign(content: CanonicalContent): CanonicalContent {
+  const issues: string[] = [];
+  const retiredSkillGroupIds = new Set<string>(RETIRED_SKILL_GROUP_IDS);
+  const combatFundamentalSkillIds = new Set<string>(COMBAT_FUNDAMENTAL_SKILL_IDS);
+  const weaponSkillIds = new Set<string>(WEAPON_SKILL_IDS);
+
+  for (const group of content.skillGroups) {
+    const fixedSkillIds = (group.skillMemberships ?? []).map((membership) => membership.skillId);
+    const slotSkillIds = getSelectionSlotSkillIdsForGroup(group);
+    const allGroupSkillIds = [...new Set([...fixedSkillIds, ...slotSkillIds])];
+    const hasSelectionSlots = (group.selectionSlots?.length ?? 0) > 0;
+    const hasDodge = fixedSkillIds.includes("dodge");
+    const hasParry = fixedSkillIds.includes("parry");
+    const hasBrawling = fixedSkillIds.includes("brawling");
+    const hasMeleeWeaponContext =
+      hasAnySkillId(fixedSkillIds, MELEE_WEAPON_SKILL_IDS) ||
+      hasAnySkillId(slotSkillIds, MELEE_WEAPON_SKILL_IDS);
+    const containsWeaponContext = allGroupSkillIds.some((skillId) => weaponSkillIds.has(skillId));
+
+    if (retiredSkillGroupIds.has(group.id)) {
+      issues.push(
+        `Retired skill group "${group.name}" (${group.id}) must not appear as an active canonical skill group.`
+      );
+    }
+
+    if (
+      !hasSelectionSlots &&
+      !ALLOWED_SMALL_SKILL_GROUP_REASONS[group.id] &&
+      getWeightedSkillPointsForGroup(content, group) < MINIMUM_DESIGN_GROUP_SKILL_POINTS
+    ) {
+      issues.push(
+        `Skill group "${group.name}" (${group.id}) has insufficient weighted value. Expected at least ${MINIMUM_DESIGN_GROUP_SKILL_POINTS} weighted points or an explicit allowed-small-group reason.`
+      );
+    }
+
+    if (containsWeaponContext && !ALLOWED_WEAPON_PACKAGE_REASONS[group.id]) {
+      issues.push(
+        `Skill group "${group.name}" (${group.id}) contains weapon skills or weapon-choice slots but is not an explicit weapon/combat package.`
+      );
+    }
+
+    if (hasParry && (!hasDodge || !hasMeleeWeaponContext)) {
+      issues.push(
+        `Skill group "${group.name}" (${group.id}) contains Parry without Dodge and melee weapon context.`
+      );
+    }
+
+    if (hasDodge && (!hasParry || !hasMeleeWeaponContext)) {
+      issues.push(
+        `Skill group "${group.name}" (${group.id}) contains Dodge outside a coherent melee/defensive combat package.`
+      );
+    }
+
+    if (hasBrawling && (!hasDodge || !hasParry || !hasMeleeWeaponContext)) {
+      issues.push(
+        `Skill group "${group.name}" (${group.id}) contains Brawling outside a coherent melee combat package.`
+      );
+    }
+
+    if (MILITARY_SUPPORT_GROUP_IDS.includes(group.id as (typeof MILITARY_SUPPORT_GROUP_IDS)[number])) {
+      const forbiddenSkillIds = allGroupSkillIds.filter(
+        (skillId) =>
+          combatFundamentalSkillIds.has(skillId) ||
+          weaponSkillIds.has(skillId) ||
+          OFFICER_COMMAND_SKILL_IDS.includes(skillId as (typeof OFFICER_COMMAND_SKILL_IDS)[number])
+      );
+
+      if (forbiddenSkillIds.length > 0) {
+        issues.push(
+          `Military-support skill group "${group.name}" (${group.id}) contains forbidden combat or command skill(s): ${forbiddenSkillIds.join(", ")}.`
+        );
+      }
+    }
+  }
+
+  if (issues.length > 0) {
+    throw new Error(`Invalid skill-group design content:\n${issues.join("\n")}`);
+  }
+
+  return content;
 }
 
 function validateSocieties(content: CanonicalContent): CanonicalContent {
@@ -787,11 +937,13 @@ export function validateCanonicalContent(input: unknown): CanonicalContent {
   }));
 
   return validateProfessionRelationships(
-    validateSkillRelationships(
-      validateCivilizations(
-        validateLanguages(
-          validateSocieties(
-            validateSocietyBandSkillAccess(validateSocietyBandRows(normalizedContent))
+    validateSkillGroupDesign(
+      validateSkillRelationships(
+        validateCivilizations(
+          validateLanguages(
+            validateSocieties(
+              validateSocietyBandSkillAccess(validateSocietyBandRows(normalizedContent))
+            )
           )
         )
       )
