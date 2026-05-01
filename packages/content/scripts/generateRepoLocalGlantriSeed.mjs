@@ -729,6 +729,18 @@ const PROFESSION_AVAILABILITY_OVERRIDES = {
     classBands: [1, 2],
     societyLevels: [1, 2]
   },
+  docker: {
+    classBands: [2, 3],
+    societyLevels: [2, 3, 4, 5]
+  },
+  farmer: {
+    classBands: [1, 2, 3],
+    societyLevels: [1, 2, 3, 4, 5, 6]
+  },
+  fisher: {
+    classBands: [1, 2, 3],
+    societyLevels: [1, 2, 3, 4, 5, 6]
+  },
   garrison_soldier: {
     classBands: [2, 3],
     societyLevels: [3, 4, 5]
@@ -765,6 +777,14 @@ const PROFESSION_AVAILABILITY_OVERRIDES = {
     classBands: [2, 3],
     societyLevels: [3, 4, 5]
   },
+  herder: {
+    classBands: [1, 2, 3],
+    societyLevels: [1, 2, 3, 4, 5, 6]
+  },
+  herdsman_subtype: {
+    classBands: [1, 2, 3],
+    societyLevels: [1, 2, 3, 4, 5, 6]
+  },
   imperial_officer: {
     classBands: [4],
     societyLevels: [6]
@@ -773,9 +793,17 @@ const PROFESSION_AVAILABILITY_OVERRIDES = {
     classBands: [2, 3],
     societyLevels: [3, 4, 5]
   },
+  inn_keeper: {
+    classBands: [2, 3],
+    societyLevels: [2, 3, 4, 5]
+  },
   levy_infantry: {
     classBands: [1, 2, 3],
     societyLevels: [2, 3, 4]
+  },
+  local_trader: {
+    classBands: [2, 3],
+    societyLevels: [2, 3, 4, 5]
   },
   militia_fighter: {
     classBands: [1, 2, 3],
@@ -788,6 +816,10 @@ const PROFESSION_AVAILABILITY_OVERRIDES = {
   pickpocket: {
     classBands: [2, 3],
     societyLevels: [2, 3, 4, 5]
+  },
+  peddler: {
+    classBands: [1, 2, 3],
+    societyLevels: [1, 2, 3, 4, 5]
   },
   prostitute_courtesan: {
     classBands: [2, 3],
@@ -820,6 +852,10 @@ const PROFESSION_AVAILABILITY_OVERRIDES = {
   watchman: {
     classBands: [2, 3],
     societyLevels: [3, 4, 5]
+  },
+  woodcutter: {
+    classBands: [1, 2, 3],
+    societyLevels: [1, 2, 3, 4, 5]
   }
 };
 

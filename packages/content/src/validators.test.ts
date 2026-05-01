@@ -2037,7 +2037,7 @@ describe("validateCanonicalContent", () => {
     }
   });
 
-  it("adds elite commercial and guild professions without constraining ordinary trade options", () => {
+  it("adds elite commercial professions and constrains ordinary trade/labor elite availability", () => {
     const canonicalSocietyLevelById = new Map(
       defaultCanonicalContent.societies.map((society) => [society.id, society.societyLevel])
     );
@@ -2185,26 +2185,54 @@ describe("validateCanonicalContent", () => {
     expect(directOnlySkillIdsFor("great_merchant")).toEqual(["language"]);
     expect(skillReachFor("great_merchant")).toBeGreaterThan(skillReachFor("merchant"));
 
-    for (const professionId of [
-      "farmer",
-      "herder",
-      "peddler",
-      "local_trader",
-      "merchant",
-      "inn_keeper",
-      "fisher",
-      "docker"
-    ]) {
+    for (const professionId of ["farmer", "herder", "peddler", "local_trader", "merchant", "inn_keeper", "fisher", "docker"]) {
       expect(professionById.has(professionId)).toBe(true);
       expect(allowedRowsFor(professionId).length).toBeGreaterThan(0);
     }
 
-    expect(canonicalSocietyLevelsFor("peddler")).toEqual([1, 2, 3, 4, 5, 6]);
-    expect(classBandsFor("peddler")).toEqual([1, 2, 3, 4]);
-    expect(canonicalSocietyLevelsFor("local_trader")).toEqual([2, 3, 4, 5, 6]);
-    expect(classBandsFor("local_trader")).toEqual([2, 3, 4]);
+    expect(canonicalSocietyLevelsFor("farmer")).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(classBandsFor("farmer")).toEqual([1, 2, 3]);
+    expect(canonicalSocietyLevelsFor("herdsman_subtype")).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(classBandsFor("herdsman_subtype")).toEqual([1, 2, 3]);
+    expect(canonicalSocietyLevelsFor("herder")).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(classBandsFor("herder")).toEqual([1, 2, 3]);
+    expect(canonicalSocietyLevelsFor("fisher")).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(classBandsFor("fisher")).toEqual([1, 2, 3]);
+    expect(canonicalSocietyLevelsFor("woodcutter")).toEqual([1, 2, 3, 4, 5]);
+    expect(classBandsFor("woodcutter")).toEqual([1, 2, 3]);
+    expect(canonicalSocietyLevelsFor("peddler")).toEqual([1, 2, 3, 4, 5]);
+    expect(classBandsFor("peddler")).toEqual([1, 2, 3]);
+    expect(canonicalSocietyLevelsFor("local_trader")).toEqual([2, 3, 4, 5]);
+    expect(classBandsFor("local_trader")).toEqual([2, 3]);
+    expect(canonicalSocietyLevelsFor("inn_keeper")).toEqual([2, 3, 4, 5]);
+    expect(classBandsFor("inn_keeper")).toEqual([2, 3]);
+    expect(canonicalSocietyLevelsFor("docker")).toEqual([2, 3, 4, 5]);
+    expect(classBandsFor("docker")).toEqual([2, 3]);
     expect(canonicalSocietyLevelsFor("merchant")).toEqual([2, 3, 4, 5, 6]);
     expect(classBandsFor("merchant")).toEqual([2, 3, 4]);
+    expect(canonicalSocietyLevelsFor("master_craftsmen")).toEqual([3, 4, 5, 6]);
+    expect(classBandsFor("master_craftsmen")).toEqual([3, 4]);
+    expect(canonicalSocietyLevelsFor("builder_master_mason")).toEqual([3, 4, 5, 6]);
+    expect(classBandsFor("builder_master_mason")).toEqual([3, 4]);
+
+    for (const professionId of [
+      "farmer",
+      "herdsman_subtype",
+      "herder",
+      "fisher",
+      "woodcutter",
+      "peddler",
+      "local_trader",
+      "inn_keeper",
+      "docker"
+    ]) {
+      expect(allowedRowsFor(professionId).some((row) => row.societyLevel === 4)).toBe(false);
+    }
+    expect(canonicalSocietyLevelsFor("woodcutter")).not.toContain(6);
+    expect(canonicalSocietyLevelsFor("peddler")).not.toContain(6);
+    expect(canonicalSocietyLevelsFor("local_trader")).not.toContain(6);
+    expect(canonicalSocietyLevelsFor("inn_keeper")).not.toContain(6);
+    expect(canonicalSocietyLevelsFor("docker")).not.toContain(6);
 
     expect(professionById.get("smuggler")).toMatchObject({
       familyId: "illicit_trader",
