@@ -633,6 +633,73 @@ describe("derived skill relationships in chargen drafts", () => {
     }).spentCost).toBe(1);
   });
 
+  it("treats Longbow as a Bow specialization rather than a missile weapon slot choice", () => {
+    const lightInfantryRow = defaultCanonicalContent.societyLevels.find((societyLevel) =>
+      societyLevel.professionIds.includes("light_infantry") &&
+      societyLevel.skillGroupIds.includes("basic_missile_training")
+    );
+    const basicMissileTraining = defaultCanonicalContent.skillGroups.find(
+      (group) => group.id === "basic_missile_training"
+    );
+
+    expect(lightInfantryRow).toBeDefined();
+    expect(basicMissileTraining?.selectionSlots?.[0]?.candidateSkillIds).toEqual([
+      "throwing",
+      "sling",
+      "bow",
+      "crossbow"
+    ]);
+    expect(basicMissileTraining?.selectionSlots?.[0]?.candidateSkillIds).not.toContain("longbow");
+    expect(defaultCanonicalContent.skills.find((skill) => skill.id === "longbow")).toMatchObject({
+      specializationOfSkillId: "bow"
+    });
+
+    const progression = {
+      ...createChargenProgression(),
+      chargenSelections: {
+        selectedGroupSlots: [
+          {
+            groupId: "basic_missile_training",
+            selectedSkillIds: ["bow"],
+            slotId: "missile_weapon_choice"
+          }
+        ],
+        selectedLanguageIds: [],
+        selectedSkillIds: []
+      },
+      skillGroups: [
+        {
+          gms: 0,
+          grantedRanks: 0,
+          groupId: "basic_missile_training",
+          primaryRanks: 6,
+          ranks: 6,
+          secondaryRanks: 0
+        }
+      ]
+    };
+    const draftView = buildChargenDraftView({
+      content: defaultCanonicalContent,
+      professionId: "light_infantry",
+      progression,
+      societyId: lightInfantryRow!.societyId,
+      societyLevel: lightInfantryRow!.societyLevel
+    });
+
+    expect(draftView.skills.find((skill) => skill.skillId === "bow")).toMatchObject({
+      groupLevel: 6,
+      groupId: "basic_missile_training",
+      skillId: "bow"
+    });
+    expect(draftView.skills.find((skill) => skill.skillId === "longbow")).toBeUndefined();
+    expect(
+      draftView.specializations.find((specialization) => specialization.specializationId === "longbow")
+    ).toMatchObject({
+      relationshipGrantedSourceSkillId: "bow",
+      relationshipGrantedSourceType: "specialization-bridge-parent"
+    });
+  });
+
   it("blocks required-slot group purchases until required choices are selected", () => {
     const row = defaultCanonicalContent.societyLevels.find(
       (societyLevel) =>

@@ -733,7 +733,7 @@ function getOtherSkillIds(input: {
 }
 
 describe("ChargenWizard combat allocation runtime helpers", () => {
-  it("materializes cross-trained melee skills in chargen when the source only has group XP", () => {
+  it("does not double-count cross-trained melee skills that already have group XP", () => {
     const meleeDerivedContent = validateCanonicalContent({
       civilizations: [],
       languages: [],
@@ -847,9 +847,9 @@ describe("ChargenWizard combat allocation runtime helpers", () => {
     });
 
     expect(draftView.skills.find((skill) => skill.skillId === "two_handed_edged")).toMatchObject({
-      effectiveSkillNumber: 17,
-      relationshipGrantedSkillLevel: 7,
-      relationshipSourceSkillName: "1-h edged"
+      effectiveSkillNumber: 10,
+      relationshipGrantedSkillLevel: 0,
+      relationshipSourceSkillName: undefined
     });
   });
 
@@ -1621,11 +1621,27 @@ describe("ChargenWizard profession-group display priority", () => {
         professionId: "light_infantry"
       })
     );
+    const unselectedSummary = buildChargenSelectableSkillSummary({
+      content: defaultCanonicalContent,
+      professionId: "light_infantry",
+      progression: applyProfessionGrants({
+        content: defaultCanonicalContent,
+        professionId: "light_infantry"
+      }),
+      societyId: lightInfantryRow!.societyId,
+      societyLevel: lightInfantryRow!.societyLevel
+    });
+    const missileSlot = unselectedSummary.selectionSlots.find(
+      (slot) => slot.groupId === "basic_missile_training"
+    );
 
+    expect(missileSlot?.candidateSkillIds).toEqual(["throwing", "sling", "bow", "crossbow"]);
+    expect(missileSlot?.candidateSkillIds).not.toContain("longbow");
     expect(unselectedDirectSkillIds).not.toContain("one_handed_edged");
     expect(unselectedDirectSkillIds).not.toContain("polearms");
     expect(unselectedDirectSkillIds).not.toContain("throwing");
     expect(unselectedDirectSkillIds).not.toContain("bow");
+    expect(unselectedDirectSkillIds).not.toContain("longbow");
     expect(unselectedDirectSkillIds).not.toContain("crossbow");
 
     const selectedProgression = applyProfessionGrants({

@@ -575,7 +575,6 @@ describe("validateCanonicalContent", () => {
       "throwing",
       "sling",
       "bow",
-      "longbow",
       "crossbow"
     ];
     const meleeWeaponSkillIds = weaponSkillIds.slice(0, 6);
@@ -785,12 +784,16 @@ describe("validateCanonicalContent", () => {
     );
     expect(skillIdsFor("light_infantry")).toEqual([]);
     expect(skillReachFor("light_infantry")).toBeGreaterThanOrEqual(15);
-    expect(groupSelectionCandidateIdsFor("basic_missile_training")).toEqual(
-      expect.arrayContaining(["throwing", "bow", "longbow", "crossbow"])
-    );
+    expect(groupSelectionCandidateIdsFor("basic_missile_training")).toEqual([
+      "throwing",
+      "sling",
+      "bow",
+      "crossbow"
+    ]);
     expect(groupSkillIdsFor("basic_missile_training")).toEqual(
       expect.arrayContaining(["perception", "concentration", "weapon_maintenance"])
     );
+    expect(groupSkillIdsFor("basic_missile_training")).not.toContain("longbow");
     expect(groupSkillIdsFor("basic_missile_training")).not.toContain("self_control");
     expect(groupSkillIdsFor("basic_missile_training").filter((skillId) =>
       ["dodge", "parry", "veteran_leadership", "captaincy", "tactics"].includes(skillId)
@@ -810,9 +813,12 @@ describe("validateCanonicalContent", () => {
       groupWeightedValueFor("basic_missile_training") +
         minimumSlotWeightedValueFor("basic_missile_training")
     ).toBeGreaterThanOrEqual(6);
-    expect(groupSelectionCandidateIdsFor("advanced_missile_training")).toEqual(
-      expect.arrayContaining(["throwing", "bow", "longbow", "crossbow"])
-    );
+    expect(groupSelectionCandidateIdsFor("advanced_missile_training")).toEqual([
+      "throwing",
+      "sling",
+      "bow",
+      "crossbow"
+    ]);
     expect(groupSkillIdsFor("advanced_missile_training")).toEqual(
       expect.arrayContaining([
         "perception",
@@ -822,6 +828,7 @@ describe("validateCanonicalContent", () => {
         "combat_experience"
       ])
     );
+    expect(groupSkillIdsFor("advanced_missile_training")).not.toContain("longbow");
     expect(groupSkillIdsFor("advanced_missile_training")).not.toContain("self_control");
     expect(groupSkillIdsFor("advanced_missile_training").filter((skillId) =>
       ["dodge", "parry", "veteran_leadership", "captaincy", "tactics"].includes(skillId)
@@ -832,6 +839,9 @@ describe("validateCanonicalContent", () => {
     expect(groupSkillIdsFor("basic_melee_training")).toEqual(
       expect.arrayContaining(["dodge", "parry", "brawling"])
     );
+    expect(defaultCanonicalContent.skills.find((skill) => skill.id === "longbow")).toMatchObject({
+      specializationOfSkillId: "bow"
+    });
     expect(groupSkillIdsFor("defensive_soldiering")).toEqual(
       expect.arrayContaining([
         "formation_fighting",
@@ -3609,6 +3619,66 @@ describe("validateCanonicalContent", () => {
       })
     ).toThrow(
       `Skill group "Test group" (test_group) selection slot "missing_choice" references unknown skill "missing-skill".`
+    );
+
+    expect(() =>
+      validateCanonicalContent({
+        civilizations: [],
+        languages: [],
+        professionFamilies: [],
+        professionSkills: [],
+        professions: [],
+        societies: [],
+        societyLevels: [],
+        skillGroups: [
+          {
+            id: "test_group",
+            name: "Test group",
+            selectionSlots: [
+              {
+                candidateSkillIds: ["longbow"],
+                chooseCount: 1,
+                id: "specialization_choice",
+                label: "Choose one skill",
+                required: true
+              }
+            ],
+            sortOrder: 1
+          }
+        ],
+        skills: [
+          {
+            allowsSpecializations: true,
+            category: "secondary",
+            dependencies: [],
+            dependencySkillIds: [],
+            groupId: "test_group",
+            groupIds: ["test_group"],
+            id: "bow",
+            linkedStats: ["dex"],
+            name: "Bow",
+            requiresLiteracy: "no",
+            sortOrder: 1
+          },
+          {
+            allowsSpecializations: false,
+            category: "secondary",
+            dependencies: [],
+            dependencySkillIds: [],
+            groupId: "test_group",
+            groupIds: ["test_group"],
+            id: "longbow",
+            linkedStats: ["dex"],
+            name: "Longbow",
+            requiresLiteracy: "no",
+            sortOrder: 2,
+            specializationOfSkillId: "bow"
+          }
+        ],
+        specializations: []
+      })
+    ).toThrow(
+      `Skill group "Test group" (test_group) selection slot "specialization_choice" references specialization "Longbow" (longbow) as a normal skill candidate.`
     );
   });
 

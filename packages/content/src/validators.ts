@@ -27,7 +27,7 @@ const MELEE_WEAPON_SKILL_IDS = [
   "polearms",
   "lance"
 ] as const;
-const MISSILE_WEAPON_SKILL_IDS = ["throwing", "sling", "bow", "longbow", "crossbow"] as const;
+const MISSILE_WEAPON_SKILL_IDS = ["throwing", "sling", "bow", "crossbow"] as const;
 const WEAPON_SKILL_IDS = [...MELEE_WEAPON_SKILL_IDS, ...MISSILE_WEAPON_SKILL_IDS] as const;
 
 const ALLOWED_SMALL_SKILL_GROUP_REASONS: Partial<Record<string, string>> = {
@@ -850,6 +850,12 @@ function validateSkillRelationships(content: CanonicalContent): CanonicalContent
         if (!skill.groupIds.includes(group.id)) {
           issues.push(
             `Skill group "${group.name}" (${group.id}) selection slot "${slot.id}" references skill "${candidateSkillId}" that does not include the group in its groupIds.`
+          );
+        }
+
+        if (skill.specializationOfSkillId) {
+          issues.push(
+            `Skill group "${group.name}" (${group.id}) selection slot "${slot.id}" references specialization "${skill.name}" (${candidateSkillId}) as a normal skill candidate.`
           );
         }
       }

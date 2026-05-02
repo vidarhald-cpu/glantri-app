@@ -171,7 +171,6 @@ const MISSILE_WEAPON_SKILL_IDS = [
   "throwing",
   "sling",
   "bow",
-  "longbow",
   "crossbow"
 ];
 
@@ -373,6 +372,7 @@ const EXCLUDED_TRAINING_GROUP_IDS_BY_SKILL_ID = {
     "defensive_soldiering",
     "veteran_soldiering"
   ],
+  longbow: ["basic_missile_training", "advanced_missile_training"],
   parry: ["defensive_soldiering", "veteran_soldiering"]
 };
 

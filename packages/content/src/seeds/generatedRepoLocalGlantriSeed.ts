@@ -955,7 +955,6 @@ export const generatedRepoLocalGlantriSeed = {
             "throwing",
             "sling",
             "bow",
-            "longbow",
             "crossbow"
           ],
           "chooseCount": 1,
@@ -998,7 +997,6 @@ export const generatedRepoLocalGlantriSeed = {
             "throwing",
             "sling",
             "bow",
-            "longbow",
             "crossbow"
           ],
           "chooseCount": 3,
@@ -5265,9 +5263,7 @@ export const generatedRepoLocalGlantriSeed = {
       "description": "Longbow Use powerful longbows requiring strength, discipline, and trained missile technique. More specialized than ordinary bow use.",
       "groupId": "combat_group",
       "groupIds": [
-        "combat_group",
-        "basic_missile_training",
-        "advanced_missile_training"
+        "combat_group"
       ],
       "id": "longbow",
       "isTheoretical": false,
