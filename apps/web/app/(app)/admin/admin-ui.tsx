@@ -125,6 +125,11 @@ export const adminNavGroups: AdminNavGroup[] = [
         label: "Documents"
       },
       {
+        description: "Read repo-local markdown references for rules, formulas, and displayed calculations.",
+        href: "/admin/rules-docs",
+        label: "Rules Docs"
+      },
+      {
         description: "Inspect the canonical civilization layer that links named cultures to society models and language names.",
         href: "/admin/civilizations",
         label: "Civilizations"
