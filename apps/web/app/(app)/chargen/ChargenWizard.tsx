@@ -3559,6 +3559,11 @@ export default function ChargenWizard() {
                               </div>
 
                               {addPreview?.spentCost ? <div>Next purchase cost: {addPreview.spentCost}</div> : null}
+                              {addPreview?.error ? (
+                                <div style={{ color: "#8a3b12", fontSize: "0.9rem" }}>
+                                  {addPreview.error}
+                                </div>
+                              ) : null}
 
                               {groupSelectionSlots.length > 0 ? (
                                 <div style={{ display: "grid", gap: "0.5rem" }}>

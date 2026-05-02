@@ -49,9 +49,9 @@ import {
 } from "./selectionStructure";
 import { getResolvedProfileStats } from "./statResolution";
 
-const GROUP_POINT_COST = 4;
 const ORDINARY_SKILL_POINT_COST = 2;
 const SECONDARY_SKILL_POINT_COST = 1;
+const LEGACY_GROUP_POINT_COST = 4;
 const NEW_SPECIALIZATION_COST = 4;
 const EXISTING_SPECIALIZATION_COST = 2;
 const LITERACY_SKILL_ID = "literacy";
@@ -686,8 +686,72 @@ function getSkillSpendCost(skill: SkillDefinition): number {
   return skill.category === "secondary" ? SECONDARY_SKILL_POINT_COST : ORDINARY_SKILL_POINT_COST;
 }
 
-function getGroupSpendCost(exists: boolean): number {
-  return exists ? GROUP_POINT_COST : GROUP_POINT_COST * 2;
+function getSelectedSkillIdsForGroupSlot(input: {
+  groupId: string;
+  progression: CharacterProgression;
+  slotId: string;
+}): string[] {
+  return (
+    input.progression.chargenSelections?.selectedGroupSlots.find(
+      (selection) => selection.groupId === input.groupId && selection.slotId === input.slotId
+    )?.selectedSkillIds ?? []
+  );
+}
+
+function getActiveGroupSkillCost(input: {
+  content: CanonicalContentShape;
+  groupId: string;
+  progression: CharacterProgression;
+}): { cost?: number; error?: string } {
+  const group = input.content.skillGroups.find((candidate) => candidate.id === input.groupId);
+
+  if (!group) {
+    return { error: "Skill group definition not found." };
+  }
+
+  const skillsById = new Map(input.content.skills.map((skill) => [skill.id, skill]));
+  const fixedGroupSkillIds = (group.skillMemberships ?? []).map((membership) => membership.skillId);
+  const hasSelectionSlots = (group.selectionSlots?.length ?? 0) > 0;
+  const activeSkillIds = new Set(
+    fixedGroupSkillIds.length > 0
+      ? fixedGroupSkillIds
+      : hasSelectionSlots
+        ? []
+      : input.content.skills
+          .filter((skill) => getSkillGroupIds(skill).includes(input.groupId))
+          .map((skill) => skill.id)
+  );
+
+  for (const slot of group.selectionSlots ?? []) {
+    const candidateSkillIds = new Set(slot.candidateSkillIds);
+    const selectedSkillIds = getSelectedSkillIdsForGroupSlot({
+      groupId: input.groupId,
+      progression: input.progression,
+      slotId: slot.id
+    }).filter((skillId) => candidateSkillIds.has(skillId));
+
+    if (slot.required && selectedSkillIds.length < slot.chooseCount) {
+      return { error: `${group.name}: ${slot.label}.` };
+    }
+
+    for (const skillId of selectedSkillIds.slice(0, slot.chooseCount)) {
+      activeSkillIds.add(skillId);
+    }
+  }
+
+  const totalIndividualCost = [...activeSkillIds].reduce((total, skillId) => {
+    const skill = skillsById.get(skillId);
+
+    return skill ? total + getSkillSpendCost(skill) : total;
+  }, 0);
+
+  if (totalIndividualCost <= 0) {
+    return { error: "This skill group has no active skills to price." };
+  }
+
+  return {
+    cost: Math.max(1, Math.floor(totalIndividualCost * 0.6))
+  };
 }
 
 function getSpecializationSpendCost(exists: boolean): number {
@@ -915,8 +979,21 @@ export function allocateChargenPoint(input: AllocateChargenPointInput): SpendPoi
       };
     }
 
-    const existingGroup = progression.skillGroups.find((group) => group.groupId === input.targetId);
-    const cost = getGroupSpendCost(Boolean(existingGroup && existingGroup.ranks > 0));
+    const groupCost = getActiveGroupSkillCost({
+      content: input.content,
+      groupId: input.targetId,
+      progression
+    });
+
+    if (groupCost.error || groupCost.cost === undefined) {
+      return {
+        error: groupCost.error ?? "Skill group cost could not be calculated.",
+        progression,
+        warnings
+      };
+    }
+
+    const cost = groupCost.cost;
     const pool = chooseChargenPool({
       cost,
       normalAccess,
@@ -1038,8 +1115,22 @@ export function spendPrimaryPoint(input: SpendPrimaryPointInput): SpendPointResu
       };
     }
 
+    const groupCost = getActiveGroupSkillCost({
+      content: input.content,
+      groupId: input.targetId,
+      progression
+    });
+
+    if (groupCost.error || groupCost.cost === undefined) {
+      return {
+        error: groupCost.error ?? "Skill group cost could not be calculated.",
+        progression,
+        warnings
+      };
+    }
+
     const group = ensureGroupExists(progression, input.targetId);
-    const cost = getGroupSpendCost(group.ranks > 0);
+    const cost = groupCost.cost;
 
     if (progression.primaryPoolSpent + cost > progression.primaryPoolTotal) {
       return {
@@ -1389,7 +1480,21 @@ export function removePrimaryPoint(input: SpendPrimaryPointInput): SpendPointRes
 
     group.primaryRanks -= 1;
     group.ranks = group.grantedRanks + group.primaryRanks + group.secondaryRanks;
-    const refundedCost = getGroupSpendCost(group.ranks > 0);
+    const groupCost = getActiveGroupSkillCost({
+      content: input.content,
+      groupId: input.targetId,
+      progression
+    });
+    const refundedCost = groupCost.cost;
+
+    if (refundedCost === undefined) {
+      return {
+        error: groupCost.error ?? "Skill group refund could not be calculated.",
+        progression,
+        warnings
+      };
+    }
+
     progression.primaryPoolSpent = Math.max(0, progression.primaryPoolSpent - refundedCost);
 
     return {
@@ -1470,7 +1575,20 @@ export function removeChargenPoint(
       };
     }
 
-    const refundCost = getGroupSpendCost(group.primaryRanks + group.secondaryRanks - 1 > 0);
+    const groupCost = getActiveGroupSkillCost({
+      content: input.content,
+      groupId: input.targetId,
+      progression
+    });
+    const refundCost = groupCost.cost;
+
+    if (refundCost === undefined) {
+      return {
+        error: groupCost.error ?? "Skill group refund could not be calculated.",
+        progression,
+        warnings
+      };
+    }
 
     if (group.secondaryRanks > 0) {
       group.secondaryRanks -= 1;
@@ -2347,7 +2465,7 @@ export function getPrimaryPurchaseCostForGroup(
   groupId: string
 ): number {
   const group = progression.skillGroups.find((item) => item.groupId === groupId);
-  return getGroupSpendCost(Boolean(group && group.ranks > 0));
+  return group && group.ranks > 0 ? LEGACY_GROUP_POINT_COST : LEGACY_GROUP_POINT_COST * 2;
 }
 
 export function getPrimaryPurchaseCostForSkill(

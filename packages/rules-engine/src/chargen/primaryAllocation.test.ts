@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { validateCanonicalContent } from "@glantri/content";
+import { defaultCanonicalContent, validateCanonicalContent } from "@glantri/content";
 import type { CharacterProgression } from "@glantri/domain";
 
 import {
@@ -8,7 +8,6 @@ import {
   buildChargenDraftView,
   createChargenProgression,
   finalizeChargenDraft,
-  getPrimaryPurchaseCostForGroup,
   getPrimaryPurchaseCostForSkill,
   getSecondaryPurchaseCostForSkill,
   getSecondaryPurchaseCostForSpecialization,
@@ -526,7 +525,6 @@ describe("derived skill relationships in chargen drafts", () => {
     };
     const literacy = chargenTestContent.skills.find((skill) => skill.id === "literacy")!;
 
-    expect(getPrimaryPurchaseCostForGroup(progression, "scholarly")).toBe(4);
     expect(getPrimaryPurchaseCostForSkill(progression, literacy)).toBe(2);
 
     const groupPurchase = allocateChargenPoint({
@@ -549,9 +547,113 @@ describe("derived skill relationships in chargen drafts", () => {
     });
 
     expect(groupPurchase.error).toBeUndefined();
-    expect(groupPurchase.spentCost).toBe(4);
+    expect(groupPurchase.spentCost).toBe(3);
     expect(skillPurchase.error).toBeUndefined();
     expect(skillPurchase.spentCost).toBe(2);
+  });
+
+  it("prices canonical group purchases from active fixed and selected slot skills", () => {
+    const rowFor = (professionId: string, groupId: string) => {
+      const row = defaultCanonicalContent.societyLevels.find(
+        (societyLevel) =>
+          societyLevel.professionIds.includes(professionId) &&
+          societyLevel.skillGroupIds.includes(groupId)
+      );
+
+      expect(row).toBeDefined();
+
+      return row!;
+    };
+    const buyGroup = (input: {
+      groupId: string;
+      professionId: string;
+      selectedGroupSlots?: CharacterProgression["chargenSelections"]["selectedGroupSlots"];
+    }) => {
+      const row = rowFor(input.professionId, input.groupId);
+      const progression = {
+        ...createChargenProgression(),
+        chargenSelections: {
+          selectedGroupSlots: input.selectedGroupSlots ?? [],
+          selectedLanguageIds: [],
+          selectedSkillIds: []
+        }
+      };
+
+      return allocateChargenPoint({
+        content: defaultCanonicalContent,
+        professionId: input.professionId,
+        progression,
+        societyId: row.societyId,
+        societyLevel: row.societyLevel,
+        targetId: input.groupId,
+        targetType: "group"
+      });
+    };
+
+    expect(buyGroup({
+      groupId: "mercantile_practice",
+      professionId: "master_craftsmen"
+    }).spentCost).toBe(3);
+    expect(buyGroup({
+      groupId: "technical_measurement",
+      professionId: "master_craftsmen"
+    }).spentCost).toBe(3);
+    expect(buyGroup({
+      groupId: "basic_melee_training",
+      professionId: "light_infantry",
+      selectedGroupSlots: [
+        {
+          groupId: "basic_melee_training",
+          selectedSkillIds: ["polearms"],
+          slotId: "melee_weapon_choice"
+        }
+      ]
+    }).spentCost).toBe(2);
+    expect(buyGroup({
+      groupId: "basic_missile_training",
+      professionId: "light_infantry",
+      selectedGroupSlots: [
+        {
+          groupId: "basic_missile_training",
+          selectedSkillIds: ["bow"],
+          slotId: "missile_weapon_choice"
+        }
+      ]
+    }).spentCost).toBe(3);
+    expect(buyGroup({
+      groupId: "craft_specialty_advanced",
+      professionId: "master_craftsmen",
+      selectedGroupSlots: [
+        {
+          groupId: "craft_specialty_advanced",
+          selectedSkillIds: ["carpentry", "smithing"],
+          slotId: "advanced_craft_specialty_choices"
+        }
+      ]
+    }).spentCost).toBe(2);
+  });
+
+  it("blocks required-slot group purchases until required choices are selected", () => {
+    const row = defaultCanonicalContent.societyLevels.find(
+      (societyLevel) =>
+        societyLevel.professionIds.includes("master_craftsmen") &&
+        societyLevel.skillGroupIds.includes("craft_specialty_advanced")
+    );
+
+    expect(row).toBeDefined();
+
+    const purchase = allocateChargenPoint({
+      content: defaultCanonicalContent,
+      professionId: "master_craftsmen",
+      progression: createChargenProgression(),
+      societyId: row!.societyId,
+      societyLevel: row!.societyLevel,
+      targetId: "craft_specialty_advanced",
+      targetType: "group"
+    });
+
+    expect(purchase.spentCost).toBeUndefined();
+    expect(purchase.error).toBe("Advanced Craft Specialty: Choose two craft specialties.");
   });
 
   it("uses individual skill pricing for other skills outside normal group access", () => {
