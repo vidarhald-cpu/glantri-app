@@ -86,7 +86,17 @@ const REMOVED_SKILL_GROUP_IDS_BY_SKILL_ID: Partial<Record<string, string[]>> = {
     "defensive_soldiering",
     "veteran_soldiering"
   ],
+  longbow: ["basic_missile_training", "advanced_missile_training"],
   parry: ["defensive_soldiering", "veteran_soldiering"]
+};
+
+const CANONICAL_SELECTION_SLOT_CANDIDATES: Partial<Record<string, Record<string, string[]>>> = {
+  advanced_missile_training: {
+    advanced_missile_weapon_choices: [...MISSILE_WEAPON_SKILL_IDS]
+  },
+  basic_missile_training: {
+    missile_weapon_choice: [...MISSILE_WEAPON_SKILL_IDS]
+  }
 };
 
 function removeRetiredSkillGroupMemberships(
@@ -288,7 +298,11 @@ function normalizeSkillGroups(content: CanonicalContent): CanonicalContent {
       ...group,
       selectionSlots: (group.selectionSlots ?? []).map((slot) => ({
         ...slot,
-        candidateSkillIds: [...new Set(slot.candidateSkillIds)]
+        candidateSkillIds: [
+          ...new Set(
+            CANONICAL_SELECTION_SLOT_CANDIDATES[group.id]?.[slot.id] ?? slot.candidateSkillIds
+          )
+        ]
       })),
       skillMemberships: [
         ...new Map(

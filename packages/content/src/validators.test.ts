@@ -496,6 +496,88 @@ describe("validateCanonicalContent", () => {
     );
   });
 
+  it("normalizes stale missile weapon slots before validating legacy Longbow candidates", () => {
+    const legacyContent = {
+      ...defaultCanonicalContent,
+      skills: defaultCanonicalContent.skills.map((skill) =>
+        skill.id === "longbow"
+          ? {
+              ...skill,
+              groupIds: [
+                ...new Set([
+                  ...skill.groupIds,
+                  "basic_missile_training",
+                  "advanced_missile_training"
+                ])
+              ]
+            }
+          : skill
+      ),
+      skillGroups: defaultCanonicalContent.skillGroups.map((group) =>
+        group.id === "basic_missile_training"
+          ? {
+              ...group,
+              selectionSlots: group.selectionSlots?.map((slot) =>
+                slot.id === "missile_weapon_choice"
+                  ? {
+                      ...slot,
+                      candidateSkillIds: [
+                        "throwing",
+                        "sling",
+                        "bow",
+                        "longbow",
+                        "crossbow"
+                      ]
+                    }
+                  : slot
+              )
+            }
+          : group.id === "advanced_missile_training"
+            ? {
+                ...group,
+                selectionSlots: group.selectionSlots?.map((slot) =>
+                  slot.id === "advanced_missile_weapon_choices"
+                    ? {
+                        ...slot,
+                        candidateSkillIds: [
+                          "throwing",
+                          "sling",
+                          "bow",
+                          "longbow",
+                          "crossbow"
+                        ]
+                      }
+                    : slot
+                )
+              }
+            : group
+      )
+    };
+
+    const normalizedContent = validateCanonicalContent(legacyContent);
+    const groupById = new Map(normalizedContent.skillGroups.map((group) => [group.id, group]));
+    const slotCandidateIdsFor = (groupId: string, slotId: string) =>
+      groupById.get(groupId)?.selectionSlots?.find((slot) => slot.id === slotId)
+        ?.candidateSkillIds ?? [];
+    const longbow = normalizedContent.skills.find((skill) => skill.id === "longbow");
+
+    expect(slotCandidateIdsFor("basic_missile_training", "missile_weapon_choice")).toEqual([
+      "throwing",
+      "sling",
+      "bow",
+      "crossbow"
+    ]);
+    expect(
+      slotCandidateIdsFor("advanced_missile_training", "advanced_missile_weapon_choices")
+    ).toEqual(["throwing", "sling", "bow", "crossbow"]);
+    expect(longbow).toMatchObject({
+      specializationOfSkillId: "bow"
+    });
+    expect(longbow?.groupIds).not.toEqual(
+      expect.arrayContaining(["basic_missile_training", "advanced_missile_training"])
+    );
+  });
+
   it("rejects skill-group design regressions for weak groups and isolated combat skills", () => {
     const withGroupMembership = (groupId: string, skillId: string) => ({
       ...defaultCanonicalContent,
