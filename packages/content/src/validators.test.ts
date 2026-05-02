@@ -2575,7 +2575,7 @@ describe("validateCanonicalContent", () => {
       expect.arrayContaining(["smithing", "carpentry", "leatherworking", "weaving", "pottery"])
     );
     expect(advancedCraftSpecialtySlot).toMatchObject({
-      chooseCount: 2,
+      chooseCount: 1,
       id: "advanced_craft_specialty_choices",
       required: true
     });

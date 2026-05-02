@@ -1943,9 +1943,9 @@ export const generatedRepoLocalGlantriSeed = {
             "smithing",
             "weapon_maintenance"
           ],
-          "chooseCount": 2,
+          "chooseCount": 1,
           "id": "advanced_craft_specialty_choices",
-          "label": "Choose two craft specialties",
+          "label": "Choose one craft specialty",
           "required": true
         }
       ],

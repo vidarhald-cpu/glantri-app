@@ -626,11 +626,11 @@ describe("derived skill relationships in chargen drafts", () => {
       selectedGroupSlots: [
         {
           groupId: "craft_specialty_advanced",
-          selectedSkillIds: ["carpentry", "smithing"],
+          selectedSkillIds: ["smithing"],
           slotId: "advanced_craft_specialty_choices"
         }
       ]
-    }).spentCost).toBe(2);
+    }).spentCost).toBe(1);
   });
 
   it("blocks required-slot group purchases until required choices are selected", () => {
@@ -653,7 +653,7 @@ describe("derived skill relationships in chargen drafts", () => {
     });
 
     expect(purchase.spentCost).toBeUndefined();
-    expect(purchase.error).toBe("Advanced Craft Specialty: Choose two craft specialties.");
+    expect(purchase.error).toBe("Advanced Craft Specialty: Choose one craft specialty.");
   });
 
   it("uses individual skill pricing for other skills outside normal group access", () => {

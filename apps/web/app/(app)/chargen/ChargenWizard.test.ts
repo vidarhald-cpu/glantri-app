@@ -1824,7 +1824,7 @@ describe("ChargenWizard profession-group display priority", () => {
     );
 
     expect(advancedCraftSlot).toMatchObject({
-      chooseCount: 2,
+      chooseCount: 1,
       groupName: "Advanced Craft Specialty",
       required: true
     });
@@ -1843,7 +1843,7 @@ describe("ChargenWizard profession-group display priority", () => {
         selectedGroupSlots: [
           {
             groupId: "craft_specialty_advanced",
-            selectedSkillIds: ["carpentry", "smithing"],
+            selectedSkillIds: ["smithing"],
             slotId: "advanced_craft_specialty_choices"
           }
         ]
@@ -1888,8 +1888,9 @@ describe("ChargenWizard profession-group display priority", () => {
       .map((skill) => skill.id);
 
     expect(selectedAdvancedCraftSkillIds).toEqual(
-      expect.arrayContaining(["carpentry", "smithing"])
+      expect.arrayContaining(["smithing"])
     );
+    expect(selectedAdvancedCraftSkillIds).not.toContain("carpentry");
     expect(buildDirectSkillIds(selectedSlotProgression)).not.toEqual(
       expect.arrayContaining(["carpentry", "smithing"])
     );

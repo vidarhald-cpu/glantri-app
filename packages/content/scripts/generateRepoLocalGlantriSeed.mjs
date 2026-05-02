@@ -244,9 +244,9 @@ const SKILL_GROUP_SELECTION_SLOTS_BY_ID = {
   craft_specialty_advanced: [
     {
       candidateSkillIds: CRAFT_SPECIALTY_SKILL_IDS,
-      chooseCount: 2,
+      chooseCount: 1,
       id: "advanced_craft_specialty_choices",
-      label: "Choose two craft specialties",
+      label: "Choose one craft specialty",
       required: true
     }
   ],
