@@ -24,6 +24,15 @@ export const rulesDocumentsRegistry: RulesDocumentRegistryEntry[] = [
     order: 10,
     section: "Character",
     title: "Character Sheet Calculations"
+  },
+  {
+    audience: "Players and GM reviewers",
+    description: "Manual reference for item ENC, carried load, inventory location, material/quality modifiers, and encumbrance effects.",
+    fileName: "equipment-encumbrance-calculations.md",
+    id: "equipment-encumbrance-calculations",
+    order: 20,
+    section: "Equipment",
+    title: "Equipment & Encumbrance Calculations"
   }
 ];
 

@@ -152,7 +152,7 @@ The Specializations table shows:
 
 Specializations are gated by parent skill access and parent skill level requirements.
 
-Cost examples:
+Examples:
 
 - `Longbow` is a specialization of `Bow`.
 - `Fencing` is a specialization of `1-h edged`.
@@ -221,13 +221,13 @@ Active group skills = fixed group skills + skills currently selected in choice s
 
 Unselected slot candidates do not count. Required-slot groups cannot be bought or raised until their required choices are selected.
 
-Examples:
+Choice examples:
 
 - `Basic Missile Training` has fixed skills such as `Perception`, `Concentration`, and `Weapon Maintenance`, plus one selected missile weapon.
 - `Advanced Craft Specialty` has a craft choice slot; only the selected craft counts, not every possible craft candidate.
 - Unselected slot candidates do not increase cost and do not appear as trained skills.
 
-Examples:
+Cost examples:
 
 | Group shape | Individual-cost total | Group cost |
 | --- | ---: | ---: |
