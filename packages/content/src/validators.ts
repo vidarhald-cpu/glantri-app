@@ -67,7 +67,7 @@ const CANONICAL_SKILL_GROUP_MEMBERSHIPS: Partial<Record<string, string[]>> = {
     "formation_fighting",
     "battlefield_awareness",
     "perception",
-    "self_control",
+    "combat_experience",
     "first_aid"
   ],
   veteran_soldiering: [

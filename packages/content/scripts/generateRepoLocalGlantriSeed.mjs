@@ -271,10 +271,10 @@ const FIXED_SKILL_MEMBERSHIPS_BY_GROUP_ID = {
     "oratory",
     "weapon_maintenance"
   ],
-  basic_missile_training: ["perception", "self_control", "weapon_maintenance"],
+  basic_missile_training: ["perception", "concentration", "weapon_maintenance"],
   advanced_missile_training: [
     "perception",
-    "self_control",
+    "concentration",
     "weapon_maintenance",
     "battlefield_awareness",
     "combat_experience"
@@ -283,7 +283,7 @@ const FIXED_SKILL_MEMBERSHIPS_BY_GROUP_ID = {
     "formation_fighting",
     "battlefield_awareness",
     "perception",
-    "self_control",
+    "combat_experience",
     "first_aid"
   ],
   coastal_fishing: [
@@ -309,7 +309,6 @@ const FIXED_SKILL_MEMBERSHIPS_BY_GROUP_ID = {
     "search",
     "climb",
     "run",
-    "self_control",
     "carpentry",
     "first_aid"
   ],
@@ -318,7 +317,6 @@ const FIXED_SKILL_MEMBERSHIPS_BY_GROUP_ID = {
     "search",
     "climb",
     "run",
-    "self_control",
     "stoneworking",
     "mechanics",
     "first_aid"
@@ -384,9 +382,9 @@ const GROUP_DESCRIPTION_OVERRIDES = {
   arena_training:
     "Arena awareness, showmanship, professional discipline, and practical weapon upkeep.",
   basic_missile_training:
-    "Range discipline, target awareness, weapon upkeep, and one required missile weapon skill.",
+    "Range focus, target awareness, weapon upkeep, and one required missile weapon skill.",
   defensive_soldiering:
-    "Formation discipline, battlefield awareness, self-control, and practical aid for defensive service.",
+    "Formation discipline, battlefield awareness, combat hardening, and practical aid for defensive service.",
   coastal_fishing:
     "Coastal provisioning, boat handling, search, and practical safety for local fishers.",
   construction_specialty:
@@ -410,7 +408,7 @@ const GROUP_DESCRIPTION_OVERRIDES = {
   pastoral_work:
     "Herd movement, watchfulness, animal care, and practical field care for grazing work.",
   advanced_missile_training:
-    "Advanced range discipline, battlefield judgment, weapon upkeep, and three required missile weapon skills.",
+    "Advanced range focus, battlefield judgment, weapon upkeep, and three required missile weapon skills.",
   route_security:
     "Road awareness, animal handling, search, and practical care for guarding overland routes.",
   ship_command:

@@ -932,7 +932,7 @@ export const generatedRepoLocalGlantriSeed = {
       "sortOrder": 28
     },
     {
-      "description": "Range discipline, target awareness, weapon upkeep, and one required missile weapon skill.",
+      "description": "Range focus, target awareness, weapon upkeep, and one required missile weapon skill.",
       "id": "basic_missile_training",
       "name": "Basic Missile Training",
       "skillMemberships": [
@@ -942,7 +942,7 @@ export const generatedRepoLocalGlantriSeed = {
         },
         {
           "relevance": "optional",
-          "skillId": "self_control"
+          "skillId": "concentration"
         },
         {
           "relevance": "optional",
@@ -967,7 +967,7 @@ export const generatedRepoLocalGlantriSeed = {
       "sortOrder": 29
     },
     {
-      "description": "Advanced range discipline, battlefield judgment, weapon upkeep, and three required missile weapon skills.",
+      "description": "Advanced range focus, battlefield judgment, weapon upkeep, and three required missile weapon skills.",
       "id": "advanced_missile_training",
       "name": "Advanced Missile Training",
       "skillMemberships": [
@@ -977,7 +977,7 @@ export const generatedRepoLocalGlantriSeed = {
         },
         {
           "relevance": "optional",
-          "skillId": "self_control"
+          "skillId": "concentration"
         },
         {
           "relevance": "optional",
@@ -1010,7 +1010,7 @@ export const generatedRepoLocalGlantriSeed = {
       "sortOrder": 30
     },
     {
-      "description": "Formation discipline, battlefield awareness, self-control, and practical aid for defensive service.",
+      "description": "Formation discipline, battlefield awareness, combat hardening, and practical aid for defensive service.",
       "id": "defensive_soldiering",
       "name": "Defensive Soldiering",
       "skillMemberships": [
@@ -1028,7 +1028,7 @@ export const generatedRepoLocalGlantriSeed = {
         },
         {
           "relevance": "optional",
-          "skillId": "self_control"
+          "skillId": "combat_experience"
         },
         {
           "relevance": "optional",
@@ -2098,10 +2098,6 @@ export const generatedRepoLocalGlantriSeed = {
         },
         {
           "relevance": "optional",
-          "skillId": "self_control"
-        },
-        {
-          "relevance": "optional",
           "skillId": "carpentry"
         },
         {
@@ -2132,10 +2128,6 @@ export const generatedRepoLocalGlantriSeed = {
         {
           "relevance": "optional",
           "skillId": "run"
-        },
-        {
-          "relevance": "optional",
-          "skillId": "self_control"
         },
         {
           "relevance": "optional",
@@ -3480,6 +3472,8 @@ export const generatedRepoLocalGlantriSeed = {
       "groupIds": [
         "mental_discipline",
         "mental_group",
+        "basic_missile_training",
+        "advanced_missile_training",
         "mortuary_practice"
       ],
       "id": "concentration",
@@ -3529,12 +3523,7 @@ export const generatedRepoLocalGlantriSeed = {
       "groupId": "mental_discipline",
       "groupIds": [
         "mental_discipline",
-        "mental_group",
-        "basic_missile_training",
-        "advanced_missile_training",
-        "defensive_soldiering",
-        "forestry_resource_work",
-        "mining_extraction"
+        "mental_group"
       ],
       "id": "self_control",
       "isTheoretical": false,
@@ -5330,7 +5319,8 @@ export const generatedRepoLocalGlantriSeed = {
         "veteran_leadership",
         "military_group",
         "arena_training",
-        "advanced_missile_training"
+        "advanced_missile_training",
+        "defensive_soldiering"
       ],
       "id": "combat_experience",
       "isTheoretical": false,

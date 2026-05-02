@@ -442,7 +442,7 @@ describe("validateCanonicalContent", () => {
       "formation_fighting",
       "battlefield_awareness",
       "perception",
-      "self_control",
+      "combat_experience",
       "first_aid"
     ]);
     expect([...membershipBySkillIdFor("defensive_soldiering").keys()].filter((skillId) =>
@@ -771,8 +771,9 @@ describe("validateCanonicalContent", () => {
       expect.arrayContaining(["throwing", "bow", "longbow", "crossbow"])
     );
     expect(groupSkillIdsFor("basic_missile_training")).toEqual(
-      expect.arrayContaining(["perception", "self_control", "weapon_maintenance"])
+      expect.arrayContaining(["perception", "concentration", "weapon_maintenance"])
     );
+    expect(groupSkillIdsFor("basic_missile_training")).not.toContain("self_control");
     expect(groupSkillIdsFor("basic_missile_training").filter((skillId) =>
       ["dodge", "parry", "veteran_leadership", "captaincy", "tactics"].includes(skillId)
     )).toEqual([]);
@@ -797,12 +798,13 @@ describe("validateCanonicalContent", () => {
     expect(groupSkillIdsFor("advanced_missile_training")).toEqual(
       expect.arrayContaining([
         "perception",
-        "self_control",
+        "concentration",
         "weapon_maintenance",
         "battlefield_awareness",
         "combat_experience"
       ])
     );
+    expect(groupSkillIdsFor("advanced_missile_training")).not.toContain("self_control");
     expect(groupSkillIdsFor("advanced_missile_training").filter((skillId) =>
       ["dodge", "parry", "veteran_leadership", "captaincy", "tactics"].includes(skillId)
     )).toEqual([]);
@@ -817,14 +819,22 @@ describe("validateCanonicalContent", () => {
         "formation_fighting",
         "battlefield_awareness",
         "perception",
-        "self_control",
+        "combat_experience",
         "first_aid"
       ])
     );
+    expect(groupSkillIdsFor("defensive_soldiering")).not.toContain("self_control");
     expect(groupSkillIdsFor("defensive_soldiering").filter((skillId) =>
       ["dodge", "parry", "brawling"].includes(skillId)
     )).toEqual([]);
     expect(groupWeightedValueFor("defensive_soldiering")).toBeGreaterThanOrEqual(6);
+    expect(defaultCanonicalContent.skills.find((skill) => skill.id === "self_control")).toBeDefined();
+    expect(defaultCanonicalContent.skillGroups
+      .filter((group) =>
+        (group.skillMemberships ?? []).some((membership) => membership.skillId === "self_control")
+      )
+      .map((group) => group.id)
+      .sort()).toEqual(["mental_discipline", "mental_group"]);
     expect(groupSkillIdsFor("veteran_soldiering")).toEqual(
       expect.arrayContaining([
         "combat_experience",
@@ -2891,6 +2901,12 @@ describe("validateCanonicalContent", () => {
     };
     const groupSkillIdsFor = (groupId: string) =>
       groupById.get(groupId)?.skillMemberships?.map((membership) => membership.skillId) ?? [];
+    const skillWeightFor = (skillId: string) =>
+      defaultCanonicalContent.skills.find((skill) => skill.id === skillId)?.category === "secondary"
+        ? 1
+        : 2;
+    const groupWeightedValueFor = (groupId: string) =>
+      groupSkillIdsFor(groupId).reduce((total, skillId) => total + skillWeightFor(skillId), 0);
     const expectNoCommandOrCombatLeak = (professionId: string) => {
       expect(groupIdsFor(professionId)).not.toContain("veteran_leadership");
       expect(directSkillIdsFor(professionId)).not.toEqual(
@@ -2946,20 +2962,22 @@ describe("validateCanonicalContent", () => {
       "search",
       "climb",
       "run",
-      "self_control",
       "carpentry",
       "first_aid"
     ]);
+    expect(groupSkillIdsFor("forestry_resource_work")).not.toContain("self_control");
+    expect(groupWeightedValueFor("forestry_resource_work")).toBeGreaterThanOrEqual(6);
     expect(groupSkillIdsFor("mining_extraction")).toEqual([
       "perception",
       "search",
       "climb",
       "run",
-      "self_control",
       "stoneworking",
       "mechanics",
       "first_aid"
     ]);
+    expect(groupSkillIdsFor("mining_extraction")).not.toContain("self_control");
+    expect(groupWeightedValueFor("mining_extraction")).toBeGreaterThanOrEqual(6);
 
     expect(professionById.get("herder")).toMatchObject({ familyId: "herdsman_rider" });
     expect(professionById.get("herdsman_subtype")).toMatchObject({
@@ -3014,7 +3032,7 @@ describe("validateCanonicalContent", () => {
       "forestry_resource_work"
     ]);
     expect(directOnlySkillIdsFor("woodcutter")).toEqual([]);
-    expect(skillReachFor("woodcutter")).toBeGreaterThanOrEqual(10);
+    expect(skillReachFor("woodcutter")).toBeGreaterThanOrEqual(9);
 
     expect(professionById.get("miner")).toMatchObject({ familyId: "resource_labor" });
     expect(groupIdsFor("miner")).toEqual(["technical_measurement", "mining_extraction"]);
