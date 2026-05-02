@@ -6,69 +6,27 @@ This page explains how the app calculates item `ENC`, personal carried load, and
 
 It focuses on equipment and load. Combat formulas such as OB, DB, Parry, and attack modifiers are documented separately.
 
-## 2. What ENC means
+## 2. Quick rule summary
 
-`ENC` is the app's encumbrance value for an item or load.
+- Equipped, worn, or held items count toward personal carried load.
+- On-person items count toward personal carried load.
+- Backpack items count toward personal carried load with the backpack carry factor.
+- Nearby or `With you` items that are not personally carried do not count toward personal carried load.
+- `Elsewhere` items do not count toward personal carried load.
+- Mount-carried items are tracked separately and do not count toward personal carried load.
 
-An item's ENC usually starts from the item's base ENC, then changes based on quantity, material, quality, and how the item is carried.
-
-Armor has a special workbook ENC formula when the character's Size is known.
-
-## 3. Item ENC formula
-
-For most non-armor items, effective ENC is:
-
-```text
-Item ENC = base ENC * quantity * material factor * quality factor * carry factor
-```
-
-If an item has an explicit ENC override, the override is used instead.
-
-For inventory display, the app also calculates actual item ENC:
-
-```text
-Actual item ENC = base ENC * quantity * material factor * quality factor
-```
-
-Actual item ENC does not include the carry factor. Effective ENC is the value used for personal carried load.
-
-### Armor ENC
-
-Armor uses a workbook formula when character Size is available:
-
-```text
-Armor ENC = armor encumbrance factor * quantity * character Size
-```
-
-If an armor template does not have a separate armor encumbrance factor, the app uses the armor's base ENC as the factor.
-
-If the workbook armor formula cannot be calculated, armor falls back to the normal item ENC calculation.
-
-## 4. Material and quality
-
-| Input | What it means | Where it comes from | Effect on ENC |
-| --- | --- | --- | --- |
-| Base ENC | The item's starting encumbrance value. | Item rules data. | Main starting value for non-armor items and armor fallback. |
-| Quantity | How many of the item the character has. | Saved inventory item. | Multiplies ENC. |
-| Material | What the item is made of. | Saved inventory item. | Bronze currently multiplies ENC by `1.1`; other materials currently use `1.0`. |
-| Quality | Item quality. | Saved inventory item. | Extraordinary quality currently multiplies ENC by `0.9`; standard quality uses `1.0`. |
-| Carry factor | How the item is carried. | Inventory location/carry mode. | Equipped/on-person items use `1.0`; backpack items use `0.75`; mount/stored items use `0.0` for personal effective ENC. |
-
-Current armor note: when the workbook armor formula is used, armor ENC is based on armor encumbrance factor, quantity, and character Size. Material and quality are only used if armor falls back to the normal item ENC calculation.
-
-## 5. Inventory location and carried load
+## 3. Inventory location and carried load
 
 `Carried` means the item is on the character and counted for personal encumbrance.
 
-| Location / state | Counts as carried load? | Notes |
-| --- | --- | --- |
-| `Equipped` / worn / held | Yes | Immediate access. Counts as personal carried load. |
-| `On person` | Yes | Fast access. Counts as personal carried load. |
-| `Backpack` | Yes | Slow access. Counts as personal carried load with the backpack carry factor for normal items. |
-| `With you`, but not in Equipped/On person/Backpack | No | Nearby or travelling with the character, but not counted as personal carried load. It may still be situationally accessible. |
-| `Elsewhere` | No | Stored away from the character. Does not count as personal carried load. |
-| `Mount` / mount-carried | No | Tracked as mount load, not personal carried load. |
-| Coins | Depends on location | Coins are valuables. They follow normal item/location ENC rules. The app separately counts encounter-accessible coins for display/use. |
+| Carry state | Counts as personal carried load? | Carry factor | Notes |
+| --- | --- | ---: | --- |
+| `Equipped` / worn / held | Yes | `1.0` | Immediate access. |
+| `On person` | Yes | `1.0` | Fast access. |
+| `Backpack` | Yes | `0.75` | Slow access. Normal items count at reduced carried ENC. |
+| `With you`, but not personally carried | No | `0.0` for personal carried ENC | Nearby or travelling with the character. May still be situationally accessible. |
+| `Elsewhere` | No | `0.0` for personal carried ENC | Stored away from the character. |
+| `Mount` / mount-carried | No | `0.0` for personal carried ENC | Tracked as mount load instead. |
 
 The app groups inventory as:
 
@@ -76,11 +34,83 @@ The app groups inventory as:
 - `With you`: nearby or travelling-with-you locations that are not personally carried
 - `Elsewhere`: stored away from the character
 
-## 6. Total carried ENC
+Coins are valuables. They follow normal item and location ENC rules. The app also counts encounter-accessible coins separately for display and use.
 
-Personal carried ENC is the sum of effective ENC for personal-load items.
+## 4. Actual item ENC vs effective carried ENC
 
-Personal-load items are items with these carry modes:
+The app tracks two related ENC ideas.
+
+| Value | Includes carry factor? | Used for |
+| --- | --- | --- |
+| Actual item ENC | No | Item display and the item's full burden before carry mode. |
+| Effective carried ENC | Yes | Personal carried load. |
+
+Actual item ENC answers: "How heavy/bulky is this item?"
+
+Effective carried ENC answers: "How much does this item count against the character's personal load right now?"
+
+## 5. Item ENC formula
+
+For most non-armor items, ENC is built in steps.
+
+| Step | Calculation | Meaning |
+| --- | --- | --- |
+| 1 | Start with `base ENC` | The item's starting encumbrance from rules data. |
+| 2 | `* quantity` | More copies add more load. |
+| 3 | `* material factor` | Some materials change ENC. |
+| 4 | `* quality factor` | Some quality levels change ENC. |
+| 5 | `* carry factor` | Carry mode changes effective personal load. |
+
+Effective item ENC:
+
+```text
+Effective item ENC = base ENC * quantity * material factor * quality factor * carry factor
+```
+
+Actual item ENC:
+
+```text
+Actual item ENC = base ENC * quantity * material factor * quality factor
+```
+
+If an item has an explicit ENC override, the override is used instead.
+
+## 6. Material, quality, and carry factor
+
+| Input | What it means | Where it comes from | Effect on ENC |
+| --- | --- | --- | --- |
+| Base ENC | The item's starting encumbrance value. | Item rules data. | Main starting value for non-armor items and armor fallback. |
+| Quantity | How many of the item the character has. | Saved inventory item. | Multiplies ENC. |
+| Material | What the item is made of. | Saved inventory item. | Bronze currently multiplies ENC by `1.1`; other materials currently use `1.0`. |
+| Quality | Item quality. | Saved inventory item. | Extraordinary quality currently multiplies ENC by `0.9`; standard quality uses `1.0`. |
+| Carry factor | How the item is carried. | Inventory location/carry mode. | Equipped/on-person items use `1.0`; backpack items use `0.75`; mount/stored items use `0.0` for personal carried ENC. |
+
+## 7. Armor ENC and worn armor
+
+Armor uses a workbook formula when character Size is available.
+
+| Case | Formula / behavior |
+| --- | --- |
+| Workbook armor ENC available | `Armor ENC = armor encumbrance factor * quantity * character Size` |
+| Armor encumbrance factor missing | Use armor base ENC as the factor. |
+| Workbook armor ENC unavailable | Fall back to normal item ENC calculation. |
+
+Other armor values shown on the Character Loadout page:
+
+| Value | Meaning |
+| --- | --- |
+| General armor | Rounded armor protection and armor type. |
+| AA modifier | Armor Activity modifier used by combat/loadout formulas. |
+| Perception modifier | Armor perception modifier used by perception/loadout formulas. |
+| Coverage locations | Armor values by body location. |
+
+Worn armor counts toward personal carried ENC when it is in a carried location.
+
+Armor material and quality currently affect ENC only if the armor falls back to the normal item ENC calculation.
+
+## 8. Total carried ENC
+
+Personal carried ENC is the sum of effective ENC for items with these carry modes:
 
 - `equipped`
 - `on_person`
@@ -94,64 +124,45 @@ Personal carried ENC = sum(effective ENC for equipped, on-person, and backpack i
 
 Items in nearby `With you` locations, `Elsewhere` locations, and `Mount` locations do not count toward personal carried ENC.
 
-Worn armor counts if it is in a carried location. When the workbook armor formula is available, the armor's carried ENC comes from that armor formula.
+## 9. Capacity, encumbrance level, and movement
 
-## 7. Encumbrance capacity and encumbrance level
+The loadout panel compares personal carried ENC to carrying capacity, then derives encumbrance level and movement.
 
-The loadout panel compares personal carried ENC to carrying capacity.
+| Step | Formula | Result |
+| --- | --- | --- |
+| 1. Capacity | `Capacity = round(STR + SIZ + 0.5 * CON)` | Carrying capacity. |
+| 2. Carried percent | `Carried percent = round((personal carried ENC * 100) / Capacity)` | Load as percent of capacity. |
+| 3. Encumbrance level | Use the threshold table below. | Encumbrance level. |
+| 4. Movement modifier | `Movement modifier = round((encumbrance level / 2) + shield movement modifier)` | Modifier used for movement adjustment. |
+| 5. Base move | If `Size GM <= 2`: `10 + STR GM + DEX GM + Size GM`. Otherwise: `10 + STR GM + DEX GM + 2`. | Unencumbered base movement. |
+| 6. Final movement | `Final movement = base move - workbook movement-table adjustment` | Displayed movement. |
 
-Formula:
+Encumbrance level is the highest level whose threshold is exceeded. If no threshold is exceeded, encumbrance level is `0`.
 
-```text
-Capacity = round(STR + SIZ + 0.5 * CON)
-Carried percent = round((personal carried ENC * 100) / Capacity)
-```
-
-Encumbrance level is based on how many thresholds the carried percent exceeds:
-
-```text
-20, 40, 60, 90, 120, 150, 170, 190, 210, 230, 250, 260, 270, 280, 290
-```
+| Carried percent above | Encumbrance level |
+| ---: | ---: |
+| 20% | 1 |
+| 40% | 2 |
+| 60% | 3 |
+| 90% | 4 |
+| 120% | 5 |
+| 150% | 6 |
+| 170% | 7 |
+| 190% | 8 |
+| 210% | 9 |
+| 230% | 10 |
+| 250% | 11 |
+| 260% | 12 |
+| 270% | 13 |
+| 280% | 14 |
+| 290% | 15 |
 
 Example:
 
-- If carried percent is `91`, it exceeds `20`, `40`, `60`, and `90`.
-- Encumbrance level is therefore `4`.
+- If carried percent is exactly `90%`, it does not exceed `90%`, so level `4` is not reached yet.
+- If carried percent is `91%`, it exceeds `20%`, `40%`, `60%`, and `90%`, so encumbrance level is `4`.
 
-Movement modifier uses encumbrance level and any ready shield movement modifier:
-
-```text
-Movement modifier = round((encumbrance level / 2) + shield movement modifier)
-```
-
-Base move is:
-
-```text
-If Size GM <= 2:
-  Base move = 10 + STR GM + DEX GM + Size GM
-Otherwise:
-  Base move = 10 + STR GM + DEX GM + 2
-```
-
-Final movement is base move minus the workbook movement-table adjustment for the current movement modifier.
-
-## 8. Armor ENC and worn armor
-
-Armor can show several values on the Character Loadout page:
-
-| Value | Meaning |
-| --- | --- |
-| Armor ENC | Encumbrance from the workbook armor formula when Size is known. |
-| General armor | Rounded general armor value and armor type. |
-| AA modifier | Armor Activity modifier used by combat/loadout formulas. |
-| Perception modifier | Armor perception modifier used by perception/loadout formulas. |
-| Coverage locations | Armor values by body location, such as head, chest, abdomen, arms, thighs, and feet. |
-
-Worn armor counts toward personal carried ENC when it is in a carried location.
-
-Armor material and quality currently affect ENC only if the armor falls back to the normal item ENC calculation.
-
-## 9. Mount and nearby storage notes
+## 10. Mount and nearby storage
 
 Mount-carried load is tracked separately from personal carried load.
 
@@ -161,11 +172,9 @@ Current mount formula:
 Mount-carried ENC = sum(base ENC of mount-carried items)
 ```
 
-Current app behavior / needs final rule review: mount-carried ENC currently uses a simpler calculation than personal carried ENC. It does not apply quantity, material, quality, carry factor, or the workbook armor formula.
-
 Nearby `With you` storage can be encounter-accessible, but it does not count toward personal carried load unless the item is in an equipped, on-person, or backpack location.
 
-## 10. Known interim notes
+## 11. Known interim notes
 
 - Mount-carried encumbrance currently uses a simpler calculation than personal carried load.
 - Combat/loadout formulas such as OB, DB, Parry, and attack modifiers are documented separately.
