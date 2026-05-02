@@ -2,64 +2,76 @@
 
 ## 1. Purpose and scope
 
-This page documents the values shown on the main Character Sheet / Character Detail page.
+This page explains the values shown on the main Character Sheet / Character Detail page.
 
-It is written for players and GM reviewers who want to manually verify the numbers shown in the app.
+It is written for players and GM reviewers who want to check the sheet by hand.
 
-Combat and loadout workbook values are only summarized here. Full OB, DMB, DB, DM, Parry, Initiative, encumbrance, and movement formulas are documented separately or will be expanded in later combat/loadout pages.
+Combat and loadout values are only summarized here. Full OB, DMB, DB, DM, Parry, Initiative, encumbrance, and movement formulas are documented separately or will be expanded in later combat/loadout pages.
 
 ## 2. Character identity and chargen rule set
 
-- `Character name`, `Title`, `Age`, `Gender`, and `Notes` are stored character fields.
-- `Society`, `Social class`, and `Profession` are labels from the character's chargen choices and the current canonical content.
-- `Social class` may show the stored social-class roll in parentheses.
-- `Chargen rules` comes from the chargen rule-set snapshot saved on the character.
-- Older characters without a saved rule-set snapshot show `Legacy default`.
+- `Character name`, `Title`, `Age`, `Gender`, and `Notes` are saved character details.
+- `Society`, `Social class`, and `Profession` are labels from the character's chargen choices and the current rules data.
+- `Social class` may show the saved social-class roll in parentheses.
+- `Chargen rules` comes from the saved chargen rule set on the character.
+- Older characters without saved chargen rules show `Legacy default`.
 
 Changing the active chargen rule set later does not silently change the rule-set name recorded on an already finalized character.
 
 ## 3. Characteristics and GMs
 
-The `Profile Stats` table shows `Stats die roll`, `Original`, `Current`, and `GM`.
+The `Profile Stats` table shows:
 
-- `Stats die roll` is the raw rolled stat stored from chargen.
-- `Original` is the finished stat at character creation after chargen stat-resolution effects.
-- `Current` is the current gameplay stat after later advancement, injury, effects, or other post-creation changes.
-- `GM` is the displayed game modifier for the current stat.
-
-Current app behavior: character advancement, injury, and persistent current-stat effects are not implemented yet, so `Current` currently equals `Original`.
+| Column | Meaning |
+| --- | --- |
+| `Stats die roll` | The raw rolled value from chargen. |
+| `Original` | The finished creation stat after chargen stat resolution. |
+| `Current` | The current gameplay stat. Currently this is the same as `Original`. |
+| `GM` | The game modifier calculated from `Current`. |
 
 Formula:
 
 ```text
 Original stat = resolved stat from chargen
 Current stat = Original stat for now
-Displayed GM = trunc((Current stat - 11) / 2)
+GM = trunc((Current - 11) / 2)
 ```
 
-`trunc` means truncate toward zero. For example:
+`trunc` means truncate toward zero.
 
-| Current stat | Calculation | Displayed GM |
-| --- | --- | --- |
-| 15 | `trunc((15 - 11) / 2)` | `2` |
-| 12 | `trunc((12 - 11) / 2)` | `0` |
-| 10 | `trunc((10 - 11) / 2)` | `0` |
-| 8 | `trunc((8 - 11) / 2)` | `-1` |
+| Current | Calculation | GM |
+| ---: | --- | ---: |
+| 15 | `trunc((15 - 11) / 2)` | 2 |
+| 12 | `trunc((12 - 11) / 2)` | 0 |
+| 10 | `trunc((10 - 11) / 2)` | 0 |
+| 8 | `trunc((8 - 11) / 2)` | -1 |
 
-Current chargen-resolution inputs:
+Chargen stat resolution can adjust some rolled stats before they become `Original`:
 
 - `STR` may be adjusted by `Size`.
 - `DEX` may be adjusted by `Size`.
 - `CHA` may be adjusted by `Comeliness`.
 - `Health` may be adjusted by `Constitution`.
 
-These are chargen-resolution inputs, not manual sheet edits.
+`Distraction` displays its saved value and has no GM. The GM column shows `-`.
 
-`Distraction` displays its stored value and has no GM. The GM column shows `-`.
-
-## 4. Skill XP columns
+## 4. Skills table
 
 The Skills table shows each visible trained skill grouped into player-facing categories.
+
+### Stats and Avg stats
+
+`Stats` lists the stats linked to the skill.
+
+`Avg stats` is the average of those linked stats, using the rounded/floored value shown by the app.
+
+Formula:
+
+```text
+Avg stats = average of the skill's linked stats
+```
+
+Use the displayed `Avg stats` value when checking `Total skill level`.
 
 ### Group XP
 
@@ -72,23 +84,21 @@ Group XP = highest applicable active skill-group level for this skill
 Skill group level = group ranks + group GMs
 ```
 
-If a skill belongs to multiple bought groups, only the best group contribution counts. Group contributions are not added together.
+If a skill belongs to more than one bought group, only the best group contribution counts. Group XP values are not added together.
 
 ### Skill XP
 
-`Skill XP` is XP/ranks bought or granted directly for that specific skill.
+`Skill XP` is XP bought or granted for that specific skill outside the chosen group contribution.
 
 Formula:
 
 ```text
-Skill XP = granted/specific ranks + ordinary ranks + secondary ranks for that skill row
+Skill XP = granted/specific ranks + ordinary ranks + secondary ranks for that skill
 ```
-
-For most manual checking, read this as: XP invested directly into that skill outside the chosen skill-group contribution.
 
 ### Derived XP
 
-`Derived XP` is relationship-derived XP, such as melee cross-training, explicit derived grants, or specialization bridge effects.
+`Derived XP` is XP from related skills, cross-training, or specialization rules.
 
 The Character Sheet shows Derived XP as its own column. It may also show a source label such as `Cross-trained from ...`.
 
@@ -104,52 +114,40 @@ Formula:
 Total XP = Group XP + Skill XP + Derived XP
 ```
 
-Combat calculations use this total skill XP value, not only direct skill XP and not only group XP.
+Combat calculations use this total skill XP value, not only Skill XP and not only Group XP.
 
 ### Total skill level
 
-`Total skill level` adds the skill's linked-stat average to Total XP.
+`Total skill level` adds `Avg stats` to `Total XP`.
 
 Formula:
 
 ```text
-Total skill level = linked stat average + Total XP
+Total skill level = Avg stats + Total XP
 ```
 
-## 5. Linked stat average
-
-Each skill has linked stats, shown in the `Stats` column.
-
-Formula:
-
-```text
-Linked stat average = average of the skill's linked stats
-```
-
-The app displays the rounded/floored value in `Avg stats`.
-
-Current app behavior / needs final rule decision: the exact stat source should be standardized if there is a rolled, resolved, or adjusted-stat discrepancy. Until then, use the `Avg stats` value displayed by the app when manually checking `Total skill level`.
-
-## 6. Specializations
+## 5. Specializations
 
 Specializations are shown separately from ordinary skills.
 
 The Specializations table shows:
 
-- `Specialization`
-- `Parent skill`
-- `Specialization XP`
-- `Derived XP`
-- `Total`
+| Column | Meaning |
+| --- | --- |
+| `Specialization` | The specialization name. |
+| `Parent skill` | The skill the specialization belongs to. |
+| `Specialization XP` | XP bought for that specialization. |
+| `Derived XP` | XP from specialization or cross-training effects. |
+| `Total` | Final specialization value shown on the sheet. |
 
 Specializations are gated by parent skill access and parent skill level requirements.
 
 Examples:
 
-- `Longbow` is a specialization of `Bow`. It is not a normal missile weapon skill.
+- `Longbow` is a specialization of `Bow`.
 - `Fencing` is a specialization of `1-h edged`.
 
-Current formula:
+Formula:
 
 ```text
 Total specialization = floor(parent group contribution / 2)
@@ -157,27 +155,19 @@ Total specialization = floor(parent group contribution / 2)
   + Derived XP
 ```
 
-`Parent group contribution` means the active group contribution used for the parent skill in the specialization calculation path.
+`Derived XP` is included in `Total`.
 
-Bridge-derived specialization XP is shown in the `Derived XP` column and is included in `Total`.
+## 6. Skill points and education
 
-## 7. Skill points and education
+### Ordinary and flexible points
 
-### Ordinary points
+`Ordinary skill points` come from the saved chargen rule set.
 
-`Ordinary skill points` come from the saved chargen rule set:
+Formula:
 
 ```text
 Ordinary skill points = chargenRuleSet.ordinarySkillPoints
 ```
-
-Ordinary skill first/raise cost:
-
-```text
-Ordinary skill cost = 2
-```
-
-### Flexible points
 
 Flexible points use the current chargen formula multiplied by the saved rule-set factor.
 
@@ -189,9 +179,10 @@ Flexible points = floor((resolved INT + resolved LCK) * flexiblePointFactor)
 
 With the standard rule set, `flexiblePointFactor = 1`.
 
-Secondary skill first/raise cost:
+### Individual skill pricing
 
 ```text
+Ordinary skill cost = 2
 Secondary skill cost = 1
 ```
 
@@ -206,14 +197,9 @@ Skill group cost = floor(0.6 * total individual cost of active group skills)
 Minimum cost = 1 when at least one active skill exists
 ```
 
-`Active group skills` means:
+`Active group skills` means fixed group skills plus selected slot skills.
 
-- fixed skills in the group
-- selected slot skills
-
-Unselected slot candidates do not count.
-
-Required-slot groups cannot be bought or raised until their required choices are selected.
+Unselected slot candidates do not count. Required-slot groups cannot be bought or raised until their required choices are selected.
 
 Examples:
 
@@ -228,31 +214,28 @@ Examples:
 
 The Character Sheet summary shows spent and remaining skill points.
 
-Current app behavior:
+Formula:
 
 ```text
 Spent = total skill points invested
 Remaining = ordinary pool remaining + flexible pool remaining
 ```
 
-The summary combines the remaining ordinary and flexible pools into one displayed value.
-
 ### Education
 
-The Character Sheet shows `Education` as a single value.
+`Education` combines base education, social-class education, and education-linked learned skills.
 
-Current app behavior:
+Formula:
 
 ```text
 Education = base education
   + social class education value
-  + theoretical/education-linked skill count
+  + education-linked skill count
 ```
 
-Current app behavior / needs final rule decision: the current label combines these inputs into one number, so the label is useful but slightly compressed.
+## 7. Known interim notes
 
-## 8. Known interim notes
-
-- Character Detail and the loadout panel may use different combat derivation paths. The workbook-style loadout formulas should be documented separately.
-- Linked stat average source needs final standardization if rolled, resolved, and adjusted stats differ.
-- Full combat/loadout formulas for OB, DMB, DB, DM, Parry, Initiative, armor, encumbrance, and movement will be documented separately.
+- Linked stat average source still needs final standardization if rolled, resolved, and adjusted stats differ.
+- Combat/loadout formulas are documented separately.
+- Character Detail and the loadout panel may still use different combat derivation paths.
+- Remaining points combine ordinary and flexible remaining pools.
