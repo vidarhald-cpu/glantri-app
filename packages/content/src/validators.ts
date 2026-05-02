@@ -108,12 +108,13 @@ function removeRetiredSkillGroupMemberships(
 }
 
 function normalizeCanonicalSkillGroupMembershipsInSkill(
+  activeCanonicalGroupIds: Set<string>,
   skill: CanonicalContent["skills"][number]
 ): CanonicalContent["skills"][number] {
   const groupIds = new Set(skill.groupIds);
 
   for (const [groupId, skillIds] of Object.entries(CANONICAL_SKILL_GROUP_MEMBERSHIPS)) {
-    if (!skillIds) {
+    if (!skillIds || !activeCanonicalGroupIds.has(groupId)) {
       continue;
     }
 
@@ -979,6 +980,9 @@ function validateProfessionRelationships(content: CanonicalContent): CanonicalCo
 
 export function validateCanonicalContent(input: unknown): CanonicalContent {
   const parsedContent = canonicalContentSchema.parse(input);
+  const activeCanonicalGroupIds = new Set(
+    parsedContent.skillGroups.map((group) => normalizeSkillGroupId(group.id) ?? group.id)
+  );
   const normalizedSkills: CanonicalContent["skills"] = applySkillRelationshipMetadata(
     parsedContent.skills
   ).map((skill): CanonicalContent["skills"][number] => {
@@ -993,6 +997,7 @@ export function validateCanonicalContent(input: unknown): CanonicalContent {
         : skill;
 
     return normalizeCanonicalSkillGroupMembershipsInSkill(
+      activeCanonicalGroupIds,
       removeRetiredSkillGroupMemberships(normalizedSkill)
     );
   });

@@ -1700,6 +1700,200 @@ describe("ChargenWizard profession-group display priority", () => {
     expect(buildDirectSkillIds(selectedSlotProgression)).not.toContain("bow");
     expect(buildDirectSkillIds(selectedSlotProgression)).not.toContain("polearms");
   });
+
+  it("renders slot-only craft specialty groups in profession sections", () => {
+    const findProfessionRow = (professionId: string, groupId: string) => {
+      const row = defaultCanonicalContent.societyLevels.find(
+        (societyLevel) =>
+          societyLevel.professionIds.includes(professionId) &&
+          societyLevel.skillGroupIds.includes(groupId)
+      );
+
+      expect(row).toBeDefined();
+
+      return row!;
+    };
+    const visibleProfessionGroupIdsFor = (professionId: string, groupId: string) => {
+      const row = findProfessionRow(professionId, groupId);
+      const skillAccess = buildChargenSkillAccessSummary({
+        content: defaultCanonicalContent,
+        professionId,
+        societyId: row.societyId,
+        societyLevel: row.societyLevel
+      });
+
+      return defaultCanonicalContent.skillGroups
+        .filter((group) => skillAccess.normalSkillGroupIds.includes(group.id))
+        .filter(
+          (group) =>
+            getPlayerFacingSkillBucket({
+              id: group.id,
+              groupId: group.id,
+              groupIds: [group.id]
+            }) !== "special-access"
+        )
+        .map((group) => group.id);
+    };
+
+    expect(getPlayerFacingSkillBucket({
+      id: "craft_specialty",
+      groupId: "craft_specialty",
+      groupIds: ["craft_specialty"]
+    })).toBe("craft");
+    expect(getPlayerFacingSkillBucket({
+      id: "craft_specialty_advanced",
+      groupId: "craft_specialty_advanced",
+      groupIds: ["craft_specialty_advanced"]
+    })).toBe("craft");
+    expect(getPlayerFacingSkillBucket({
+      id: "construction_specialty",
+      groupId: "construction_specialty",
+      groupIds: ["construction_specialty"]
+    })).toBe("craft");
+
+    expect(visibleProfessionGroupIdsFor("crafter", "craft_specialty")).toContain(
+      "craft_specialty"
+    );
+    expect(visibleProfessionGroupIdsFor("master_craftsmen", "craft_specialty_advanced")).toContain(
+      "craft_specialty_advanced"
+    );
+    expect(visibleProfessionGroupIdsFor("builder_master_mason", "construction_specialty")).toContain(
+      "construction_specialty"
+    );
+  });
+
+  it("keeps craft slot candidates in their group choices instead of direct skill rows", () => {
+    const masterCraftsmenRow = defaultCanonicalContent.societyLevels.find(
+      (societyLevel) =>
+        societyLevel.professionIds.includes("master_craftsmen") &&
+        societyLevel.skillGroupIds.includes("craft_specialty_advanced")
+    );
+
+    expect(masterCraftsmenRow).toBeDefined();
+
+    const buildDirectSkillIds = (progression = createChargenProgression()) => {
+      const draftView = buildChargenDraftView({
+        content: defaultCanonicalContent,
+        professionId: "master_craftsmen",
+        progression,
+        societyId: masterCraftsmenRow!.societyId,
+        societyLevel: masterCraftsmenRow!.societyLevel
+      });
+      const skillAccess = buildChargenSkillAccessSummary({
+        content: defaultCanonicalContent,
+        professionId: "master_craftsmen",
+        societyId: masterCraftsmenRow!.societyId,
+        societyLevel: masterCraftsmenRow!.societyLevel
+      });
+      const selectableSkillSummary = buildChargenSelectableSkillSummary({
+        content: defaultCanonicalContent,
+        professionId: "master_craftsmen",
+        progression,
+        societyId: masterCraftsmenRow!.societyId,
+        societyLevel: masterCraftsmenRow!.societyLevel
+      });
+      const groupSlotCandidateSkillIds = getGroupSlotCandidateSkillIds(selectableSkillSummary);
+
+      return defaultCanonicalContent.skills
+        .filter(
+          (skill) =>
+            skillAccess.normalSkillIds.includes(skill.id) &&
+            !groupSlotCandidateSkillIds.has(skill.id) &&
+            getSkillDisplayGroupId({
+              content: defaultCanonicalContent,
+              draftView,
+              skill,
+              skillAccess
+            }) === undefined
+        )
+        .map((skill) => skill.id);
+    };
+    const professionProgression = applyProfessionGrants({
+      content: defaultCanonicalContent,
+      professionId: "master_craftsmen"
+    });
+    const selectableSkillSummary = buildChargenSelectableSkillSummary({
+      content: defaultCanonicalContent,
+      professionId: "master_craftsmen",
+      progression: professionProgression,
+      societyId: masterCraftsmenRow!.societyId,
+      societyLevel: masterCraftsmenRow!.societyLevel
+    });
+    const advancedCraftSlot = selectableSkillSummary.selectionSlots.find(
+      (slot) => slot.groupId === "craft_specialty_advanced"
+    );
+
+    expect(advancedCraftSlot).toMatchObject({
+      chooseCount: 2,
+      groupName: "Advanced Craft Specialty",
+      required: true
+    });
+    expect(advancedCraftSlot?.candidateSkillIds).toEqual(
+      expect.arrayContaining(["carpentry", "smithing", "stoneworking", "weaving"])
+    );
+    expect(buildDirectSkillIds(professionProgression)).not.toEqual(
+      expect.arrayContaining(["carpentry", "smithing", "stoneworking", "weaving"])
+    );
+
+    const selectedSlotProgression = {
+      ...professionProgression,
+      chargenSelections: {
+        selectedLanguageIds: [],
+        selectedSkillIds: [],
+        selectedGroupSlots: [
+          {
+            groupId: "craft_specialty_advanced",
+            selectedSkillIds: ["carpentry", "smithing"],
+            slotId: "advanced_craft_specialty_choices"
+          }
+        ]
+      }
+    };
+    const selectedDraftView = buildChargenDraftView({
+      content: defaultCanonicalContent,
+      professionId: "master_craftsmen",
+      progression: selectedSlotProgression,
+      societyId: masterCraftsmenRow!.societyId,
+      societyLevel: masterCraftsmenRow!.societyLevel
+    });
+    const selectedSkillAccess = buildChargenSkillAccessSummary({
+      content: defaultCanonicalContent,
+      professionId: "master_craftsmen",
+      societyId: masterCraftsmenRow!.societyId,
+      societyLevel: masterCraftsmenRow!.societyLevel
+    });
+    const selectedSummary = buildChargenSelectableSkillSummary({
+      content: defaultCanonicalContent,
+      professionId: "master_craftsmen",
+      progression: selectedSlotProgression,
+      societyId: masterCraftsmenRow!.societyId,
+      societyLevel: masterCraftsmenRow!.societyLevel
+    });
+    const selectedGroupSlotSkillIds = new Set(
+      selectedSummary.selectionSlots
+        .filter((slot) => slot.groupId === "craft_specialty_advanced")
+        .flatMap((slot) => slot.selectedSkillIds)
+    );
+    const selectedAdvancedCraftSkillIds = defaultCanonicalContent.skills
+      .filter(
+        (skill) =>
+          getSkillDisplayGroupId({
+            content: defaultCanonicalContent,
+            draftView: selectedDraftView,
+            skill,
+            skillAccess: selectedSkillAccess
+          }) === "craft_specialty_advanced" ||
+          selectedGroupSlotSkillIds.has(skill.id)
+      )
+      .map((skill) => skill.id);
+
+    expect(selectedAdvancedCraftSkillIds).toEqual(
+      expect.arrayContaining(["carpentry", "smithing"])
+    );
+    expect(buildDirectSkillIds(selectedSlotProgression)).not.toEqual(
+      expect.arrayContaining(["carpentry", "smithing"])
+    );
+  });
 });
 
 describe("ChargenWizard concrete language rows", () => {
