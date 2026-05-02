@@ -21,6 +21,12 @@ describe("rules documentation registry", () => {
           id: "equipment-encumbrance-calculations",
           section: "Equipment",
           title: "Equipment & Encumbrance Calculations"
+        }),
+        expect.objectContaining({
+          fileName: "combat-loadout-calculations.md",
+          id: "combat-loadout-calculations",
+          section: "Combat / Equipment",
+          title: "Combat Loadout Calculations"
         })
       ])
     );
@@ -56,8 +62,21 @@ describe("rules documentation registry", () => {
 
     expect(model.selectedDocument.title).toBe("Equipment & Encumbrance Calculations");
     expect(model.selectedDocument.markdown).toContain("# Equipment & Encumbrance Calculations");
-    expect(model.selectedDocument.markdown).toContain("Item ENC = base ENC * quantity * material factor * quality factor * carry factor");
-    expect(model.selectedDocument.markdown).toContain("Location / state");
+    expect(model.selectedDocument.markdown).toContain("Effective item ENC = base ENC * quantity * material factor * quality factor * carry factor");
+    expect(model.selectedDocument.markdown).toContain("Carry state");
     expect(model.selectedDocument.markdown).toContain("Mount-carried ENC = sum(base ENC of mount-carried items)");
+  });
+
+  it("loads the combat loadout document with weapon and defense formulas", async () => {
+    const model = await getRulesDocumentationPageModel({
+      selectedDocumentId: "combat-loadout-calculations"
+    });
+
+    expect(model.selectedDocument.title).toBe("Combat Loadout Calculations");
+    expect(model.selectedDocument.markdown).toContain("# Combat Loadout Calculations");
+    expect(model.selectedDocument.markdown).toContain("Raw OB");
+    expect(model.selectedDocument.markdown).toContain("Base DB");
+    expect(model.selectedDocument.markdown).toContain("Combined parry modifier");
+    expect(model.selectedDocument.markdown).toContain("GMR");
   });
 });

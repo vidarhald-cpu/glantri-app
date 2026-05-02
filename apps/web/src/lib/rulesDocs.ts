@@ -33,6 +33,15 @@ export const rulesDocumentsRegistry: RulesDocumentRegistryEntry[] = [
     order: 20,
     section: "Equipment",
     title: "Equipment & Encumbrance Calculations"
+  },
+  {
+    audience: "Players and GM reviewers",
+    description: "Manual reference for loadout weapon rows, combat values, defense rows, armor modifiers, movement, and encumbrance effects.",
+    fileName: "combat-loadout-calculations.md",
+    id: "combat-loadout-calculations",
+    order: 30,
+    section: "Combat / Equipment",
+    title: "Combat Loadout Calculations"
   }
 ];
 
