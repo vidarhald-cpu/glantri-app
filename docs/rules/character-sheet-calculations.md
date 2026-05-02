@@ -20,16 +20,20 @@ Changing the active chargen rule set later does not silently change the rule-set
 
 ## 3. Characteristics and GMs
 
-The `Profile Stats` table shows `Original`, `Current`, and `GM`.
+The `Profile Stats` table shows `Stats die roll`, `Original`, `Current`, and `GM`.
 
-- `Original` is the rolled stat stored on the character.
-- `Current` is the resolved stat plus additive stat modifiers.
+- `Stats die roll` is the raw rolled stat stored from chargen.
+- `Original` is the finished stat at character creation after chargen stat-resolution effects.
+- `Current` is the current gameplay stat after later advancement, injury, effects, or other post-creation changes.
 - `GM` is the displayed game modifier for the current stat.
+
+Current app behavior: character advancement, injury, and persistent current-stat effects are not implemented yet, so `Current` currently equals `Original`.
 
 Formula:
 
 ```text
-Current stat = resolved stat + additive stat modifiers
+Original stat = resolved stat from chargen
+Current stat = Original stat for now
 Displayed GM = trunc((Current stat - 11) / 2)
 ```
 
@@ -57,38 +61,38 @@ These are chargen-resolution inputs, not manual sheet edits.
 
 The Skills table shows each visible trained skill grouped into player-facing categories.
 
-### Skill group XP
+### Group XP
 
-`Skill group XP` is the best active skill-group contribution for that skill.
+`Group XP` is the best active skill-group contribution for that skill.
 
 Formula:
 
 ```text
-Skill group XP = highest applicable active skill-group level for this skill
+Group XP = highest applicable active skill-group level for this skill
 Skill group level = group ranks + group GMs
 ```
 
 If a skill belongs to multiple bought groups, only the best group contribution counts. Group contributions are not added together.
 
-### Owned XP
+### Skill XP
 
-`Owned XP` is XP/ranks bought or granted directly for that specific skill.
+`Skill XP` is XP/ranks bought or granted directly for that specific skill.
 
 Formula:
 
 ```text
-Owned XP = granted/specific ranks + ordinary ranks + secondary ranks for that skill row
+Skill XP = granted/specific ranks + ordinary ranks + secondary ranks for that skill row
 ```
 
 For most manual checking, read this as: XP invested directly into that skill outside the chosen skill-group contribution.
 
-### Derived XP / Derived preview
+### Derived XP
 
 `Derived XP` is relationship-derived XP, such as melee cross-training, explicit derived grants, or specialization bridge effects.
 
-Some app tables may call this `Derived preview` or show it as a source label such as `Cross-trained from ...`.
+The Character Sheet shows Derived XP as its own column. It may also show a source label such as `Cross-trained from ...`.
 
-Current app behavior: Character Detail does not show Derived XP as its own separate column. When applicable, Derived XP is included in `Total XP`.
+Derived XP rules and skill relationships can be reviewed in Admin -> Skills.
 
 ### Total XP
 
@@ -97,7 +101,7 @@ Current app behavior: Character Detail does not show Derived XP as its own separ
 Formula:
 
 ```text
-Total XP = Skill group XP + Owned XP + Derived XP
+Total XP = Group XP + Skill XP + Derived XP
 ```
 
 Combat calculations use this total skill XP value, not only direct skill XP and not only group XP.
@@ -134,7 +138,8 @@ The Specializations table shows:
 
 - `Specialization`
 - `Parent skill`
-- `Owned XP`
+- `Specialization XP`
+- `Derived XP`
 - `Total`
 
 Specializations are gated by parent skill access and parent skill level requirements.
@@ -148,13 +153,13 @@ Current formula:
 
 ```text
 Total specialization = floor(parent group contribution / 2)
-  + owned specialization XP
-  + derived specialization XP
+  + Specialization XP
+  + Derived XP
 ```
 
 `Parent group contribution` means the active group contribution used for the parent skill in the specialization calculation path.
 
-Current app behavior: Character Detail does not show derived specialization XP as its own separate column. When applicable, bridge-derived specialization XP is included in `Total` and may be indicated by a source label.
+Bridge-derived specialization XP is shown in the `Derived XP` column and is included in `Total`.
 
 ## 7. Skill points and education
 
@@ -249,6 +254,5 @@ Current app behavior / needs final rule decision: the current label combines the
 ## 8. Known interim notes
 
 - Character Detail and the loadout panel may use different combat derivation paths. The workbook-style loadout formulas should be documented separately.
-- Derived XP display is still being standardized. Character Detail currently includes derived XP in totals instead of showing a separate column.
 - Linked stat average source needs final standardization if rolled, resolved, and adjusted stats differ.
 - Full combat/loadout formulas for OB, DMB, DB, DM, Parry, Initiative, armor, encumbrance, and movement will be documented separately.

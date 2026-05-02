@@ -2,11 +2,16 @@ import {
   getCharacterSkillKey,
   getSkillGroupIds,
   type CharacterBuild,
+  type GlantriCharacteristicBlock,
   type GlantriCharacteristicKey,
+  glantriCharacteristicLabels,
+  glantriCharacteristicOrder,
   type SkillDefinition,
   type SkillSpecialization
 } from "@glantri/domain";
 import {
+  getCharacteristicGm,
+  getResolvedProfileStats,
   selectBestSkillGroupContribution,
   type CharacterSheetSummary
 } from "@glantri/rules-engine";
@@ -49,6 +54,42 @@ export interface CharacterSheetSpecializationRow {
   xp: number;
 }
 
+export const characterSheetStatsTableColumns = [
+  "Stat",
+  "Stats die roll",
+  "Original",
+  "Current",
+  "GM"
+] as const;
+
+export const characterSheetSkillsTableColumns = [
+  "Skill",
+  "Stats",
+  "Avg stats",
+  "Group XP",
+  "Skill XP",
+  "Derived XP",
+  "Total XP",
+  "Total skill level"
+] as const;
+
+export const characterSheetSpecializationsTableColumns = [
+  "Specialization",
+  "Parent skill",
+  "Specialization XP",
+  "Derived XP",
+  "Total"
+] as const;
+
+export interface CharacterSheetProfileStatRow {
+  currentValue: number;
+  gmValue: number;
+  label: string;
+  originalValue: number;
+  stat: GlantriCharacteristicKey;
+  statsDieRollValue: number;
+}
+
 function sortSkills(skills: SkillDefinition[]): SkillDefinition[] {
   return [...skills].sort((left, right) => left.sortOrder - right.sortOrder);
 }
@@ -67,6 +108,31 @@ function getSkillLinkedStatAverage(
   );
 
   return Math.floor(total / skill.linkedStats.length);
+}
+
+export function buildCharacterSheetProfileStatRows(
+  build: Pick<CharacterBuild, "profile">
+): CharacterSheetProfileStatRow[] {
+  const resolvedStats = getResolvedProfileStats(build.profile) ?? build.profile.rolledStats;
+
+  return glantriCharacteristicOrder.map((stat) => {
+    const statsDieRollValue = build.profile.rolledStats[stat];
+    const originalValue = resolvedStats[stat] ?? statsDieRollValue;
+    const currentValue = originalValue;
+    const currentStatsForGm = {
+      ...resolvedStats,
+      [stat]: currentValue
+    } as GlantriCharacteristicBlock;
+
+    return {
+      currentValue,
+      gmValue: getCharacteristicGm(stat, currentStatsForGm),
+      label: glantriCharacteristicLabels[stat],
+      originalValue,
+      stat,
+      statsDieRollValue
+    };
+  });
 }
 
 export function buildCharacterSheetSkillRows(input: {

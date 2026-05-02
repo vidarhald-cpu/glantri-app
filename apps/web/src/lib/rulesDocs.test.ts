@@ -34,7 +34,12 @@ describe("rules documentation registry", () => {
 
     expect(model.selectedDocument.title).toBe("Character Sheet Calculations");
     expect(model.selectedDocument.markdown).toContain("# Character Sheet Calculations");
+    expect(model.selectedDocument.markdown).toContain("Stats die roll");
+    expect(model.selectedDocument.markdown).toContain("Group XP");
+    expect(model.selectedDocument.markdown).toContain("Skill XP");
+    expect(model.selectedDocument.markdown).toContain("Derived XP rules and skill relationships can be reviewed in Admin -> Skills.");
     expect(model.selectedDocument.markdown).toContain("Displayed GM = trunc((Current stat - 11) / 2)");
     expect(model.selectedDocument.markdown).toContain("Skill group cost = floor(0.6 * total individual cost of active group skills)");
+    expect(model.selectedDocument.markdown).not.toContain("Character Detail does not show Derived XP");
   });
 });

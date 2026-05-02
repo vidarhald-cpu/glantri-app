@@ -5,13 +5,10 @@ import { useEffect, useMemo, useState } from "react";
 
 import {
   type CharacterBuild,
-  glantriCharacteristicLabels,
-  glantriCharacteristicOrder,
   type ProfessionDefinition,
 } from "@glantri/domain";
 import {
   buildCharacterSheetSummary,
-  getCharacteristicGm,
 } from "@glantri/rules-engine";
 
 import { updateServerCharacter } from "../../../../src/lib/api/localServiceClient";
@@ -23,8 +20,12 @@ import {
   setCharacterTitle
 } from "../../../../src/lib/characters/characterEdit";
 import {
+  buildCharacterSheetProfileStatRows,
   buildCharacterSheetSkillRows,
-  buildCharacterSheetSpecializationRows
+  buildCharacterSheetSpecializationRows,
+  characterSheetSkillsTableColumns,
+  characterSheetSpecializationsTableColumns,
+  characterSheetStatsTableColumns
 } from "../../../../src/lib/characters/characterSheet";
 import { loadLocalCharacterContext } from "../../../../src/lib/characters/loadLocalCharacterContext";
 import type { LocalCharacterRecord } from "../../../../src/lib/offline/glantriDexie";
@@ -113,27 +114,12 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
   }, [build, contentState]);
 
   const profileStatRows = useMemo(() => {
-    if (!build || !sheetSummary) {
+    if (!build) {
       return [];
     }
 
-    return glantriCharacteristicOrder.map((stat) => {
-      const originalValue = build.profile.rolledStats[stat];
-      const currentValue = sheetSummary.adjustedStats[stat] ?? originalValue;
-      const gmValue = getCharacteristicGm(stat, {
-        ...build.profile.rolledStats,
-        ...sheetSummary.adjustedStats
-      });
-
-      return {
-        currentValue,
-        gmValue,
-        label: glantriCharacteristicLabels[stat],
-        stat,
-        originalValue
-      };
-    });
-  }, [build, sheetSummary]);
+    return buildCharacterSheetProfileStatRows(build);
+  }, [build]);
 
   const groupedSkillRows = useMemo(() => {
     if (!contentState || !sheetSummary || !build) {
@@ -294,19 +280,27 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
           <table style={{ borderCollapse: "collapse", width: "100%" }}>
             <thead>
               <tr style={{ borderBottom: "1px solid #d9ddd8", textAlign: "left" }}>
-                <th style={{ padding: "0.5rem 0.75rem 0.5rem 0" }}>Stat</th>
-                <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Original</th>
-                <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Current</th>
-                <th style={{ padding: "0.5rem 0", textAlign: "right" }}>GM</th>
+                {characterSheetStatsTableColumns.map((column, index) => (
+                  <th
+                    key={column}
+                    style={{
+                      padding: index === 0 ? "0.5rem 0.75rem 0.5rem 0" : "0.5rem 0.75rem",
+                      textAlign: index === 0 ? "left" : "right"
+                    }}
+                  >
+                    {column}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
               {profileStatRows.map((row) => (
                 <tr key={row.stat} style={{ borderBottom: "1px solid #eee8dc" }}>
                   <td style={{ padding: "0.6rem 0.75rem 0.6rem 0" }}>{row.label}</td>
+                  <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>{row.statsDieRollValue}</td>
                   <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>{row.originalValue}</td>
                   <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>{row.currentValue}</td>
-                  <td style={{ padding: "0.6rem 0", textAlign: "right" }}>{row.gmValue}</td>
+                  <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>{row.gmValue}</td>
                 </tr>
               ))}
               <tr style={{ borderBottom: "1px solid #eee8dc" }}>
@@ -317,7 +311,10 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
                 <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>
                   {sheetSummary.distractionLevel}
                 </td>
-                <td style={{ padding: "0.6rem 0", textAlign: "right" }}>—</td>
+                <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>
+                  {sheetSummary.distractionLevel}
+                </td>
+                <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>—</td>
               </tr>
             </tbody>
           </table>
@@ -493,17 +490,13 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
                     fontSize: "0.8rem",
                     gap: "0.75rem",
                     gridTemplateColumns:
-                      "minmax(180px, 2fr) minmax(120px, 1.2fr) repeat(5, minmax(72px, 88px))",
+                      "minmax(180px, 2fr) minmax(120px, 1.2fr) repeat(6, minmax(72px, 88px))",
                     padding: "0.75rem 1rem"
                   }}
                 >
-                  <strong>Skill</strong>
-                  <strong>Stats</strong>
-                  <strong>Avg stats</strong>
-                  <strong>Skill group XP</strong>
-                  <strong>Owned XP</strong>
-                  <strong>Total XP</strong>
-                  <strong>Total skill level</strong>
+                  {characterSheetSkillsTableColumns.map((column) => (
+                    <strong key={column}>{column}</strong>
+                  ))}
                 </div>
 
                 {group.rows.map((skill) => (
@@ -514,7 +507,7 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
                     display: "grid",
                     gap: "0.75rem",
                     gridTemplateColumns:
-                        "minmax(180px, 2fr) minmax(120px, 1.2fr) repeat(5, minmax(72px, 88px))",
+                        "minmax(180px, 2fr) minmax(120px, 1.2fr) repeat(6, minmax(72px, 88px))",
                     padding: "0.75rem 1rem"
                   }}
                 >
@@ -530,6 +523,7 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
                     <div>{skill.avgStats}</div>
                     <div>{skill.skillGroupXp}</div>
                     <div>{skill.skillXp}</div>
+                    <div>{skill.grantedXp}</div>
                     <div>{skill.totalXp}</div>
                     <div>{skill.totalSkillLevel}</div>
                   </div>
@@ -563,14 +557,13 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
                   display: "grid",
                   fontSize: "0.8rem",
                   gap: "0.75rem",
-                  gridTemplateColumns: "minmax(180px, 2fr) minmax(140px, 1.5fr) repeat(2, minmax(72px, 88px))",
+                  gridTemplateColumns: "minmax(180px, 2fr) minmax(140px, 1.5fr) repeat(3, minmax(72px, 88px))",
                   padding: "0.75rem 1rem"
                 }}
               >
-                <strong>Specialization</strong>
-                <strong>Parent skill</strong>
-                <strong>Owned XP</strong>
-                <strong>Total</strong>
+                {characterSheetSpecializationsTableColumns.map((column) => (
+                  <strong key={column}>{column}</strong>
+                ))}
               </div>
 
               {specializationRows.map((specialization) => (
@@ -580,7 +573,7 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
                     borderTop: "1px solid #f0eadf",
                     display: "grid",
                     gap: "0.75rem",
-                    gridTemplateColumns: "minmax(180px, 2fr) minmax(140px, 1.5fr) repeat(2, minmax(72px, 88px))",
+                    gridTemplateColumns: "minmax(180px, 2fr) minmax(140px, 1.5fr) repeat(3, minmax(72px, 88px))",
                     padding: "0.75rem 1rem"
                   }}
                 >
@@ -594,6 +587,7 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
                   </div>
                   <div>{specialization.parentSkillName}</div>
                   <div>{specialization.xp}</div>
+                  <div>{specialization.grantedXp}</div>
                   <div>{specialization.total}</div>
                 </div>
               ))}

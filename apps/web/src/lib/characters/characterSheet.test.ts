@@ -4,8 +4,12 @@ import type { CharacterBuild, SkillDefinition, SkillGroupDefinition } from "@gla
 import { buildCharacterSheetSummary } from "@glantri/rules-engine";
 
 import {
+  buildCharacterSheetProfileStatRows,
   buildCharacterSheetSkillRows,
-  buildCharacterSheetSpecializationRows
+  buildCharacterSheetSpecializationRows,
+  characterSheetSkillsTableColumns,
+  characterSheetSpecializationsTableColumns,
+  characterSheetStatsTableColumns
 } from "./characterSheet";
 
 const skills: SkillDefinition[] = [
@@ -200,6 +204,58 @@ const content = {
 };
 
 describe("buildCharacterSheetSkillRows", () => {
+  it("defines player-facing Character Sheet table labels", () => {
+    expect(characterSheetStatsTableColumns).toEqual([
+      "Stat",
+      "Stats die roll",
+      "Original",
+      "Current",
+      "GM"
+    ]);
+    expect(characterSheetSkillsTableColumns).toEqual([
+      "Skill",
+      "Stats",
+      "Avg stats",
+      "Group XP",
+      "Skill XP",
+      "Derived XP",
+      "Total XP",
+      "Total skill level"
+    ]);
+    expect(characterSheetSpecializationsTableColumns).toEqual([
+      "Specialization",
+      "Parent skill",
+      "Specialization XP",
+      "Derived XP",
+      "Total"
+    ]);
+  });
+
+  it("separates stats die roll from resolved original and current stat values", () => {
+    const build: CharacterBuild = {
+      ...baseBuild,
+      profile: {
+        ...baseBuild.profile,
+        resolvedStats: {
+          ...baseBuild.profile.rolledStats,
+          str: 12
+        }
+      },
+      statModifiers: {
+        str: 3
+      }
+    };
+    const rows = buildCharacterSheetProfileStatRows(build);
+    const strengthRow = rows.find((row) => row.stat === "str");
+
+    expect(strengthRow).toMatchObject({
+      currentValue: 12,
+      gmValue: 0,
+      originalValue: 12,
+      statsDieRollValue: 11
+    });
+  });
+
   it("shows derived-only skills on the sheet with a compact source label", () => {
     const build: CharacterBuild = {
       ...baseBuild,
