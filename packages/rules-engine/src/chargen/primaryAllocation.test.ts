@@ -2583,6 +2583,78 @@ describe("chargen purchase gate integration", () => {
     expect(draftView.skills.find((skill) => skill.skillId === "mace")).toBeUndefined();
   });
 
+  it("does not double-count melee cross-training on selected Advanced Melee Training weapons", () => {
+    const progression = {
+      ...createChargenProgression(),
+      chargenSelections: {
+        selectedLanguageIds: [],
+        selectedGroupSlots: [
+          {
+            groupId: "advanced_melee_training",
+            selectedSkillIds: ["one_handed_edged", "two_handed_edged", "polearms"],
+            slotId: "advanced_melee_weapon_choices"
+          }
+        ],
+        selectedSkillIds: []
+      },
+      skillGroups: [
+        {
+          gms: 0,
+          grantedRanks: 0,
+          groupId: "advanced_melee_training",
+          primaryRanks: 11,
+          ranks: 11,
+          secondaryRanks: 0
+        }
+      ]
+    };
+    const draftView = buildChargenDraftView({
+      content: defaultCanonicalContent,
+      professionId: "bodyguard",
+      progression,
+      societyId: "glantri",
+      societyLevel: 4
+    });
+    const selectedWeaponRows = ["one_handed_edged", "two_handed_edged", "polearms"].map(
+      (skillId) => draftView.skills.find((skill) => skill.skillId === skillId)
+    );
+    const unselectedRelatedRow = draftView.skills.find(
+      (skill) => skill.skillId === "one_handed_concussion_axe"
+    );
+
+    expect(selectedWeaponRows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          effectiveSkillNumber: 11,
+          groupLevel: 11,
+          relationshipGrantedPreviewLevel: 0,
+          relationshipGrantedSkillLevel: 0,
+          skillId: "one_handed_edged"
+        }),
+        expect.objectContaining({
+          effectiveSkillNumber: 11,
+          groupLevel: 11,
+          relationshipGrantedPreviewLevel: 0,
+          relationshipGrantedSkillLevel: 0,
+          skillId: "two_handed_edged"
+        }),
+        expect.objectContaining({
+          effectiveSkillNumber: 11,
+          groupLevel: 11,
+          relationshipGrantedPreviewLevel: 0,
+          relationshipGrantedSkillLevel: 0,
+          skillId: "polearms"
+        })
+      ])
+    );
+    expect(unselectedRelatedRow).toMatchObject({
+      groupLevel: 0,
+      relationshipGrantedPreviewLevel: 8,
+      relationshipGrantedSkillLevel: 8,
+      relationshipSourceType: "melee-cross-training"
+    });
+  });
+
   it("caps combat slot group XP to the canonical choose count", () => {
     const combatPickerContent = validateCanonicalContent({
       skillGroups: [

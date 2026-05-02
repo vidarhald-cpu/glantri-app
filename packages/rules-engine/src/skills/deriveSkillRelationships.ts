@@ -602,12 +602,13 @@ export function resolveRelationshipMinimumGrants(input: {
 
   for (const skill of input.content.skills) {
     const bestMinimum = minimums.bestDerivedBySkillId.get(skill.id);
-    const currentOwnedTotal = getCurrentSkillOwnedTotal(input.progression, skill.id);
+    const currentNonRelationshipTotal =
+      skillBaseXpBySkillId.get(skill.id) ?? getCurrentSkillOwnedTotal(input.progression, skill.id);
     const currentRelationshipGrantedRanks = getExistingSkillRelationshipGrantedRanks(
       input.progression,
       skill.id
     );
-    const currentRealTotal = currentOwnedTotal + currentRelationshipGrantedRanks;
+    const currentRealTotal = currentNonRelationshipTotal + currentRelationshipGrantedRanks;
     const minimumXp = bestMinimum?.xp ?? 0;
     const neededAdditionalRanks = Math.max(0, minimumXp - currentRealTotal);
     const relationshipGrantedRanks = currentRelationshipGrantedRanks + neededAdditionalRanks;

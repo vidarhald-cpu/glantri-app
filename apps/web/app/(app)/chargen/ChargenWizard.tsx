@@ -2037,7 +2037,7 @@ export default function ChargenWizard() {
           <strong>Group XP</strong>
           <strong>Ordinary</strong>
           <strong>Flexible</strong>
-          <strong>Granted</strong>
+          <strong>Derived XP</strong>
           <strong>Total XP</strong>
           <strong>Actions</strong>
         </div>
@@ -2185,7 +2185,7 @@ export default function ChargenWizard() {
                         Group-derived value {row.metrics.groupXp}
                       </span>
                       <span style={getBadgeStyle({ muted: true })}>
-                        Relationship grant preview {row.metrics.grantedXp}
+                        Derived/cross-training XP {row.metrics.grantedXp}
                       </span>
                       <span style={getBadgeStyle({ muted: true })}>
                         Effective total {row.metrics.totalXp}
@@ -3854,7 +3854,7 @@ export default function ChargenWizard() {
                       <div>{row.secondaryRanks}</div>
                       {row.grantedSpecializationLevel > 0 ? (
                         <div style={{ color: "#5e5a50", fontSize: "0.8rem" }}>
-                          +{row.grantedSpecializationLevel} grant preview
+                          +{row.grantedSpecializationLevel} derived preview
                         </div>
                       ) : null}
                     </div>
@@ -4071,7 +4071,7 @@ export default function ChargenWizard() {
                   <strong>Avg stats</strong>
                   <strong>Skill group XP</strong>
                   <strong>Owned XP</strong>
-                  <strong>Grant preview</strong>
+                  <strong>Derived preview</strong>
                   <strong>Total XP</strong>
                   <strong>Total skill level</strong>
                 </div>
@@ -4148,7 +4148,7 @@ export default function ChargenWizard() {
               <strong>Specialization</strong>
               <strong>Parent skill</strong>
               <strong>Direct XP</strong>
-              <strong>Grant preview</strong>
+              <strong>Derived preview</strong>
               <strong>Total</strong>
             </div>
 
