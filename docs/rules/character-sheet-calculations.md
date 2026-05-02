@@ -88,13 +88,23 @@ If a skill belongs to more than one bought group, only the best group contributi
 
 ### Skill XP
 
-`Skill XP` is XP bought or granted for that specific skill outside the chosen group contribution.
+`Skill XP` is XP on the skill itself. It is separate from XP received through a skill group.
+
+Skill XP can come from:
+
+- points spent directly on that skill
+- direct profession or society grants
+- other specific skill grants saved on the character
+
+Skill XP does not include `Group XP`. It does not include `Derived XP`. `Total XP` is where these parts are added together.
 
 Formula:
 
 ```text
-Skill XP = granted/specific ranks + ordinary ranks + secondary ranks for that skill
+Skill XP = direct XP on this skill
 ```
+
+Internally this includes ordinary, secondary, and specific/granted ranks recorded for that skill.
 
 ### Derived XP
 
@@ -142,7 +152,7 @@ The Specializations table shows:
 
 Specializations are gated by parent skill access and parent skill level requirements.
 
-Examples:
+Cost examples:
 
 - `Longbow` is a specialization of `Bow`.
 - `Fencing` is a specialization of `1-h edged`.
@@ -161,7 +171,9 @@ Total specialization = floor(parent group contribution / 2)
 
 ### Ordinary and flexible points
 
-`Ordinary skill points` come from the saved chargen rule set.
+Ordinary points are used for ordinary skill and skill-group purchases during chargen.
+
+The total comes from the saved chargen rule set.
 
 Formula:
 
@@ -169,15 +181,19 @@ Formula:
 Ordinary skill points = chargenRuleSet.ordinarySkillPoints
 ```
 
-Flexible points use the current chargen formula multiplied by the saved rule-set factor.
+Ordinary skills cost 2 points per increase. Secondary skills cost 1 point per increase. Skill groups use the dynamic group cost formula below.
+
+Flexible points are used for extra skills outside normal profession and society access.
+
+The amount is based on the character's resolved `INT` and `LCK`, multiplied by the chargen rule-set flexible-point factor.
 
 Formula:
 
 ```text
-Flexible points = floor((resolved INT + resolved LCK) * flexiblePointFactor)
+Flexible points = floor((resolved INT + resolved LCK) * flexible point factor)
 ```
 
-With the standard rule set, `flexiblePointFactor = 1`.
+With the standard rule set, the flexible point factor is 1.
 
 ### Individual skill pricing
 
@@ -190,6 +206,8 @@ Secondary skill cost = 1
 
 Skill group cost is dynamic.
 
+Some groups have fixed skills. These are always part of the group. Other groups have a choice slot. A choice slot lets the player select one or more skills from a list, such as choosing `Bow` for `Basic Missile Training` or `Smithing` for `Craft Specialty`.
+
 Formula:
 
 ```text
@@ -197,9 +215,17 @@ Skill group cost = floor(0.6 * total individual cost of active group skills)
 Minimum cost = 1 when at least one active skill exists
 ```
 
-`Active group skills` means fixed group skills plus selected slot skills.
+```text
+Active group skills = fixed group skills + skills currently selected in choice slots
+```
 
 Unselected slot candidates do not count. Required-slot groups cannot be bought or raised until their required choices are selected.
+
+Examples:
+
+- `Basic Missile Training` has fixed skills such as `Perception`, `Concentration`, and `Weapon Maintenance`, plus one selected missile weapon.
+- `Advanced Craft Specialty` has a craft choice slot; only the selected craft counts, not every possible craft candidate.
+- Unselected slot candidates do not increase cost and do not appear as trained skills.
 
 Examples:
 
@@ -224,6 +250,8 @@ Remaining = ordinary pool remaining + flexible pool remaining
 ### Education
 
 `Education` combines base education, social-class education, and education-linked learned skills.
+
+Base education is the starting education value provided by the society/civilization setup before social class and learned education-linked skills are added.
 
 Formula:
 
