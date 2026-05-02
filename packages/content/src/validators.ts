@@ -107,6 +107,34 @@ function removeRetiredSkillGroupMemberships(
   };
 }
 
+function normalizeCanonicalSkillGroupMembershipsInSkill(
+  skill: CanonicalContent["skills"][number]
+): CanonicalContent["skills"][number] {
+  const groupIds = new Set(skill.groupIds);
+
+  for (const [groupId, skillIds] of Object.entries(CANONICAL_SKILL_GROUP_MEMBERSHIPS)) {
+    if (!skillIds) {
+      continue;
+    }
+
+    if (skillIds.includes(skill.id)) {
+      groupIds.add(groupId);
+    } else {
+      groupIds.delete(groupId);
+    }
+  }
+
+  const normalizedGroupIds = [...groupIds];
+
+  return {
+    ...skill,
+    groupId: normalizedGroupIds.includes(skill.groupId)
+      ? skill.groupId
+      : (normalizedGroupIds[0] ?? skill.groupId),
+    groupIds: normalizedGroupIds
+  };
+}
+
 function slugifyLanguageName(name: string): string {
   return name
     .trim()
@@ -964,7 +992,9 @@ export function validateCanonicalContent(input: unknown): CanonicalContent {
           }
         : skill;
 
-    return removeRetiredSkillGroupMemberships(normalizedSkill);
+    return normalizeCanonicalSkillGroupMembershipsInSkill(
+      removeRetiredSkillGroupMemberships(normalizedSkill)
+    );
   });
   const normalizedContent: CanonicalContent = normalizeSkillGroups(normalizeLanguages({
     ...parsedContent,

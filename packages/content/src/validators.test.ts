@@ -339,6 +339,16 @@ describe("validateCanonicalContent", () => {
                 ...skill,
                 groupIds: [...new Set([...skill.groupIds, "defensive_soldiering"])]
               }
+            : skill.id === "self_control"
+              ? {
+                  ...skill,
+                  groupIds: [...new Set([...skill.groupIds, "defensive_soldiering"])]
+                }
+            : skill.id === "combat_experience"
+              ? {
+                  ...skill,
+                  groupIds: skill.groupIds.filter((groupId) => groupId !== "defensive_soldiering")
+                }
             : skill
       ),
       skillGroups: [
@@ -347,7 +357,9 @@ describe("validateCanonicalContent", () => {
             ? {
                 ...group,
                 skillMemberships: [
-                  ...(group.skillMemberships ?? []),
+                  ...(group.skillMemberships
+                    ?.filter((membership) => membership.skillId !== "combat_experience") ?? []),
+                  { skillId: "self_control", relevance: "optional" as const },
                   { skillId: "dodge", relevance: "optional" as const },
                   { skillId: "parry", relevance: "optional" as const }
                 ]
@@ -474,6 +486,12 @@ describe("validateCanonicalContent", () => {
       expect.arrayContaining(["defensive_soldiering", "veteran_soldiering"])
     );
     expect(normalizedContent.skills.find((skill) => skill.id === "parry")?.groupIds).not.toEqual(
+      expect.arrayContaining(["defensive_soldiering"])
+    );
+    expect(normalizedContent.skills.find((skill) => skill.id === "self_control")?.groupIds).not.toEqual(
+      expect.arrayContaining(["defensive_soldiering"])
+    );
+    expect(normalizedContent.skills.find((skill) => skill.id === "combat_experience")?.groupIds).toEqual(
       expect.arrayContaining(["defensive_soldiering"])
     );
   });
