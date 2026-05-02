@@ -102,8 +102,13 @@ export const adminNavGroups: AdminNavGroup[] = [
     ]
   },
   {
-    label: "Accounts",
+    label: "Accounts & Setup",
     items: [
+      {
+        description: "Manage named chargen rule sets for current and future characters.",
+        href: "/admin/chargen-setup",
+        label: "Chargen Setup"
+      },
       {
         description: "Manage local users and assign Player, GM, or Admin roles.",
         href: "/admin/players",

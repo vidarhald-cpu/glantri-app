@@ -17,6 +17,7 @@ import {
 } from "@glantri/content";
 import type { AuthUser } from "@glantri/auth";
 import type {
+  ChargenRuleSet,
   CharacterProgression,
   GlantriCharacteristicKey,
   ProfessionDefinition,
@@ -25,6 +26,7 @@ import type {
   SocietyLevelAccess
 } from "@glantri/domain";
 import {
+  DEFAULT_CHARGEN_RULE_SET,
   getCharacterSkillKey,
   glantriCharacteristicLabels,
   glantriCharacteristicOrder
@@ -42,6 +44,7 @@ import {
   buildChargenSelectableSkillSummary,
   buildChargenSkillAccessSummary,
   createChargenStatAdjustmentState,
+  createChargenMethodPolicy,
   createChargenProgression,
   evaluateSkillSelection,
   finalizeChargenDraft,
@@ -53,7 +56,6 @@ import {
   removeChargenPoint,
   removeSecondaryPoint,
   resolveEffectiveProfessionPackage,
-  STANDARD_CHARGEN_METHOD_POLICY,
   reviewChargenDraft,
   selectProfile,
   spendSecondaryPoint,
@@ -80,6 +82,7 @@ import {
 } from "../../../src/lib/chargen/chargenBrowse";
 import {
   getCurrentSessionUser,
+  loadActiveChargenRuleSet,
   saveCharacterToServer
 } from "../../../src/lib/api/localServiceClient";
 import { ChargenSessionRepository } from "../../../src/lib/offline/repositories/chargenSessionRepository";
@@ -892,6 +895,7 @@ export default function ChargenWizard() {
   const [expandedProfessionId, setExpandedProfessionId] = useState<string>();
   const [professionFamilyFilter, setProfessionFamilyFilter] = useState("all");
   const [professionSearch, setProfessionSearch] = useState("");
+  const [chargenRuleSet, setChargenRuleSet] = useState<ChargenRuleSet>(DEFAULT_CHARGEN_RULE_SET);
   const [expandedAllocationSections, setExpandedAllocationSections] = useState<string[]>([]);
   const [expandedSkillDetails, setExpandedSkillDetails] = useState<string[]>([]);
   const [showOtherSkills, setShowOtherSkills] = useState(false);
@@ -926,14 +930,15 @@ export default function ChargenWizard() {
       ? getSocialBand(selectedProfile.socialClassRoll)
       : undefined;
   const selectedResolvedStats = getResolvedProfileStats(selectedProfile);
+  const chargenPolicy = createChargenMethodPolicy(chargenRuleSet);
   const exchangeDisabled =
     !selectedAdjustment ||
     exchangeFirstStat === exchangeSecondStat ||
-    selectedAdjustment.exchangesUsed >= STANDARD_CHARGEN_METHOD_POLICY.maxExchanges;
+    selectedAdjustment.exchangesUsed >= chargenPolicy.maxExchanges;
   const buildDisabled =
     !selectedAdjustment ||
     buildIncreaseStat === buildDecreaseStat ||
-    selectedAdjustment.buildsUsed >= STANDARD_CHARGEN_METHOD_POLICY.maxBuilds ||
+    selectedAdjustment.buildsUsed >= chargenPolicy.maxBuilds ||
     selectedAdjustment.stats[buildDecreaseStat] - 2 < 1 ||
     selectedAdjustment.stats[buildIncreaseStat] + 1 > 25;
   const selectedRolledProfileSummary = selectedRolledProfile
@@ -1073,6 +1078,11 @@ export default function ChargenWizard() {
     professionId: selectedProfessionId,
     profile: selectedProfile,
     progression,
+    ruleSet: {
+      id: chargenRuleSet.id,
+      name: chargenRuleSet.name,
+      parameters: chargenRuleSet
+    },
     socialClass: selectedSocietyAccess?.socialClass,
     societyId: selectedSocietyId,
     societyLevel: selectedSocietyBand
@@ -1373,9 +1383,10 @@ export default function ChargenWizard() {
     let cancelled = false;
 
     async function hydrate() {
-      const [cachedContent, sessionUser] = await Promise.all([
+      const [cachedContent, sessionUser, activeRuleSet] = await Promise.all([
         contentCacheRepository.get(CONTENT_CACHE_KEY),
-        getCurrentSessionUser().catch(() => null)
+        getCurrentSessionUser().catch(() => null),
+        loadActiveChargenRuleSet().catch(() => DEFAULT_CHARGEN_RULE_SET)
       ]);
 
       if (cancelled) {
@@ -1391,6 +1402,12 @@ export default function ChargenWizard() {
       }
 
       setCurrentUser(sessionUser);
+      setChargenRuleSet(activeRuleSet);
+      setProgression((current) => ({
+        ...current,
+        flexiblePointFactor: activeRuleSet.flexiblePointFactor,
+        primaryPoolTotal: activeRuleSet.ordinarySkillPoints
+      }));
 
       setHydrated(true);
 
@@ -1447,12 +1464,14 @@ export default function ChargenWizard() {
       setProgression(
         applyProfessionGrants({
           content,
-          professionId: availableProfessions[0].id
+          professionId: availableProfessions[0].id,
+          ruleSet: chargenRuleSet
         })
       );
     }
   }, [
     availableProfessions,
+    chargenRuleSet,
     content,
     hydrated,
     selectedProfessionId,
@@ -1469,10 +1488,10 @@ export default function ChargenWizard() {
       !availableProfessions.some((profession) => profession.id === selectedProfessionId)
     ) {
       setSelectedProfessionId(undefined);
-      setProgression(createChargenProgression());
+      setProgression(createChargenProgression("standard", chargenRuleSet));
       setFeedback(["Profession selection was cleared because society access changed."]);
     }
-  }, [availableProfessions, hydrated, selectedProfessionId]);
+  }, [availableProfessions, chargenRuleSet, hydrated, selectedProfessionId]);
 
   useEffect(() => {
     if (
@@ -1550,7 +1569,7 @@ export default function ChargenWizard() {
 
     setSelectedProfessionId(undefined);
     setShowProfessionChooser(true);
-    setProgression(createChargenProgression());
+    setProgression(createChargenProgression("standard", chargenRuleSet));
     setRowActionFeedback({});
     setExpandedSkillDetails([]);
     setFeedback(["Changing civilization changed the inferred society, so profession access and point allocation were reset."]);
@@ -1563,7 +1582,8 @@ export default function ChargenWizard() {
     setProgression(
       applyProfessionGrants({
         content,
-        professionId
+        professionId,
+        ruleSet: chargenRuleSet
       })
     );
     setRowActionFeedback({});
@@ -1724,6 +1744,7 @@ export default function ChargenWizard() {
 
     const result = applyChargenStatExchange({
       firstStat: exchangeFirstStat,
+      policy: chargenPolicy,
       secondStat: exchangeSecondStat,
       state: selectedAdjustment
     });
@@ -1750,6 +1771,7 @@ export default function ChargenWizard() {
     const result = applyChargenStatBuild({
       decreaseStat: buildDecreaseStat,
       increaseStat: buildIncreaseStat,
+      policy: chargenPolicy,
       state: selectedAdjustment
     });
 
@@ -1771,11 +1793,11 @@ export default function ChargenWizard() {
     await chargenSessionRepository.delete(SESSION_ID);
 
     setHasStartedChargen(true);
-    setRolledProfiles(generateProfiles({}));
+    setRolledProfiles(generateProfiles({ ruleSet: chargenRuleSet }));
     setProfileAdjustments({});
     setCharacterName("");
     setFeedback([]);
-    setProgression(createChargenProgression());
+    setProgression(createChargenProgression("standard", chargenRuleSet));
     setRowActionFeedback({});
     setSelectedProfileId(undefined);
     setSelectedProfessionId(undefined);
@@ -2236,6 +2258,11 @@ export default function ChargenWizard() {
       professionId: selectedProfessionId,
       profile: selectedProfile,
       progression,
+      ruleSet: {
+        id: chargenRuleSet.id,
+        name: chargenRuleSet.name,
+        parameters: chargenRuleSet
+      },
       socialClass: selectedSocietyAccess?.socialClass,
       societyId: selectedSocietyId,
       societyLevel: selectedSocialBand
@@ -2550,7 +2577,7 @@ export default function ChargenWizard() {
                       <strong style={{ fontSize: "0.9rem", fontWeight: 600 }}>Exchange</strong>
                       <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
                         Exchanges: {selectedAdjustment.exchangesUsed} /{" "}
-                        {STANDARD_CHARGEN_METHOD_POLICY.maxExchanges}
+                        {chargenPolicy.maxExchanges}
                       </div>
                     </div>
                     <label style={{ display: "grid", gap: "0.25rem" }}>
@@ -2592,7 +2619,7 @@ export default function ChargenWizard() {
                       <strong style={{ fontSize: "0.9rem", fontWeight: 600 }}>Build</strong>
                       <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
                         Builds: {selectedAdjustment.buildsUsed} /{" "}
-                        {STANDARD_CHARGEN_METHOD_POLICY.maxBuilds}
+                        {chargenPolicy.maxBuilds}
                       </div>
                     </div>
                     <label style={{ display: "grid", gap: "0.25rem" }}>
@@ -4191,6 +4218,7 @@ export default function ChargenWizard() {
             }}
           >
             <strong>Character summary</strong>
+            <div>Chargen rules: {chargenRuleSet.name}</div>
             <div>Profile: {selectedProfile?.label ?? "Not selected"}</div>
             <div>Civilization: {selectedCivilization?.name ?? "Not selected"}</div>
             <div>Society: {selectedSociety?.name ?? "Not selected"}</div>
@@ -4224,6 +4252,10 @@ export default function ChargenWizard() {
             }}
           >
             <strong>Points and education</strong>
+            <div>
+              Rule set: {chargenRuleSet.name} ({chargenRuleSet.ordinarySkillPoints} ordinary, flexible x
+              {chargenRuleSet.flexiblePointFactor})
+            </div>
             <div>
               Ordinary points: {progression.primaryPoolSpent} spent /{" "}
               {draftView.primaryPoolAvailable} remaining

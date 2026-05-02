@@ -6,6 +6,7 @@ import type {
   CharacterSkill,
   CharacterSkillGroup,
   CharacterSpecialization,
+  ChargenRuleSetParameters,
   ChargenMode,
   GlantriCharacteristicKey,
   LanguageDefinition,
@@ -39,7 +40,7 @@ import {
 import { evaluateSkillSelection } from "../skills/evaluateSkillSelection";
 import { getActiveSkillGroupIds } from "../skills/getActiveSkillGroupIds";
 import { selectBestSkillGroupContribution } from "../skills/selectBestSkillGroupContribution";
-import { STANDARD_CHARGEN_METHOD_POLICY } from "./policy";
+import { createChargenMethodPolicy, STANDARD_CHARGEN_METHOD_POLICY } from "./policy";
 import {
   buildChargenLanguageSelectionSummary,
   buildChargenSelectableSkillSummary,
@@ -104,6 +105,12 @@ export interface AllocateChargenPointInput {
   targetLanguageName?: string;
   targetId: string;
   targetType: "group" | "skill";
+}
+
+export interface ChargenRuleSetInput {
+  id?: string;
+  name?: string;
+  parameters?: Partial<ChargenRuleSetParameters>;
 }
 
 export interface SpendPointResult {
@@ -231,6 +238,7 @@ export interface ReviewChargenDraftInput {
   professionId?: string;
   profile?: RolledCharacterProfile;
   progression: CharacterProgression;
+  ruleSet?: ChargenRuleSetInput;
   socialClass?: string;
   societyId?: string;
   societyLevel?: number;
@@ -376,12 +384,18 @@ function recalculateProgression(progression: CharacterProgression): CharacterPro
     secondaryPoolSpent: progression.secondaryPoolSpent ?? 0,
     secondaryPoolTotal:
       progression.secondaryPoolTotal ?? STANDARD_CHARGEN_METHOD_POLICY.secondaryPoolTotal,
+    flexiblePointFactor:
+      progression.flexiblePointFactor ?? STANDARD_CHARGEN_METHOD_POLICY.flexiblePointFactor,
     skillGroups: progression.skillGroups.map(normalizeGroup),
     skills: progression.skills.map(normalizeSkill),
     specializations: progression.specializations
       .map(normalizeSpecialization)
       .filter((specialization) => specialization.skillId !== LANGUAGE_SKILL_ID)
   };
+}
+
+function getRuleSetParameters(ruleSet?: ChargenRuleSetInput): Partial<ChargenRuleSetParameters> {
+  return ruleSet?.parameters ?? {};
 }
 
 function getSocietyAccess(
@@ -885,37 +899,47 @@ function getEvaluationMessages(input: {
   return [...input.warnings, ...input.advisories].map((item) => item.message);
 }
 
-export function getOrdinaryPoolTotal(): number {
-  return STANDARD_CHARGEN_METHOD_POLICY.primaryPoolTotal;
+export function getOrdinaryPoolTotal(progression?: CharacterProgression): number {
+  return progression?.primaryPoolTotal ?? STANDARD_CHARGEN_METHOD_POLICY.primaryPoolTotal;
 }
 
 export function getFlexiblePoolTotal(
-  profile: RolledCharacterProfile | undefined
+  profile: RolledCharacterProfile | undefined,
+  progression?: Pick<CharacterProgression, "flexiblePointFactor" | "secondaryPoolTotal">
 ): number {
   const resolvedStats = getResolvedProfileStats(profile);
 
   if (!resolvedStats) {
-    return 0;
+    return progression?.secondaryPoolTotal ?? 0;
   }
 
-  return (resolvedStats.int ?? 0) + (resolvedStats.lck ?? 0);
+  return Math.floor(
+    ((resolvedStats.int ?? 0) + (resolvedStats.lck ?? 0)) *
+      (progression?.flexiblePointFactor ?? STANDARD_CHARGEN_METHOD_POLICY.flexiblePointFactor)
+  );
 }
 
 function getAvailableFlexiblePoolTotal(input: {
   profile: RolledCharacterProfile | undefined;
   progression: CharacterProgression;
 }): number {
-  const profileDrivenTotal = getFlexiblePoolTotal(input.profile);
+  const profileDrivenTotal = getFlexiblePoolTotal(input.profile, input.progression);
   return profileDrivenTotal > 0 ? profileDrivenTotal : input.progression.secondaryPoolTotal;
 }
 
-export function createChargenProgression(mode: ChargenMode = "standard"): CharacterProgression {
+export function createChargenProgression(
+  mode: ChargenMode = "standard",
+  ruleSet?: Partial<ChargenRuleSetParameters>
+): CharacterProgression {
+  const policy = createChargenMethodPolicy(ruleSet);
+
   return recalculateProgression({
     chargenMode: mode,
     educationPoints: 0,
+    flexiblePointFactor: policy.flexiblePointFactor,
     level: 1,
     primaryPoolSpent: 0,
-    primaryPoolTotal: STANDARD_CHARGEN_METHOD_POLICY.primaryPoolTotal,
+    primaryPoolTotal: policy.primaryPoolTotal,
     secondaryPoolSpent: 0,
     secondaryPoolTotal: STANDARD_CHARGEN_METHOD_POLICY.secondaryPoolTotal,
     skillGroups: [],
@@ -934,8 +958,9 @@ export function applyProfessionGrants(input: {
   content: CanonicalContentShape;
   mode?: ChargenMode;
   professionId: string;
+  ruleSet?: Partial<ChargenRuleSetParameters>;
 }): CharacterProgression {
-  return createChargenProgression(input.mode ?? "standard");
+  return createChargenProgression(input.mode ?? "standard", input.ruleSet);
 }
 
 function chooseChargenPool(input: {
@@ -944,8 +969,9 @@ function chooseChargenPool(input: {
   profile?: RolledCharacterProfile;
   progression: CharacterProgression;
 }): "primary" | "secondary" | null {
-  const ordinaryRemaining = getOrdinaryPoolTotal() - input.progression.primaryPoolSpent;
-  const flexibleRemaining = getFlexiblePoolTotal(input.profile) - input.progression.secondaryPoolSpent;
+  const ordinaryRemaining = getOrdinaryPoolTotal(input.progression) - input.progression.primaryPoolSpent;
+  const flexibleRemaining =
+    getFlexiblePoolTotal(input.profile, input.progression) - input.progression.secondaryPoolSpent;
 
   if (input.normalAccess && ordinaryRemaining >= input.cost) {
     return "primary";
@@ -2192,10 +2218,10 @@ export function buildChargenDraftView(input: {
   return {
     education,
     groups,
-    primaryPoolAvailable: Math.max(0, getOrdinaryPoolTotal() - progression.primaryPoolSpent),
+    primaryPoolAvailable: Math.max(0, getOrdinaryPoolTotal(progression) - progression.primaryPoolSpent),
     secondaryPoolAvailable: Math.max(
       0,
-      getFlexiblePoolTotal(input.profile) - progression.secondaryPoolSpent
+      getFlexiblePoolTotal(input.profile, progression) - progression.secondaryPoolSpent
     ),
     skills,
     specializations,
@@ -2270,11 +2296,11 @@ export function reviewChargenDraft(
     errorSet.add("Select a profession before finalizing.");
   }
 
-  if (progression.primaryPoolSpent > getOrdinaryPoolTotal()) {
+  if (progression.primaryPoolSpent > getOrdinaryPoolTotal(progression)) {
     errorSet.add("Ordinary pool is overspent.");
   }
 
-  if (progression.secondaryPoolSpent > getFlexiblePoolTotal(input.profile)) {
+  if (progression.secondaryPoolSpent > getFlexiblePoolTotal(input.profile, progression)) {
     errorSet.add("Flexible pool is overspent.");
   }
 
@@ -2434,7 +2460,17 @@ export function finalizeChargenDraft(
   );
 
   const profession = getProfessionById(input.content, input.professionId);
+  const ruleSetParameters = getRuleSetParameters(input.ruleSet);
+  const ruleSetPolicy = createChargenMethodPolicy(ruleSetParameters);
   const build: CharacterBuild = {
+    chargenRuleSet: {
+      exchangeCount: ruleSetPolicy.maxExchanges,
+      flexiblePointFactor: ruleSetPolicy.flexiblePointFactor,
+      id: input.ruleSet?.id,
+      name: input.ruleSet?.name?.trim() || "Legacy default",
+      ordinarySkillPoints: ruleSetPolicy.primaryPoolTotal,
+      statRollCount: ruleSetPolicy.displayedRollCount
+    },
     equipment: {
       items: []
     },

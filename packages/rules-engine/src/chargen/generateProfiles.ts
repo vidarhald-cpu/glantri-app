@@ -1,12 +1,14 @@
 import type {
+  ChargenRuleSetParameters,
   GlantriCharacteristicBlock,
   RolledCharacterProfile
 } from "@glantri/domain";
 
-import { STANDARD_CHARGEN_METHOD_POLICY } from "./policy";
+import { createChargenMethodPolicy } from "./policy";
 
 export interface GenerateProfilesInput {
   count?: number;
+  ruleSet?: Partial<ChargenRuleSetParameters>;
   rollSets?: GlantriCharacteristicBlock[];
   rng?: () => number;
   socialClassTableId?: string;
@@ -104,10 +106,11 @@ function createRolledProfile(input: {
 
 export function generateProfiles(input: GenerateProfilesInput): RolledCharacterProfile[] {
   const rng = input.rng ?? Math.random;
+  const policy = createChargenMethodPolicy(input.ruleSet);
   const socialClassTableId = input.socialClassTableId ?? DEFAULT_SOCIAL_CLASS_TABLE_ID;
   const rollSets =
     input.rollSets ??
-    Array.from({ length: input.count ?? STANDARD_CHARGEN_METHOD_POLICY.displayedRollCount }, () =>
+    Array.from({ length: input.count ?? policy.displayedRollCount }, () =>
       generateCharacteristicBlock(rng)
     );
 

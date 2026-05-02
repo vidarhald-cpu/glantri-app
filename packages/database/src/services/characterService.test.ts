@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { CharacterBuild } from "@glantri/domain";
+import { characterBuildSchema, type CharacterBuild } from "@glantri/domain";
 
 import type { CharacterRecord, CharacterRepository } from "../repositories/characterRepository";
 import { CharacterService } from "./characterService";
@@ -136,6 +136,7 @@ describe("CharacterService edit persistence", () => {
         level: 3
       }
     };
+    const normalizedNextBuild = characterBuildSchema.parse(nextBuild);
 
     const saved = await service.saveExistingCharacter({
       build: nextBuild,
@@ -144,7 +145,7 @@ describe("CharacterService edit persistence", () => {
 
     expect(calls.saveOwned).toEqual([
       {
-        build: nextBuild,
+        build: normalizedNextBuild,
         id: "character-1",
         level: 3,
         name: "Edited Character Saved",
@@ -152,7 +153,7 @@ describe("CharacterService edit persistence", () => {
       }
     ]);
     expect(saved).toMatchObject({
-      build: nextBuild,
+      build: normalizedNextBuild,
       id: "character-1",
       ownerId: "owner-1"
     });

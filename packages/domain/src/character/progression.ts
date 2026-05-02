@@ -184,6 +184,7 @@ export const characterProgressionSchema = z.object({
   primaryPoolTotal: z.number().int().nonnegative().default(60),
   secondaryPoolSpent: z.number().int().nonnegative().default(0),
   secondaryPoolTotal: z.number().int().nonnegative().default(0),
+  flexiblePointFactor: z.number().positive().default(1),
   level: z.number().int().positive().default(1),
   skillGroups: z.array(characterSkillGroupSchema).default([]),
   skills: z.array(characterSkillSchema).default([]),

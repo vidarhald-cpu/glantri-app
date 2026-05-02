@@ -14,6 +14,51 @@ import {
 } from "./statResolution";
 
 describe("chargen stat resolution", () => {
+  it("uses rule-set stat roll and exchange counts without changing social/distraction rolls", () => {
+    const profiles = generateProfiles({
+      rng: () => 0.5,
+      ruleSet: {
+        exchangeCount: 1,
+        flexiblePointFactor: 1,
+        ordinarySkillPoints: 60,
+        statRollCount: 3
+      }
+    });
+    const initialState = createChargenStatAdjustmentState(profiles[0].rolledStats);
+    const firstExchange = applyChargenStatExchange({
+      firstStat: "str",
+      policy: {
+        displayedRollCount: 3,
+        flexiblePointFactor: 1,
+        maxBuilds: 2,
+        maxExchanges: 1,
+        primaryPoolTotal: 60,
+        secondaryPoolTotal: 0
+      },
+      secondStat: "dex",
+      state: initialState
+    });
+    const secondExchange = applyChargenStatExchange({
+      firstStat: "con",
+      policy: {
+        displayedRollCount: 3,
+        flexiblePointFactor: 1,
+        maxBuilds: 2,
+        maxExchanges: 1,
+        primaryPoolTotal: 60,
+        secondaryPoolTotal: 0
+      },
+      secondStat: "int",
+      state: firstExchange.state
+    });
+
+    expect(profiles).toHaveLength(3);
+    expect(profiles[0].socialClassRoll).toBeGreaterThan(0);
+    expect(profiles[0].distractionLevel).toBeGreaterThan(0);
+    expect(firstExchange.error).toBeUndefined();
+    expect(secondExchange.error).toBe("You can exchange stats at most 1 times.");
+  });
+
   it("keeps generated profile rolls raw until the resolution stage", () => {
     const [profile] = generateProfiles({
       rollSets: [

@@ -656,6 +656,48 @@ describe("derived skill relationships in chargen drafts", () => {
     expect(purchase.error).toBe("Advanced Craft Specialty: Choose one craft specialty.");
   });
 
+  it("uses rule-set ordinary points and flexible-point factor in chargen pools", () => {
+    const progression = createChargenProgression("standard", {
+      exchangeCount: 2,
+      flexiblePointFactor: 0.5,
+      ordinarySkillPoints: 40,
+      statRollCount: 20
+    });
+    const profile = {
+      distractionLevel: 0,
+      id: "profile-rule-set",
+      label: "Rule Set Profile",
+      rolledStats: {
+        cha: 10,
+        com: 10,
+        con: 10,
+        dex: 10,
+        health: 10,
+        int: 20,
+        lck: 10,
+        pow: 10,
+        siz: 10,
+        str: 10,
+        will: 10
+      },
+      societyLevel: 0
+    };
+
+    const draftView = buildChargenDraftView({
+      content: chargenTestContent,
+      professionId: undefined,
+      profile,
+      progression,
+      societyId: "glantri",
+      societyLevel: 1
+    });
+
+    expect(progression.primaryPoolTotal).toBe(40);
+    expect(progression.flexiblePointFactor).toBe(0.5);
+    expect(draftView.primaryPoolAvailable).toBe(40);
+    expect(draftView.secondaryPoolAvailable).toBe(15);
+  });
+
   it("uses individual skill pricing for other skills outside normal group access", () => {
     const otherSkillContent = validateCanonicalContent({
       ...chargenTestContent,
@@ -1865,6 +1907,16 @@ describe("chargen purchase gate integration", () => {
         societyLevel: 0
       },
       progression: createChargenProgression(),
+      ruleSet: {
+        id: "chargen-rule-standard",
+        name: "Standard chargen",
+        parameters: {
+          exchangeCount: 2,
+          flexiblePointFactor: 1,
+          ordinarySkillPoints: 60,
+          statRollCount: 20
+        }
+      },
       socialClass: "Common",
       societyId: "glantri",
       societyLevel: 1
@@ -1879,6 +1931,11 @@ describe("chargen purchase gate integration", () => {
     expect(motherTongueSkill?.sourceTag).toBe("mother-tongue");
     expect(result.build?.progression.primaryPoolSpent).toBe(0);
     expect(result.build?.progression.secondaryPoolSpent).toBe(0);
+    expect(result.build?.chargenRuleSet).toMatchObject({
+      id: "chargen-rule-standard",
+      name: "Standard chargen",
+      ordinarySkillPoints: 60
+    });
   });
 
   it("materializes selected optional civilization languages as concrete chargen skill rows", () => {

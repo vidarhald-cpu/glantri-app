@@ -139,4 +139,23 @@ describe("character progression compatibility", () => {
 
     expect(parsed.professionId).toBe("musician");
   });
+
+  it("keeps legacy characters loadable and preserves optional chargen rule-set snapshots", () => {
+    const legacy = characterBuildSchema.parse(baseBuild);
+    const withRuleSet = characterBuildSchema.parse({
+      ...baseBuild,
+      chargenRuleSet: {
+        exchangeCount: 3,
+        flexiblePointFactor: 2,
+        id: "chargen-rule-experiment",
+        name: "Experimental chargen",
+        ordinarySkillPoints: 80,
+        statRollCount: 12
+      }
+    });
+
+    expect(legacy.chargenRuleSet).toBeUndefined();
+    expect(withRuleSet.chargenRuleSet?.name).toBe("Experimental chargen");
+    expect(withRuleSet.chargenRuleSet?.flexiblePointFactor).toBe(2);
+  });
 });

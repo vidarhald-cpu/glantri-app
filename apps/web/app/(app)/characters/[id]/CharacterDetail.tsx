@@ -43,6 +43,10 @@ function getCharacterName(build: CharacterBuild): string {
   return build.name.trim() || UNNAMED_CHARACTER_PLACEHOLDER;
 }
 
+function getChargenRuleSetName(build: CharacterBuild): string {
+  return build.chargenRuleSet?.name ?? "Legacy default";
+}
+
 function getProfessionFamilyName(
   content: Awaited<ReturnType<typeof loadLocalCharacterContext>>["content"],
   profession: ProfessionDefinition | undefined
@@ -403,6 +407,9 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
               {sheetSummary.professionName ?? build.professionId ?? "Not set"}
               {professionFamilyName ? `, ${professionFamilyName}` : ""}
             </div>
+
+            <strong>Chargen rules</strong>
+            <div>{getChargenRuleSetName(build)}</div>
 
             <strong>Skill points</strong>
             <div>
