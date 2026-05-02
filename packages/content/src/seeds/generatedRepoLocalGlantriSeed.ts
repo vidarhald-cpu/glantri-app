@@ -932,10 +932,23 @@ export const generatedRepoLocalGlantriSeed = {
       "sortOrder": 28
     },
     {
-      "description": "One required missile weapon skill.",
+      "description": "Range discipline, target awareness, weapon upkeep, and one required missile weapon skill.",
       "id": "basic_missile_training",
       "name": "Basic Missile Training",
-      "skillMemberships": [],
+      "skillMemberships": [
+        {
+          "relevance": "core",
+          "skillId": "perception"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "self_control"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "weapon_maintenance"
+        }
+      ],
       "selectionSlots": [
         {
           "candidateSkillIds": [
@@ -954,10 +967,31 @@ export const generatedRepoLocalGlantriSeed = {
       "sortOrder": 29
     },
     {
-      "description": "Three required missile weapon skills.",
+      "description": "Advanced range discipline, battlefield judgment, weapon upkeep, and three required missile weapon skills.",
       "id": "advanced_missile_training",
       "name": "Advanced Missile Training",
-      "skillMemberships": [],
+      "skillMemberships": [
+        {
+          "relevance": "optional",
+          "skillId": "perception"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "self_control"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "weapon_maintenance"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "battlefield_awareness"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "combat_experience"
+        }
+      ],
       "selectionSlots": [
         {
           "candidateSkillIds": [
@@ -3496,6 +3530,8 @@ export const generatedRepoLocalGlantriSeed = {
       "groupIds": [
         "mental_discipline",
         "mental_group",
+        "basic_missile_training",
+        "advanced_missile_training",
         "defensive_soldiering",
         "forestry_resource_work",
         "mining_extraction"
@@ -4584,6 +4620,8 @@ export const generatedRepoLocalGlantriSeed = {
         "craft_specialty",
         "craft_specialty_advanced",
         "arena_training",
+        "basic_missile_training",
+        "advanced_missile_training",
         "veteran_soldiering"
       ],
       "id": "weapon_maintenance",
@@ -5291,7 +5329,8 @@ export const generatedRepoLocalGlantriSeed = {
         "veteran_soldiering",
         "veteran_leadership",
         "military_group",
-        "arena_training"
+        "arena_training",
+        "advanced_missile_training"
       ],
       "id": "combat_experience",
       "isTheoretical": false,
@@ -5323,6 +5362,7 @@ export const generatedRepoLocalGlantriSeed = {
       "groupIds": [
         "veteran_soldiering",
         "military_group",
+        "advanced_missile_training",
         "defensive_soldiering"
       ],
       "id": "battlefield_awareness",

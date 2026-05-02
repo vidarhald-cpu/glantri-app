@@ -210,14 +210,14 @@ export function getSkillDisplayGroupId(input: {
     ) ??
     input.draftView.skills.find((candidate) => candidate.skillId === input.skill.id);
 
-  const canonicalVisibleGroupId = [
+  const canonicalVisibleGroupIds = [
     ...(input.skill.groupIds ?? []),
     input.skill.groupId
   ]
     .filter((groupId): groupId is string => Boolean(groupId))
-    .find((groupId) => input.skillAccess.normalSkillGroupIds.includes(groupId));
+    .filter((groupId) => input.skillAccess.normalSkillGroupIds.includes(groupId));
 
-  if (canonicalVisibleGroupId) {
+  for (const canonicalVisibleGroupId of canonicalVisibleGroupIds) {
     const canonicalVisibleGroup = input.content.skillGroups.find(
       (group) => group.id === canonicalVisibleGroupId
     );
@@ -235,8 +235,6 @@ export function getSkillDisplayGroupId(input: {
     if (purchasedSkill?.contributingGroupId === canonicalVisibleGroupId) {
       return canonicalVisibleGroupId;
     }
-
-    return undefined;
   }
 
   if (purchasedSkill?.contributingGroupId && input.skillAccess.normalSkillIds.includes(input.skill.id)) {
@@ -244,6 +242,16 @@ export function getSkillDisplayGroupId(input: {
   }
 
   return undefined;
+}
+
+export function getGroupSlotCandidateSkillIds(input: {
+  selectionSlots: Array<{
+    candidateSkillIds: string[];
+  }>;
+}): Set<string> {
+  return new Set(
+    input.selectionSlots.flatMap((slot) => slot.candidateSkillIds)
+  );
 }
 
 function getSkillDisplayName(input: {
@@ -1087,6 +1095,9 @@ export default function ChargenWizard() {
     societyId: selectedSocietyId,
     societyLevel: selectedSocietyBand
   });
+  const groupSlotCandidateSkillIds = getGroupSlotCandidateSkillIds(
+    selectableSkillSummary
+  );
   const skillAccess =
     selectedProfessionId && selectedSocietyId && selectedSocietyBand !== undefined
       ? buildChargenSkillAccessSummary({
@@ -1136,6 +1147,7 @@ export default function ChargenWizard() {
       (skill) =>
         skill.id !== "language" &&
         skillAccess.normalSkillIds.includes(skill.id) &&
+        !groupSlotCandidateSkillIds.has(skill.id) &&
         skillDisplayGroupIds.get(skill.id) === undefined
     )
   );
@@ -3428,6 +3440,9 @@ export default function ChargenWizard() {
                           const groupSelectionSlots = selectableSkillSummary.selectionSlots.filter(
                             (slot) => slot.groupId === group.id
                           );
+                          const selectedGroupSlotSkillIds = new Set(
+                            groupSelectionSlots.flatMap((slot) => slot.selectedSkillIds)
+                          );
                           const addPreview = skillAllocationContext
                             ? allocateChargenPoint({
                                 ...skillAllocationContext,
@@ -3436,7 +3451,11 @@ export default function ChargenWizard() {
                               })
                             : undefined;
                           const groupSkillRows = sortSkills(
-                            content.skills.filter((skill) => skillDisplayGroupIds.get(skill.id) === group.id)
+                            content.skills.filter(
+                              (skill) =>
+                                skillDisplayGroupIds.get(skill.id) === group.id ||
+                                selectedGroupSlotSkillIds.has(skill.id)
+                            )
                           )
                             .map((skill) => {
                               const row = skillRowsById.get(skill.id);

@@ -271,8 +271,14 @@ const FIXED_SKILL_MEMBERSHIPS_BY_GROUP_ID = {
     "oratory",
     "weapon_maintenance"
   ],
-  basic_missile_training: [],
-  advanced_missile_training: [],
+  basic_missile_training: ["perception", "self_control", "weapon_maintenance"],
+  advanced_missile_training: [
+    "perception",
+    "self_control",
+    "weapon_maintenance",
+    "battlefield_awareness",
+    "combat_experience"
+  ],
   defensive_soldiering: [
     "formation_fighting",
     "battlefield_awareness",
@@ -377,7 +383,8 @@ const GROUP_DESCRIPTION_OVERRIDES = {
   advanced_melee_training: "Dodge, parry, and brawling plus three required melee weapon skills.",
   arena_training:
     "Arena awareness, showmanship, professional discipline, and practical weapon upkeep.",
-  basic_missile_training: "One required missile weapon skill.",
+  basic_missile_training:
+    "Range discipline, target awareness, weapon upkeep, and one required missile weapon skill.",
   defensive_soldiering:
     "Formation discipline, battlefield awareness, self-control, and practical aid for defensive service.",
   coastal_fishing:
@@ -402,7 +409,8 @@ const GROUP_DESCRIPTION_OVERRIDES = {
     "Funerary preparation, ritual body care, remedy handling, and mortuary discipline.",
   pastoral_work:
     "Herd movement, watchfulness, animal care, and practical field care for grazing work.",
-  advanced_missile_training: "Three required missile weapon skills.",
+  advanced_missile_training:
+    "Advanced range discipline, battlefield judgment, weapon upkeep, and three required missile weapon skills.",
   route_security:
     "Road awareness, animal handling, search, and practical care for guarding overland routes.",
   ship_command:

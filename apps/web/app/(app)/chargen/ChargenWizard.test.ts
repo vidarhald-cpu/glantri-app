@@ -3,7 +3,9 @@ import { describe, expect, it } from "vitest";
 import { defaultCanonicalContent, validateCanonicalContent } from "@glantri/content";
 import {
   allocateChargenPoint,
+  applyProfessionGrants,
   buildChargenDraftView,
+  buildChargenSelectableSkillSummary,
   buildChargenSkillAccessSummary,
   createChargenProgression,
   evaluateSkillSelection,
@@ -16,6 +18,7 @@ import {
   getGroupScopedSkillAllocationMetrics,
   getSkillAllocationMetrics,
   getSkillDisplayGroupId,
+  getGroupSlotCandidateSkillIds,
   getSpecializationRowMessages,
   getSpecializationPurchaseState
 } from "./ChargenWizard";
@@ -1561,6 +1564,141 @@ describe("ChargenWizard profession-group display priority", () => {
     expect(stealthDisplayGroupId).toBe("fieldcraft");
     expect(fieldcraftGroupSkillIds).toContain("stealth");
     expect(additionalAllowedSkills.map((skill) => skill.id)).not.toContain("stealth");
+  });
+
+  it("keeps unselected weapon slot candidates out of direct skill display rows", () => {
+    const lightInfantryRow = defaultCanonicalContent.societyLevels.find((societyLevel) =>
+      societyLevel.professionIds.includes("light_infantry") &&
+      societyLevel.skillGroupIds.includes("basic_missile_training") &&
+      societyLevel.skillGroupIds.includes("basic_melee_training")
+    );
+
+    expect(lightInfantryRow).toBeDefined();
+
+    const buildDirectSkillIds = (progression = createChargenProgression()) => {
+      const draftView = buildChargenDraftView({
+        content: defaultCanonicalContent,
+        professionId: "light_infantry",
+        progression,
+        societyId: lightInfantryRow!.societyId,
+        societyLevel: lightInfantryRow!.societyLevel
+      });
+      const skillAccess = buildChargenSkillAccessSummary({
+        content: defaultCanonicalContent,
+        professionId: "light_infantry",
+        societyId: lightInfantryRow!.societyId,
+        societyLevel: lightInfantryRow!.societyLevel
+      });
+      const selectableSkillSummary = buildChargenSelectableSkillSummary({
+        content: defaultCanonicalContent,
+        professionId: "light_infantry",
+        progression,
+        societyId: lightInfantryRow!.societyId,
+        societyLevel: lightInfantryRow!.societyLevel
+      });
+      const groupSlotCandidateSkillIds = getGroupSlotCandidateSkillIds(
+        selectableSkillSummary
+      );
+
+      return defaultCanonicalContent.skills
+        .filter(
+          (skill) =>
+            skillAccess.normalSkillIds.includes(skill.id) &&
+            !groupSlotCandidateSkillIds.has(skill.id) &&
+            getSkillDisplayGroupId({
+              content: defaultCanonicalContent,
+              draftView,
+              skill,
+              skillAccess
+            }) === undefined
+        )
+        .map((skill) => skill.id);
+    };
+
+    const unselectedDirectSkillIds = buildDirectSkillIds(
+      applyProfessionGrants({
+        content: defaultCanonicalContent,
+        professionId: "light_infantry"
+      })
+    );
+
+    expect(unselectedDirectSkillIds).not.toContain("one_handed_edged");
+    expect(unselectedDirectSkillIds).not.toContain("polearms");
+    expect(unselectedDirectSkillIds).not.toContain("throwing");
+    expect(unselectedDirectSkillIds).not.toContain("bow");
+    expect(unselectedDirectSkillIds).not.toContain("crossbow");
+
+    const selectedProgression = applyProfessionGrants({
+      content: defaultCanonicalContent,
+      professionId: "light_infantry"
+    });
+    const selectedSlotProgression = {
+      ...selectedProgression,
+      chargenSelections: {
+        selectedLanguageIds: [],
+        selectedSkillIds: [],
+        selectedGroupSlots: [
+          {
+            groupId: "basic_missile_training",
+            selectedSkillIds: ["bow"],
+            slotId: "missile_weapon_choice"
+          },
+          {
+            groupId: "basic_melee_training",
+            selectedSkillIds: ["polearms"],
+            slotId: "melee_weapon_choice"
+          }
+        ]
+      }
+    };
+    const selectedDraftView = buildChargenDraftView({
+      content: defaultCanonicalContent,
+      professionId: "light_infantry",
+      progression: selectedSlotProgression,
+      societyId: lightInfantryRow!.societyId,
+      societyLevel: lightInfantryRow!.societyLevel
+    });
+    const selectedSkillAccess = buildChargenSkillAccessSummary({
+      content: defaultCanonicalContent,
+      professionId: "light_infantry",
+      societyId: lightInfantryRow!.societyId,
+      societyLevel: lightInfantryRow!.societyLevel
+    });
+    const bow = defaultCanonicalContent.skills.find((skill) => skill.id === "bow");
+    const polearms = defaultCanonicalContent.skills.find((skill) => skill.id === "polearms");
+    const selectedSummary = buildChargenSelectableSkillSummary({
+      content: defaultCanonicalContent,
+      professionId: "light_infantry",
+      progression: selectedSlotProgression,
+      societyId: lightInfantryRow!.societyId,
+      societyLevel: lightInfantryRow!.societyLevel
+    });
+    const selectedGroupSkillIdsFor = (groupId: string) => {
+      const selectedGroupSlotSkillIds = new Set(
+        selectedSummary.selectionSlots
+          .filter((slot) => slot.groupId === groupId)
+          .flatMap((slot) => slot.selectedSkillIds)
+      );
+
+      return defaultCanonicalContent.skills
+        .filter(
+          (skill) =>
+            getSkillDisplayGroupId({
+              content: defaultCanonicalContent,
+              draftView: selectedDraftView,
+              skill,
+              skillAccess: selectedSkillAccess
+            }) === groupId || selectedGroupSlotSkillIds.has(skill.id)
+        )
+        .map((skill) => skill.id);
+    };
+
+    expect(bow).toBeDefined();
+    expect(polearms).toBeDefined();
+    expect(selectedGroupSkillIdsFor("basic_missile_training")).toContain("bow");
+    expect(selectedGroupSkillIdsFor("basic_melee_training")).toContain("polearms");
+    expect(buildDirectSkillIds(selectedSlotProgression)).not.toContain("bow");
+    expect(buildDirectSkillIds(selectedSlotProgression)).not.toContain("polearms");
   });
 });
 

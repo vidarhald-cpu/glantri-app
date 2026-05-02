@@ -692,6 +692,15 @@ describe("validateCanonicalContent", () => {
       skillById.get(skillId)?.category === "secondary" ? 1 : 2;
     const groupWeightedValueFor = (groupId: string) =>
       groupSkillIdsFor(groupId).reduce((total, skillId) => total + skillWeightFor(skillId), 0);
+    const minimumSlotWeightedValueFor = (groupId: string) =>
+      defaultCanonicalContent.skillGroups
+        .find((group) => group.id === groupId)
+        ?.selectionSlots?.reduce((total, slot) => {
+          const candidateWeights = slot.candidateSkillIds.map((skillId) => skillWeightFor(skillId));
+          const minimumCandidateWeight = Math.min(...candidateWeights);
+
+          return total + minimumCandidateWeight * slot.chooseCount;
+        }, 0) ?? 0;
     const directOnlySkillIdsFor = (professionId: string) => {
       const groupIds = groupIdsFor(professionId);
       const skillIdsFromGroups = defaultCanonicalContent.skills
@@ -761,6 +770,42 @@ describe("validateCanonicalContent", () => {
     expect(groupSelectionCandidateIdsFor("basic_missile_training")).toEqual(
       expect.arrayContaining(["throwing", "bow", "longbow", "crossbow"])
     );
+    expect(groupSkillIdsFor("basic_missile_training")).toEqual(
+      expect.arrayContaining(["perception", "self_control", "weapon_maintenance"])
+    );
+    expect(groupSkillIdsFor("basic_missile_training").filter((skillId) =>
+      ["dodge", "parry", "veteran_leadership", "captaincy", "tactics"].includes(skillId)
+    )).toEqual([]);
+    expect(groupSkillIdsFor("basic_missile_training").filter((skillId) =>
+      [
+        "one_handed_edged",
+        "one_handed_concussion_axe",
+        "two_handed_edged",
+        "two_handed_concussion_axe",
+        "polearms",
+        "lance"
+      ].includes(skillId)
+    )).toEqual([]);
+    expect(groupWeightedValueFor("basic_missile_training")).toBeGreaterThanOrEqual(5);
+    expect(
+      groupWeightedValueFor("basic_missile_training") +
+        minimumSlotWeightedValueFor("basic_missile_training")
+    ).toBeGreaterThanOrEqual(6);
+    expect(groupSelectionCandidateIdsFor("advanced_missile_training")).toEqual(
+      expect.arrayContaining(["throwing", "bow", "longbow", "crossbow"])
+    );
+    expect(groupSkillIdsFor("advanced_missile_training")).toEqual(
+      expect.arrayContaining([
+        "perception",
+        "self_control",
+        "weapon_maintenance",
+        "battlefield_awareness",
+        "combat_experience"
+      ])
+    );
+    expect(groupSkillIdsFor("advanced_missile_training").filter((skillId) =>
+      ["dodge", "parry", "veteran_leadership", "captaincy", "tactics"].includes(skillId)
+    )).toEqual([]);
     expect(groupSelectionCandidateIdsFor("basic_melee_training")).toEqual(
       expect.arrayContaining(["one_handed_edged", "polearms"])
     );
