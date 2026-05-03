@@ -58,6 +58,8 @@ Each profile card has rolled stats, a distraction level, and a social class roll
 
 The rule set's `Stat roll count` controls how many profile cards are generated. It does not change the dice used for social class or distraction.
 
+Future-rule note: the current default social class roll is one `d20`. Earlier spreadsheet versions experimented with more generous methods such as best-of-two `d20`. That is not the current default rule, but it may later become a configurable chargen rule-set option for campaigns where higher social access is intended.
+
 `Stats die roll` on the Character Sheet means the rolled or adjusted chargen stat before final stat-resolution effects are applied.
 
 ## 4. Resolve stats
