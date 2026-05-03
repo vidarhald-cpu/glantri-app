@@ -43,14 +43,16 @@ function getCharacterName(build: CharacterBuild): string {
   return build.name.trim() || "Unnamed Character";
 }
 
-function formatHistoryTime(value: string): string {
+function formatHistoryDateTime(value: string): string {
   const date = new Date(value);
 
   if (Number.isNaN(date.getTime())) {
-    return "--:--";
+    return "--.-- --:--";
   }
 
-  return `${date.getHours().toString().padStart(2, "0")}:${date
+  return `${date.getDate().toString().padStart(2, "0")}.${(date.getMonth() + 1)
+    .toString()
+    .padStart(2, "0")} ${date.getHours().toString().padStart(2, "0")}:${date
     .getMinutes()
     .toString()
     .padStart(2, "0")}`;
@@ -62,6 +64,18 @@ function formatProgressionRoll(input: { openEndedD10s: number[]; rollD20: number
   }
 
   return `roll ${[input.rollD20, ...input.openEndedD10s].join("+")}=${input.rollTotal}`;
+}
+
+function formatValueChange(input: { afterValue: number; beforeValue: number; success: boolean }): string {
+  if (!input.success || input.beforeValue === input.afterValue) {
+    return `value stayed ${input.beforeValue}`;
+  }
+
+  return `value ${input.beforeValue} to ${input.afterValue}`;
+}
+
+function formatSkillStats(stats: string[]): string {
+  return [...new Set(stats)].map((stat) => stat.toUpperCase()).join(" / ");
 }
 
 export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
@@ -339,11 +353,14 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
   const groupedSkillRows = groupRowsBySkillType(
     rowsByType.skill.map((row) => {
       const skill = content.skills.find((item) => item.id === row.targetId);
+      const skillView = progressionView.draftView.skills.find((item) => item.skillId === row.targetId);
 
       return {
         ...row,
+        stats: skill ? formatSkillStats(skill.linkedStats) : "—",
         skillName: row.label,
-        skillType: skill ? getPlayerFacingSkillBucket(skill) : "special-access"
+        skillType: skill ? getPlayerFacingSkillBucket(skill) : "special-access",
+        totalSkillLevel: skillView?.totalSkill ?? row.currentValue
       };
     })
   );
@@ -358,6 +375,16 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
     }
 
     return "—";
+  }
+
+  function canBuyProgression(row: CharacterProgressionTargetRow): boolean {
+    return Boolean(
+      row.approved &&
+        !row.pending &&
+        row.cost !== undefined &&
+        row.cost <= availableProgressionPoints &&
+        !row.disabledReason
+    );
   }
 
   function renderRequestCheckbox(row: CharacterProgressionTargetRow) {
@@ -375,12 +402,7 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
   }
 
   function renderProgressionRow(row: CharacterProgressionTargetRow) {
-    const canBuy =
-      row.approved &&
-      !row.pending &&
-      row.cost !== undefined &&
-      row.cost <= availableProgressionPoints &&
-      !row.disabledReason;
+    const canBuy = canBuyProgression(row);
 
     return (
       <tr key={`${row.targetType}:${row.targetId}`} style={{ borderBottom: "1px solid #eee8dc" }}>
@@ -393,18 +415,18 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
             <div style={{ color: "#8f3d2f", fontSize: "0.82rem" }}>{row.disabledReason}</div>
           ) : null}
         </td>
-        <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>{row.currentValue}</td>
+        <td style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>{row.currentValue}</td>
         <td style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>{renderRequestCheckbox(row)}</td>
-        <td style={{ padding: "0.6rem 0.75rem" }}>{formatApprovedState(row)}</td>
-        <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>{row.cost ?? "-"}</td>
-        <td style={{ padding: "0.6rem 0" }}>
-          <button
-            disabled={!canBuy}
-            onClick={() => void handleBuyAttempt(row.targetType, row.targetId)}
-            type="button"
-          >
-            Buy
-          </button>
+        <td style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>{formatApprovedState(row)}</td>
+        <td style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>{row.cost ?? "—"}</td>
+        <td style={{ padding: "0.6rem 0", textAlign: "center" }}>
+          {canBuy ? (
+            <button onClick={() => void handleBuyAttempt(row.targetType, row.targetId)} type="button">
+              Buy
+            </button>
+          ) : (
+            "—"
+          )}
         </td>
       </tr>
     );
@@ -497,10 +519,10 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
                 return (
                   <tr key={statRow.stat} style={{ borderBottom: "1px solid #eee8dc" }}>
                     <td style={{ padding: "0.6rem 0.75rem 0.6rem 0" }}>{statRow.label}</td>
-                    <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>
+                    <td style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>
                       {statRow.originalValue}
                     </td>
-                    <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>
+                    <td style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>
                       {statRow.currentValue}
                     </td>
                     <td style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>
@@ -514,10 +536,10 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
               })}
               <tr style={{ borderBottom: "1px solid #eee8dc" }}>
                 <td style={{ padding: "0.6rem 0.75rem 0.6rem 0" }}>Distraction</td>
-                <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>
+                <td style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>
                   {progressionView.sheetSummary.distractionLevel}
                 </td>
-                <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>
+                <td style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>
                   {progressionView.sheetSummary.distractionLevel}
                 </td>
                 <td style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>—</td>
@@ -581,11 +603,13 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
                   <thead>
                     <tr style={{ borderBottom: "1px solid #d9ddd8", textAlign: "left" }}>
                       <th style={{ padding: "0.4rem 0.5rem 0.4rem 0" }}>Group</th>
-                      <th style={{ padding: "0.4rem 0.5rem", textAlign: "right" }}>Level</th>
+                      <th style={{ padding: "0.4rem 0.5rem", textAlign: "center" }}>Level</th>
                       <th style={{ padding: "0.4rem 0.5rem" }}>Requested</th>
                       <th style={{ padding: "0.4rem 0.5rem" }}>Approved</th>
-                      <th style={{ padding: "0.4rem 0.5rem", textAlign: "right" }}>Cost</th>
-                      <th style={{ padding: "0.4rem 0" }}>Buy</th>
+                      <th style={{ padding: "0.4rem 0.5rem", textAlign: "center" }}>Requested</th>
+                      <th style={{ padding: "0.4rem 0.5rem", textAlign: "center" }}>Approved</th>
+                      <th style={{ padding: "0.4rem 0.5rem", textAlign: "center" }}>Cost</th>
+                      <th style={{ padding: "0.4rem 0", textAlign: "center" }}>Buy</th>
                     </tr>
                   </thead>
                   <tbody>{rowsByType.skillGroup.map((row) => renderProgressionRow(row))}</tbody>
@@ -639,14 +663,49 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
                   <thead>
                     <tr style={{ borderBottom: "1px solid #d9ddd8", textAlign: "left" }}>
                       <th style={{ padding: "0.5rem 0.75rem 0.5rem 1rem" }}>Skill</th>
-                      <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Current</th>
-                      <th style={{ padding: "0.5rem 0.75rem" }}>Requested</th>
-                      <th style={{ padding: "0.5rem 0.75rem" }}>Approved</th>
-                      <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Cost</th>
-                      <th style={{ padding: "0.5rem 1rem 0.5rem 0" }}>Buy</th>
+                      <th style={{ padding: "0.5rem 0.75rem" }}>Stats</th>
+                      <th style={{ padding: "0.5rem 0.75rem", textAlign: "center" }}>Total XP</th>
+                      <th style={{ padding: "0.5rem 0.75rem", textAlign: "center" }}>Total skill level</th>
+                      <th style={{ padding: "0.5rem 0.75rem", textAlign: "center" }}>Requested</th>
+                      <th style={{ padding: "0.5rem 0.75rem", textAlign: "center" }}>Approved</th>
+                      <th style={{ padding: "0.5rem 0.75rem", textAlign: "center" }}>Cost</th>
+                      <th style={{ padding: "0.5rem 1rem 0.5rem 0", textAlign: "center" }}>Buy</th>
                     </tr>
                   </thead>
-                  <tbody>{group.rows.map((row) => renderProgressionRow(row))}</tbody>
+                  <tbody>
+                    {group.rows.map((row) => {
+                      const canBuy = canBuyProgression(row);
+
+                      return (
+                        <tr key={`${row.targetType}:${row.targetId}`} style={{ borderBottom: "1px solid #eee8dc" }}>
+                          <td style={{ padding: "0.6rem 0.75rem 0.6rem 1rem" }}>
+                            <div>{row.label}</div>
+                            {row.provisional ? (
+                              <div style={{ color: "#8f5a00", fontSize: "0.82rem" }}>Provisional</div>
+                            ) : null}
+                            {row.disabledReason ? (
+                              <div style={{ color: "#8f3d2f", fontSize: "0.82rem" }}>{row.disabledReason}</div>
+                            ) : null}
+                          </td>
+                          <td style={{ padding: "0.6rem 0.75rem" }}>{row.stats}</td>
+                          <td style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>{row.currentValue}</td>
+                          <td style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>{row.totalSkillLevel}</td>
+                          <td style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>{renderRequestCheckbox(row)}</td>
+                          <td style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>{formatApprovedState(row)}</td>
+                          <td style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>{row.cost ?? "—"}</td>
+                          <td style={{ padding: "0.6rem 1rem 0.6rem 0", textAlign: "center" }}>
+                            {canBuy ? (
+                              <button onClick={() => void handleBuyAttempt(row.targetType, row.targetId)} type="button">
+                                Buy
+                              </button>
+                            ) : (
+                              "—"
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
                 </table>
               </section>
             ))}
@@ -702,19 +761,52 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
             <thead>
               <tr style={{ borderBottom: "1px solid #d9ddd8", textAlign: "left" }}>
                 <th style={{ padding: "0.5rem 0.75rem 0.5rem 0" }}>Specialization</th>
-                <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Current</th>
-                <th style={{ padding: "0.5rem 0.75rem" }}>Requested</th>
-                <th style={{ padding: "0.5rem 0.75rem" }}>Approved</th>
-                <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Cost</th>
-                <th style={{ padding: "0.5rem 0" }}>Buy</th>
+                <th style={{ padding: "0.5rem 0.75rem" }}>Parent skill</th>
+                <th style={{ padding: "0.5rem 0.75rem", textAlign: "center" }}>Total</th>
+                <th style={{ padding: "0.5rem 0.75rem", textAlign: "center" }}>Requested</th>
+                <th style={{ padding: "0.5rem 0.75rem", textAlign: "center" }}>Approved</th>
+                <th style={{ padding: "0.5rem 0.75rem", textAlign: "center" }}>Cost</th>
+                <th style={{ padding: "0.5rem 0", textAlign: "center" }}>Buy</th>
               </tr>
             </thead>
             <tbody>
               {rowsByType.specialization.length > 0 ? (
-                rowsByType.specialization.map((row) => renderProgressionRow(row))
+                rowsByType.specialization.map((row) => {
+                  const specializationView = progressionView.draftView.specializations.find(
+                    (item) => item.specializationId === row.targetId
+                  );
+                  const canBuy = canBuyProgression(row);
+
+                  return (
+                    <tr key={`${row.targetType}:${row.targetId}`} style={{ borderBottom: "1px solid #eee8dc" }}>
+                      <td style={{ padding: "0.6rem 0.75rem 0.6rem 0" }}>
+                        <div>{row.label}</div>
+                        {row.disabledReason ? (
+                          <div style={{ color: "#8f3d2f", fontSize: "0.82rem" }}>{row.disabledReason}</div>
+                        ) : null}
+                      </td>
+                      <td style={{ padding: "0.6rem 0.75rem" }}>
+                        {specializationView?.parentSkillName ?? "—"}
+                      </td>
+                      <td style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>{row.currentValue}</td>
+                      <td style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>{renderRequestCheckbox(row)}</td>
+                      <td style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>{formatApprovedState(row)}</td>
+                      <td style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>{row.cost ?? "—"}</td>
+                      <td style={{ padding: "0.6rem 0", textAlign: "center" }}>
+                        {canBuy ? (
+                          <button onClick={() => void handleBuyAttempt(row.targetType, row.targetId)} type="button">
+                            Buy
+                          </button>
+                        ) : (
+                          "—"
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })
               ) : (
                 <tr>
-                  <td colSpan={6} style={{ padding: "0.75rem 0" }}>
+                  <td colSpan={7} style={{ padding: "0.75rem 0" }}>
                     No specialization rows yet.
                   </td>
                 </tr>
@@ -778,14 +870,20 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
                   overflowX: "auto"
                 }}
               >
-                {formatHistoryTime(entry.resolvedAt)} · {entry.targetLabel} ·{" "}
+                {formatHistoryDateTime(entry.resolvedAt)} · {entry.targetLabel} ·{" "}
                 {entry.success ? "Success" : "Fail"} ·{" "}
                 {formatProgressionRoll({
                   openEndedD10s: entry.openEndedD10s,
                   rollD20: entry.rollD20,
                   rollTotal: entry.rollTotal
                 })}{" "}
-                vs {entry.threshold} · {entry.beforeValue}→{entry.afterValue} · cost {entry.cost}
+                vs {entry.threshold} ·{" "}
+                {formatValueChange({
+                  afterValue: entry.afterValue,
+                  beforeValue: entry.beforeValue,
+                  success: entry.success
+                })}{" "}
+                · cost {entry.cost}
               </div>
             ))
         ) : (

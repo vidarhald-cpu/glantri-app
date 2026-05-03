@@ -387,7 +387,7 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
     const approved = Boolean(row?.approved);
 
     return (
-      <div style={{ color: "#5e5a50", display: "grid", fontSize: "0.82rem", gap: "0.25rem" }}>
+      <div style={{ color: "#5e5a50", display: "grid", fontSize: "0.82rem", gap: "0.25rem", justifyItems: "center", textAlign: "center" }}>
         <span>Requested: {row?.requested ? "Requested" : "—"}</span>
         <label style={{ alignItems: "center", display: "inline-flex", gap: "0.25rem" }}>
           <input
@@ -636,8 +636,8 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
                     <thead>
                       <tr style={{ borderBottom: "1px solid #d9ddd8", textAlign: "left" }}>
                         <th style={{ padding: "0.4rem 0.5rem 0.4rem 0" }}>Group</th>
-                        <th style={{ padding: "0.4rem 0.5rem", textAlign: "right" }}>Level</th>
-                        <th style={{ padding: "0.4rem 0" }}>Progression</th>
+                        <th style={{ padding: "0.4rem 0.5rem", textAlign: "center" }}>Level</th>
+                        <th style={{ padding: "0.4rem 0", textAlign: "center" }}>Progression</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -645,7 +645,7 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
                         skillGroupRows.map((group) => (
                           <tr key={group.groupId} style={{ borderBottom: "1px solid #eee8dc" }}>
                             <td style={{ padding: "0.55rem 0.5rem 0.55rem 0" }}>{group.name}</td>
-                            <td style={{ padding: "0.55rem 0.5rem", textAlign: "right" }}>
+                            <td style={{ padding: "0.55rem 0.5rem", textAlign: "center" }}>
                               <input
                                 onChange={(event) => updateSkillGroup(group.groupId, event.target.value)}
                                 style={numericInputStyle}
@@ -653,7 +653,7 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
                                 value={group.level}
                               />
                             </td>
-                            <td style={{ padding: "0.55rem 0" }}>
+                            <td style={{ padding: "0.55rem 0", textAlign: "center" }}>
                               {renderProgressionCheckControls({
                                 targetId: group.groupId,
                                 targetType: "skillGroup"
@@ -694,7 +694,7 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
                 <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Original</th>
                 <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Current</th>
                 <th style={{ padding: "0.5rem 0", textAlign: "right" }}>GM</th>
-                {isGameMaster ? <th style={{ padding: "0.5rem 0 0.5rem 0.75rem" }}>Progression</th> : null}
+                {isGameMaster ? <th style={{ padding: "0.5rem 0 0.5rem 0.75rem", textAlign: "center" }}>Progression</th> : null}
               </tr>
             </thead>
             <tbody>
@@ -731,7 +731,7 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
                   </td>
                   <td style={{ padding: "0.6rem 0", textAlign: "right" }}>{row.gmValue}</td>
                   {isGameMaster ? (
-                    <td style={{ padding: "0.6rem 0 0.6rem 0.75rem" }}>
+                    <td style={{ padding: "0.6rem 0 0.6rem 0.75rem", textAlign: "center" }}>
                       {row.stat === "distraction"
                         ? "—"
                         : renderProgressionCheckControls({
@@ -813,7 +813,7 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
                       <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Total XP</th>
                       <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Total</th>
                       <th style={{ padding: "0.5rem 0", textAlign: "right" }}>Remove</th>
-                      {isGameMaster ? <th style={{ padding: "0.5rem 1rem 0.5rem 0.75rem" }}>Progression</th> : null}
+                      {isGameMaster ? <th style={{ padding: "0.5rem 1rem 0.5rem 0.75rem", textAlign: "center" }}>Progression</th> : null}
                     </tr>
                   </thead>
                   <tbody>
@@ -850,7 +850,7 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
                           </button>
                         </td>
                         {isGameMaster ? (
-                          <td style={{ padding: "0.6rem 1rem 0.6rem 0.75rem" }}>
+                          <td style={{ padding: "0.6rem 1rem 0.6rem 0.75rem", textAlign: "center" }}>
                             {renderProgressionCheckControls({
                               targetId: skill.skillId,
                               targetType: "skill"
