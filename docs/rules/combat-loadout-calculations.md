@@ -1,19 +1,21 @@
-# Combat Loadout Calculations
+# Equip Items Calculations
 
 ## 1. Purpose and scope
 
-This page explains the values shown in the Character Loadout combat panel.
+This page explains the values shown on the Character `Equip Items` screen.
 
-It covers equipped weapons, shields, armor, defense rows, movement, encumbrance summaries, and the small skill table shown with the loadout. It is not the full combat action system.
+It covers equipped weapons, shields, armor, weapon rows, defense rows, movement, encumbrance summaries, and the small skill table shown with equipped items. It is not the full combat action system.
+
+Quick summary: `Equip Items` rows combine the character's relevant skill XP, relevant stat GM, weapon or armor rules data, armor/activity modifiers, and encumbrance modifiers where relevant. Some values come directly from item rules data; others are calculated.
 
 For related references:
 
 - See `Character Sheet Calculations` for Skill XP, Group XP, Derived XP, and Total XP.
 - See `Equipment & Encumbrance Calculations` for item ENC, carried load, capacity, and encumbrance level.
 
-## 2. Inputs used by the loadout panel
+## 2. Inputs used by the Equip Items screen
 
-The loadout panel uses the current character, chosen equipment, and live combat state.
+The `Equip Items` screen uses the current character, chosen equipment, and live combat state.
 
 | Input | What it affects |
 | --- | --- |
@@ -36,7 +38,7 @@ Combat uses total skill XP for the relevant skill.
 Combat skill XP = Group XP + Skill XP + Derived XP
 ```
 
-This is the same `Total XP` concept documented on the Character Sheet. Combat formulas use this XP number directly. They do not add the skill's linked-stat average unless a specific loadout skill row says it is calculating a skill level.
+This is the same `Total XP` concept documented on the Character Sheet. Combat formulas use this XP number directly. They do not add the skill's linked-stat average unless a specific Equip Items skill row says it is calculating a skill level.
 
 Examples:
 
@@ -51,7 +53,7 @@ Examples:
 
 ## 4. Characteristic GMs used by combat
 
-Loadout combat formulas use workbook-style GMs from adjusted character stats.
+Equip Items combat formulas use workbook-style GMs from adjusted character stats.
 
 Formula:
 
@@ -66,7 +68,7 @@ GM = trunc((stat - 11) / 2)
 | `Size GM` | Base move. If Size GM is above `2`, base move uses `2` instead. |
 | `CON` | Carrying capacity. |
 | `SIZ` | Carrying capacity and armor ENC when armor workbook sizing is available. |
-| `INT`, `POW`, `LCK` | Perception in the loadout skills table. |
+| `INT`, `POW`, `LCK` | Perception in the Equip Items skills table. |
 
 ## 5. Weapon row values
 
@@ -89,15 +91,15 @@ Weapon table columns:
 
 | Column | Meaning | Formula/source | Notes |
 | --- | --- | --- | --- |
-| `Mode` | How the row is being used. | Loadout row type. | Examples: `Primary`, `Shield`, `Combined`, `Missile`, `Thrown`. |
+| `Mode` | How the row is being used. | Equip Items row type. | Examples: `Primary`, `Shield`, `Combined`, `Missile`, `Thrown`. |
 | `Weapon` | Item or combined item label. | Equipped item name or weapon class pair. | Combined rows show the primary/off-hand pairing. |
 | `I` | Initiative. | See Initiative below. | Missile and thrown rows use a simpler DEX-adjusted value. |
 | `Attack 1`, `Attack 2`, `Attack 3` | Attack mode labels. | Comes from the weapon or shield rules data. | Missing modes show `-`. |
 | `OB`, `OB2`, `OB3` | Offensive bonus for the attack mode. | See OB below. | `OB3` is currently not calculated for normal weapon rows. |
 | `DMB`, `DMB2`, `DMB3` | Damage modifier bonus. | See DMB below. | Dice or special text can come directly from weapon rules data. |
 | `Crit 1`, `Crit 2`, `Crit 3` | Critical code. | Comes from weapon rules data. | Examples include workbook critical codes such as `AC`. |
-| `Sec` | Secondary critical. | Comes from weapon rules data. | If the attack mode lacks one, the weapon-level second crit can be used. |
-| `AM`, `AM 2`, `AM 3` | Armor modifier code for the attack. | Comes from weapon rules data. | This is not armor ENC. |
+| `Sec` | Secondary critical. | Comes from weapon rules data. | Sec is the second critical attached to the main attack mode. It is only applied when the main attack mode is used and the rules call for the second critical. |
+| `AM`, `AM 2`, `AM 3` | Armor modifier code/value for the attack. | Comes from weapon rules data. | AM is used when resolving how the attack interacts with armor. AM is separate from item ENC. ENC measures carried load. |
 | `DB` | Defensive bonus for this defensive item state. | See Defense values. | Uses Dodge XP, DEX GM, equipment defense, and encumbrance to-hit modifier. |
 | `DM` | Difference caused by the encumbrance to-hit modifier. | See Defense values. | Current app behavior reports the change between equipment-only DB and full DB. |
 | `Parry` | Parry value. | See Parry below. | Uses Parry XP, DEX GM, armor AA, and weapon/shield parry. |
@@ -110,12 +112,14 @@ Melee weapon rows use the workbook melee OB formula when all inputs are availabl
 
 | Step | Formula |
 | --- | --- |
-| Raw OB | `round(skill XP / 2) + 1 + max(min(STR GM, 4), DEX GM)` |
+| Raw melee OB | `round(skill XP / 2) + trained-skill bonus + max(min(STR GM, 4), DEX GM)` |
 | Modifier | `armor AA modifier + weapon OB` |
-| Adjustment | Look up the workbook percentage adjustment for `Raw OB` and `abs(Modifier)`. |
-| Final OB | If modifier is positive or zero, `Raw OB + adjustment`; otherwise `Raw OB - adjustment`. |
+| Adjustment | Look up the workbook percentage adjustment for `Raw melee OB` and `abs(Modifier)`. |
+| Final OB | If modifier is positive or zero, `Raw melee OB + adjustment`; otherwise `Raw melee OB - adjustment`. |
 
 Any live attack situational modifier is added after the workbook OB result.
+
+`trained-skill bonus` is `+1` when the character has the relevant weapon skill. If the character uses a weapon without the relevant skill, the `+1` trained-skill bonus is not added.
 
 ### Projectile and thrown OB
 
@@ -123,12 +127,14 @@ Projectile and thrown rows use the projectile OB formula.
 
 | Step | Formula |
 | --- | --- |
-| Raw OB | `round(skill XP / 2) + 1 + DEX GM` |
+| Raw projectile OB | `round(skill XP / 2) + trained-skill bonus + DEX GM` |
 | Modifier | `armor AA modifier + weapon OB` |
-| Adjustment | Look up the workbook percentage adjustment for `Raw OB` and `abs(Modifier)`. |
-| Final OB | If modifier is positive or zero, `Raw OB + adjustment`; otherwise `Raw OB - adjustment`. |
+| Adjustment | Look up the workbook percentage adjustment for `Raw projectile OB` and `abs(Modifier)`. |
+| Final OB | If modifier is positive or zero, `Raw projectile OB + adjustment`; otherwise `Raw projectile OB - adjustment`. |
 
 Thrown weapon OB uses `Throwing` XP instead of the weapon's melee skill.
+
+Projectile and thrown OB use the same trained-skill bonus rule: `+1` is included when the character has the relevant missile or throwing skill.
 
 ### Melee DMB
 
@@ -137,8 +143,8 @@ Melee DMB uses the workbook melee DMB formula when the weapon has numeric OB and
 | Step | Formula |
 | --- | --- |
 | Raw DMB | `STR GM + weapon DMB` |
-| Reference adjustment | Workbook percentage adjustment for `Raw OB` and `3`. |
-| Reference OB | `Raw OB + reference adjustment` |
+| Reference adjustment | Workbook percentage adjustment for `Raw melee OB` and `3`. |
+| Reference OB | `Raw melee OB + reference adjustment` |
 | Final DMB | `Raw DMB + (Reference OB - Final OB) - (3 - weapon OB)` |
 
 If the workbook numeric path is unavailable, DMB comes from the weapon rules data.
@@ -226,9 +232,9 @@ Combined parry modifier =
   + max(1, off-hand parry modifier)
 ```
 
-Current app behavior / needs final rule review: the loadout summary still displays `Combined parry` as `-` even though the combined weapon row can calculate a parry value.
+Current app behavior / needs final rule review: the Equip Items summary still displays `Combined parry` as `-` even though the combined weapon row can calculate a parry value.
 
-## 8. Armor effects in the loadout panel
+## 8. Armor effects on the Equip Items screen
 
 The Armor card shows armor values for the currently worn armor.
 
@@ -236,9 +242,11 @@ The Armor card shows armor values for the currently worn armor.
 | --- | --- |
 | `Armor` | The worn armor item. |
 | `General armor` | Rounded armor protection plus armor type. |
-| `AA modifier` | Armor Activity modifier used by OB, DMB, and parry calculations. |
-| `Perception modifier` | Armor modifier used by the loadout perception calculation. |
+| `AA modifier` | Armor Activity modifier. This is a negative modifier from bulky armor that restricts free movement. It normally appears on very heavy armor designed mainly to protect an important person who is not expected to move freely in the fighting line. |
+| `Perception modifier` | Armor modifier used by the Equip Items perception calculation. |
 | `Armor coverage` | Armor values by body location. |
+
+AA modifier is separate from armor ENC. ENC measures carried load; AA modifier affects combat and activity calculations.
 
 Armor ENC and carried-load rules are documented in `Equipment & Encumbrance Calculations`.
 
@@ -278,7 +286,7 @@ The `Encumbrance dependent skills` table lists learned skills from combat, cover
 | `Skill level` | Skill level before encumbrance adjustment. | `Stat average + XP`. |
 | `Encumbered` | Skill level after movement modifier adjustment. | `Skill level - workbook composite adjustment`. |
 
-Perception is a special current loadout path:
+Perception is a special current Equip Items path:
 
 ```text
 Base perception = round((INT + POW + LCK) / 3) + Perception XP
@@ -300,7 +308,7 @@ Current app behavior / needs final rule review: Hitpoints currently comes from r
 
 ## 12. Known interim notes
 
-- Character Detail and the loadout panel may still use different combat derivation paths.
+- Character Detail and the Equip Items screen may still use different combat derivation paths.
 - The combined parry summary can show `-` even when the combined row has a calculated parry value.
 - Perception encumbrance and armor handling needs final rule review.
 - Mount-carried encumbrance is documented separately and currently uses a simpler load calculation than personal carried load.

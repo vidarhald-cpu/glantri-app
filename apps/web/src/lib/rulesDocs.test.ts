@@ -26,7 +26,7 @@ describe("rules documentation registry", () => {
           fileName: "combat-loadout-calculations.md",
           id: "combat-loadout-calculations",
           section: "Combat / Equipment",
-          title: "Combat Loadout Calculations"
+          title: "Equip Items Calculations"
         })
       ])
     );
@@ -67,14 +67,14 @@ describe("rules documentation registry", () => {
     expect(model.selectedDocument.markdown).toContain("Mount-carried ENC = sum(base ENC of mount-carried items)");
   });
 
-  it("loads the combat loadout document with weapon and defense formulas", async () => {
+  it("loads the Equip Items document with weapon and defense formulas", async () => {
     const model = await getRulesDocumentationPageModel({
       selectedDocumentId: "combat-loadout-calculations"
     });
 
-    expect(model.selectedDocument.title).toBe("Combat Loadout Calculations");
-    expect(model.selectedDocument.markdown).toContain("# Combat Loadout Calculations");
-    expect(model.selectedDocument.markdown).toContain("Raw OB");
+    expect(model.selectedDocument.title).toBe("Equip Items Calculations");
+    expect(model.selectedDocument.markdown).toContain("# Equip Items Calculations");
+    expect(model.selectedDocument.markdown).toContain("Raw melee OB");
     expect(model.selectedDocument.markdown).toContain("Base DB");
     expect(model.selectedDocument.markdown).toContain("Combined parry modifier");
     expect(model.selectedDocument.markdown).toContain("GMR");
