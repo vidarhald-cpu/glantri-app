@@ -59,6 +59,32 @@ describe("chargen stat resolution", () => {
     expect(secondExchange.error).toBe("You can exchange stats at most 1 times.");
   });
 
+  it("uses a single d20 roll for social class", () => {
+    const rolls = [0, 0.99, 0.99];
+    const [profile] = generateProfiles({
+      rollSets: [
+        {
+          cha: 10,
+          com: 10,
+          con: 10,
+          dex: 10,
+          health: 10,
+          int: 10,
+          lck: 10,
+          pow: 10,
+          siz: 10,
+          str: 10,
+          will: 10
+        }
+      ],
+      rng: () => rolls.shift() ?? 0
+    });
+
+    expect(profile.socialClassRoll).toBe(1);
+    expect(profile.socialClassResult).toBe("Bønder");
+    expect(profile.distractionLevel).toBe(6);
+  });
+
   it("keeps generated profile rolls raw until the resolution stage", () => {
     const [profile] = generateProfiles({
       rollSets: [

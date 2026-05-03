@@ -1948,6 +1948,69 @@ describe("chargen purchase gate integration", () => {
     expect(languageView?.specificSkillLevel).toBe(12);
   });
 
+  it("exposes education components in the chargen draft view", () => {
+    const educationContent = validateCanonicalContent({
+      ...motherTongueTestContent,
+      skills: motherTongueTestContent.skills.map((skill) =>
+        skill.id === "lore" ? { ...skill, isTheoretical: true } : skill
+      ),
+      societyLevels: motherTongueTestContent.societyLevels.map((societyLevel) =>
+        societyLevel.societyId === "glantri" && societyLevel.societyLevel === 1
+          ? { ...societyLevel, baseEducation: 3 }
+          : societyLevel
+      )
+    });
+    const draftView = buildChargenDraftView({
+      civilizationId: "glantri_civ",
+      content: educationContent,
+      profile: {
+        distractionLevel: 0,
+        id: "profile-education",
+        label: "Education",
+        rolledStats: {
+          cha: 10,
+          com: 10,
+          con: 10,
+          dex: 10,
+          health: 10,
+          int: 10,
+          lck: 10,
+          pow: 10,
+          siz: 10,
+          str: 10,
+          will: 10
+        },
+        socialClassEducationValue: 12,
+        societyLevel: 0
+      },
+      progression: {
+        ...createChargenProgression(),
+        skills: [
+          {
+            category: "ordinary",
+            categoryId: "lore",
+            level: 0,
+            primaryRanks: 1,
+            ranks: 1,
+            secondaryRanks: 0,
+            skillId: "lore"
+          }
+        ]
+      },
+      societyId: "glantri",
+      societyLevel: 1
+    });
+
+    expect(draftView.education.baseEducation).toBe(3);
+    expect(draftView.education.socialClassEducationValue).toBe(12);
+    expect(
+      draftView.education.theoreticalSkillCount -
+        draftView.education.baseEducation -
+        draftView.education.socialClassEducationValue
+    ).toBe(1);
+    expect(draftView.education.theoreticalSkillCount).toBe(16);
+  });
+
   it("finalizes mother tongue without spending ordinary or flexible points", () => {
     const result = finalizeChargenDraft({
       civilizationId: "glantri_civ",

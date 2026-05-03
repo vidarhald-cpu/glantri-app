@@ -1072,6 +1072,12 @@ export default function ChargenWizard() {
     societyId: selectedSocietyId,
     societyLevel: selectedSocietyBand
   });
+  const educationLinkedSkillCount = Math.max(
+    0,
+    draftView.education.theoreticalSkillCount -
+      draftView.education.baseEducation -
+      draftView.education.socialClassEducationValue
+  );
   const review = reviewChargenDraft({
     civilizationId: selectedCivilizationId,
     content,
@@ -4267,7 +4273,11 @@ export default function ChargenWizard() {
             <div>Education: {draftView.education.theoreticalSkillCount}</div>
             <div>Base education: {draftView.education.baseEducation}</div>
             <div>Social class education value: {draftView.education.socialClassEducationValue}</div>
-            <div>GM_int: {draftView.education.gmInt}</div>
+            <div>Education-linked skills: {educationLinkedSkillCount}</div>
+            <small style={{ color: "#6d665a" }}>
+              Education-linked skills are learned skills that add to Education. Review skill
+              metadata in Admin -&gt; Skills.
+            </small>
             <div>Total skill points invested: {draftView.totalSkillPointsInvested}</div>
           </div>
 

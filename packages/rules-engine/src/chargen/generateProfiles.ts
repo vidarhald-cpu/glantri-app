@@ -31,10 +31,6 @@ function rollFourD6DropLowest(rng: () => number): number {
   return rolls.reduce((sum, value) => sum + value, 0) - Math.min(...rolls);
 }
 
-function rollBestOfTwoD20(rng: () => number): number {
-  return Math.max(rollDie(rng, 20), rollDie(rng, 20));
-}
-
 function rollDistractionLevel(rng: () => number): number {
   return rollDie(rng, 3) + rollDie(rng, 3);
 }
@@ -52,7 +48,7 @@ function rollSocialClass(input: {
     throw new Error(`Unsupported social class table: ${input.tableId}`);
   }
 
-  const roll = rollBestOfTwoD20(input.rng);
+  const roll = rollDie(input.rng, 20);
   const threshold = SOCIAL_CLASS_THRESHOLDS.find((entry) => roll <= entry.maxRoll);
 
   return {

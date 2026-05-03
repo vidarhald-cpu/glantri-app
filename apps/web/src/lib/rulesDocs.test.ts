@@ -38,10 +38,19 @@ describe("rules documentation registry", () => {
     );
   });
 
-  it("defaults to Character Sheet Calculations", () => {
+  it("orders Chargen Calculations first", () => {
+    expect(getRulesDocuments().map((document) => document.title)).toEqual([
+      "Chargen Calculations",
+      "Character Sheet Calculations",
+      "Equipment & Encumbrance Calculations",
+      "Equip Items Calculations"
+    ]);
+  });
+
+  it("defaults to Chargen Calculations", () => {
     expect(getRulesDocumentEntryById(undefined)).toMatchObject({
-      id: "character-sheet-calculations",
-      title: "Character Sheet Calculations"
+      id: "chargen-calculations",
+      title: "Chargen Calculations"
     });
   });
 
@@ -68,8 +77,13 @@ describe("rules documentation registry", () => {
 
     expect(model.selectedDocument.title).toBe("Chargen Calculations");
     expect(model.selectedDocument.markdown).toContain("# Chargen Calculations");
+    expect(model.selectedDocument.markdown).toContain("What you see in Chargen");
     expect(model.selectedDocument.markdown).toContain("Profile stats");
     expect(model.selectedDocument.markdown).toContain("4d6, drop the lowest die");
+    expect(model.selectedDocument.markdown).toContain("Social class roll | `1d20`.");
+    expect(model.selectedDocument.markdown).not.toContain("Best of two");
+    expect(model.selectedDocument.markdown).toContain("Default value");
+    expect(model.selectedDocument.markdown).not.toContain("Standard value");
     expect(model.selectedDocument.markdown).toContain("Flexible points = floor((resolved INT + resolved LCK) * flexible point factor)");
     expect(model.selectedDocument.markdown).toContain("Skill group cost = floor(0.6 * total individual cost of active group skills)");
   });

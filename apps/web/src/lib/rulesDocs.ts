@@ -18,21 +18,21 @@ export interface RulesDocument extends RulesDocumentRegistryEntry {
 export const rulesDocumentsRegistry: RulesDocumentRegistryEntry[] = [
   {
     audience: "Players and GM reviewers",
+    description: "Manual reference for profile rolls, stat resolution, social class, education, skill points, skill-group costs, choices, and finalization.",
+    fileName: "chargen-calculations.md",
+    id: "chargen-calculations",
+    order: 5,
+    section: "Chargen",
+    title: "Chargen Calculations"
+  },
+  {
+    audience: "Players and GM reviewers",
     description: "Manual reference for the main Character Sheet values, skill XP columns, characteristics, and chargen-rule displays.",
     fileName: "character-sheet-calculations.md",
     id: "character-sheet-calculations",
     order: 10,
     section: "Character",
     title: "Character Sheet Calculations"
-  },
-  {
-    audience: "Players and GM reviewers",
-    description: "Manual reference for profile rolls, stat resolution, social class, education, skill points, skill-group costs, choices, and finalization.",
-    fileName: "chargen-calculations.md",
-    id: "chargen-calculations",
-    order: 15,
-    section: "Chargen",
-    title: "Chargen Calculations"
   },
   {
     audience: "Players and GM reviewers",

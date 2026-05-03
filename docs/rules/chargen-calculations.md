@@ -12,13 +12,32 @@ For related references:
 - See `Equipment & Encumbrance Calculations` for carried load.
 - See `Equip Items Calculations` for equipped weapon, armor, movement, and combat values.
 
+Quick lookup:
+
+| What you see in Chargen | Where this doc explains it |
+| --- | --- |
+| Profile roll cards | `Stat/profile rolls` |
+| Resolve stats | `Resolve stats` and `Exchanges and builds` |
+| Choose civilization | `Civilization, society, and social class` |
+| Social class | `Stat/profile rolls` and `Civilization, society, and social class` |
+| Choose profession | `Profession packages and choices` |
+| Skill allocation | `Ordinary and flexible skill points` and `Skill purchases` |
+| Other skills | `Skill purchases` and `Profession packages and choices` |
+| Specializations | `Derived XP and specializations` |
+| Review summary | `Review summary and finalization` |
+| Finalize character | `Review summary and finalization` |
+
 ## 2. Chargen rule set
 
-Chargen uses the active chargen rule set. Admins can manage rule sets in `Admin -> Chargen Setup`.
+App section: Chargen header and `Review summary`.
+
+Chargen uses the active chargen rule set. Admins can manage rule sets in `Admin -> Chargen Setup`, where the current active values are shown.
 
 Finalized characters save the chargen rule-set name and parameters that were used. Changing the active rule set later does not silently change already-finalized characters. Older characters without saved chargen rules show `Legacy default`.
 
-| Rule-set parameter | Meaning | Standard value |
+Custom rule sets can change these values. The table below shows the legacy/default values used when no custom active rule set overrides them.
+
+| Rule-set parameter | Meaning | Default value |
 | --- | --- | ---: |
 | `Stat roll count` | Number of profile roll cards generated. | 20 |
 | `Exchanges allowed` | Number of stat exchanges allowed after choosing a profile. | 2 |
@@ -27,19 +46,23 @@ Finalized characters save the chargen rule-set name and parameters that were use
 
 ## 3. Stat/profile rolls
 
+App section: Chargen step `Profile rolls`.
+
 Each profile card has rolled stats, a distraction level, and a social class roll.
 
-| Value | Current roll rule |
+| Value | Roll rule |
 | --- | --- |
 | Profile stats | Each stat is `4d6, drop the lowest die`. |
 | Distraction | `1d3 + 1d3`. |
-| Social class roll | Best of two `d20` rolls. |
+| Social class roll | `1d20`. |
 
 The rule set's `Stat roll count` controls how many profile cards are generated. It does not change the dice used for social class or distraction.
 
 `Stats die roll` on the Character Sheet means the rolled or adjusted chargen stat before final stat-resolution effects are applied.
 
 ## 4. Resolve stats
+
+App section: Chargen step `Resolve stats`.
 
 After profile selection and any stat exchanges/builds, chargen resolves the final creation stats.
 
@@ -83,6 +106,8 @@ Size-to-DEX modifier:
 
 ## 5. Exchanges and builds
 
+App section: Chargen step `Resolve stats`.
+
 Exchanges and builds happen before final stat resolution.
 
 | Adjustment | Current rule |
@@ -97,6 +122,8 @@ Exchanges and builds happen before final stat resolution.
 Exchange count and build count are tracked separately.
 
 ## 6. Civilization, society, and social class
+
+App section: Chargen steps `Choose civilization` and `Social class`.
 
 Civilization determines language/culture setup and links to a society model.
 
@@ -124,6 +151,8 @@ Society stage and social class band are separate ideas. Society stage is the civ
 
 ## 7. Mother tongue and languages
 
+App section: Chargen steps `Choose civilization`, `Skill allocation`, and `Other skills`.
+
 Mother tongue is granted automatically from the selected civilization.
 
 Formula:
@@ -138,23 +167,27 @@ Society baseline languages are required. Civilization optional languages can be 
 
 ## 8. Education
 
-Education combines society, social class, and learned education-linked skills.
+App section: Chargen `Review summary`.
+
+Education combines the selected society/civilization setup, social class, and education-linked learned skills.
 
 | Input | Meaning |
 | --- | --- |
-| Base education | Starting education from the selected society/social band row. |
-| Social class education value | Education value from the social class roll. |
-| Education-linked learned skills | Count of learned theoretical skills. |
+| Base education | Starting education from the selected society/civilization setup. |
+| Social class education value | Education value from the social class band. |
+| Education-linked skills | Learned skills that add to Education. |
 
 Formula:
 
 ```text
-Education = base education + social class education value + learned theoretical skill count
+Education = base education + social class education value + education-linked skill count
 ```
 
-The current app label for the total is `Education`.
+The Chargen review summary shows `Education`, `Base education`, `Social class education value`, and `Education-linked skills`. Education-linked skill metadata can be reviewed in `Admin -> Skills`.
 
 ## 9. Ordinary and flexible skill points
+
+App section: Chargen steps `Skill allocation`, `Other skills`, and `Review summary`.
 
 Ordinary points are used for normal chargen skill and skill-group purchases.
 
@@ -168,11 +201,13 @@ Flexible points are used when ordinary points are not available or when buying o
 Flexible points = floor((resolved INT + resolved LCK) * flexible point factor)
 ```
 
-The flexible point factor comes from the active chargen rule set. With the standard rule set, the factor is `1`.
+The flexible point factor comes from the active chargen rule set. With the default rule set, the factor is `1`.
 
 Normal-access purchases spend ordinary points first when enough ordinary points remain. If ordinary points cannot cover the cost, a normal-access purchase may use flexible points. Outside-normal-access skill purchases use flexible points.
 
 ## 10. Skill purchases
+
+App section: Chargen steps `Skill allocation`, `Other skills`, and `Specializations`.
 
 Individual skill costs:
 
@@ -202,6 +237,8 @@ Unselected slot candidates do not count toward group cost and do not become trai
 
 ## 11. Profession packages and choices
 
+App section: Chargen step `Choose profession`, then `Skill allocation`.
+
 A profession grants access to included training packages and sometimes specific skills. Those packages define what the character may buy during chargen; they are not all automatic XP.
 
 The review summary shows:
@@ -219,6 +256,8 @@ Selected slot skills appear under their owning group. Unselected slot candidates
 
 ## 12. Derived XP and specializations
 
+App section: Chargen step `Specializations`.
+
 Derived XP may come from related skills, cross-training, or specialization rules.
 
 Derived relationship definitions can be reviewed in `Admin -> Skills`.
@@ -231,6 +270,8 @@ Examples:
 - `Fencing` is a specialization of `1-h edged`.
 
 ## 13. Review summary and finalization
+
+App section: Chargen steps `Review summary` and `Finalize character`.
 
 Before finalization, Chargen summarizes the selected profile, civilization, society, social band, social class, profession, mother tongue, selected languages, skill counts, point spending, and education.
 
@@ -258,4 +299,4 @@ Creator or owner attribution is handled by the character record around the saved
 
 - Character advancement is not implemented yet.
 - Some formula labels may be refined as the docs mature.
-- Combat and Equip Items calculations are documented in separate pages.
+- Combat and equipment calculations are documented in separate pages.
