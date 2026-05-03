@@ -7,11 +7,17 @@ import type { CharacterBuild, ProgressionTargetType } from "@glantri/domain";
 import {
   buildCharacterProgressionView,
   buyCharacterProgressionAttempt,
+  type CharacterProgressionTargetRow,
   requestCharacterProgressionCheck,
   resolveCharacterProgressionAttempts
 } from "@glantri/rules-engine";
 
 import { saveCharacterToServer } from "../../../../../src/lib/api/localServiceClient";
+import { getPlayerFacingSkillBucket, groupRowsBySkillType } from "../../../../../src/lib/chargen/chargenBrowse";
+import {
+  buildCharacterSheetProfileStatRows,
+  characterSheetStatsTableColumns
+} from "../../../../../src/lib/characters/characterSheet";
 import { loadLocalCharacterAdvancementContext } from "../../../../../src/lib/characters/loadLocalCharacterAdvancementContext";
 import type {
   LocalCharacterDraft,
@@ -33,6 +39,10 @@ function formatTargetType(type: ProgressionTargetType): string {
   }
 
   return type[0]?.toUpperCase() + type.slice(1);
+}
+
+function getCharacterName(build: CharacterBuild): string {
+  return build.name.trim() || "Unnamed Character";
 }
 
 export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
@@ -280,17 +290,101 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
       stat: []
     } as Record<ProgressionTargetType, typeof progressionView.rows>
   );
-  const rowSections: Array<{ label: string; rows: typeof progressionView.rows; type: ProgressionTargetType }> = [
-    { label: "Stats", rows: rowsByType.stat, type: "stat" },
-    { label: "Skill groups", rows: rowsByType.skillGroup, type: "skillGroup" },
-    { label: "Skills", rows: rowsByType.skill, type: "skill" },
-    { label: "Specializations", rows: rowsByType.specialization, type: "specialization" }
-  ];
+  const characterName = getCharacterName(draft.build);
+  const profession = content.professions.find((item) => item.id === draft.build.professionId);
+  const professionFamilyName = profession?.familyId
+    ? content.professionFamilies.find((family) => family.id === profession.familyId)?.name
+    : undefined;
+  const socialClassLabel = draft.build.socialClass ?? draft.build.profile.socialClassResult ?? "Not set";
+  const socialClassNumber = draft.build.profile.socialClassRoll;
+  const socialClassSummary =
+    socialClassNumber !== undefined ? `${socialClassLabel} (${socialClassNumber})` : socialClassLabel;
+  const profileStatRows = buildCharacterSheetProfileStatRows(draft.build);
+  const skillGroupSummaryRows = [...content.skillGroups]
+    .sort((left, right) => left.sortOrder - right.sortOrder)
+    .map((group) => {
+      const groupView = progressionView.draftView.groups.find((item) => item.groupId === group.id);
+
+      if (!groupView || groupView.groupLevel <= 0) {
+        return null;
+      }
+
+      return {
+        groupLevel: groupView.groupLevel,
+        name: group.name
+      };
+    })
+    .filter((group): group is { groupLevel: number; name: string } => group !== null);
+  const educationLevel = progressionView.draftView.education.theoreticalSkillCount;
+  const requestedCheckCount = progressionView.checks.filter((check) => check.status === "requested").length;
+  const approvedCheckCount = progressionView.checks.filter(
+    (check) => (check.status ?? "approved") === "approved"
+  ).length;
+  const availableProgressionPoints = progressionView.availablePoints;
+  const groupedSkillRows = groupRowsBySkillType(
+    rowsByType.skill.map((row) => {
+      const skill = content.skills.find((item) => item.id === row.targetId);
+
+      return {
+        ...row,
+        skillName: row.label,
+        skillType: skill ? getPlayerFacingSkillBucket(skill) : "special-access"
+      };
+    })
+  );
+
+  function renderProgressionRow(row: CharacterProgressionTargetRow) {
+    const canRequest = !row.requested && !row.approved && !row.pending;
+    const canBuy =
+      row.approved &&
+      !row.pending &&
+      row.cost !== undefined &&
+      row.cost <= availableProgressionPoints &&
+      !row.disabledReason;
+
+    return (
+      <tr key={`${row.targetType}:${row.targetId}`} style={{ borderBottom: "1px solid #eee8dc" }}>
+        <td style={{ padding: "0.6rem 0.75rem 0.6rem 0" }}>
+          <div>{row.label}</div>
+          {row.provisional ? (
+            <div style={{ color: "#8f5a00", fontSize: "0.82rem" }}>Provisional</div>
+          ) : null}
+          {row.disabledReason ? (
+            <div style={{ color: "#8f3d2f", fontSize: "0.82rem" }}>{row.disabledReason}</div>
+          ) : null}
+        </td>
+        <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>{row.currentValue}</td>
+        <td style={{ padding: "0.6rem 0.75rem" }}>
+          {row.requested ? "Awaiting GM approval" : row.approved ? "Approved by GM" : "Not requested"}
+        </td>
+        <td style={{ padding: "0.6rem 0.75rem" }}>{row.approved ? "Approved" : "No"}</td>
+        <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>{row.cost ?? "-"}</td>
+        <td style={{ padding: "0.6rem 0" }}>
+          <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
+            <button
+              disabled={!canRequest}
+              onClick={() => void handleRequestCheck(row.targetType, row.targetId)}
+              type="button"
+            >
+              Request check
+            </button>
+            <button
+              disabled={!canBuy}
+              onClick={() => void handleBuyAttempt(row.targetType, row.targetId)}
+              type="button"
+            >
+              Buy attempt
+            </button>
+          </div>
+        </td>
+      </tr>
+    );
+  }
 
   return (
     <section style={{ display: "grid", gap: "1rem", maxWidth: 1120 }}>
       <div>
-        <h1 style={{ marginBottom: "0.5rem" }}>Progression</h1>
+        <h1 style={{ marginBottom: "0.5rem" }}>Progression — {characterName}</h1>
         <p style={{ margin: 0 }}>
           Spend GM-granted progression points on checked items. Increases apply only after the
           open-ended progression roll succeeds.
@@ -312,20 +406,208 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
 
       <section
         style={{
-          background: "#f6f5ef",
+          display: "grid",
+          gap: "1rem",
+          gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))"
+        }}
+      >
+        <section
+          style={{
+            background: "#fbfaf5",
+            border: "1px solid #d9ddd8",
+            borderRadius: 12,
+            overflowX: "auto",
+            padding: "1rem"
+          }}
+        >
+          <h2 style={{ margin: "0 0 0.75rem 0" }}>Profile Stats</h2>
+          <table style={{ borderCollapse: "collapse", width: "100%" }}>
+            <thead>
+              <tr style={{ borderBottom: "1px solid #d9ddd8", textAlign: "left" }}>
+                {characterSheetStatsTableColumns.map((column, index) => (
+                  <th
+                    key={column}
+                    style={{
+                      padding: index === 0 ? "0.5rem 0.75rem 0.5rem 0" : "0.5rem 0.75rem",
+                      textAlign: index === 0 ? "left" : "right"
+                    }}
+                  >
+                    {column}
+                  </th>
+                ))}
+                <th style={{ padding: "0.5rem 0.75rem" }}>Requested</th>
+                <th style={{ padding: "0.5rem 0.75rem" }}>Approved</th>
+                <th style={{ padding: "0.5rem 0" }}>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {profileStatRows.map((statRow) => {
+                const progressionRow = rowsByType.stat.find((row) => row.targetId === statRow.stat);
+                const canRequest =
+                  progressionRow &&
+                  !progressionRow.requested &&
+                  !progressionRow.approved &&
+                  !progressionRow.pending;
+
+                return (
+                  <tr key={statRow.stat} style={{ borderBottom: "1px solid #eee8dc" }}>
+                    <td style={{ padding: "0.6rem 0.75rem 0.6rem 0" }}>{statRow.label}</td>
+                    <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>
+                      {statRow.statsDieRollValue}
+                    </td>
+                    <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>
+                      {statRow.originalValue}
+                    </td>
+                    <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>
+                      {statRow.currentValue}
+                    </td>
+                    <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>{statRow.gmValue}</td>
+                    <td style={{ padding: "0.6rem 0.75rem" }}>
+                      {progressionRow?.requested ? "Awaiting GM" : progressionRow?.approved ? "Approved" : "No"}
+                    </td>
+                    <td style={{ padding: "0.6rem 0.75rem" }}>{progressionRow?.approved ? "Approved" : "No"}</td>
+                    <td style={{ padding: "0.6rem 0" }}>
+                      <button
+                        disabled={!canRequest}
+                        onClick={() =>
+                          progressionRow
+                            ? void handleRequestCheck(progressionRow.targetType, progressionRow.targetId)
+                            : undefined
+                        }
+                        type="button"
+                      >
+                        Request
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+              <tr style={{ borderBottom: "1px solid #eee8dc" }}>
+                <td style={{ padding: "0.6rem 0.75rem 0.6rem 0" }}>Distraction</td>
+                <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>
+                  {progressionView.sheetSummary.distractionLevel}
+                </td>
+                <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>
+                  {progressionView.sheetSummary.distractionLevel}
+                </td>
+                <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>
+                  {progressionView.sheetSummary.distractionLevel}
+                </td>
+                <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>—</td>
+                <td colSpan={3} style={{ color: "#5e5a50", padding: "0.6rem 0.75rem" }}>
+                  No progression check
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <p style={{ color: "#5e5a50", fontSize: "0.85rem", margin: "0.75rem 0 0 0" }}>
+            Stat checks can be requested, but stat advancement is not enabled in v1.
+          </p>
+        </section>
+
+        <section
+          style={{
+            background: "#f6f5ef",
+            border: "1px solid #d9ddd8",
+            borderRadius: 12,
+            padding: "1rem"
+          }}
+        >
+          <h2 style={{ margin: "0 0 0.75rem 0" }}>Summary</h2>
+          <div
+            style={{
+              alignItems: "start",
+              columnGap: "1rem",
+              display: "grid",
+              gridTemplateColumns: "minmax(120px, auto) minmax(0, 1fr)",
+              rowGap: "0.55rem"
+            }}
+          >
+            <strong>Character name</strong>
+            <div>{characterName}</div>
+            <strong>Title</strong>
+            <div>{draft.build.profile.title?.trim() || "—"}</div>
+            <strong>Society</strong>
+            <div>{progressionView.sheetSummary.societyLabel ?? "Not set"}</div>
+            <strong>Social class</strong>
+            <div>{socialClassSummary}</div>
+            <strong>Profession</strong>
+            <div>
+              {progressionView.sheetSummary.professionName ?? draft.build.professionId ?? "Not set"}
+              {professionFamilyName ? `, ${professionFamilyName}` : ""}
+            </div>
+            <strong>Current skill points</strong>
+            <div>
+              <div>{progressionView.sheetSummary.skillPoints.current}</div>
+              <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
+                Original {progressionView.sheetSummary.skillPoints.original} + successful progression{" "}
+                {progressionView.sheetSummary.skillPoints.successfulProgressionGains}
+              </div>
+            </div>
+            <strong>Skill groups</strong>
+            <div style={{ display: "grid", gap: "0.2rem" }}>
+              {skillGroupSummaryRows.length > 0 ? (
+                skillGroupSummaryRows.map((group) => (
+                  <div key={group.name}>
+                    {group.name} (Level {group.groupLevel})
+                  </div>
+                ))
+              ) : (
+                <div>No skill groups recorded.</div>
+              )}
+            </div>
+            <strong>Education</strong>
+            <div>{educationLevel}</div>
+          </div>
+        </section>
+      </section>
+
+      <section
+        style={{
+          background: "#fbfaf5",
           border: "1px solid #d9ddd8",
           borderRadius: 12,
-          display: "grid",
-          gap: "0.4rem",
+          display: "flex",
+          flexWrap: "wrap",
+          gap: "0.75rem",
+          position: "sticky",
+          top: "0.75rem",
+          zIndex: 5,
+          alignItems: "center",
           padding: "1rem"
         }}
       >
-        <h2 style={{ margin: 0 }}>Progression points</h2>
-        <div>Available progression points: {progressionView.availablePoints}</div>
-        <div>Requested checks: {progressionView.checks.filter((check) => check.status === "requested").length}</div>
-        <div>Approved checks: {progressionView.checks.filter((check) => (check.status ?? "approved") === "approved").length}</div>
-        <div>Pending attempts: {progressionView.pendingAttempts.length}</div>
-        <div>Resolved history entries: {progressionView.history.length}</div>
+        <strong>Progression</strong>
+        <span>Available points: {progressionView.availablePoints}</span>
+        <span>Requested: {requestedCheckCount}</span>
+        <span>Approved: {approvedCheckCount}</span>
+        <span>Pending: {progressionView.pendingAttempts.length}</span>
+        <span>History: {progressionView.history.length}</span>
+        <select
+          onChange={(event) => setSelectedProvisionalSkillId(event.target.value)}
+          style={{ fontSize: "1rem", padding: "0.45rem" }}
+          value={selectedProvisionalSkillId}
+        >
+          <option value="">Request provisional skill...</option>
+          {availableProvisionalSkills.map((skill) => (
+            <option key={skill.id} value={skill.id}>
+              {skill.name}
+            </option>
+          ))}
+        </select>
+        <button
+          disabled={!selectedProvisionalSkillId}
+          onClick={() => void handleRequestProvisionalSkillCheck()}
+          type="button"
+        >
+          Request provisional
+        </button>
+        <button onClick={() => void handleSaveLocally()} type="button">
+          Save locally
+        </button>
+        <button onClick={() => void handleSaveToServer()} type="button">
+          Save to server
+        </button>
       </section>
 
       <section
@@ -334,102 +616,132 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
           border: "1px solid #d9ddd8",
           borderRadius: 12,
           display: "grid",
-          gap: "0.75rem",
+          gap: "1rem",
           padding: "1rem"
         }}
       >
-        <h2 style={{ margin: 0 }}>Progression rows</h2>
-        <p style={{ color: "#5e5a50", margin: 0 }}>
-          Request checks for things your character used. A GM-approved check is required before
-          spending progression points.
-        </p>
-        <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-          <select
-            onChange={(event) => setSelectedProvisionalSkillId(event.target.value)}
-            style={{ fontSize: "1rem", padding: "0.45rem" }}
-            value={selectedProvisionalSkillId}
-          >
-            <option value="">Request provisional skill check...</option>
-            {availableProvisionalSkills.map((skill) => (
-              <option key={skill.id} value={skill.id}>
-                {skill.name}
-              </option>
-            ))}
-          </select>
-          <button
-            disabled={!selectedProvisionalSkillId}
-            onClick={() => void handleRequestProvisionalSkillCheck()}
-            type="button"
-          >
-            Request provisional check
-          </button>
+        <div>
+          <h2 style={{ margin: 0 }}>Skills</h2>
+          <p style={{ color: "#5e5a50", margin: "0.35rem 0 0 0" }}>
+            Request checks for things your character used. A GM-approved check is required before
+            spending progression points.
+          </p>
         </div>
-        {rowSections.map((section) =>
-          section.rows.length > 0 ? (
-            <div key={section.type} style={{ display: "grid", gap: "0.5rem" }}>
-              <h3 style={{ margin: "0.5rem 0 0 0" }}>{section.label}</h3>
-              <div style={{ overflowX: "auto" }}>
+        {groupedSkillRows.length > 0 ? (
+          <div style={{ display: "grid", gap: "1rem" }}>
+            {groupedSkillRows.map((group) => (
+              <section key={group.bucketId} style={{ border: "1px solid #e7e2d7", borderRadius: 10, overflowX: "auto" }}>
+                <div
+                  style={{
+                    alignItems: "center",
+                    background: "#f6f5ef",
+                    borderBottom: "1px solid #e7e2d7",
+                    display: "flex",
+                    gap: "0.5rem",
+                    justifyContent: "space-between",
+                    padding: "0.75rem 1rem"
+                  }}
+                >
+                  <strong>{group.label}</strong>
+                  <span style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
+                    {group.rows.length} skill{group.rows.length === 1 ? "" : "s"}
+                  </span>
+                </div>
                 <table style={{ borderCollapse: "collapse", width: "100%" }}>
                   <thead>
                     <tr style={{ borderBottom: "1px solid #d9ddd8", textAlign: "left" }}>
-                      <th style={{ padding: "0.5rem 0.75rem 0.5rem 0" }}>Target</th>
+                      <th style={{ padding: "0.5rem 0.75rem 0.5rem 1rem" }}>Skill</th>
                       <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Current</th>
                       <th style={{ padding: "0.5rem 0.75rem" }}>Requested check</th>
                       <th style={{ padding: "0.5rem 0.75rem" }}>Approved check</th>
                       <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Cost</th>
-                      <th style={{ padding: "0.5rem 0" }}>Action</th>
+                      <th style={{ padding: "0.5rem 1rem 0.5rem 0" }}>Action</th>
                     </tr>
                   </thead>
-                  <tbody>
-                    {section.rows.map((row) => {
-                      const canRequest = !row.requested && !row.approved && !row.pending;
-                      const canBuy =
-                        row.approved &&
-                        !row.pending &&
-                        row.cost !== undefined &&
-                        row.cost <= progressionView.availablePoints &&
-                        !row.disabledReason;
-
-                      return (
-                        <tr key={`${row.targetType}:${row.targetId}`} style={{ borderBottom: "1px solid #eee8dc" }}>
-                          <td style={{ padding: "0.6rem 0.75rem 0.6rem 0" }}>
-                            <div>{row.label}</div>
-                            {row.provisional ? <div style={{ color: "#8f5a00", fontSize: "0.82rem" }}>Provisional</div> : null}
-                            {row.disabledReason ? <div style={{ color: "#8f3d2f", fontSize: "0.82rem" }}>{row.disabledReason}</div> : null}
-                          </td>
-                          <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>{row.currentValue}</td>
-                          <td style={{ padding: "0.6rem 0.75rem" }}>
-                            {row.requested ? "Awaiting GM approval" : row.approved ? "Approved by GM" : "Not requested"}
-                          </td>
-                          <td style={{ padding: "0.6rem 0.75rem" }}>{row.approved ? "Approved" : "No"}</td>
-                          <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>{row.cost ?? "-"}</td>
-                          <td style={{ padding: "0.6rem 0" }}>
-                            <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
-                              <button
-                                disabled={!canRequest}
-                                onClick={() => void handleRequestCheck(row.targetType, row.targetId)}
-                                type="button"
-                              >
-                                Request check
-                              </button>
-                              <button
-                                disabled={!canBuy}
-                                onClick={() => void handleBuyAttempt(row.targetType, row.targetId)}
-                                type="button"
-                              >
-                                Buy attempt
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
+                  <tbody>{group.rows.map((row) => renderProgressionRow(row))}</tbody>
                 </table>
-              </div>
-            </div>
-          ) : null
+              </section>
+            ))}
+          </div>
+        ) : (
+          <div>No skill progression rows yet.</div>
         )}
+      </section>
+
+      <section
+        style={{
+          background: "#fbfaf5",
+          border: "1px solid #d9ddd8",
+          borderRadius: 12,
+          display: "grid",
+          gap: "1rem",
+          padding: "1rem"
+        }}
+      >
+        <h2 style={{ margin: 0 }}>Skill Groups</h2>
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ borderCollapse: "collapse", width: "100%" }}>
+            <thead>
+              <tr style={{ borderBottom: "1px solid #d9ddd8", textAlign: "left" }}>
+                <th style={{ padding: "0.5rem 0.75rem 0.5rem 0" }}>Skill group</th>
+                <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Current</th>
+                <th style={{ padding: "0.5rem 0.75rem" }}>Requested check</th>
+                <th style={{ padding: "0.5rem 0.75rem" }}>Approved check</th>
+                <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Cost</th>
+                <th style={{ padding: "0.5rem 0" }}>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rowsByType.skillGroup.length > 0 ? (
+                rowsByType.skillGroup.map((row) => renderProgressionRow(row))
+              ) : (
+                <tr>
+                  <td colSpan={6} style={{ padding: "0.75rem 0" }}>
+                    No skill groups recorded.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section
+        style={{
+          background: "#fbfaf5",
+          border: "1px solid #d9ddd8",
+          borderRadius: 12,
+          display: "grid",
+          gap: "1rem",
+          padding: "1rem"
+        }}
+      >
+        <h2 style={{ margin: 0 }}>Specializations</h2>
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ borderCollapse: "collapse", width: "100%" }}>
+            <thead>
+              <tr style={{ borderBottom: "1px solid #d9ddd8", textAlign: "left" }}>
+                <th style={{ padding: "0.5rem 0.75rem 0.5rem 0" }}>Specialization</th>
+                <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Current</th>
+                <th style={{ padding: "0.5rem 0.75rem" }}>Requested check</th>
+                <th style={{ padding: "0.5rem 0.75rem" }}>Approved check</th>
+                <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Cost</th>
+                <th style={{ padding: "0.5rem 0" }}>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rowsByType.specialization.length > 0 ? (
+                rowsByType.specialization.map((row) => renderProgressionRow(row))
+              ) : (
+                <tr>
+                  <td colSpan={6} style={{ padding: "0.75rem 0" }}>
+                    No specialization rows yet.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </section>
 
       <section
@@ -496,25 +808,6 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
         ) : (
           <div>No resolved progression attempts yet.</div>
         )}
-      </section>
-
-      <section
-        style={{
-          background: "#f6f5ef",
-          border: "1px solid #d9ddd8",
-          borderRadius: 12,
-          display: "flex",
-          flexWrap: "wrap",
-          gap: "0.75rem",
-          padding: "1rem"
-        }}
-      >
-        <button onClick={() => void handleSaveLocally()} type="button">
-          Save progression locally
-        </button>
-        <button onClick={() => void handleSaveToServer()} type="button">
-          Save progression to server
-        </button>
       </section>
     </section>
   );

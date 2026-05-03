@@ -20,6 +20,7 @@ import {
 
 import { updateServerCharacter } from "../../../../../src/lib/api/localServiceClient";
 import { useHasAnyRole } from "../../../../../src/lib/auth/SessionUserContext";
+import { getPlayerFacingSkillBucket, groupRowsBySkillType } from "../../../../../src/lib/chargen/chargenBrowse";
 import {
   addCharacterSkillGroup,
   buildAvailableCharacterEditSkillGroups,
@@ -155,6 +156,22 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
       sheetSummary
     });
   }, [build, content, sheetSummary]);
+  const groupedSkillRows = useMemo(() => {
+    if (!content) {
+      return [];
+    }
+
+    return groupRowsBySkillType(
+      skillRows.map((row) => {
+        const skill = content.skills.find((item) => item.id === row.skillId);
+
+        return {
+          ...row,
+          skillType: skill ? getPlayerFacingSkillBucket(skill) : "special-access"
+        };
+      })
+    );
+  }, [content, skillRows]);
   const specializationRows = useMemo(() => {
     if (!build || !content || !sheetSummary) {
       return [];
@@ -467,6 +484,16 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
     );
   }
 
+  const profession = content.professions.find((item) => item.id === build.professionId);
+  const professionFamilyName = profession?.familyId
+    ? content.professionFamilies.find((family) => family.id === profession.familyId)?.name
+    : undefined;
+  const socialClassLabel = build.socialClass ?? build.profile.socialClassResult ?? "Not set";
+  const socialClassNumber = build.profile.socialClassRoll;
+  const socialClassSummary =
+    socialClassNumber !== undefined ? `${socialClassLabel} (${socialClassNumber})` : socialClassLabel;
+  const educationLevel = sheetSummary.draftView.education.theoreticalSkillCount;
+
   return (
     <section style={{ display: "grid", gap: "1rem", maxWidth: 1180 }}>
       <div style={{ display: "flex", gap: "0.75rem", justifyContent: "space-between", flexWrap: "wrap" }}>
@@ -497,27 +524,89 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
             background: "#f6f5ef",
             border: "1px solid #d9ddd8",
             borderRadius: 12,
+            order: 1,
             padding: "1rem"
           }}
         >
-          <h2 style={{ margin: "0 0 0.75rem 0" }}>Identity</h2>
-          <div style={{ color: "#5e5a50", display: "grid", gap: "0.6rem" }}>
+          <h2 style={{ margin: "0 0 0.75rem 0" }}>Summary</h2>
+          <div
+            style={{
+              alignItems: "start",
+              color: "#5e5a50",
+              columnGap: "1rem",
+              display: "grid",
+              gridTemplateColumns: "minmax(120px, auto) minmax(0, 1fr)",
+              rowGap: "0.55rem"
+            }}
+          >
+            <strong>Name</strong>
+            <div>{build.name.trim() || "Unnamed Character"}</div>
+            <strong>Title</strong>
+            <div>{build.profile.title?.trim() || "—"}</div>
+            <strong>Society</strong>
+            <div>{sheetSummary.societyLabel ?? "Not set"}</div>
+            <strong>Social class</strong>
+            <div>{socialClassSummary}</div>
+            <strong>Profession</strong>
             <div>
-              <strong>Name:</strong> {build.name.trim() || "Unnamed Character"}
+              {sheetSummary.professionName ?? build.professionId ?? "Not set"}
+              {professionFamilyName ? `, ${professionFamilyName}` : ""}
             </div>
-            <div>
-              <strong>Title:</strong> {build.profile.title?.trim() || "—"}
-            </div>
-            <div>
-              <strong>Age:</strong> {build.profile.age?.trim() || "—"}
-            </div>
-            <div>
-              <strong>Gender:</strong> {build.profile.gender ?? "---"}
-            </div>
-            <div style={{ fontSize: "0.9rem" }}>
-              Personal information is edited on the Character Sheet, not in this GM progression editor.
-            </div>
+            <strong>Current skill points</strong>
+            <div>{sheetSummary.skillPoints.current}</div>
+            <strong>Education</strong>
+            <div>{educationLevel}</div>
           </div>
+          <p style={{ color: "#5e5a50", fontSize: "0.9rem", margin: "0.9rem 0 0 0" }}>
+            Personal information is edited on the Character Sheet. GM progression controls are
+            integrated into the rows below.
+          </p>
+          {isGameMaster && progressionView ? (
+            <div
+              style={{
+                borderTop: "1px solid #e7e2d7",
+                display: "grid",
+                gap: "0.75rem",
+                marginTop: "0.9rem",
+                paddingTop: "0.9rem"
+              }}
+            >
+              <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
+                <strong>Available progression points: {progressionView.availablePoints}</strong>
+                <label style={{ display: "grid", gap: "0.2rem" }}>
+                  <span style={{ color: "#5e5a50", fontSize: "0.82rem" }}>Points to add</span>
+                  <input
+                    min="0"
+                    onChange={(event) => setPointsToGrant(event.target.value)}
+                    style={numericInputStyle}
+                    type="number"
+                    value={pointsToGrant}
+                  />
+                </label>
+                <button onClick={handleGrantProgressionPoints} type="button">
+                  Grant points
+                </button>
+              </div>
+
+              <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+                <select
+                  onChange={(event) => setSelectedProvisionalSkillId(event.target.value)}
+                  style={{ fontSize: "1rem", padding: "0.45rem" }}
+                  value={selectedProvisionalSkillId}
+                >
+                  <option value="">Add provisional checked skill...</option>
+                  {availableSkills.map((skill) => (
+                    <option key={skill.id} value={skill.id}>
+                      {skill.name}
+                    </option>
+                  ))}
+                </select>
+                <button disabled={!selectedProvisionalSkillId} onClick={handleAddProvisionalSkillCheck} type="button">
+                  Add provisional check
+                </button>
+              </div>
+            </div>
+          ) : null}
         </section>
 
         <section
@@ -525,6 +614,7 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
             background: "#fbfaf5",
             border: "1px solid #d9ddd8",
             borderRadius: 12,
+            order: 0,
             overflowX: "auto",
             padding: "1rem"
           }}
@@ -594,6 +684,8 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
             background: "#f6f5ef",
             border: "1px solid #d9ddd8",
             borderRadius: 12,
+            gridColumn: "1 / -1",
+            order: 2,
             padding: "1rem"
           }}
         >
@@ -649,91 +741,6 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
         </section>
       </section>
 
-      {isGameMaster && progressionView ? (
-        <section
-          style={{
-            background: "#f6f5ef",
-            border: "1px solid #d9ddd8",
-            borderRadius: 12,
-            display: "grid",
-            gap: "1rem",
-            padding: "1rem"
-          }}
-        >
-          <div>
-            <h2 style={{ margin: "0 0 0.35rem 0" }}>Progression checks and points</h2>
-            <p style={{ color: "#5e5a50", margin: 0 }}>
-              GM controls are integrated into the stat, group, skill, and specialization rows below.
-              Stat checks are visible, but stat advancement is not enabled yet.
-            </p>
-          </div>
-
-          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
-            <strong>Available progression points: {progressionView.availablePoints}</strong>
-            <label style={{ display: "grid", gap: "0.2rem" }}>
-              <span style={{ color: "#5e5a50", fontSize: "0.82rem" }}>Points to add</span>
-              <input
-                min="0"
-                onChange={(event) => setPointsToGrant(event.target.value)}
-                style={numericInputStyle}
-                type="number"
-                value={pointsToGrant}
-              />
-            </label>
-            <button onClick={handleGrantProgressionPoints} type="button">
-              Grant points
-            </button>
-          </div>
-
-          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-            <select
-              onChange={(event) => setSelectedProvisionalSkillId(event.target.value)}
-              style={{ fontSize: "1rem", padding: "0.45rem" }}
-              value={selectedProvisionalSkillId}
-            >
-              <option value="">Add provisional checked skill...</option>
-              {availableSkills.map((skill) => (
-                <option key={skill.id} value={skill.id}>
-                  {skill.name}
-                </option>
-              ))}
-            </select>
-            <button disabled={!selectedProvisionalSkillId} onClick={handleAddProvisionalSkillCheck} type="button">
-              Add provisional check
-            </button>
-          </div>
-
-          {provisionalProgressionRows.length > 0 ? (
-            <div style={{ display: "grid", gap: "0.5rem" }}>
-              <h3 style={{ margin: 0 }}>Provisional skill checks</h3>
-              {provisionalProgressionRows.map((row) => (
-                <div
-                  key={`${row.targetType}:${row.targetId}`}
-                  style={{
-                    alignItems: "center",
-                    borderTop: "1px solid #e7e2d7",
-                    display: "flex",
-                    gap: "1rem",
-                    justifyContent: "space-between",
-                    paddingTop: "0.5rem"
-                  }}
-                >
-                  <div>
-                    <strong>{row.label}</strong>
-                    <div style={{ color: "#8f5a00", fontSize: "0.82rem" }}>Provisional skill</div>
-                  </div>
-                  {renderProgressionCheckControls({
-                    provisional: true,
-                    targetId: row.targetId,
-                    targetType: row.targetType
-                  })}
-                </div>
-              ))}
-            </div>
-          ) : null}
-        </section>
-      ) : null}
-
       <section
         style={{
           background: "#fbfaf5",
@@ -765,75 +772,123 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
           </div>
         </div>
 
-        <div style={{ overflowX: "auto" }}>
-          <table style={{ borderCollapse: "collapse", width: "100%" }}>
-            <thead>
-              <tr style={{ borderBottom: "1px solid #d9ddd8", textAlign: "left" }}>
-                <th style={{ padding: "0.5rem 0.75rem 0.5rem 0" }}>Skill</th>
-                <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Stats</th>
-                <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Group XP</th>
-                <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Owned XP</th>
-                <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Granted XP</th>
-                <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Total XP</th>
-                <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Total</th>
-                <th style={{ padding: "0.5rem 0", textAlign: "right" }}>Remove</th>
-                {isGameMaster ? <th style={{ padding: "0.5rem 0 0.5rem 0.75rem" }}>Progression</th> : null}
-              </tr>
-            </thead>
-            <tbody>
-              {skillRows.length > 0 ? (
-                skillRows.map((skill) => (
-                  <tr key={skill.skillKey} style={{ borderBottom: "1px solid #eee8dc" }}>
-                    <td style={{ padding: "0.6rem 0.75rem 0.6rem 0" }}>
-                      <div>{skill.skillName}</div>
-                      {skill.grantedSourceLabel ? (
-                        <div style={{ color: "#5e5a50", fontSize: "0.82rem" }}>
-                          {skill.grantedSourceLabel}
-                        </div>
-                      ) : null}
-                    </td>
-                    <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>{skill.stats}</td>
-                    <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>{skill.groupXp}</td>
-                    <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>
-                      <input
-                        onChange={(event) => updateSkill(skill.skillId, event.target.value)}
-                        style={numericInputStyle}
-                        type="number"
-                        value={skill.xp}
-                      />
-                    </td>
-                    <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>{skill.grantedXp}</td>
-                    <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>{skill.totalXp}</td>
-                    <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>{skill.total}</td>
-                    <td style={{ padding: "0.6rem 0", textAlign: "right" }}>
-                      <button
-                        disabled={!skill.canRemoveDirectXp}
-                        onClick={() => handleRemoveSkill(skill.skillId)}
-                        type="button"
-                      >
-                        Remove
-                      </button>
-                    </td>
-                    {isGameMaster ? (
-                      <td style={{ padding: "0.6rem 0 0.6rem 0.75rem" }}>
-                        {renderProgressionCheckControls({
-                          targetId: skill.skillId,
-                          targetType: "skill"
-                        })}
-                      </td>
-                    ) : null}
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan={isGameMaster ? 9 : 8} style={{ padding: "0.75rem 0" }}>
-                    No progression skill rows yet.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+        {groupedSkillRows.length > 0 ? (
+          <div style={{ display: "grid", gap: "1rem" }}>
+            {groupedSkillRows.map((group) => (
+              <section
+                key={group.bucketId}
+                style={{ border: "1px solid #e7e2d7", borderRadius: 10, overflowX: "auto" }}
+              >
+                <div
+                  style={{
+                    alignItems: "center",
+                    background: "#f6f5ef",
+                    borderBottom: "1px solid #e7e2d7",
+                    display: "flex",
+                    gap: "0.5rem",
+                    justifyContent: "space-between",
+                    padding: "0.75rem 1rem"
+                  }}
+                >
+                  <strong>{group.label}</strong>
+                  <span style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
+                    {group.rows.length} skill{group.rows.length === 1 ? "" : "s"}
+                  </span>
+                </div>
+                <table style={{ borderCollapse: "collapse", width: "100%" }}>
+                  <thead>
+                    <tr style={{ borderBottom: "1px solid #d9ddd8", textAlign: "left" }}>
+                      <th style={{ padding: "0.5rem 0.75rem 0.5rem 1rem" }}>Skill</th>
+                      <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Stats</th>
+                      <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Group XP</th>
+                      <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Skill XP</th>
+                      <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Granted XP</th>
+                      <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Total XP</th>
+                      <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Total</th>
+                      <th style={{ padding: "0.5rem 0", textAlign: "right" }}>Remove</th>
+                      {isGameMaster ? <th style={{ padding: "0.5rem 1rem 0.5rem 0.75rem" }}>Progression</th> : null}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {group.rows.map((skill) => (
+                      <tr key={skill.skillKey} style={{ borderBottom: "1px solid #eee8dc" }}>
+                        <td style={{ padding: "0.6rem 0.75rem 0.6rem 1rem" }}>
+                          <div>{skill.skillName}</div>
+                          {skill.grantedSourceLabel ? (
+                            <div style={{ color: "#5e5a50", fontSize: "0.82rem" }}>
+                              {skill.grantedSourceLabel}
+                            </div>
+                          ) : null}
+                        </td>
+                        <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>{skill.stats}</td>
+                        <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>{skill.groupXp}</td>
+                        <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>
+                          <input
+                            onChange={(event) => updateSkill(skill.skillId, event.target.value)}
+                            style={numericInputStyle}
+                            type="number"
+                            value={skill.xp}
+                          />
+                        </td>
+                        <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>{skill.grantedXp}</td>
+                        <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>{skill.totalXp}</td>
+                        <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>{skill.total}</td>
+                        <td style={{ padding: "0.6rem 0", textAlign: "right" }}>
+                          <button
+                            disabled={!skill.canRemoveDirectXp}
+                            onClick={() => handleRemoveSkill(skill.skillId)}
+                            type="button"
+                          >
+                            Remove
+                          </button>
+                        </td>
+                        {isGameMaster ? (
+                          <td style={{ padding: "0.6rem 1rem 0.6rem 0.75rem" }}>
+                            {renderProgressionCheckControls({
+                              targetId: skill.skillId,
+                              targetType: "skill"
+                            })}
+                          </td>
+                        ) : null}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </section>
+            ))}
+          </div>
+        ) : (
+          <div>No skill rows yet.</div>
+        )}
+
+        {isGameMaster && provisionalProgressionRows.length > 0 ? (
+          <section style={{ border: "1px solid #e7e2d7", borderRadius: 10, display: "grid", gap: "0.5rem", padding: "1rem" }}>
+            <h3 style={{ margin: 0 }}>Provisional skill checks</h3>
+            {provisionalProgressionRows.map((row) => (
+              <div
+                key={`${row.targetType}:${row.targetId}`}
+                style={{
+                  alignItems: "center",
+                  borderTop: "1px solid #e7e2d7",
+                  display: "flex",
+                  gap: "1rem",
+                  justifyContent: "space-between",
+                  paddingTop: "0.5rem"
+                }}
+              >
+                <div>
+                  <strong>{row.label}</strong>
+                  <div style={{ color: "#8f5a00", fontSize: "0.82rem" }}>Provisional skill</div>
+                </div>
+                {renderProgressionCheckControls({
+                  provisional: true,
+                  targetId: row.targetId,
+                  targetType: row.targetType
+                })}
+              </div>
+            ))}
+          </section>
+        ) : null}
       </section>
 
       <section
