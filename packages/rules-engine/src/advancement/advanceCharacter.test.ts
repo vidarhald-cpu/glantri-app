@@ -452,6 +452,45 @@ describe("character progression state", () => {
     expect(purchased.build.progressionState?.availablePoints).toBe(0);
   });
 
+  it("shows requested and approved provisional skills in the progression view", () => {
+    const requested = requestCharacterProgressionCheck({
+      build: createBuild(),
+      content,
+      provisional: true,
+      targetId: "swim",
+      targetType: "skill"
+    });
+    const requestedView = buildCharacterProgressionView({ build: requested, content });
+    const requestedRow = requestedView.rows.find(
+      (row) => row.targetType === "skill" && row.targetId === "swim"
+    );
+    const approved = approveCharacterProgressionCheck({
+      build: requested,
+      content,
+      targetId: "swim",
+      targetType: "skill"
+    });
+    const approvedView = buildCharacterProgressionView({ build: approved, content });
+    const approvedRow = approvedView.rows.find(
+      (row) => row.targetType === "skill" && row.targetId === "swim"
+    );
+
+    expect(requestedRow).toMatchObject({
+      approved: false,
+      currentValue: 0,
+      label: "Swim",
+      provisional: true,
+      requested: true
+    });
+    expect(approvedRow).toMatchObject({
+      approved: true,
+      currentValue: 0,
+      label: "Swim",
+      provisional: true,
+      requested: false
+    });
+  });
+
   it("does not leak an older pending attempt cost through the legacy spend wrapper", () => {
     const checked = addCharacterProgressionCheck({
       build: grantCharacterProgressionPoints({ amount: 2, build: createBuild() }),

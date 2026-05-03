@@ -16,23 +16,34 @@ export interface ServerCharacterEditContext {
 export async function loadServerCharacterEditContext(
   id: string
 ): Promise<ServerCharacterEditContext> {
-  const [content, serverRecord] = await Promise.all([
+  const [content, serverRecord, existingLocalRecord] = await Promise.all([
     loadCanonicalContent(),
-    loadServerCharacterById(id)
+    loadServerCharacterById(id),
+    localCharacterRepository.get(id)
   ]);
-
-  const localRecord = await localCharacterRepository.save({
-    build: serverRecord.build,
-    creatorDisplayName: serverRecord.owner?.displayName ?? undefined,
-    creatorEmail: serverRecord.owner?.email ?? undefined,
-    creatorId: serverRecord.ownerId ?? undefined,
-    syncStatus: "synced",
-    updatedAt: serverRecord.updatedAt
-  });
+  const localIsNewer =
+    existingLocalRecord &&
+    Date.parse(existingLocalRecord.updatedAt) > Date.parse(serverRecord.updatedAt);
+  const localRecord = localIsNewer
+    ? existingLocalRecord
+    : await localCharacterRepository.save({
+        build: serverRecord.build,
+        creatorDisplayName: serverRecord.owner?.displayName ?? undefined,
+        creatorEmail: serverRecord.owner?.email ?? undefined,
+        creatorId: serverRecord.ownerId ?? undefined,
+        syncStatus: "synced",
+        updatedAt: serverRecord.updatedAt
+      });
 
   return {
     content,
     localRecord,
-    serverRecord
+    serverRecord: localIsNewer
+      ? {
+          ...serverRecord,
+          build: localRecord.build,
+          updatedAt: localRecord.updatedAt
+        }
+      : serverRecord
   };
 }

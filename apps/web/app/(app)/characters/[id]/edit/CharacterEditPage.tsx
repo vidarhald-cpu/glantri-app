@@ -188,6 +188,10 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
       .filter((skill) => !existingSkillIds.has(skill.id))
       .sort((left, right) => left.sortOrder - right.sortOrder || left.name.localeCompare(right.name));
   }, [build, content]);
+  const provisionalProgressionRows = useMemo(
+    () => progressionView?.rows.filter((row) => row.provisional) ?? [],
+    [progressionView]
+  );
 
   async function handleSave() {
     if (!build || !record) {
@@ -698,6 +702,35 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
               Add provisional check
             </button>
           </div>
+
+          {provisionalProgressionRows.length > 0 ? (
+            <div style={{ display: "grid", gap: "0.5rem" }}>
+              <h3 style={{ margin: 0 }}>Provisional skill checks</h3>
+              {provisionalProgressionRows.map((row) => (
+                <div
+                  key={`${row.targetType}:${row.targetId}`}
+                  style={{
+                    alignItems: "center",
+                    borderTop: "1px solid #e7e2d7",
+                    display: "flex",
+                    gap: "1rem",
+                    justifyContent: "space-between",
+                    paddingTop: "0.5rem"
+                  }}
+                >
+                  <div>
+                    <strong>{row.label}</strong>
+                    <div style={{ color: "#8f5a00", fontSize: "0.82rem" }}>Provisional skill</div>
+                  </div>
+                  {renderProgressionCheckControls({
+                    provisional: true,
+                    targetId: row.targetId,
+                    targetType: row.targetType
+                  })}
+                </div>
+              ))}
+            </div>
+          ) : null}
         </section>
       ) : null}
 

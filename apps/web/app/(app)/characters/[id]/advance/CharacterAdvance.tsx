@@ -43,6 +43,7 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
   const [feedback, setFeedback] = useState<string>();
   const [loading, setLoading] = useState(true);
   const [record, setRecord] = useState<LocalCharacterRecord>();
+  const [selectedProvisionalSkillId, setSelectedProvisionalSkillId] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -88,6 +89,27 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
       content
     });
   }, [content, draft]);
+  const availableProvisionalSkills = useMemo(() => {
+    if (!content || !draft || !progressionView) {
+      return [];
+    }
+
+    const existingSkillIds = new Set(draft.build.progression.skills.map((skill) => skill.skillId));
+    const existingProgressionRowSkillIds = new Set(
+      progressionView.rows
+        .filter((row) => row.targetType === "skill")
+        .map((row) => row.targetId)
+    );
+
+    return [...content.skills]
+      .filter(
+        (skill) =>
+          !skill.specializationOfSkillId &&
+          !existingSkillIds.has(skill.id) &&
+          !existingProgressionRowSkillIds.has(skill.id)
+      )
+      .sort((left, right) => left.sortOrder - right.sortOrder || left.name.localeCompare(right.name));
+  }, [content, draft, progressionView]);
 
   async function persistDraft(nextBuild: CharacterBuild, message?: string) {
     if (!draft) {
@@ -145,6 +167,23 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
     });
 
     await persistDraft(nextBuild, "Check requested. Save progression to share it with the GM.");
+  }
+
+  async function handleRequestProvisionalSkillCheck() {
+    if (!draft || !content || !selectedProvisionalSkillId) {
+      return;
+    }
+
+    const nextBuild = requestCharacterProgressionCheck({
+      build: draft.build,
+      content,
+      provisional: true,
+      targetId: selectedProvisionalSkillId,
+      targetType: "skill"
+    });
+
+    setSelectedProvisionalSkillId("");
+    await persistDraft(nextBuild, "Provisional skill check requested. Save progression to share it with the GM.");
   }
 
   async function handleResolveAttempts() {
@@ -304,6 +343,27 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
           Request checks for things your character used. A GM-approved check is required before
           spending progression points.
         </p>
+        <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+          <select
+            onChange={(event) => setSelectedProvisionalSkillId(event.target.value)}
+            style={{ fontSize: "1rem", padding: "0.45rem" }}
+            value={selectedProvisionalSkillId}
+          >
+            <option value="">Request provisional skill check...</option>
+            {availableProvisionalSkills.map((skill) => (
+              <option key={skill.id} value={skill.id}>
+                {skill.name}
+              </option>
+            ))}
+          </select>
+          <button
+            disabled={!selectedProvisionalSkillId}
+            onClick={() => void handleRequestProvisionalSkillCheck()}
+            type="button"
+          >
+            Request provisional check
+          </button>
+        </div>
         {rowSections.map((section) =>
           section.rows.length > 0 ? (
             <div key={section.type} style={{ display: "grid", gap: "0.5rem" }}>
