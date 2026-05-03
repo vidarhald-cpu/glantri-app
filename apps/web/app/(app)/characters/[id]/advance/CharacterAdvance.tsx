@@ -13,7 +13,7 @@ import {
   resolveCharacterProgressionAttempts
 } from "@glantri/rules-engine";
 
-import { saveCharacterToServer } from "../../../../../src/lib/api/localServiceClient";
+import { updateServerCharacter } from "../../../../../src/lib/api/localServiceClient";
 import { getPlayerFacingSkillBucket, groupRowsBySkillType } from "../../../../../src/lib/chargen/chargenBrowse";
 import { buildCharacterSheetProfileStatRows } from "../../../../../src/lib/characters/characterSheet";
 import { loadLocalCharacterAdvancementContext } from "../../../../../src/lib/characters/loadLocalCharacterAdvancementContext";
@@ -86,6 +86,7 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
   const [feedback, setFeedback] = useState<string>();
   const [loading, setLoading] = useState(true);
   const [record, setRecord] = useState<LocalCharacterRecord>();
+  const [saving, setSaving] = useState(false);
   const [selectedProvisionalSkillId, setSelectedProvisionalSkillId] = useState("");
 
   useEffect(() => {
@@ -264,48 +265,60 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
     );
   }
 
-  async function handleSaveLocally() {
+  async function handleSaveChanges() {
     if (!draft || !record) {
       return;
     }
 
-    const savedRecord = await localCharacterRepository.save({
+    setSaving(true);
+
+    const hasServerSavePath = record.syncStatus === "synced" || draft.syncStatus === "synced";
+
+    if (!hasServerSavePath) {
+      const savedRecord = await localCharacterRepository.save({
+        build: draft.build,
+        createdAt: record.createdAt,
+        finalizedAt: record.finalizedAt,
+        syncStatus: "local"
+      });
+
+      setRecord(savedRecord);
+      await persistDraft(draft.build, "Changes saved locally.");
+      setSaving(false);
+      return;
+    }
+
+    const localBackupRecord = await localCharacterRepository.save({
       build: draft.build,
       createdAt: record.createdAt,
       finalizedAt: record.finalizedAt,
       syncStatus: "local"
     });
-
-    setRecord(savedRecord);
-    await persistDraft(draft.build, "Progression saved locally.");
-  }
-
-  async function handleSaveToServer() {
-    if (!draft || !record) {
-      return;
-    }
-
-    const savedLocalRecord = await localCharacterRepository.save({
-      build: draft.build,
-      createdAt: record.createdAt,
-      finalizedAt: record.finalizedAt,
-      syncStatus: "local"
-    });
+    setRecord(localBackupRecord);
 
     try {
-      const serverRecord = await saveCharacterToServer(savedLocalRecord.build);
+      const serverRecord = await updateServerCharacter({
+        build: localBackupRecord.build,
+        characterId: id
+      });
       const syncedRecord = await localCharacterRepository.save({
         build: serverRecord.build,
-        createdAt: savedLocalRecord.createdAt,
-        finalizedAt: savedLocalRecord.finalizedAt,
+        createdAt: localBackupRecord.createdAt,
+        finalizedAt: localBackupRecord.finalizedAt,
         syncStatus: "synced",
         updatedAt: serverRecord.updatedAt
       });
 
       setRecord(syncedRecord);
-      await persistDraft(serverRecord.build, "Progression saved locally and pushed to the local service.");
+      await persistDraft(serverRecord.build, "Changes saved to server.");
     } catch (error) {
-      setFeedback(error instanceof Error ? error.message : "Character could not be saved to the server.");
+      setFeedback(
+        error instanceof Error
+          ? `${error.message} Changes saved locally.`
+          : "Character could not be saved to the server. Changes saved locally."
+      );
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -477,11 +490,8 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
         <span>Approved: {approvedCheckCount}</span>
         <span>Pending: {progressionView.pendingAttempts.length}</span>
         <span>History: {progressionView.history.length}</span>
-        <button onClick={() => void handleSaveLocally()} type="button">
-          Save locally
-        </button>
-        <button onClick={() => void handleSaveToServer()} type="button">
-          Save to server
+        <button disabled={saving} onClick={() => void handleSaveChanges()} type="button">
+          {saving ? "Saving..." : "Save changes"}
         </button>
       </section>
 
