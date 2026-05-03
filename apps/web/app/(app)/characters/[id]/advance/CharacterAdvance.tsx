@@ -614,8 +614,6 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
                     <tr style={{ borderBottom: "1px solid #d9ddd8", textAlign: "left" }}>
                       <th style={{ padding: "0.4rem 0.5rem 0.4rem 0" }}>Group</th>
                       <th style={{ padding: "0.4rem 0.5rem", textAlign: "center" }}>Level</th>
-                      <th style={{ padding: "0.4rem 0.5rem" }}>Requested</th>
-                      <th style={{ padding: "0.4rem 0.5rem" }}>Approved</th>
                       <th style={{ padding: "0.4rem 0.5rem", textAlign: "center" }}>Requested</th>
                       <th style={{ padding: "0.4rem 0.5rem", textAlign: "center" }}>Approved</th>
                       <th style={{ padding: "0.4rem 0.5rem", textAlign: "center" }}>Cost</th>
