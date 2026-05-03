@@ -75,7 +75,7 @@ export function buildCharactersSubmenuItems(options: {
       ? {
           href: `/characters/${effectiveCharacterId}/advance`,
           isActive: pathname === `/characters/${effectiveCharacterId}/advance`,
-          label: "Advance Character"
+          label: "Progression"
         }
       : null,
     effectiveCharacterId && isGameMaster

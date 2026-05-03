@@ -155,6 +155,12 @@ describe("character progression compatibility", () => {
     });
 
     expect(legacy.chargenRuleSet).toBeUndefined();
+    expect(legacy.progressionState).toEqual({
+      availablePoints: 0,
+      checks: [],
+      history: [],
+      pendingAttempts: []
+    });
     expect(withRuleSet.chargenRuleSet?.name).toBe("Experimental chargen");
     expect(withRuleSet.chargenRuleSet?.flexiblePointFactor).toBe(2);
   });

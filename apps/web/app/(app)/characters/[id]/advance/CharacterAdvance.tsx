@@ -3,12 +3,11 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
+import type { CharacterBuild, ProgressionTargetType } from "@glantri/domain";
 import {
-  getAdvancementPurchaseCostForSkill,
-  getPrimaryPurchaseCostForGroup,
-  getSecondaryPurchaseCostForSpecialization,
-  reviewCharacterAdvancement,
-  spendAdvancementPoint
+  buildCharacterProgressionView,
+  buyCharacterProgressionAttempt,
+  resolveCharacterProgressionAttempts
 } from "@glantri/rules-engine";
 
 import { saveCharacterToServer } from "../../../../../src/lib/api/localServiceClient";
@@ -27,15 +26,12 @@ interface CharacterAdvanceProps {
 const characterDraftRepository = new CharacterDraftRepository();
 const localCharacterRepository = new LocalCharacterRepository();
 
-function sortByName<T extends { name: string; sortOrder?: number }>(left: T, right: T): number {
-  const leftOrder = left.sortOrder ?? 0;
-  const rightOrder = right.sortOrder ?? 0;
-
-  if (leftOrder !== rightOrder) {
-    return leftOrder - rightOrder;
+function formatTargetType(type: ProgressionTargetType): string {
+  if (type === "skillGroup") {
+    return "Skill group";
   }
 
-  return left.name.localeCompare(right.name);
+  return type[0]?.toUpperCase() + type.slice(1);
 }
 
 export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
@@ -45,7 +41,6 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
   const [draft, setDraft] = useState<LocalCharacterDraft>();
   const [feedback, setFeedback] = useState<string>();
   const [loading, setLoading] = useState(true);
-  const [pointsInput, setPointsInput] = useState("0");
   const [record, setRecord] = useState<LocalCharacterRecord>();
 
   useEffect(() => {
@@ -69,7 +64,6 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
 
         if (!cancelled) {
           setDraft(resolvedDraft);
-          setPointsInput(String(resolvedDraft.advancementPointsTotal));
         }
       })
       .finally(() => {
@@ -83,30 +77,30 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
     };
   }, [id]);
 
-  const review = useMemo(() => {
+  const progressionView = useMemo(() => {
     if (!draft || !content) {
       return undefined;
     }
 
-    return reviewCharacterAdvancement({
-      advancementPointsSpent: draft.advancementPointsSpent,
-      advancementPointsTotal: draft.advancementPointsTotal,
+    return buildCharacterProgressionView({
       build: draft.build,
       content
     });
   }, [content, draft]);
 
-  const view = review?.view;
+  async function persistDraft(nextBuild: CharacterBuild, message?: string) {
+    if (!draft) {
+      return undefined;
+    }
 
-  async function persistDraft(nextDraft: LocalCharacterDraft, message?: string) {
     const savedDraft = await characterDraftRepository.save({
-      advancementPointsSpent: nextDraft.advancementPointsSpent,
-      advancementPointsTotal: nextDraft.advancementPointsTotal,
-      build: nextDraft.build,
-      characterId: nextDraft.characterId,
-      id: nextDraft.id,
-      syncStatus: nextDraft.syncStatus,
-      updatedAt: nextDraft.updatedAt
+      advancementPointsSpent: 0,
+      advancementPointsTotal: nextBuild.progressionState?.availablePoints ?? 0,
+      build: nextBuild,
+      characterId: draft.characterId,
+      id: draft.id,
+      syncStatus: draft.syncStatus,
+      updatedAt: new Date().toISOString()
     });
 
     setDraft(savedDraft);
@@ -117,36 +111,12 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
     return savedDraft;
   }
 
-  async function handleUpdateAdvancementPool() {
-    if (!draft) {
-      return;
-    }
-
-    const parsed = Number.parseInt(pointsInput, 10);
-
-    if (Number.isNaN(parsed) || parsed < 0) {
-      setFeedback("Advancement points total must be a non-negative whole number.");
-      return;
-    }
-
-    await persistDraft(
-      {
-        ...draft,
-        advancementPointsTotal: parsed,
-        updatedAt: new Date().toISOString()
-      },
-      "Advancement points total saved locally."
-    );
-  }
-
-  async function handleSpend(targetType: "group" | "skill" | "specialization", targetId: string) {
+  async function handleBuyAttempt(targetType: ProgressionTargetType, targetId: string) {
     if (!draft || !content) {
       return;
     }
 
-    const result = spendAdvancementPoint({
-      advancementPointsSpent: draft.advancementPointsSpent,
-      advancementPointsTotal: draft.advancementPointsTotal,
+    const result = buyCharacterProgressionAttempt({
       build: draft.build,
       content,
       targetId,
@@ -158,16 +128,23 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
       return;
     }
 
+    await persistDraft(result.build, "Progression attempt purchased. Resolve checks to roll.");
+  }
+
+  async function handleResolveAttempts() {
+    if (!draft || !content) {
+      return;
+    }
+
+    const result = resolveCharacterProgressionAttempts({
+      build: draft.build,
+      content
+    });
+    const successes = result.history.filter((entry) => entry.success).length;
+
     await persistDraft(
-      {
-        ...draft,
-        advancementPointsSpent: result.advancementPointsSpent,
-        build: result.build,
-        updatedAt: new Date().toISOString()
-      },
-      result.warnings.length > 0
-        ? result.warnings.join(" ")
-        : `Spent ${result.spentCost ?? 0} advancement point${result.spentCost === 1 ? "" : "s"}.`
+      result.build,
+      `Resolved ${result.history.length} progression attempt${result.history.length === 1 ? "" : "s"}; ${successes} succeeded.`
     );
   }
 
@@ -184,15 +161,7 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
     });
 
     setRecord(savedRecord);
-
-    await persistDraft(
-      {
-        ...draft,
-        syncStatus: "local",
-        updatedAt: new Date().toISOString()
-      },
-      "Advanced character saved locally."
-    );
+    await persistDraft(draft.build, "Progression saved locally.");
   }
 
   async function handleSaveToServer() {
@@ -218,26 +187,17 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
       });
 
       setRecord(syncedRecord);
-
-      await persistDraft(
-        {
-          ...draft,
-          build: serverRecord.build,
-          syncStatus: "synced",
-          updatedAt: serverRecord.updatedAt
-        },
-        "Advanced character saved locally and pushed to the local service."
-      );
+      await persistDraft(serverRecord.build, "Progression saved locally and pushed to the local service.");
     } catch (error) {
       setFeedback(error instanceof Error ? error.message : "Character could not be saved to the server.");
     }
   }
 
   if (loading) {
-    return <section>Loading advancement draft...</section>;
+    return <section>Loading progression draft...</section>;
   }
 
-  if (!record || !draft || !content || !view) {
+  if (!record || !draft || !content || !progressionView) {
     return (
       <section style={{ display: "grid", gap: "1rem", maxWidth: 720 }}>
         <h1 style={{ margin: 0 }}>Character not found</h1>
@@ -246,90 +206,17 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
     );
   }
 
-  const groupedSkills = [...content.skills].sort(sortByName);
-  const groupedSpecializations = [...content.specializations].sort(sortByName);
-  const groupedGroups = [...content.skillGroups].sort(sortByName);
-  const reviewResult = review;
-  const canSave = reviewResult?.canSave ?? false;
+  const checkedRows = progressionView.rows.filter((row) => row.checked);
 
   return (
-    <section style={{ display: "grid", gap: "1rem", maxWidth: 1040 }}>
+    <section style={{ display: "grid", gap: "1rem", maxWidth: 1120 }}>
       <div>
-        <h1 style={{ marginBottom: "0.5rem" }}>Advance Character</h1>
+        <h1 style={{ marginBottom: "0.5rem" }}>Progression</h1>
         <p style={{ margin: 0 }}>
-          This works on a local-first advancement draft. Save locally to update the Dexie record,
-          or push explicitly to the local service when ready.
+          Spend GM-granted progression points on checked items. Increases apply only after the
+          open-ended progression roll succeeds.
         </p>
       </div>
-
-      <section
-        style={{
-          background: "#f6f5ef",
-          border: "1px solid #d9ddd8",
-          borderRadius: 12,
-          display: "grid",
-          gap: "0.75rem",
-          padding: "1rem"
-        }}
-      >
-        <h2 style={{ margin: 0 }}>Advancement points</h2>
-        <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", alignItems: "center" }}>
-          <label style={{ display: "grid", gap: "0.25rem" }}>
-            Total available
-            <input
-              min="0"
-              onChange={(event) => setPointsInput(event.target.value)}
-              style={{ padding: "0.5rem", width: 140 }}
-              type="number"
-              value={pointsInput}
-            />
-          </label>
-          <button onClick={() => void handleUpdateAdvancementPool()} type="button">
-            Save pool
-          </button>
-        </div>
-        <div>Spent in advancement draft: {view.advancementPointsSpent}</div>
-        <div>Remaining: {view.advancementPointsAvailable}</div>
-        <div>Total skill points invested: {view.totalSkillPointsInvested}</div>
-        <div>Seniority: {view.seniority}</div>
-        <div>Local draft status: {draft.syncStatus}</div>
-      </section>
-
-      {reviewResult && reviewResult.errors.length > 0 ? (
-        <section
-          style={{
-            background: "#fff2ef",
-            border: "1px solid #e0b4a8",
-            borderRadius: 12,
-            display: "grid",
-            gap: "0.5rem",
-            padding: "1rem"
-          }}
-        >
-          <h2 style={{ margin: 0 }}>Blocking errors</h2>
-          {reviewResult.errors.map((error) => (
-            <div key={error}>{error}</div>
-          ))}
-        </section>
-      ) : null}
-
-      {reviewResult && reviewResult.warnings.length > 0 ? (
-        <section
-          style={{
-            background: "#fff8df",
-            border: "1px solid #d8c271",
-            borderRadius: 12,
-            display: "grid",
-            gap: "0.5rem",
-            padding: "1rem"
-          }}
-        >
-          <h2 style={{ margin: 0 }}>Warnings</h2>
-          {reviewResult.warnings.map((warning) => (
-            <div key={warning}>{warning}</div>
-          ))}
-        </section>
-      ) : null}
 
       {feedback ? (
         <section
@@ -346,23 +233,19 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
 
       <section
         style={{
-          background: "#fbfaf5",
+          background: "#f6f5ef",
           border: "1px solid #d9ddd8",
           borderRadius: 12,
           display: "grid",
-          gap: "0.5rem",
+          gap: "0.4rem",
           padding: "1rem"
         }}
       >
-        <h2 style={{ margin: 0 }}>Identity and education</h2>
-        <div>Profile: {draft.build.profile.label}</div>
-        <div>Society: {draft.build.societyLevel ?? "Not set"}</div>
-        <div>Social class: {draft.build.socialClass ?? "Not set"}</div>
-        <div>Profession: {draft.build.professionId ?? "Not set"}</div>
-        <div>Base education: {view.draftView.education.baseEducation}</div>
-        <div>Social class education value: {view.draftView.education.socialClassEducationValue}</div>
-        <div>GM_int: {view.draftView.education.gmInt}</div>
-        <div>Theoretical skill count: {view.draftView.education.theoreticalSkillCount}</div>
+        <h2 style={{ margin: 0 }}>Progression points</h2>
+        <div>Available progression points: {progressionView.availablePoints}</div>
+        <div>Checks: {progressionView.checks.length}</div>
+        <div>Pending attempts: {progressionView.pendingAttempts.length}</div>
+        <div>Resolved history entries: {progressionView.history.length}</div>
       </section>
 
       <section
@@ -375,96 +258,41 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
           padding: "1rem"
         }}
       >
-        <h2 style={{ margin: 0 }}>Spend on groups</h2>
-        {groupedGroups.map((group) => {
-          const current = view.draftView.groups.find((item) => item.groupId === group.id);
-          const cost = getPrimaryPurchaseCostForGroup(draft.build.progression, group.id);
+        <h2 style={{ margin: 0 }}>Checked items</h2>
+        {checkedRows.length > 0 ? (
+          checkedRows.map((row) => {
+            const canBuy =
+              row.checked &&
+              !row.pending &&
+              row.cost !== undefined &&
+              row.cost <= progressionView.availablePoints &&
+              !row.disabledReason;
 
-          return (
-            <div key={group.id} style={{ borderTop: "1px solid #e7e2d7", paddingTop: "0.75rem" }}>
-              <strong>{group.name}</strong>
-              <div>Current group level: {current?.groupLevel ?? 0}</div>
-              <div>Total ranks: {current?.totalRanks ?? 0}</div>
-              <div>Cost: {cost}</div>
-              <button onClick={() => void handleSpend("group", group.id)} type="button">
-                {current ? "Increase group +1" : "Add new group at 1"}
-              </button>
-            </div>
-          );
-        })}
-      </section>
-
-      <section
-        style={{
-          background: "#fbfaf5",
-          border: "1px solid #d9ddd8",
-          borderRadius: 12,
-          display: "grid",
-          gap: "0.75rem",
-          padding: "1rem"
-        }}
-      >
-        <h2 style={{ margin: 0 }}>Spend on skills</h2>
-        {groupedSkills.map((skill) => {
-          const current = view.draftView.skills.find((item) => item.skillId === skill.id);
-          const cost = getAdvancementPurchaseCostForSkill(draft.build.progression, skill);
-
-          return (
-            <div key={skill.id} style={{ borderTop: "1px solid #e7e2d7", paddingTop: "0.75rem" }}>
-              <strong>{skill.name}</strong>
-              <div>Category: {skill.category}</div>
-              <div>Requires literacy: {skill.requiresLiteracy}</div>
-              <div>Current specific skill level: {current?.specificSkillLevel ?? 0}</div>
-              <div>Effective skill number: {current?.effectiveSkillNumber ?? 0}</div>
-              <div>Total skill: {current?.totalSkill ?? 0}</div>
-              <div>Cost: {cost}</div>
-              <button onClick={() => void handleSpend("skill", skill.id)} type="button">
-                {current ? "Increase skill +1" : "Add new skill at 1"}
-              </button>
-            </div>
-          );
-        })}
-      </section>
-
-      <section
-        style={{
-          background: "#fbfaf5",
-          border: "1px solid #d9ddd8",
-          borderRadius: 12,
-          display: "grid",
-          gap: "0.75rem",
-          padding: "1rem"
-        }}
-      >
-        <h2 style={{ margin: 0 }}>Spend on specializations</h2>
-        {groupedSpecializations.map((specialization) => {
-          const current = view.draftView.specializations.find(
-            (item) => item.specializationId === specialization.id
-          );
-          const cost = getSecondaryPurchaseCostForSpecialization(
-            draft.build.progression,
-            specialization
-          );
-
-          return (
-            <div
-              key={specialization.id}
-              style={{ borderTop: "1px solid #e7e2d7", paddingTop: "0.75rem" }}
-            >
-              <strong>{specialization.name}</strong>
-              <div>Parent skill: {specialization.skillId}</div>
-              <div>Minimum group level: {specialization.minimumGroupLevel}</div>
-              <div>Current specialization level: {current?.specializationLevel ?? 0}</div>
-              <div>
-                Effective specialization number: {current?.effectiveSpecializationNumber ?? 0}
+            return (
+              <div
+                key={`${row.targetType}:${row.targetId}`}
+                style={{ borderTop: "1px solid #e7e2d7", paddingTop: "0.75rem" }}
+              >
+                <strong>{row.label}</strong>{" "}
+                {row.provisional ? <span style={{ color: "#8f5a00" }}>Provisional</span> : null}
+                <div>Type: {formatTargetType(row.targetType)}</div>
+                <div>Current XP/value: {row.currentValue}</div>
+                <div>Cost: {row.cost ?? "-"}</div>
+                <div>Status: {row.pending ? "Pending attempt" : "Checked"}</div>
+                {row.disabledReason ? <div style={{ color: "#8f3d2f" }}>{row.disabledReason}</div> : null}
+                <button
+                  disabled={!canBuy}
+                  onClick={() => void handleBuyAttempt(row.targetType, row.targetId)}
+                  type="button"
+                >
+                  Buy progression attempt
+                </button>
               </div>
-              <div>Cost: {cost}</div>
-              <button onClick={() => void handleSpend("specialization", specialization.id)} type="button">
-                {current ? "Increase specialization +1" : "Add new specialization at 1"}
-              </button>
-            </div>
-          );
-        })}
+            );
+          })
+        ) : (
+          <div>No checked items yet. A GM can add checks from Character Edit.</div>
+        )}
       </section>
 
       <section
@@ -473,38 +301,64 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
           border: "1px solid #d9ddd8",
           borderRadius: 12,
           display: "grid",
-          gap: "1rem",
+          gap: "0.75rem",
           padding: "1rem"
         }}
       >
-        <h2 style={{ margin: 0 }}>Current results</h2>
-        {view.draftView.groups.map((group) => (
-          <div key={group.groupId} style={{ borderTop: "1px solid #e7e2d7", paddingTop: "0.75rem" }}>
-            <strong>{group.name}</strong>
-            <div>Group level: {group.groupLevel}</div>
-            <div>Total ranks: {group.totalRanks}</div>
-          </div>
-        ))}
-        {view.draftView.skills.map((skill) => (
-          <div key={skill.skillId} style={{ borderTop: "1px solid #e7e2d7", paddingTop: "0.75rem" }}>
-            <strong>{skill.name}</strong>
-            <div>Specific skill level: {skill.specificSkillLevel}</div>
-            <div>Effective skill number: {skill.effectiveSkillNumber}</div>
-            <div>Total skill: {skill.totalSkill}</div>
-          </div>
-        ))}
-        {view.draftView.specializations.map((specialization) => (
-          <div
-            key={specialization.specializationId}
-            style={{ borderTop: "1px solid #e7e2d7", paddingTop: "0.75rem" }}
-          >
-            <strong>{specialization.name}</strong>
-            <div>Specialization level: {specialization.specializationLevel}</div>
-            <div>
-              Effective specialization number: {specialization.effectiveSpecializationNumber}
-            </div>
-          </div>
-        ))}
+        <h2 style={{ margin: 0 }}>Pending attempts</h2>
+        {progressionView.pendingAttempts.length > 0 ? (
+          <>
+            {progressionView.pendingAttempts.map((attempt) => (
+              <div key={attempt.id} style={{ borderTop: "1px solid #e7e2d7", paddingTop: "0.75rem" }}>
+                <strong>{attempt.targetLabel}</strong>
+                <div>Type: {formatTargetType(attempt.targetType)}</div>
+                <div>Cost paid: {attempt.cost}</div>
+              </div>
+            ))}
+            <button onClick={() => void handleResolveAttempts()} type="button">
+              Resolve checks
+            </button>
+          </>
+        ) : (
+          <div>No pending progression attempts.</div>
+        )}
+      </section>
+
+      <section
+        style={{
+          background: "#fbfaf5",
+          border: "1px solid #d9ddd8",
+          borderRadius: 12,
+          display: "grid",
+          gap: "0.75rem",
+          padding: "1rem"
+        }}
+      >
+        <h2 style={{ margin: 0 }}>History</h2>
+        {progressionView.history.length > 0 ? (
+          progressionView.history
+            .slice()
+            .reverse()
+            .map((entry) => (
+              <div key={entry.id} style={{ borderTop: "1px solid #e7e2d7", paddingTop: "0.75rem" }}>
+                <strong>{entry.targetLabel}</strong> - {entry.success ? "Success" : "Failure"}
+                <div>
+                  Roll: d20 {entry.rollD20}
+                  {entry.openEndedD10s.length > 0
+                    ? ` + d10s ${entry.openEndedD10s.join(", ")}`
+                    : ""}{" "}
+                  = {entry.rollTotal}
+                </div>
+                <div>Threshold: {entry.threshold}</div>
+                <div>
+                  Value: {entry.beforeValue} {"->"} {entry.afterValue}
+                </div>
+                <div>Cost paid: {entry.cost}</div>
+              </div>
+            ))
+        ) : (
+          <div>No resolved progression attempts yet.</div>
+        )}
       </section>
 
       <section
@@ -518,11 +372,11 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
           padding: "1rem"
         }}
       >
-        <button disabled={!canSave} onClick={() => void handleSaveLocally()} type="button">
-          Save advancement locally
+        <button onClick={() => void handleSaveLocally()} type="button">
+          Save progression locally
         </button>
-        <button disabled={!canSave} onClick={() => void handleSaveToServer()} type="button">
-          Save advancement to server
+        <button onClick={() => void handleSaveToServer()} type="button">
+          Save progression to server
         </button>
       </section>
     </section>

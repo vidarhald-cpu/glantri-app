@@ -768,6 +768,14 @@ function getActiveGroupSkillCost(input: {
   };
 }
 
+export function getActiveGroupSkillPurchaseCost(input: {
+  content: CanonicalContentShape;
+  groupId: string;
+  progression: CharacterProgression;
+}): { cost?: number; error?: string } {
+  return getActiveGroupSkillCost(input);
+}
+
 function getSpecializationSpendCost(exists: boolean): number {
   return exists ? EXISTING_SPECIALIZATION_COST : NEW_SPECIALIZATION_COST;
 }
@@ -2484,6 +2492,12 @@ export function finalizeChargenDraft(
     profile: input.profile,
     professionId: input.professionId,
     progression,
+    progressionState: {
+      availablePoints: 0,
+      checks: [],
+      history: [],
+      pendingAttempts: []
+    },
     socialClass: input.socialClass,
     societyId: input.societyId,
     societyLevel: input.societyLevel

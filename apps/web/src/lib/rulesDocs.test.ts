@@ -29,6 +29,12 @@ describe("rules documentation registry", () => {
           title: "Equipment & Encumbrance Calculations"
         }),
         expect.objectContaining({
+          fileName: "character-progression-calculations.md",
+          id: "character-progression-calculations",
+          section: "Character",
+          title: "Character Progression Calculations"
+        }),
+        expect.objectContaining({
           fileName: "combat-loadout-calculations.md",
           id: "combat-loadout-calculations",
           section: "Combat / Equipment",
@@ -42,6 +48,7 @@ describe("rules documentation registry", () => {
     expect(getRulesDocuments().map((document) => document.title)).toEqual([
       "Chargen Calculations",
       "Character Sheet Calculations",
+      "Character Progression Calculations",
       "Equipment & Encumbrance Calculations",
       "Equip Items Calculations"
     ]);
@@ -52,6 +59,18 @@ describe("rules documentation registry", () => {
       id: "chargen-calculations",
       title: "Chargen Calculations"
     });
+  });
+
+  it("loads the character progression document with roll and threshold content", async () => {
+    const model = await getRulesDocumentationPageModel({
+      selectedDocumentId: "character-progression-calculations"
+    });
+
+    expect(model.selectedDocument.title).toBe("Character Progression Calculations");
+    expect(model.selectedDocument.markdown).toContain("# Character Progression Calculations");
+    expect(model.selectedDocument.markdown).toContain("Progression succeeds if final roll total >= threshold");
+    expect(model.selectedDocument.markdown).toContain("Skill thresholds use XP, not Total skill level.");
+    expect(model.selectedDocument.markdown).toContain("Stat advancement is checks-only/deferred.");
   });
 
   it("loads the markdown title and formula text for the docs page", async () => {

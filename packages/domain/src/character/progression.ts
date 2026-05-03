@@ -178,6 +178,55 @@ export const characterChargenSelectionsSchema = z.object({
   selectedGroupSlots: z.array(characterChargenGroupSlotSelectionSchema).default([])
 });
 
+export const progressionTargetTypeSchema = z.enum([
+  "stat",
+  "skill",
+  "skillGroup",
+  "specialization"
+]);
+
+const progressionTargetBaseSchema = z.object({
+  targetId: z.string().min(1),
+  targetLabel: z.string().min(1),
+  targetType: progressionTargetTypeSchema
+});
+
+export const characterProgressionCheckSchema = progressionTargetBaseSchema.extend({
+  checkedAt: z.string().min(1),
+  checkedBy: z.string().min(1).optional(),
+  id: z.string().min(1),
+  notes: z.string().optional(),
+  provisional: z.boolean().optional()
+});
+
+export const characterProgressionPendingAttemptSchema = progressionTargetBaseSchema.extend({
+  checkId: z.string().min(1),
+  cost: z.number().int().nonnegative(),
+  id: z.string().min(1),
+  purchasedAt: z.string().min(1),
+  purchasedBy: z.string().min(1).optional()
+});
+
+export const characterProgressionHistoryEntrySchema = progressionTargetBaseSchema.extend({
+  afterValue: z.number(),
+  beforeValue: z.number(),
+  cost: z.number().int().nonnegative(),
+  id: z.string().min(1),
+  openEndedD10s: z.array(z.number().int().min(1).max(10)).default([]),
+  resolvedAt: z.string().min(1),
+  rollD20: z.number().int().min(1).max(20),
+  rollTotal: z.number().int().nonnegative(),
+  success: z.boolean(),
+  threshold: z.number()
+});
+
+export const characterProgressionStateSchema = z.object({
+  availablePoints: z.number().int().nonnegative().default(0),
+  checks: z.array(characterProgressionCheckSchema).default([]),
+  history: z.array(characterProgressionHistoryEntrySchema).default([]),
+  pendingAttempts: z.array(characterProgressionPendingAttemptSchema).default([])
+});
+
 export const characterProgressionSchema = z.object({
   chargenMode: chargenModeSchema.default("standard"),
   primaryPoolSpent: z.number().int().nonnegative().default(0),
@@ -202,6 +251,15 @@ export type CharacterChargenGroupSlotSelection = z.infer<
 export type CharacterChargenSelections = z.infer<typeof characterChargenSelectionsSchema>;
 export type CharacterProgression = z.infer<typeof characterProgressionSchema>;
 export type ChargenMode = z.infer<typeof chargenModeSchema>;
+export type ProgressionTargetType = z.infer<typeof progressionTargetTypeSchema>;
+export type CharacterProgressionCheck = z.infer<typeof characterProgressionCheckSchema>;
+export type CharacterProgressionPendingAttempt = z.infer<
+  typeof characterProgressionPendingAttemptSchema
+>;
+export type CharacterProgressionHistoryEntry = z.infer<
+  typeof characterProgressionHistoryEntrySchema
+>;
+export type CharacterProgressionState = z.infer<typeof characterProgressionStateSchema>;
 
 export function normalizeCharacterSkillLanguageName(
   languageName: string | undefined

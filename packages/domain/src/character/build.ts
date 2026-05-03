@@ -3,7 +3,10 @@ import { z } from "zod";
 import { normalizeProfessionId } from "../profession/professions";
 import { characterChargenRuleSetSnapshotSchema } from "./chargenRuleSet";
 import { characterEquipmentSchema } from "./equipment";
-import { characterProgressionSchema } from "./progression";
+import {
+  characterProgressionSchema,
+  characterProgressionStateSchema
+} from "./progression";
 import { rolledCharacterProfileSchema } from "./profiles";
 
 export const characterBuildSchema = z.object({
@@ -14,6 +17,12 @@ export const characterBuildSchema = z.object({
   chargenRuleSet: characterChargenRuleSetSnapshotSchema.optional(),
   profile: rolledCharacterProfileSchema,
   progression: characterProgressionSchema,
+  progressionState: characterProgressionStateSchema.default({
+    availablePoints: 0,
+    checks: [],
+    history: [],
+    pendingAttempts: []
+  }),
   statModifiers: z.record(z.string(), z.number().int()).optional(),
   professionId: z.preprocess(
     (value) => normalizeProfessionId(value) ?? value,

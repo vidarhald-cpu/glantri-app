@@ -47,5 +47,6 @@ describe("CharactersSubmenu", () => {
       "/characters/character-1/loadout",
       "/characters/character-1/advance",
     ]);
+    expect(items.map((item) => item.label)).toContain("Progression");
   });
 });

@@ -9,8 +9,15 @@ import {
   type CharacterBuild,
   type GlantriCharacteristicKey
 } from "@glantri/domain";
+import {
+  addCharacterProgressionCheck,
+  buildCharacterProgressionView,
+  grantCharacterProgressionPoints,
+  removeCharacterProgressionCheck
+} from "@glantri/rules-engine";
 
 import { updateServerCharacter } from "../../../../../src/lib/api/localServiceClient";
+import { useHasAnyRole } from "../../../../../src/lib/auth/SessionUserContext";
 import {
   addCharacterSkillGroup,
   buildAvailableCharacterEditSkillGroups,
@@ -64,6 +71,9 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
   const [saving, setSaving] = useState(false);
   const [selectedSkillGroupId, setSelectedSkillGroupId] = useState("");
   const [selectedSkillId, setSelectedSkillId] = useState("");
+  const [selectedProvisionalSkillId, setSelectedProvisionalSkillId] = useState("");
+  const [pointsToGrant, setPointsToGrant] = useState("0");
+  const isGameMaster = useHasAnyRole(["game_master", "admin"]);
 
   useEffect(() => {
     let cancelled = false;
@@ -154,6 +164,16 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
       sheetSummary
     });
   }, [build, content, sheetSummary]);
+  const progressionView = useMemo(() => {
+    if (!build || !content) {
+      return undefined;
+    }
+
+    return buildCharacterProgressionView({
+      build,
+      content
+    });
+  }, [build, content]);
 
   const availableSkills = useMemo(() => {
     if (!build || !content) {
@@ -280,6 +300,69 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
 
   function handleRemoveSkill(skillId: string) {
     setBuild((current) => (current ? removeCharacterSkill(current, skillId) : current));
+  }
+
+  function handleGrantProgressionPoints() {
+    const amount = parseWholeNumber(pointsToGrant);
+
+    if (amount <= 0) {
+      setFeedback("Progression point grant must be a positive whole number.");
+      return;
+    }
+
+    setBuild((current) => current ? grantCharacterProgressionPoints({ amount, build: current }) : current);
+    setPointsToGrant("0");
+    setFeedback(`Granted ${amount} progression point${amount === 1 ? "" : "s"}.`);
+  }
+
+  function toggleProgressionCheck(input: {
+    checked: boolean;
+    provisional?: boolean;
+    targetId: string;
+    targetType: "stat" | "skill" | "skillGroup" | "specialization";
+  }) {
+    if (!content) {
+      return;
+    }
+
+    setBuild((current) => {
+      if (!current) {
+        return current;
+      }
+
+      return input.checked
+        ? removeCharacterProgressionCheck({
+            build: current,
+            targetId: input.targetId,
+            targetType: input.targetType
+          })
+        : addCharacterProgressionCheck({
+            build: current,
+            content,
+            provisional: input.provisional,
+            targetId: input.targetId,
+            targetType: input.targetType
+          });
+    });
+  }
+
+  function handleAddProvisionalSkillCheck() {
+    if (!content || !selectedProvisionalSkillId) {
+      return;
+    }
+
+    setBuild((current) =>
+      current
+        ? addCharacterProgressionCheck({
+            build: current,
+            content,
+            provisional: true,
+            targetId: selectedProvisionalSkillId,
+            targetType: "skill"
+          })
+        : current
+    );
+    setSelectedProvisionalSkillId("");
   }
 
   function adjustSpecialization(specializationId: string, delta: number) {
@@ -499,6 +582,178 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
           </div>
         </section>
       </section>
+
+      {isGameMaster && progressionView ? (
+        <section
+          style={{
+            background: "#f6f5ef",
+            border: "1px solid #d9ddd8",
+            borderRadius: 12,
+            display: "grid",
+            gap: "1rem",
+            padding: "1rem"
+          }}
+        >
+          <div>
+            <h2 style={{ margin: "0 0 0.35rem 0" }}>Progression checks and points</h2>
+            <p style={{ color: "#5e5a50", margin: 0 }}>
+              GM-only manual checks for later player progression. Stat checks are visible, but stat
+              advancement is not enabled yet.
+            </p>
+          </div>
+
+          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
+            <strong>Available progression points: {progressionView.availablePoints}</strong>
+            <input
+              min="0"
+              onChange={(event) => setPointsToGrant(event.target.value)}
+              style={numericInputStyle}
+              type="number"
+              value={pointsToGrant}
+            />
+            <button onClick={handleGrantProgressionPoints} type="button">
+              Grant points
+            </button>
+          </div>
+
+          <div style={{ display: "grid", gap: "0.75rem", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))" }}>
+            <div>
+              <h3 style={{ margin: "0 0 0.5rem 0" }}>Stats</h3>
+              {statRows.map((row) => {
+                const checked = Boolean(
+                  progressionView.checks.find(
+                    (check) => check.targetType === "stat" && check.targetId === row.stat
+                  )
+                );
+
+                return (
+                  <label key={`check-${row.stat}`} style={{ display: "block", marginBottom: "0.35rem" }}>
+                    <input
+                      checked={checked}
+                      onChange={() =>
+                        toggleProgressionCheck({
+                          checked,
+                          targetId: row.stat,
+                          targetType: "stat"
+                        })
+                      }
+                      type="checkbox"
+                    />{" "}
+                    {row.label}
+                  </label>
+                );
+              })}
+            </div>
+
+            <div>
+              <h3 style={{ margin: "0 0 0.5rem 0" }}>Skill groups</h3>
+              {skillGroupRows.map((group) => {
+                const checked = Boolean(
+                  progressionView.checks.find(
+                    (check) => check.targetType === "skillGroup" && check.targetId === group.groupId
+                  )
+                );
+
+                return (
+                  <label key={`check-${group.groupId}`} style={{ display: "block", marginBottom: "0.35rem" }}>
+                    <input
+                      checked={checked}
+                      onChange={() =>
+                        toggleProgressionCheck({
+                          checked,
+                          targetId: group.groupId,
+                          targetType: "skillGroup"
+                        })
+                      }
+                      type="checkbox"
+                    />{" "}
+                    {group.name}
+                  </label>
+                );
+              })}
+            </div>
+
+            <div>
+              <h3 style={{ margin: "0 0 0.5rem 0" }}>Skills</h3>
+              {skillRows.map((skill) => {
+                const checked = Boolean(
+                  progressionView.checks.find(
+                    (check) => check.targetType === "skill" && check.targetId === skill.skillId
+                  )
+                );
+
+                return (
+                  <label key={`check-${skill.skillKey}`} style={{ display: "block", marginBottom: "0.35rem" }}>
+                    <input
+                      checked={checked}
+                      onChange={() =>
+                        toggleProgressionCheck({
+                          checked,
+                          targetId: skill.skillId,
+                          targetType: "skill"
+                        })
+                      }
+                      type="checkbox"
+                    />{" "}
+                    {skill.skillName}
+                  </label>
+                );
+              })}
+            </div>
+
+            <div>
+              <h3 style={{ margin: "0 0 0.5rem 0" }}>Specializations</h3>
+              {specializationRows.map((specialization) => {
+                const checked = Boolean(
+                  progressionView.checks.find(
+                    (check) =>
+                      check.targetType === "specialization" &&
+                      check.targetId === specialization.specializationId
+                  )
+                );
+
+                return (
+                  <label
+                    key={`check-${specialization.specializationId}`}
+                    style={{ display: "block", marginBottom: "0.35rem" }}
+                  >
+                    <input
+                      checked={checked}
+                      onChange={() =>
+                        toggleProgressionCheck({
+                          checked,
+                          targetId: specialization.specializationId,
+                          targetType: "specialization"
+                        })
+                      }
+                      type="checkbox"
+                    />{" "}
+                    {specialization.specializationName}
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+
+          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+            <select
+              onChange={(event) => setSelectedProvisionalSkillId(event.target.value)}
+              style={{ fontSize: "1rem", padding: "0.45rem" }}
+              value={selectedProvisionalSkillId}
+            >
+              <option value="">Add provisional checked skill...</option>
+              {availableSkills.map((skill) => (
+                <option key={skill.id} value={skill.id}>
+                  {skill.name}
+                </option>
+              ))}
+            </select>
+            <button disabled={!selectedProvisionalSkillId} onClick={handleAddProvisionalSkillCheck} type="button">
+              Add provisional check
+            </button>
+          </div>
+        </section>
+      ) : null}
 
       <section
         style={{
