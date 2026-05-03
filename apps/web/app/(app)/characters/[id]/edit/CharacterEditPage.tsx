@@ -53,6 +53,7 @@ const numericInputStyle = {
   textAlign: "right" as const,
   width: 80
 };
+const centeredCellStyle = { padding: "0.55rem 0.5rem", textAlign: "center" as const };
 
 function getCharacterName(record: LocalCharacterRecord): string {
   return record.build.name.trim() || "Unnamed Character";
@@ -387,24 +388,64 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
     const approved = Boolean(row?.approved);
 
     return (
-      <div style={{ color: "#5e5a50", display: "grid", fontSize: "0.82rem", gap: "0.25rem", justifyItems: "center", textAlign: "center" }}>
-        <span>Requested: {row?.requested ? "Requested" : "—"}</span>
-        <label style={{ alignItems: "center", display: "inline-flex", gap: "0.25rem" }}>
-          <input
-            checked={approved}
-            onChange={() =>
-              toggleProgressionCheck({
-                approved,
-                provisional: input.provisional,
-                targetId: input.targetId,
-                targetType: input.targetType
-              })
-            }
-            type="checkbox"
-          />
-          Approved
-        </label>
+      <div
+        style={{
+          alignItems: "center",
+          color: "#5e5a50",
+          display: "grid",
+          fontSize: "0.82rem",
+          gap: "0.25rem",
+          justifyItems: "center",
+          textAlign: "center"
+        }}
+      >
+        <span>{row?.requested ? "Requested" : "—"}</span>
+        {renderApprovedCheck({
+          approved,
+          provisional: input.provisional,
+          targetId: input.targetId,
+          targetType: input.targetType
+        })}
       </div>
+    );
+  }
+
+  function renderRequestedStatus(targetType: ProgressionTargetType, targetId: string) {
+    if (!isGameMaster || !progressionView) {
+      return null;
+    }
+
+    return getProgressionRow(targetType, targetId)?.requested ? "Requested" : "—";
+  }
+
+  function renderApprovedCheck(input: {
+    approved?: boolean;
+    provisional?: boolean;
+    targetId: string;
+    targetType: ProgressionTargetType;
+  }) {
+    if (!isGameMaster) {
+      return null;
+    }
+
+    const approved =
+      input.approved ??
+      Boolean(getProgressionRow(input.targetType, input.targetId)?.approved);
+
+    return (
+      <input
+        aria-label={`${input.targetId} approved progression check`}
+        checked={approved}
+        onChange={() =>
+          toggleProgressionCheck({
+            approved,
+            provisional: input.provisional,
+            targetId: input.targetId,
+            targetType: input.targetType
+          })
+        }
+        type="checkbox"
+      />
     );
   }
 
@@ -491,6 +532,9 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
   const socialClassSummary =
     socialClassNumber !== undefined ? `${socialClassLabel} (${socialClassNumber})` : socialClassLabel;
   const educationLevel = sheetSummary.draftView.education.theoreticalSkillCount;
+  const requestedCheckCount = progressionView?.checks.filter((check) => check.status === "requested").length ?? 0;
+  const approvedCheckCount =
+    progressionView?.checks.filter((check) => (check.status ?? "approved") === "approved").length ?? 0;
 
   return (
     <section style={{ display: "grid", gap: "1rem", maxWidth: 1180 }}>
@@ -504,11 +548,54 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
         </div>
         <div style={{ display: "flex", gap: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
           <Link href={`/characters/${id}`}>Back to character sheet</Link>
+        </div>
+      </div>
+
+      {progressionView ? (
+        <section
+          style={{
+            alignItems: "center",
+            background: "#fbfaf5",
+            border: "1px solid #d9ddd8",
+            borderRadius: 12,
+            boxShadow: "0 8px 18px rgba(43, 37, 26, 0.08)",
+            display: "flex",
+            flexWrap: "wrap",
+            gap: "0.75rem",
+            padding: "0.75rem 1rem",
+            position: "sticky",
+            top: "3rem",
+            zIndex: 5
+          }}
+        >
+          <strong>GM edit</strong>
+          <span>Available points: {progressionView.availablePoints}</span>
+          <span>Requested: {requestedCheckCount}</span>
+          <span>Approved: {approvedCheckCount}</span>
+          <span>Pending: {progressionView.pendingAttempts.length}</span>
+          <span>History: {progressionView.history.length}</span>
+          {isGameMaster ? (
+            <>
+              <label style={{ alignItems: "center", display: "inline-flex", gap: "0.35rem" }}>
+                <span>Points to add</span>
+                <input
+                  min="0"
+                  onChange={(event) => setPointsToGrant(event.target.value)}
+                  style={numericInputStyle}
+                  type="number"
+                  value={pointsToGrant}
+                />
+              </label>
+              <button onClick={handleGrantProgressionPoints} type="button">
+                Grant points
+              </button>
+            </>
+          ) : null}
           <button disabled={saving} onClick={() => void handleSave()} type="button">
             {saving ? "Saving..." : "Save changes"}
           </button>
-        </div>
-      </div>
+        </section>
+      ) : null}
 
       <section
         style={{
@@ -571,39 +658,8 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
             >
               {isGameMaster ? (
                 <>
-                  <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
-                    <strong>Available progression points: {progressionView.availablePoints}</strong>
-                    <label style={{ display: "grid", gap: "0.2rem" }}>
-                      <span style={{ color: "#5e5a50", fontSize: "0.82rem" }}>Points to add</span>
-                      <input
-                        min="0"
-                        onChange={(event) => setPointsToGrant(event.target.value)}
-                        style={numericInputStyle}
-                        type="number"
-                        value={pointsToGrant}
-                      />
-                    </label>
-                    <button onClick={handleGrantProgressionPoints} type="button">
-                      Grant points
-                    </button>
-                  </div>
-
-                  <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-                    <select
-                      onChange={(event) => setSelectedProvisionalSkillId(event.target.value)}
-                      style={{ fontSize: "1rem", padding: "0.45rem" }}
-                      value={selectedProvisionalSkillId}
-                    >
-                      <option value="">Add provisional checked skill...</option>
-                      {availableSkills.map((skill) => (
-                        <option key={skill.id} value={skill.id}>
-                          {skill.name}
-                        </option>
-                      ))}
-                    </select>
-                    <button disabled={!selectedProvisionalSkillId} onClick={handleAddProvisionalSkillCheck} type="button">
-                      Add provisional check
-                    </button>
+                  <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
+                    Provisional checked skills can be added near the Skills section below.
                   </div>
                 </>
               ) : null}
@@ -637,7 +693,12 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
                       <tr style={{ borderBottom: "1px solid #d9ddd8", textAlign: "left" }}>
                         <th style={{ padding: "0.4rem 0.5rem 0.4rem 0" }}>Group</th>
                         <th style={{ padding: "0.4rem 0.5rem", textAlign: "center" }}>Level</th>
-                        <th style={{ padding: "0.4rem 0", textAlign: "center" }}>Progression</th>
+                        {isGameMaster ? (
+                          <>
+                            <th style={{ padding: "0.4rem 0.5rem", textAlign: "center" }}>Requested</th>
+                            <th style={{ padding: "0.4rem 0", textAlign: "center" }}>Approved</th>
+                          </>
+                        ) : null}
                       </tr>
                     </thead>
                     <tbody>
@@ -653,17 +714,24 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
                                 value={group.level}
                               />
                             </td>
-                            <td style={{ padding: "0.55rem 0", textAlign: "center" }}>
-                              {renderProgressionCheckControls({
-                                targetId: group.groupId,
-                                targetType: "skillGroup"
-                              })}
-                            </td>
+                            {isGameMaster ? (
+                              <>
+                                <td style={centeredCellStyle}>
+                                  {renderRequestedStatus("skillGroup", group.groupId)}
+                                </td>
+                                <td style={{ padding: "0.55rem 0", textAlign: "center" }}>
+                                  {renderApprovedCheck({
+                                    targetId: group.groupId,
+                                    targetType: "skillGroup"
+                                  })}
+                                </td>
+                              </>
+                            ) : null}
                           </tr>
                         ))
                       ) : (
                         <tr>
-                          <td colSpan={3} style={{ padding: "0.75rem 0" }}>
+                          <td colSpan={isGameMaster ? 4 : 2} style={{ padding: "0.75rem 0" }}>
                             No skill groups recorded.
                           </td>
                         </tr>
@@ -694,7 +762,12 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
                 <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Original</th>
                 <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Current</th>
                 <th style={{ padding: "0.5rem 0", textAlign: "right" }}>GM</th>
-                {isGameMaster ? <th style={{ padding: "0.5rem 0 0.5rem 0.75rem", textAlign: "center" }}>Progression</th> : null}
+                {isGameMaster ? (
+                  <>
+                    <th style={{ padding: "0.5rem 0.75rem", textAlign: "center" }}>Requested</th>
+                    <th style={{ padding: "0.5rem 0 0.5rem 0.75rem", textAlign: "center" }}>Approved</th>
+                  </>
+                ) : null}
               </tr>
             </thead>
             <tbody>
@@ -731,14 +804,19 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
                   </td>
                   <td style={{ padding: "0.6rem 0", textAlign: "right" }}>{row.gmValue}</td>
                   {isGameMaster ? (
-                    <td style={{ padding: "0.6rem 0 0.6rem 0.75rem", textAlign: "center" }}>
-                      {row.stat === "distraction"
-                        ? "—"
-                        : renderProgressionCheckControls({
-                            targetId: row.stat,
-                            targetType: "stat"
-                          })}
-                    </td>
+                    <>
+                      <td style={centeredCellStyle}>
+                        {row.stat === "distraction" ? "—" : renderRequestedStatus("stat", row.stat)}
+                      </td>
+                      <td style={{ padding: "0.6rem 0 0.6rem 0.75rem", textAlign: "center" }}>
+                        {row.stat === "distraction"
+                          ? "—"
+                          : renderApprovedCheck({
+                              targetId: row.stat,
+                              targetType: "stat"
+                            })}
+                      </td>
+                    </>
                   ) : null}
                 </tr>
               ))}
@@ -806,14 +884,19 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
                   <thead>
                     <tr style={{ borderBottom: "1px solid #d9ddd8", textAlign: "left" }}>
                       <th style={{ padding: "0.5rem 0.75rem 0.5rem 1rem" }}>Skill</th>
-                      <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Stats</th>
-                      <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Group XP</th>
-                      <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Skill XP</th>
-                      <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Granted XP</th>
-                      <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Total XP</th>
-                      <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Total</th>
-                      <th style={{ padding: "0.5rem 0", textAlign: "right" }}>Remove</th>
-                      {isGameMaster ? <th style={{ padding: "0.5rem 1rem 0.5rem 0.75rem", textAlign: "center" }}>Progression</th> : null}
+                      <th style={{ padding: "0.5rem 0.75rem", textAlign: "center" }}>Stats</th>
+                      <th style={{ padding: "0.5rem 0.75rem", textAlign: "center" }}>Group XP</th>
+                      <th style={{ padding: "0.5rem 0.75rem", textAlign: "center" }}>Skill XP</th>
+                      <th style={{ padding: "0.5rem 0.75rem", textAlign: "center" }}>Granted XP</th>
+                      <th style={{ padding: "0.5rem 0.75rem", textAlign: "center" }}>Total XP</th>
+                      <th style={{ padding: "0.5rem 0.75rem", textAlign: "center" }}>Total</th>
+                      <th style={{ padding: "0.5rem 0", textAlign: "center" }}>Remove</th>
+                      {isGameMaster ? (
+                        <>
+                          <th style={{ padding: "0.5rem 0.75rem", textAlign: "center" }}>Requested</th>
+                          <th style={{ padding: "0.5rem 1rem 0.5rem 0.75rem", textAlign: "center" }}>Approved</th>
+                        </>
+                      ) : null}
                     </tr>
                   </thead>
                   <tbody>
@@ -827,9 +910,9 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
                             </div>
                           ) : null}
                         </td>
-                        <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>{skill.stats}</td>
-                        <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>{skill.groupXp}</td>
-                        <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>
+                        <td style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>{skill.stats}</td>
+                        <td style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>{skill.groupXp}</td>
+                        <td style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>
                           <input
                             onChange={(event) => updateSkill(skill.skillId, event.target.value)}
                             style={numericInputStyle}
@@ -837,10 +920,10 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
                             value={skill.xp}
                           />
                         </td>
-                        <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>{skill.grantedXp}</td>
-                        <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>{skill.totalXp}</td>
-                        <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>{skill.total}</td>
-                        <td style={{ padding: "0.6rem 0", textAlign: "right" }}>
+                        <td style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>{skill.grantedXp}</td>
+                        <td style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>{skill.totalXp}</td>
+                        <td style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>{skill.total}</td>
+                        <td style={{ padding: "0.6rem 0", textAlign: "center" }}>
                           <button
                             disabled={!skill.canRemoveDirectXp}
                             onClick={() => handleRemoveSkill(skill.skillId)}
@@ -850,12 +933,17 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
                           </button>
                         </td>
                         {isGameMaster ? (
-                          <td style={{ padding: "0.6rem 1rem 0.6rem 0.75rem", textAlign: "center" }}>
-                            {renderProgressionCheckControls({
-                              targetId: skill.skillId,
-                              targetType: "skill"
-                            })}
-                          </td>
+                          <>
+                            <td style={centeredCellStyle}>
+                              {renderRequestedStatus("skill", skill.skillId)}
+                            </td>
+                            <td style={{ padding: "0.6rem 1rem 0.6rem 0.75rem", textAlign: "center" }}>
+                              {renderApprovedCheck({
+                                targetId: skill.skillId,
+                                targetType: "skill"
+                              })}
+                            </td>
+                          </>
                         ) : null}
                       </tr>
                     ))}
@@ -867,6 +955,36 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
         ) : (
           <div>No skill rows yet.</div>
         )}
+
+        {isGameMaster ? (
+          <section
+            style={{
+              alignItems: "center",
+              borderTop: "1px solid #e7e2d7",
+              display: "flex",
+              flexWrap: "wrap",
+              gap: "0.5rem",
+              paddingTop: "0.75rem"
+            }}
+          >
+            <strong>Provisional skill check</strong>
+            <select
+              onChange={(event) => setSelectedProvisionalSkillId(event.target.value)}
+              style={{ fontSize: "1rem", padding: "0.45rem" }}
+              value={selectedProvisionalSkillId}
+            >
+              <option value="">Add provisional checked skill...</option>
+              {availableSkills.map((skill) => (
+                <option key={skill.id} value={skill.id}>
+                  {skill.name}
+                </option>
+              ))}
+            </select>
+            <button disabled={!selectedProvisionalSkillId} onClick={handleAddProvisionalSkillCheck} type="button">
+              Add check
+            </button>
+          </section>
+        ) : null}
 
         {isGameMaster && provisionalProgressionRows.length > 0 ? (
           <section style={{ border: "1px solid #e7e2d7", borderRadius: 10, display: "grid", gap: "0.5rem", padding: "1rem" }}>
@@ -918,11 +1036,16 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
               <tr style={{ borderBottom: "1px solid #d9ddd8", textAlign: "left" }}>
                 <th style={{ padding: "0.5rem 0.75rem 0.5rem 0" }}>Specialization</th>
                 <th style={{ padding: "0.5rem 0.75rem" }}>Parent skill</th>
-                <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Owned XP</th>
-                <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Granted XP</th>
-                <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Total</th>
-                <th style={{ padding: "0.5rem 0", textAlign: "right" }}>Adjust</th>
-                {isGameMaster ? <th style={{ padding: "0.5rem 0 0.5rem 0.75rem" }}>Progression</th> : null}
+                <th style={{ padding: "0.5rem 0.75rem", textAlign: "center" }}>Owned XP</th>
+                <th style={{ padding: "0.5rem 0.75rem", textAlign: "center" }}>Granted XP</th>
+                <th style={{ padding: "0.5rem 0.75rem", textAlign: "center" }}>Total</th>
+                <th style={{ padding: "0.5rem 0", textAlign: "center" }}>Adjust</th>
+                {isGameMaster ? (
+                  <>
+                    <th style={{ padding: "0.5rem 0.75rem", textAlign: "center" }}>Requested</th>
+                    <th style={{ padding: "0.5rem 0 0.5rem 0.75rem", textAlign: "center" }}>Approved</th>
+                  </>
+                ) : null}
               </tr>
             </thead>
             <tbody>
@@ -946,16 +1069,16 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
                         Current parent level {specialization.parentSkillXp}
                       </div>
                     </td>
-                    <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>{specialization.xp}</td>
-                    <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>{specialization.grantedXp}</td>
-                    <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>{specialization.total}</td>
-                    <td style={{ padding: "0.6rem 0", textAlign: "right" }}>
+                    <td style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>{specialization.xp}</td>
+                    <td style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>{specialization.grantedXp}</td>
+                    <td style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>{specialization.total}</td>
+                    <td style={{ padding: "0.6rem 0", textAlign: "center" }}>
                       <div
                         style={{
                           alignItems: "center",
                           display: "inline-flex",
                           gap: "0.4rem",
-                          justifyContent: "flex-end"
+                          justifyContent: "center"
                         }}
                       >
                         <button
@@ -975,18 +1098,23 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
                       </div>
                     </td>
                     {isGameMaster ? (
-                      <td style={{ padding: "0.6rem 0 0.6rem 0.75rem" }}>
-                        {renderProgressionCheckControls({
-                          targetId: specialization.specializationId,
-                          targetType: "specialization"
-                        })}
-                      </td>
+                      <>
+                        <td style={centeredCellStyle}>
+                          {renderRequestedStatus("specialization", specialization.specializationId)}
+                        </td>
+                        <td style={{ padding: "0.6rem 0 0.6rem 0.75rem", textAlign: "center" }}>
+                          {renderApprovedCheck({
+                            targetId: specialization.specializationId,
+                            targetType: "specialization"
+                          })}
+                        </td>
+                      </>
                     ) : null}
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan={isGameMaster ? 7 : 6} style={{ padding: "0.75rem 0" }}>
+                  <td colSpan={isGameMaster ? 8 : 6} style={{ padding: "0.75rem 0" }}>
                     No specialization rows yet.
                   </td>
                 </tr>
@@ -996,7 +1124,7 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
                     .filter((specialization) => specialization.blockingMessage)
                     .map((specialization) => (
                       <tr key={`${specialization.specializationId}-status`}>
-                        <td colSpan={isGameMaster ? 7 : 6} style={{ color: "#8f5a00", fontSize: "0.85rem", padding: "0 0 0.75rem 0" }}>
+                        <td colSpan={isGameMaster ? 8 : 6} style={{ color: "#8f5a00", fontSize: "0.85rem", padding: "0 0 0.75rem 0" }}>
                           {specialization.specializationName}: {specialization.blockingMessage}
                         </td>
                       </tr>
