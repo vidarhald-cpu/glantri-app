@@ -27,6 +27,15 @@ export const rulesDocumentsRegistry: RulesDocumentRegistryEntry[] = [
   },
   {
     audience: "Players and GM reviewers",
+    description: "Manual reference for profile rolls, stat resolution, social class, education, skill points, skill-group costs, choices, and finalization.",
+    fileName: "chargen-calculations.md",
+    id: "chargen-calculations",
+    order: 15,
+    section: "Chargen",
+    title: "Chargen Calculations"
+  },
+  {
+    audience: "Players and GM reviewers",
     description: "Manual reference for item ENC, carried load, inventory location, material/quality modifiers, and encumbrance effects.",
     fileName: "equipment-encumbrance-calculations.md",
     id: "equipment-encumbrance-calculations",

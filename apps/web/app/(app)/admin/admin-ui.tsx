@@ -120,11 +120,6 @@ export const adminNavGroups: AdminNavGroup[] = [
     label: "Rules & Documentation",
     items: [
       {
-        description: "Read short player-facing notes for current combat calculations.",
-        href: "/admin/documents",
-        label: "Documents"
-      },
-      {
         description: "Read repo-local markdown references for rules, formulas, and displayed calculations.",
         href: "/admin/rules-docs",
         label: "Rules Docs"

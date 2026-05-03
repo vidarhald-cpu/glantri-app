@@ -17,6 +17,12 @@ describe("rules documentation registry", () => {
           title: "Character Sheet Calculations"
         }),
         expect.objectContaining({
+          fileName: "chargen-calculations.md",
+          id: "chargen-calculations",
+          section: "Chargen",
+          title: "Chargen Calculations"
+        }),
+        expect.objectContaining({
           fileName: "equipment-encumbrance-calculations.md",
           id: "equipment-encumbrance-calculations",
           section: "Equipment",
@@ -53,6 +59,19 @@ describe("rules documentation registry", () => {
     expect(model.selectedDocument.markdown).toContain("GM = trunc((Current - 11) / 2)");
     expect(model.selectedDocument.markdown).toContain("Skill group cost = floor(0.6 * total individual cost of active group skills)");
     expect(model.selectedDocument.markdown).not.toContain("Character Detail does not show Derived XP");
+  });
+
+  it("loads the chargen document with profile and skill-point formulas", async () => {
+    const model = await getRulesDocumentationPageModel({
+      selectedDocumentId: "chargen-calculations"
+    });
+
+    expect(model.selectedDocument.title).toBe("Chargen Calculations");
+    expect(model.selectedDocument.markdown).toContain("# Chargen Calculations");
+    expect(model.selectedDocument.markdown).toContain("Profile stats");
+    expect(model.selectedDocument.markdown).toContain("4d6, drop the lowest die");
+    expect(model.selectedDocument.markdown).toContain("Flexible points = floor((resolved INT + resolved LCK) * flexible point factor)");
+    expect(model.selectedDocument.markdown).toContain("Skill group cost = floor(0.6 * total individual cost of active group skills)");
   });
 
   it("loads the equipment encumbrance document with location and formula content", async () => {
