@@ -300,21 +300,6 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
   const socialClassSummary =
     socialClassNumber !== undefined ? `${socialClassLabel} (${socialClassNumber})` : socialClassLabel;
   const profileStatRows = buildCharacterSheetProfileStatRows(draft.build);
-  const skillGroupSummaryRows = [...content.skillGroups]
-    .sort((left, right) => left.sortOrder - right.sortOrder)
-    .map((group) => {
-      const groupView = progressionView.draftView.groups.find((item) => item.groupId === group.id);
-
-      if (!groupView || groupView.groupLevel <= 0) {
-        return null;
-      }
-
-      return {
-        groupLevel: groupView.groupLevel,
-        name: group.name
-      };
-    })
-    .filter((group): group is { groupLevel: number; name: string } => group !== null);
   const educationLevel = progressionView.draftView.education.theoreticalSkillCount;
   const requestedCheckCount = progressionView.checks.filter((check) => check.status === "requested").length;
   const approvedCheckCount = progressionView.checks.filter(
@@ -545,13 +530,21 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
               </div>
             </div>
             <strong>Skill groups</strong>
-            <div style={{ display: "grid", gap: "0.2rem" }}>
-              {skillGroupSummaryRows.length > 0 ? (
-                skillGroupSummaryRows.map((group) => (
-                  <div key={group.name}>
-                    {group.name} (Level {group.groupLevel})
-                  </div>
-                ))
+            <div style={{ overflowX: "auto" }}>
+              {rowsByType.skillGroup.length > 0 ? (
+                <table style={{ borderCollapse: "collapse", minWidth: 520, width: "100%" }}>
+                  <thead>
+                    <tr style={{ borderBottom: "1px solid #d9ddd8", textAlign: "left" }}>
+                      <th style={{ padding: "0.4rem 0.5rem 0.4rem 0" }}>Group</th>
+                      <th style={{ padding: "0.4rem 0.5rem", textAlign: "right" }}>Level</th>
+                      <th style={{ padding: "0.4rem 0.5rem" }}>Requested</th>
+                      <th style={{ padding: "0.4rem 0.5rem" }}>Approved</th>
+                      <th style={{ padding: "0.4rem 0.5rem", textAlign: "right" }}>Cost</th>
+                      <th style={{ padding: "0.4rem 0" }}>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>{rowsByType.skillGroup.map((row) => renderProgressionRow(row))}</tbody>
+                </table>
               ) : (
                 <div>No skill groups recorded.</div>
               )}
@@ -571,10 +564,11 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
           flexWrap: "wrap",
           gap: "0.75rem",
           position: "sticky",
-          top: "0.75rem",
+          top: "3rem",
           zIndex: 5,
           alignItems: "center",
-          padding: "1rem"
+          boxShadow: "0 8px 18px rgba(43, 37, 26, 0.08)",
+          padding: "0.75rem 1rem"
         }}
       >
         <strong>Progression</strong>
@@ -583,25 +577,6 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
         <span>Approved: {approvedCheckCount}</span>
         <span>Pending: {progressionView.pendingAttempts.length}</span>
         <span>History: {progressionView.history.length}</span>
-        <select
-          onChange={(event) => setSelectedProvisionalSkillId(event.target.value)}
-          style={{ fontSize: "1rem", padding: "0.45rem" }}
-          value={selectedProvisionalSkillId}
-        >
-          <option value="">Request provisional skill...</option>
-          {availableProvisionalSkills.map((skill) => (
-            <option key={skill.id} value={skill.id}>
-              {skill.name}
-            </option>
-          ))}
-        </select>
-        <button
-          disabled={!selectedProvisionalSkillId}
-          onClick={() => void handleRequestProvisionalSkillCheck()}
-          type="button"
-        >
-          Request provisional
-        </button>
         <button onClick={() => void handleSaveLocally()} type="button">
           Save locally
         </button>
@@ -666,43 +641,35 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
         ) : (
           <div>No skill progression rows yet.</div>
         )}
-      </section>
 
-      <section
-        style={{
-          background: "#fbfaf5",
-          border: "1px solid #d9ddd8",
-          borderRadius: 12,
-          display: "grid",
-          gap: "1rem",
-          padding: "1rem"
-        }}
-      >
-        <h2 style={{ margin: 0 }}>Skill Groups</h2>
-        <div style={{ overflowX: "auto" }}>
-          <table style={{ borderCollapse: "collapse", width: "100%" }}>
-            <thead>
-              <tr style={{ borderBottom: "1px solid #d9ddd8", textAlign: "left" }}>
-                <th style={{ padding: "0.5rem 0.75rem 0.5rem 0" }}>Skill group</th>
-                <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Current</th>
-                <th style={{ padding: "0.5rem 0.75rem" }}>Requested check</th>
-                <th style={{ padding: "0.5rem 0.75rem" }}>Approved check</th>
-                <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Cost</th>
-                <th style={{ padding: "0.5rem 0" }}>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rowsByType.skillGroup.length > 0 ? (
-                rowsByType.skillGroup.map((row) => renderProgressionRow(row))
-              ) : (
-                <tr>
-                  <td colSpan={6} style={{ padding: "0.75rem 0" }}>
-                    No skill groups recorded.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+        <div
+          style={{
+            borderTop: "1px solid #e7e2d7",
+            display: "flex",
+            gap: "0.5rem",
+            flexWrap: "wrap",
+            paddingTop: "0.75rem"
+          }}
+        >
+          <select
+            onChange={(event) => setSelectedProvisionalSkillId(event.target.value)}
+            style={{ fontSize: "1rem", padding: "0.45rem" }}
+            value={selectedProvisionalSkillId}
+          >
+            <option value="">Request provisional skill...</option>
+            {availableProvisionalSkills.map((skill) => (
+              <option key={skill.id} value={skill.id}>
+                {skill.name}
+              </option>
+            ))}
+          </select>
+          <button
+            disabled={!selectedProvisionalSkillId}
+            onClick={() => void handleRequestProvisionalSkillCheck()}
+            type="button"
+          >
+            Request provisional skill
+          </button>
         </div>
       </section>
 

@@ -561,7 +561,7 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
             Personal information is edited on the Character Sheet. GM progression controls are
             integrated into the rows below.
           </p>
-          {isGameMaster && progressionView ? (
+          {progressionView ? (
             <div
               style={{
                 borderTop: "1px solid #e7e2d7",
@@ -571,39 +571,108 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
                 paddingTop: "0.9rem"
               }}
             >
-              <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
-                <strong>Available progression points: {progressionView.availablePoints}</strong>
-                <label style={{ display: "grid", gap: "0.2rem" }}>
-                  <span style={{ color: "#5e5a50", fontSize: "0.82rem" }}>Points to add</span>
-                  <input
-                    min="0"
-                    onChange={(event) => setPointsToGrant(event.target.value)}
-                    style={numericInputStyle}
-                    type="number"
-                    value={pointsToGrant}
-                  />
-                </label>
-                <button onClick={handleGrantProgressionPoints} type="button">
-                  Grant points
-                </button>
-              </div>
+              {isGameMaster ? (
+                <>
+                  <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
+                    <strong>Available progression points: {progressionView.availablePoints}</strong>
+                    <label style={{ display: "grid", gap: "0.2rem" }}>
+                      <span style={{ color: "#5e5a50", fontSize: "0.82rem" }}>Points to add</span>
+                      <input
+                        min="0"
+                        onChange={(event) => setPointsToGrant(event.target.value)}
+                        style={numericInputStyle}
+                        type="number"
+                        value={pointsToGrant}
+                      />
+                    </label>
+                    <button onClick={handleGrantProgressionPoints} type="button">
+                      Grant points
+                    </button>
+                  </div>
 
-              <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-                <select
-                  onChange={(event) => setSelectedProvisionalSkillId(event.target.value)}
-                  style={{ fontSize: "1rem", padding: "0.45rem" }}
-                  value={selectedProvisionalSkillId}
-                >
-                  <option value="">Add provisional checked skill...</option>
-                  {availableSkills.map((skill) => (
-                    <option key={skill.id} value={skill.id}>
-                      {skill.name}
-                    </option>
-                  ))}
-                </select>
-                <button disabled={!selectedProvisionalSkillId} onClick={handleAddProvisionalSkillCheck} type="button">
-                  Add provisional check
-                </button>
+                  <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+                    <select
+                      onChange={(event) => setSelectedProvisionalSkillId(event.target.value)}
+                      style={{ fontSize: "1rem", padding: "0.45rem" }}
+                      value={selectedProvisionalSkillId}
+                    >
+                      <option value="">Add provisional checked skill...</option>
+                      {availableSkills.map((skill) => (
+                        <option key={skill.id} value={skill.id}>
+                          {skill.name}
+                        </option>
+                      ))}
+                    </select>
+                    <button disabled={!selectedProvisionalSkillId} onClick={handleAddProvisionalSkillCheck} type="button">
+                      Add provisional check
+                    </button>
+                  </div>
+                </>
+              ) : null}
+
+              <div style={{ borderTop: "1px solid #e7e2d7", display: "grid", gap: "0.75rem", paddingTop: "0.75rem" }}>
+                <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: "0.5rem", justifyContent: "space-between" }}>
+                  <h3 style={{ margin: 0 }}>Skill groups</h3>
+                  {isGameMaster ? (
+                    <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+                    <select
+                      onChange={(event) => setSelectedSkillGroupId(event.target.value)}
+                      style={{ fontSize: "1rem", padding: "0.45rem" }}
+                      value={selectedSkillGroupId}
+                    >
+                      <option value="">Add skill group...</option>
+                      {availableSkillGroups.map((group) => (
+                        <option key={group.groupId} value={group.groupId}>
+                          {group.name}
+                        </option>
+                      ))}
+                    </select>
+                    <button disabled={!selectedSkillGroupId} onClick={handleAddSkillGroup} type="button">
+                      Add group
+                    </button>
+                    </div>
+                  ) : null}
+                </div>
+                <div style={{ overflowX: "auto" }}>
+                  <table style={{ borderCollapse: "collapse", minWidth: 520, width: "100%" }}>
+                    <thead>
+                      <tr style={{ borderBottom: "1px solid #d9ddd8", textAlign: "left" }}>
+                        <th style={{ padding: "0.4rem 0.5rem 0.4rem 0" }}>Group</th>
+                        <th style={{ padding: "0.4rem 0.5rem", textAlign: "right" }}>Level</th>
+                        <th style={{ padding: "0.4rem 0" }}>Progression</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {skillGroupRows.length > 0 ? (
+                        skillGroupRows.map((group) => (
+                          <tr key={group.groupId} style={{ borderBottom: "1px solid #eee8dc" }}>
+                            <td style={{ padding: "0.55rem 0.5rem 0.55rem 0" }}>{group.name}</td>
+                            <td style={{ padding: "0.55rem 0.5rem", textAlign: "right" }}>
+                              <input
+                                onChange={(event) => updateSkillGroup(group.groupId, event.target.value)}
+                                style={numericInputStyle}
+                                type="number"
+                                value={group.level}
+                              />
+                            </td>
+                            <td style={{ padding: "0.55rem 0" }}>
+                              {renderProgressionCheckControls({
+                                targetId: group.groupId,
+                                targetType: "skillGroup"
+                              })}
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={3} style={{ padding: "0.75rem 0" }}>
+                            No skill groups recorded.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           ) : null}
@@ -679,66 +748,6 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
           </table>
         </section>
 
-        <section
-          style={{
-            background: "#f6f5ef",
-            border: "1px solid #d9ddd8",
-            borderRadius: 12,
-            gridColumn: "1 / -1",
-            order: 2,
-            padding: "1rem"
-          }}
-        >
-          <h2 style={{ margin: "0 0 0.75rem 0" }}>Skill Groups</h2>
-          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginBottom: "0.9rem" }}>
-            <select
-              onChange={(event) => setSelectedSkillGroupId(event.target.value)}
-              style={{ fontSize: "1rem", padding: "0.45rem" }}
-              value={selectedSkillGroupId}
-            >
-              <option value="">Add skill group...</option>
-              {availableSkillGroups.map((group) => (
-                <option key={group.groupId} value={group.groupId}>
-                  {group.name}
-                </option>
-              ))}
-            </select>
-            <button disabled={!selectedSkillGroupId} onClick={handleAddSkillGroup} type="button">
-              Add group
-            </button>
-          </div>
-          <div
-            style={{
-              display: "grid",
-              gap: "0.6rem",
-              gridTemplateColumns: isGameMaster ? "minmax(0, 1fr) auto minmax(160px, auto)" : "minmax(0, 1fr) auto",
-              alignItems: "center"
-            }}
-          >
-            {skillGroupRows.map((group) => (
-              <div
-                key={group.groupId}
-                style={{ display: "contents" }}
-              >
-                <div>{group.name}</div>
-                <input
-                  onChange={(event) => updateSkillGroup(group.groupId, event.target.value)}
-                  style={numericInputStyle}
-                  type="number"
-                  value={group.level}
-                />
-                {isGameMaster ? (
-                  <div>
-                    {renderProgressionCheckControls({
-                      targetId: group.groupId,
-                      targetType: "skillGroup"
-                    })}
-                  </div>
-                ) : null}
-              </div>
-            ))}
-          </div>
-        </section>
       </section>
 
       <section
