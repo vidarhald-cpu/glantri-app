@@ -148,7 +148,7 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
   }
 
   async function handleResolveAttempts() {
-    if (!draft || !content) {
+    if (!draft || !content || !record) {
       return;
     }
 
@@ -157,10 +157,17 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
       content
     });
     const successes = result.history.filter((entry) => entry.success).length;
+    const savedRecord = await localCharacterRepository.save({
+      build: result.build,
+      createdAt: record.createdAt,
+      finalizedAt: record.finalizedAt,
+      syncStatus: "local"
+    });
 
+    setRecord(savedRecord);
     await persistDraft(
       result.build,
-      `Resolved ${result.history.length} progression attempt${result.history.length === 1 ? "" : "s"}; ${successes} succeeded.`
+      `Resolved ${result.history.length} progression attempt${result.history.length === 1 ? "" : "s"}; ${successes} succeeded. Progression saved locally.`
     );
   }
 

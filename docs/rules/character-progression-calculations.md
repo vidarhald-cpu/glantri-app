@@ -58,10 +58,11 @@ Provisional skills:
 
 - show as `Provisional`,
 - have current XP `0`,
-- do not appear as trained on the main Character Sheet yet,
+- appear on Progression while they are only requested or approved checks,
+- do not appear as trained on the main Character Sheet before a successful resolution,
 - become real skill rows with `+1 XP` if the progression attempt succeeds.
 
-If the attempt fails, the failure is recorded in history and the skill does not become trained.
+If the attempt fails, the failure is recorded in history and the skill does not become trained or appear on the Character Sheet.
 
 ## 6. Advancement thresholds
 

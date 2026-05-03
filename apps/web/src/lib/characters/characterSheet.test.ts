@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import type { CharacterBuild, SkillDefinition, SkillGroupDefinition } from "@glantri/domain";
-import { buildCharacterSheetSummary } from "@glantri/rules-engine";
+import {
+  addCharacterProgressionCheck,
+  buildCharacterSheetSummary,
+  buyCharacterProgressionAttempt,
+  grantCharacterProgressionPoints,
+  resolveCharacterProgressionAttempts
+} from "@glantri/rules-engine";
 
 import {
   buildCharacterSheetProfileStatRows,
@@ -106,6 +112,21 @@ const skills: SkillDefinition[] = [
     requiresLiteracy: "no",
     societyLevel: 1,
     sortOrder: 6
+  },
+  {
+    allowsSpecializations: false,
+    category: "ordinary",
+    dependencies: [],
+    dependencySkillIds: [],
+    groupId: "philosophy_group",
+    groupIds: ["philosophy_group"],
+    id: "philosophy",
+    isTheoretical: true,
+    linkedStats: ["int", "pow"],
+    name: "Philosophy",
+    requiresLiteracy: "yes",
+    societyLevel: 1,
+    sortOrder: 7
   }
 ];
 
@@ -151,6 +172,12 @@ const skillGroups: SkillGroupDefinition[] = [
     id: "combat_group",
     name: "Combat",
     sortOrder: 2
+  },
+  {
+    description: "Philosophy",
+    id: "philosophy_group",
+    name: "Philosophy",
+    sortOrder: 3
   }
 ];
 
@@ -415,5 +442,79 @@ describe("buildCharacterSheetSkillRows", () => {
         xp: 2
       })
     );
+  });
+
+  it("does not show unresolved provisional skills on the Character Sheet", () => {
+    const build: CharacterBuild = {
+      ...baseBuild,
+      progressionState: {
+        availablePoints: 2,
+        checks: [
+          {
+            checkedAt: "2026-01-01T00:00:00.000Z",
+            id: "check-philosophy",
+            provisional: true,
+            status: "approved",
+            targetId: "philosophy",
+            targetLabel: "Philosophy",
+            targetType: "skill"
+          }
+        ],
+        history: [],
+        pendingAttempts: []
+      }
+    };
+    const sheetSummary = buildCharacterSheetSummary({
+      build,
+      content
+    });
+    const rows = buildCharacterSheetSkillRows({
+      build,
+      content,
+      sheetSummary
+    }).flatMap((group) => group.rows);
+
+    expect(rows.find((row) => row.skillId === "philosophy")).toBeUndefined();
+  });
+
+  it("shows successfully resolved provisional skills and current skill-point gains", () => {
+    const checked = addCharacterProgressionCheck({
+      build: grantCharacterProgressionPoints({ amount: 2, build: baseBuild }),
+      content,
+      provisional: true,
+      targetId: "philosophy",
+      targetType: "skill"
+    });
+    const purchased = buyCharacterProgressionAttempt({
+      build: checked,
+      content,
+      targetId: "philosophy",
+      targetType: "skill"
+    });
+    const resolved = resolveCharacterProgressionAttempts({
+      build: purchased.build,
+      content,
+      rng: () => 0
+    });
+    const sheetSummary = buildCharacterSheetSummary({
+      build: resolved.build,
+      content
+    });
+    const rows = buildCharacterSheetSkillRows({
+      build: resolved.build,
+      content,
+      sheetSummary
+    }).flatMap((group) => group.rows);
+
+    expect(rows.find((row) => row.skillId === "philosophy")).toMatchObject({
+      skillName: "Philosophy",
+      skillXp: 1,
+      totalXp: 1
+    });
+    expect(sheetSummary.skillPoints).toEqual({
+      current: 2,
+      original: 0,
+      successfulProgressionGains: 2
+    });
   });
 });

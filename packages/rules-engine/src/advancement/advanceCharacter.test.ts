@@ -14,6 +14,7 @@ import {
   rollOpenEndedProgressionD20,
   spendAdvancementPoint
 } from "./advanceCharacter";
+import { buildCharacterSheetSummary } from "../sheets/buildCharacterSheetSummary";
 
 const content = validateCanonicalContent({
   professionFamilies: [{ id: "scholar", name: "Scholar" }],
@@ -674,5 +675,70 @@ describe("character progression state", () => {
     });
     expect(resolved.build.progressionState?.pendingAttempts).toHaveLength(0);
     expect(resolved.build.progressionState?.checks).toHaveLength(0);
+  });
+
+  it("counts only successful resolved progression costs as current skill-point gains", () => {
+    const build: CharacterBuild = {
+      ...createBuild(),
+      progression: {
+        ...createBuild().progression,
+        primaryPoolSpent: 10,
+        secondaryPoolSpent: 3
+      },
+      progressionState: {
+        availablePoints: 99,
+        checks: [],
+        history: [
+          {
+            afterValue: 13,
+            beforeValue: 12,
+            cost: 2,
+            id: "history-success",
+            openEndedD10s: [],
+            resolvedAt: "2026-01-01T00:00:00.000Z",
+            rollD20: 12,
+            rollTotal: 12,
+            success: true,
+            targetId: "lore",
+            targetLabel: "Lore",
+            targetType: "skill",
+            threshold: 12
+          },
+          {
+            afterValue: 12,
+            beforeValue: 12,
+            cost: 2,
+            id: "history-failure",
+            openEndedD10s: [],
+            resolvedAt: "2026-01-01T00:00:00.000Z",
+            rollD20: 11,
+            rollTotal: 11,
+            success: false,
+            targetId: "lore",
+            targetLabel: "Lore",
+            targetType: "skill",
+            threshold: 12
+          }
+        ],
+        pendingAttempts: [
+          {
+            checkId: "check-pending",
+            cost: 4,
+            id: "attempt-pending",
+            purchasedAt: "2026-01-01T00:00:00.000Z",
+            targetId: "codes",
+            targetLabel: "Codes",
+            targetType: "specialization"
+          }
+        ]
+      }
+    };
+    const summary = buildCharacterSheetSummary({ build, content });
+
+    expect(summary.skillPoints).toEqual({
+      current: 15,
+      original: 13,
+      successfulProgressionGains: 2
+    });
   });
 });

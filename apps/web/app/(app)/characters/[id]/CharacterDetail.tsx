@@ -248,7 +248,9 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
   const socialClassNumber = build.profile.socialClassRoll;
   const socialClassSummary =
     socialClassNumber !== undefined ? `${socialClassLabel} (${socialClassNumber})` : socialClassLabel;
-  const spentSkillPoints = sheetSummary.totalSkillPointsInvested;
+  const originalSkillPoints = sheetSummary.skillPoints.original;
+  const successfulProgressionGains = sheetSummary.skillPoints.successfulProgressionGains;
+  const currentSkillPoints = sheetSummary.skillPoints.current;
   const remainingSkillPoints =
     sheetSummary.draftView.primaryPoolAvailable + sheetSummary.draftView.secondaryPoolAvailable;
   const educationLevel = sheetSummary.draftView.education.theoreticalSkillCount;
@@ -408,9 +410,15 @@ export default function CharacterDetail({ id }: CharacterDetailProps) {
             <strong>Chargen rules</strong>
             <div>{getChargenRuleSetName(build)}</div>
 
-            <strong>Skill points</strong>
+            <strong>Current skill points</strong>
             <div>
-              {spentSkillPoints} spent / {remainingSkillPoints} remaining
+              <div>{currentSkillPoints}</div>
+              <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
+                Original {originalSkillPoints} + successful progression {successfulProgressionGains}
+              </div>
+              <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
+                Chargen remaining: {remainingSkillPoints}
+              </div>
             </div>
 
             <strong>Skill groups</strong>

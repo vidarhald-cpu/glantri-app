@@ -238,13 +238,23 @@ Cost examples:
 
 ### Skill points summary
 
-The Character Sheet summary shows spent and remaining skill points.
+The Character Sheet summary shows current skill points and how progression changed them.
 
 Formula:
 
 ```text
-Spent = total skill points invested
-Remaining = ordinary pool remaining + flexible pool remaining
+Successful progression gains = sum(cost of successful resolved progression attempts)
+Current skill points = Original skill points + Successful progression gains
+```
+
+`Original skill points` are the character's chargen invested points at creation/finalization.
+`Successful progression gains` count only resolved progression attempts that succeeded.
+Failed attempts, pending attempts, and unspent progression points do not count toward current skill points.
+
+The summary may also show chargen remaining points:
+
+```text
+Chargen remaining = ordinary pool remaining + flexible pool remaining
 ```
 
 ### Education

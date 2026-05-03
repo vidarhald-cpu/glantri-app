@@ -63,6 +63,11 @@ export interface CharacterSheetSummary {
   professionName?: string;
   societyLabel?: string;
   seniority: number;
+  skillPoints: {
+    current: number;
+    original: number;
+    successfulProgressionGains: number;
+  };
   totalSkillPointsInvested: number;
 }
 
@@ -140,6 +145,13 @@ export function buildCharacterSheetSummary(input: {
     (sum, group) => sum + (group.gms ?? 0),
     0
   );
+  const successfulProgressionGains =
+    input.build.progressionState?.history.reduce(
+      (sum, entry) => sum + (entry.success ? entry.cost : 0),
+      0
+    ) ?? 0;
+  const originalSkillPoints = draftView.totalSkillPointsInvested;
+  const currentSkillPoints = originalSkillPoints + successfulProgressionGains;
 
   return {
     adjustedStats,
@@ -168,7 +180,12 @@ export function buildCharacterSheetSummary(input: {
     },
     professionName: getProfessionName(input.content, input.build.professionId),
     societyLabel: getSocietyLabel(input.content, input.build.societyId, input.build.societyLevel),
-    seniority: draftView.totalSkillPointsInvested,
-    totalSkillPointsInvested: draftView.totalSkillPointsInvested
+    seniority: currentSkillPoints,
+    skillPoints: {
+      current: currentSkillPoints,
+      original: originalSkillPoints,
+      successfulProgressionGains
+    },
+    totalSkillPointsInvested: currentSkillPoints
   };
 }
