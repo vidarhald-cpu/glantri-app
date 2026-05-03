@@ -18,7 +18,12 @@ import type {
   SkillSpecialization,
   SocietyLevelAccess
 } from "@glantri/domain";
-import { getSkillGroupIds, glantriCharacteristicKeySchema } from "@glantri/domain";
+import {
+  getSkillGroupIds,
+  glantriCharacteristicKeySchema,
+  glantriCharacteristicLabels,
+  glantriCharacteristicOrder
+} from "@glantri/domain";
 
 import {
   buildCharacterSheetSummary,
@@ -45,6 +50,8 @@ interface CanonicalContentShape {
 }
 
 export interface CharacterProgressionTargetRow {
+  approved: boolean;
+  approvedCheckId?: string;
   checked: boolean;
   checkId?: string;
   cost?: number;
@@ -53,6 +60,8 @@ export interface CharacterProgressionTargetRow {
   label: string;
   pending: boolean;
   provisional: boolean;
+  requested: boolean;
+  requestedCheckId?: string;
   targetId: string;
   targetType: ProgressionTargetType;
 }
@@ -149,6 +158,32 @@ function findCheck(
 ): CharacterProgressionCheck | undefined {
   return state.checks.find(
     (check) => check.targetType === targetType && check.targetId === targetId
+  );
+}
+
+function findApprovedCheck(
+  state: CharacterProgressionState,
+  targetType: ProgressionTargetType,
+  targetId: string
+): CharacterProgressionCheck | undefined {
+  return state.checks.find(
+    (check) =>
+      check.targetType === targetType &&
+      check.targetId === targetId &&
+      (check.status ?? "approved") === "approved"
+  );
+}
+
+function findRequestedCheck(
+  state: CharacterProgressionState,
+  targetType: ProgressionTargetType,
+  targetId: string
+): CharacterProgressionCheck | undefined {
+  return state.checks.find(
+    (check) =>
+      check.targetType === targetType &&
+      check.targetId === targetId &&
+      (check.status ?? "approved") === "requested"
   );
 }
 
@@ -459,11 +494,85 @@ export function addCharacterProgressionCheck(input: {
         id: createId("check"),
         notes: input.notes,
         provisional: input.provisional,
+        status: "approved",
         targetId: input.targetId,
         targetLabel: getTargetLabel(input),
         targetType: input.targetType
       }
     ]
+  };
+  return build;
+}
+
+export function requestCharacterProgressionCheck(input: {
+  build: CharacterBuild;
+  content: CanonicalContentShape;
+  notes?: string;
+  provisional?: boolean;
+  requestedBy?: string;
+  targetId: string;
+  targetType: ProgressionTargetType;
+}): CharacterBuild {
+  const build = structuredClone(input.build);
+  const state = getCharacterProgressionState(build);
+  const existing = findCheck(state, input.targetType, input.targetId);
+
+  if (existing || !isValidProgressionTarget(input)) {
+    return build;
+  }
+
+  build.progressionState = {
+    ...state,
+    checks: [
+      ...state.checks,
+      {
+        checkedAt: nowIso(),
+        id: createId("check"),
+        notes: input.notes,
+        provisional: input.provisional,
+        requestedBy: input.requestedBy,
+        status: "requested",
+        targetId: input.targetId,
+        targetLabel: getTargetLabel(input),
+        targetType: input.targetType
+      }
+    ]
+  };
+  return build;
+}
+
+export function approveCharacterProgressionCheck(input: {
+  build: CharacterBuild;
+  checkedBy?: string;
+  content: CanonicalContentShape;
+  provisional?: boolean;
+  targetId: string;
+  targetType: ProgressionTargetType;
+}): CharacterBuild {
+  const build = structuredClone(input.build);
+  const state = getCharacterProgressionState(build);
+  const existing = findCheck(state, input.targetType, input.targetId);
+
+  if (!isValidProgressionTarget(input)) {
+    return build;
+  }
+
+  if (!existing) {
+    return addCharacterProgressionCheck(input);
+  }
+
+  build.progressionState = {
+    ...state,
+    checks: state.checks.map((check) =>
+      check.id === existing.id
+        ? {
+            ...check,
+            checkedBy: input.checkedBy ?? check.checkedBy,
+            provisional: input.provisional ?? check.provisional,
+            status: "approved"
+          }
+        : check
+    )
   };
   return build;
 }
@@ -498,10 +607,10 @@ export function buyCharacterProgressionAttempt(input: {
 } {
   const build = structuredClone(input.build);
   const state = getCharacterProgressionState(build);
-  const check = findCheck(state, input.targetType, input.targetId);
+  const check = findApprovedCheck(state, input.targetType, input.targetId);
 
   if (!check) {
-    return { build, error: "This target needs a check before buying a progression attempt." };
+    return { build, error: "This target needs a GM-approved check before buying a progression attempt." };
   }
 
   if (hasPendingAttempt(state, input.targetType, input.targetId)) {
@@ -626,16 +735,51 @@ export function buildCharacterProgressionView(input: {
   const sheetSummary = buildCharacterSheetSummary(input);
   const rowsByKey = new Map<string, CharacterProgressionTargetRow>();
 
-  const addRow = (row: Omit<CharacterProgressionTargetRow, "checked" | "checkId" | "pending">) => {
+  const addRow = (
+    row: Omit<
+      CharacterProgressionTargetRow,
+      | "approved"
+      | "approvedCheckId"
+      | "checked"
+      | "checkId"
+      | "pending"
+      | "requested"
+      | "requestedCheckId"
+    >
+  ) => {
     const check = findCheck(state, row.targetType, row.targetId);
+    const approvedCheck = findApprovedCheck(state, row.targetType, row.targetId);
+    const requestedCheck = findRequestedCheck(state, row.targetType, row.targetId);
     const pending = hasPendingAttempt(state, row.targetType, row.targetId);
     rowsByKey.set(`${row.targetType}:${row.targetId}`, {
       ...row,
-      checked: Boolean(check),
+      approved: Boolean(approvedCheck),
+      approvedCheckId: approvedCheck?.id,
+      checked: Boolean(approvedCheck),
       checkId: check?.id,
-      pending
+      pending,
+      requested: Boolean(requestedCheck),
+      requestedCheckId: requestedCheck?.id
     });
   };
+
+  for (const stat of glantriCharacteristicOrder) {
+    const costResult = getProgressionAttemptCost({
+      build: input.build,
+      content: input.content,
+      targetId: stat,
+      targetType: "stat"
+    });
+    addRow({
+      cost: costResult.cost,
+      currentValue: getStatValue(input.build, stat),
+      disabledReason: costResult.error,
+      label: glantriCharacteristicLabels[stat],
+      provisional: false,
+      targetId: stat,
+      targetType: "stat"
+    });
+  }
 
   for (const group of sheetSummary.draftView.groups) {
     const costResult = getProgressionAttemptCost({
@@ -705,7 +849,9 @@ export function buildCharacterProgressionView(input: {
       targetType: check.targetType
     });
     rowsByKey.set(key, {
-      checked: true,
+      approved: (check.status ?? "approved") === "approved",
+      approvedCheckId: (check.status ?? "approved") === "approved" ? check.id : undefined,
+      checked: (check.status ?? "approved") === "approved",
       checkId: check.id,
       cost: costResult.cost,
       currentValue:
@@ -716,6 +862,8 @@ export function buildCharacterProgressionView(input: {
       label: check.targetLabel,
       pending: hasPendingAttempt(state, check.targetType, check.targetId),
       provisional: Boolean(check.provisional),
+      requested: (check.status ?? "approved") === "requested",
+      requestedCheckId: (check.status ?? "approved") === "requested" ? check.id : undefined,
       targetId: check.targetId,
       targetType: check.targetType
     });

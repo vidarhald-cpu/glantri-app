@@ -184,6 +184,7 @@ export const progressionTargetTypeSchema = z.enum([
   "skillGroup",
   "specialization"
 ]);
+export const progressionCheckStatusSchema = z.enum(["requested", "approved"]);
 
 const progressionTargetBaseSchema = z.object({
   targetId: z.string().min(1),
@@ -196,7 +197,9 @@ export const characterProgressionCheckSchema = progressionTargetBaseSchema.exten
   checkedBy: z.string().min(1).optional(),
   id: z.string().min(1),
   notes: z.string().optional(),
-  provisional: z.boolean().optional()
+  provisional: z.boolean().optional(),
+  requestedBy: z.string().min(1).optional(),
+  status: progressionCheckStatusSchema.default("approved")
 });
 
 export const characterProgressionPendingAttemptSchema = progressionTargetBaseSchema.extend({

@@ -6,11 +6,13 @@ This page explains the first version of character progression: GM checks, progre
 
 Progression is manual in this version. Combat and skill use do not automatically create checks yet.
 
-## 2. Checks and progression points
+## 2. Requested checks, approved checks, and progression points
 
-A `Check` is a GM marker that the character used a stat, skill, skill group, or specialization successfully.
+A requested check is a player proposal: “I used this stat, skill, skill group, or specialization successfully.”
 
-A character must have a check before a player can buy a progression attempt for that target.
+An approved check is the GM-approved version. A character must have an approved check before the player can buy a progression attempt for that target.
+
+Requested checks show as awaiting GM approval. They do not allow spending progression points yet.
 
 `Progression points` are granted by the GM. The player spends them to buy pending progression attempts. Spending points does not immediately increase XP or values.
 
@@ -50,7 +52,7 @@ Active group skills are fixed group skills plus selected choice-slot skills. Uns
 
 ## 5. Provisional skills
 
-A GM can check a skill the character does not currently have. This creates a provisional checked skill on the Progression screen.
+A GM can approve a check for a skill the character does not currently have. This creates a provisional checked skill on the Progression screen.
 
 Provisional skills:
 

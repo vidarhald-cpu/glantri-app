@@ -5,9 +5,11 @@ import type { CharacterBuild } from "@glantri/domain";
 
 import {
   addCharacterProgressionCheck,
+  approveCharacterProgressionCheck,
   buildCharacterProgressionView,
   buyCharacterProgressionAttempt,
   grantCharacterProgressionPoints,
+  requestCharacterProgressionCheck,
   resolveCharacterProgressionAttempts,
   rollOpenEndedProgressionD20,
   spendAdvancementPoint
@@ -380,10 +382,73 @@ describe("character progression state", () => {
       targetType: "skill"
     });
 
-    expect(rejected.error).toContain("needs a check");
+    expect(rejected.error).toContain("GM-approved check");
     expect(purchased.error).toBeUndefined();
     expect(purchased.build.progressionState?.availablePoints).toBe(0);
     expect(purchased.build.progressionState?.pendingAttempts).toHaveLength(1);
+  });
+
+  it("shows full progression rows even before checks exist", () => {
+    const view = buildCharacterProgressionView({
+      build: createBuild(),
+      content
+    });
+
+    expect(view.rows.some((row) => row.targetType === "stat" && row.targetId === "str")).toBe(true);
+    expect(view.rows.some((row) => row.targetType === "skillGroup" && row.targetId === "scholarly")).toBe(true);
+    expect(view.rows.some((row) => row.targetType === "skill" && row.targetId === "lore")).toBe(true);
+    expect(view.rows.some((row) => row.targetType === "specialization" && row.targetId === "codes")).toBe(true);
+  });
+
+  it("lets players request checks but requires GM approval before buying attempts", () => {
+    const requested = requestCharacterProgressionCheck({
+      build: grantCharacterProgressionPoints({ amount: 2, build: createBuild() }),
+      content,
+      targetId: "lore",
+      targetType: "skill"
+    });
+    const requestedView = buildCharacterProgressionView({ build: requested, content });
+    const requestedRow = requestedView.rows.find(
+      (row) => row.targetType === "skill" && row.targetId === "lore"
+    );
+    const rejected = buyCharacterProgressionAttempt({
+      build: requested,
+      content,
+      targetId: "lore",
+      targetType: "skill"
+    });
+    const approved = approveCharacterProgressionCheck({
+      build: requested,
+      content,
+      targetId: "lore",
+      targetType: "skill"
+    });
+    const approvedView = buildCharacterProgressionView({ build: approved, content });
+    const approvedRow = approvedView.rows.find(
+      (row) => row.targetType === "skill" && row.targetId === "lore"
+    );
+    const purchased = buyCharacterProgressionAttempt({
+      build: approved,
+      content,
+      targetId: "lore",
+      targetType: "skill"
+    });
+
+    expect(requested.progressionState?.checks[0]).toMatchObject({ status: "requested" });
+    expect(requestedRow).toMatchObject({
+      approved: false,
+      checked: false,
+      requested: true
+    });
+    expect(rejected.error).toBe("This target needs a GM-approved check before buying a progression attempt.");
+    expect(approved.progressionState?.checks[0]).toMatchObject({ status: "approved" });
+    expect(approvedRow).toMatchObject({
+      approved: true,
+      checked: true,
+      requested: false
+    });
+    expect(purchased.error).toBeUndefined();
+    expect(purchased.build.progressionState?.availablePoints).toBe(0);
   });
 
   it("does not leak an older pending attempt cost through the legacy spend wrapper", () => {
@@ -407,7 +472,7 @@ describe("character progression state", () => {
     });
 
     expect(purchased.attempt?.cost).toBe(2);
-    expect(rejected.error).toContain("needs a check");
+    expect(rejected.error).toContain("GM-approved check");
     expect(rejected.spentCost).toBeUndefined();
   });
 
@@ -547,7 +612,9 @@ describe("character progression state", () => {
       build: checked,
       content
     });
-    const row = view.rows.find((candidate) => candidate.targetType === "stat");
+    const row = view.rows.find(
+      (candidate) => candidate.targetType === "stat" && candidate.targetId === "str"
+    );
     const purchased = buyCharacterProgressionAttempt({
       build: checked,
       content,

@@ -164,4 +164,26 @@ describe("character progression compatibility", () => {
     expect(withRuleSet.chargenRuleSet?.name).toBe("Experimental chargen");
     expect(withRuleSet.chargenRuleSet?.flexiblePointFactor).toBe(2);
   });
+
+  it("normalizes legacy progression checks without status as approved checks", () => {
+    const parsed = characterBuildSchema.parse({
+      ...baseBuild,
+      progressionState: {
+        availablePoints: 1,
+        checks: [
+          {
+            checkedAt: "2026-01-01T00:00:00.000Z",
+            id: "check-legacy",
+            targetId: "lore",
+            targetLabel: "Lore",
+            targetType: "skill"
+          }
+        ],
+        history: [],
+        pendingAttempts: []
+      }
+    });
+
+    expect(parsed.progressionState.checks[0]?.status).toBe("approved");
+  });
 });

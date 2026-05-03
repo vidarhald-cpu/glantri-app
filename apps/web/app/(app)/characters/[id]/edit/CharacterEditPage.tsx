@@ -7,10 +7,12 @@ import {
   glantriCharacteristicLabels,
   glantriCharacteristicOrder,
   type CharacterBuild,
-  type GlantriCharacteristicKey
+  type GlantriCharacteristicKey,
+  type ProgressionTargetType
 } from "@glantri/domain";
 import {
   addCharacterProgressionCheck,
+  approveCharacterProgressionCheck,
   buildCharacterProgressionView,
   grantCharacterProgressionPoints,
   removeCharacterProgressionCheck
@@ -316,10 +318,10 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
   }
 
   function toggleProgressionCheck(input: {
-    checked: boolean;
+    approved: boolean;
     provisional?: boolean;
     targetId: string;
-    targetType: "stat" | "skill" | "skillGroup" | "specialization";
+    targetType: ProgressionTargetType;
   }) {
     if (!content) {
       return;
@@ -330,13 +332,13 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
         return current;
       }
 
-      return input.checked
+      return input.approved
         ? removeCharacterProgressionCheck({
             build: current,
             targetId: input.targetId,
             targetType: input.targetType
           })
-        : addCharacterProgressionCheck({
+        : approveCharacterProgressionCheck({
             build: current,
             content,
             provisional: input.provisional,
@@ -344,6 +346,47 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
             targetType: input.targetType
           });
     });
+  }
+
+  function getProgressionRow(targetType: ProgressionTargetType, targetId: string) {
+    return progressionView?.rows.find((row) => row.targetType === targetType && row.targetId === targetId);
+  }
+
+  function renderProgressionCheckControls(input: {
+    label?: string;
+    provisional?: boolean;
+    targetId: string;
+    targetType: ProgressionTargetType;
+  }) {
+    if (!isGameMaster || !progressionView) {
+      return null;
+    }
+
+    const row = getProgressionRow(input.targetType, input.targetId);
+    const approved = Boolean(row?.approved);
+
+    return (
+      <div style={{ color: "#5e5a50", display: "grid", fontSize: "0.82rem", gap: "0.2rem" }}>
+        <span>
+          Requested: {row?.requested ? "Awaiting GM approval" : approved ? "Approved" : "No"}
+        </span>
+        <label>
+          <input
+            checked={approved}
+            onChange={() =>
+              toggleProgressionCheck({
+                approved,
+                provisional: input.provisional,
+                targetId: input.targetId,
+                targetType: input.targetType
+              })
+            }
+            type="checkbox"
+          />{" "}
+          Approved check
+        </label>
+      </div>
+    );
   }
 
   function handleAddProvisionalSkillCheck() {
@@ -490,6 +533,7 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
                 <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Original</th>
                 <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Current</th>
                 <th style={{ padding: "0.5rem 0", textAlign: "right" }}>GM</th>
+                {isGameMaster ? <th style={{ padding: "0.5rem 0 0.5rem 0.75rem" }}>Progression</th> : null}
               </tr>
             </thead>
             <tbody>
@@ -525,6 +569,16 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
                     )}
                   </td>
                   <td style={{ padding: "0.6rem 0", textAlign: "right" }}>{row.gmValue}</td>
+                  {isGameMaster ? (
+                    <td style={{ padding: "0.6rem 0 0.6rem 0.75rem" }}>
+                      {row.stat === "distraction"
+                        ? "—"
+                        : renderProgressionCheckControls({
+                            targetId: row.stat,
+                            targetType: "stat"
+                          })}
+                    </td>
+                  ) : null}
                 </tr>
               ))}
             </tbody>
@@ -561,7 +615,7 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
             style={{
               display: "grid",
               gap: "0.6rem",
-              gridTemplateColumns: "minmax(0, 1fr) auto",
+              gridTemplateColumns: isGameMaster ? "minmax(0, 1fr) auto minmax(160px, auto)" : "minmax(0, 1fr) auto",
               alignItems: "center"
             }}
           >
@@ -577,6 +631,14 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
                   type="number"
                   value={group.level}
                 />
+                {isGameMaster ? (
+                  <div>
+                    {renderProgressionCheckControls({
+                      targetId: group.groupId,
+                      targetType: "skillGroup"
+                    })}
+                  </div>
+                ) : null}
               </div>
             ))}
           </div>
@@ -597,142 +659,26 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
           <div>
             <h2 style={{ margin: "0 0 0.35rem 0" }}>Progression checks and points</h2>
             <p style={{ color: "#5e5a50", margin: 0 }}>
-              GM-only manual checks for later player progression. Stat checks are visible, but stat
-              advancement is not enabled yet.
+              GM controls are integrated into the stat, group, skill, and specialization rows below.
+              Stat checks are visible, but stat advancement is not enabled yet.
             </p>
           </div>
 
           <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
             <strong>Available progression points: {progressionView.availablePoints}</strong>
-            <input
-              min="0"
-              onChange={(event) => setPointsToGrant(event.target.value)}
-              style={numericInputStyle}
-              type="number"
-              value={pointsToGrant}
-            />
+            <label style={{ display: "grid", gap: "0.2rem" }}>
+              <span style={{ color: "#5e5a50", fontSize: "0.82rem" }}>Points to add</span>
+              <input
+                min="0"
+                onChange={(event) => setPointsToGrant(event.target.value)}
+                style={numericInputStyle}
+                type="number"
+                value={pointsToGrant}
+              />
+            </label>
             <button onClick={handleGrantProgressionPoints} type="button">
               Grant points
             </button>
-          </div>
-
-          <div style={{ display: "grid", gap: "0.75rem", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))" }}>
-            <div>
-              <h3 style={{ margin: "0 0 0.5rem 0" }}>Stats</h3>
-              {statRows.map((row) => {
-                const checked = Boolean(
-                  progressionView.checks.find(
-                    (check) => check.targetType === "stat" && check.targetId === row.stat
-                  )
-                );
-
-                return (
-                  <label key={`check-${row.stat}`} style={{ display: "block", marginBottom: "0.35rem" }}>
-                    <input
-                      checked={checked}
-                      onChange={() =>
-                        toggleProgressionCheck({
-                          checked,
-                          targetId: row.stat,
-                          targetType: "stat"
-                        })
-                      }
-                      type="checkbox"
-                    />{" "}
-                    {row.label}
-                  </label>
-                );
-              })}
-            </div>
-
-            <div>
-              <h3 style={{ margin: "0 0 0.5rem 0" }}>Skill groups</h3>
-              {skillGroupRows.map((group) => {
-                const checked = Boolean(
-                  progressionView.checks.find(
-                    (check) => check.targetType === "skillGroup" && check.targetId === group.groupId
-                  )
-                );
-
-                return (
-                  <label key={`check-${group.groupId}`} style={{ display: "block", marginBottom: "0.35rem" }}>
-                    <input
-                      checked={checked}
-                      onChange={() =>
-                        toggleProgressionCheck({
-                          checked,
-                          targetId: group.groupId,
-                          targetType: "skillGroup"
-                        })
-                      }
-                      type="checkbox"
-                    />{" "}
-                    {group.name}
-                  </label>
-                );
-              })}
-            </div>
-
-            <div>
-              <h3 style={{ margin: "0 0 0.5rem 0" }}>Skills</h3>
-              {skillRows.map((skill) => {
-                const checked = Boolean(
-                  progressionView.checks.find(
-                    (check) => check.targetType === "skill" && check.targetId === skill.skillId
-                  )
-                );
-
-                return (
-                  <label key={`check-${skill.skillKey}`} style={{ display: "block", marginBottom: "0.35rem" }}>
-                    <input
-                      checked={checked}
-                      onChange={() =>
-                        toggleProgressionCheck({
-                          checked,
-                          targetId: skill.skillId,
-                          targetType: "skill"
-                        })
-                      }
-                      type="checkbox"
-                    />{" "}
-                    {skill.skillName}
-                  </label>
-                );
-              })}
-            </div>
-
-            <div>
-              <h3 style={{ margin: "0 0 0.5rem 0" }}>Specializations</h3>
-              {specializationRows.map((specialization) => {
-                const checked = Boolean(
-                  progressionView.checks.find(
-                    (check) =>
-                      check.targetType === "specialization" &&
-                      check.targetId === specialization.specializationId
-                  )
-                );
-
-                return (
-                  <label
-                    key={`check-${specialization.specializationId}`}
-                    style={{ display: "block", marginBottom: "0.35rem" }}
-                  >
-                    <input
-                      checked={checked}
-                      onChange={() =>
-                        toggleProgressionCheck({
-                          checked,
-                          targetId: specialization.specializationId,
-                          targetType: "specialization"
-                        })
-                      }
-                      type="checkbox"
-                    />{" "}
-                    {specialization.specializationName}
-                  </label>
-                );
-              })}
-            </div>
           </div>
 
           <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
@@ -798,6 +744,7 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
                 <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Total XP</th>
                 <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Total</th>
                 <th style={{ padding: "0.5rem 0", textAlign: "right" }}>Remove</th>
+                {isGameMaster ? <th style={{ padding: "0.5rem 0 0.5rem 0.75rem" }}>Progression</th> : null}
               </tr>
             </thead>
             <tbody>
@@ -834,11 +781,19 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
                         Remove
                       </button>
                     </td>
+                    {isGameMaster ? (
+                      <td style={{ padding: "0.6rem 0 0.6rem 0.75rem" }}>
+                        {renderProgressionCheckControls({
+                          targetId: skill.skillId,
+                          targetType: "skill"
+                        })}
+                      </td>
+                    ) : null}
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan={8} style={{ padding: "0.75rem 0" }}>
+                  <td colSpan={isGameMaster ? 9 : 8} style={{ padding: "0.75rem 0" }}>
                     No progression skill rows yet.
                   </td>
                 </tr>
@@ -872,6 +827,7 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
                 <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Granted XP</th>
                 <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Total</th>
                 <th style={{ padding: "0.5rem 0", textAlign: "right" }}>Adjust</th>
+                {isGameMaster ? <th style={{ padding: "0.5rem 0 0.5rem 0.75rem" }}>Progression</th> : null}
               </tr>
             </thead>
             <tbody>
@@ -923,11 +879,19 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
                         </button>
                       </div>
                     </td>
+                    {isGameMaster ? (
+                      <td style={{ padding: "0.6rem 0 0.6rem 0.75rem" }}>
+                        {renderProgressionCheckControls({
+                          targetId: specialization.specializationId,
+                          targetType: "specialization"
+                        })}
+                      </td>
+                    ) : null}
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan={6} style={{ padding: "0.75rem 0" }}>
+                  <td colSpan={isGameMaster ? 7 : 6} style={{ padding: "0.75rem 0" }}>
                     No specialization rows yet.
                   </td>
                 </tr>
@@ -937,7 +901,7 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
                     .filter((specialization) => specialization.blockingMessage)
                     .map((specialization) => (
                       <tr key={`${specialization.specializationId}-status`}>
-                        <td colSpan={6} style={{ color: "#8f5a00", fontSize: "0.85rem", padding: "0 0 0.75rem 0" }}>
+                        <td colSpan={isGameMaster ? 7 : 6} style={{ color: "#8f5a00", fontSize: "0.85rem", padding: "0 0 0.75rem 0" }}>
                           {specialization.specializationName}: {specialization.blockingMessage}
                         </td>
                       </tr>

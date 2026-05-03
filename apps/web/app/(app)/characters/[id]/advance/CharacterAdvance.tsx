@@ -7,6 +7,7 @@ import type { CharacterBuild, ProgressionTargetType } from "@glantri/domain";
 import {
   buildCharacterProgressionView,
   buyCharacterProgressionAttempt,
+  requestCharacterProgressionCheck,
   resolveCharacterProgressionAttempts
 } from "@glantri/rules-engine";
 
@@ -131,6 +132,21 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
     await persistDraft(result.build, "Progression attempt purchased. Resolve checks to roll.");
   }
 
+  async function handleRequestCheck(targetType: ProgressionTargetType, targetId: string) {
+    if (!draft || !content) {
+      return;
+    }
+
+    const nextBuild = requestCharacterProgressionCheck({
+      build: draft.build,
+      content,
+      targetId,
+      targetType
+    });
+
+    await persistDraft(nextBuild, "Check requested. Save progression to share it with the GM.");
+  }
+
   async function handleResolveAttempts() {
     if (!draft || !content) {
       return;
@@ -206,7 +222,24 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
     );
   }
 
-  const checkedRows = progressionView.rows.filter((row) => row.checked);
+  const rowsByType = progressionView.rows.reduce(
+    (groups, row) => {
+      groups[row.targetType].push(row);
+      return groups;
+    },
+    {
+      skill: [],
+      skillGroup: [],
+      specialization: [],
+      stat: []
+    } as Record<ProgressionTargetType, typeof progressionView.rows>
+  );
+  const rowSections: Array<{ label: string; rows: typeof progressionView.rows; type: ProgressionTargetType }> = [
+    { label: "Stats", rows: rowsByType.stat, type: "stat" },
+    { label: "Skill groups", rows: rowsByType.skillGroup, type: "skillGroup" },
+    { label: "Skills", rows: rowsByType.skill, type: "skill" },
+    { label: "Specializations", rows: rowsByType.specialization, type: "specialization" }
+  ];
 
   return (
     <section style={{ display: "grid", gap: "1rem", maxWidth: 1120 }}>
@@ -243,7 +276,8 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
       >
         <h2 style={{ margin: 0 }}>Progression points</h2>
         <div>Available progression points: {progressionView.availablePoints}</div>
-        <div>Checks: {progressionView.checks.length}</div>
+        <div>Requested checks: {progressionView.checks.filter((check) => check.status === "requested").length}</div>
+        <div>Approved checks: {progressionView.checks.filter((check) => (check.status ?? "approved") === "approved").length}</div>
         <div>Pending attempts: {progressionView.pendingAttempts.length}</div>
         <div>Resolved history entries: {progressionView.history.length}</div>
       </section>
@@ -258,40 +292,76 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
           padding: "1rem"
         }}
       >
-        <h2 style={{ margin: 0 }}>Checked items</h2>
-        {checkedRows.length > 0 ? (
-          checkedRows.map((row) => {
-            const canBuy =
-              row.checked &&
-              !row.pending &&
-              row.cost !== undefined &&
-              row.cost <= progressionView.availablePoints &&
-              !row.disabledReason;
+        <h2 style={{ margin: 0 }}>Progression rows</h2>
+        <p style={{ color: "#5e5a50", margin: 0 }}>
+          Request checks for things your character used. A GM-approved check is required before
+          spending progression points.
+        </p>
+        {rowSections.map((section) =>
+          section.rows.length > 0 ? (
+            <div key={section.type} style={{ display: "grid", gap: "0.5rem" }}>
+              <h3 style={{ margin: "0.5rem 0 0 0" }}>{section.label}</h3>
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ borderCollapse: "collapse", width: "100%" }}>
+                  <thead>
+                    <tr style={{ borderBottom: "1px solid #d9ddd8", textAlign: "left" }}>
+                      <th style={{ padding: "0.5rem 0.75rem 0.5rem 0" }}>Target</th>
+                      <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Current</th>
+                      <th style={{ padding: "0.5rem 0.75rem" }}>Requested check</th>
+                      <th style={{ padding: "0.5rem 0.75rem" }}>Approved check</th>
+                      <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Cost</th>
+                      <th style={{ padding: "0.5rem 0" }}>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {section.rows.map((row) => {
+                      const canRequest = !row.requested && !row.approved && !row.pending;
+                      const canBuy =
+                        row.approved &&
+                        !row.pending &&
+                        row.cost !== undefined &&
+                        row.cost <= progressionView.availablePoints &&
+                        !row.disabledReason;
 
-            return (
-              <div
-                key={`${row.targetType}:${row.targetId}`}
-                style={{ borderTop: "1px solid #e7e2d7", paddingTop: "0.75rem" }}
-              >
-                <strong>{row.label}</strong>{" "}
-                {row.provisional ? <span style={{ color: "#8f5a00" }}>Provisional</span> : null}
-                <div>Type: {formatTargetType(row.targetType)}</div>
-                <div>Current XP/value: {row.currentValue}</div>
-                <div>Cost: {row.cost ?? "-"}</div>
-                <div>Status: {row.pending ? "Pending attempt" : "Checked"}</div>
-                {row.disabledReason ? <div style={{ color: "#8f3d2f" }}>{row.disabledReason}</div> : null}
-                <button
-                  disabled={!canBuy}
-                  onClick={() => void handleBuyAttempt(row.targetType, row.targetId)}
-                  type="button"
-                >
-                  Buy progression attempt
-                </button>
+                      return (
+                        <tr key={`${row.targetType}:${row.targetId}`} style={{ borderBottom: "1px solid #eee8dc" }}>
+                          <td style={{ padding: "0.6rem 0.75rem 0.6rem 0" }}>
+                            <div>{row.label}</div>
+                            {row.provisional ? <div style={{ color: "#8f5a00", fontSize: "0.82rem" }}>Provisional</div> : null}
+                            {row.disabledReason ? <div style={{ color: "#8f3d2f", fontSize: "0.82rem" }}>{row.disabledReason}</div> : null}
+                          </td>
+                          <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>{row.currentValue}</td>
+                          <td style={{ padding: "0.6rem 0.75rem" }}>
+                            {row.requested ? "Awaiting GM approval" : row.approved ? "Approved by GM" : "Not requested"}
+                          </td>
+                          <td style={{ padding: "0.6rem 0.75rem" }}>{row.approved ? "Approved" : "No"}</td>
+                          <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>{row.cost ?? "-"}</td>
+                          <td style={{ padding: "0.6rem 0" }}>
+                            <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
+                              <button
+                                disabled={!canRequest}
+                                onClick={() => void handleRequestCheck(row.targetType, row.targetId)}
+                                type="button"
+                              >
+                                Request check
+                              </button>
+                              <button
+                                disabled={!canBuy}
+                                onClick={() => void handleBuyAttempt(row.targetType, row.targetId)}
+                                type="button"
+                              >
+                                Buy attempt
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
-            );
-          })
-        ) : (
-          <div>No checked items yet. A GM can add checks from Character Edit.</div>
+            </div>
+          ) : null
         )}
       </section>
 
