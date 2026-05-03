@@ -387,11 +387,9 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
     const approved = Boolean(row?.approved);
 
     return (
-      <div style={{ color: "#5e5a50", display: "grid", fontSize: "0.82rem", gap: "0.2rem" }}>
-        <span>
-          Requested: {row?.requested ? "Awaiting GM approval" : approved ? "Approved" : "No"}
-        </span>
-        <label>
+      <div style={{ color: "#5e5a50", display: "grid", fontSize: "0.82rem", gap: "0.25rem" }}>
+        <span>Requested: {row?.requested ? "Requested" : "—"}</span>
+        <label style={{ alignItems: "center", display: "inline-flex", gap: "0.25rem" }}>
           <input
             checked={approved}
             onChange={() =>
@@ -403,8 +401,8 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
               })
             }
             type="checkbox"
-          />{" "}
-          Approved check
+          />
+          Approved
         </label>
       </div>
     );

@@ -8,16 +8,14 @@ import {
   buildCharacterProgressionView,
   buyCharacterProgressionAttempt,
   type CharacterProgressionTargetRow,
+  removeCharacterProgressionCheck,
   requestCharacterProgressionCheck,
   resolveCharacterProgressionAttempts
 } from "@glantri/rules-engine";
 
 import { saveCharacterToServer } from "../../../../../src/lib/api/localServiceClient";
 import { getPlayerFacingSkillBucket, groupRowsBySkillType } from "../../../../../src/lib/chargen/chargenBrowse";
-import {
-  buildCharacterSheetProfileStatRows,
-  characterSheetStatsTableColumns
-} from "../../../../../src/lib/characters/characterSheet";
+import { buildCharacterSheetProfileStatRows } from "../../../../../src/lib/characters/characterSheet";
 import { loadLocalCharacterAdvancementContext } from "../../../../../src/lib/characters/loadLocalCharacterAdvancementContext";
 import type {
   LocalCharacterDraft,
@@ -43,6 +41,27 @@ function formatTargetType(type: ProgressionTargetType): string {
 
 function getCharacterName(build: CharacterBuild): string {
   return build.name.trim() || "Unnamed Character";
+}
+
+function formatHistoryTime(value: string): string {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "--:--";
+  }
+
+  return `${date.getHours().toString().padStart(2, "0")}:${date
+    .getMinutes()
+    .toString()
+    .padStart(2, "0")}`;
+}
+
+function formatProgressionRoll(input: { openEndedD10s: number[]; rollD20: number; rollTotal: number }): string {
+  if (input.openEndedD10s.length === 0) {
+    return `roll ${input.rollD20}`;
+  }
+
+  return `roll ${[input.rollD20, ...input.openEndedD10s].join("+")}=${input.rollTotal}`;
 }
 
 export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
@@ -164,19 +183,30 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
     await persistDraft(result.build, "Progression attempt purchased. Resolve checks to roll.");
   }
 
-  async function handleRequestCheck(targetType: ProgressionTargetType, targetId: string) {
-    if (!draft || !content) {
+  async function handleToggleRequestCheck(row: CharacterProgressionTargetRow) {
+    if (!draft || !content || row.approved || row.pending) {
       return;
     }
 
-    const nextBuild = requestCharacterProgressionCheck({
-      build: draft.build,
-      content,
-      targetId,
-      targetType
-    });
+    const nextBuild = row.requested
+      ? removeCharacterProgressionCheck({
+          build: draft.build,
+          targetId: row.targetId,
+          targetType: row.targetType
+        })
+      : requestCharacterProgressionCheck({
+          build: draft.build,
+          content,
+          targetId: row.targetId,
+          targetType: row.targetType
+        });
 
-    await persistDraft(nextBuild, "Check requested. Save progression to share it with the GM.");
+    await persistDraft(
+      nextBuild,
+      row.requested
+        ? "Check request removed. Save progression to share it with the GM."
+        : "Check requested. Save progression to share it with the GM."
+    );
   }
 
   async function handleRequestProvisionalSkillCheck() {
@@ -318,8 +348,33 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
     })
   );
 
-  function renderProgressionRow(row: CharacterProgressionTargetRow) {
+  function formatApprovedState(row: CharacterProgressionTargetRow): string {
+    if (row.approved) {
+      return "Approved";
+    }
+
+    if (row.requested) {
+      return "Awaiting GM";
+    }
+
+    return "—";
+  }
+
+  function renderRequestCheckbox(row: CharacterProgressionTargetRow) {
     const canRequest = !row.requested && !row.approved && !row.pending;
+
+    return (
+      <input
+        aria-label={`${row.label} requested check`}
+        checked={row.requested}
+        disabled={row.approved || row.pending || (!row.requested && !canRequest)}
+        onChange={() => void handleToggleRequestCheck(row)}
+        type="checkbox"
+      />
+    );
+  }
+
+  function renderProgressionRow(row: CharacterProgressionTargetRow) {
     const canBuy =
       row.approved &&
       !row.pending &&
@@ -339,28 +394,17 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
           ) : null}
         </td>
         <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>{row.currentValue}</td>
-        <td style={{ padding: "0.6rem 0.75rem" }}>
-          {row.requested ? "Awaiting GM approval" : row.approved ? "Approved by GM" : "Not requested"}
-        </td>
-        <td style={{ padding: "0.6rem 0.75rem" }}>{row.approved ? "Approved" : "No"}</td>
+        <td style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>{renderRequestCheckbox(row)}</td>
+        <td style={{ padding: "0.6rem 0.75rem" }}>{formatApprovedState(row)}</td>
         <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>{row.cost ?? "-"}</td>
         <td style={{ padding: "0.6rem 0" }}>
-          <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
-            <button
-              disabled={!canRequest}
-              onClick={() => void handleRequestCheck(row.targetType, row.targetId)}
-              type="button"
-            >
-              Request check
-            </button>
-            <button
-              disabled={!canBuy}
-              onClick={() => void handleBuyAttempt(row.targetType, row.targetId)}
-              type="button"
-            >
-              Buy attempt
-            </button>
-          </div>
+          <button
+            disabled={!canBuy}
+            onClick={() => void handleBuyAttempt(row.targetType, row.targetId)}
+            type="button"
+          >
+            Buy
+          </button>
         </td>
       </tr>
     );
@@ -391,6 +435,36 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
 
       <section
         style={{
+          alignItems: "center",
+          background: "#fbfaf5",
+          border: "1px solid #d9ddd8",
+          borderRadius: 12,
+          boxShadow: "0 8px 18px rgba(43, 37, 26, 0.08)",
+          display: "flex",
+          flexWrap: "wrap",
+          gap: "0.75rem",
+          padding: "0.75rem 1rem",
+          position: "sticky",
+          top: "3rem",
+          zIndex: 5
+        }}
+      >
+        <strong>Progression</strong>
+        <span>Available points: {progressionView.availablePoints}</span>
+        <span>Requested: {requestedCheckCount}</span>
+        <span>Approved: {approvedCheckCount}</span>
+        <span>Pending: {progressionView.pendingAttempts.length}</span>
+        <span>History: {progressionView.history.length}</span>
+        <button onClick={() => void handleSaveLocally()} type="button">
+          Save locally
+        </button>
+        <button onClick={() => void handleSaveToServer()} type="button">
+          Save to server
+        </button>
+      </section>
+
+      <section
+        style={{
           display: "grid",
           gap: "1rem",
           gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))"
@@ -409,60 +483,31 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
           <table style={{ borderCollapse: "collapse", width: "100%" }}>
             <thead>
               <tr style={{ borderBottom: "1px solid #d9ddd8", textAlign: "left" }}>
-                {characterSheetStatsTableColumns.map((column, index) => (
-                  <th
-                    key={column}
-                    style={{
-                      padding: index === 0 ? "0.5rem 0.75rem 0.5rem 0" : "0.5rem 0.75rem",
-                      textAlign: index === 0 ? "left" : "right"
-                    }}
-                  >
-                    {column}
-                  </th>
-                ))}
+                <th style={{ padding: "0.5rem 0.75rem 0.5rem 0" }}>Stat</th>
+                <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Original</th>
+                <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Current</th>
                 <th style={{ padding: "0.5rem 0.75rem" }}>Requested</th>
                 <th style={{ padding: "0.5rem 0.75rem" }}>Approved</th>
-                <th style={{ padding: "0.5rem 0" }}>Action</th>
               </tr>
             </thead>
             <tbody>
               {profileStatRows.map((statRow) => {
                 const progressionRow = rowsByType.stat.find((row) => row.targetId === statRow.stat);
-                const canRequest =
-                  progressionRow &&
-                  !progressionRow.requested &&
-                  !progressionRow.approved &&
-                  !progressionRow.pending;
 
                 return (
                   <tr key={statRow.stat} style={{ borderBottom: "1px solid #eee8dc" }}>
                     <td style={{ padding: "0.6rem 0.75rem 0.6rem 0" }}>{statRow.label}</td>
-                    <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>
-                      {statRow.statsDieRollValue}
-                    </td>
                     <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>
                       {statRow.originalValue}
                     </td>
                     <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>
                       {statRow.currentValue}
                     </td>
-                    <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>{statRow.gmValue}</td>
-                    <td style={{ padding: "0.6rem 0.75rem" }}>
-                      {progressionRow?.requested ? "Awaiting GM" : progressionRow?.approved ? "Approved" : "No"}
+                    <td style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>
+                      {progressionRow ? renderRequestCheckbox(progressionRow) : "—"}
                     </td>
-                    <td style={{ padding: "0.6rem 0.75rem" }}>{progressionRow?.approved ? "Approved" : "No"}</td>
-                    <td style={{ padding: "0.6rem 0" }}>
-                      <button
-                        disabled={!canRequest}
-                        onClick={() =>
-                          progressionRow
-                            ? void handleRequestCheck(progressionRow.targetType, progressionRow.targetId)
-                            : undefined
-                        }
-                        type="button"
-                      >
-                        Request
-                      </button>
+                    <td style={{ padding: "0.6rem 0.75rem" }}>
+                      {progressionRow ? formatApprovedState(progressionRow) : "—"}
                     </td>
                   </tr>
                 );
@@ -475,13 +520,8 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
                 <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>
                   {progressionView.sheetSummary.distractionLevel}
                 </td>
-                <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>
-                  {progressionView.sheetSummary.distractionLevel}
-                </td>
-                <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>—</td>
-                <td colSpan={3} style={{ color: "#5e5a50", padding: "0.6rem 0.75rem" }}>
-                  No progression check
-                </td>
+                <td style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>—</td>
+                <td style={{ padding: "0.6rem 0.75rem" }}>—</td>
               </tr>
             </tbody>
           </table>
@@ -529,7 +569,12 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
                 {progressionView.sheetSummary.skillPoints.successfulProgressionGains}
               </div>
             </div>
-            <strong>Skill groups</strong>
+            <strong>Education</strong>
+            <div>{educationLevel}</div>
+          </div>
+
+          <div style={{ borderTop: "1px solid #e7e2d7", display: "grid", gap: "0.75rem", marginTop: "0.9rem", paddingTop: "0.9rem" }}>
+            <h3 style={{ margin: 0 }}>Skill groups</h3>
             <div style={{ overflowX: "auto" }}>
               {rowsByType.skillGroup.length > 0 ? (
                 <table style={{ borderCollapse: "collapse", minWidth: 520, width: "100%" }}>
@@ -540,7 +585,7 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
                       <th style={{ padding: "0.4rem 0.5rem" }}>Requested</th>
                       <th style={{ padding: "0.4rem 0.5rem" }}>Approved</th>
                       <th style={{ padding: "0.4rem 0.5rem", textAlign: "right" }}>Cost</th>
-                      <th style={{ padding: "0.4rem 0" }}>Action</th>
+                      <th style={{ padding: "0.4rem 0" }}>Buy</th>
                     </tr>
                   </thead>
                   <tbody>{rowsByType.skillGroup.map((row) => renderProgressionRow(row))}</tbody>
@@ -549,40 +594,8 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
                 <div>No skill groups recorded.</div>
               )}
             </div>
-            <strong>Education</strong>
-            <div>{educationLevel}</div>
           </div>
         </section>
-      </section>
-
-      <section
-        style={{
-          background: "#fbfaf5",
-          border: "1px solid #d9ddd8",
-          borderRadius: 12,
-          display: "flex",
-          flexWrap: "wrap",
-          gap: "0.75rem",
-          position: "sticky",
-          top: "3rem",
-          zIndex: 5,
-          alignItems: "center",
-          boxShadow: "0 8px 18px rgba(43, 37, 26, 0.08)",
-          padding: "0.75rem 1rem"
-        }}
-      >
-        <strong>Progression</strong>
-        <span>Available points: {progressionView.availablePoints}</span>
-        <span>Requested: {requestedCheckCount}</span>
-        <span>Approved: {approvedCheckCount}</span>
-        <span>Pending: {progressionView.pendingAttempts.length}</span>
-        <span>History: {progressionView.history.length}</span>
-        <button onClick={() => void handleSaveLocally()} type="button">
-          Save locally
-        </button>
-        <button onClick={() => void handleSaveToServer()} type="button">
-          Save to server
-        </button>
       </section>
 
       <section
@@ -627,10 +640,10 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
                     <tr style={{ borderBottom: "1px solid #d9ddd8", textAlign: "left" }}>
                       <th style={{ padding: "0.5rem 0.75rem 0.5rem 1rem" }}>Skill</th>
                       <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Current</th>
-                      <th style={{ padding: "0.5rem 0.75rem" }}>Requested check</th>
-                      <th style={{ padding: "0.5rem 0.75rem" }}>Approved check</th>
+                      <th style={{ padding: "0.5rem 0.75rem" }}>Requested</th>
+                      <th style={{ padding: "0.5rem 0.75rem" }}>Approved</th>
                       <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Cost</th>
-                      <th style={{ padding: "0.5rem 1rem 0.5rem 0" }}>Action</th>
+                      <th style={{ padding: "0.5rem 1rem 0.5rem 0" }}>Buy</th>
                     </tr>
                   </thead>
                   <tbody>{group.rows.map((row) => renderProgressionRow(row))}</tbody>
@@ -690,10 +703,10 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
               <tr style={{ borderBottom: "1px solid #d9ddd8", textAlign: "left" }}>
                 <th style={{ padding: "0.5rem 0.75rem 0.5rem 0" }}>Specialization</th>
                 <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Current</th>
-                <th style={{ padding: "0.5rem 0.75rem" }}>Requested check</th>
-                <th style={{ padding: "0.5rem 0.75rem" }}>Approved check</th>
+                <th style={{ padding: "0.5rem 0.75rem" }}>Requested</th>
+                <th style={{ padding: "0.5rem 0.75rem" }}>Approved</th>
                 <th style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>Cost</th>
-                <th style={{ padding: "0.5rem 0" }}>Action</th>
+                <th style={{ padding: "0.5rem 0" }}>Buy</th>
               </tr>
             </thead>
             <tbody>
@@ -756,20 +769,23 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
             .slice()
             .reverse()
             .map((entry) => (
-              <div key={entry.id} style={{ borderTop: "1px solid #e7e2d7", paddingTop: "0.75rem" }}>
-                <strong>{entry.targetLabel}</strong> - {entry.success ? "Success" : "Failure"}
-                <div>
-                  Roll: d20 {entry.rollD20}
-                  {entry.openEndedD10s.length > 0
-                    ? ` + d10s ${entry.openEndedD10s.join(", ")}`
-                    : ""}{" "}
-                  = {entry.rollTotal}
-                </div>
-                <div>Threshold: {entry.threshold}</div>
-                <div>
-                  Value: {entry.beforeValue} {"->"} {entry.afterValue}
-                </div>
-                <div>Cost paid: {entry.cost}</div>
+              <div
+                key={entry.id}
+                style={{
+                  borderTop: "1px solid #e7e2d7",
+                  paddingTop: "0.6rem",
+                  whiteSpace: "nowrap",
+                  overflowX: "auto"
+                }}
+              >
+                {formatHistoryTime(entry.resolvedAt)} · {entry.targetLabel} ·{" "}
+                {entry.success ? "Success" : "Fail"} ·{" "}
+                {formatProgressionRoll({
+                  openEndedD10s: entry.openEndedD10s,
+                  rollD20: entry.rollD20,
+                  rollTotal: entry.rollTotal
+                })}{" "}
+                vs {entry.threshold} · {entry.beforeValue}→{entry.afterValue} · cost {entry.cost}
               </div>
             ))
         ) : (
