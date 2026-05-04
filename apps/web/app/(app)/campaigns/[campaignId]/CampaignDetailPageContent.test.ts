@@ -28,18 +28,36 @@ describe("CampaignDetailPageContent roster UI", () => {
   it("exposes the intended roster filter groups and candidate table columns", () => {
     const source = readCampaignDetailSource();
 
-    expect(source).toContain("Membership");
-    expect(source).toContain("In campaign");
+    expect(source).toContain("Roster membership filter");
+    expect(source).toContain("Members");
     expect(source).toContain("Other campaigns");
-    expect(source).toContain("Type");
+    expect(source).toContain("Roster type filter");
+    expect(source).toContain("All types");
+    expect(source).toContain("PCs");
+    expect(source).toContain("NPCs");
+    expect(source).toContain("Templates");
     expect(source).toContain("All civilizations");
     expect(source).toContain("All professions");
     expect(source).toContain("All skill groups");
-    expect(source).toContain("Search name, type, profession, civilization");
-    expect(source).toContain("In campaign</th>");
+    expect(source).toContain("Search roster candidates");
+    expect(source).toContain("Member</th>");
+    expect(source).toContain("Name</th>");
+    expect(source).toContain("Type</th>");
     expect(source).toContain("Civilization</th>");
     expect(source).toContain("Profession</th>");
-    expect(source).toContain("Skill groups</th>");
-    expect(source).toContain("Source</th>");
+    expect(source).toContain("Owner</th>");
+    expect(source).not.toContain("Skill groups</th>");
+    expect(source).not.toContain("Source</th>");
+    expect(source).not.toContain("Character · Owner:");
+  });
+
+  it("maps roster civilizations to player-facing names without showing unknown internal ids", () => {
+    const source = readCampaignDetailSource();
+
+    expect(source).toContain("defaultCanonicalContent.civilizations");
+    expect(source).toContain("getCivilizationDisplayName");
+    expect(source).toContain("civilizationNameById");
+    expect(source).toContain("civilizationNamesBySocietyId");
+    expect(source).toContain('return "—";');
   });
 });

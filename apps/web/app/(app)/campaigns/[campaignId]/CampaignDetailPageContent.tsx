@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
+import { defaultCanonicalContent } from "@glantri/content";
 import type {
   Campaign,
   CampaignAsset,
@@ -51,11 +52,30 @@ interface RosterCandidate {
   kindLabel: string;
   member: boolean;
   name: string;
+  ownerLabel: string;
   rosterEntry?: CampaignRosterEntry;
   sourceId: string;
-  sourceLabel: string;
   sourceType: CampaignRosterEntry["sourceType"];
   typeLabel: string;
+}
+
+const civilizationNameById = new Map(
+  defaultCanonicalContent.civilizations.map((civilization) => [civilization.id, civilization.name])
+);
+const civilizationNameByName = new Map(
+  defaultCanonicalContent.civilizations.map((civilization) => [
+    civilization.name.toLowerCase(),
+    civilization.name
+  ])
+);
+const civilizationNamesBySocietyId = new Map<string, string[]>();
+
+for (const civilization of defaultCanonicalContent.civilizations) {
+  const existingNames = civilizationNamesBySocietyId.get(civilization.linkedSocietyId) ?? [];
+  civilizationNamesBySocietyId.set(civilization.linkedSocietyId, [
+    ...existingNames,
+    civilization.name
+  ]);
 }
 
 function buildRosterSourceKey(sourceType: CampaignRosterEntry["sourceType"], sourceId: string): string {
@@ -109,6 +129,30 @@ function readSnapshotMetadata(snapshot: unknown): {
       ...readStringList(snapshot.trainingPackages)
     ]
   };
+}
+
+function getCivilizationDisplayName(value?: string): string {
+  const normalizedValue = value?.trim();
+
+  if (!normalizedValue) {
+    return "—";
+  }
+
+  const exactCivilizationName =
+    civilizationNameById.get(normalizedValue) ??
+    civilizationNameByName.get(normalizedValue.toLowerCase());
+
+  if (exactCivilizationName) {
+    return exactCivilizationName;
+  }
+
+  const societyCivilizationNames = civilizationNamesBySocietyId.get(normalizedValue);
+
+  if (societyCivilizationNames && societyCivilizationNames.length > 0) {
+    return societyCivilizationNames.join(" / ");
+  }
+
+  return "—";
 }
 
 export default function CampaignDetailPageContent({
@@ -171,17 +215,17 @@ export default function CampaignDetailPageContent({
 
       return {
         category: "pc",
-        civilizationLabel: character.build.societyId ?? "—",
+        civilizationLabel: getCivilizationDisplayName(character.build.societyId),
         membership: rosterEntry ? "inCampaign" : otherRosterSourceKeys.has(sourceKey) ? "otherCampaigns" : "available",
         professionLabel: character.build.professionId ?? "—",
         skillGroups,
         typeFilter: "pcs",
-        kindLabel: character.owner?.displayName ? `Owner: ${character.owner.displayName}` : "Character",
+        kindLabel: "Character",
         member: Boolean(rosterEntry),
         name: character.name,
+        ownerLabel: character.owner?.displayName ?? character.owner?.email ?? "—",
         rosterEntry,
         sourceId: character.id,
-        sourceLabel: "Character",
         sourceType: "character",
         typeLabel: "PC"
       };
@@ -198,7 +242,7 @@ export default function CampaignDetailPageContent({
 
         return {
           category: "npc",
-          civilizationLabel: snapshotMetadata.civilizationLabel ?? "—",
+          civilizationLabel: getCivilizationDisplayName(snapshotMetadata.civilizationLabel),
           membership: rosterEntry ? "inCampaign" : otherRosterSourceKeys.has(sourceKey) ? "otherCampaigns" : "available",
           professionLabel: metadata.profession ?? snapshotMetadata.professionLabel ?? "—",
           skillGroups: snapshotMetadata.skillGroups,
@@ -206,9 +250,9 @@ export default function CampaignDetailPageContent({
           kindLabel: formatEntityKind(entity.kind),
           member: Boolean(rosterEntry),
           name: entity.name,
+          ownerLabel: "—",
           rosterEntry,
           sourceId: entity.id,
-          sourceLabel: "Reusable entity",
           sourceType: "reusableEntity",
           typeLabel: formatEntityKind(entity.kind)
         };
@@ -221,7 +265,7 @@ export default function CampaignDetailPageContent({
 
       return {
         category: "template",
-        civilizationLabel: snapshotMetadata.civilizationLabel ?? "—",
+        civilizationLabel: getCivilizationDisplayName(snapshotMetadata.civilizationLabel),
         membership: rosterEntry ? "inCampaign" : otherRosterSourceKeys.has(sourceKey) ? "otherCampaigns" : "available",
         professionLabel: metadata.profession ?? snapshotMetadata.professionLabel ?? "—",
         skillGroups: snapshotMetadata.skillGroups,
@@ -229,9 +273,9 @@ export default function CampaignDetailPageContent({
         kindLabel: formatEntityKind(template.kind),
         member: Boolean(rosterEntry),
         name: template.name,
+        ownerLabel: "—",
         rosterEntry,
         sourceId: template.id,
-        sourceLabel: "Template",
         sourceType: "template",
         typeLabel: "Template"
       };
@@ -244,9 +288,9 @@ export default function CampaignDetailPageContent({
   const rosterTypeFilterOptions = useMemo(
     () =>
       [
-        { id: "all" as const, label: "All" },
-        { id: "pcs" as const, label: "PC" },
-        { id: "npcs" as const, label: "NPC" },
+        { id: "all" as const, label: "All types" },
+        { id: "pcs" as const, label: "PCs" },
+        { id: "npcs" as const, label: "NPCs" },
         { id: "templates" as const, label: "Templates" },
         { id: "monsters" as const, label: "Monsters" },
         { id: "other" as const, label: "Other" }
@@ -531,106 +575,85 @@ export default function CampaignDetailPageContent({
           </p>
         </div>
 
-        <div style={{ display: "grid", gap: "0.6rem" }}>
-          <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
-            <strong>Membership</strong>
-            {[
-              { id: "all" as const, label: "All" },
-              { id: "inCampaign" as const, label: "In campaign" },
-              { id: "otherCampaigns" as const, label: "Other campaigns" }
-            ].map((option) => (
-              <button
-                key={option.id}
-                onClick={() => setRosterMembershipFilter(option.id)}
-                style={{
-                  background: rosterMembershipFilter === option.id ? "#283426" : "#f6f5ef",
-                  border: "1px solid #bfc8ba",
-                  borderRadius: 999,
-                  color: rosterMembershipFilter === option.id ? "#fff" : "#283426",
-                  padding: "0.25rem 0.65rem"
-                }}
-                type="button"
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
-
-          <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
-            <strong>Type</strong>
+        <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+          <select
+            aria-label="Roster membership filter"
+            onChange={(event) =>
+              setRosterMembershipFilter(event.target.value as RosterMembershipFilter)
+            }
+            value={rosterMembershipFilter}
+          >
+            <option value="all">All</option>
+            <option value="inCampaign">Members</option>
+            <option value="otherCampaigns">Other campaigns</option>
+          </select>
+          <select
+            aria-label="Roster type filter"
+            onChange={(event) => setRosterTypeFilter(event.target.value as RosterTypeFilter)}
+            value={rosterTypeFilter}
+          >
             {rosterTypeFilterOptions.map((option) => (
-            <button
-              key={option.id}
-              onClick={() => setRosterTypeFilter(option.id)}
-              style={{
-                background: rosterTypeFilter === option.id ? "#283426" : "#f6f5ef",
-                border: "1px solid #bfc8ba",
-                borderRadius: 999,
-                color: rosterTypeFilter === option.id ? "#fff" : "#283426",
-                padding: "0.25rem 0.65rem"
-              }}
-              type="button"
-            >
-              {option.label}
-            </button>
-          ))}
-          </div>
-
-          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
-            <select
-              onChange={(event) => setRosterCivilizationFilter(event.target.value)}
-              value={rosterCivilizationFilter}
-            >
-              <option value="">All civilizations</option>
-              {rosterCivilizationOptions.map((civilization) => (
-                <option key={civilization} value={civilization}>
-                  {civilization}
-                </option>
-              ))}
-            </select>
-            <select
-              onChange={(event) => setRosterProfessionFilter(event.target.value)}
-              value={rosterProfessionFilter}
-            >
-              <option value="">All professions</option>
-              {rosterProfessionOptions.map((profession) => (
-                <option key={profession} value={profession}>
-                  {profession}
-                </option>
-              ))}
-            </select>
-            <select
-              onChange={(event) => setRosterSkillGroupFilter(event.target.value)}
-              value={rosterSkillGroupFilter}
-            >
-              <option value="">All skill groups</option>
-              {rosterSkillGroupOptions.map((group) => (
-                <option key={group} value={group}>
-                  {group}
-                </option>
-              ))}
-            </select>
-            <input
-              onChange={(event) => setRosterSearch(event.target.value)}
-              placeholder="Search name, type, profession, civilization"
-              style={{ minWidth: 260 }}
-              value={rosterSearch}
-            />
-          </div>
+              <option key={option.id} value={option.id}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+          <select
+            aria-label="Roster civilization filter"
+            onChange={(event) => setRosterCivilizationFilter(event.target.value)}
+            value={rosterCivilizationFilter}
+          >
+            <option value="">All civilizations</option>
+            {rosterCivilizationOptions.map((civilization) => (
+              <option key={civilization} value={civilization}>
+                {civilization}
+              </option>
+            ))}
+          </select>
+          <select
+            aria-label="Roster profession filter"
+            onChange={(event) => setRosterProfessionFilter(event.target.value)}
+            value={rosterProfessionFilter}
+          >
+            <option value="">All professions</option>
+            {rosterProfessionOptions.map((profession) => (
+              <option key={profession} value={profession}>
+                {profession}
+              </option>
+            ))}
+          </select>
+          <select
+            aria-label="Roster skill group filter"
+            onChange={(event) => setRosterSkillGroupFilter(event.target.value)}
+            value={rosterSkillGroupFilter}
+          >
+            <option value="">All skill groups</option>
+            {rosterSkillGroupOptions.map((group) => (
+              <option key={group} value={group}>
+                {group}
+              </option>
+            ))}
+          </select>
+          <input
+            aria-label="Search roster candidates"
+            onChange={(event) => setRosterSearch(event.target.value)}
+            placeholder="Search roster candidates"
+            style={{ minWidth: 260 }}
+            value={rosterSearch}
+          />
         </div>
 
         {filteredRosterCandidates.length > 0 ? (
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ borderCollapse: "collapse", minWidth: 860, width: "100%" }}>
+          <div style={{ maxHeight: "32rem", overflow: "auto" }}>
+            <table style={{ borderCollapse: "collapse", minWidth: 720, width: "100%" }}>
               <thead>
                 <tr style={{ borderBottom: "1px solid #d9ddd8", textAlign: "left" }}>
-                  <th style={{ padding: "0.5rem 0.75rem 0.5rem 0", textAlign: "center" }}>In campaign</th>
-                  <th style={{ padding: "0.5rem 0.75rem" }}>Name</th>
-                  <th style={{ padding: "0.5rem 0.75rem" }}>Type</th>
-                  <th style={{ padding: "0.5rem 0.75rem" }}>Civilization</th>
-                  <th style={{ padding: "0.5rem 0.75rem" }}>Profession</th>
-                  <th style={{ padding: "0.5rem 0.75rem" }}>Skill groups</th>
-                  <th style={{ padding: "0.5rem 0" }}>Source</th>
+                  <th style={{ background: "#fff", padding: "0.5rem 0.75rem 0.5rem 0", position: "sticky", textAlign: "center", top: 0 }}>Member</th>
+                  <th style={{ background: "#fff", padding: "0.5rem 0.75rem", position: "sticky", top: 0 }}>Name</th>
+                  <th style={{ background: "#fff", padding: "0.5rem 0.75rem", position: "sticky", top: 0 }}>Type</th>
+                  <th style={{ background: "#fff", padding: "0.5rem 0.75rem", position: "sticky", top: 0 }}>Civilization</th>
+                  <th style={{ background: "#fff", padding: "0.5rem 0.75rem", position: "sticky", top: 0 }}>Profession</th>
+                  <th style={{ background: "#fff", padding: "0.5rem 0", position: "sticky", top: 0 }}>Owner</th>
                 </tr>
               </thead>
               <tbody>
@@ -655,15 +678,7 @@ export default function CampaignDetailPageContent({
                     <td style={{ padding: "0.6rem 0.75rem" }}>{candidate.typeLabel}</td>
                     <td style={{ padding: "0.6rem 0.75rem" }}>{candidate.civilizationLabel}</td>
                     <td style={{ padding: "0.6rem 0.75rem" }}>{candidate.professionLabel}</td>
-                    <td style={{ padding: "0.6rem 0.75rem" }}>
-                      {candidate.skillGroups.length > 0
-                        ? candidate.skillGroups.slice(0, 3).join(", ")
-                        : "—"}
-                      {candidate.skillGroups.length > 3 ? ` +${candidate.skillGroups.length - 3}` : ""}
-                    </td>
-                    <td style={{ padding: "0.6rem 0" }}>
-                      {candidate.sourceLabel} · {candidate.kindLabel}
-                    </td>
+                    <td style={{ padding: "0.6rem 0" }}>{candidate.ownerLabel}</td>
                   </tr>
                 ))}
               </tbody>
