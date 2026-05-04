@@ -3,7 +3,14 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
-import type { Campaign, CampaignAsset, CampaignRosterEntry, ReusableEntity, Scenario } from "@glantri/domain";
+import type {
+  Campaign,
+  CampaignAsset,
+  CampaignRosterEntry,
+  ReusableEntity,
+  Scenario,
+  ScenarioRelationship
+} from "@glantri/domain";
 
 import {
   addCampaignRosterEntryOnServer,
@@ -14,6 +21,7 @@ import {
   loadCampaignById,
   loadCampaignEntities,
   loadCampaignRoster,
+  loadCampaignScenarioRelationships,
   loadCampaignScenarios,
   loadServerCharacters,
   loadTemplates,
@@ -34,28 +42,31 @@ interface CampaignDetailPageContentProps {
   onWorkspaceScenariosChanged?: (scenarios: Scenario[]) => void;
 }
 
-function formatRosterType(entry: CampaignRosterEntry): string {
-  if (entry.category === "pc") {
-    return "PC";
-  }
+type RosterFilter = "all" | "pcs" | "npcs" | "templates" | "monsters" | "other";
 
-  if (entry.category === "npc") {
+interface RosterCandidate {
+  category: CampaignRosterEntry["category"];
+  filter: RosterFilter;
+  kindLabel: string;
+  member: boolean;
+  name: string;
+  rosterEntry?: CampaignRosterEntry;
+  sourceId: string;
+  sourceLabel: string;
+  sourceType: CampaignRosterEntry["sourceType"];
+  typeLabel: string;
+}
+
+function buildRosterSourceKey(sourceType: CampaignRosterEntry["sourceType"], sourceId: string): string {
+  return `${sourceType}:${sourceId}`;
+}
+
+function formatEntityKind(kind: ReusableEntity["kind"]): string {
+  if (kind === "npc") {
     return "NPC";
   }
 
-  return "Template";
-}
-
-function formatRosterSource(entry: CampaignRosterEntry): string {
-  if (entry.sourceType === "character") {
-    return "Character";
-  }
-
-  if (entry.sourceType === "reusableEntity") {
-    return "Reusable entity";
-  }
-
-  return "Template";
+  return `${kind.charAt(0).toUpperCase()}${kind.slice(1)}`;
 }
 
 export default function CampaignDetailPageContent({
@@ -71,12 +82,16 @@ export default function CampaignDetailPageContent({
   const [feedback, setFeedback] = useState<string>();
   const [loading, setLoading] = useState(true);
   const [roster, setRoster] = useState<CampaignRosterEntry[]>([]);
+  const [rosterFilter, setRosterFilter] = useState<RosterFilter>("all");
+  const [rosterSearch, setRosterSearch] = useState("");
   const [scenarios, setScenarios] = useState<Scenario[]>([]);
+  const [scenarioRelationships, setScenarioRelationships] = useState<ScenarioRelationship[]>([]);
   const [templates, setTemplates] = useState<ReusableEntity[]>([]);
 
   const [scenarioName, setScenarioName] = useState("");
   const [scenarioDescription, setScenarioDescription] = useState("");
   const [scenarioKind, setScenarioKind] = useState<Scenario["kind"]>("mixed");
+  const [continuesFromScenarioId, setContinuesFromScenarioId] = useState("");
 
   const [entityName, setEntityName] = useState("");
   const [entityDescription, setEntityDescription] = useState("");
@@ -89,15 +104,113 @@ export default function CampaignDetailPageContent({
   const [assetTitle, setAssetTitle] = useState("");
   const [assetUrl, setAssetUrl] = useState("");
   const [assetType, setAssetType] = useState<CampaignAsset["type"]>("document");
-  const [selectedRosterCharacterId, setSelectedRosterCharacterId] = useState("");
-  const [selectedRosterEntityId, setSelectedRosterEntityId] = useState("");
-  const [selectedRosterTemplateId, setSelectedRosterTemplateId] = useState("");
   const splitEntities = useMemo(() => splitCampaignActors(entities, campaignId), [campaignId, entities]);
+  const rosterBySourceKey = useMemo(() => {
+    const entries = new Map<string, CampaignRosterEntry>();
+
+    for (const entry of roster) {
+      entries.set(buildRosterSourceKey(entry.sourceType, entry.sourceId), entry);
+    }
+
+    return entries;
+  }, [roster]);
+  const rosterCandidates = useMemo<RosterCandidate[]>(() => {
+    const characterCandidates = characters.map((character): RosterCandidate => {
+      const rosterEntry = rosterBySourceKey.get(buildRosterSourceKey("character", character.id));
+
+      return {
+        category: "pc",
+        filter: "pcs",
+        kindLabel: character.owner?.displayName ? `Owner: ${character.owner.displayName}` : "Character",
+        member: Boolean(rosterEntry),
+        name: character.name,
+        rosterEntry,
+        sourceId: character.id,
+        sourceLabel: "Character",
+        sourceType: "character",
+        typeLabel: "PC"
+      };
+    });
+    const entityCandidates = entities
+      .filter((entity) => getCampaignActorMetadata(entity).actorClass !== "template")
+      .map((entity): RosterCandidate => {
+        const rosterEntry = rosterBySourceKey.get(buildRosterSourceKey("reusableEntity", entity.id));
+        const filter: RosterFilter =
+          entity.kind === "monster" ? "monsters" : entity.kind === "npc" ? "npcs" : "other";
+
+        return {
+          category: "npc",
+          filter,
+          kindLabel: formatEntityKind(entity.kind),
+          member: Boolean(rosterEntry),
+          name: entity.name,
+          rosterEntry,
+          sourceId: entity.id,
+          sourceLabel: "Reusable entity",
+          sourceType: "reusableEntity",
+          typeLabel: formatEntityKind(entity.kind)
+        };
+      });
+    const templateCandidates = templates.map((template): RosterCandidate => {
+      const rosterEntry = rosterBySourceKey.get(buildRosterSourceKey("template", template.id));
+
+      return {
+        category: "template",
+        filter: "templates",
+        kindLabel: formatEntityKind(template.kind),
+        member: Boolean(rosterEntry),
+        name: template.name,
+        rosterEntry,
+        sourceId: template.id,
+        sourceLabel: "Template",
+        sourceType: "template",
+        typeLabel: "Template"
+      };
+    });
+
+    return [...characterCandidates, ...entityCandidates, ...templateCandidates].sort((a, b) =>
+      a.name.localeCompare(b.name)
+    );
+  }, [characters, entities, rosterBySourceKey, templates]);
+  const rosterFilterOptions = useMemo(
+    () =>
+      [
+        { id: "all" as const, label: "All" },
+        { id: "pcs" as const, label: "PCs" },
+        { id: "npcs" as const, label: "NPCs" },
+        { id: "templates" as const, label: "Templates" },
+        { id: "monsters" as const, label: "Monsters" },
+        { id: "other" as const, label: "Other" }
+      ].filter((option) => option.id === "all" || rosterCandidates.some((candidate) => candidate.filter === option.id)),
+    [rosterCandidates]
+  );
+  const filteredRosterCandidates = useMemo(() => {
+    const search = rosterSearch.trim().toLowerCase();
+
+    return rosterCandidates.filter((candidate) => {
+      const matchesFilter = rosterFilter === "all" || candidate.filter === rosterFilter;
+      const matchesSearch =
+        search.length === 0 ||
+        candidate.name.toLowerCase().includes(search) ||
+        candidate.typeLabel.toLowerCase().includes(search) ||
+        candidate.kindLabel.toLowerCase().includes(search);
+
+      return matchesFilter && matchesSearch;
+    });
+  }, [rosterCandidates, rosterFilter, rosterSearch]);
+  const orderedScenarios = useMemo(
+    () =>
+      [...scenarios].sort(
+        (first, second) => Date.parse(first.createdAt) - Date.parse(second.createdAt)
+      ),
+    [scenarios]
+  );
 
   async function refreshPage() {
     const [
       nextCampaign,
       nextScenarios,
+      nextScenarioRelationships,
       nextEntities,
       nextAssets,
       nextTemplates,
@@ -106,6 +219,7 @@ export default function CampaignDetailPageContent({
     ] = await Promise.all([
       loadCampaignById(campaignId),
       loadCampaignScenarios(campaignId),
+      loadCampaignScenarioRelationships(campaignId),
       loadCampaignEntities(campaignId),
       loadCampaignAssets(campaignId),
       loadTemplates(),
@@ -115,6 +229,7 @@ export default function CampaignDetailPageContent({
 
     setCampaign(nextCampaign);
     setScenarios(nextScenarios);
+    setScenarioRelationships(nextScenarioRelationships);
     onWorkspaceScenariosChanged?.(nextScenarios);
     setEntities(nextEntities);
     setAssets(nextAssets);
@@ -126,9 +241,6 @@ export default function CampaignDetailPageContent({
 
     setTemplates(globalTemplates);
     setSelectedTemplateId((current) => current || globalTemplates[0]?.id || "");
-    setSelectedRosterCharacterId((current) => current || nextCharacters[0]?.id || "");
-    setSelectedRosterEntityId((current) => current || splitCampaignActors(nextEntities, campaignId).campaignNpcs[0]?.id || "");
-    setSelectedRosterTemplateId((current) => current || globalTemplates[0]?.id || "");
   }
 
   useEffect(() => {
@@ -146,6 +258,7 @@ export default function CampaignDetailPageContent({
 
       const scenario = await createScenarioOnServer({
         campaignId,
+        continuesFromScenarioId: continuesFromScenarioId || undefined,
         description: scenarioDescription,
         kind: scenarioKind,
         name: scenarioName,
@@ -155,91 +268,40 @@ export default function CampaignDetailPageContent({
       setFeedback(`Created scenario ${scenario.name}.`);
       setScenarioName("");
       setScenarioDescription("");
+      setContinuesFromScenarioId("");
       await refreshPage();
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : "Unable to create scenario.");
     }
   }
 
-  async function handleAddRosterCharacter() {
-    if (!selectedRosterCharacterId) {
-      return;
-    }
-
+  async function handleRosterMembershipToggle(candidate: RosterCandidate, member: boolean) {
     try {
       setError(undefined);
       setFeedback(undefined);
-      const entry = await addCampaignRosterEntryOnServer({
-        campaignId,
-        category: "pc",
-        sourceId: selectedRosterCharacterId,
-        sourceType: "character"
-      });
 
-      setFeedback(`Linked ${entry.labelSnapshot ?? "character"} to the campaign roster.`);
+      if (member) {
+        const entry = await addCampaignRosterEntryOnServer({
+          campaignId,
+          category: candidate.category,
+          sourceId: candidate.sourceId,
+          sourceType: candidate.sourceType
+        });
+
+        setFeedback(`Linked ${entry.labelSnapshot ?? candidate.name} to the campaign roster.`);
+      } else if (candidate.rosterEntry) {
+        await removeCampaignRosterEntryOnServer({
+          campaignId,
+          rosterEntryId: candidate.rosterEntry.id
+        });
+
+        setFeedback(`Removed ${candidate.name} from the campaign roster.`);
+      }
       await refreshPage();
     } catch (caughtError) {
-      setError(caughtError instanceof Error ? caughtError.message : "Unable to link character.");
-    }
-  }
-
-  async function handleAddRosterEntity() {
-    if (!selectedRosterEntityId) {
-      return;
-    }
-
-    try {
-      setError(undefined);
-      setFeedback(undefined);
-      const entry = await addCampaignRosterEntryOnServer({
-        campaignId,
-        category: "npc",
-        sourceId: selectedRosterEntityId,
-        sourceType: "reusableEntity"
-      });
-
-      setFeedback(`Linked ${entry.labelSnapshot ?? "entity"} to the campaign roster.`);
-      await refreshPage();
-    } catch (caughtError) {
-      setError(caughtError instanceof Error ? caughtError.message : "Unable to link entity.");
-    }
-  }
-
-  async function handleAddRosterTemplate() {
-    if (!selectedRosterTemplateId) {
-      return;
-    }
-
-    try {
-      setError(undefined);
-      setFeedback(undefined);
-      const entry = await addCampaignRosterEntryOnServer({
-        campaignId,
-        category: "template",
-        sourceId: selectedRosterTemplateId,
-        sourceType: "template"
-      });
-
-      setFeedback(`Linked ${entry.labelSnapshot ?? "template"} to the campaign roster.`);
-      await refreshPage();
-    } catch (caughtError) {
-      setError(caughtError instanceof Error ? caughtError.message : "Unable to link template.");
-    }
-  }
-
-  async function handleRemoveRosterEntry(rosterEntryId: string) {
-    try {
-      setError(undefined);
-      setFeedback(undefined);
-      await removeCampaignRosterEntryOnServer({
-        campaignId,
-        rosterEntryId
-      });
-
-      setFeedback("Removed roster entry.");
-      await refreshPage();
-    } catch (caughtError) {
-      setError(caughtError instanceof Error ? caughtError.message : "Unable to remove roster entry.");
+      setError(
+        caughtError instanceof Error ? caughtError.message : "Unable to update campaign roster."
+      );
     }
   }
 
@@ -345,6 +407,18 @@ export default function CampaignDetailPageContent({
     }
   }
 
+  function getContinuationLabel(scenarioId: string): string {
+    const relationship = scenarioRelationships.find(
+      (entry) => entry.relationType === "continues_from" && entry.toScenarioId === scenarioId
+    );
+
+    if (!relationship) {
+      return "—";
+    }
+
+    return scenarios.find((scenario) => scenario.id === relationship.fromScenarioId)?.name ?? "Earlier scenario";
+  }
+
   if (loading) {
     return <section>Loading campaign...</section>;
   }
@@ -391,93 +465,72 @@ export default function CampaignDetailPageContent({
           </p>
         </div>
 
-        <div style={{ display: "grid", gap: "0.6rem" }}>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
-            <select
-              onChange={(event) => setSelectedRosterCharacterId(event.target.value)}
-              value={selectedRosterCharacterId}
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+          {rosterFilterOptions.map((option) => (
+            <button
+              key={option.id}
+              onClick={() => setRosterFilter(option.id)}
+              style={{
+                background: rosterFilter === option.id ? "#283426" : "#f6f5ef",
+                border: "1px solid #bfc8ba",
+                borderRadius: 999,
+                color: rosterFilter === option.id ? "#fff" : "#283426",
+                padding: "0.25rem 0.65rem"
+              }}
+              type="button"
             >
-              <option value="">Select existing PC...</option>
-              {characters.map((character) => (
-                <option key={character.id} value={character.id}>
-                  {character.name}
-                  {character.owner?.displayName ? ` (${character.owner.displayName})` : ""}
-                </option>
-              ))}
-            </select>
-            <button disabled={!selectedRosterCharacterId} onClick={() => void handleAddRosterCharacter()} type="button">
-              Add PC
+              {option.label}
             </button>
-          </div>
-
-          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
-            <select
-              onChange={(event) => setSelectedRosterEntityId(event.target.value)}
-              value={selectedRosterEntityId}
-            >
-              <option value="">Select campaign NPC/entity...</option>
-              {splitEntities.campaignNpcs.map((entity) => (
-                <option key={entity.id} value={entity.id}>
-                  {entity.name} ({entity.kind})
-                </option>
-              ))}
-            </select>
-            <button disabled={!selectedRosterEntityId} onClick={() => void handleAddRosterEntity()} type="button">
-              Add NPC
-            </button>
-          </div>
-
-          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
-            <select
-              onChange={(event) => setSelectedRosterTemplateId(event.target.value)}
-              value={selectedRosterTemplateId}
-            >
-              <option value="">Select template...</option>
-              {templates.map((template) => (
-                <option key={template.id} value={template.id}>
-                  {template.name} ({template.kind})
-                </option>
-              ))}
-            </select>
-            <button disabled={!selectedRosterTemplateId} onClick={() => void handleAddRosterTemplate()} type="button">
-              Add template
-            </button>
-          </div>
+          ))}
+          <input
+            onChange={(event) => setRosterSearch(event.target.value)}
+            placeholder="Search roster candidates"
+            style={{ minWidth: 220 }}
+            value={rosterSearch}
+          />
         </div>
 
-        {roster.length > 0 ? (
+        {filteredRosterCandidates.length > 0 ? (
           <div style={{ overflowX: "auto" }}>
             <table style={{ borderCollapse: "collapse", minWidth: 640, width: "100%" }}>
               <thead>
                 <tr style={{ borderBottom: "1px solid #d9ddd8", textAlign: "left" }}>
-                  <th style={{ padding: "0.5rem 0.75rem 0.5rem 0" }}>Name</th>
+                  <th style={{ padding: "0.5rem 0.75rem 0.5rem 0", textAlign: "center" }}>In campaign</th>
+                  <th style={{ padding: "0.5rem 0.75rem" }}>Name</th>
                   <th style={{ padding: "0.5rem 0.75rem" }}>Type</th>
                   <th style={{ padding: "0.5rem 0.75rem" }}>Source</th>
-                  <th style={{ padding: "0.5rem 0.75rem" }}>Notes</th>
-                  <th style={{ padding: "0.5rem 0", textAlign: "center" }}>Action</th>
+                  <th style={{ padding: "0.5rem 0" }}>Kind</th>
                 </tr>
               </thead>
               <tbody>
-                {roster.map((entry) => (
-                  <tr key={entry.id} style={{ borderBottom: "1px solid #eee8dc" }}>
-                    <td style={{ padding: "0.6rem 0.75rem 0.6rem 0" }}>
-                      {entry.labelSnapshot ?? entry.sourceId}
+                {filteredRosterCandidates.map((candidate) => (
+                  <tr
+                    key={buildRosterSourceKey(candidate.sourceType, candidate.sourceId)}
+                    style={{ borderBottom: "1px solid #eee8dc" }}
+                  >
+                    <td style={{ padding: "0.6rem 0.75rem 0.6rem 0", textAlign: "center" }}>
+                      <input
+                        aria-label={`Toggle ${candidate.name} campaign roster membership`}
+                        checked={candidate.member}
+                        onChange={(event) =>
+                          void handleRosterMembershipToggle(candidate, event.target.checked)
+                        }
+                        type="checkbox"
+                      />
                     </td>
-                    <td style={{ padding: "0.6rem 0.75rem" }}>{formatRosterType(entry)}</td>
-                    <td style={{ padding: "0.6rem 0.75rem" }}>{formatRosterSource(entry)}</td>
-                    <td style={{ padding: "0.6rem 0.75rem" }}>{entry.notes ?? "—"}</td>
-                    <td style={{ padding: "0.6rem 0", textAlign: "center" }}>
-                      <button onClick={() => void handleRemoveRosterEntry(entry.id)} type="button">
-                        Remove
-                      </button>
+                    <td style={{ padding: "0.6rem 0.75rem" }}>
+                      <strong>{candidate.name}</strong>
                     </td>
+                    <td style={{ padding: "0.6rem 0.75rem" }}>{candidate.typeLabel}</td>
+                    <td style={{ padding: "0.6rem 0.75rem" }}>{candidate.sourceLabel}</td>
+                    <td style={{ padding: "0.6rem 0" }}>{candidate.kindLabel}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
         ) : (
-          <div>No campaign roster entries yet.</div>
+          <div>No roster candidates match the current filters.</div>
         )}
       </section>
 
@@ -503,6 +556,17 @@ export default function CampaignDetailPageContent({
           <option value="travel">Travel</option>
           <option value="mixed">Mixed</option>
         </select>
+        <select
+          onChange={(event) => setContinuesFromScenarioId(event.target.value)}
+          value={continuesFromScenarioId}
+        >
+          <option value="">No previous scenario</option>
+          {orderedScenarios.map((scenario) => (
+            <option key={scenario.id} value={scenario.id}>
+              Continues from {scenario.name}
+            </option>
+          ))}
+        </select>
         <div>
           <button onClick={() => void handleCreateScenario()} type="button">
             Create scenario
@@ -527,11 +591,12 @@ export default function CampaignDetailPageContent({
                   <th style={{ padding: "0.5rem 0.75rem" }}>Kind</th>
                   <th style={{ padding: "0.5rem 0.75rem" }}>Status</th>
                   <th style={{ padding: "0.5rem 0.75rem" }}>Combat</th>
+                  <th style={{ padding: "0.5rem 0.75rem" }}>Follows</th>
                   <th style={{ padding: "0.5rem 0" }}>Action</th>
                 </tr>
               </thead>
               <tbody>
-                {scenarios.map((scenario) => (
+                {orderedScenarios.map((scenario) => (
                   <tr key={scenario.id} style={{ borderBottom: "1px solid #eee8dc" }}>
                     <td style={{ padding: "0.6rem 0.75rem 0.6rem 0" }}>
                       <div>
@@ -545,6 +610,9 @@ export default function CampaignDetailPageContent({
                     <td style={{ padding: "0.6rem 0.75rem" }}>{scenario.status}</td>
                     <td style={{ padding: "0.6rem 0.75rem" }}>
                       {scenario.liveState?.combatStatus ?? "not_started"}
+                    </td>
+                    <td style={{ padding: "0.6rem 0.75rem" }}>
+                      {getContinuationLabel(scenario.id)}
                     </td>
                     <td style={{ padding: "0.6rem 0" }}>
                       <Link

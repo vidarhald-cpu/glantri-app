@@ -11,6 +11,7 @@ import type {
   Scenario,
   ScenarioEventLog,
   ScenarioLiveState,
+  ScenarioRelationship,
   ScenarioPlayerProjection,
   ScenarioParticipant,
   ChargenRuleSet,
@@ -453,6 +454,7 @@ export async function loadCampaignScenarios(campaignId: string): Promise<Scenari
 
 export async function createScenarioOnServer(input: {
   campaignId: string;
+  continuesFromScenarioId?: string;
   description?: string;
   kind?: Scenario["kind"];
   mapAssetId?: string | null;
@@ -463,6 +465,7 @@ export async function createScenarioOnServer(input: {
     `/campaigns/${input.campaignId}/scenarios`,
     {
       body: JSON.stringify({
+        continuesFromScenarioId: input.continuesFromScenarioId,
         description: input.description,
         kind: input.kind,
         mapAssetId: input.mapAssetId,
@@ -474,6 +477,19 @@ export async function createScenarioOnServer(input: {
   );
 
   return payload.scenario;
+}
+
+export async function loadCampaignScenarioRelationships(
+  campaignId: string
+): Promise<ScenarioRelationship[]> {
+  const payload = await sendJson<{ relationships: ScenarioRelationship[] }>(
+    `/campaigns/${campaignId}/scenario-relationships`,
+    {
+      method: "GET"
+    }
+  );
+
+  return payload.relationships;
 }
 
 export async function loadCampaignRoster(campaignId: string): Promise<CampaignRosterEntry[]> {

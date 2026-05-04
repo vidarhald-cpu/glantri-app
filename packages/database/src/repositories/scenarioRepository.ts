@@ -6,6 +6,7 @@ import {
   scenarioEventLogSchema,
   scenarioLiveStateSchema,
   scenarioParticipantSchema,
+  scenarioRelationshipSchema,
   scenarioSchema,
   type Campaign,
   type CampaignAsset,
@@ -20,7 +21,9 @@ import {
   type ScenarioParticipant,
   type ScenarioParticipantPosition,
   type ScenarioParticipantSnapshot,
-  type ScenarioParticipantState
+  type ScenarioParticipantState,
+  type ScenarioRelationship,
+  type ScenarioRelationshipType
 } from "@glantri/domain";
 import { Prisma } from "@prisma/client";
 
@@ -236,6 +239,28 @@ function mapCampaignRosterEntry(record: {
   });
 }
 
+function mapScenarioRelationship(record: {
+  campaignId: string;
+  createdAt: Date;
+  fromScenarioId: string;
+  id: string;
+  relationType: string;
+  sortOrder: number | null;
+  toScenarioId: string;
+  updatedAt: Date;
+}): ScenarioRelationship {
+  return scenarioRelationshipSchema.parse({
+    campaignId: record.campaignId,
+    createdAt: record.createdAt.toISOString(),
+    fromScenarioId: record.fromScenarioId,
+    id: record.id,
+    relationType: record.relationType,
+    sortOrder: record.sortOrder ?? undefined,
+    toScenarioId: record.toScenarioId,
+    updatedAt: record.updatedAt.toISOString()
+  });
+}
+
 export interface ScenarioRepository {
   createCampaign(input: {
     description: string;
@@ -351,6 +376,14 @@ export interface ScenarioRepository {
   deleteCampaignRosterEntry(entryId: string): Promise<void>;
   getCampaignRosterEntryById(entryId: string): Promise<CampaignRosterEntry | null>;
   listCampaignRosterEntries(campaignId: string): Promise<CampaignRosterEntry[]>;
+  createScenarioRelationship(input: {
+    campaignId: string;
+    fromScenarioId: string;
+    relationType: ScenarioRelationshipType;
+    sortOrder?: number | null;
+    toScenarioId: string;
+  }): Promise<ScenarioRelationship>;
+  listScenarioRelationshipsByCampaign(campaignId: string): Promise<ScenarioRelationship[]>;
   createScenarioEventLog(input: {
     actorUserId?: string | null;
     eventType: string;
@@ -705,6 +738,27 @@ export function createPrismaScenarioRepository(): ScenarioRepository {
       });
 
       return records.map(mapCampaignRosterEntry);
+    },
+    async createScenarioRelationship(input) {
+      const record = await prisma.scenarioRelationship.create({
+        data: {
+          campaignId: input.campaignId,
+          fromScenarioId: input.fromScenarioId,
+          relationType: input.relationType,
+          sortOrder: input.sortOrder ?? null,
+          toScenarioId: input.toScenarioId
+        }
+      });
+
+      return mapScenarioRelationship(record);
+    },
+    async listScenarioRelationshipsByCampaign(campaignId) {
+      const records = await prisma.scenarioRelationship.findMany({
+        orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+        where: { campaignId }
+      });
+
+      return records.map(mapScenarioRelationship);
     },
     async createScenarioEventLog(input) {
       const record = await prisma.scenarioEventLog.create({

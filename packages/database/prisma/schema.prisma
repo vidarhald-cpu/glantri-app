@@ -122,6 +122,10 @@ enum ScenarioParticipantJoinSource {
   imported_from_template
 }
 
+enum ScenarioRelationshipType {
+  continues_from
+}
+
 enum ScenarioVisibility {
   hidden
   visible_to_all
@@ -332,6 +336,7 @@ model Campaign {
   assets      CampaignAsset[]
   gmUser      User            @relation(fields: [gmUserId], references: [id], onDelete: Cascade)
   rosterEntries CampaignRosterEntry[]
+  scenarioRelationships ScenarioRelationship[]
   scenarios   Scenario[]
 }
 
@@ -350,9 +355,30 @@ model Scenario {
   eventLogs     ScenarioEventLog[]
   mapAsset      CampaignAsset?     @relation("ScenarioMapAsset", fields: [mapAssetId], references: [id], onDelete: SetNull)
   participants  ScenarioParticipant[]
+  relationshipsFrom ScenarioRelationship[] @relation("ScenarioRelationshipFrom")
+  relationshipsTo   ScenarioRelationship[] @relation("ScenarioRelationshipTo")
 
   @@index([campaignId])
   @@index([campaignId, status])
+}
+
+model ScenarioRelationship {
+  id             String                   @id @default(cuid())
+  campaignId     String
+  fromScenarioId String
+  toScenarioId   String
+  relationType   ScenarioRelationshipType
+  sortOrder      Int?
+  createdAt      DateTime                 @default(now())
+  updatedAt      DateTime                 @updatedAt
+  campaign       Campaign                 @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  fromScenario   Scenario                 @relation("ScenarioRelationshipFrom", fields: [fromScenarioId], references: [id], onDelete: Cascade)
+  toScenario     Scenario                 @relation("ScenarioRelationshipTo", fields: [toScenarioId], references: [id], onDelete: Cascade)
+
+  @@index([campaignId])
+  @@index([fromScenarioId])
+  @@index([toScenarioId])
+  @@index([campaignId, relationType])
 }
 
 model ReusableEntity {

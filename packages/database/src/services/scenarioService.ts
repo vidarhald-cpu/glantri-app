@@ -6,6 +6,7 @@ import type {
   CampaignRosterSourceType,
   ReusableEntity,
   Scenario,
+  ScenarioRelationship,
   ScenarioParticipant,
   ScenarioParticipantRole,
   ScenarioParticipantState
@@ -126,13 +127,22 @@ export class ScenarioService {
 
   async createScenario(input: {
     campaignId: string;
+    continuesFromScenarioId?: string | null;
     description?: string;
     kind?: Scenario["kind"];
     mapAssetId?: string | null;
     name: string;
     status?: Scenario["status"];
   }): Promise<Scenario> {
-    return this.repository.createScenario({
+    const previousScenario = input.continuesFromScenarioId
+      ? await this.repository.getScenarioById(input.continuesFromScenarioId)
+      : null;
+
+    if (input.continuesFromScenarioId && (!previousScenario || previousScenario.campaignId !== input.campaignId)) {
+      throw new Error("Continuation scenario not found in this campaign.");
+    }
+
+    const scenario = await this.repository.createScenario({
       campaignId: input.campaignId,
       description: input.description?.trim() ?? "",
       kind: input.kind ?? "mixed",
@@ -140,10 +150,25 @@ export class ScenarioService {
       name: input.name.trim(),
       status: input.status ?? "draft"
     });
+
+    if (previousScenario) {
+      await this.repository.createScenarioRelationship({
+        campaignId: input.campaignId,
+        fromScenarioId: previousScenario.id,
+        relationType: "continues_from",
+        toScenarioId: scenario.id
+      });
+    }
+
+    return scenario;
   }
 
   async listScenariosByCampaign(campaignId: string): Promise<Scenario[]> {
     return this.repository.listScenariosByCampaign(campaignId);
+  }
+
+  async listScenarioRelationshipsByCampaign(campaignId: string): Promise<ScenarioRelationship[]> {
+    return this.repository.listScenarioRelationshipsByCampaign(campaignId);
   }
 
   async listScenariosByCampaignPlayerAccess(campaignId: string, userId: string): Promise<Scenario[]> {

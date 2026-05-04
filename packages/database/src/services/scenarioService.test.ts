@@ -7,7 +7,8 @@ import type {
   ReusableEntity,
   Scenario,
   ScenarioEventLog,
-  ScenarioParticipant
+  ScenarioParticipant,
+  ScenarioRelationship
 } from "@glantri/domain";
 
 import type { ScenarioRepository } from "../repositories/scenarioRepository";
@@ -86,6 +87,7 @@ function createScenarioRepositoryStub() {
   const participants: ScenarioParticipant[] = [];
   const eventLogs: ScenarioEventLog[] = [];
   const rosterEntries: CampaignRosterEntry[] = [];
+  const scenarioRelationships: ScenarioRelationship[] = [];
 
   const repository: ScenarioRepository = {
     createCampaign: async () => {
@@ -95,8 +97,19 @@ function createScenarioRepositoryStub() {
     listCampaignsByGameMaster: async () => [],
     listCampaignsAllowingPlayerSelfJoin: async () => [],
     listCampaignsByPlayerAccess: async () => campaigns,
-    createScenario: async () => {
-      throw new Error("Not implemented in test stub.");
+    createScenario: async (input) => {
+      const now = "2026-04-21T00:00:00.000Z";
+
+      return {
+        campaignId: input.campaignId,
+        createdAt: now,
+        description: input.description,
+        id: `scenario-created-${scenarioRelationships.length + 1}`,
+        kind: input.kind,
+        name: input.name,
+        status: input.status,
+        updatedAt: now
+      };
     },
     getScenarioById: async (scenarioId) => (scenarioId === scenario.id ? scenario : null),
     listScenariosByCampaign: async () => [],
@@ -224,6 +237,23 @@ function createScenarioRepositoryStub() {
       rosterEntries.find((entry) => entry.id === entryId) ?? null,
     listCampaignRosterEntries: async (campaignId) =>
       rosterEntries.filter((entry) => entry.campaignId === campaignId),
+    createScenarioRelationship: async (input) => {
+      const now = "2026-04-21T00:00:00.000Z";
+      const relationship: ScenarioRelationship = {
+        campaignId: input.campaignId,
+        createdAt: now,
+        fromScenarioId: input.fromScenarioId,
+        id: `relationship-${scenarioRelationships.length + 1}`,
+        relationType: input.relationType,
+        sortOrder: input.sortOrder ?? undefined,
+        toScenarioId: input.toScenarioId,
+        updatedAt: now
+      };
+      scenarioRelationships.push(relationship);
+      return relationship;
+    },
+    listScenarioRelationshipsByCampaign: async (campaignId) =>
+      scenarioRelationships.filter((entry) => entry.campaignId === campaignId),
     createScenarioEventLog: async (input) => {
       const eventLog: ScenarioEventLog = {
         actorUserId: input.actorUserId ?? undefined,
@@ -243,7 +273,7 @@ function createScenarioRepositoryStub() {
     listScenarioEventLogs: async () => eventLogs
   };
 
-  return { campaigns, eventLogs, participants, repository, rosterEntries, scenario };
+  return { campaigns, eventLogs, participants, repository, rosterEntries, scenario, scenarioRelationships };
 }
 
 describe("ScenarioService controller assignment", () => {
@@ -454,6 +484,73 @@ describe("ScenarioService access listing", () => {
         name: "Arena Bout",
       }),
     ]);
+  });
+});
+
+describe("ScenarioService scenario relationships", () => {
+  it("creates scenarios without continuation links by default", async () => {
+    const { repository, scenarioRelationships } = createScenarioRepositoryStub();
+    const service = new ScenarioService(repository);
+
+    await expect(
+      service.createScenario({
+        campaignId: "campaign-1",
+        kind: "mixed",
+        name: "Standalone Scene",
+        status: "draft"
+      })
+    ).resolves.toMatchObject({
+      campaignId: "campaign-1",
+      name: "Standalone Scene"
+    });
+    expect(scenarioRelationships).toHaveLength(0);
+  });
+
+  it("creates a continuation relationship to an earlier campaign scenario", async () => {
+    const { repository, scenarioRelationships } = createScenarioRepositoryStub();
+    const service = new ScenarioService(repository);
+
+    const scenario = await service.createScenario({
+      campaignId: "campaign-1",
+      continuesFromScenarioId: "scenario-1",
+      kind: "mixed",
+      name: "Follow-up Scene",
+      status: "draft"
+    });
+
+    expect(scenarioRelationships).toEqual([
+      expect.objectContaining({
+        campaignId: "campaign-1",
+        fromScenarioId: "scenario-1",
+        relationType: "continues_from",
+        toScenarioId: scenario.id
+      })
+    ]);
+    await expect(service.listScenarioRelationshipsByCampaign("campaign-1")).resolves.toHaveLength(1);
+  });
+
+  it("rejects continuation links to scenarios outside the campaign", async () => {
+    const { repository, scenarioRelationships } = createScenarioRepositoryStub();
+    repository.getScenarioById = async () => ({
+      campaignId: "other-campaign",
+      createdAt: "2026-04-21T00:00:00.000Z",
+      description: "",
+      id: "scenario-other",
+      kind: "mixed",
+      name: "Other Campaign Scene",
+      status: "draft",
+      updatedAt: "2026-04-21T00:00:00.000Z"
+    });
+    const service = new ScenarioService(repository);
+
+    await expect(
+      service.createScenario({
+        campaignId: "campaign-1",
+        continuesFromScenarioId: "scenario-other",
+        name: "Invalid Follow-up"
+      })
+    ).rejects.toThrow("Continuation scenario not found in this campaign.");
+    expect(scenarioRelationships).toHaveLength(0);
   });
 });
 

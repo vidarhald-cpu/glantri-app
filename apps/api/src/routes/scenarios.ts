@@ -487,6 +487,7 @@ export const scenariosRoutes: FastifyPluginAsync = async (app) => {
       const body = parseBodyObject(request.body, "Scenario payload");
       const scenario = await scenarioService.createScenario({
         campaignId,
+        continuesFromScenarioId: parseOptionalString(body, "continuesFromScenarioId"),
         description: parseOptionalString(body, "description"),
         kind: body.kind == null ? undefined : scenarioKindSchema.parse(body.kind),
         mapAssetId: parseOptionalNullableString(body, "mapAssetId"),
@@ -498,6 +499,33 @@ export const scenariosRoutes: FastifyPluginAsync = async (app) => {
     } catch (error) {
       return reply.code(400).send({
         error: error instanceof Error ? error.message : "Unable to create scenario."
+      });
+    }
+  });
+
+  app.get("/campaigns/:campaignId/scenario-relationships", async (request, reply) => {
+    const user = await requireAdminUser(request, reply);
+
+    if (!user) {
+      return;
+    }
+
+    try {
+      const campaignId = parseId(request.params, "campaignId", "Campaign id");
+      const campaign = await scenarioService.getCampaignById(campaignId);
+
+      if (!campaign || campaign.gmUserId !== user.id) {
+        return reply.code(404).send({
+          error: "Campaign not found."
+        });
+      }
+
+      const relationships = await scenarioService.listScenarioRelationshipsByCampaign(campaignId);
+
+      return { relationships };
+    } catch (error) {
+      return reply.code(400).send({
+        error: error instanceof Error ? error.message : "Unable to list scenario relationships."
       });
     }
   });

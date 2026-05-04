@@ -36,6 +36,7 @@ export const scenarioParticipantJoinSourceSchema = z.enum([
   "player_joined",
   "imported_from_template"
 ]);
+export const scenarioRelationshipTypeSchema = z.enum(["continues_from"]);
 export const campaignAssetTypeSchema = z.enum(["map", "image", "document", "handout", "drawing"]);
 export const reusableEntityKindSchema = z.enum(["npc", "monster", "animal"]);
 export const campaignRosterSourceTypeSchema = z.enum(["character", "reusableEntity", "template"]);
@@ -254,6 +255,17 @@ export const campaignRosterEntrySchema = z.object({
   updatedAt: timestampSchema
 });
 
+export const scenarioRelationshipSchema = z.object({
+  campaignId: idSchema,
+  createdAt: timestampSchema,
+  fromScenarioId: idSchema,
+  id: idSchema,
+  relationType: scenarioRelationshipTypeSchema,
+  sortOrder: z.number().int().optional(),
+  toScenarioId: idSchema,
+  updatedAt: timestampSchema
+});
+
 export const scenarioEventLogSchema = z.object({
   actorUserId: idSchema.optional(),
   createdAt: timestampSchema,
@@ -337,6 +349,7 @@ export type ScenarioParticipantRole = z.infer<typeof scenarioParticipantRoleSche
 export type ScenarioParticipantJoinSource = z.infer<
   typeof scenarioParticipantJoinSourceSchema
 >;
+export type ScenarioRelationshipType = z.infer<typeof scenarioRelationshipTypeSchema>;
 export type CampaignAssetType = z.infer<typeof campaignAssetTypeSchema>;
 export type ReusableEntityKind = z.infer<typeof reusableEntityKindSchema>;
 export type CampaignRosterSourceType = z.infer<typeof campaignRosterSourceTypeSchema>;
@@ -363,6 +376,7 @@ export type ScenarioParticipantSnapshot = z.infer<typeof scenarioParticipantSnap
 export type ScenarioParticipant = z.infer<typeof scenarioParticipantSchema>;
 export type CampaignAsset = z.infer<typeof campaignAssetSchema>;
 export type CampaignRosterEntry = z.infer<typeof campaignRosterEntrySchema>;
+export type ScenarioRelationship = z.infer<typeof scenarioRelationshipSchema>;
 export type ScenarioEventLog = z.infer<typeof scenarioEventLogSchema>;
 export type ReusableEntity = z.infer<typeof reusableEntitySchema>;
 export type ScenarioPlayerVisibleParticipant = z.infer<
