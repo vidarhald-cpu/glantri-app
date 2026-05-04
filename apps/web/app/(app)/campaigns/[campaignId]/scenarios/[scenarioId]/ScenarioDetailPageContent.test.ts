@@ -13,14 +13,17 @@ function readScenarioDetailSource(): string {
 }
 
 describe("ScenarioDetailPageContent GM scenario manager UI", () => {
-  it("uses a roster-based scenario participant picker instead of legacy add forms", () => {
+  it("uses compact roster sources instead of a separate concrete participant section", () => {
     const source = readScenarioDetailSource();
 
-    expect(source).toContain("Scenario participants");
     expect(source).toContain("Toggle ${candidate.name} scenario participation");
-    expect(source).toContain("Concrete scenario participants");
     expect(source).toContain("Add from campaign roster");
     expect(source).toContain("Toggle ${participant.snapshot.displayName} active scenario status");
+    expect(source).toContain(">Active</th>");
+    expect(source).toContain(">Controller</th>");
+    expect(source).toContain(">Status</th>");
+    expect(source).not.toContain(">Scenario participants</h2>");
+    expect(source).not.toContain("Concrete scenario participants");
     expect(source).not.toContain("<h2 style={{ margin: 0 }}>Add player character</h2>");
     expect(source).not.toContain("Add participant from template or campaign NPC");
   });
@@ -29,7 +32,10 @@ describe("ScenarioDetailPageContent GM scenario manager UI", () => {
     const source = readScenarioDetailSource();
 
     expect(source).toContain("Scenario summary");
+    expect(source).toContain('aria-label="Scenario summary"');
+    expect(source).toContain("gridTemplateColumns");
     expect(source).toContain("setScenarioDescription");
+    expect(source).not.toContain("<textarea");
     expect(source).not.toContain("setScenarioKind");
     expect(source).not.toContain("value={scenarioKind}");
     expect(source).not.toContain("{scenario.description || \"No description yet.\"}");
@@ -63,6 +69,10 @@ describe("ScenarioDetailPageContent GM scenario manager UI", () => {
     expect(source).toContain("Assign selected");
     expect(source).toContain("Withdraw selected");
     expect(source).toContain("Bulk assignment encounter");
+    expect(source).toContain(">Select</th>");
+    expect(source).toContain(">Controller</th>");
+    expect(source).toContain(">Status</th>");
+    expect(source).toContain(">Details</th>");
     expect(source).toContain("Encounter-specific details");
   });
 
@@ -78,19 +88,35 @@ describe("ScenarioDetailPageContent GM scenario manager UI", () => {
     expect(source).toContain(".filter((entry) => entry.category !== \"template\")");
   });
 
-  it("renders scenario participant filters for roster candidates and concrete actors", () => {
+  it("renders filters on Encounter Assignment", () => {
     const source = readScenarioDetailSource();
 
-    expect(source).toContain("Scenario participant status filter");
-    expect(source).toContain("In scenario / Active");
-    expect(source).toContain("Available / Not in scenario");
-    expect(source).toContain("Scenario participant type filter");
+    expect(source).toContain("Encounter assignment status filter");
+    expect(source).toContain("Encounter assignment type filter");
     expect(source).toContain("Temporary actors");
     expect(source).toContain("All civilizations");
     expect(source).toContain("All professions");
     expect(source).toContain("All skill groups");
-    expect(source).toContain("Search scenario participants");
+    expect(source).toContain("Search encounter participants");
     expect(source).toContain("filteredConcreteParticipants");
-    expect(source).toContain("filteredScenarioRosterCandidates");
+  });
+
+  it("keeps the scenario workflow sections in the intended order", () => {
+    const source = readScenarioDetailSource();
+    const summaryIndex = source.indexOf('aria-label="Scenario summary"');
+    const encountersIndex = source.indexOf(">Encounters</h2>");
+    const rosterIndex = source.indexOf(">Add from campaign roster</h2>");
+    const templatesIndex = source.indexOf(">Template sources</h2>");
+    const assignmentIndex = source.indexOf(">Encounter Assignment</h2>");
+    const eventLogIndex = source.indexOf(">Event log</h2>");
+
+    expect(summaryIndex).toBeGreaterThan(-1);
+    expect(encountersIndex).toBeGreaterThan(summaryIndex);
+    expect(rosterIndex).toBeGreaterThan(encountersIndex);
+    expect(templatesIndex).toBeGreaterThan(rosterIndex);
+    expect(assignmentIndex).toBeGreaterThan(templatesIndex);
+    expect(eventLogIndex).toBeGreaterThan(assignmentIndex);
+    expect(source.lastIndexOf(">Select</th>")).toBeLessThan(eventLogIndex);
+    expect(source.lastIndexOf(">Status</th>")).toBeLessThan(eventLogIndex);
   });
 });
