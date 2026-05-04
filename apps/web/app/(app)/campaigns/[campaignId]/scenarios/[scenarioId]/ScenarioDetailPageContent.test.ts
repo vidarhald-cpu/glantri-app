@@ -29,7 +29,8 @@ describe("ScenarioDetailPageContent GM scenario manager UI", () => {
 
     expect(source).toContain("Scenario summary");
     expect(source).toContain("setScenarioDescription");
-    expect(source).toContain("setScenarioKind");
+    expect(source).not.toContain("setScenarioKind");
+    expect(source).not.toContain("value={scenarioKind}");
     expect(source).not.toContain("{scenario.description || \"No description yet.\"}");
     expect(source).not.toContain("<h2 style={{ margin: 0 }}>Live state</h2>");
     expect(source).not.toContain("handleUpdateLiveState");
@@ -56,6 +57,7 @@ describe("ScenarioDetailPageContent GM scenario manager UI", () => {
     expect(source).toContain("nonArchivedEncounters");
     expect(source).toContain("scenarioParticipantId");
     expect(source).toContain('participantType: "scenario"');
+    expect(source).toContain("checked={encounter.participants.some");
   });
 
   it("separates templates as sources for temporary actors", () => {
@@ -64,6 +66,23 @@ describe("ScenarioDetailPageContent GM scenario manager UI", () => {
     expect(source).toContain("Template sources");
     expect(source).toContain("handleCreateTemporaryActorFromTemplate");
     expect(source).toContain("Create temporary actor");
+    expect(source).toContain("templateSources[0]");
     expect(source).toContain(".filter((entry) => entry.category !== \"template\")");
+  });
+
+  it("renders scenario participant filters for roster candidates and concrete actors", () => {
+    const source = readScenarioDetailSource();
+
+    expect(source).toContain("Scenario participant status filter");
+    expect(source).toContain("In scenario / Active");
+    expect(source).toContain("Available / Not in scenario");
+    expect(source).toContain("Scenario participant type filter");
+    expect(source).toContain("Temporary actors");
+    expect(source).toContain("All civilizations");
+    expect(source).toContain("All professions");
+    expect(source).toContain("All skill groups");
+    expect(source).toContain("Search scenario participants");
+    expect(source).toContain("filteredConcreteParticipants");
+    expect(source).toContain("filteredScenarioRosterCandidates");
   });
 });

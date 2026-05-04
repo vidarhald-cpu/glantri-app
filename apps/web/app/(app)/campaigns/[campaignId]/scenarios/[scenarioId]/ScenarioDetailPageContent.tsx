@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 import type { AuthUser } from "@glantri/auth";
+import { defaultCanonicalContent } from "@glantri/content";
 import type {
   CampaignRosterEntry,
   EncounterKind,
@@ -50,17 +51,187 @@ interface ScenarioDetailPageContentProps {
 }
 
 interface ScenarioRosterCandidate {
+  civilizationLabel: string;
   existingParticipant?: ScenarioParticipant;
   member: boolean;
   name: string;
+  professionLabel: string;
   rosterEntry: CampaignRosterEntry;
+  skillGroups: string[];
   sourceKind: string;
+  statusFilter: ScenarioParticipantMembershipFilter;
+  typeFilter: ScenarioParticipantTypeFilter;
   typeLabel: string;
 }
 
 interface TemplateSource {
   entity: ReusableEntity;
   label: string;
+}
+
+type ScenarioParticipantMembershipFilter = "all" | "active" | "available" | "inactive";
+type ScenarioParticipantTypeFilter = "all" | "pc" | "npc" | "temporary" | "monster" | "other";
+
+const civilizationNameById = new Map(
+  defaultCanonicalContent.civilizations.map((civilization) => [civilization.id, civilization.name])
+);
+const civilizationNameByName = new Map(
+  defaultCanonicalContent.civilizations.map((civilization) => [
+    civilization.name.toLowerCase(),
+    civilization.name
+  ])
+);
+const civilizationNamesBySocietyId = new Map<string, string[]>();
+
+for (const civilization of defaultCanonicalContent.civilizations) {
+  const existingNames = civilizationNamesBySocietyId.get(civilization.linkedSocietyId) ?? [];
+  civilizationNamesBySocietyId.set(civilization.linkedSocietyId, [
+    ...existingNames,
+    civilization.name
+  ]);
+}
+
+function formatEntityKind(kind: ReusableEntity["kind"]): string {
+  if (kind === "npc") {
+    return "NPC";
+  }
+
+  return `${kind.charAt(0).toUpperCase()}${kind.slice(1)}`;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function readOptionalString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim().length > 0 ? value : undefined;
+}
+
+function readStringList(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0);
+}
+
+function getCivilizationDisplayName(value?: string): string {
+  const normalizedValue = value?.trim();
+
+  if (!normalizedValue) {
+    return "—";
+  }
+
+  const exactCivilizationName =
+    civilizationNameById.get(normalizedValue) ??
+    civilizationNameByName.get(normalizedValue.toLowerCase());
+
+  if (exactCivilizationName) {
+    return exactCivilizationName;
+  }
+
+  const societyCivilizationNames = civilizationNamesBySocietyId.get(normalizedValue);
+
+  if (societyCivilizationNames && societyCivilizationNames.length > 0) {
+    return societyCivilizationNames.join(" / ");
+  }
+
+  return "—";
+}
+
+function readSnapshotMetadata(snapshot: unknown): {
+  civilizationLabel?: string;
+  professionLabel?: string;
+  skillGroups: string[];
+} {
+  if (!isRecord(snapshot)) {
+    return { skillGroups: [] };
+  }
+
+  const progression = isRecord(snapshot.progression) ? snapshot.progression : undefined;
+  const progressionSkillGroups = Array.isArray(progression?.skillGroups)
+    ? progression.skillGroups
+        .map((entry) => (isRecord(entry) ? readOptionalString(entry.groupId) : undefined))
+        .filter((entry): entry is string => Boolean(entry))
+    : [];
+
+  return {
+    civilizationLabel:
+      readOptionalString(snapshot.civilization) ??
+      readOptionalString(snapshot.civilizationId) ??
+      readOptionalString(snapshot.culture) ??
+      readOptionalString(snapshot.societyId) ??
+      readOptionalString(snapshot.society),
+    professionLabel: readOptionalString(snapshot.profession) ?? readOptionalString(snapshot.professionId),
+    skillGroups: [
+      ...readStringList(snapshot.skillGroups),
+      ...readStringList(snapshot.skillGroupIds),
+      ...readStringList(snapshot.trainingPackages),
+      ...progressionSkillGroups
+    ]
+  };
+}
+
+function getScenarioParticipantStatusFilter(
+  participant: ScenarioParticipant | undefined
+): ScenarioParticipantMembershipFilter {
+  if (!participant) {
+    return "available";
+  }
+
+  return participant.isActive ? "active" : "inactive";
+}
+
+function getScenarioParticipantType(input: {
+  characterId?: string;
+  entityId?: string;
+  role: ScenarioParticipant["role"];
+  sourceType: ScenarioParticipant["sourceType"];
+}): {
+  label: string;
+  typeFilter: ScenarioParticipantTypeFilter;
+} {
+  if (input.role === "player_character" || input.sourceType === "character") {
+    return { label: "PC", typeFilter: "pc" };
+  }
+
+  if (input.role === "monster") {
+    return { label: input.entityId ? "Monster" : "Temporary monster", typeFilter: "monster" };
+  }
+
+  if (input.sourceType === "entity" && !input.entityId) {
+    return { label: "Temporary actor", typeFilter: "temporary" };
+  }
+
+  if (input.role === "npc" || input.role === "enemy" || input.role === "ally") {
+    return { label: "NPC", typeFilter: "npc" };
+  }
+
+  return { label: "Other", typeFilter: "other" };
+}
+
+function getConcreteParticipantMetadata(participant: ScenarioParticipant): {
+  civilizationLabel: string;
+  professionLabel: string;
+  skillGroups: string[];
+  typeFilter: ScenarioParticipantTypeFilter;
+  typeLabel: string;
+} {
+  const participantType = getScenarioParticipantType({
+    characterId: participant.characterId,
+    entityId: participant.entityId,
+    role: participant.role,
+    sourceType: participant.sourceType
+  });
+  const buildMetadata = readSnapshotMetadata(participant.snapshot.build);
+
+  return {
+    civilizationLabel: getCivilizationDisplayName(buildMetadata.civilizationLabel),
+    professionLabel: buildMetadata.professionLabel ?? "—",
+    skillGroups: buildMetadata.skillGroups,
+    typeFilter: participantType.typeFilter,
+    typeLabel: participantType.label
+  };
 }
 
 export default function ScenarioDetailPageContent({
@@ -102,9 +273,17 @@ export default function ScenarioDetailPageContent({
   const [temporaryActorName, setTemporaryActorName] = useState("");
   const [temporaryActorRole, setTemporaryActorRole] = useState<ScenarioParticipant["role"]>("npc");
 
+  const [participantMembershipFilter, setParticipantMembershipFilter] =
+    useState<ScenarioParticipantMembershipFilter>("all");
+  const [participantTypeFilter, setParticipantTypeFilter] =
+    useState<ScenarioParticipantTypeFilter>("all");
+  const [participantCivilizationFilter, setParticipantCivilizationFilter] = useState("");
+  const [participantProfessionFilter, setParticipantProfessionFilter] = useState("");
+  const [participantSkillGroupFilter, setParticipantSkillGroupFilter] = useState("");
+  const [participantSearch, setParticipantSearch] = useState("");
+
   const [scenarioName, setScenarioName] = useState("");
   const [scenarioDescription, setScenarioDescription] = useState("");
-  const [scenarioKind, setScenarioKind] = useState<Scenario["kind"]>("mixed");
   const [scenarioStatus, setScenarioStatus] = useState<Scenario["status"]>("draft");
   const usersById = useMemo(
     () => new Map(assignableUsers.map((user) => [user.id, user])),
@@ -144,26 +323,43 @@ export default function ScenarioDetailPageContent({
             ? entitiesById.get(entry.sourceId)
             : undefined;
           const existingParticipant = participantsByRosterSource.get(`${entry.sourceType}:${entry.sourceId}`);
+          const entityMetadata = entity ? getCampaignActorMetadata(entity) : undefined;
+          const entitySnapshotMetadata = readSnapshotMetadata(entity?.snapshot);
           const name = character?.name ?? entity?.name ?? entry.labelSnapshot ?? "Unknown roster member";
           const sourceKind =
             entry.sourceType === "character"
               ? "Character"
               : entity
-                ? `${entity.kind.charAt(0).toUpperCase()}${entity.kind.slice(1)}`
+                ? formatEntityKind(entity.kind)
                 : entry.sourceType;
+          const participantType =
+            entry.category === "pc"
+              ? { label: "PC", typeFilter: "pc" as const }
+              : entity?.kind === "monster"
+                ? { label: "Monster", typeFilter: "monster" as const }
+                : { label: "NPC", typeFilter: "npc" as const };
 
           return {
+            civilizationLabel:
+              character
+                ? getCivilizationDisplayName(character.build.societyId)
+                : getCivilizationDisplayName(entitySnapshotMetadata.civilizationLabel),
             existingParticipant,
             member: Boolean(existingParticipant?.isActive),
             name,
+            professionLabel:
+              character?.build.professionId ??
+              entityMetadata?.profession ??
+              entitySnapshotMetadata.professionLabel ??
+              "—",
             rosterEntry: entry,
+            skillGroups:
+              character?.build.progression.skillGroups.map((group) => group.groupId) ??
+              entitySnapshotMetadata.skillGroups,
             sourceKind,
-            typeLabel:
-              entry.category === "pc"
-                ? "PC"
-                : entity?.kind === "monster"
-                  ? "Monster"
-                  : "NPC"
+            statusFilter: getScenarioParticipantStatusFilter(existingParticipant),
+            typeFilter: participantType.typeFilter,
+            typeLabel: participantType.label
           };
         })
         .sort((left, right) => left.name.localeCompare(right.name)),
@@ -226,6 +422,138 @@ export default function ScenarioDetailPageContent({
       (participant) => !(participant.entityId && templateIds.has(participant.entityId))
     );
   }, [participants, templateSources]);
+  const participantTypeFilterOptions = useMemo(() => {
+    const participantTypes = new Set<ScenarioParticipantTypeFilter>([
+      ...scenarioRosterCandidates.map((candidate) => candidate.typeFilter),
+      ...concreteParticipants.map((participant) => getConcreteParticipantMetadata(participant).typeFilter)
+    ]);
+
+    return [
+      { id: "all" as const, label: "All types" },
+      { id: "pc" as const, label: "PCs" },
+      { id: "npc" as const, label: "NPCs" },
+      { id: "temporary" as const, label: "Temporary actors" },
+      { id: "monster" as const, label: "Monsters" },
+      { id: "other" as const, label: "Other" }
+    ].filter((option) => option.id === "all" || participantTypes.has(option.id));
+  }, [concreteParticipants, scenarioRosterCandidates]);
+  const participantCivilizationOptions = useMemo(
+    () =>
+      [
+        ...new Set([
+          ...scenarioRosterCandidates.map((candidate) => candidate.civilizationLabel),
+          ...concreteParticipants.map(
+            (participant) => getConcreteParticipantMetadata(participant).civilizationLabel
+          )
+        ].filter((value) => value !== "—"))
+      ].sort(),
+    [concreteParticipants, scenarioRosterCandidates]
+  );
+  const participantProfessionOptions = useMemo(
+    () =>
+      [
+        ...new Set([
+          ...scenarioRosterCandidates.map((candidate) => candidate.professionLabel),
+          ...concreteParticipants.map(
+            (participant) => getConcreteParticipantMetadata(participant).professionLabel
+          )
+        ].filter((value) => value !== "—"))
+      ].sort(),
+    [concreteParticipants, scenarioRosterCandidates]
+  );
+  const participantSkillGroupOptions = useMemo(
+    () =>
+      [
+        ...new Set([
+          ...scenarioRosterCandidates.flatMap((candidate) => candidate.skillGroups),
+          ...concreteParticipants.flatMap(
+            (participant) => getConcreteParticipantMetadata(participant).skillGroups
+          )
+        ])
+      ].sort(),
+    [concreteParticipants, scenarioRosterCandidates]
+  );
+  const filteredScenarioRosterCandidates = useMemo(() => {
+    const search = participantSearch.trim().toLowerCase();
+
+    return scenarioRosterCandidates.filter((candidate) => {
+      const matchesMembership =
+        participantMembershipFilter === "all" || candidate.statusFilter === participantMembershipFilter;
+      const matchesType = participantTypeFilter === "all" || candidate.typeFilter === participantTypeFilter;
+      const matchesCivilization =
+        !participantCivilizationFilter || candidate.civilizationLabel === participantCivilizationFilter;
+      const matchesProfession =
+        !participantProfessionFilter || candidate.professionLabel === participantProfessionFilter;
+      const matchesSkillGroup =
+        !participantSkillGroupFilter || candidate.skillGroups.includes(participantSkillGroupFilter);
+      const matchesSearch =
+        search.length === 0 ||
+        candidate.name.toLowerCase().includes(search) ||
+        candidate.typeLabel.toLowerCase().includes(search) ||
+        candidate.sourceKind.toLowerCase().includes(search) ||
+        candidate.civilizationLabel.toLowerCase().includes(search) ||
+        candidate.professionLabel.toLowerCase().includes(search) ||
+        candidate.skillGroups.some((group) => group.toLowerCase().includes(search));
+
+      return (
+        matchesMembership &&
+        matchesType &&
+        matchesCivilization &&
+        matchesProfession &&
+        matchesSkillGroup &&
+        matchesSearch
+      );
+    });
+  }, [
+    participantCivilizationFilter,
+    participantMembershipFilter,
+    participantProfessionFilter,
+    participantSearch,
+    participantSkillGroupFilter,
+    participantTypeFilter,
+    scenarioRosterCandidates
+  ]);
+  const filteredConcreteParticipants = useMemo(() => {
+    const search = participantSearch.trim().toLowerCase();
+
+    return concreteParticipants.filter((participant) => {
+      const metadata = getConcreteParticipantMetadata(participant);
+      const statusFilter = getScenarioParticipantStatusFilter(participant);
+      const matchesMembership =
+        participantMembershipFilter === "all" || statusFilter === participantMembershipFilter;
+      const matchesType = participantTypeFilter === "all" || metadata.typeFilter === participantTypeFilter;
+      const matchesCivilization =
+        !participantCivilizationFilter || metadata.civilizationLabel === participantCivilizationFilter;
+      const matchesProfession =
+        !participantProfessionFilter || metadata.professionLabel === participantProfessionFilter;
+      const matchesSkillGroup =
+        !participantSkillGroupFilter || metadata.skillGroups.includes(participantSkillGroupFilter);
+      const matchesSearch =
+        search.length === 0 ||
+        participant.snapshot.displayName.toLowerCase().includes(search) ||
+        metadata.typeLabel.toLowerCase().includes(search) ||
+        metadata.civilizationLabel.toLowerCase().includes(search) ||
+        metadata.professionLabel.toLowerCase().includes(search) ||
+        metadata.skillGroups.some((group) => group.toLowerCase().includes(search));
+
+      return (
+        matchesMembership &&
+        matchesType &&
+        matchesCivilization &&
+        matchesProfession &&
+        matchesSkillGroup &&
+        matchesSearch
+      );
+    });
+  }, [
+    concreteParticipants,
+    participantCivilizationFilter,
+    participantMembershipFilter,
+    participantProfessionFilter,
+    participantSearch,
+    participantSkillGroupFilter,
+    participantTypeFilter
+  ]);
 
   function formatUserLabel(userId: string | undefined): string {
     if (!userId) {
@@ -320,7 +648,6 @@ export default function ScenarioDetailPageContent({
     setRoster(nextRoster);
     setScenarioName(nextScenario.name);
     setScenarioDescription(nextScenario.description);
-    setScenarioKind(nextScenario.kind);
     setScenarioStatus(nextScenario.status);
   }
 
@@ -368,7 +695,6 @@ export default function ScenarioDetailPageContent({
       setFeedback(undefined);
       const updatedScenario = await updateScenarioOnServer({
         description: scenarioDescription,
-        kind: scenarioKind,
         name: scenarioName,
         scenarioId,
         status: scenarioStatus
@@ -388,11 +714,15 @@ export default function ScenarioDetailPageContent({
 
       if (!member) {
         if (candidate.existingParticipant) {
-          await updateScenarioParticipantMetadataOnServer({
+          const participant = await updateScenarioParticipantMetadataOnServer({
             isActive: false,
             participantId: candidate.existingParticipant.id,
             scenarioId
           });
+
+          setParticipants((current) =>
+            current.map((entry) => (entry.id === participant.id ? participant : entry))
+          );
         }
 
         setFeedback(`Removed ${candidate.name} from active scenario participants.`);
@@ -401,11 +731,14 @@ export default function ScenarioDetailPageContent({
       }
 
       if (candidate.existingParticipant) {
-        await updateScenarioParticipantMetadataOnServer({
+        const participant = await updateScenarioParticipantMetadataOnServer({
           isActive: true,
           participantId: candidate.existingParticipant.id,
           scenarioId
         });
+        setParticipants((current) =>
+          current.map((entry) => (entry.id === participant.id ? participant : entry))
+        );
         setFeedback(`Reactivated ${candidate.name} in this scenario.`);
         await refreshScenario();
         return;
@@ -431,6 +764,9 @@ export default function ScenarioDetailPageContent({
             });
 
       setFeedback(`Added ${participant.snapshot.displayName} to the scenario.`);
+      setParticipants((current) =>
+        current.some((entry) => entry.id === participant.id) ? current : [...current, participant]
+      );
       await refreshScenario();
     } catch (caughtError) {
       setError(
@@ -442,7 +778,10 @@ export default function ScenarioDetailPageContent({
   }
 
   async function handleCreateTemporaryActorFromTemplate() {
-    const template = templateSources.find((source) => source.entity.id === selectedTemplateSourceId)?.entity;
+    const templateSource =
+      templateSources.find((source) => source.entity.id === selectedTemplateSourceId) ??
+      templateSources[0];
+    const template = templateSource?.entity;
 
     if (!template) {
       setError("Choose a template source.");
@@ -466,6 +805,9 @@ export default function ScenarioDetailPageContent({
 
       setFeedback(`Created temporary actor ${participant.snapshot.displayName}.`);
       setTemporaryActorName("");
+      setParticipants((current) =>
+        current.some((entry) => entry.id === participant.id) ? current : [...current, participant]
+      );
       await refreshScenario();
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : "Unable to create temporary actor.");
@@ -547,6 +889,11 @@ export default function ScenarioDetailPageContent({
       });
 
       setFeedback(`Updated participants for ${encounter.title}.`);
+      setEncounters((current) =>
+        current.map((entry) =>
+          entry.id === encounter.id ? { ...encounter, participants: nextParticipants } : entry
+        )
+      );
       await refreshScenario();
     } catch (caughtError) {
       setError(
@@ -669,15 +1016,6 @@ export default function ScenarioDetailPageContent({
             value={scenarioDescription}
           />
         </label>
-        <select
-          onChange={(event) => setScenarioKind(event.target.value as Scenario["kind"])}
-          value={scenarioKind}
-        >
-          <option value="combat">Combat</option>
-          <option value="social">Social</option>
-          <option value="travel">Travel</option>
-          <option value="mixed">Mixed</option>
-        </select>
         <select
           onChange={(event) => setScenarioStatus(event.target.value as Scenario["status"])}
           value={scenarioStatus}
@@ -848,6 +1186,77 @@ export default function ScenarioDetailPageContent({
           Pull concrete PCs, NPCs, and monsters from the campaign roster into this scenario.
           Templates are handled as sources for temporary scenario actors below.
         </p>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+          <select
+            aria-label="Scenario participant status filter"
+            onChange={(event) =>
+              setParticipantMembershipFilter(event.target.value as ScenarioParticipantMembershipFilter)
+            }
+            value={participantMembershipFilter}
+          >
+            <option value="all">All</option>
+            <option value="active">In scenario / Active</option>
+            <option value="available">Available / Not in scenario</option>
+            <option value="inactive">Inactive</option>
+          </select>
+          <select
+            aria-label="Scenario participant type filter"
+            onChange={(event) =>
+              setParticipantTypeFilter(event.target.value as ScenarioParticipantTypeFilter)
+            }
+            value={participantTypeFilter}
+          >
+            {participantTypeFilterOptions.map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+          <select
+            aria-label="Scenario participant civilization filter"
+            onChange={(event) => setParticipantCivilizationFilter(event.target.value)}
+            value={participantCivilizationFilter}
+          >
+            <option value="">All civilizations</option>
+            {participantCivilizationOptions.map((civilization) => (
+              <option key={civilization} value={civilization}>
+                {civilization}
+              </option>
+            ))}
+          </select>
+          <select
+            aria-label="Scenario participant profession filter"
+            onChange={(event) => setParticipantProfessionFilter(event.target.value)}
+            value={participantProfessionFilter}
+          >
+            <option value="">All professions</option>
+            {participantProfessionOptions.map((profession) => (
+              <option key={profession} value={profession}>
+                {profession}
+              </option>
+            ))}
+          </select>
+          <select
+            aria-label="Scenario participant skill group filter"
+            onChange={(event) => setParticipantSkillGroupFilter(event.target.value)}
+            value={participantSkillGroupFilter}
+          >
+            <option value="">All skill groups</option>
+            {participantSkillGroupOptions.map((group) => (
+              <option key={group} value={group}>
+                {group}
+              </option>
+            ))}
+          </select>
+          <input
+            aria-label="Search scenario participants"
+            onChange={(event) => setParticipantSearch(event.target.value)}
+            placeholder="Search scenario participants"
+            style={{ minWidth: 220 }}
+            type="search"
+            value={participantSearch}
+          />
+        </div>
         {scenarioRosterCandidates.length > 0 ? (
           <div style={{ overflowX: "auto" }}>
             <table style={{ borderCollapse: "collapse", minWidth: 780, width: "100%" }}>
@@ -862,7 +1271,7 @@ export default function ScenarioDetailPageContent({
                 </tr>
               </thead>
               <tbody>
-                {scenarioRosterCandidates.map((candidate) => (
+                {filteredScenarioRosterCandidates.map((candidate) => (
                   <tr key={candidate.rosterEntry.id} style={{ borderBottom: "1px solid #eee8dc" }}>
                     <td style={{ padding: "0.6rem 0.75rem 0.6rem 0", textAlign: "center" }}>
                       <input
@@ -893,6 +1302,11 @@ export default function ScenarioDetailPageContent({
                 ))}
               </tbody>
             </table>
+            {filteredScenarioRosterCandidates.length === 0 ? (
+              <div style={{ padding: "0.75rem 0" }}>
+                No campaign roster candidates match the current scenario participant filters.
+              </div>
+            ) : null}
           </div>
         ) : (
           <div>No campaign roster entries are available. Add PCs, NPCs, or templates to the campaign roster first.</div>
@@ -950,21 +1364,24 @@ export default function ScenarioDetailPageContent({
       <section style={{ display: "grid", gap: "0.75rem" }}>
         <h2 style={{ margin: 0 }}>Concrete participant roster</h2>
         {concreteParticipants.length > 0 ? (
-          concreteParticipants.map((participant) => (
-            <div
-              key={participant.id}
-              style={{
-                border: "1px solid #d9ddd8",
-                borderRadius: 12,
-                display: "grid",
-                gap: "0.35rem",
-                padding: "1rem"
-              }}
-            >
-              <strong>{participant.snapshot.displayName}</strong>
-              <div>
-                {participant.sourceType} · {participant.role}
-              </div>
+          filteredConcreteParticipants.map((participant) => {
+            const participantMetadata = getConcreteParticipantMetadata(participant);
+
+            return (
+              <div
+                key={participant.id}
+                style={{
+                  border: "1px solid #d9ddd8",
+                  borderRadius: 12,
+                  display: "grid",
+                  gap: "0.35rem",
+                  padding: "1rem"
+                }}
+              >
+                <strong>{participant.snapshot.displayName}</strong>
+                <div>
+                  {participantMetadata.typeLabel} · {participant.isActive ? "Active" : "Inactive"}
+                </div>
               <div>
                 Controller: {formatUserLabel(participant.controlledByUserId)}
                 {participant.role === "player_character" && participant.controlledByUserId ? (
@@ -1153,11 +1570,15 @@ export default function ScenarioDetailPageContent({
                   </button>
                 </div>
               </div>
-            </div>
-          ))
+              </div>
+            );
+          })
         ) : (
           <div>No participants yet.</div>
         )}
+        {concreteParticipants.length > 0 && filteredConcreteParticipants.length === 0 ? (
+          <div>No concrete participants match the current scenario participant filters.</div>
+        ) : null}
       </section>
 
       <section style={{ display: "grid", gap: "0.75rem" }}>

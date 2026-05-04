@@ -598,19 +598,19 @@ export default function EncounterDetail({
                 </tr>
                 <tr>
                   {[
-                    "Action",
-                    "Target",
-                    "Action",
-                    "Initiative",
-                    "Adjustments",
-                    "Results",
-                    "Action",
-                    "Initiative",
-                    "Adjustments",
-                    "Results",
-                  ].map((label) => (
-                    <th key={label} style={gmEncounterHeaderCellStyle}>
-                      {label}
+                    { id: "selected-action", label: "Action" },
+                    { id: "selected-target", label: "Target" },
+                    { id: "phase-one-action", label: "Action" },
+                    { id: "phase-one-initiative", label: "Initiative" },
+                    { id: "phase-one-adjustments", label: "Adjustments" },
+                    { id: "phase-one-results", label: "Results" },
+                    { id: "phase-two-action", label: "Action" },
+                    { id: "phase-two-initiative", label: "Initiative" },
+                    { id: "phase-two-adjustments", label: "Adjustments" },
+                    { id: "phase-two-results", label: "Results" },
+                  ].map((column) => (
+                    <th key={column.id} style={gmEncounterHeaderCellStyle}>
+                      {column.label}
                     </th>
                   ))}
                 </tr>

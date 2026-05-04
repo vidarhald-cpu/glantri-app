@@ -451,6 +451,9 @@ export default function CampaignDetailPageContent({
         });
 
         setFeedback(`Linked ${entry.labelSnapshot ?? candidate.name} to the campaign roster.`);
+        setRoster((current) =>
+          current.some((rosterEntry) => rosterEntry.id === entry.id) ? current : [...current, entry]
+        );
       } else {
         const rosterEntry =
           candidate.rosterEntry ??
@@ -468,6 +471,7 @@ export default function CampaignDetailPageContent({
         });
 
         setFeedback(`Removed ${candidate.name} from the campaign roster.`);
+        setRoster((current) => current.filter((entry) => entry.id !== rosterEntry.id));
       }
       await refreshPage();
     } catch (caughtError) {
