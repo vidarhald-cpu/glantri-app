@@ -19,9 +19,20 @@ describe("ScenarioDetailPageContent GM scenario manager UI", () => {
     expect(source).toContain("Scenario participants");
     expect(source).toContain("Toggle ${candidate.name} scenario participation");
     expect(source).toContain("In scenario</th>");
+    expect(source).toContain("Concrete participant roster");
     expect(source).not.toContain("<h2 style={{ margin: 0 }}>Add player character</h2>");
     expect(source).not.toContain("Add participant from template or campaign NPC");
-    expect(source).not.toContain("Create temporary scenario actor");
+  });
+
+  it("keeps summary editing together and removes prominent scenario-level live state", () => {
+    const source = readScenarioDetailSource();
+
+    expect(source).toContain("Scenario summary");
+    expect(source).toContain("setScenarioDescription");
+    expect(source).toContain("setScenarioKind");
+    expect(source).not.toContain("{scenario.description || \"No description yet.\"}");
+    expect(source).not.toContain("<h2 style={{ margin: 0 }}>Live state</h2>");
+    expect(source).not.toContain("handleUpdateLiveState");
   });
 
   it("supports combat and roleplaying encounters with timeline/status controls", () => {
@@ -35,13 +46,24 @@ describe("ScenarioDetailPageContent GM scenario manager UI", () => {
     expect(source).toContain("\"active\"");
     expect(source).toContain("\"paused\"");
     expect(source).toContain("\"archived\"");
+    expect(source).not.toContain("participants.map((participant) => (");
   });
 
-  it("assigns encounter participants from scenario participants", () => {
+  it("assigns encounter participants from concrete scenario participant rows", () => {
     const source = readScenarioDetailSource();
 
     expect(source).toContain("handleEncounterParticipantToggle");
+    expect(source).toContain("nonArchivedEncounters");
     expect(source).toContain("scenarioParticipantId");
     expect(source).toContain('participantType: "scenario"');
+  });
+
+  it("separates templates as sources for temporary actors", () => {
+    const source = readScenarioDetailSource();
+
+    expect(source).toContain("Template sources");
+    expect(source).toContain("handleCreateTemporaryActorFromTemplate");
+    expect(source).toContain("Create temporary actor");
+    expect(source).toContain(".filter((entry) => entry.category !== \"template\")");
   });
 });

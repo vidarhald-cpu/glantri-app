@@ -32,10 +32,10 @@ import {
   loadScenarioParticipants,
   updateEncounterOnServer,
   updateScenarioParticipantMetadataOnServer,
-  updateScenarioLiveStateOnServer,
   updateScenarioOnServer
 } from "../../../../../../src/lib/api/localServiceClient";
 import {
+  buildScenarioActorInputFromTemplate,
   getCampaignActorMetadata,
 } from "../../../../../../src/lib/campaigns/campaignActors";
 import RememberedCampaignWorkspaceEffect from "../../../../../../src/lib/campaigns/RememberedCampaignWorkspaceEffect";
@@ -56,6 +56,11 @@ interface ScenarioRosterCandidate {
   rosterEntry: CampaignRosterEntry;
   sourceKind: string;
   typeLabel: string;
+}
+
+interface TemplateSource {
+  entity: ReusableEntity;
+  label: string;
 }
 
 export default function ScenarioDetailPageContent({
@@ -93,14 +98,14 @@ export default function ScenarioDetailPageContent({
   const [encounterDescription, setEncounterDescription] = useState("");
   const [encounterKind, setEncounterKind] = useState<EncounterKind>("combat");
   const [encounterTimelineLabel, setEncounterTimelineLabel] = useState("");
+  const [selectedTemplateSourceId, setSelectedTemplateSourceId] = useState("");
+  const [temporaryActorName, setTemporaryActorName] = useState("");
+  const [temporaryActorRole, setTemporaryActorRole] = useState<ScenarioParticipant["role"]>("npc");
 
   const [scenarioName, setScenarioName] = useState("");
+  const [scenarioDescription, setScenarioDescription] = useState("");
+  const [scenarioKind, setScenarioKind] = useState<Scenario["kind"]>("mixed");
   const [scenarioStatus, setScenarioStatus] = useState<Scenario["status"]>("draft");
-  const [roundNumber, setRoundNumber] = useState("1");
-  const [phase, setPhase] = useState<"1" | "2">("1");
-  const [combatStatus, setCombatStatus] = useState<
-    NonNullable<Scenario["liveState"]>["combatStatus"]
-  >("not_started");
   const usersById = useMemo(
     () => new Map(assignableUsers.map((user) => [user.id, user])),
     [assignableUsers]
@@ -132,6 +137,7 @@ export default function ScenarioDetailPageContent({
   const scenarioRosterCandidates = useMemo<ScenarioRosterCandidate[]>(
     () =>
       roster
+        .filter((entry) => entry.category !== "template")
         .map((entry) => {
           const character = entry.sourceType === "character" ? charactersById.get(entry.sourceId) : undefined;
           const entity = entry.sourceType === "reusableEntity" || entry.sourceType === "template"
@@ -155,11 +161,9 @@ export default function ScenarioDetailPageContent({
             typeLabel:
               entry.category === "pc"
                 ? "PC"
-                : entry.category === "template"
-                  ? "Template"
-                  : entity?.kind === "monster"
-                    ? "Monster"
-                    : "NPC"
+                : entity?.kind === "monster"
+                  ? "Monster"
+                  : "NPC"
           };
         })
         .sort((left, right) => left.name.localeCompare(right.name)),
@@ -179,6 +183,49 @@ export default function ScenarioDetailPageContent({
       }),
     [encounters]
   );
+  const nonArchivedEncounters = useMemo(
+    () =>
+      orderedEncounters.filter(
+        (encounter) => encounter.status !== "archived" && encounter.status !== "complete"
+      ),
+    [orderedEncounters]
+  );
+  const templateSources = useMemo<TemplateSource[]>(() => {
+    const sourcesById = new Map<string, TemplateSource>();
+
+    for (const template of templates) {
+      sourcesById.set(template.id, {
+        entity: template,
+        label: `${template.name} (template library)`
+      });
+    }
+
+    for (const entry of roster) {
+      if (entry.category !== "template") {
+        continue;
+      }
+
+      const entity = entitiesById.get(entry.sourceId);
+
+      if (!entity) {
+        continue;
+      }
+
+      sourcesById.set(entity.id, {
+        entity,
+        label: `${entity.name} (campaign roster)`
+      });
+    }
+
+    return [...sourcesById.values()].sort((left, right) => left.label.localeCompare(right.label));
+  }, [entitiesById, roster, templates]);
+  const concreteParticipants = useMemo(() => {
+    const templateIds = new Set(templateSources.map((source) => source.entity.id));
+
+    return participants.filter(
+      (participant) => !(participant.entityId && templateIds.has(participant.entityId))
+    );
+  }, [participants, templateSources]);
 
   function formatUserLabel(userId: string | undefined): string {
     if (!userId) {
@@ -195,6 +242,28 @@ export default function ScenarioDetailPageContent({
     }
 
     return user.email;
+  }
+
+  function formatEventType(value: string): string {
+    return value
+      .split("_")
+      .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+      .join(" ");
+  }
+
+  function formatShortDateTime(value: string): string {
+    const date = new Date(value);
+
+    if (Number.isNaN(date.getTime())) {
+      return value;
+    }
+
+    const day = String(date.getDate()).padStart(2, "0");
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const hours = String(date.getHours()).padStart(2, "0");
+    const minutes = String(date.getMinutes()).padStart(2, "0");
+
+    return `${day}.${month} ${hours}:${minutes}`;
   }
 
   async function refreshScenario() {
@@ -250,10 +319,9 @@ export default function ScenarioDetailPageContent({
     setPlayerCharacters(nextPlayerCharacters);
     setRoster(nextRoster);
     setScenarioName(nextScenario.name);
+    setScenarioDescription(nextScenario.description);
+    setScenarioKind(nextScenario.kind);
     setScenarioStatus(nextScenario.status);
-    setRoundNumber(String(nextScenario.liveState?.roundNumber ?? 1));
-    setPhase(String(nextScenario.liveState?.phase ?? 1) as "1" | "2");
-    setCombatStatus(nextScenario.liveState?.combatStatus ?? "not_started");
   }
 
   async function handleCreateEncounter() {
@@ -299,6 +367,8 @@ export default function ScenarioDetailPageContent({
       setError(undefined);
       setFeedback(undefined);
       const updatedScenario = await updateScenarioOnServer({
+        description: scenarioDescription,
+        kind: scenarioKind,
         name: scenarioName,
         scenarioId,
         status: scenarioStatus
@@ -308,29 +378,6 @@ export default function ScenarioDetailPageContent({
       await refreshScenario();
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : "Unable to update scenario.");
-    }
-  }
-
-  async function handleUpdateLiveState() {
-    try {
-      setError(undefined);
-      setFeedback(undefined);
-
-      await updateScenarioLiveStateOnServer({
-        liveState: {
-          combatStatus,
-          phase: phase === "2" ? 2 : 1,
-          roundNumber: Math.max(1, Number.parseInt(roundNumber, 10) || 1)
-        },
-        scenarioId
-      });
-
-      setFeedback("Updated scenario live state.");
-      await refreshScenario();
-    } catch (caughtError) {
-      setError(
-        caughtError instanceof Error ? caughtError.message : "Unable to update live state."
-      );
     }
   }
 
@@ -391,6 +438,37 @@ export default function ScenarioDetailPageContent({
           ? caughtError.message
           : "Unable to update scenario participant.",
       );
+    }
+  }
+
+  async function handleCreateTemporaryActorFromTemplate() {
+    const template = templateSources.find((source) => source.entity.id === selectedTemplateSourceId)?.entity;
+
+    if (!template) {
+      setError("Choose a template source.");
+      return;
+    }
+
+    try {
+      setError(undefined);
+      setFeedback(undefined);
+
+      const participant = await addScenarioParticipantFromEntityOnServer({
+        entityInput: buildScenarioActorInputFromTemplate({
+          name: temporaryActorName.trim() || template.name,
+          template
+        }),
+        isTemporary: true,
+        joinSource: "gm_added",
+        role: temporaryActorRole,
+        scenarioId
+      });
+
+      setFeedback(`Created temporary actor ${participant.snapshot.displayName}.`);
+      setTemporaryActorName("");
+      await refreshScenario();
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : "Unable to create temporary actor.");
     }
   }
 
@@ -521,6 +599,10 @@ export default function ScenarioDetailPageContent({
     return <section>{error ?? "Scenario not found."}</section>;
   }
 
+  const selectedTemplateSource = templateSources.find(
+    (source) => source.entity.id === selectedTemplateSourceId
+  ) ?? templateSources[0];
+
   return (
     <section style={{ display: "grid", gap: "1rem", maxWidth: 980 }}>
       <RememberedCampaignWorkspaceEffect
@@ -561,7 +643,6 @@ export default function ScenarioDetailPageContent({
           </div>
         ) : null}
         <h1 style={{ marginBottom: "0.5rem" }}>{scenario.name}</h1>
-        <p style={{ margin: 0 }}>{scenario.description || "No description yet."}</p>
       </div>
 
       {error ? <div>{error}</div> : null}
@@ -575,7 +656,28 @@ export default function ScenarioDetailPageContent({
             visibility/state controls, and links onward to encounters.
           </p>
         ) : null}
-        <input onChange={(event) => setScenarioName(event.target.value)} value={scenarioName} />
+        <label style={{ display: "grid", gap: "0.25rem" }}>
+          <span>Name</span>
+          <input onChange={(event) => setScenarioName(event.target.value)} value={scenarioName} />
+        </label>
+        <label style={{ display: "grid", gap: "0.25rem" }}>
+          <span>Description</span>
+          <textarea
+            onChange={(event) => setScenarioDescription(event.target.value)}
+            placeholder="No description yet."
+            rows={3}
+            value={scenarioDescription}
+          />
+        </label>
+        <select
+          onChange={(event) => setScenarioKind(event.target.value as Scenario["kind"])}
+          value={scenarioKind}
+        >
+          <option value="combat">Combat</option>
+          <option value="social">Social</option>
+          <option value="travel">Travel</option>
+          <option value="mixed">Mixed</option>
+        </select>
         <select
           onChange={(event) => setScenarioStatus(event.target.value as Scenario["status"])}
           value={scenarioStatus}
@@ -589,44 +691,6 @@ export default function ScenarioDetailPageContent({
         <div>
           <button onClick={() => void handleUpdateScenarioMetadata()} type="button">
             Update scenario
-          </button>
-        </div>
-      </section>
-
-      <section style={{ border: "1px solid #d9ddd8", borderRadius: 12, display: "grid", gap: "0.75rem", padding: "1rem" }}>
-        <h2 style={{ margin: 0 }}>Live state</h2>
-        <div>Status: {scenario.status}</div>
-        <div>Combat status: {scenario.liveState?.combatStatus ?? "not_started"}</div>
-        <div>Round: {scenario.liveState?.roundNumber ?? 1}</div>
-        <div>Phase: {scenario.liveState?.phase ?? 1}</div>
-        <div style={{ display: "grid", gap: "0.75rem", gridTemplateColumns: "140px 140px 180px" }}>
-          <input
-            min={1}
-            onChange={(event) => setRoundNumber(event.target.value)}
-            type="number"
-            value={roundNumber}
-          />
-          <select onChange={(event) => setPhase(event.target.value as "1" | "2")} value={phase}>
-            <option value="1">Phase 1</option>
-            <option value="2">Phase 2</option>
-          </select>
-          <select
-            onChange={(event) =>
-              setCombatStatus(
-                event.target.value as NonNullable<Scenario["liveState"]>["combatStatus"]
-              )
-            }
-            value={combatStatus}
-          >
-            <option value="not_started">Not started</option>
-            <option value="in_progress">In progress</option>
-            <option value="paused">Paused</option>
-            <option value="ended">Ended</option>
-          </select>
-        </div>
-        <div>
-          <button onClick={() => void handleUpdateLiveState()} type="button">
-            Update live state
           </button>
         </div>
       </section>
@@ -706,31 +770,6 @@ export default function ScenarioDetailPageContent({
                             {encounter.description}
                           </div>
                         ) : null}
-                        {participants.length > 0 ? (
-                          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", marginTop: "0.5rem" }}>
-                            {participants.map((participant) => (
-                              <label
-                                key={participant.id}
-                                style={{ alignItems: "center", display: "flex", gap: "0.25rem", whiteSpace: "nowrap" }}
-                              >
-                                <input
-                                  checked={encounter.participants.some(
-                                    (entry) => entry.scenarioParticipantId === participant.id
-                                  )}
-                                  onChange={(event) =>
-                                    void handleEncounterParticipantToggle(
-                                      encounter,
-                                      participant,
-                                      event.target.checked
-                                    )
-                                  }
-                                  type="checkbox"
-                                />
-                                {participant.snapshot.displayName}
-                              </label>
-                            ))}
-                          </div>
-                        ) : null}
                       </td>
                       <td style={{ padding: "0.6rem 0.75rem" }}>
                         {encounter.kind === "roleplay" ? "Roleplaying" : "Combat"}
@@ -806,8 +845,8 @@ export default function ScenarioDetailPageContent({
       <section style={{ border: "1px solid #d9ddd8", borderRadius: 12, display: "grid", gap: "0.75rem", padding: "1rem" }}>
         <h2 style={{ margin: 0 }}>Scenario participants</h2>
         <p style={{ margin: 0 }}>
-          Pull PCs, NPCs, monsters, and templates from the campaign roster into this scenario.
-          Encounter membership is chosen separately below.
+          Pull concrete PCs, NPCs, and monsters from the campaign roster into this scenario.
+          Templates are handled as sources for temporary scenario actors below.
         </p>
         {scenarioRosterCandidates.length > 0 ? (
           <div style={{ overflowX: "auto" }}>
@@ -860,10 +899,58 @@ export default function ScenarioDetailPageContent({
         )}
       </section>
 
+      <section style={{ border: "1px solid #d9ddd8", borderRadius: 12, display: "grid", gap: "0.75rem", padding: "1rem" }}>
+        <h2 style={{ margin: 0 }}>Template sources</h2>
+        <p style={{ margin: 0 }}>
+          Templates create scenario-local temporary actors. The template itself is not an active
+          scenario participant.
+        </p>
+        {templateSources.length > 0 ? (
+          <>
+            <select
+              onChange={(event) => setSelectedTemplateSourceId(event.target.value)}
+              value={selectedTemplateSource?.entity.id ?? ""}
+            >
+              {templateSources.map((source) => (
+                <option key={source.entity.id} value={source.entity.id}>
+                  {source.label}
+                </option>
+              ))}
+            </select>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
+              <input
+                onChange={(event) => setTemporaryActorName(event.target.value)}
+                placeholder="Temporary actor name override"
+                style={{ minWidth: 260 }}
+                value={temporaryActorName}
+              />
+              <select
+                onChange={(event) =>
+                  setTemporaryActorRole(event.target.value as ScenarioParticipant["role"])
+                }
+                value={temporaryActorRole}
+              >
+                <option value="npc">NPC</option>
+                <option value="monster">Monster</option>
+                <option value="animal">Animal</option>
+                <option value="neutral">Neutral</option>
+                <option value="ally">Ally</option>
+                <option value="enemy">Enemy</option>
+              </select>
+              <button onClick={() => void handleCreateTemporaryActorFromTemplate()} type="button">
+                Create temporary actor
+              </button>
+            </div>
+          </>
+        ) : (
+          <div>No template sources are available.</div>
+        )}
+      </section>
+
       <section style={{ display: "grid", gap: "0.75rem" }}>
-        <h2 style={{ margin: 0 }}>Participant state and assignment</h2>
-        {participants.length > 0 ? (
-          participants.map((participant) => (
+        <h2 style={{ margin: 0 }}>Concrete participant roster</h2>
+        {concreteParticipants.length > 0 ? (
+          concreteParticipants.map((participant) => (
             <div
               key={participant.id}
               style={{
@@ -893,6 +980,52 @@ export default function ScenarioDetailPageContent({
                 HP: {participant.state.health.currentHp}/{participant.state.health.maxHp}
               </div>
               <div>Conditions: {participant.state.conditions.length}</div>
+              <div
+                style={{
+                  borderTop: "1px solid #e7e2d7",
+                  display: "grid",
+                  gap: "0.5rem",
+                  marginTop: "0.5rem",
+                  paddingTop: "0.75rem"
+                }}
+              >
+                <strong style={{ fontSize: "0.95rem" }}>Encounters</strong>
+                {nonArchivedEncounters.length > 0 ? (
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+                    {nonArchivedEncounters.map((encounter) => (
+                      <label
+                        key={encounter.id}
+                        style={{
+                          alignItems: "center",
+                          border: "1px solid #d9ddd8",
+                          borderRadius: 999,
+                          display: "flex",
+                          gap: "0.35rem",
+                          padding: "0.25rem 0.6rem",
+                          whiteSpace: "nowrap"
+                        }}
+                      >
+                        <input
+                          checked={encounter.participants.some(
+                            (entry) => entry.scenarioParticipantId === participant.id
+                          )}
+                          onChange={(event) =>
+                            void handleEncounterParticipantToggle(
+                              encounter,
+                              participant,
+                              event.target.checked
+                            )
+                          }
+                          type="checkbox"
+                        />
+                        {encounter.title}
+                      </label>
+                    ))}
+                  </div>
+                ) : (
+                  <div>No planned, active, or paused encounters are available.</div>
+                )}
+              </div>
               <div
                 style={{
                   borderTop: "1px solid #e7e2d7",
@@ -1041,10 +1174,10 @@ export default function ScenarioDetailPageContent({
                 padding: "0.75rem 1rem"
               }}
             >
-              <strong>{eventLog.eventType}</strong>
+              <strong>{formatEventType(eventLog.eventType)}</strong>
               <div>{eventLog.summary}</div>
               <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
-                Round {eventLog.roundNumber ?? "-"} · Phase {eventLog.phase ?? "-"} · {eventLog.createdAt}
+                {formatShortDateTime(eventLog.createdAt)}
               </div>
             </div>
           ))
