@@ -18,8 +18,9 @@ describe("ScenarioDetailPageContent GM scenario manager UI", () => {
 
     expect(source).toContain("Scenario participants");
     expect(source).toContain("Toggle ${candidate.name} scenario participation");
-    expect(source).toContain("In scenario</th>");
-    expect(source).toContain("Concrete participant roster");
+    expect(source).toContain("Concrete scenario participants");
+    expect(source).toContain("Add from campaign roster");
+    expect(source).toContain("Toggle ${participant.snapshot.displayName} active scenario status");
     expect(source).not.toContain("<h2 style={{ margin: 0 }}>Add player character</h2>");
     expect(source).not.toContain("Add participant from template or campaign NPC");
   });
@@ -57,7 +58,12 @@ describe("ScenarioDetailPageContent GM scenario manager UI", () => {
     expect(source).toContain("nonArchivedEncounters");
     expect(source).toContain("scenarioParticipantId");
     expect(source).toContain('participantType: "scenario"');
-    expect(source).toContain("checked={encounter.participants.some");
+    expect(source).toContain("isParticipantInEncounter(encounter, participant)");
+    expect(source).toContain("Encounter Assignment");
+    expect(source).toContain("Assign selected");
+    expect(source).toContain("Withdraw selected");
+    expect(source).toContain("Bulk assignment encounter");
+    expect(source).toContain("Encounter-specific details");
   });
 
   it("separates templates as sources for temporary actors", () => {
@@ -67,6 +73,8 @@ describe("ScenarioDetailPageContent GM scenario manager UI", () => {
     expect(source).toContain("handleCreateTemporaryActorFromTemplate");
     expect(source).toContain("Create temporary actor");
     expect(source).toContain("templateSources[0]");
+    expect(source).toContain("setParticipants((current) =>");
+    expect(source).toContain("Temporary actor");
     expect(source).toContain(".filter((entry) => entry.category !== \"template\")");
   });
 

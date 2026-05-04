@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 
 import type { AuthUser } from "@glantri/auth";
 import { defaultCanonicalContent } from "@glantri/content";
@@ -249,19 +249,6 @@ export default function ScenarioDetailPageContent({
   const [participants, setParticipants] = useState<ScenarioParticipant[]>([]);
   const [playerCharacters, setPlayerCharacters] = useState<ServerCharacterRecord[]>([]);
   const [roster, setRoster] = useState<CampaignRosterEntry[]>([]);
-  const [participantDrafts, setParticipantDrafts] = useState<
-    Record<
-      string,
-      {
-        controlledByUserId: string;
-        displayOrder: string;
-        factionId: string;
-        isActive: boolean;
-        roleTag: string;
-        tacticalGroupId: string;
-      }
-    >
-  >({});
   const [scenario, setScenario] = useState<Scenario | null>(null);
   const [templates, setTemplates] = useState<ReusableEntity[]>([]);
 
@@ -281,6 +268,9 @@ export default function ScenarioDetailPageContent({
   const [participantProfessionFilter, setParticipantProfessionFilter] = useState("");
   const [participantSkillGroupFilter, setParticipantSkillGroupFilter] = useState("");
   const [participantSearch, setParticipantSearch] = useState("");
+  const [bulkEncounterId, setBulkEncounterId] = useState("");
+  const [expandedAssignmentParticipantIds, setExpandedAssignmentParticipantIds] = useState<string[]>([]);
+  const [selectedAssignmentParticipantIds, setSelectedAssignmentParticipantIds] = useState<string[]>([]);
 
   const [scenarioName, setScenarioName] = useState("");
   const [scenarioDescription, setScenarioDescription] = useState("");
@@ -554,6 +544,11 @@ export default function ScenarioDetailPageContent({
     participantSkillGroupFilter,
     participantTypeFilter
   ]);
+  const assignmentParticipants = useMemo(
+    () => filteredConcreteParticipants.filter((participant) => participant.isActive),
+    [filteredConcreteParticipants]
+  );
+  const selectedBulkEncounterId = bulkEncounterId || nonArchivedEncounters[0]?.id || "";
 
   function formatUserLabel(userId: string | undefined): string {
     if (!userId) {
@@ -594,6 +589,69 @@ export default function ScenarioDetailPageContent({
     return `${day}.${month} ${hours}:${minutes}`;
   }
 
+  function buildEncounterParticipant(
+    encounter: EncounterSession,
+    participant: ScenarioParticipant
+  ): EncounterParticipant {
+    const participantId = `scenario-${participant.id}`;
+
+    return {
+      declaration: {
+        actionType: "none",
+        defenseFocus: "none",
+        defensePosture: "none",
+        targetLocation: "any"
+      },
+      facing: "north",
+      id: participantId,
+      initiative: 0,
+      label: participant.snapshot.displayName,
+      order: encounter.participants.length,
+      orientation: "neutral",
+      participantType: "scenario",
+      position: {
+        x: 0,
+        y: 0,
+        zone: "center"
+      },
+      scenarioParticipantId: participant.id
+    };
+  }
+
+  function isParticipantInEncounter(
+    encounter: EncounterSession,
+    participant: ScenarioParticipant
+  ): boolean {
+    const participantId = `scenario-${participant.id}`;
+
+    return encounter.participants.some(
+      (entry) => entry.scenarioParticipantId === participant.id || entry.id === participantId
+    );
+  }
+
+  async function saveEncounterParticipants(input: {
+    encounter: EncounterSession;
+    participants: EncounterParticipant[];
+    feedbackMessage: string;
+  }) {
+    await updateEncounterOnServer({
+      encounterId: input.encounter.id,
+      session: {
+        ...input.encounter,
+        participants: input.participants,
+        updatedAt: new Date().toISOString()
+      }
+    });
+
+    setFeedback(input.feedbackMessage);
+    setEncounters((current) =>
+      current.map((entry) =>
+        entry.id === input.encounter.id ? { ...input.encounter, participants: input.participants } : entry
+      )
+    );
+    await refreshScenario();
+  }
+
   async function refreshScenario() {
     const [
       nextScenario,
@@ -623,22 +681,6 @@ export default function ScenarioDetailPageContent({
 
     setScenario(nextScenario);
     setParticipants(nextParticipants);
-    setParticipantDrafts(
-      Object.fromEntries(
-        nextParticipants.map((participant) => [
-          participant.id,
-          {
-            controlledByUserId: participant.controlledByUserId ?? "",
-            displayOrder:
-              participant.displayOrder === undefined ? "" : String(participant.displayOrder),
-            factionId: participant.factionId ?? "",
-            isActive: participant.isActive,
-            roleTag: participant.roleTag ?? "",
-            tacticalGroupId: participant.tacticalGroupId ?? ""
-          }
-        ])
-      )
-    );
     setEntities(nextEntities);
     setTemplates(globalTemplates);
     setEventLogs(nextEventLogs);
@@ -847,54 +889,20 @@ export default function ScenarioDetailPageContent({
       setFeedback(undefined);
 
       const participantId = `scenario-${participant.id}`;
-      const nextEncounterParticipant: EncounterParticipant = {
-        declaration: {
-          actionType: "none",
-          defenseFocus: "none",
-          defensePosture: "none",
-          targetLocation: "any"
-        },
-        facing: "north",
-        id: participantId,
-        initiative: 0,
-        label: participant.snapshot.displayName,
-        order: encounter.participants.length,
-        orientation: "neutral",
-        participantType: "scenario",
-        position: {
-          x: 0,
-          y: 0,
-          zone: "center"
-        },
-        scenarioParticipantId: participant.id
-      };
-      const existing = encounter.participants.some(
-        (entry) => entry.scenarioParticipantId === participant.id || entry.id === participantId
-      );
+      const existing = isParticipantInEncounter(encounter, participant);
       const nextParticipants = member
         ? existing
           ? encounter.participants
-          : [...encounter.participants, nextEncounterParticipant]
+          : [...encounter.participants, buildEncounterParticipant(encounter, participant)]
         : encounter.participants.filter(
             (entry) => entry.scenarioParticipantId !== participant.id && entry.id !== participantId
           );
 
-      await updateEncounterOnServer({
-        encounterId: encounter.id,
-        session: {
-          ...encounter,
-          participants: nextParticipants,
-          updatedAt: new Date().toISOString()
-        }
+      await saveEncounterParticipants({
+        encounter,
+        feedbackMessage: `Updated participants for ${encounter.title}.`,
+        participants: nextParticipants
       });
-
-      setFeedback(`Updated participants for ${encounter.title}.`);
-      setEncounters((current) =>
-        current.map((entry) =>
-          entry.id === encounter.id ? { ...encounter, participants: nextParticipants } : entry
-        )
-      );
-      await refreshScenario();
     } catch (caughtError) {
       setError(
         caughtError instanceof Error ? caughtError.message : "Unable to update encounter participants."
@@ -902,10 +910,13 @@ export default function ScenarioDetailPageContent({
     }
   }
 
-  async function handleSaveParticipantMetadata(participantId: string) {
-    const draft = participantDrafts[participantId];
+  async function handleBulkEncounterAssignment(member: boolean) {
+    const encounter = encounters.find((entry) => entry.id === selectedBulkEncounterId);
+    const selectedParticipants = assignmentParticipants.filter((participant) =>
+      selectedAssignmentParticipantIds.includes(participant.id)
+    );
 
-    if (!draft) {
+    if (!encounter || selectedParticipants.length === 0) {
       return;
     }
 
@@ -913,27 +924,74 @@ export default function ScenarioDetailPageContent({
       setError(undefined);
       setFeedback(undefined);
 
-      const participant = await updateScenarioParticipantMetadataOnServer({
-        controlledByUserId: draft.controlledByUserId || null,
-        displayOrder:
-          draft.displayOrder.trim().length > 0
-            ? Number.parseInt(draft.displayOrder, 10)
-            : null,
-        factionId: draft.factionId.trim() || null,
-        isActive: draft.isActive,
-        participantId,
-        roleTag: draft.roleTag.trim() || null,
-        scenarioId,
-        tacticalGroupId: draft.tacticalGroupId.trim() || null
-      });
+      const selectedIds = new Set(selectedParticipants.map((participant) => participant.id));
+      const nextParticipants = member
+        ? selectedParticipants.reduce<EncounterParticipant[]>((current, participant) => {
+            if (
+              current.some(
+                (entry) =>
+                  entry.scenarioParticipantId === participant.id ||
+                  entry.id === `scenario-${participant.id}`
+              )
+            ) {
+              return current;
+            }
 
-      setFeedback(`Updated control assignment for ${participant.snapshot.displayName}.`);
-      await refreshScenario();
+            return [
+              ...current,
+              buildEncounterParticipant(
+                {
+                  ...encounter,
+                  participants: current
+                },
+                participant
+              )
+            ];
+          }, encounter.participants)
+        : encounter.participants.filter((entry) => {
+            const scenarioParticipantId =
+              entry.scenarioParticipantId ??
+              (entry.id.startsWith("scenario-") ? entry.id.slice("scenario-".length) : undefined);
+
+            return !scenarioParticipantId || !selectedIds.has(scenarioParticipantId);
+          });
+
+      await saveEncounterParticipants({
+        encounter,
+        feedbackMessage: `${member ? "Assigned" : "Withdrew"} ${selectedParticipants.length} participant${
+          selectedParticipants.length === 1 ? "" : "s"
+        } ${member ? "to" : "from"} ${encounter.title}.`,
+        participants: nextParticipants
+      });
+      setSelectedAssignmentParticipantIds([]);
     } catch (caughtError) {
       setError(
         caughtError instanceof Error
           ? caughtError.message
-          : "Unable to update participant control metadata."
+          : "Unable to update bulk encounter assignment."
+      );
+    }
+  }
+
+  async function handleParticipantActiveToggle(participant: ScenarioParticipant, isActive: boolean) {
+    try {
+      setError(undefined);
+      setFeedback(undefined);
+
+      const updatedParticipant = await updateScenarioParticipantMetadataOnServer({
+        isActive,
+        participantId: participant.id,
+        scenarioId
+      });
+
+      setParticipants((current) =>
+        current.map((entry) => (entry.id === updatedParticipant.id ? updatedParticipant : entry))
+      );
+      setFeedback(`${updatedParticipant.snapshot.displayName} is now ${isActive ? "active" : "inactive"}.`);
+      await refreshScenario();
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error ? caughtError.message : "Unable to update participant status."
       );
     }
   }
@@ -1257,17 +1315,74 @@ export default function ScenarioDetailPageContent({
             value={participantSearch}
           />
         </div>
+        <div>
+          <h3 style={{ margin: "0 0 0.5rem" }}>Concrete scenario participants</h3>
+          {concreteParticipants.length > 0 ? (
+            <div style={{ maxHeight: "30rem", overflowY: "auto" }}>
+              <table style={{ borderCollapse: "collapse", minWidth: 720, width: "100%" }}>
+                <thead>
+                  <tr style={{ borderBottom: "1px solid #d9ddd8", textAlign: "left" }}>
+                    <th style={{ background: "#fff", padding: "0.5rem 0.75rem 0.5rem 0", position: "sticky", textAlign: "center", top: 0 }}>Active</th>
+                    <th style={{ background: "#fff", padding: "0.5rem 0.75rem", position: "sticky", top: 0 }}>Name</th>
+                    <th style={{ background: "#fff", padding: "0.5rem 0.75rem", position: "sticky", top: 0 }}>Type</th>
+                    <th style={{ background: "#fff", padding: "0.5rem 0.75rem", position: "sticky", top: 0 }}>Controller</th>
+                    <th style={{ background: "#fff", padding: "0.5rem 0", position: "sticky", top: 0 }}>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredConcreteParticipants.map((participant) => {
+                    const participantMetadata = getConcreteParticipantMetadata(participant);
+
+                    return (
+                      <tr key={participant.id} style={{ borderBottom: "1px solid #eee8dc" }}>
+                        <td style={{ padding: "0.6rem 0.75rem 0.6rem 0", textAlign: "center" }}>
+                          <input
+                            aria-label={`Toggle ${participant.snapshot.displayName} active scenario status`}
+                            checked={participant.isActive}
+                            onChange={(event) =>
+                              void handleParticipantActiveToggle(participant, event.target.checked)
+                            }
+                            type="checkbox"
+                          />
+                        </td>
+                        <td style={{ padding: "0.6rem 0.75rem" }}>
+                          <strong>{participant.snapshot.displayName}</strong>
+                        </td>
+                        <td style={{ padding: "0.6rem 0.75rem" }}>{participantMetadata.typeLabel}</td>
+                        <td style={{ padding: "0.6rem 0.75rem" }}>
+                          {formatUserLabel(participant.controlledByUserId)}
+                        </td>
+                        <td style={{ padding: "0.6rem 0" }}>
+                          {participant.isActive ? "Active" : "Inactive"}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              {filteredConcreteParticipants.length === 0 ? (
+                <div style={{ padding: "0.75rem 0" }}>
+                  No concrete participants match the current scenario participant filters.
+                </div>
+              ) : null}
+            </div>
+          ) : (
+            <div>No concrete participants yet.</div>
+          )}
+        </div>
+        <div>
+          <h3 style={{ margin: "0 0 0.5rem" }}>Add from campaign roster</h3>
         {scenarioRosterCandidates.length > 0 ? (
-          <div style={{ overflowX: "auto" }}>
+          <div style={{ maxHeight: "30rem", overflow: "auto" }}>
             <table style={{ borderCollapse: "collapse", minWidth: 780, width: "100%" }}>
               <thead>
                 <tr style={{ borderBottom: "1px solid #d9ddd8", textAlign: "left" }}>
-                  <th style={{ padding: "0.5rem 0.75rem 0.5rem 0", textAlign: "center" }}>In scenario</th>
-                  <th style={{ padding: "0.5rem 0.75rem" }}>Name</th>
-                  <th style={{ padding: "0.5rem 0.75rem" }}>Type</th>
-                  <th style={{ padding: "0.5rem 0.75rem" }}>Source</th>
-                  <th style={{ padding: "0.5rem 0.75rem" }}>Controller</th>
-                  <th style={{ padding: "0.5rem 0" }}>Status</th>
+                  <th style={{ background: "#fff", padding: "0.5rem 0.75rem 0.5rem 0", position: "sticky", textAlign: "center", top: 0 }}>Active</th>
+                  <th style={{ background: "#fff", padding: "0.5rem 0.75rem", position: "sticky", top: 0 }}>Name</th>
+                  <th style={{ background: "#fff", padding: "0.5rem 0.75rem", position: "sticky", top: 0 }}>Type</th>
+                  <th style={{ background: "#fff", padding: "0.5rem 0.75rem", position: "sticky", top: 0 }}>Source</th>
+                  <th style={{ background: "#fff", padding: "0.5rem 0.75rem", position: "sticky", top: 0 }}>Controller</th>
+                  <th style={{ background: "#fff", padding: "0.5rem 0", position: "sticky", top: 0 }}>Status</th>
                 </tr>
               </thead>
               <tbody>
@@ -1311,6 +1426,7 @@ export default function ScenarioDetailPageContent({
         ) : (
           <div>No campaign roster entries are available. Add PCs, NPCs, or templates to the campaign roster first.</div>
         )}
+        </div>
       </section>
 
       <section style={{ border: "1px solid #d9ddd8", borderRadius: 12, display: "grid", gap: "0.75rem", padding: "1rem" }}>
@@ -1320,7 +1436,7 @@ export default function ScenarioDetailPageContent({
           scenario participant.
         </p>
         {templateSources.length > 0 ? (
-          <>
+          <div style={{ display: "grid", gap: "0.75rem", maxHeight: "28rem", overflowY: "auto" }}>
             <select
               onChange={(event) => setSelectedTemplateSourceId(event.target.value)}
               value={selectedTemplateSource?.entity.id ?? ""}
@@ -1355,230 +1471,173 @@ export default function ScenarioDetailPageContent({
                 Create temporary actor
               </button>
             </div>
-          </>
+          </div>
         ) : (
           <div>No template sources are available.</div>
         )}
       </section>
 
-      <section style={{ display: "grid", gap: "0.75rem" }}>
-        <h2 style={{ margin: 0 }}>Concrete participant roster</h2>
-        {concreteParticipants.length > 0 ? (
-          filteredConcreteParticipants.map((participant) => {
-            const participantMetadata = getConcreteParticipantMetadata(participant);
-
-            return (
-              <div
-                key={participant.id}
-                style={{
-                  border: "1px solid #d9ddd8",
-                  borderRadius: 12,
-                  display: "grid",
-                  gap: "0.35rem",
-                  padding: "1rem"
-                }}
+      <section style={{ border: "1px solid #d9ddd8", borderRadius: 12, display: "grid", gap: "0.75rem", padding: "1rem" }}>
+        <h2 style={{ margin: 0 }}>Encounter Assignment</h2>
+        <p style={{ margin: 0 }}>
+          Assign active scenario participants to planned, active, or paused encounters. Encounter-specific
+          appearance and GM-facing details belong here because they can differ by encounter.
+        </p>
+        {nonArchivedEncounters.length > 0 && assignmentParticipants.length > 0 ? (
+          <>
+            <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+              <select
+                aria-label="Bulk assignment encounter"
+                onChange={(event) => setBulkEncounterId(event.target.value)}
+                value={selectedBulkEncounterId}
               >
-                <strong>{participant.snapshot.displayName}</strong>
-                <div>
-                  {participantMetadata.typeLabel} · {participant.isActive ? "Active" : "Inactive"}
-                </div>
-              <div>
-                Controller: {formatUserLabel(participant.controlledByUserId)}
-                {participant.role === "player_character" && participant.controlledByUserId ? (
-                  <> · Active controlled character</>
-                ) : null}
-              </div>
-              <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
-                Source trace: participant {participant.id}
-                {participant.characterId ? ` · character ${participant.characterId}` : ""}
-                {participant.entityId ? ` · entity ${participant.entityId}` : ""}
-              </div>
-              <div>
-                HP: {participant.state.health.currentHp}/{participant.state.health.maxHp}
-              </div>
-              <div>Conditions: {participant.state.conditions.length}</div>
-              <div
-                style={{
-                  borderTop: "1px solid #e7e2d7",
-                  display: "grid",
-                  gap: "0.5rem",
-                  marginTop: "0.5rem",
-                  paddingTop: "0.75rem"
-                }}
+                {nonArchivedEncounters.map((encounter) => (
+                  <option key={encounter.id} value={encounter.id}>
+                    {encounter.title}
+                  </option>
+                ))}
+              </select>
+              <button
+                disabled={selectedAssignmentParticipantIds.length === 0 || !selectedBulkEncounterId}
+                onClick={() => void handleBulkEncounterAssignment(true)}
+                type="button"
               >
-                <strong style={{ fontSize: "0.95rem" }}>Encounters</strong>
-                {nonArchivedEncounters.length > 0 ? (
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+                Assign selected
+              </button>
+              <button
+                disabled={selectedAssignmentParticipantIds.length === 0 || !selectedBulkEncounterId}
+                onClick={() => void handleBulkEncounterAssignment(false)}
+                type="button"
+              >
+                Withdraw selected
+              </button>
+              <span style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
+                {selectedAssignmentParticipantIds.length} selected
+              </span>
+            </div>
+            <div style={{ maxHeight: "36rem", overflow: "auto" }}>
+              <table style={{ borderCollapse: "collapse", minWidth: 820 + nonArchivedEncounters.length * 120, width: "100%" }}>
+                <thead>
+                  <tr style={{ borderBottom: "1px solid #d9ddd8", textAlign: "left" }}>
+                    <th style={{ background: "#fff", padding: "0.5rem 0.75rem 0.5rem 0", position: "sticky", textAlign: "center", top: 0 }}>Select</th>
+                    <th style={{ background: "#fff", padding: "0.5rem 0.75rem", position: "sticky", top: 0 }}>Name</th>
+                    <th style={{ background: "#fff", padding: "0.5rem 0.75rem", position: "sticky", top: 0 }}>Type</th>
+                    <th style={{ background: "#fff", padding: "0.5rem 0.75rem", position: "sticky", top: 0 }}>Controller / status</th>
                     {nonArchivedEncounters.map((encounter) => (
-                      <label
+                      <th
                         key={encounter.id}
-                        style={{
-                          alignItems: "center",
-                          border: "1px solid #d9ddd8",
-                          borderRadius: 999,
-                          display: "flex",
-                          gap: "0.35rem",
-                          padding: "0.25rem 0.6rem",
-                          whiteSpace: "nowrap"
-                        }}
+                        style={{ background: "#fff", padding: "0.5rem 0.75rem", position: "sticky", textAlign: "center", top: 0 }}
+                        title={encounter.title}
                       >
-                        <input
-                          checked={encounter.participants.some(
-                            (entry) => entry.scenarioParticipantId === participant.id
-                          )}
-                          onChange={(event) =>
-                            void handleEncounterParticipantToggle(
-                              encounter,
-                              participant,
-                              event.target.checked
-                            )
-                          }
-                          type="checkbox"
-                        />
-                        {encounter.title}
-                      </label>
+                        {encounter.title.length > 16 ? `${encounter.title.slice(0, 15)}...` : encounter.title}
+                      </th>
                     ))}
-                  </div>
-                ) : (
-                  <div>No planned, active, or paused encounters are available.</div>
-                )}
-              </div>
-              <div
-                style={{
-                  borderTop: "1px solid #e7e2d7",
-                  display: "grid",
-                  gap: "0.75rem",
-                  marginTop: "0.5rem",
-                  paddingTop: "0.75rem"
-                }}
-              >
-                <strong style={{ fontSize: "0.95rem" }}>Control and grouping</strong>
-                <div
-                  style={{
-                    display: "grid",
-                    gap: "0.75rem",
-                    gridTemplateColumns: "minmax(220px, 1.4fr) repeat(4, minmax(120px, 1fr))"
-                  }}
-                >
-                  <label style={{ display: "grid", gap: "0.25rem" }}>
-                    <span style={{ fontSize: "0.85rem" }}>Assigned controller</span>
-                    <select
-                      onChange={(event) =>
-                        setParticipantDrafts((current) => ({
-                          ...current,
-                          [participant.id]: {
-                            ...current[participant.id],
-                            controlledByUserId: event.target.value
-                          }
-                        }))
-                      }
-                      value={participantDrafts[participant.id]?.controlledByUserId ?? ""}
-                    >
-                      <option value="">GM / unassigned</option>
-                      {assignableUsers.map((user) => (
-                        <option key={user.id} value={user.id}>
-                          {user.displayName ? `${user.displayName} (${user.email})` : user.email}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label style={{ display: "grid", gap: "0.25rem" }}>
-                    <span style={{ fontSize: "0.85rem" }}>Faction / side</span>
-                    <input
-                      onChange={(event) =>
-                        setParticipantDrafts((current) => ({
-                          ...current,
-                          [participant.id]: {
-                            ...current[participant.id],
-                            factionId: event.target.value
-                          }
-                        }))
-                      }
-                      type="text"
-                      value={participantDrafts[participant.id]?.factionId ?? ""}
-                    />
-                  </label>
-                  <label style={{ display: "grid", gap: "0.25rem" }}>
-                    <span style={{ fontSize: "0.85rem" }}>Tactical group</span>
-                    <input
-                      onChange={(event) =>
-                        setParticipantDrafts((current) => ({
-                          ...current,
-                          [participant.id]: {
-                            ...current[participant.id],
-                            tacticalGroupId: event.target.value
-                          }
-                        }))
-                      }
-                      type="text"
-                      value={participantDrafts[participant.id]?.tacticalGroupId ?? ""}
-                    />
-                  </label>
-                  <label style={{ display: "grid", gap: "0.25rem" }}>
-                    <span style={{ fontSize: "0.85rem" }}>Role tag</span>
-                    <input
-                      onChange={(event) =>
-                        setParticipantDrafts((current) => ({
-                          ...current,
-                          [participant.id]: {
-                            ...current[participant.id],
-                            roleTag: event.target.value
-                          }
-                        }))
-                      }
-                      type="text"
-                      value={participantDrafts[participant.id]?.roleTag ?? ""}
-                    />
-                  </label>
-                  <label style={{ display: "grid", gap: "0.25rem" }}>
-                    <span style={{ fontSize: "0.85rem" }}>Display order</span>
-                    <input
-                      min={0}
-                      onChange={(event) =>
-                        setParticipantDrafts((current) => ({
-                          ...current,
-                          [participant.id]: {
-                            ...current[participant.id],
-                            displayOrder: event.target.value
-                          }
-                        }))
-                      }
-                      type="number"
-                      value={participantDrafts[participant.id]?.displayOrder ?? ""}
-                    />
-                  </label>
-                </div>
-                <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: "0.75rem" }}>
-                  <label style={{ alignItems: "center", display: "flex", gap: "0.5rem" }}>
-                    <input
-                      checked={participantDrafts[participant.id]?.isActive ?? participant.isActive}
-                      onChange={(event) =>
-                        setParticipantDrafts((current) => ({
-                          ...current,
-                          [participant.id]: {
-                            ...current[participant.id],
-                            isActive: event.target.checked
-                          }
-                        }))
-                      }
-                      type="checkbox"
-                    />
-                    Participant active in scenario
-                  </label>
-                  <button onClick={() => void handleSaveParticipantMetadata(participant.id)} type="button">
-                    Save assignment
-                  </button>
-                </div>
-              </div>
-              </div>
-            );
-          })
+                    <th style={{ background: "#fff", padding: "0.5rem 0", position: "sticky", textAlign: "center", top: 0 }}>Details</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {assignmentParticipants.map((participant) => {
+                    const participantMetadata = getConcreteParticipantMetadata(participant);
+                    const expanded = expandedAssignmentParticipantIds.includes(participant.id);
+                    const joinedEncounters = nonArchivedEncounters.filter((encounter) =>
+                      isParticipantInEncounter(encounter, participant)
+                    );
+
+                    return (
+                      <Fragment key={participant.id}>
+                        <tr style={{ borderBottom: "1px solid #eee8dc" }}>
+                          <td style={{ padding: "0.6rem 0.75rem 0.6rem 0", textAlign: "center" }}>
+                            <input
+                              aria-label={`Select ${participant.snapshot.displayName} for bulk encounter assignment`}
+                              checked={selectedAssignmentParticipantIds.includes(participant.id)}
+                              onChange={(event) =>
+                                setSelectedAssignmentParticipantIds((current) =>
+                                  event.target.checked
+                                    ? [...new Set([...current, participant.id])]
+                                    : current.filter((id) => id !== participant.id)
+                                )
+                              }
+                              type="checkbox"
+                            />
+                          </td>
+                          <td style={{ padding: "0.6rem 0.75rem" }}>
+                            <strong>{participant.snapshot.displayName}</strong>
+                          </td>
+                          <td style={{ padding: "0.6rem 0.75rem" }}>{participantMetadata.typeLabel}</td>
+                          <td style={{ padding: "0.6rem 0.75rem" }}>
+                            {formatUserLabel(participant.controlledByUserId)} · Active
+                          </td>
+                          {nonArchivedEncounters.map((encounter) => (
+                            <td key={encounter.id} style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>
+                              <input
+                                aria-label={`Toggle ${participant.snapshot.displayName} in ${encounter.title}`}
+                                checked={isParticipantInEncounter(encounter, participant)}
+                                onChange={(event) =>
+                                  void handleEncounterParticipantToggle(
+                                    encounter,
+                                    participant,
+                                    event.target.checked
+                                  )
+                                }
+                                type="checkbox"
+                              />
+                            </td>
+                          ))}
+                          <td style={{ padding: "0.6rem 0", textAlign: "center" }}>
+                            <button
+                              onClick={() =>
+                                setExpandedAssignmentParticipantIds((current) =>
+                                  current.includes(participant.id)
+                                    ? current.filter((id) => id !== participant.id)
+                                    : [...current, participant.id]
+                                )
+                              }
+                              type="button"
+                            >
+                              {expanded ? "Hide" : "Details"}
+                            </button>
+                          </td>
+                        </tr>
+                        {expanded ? (
+                          <tr key={`${participant.id}-details`}>
+                            <td colSpan={5 + nonArchivedEncounters.length} style={{ background: "#fbfaf6", padding: "0.75rem 1rem" }}>
+                              <div style={{ display: "grid", gap: "0.5rem" }}>
+                                <strong>Encounter-specific details</strong>
+                                {joinedEncounters.length > 0 ? (
+                                  joinedEncounters.map((encounter) => (
+                                    <div key={encounter.id}>
+                                      <strong>{encounter.title}:</strong>{" "}
+                                      appearance, disguise, clothing/equipment notes, encounter role,
+                                      visibility notes, and GM-only notes will live on this encounter
+                                      participant entry.
+                                    </div>
+                                  ))
+                                ) : (
+                                  <div>
+                                    This participant is not assigned to a non-archived encounter yet.
+                                    Assign them to an encounter before recording encounter-specific details.
+                                  </div>
+                                )}
+                                <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
+                                  Editing these fields is deferred; this placeholder is intentionally here
+                                  in Encounter Assignment, not the shared Scenario Participants roster.
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        ) : null}
+                      </Fragment>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
+        ) : nonArchivedEncounters.length === 0 ? (
+          <div>Create a planned, active, or paused encounter before assigning participants.</div>
         ) : (
-          <div>No participants yet.</div>
+          <div>No active concrete participants match the current scenario participant filters.</div>
         )}
-        {concreteParticipants.length > 0 && filteredConcreteParticipants.length === 0 ? (
-          <div>No concrete participants match the current scenario participant filters.</div>
-        ) : null}
       </section>
 
       <section style={{ display: "grid", gap: "0.75rem" }}>
