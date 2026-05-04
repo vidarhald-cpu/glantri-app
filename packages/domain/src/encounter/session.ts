@@ -2,11 +2,19 @@ import { z } from "zod";
 
 const idSchema = z.string().min(1);
 
-export const encounterStatusSchema = z.enum(["setup", "active", "complete"]);
+export const encounterKindSchema = z.enum(["combat", "roleplay"]);
+export const encounterStatusSchema = z.enum([
+  "setup",
+  "planned",
+  "active",
+  "paused",
+  "complete",
+  "archived"
+]);
 export const encounterTurnOrderModeSchema = z.enum(["manual"]);
 export const encounterFacingSchema = z.enum(["north", "east", "south", "west"]);
 export const encounterOrientationSchema = z.enum(["neutral", "front", "side", "behind"]);
-export const encounterParticipantTypeSchema = z.enum(["character", "ad-hoc"]);
+export const encounterParticipantTypeSchema = z.enum(["character", "ad-hoc", "scenario"]);
 export const encounterActionTypeSchema = z.enum(["none", "attack", "move", "defend", "ready", "other"]);
 export const encounterDefensePostureSchema = z.enum([
   "none",
@@ -156,7 +164,8 @@ export const encounterParticipantSchema = z.object({
     x: 0,
     y: 0,
     zone: "center"
-  })
+  }),
+  scenarioParticipantId: idSchema.optional()
 });
 
 export const encounterSessionSchema = z.object({
@@ -166,16 +175,20 @@ export const encounterSessionSchema = z.object({
   currentRound: z.number().int().positive().default(1),
   currentTurnIndex: z.number().int().nonnegative().default(0),
   declarationsLocked: z.boolean().default(false),
+  description: z.string().optional(),
   id: idSchema,
+  kind: encounterKindSchema.default("combat"),
   participants: z.array(encounterParticipantSchema).default([]),
   scenarioId: idSchema.optional(),
   status: encounterStatusSchema.default("setup"),
+  timelineLabel: z.string().optional(),
   title: z.string().min(1),
   turnOrderMode: encounterTurnOrderModeSchema.default("manual"),
   updatedAt: z.string().min(1)
 });
 
 export type EncounterStatus = z.infer<typeof encounterStatusSchema>;
+export type EncounterKind = z.infer<typeof encounterKindSchema>;
 export type EncounterTurnOrderMode = z.infer<typeof encounterTurnOrderModeSchema>;
 export type EncounterFacing = z.infer<typeof encounterFacingSchema>;
 export type EncounterOrientation = z.infer<typeof encounterOrientationSchema>;

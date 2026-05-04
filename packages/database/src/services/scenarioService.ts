@@ -671,6 +671,32 @@ export class ScenarioService {
     return this.repository.listScenarioEventLogs(scenarioId);
   }
 
+  async recordScenarioEvent(input: {
+    actorUserId?: string | null;
+    eventType: string;
+    participantId?: string | null;
+    payload?: unknown;
+    scenarioId: string;
+    summary: string;
+  }) {
+    const scenario = await this.repository.getScenarioById(input.scenarioId);
+
+    if (!scenario) {
+      throw new Error("Scenario not found.");
+    }
+
+    return this.repository.createScenarioEventLog({
+      actorUserId: input.actorUserId ?? null,
+      eventType: input.eventType,
+      participantId: input.participantId ?? null,
+      payload: input.payload,
+      phase: scenario.liveState?.phase,
+      roundNumber: scenario.liveState?.roundNumber,
+      scenarioId: input.scenarioId,
+      summary: input.summary
+    });
+  }
+
   private async assertControllerAssignmentAvailable(input: {
     controlledByUserId?: string | null;
     excludingParticipantId?: string;

@@ -946,6 +946,18 @@ export const scenariosRoutes: FastifyPluginAsync = async (app) => {
         session: encounterSessionSchema.parse(body.session),
       });
 
+      await scenarioService.recordScenarioEvent({
+        actorUserId: user.id,
+        eventType: "encounter_created",
+        payload: {
+          encounterId: encounter.id,
+          kind: encounter.kind,
+          status: encounter.status
+        },
+        scenarioId,
+        summary: `Created ${encounter.kind} encounter ${encounter.title}.`,
+      });
+
       return { encounter };
     } catch (error) {
       return reply.code(400).send({
@@ -1021,9 +1033,20 @@ export const scenariosRoutes: FastifyPluginAsync = async (app) => {
       }
 
       const body = parseBodyObject(request.body, "Encounter payload");
-      const encounter = await encounterService.updateEncounter(
-        encounterSessionSchema.parse(body.session),
-      );
+      const encounterSession = encounterSessionSchema.parse(body.session);
+      const encounter = await encounterService.updateEncounter(encounterSession);
+
+      await scenarioService.recordScenarioEvent({
+        actorUserId: user.id,
+        eventType: "encounter_updated",
+        payload: {
+          encounterId: encounter.id,
+          participantCount: encounter.participants.length,
+          status: encounter.status
+        },
+        scenarioId: existingEncounter.scenarioId,
+        summary: `Updated encounter ${encounter.title}.`,
+      });
 
       return { encounter };
     } catch (error) {

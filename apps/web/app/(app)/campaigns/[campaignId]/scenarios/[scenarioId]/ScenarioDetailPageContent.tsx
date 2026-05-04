@@ -5,7 +5,11 @@ import { useEffect, useMemo, useState } from "react";
 
 import type { AuthUser } from "@glantri/auth";
 import type {
+  CampaignRosterEntry,
+  EncounterKind,
+  EncounterParticipant,
   EncounterSession,
+  EncounterStatus,
   ReusableEntity,
   Scenario,
   ScenarioEventLog,
@@ -19,33 +23,39 @@ import {
   createEncounterOnServer,
   loadAuthUsers,
   loadCampaignEntities,
+  loadCampaignRoster,
   loadServerCharacters,
   loadScenarioEncounters,
   loadTemplates,
   loadScenarioById,
   loadScenarioEventLogs,
   loadScenarioParticipants,
+  updateEncounterOnServer,
   updateScenarioParticipantMetadataOnServer,
   updateScenarioLiveStateOnServer,
   updateScenarioOnServer
 } from "../../../../../../src/lib/api/localServiceClient";
 import {
-  buildScenarioActorInputFromTemplate,
   getCampaignActorMetadata,
-  splitCampaignActors
 } from "../../../../../../src/lib/campaigns/campaignActors";
 import RememberedCampaignWorkspaceEffect from "../../../../../../src/lib/campaigns/RememberedCampaignWorkspaceEffect";
 import type { ServerCharacterRecord } from "../../../../../../src/lib/api/localServiceClient";
-import {
-  getAvailableScenarioCharacters,
-  getScenarioCharacterDefaultControllerId,
-} from "../../../../../../src/lib/campaigns/scenarioCharacters";
+import { getScenarioCharacterDefaultControllerId } from "../../../../../../src/lib/campaigns/scenarioCharacters";
 import { buildCampaignWorkspaceHref } from "../../../../../../src/lib/campaigns/workspace";
 
 interface ScenarioDetailPageContentProps {
   campaignId: string;
   embedded?: boolean;
   scenarioId: string;
+}
+
+interface ScenarioRosterCandidate {
+  existingParticipant?: ScenarioParticipant;
+  member: boolean;
+  name: string;
+  rosterEntry: CampaignRosterEntry;
+  sourceKind: string;
+  typeLabel: string;
 }
 
 export default function ScenarioDetailPageContent({
@@ -62,6 +72,7 @@ export default function ScenarioDetailPageContent({
   const [loading, setLoading] = useState(true);
   const [participants, setParticipants] = useState<ScenarioParticipant[]>([]);
   const [playerCharacters, setPlayerCharacters] = useState<ServerCharacterRecord[]>([]);
+  const [roster, setRoster] = useState<CampaignRosterEntry[]>([]);
   const [participantDrafts, setParticipantDrafts] = useState<
     Record<
       string,
@@ -78,13 +89,10 @@ export default function ScenarioDetailPageContent({
   const [scenario, setScenario] = useState<Scenario | null>(null);
   const [templates, setTemplates] = useState<ReusableEntity[]>([]);
 
-  const [selectedEntityId, setSelectedEntityId] = useState("");
-  const [selectedCharacterId, setSelectedCharacterId] = useState("");
-  const [selectedCharacterControllerId, setSelectedCharacterControllerId] = useState("");
-  const [selectedCharacterFactionId, setSelectedCharacterFactionId] = useState("");
-  const [temporaryActorName, setTemporaryActorName] = useState("");
-  const [participantRole, setParticipantRole] = useState<ScenarioParticipant["role"]>("npc");
   const [encounterTitle, setEncounterTitle] = useState("");
+  const [encounterDescription, setEncounterDescription] = useState("");
+  const [encounterKind, setEncounterKind] = useState<EncounterKind>("combat");
+  const [encounterTimelineLabel, setEncounterTimelineLabel] = useState("");
 
   const [scenarioName, setScenarioName] = useState("");
   const [scenarioStatus, setScenarioStatus] = useState<Scenario["status"]>("draft");
@@ -93,18 +101,83 @@ export default function ScenarioDetailPageContent({
   const [combatStatus, setCombatStatus] = useState<
     NonNullable<Scenario["liveState"]>["combatStatus"]
   >("not_started");
-  const splitEntities = useMemo(() => splitCampaignActors(entities, campaignId), [campaignId, entities]);
-  const availablePlayerCharacters = useMemo(
-    () =>
-      getAvailableScenarioCharacters({
-        characters: playerCharacters,
-        participants,
-      }),
-    [participants, playerCharacters],
-  );
   const usersById = useMemo(
     () => new Map(assignableUsers.map((user) => [user.id, user])),
     [assignableUsers]
+  );
+  const charactersById = useMemo(
+    () => new Map(playerCharacters.map((character) => [character.id, character])),
+    [playerCharacters]
+  );
+  const entitiesById = useMemo(
+    () => new Map([...entities, ...templates].map((entity) => [entity.id, entity])),
+    [entities, templates]
+  );
+  const participantsByRosterSource = useMemo(() => {
+    const entries = new Map<string, ScenarioParticipant>();
+
+    for (const participant of participants) {
+      if (participant.sourceType === "character" && participant.characterId) {
+        entries.set(`character:${participant.characterId}`, participant);
+      }
+
+      if (participant.sourceType === "entity" && participant.entityId) {
+        entries.set(`reusableEntity:${participant.entityId}`, participant);
+        entries.set(`template:${participant.entityId}`, participant);
+      }
+    }
+
+    return entries;
+  }, [participants]);
+  const scenarioRosterCandidates = useMemo<ScenarioRosterCandidate[]>(
+    () =>
+      roster
+        .map((entry) => {
+          const character = entry.sourceType === "character" ? charactersById.get(entry.sourceId) : undefined;
+          const entity = entry.sourceType === "reusableEntity" || entry.sourceType === "template"
+            ? entitiesById.get(entry.sourceId)
+            : undefined;
+          const existingParticipant = participantsByRosterSource.get(`${entry.sourceType}:${entry.sourceId}`);
+          const name = character?.name ?? entity?.name ?? entry.labelSnapshot ?? "Unknown roster member";
+          const sourceKind =
+            entry.sourceType === "character"
+              ? "Character"
+              : entity
+                ? `${entity.kind.charAt(0).toUpperCase()}${entity.kind.slice(1)}`
+                : entry.sourceType;
+
+          return {
+            existingParticipant,
+            member: Boolean(existingParticipant?.isActive),
+            name,
+            rosterEntry: entry,
+            sourceKind,
+            typeLabel:
+              entry.category === "pc"
+                ? "PC"
+                : entry.category === "template"
+                  ? "Template"
+                  : entity?.kind === "monster"
+                    ? "Monster"
+                    : "NPC"
+          };
+        })
+        .sort((left, right) => left.name.localeCompare(right.name)),
+    [charactersById, entitiesById, participantsByRosterSource, roster]
+  );
+  const orderedEncounters = useMemo(
+    () =>
+      [...encounters].sort((left, right) => {
+        const leftTimeline = left.timelineLabel?.trim() ?? "";
+        const rightTimeline = right.timelineLabel?.trim() ?? "";
+
+        if (leftTimeline || rightTimeline) {
+          return leftTimeline.localeCompare(rightTimeline) || left.createdAt.localeCompare(right.createdAt);
+        }
+
+        return left.createdAt.localeCompare(right.createdAt);
+      }),
+    [encounters]
   );
 
   function formatUserLabel(userId: string | undefined): string {
@@ -134,6 +207,7 @@ export default function ScenarioDetailPageContent({
       nextEncounters,
       nextUsers,
       nextPlayerCharacters,
+      nextRoster,
     ] = await Promise.all([
       loadScenarioById(scenarioId),
       loadScenarioParticipants(scenarioId),
@@ -143,6 +217,7 @@ export default function ScenarioDetailPageContent({
       loadScenarioEncounters(scenarioId),
       loadAuthUsers(),
       loadServerCharacters(),
+      loadCampaignRoster(campaignId),
     ]);
 
     const globalTemplates = nextTemplates.filter(
@@ -173,7 +248,7 @@ export default function ScenarioDetailPageContent({
     setEncounters(nextEncounters);
     setAssignableUsers(nextUsers);
     setPlayerCharacters(nextPlayerCharacters);
-    setSelectedEntityId((current) => current || globalTemplates[0]?.id || nextEntities[0]?.id || "");
+    setRoster(nextRoster);
     setScenarioName(nextScenario.name);
     setScenarioStatus(nextScenario.status);
     setRoundNumber(String(nextScenario.liveState?.roundNumber ?? 1));
@@ -191,11 +266,17 @@ export default function ScenarioDetailPageContent({
         session: {
           ...createEncounterSession(encounterTitle.trim()),
           campaignId,
+          description: encounterDescription.trim() || undefined,
+          kind: encounterKind,
           scenarioId,
+          status: "planned",
+          timelineLabel: encounterTimelineLabel.trim() || undefined,
         },
       });
 
       setEncounterTitle("");
+      setEncounterDescription("");
+      setEncounterTimelineLabel("");
       setFeedback(`Created encounter ${encounter.title}.`);
       await refreshScenario();
     } catch (caughtError) {
@@ -212,28 +293,6 @@ export default function ScenarioDetailPageContent({
       })
       .finally(() => setLoading(false));
   }, [campaignId, scenarioId]);
-
-  useEffect(() => {
-    const preferredCharacter =
-      availablePlayerCharacters.find((character) => character.id === selectedCharacterId) ??
-      availablePlayerCharacters[0] ??
-      null;
-
-    if (!preferredCharacter) {
-      setSelectedCharacterId("");
-      setSelectedCharacterControllerId("");
-      return;
-    }
-
-    if (preferredCharacter.id !== selectedCharacterId) {
-      setSelectedCharacterId(preferredCharacter.id);
-      setSelectedCharacterControllerId(
-        getScenarioCharacterDefaultControllerId({
-          character: preferredCharacter,
-        }),
-      );
-    }
-  }, [availablePlayerCharacters, selectedCharacterId]);
 
   async function handleUpdateScenarioMetadata() {
     try {
@@ -275,64 +334,145 @@ export default function ScenarioDetailPageContent({
     }
   }
 
-  async function handleAddParticipant() {
-    try {
-      setError(undefined);
-      setFeedback(undefined);
-      const selectedTemplate = templates.find((template) => template.id === selectedEntityId);
-
-      const participant = await addScenarioParticipantFromEntityOnServer({
-        entityId: selectedTemplate ? undefined : selectedEntityId,
-        entityInput: selectedTemplate
-          ? {
-              ...buildScenarioActorInputFromTemplate({
-                name: temporaryActorName.trim() || selectedTemplate.name,
-                template: selectedTemplate
-              })
-            }
-          : undefined,
-        isTemporary: Boolean(selectedTemplate),
-        role: participantRole,
-        scenarioId
-      });
-
-      setFeedback(`Added participant ${participant.snapshot.displayName}.`);
-      setTemporaryActorName("");
-      await refreshScenario();
-    } catch (caughtError) {
-      setError(
-        caughtError instanceof Error ? caughtError.message : "Unable to add scenario participant."
-      );
-    }
-  }
-
-  async function handleAddCharacterParticipant() {
-    if (!selectedCharacterId) {
-      setError("Choose a character to add.");
-      return;
-    }
-
+  async function handleRosterParticipantToggle(candidate: ScenarioRosterCandidate, member: boolean) {
     try {
       setError(undefined);
       setFeedback(undefined);
 
-      const participant = await addScenarioParticipantFromCharacterOnServer({
-        characterId: selectedCharacterId,
-        controlledByUserId: selectedCharacterControllerId || null,
-        factionId: selectedCharacterFactionId.trim() || null,
-        joinSource: "gm_added",
-        role: "player_character",
-        scenarioId,
-      });
+      if (!member) {
+        if (candidate.existingParticipant) {
+          await updateScenarioParticipantMetadataOnServer({
+            isActive: false,
+            participantId: candidate.existingParticipant.id,
+            scenarioId
+          });
+        }
 
-      setFeedback(`Added player character ${participant.snapshot.displayName}.`);
-      setSelectedCharacterFactionId("");
+        setFeedback(`Removed ${candidate.name} from active scenario participants.`);
+        await refreshScenario();
+        return;
+      }
+
+      if (candidate.existingParticipant) {
+        await updateScenarioParticipantMetadataOnServer({
+          isActive: true,
+          participantId: candidate.existingParticipant.id,
+          scenarioId
+        });
+        setFeedback(`Reactivated ${candidate.name} in this scenario.`);
+        await refreshScenario();
+        return;
+      }
+
+      const participant =
+        candidate.rosterEntry.sourceType === "character"
+          ? await addScenarioParticipantFromCharacterOnServer({
+              characterId: candidate.rosterEntry.sourceId,
+              controlledByUserId:
+                getScenarioCharacterDefaultControllerId({
+                  character: charactersById.get(candidate.rosterEntry.sourceId) ?? null,
+                }) || null,
+              joinSource: "gm_added",
+              role: "player_character",
+              scenarioId,
+            })
+          : await addScenarioParticipantFromEntityOnServer({
+              entityId: candidate.rosterEntry.sourceId,
+              joinSource: "gm_added",
+              role: candidate.typeLabel === "Monster" ? "monster" : "npc",
+              scenarioId,
+            });
+
+      setFeedback(`Added ${participant.snapshot.displayName} to the scenario.`);
       await refreshScenario();
     } catch (caughtError) {
       setError(
         caughtError instanceof Error
           ? caughtError.message
-          : "Unable to add player character participant.",
+          : "Unable to update scenario participant.",
+      );
+    }
+  }
+
+  async function handleUpdateEncounterStatus(
+    encounter: EncounterSession,
+    status: EncounterStatus
+  ) {
+    try {
+      setError(undefined);
+      setFeedback(undefined);
+      const updated = await updateEncounterOnServer({
+        encounterId: encounter.id,
+        session: {
+          ...encounter,
+          status,
+          updatedAt: new Date().toISOString()
+        }
+      });
+
+      setFeedback(`Updated encounter ${updated.title}.`);
+      await refreshScenario();
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : "Unable to update encounter.");
+    }
+  }
+
+  async function handleEncounterParticipantToggle(
+    encounter: EncounterSession,
+    participant: ScenarioParticipant,
+    member: boolean
+  ) {
+    try {
+      setError(undefined);
+      setFeedback(undefined);
+
+      const participantId = `scenario-${participant.id}`;
+      const nextEncounterParticipant: EncounterParticipant = {
+        declaration: {
+          actionType: "none",
+          defenseFocus: "none",
+          defensePosture: "none",
+          targetLocation: "any"
+        },
+        facing: "north",
+        id: participantId,
+        initiative: 0,
+        label: participant.snapshot.displayName,
+        order: encounter.participants.length,
+        orientation: "neutral",
+        participantType: "scenario",
+        position: {
+          x: 0,
+          y: 0,
+          zone: "center"
+        },
+        scenarioParticipantId: participant.id
+      };
+      const existing = encounter.participants.some(
+        (entry) => entry.scenarioParticipantId === participant.id || entry.id === participantId
+      );
+      const nextParticipants = member
+        ? existing
+          ? encounter.participants
+          : [...encounter.participants, nextEncounterParticipant]
+        : encounter.participants.filter(
+            (entry) => entry.scenarioParticipantId !== participant.id && entry.id !== participantId
+          );
+
+      await updateEncounterOnServer({
+        encounterId: encounter.id,
+        session: {
+          ...encounter,
+          participants: nextParticipants,
+          updatedAt: new Date().toISOString()
+        }
+      });
+
+      setFeedback(`Updated participants for ${encounter.title}.`);
+      await refreshScenario();
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error ? caughtError.message : "Unable to update encounter participants."
       );
     }
   }
@@ -502,16 +642,37 @@ export default function ScenarioDetailPageContent({
       >
           <h2 style={{ margin: 0 }}>Encounters</h2>
           <p style={{ margin: 0 }}>
-            Canonical encounters are now shared server-backed scenario records. Create them here,
-            then open GM or player encounter workspace on the same shared encounter.
+            Create combat or roleplaying encounters on one scenario timeline. More than one
+            encounter can be active at the same time.
           </p>
           <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
             <input
               onChange={(event) => setEncounterTitle(event.target.value)}
-              placeholder="Arena clash"
+              placeholder="Encounter name"
               style={{ minWidth: 260, padding: "0.5rem" }}
               type="text"
               value={encounterTitle}
+            />
+            <select
+              onChange={(event) => setEncounterKind(event.target.value as EncounterKind)}
+              value={encounterKind}
+            >
+              <option value="combat">Combat</option>
+              <option value="roleplay">Roleplaying</option>
+            </select>
+            <input
+              onChange={(event) => setEncounterTimelineLabel(event.target.value)}
+              placeholder="Timeline label (optional)"
+              style={{ minWidth: 180, padding: "0.5rem" }}
+              type="text"
+              value={encounterTimelineLabel}
+            />
+            <input
+              onChange={(event) => setEncounterDescription(event.target.value)}
+              placeholder="Description / notes (optional)"
+              style={{ minWidth: 240, padding: "0.5rem" }}
+              type="text"
+              value={encounterDescription}
             />
             <button
               disabled={encounterTitle.trim().length === 0}
@@ -522,208 +683,185 @@ export default function ScenarioDetailPageContent({
             </button>
           </div>
           {encounters.length > 0 ? (
-            <div style={{ display: "grid", gap: "0.75rem" }}>
-              {encounters.map((encounter) => (
-                <div
-                  key={encounter.id}
-                  style={{
-                    background: "#ffffff",
-                    border: "1px solid #ddd7c9",
-                    borderRadius: 10,
-                    display: "grid",
-                    gap: "0.35rem",
-                    padding: "0.75rem",
-                  }}
-                >
-                  <strong>{encounter.title}</strong>
-                  <div>Status: {encounter.status}</div>
-                  <div>Participants: {encounter.participants.length}</div>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
-                    <Link
-                      href={buildCampaignWorkspaceHref({
-                        campaignId,
-                        encounterId: encounter.id,
-                        scenarioId,
-                        tab: "gm-encounter",
-                      })}
-                    >
-                      Open GM encounter workspace
-                    </Link>
-                    <Link
-                      href={buildCampaignWorkspaceHref({
-                        campaignId,
-                        encounterId: encounter.id,
-                        scenarioId,
-                        tab: "player-encounter",
-                      })}
-                    >
-                      Open player encounter workspace
-                    </Link>
-                  </div>
-                </div>
-              ))}
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ borderCollapse: "collapse", minWidth: 920, width: "100%" }}>
+                <thead>
+                  <tr style={{ borderBottom: "1px solid #d9ddd8", textAlign: "left" }}>
+                    <th style={{ padding: "0.5rem 0.75rem 0.5rem 0" }}>Name</th>
+                    <th style={{ padding: "0.5rem 0.75rem" }}>Type</th>
+                    <th style={{ padding: "0.5rem 0.75rem" }}>Status</th>
+                    <th style={{ padding: "0.5rem 0.75rem" }}>Timeline</th>
+                    <th style={{ padding: "0.5rem 0.75rem", textAlign: "center" }}>Participants</th>
+                    <th style={{ padding: "0.5rem 0.75rem" }}>Open</th>
+                    <th style={{ padding: "0.5rem 0" }}>Controls</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {orderedEncounters.map((encounter) => (
+                    <tr key={encounter.id} style={{ borderBottom: "1px solid #eee8dc", verticalAlign: "top" }}>
+                      <td style={{ padding: "0.6rem 0.75rem 0.6rem 0" }}>
+                        <strong>{encounter.title}</strong>
+                        {encounter.description ? (
+                          <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
+                            {encounter.description}
+                          </div>
+                        ) : null}
+                        {participants.length > 0 ? (
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", marginTop: "0.5rem" }}>
+                            {participants.map((participant) => (
+                              <label
+                                key={participant.id}
+                                style={{ alignItems: "center", display: "flex", gap: "0.25rem", whiteSpace: "nowrap" }}
+                              >
+                                <input
+                                  checked={encounter.participants.some(
+                                    (entry) => entry.scenarioParticipantId === participant.id
+                                  )}
+                                  onChange={(event) =>
+                                    void handleEncounterParticipantToggle(
+                                      encounter,
+                                      participant,
+                                      event.target.checked
+                                    )
+                                  }
+                                  type="checkbox"
+                                />
+                                {participant.snapshot.displayName}
+                              </label>
+                            ))}
+                          </div>
+                        ) : null}
+                      </td>
+                      <td style={{ padding: "0.6rem 0.75rem" }}>
+                        {encounter.kind === "roleplay" ? "Roleplaying" : "Combat"}
+                      </td>
+                      <td style={{ padding: "0.6rem 0.75rem" }}>{encounter.status}</td>
+                      <td style={{ padding: "0.6rem 0.75rem" }}>
+                        {encounter.timelineLabel ?? encounter.createdAt}
+                      </td>
+                      <td style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>
+                        {encounter.participants.length}
+                      </td>
+                      <td style={{ padding: "0.6rem 0.75rem" }}>
+                        <div style={{ display: "grid", gap: "0.35rem" }}>
+                          <Link
+                            href={buildCampaignWorkspaceHref({
+                              campaignId,
+                              encounterId: encounter.id,
+                              scenarioId,
+                              tab: "gm-encounter",
+                            })}
+                          >
+                            GM
+                          </Link>
+                          <Link
+                            href={buildCampaignWorkspaceHref({
+                              campaignId,
+                              encounterId: encounter.id,
+                              scenarioId,
+                              tab: "player-encounter",
+                            })}
+                          >
+                            Player
+                          </Link>
+                        </div>
+                      </td>
+                      <td style={{ padding: "0.6rem 0" }}>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: "0.35rem" }}>
+                          {encounter.status === "active" ? (
+                            <button
+                              onClick={() => void handleUpdateEncounterStatus(encounter, "paused")}
+                              type="button"
+                            >
+                              Pause
+                            </button>
+                          ) : encounter.status !== "archived" && encounter.status !== "complete" ? (
+                            <button
+                              onClick={() => void handleUpdateEncounterStatus(encounter, "active")}
+                              type="button"
+                            >
+                              {encounter.status === "paused" ? "Resume" : "Start"}
+                            </button>
+                          ) : null}
+                          {encounter.status !== "archived" ? (
+                            <button
+                              onClick={() => void handleUpdateEncounterStatus(encounter, "archived")}
+                              type="button"
+                            >
+                              Archive
+                            </button>
+                          ) : null}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           ) : (
             <div>No encounters have been created for this scenario yet.</div>
           )}
       </section>
 
-      <section
-        style={{
-          border: "1px solid #d9ddd8",
-          borderRadius: 12,
-          display: "grid",
-          gap: "0.75rem",
-          padding: "1rem",
-        }}
-      >
-        <h2 style={{ margin: 0 }}>Add player character</h2>
-        <p style={{ margin: 0 }}>
-          Player characters come into the scenario directly from saved server-backed characters.
-        </p>
-        {availablePlayerCharacters.length > 0 ? (
-          <>
-            <label style={{ display: "grid", gap: "0.25rem" }}>
-              <span>Character</span>
-              <select
-                onChange={(event) => {
-                  const nextCharacter =
-                    availablePlayerCharacters.find(
-                      (character) => character.id === event.target.value,
-                    ) ?? null;
-                  setSelectedCharacterId(event.target.value);
-                  setSelectedCharacterControllerId(
-                    getScenarioCharacterDefaultControllerId({
-                      character: nextCharacter,
-                    }),
-                  );
-                }}
-                value={selectedCharacterId}
-              >
-                {availablePlayerCharacters.map((character) => (
-                  <option key={character.id} value={character.id}>
-                    {(character.build.name.trim() || character.name).trim()}
-                    {character.owner?.displayName || character.owner?.email
-                      ? ` (${character.owner?.displayName ?? character.owner?.email})`
-                      : ""}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <div
-              style={{
-                display: "grid",
-                gap: "0.75rem",
-                gridTemplateColumns: "minmax(220px, 1.25fr) minmax(160px, 1fr)",
-              }}
-            >
-              <label style={{ display: "grid", gap: "0.25rem" }}>
-                <span>Assigned controller</span>
-                <select
-                  onChange={(event) => setSelectedCharacterControllerId(event.target.value)}
-                  value={selectedCharacterControllerId}
-                >
-                  <option value="">GM / unassigned</option>
-                  {assignableUsers.map((user) => (
-                    <option key={user.id} value={user.id}>
-                      {user.displayName ? `${user.displayName} (${user.email})` : user.email}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label style={{ display: "grid", gap: "0.25rem" }}>
-                <span>Faction / side</span>
-                <input
-                  onChange={(event) => setSelectedCharacterFactionId(event.target.value)}
-                  type="text"
-                  value={selectedCharacterFactionId}
-                />
-              </label>
-            </div>
-            <div>
-              <button onClick={() => void handleAddCharacterParticipant()} type="button">
-                Add player character
-              </button>
-            </div>
-          </>
-        ) : (
-          <div>No available server-backed player characters remain to add to this scenario.</div>
-        )}
-      </section>
-
       <section style={{ border: "1px solid #d9ddd8", borderRadius: 12, display: "grid", gap: "0.75rem", padding: "1rem" }}>
-        <h2 style={{ margin: 0 }}>Add participant from template or campaign NPC</h2>
+        <h2 style={{ margin: 0 }}>Scenario participants</h2>
         <p style={{ margin: 0 }}>
-          Choose either a reusable archetype or a persistent campaign individual as the source.
+          Pull PCs, NPCs, monsters, and templates from the campaign roster into this scenario.
+          Encounter membership is chosen separately below.
         </p>
-        {templates.length > 0 || splitEntities.campaignNpcs.length > 0 ? (
-          <>
-            <select
-              onChange={(event) => setSelectedEntityId(event.target.value)}
-              value={selectedEntityId}
-            >
-              {templates.length > 0 ? (
-                <optgroup label="Templates">
-                  {templates.map((entity) => {
-                    const metadata = getCampaignActorMetadata(entity);
-
-                    return (
-                      <option key={entity.id} value={entity.id}>
-                        {entity.name} ({entity.kind}
-                        {metadata.roleLabel ? `, ${metadata.roleLabel}` : ""})
-                      </option>
-                    );
-                  })}
-                </optgroup>
-              ) : null}
-              {splitEntities.campaignNpcs.length > 0 ? (
-                <optgroup label="Campaign NPCs">
-                  {splitEntities.campaignNpcs.map((entity) => {
-                    const metadata = getCampaignActorMetadata(entity);
-
-                    return (
-                      <option key={entity.id} value={entity.id}>
-                        {entity.name} ({entity.kind}
-                        {metadata.allegiance ? `, ${metadata.allegiance}` : ""})
-                      </option>
-                    );
-                  })}
-                </optgroup>
-              ) : null}
-            </select>
-            <select
-              onChange={(event) => setParticipantRole(event.target.value as ScenarioParticipant["role"])}
-              value={participantRole}
-            >
-              <option value="npc">NPC</option>
-              <option value="monster">Monster</option>
-              <option value="animal">Animal</option>
-              <option value="neutral">Neutral</option>
-              <option value="ally">Ally</option>
-              <option value="enemy">Enemy</option>
-            </select>
-            {templates.some((template) => template.id === selectedEntityId) ? (
-              <input
-                onChange={(event) => setTemporaryActorName(event.target.value)}
-                placeholder="Temporary actor name override (optional)"
-                value={temporaryActorName}
-              />
-            ) : null}
-            <div>
-              <button onClick={() => void handleAddParticipant()} type="button">
-                {templates.some((template) => template.id === selectedEntityId)
-                  ? "Create temporary scenario actor"
-                  : "Add participant"}
-              </button>
-            </div>
-          </>
+        {scenarioRosterCandidates.length > 0 ? (
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ borderCollapse: "collapse", minWidth: 780, width: "100%" }}>
+              <thead>
+                <tr style={{ borderBottom: "1px solid #d9ddd8", textAlign: "left" }}>
+                  <th style={{ padding: "0.5rem 0.75rem 0.5rem 0", textAlign: "center" }}>In scenario</th>
+                  <th style={{ padding: "0.5rem 0.75rem" }}>Name</th>
+                  <th style={{ padding: "0.5rem 0.75rem" }}>Type</th>
+                  <th style={{ padding: "0.5rem 0.75rem" }}>Source</th>
+                  <th style={{ padding: "0.5rem 0.75rem" }}>Controller</th>
+                  <th style={{ padding: "0.5rem 0" }}>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {scenarioRosterCandidates.map((candidate) => (
+                  <tr key={candidate.rosterEntry.id} style={{ borderBottom: "1px solid #eee8dc" }}>
+                    <td style={{ padding: "0.6rem 0.75rem 0.6rem 0", textAlign: "center" }}>
+                      <input
+                        aria-label={`Toggle ${candidate.name} scenario participation`}
+                        checked={candidate.member}
+                        onChange={(event) =>
+                          void handleRosterParticipantToggle(candidate, event.target.checked)
+                        }
+                        type="checkbox"
+                      />
+                    </td>
+                    <td style={{ padding: "0.6rem 0.75rem" }}>
+                      <strong>{candidate.name}</strong>
+                    </td>
+                    <td style={{ padding: "0.6rem 0.75rem" }}>{candidate.typeLabel}</td>
+                    <td style={{ padding: "0.6rem 0.75rem" }}>{candidate.sourceKind}</td>
+                    <td style={{ padding: "0.6rem 0.75rem" }}>
+                      {formatUserLabel(candidate.existingParticipant?.controlledByUserId)}
+                    </td>
+                    <td style={{ padding: "0.6rem 0" }}>
+                      {candidate.existingParticipant
+                        ? candidate.existingParticipant.isActive
+                          ? "Active"
+                          : "Inactive"
+                        : "Available"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         ) : (
-          <div>No templates or campaign NPCs are available yet.</div>
+          <div>No campaign roster entries are available. Add PCs, NPCs, or templates to the campaign roster first.</div>
         )}
       </section>
 
       <section style={{ display: "grid", gap: "0.75rem" }}>
-        <h2 style={{ margin: 0 }}>Participants</h2>
+        <h2 style={{ margin: 0 }}>Participant state and assignment</h2>
         {participants.length > 0 ? (
           participants.map((participant) => (
             <div
