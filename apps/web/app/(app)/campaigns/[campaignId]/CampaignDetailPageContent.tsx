@@ -15,11 +15,11 @@ import type {
 import {
   addCampaignRosterEntryOnServer,
   createCampaignAssetOnServer,
-  createReusableEntityOnServer,
   createScenarioOnServer,
   loadCampaignAssets,
   loadCampaignById,
   loadCampaignEntities,
+  loadCampaigns,
   loadCampaignRoster,
   loadCampaignScenarioRelationships,
   loadCampaignScenarios,
@@ -29,11 +29,7 @@ import {
   type ServerCharacterRecord,
   updateCampaignAssetVisibilityOnServer
 } from "../../../../src/lib/api/localServiceClient";
-import {
-  buildCampaignNpcSnapshotFromTemplate,
-  getCampaignActorMetadata,
-  splitCampaignActors
-} from "../../../../src/lib/campaigns/campaignActors";
+import { getCampaignActorMetadata } from "../../../../src/lib/campaigns/campaignActors";
 import { buildCampaignWorkspaceHref } from "../../../../src/lib/campaigns/workspace";
 
 interface CampaignDetailPageContentProps {
@@ -42,11 +38,16 @@ interface CampaignDetailPageContentProps {
   onWorkspaceScenariosChanged?: (scenarios: Scenario[]) => void;
 }
 
-type RosterFilter = "all" | "pcs" | "npcs" | "templates" | "monsters" | "other";
+type RosterMembershipFilter = "all" | "inCampaign" | "otherCampaigns";
+type RosterTypeFilter = "all" | "pcs" | "npcs" | "templates" | "monsters" | "other";
 
 interface RosterCandidate {
   category: CampaignRosterEntry["category"];
-  filter: RosterFilter;
+  civilizationLabel: string;
+  membership: "inCampaign" | "otherCampaigns" | "available";
+  professionLabel: string;
+  skillGroups: string[];
+  typeFilter: RosterTypeFilter;
   kindLabel: string;
   member: boolean;
   name: string;
@@ -69,6 +70,47 @@ function formatEntityKind(kind: ReusableEntity["kind"]): string {
   return `${kind.charAt(0).toUpperCase()}${kind.slice(1)}`;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function readOptionalString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim().length > 0 ? value : undefined;
+}
+
+function readStringList(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0);
+}
+
+function readSnapshotMetadata(snapshot: unknown): {
+  civilizationLabel?: string;
+  professionLabel?: string;
+  skillGroups: string[];
+} {
+  if (!isRecord(snapshot)) {
+    return { skillGroups: [] };
+  }
+
+  return {
+    civilizationLabel:
+      readOptionalString(snapshot.civilization) ??
+      readOptionalString(snapshot.civilizationId) ??
+      readOptionalString(snapshot.culture) ??
+      readOptionalString(snapshot.societyId) ??
+      readOptionalString(snapshot.society),
+    professionLabel: readOptionalString(snapshot.profession) ?? readOptionalString(snapshot.professionId),
+    skillGroups: [
+      ...readStringList(snapshot.skillGroups),
+      ...readStringList(snapshot.skillGroupIds),
+      ...readStringList(snapshot.trainingPackages)
+    ]
+  };
+}
+
 export default function CampaignDetailPageContent({
   campaignId,
   embedded = false,
@@ -81,8 +123,13 @@ export default function CampaignDetailPageContent({
   const [error, setError] = useState<string>();
   const [feedback, setFeedback] = useState<string>();
   const [loading, setLoading] = useState(true);
+  const [allRosterEntries, setAllRosterEntries] = useState<CampaignRosterEntry[]>([]);
   const [roster, setRoster] = useState<CampaignRosterEntry[]>([]);
-  const [rosterFilter, setRosterFilter] = useState<RosterFilter>("all");
+  const [rosterMembershipFilter, setRosterMembershipFilter] = useState<RosterMembershipFilter>("all");
+  const [rosterTypeFilter, setRosterTypeFilter] = useState<RosterTypeFilter>("all");
+  const [rosterCivilizationFilter, setRosterCivilizationFilter] = useState("");
+  const [rosterProfessionFilter, setRosterProfessionFilter] = useState("");
+  const [rosterSkillGroupFilter, setRosterSkillGroupFilter] = useState("");
   const [rosterSearch, setRosterSearch] = useState("");
   const [scenarios, setScenarios] = useState<Scenario[]>([]);
   const [scenarioRelationships, setScenarioRelationships] = useState<ScenarioRelationship[]>([]);
@@ -93,18 +140,9 @@ export default function CampaignDetailPageContent({
   const [scenarioKind, setScenarioKind] = useState<Scenario["kind"]>("mixed");
   const [continuesFromScenarioId, setContinuesFromScenarioId] = useState("");
 
-  const [entityName, setEntityName] = useState("");
-  const [entityDescription, setEntityDescription] = useState("");
-  const [entityKind, setEntityKind] = useState<ReusableEntity["kind"]>("npc");
-  const [entityRoleLabel, setEntityRoleLabel] = useState("");
-  const [entityAllegiance, setEntityAllegiance] = useState("");
-  const [entityTags, setEntityTags] = useState("");
-  const [selectedTemplateId, setSelectedTemplateId] = useState("");
-
   const [assetTitle, setAssetTitle] = useState("");
   const [assetUrl, setAssetUrl] = useState("");
   const [assetType, setAssetType] = useState<CampaignAsset["type"]>("document");
-  const splitEntities = useMemo(() => splitCampaignActors(entities, campaignId), [campaignId, entities]);
   const rosterBySourceKey = useMemo(() => {
     const entries = new Map<string, CampaignRosterEntry>();
 
@@ -114,13 +152,30 @@ export default function CampaignDetailPageContent({
 
     return entries;
   }, [roster]);
+  const otherRosterSourceKeys = useMemo(() => {
+    const keys = new Set<string>();
+
+    for (const entry of allRosterEntries) {
+      if (entry.campaignId !== campaignId) {
+        keys.add(buildRosterSourceKey(entry.sourceType, entry.sourceId));
+      }
+    }
+
+    return keys;
+  }, [allRosterEntries, campaignId]);
   const rosterCandidates = useMemo<RosterCandidate[]>(() => {
     const characterCandidates = characters.map((character): RosterCandidate => {
-      const rosterEntry = rosterBySourceKey.get(buildRosterSourceKey("character", character.id));
+      const sourceKey = buildRosterSourceKey("character", character.id);
+      const rosterEntry = rosterBySourceKey.get(sourceKey);
+      const skillGroups = character.build.progression.skillGroups.map((entry) => entry.groupId);
 
       return {
         category: "pc",
-        filter: "pcs",
+        civilizationLabel: character.build.societyId ?? "—",
+        membership: rosterEntry ? "inCampaign" : otherRosterSourceKeys.has(sourceKey) ? "otherCampaigns" : "available",
+        professionLabel: character.build.professionId ?? "—",
+        skillGroups,
+        typeFilter: "pcs",
         kindLabel: character.owner?.displayName ? `Owner: ${character.owner.displayName}` : "Character",
         member: Boolean(rosterEntry),
         name: character.name,
@@ -134,13 +189,20 @@ export default function CampaignDetailPageContent({
     const entityCandidates = entities
       .filter((entity) => getCampaignActorMetadata(entity).actorClass !== "template")
       .map((entity): RosterCandidate => {
-        const rosterEntry = rosterBySourceKey.get(buildRosterSourceKey("reusableEntity", entity.id));
-        const filter: RosterFilter =
+        const sourceKey = buildRosterSourceKey("reusableEntity", entity.id);
+        const rosterEntry = rosterBySourceKey.get(sourceKey);
+        const typeFilter: RosterTypeFilter =
           entity.kind === "monster" ? "monsters" : entity.kind === "npc" ? "npcs" : "other";
+        const metadata = getCampaignActorMetadata(entity);
+        const snapshotMetadata = readSnapshotMetadata(entity.snapshot);
 
         return {
           category: "npc",
-          filter,
+          civilizationLabel: snapshotMetadata.civilizationLabel ?? "—",
+          membership: rosterEntry ? "inCampaign" : otherRosterSourceKeys.has(sourceKey) ? "otherCampaigns" : "available",
+          professionLabel: metadata.profession ?? snapshotMetadata.professionLabel ?? "—",
+          skillGroups: snapshotMetadata.skillGroups,
+          typeFilter,
           kindLabel: formatEntityKind(entity.kind),
           member: Boolean(rosterEntry),
           name: entity.name,
@@ -150,13 +212,20 @@ export default function CampaignDetailPageContent({
           sourceType: "reusableEntity",
           typeLabel: formatEntityKind(entity.kind)
         };
-      });
+    });
     const templateCandidates = templates.map((template): RosterCandidate => {
-      const rosterEntry = rosterBySourceKey.get(buildRosterSourceKey("template", template.id));
+      const sourceKey = buildRosterSourceKey("template", template.id);
+      const rosterEntry = rosterBySourceKey.get(sourceKey);
+      const metadata = getCampaignActorMetadata(template);
+      const snapshotMetadata = readSnapshotMetadata(template.snapshot);
 
       return {
         category: "template",
-        filter: "templates",
+        civilizationLabel: snapshotMetadata.civilizationLabel ?? "—",
+        membership: rosterEntry ? "inCampaign" : otherRosterSourceKeys.has(sourceKey) ? "otherCampaigns" : "available",
+        professionLabel: metadata.profession ?? snapshotMetadata.professionLabel ?? "—",
+        skillGroups: snapshotMetadata.skillGroups,
+        typeFilter: "templates",
         kindLabel: formatEntityKind(template.kind),
         member: Boolean(rosterEntry),
         name: template.name,
@@ -171,33 +240,73 @@ export default function CampaignDetailPageContent({
     return [...characterCandidates, ...entityCandidates, ...templateCandidates].sort((a, b) =>
       a.name.localeCompare(b.name)
     );
-  }, [characters, entities, rosterBySourceKey, templates]);
-  const rosterFilterOptions = useMemo(
+  }, [characters, entities, otherRosterSourceKeys, rosterBySourceKey, templates]);
+  const rosterTypeFilterOptions = useMemo(
     () =>
       [
         { id: "all" as const, label: "All" },
-        { id: "pcs" as const, label: "PCs" },
-        { id: "npcs" as const, label: "NPCs" },
+        { id: "pcs" as const, label: "PC" },
+        { id: "npcs" as const, label: "NPC" },
         { id: "templates" as const, label: "Templates" },
         { id: "monsters" as const, label: "Monsters" },
         { id: "other" as const, label: "Other" }
-      ].filter((option) => option.id === "all" || rosterCandidates.some((candidate) => candidate.filter === option.id)),
+      ].filter((option) => option.id === "all" || rosterCandidates.some((candidate) => candidate.typeFilter === option.id)),
+    [rosterCandidates]
+  );
+  const rosterCivilizationOptions = useMemo(
+    () =>
+      [...new Set(rosterCandidates.map((candidate) => candidate.civilizationLabel).filter((value) => value !== "—"))].sort(),
+    [rosterCandidates]
+  );
+  const rosterProfessionOptions = useMemo(
+    () =>
+      [...new Set(rosterCandidates.map((candidate) => candidate.professionLabel).filter((value) => value !== "—"))].sort(),
+    [rosterCandidates]
+  );
+  const rosterSkillGroupOptions = useMemo(
+    () => [...new Set(rosterCandidates.flatMap((candidate) => candidate.skillGroups))].sort(),
     [rosterCandidates]
   );
   const filteredRosterCandidates = useMemo(() => {
     const search = rosterSearch.trim().toLowerCase();
 
     return rosterCandidates.filter((candidate) => {
-      const matchesFilter = rosterFilter === "all" || candidate.filter === rosterFilter;
+      const matchesMembership =
+        rosterMembershipFilter === "all" || candidate.membership === rosterMembershipFilter;
+      const matchesType = rosterTypeFilter === "all" || candidate.typeFilter === rosterTypeFilter;
+      const matchesCivilization =
+        !rosterCivilizationFilter || candidate.civilizationLabel === rosterCivilizationFilter;
+      const matchesProfession =
+        !rosterProfessionFilter || candidate.professionLabel === rosterProfessionFilter;
+      const matchesSkillGroup =
+        !rosterSkillGroupFilter || candidate.skillGroups.includes(rosterSkillGroupFilter);
       const matchesSearch =
         search.length === 0 ||
         candidate.name.toLowerCase().includes(search) ||
         candidate.typeLabel.toLowerCase().includes(search) ||
-        candidate.kindLabel.toLowerCase().includes(search);
+        candidate.kindLabel.toLowerCase().includes(search) ||
+        candidate.civilizationLabel.toLowerCase().includes(search) ||
+        candidate.professionLabel.toLowerCase().includes(search) ||
+        candidate.skillGroups.some((group) => group.toLowerCase().includes(search));
 
-      return matchesFilter && matchesSearch;
+      return (
+        matchesMembership &&
+        matchesType &&
+        matchesCivilization &&
+        matchesProfession &&
+        matchesSkillGroup &&
+        matchesSearch
+      );
     });
-  }, [rosterCandidates, rosterFilter, rosterSearch]);
+  }, [
+    rosterCandidates,
+    rosterCivilizationFilter,
+    rosterMembershipFilter,
+    rosterProfessionFilter,
+    rosterSearch,
+    rosterSkillGroupFilter,
+    rosterTypeFilter
+  ]);
   const orderedScenarios = useMemo(
     () =>
       [...scenarios].sort(
@@ -210,7 +319,6 @@ export default function CampaignDetailPageContent({
     const [
       nextCampaign,
       nextScenarios,
-      nextScenarioRelationships,
       nextEntities,
       nextAssets,
       nextTemplates,
@@ -219,13 +327,23 @@ export default function CampaignDetailPageContent({
     ] = await Promise.all([
       loadCampaignById(campaignId),
       loadCampaignScenarios(campaignId),
-      loadCampaignScenarioRelationships(campaignId),
       loadCampaignEntities(campaignId),
       loadCampaignAssets(campaignId),
       loadTemplates(),
       loadCampaignRoster(campaignId),
       loadServerCharacters()
     ]);
+    const nextScenarioRelationships = await loadCampaignScenarioRelationships(campaignId).catch(
+      () => []
+    );
+    const nextAllRosterEntries = await loadCampaigns()
+      .then((campaigns) =>
+        Promise.allSettled(campaigns.map((entry) => loadCampaignRoster(entry.id)))
+      )
+      .then((results) =>
+        results.flatMap((result) => (result.status === "fulfilled" ? result.value : []))
+      )
+      .catch(() => nextRoster);
 
     setCampaign(nextCampaign);
     setScenarios(nextScenarios);
@@ -233,6 +351,7 @@ export default function CampaignDetailPageContent({
     onWorkspaceScenariosChanged?.(nextScenarios);
     setEntities(nextEntities);
     setAssets(nextAssets);
+    setAllRosterEntries(nextAllRosterEntries);
     setRoster(nextRoster);
     setCharacters(nextCharacters);
     const globalTemplates = nextTemplates.filter(
@@ -240,7 +359,6 @@ export default function CampaignDetailPageContent({
     );
 
     setTemplates(globalTemplates);
-    setSelectedTemplateId((current) => current || globalTemplates[0]?.id || "");
   }
 
   useEffect(() => {
@@ -289,10 +407,20 @@ export default function CampaignDetailPageContent({
         });
 
         setFeedback(`Linked ${entry.labelSnapshot ?? candidate.name} to the campaign roster.`);
-      } else if (candidate.rosterEntry) {
+      } else {
+        const rosterEntry =
+          candidate.rosterEntry ??
+          rosterBySourceKey.get(buildRosterSourceKey(candidate.sourceType, candidate.sourceId));
+
+        if (!rosterEntry) {
+          setFeedback(`${candidate.name} is already outside the campaign roster.`);
+          await refreshPage();
+          return;
+        }
+
         await removeCampaignRosterEntryOnServer({
           campaignId,
-          rosterEntryId: candidate.rosterEntry.id
+          rosterEntryId: rosterEntry.id
         });
 
         setFeedback(`Removed ${candidate.name} from the campaign roster.`);
@@ -303,68 +431,6 @@ export default function CampaignDetailPageContent({
         caughtError instanceof Error ? caughtError.message : "Unable to update campaign roster."
       );
     }
-  }
-
-  async function handleCreateEntity() {
-    try {
-      setError(undefined);
-      setFeedback(undefined);
-      const selectedTemplate = templates.find((template) => template.id === selectedTemplateId);
-      const templateSnapshot = selectedTemplate
-        ? buildCampaignNpcSnapshotFromTemplate({
-            campaignId,
-            name: entityName,
-            template: selectedTemplate
-          })
-        : {
-            actorClass: "campaign_npc" as const,
-            campaignId
-          };
-
-      const entity = await createReusableEntityOnServer({
-        campaignId,
-        description: entityDescription,
-        kind: entityKind,
-        name: entityName,
-        snapshot: {
-          ...templateSnapshot,
-          allegiance: entityAllegiance.trim() || undefined,
-          roleLabel: entityRoleLabel.trim() || undefined,
-          tags: entityTags
-            .split(",")
-            .map((tag) => tag.trim())
-            .filter(Boolean)
-        }
-      });
-
-      setFeedback(`Created campaign NPC ${entity.name}.`);
-      setEntityName("");
-      setEntityDescription("");
-      setEntityRoleLabel("");
-      setEntityAllegiance("");
-      setEntityTags("");
-      await refreshPage();
-    } catch (caughtError) {
-      setError(caughtError instanceof Error ? caughtError.message : "Unable to create entity.");
-    }
-  }
-
-  function handleApplyTemplate() {
-    const selectedTemplate = templates.find((template) => template.id === selectedTemplateId);
-
-    if (!selectedTemplate) {
-      return;
-    }
-
-    const metadata = getCampaignActorMetadata(selectedTemplate);
-
-    setEntityName(selectedTemplate.name);
-    setEntityDescription(selectedTemplate.description ?? "");
-    setEntityKind(selectedTemplate.kind);
-    setEntityAllegiance("");
-    setEntityRoleLabel(metadata.roleLabel ?? "");
-    setEntityTags(metadata.tags?.join(", ") ?? "");
-    setFeedback(`Loaded template ${selectedTemplate.name} into the campaign NPC form.`);
   }
 
   async function handleCreateAsset() {
@@ -447,7 +513,7 @@ export default function CampaignDetailPageContent({
           }}
         >
           <h2 style={{ margin: 0 }}>Campaign flow</h2>
-          <div>This page is the in-campaign home for overview, roster, NPCs, assets, and scenarios.</div>
+          <div>This page is the in-campaign home for overview, roster, assets, and scenarios.</div>
           <div>Scenarios belong to this campaign and handle session-level setup.</div>
           <div>Encounters belong inside scenarios and lead onward to the player combat screen.</div>
         </section>
@@ -465,16 +531,42 @@ export default function CampaignDetailPageContent({
           </p>
         </div>
 
-        <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
-          {rosterFilterOptions.map((option) => (
+        <div style={{ display: "grid", gap: "0.6rem" }}>
+          <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+            <strong>Membership</strong>
+            {[
+              { id: "all" as const, label: "All" },
+              { id: "inCampaign" as const, label: "In campaign" },
+              { id: "otherCampaigns" as const, label: "Other campaigns" }
+            ].map((option) => (
+              <button
+                key={option.id}
+                onClick={() => setRosterMembershipFilter(option.id)}
+                style={{
+                  background: rosterMembershipFilter === option.id ? "#283426" : "#f6f5ef",
+                  border: "1px solid #bfc8ba",
+                  borderRadius: 999,
+                  color: rosterMembershipFilter === option.id ? "#fff" : "#283426",
+                  padding: "0.25rem 0.65rem"
+                }}
+                type="button"
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+
+          <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+            <strong>Type</strong>
+            {rosterTypeFilterOptions.map((option) => (
             <button
               key={option.id}
-              onClick={() => setRosterFilter(option.id)}
+              onClick={() => setRosterTypeFilter(option.id)}
               style={{
-                background: rosterFilter === option.id ? "#283426" : "#f6f5ef",
+                background: rosterTypeFilter === option.id ? "#283426" : "#f6f5ef",
                 border: "1px solid #bfc8ba",
                 borderRadius: 999,
-                color: rosterFilter === option.id ? "#fff" : "#283426",
+                color: rosterTypeFilter === option.id ? "#fff" : "#283426",
                 padding: "0.25rem 0.65rem"
               }}
               type="button"
@@ -482,24 +574,63 @@ export default function CampaignDetailPageContent({
               {option.label}
             </button>
           ))}
-          <input
-            onChange={(event) => setRosterSearch(event.target.value)}
-            placeholder="Search roster candidates"
-            style={{ minWidth: 220 }}
-            value={rosterSearch}
-          />
+          </div>
+
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+            <select
+              onChange={(event) => setRosterCivilizationFilter(event.target.value)}
+              value={rosterCivilizationFilter}
+            >
+              <option value="">All civilizations</option>
+              {rosterCivilizationOptions.map((civilization) => (
+                <option key={civilization} value={civilization}>
+                  {civilization}
+                </option>
+              ))}
+            </select>
+            <select
+              onChange={(event) => setRosterProfessionFilter(event.target.value)}
+              value={rosterProfessionFilter}
+            >
+              <option value="">All professions</option>
+              {rosterProfessionOptions.map((profession) => (
+                <option key={profession} value={profession}>
+                  {profession}
+                </option>
+              ))}
+            </select>
+            <select
+              onChange={(event) => setRosterSkillGroupFilter(event.target.value)}
+              value={rosterSkillGroupFilter}
+            >
+              <option value="">All skill groups</option>
+              {rosterSkillGroupOptions.map((group) => (
+                <option key={group} value={group}>
+                  {group}
+                </option>
+              ))}
+            </select>
+            <input
+              onChange={(event) => setRosterSearch(event.target.value)}
+              placeholder="Search name, type, profession, civilization"
+              style={{ minWidth: 260 }}
+              value={rosterSearch}
+            />
+          </div>
         </div>
 
         {filteredRosterCandidates.length > 0 ? (
           <div style={{ overflowX: "auto" }}>
-            <table style={{ borderCollapse: "collapse", minWidth: 640, width: "100%" }}>
+            <table style={{ borderCollapse: "collapse", minWidth: 860, width: "100%" }}>
               <thead>
                 <tr style={{ borderBottom: "1px solid #d9ddd8", textAlign: "left" }}>
                   <th style={{ padding: "0.5rem 0.75rem 0.5rem 0", textAlign: "center" }}>In campaign</th>
                   <th style={{ padding: "0.5rem 0.75rem" }}>Name</th>
                   <th style={{ padding: "0.5rem 0.75rem" }}>Type</th>
-                  <th style={{ padding: "0.5rem 0.75rem" }}>Source</th>
-                  <th style={{ padding: "0.5rem 0" }}>Kind</th>
+                  <th style={{ padding: "0.5rem 0.75rem" }}>Civilization</th>
+                  <th style={{ padding: "0.5rem 0.75rem" }}>Profession</th>
+                  <th style={{ padding: "0.5rem 0.75rem" }}>Skill groups</th>
+                  <th style={{ padding: "0.5rem 0" }}>Source</th>
                 </tr>
               </thead>
               <tbody>
@@ -522,8 +653,17 @@ export default function CampaignDetailPageContent({
                       <strong>{candidate.name}</strong>
                     </td>
                     <td style={{ padding: "0.6rem 0.75rem" }}>{candidate.typeLabel}</td>
-                    <td style={{ padding: "0.6rem 0.75rem" }}>{candidate.sourceLabel}</td>
-                    <td style={{ padding: "0.6rem 0" }}>{candidate.kindLabel}</td>
+                    <td style={{ padding: "0.6rem 0.75rem" }}>{candidate.civilizationLabel}</td>
+                    <td style={{ padding: "0.6rem 0.75rem" }}>{candidate.professionLabel}</td>
+                    <td style={{ padding: "0.6rem 0.75rem" }}>
+                      {candidate.skillGroups.length > 0
+                        ? candidate.skillGroups.slice(0, 3).join(", ")
+                        : "—"}
+                      {candidate.skillGroups.length > 3 ? ` +${candidate.skillGroups.length - 3}` : ""}
+                    </td>
+                    <td style={{ padding: "0.6rem 0" }}>
+                      {candidate.sourceLabel} · {candidate.kindLabel}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -632,114 +772,6 @@ export default function CampaignDetailPageContent({
           </div>
         ) : (
           <div>No scenarios yet.</div>
-        )}
-      </section>
-
-      <section style={{ border: "1px solid #d9ddd8", borderRadius: 12, display: "grid", gap: "0.75rem", padding: "1rem" }}>
-        <div style={{ display: "grid", gap: "0.35rem" }}>
-          <h2 style={{ margin: 0 }}>Create campaign NPC</h2>
-          <p style={{ margin: 0 }}>
-            Campaign NPCs are persistent individuals tied to this campaign. Reusable archetypes are
-            authored in the <Link href="/templates">Templates</Link> library.
-          </p>
-        </div>
-        {templates.length > 0 ? (
-          <div style={{ display: "grid", gap: "0.5rem" }}>
-            <label style={{ display: "grid", gap: "0.25rem" }}>
-              <span>Start from template</span>
-              <select
-                onChange={(event) => setSelectedTemplateId(event.target.value)}
-                value={selectedTemplateId}
-              >
-                {templates.map((template) => (
-                  <option key={template.id} value={template.id}>
-                    {template.name} ({template.kind})
-                  </option>
-                ))}
-              </select>
-            </label>
-            <div>
-              <button onClick={handleApplyTemplate} type="button">
-                Use template values
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div>No global templates yet. Create one in the Templates library if you want a reusable starting point.</div>
-        )}
-        <input
-          onChange={(event) => setEntityName(event.target.value)}
-          placeholder="NPC name"
-          value={entityName}
-        />
-        <textarea
-          onChange={(event) => setEntityDescription(event.target.value)}
-          placeholder="Description"
-          rows={2}
-          value={entityDescription}
-        />
-        <select
-          onChange={(event) => setEntityKind(event.target.value as ReusableEntity["kind"])}
-          value={entityKind}
-        >
-          <option value="npc">NPC</option>
-          <option value="monster">Monster</option>
-          <option value="animal">Animal</option>
-        </select>
-        <input
-          onChange={(event) => setEntityRoleLabel(event.target.value)}
-          placeholder="Role in campaign (optional)"
-          value={entityRoleLabel}
-        />
-        <input
-          onChange={(event) => setEntityAllegiance(event.target.value)}
-          placeholder="Allegiance or faction (optional)"
-          value={entityAllegiance}
-        />
-        <input
-          onChange={(event) => setEntityTags(event.target.value)}
-          placeholder="Tags (comma-separated, optional)"
-          value={entityTags}
-        />
-        <div>
-          <button onClick={() => void handleCreateEntity()} type="button">
-            Create campaign NPC
-          </button>
-        </div>
-      </section>
-
-      <section style={{ display: "grid", gap: "0.75rem" }}>
-        <h2 style={{ margin: 0 }}>Campaign NPCs</h2>
-        <p style={{ margin: 0 }}>
-          Persistent individuals for this campaign. Scenario pages can still pull from both the
-          global template library and this roster.
-        </p>
-        {splitEntities.campaignNpcs.length > 0 ? (
-          splitEntities.campaignNpcs.map((entity) => {
-            const metadata = getCampaignActorMetadata(entity);
-
-            return (
-              <div
-                key={entity.id}
-                style={{
-                  border: "1px solid #d9ddd8",
-                  borderRadius: 12,
-                  display: "grid",
-                  gap: "0.35rem",
-                  padding: "1rem"
-                }}
-              >
-                <strong>{entity.name}</strong>
-                <div>{entity.kind}</div>
-                <div>{entity.description || "No description yet."}</div>
-                {metadata.roleLabel ? <div>Role: {metadata.roleLabel}</div> : null}
-                {metadata.allegiance ? <div>Allegiance: {metadata.allegiance}</div> : null}
-                {metadata.tags?.length ? <div>Tags: {metadata.tags.join(", ")}</div> : null}
-              </div>
-            );
-          })
-        ) : (
-          <div>No campaign NPCs yet.</div>
         )}
       </section>
 
