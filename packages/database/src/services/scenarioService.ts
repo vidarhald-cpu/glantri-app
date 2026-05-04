@@ -1,6 +1,9 @@
 import type {
   Campaign,
   CampaignAsset,
+  CampaignRosterCategory,
+  CampaignRosterEntry,
+  CampaignRosterSourceType,
   ReusableEntity,
   Scenario,
   ScenarioParticipant,
@@ -83,6 +86,44 @@ export class ScenarioService {
     return this.repository.getCampaignById(campaignId);
   }
 
+  async listCampaignRosterEntries(campaignId: string): Promise<CampaignRosterEntry[]> {
+    return this.repository.listCampaignRosterEntries(campaignId);
+  }
+
+  async addCampaignRosterEntry(input: {
+    campaignId: string;
+    category: CampaignRosterCategory;
+    createdByUserId?: string | null;
+    notes?: string | null;
+    sourceId: string;
+    sourceType: CampaignRosterSourceType;
+  }): Promise<CampaignRosterEntry> {
+    const labelSnapshot = await this.resolveCampaignRosterLabel(input);
+
+    return this.repository.createCampaignRosterEntry({
+      campaignId: input.campaignId,
+      category: input.category,
+      createdByUserId: input.createdByUserId,
+      labelSnapshot,
+      notes: input.notes?.trim() || null,
+      sourceId: input.sourceId,
+      sourceType: input.sourceType
+    });
+  }
+
+  async removeCampaignRosterEntry(input: {
+    campaignId: string;
+    rosterEntryId: string;
+  }): Promise<void> {
+    const entry = await this.repository.getCampaignRosterEntryById(input.rosterEntryId);
+
+    if (!entry || entry.campaignId !== input.campaignId) {
+      throw new Error("Campaign roster entry not found.");
+    }
+
+    await this.repository.deleteCampaignRosterEntry(input.rosterEntryId);
+  }
+
   async createScenario(input: {
     campaignId: string;
     description?: string;
@@ -107,6 +148,38 @@ export class ScenarioService {
 
   async listScenariosByCampaignPlayerAccess(campaignId: string, userId: string): Promise<Scenario[]> {
     return this.repository.listScenariosByCampaignPlayerAccess(campaignId, userId);
+  }
+
+  private async resolveCampaignRosterLabel(input: {
+    category: CampaignRosterCategory;
+    sourceId: string;
+    sourceType: CampaignRosterSourceType;
+  }): Promise<string> {
+    if (input.sourceType === "character") {
+      const character = await this.characterService.getCharacterById(input.sourceId);
+
+      if (!character) {
+        throw new Error("Character not found.");
+      }
+
+      return character.name;
+    }
+
+    const entity = await this.repository.getReusableEntityById(input.sourceId);
+
+    if (!entity) {
+      throw new Error("Reusable entity not found.");
+    }
+
+    if (input.sourceType === "template" && input.category !== "template") {
+      throw new Error("Template roster entries must use the template category.");
+    }
+
+    if (input.sourceType === "reusableEntity" && input.category === "template") {
+      throw new Error("Reusable entity roster entries cannot use the template category.");
+    }
+
+    return entity.name;
   }
 
   async getScenarioById(scenarioId: string): Promise<Scenario | null> {

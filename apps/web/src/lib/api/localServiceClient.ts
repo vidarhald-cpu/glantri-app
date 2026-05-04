@@ -3,6 +3,9 @@ import type { CanonicalContent } from "@glantri/content";
 import type {
   Campaign,
   CampaignAsset,
+  CampaignRosterCategory,
+  CampaignRosterEntry,
+  CampaignRosterSourceType,
   EncounterSession,
   ReusableEntity,
   Scenario,
@@ -471,6 +474,52 @@ export async function createScenarioOnServer(input: {
   );
 
   return payload.scenario;
+}
+
+export async function loadCampaignRoster(campaignId: string): Promise<CampaignRosterEntry[]> {
+  const payload = await sendJson<{ roster: CampaignRosterEntry[] }>(
+    `/campaigns/${campaignId}/roster`,
+    {
+      method: "GET"
+    }
+  );
+
+  return payload.roster;
+}
+
+export async function addCampaignRosterEntryOnServer(input: {
+  campaignId: string;
+  category: CampaignRosterCategory;
+  notes?: string;
+  sourceId: string;
+  sourceType: CampaignRosterSourceType;
+}): Promise<CampaignRosterEntry> {
+  const payload = await sendJson<{ rosterEntry: CampaignRosterEntry }>(
+    `/campaigns/${input.campaignId}/roster`,
+    {
+      body: JSON.stringify({
+        category: input.category,
+        notes: input.notes,
+        sourceId: input.sourceId,
+        sourceType: input.sourceType
+      }),
+      method: "POST"
+    }
+  );
+
+  return payload.rosterEntry;
+}
+
+export async function removeCampaignRosterEntryOnServer(input: {
+  campaignId: string;
+  rosterEntryId: string;
+}): Promise<void> {
+  await sendJson<{ ok: true }>(
+    `/campaigns/${input.campaignId}/roster/${input.rosterEntryId}`,
+    {
+      method: "DELETE"
+    }
+  );
 }
 
 export async function loadCampaignEntities(campaignId: string): Promise<ReusableEntity[]> {

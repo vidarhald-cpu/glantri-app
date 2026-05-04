@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type {
   Campaign,
+  CampaignRosterEntry,
   CharacterBuild,
   ReusableEntity,
   Scenario,
@@ -84,6 +85,7 @@ function createScenarioRepositoryStub() {
   };
   const participants: ScenarioParticipant[] = [];
   const eventLogs: ScenarioEventLog[] = [];
+  const rosterEntries: CampaignRosterEntry[] = [];
 
   const repository: ScenarioRepository = {
     createCampaign: async () => {
@@ -183,6 +185,45 @@ function createScenarioRepositoryStub() {
     updateCampaignAssetVisibility: async () => {
       throw new Error("Not implemented in test stub.");
     },
+    createCampaignRosterEntry: async (input) => {
+      const existing = rosterEntries.find(
+        (entry) =>
+          entry.campaignId === input.campaignId &&
+          entry.sourceType === input.sourceType &&
+          entry.sourceId === input.sourceId
+      );
+
+      if (existing) {
+        return existing;
+      }
+
+      const now = "2026-04-21T00:00:00.000Z";
+      const rosterEntry: CampaignRosterEntry = {
+        campaignId: input.campaignId,
+        category: input.category,
+        createdAt: now,
+        createdByUserId: input.createdByUserId ?? undefined,
+        id: `roster-${rosterEntries.length + 1}`,
+        labelSnapshot: input.labelSnapshot ?? undefined,
+        notes: input.notes ?? undefined,
+        sourceId: input.sourceId,
+        sourceType: input.sourceType,
+        updatedAt: now
+      };
+      rosterEntries.push(rosterEntry);
+      return rosterEntry;
+    },
+    deleteCampaignRosterEntry: async (entryId) => {
+      const index = rosterEntries.findIndex((entry) => entry.id === entryId);
+
+      if (index >= 0) {
+        rosterEntries.splice(index, 1);
+      }
+    },
+    getCampaignRosterEntryById: async (entryId) =>
+      rosterEntries.find((entry) => entry.id === entryId) ?? null,
+    listCampaignRosterEntries: async (campaignId) =>
+      rosterEntries.filter((entry) => entry.campaignId === campaignId),
     createScenarioEventLog: async (input) => {
       const eventLog: ScenarioEventLog = {
         actorUserId: input.actorUserId ?? undefined,
@@ -202,7 +243,7 @@ function createScenarioRepositoryStub() {
     listScenarioEventLogs: async () => eventLogs
   };
 
-  return { campaigns, eventLogs, participants, repository, scenario };
+  return { campaigns, eventLogs, participants, repository, rosterEntries, scenario };
 }
 
 describe("ScenarioService controller assignment", () => {
@@ -413,5 +454,128 @@ describe("ScenarioService access listing", () => {
         name: "Arena Bout",
       }),
     ]);
+  });
+});
+
+describe("ScenarioService campaign roster", () => {
+  it("links characters, reusable entities, and templates without creating scenario participants", async () => {
+    const { participants, repository, rosterEntries } = createScenarioRepositoryStub();
+    const characters = new Map([
+      ["character-1", createCharacterRecord({ id: "character-1", name: "Ari", ownerId: "user-1" })]
+    ]);
+    const reusableEntities = new Map<string, ReusableEntity>([
+      [
+        "entity-1",
+        {
+          createdAt: "2026-04-21T00:00:00.000Z",
+          gmUserId: "gm-1",
+          id: "entity-1",
+          kind: "npc",
+          name: "Guard Captain",
+          snapshot: {
+            actorClass: "campaign_npc",
+            campaignId: "campaign-1"
+          },
+          updatedAt: "2026-04-21T00:00:00.000Z"
+        }
+      ],
+      [
+        "template-1",
+        {
+          createdAt: "2026-04-21T00:00:00.000Z",
+          gmUserId: "gm-1",
+          id: "template-1",
+          kind: "npc",
+          name: "Bandit Template",
+          snapshot: {
+            actorClass: "template"
+          },
+          updatedAt: "2026-04-21T00:00:00.000Z"
+        }
+      ]
+    ]);
+    repository.getReusableEntityById = async (entityId) => reusableEntities.get(entityId) ?? null;
+    const service = new ScenarioService(
+      repository,
+      {
+        getCharacterById: async (characterId: string) => characters.get(characterId) ?? null
+      } as never
+    );
+
+    await expect(
+      service.addCampaignRosterEntry({
+        campaignId: "campaign-1",
+        category: "pc",
+        sourceId: "character-1",
+        sourceType: "character"
+      })
+    ).resolves.toMatchObject({
+      category: "pc",
+      labelSnapshot: "Ari",
+      sourceType: "character"
+    });
+    await expect(
+      service.addCampaignRosterEntry({
+        campaignId: "campaign-1",
+        category: "npc",
+        sourceId: "entity-1",
+        sourceType: "reusableEntity"
+      })
+    ).resolves.toMatchObject({
+      category: "npc",
+      labelSnapshot: "Guard Captain",
+      sourceType: "reusableEntity"
+    });
+    await expect(
+      service.addCampaignRosterEntry({
+        campaignId: "campaign-1",
+        category: "template",
+        sourceId: "template-1",
+        sourceType: "template"
+      })
+    ).resolves.toMatchObject({
+      category: "template",
+      labelSnapshot: "Bandit Template",
+      sourceType: "template"
+    });
+
+    expect(rosterEntries).toHaveLength(3);
+    expect(participants).toHaveLength(0);
+  });
+
+  it("dedupes duplicate roster links and can remove a roster entry", async () => {
+    const { repository, rosterEntries } = createScenarioRepositoryStub();
+    const characters = new Map([
+      ["character-1", createCharacterRecord({ id: "character-1", name: "Ari", ownerId: "user-1" })]
+    ]);
+    const service = new ScenarioService(
+      repository,
+      {
+        getCharacterById: async (characterId: string) => characters.get(characterId) ?? null
+      } as never
+    );
+
+    const first = await service.addCampaignRosterEntry({
+      campaignId: "campaign-1",
+      category: "pc",
+      sourceId: "character-1",
+      sourceType: "character"
+    });
+    const duplicate = await service.addCampaignRosterEntry({
+      campaignId: "campaign-1",
+      category: "pc",
+      sourceId: "character-1",
+      sourceType: "character"
+    });
+
+    expect(duplicate.id).toBe(first.id);
+    expect(rosterEntries).toHaveLength(1);
+
+    await service.removeCampaignRosterEntry({
+      campaignId: "campaign-1",
+      rosterEntryId: first.id
+    });
+
+    await expect(service.listCampaignRosterEntries("campaign-1")).resolves.toEqual([]);
   });
 });

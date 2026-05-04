@@ -142,6 +142,18 @@ enum ReusableEntityKind {
   animal
 }
 
+enum CampaignRosterSourceType {
+  character
+  reusableEntity
+  template
+}
+
+enum CampaignRosterCategory {
+  pc
+  npc
+  template
+}
+
 model Character {
   id               String                    @id @default(cuid())
   name             String
@@ -319,6 +331,7 @@ model Campaign {
   updatedAt   DateTime        @updatedAt
   assets      CampaignAsset[]
   gmUser      User            @relation(fields: [gmUserId], references: [id], onDelete: Cascade)
+  rosterEntries CampaignRosterEntry[]
   scenarios   Scenario[]
 }
 
@@ -411,6 +424,24 @@ model CampaignAsset {
   mappedScenarios Scenario[]     @relation("ScenarioMapAsset")
 
   @@index([campaignId])
+}
+
+model CampaignRosterEntry {
+  id              String                   @id @default(cuid())
+  campaignId      String
+  sourceType      CampaignRosterSourceType
+  sourceId        String
+  category        CampaignRosterCategory
+  labelSnapshot   String?
+  notes           String?
+  createdByUserId String?
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
+  campaign        Campaign                 @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@index([campaignId])
+  @@index([sourceType, sourceId])
+  @@unique([campaignId, sourceType, sourceId])
 }
 
 model ScenarioEventLog {

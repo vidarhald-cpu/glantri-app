@@ -1,5 +1,6 @@
 import {
   campaignAssetSchema,
+  campaignRosterEntrySchema,
   campaignSchema,
   reusableEntitySchema,
   scenarioEventLogSchema,
@@ -8,7 +9,10 @@ import {
   scenarioSchema,
   type Campaign,
   type CampaignAsset,
+  type CampaignRosterEntry,
   type CampaignSettings,
+  type CampaignRosterCategory,
+  type CampaignRosterSourceType,
   type ReusableEntity,
   type Scenario,
   type ScenarioEventLog,
@@ -206,6 +210,32 @@ function mapScenarioEventLog(record: {
   });
 }
 
+function mapCampaignRosterEntry(record: {
+  campaignId: string;
+  category: string;
+  createdAt: Date;
+  createdByUserId: string | null;
+  id: string;
+  labelSnapshot: string | null;
+  notes: string | null;
+  sourceId: string;
+  sourceType: string;
+  updatedAt: Date;
+}): CampaignRosterEntry {
+  return campaignRosterEntrySchema.parse({
+    campaignId: record.campaignId,
+    category: record.category,
+    createdAt: record.createdAt.toISOString(),
+    createdByUserId: record.createdByUserId ?? undefined,
+    id: record.id,
+    labelSnapshot: record.labelSnapshot ?? undefined,
+    notes: record.notes ?? undefined,
+    sourceId: record.sourceId,
+    sourceType: record.sourceType,
+    updatedAt: record.updatedAt.toISOString()
+  });
+}
+
 export interface ScenarioRepository {
   createCampaign(input: {
     description: string;
@@ -309,6 +339,18 @@ export interface ScenarioRepository {
     assetId: string,
     visibility: CampaignAsset["visibility"]
   ): Promise<CampaignAsset>;
+  createCampaignRosterEntry(input: {
+    campaignId: string;
+    category: CampaignRosterCategory;
+    createdByUserId?: string | null;
+    labelSnapshot?: string | null;
+    notes?: string | null;
+    sourceId: string;
+    sourceType: CampaignRosterSourceType;
+  }): Promise<CampaignRosterEntry>;
+  deleteCampaignRosterEntry(entryId: string): Promise<void>;
+  getCampaignRosterEntryById(entryId: string): Promise<CampaignRosterEntry | null>;
+  listCampaignRosterEntries(campaignId: string): Promise<CampaignRosterEntry[]>;
   createScenarioEventLog(input: {
     actorUserId?: string | null;
     eventType: string;
@@ -614,6 +656,55 @@ export function createPrismaScenarioRepository(): ScenarioRepository {
       });
 
       return mapCampaignAsset(record);
+    },
+    async createCampaignRosterEntry(input) {
+      const existing = await prisma.campaignRosterEntry.findUnique({
+        where: {
+          campaignId_sourceType_sourceId: {
+            campaignId: input.campaignId,
+            sourceId: input.sourceId,
+            sourceType: input.sourceType
+          }
+        }
+      });
+
+      if (existing) {
+        return mapCampaignRosterEntry(existing);
+      }
+
+      const record = await prisma.campaignRosterEntry.create({
+        data: {
+          campaignId: input.campaignId,
+          category: input.category,
+          createdByUserId: input.createdByUserId ?? null,
+          labelSnapshot: input.labelSnapshot ?? null,
+          notes: input.notes ?? null,
+          sourceId: input.sourceId,
+          sourceType: input.sourceType
+        }
+      });
+
+      return mapCampaignRosterEntry(record);
+    },
+    async deleteCampaignRosterEntry(entryId) {
+      await prisma.campaignRosterEntry.delete({
+        where: { id: entryId }
+      });
+    },
+    async getCampaignRosterEntryById(entryId) {
+      const record = await prisma.campaignRosterEntry.findUnique({
+        where: { id: entryId }
+      });
+
+      return record ? mapCampaignRosterEntry(record) : null;
+    },
+    async listCampaignRosterEntries(campaignId) {
+      const records = await prisma.campaignRosterEntry.findMany({
+        orderBy: { createdAt: "desc" },
+        where: { campaignId }
+      });
+
+      return records.map(mapCampaignRosterEntry);
     },
     async createScenarioEventLog(input) {
       const record = await prisma.scenarioEventLog.create({

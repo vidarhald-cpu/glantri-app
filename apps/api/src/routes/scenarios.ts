@@ -4,6 +4,8 @@ import { CharacterService, EncounterService, ScenarioService } from "@glantri/da
 import {
   buildScenarioPlayerProjection,
   campaignAssetTypeSchema,
+  campaignRosterCategorySchema,
+  campaignRosterSourceTypeSchema,
   campaignSettingsSchema,
   campaignStatusSchema,
   encounterSessionSchema,
@@ -496,6 +498,99 @@ export const scenariosRoutes: FastifyPluginAsync = async (app) => {
     } catch (error) {
       return reply.code(400).send({
         error: error instanceof Error ? error.message : "Unable to create scenario."
+      });
+    }
+  });
+
+  app.get("/campaigns/:campaignId/roster", async (request, reply) => {
+    const user = await requireAdminUser(request, reply);
+
+    if (!user) {
+      return;
+    }
+
+    try {
+      const campaignId = parseId(request.params, "campaignId", "Campaign id");
+      const campaign = await scenarioService.getCampaignById(campaignId);
+
+      if (!campaign || campaign.gmUserId !== user.id) {
+        return reply.code(404).send({
+          error: "Campaign not found."
+        });
+      }
+
+      const roster = await scenarioService.listCampaignRosterEntries(campaignId);
+
+      return { roster };
+    } catch (error) {
+      return reply.code(400).send({
+        error: error instanceof Error ? error.message : "Unable to list campaign roster."
+      });
+    }
+  });
+
+  app.post("/campaigns/:campaignId/roster", async (request, reply) => {
+    const user = await requireAdminUser(request, reply);
+
+    if (!user) {
+      return;
+    }
+
+    try {
+      const campaignId = parseId(request.params, "campaignId", "Campaign id");
+      const campaign = await scenarioService.getCampaignById(campaignId);
+
+      if (!campaign || campaign.gmUserId !== user.id) {
+        return reply.code(404).send({
+          error: "Campaign not found."
+        });
+      }
+
+      const body = parseBodyObject(request.body, "Campaign roster payload");
+      const rosterEntry = await scenarioService.addCampaignRosterEntry({
+        campaignId,
+        category: campaignRosterCategorySchema.parse(body.category),
+        createdByUserId: user.id,
+        notes: parseOptionalString(body, "notes"),
+        sourceId: parseRequiredString(body, "sourceId"),
+        sourceType: campaignRosterSourceTypeSchema.parse(body.sourceType)
+      });
+
+      return { rosterEntry };
+    } catch (error) {
+      return reply.code(400).send({
+        error: error instanceof Error ? error.message : "Unable to add campaign roster entry."
+      });
+    }
+  });
+
+  app.delete("/campaigns/:campaignId/roster/:rosterEntryId", async (request, reply) => {
+    const user = await requireAdminUser(request, reply);
+
+    if (!user) {
+      return;
+    }
+
+    try {
+      const campaignId = parseId(request.params, "campaignId", "Campaign id");
+      const rosterEntryId = parseId(request.params, "rosterEntryId", "Roster entry id");
+      const campaign = await scenarioService.getCampaignById(campaignId);
+
+      if (!campaign || campaign.gmUserId !== user.id) {
+        return reply.code(404).send({
+          error: "Campaign not found."
+        });
+      }
+
+      await scenarioService.removeCampaignRosterEntry({
+        campaignId,
+        rosterEntryId
+      });
+
+      return { ok: true };
+    } catch (error) {
+      return reply.code(400).send({
+        error: error instanceof Error ? error.message : "Unable to remove campaign roster entry."
       });
     }
   });
