@@ -99,7 +99,6 @@ describe("ScenarioDetailPageContent GM scenario manager UI", () => {
   it("renders filters on Encounter Assignment", () => {
     const source = readScenarioDetailSource();
 
-    expect(source).toContain("Encounter assignment status filter");
     expect(source).toContain("Encounter assignment type filter");
     expect(source).toContain("Temporary actors");
     expect(source).toContain("All civilizations");
@@ -107,12 +106,17 @@ describe("ScenarioDetailPageContent GM scenario manager UI", () => {
     expect(source).toContain("All skill groups");
     expect(source).toContain("Search encounter participants");
     expect(source).toContain("filteredConcreteParticipants");
+    expect(source).toContain("participant.isActive &&");
+    expect(source).not.toContain("Encounter assignment status filter");
   });
 
   it("renders campaign roster filters for adding scenario participants", () => {
     const source = readScenarioDetailSource();
+    const rosterSource = source.slice(
+      source.indexOf(">Add from campaign roster</h2>"),
+      source.indexOf(">Template sources</h2>")
+    );
 
-    expect(source).toContain("Campaign roster status filter");
     expect(source).toContain("Campaign roster type filter");
     expect(source).toContain("Campaign roster controller filter");
     expect(source).toContain("Players");
@@ -123,6 +127,10 @@ describe("ScenarioDetailPageContent GM scenario manager UI", () => {
     expect(source).toContain("Search campaign roster candidates");
     expect(source).toContain("filteredScenarioRosterCandidates");
     expect(source).toContain("controllerLabel");
+    expect(source).toContain("!candidate.existingParticipant?.isActive");
+    expect(rosterSource).toContain(">Add</th>");
+    expect(rosterSource).not.toContain(">Status</th>");
+    expect(source).not.toContain("Campaign roster status filter");
     expect(source).not.toContain("${user.displayName} (${user.email})");
   });
 

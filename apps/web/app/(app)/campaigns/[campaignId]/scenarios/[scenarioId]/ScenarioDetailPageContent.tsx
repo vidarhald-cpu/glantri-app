@@ -55,13 +55,11 @@ interface ScenarioRosterCandidate {
   controllerFilter: ScenarioControllerFilter;
   controllerLabel: string;
   existingParticipant?: ScenarioParticipant;
-  member: boolean;
   name: string;
   professionLabel: string;
   rosterEntry: CampaignRosterEntry;
   skillGroups: string[];
   sourceKind: string;
-  statusFilter: ScenarioParticipantMembershipFilter;
   typeFilter: ScenarioParticipantTypeFilter;
   typeLabel: string;
 }
@@ -71,7 +69,6 @@ interface TemplateSource {
   label: string;
 }
 
-type ScenarioParticipantMembershipFilter = "all" | "active" | "available" | "inactive";
 type ScenarioParticipantTypeFilter = "all" | "pc" | "npc" | "temporary" | "monster" | "other";
 type ScenarioControllerFilter = "all" | "players" | "gms";
 
@@ -175,16 +172,6 @@ function readSnapshotMetadata(snapshot: unknown): {
   };
 }
 
-function getScenarioParticipantStatusFilter(
-  participant: ScenarioParticipant | undefined
-): ScenarioParticipantMembershipFilter {
-  if (!participant) {
-    return "available";
-  }
-
-  return participant.isActive ? "active" : "inactive";
-}
-
 function getScenarioParticipantType(input: {
   characterId?: string;
   entityId?: string;
@@ -264,8 +251,6 @@ export default function ScenarioDetailPageContent({
   const [temporaryActorName, setTemporaryActorName] = useState("");
   const [temporaryActorRole, setTemporaryActorRole] = useState<ScenarioParticipant["role"]>("npc");
 
-  const [rosterMembershipFilter, setRosterMembershipFilter] =
-    useState<ScenarioParticipantMembershipFilter>("all");
   const [rosterTypeFilter, setRosterTypeFilter] =
     useState<ScenarioParticipantTypeFilter>("all");
   const [rosterControllerFilter, setRosterControllerFilter] =
@@ -275,8 +260,6 @@ export default function ScenarioDetailPageContent({
   const [rosterSkillGroupFilter, setRosterSkillGroupFilter] = useState("");
   const [rosterSearch, setRosterSearch] = useState("");
 
-  const [participantMembershipFilter, setParticipantMembershipFilter] =
-    useState<ScenarioParticipantMembershipFilter>("all");
   const [participantTypeFilter, setParticipantTypeFilter] =
     useState<ScenarioParticipantTypeFilter>("all");
   const [participantCivilizationFilter, setParticipantCivilizationFilter] = useState("");
@@ -359,7 +342,6 @@ export default function ScenarioDetailPageContent({
             controllerFilter,
             controllerLabel: formatUserLabel(controllerUserId),
             existingParticipant,
-            member: Boolean(existingParticipant?.isActive),
             name,
             professionLabel:
               character?.build.professionId ??
@@ -371,7 +353,6 @@ export default function ScenarioDetailPageContent({
               character?.build.progression.skillGroups.map((group) => group.groupId) ??
               entitySnapshotMetadata.skillGroups,
             sourceKind,
-            statusFilter: getScenarioParticipantStatusFilter(existingParticipant),
             typeFilter: participantType.typeFilter,
             typeLabel: participantType.label
           };
@@ -433,7 +414,8 @@ export default function ScenarioDetailPageContent({
     const templateIds = new Set(templateSources.map((source) => source.entity.id));
 
     return participants.filter(
-      (participant) => !(participant.entityId && templateIds.has(participant.entityId))
+      (participant) =>
+        participant.isActive && !(participant.entityId && templateIds.has(participant.entityId))
     );
   }, [participants, templateSources]);
   const participantTypeFilterOptions = useMemo(() => {
@@ -488,7 +470,11 @@ export default function ScenarioDetailPageContent({
     [concreteParticipants, scenarioRosterCandidates]
   );
   const rosterTypeFilterOptions = useMemo(() => {
-    const rosterTypes = new Set(scenarioRosterCandidates.map((candidate) => candidate.typeFilter));
+    const rosterTypes = new Set(
+      scenarioRosterCandidates
+        .filter((candidate) => !candidate.existingParticipant?.isActive)
+        .map((candidate) => candidate.typeFilter)
+    );
 
     return [
       { id: "all" as const, label: "All types" },
@@ -502,8 +488,7 @@ export default function ScenarioDetailPageContent({
     const search = rosterSearch.trim().toLowerCase();
 
     return scenarioRosterCandidates.filter((candidate) => {
-      const matchesMembership =
-        rosterMembershipFilter === "all" || candidate.statusFilter === rosterMembershipFilter;
+      const isAvailableForScenario = !candidate.existingParticipant?.isActive;
       const matchesType = rosterTypeFilter === "all" || candidate.typeFilter === rosterTypeFilter;
       const matchesController =
         rosterControllerFilter === "all" || candidate.controllerFilter === rosterControllerFilter;
@@ -524,7 +509,7 @@ export default function ScenarioDetailPageContent({
         candidate.skillGroups.some((group) => group.toLowerCase().includes(search));
 
       return (
-        matchesMembership &&
+        isAvailableForScenario &&
         matchesType &&
         matchesController &&
         matchesCivilization &&
@@ -536,7 +521,6 @@ export default function ScenarioDetailPageContent({
   }, [
     rosterCivilizationFilter,
     rosterControllerFilter,
-    rosterMembershipFilter,
     rosterProfessionFilter,
     rosterSearch,
     rosterSkillGroupFilter,
@@ -548,9 +532,6 @@ export default function ScenarioDetailPageContent({
 
     return concreteParticipants.filter((participant) => {
       const metadata = getConcreteParticipantMetadata(participant);
-      const statusFilter = getScenarioParticipantStatusFilter(participant);
-      const matchesMembership =
-        participantMembershipFilter === "all" || statusFilter === participantMembershipFilter;
       const matchesType = participantTypeFilter === "all" || metadata.typeFilter === participantTypeFilter;
       const matchesCivilization =
         !participantCivilizationFilter || metadata.civilizationLabel === participantCivilizationFilter;
@@ -568,7 +549,6 @@ export default function ScenarioDetailPageContent({
         metadata.skillGroups.some((group) => group.toLowerCase().includes(search));
 
       return (
-        matchesMembership &&
         matchesType &&
         matchesCivilization &&
         matchesProfession &&
@@ -579,7 +559,6 @@ export default function ScenarioDetailPageContent({
   }, [
     concreteParticipants,
     participantCivilizationFilter,
-    participantMembershipFilter,
     participantProfessionFilter,
     participantSearch,
     participantSkillGroupFilter,
@@ -1292,17 +1271,6 @@ export default function ScenarioDetailPageContent({
         </p>
         <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
           <select
-            aria-label="Encounter assignment status filter"
-            onChange={(event) =>
-              setParticipantMembershipFilter(event.target.value as ScenarioParticipantMembershipFilter)
-            }
-            value={participantMembershipFilter}
-          >
-            <option value="all">All</option>
-            <option value="active">Active</option>
-            <option value="inactive">Inactive</option>
-          </select>
-          <select
             aria-label="Encounter assignment type filter"
             onChange={(event) =>
               setParticipantTypeFilter(event.target.value as ScenarioParticipantTypeFilter)
@@ -1556,18 +1524,6 @@ export default function ScenarioDetailPageContent({
           <>
             <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
               <select
-                aria-label="Campaign roster status filter"
-                onChange={(event) =>
-                  setRosterMembershipFilter(event.target.value as ScenarioParticipantMembershipFilter)
-                }
-                value={rosterMembershipFilter}
-              >
-                <option value="all">All</option>
-                <option value="available">Not in scenario</option>
-                <option value="active">In scenario</option>
-                <option value="inactive">Inactive</option>
-              </select>
-              <select
                 aria-label="Campaign roster type filter"
                 onChange={(event) => setRosterTypeFilter(event.target.value as ScenarioParticipantTypeFilter)}
                 value={rosterTypeFilter}
@@ -1636,12 +1592,11 @@ export default function ScenarioDetailPageContent({
               <table style={{ borderCollapse: "collapse", minWidth: 780, width: "100%" }}>
                 <thead>
                   <tr style={{ borderBottom: "1px solid #d9ddd8", textAlign: "left" }}>
-                    <th style={{ background: "#fff", padding: "0.5rem 0.75rem 0.5rem 0", position: "sticky", textAlign: "center", top: 0 }}>Active</th>
+                    <th style={{ background: "#fff", padding: "0.5rem 0.75rem 0.5rem 0", position: "sticky", textAlign: "center", top: 0 }}>Add</th>
                     <th style={{ background: "#fff", padding: "0.5rem 0.75rem", position: "sticky", top: 0 }}>Name</th>
                     <th style={{ background: "#fff", padding: "0.5rem 0.75rem", position: "sticky", top: 0 }}>Type</th>
                     <th style={{ background: "#fff", padding: "0.5rem 0.75rem", position: "sticky", top: 0 }}>Source</th>
                     <th style={{ background: "#fff", padding: "0.5rem 0.75rem", position: "sticky", top: 0 }}>Controller</th>
-                    <th style={{ background: "#fff", padding: "0.5rem 0", position: "sticky", top: 0 }}>Status</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1650,7 +1605,7 @@ export default function ScenarioDetailPageContent({
                       <td style={{ padding: "0.6rem 0.75rem 0.6rem 0", textAlign: "center" }}>
                         <input
                           aria-label={`Toggle ${candidate.name} scenario participation`}
-                          checked={candidate.member}
+                          checked={false}
                           onChange={(event) =>
                             void handleRosterParticipantToggle(candidate, event.target.checked)
                           }
@@ -1663,13 +1618,6 @@ export default function ScenarioDetailPageContent({
                       <td style={{ padding: "0.6rem 0.75rem" }}>{candidate.typeLabel}</td>
                       <td style={{ padding: "0.6rem 0.75rem" }}>{candidate.sourceKind}</td>
                       <td style={{ padding: "0.6rem 0.75rem" }}>{candidate.controllerLabel}</td>
-                      <td style={{ padding: "0.6rem 0" }}>
-                        {candidate.existingParticipant
-                          ? candidate.existingParticipant.isActive
-                            ? "Active"
-                            : "Inactive"
-                          : "Available"}
-                      </td>
                     </tr>
                   ))}
                 </tbody>
