@@ -52,6 +52,8 @@ interface ScenarioDetailPageContentProps {
 
 interface ScenarioRosterCandidate {
   civilizationLabel: string;
+  controllerFilter: ScenarioControllerFilter;
+  controllerLabel: string;
   existingParticipant?: ScenarioParticipant;
   member: boolean;
   name: string;
@@ -71,6 +73,7 @@ interface TemplateSource {
 
 type ScenarioParticipantMembershipFilter = "all" | "active" | "available" | "inactive";
 type ScenarioParticipantTypeFilter = "all" | "pc" | "npc" | "temporary" | "monster" | "other";
+type ScenarioControllerFilter = "all" | "players" | "gms";
 
 const civilizationNameById = new Map(
   defaultCanonicalContent.civilizations.map((civilization) => [civilization.id, civilization.name])
@@ -257,8 +260,20 @@ export default function ScenarioDetailPageContent({
   const [encounterKind, setEncounterKind] = useState<EncounterKind>("combat");
   const [encounterTimelineLabel, setEncounterTimelineLabel] = useState("");
   const [selectedTemplateSourceId, setSelectedTemplateSourceId] = useState("");
+  const [temporaryActorCount, setTemporaryActorCount] = useState(1);
   const [temporaryActorName, setTemporaryActorName] = useState("");
   const [temporaryActorRole, setTemporaryActorRole] = useState<ScenarioParticipant["role"]>("npc");
+
+  const [rosterMembershipFilter, setRosterMembershipFilter] =
+    useState<ScenarioParticipantMembershipFilter>("all");
+  const [rosterTypeFilter, setRosterTypeFilter] =
+    useState<ScenarioParticipantTypeFilter>("all");
+  const [rosterControllerFilter, setRosterControllerFilter] =
+    useState<ScenarioControllerFilter>("all");
+  const [rosterCivilizationFilter, setRosterCivilizationFilter] = useState("");
+  const [rosterProfessionFilter, setRosterProfessionFilter] = useState("");
+  const [rosterSkillGroupFilter, setRosterSkillGroupFilter] = useState("");
+  const [rosterSearch, setRosterSearch] = useState("");
 
   const [participantMembershipFilter, setParticipantMembershipFilter] =
     useState<ScenarioParticipantMembershipFilter>("all");
@@ -328,12 +343,21 @@ export default function ScenarioDetailPageContent({
               : entity?.kind === "monster"
                 ? { label: "Monster", typeFilter: "monster" as const }
                 : { label: "NPC", typeFilter: "npc" as const };
+          const controllerUserId = existingParticipant?.controlledByUserId ?? character?.ownerId ?? undefined;
+          const controllerUser = controllerUserId ? usersById.get(controllerUserId) : undefined;
+          const controllerFilter: ScenarioControllerFilter =
+            controllerUser?.roles.some((role) => role === "admin" || role === "game_master") ||
+            !controllerUserId
+              ? "gms"
+              : "players";
 
           return {
             civilizationLabel:
               character
                 ? getCivilizationDisplayName(character.build.societyId)
                 : getCivilizationDisplayName(entitySnapshotMetadata.civilizationLabel),
+            controllerFilter,
+            controllerLabel: formatUserLabel(controllerUserId),
             existingParticipant,
             member: Boolean(existingParticipant?.isActive),
             name,
@@ -353,7 +377,7 @@ export default function ScenarioDetailPageContent({
           };
         })
         .sort((left, right) => left.name.localeCompare(right.name)),
-    [charactersById, entitiesById, participantsByRosterSource, roster]
+    [charactersById, entitiesById, participantsByRosterSource, roster, usersById]
   );
   const orderedEncounters = useMemo(
     () =>
@@ -463,6 +487,62 @@ export default function ScenarioDetailPageContent({
       ].sort(),
     [concreteParticipants, scenarioRosterCandidates]
   );
+  const rosterTypeFilterOptions = useMemo(() => {
+    const rosterTypes = new Set(scenarioRosterCandidates.map((candidate) => candidate.typeFilter));
+
+    return [
+      { id: "all" as const, label: "All types" },
+      { id: "pc" as const, label: "PCs" },
+      { id: "npc" as const, label: "NPCs" },
+      { id: "monster" as const, label: "Monsters" },
+      { id: "other" as const, label: "Other" }
+    ].filter((option) => option.id === "all" || rosterTypes.has(option.id));
+  }, [scenarioRosterCandidates]);
+  const filteredScenarioRosterCandidates = useMemo(() => {
+    const search = rosterSearch.trim().toLowerCase();
+
+    return scenarioRosterCandidates.filter((candidate) => {
+      const matchesMembership =
+        rosterMembershipFilter === "all" || candidate.statusFilter === rosterMembershipFilter;
+      const matchesType = rosterTypeFilter === "all" || candidate.typeFilter === rosterTypeFilter;
+      const matchesController =
+        rosterControllerFilter === "all" || candidate.controllerFilter === rosterControllerFilter;
+      const matchesCivilization =
+        !rosterCivilizationFilter || candidate.civilizationLabel === rosterCivilizationFilter;
+      const matchesProfession =
+        !rosterProfessionFilter || candidate.professionLabel === rosterProfessionFilter;
+      const matchesSkillGroup =
+        !rosterSkillGroupFilter || candidate.skillGroups.includes(rosterSkillGroupFilter);
+      const matchesSearch =
+        search.length === 0 ||
+        candidate.name.toLowerCase().includes(search) ||
+        candidate.typeLabel.toLowerCase().includes(search) ||
+        candidate.sourceKind.toLowerCase().includes(search) ||
+        candidate.controllerLabel.toLowerCase().includes(search) ||
+        candidate.civilizationLabel.toLowerCase().includes(search) ||
+        candidate.professionLabel.toLowerCase().includes(search) ||
+        candidate.skillGroups.some((group) => group.toLowerCase().includes(search));
+
+      return (
+        matchesMembership &&
+        matchesType &&
+        matchesController &&
+        matchesCivilization &&
+        matchesProfession &&
+        matchesSkillGroup &&
+        matchesSearch
+      );
+    });
+  }, [
+    rosterCivilizationFilter,
+    rosterControllerFilter,
+    rosterMembershipFilter,
+    rosterProfessionFilter,
+    rosterSearch,
+    rosterSkillGroupFilter,
+    rosterTypeFilter,
+    scenarioRosterCandidates
+  ]);
   const filteredConcreteParticipants = useMemo(() => {
     const search = participantSearch.trim().toLowerCase();
 
@@ -513,7 +593,7 @@ export default function ScenarioDetailPageContent({
 
   function formatUserLabel(userId: string | undefined): string {
     if (!userId) {
-      return "GM / unassigned";
+      return "—";
     }
 
     const user = usersById.get(userId);
@@ -522,7 +602,7 @@ export default function ScenarioDetailPageContent({
     }
 
     if (user.displayName) {
-      return `${user.displayName} (${user.email})`;
+      return user.displayName;
     }
 
     return user.email;
@@ -1205,115 +1285,10 @@ export default function ScenarioDetailPageContent({
       </section>
 
       <section style={{ border: "1px solid #d9ddd8", borderRadius: 12, display: "grid", gap: "0.75rem", padding: "1rem" }}>
-        <h2 style={{ margin: 0 }}>Add from campaign roster</h2>
-        <p style={{ margin: 0 }}>
-          Add existing concrete campaign roster members to this scenario. Templates stay in
-          Template sources below.
-        </p>
-        {scenarioRosterCandidates.length > 0 ? (
-          <div style={{ maxHeight: "24rem", overflow: "auto" }}>
-            <table style={{ borderCollapse: "collapse", minWidth: 780, width: "100%" }}>
-              <thead>
-                <tr style={{ borderBottom: "1px solid #d9ddd8", textAlign: "left" }}>
-                  <th style={{ background: "#fff", padding: "0.5rem 0.75rem 0.5rem 0", position: "sticky", textAlign: "center", top: 0 }}>Active</th>
-                  <th style={{ background: "#fff", padding: "0.5rem 0.75rem", position: "sticky", top: 0 }}>Name</th>
-                  <th style={{ background: "#fff", padding: "0.5rem 0.75rem", position: "sticky", top: 0 }}>Type</th>
-                  <th style={{ background: "#fff", padding: "0.5rem 0.75rem", position: "sticky", top: 0 }}>Source</th>
-                  <th style={{ background: "#fff", padding: "0.5rem 0.75rem", position: "sticky", top: 0 }}>Controller</th>
-                  <th style={{ background: "#fff", padding: "0.5rem 0", position: "sticky", top: 0 }}>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {scenarioRosterCandidates.map((candidate) => (
-                  <tr key={candidate.rosterEntry.id} style={{ borderBottom: "1px solid #eee8dc" }}>
-                    <td style={{ padding: "0.6rem 0.75rem 0.6rem 0", textAlign: "center" }}>
-                      <input
-                        aria-label={`Toggle ${candidate.name} scenario participation`}
-                        checked={candidate.member}
-                        onChange={(event) =>
-                          void handleRosterParticipantToggle(candidate, event.target.checked)
-                        }
-                        type="checkbox"
-                      />
-                    </td>
-                    <td style={{ padding: "0.6rem 0.75rem" }}>
-                      <strong>{candidate.name}</strong>
-                    </td>
-                    <td style={{ padding: "0.6rem 0.75rem" }}>{candidate.typeLabel}</td>
-                    <td style={{ padding: "0.6rem 0.75rem" }}>{candidate.sourceKind}</td>
-                    <td style={{ padding: "0.6rem 0.75rem" }}>
-                      {formatUserLabel(candidate.existingParticipant?.controlledByUserId)}
-                    </td>
-                    <td style={{ padding: "0.6rem 0" }}>
-                      {candidate.existingParticipant
-                        ? candidate.existingParticipant.isActive
-                          ? "Active"
-                          : "Inactive"
-                        : "Available"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <div>No campaign roster entries are available. Add PCs, NPCs, or templates to the campaign roster first.</div>
-        )}
-      </section>
-
-      <section style={{ border: "1px solid #d9ddd8", borderRadius: 12, display: "grid", gap: "0.75rem", padding: "1rem" }}>
-        <h2 style={{ margin: 0 }}>Template sources</h2>
-        <p style={{ margin: 0 }}>
-          Templates create scenario-local temporary actors. The template itself is not an active
-          scenario participant.
-        </p>
-        {templateSources.length > 0 ? (
-          <div style={{ display: "grid", gap: "0.75rem", maxHeight: "28rem", overflowY: "auto" }}>
-            <select
-              onChange={(event) => setSelectedTemplateSourceId(event.target.value)}
-              value={selectedTemplateSource?.entity.id ?? ""}
-            >
-              {templateSources.map((source) => (
-                <option key={source.entity.id} value={source.entity.id}>
-                  {source.label}
-                </option>
-              ))}
-            </select>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
-              <input
-                onChange={(event) => setTemporaryActorName(event.target.value)}
-                placeholder="Temporary actor name override"
-                style={{ minWidth: 260 }}
-                value={temporaryActorName}
-              />
-              <select
-                onChange={(event) =>
-                  setTemporaryActorRole(event.target.value as ScenarioParticipant["role"])
-                }
-                value={temporaryActorRole}
-              >
-                <option value="npc">NPC</option>
-                <option value="monster">Monster</option>
-                <option value="animal">Animal</option>
-                <option value="neutral">Neutral</option>
-                <option value="ally">Ally</option>
-                <option value="enemy">Enemy</option>
-              </select>
-              <button onClick={() => void handleCreateTemporaryActorFromTemplate()} type="button">
-                Create temporary actor
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div>No template sources are available.</div>
-        )}
-      </section>
-
-      <section style={{ border: "1px solid #d9ddd8", borderRadius: 12, display: "grid", gap: "0.75rem", padding: "1rem" }}>
         <h2 style={{ margin: 0 }}>Encounter Assignment</h2>
         <p style={{ margin: 0 }}>
-          Manage concrete scenario participants and assign them to planned, active, or paused encounters. Encounter-specific
-          appearance and GM-facing details belong here because they can differ by encounter.
+          Assign concrete scenario participants to planned, active, or paused encounters. Click a
+          participant name for scenario state and encounter-specific detail placeholders.
         </p>
         <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
           <select
@@ -1390,9 +1365,9 @@ export default function ScenarioDetailPageContent({
             <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
               <select
                 aria-label="Bulk assignment encounter"
+                disabled={nonArchivedEncounters.length === 0}
                 onChange={(event) => setBulkEncounterId(event.target.value)}
                 value={selectedBulkEncounterId}
-                disabled={nonArchivedEncounters.length === 0}
               >
                 {nonArchivedEncounters.length === 0 ? (
                   <option value="">No assignable encounters</option>
@@ -1422,15 +1397,12 @@ export default function ScenarioDetailPageContent({
               </span>
             </div>
             <div style={{ maxHeight: "36rem", overflow: "auto" }}>
-              <table style={{ borderCollapse: "collapse", minWidth: 900 + nonArchivedEncounters.length * 120, width: "100%" }}>
+              <table style={{ borderCollapse: "collapse", minWidth: 620 + nonArchivedEncounters.length * 120, width: "100%" }}>
                 <thead>
                   <tr style={{ borderBottom: "1px solid #d9ddd8", textAlign: "left" }}>
                     <th style={{ background: "#fff", padding: "0.5rem 0.75rem 0.5rem 0", position: "sticky", textAlign: "center", top: 0 }}>Select</th>
-                    <th style={{ background: "#fff", padding: "0.5rem 0.75rem", position: "sticky", textAlign: "center", top: 0 }}>Active</th>
                     <th style={{ background: "#fff", padding: "0.5rem 0.75rem", position: "sticky", top: 0 }}>Name</th>
                     <th style={{ background: "#fff", padding: "0.5rem 0.75rem", position: "sticky", top: 0 }}>Type</th>
-                    <th style={{ background: "#fff", padding: "0.5rem 0.75rem", position: "sticky", top: 0 }}>Controller</th>
-                    <th style={{ background: "#fff", padding: "0.5rem 0.75rem", position: "sticky", top: 0 }}>Status</th>
                     {nonArchivedEncounters.map((encounter) => (
                       <th
                         key={encounter.id}
@@ -1440,7 +1412,6 @@ export default function ScenarioDetailPageContent({
                         {encounter.title.length > 16 ? `${encounter.title.slice(0, 15)}...` : encounter.title}
                       </th>
                     ))}
-                    <th style={{ background: "#fff", padding: "0.5rem 0", position: "sticky", textAlign: "center", top: 0 }}>Details</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1468,26 +1439,34 @@ export default function ScenarioDetailPageContent({
                               type="checkbox"
                             />
                           </td>
-                          <td style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>
-                            <input
-                              aria-label={`Toggle ${participant.snapshot.displayName} active scenario status`}
-                              checked={participant.isActive}
-                              onChange={(event) =>
-                                void handleParticipantActiveToggle(participant, event.target.checked)
-                              }
-                              type="checkbox"
-                            />
-                          </td>
                           <td style={{ padding: "0.6rem 0.75rem" }}>
-                            <strong>{participant.snapshot.displayName}</strong>
+                            <button
+                              aria-expanded={expanded}
+                              aria-label={`Toggle ${participant.snapshot.displayName} assignment details`}
+                              onClick={() =>
+                                setExpandedAssignmentParticipantIds((current) =>
+                                  current.includes(participant.id)
+                                    ? current.filter((id) => id !== participant.id)
+                                    : [...current, participant.id]
+                                )
+                              }
+                              style={{
+                                background: "transparent",
+                                border: 0,
+                                color: "#184f3d",
+                                cursor: "pointer",
+                                font: "inherit",
+                                fontWeight: 700,
+                                padding: 0,
+                                textAlign: "left",
+                                textDecoration: "underline"
+                              }}
+                              type="button"
+                            >
+                              {participant.snapshot.displayName}
+                            </button>
                           </td>
                           <td style={{ padding: "0.6rem 0.75rem" }}>{participantMetadata.typeLabel}</td>
-                          <td style={{ padding: "0.6rem 0.75rem" }}>
-                            {formatUserLabel(participant.controlledByUserId)}
-                          </td>
-                          <td style={{ padding: "0.6rem 0.75rem" }}>
-                            {participant.isActive ? "Active" : "Inactive"}
-                          </td>
                           {nonArchivedEncounters.map((encounter) => (
                             <td key={encounter.id} style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>
                               <input
@@ -1504,26 +1483,27 @@ export default function ScenarioDetailPageContent({
                               />
                             </td>
                           ))}
-                          <td style={{ padding: "0.6rem 0", textAlign: "center" }}>
-                            <button
-                              onClick={() =>
-                                setExpandedAssignmentParticipantIds((current) =>
-                                  current.includes(participant.id)
-                                    ? current.filter((id) => id !== participant.id)
-                                    : [...current, participant.id]
-                                )
-                              }
-                              type="button"
-                            >
-                              {expanded ? "Hide" : "Details"}
-                            </button>
-                          </td>
                         </tr>
                         {expanded ? (
                           <tr key={`${participant.id}-details`}>
-                            <td colSpan={7 + nonArchivedEncounters.length} style={{ background: "#fbfaf6", padding: "0.75rem 1rem" }}>
+                            <td colSpan={3 + nonArchivedEncounters.length} style={{ background: "#fbfaf6", padding: "0.75rem 1rem" }}>
                               <div style={{ display: "grid", gap: "0.5rem" }}>
                                 <strong>Encounter-specific details</strong>
+                                <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
+                                  <label style={{ alignItems: "center", display: "flex", gap: "0.35rem" }}>
+                                    <input
+                                      aria-label={`Toggle ${participant.snapshot.displayName} active scenario status`}
+                                      checked={participant.isActive}
+                                      onChange={(event) =>
+                                        void handleParticipantActiveToggle(participant, event.target.checked)
+                                      }
+                                      type="checkbox"
+                                    />
+                                    Active
+                                  </label>
+                                  <span>Controller: {formatUserLabel(participant.controlledByUserId)}</span>
+                                  <span>Status: {participant.isActive ? "Active" : "Inactive"}</span>
+                                </div>
                                 {joinedEncounters.length > 0 ? (
                                   joinedEncounters.map((encounter) => (
                                     <div key={encounter.id}>
@@ -1541,7 +1521,7 @@ export default function ScenarioDetailPageContent({
                                 )}
                                 <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
                                   Editing these fields is deferred; this placeholder is intentionally here
-                                  in Encounter Assignment, not the shared Scenario Participants roster.
+                                  in Encounter Assignment, not a separate Scenario Participants roster.
                                 </div>
                               </div>
                             </td>
@@ -1563,6 +1543,206 @@ export default function ScenarioDetailPageContent({
           <div>Add a campaign roster member or create a temporary actor before assigning encounters.</div>
         ) : (
           <div>No concrete participants match the current encounter assignment filters.</div>
+        )}
+      </section>
+
+      <section style={{ border: "1px solid #d9ddd8", borderRadius: 12, display: "grid", gap: "0.75rem", padding: "1rem" }}>
+        <h2 style={{ margin: 0 }}>Add from campaign roster</h2>
+        <p style={{ margin: 0 }}>
+          Add existing concrete campaign roster members to this scenario. Templates stay in
+          Template sources below.
+        </p>
+        {scenarioRosterCandidates.length > 0 ? (
+          <>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+              <select
+                aria-label="Campaign roster status filter"
+                onChange={(event) =>
+                  setRosterMembershipFilter(event.target.value as ScenarioParticipantMembershipFilter)
+                }
+                value={rosterMembershipFilter}
+              >
+                <option value="all">All</option>
+                <option value="available">Not in scenario</option>
+                <option value="active">In scenario</option>
+                <option value="inactive">Inactive</option>
+              </select>
+              <select
+                aria-label="Campaign roster type filter"
+                onChange={(event) => setRosterTypeFilter(event.target.value as ScenarioParticipantTypeFilter)}
+                value={rosterTypeFilter}
+              >
+                {rosterTypeFilterOptions.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              <select
+                aria-label="Campaign roster controller filter"
+                onChange={(event) => setRosterControllerFilter(event.target.value as ScenarioControllerFilter)}
+                value={rosterControllerFilter}
+              >
+                <option value="all">All controllers</option>
+                <option value="players">Players</option>
+                <option value="gms">GMs</option>
+              </select>
+              <select
+                aria-label="Campaign roster civilization filter"
+                onChange={(event) => setRosterCivilizationFilter(event.target.value)}
+                value={rosterCivilizationFilter}
+              >
+                <option value="">All civilizations</option>
+                {participantCivilizationOptions.map((civilization) => (
+                  <option key={civilization} value={civilization}>
+                    {civilization}
+                  </option>
+                ))}
+              </select>
+              <select
+                aria-label="Campaign roster profession filter"
+                onChange={(event) => setRosterProfessionFilter(event.target.value)}
+                value={rosterProfessionFilter}
+              >
+                <option value="">All professions</option>
+                {participantProfessionOptions.map((profession) => (
+                  <option key={profession} value={profession}>
+                    {profession}
+                  </option>
+                ))}
+              </select>
+              <select
+                aria-label="Campaign roster skill group filter"
+                onChange={(event) => setRosterSkillGroupFilter(event.target.value)}
+                value={rosterSkillGroupFilter}
+              >
+                <option value="">All skill groups</option>
+                {participantSkillGroupOptions.map((group) => (
+                  <option key={group} value={group}>
+                    {group}
+                  </option>
+                ))}
+              </select>
+              <input
+                aria-label="Search campaign roster candidates"
+                onChange={(event) => setRosterSearch(event.target.value)}
+                placeholder="Search campaign roster"
+                style={{ minWidth: 220 }}
+                type="search"
+                value={rosterSearch}
+              />
+            </div>
+            <div style={{ maxHeight: "24rem", overflow: "auto" }}>
+              <table style={{ borderCollapse: "collapse", minWidth: 780, width: "100%" }}>
+                <thead>
+                  <tr style={{ borderBottom: "1px solid #d9ddd8", textAlign: "left" }}>
+                    <th style={{ background: "#fff", padding: "0.5rem 0.75rem 0.5rem 0", position: "sticky", textAlign: "center", top: 0 }}>Active</th>
+                    <th style={{ background: "#fff", padding: "0.5rem 0.75rem", position: "sticky", top: 0 }}>Name</th>
+                    <th style={{ background: "#fff", padding: "0.5rem 0.75rem", position: "sticky", top: 0 }}>Type</th>
+                    <th style={{ background: "#fff", padding: "0.5rem 0.75rem", position: "sticky", top: 0 }}>Source</th>
+                    <th style={{ background: "#fff", padding: "0.5rem 0.75rem", position: "sticky", top: 0 }}>Controller</th>
+                    <th style={{ background: "#fff", padding: "0.5rem 0", position: "sticky", top: 0 }}>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredScenarioRosterCandidates.map((candidate) => (
+                    <tr key={candidate.rosterEntry.id} style={{ borderBottom: "1px solid #eee8dc" }}>
+                      <td style={{ padding: "0.6rem 0.75rem 0.6rem 0", textAlign: "center" }}>
+                        <input
+                          aria-label={`Toggle ${candidate.name} scenario participation`}
+                          checked={candidate.member}
+                          onChange={(event) =>
+                            void handleRosterParticipantToggle(candidate, event.target.checked)
+                          }
+                          type="checkbox"
+                        />
+                      </td>
+                      <td style={{ padding: "0.6rem 0.75rem" }}>
+                        <strong>{candidate.name}</strong>
+                      </td>
+                      <td style={{ padding: "0.6rem 0.75rem" }}>{candidate.typeLabel}</td>
+                      <td style={{ padding: "0.6rem 0.75rem" }}>{candidate.sourceKind}</td>
+                      <td style={{ padding: "0.6rem 0.75rem" }}>{candidate.controllerLabel}</td>
+                      <td style={{ padding: "0.6rem 0" }}>
+                        {candidate.existingParticipant
+                          ? candidate.existingParticipant.isActive
+                            ? "Active"
+                            : "Inactive"
+                          : "Available"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {filteredScenarioRosterCandidates.length === 0 ? (
+                <div style={{ padding: "0.75rem 0" }}>
+                  No campaign roster candidates match the current filters.
+                </div>
+              ) : null}
+            </div>
+          </>
+        ) : (
+          <div>No campaign roster entries are available. Add PCs, NPCs, or templates to the campaign roster first.</div>
+        )}
+      </section>
+
+      <section style={{ border: "1px solid #d9ddd8", borderRadius: 12, display: "grid", gap: "0.75rem", padding: "1rem" }}>
+        <h2 style={{ margin: 0 }}>Template sources</h2>
+        <p style={{ margin: 0 }}>
+          Templates create scenario-local temporary actors. The template itself is not an active
+          scenario participant.
+        </p>
+        {templateSources.length > 0 ? (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem", maxHeight: "28rem", overflowY: "auto" }}>
+            <select
+              onChange={(event) => setSelectedTemplateSourceId(event.target.value)}
+              style={{ minWidth: 240 }}
+              value={selectedTemplateSource?.entity.id ?? ""}
+            >
+              {templateSources.map((source) => (
+                <option key={source.entity.id} value={source.entity.id}>
+                  {source.label}
+                </option>
+              ))}
+            </select>
+            <input
+              onChange={(event) => setTemporaryActorName(event.target.value)}
+              placeholder="Temporary actor name override"
+              style={{ minWidth: 240 }}
+              value={temporaryActorName}
+            />
+            <select
+              onChange={(event) =>
+                setTemporaryActorRole(event.target.value as ScenarioParticipant["role"])
+              }
+              value={temporaryActorRole}
+            >
+              <option value="npc">NPC</option>
+              <option value="monster">Monster</option>
+              <option value="animal">Animal</option>
+              <option value="neutral">Neutral</option>
+              <option value="ally">Ally</option>
+              <option value="enemy">Enemy</option>
+            </select>
+            <label style={{ alignItems: "center", display: "flex", gap: "0.35rem" }}>
+              <span>Count</span>
+              <input
+                aria-label="Temporary actor count"
+                max={1}
+                min={1}
+                onChange={(event) => setTemporaryActorCount(Math.min(1, Math.max(1, Number(event.target.value) || 1)))}
+                style={{ width: "4rem" }}
+                title="Bulk temporary actor creation is planned; this pass supports one actor at a time."
+                type="number"
+                value={temporaryActorCount}
+              />
+            </label>
+            <button onClick={() => void handleCreateTemporaryActorFromTemplate()} type="button">
+              Create temporary actor
+            </button>
+          </div>
+        ) : (
+          <div>No template sources are available.</div>
         )}
       </section>
 
