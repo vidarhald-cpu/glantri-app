@@ -162,6 +162,13 @@ export const roleplayParticipantDescriptionSchema = z.object({
   shortDescription: z.string().default("")
 });
 
+const roleplayRollModifierSchema = z.object({
+  otherMod: z.number().int().default(0),
+  useDbMod: z.boolean().default(false),
+  useGenMod: z.boolean().default(false),
+  useObSkillMod: z.boolean().default(false)
+});
+
 export const roleplayPendingSkillRollSchema = z.object({
   assignedAt: z.string().min(1),
   difficulty: roleplayDifficultySchema,
@@ -171,13 +178,14 @@ export const roleplayPendingSkillRollSchema = z.object({
   skillId: idSchema,
   skillLabel: z.string().min(1),
   skillValue: z.number().int().optional()
-});
+}).merge(roleplayRollModifierSchema);
 
 export const roleplayActionLogEntrySchema = z.object({
   calculationText: z.string().optional(),
   createdAt: z.string().min(1),
   difficulty: roleplayDifficultySchema.optional(),
   id: idSchema,
+  numericSubtotal: z.number().int().optional(),
   participantId: idSchema.optional(),
   roll: z.number().int().optional(),
   silent: z.boolean().default(false),
@@ -185,7 +193,7 @@ export const roleplayActionLogEntrySchema = z.object({
   skillLabel: z.string().optional(),
   summary: z.string().min(1),
   type: z.enum(["gm_message_updated", "skill_roll_assigned", "gm_skill_roll"])
-});
+}).merge(roleplayRollModifierSchema.partial());
 
 export const roleplayStateSchema = z.object({
   actionLog: z.array(roleplayActionLogEntrySchema).default([]),

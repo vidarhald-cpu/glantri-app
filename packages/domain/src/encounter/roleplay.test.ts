@@ -3,8 +3,11 @@ import { describe, expect, it, vi } from "vitest";
 import type { EncounterParticipant, EncounterSession } from "./session";
 import {
   assignRoleplaySkillRoll,
+  buildRoleplayCalculationPreview,
   normalizeRoleplayState,
+  normalizeRoleplayOtherMod,
   orderRoleplayEncounterParticipants,
+  rankRoleplayGmRollResults,
   recordRoleplayGmSkillRoll,
   selectAllRoleplayVisibilityForViewer,
   updateRoleplayGmMessage,
@@ -110,39 +113,133 @@ describe("roleplay encounter state", () => {
       skillId: "perception",
       skillLabel: "Perception",
       skillValue: 12,
+      useDbMod: true,
+      useGenMod: true,
+      useObSkillMod: false,
+      otherMod: -2,
     });
     const assignedState = normalizeRoleplayState(assigned);
 
     expect(assignedState.pendingSkillRolls[0]).toMatchObject({
       difficulty: "hard",
+      otherMod: -2,
       participantId: "participant-1",
       silent: true,
       skillId: "perception",
       skillLabel: "Perception",
       skillValue: 12,
+      useDbMod: true,
+      useGenMod: true,
+      useObSkillMod: false,
     });
     expect(assignedState.actionLog[0]).toMatchObject({
+      otherMod: -2,
       silent: true,
       type: "skill_roll_assigned",
+      useDbMod: true,
+      useGenMod: true,
     });
 
     const rolled = recordRoleplayGmSkillRoll({
-      calculationText: "Roll 12; calculation pending rules.",
+      calculationText: "Perception 12 + roll 12 + Other -2 = 22 · calculation pending rules.",
       difficulty: "hard",
+      numericSubtotal: 22,
+      otherMod: -2,
       participantId: "participant-1",
       roll: 12,
       session: assigned,
       silent: false,
       skillId: "perception",
       skillLabel: "Perception",
+      useGenMod: true,
     });
 
     expect(normalizeRoleplayState(rolled).actionLog[0]).toMatchObject({
-      calculationText: "Roll 12; calculation pending rules.",
+      calculationText: "Perception 12 + roll 12 + Other -2 = 22 · calculation pending rules.",
+      numericSubtotal: 22,
+      otherMod: -2,
       roll: 12,
       silent: false,
       type: "gm_skill_roll",
+      useGenMod: true,
     });
+  });
+
+  it("normalizes other mods and builds honest calculation previews", () => {
+    expect(normalizeRoleplayOtherMod("")).toBe(0);
+    expect(normalizeRoleplayOtherMod("-2")).toBe(-2);
+    expect(normalizeRoleplayOtherMod(3.8)).toBe(3);
+    expect(normalizeRoleplayOtherMod("bogus")).toBe(0);
+
+    expect(
+      buildRoleplayCalculationPreview({
+        difficulty: "medium",
+        skillLabel: "Perception",
+        skillValue: 8,
+      })
+    ).toMatchObject({
+      calculationText: "Perception 8 + <DIE ROLL> = pending",
+      difficultyText: "Difficulty: Medium · Result: calculation pending difficulty rules",
+      numericSubtotal: undefined,
+    });
+
+    expect(
+      buildRoleplayCalculationPreview({
+        difficulty: "hard",
+        otherMod: -2,
+        roll: 14,
+        skillLabel: "Perception",
+        skillValue: 8,
+      })
+    ).toMatchObject({
+      calculationText: "Perception 8 + roll 14 + Other -2 = 20",
+      numericSubtotal: 20,
+    });
+
+    expect(
+      buildRoleplayCalculationPreview({
+        difficulty: "hard",
+        roll: 7,
+        skillLabel: "Stealth",
+        skillValue: 10,
+        useDbMod: true,
+        useGenMod: true,
+      })
+    ).toMatchObject({
+      calculationText: "Stealth 10 + roll 7 + Gen mod + DB mod = 17 before placeholder mods",
+      hasPlaceholderMods: true,
+      numericSubtotal: 17,
+    });
+  });
+
+  it("ranks GM roll results by numeric subtotal", () => {
+    const first = recordRoleplayGmSkillRoll({
+      calculationText: "Bow 12 + roll 10 = 22",
+      difficulty: "medium",
+      numericSubtotal: 22,
+      participantId: "participant-1",
+      roll: 10,
+      session: createSession(),
+      silent: false,
+      skillId: "bow",
+      skillLabel: "Bow",
+    });
+    const second = recordRoleplayGmSkillRoll({
+      calculationText: "Stealth 10 + roll 18 = 28",
+      difficulty: "medium",
+      numericSubtotal: 28,
+      participantId: "participant-2",
+      roll: 18,
+      session: first,
+      silent: true,
+      skillId: "stealth",
+      skillLabel: "Stealth",
+    });
+
+    expect(rankRoleplayGmRollResults(normalizeRoleplayState(second)).map((entry) => entry.skillLabel)).toEqual([
+      "Stealth",
+      "Bow",
+    ]);
   });
 
   it("orders roleplay roster participants by PC, NPC, temporary/ad-hoc, then name", () => {

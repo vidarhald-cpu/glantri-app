@@ -20,9 +20,17 @@ describe("RoleplayEncounterScreens", () => {
     expect(source).toContain("Select all");
     expect(source).toContain("Roleplay roster descriptions");
     expect(source).toContain("Skill roll assignment");
-    expect(source).toContain("Silent skill roll");
+    expect(source).toContain("Silent");
+    expect(source).toContain("Skill category");
+    expect(source).toContain("All categories");
+    expect(source).toContain("Gen mod");
+    expect(source).toContain("OB/Skill mod");
+    expect(source).toContain("DB mod");
+    expect(source).toContain("Other mod");
     expect(source).toContain("Assign");
     expect(source).toContain("GM Roll");
+    expect(source).toContain("Add roll");
+    expect(source).toContain("Ranked roll results");
     expect(source).toContain("Action log");
   });
 
@@ -36,7 +44,9 @@ describe("RoleplayEncounterScreens", () => {
     expect(source).toContain("updateRoleplayParticipantDescription");
     expect(source).toContain("assignRoleplaySkillRoll");
     expect(source).toContain("recordRoleplayGmSkillRoll");
-    expect(source).toContain("calculation pending rules");
+    expect(source).toContain("buildRoleplayCalculationPreview");
+    expect(source).toContain("rankRoleplayGmRollResults");
+    expect(source).toContain("calculation pending difficulty rules");
     expect(source).toContain("rollD20");
   });
 
@@ -57,6 +67,17 @@ describe("RoleplayEncounterScreens", () => {
 
     expect(source).toContain("orderRoleplayEncounterParticipants");
     expect(source).toContain("roleplayDifficultyOptions");
-    expect(source).toContain("formatDifficulty(difficulty)");
+    expect(source).toContain("getPlayerFacingSkillBucketDefinitions");
+    expect(source).toContain("getPlayerFacingSkillBucket");
+    expect(source).toContain("readSystemSkillOptions");
+  });
+
+  it("uses all canonical ordinary and secondary skills instead of only participant-known skills", () => {
+    const source = readSource();
+
+    expect(source).toContain("input.content.skills");
+    expect(source).toContain("skill.category === \"ordinary\" || skill.category === \"secondary\"");
+    expect(source).toContain("!skill.specializationOfSkillId");
+    expect(source).toContain("value: getParticipantSkillValue");
   });
 });
