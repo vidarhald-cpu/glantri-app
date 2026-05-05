@@ -129,7 +129,10 @@ export function updateRoleplayGmMessage(input: {
           createdAt: nowIso(),
           fumble: false,
           id: makeId("roleplay-log"),
+          mode: "difficulty",
           openEndedD10s: [],
+          opponentFumble: false,
+          opponentOpenEndedD10s: [],
           partial: false,
           silent: true,
           summary: "GM message updated.",
@@ -227,6 +230,12 @@ export interface RoleplayCalculationPreview {
   numericSubtotal?: number;
   partial: boolean;
   success?: boolean;
+}
+
+export interface RoleplayOpposedResult {
+  margin: number;
+  result: "win" | "loss" | "tie";
+  summary: string;
 }
 
 function normalizeRollModifiers(input: RoleplayRollModifiers | undefined): Required<RoleplayRollModifiers> {
@@ -439,18 +448,80 @@ export function buildRoleplayCalculationPreview(input: {
   };
 }
 
+export function compareRoleplayOpposedRolls(input: {
+  actorLabel: string;
+  actorPreview: RoleplayCalculationPreview;
+  opponentLabel: string;
+  opponentPreview: RoleplayCalculationPreview;
+}): RoleplayOpposedResult {
+  const actorTotal = input.actorPreview.numericSubtotal;
+  const opponentTotal = input.opponentPreview.numericSubtotal;
+
+  if (actorTotal == null || opponentTotal == null) {
+    return { margin: 0, result: "tie", summary: "Opposed result pending." };
+  }
+
+  if (input.actorPreview.fumble && !input.opponentPreview.fumble) {
+    return {
+      margin: Math.abs(actorTotal - opponentTotal),
+      result: "loss",
+      summary: `${input.opponentLabel} wins; ${input.actorLabel} fumbled.`,
+    };
+  }
+
+  if (input.opponentPreview.fumble && !input.actorPreview.fumble) {
+    return {
+      margin: Math.abs(actorTotal - opponentTotal),
+      result: "win",
+      summary: `${input.actorLabel} wins; ${input.opponentLabel} fumbled.`,
+    };
+  }
+
+  if (input.actorPreview.fumble && input.opponentPreview.fumble) {
+    return { margin: 0, result: "tie", summary: "Both sides fumbled; tied result." };
+  }
+
+  if (actorTotal > opponentTotal) {
+    return {
+      margin: actorTotal - opponentTotal,
+      result: "win",
+      summary: `${input.actorLabel} wins by ${actorTotal - opponentTotal}.`,
+    };
+  }
+
+  if (opponentTotal > actorTotal) {
+    return {
+      margin: opponentTotal - actorTotal,
+      result: "loss",
+      summary: `${input.opponentLabel} wins by ${opponentTotal - actorTotal}.`,
+    };
+  }
+
+  return { margin: 0, result: "tie", summary: "Tie." };
+}
+
 export function assignRoleplaySkillRoll(input: {
   difficulty: RoleplayDifficulty;
+  mode?: "difficulty" | "opposed";
+  opponentParticipantId?: string;
+  opponentParticipantName?: string;
+  opponentSkillId?: string;
+  opponentSkillLabel?: string;
+  opponentSkillValue?: number;
   participantId: string;
   session: EncounterSession;
   silent: boolean;
   skillId: string;
   skillLabel: string;
   skillValue?: number;
+  supportSkillId?: string;
+  supportSkillLabel?: string;
 } & RoleplayRollModifiers): EncounterSession {
   const state = normalizeRoleplayState(input.session);
   const assignedAt = nowIso();
   const modifiers = normalizeRollModifiers(input);
+  const mode = input.mode ?? "difficulty";
+  const rollSetId = makeId("roleplay-roll-set");
 
   return withRoleplayState({
     session: input.session,
@@ -463,14 +534,27 @@ export function assignRoleplaySkillRoll(input: {
           difficulty: input.difficulty,
           fumble: false,
           id: makeId("roleplay-log"),
+          mode,
           openEndedD10s: [],
+          opponentFumble: false,
+          opponentOpenEndedD10s: [],
+          opponentParticipantId: input.opponentParticipantId,
+          opponentParticipantName: input.opponentParticipantName,
+          opponentSkillId: input.opponentSkillId,
+          opponentSkillLabel: input.opponentSkillLabel,
           otherMod: modifiers.otherMod,
           partial: false,
           participantId: input.participantId,
+          rollSetId,
           silent: input.silent,
           skillId: input.skillId,
           skillLabel: input.skillLabel,
-          summary: `Assigned ${input.skillLabel} roll.`,
+          summary:
+            mode === "opposed" && input.opponentSkillLabel
+              ? `Assigned opposed ${input.skillLabel} vs ${input.opponentSkillLabel} roll.`
+              : `Assigned ${input.skillLabel} roll.`,
+          supportSkillId: input.supportSkillId,
+          supportSkillLabel: input.supportSkillLabel,
           type: "skill_roll_assigned",
           useDbMod: modifiers.useDbMod,
           useGenMod: modifiers.useGenMod,
@@ -483,12 +567,21 @@ export function assignRoleplaySkillRoll(input: {
           assignedAt,
           difficulty: input.difficulty,
           id: makeId("roleplay-roll"),
+          mode,
+          opponentParticipantId: input.opponentParticipantId,
+          opponentParticipantName: input.opponentParticipantName,
+          opponentSkillId: input.opponentSkillId,
+          opponentSkillLabel: input.opponentSkillLabel,
+          opponentSkillValue: input.opponentSkillValue,
           otherMod: modifiers.otherMod,
           participantId: input.participantId,
+          rollSetId,
           silent: input.silent,
           skillId: input.skillId,
           skillLabel: input.skillLabel,
           skillValue: input.skillValue,
+          supportSkillId: input.supportSkillId,
+          supportSkillLabel: input.supportSkillLabel,
           useDbMod: modifiers.useDbMod,
           useGenMod: modifiers.useGenMod,
           useObSkillMod: modifiers.useObSkillMod,
@@ -507,20 +600,39 @@ export function recordRoleplayGmSkillRoll(input: {
   difficulty: RoleplayDifficulty;
   finalTotal?: number;
   fumble?: boolean;
+  mode?: "difficulty" | "opposed";
   openEndedD10s?: number[];
+  opposedMargin?: number;
+  opposedResult?: "win" | "loss" | "tie" | "pending";
+  opponentAchievedSuccessLevel?: RoleplaySuccessLevel;
+  opponentCalculationText?: string;
+  opponentDieResult?: number;
+  opponentFumble?: boolean;
+  opponentNumericSubtotal?: number;
+  opponentOpenEndedD10s?: number[];
+  opponentParticipantId?: string;
+  opponentParticipantName?: string;
+  opponentRoll?: RoleplayOpenEndedD20Roll;
+  opponentSkillId?: string;
+  opponentSkillLabel?: string;
   participantId: string;
   partial?: boolean;
   roll: RoleplayOpenEndedD20Roll;
+  rollSetId?: string;
   session: EncounterSession;
   silent: boolean;
   skillId: string;
   skillLabel: string;
   numericSubtotal?: number;
   success?: boolean;
+  supportSkillId?: string;
+  supportSkillLabel?: string;
 } & RoleplayRollModifiers): EncounterSession {
   const state = normalizeRoleplayState(input.session);
   const modifiers = normalizeRollModifiers(input);
   const achievedSuccessLevel = input.achievedSuccessLevel;
+  const mode = input.mode ?? "difficulty";
+  const opponentRoll = input.opponentRoll;
 
   return withRoleplayState({
     session: input.session,
@@ -538,19 +650,38 @@ export function recordRoleplayGmSkillRoll(input: {
           finalTotal: input.finalTotal ?? input.numericSubtotal,
           fumble: Boolean(input.fumble),
           id: makeId("roleplay-log"),
+          mode,
           numericSubtotal: input.numericSubtotal,
           openEndedD10s: input.openEndedD10s ?? input.roll.openEndedD10s,
+          opposedMargin: input.opposedMargin,
+          opposedResult: input.opposedResult,
+          opponentAchievedSuccessLevelLabel: input.opponentAchievedSuccessLevel?.label,
+          opponentDieResult: input.opponentDieResult ?? opponentRoll?.dieResult,
+          opponentFumble: Boolean(input.opponentFumble),
+          opponentNumericSubtotal: input.opponentNumericSubtotal,
+          opponentOpenEndedD10s: input.opponentOpenEndedD10s ?? opponentRoll?.openEndedD10s ?? [],
+          opponentParticipantId: input.opponentParticipantId,
+          opponentParticipantName: input.opponentParticipantName,
+          opponentRollD20: opponentRoll?.rollD20,
+          opponentSkillId: input.opponentSkillId,
+          opponentSkillLabel: input.opponentSkillLabel,
           otherMod: modifiers.otherMod,
           partial: Boolean(input.partial),
           participantId: input.participantId,
           resultModifier: achievedSuccessLevel?.resultModifier,
           roll: input.roll.rollD20,
           rollD20: input.roll.rollD20,
+          rollSetId: input.rollSetId,
           silent: input.silent,
           skillId: input.skillId,
           skillLabel: input.skillLabel,
           success: input.success,
-          summary: `GM rolled ${input.skillLabel}.`,
+          summary:
+            mode === "opposed" && input.opponentSkillLabel
+              ? `GM rolled opposed ${input.skillLabel} vs ${input.opponentSkillLabel}.`
+              : `GM rolled ${input.skillLabel}.`,
+          supportSkillId: input.supportSkillId,
+          supportSkillLabel: input.supportSkillLabel,
           type: "gm_skill_roll",
           useDbMod: modifiers.useDbMod,
           useGenMod: modifiers.useGenMod,

@@ -15,6 +15,7 @@ import type {
 import {
   assignRoleplaySkillRoll,
   buildRoleplayCalculationPreview,
+  compareRoleplayOpposedRolls,
   normalizeRoleplayState,
   normalizeRoleplayOtherMod,
   orderRoleplayEncounterParticipants,
@@ -79,10 +80,15 @@ interface RoleplayRollDraft {
   difficulty: RoleplayDifficulty;
   id: string;
   otherModInput: string;
+  opponentParticipantId: string;
+  opponentSkillCategoryId: "all" | PlayerFacingSkillBucketId;
+  opponentSkillId: string;
   participantId: string;
   silent: boolean;
   skillCategoryId: "all" | PlayerFacingSkillBucketId;
   skillId: string;
+  supportSkillCategoryId: "all" | PlayerFacingSkillBucketId;
+  supportSkillId: string;
   useDbMod: boolean;
   useGenMod: boolean;
   useObSkillMod: boolean;
@@ -231,10 +237,15 @@ function makeRollDraft(input: { participantId?: string; skillId?: string }): Rol
     difficulty: "medium",
     id: `roll-draft-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     otherModInput: "0",
+    opponentParticipantId: "",
+    opponentSkillCategoryId: "all",
+    opponentSkillId: "",
     participantId: input.participantId ?? "",
     silent: false,
     skillCategoryId: "all",
     skillId: input.skillId ?? "",
+    supportSkillCategoryId: "all",
+    supportSkillId: "",
     useDbMod: false,
     useGenMod: false,
     useObSkillMod: false,
@@ -320,14 +331,37 @@ export function GmRoleplayingEncounterScreen({
           draft.skillCategoryId === "all"
             ? skillOptions
             : skillOptions.filter((skill) => skill.categoryId === draft.skillCategoryId);
+        const supportSkillOptions =
+          draft.supportSkillCategoryId === "all"
+            ? skillOptions
+            : skillOptions.filter((skill) => skill.categoryId === draft.supportSkillCategoryId);
+        const opponent =
+          roster.find((row) => row.id === draft.opponentParticipantId) ?? undefined;
+        const opponentSkillOptions = readSystemSkillOptions({
+          content,
+          encounterParticipant: opponent,
+          scenarioParticipants,
+        });
+        const filteredOpponentSkillOptions =
+          draft.opponentSkillCategoryId === "all"
+            ? opponentSkillOptions
+            : opponentSkillOptions.filter((skill) => skill.categoryId === draft.opponentSkillCategoryId);
 
         return {
           ...draft,
+          opponentSkillId:
+            filteredOpponentSkillOptions.some((skill) => skill.id === draft.opponentSkillId)
+              ? draft.opponentSkillId
+              : filteredOpponentSkillOptions[0]?.id ?? opponentSkillOptions[0]?.id ?? "",
           participantId: participant?.id ?? "",
           skillId:
             filteredSkillOptions.some((skill) => skill.id === draft.skillId)
               ? draft.skillId
               : filteredSkillOptions[0]?.id ?? skillOptions[0]?.id ?? "",
+          supportSkillId:
+            draft.supportSkillId === "" || supportSkillOptions.some((skill) => skill.id === draft.supportSkillId)
+              ? draft.supportSkillId
+              : "",
         };
       })
     );
@@ -404,10 +438,33 @@ export function GmRoleplayingEncounterScreen({
         ? allSkillOptions
         : allSkillOptions.filter((skill) => skill.categoryId === draft.skillCategoryId);
     const selectedSkill = skillOptions.find((skill) => skill.id === draft.skillId) ?? skillOptions[0];
+    const supportSkillOptions =
+      draft.supportSkillCategoryId === "all"
+        ? allSkillOptions
+        : allSkillOptions.filter((skill) => skill.categoryId === draft.supportSkillCategoryId);
+    const selectedSupportSkill =
+      draft.supportSkillId === ""
+        ? undefined
+        : supportSkillOptions.find((skill) => skill.id === draft.supportSkillId);
+    const opponent =
+      roster.find((row) => row.id === draft.opponentParticipantId) ?? undefined;
+    const allOpponentSkillOptions = readSystemSkillOptions({
+      content,
+      encounterParticipant: opponent,
+      scenarioParticipants,
+    });
+    const opponentSkillOptions =
+      draft.opponentSkillCategoryId === "all"
+        ? allOpponentSkillOptions
+        : allOpponentSkillOptions.filter((skill) => skill.categoryId === draft.opponentSkillCategoryId);
+    const selectedOpponentSkill =
+      opponentSkillOptions.find((skill) => skill.id === draft.opponentSkillId) ??
+      opponentSkillOptions[0];
     const otherMod = normalizeRoleplayOtherMod(draft.otherModInput);
+    const isOpposed = Boolean(opponent && selectedOpponentSkill);
     const preview = selectedSkill
       ? buildRoleplayCalculationPreview({
-          difficulty: draft.difficulty,
+          difficulty: isOpposed ? undefined : draft.difficulty,
           otherMod,
           skillLabel: selectedSkill.label,
           skillValue: selectedSkill.value,
@@ -416,12 +473,42 @@ export function GmRoleplayingEncounterScreen({
           useObSkillMod: draft.useObSkillMod,
         })
       : undefined;
+    const opponentPreview =
+      opponent && selectedOpponentSkill
+        ? buildRoleplayCalculationPreview({
+            skillLabel: selectedOpponentSkill.label,
+            skillValue: selectedOpponentSkill.value,
+          })
+        : undefined;
 
-    return { allSkillOptions, otherMod, participant, preview, selectedSkill, skillOptions };
+    return {
+      allOpponentSkillOptions,
+      allSkillOptions,
+      isOpposed,
+      opponent,
+      opponentPreview,
+      opponentSkillOptions,
+      otherMod,
+      participant,
+      preview,
+      selectedOpponentSkill,
+      selectedSkill,
+      selectedSupportSkill,
+      skillOptions,
+      supportSkillOptions,
+    };
   }
 
   async function handleAssignSkillRoll(draft: RoleplayRollDraft) {
-    const { otherMod, participant, selectedSkill } = getRollDraftContext(draft);
+    const {
+      isOpposed,
+      opponent,
+      otherMod,
+      participant,
+      selectedOpponentSkill,
+      selectedSkill,
+      selectedSupportSkill,
+    } = getRollDraftContext(draft);
 
     if (!participant || !selectedSkill) {
       return;
@@ -430,6 +517,12 @@ export function GmRoleplayingEncounterScreen({
     await persist(
       assignRoleplaySkillRoll({
         difficulty: draft.difficulty,
+        mode: isOpposed ? "opposed" : "difficulty",
+        opponentParticipantId: isOpposed ? opponent?.id : undefined,
+        opponentParticipantName: isOpposed ? opponent?.label : undefined,
+        opponentSkillId: isOpposed ? selectedOpponentSkill?.id : undefined,
+        opponentSkillLabel: isOpposed ? selectedOpponentSkill?.label : undefined,
+        opponentSkillValue: isOpposed ? selectedOpponentSkill?.value : undefined,
         otherMod,
         participantId: participant.id,
         session: encounter,
@@ -437,6 +530,8 @@ export function GmRoleplayingEncounterScreen({
         skillId: selectedSkill.id,
         skillLabel: selectedSkill.label,
         skillValue: selectedSkill.value,
+        supportSkillId: selectedSupportSkill?.id,
+        supportSkillLabel: selectedSupportSkill?.label,
         useDbMod: draft.useDbMod,
         useGenMod: draft.useGenMod,
         useObSkillMod: draft.useObSkillMod,
@@ -446,15 +541,24 @@ export function GmRoleplayingEncounterScreen({
   }
 
   async function handleGmRoll(draft: RoleplayRollDraft) {
-    const { otherMod, participant, selectedSkill } = getRollDraftContext(draft);
+    const {
+      isOpposed,
+      opponent,
+      otherMod,
+      participant,
+      selectedOpponentSkill,
+      selectedSkill,
+      selectedSupportSkill,
+    } = getRollDraftContext(draft);
 
     if (!participant || !selectedSkill) {
       return;
     }
 
     const roll = rollOpenEndedRoleplayD20();
+    const opponentRoll = isOpposed ? rollOpenEndedRoleplayD20() : undefined;
     const preview = buildRoleplayCalculationPreview({
-      difficulty: draft.difficulty,
+      difficulty: isOpposed ? undefined : draft.difficulty,
       otherMod,
       roll,
       skillLabel: selectedSkill.label,
@@ -463,7 +567,30 @@ export function GmRoleplayingEncounterScreen({
       useGenMod: draft.useGenMod,
       useObSkillMod: draft.useObSkillMod,
     });
-    const calculationText = [preview.calculationText, preview.difficultyText]
+    const opponentPreview =
+      opponentRoll && selectedOpponentSkill
+        ? buildRoleplayCalculationPreview({
+            roll: opponentRoll,
+            skillLabel: selectedOpponentSkill.label,
+            skillValue: selectedOpponentSkill.value,
+          })
+        : undefined;
+    const opposedResult =
+      isOpposed && opponent && opponentPreview
+        ? compareRoleplayOpposedRolls({
+            actorLabel: participant.label,
+            actorPreview: preview,
+            opponentLabel: opponent.label,
+            opponentPreview,
+          })
+        : undefined;
+    const calculationText = [
+      selectedSupportSkill ? `Support: ${selectedSupportSkill.label} (pending support-rule effect)` : undefined,
+      isOpposed && opponentPreview
+        ? `Actor: ${preview.calculationText} · VERSUS · Opponent: ${opponentPreview.calculationText} · ${opposedResult?.summary ?? "Opposed result pending."}`
+        : preview.calculationText,
+      !isOpposed ? preview.difficultyText : undefined,
+    ]
       .filter(Boolean)
       .join(" · ");
 
@@ -476,10 +603,23 @@ export function GmRoleplayingEncounterScreen({
         dieResult: roll.dieResult,
         finalTotal: preview.finalTotal,
         fumble: preview.fumble,
+        mode: isOpposed ? "opposed" : "difficulty",
         numericSubtotal: preview.numericSubtotal,
         openEndedD10s: roll.openEndedD10s,
+        opposedMargin: opposedResult?.margin,
+        opposedResult: opposedResult?.result,
+        opponentAchievedSuccessLevel: opponentPreview?.achievedSuccessLevel,
+        opponentDieResult: opponentRoll?.dieResult,
+        opponentFumble: opponentPreview?.fumble,
+        opponentNumericSubtotal: opponentPreview?.numericSubtotal,
+        opponentOpenEndedD10s: opponentRoll?.openEndedD10s,
+        opponentParticipantId: isOpposed ? opponent?.id : undefined,
+        opponentParticipantName: isOpposed ? opponent?.label : undefined,
+        opponentRoll,
+        opponentSkillId: isOpposed ? selectedOpponentSkill?.id : undefined,
+        opponentSkillLabel: isOpposed ? selectedOpponentSkill?.label : undefined,
         otherMod,
-        partial: preview.partial,
+        partial: preview.partial || Boolean(opponentPreview?.partial),
         participantId: participant.id,
         roll,
         session: encounter,
@@ -487,6 +627,8 @@ export function GmRoleplayingEncounterScreen({
         skillId: selectedSkill.id,
         skillLabel: selectedSkill.label,
         success: preview.success,
+        supportSkillId: selectedSupportSkill?.id,
+        supportSkillLabel: selectedSupportSkill?.label,
         useDbMod: draft.useDbMod,
         useGenMod: draft.useGenMod,
         useObSkillMod: draft.useObSkillMod,
@@ -619,6 +761,12 @@ export function GmRoleplayingEncounterScreen({
             const categoryOptions = getPlayerFacingSkillBucketDefinitions().filter((category) =>
               context.allSkillOptions.some((skill) => skill.categoryId === category.id)
             );
+            const supportCategoryOptions = getPlayerFacingSkillBucketDefinitions().filter((category) =>
+              context.allSkillOptions.some((skill) => skill.categoryId === category.id)
+            );
+            const opponentCategoryOptions = getPlayerFacingSkillBucketDefinitions().filter((category) =>
+              context.allOpponentSkillOptions.some((skill) => skill.categoryId === category.id)
+            );
 
             return (
               <div
@@ -692,6 +840,40 @@ export function GmRoleplayingEncounterScreen({
                       <option value="">No skills available</option>
                     )}
                   </select>
+                  <label style={{ display: "grid", gap: "0.25rem" }}>
+                    <span>Support category</span>
+                    <select
+                      aria-label={`Roleplay roll ${index + 1} support skill category`}
+                      onChange={(event) => {
+                        const nextCategoryId = event.target.value as RoleplayRollDraft["supportSkillCategoryId"];
+                        updateRollDraft(draft.id, {
+                          supportSkillCategoryId: nextCategoryId,
+                          supportSkillId: "",
+                        });
+                      }}
+                      value={draft.supportSkillCategoryId}
+                    >
+                      <option value="all">All categories</option>
+                      {supportCategoryOptions.map((category) => (
+                        <option key={category.id} value={category.id}>
+                          {category.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <select
+                    aria-label={`Roleplay roll ${index + 1} support skill`}
+                    onChange={(event) => updateRollDraft(draft.id, { supportSkillId: event.target.value })}
+                    value={context.selectedSupportSkill?.id ?? ""}
+                  >
+                    <option value="">No support skill</option>
+                    {context.supportSkillOptions.map((skill) => (
+                      <option key={skill.id} value={skill.id}>
+                        {skill.label} ({skill.value ?? 0})
+                      </option>
+                    ))}
+                  </select>
+                  <strong style={{ alignSelf: "center" }}>Difficulty OR Opponent</strong>
                   <select
                     aria-label={`Roleplay roll ${index + 1} difficulty`}
                     onChange={(event) =>
@@ -704,6 +886,74 @@ export function GmRoleplayingEncounterScreen({
                         {option.label}
                       </option>
                     ))}
+                  </select>
+                  <strong style={{ alignSelf: "center" }}>VERSUS</strong>
+                  <select
+                    aria-label={`Roleplay roll ${index + 1} opponent`}
+                    onChange={(event) => {
+                      const opponent = roster.find((row) => row.id === event.target.value);
+                      const nextOpponentSkillId = readSystemSkillOptions({
+                        content,
+                        encounterParticipant: opponent,
+                        scenarioParticipants,
+                      })[0]?.id ?? "";
+                      updateRollDraft(draft.id, {
+                        opponentParticipantId: event.target.value,
+                        opponentSkillCategoryId: "all",
+                        opponentSkillId: event.target.value ? nextOpponentSkillId : "",
+                      });
+                    }}
+                    value={context.opponent?.id ?? ""}
+                  >
+                    <option value="">No opponent</option>
+                    {roster.map((participant) => (
+                      <option key={participant.id} value={participant.id}>
+                        {participant.label}
+                      </option>
+                    ))}
+                  </select>
+                  <label style={{ display: "grid", gap: "0.25rem" }}>
+                    <span>Opponent skill category</span>
+                    <select
+                      aria-label={`Roleplay roll ${index + 1} opponent skill category`}
+                      disabled={!context.opponent}
+                      onChange={(event) => {
+                        const nextCategoryId = event.target.value as RoleplayRollDraft["opponentSkillCategoryId"];
+                        const nextSkillOptions =
+                          nextCategoryId === "all"
+                            ? context.allOpponentSkillOptions
+                            : context.allOpponentSkillOptions.filter((skill) => skill.categoryId === nextCategoryId);
+
+                        updateRollDraft(draft.id, {
+                          opponentSkillCategoryId: nextCategoryId,
+                          opponentSkillId: nextSkillOptions[0]?.id ?? "",
+                        });
+                      }}
+                      value={draft.opponentSkillCategoryId}
+                    >
+                      <option value="all">All categories</option>
+                      {opponentCategoryOptions.map((category) => (
+                        <option key={category.id} value={category.id}>
+                          {category.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <select
+                    aria-label={`Roleplay roll ${index + 1} opponent skill`}
+                    disabled={!context.opponent || context.opponentSkillOptions.length === 0}
+                    onChange={(event) => updateRollDraft(draft.id, { opponentSkillId: event.target.value })}
+                    value={context.selectedOpponentSkill?.id ?? ""}
+                  >
+                    {context.opponentSkillOptions.length > 0 ? (
+                      context.opponentSkillOptions.map((skill) => (
+                        <option key={skill.id} value={skill.id}>
+                          {skill.label} ({skill.value ?? 0})
+                        </option>
+                      ))
+                    ) : (
+                      <option value="">No opponent skill</option>
+                    )}
                   </select>
                 </div>
                 <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
@@ -754,8 +1004,18 @@ export function GmRoleplayingEncounterScreen({
                 </div>
                 {context.preview ? (
                   <div style={{ color: "#5e5a50" }}>
-                    <div>{context.preview.calculationText}</div>
-                    {context.preview.difficultyText ? <div>{context.preview.difficultyText}</div> : null}
+                    {context.selectedSupportSkill ? (
+                      <div>Support: {context.selectedSupportSkill.label} (pending support-rule effect)</div>
+                    ) : null}
+                    <div>Actor: {context.preview.calculationText}</div>
+                    {context.isOpposed && context.opponentPreview ? (
+                      <>
+                        <div>Opponent: {context.opponentPreview.calculationText}</div>
+                        <div>Opponent selected: opposed roll uses comparison; difficulty is ignored for now.</div>
+                      </>
+                    ) : context.preview.difficultyText ? (
+                      <div>{context.preview.difficultyText}</div>
+                    ) : null}
                   </div>
                 ) : null}
                 <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
@@ -771,7 +1031,7 @@ export function GmRoleplayingEncounterScreen({
                     onClick={() => void handleGmRoll(draft)}
                     type="button"
                   >
-                    GM Roll
+                    {context.isOpposed ? "GM Roll both" : "GM Roll"}
                   </button>
                 </div>
               </div>
@@ -807,12 +1067,31 @@ export function GmRoleplayingEncounterScreen({
 
               return (
                 <div key={entry.id}>
-                  {index + 1}. {participantLabel} · {entry.skillLabel ?? "Unknown skill"} ·{" "}
-                  {entry.fumble ? "FUMBLE" : entry.numericSubtotal == null ? "unresolved" : `total ${entry.numericSubtotal}`} ·{" "}
-                  {entry.achievedSuccessLevelLabel ?? "No level"} · modifier{" "}
-                  {entry.resultModifier == null ? "—" : `${entry.resultModifier >= 0 ? "+" : ""}${entry.resultModifier}`} ·{" "}
-                  {entry.difficulty ? formatDifficulty(entry.difficulty) : "No difficulty"} ·{" "}
-                  {entry.success == null ? "level only" : entry.success ? "SUCCESS" : "NOT SUCCESSFUL"}
+                  {index + 1}. {entry.mode === "opposed" ? (
+                    <>
+                      {participantLabel} {entry.skillLabel ?? "Unknown skill"}{" "}
+                      {entry.numericSubtotal == null ? "unresolved" : entry.numericSubtotal} vs{" "}
+                      {entry.opponentParticipantName ?? "Unknown opponent"}{" "}
+                      {entry.opponentSkillLabel ?? "Unknown skill"}{" "}
+                      {entry.opponentNumericSubtotal == null ? "unresolved" : entry.opponentNumericSubtotal} —{" "}
+                      {entry.opposedResult === "win"
+                        ? `actor wins by ${entry.opposedMargin ?? 0}`
+                        : entry.opposedResult === "loss"
+                          ? `opponent wins by ${entry.opposedMargin ?? 0}`
+                          : entry.opposedResult === "tie"
+                            ? "tie"
+                            : "pending"}
+                    </>
+                  ) : (
+                    <>
+                      {participantLabel} · {entry.skillLabel ?? "Unknown skill"} ·{" "}
+                      {entry.fumble ? "FUMBLE" : entry.numericSubtotal == null ? "unresolved" : `total ${entry.numericSubtotal}`} ·{" "}
+                      {entry.achievedSuccessLevelLabel ?? "No level"} · modifier{" "}
+                      {entry.resultModifier == null ? "—" : `${entry.resultModifier >= 0 ? "+" : ""}${entry.resultModifier}`} ·{" "}
+                      {entry.difficulty ? formatDifficulty(entry.difficulty) : "No difficulty"} ·{" "}
+                      {entry.success == null ? "level only" : entry.success ? "SUCCESS" : "NOT SUCCESSFUL"}
+                    </>
+                  )}
                   {entry.partial ? " · Partial" : ""}
                   {entry.silent ? " · Silent" : ""} ·{" "}
                   {formatShortDateTime(entry.createdAt)}
@@ -833,11 +1112,20 @@ export function GmRoleplayingEncounterScreen({
               <div key={entry.id}>
                 {formatShortDateTime(entry.createdAt)} · {entry.summary}
                 {entry.skillLabel ? ` · ${entry.skillLabel}` : ""}
+                {entry.supportSkillLabel ? ` · Support ${entry.supportSkillLabel}` : ""}
                 {entry.difficulty ? ` · ${formatDifficulty(entry.difficulty)}` : ""}
                 {entry.rollD20 == null ? "" : ` · d20 ${entry.rollD20}`}
                 {entry.openEndedD10s.length > 0 ? ` · d10s ${entry.openEndedD10s.join(", ")}` : ""}
                 {entry.dieResult == null ? "" : ` · die ${entry.dieResult}`}
                 {entry.numericSubtotal == null ? "" : ` · total ${entry.numericSubtotal}`}
+                {entry.opponentSkillLabel ? ` · VERSUS ${entry.opponentParticipantName ?? "Opponent"} ${entry.opponentSkillLabel}` : ""}
+                {entry.opponentRollD20 == null ? "" : ` · opponent d20 ${entry.opponentRollD20}`}
+                {entry.opponentOpenEndedD10s.length > 0 ? ` · opponent d10s ${entry.opponentOpenEndedD10s.join(", ")}` : ""}
+                {entry.opponentDieResult == null ? "" : ` · opponent die ${entry.opponentDieResult}`}
+                {entry.opponentNumericSubtotal == null ? "" : ` · opponent total ${entry.opponentNumericSubtotal}`}
+                {entry.opponentAchievedSuccessLevelLabel ? ` · opponent ${entry.opponentAchievedSuccessLevelLabel}` : ""}
+                {entry.opposedResult ? ` · opposed ${entry.opposedResult}` : ""}
+                {entry.opposedMargin == null ? "" : ` · margin ${entry.opposedMargin}`}
                 {entry.achievedSuccessLevelLabel ? ` · ${entry.achievedSuccessLevelLabel}` : ""}
                 {entry.resultModifier == null ? "" : ` · modifier ${entry.resultModifier >= 0 ? "+" : ""}${entry.resultModifier}`}
                 {entry.success == null ? "" : entry.success ? " · SUCCESS" : " · NOT SUCCESSFUL"}

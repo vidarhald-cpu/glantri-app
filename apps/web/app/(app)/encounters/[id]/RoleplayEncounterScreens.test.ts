@@ -27,8 +27,15 @@ describe("RoleplayEncounterScreens", () => {
     expect(source).toContain("OB/Skill mod");
     expect(source).toContain("DB mod");
     expect(source).toContain("Other mod");
+    expect(source).toContain("Support category");
+    expect(source).toContain("No support skill");
+    expect(source).toContain("Difficulty OR Opponent");
+    expect(source).toContain("VERSUS");
+    expect(source).toContain("No opponent");
+    expect(source).toContain("Opponent skill category");
     expect(source).toContain("Assign");
     expect(source).toContain("GM Roll");
+    expect(source).toContain("GM Roll both");
     expect(source).toContain("Add roll");
     expect(source).toContain("Ranked roll results");
     expect(source).toContain("Action log");
@@ -45,6 +52,7 @@ describe("RoleplayEncounterScreens", () => {
     expect(source).toContain("assignRoleplaySkillRoll");
     expect(source).toContain("recordRoleplayGmSkillRoll");
     expect(source).toContain("buildRoleplayCalculationPreview");
+    expect(source).toContain("compareRoleplayOpposedRolls");
     expect(source).toContain("rankRoleplayGmRollResults");
     expect(source).toContain("rollOpenEndedRoleplayD20");
     expect(source).toContain("SUCCESS");
@@ -72,6 +80,18 @@ describe("RoleplayEncounterScreens", () => {
     expect(source).toContain("getPlayerFacingSkillBucket");
     expect(source).toContain("readSystemSkillOptions");
     expect(source).not.toContain("Critical +");
+  });
+
+  it("renders opposed roll state, support metadata, and opposed results in GM-only areas", () => {
+    const source = readSource();
+
+    expect(source).toContain("mode: isOpposed ? \"opposed\" : \"difficulty\"");
+    expect(source).toContain("supportSkillId");
+    expect(source).toContain("opponentParticipantId");
+    expect(source).toContain("opponentSkillId");
+    expect(source).toContain("opposedResult");
+    expect(source).toContain("opposedMargin");
+    expect(source).toContain("Opponent selected: opposed roll uses comparison; difficulty is ignored for now.");
   });
 
   it("uses all canonical ordinary and secondary skills instead of only participant-known skills", () => {

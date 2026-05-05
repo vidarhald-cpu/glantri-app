@@ -4,6 +4,7 @@ import type { EncounterParticipant, EncounterSession } from "./session";
 import {
   assignRoleplaySkillRoll,
   buildRoleplayCalculationPreview,
+  compareRoleplayOpposedRolls,
   getSkillRollSuccessLevel,
   getStatRollSuccessLevel,
   rollOpenEndedRoleplayD20,
@@ -196,6 +197,174 @@ describe("roleplay encounter state", () => {
       success: false,
       type: "gm_skill_roll",
       useGenMod: true,
+    });
+  });
+
+  it("stores opposed roll assignment and support skill metadata", () => {
+    const assigned = assignRoleplaySkillRoll({
+      difficulty: "medium",
+      mode: "opposed",
+      opponentParticipantId: "opponent-1",
+      opponentParticipantName: "The Gladiator",
+      opponentSkillId: "perception",
+      opponentSkillLabel: "Perception",
+      opponentSkillValue: 12,
+      participantId: "actor-1",
+      session: createSession(),
+      silent: true,
+      skillId: "stealth",
+      skillLabel: "Stealth",
+      skillValue: 14,
+      supportSkillId: "streetwise",
+      supportSkillLabel: "Streetwise",
+    });
+    const state = normalizeRoleplayState(assigned);
+
+    expect(state.pendingSkillRolls[0]).toMatchObject({
+      mode: "opposed",
+      opponentParticipantId: "opponent-1",
+      opponentSkillId: "perception",
+      opponentSkillValue: 12,
+      supportSkillId: "streetwise",
+    });
+    expect(state.actionLog[0]).toMatchObject({
+      mode: "opposed",
+      opponentSkillLabel: "Perception",
+      supportSkillLabel: "Streetwise",
+      type: "skill_roll_assigned",
+    });
+  });
+
+  it("compares opposed rolls by total, ties, and fumbles deterministically", () => {
+    const actor = buildRoleplayCalculationPreview({
+      roll: { dieResult: 16, openEndedD10s: [], rollD20: 16 },
+      skillLabel: "Stealth",
+      skillValue: 14,
+      otherMod: -2,
+    });
+    const opponent = buildRoleplayCalculationPreview({
+      roll: { dieResult: 10, openEndedD10s: [], rollD20: 10 },
+      skillLabel: "Perception",
+      skillValue: 12,
+    });
+
+    expect(
+      compareRoleplayOpposedRolls({
+        actorLabel: "Scyrian cavalry guy",
+        actorPreview: actor,
+        opponentLabel: "The Gladiator",
+        opponentPreview: opponent,
+      })
+    ).toEqual({
+      margin: 6,
+      result: "win",
+      summary: "Scyrian cavalry guy wins by 6.",
+    });
+
+    expect(
+      compareRoleplayOpposedRolls({
+        actorLabel: "Actor",
+        actorPreview: buildRoleplayCalculationPreview({
+          roll: { dieResult: 10, openEndedD10s: [], rollD20: 10 },
+          skillLabel: "Stealth",
+          skillValue: 12,
+        }),
+        opponentLabel: "Opponent",
+        opponentPreview: buildRoleplayCalculationPreview({
+          roll: { dieResult: 12, openEndedD10s: [], rollD20: 12 },
+          skillLabel: "Perception",
+          skillValue: 10,
+        }),
+      }).result
+    ).toBe("tie");
+
+    expect(
+      compareRoleplayOpposedRolls({
+        actorLabel: "Actor",
+        actorPreview: buildRoleplayCalculationPreview({
+          roll: { dieResult: -5, openEndedD10s: [6], rollD20: 1 },
+          skillLabel: "Stealth",
+          skillValue: 40,
+        }),
+        opponentLabel: "Opponent",
+        opponentPreview: buildRoleplayCalculationPreview({
+          roll: { dieResult: 4, openEndedD10s: [], rollD20: 4 },
+          skillLabel: "Perception",
+          skillValue: 10,
+        }),
+      }).result
+    ).toBe("loss");
+
+    expect(
+      compareRoleplayOpposedRolls({
+        actorLabel: "Actor",
+        actorPreview: buildRoleplayCalculationPreview({
+          roll: { dieResult: -5, openEndedD10s: [6], rollD20: 1 },
+          skillLabel: "Stealth",
+          skillValue: 40,
+        }),
+        opponentLabel: "Opponent",
+        opponentPreview: buildRoleplayCalculationPreview({
+          roll: { dieResult: -5, openEndedD10s: [6], rollD20: 1 },
+          skillLabel: "Perception",
+          skillValue: 40,
+        }),
+      }).summary
+    ).toBe("Both sides fumbled; tied result.");
+  });
+
+  it("records opposed GM rolls with both sides and comparison result", () => {
+    const actorPreview = buildRoleplayCalculationPreview({
+      roll: { dieResult: 16, openEndedD10s: [], rollD20: 16 },
+      skillLabel: "Stealth",
+      skillValue: 14,
+      otherMod: -2,
+    });
+    const opponentPreview = buildRoleplayCalculationPreview({
+      roll: { dieResult: 10, openEndedD10s: [], rollD20: 10 },
+      skillLabel: "Perception",
+      skillValue: 12,
+    });
+    const opposed = compareRoleplayOpposedRolls({
+      actorLabel: "Scyrian cavalry guy",
+      actorPreview,
+      opponentLabel: "The Gladiator",
+      opponentPreview,
+    });
+    const rolled = recordRoleplayGmSkillRoll({
+      achievedSuccessLevel: actorPreview.achievedSuccessLevel,
+      calculationText: "opposed roll",
+      difficulty: "medium",
+      mode: "opposed",
+      numericSubtotal: actorPreview.numericSubtotal,
+      opposedMargin: opposed.margin,
+      opposedResult: opposed.result,
+      opponentAchievedSuccessLevel: opponentPreview.achievedSuccessLevel,
+      opponentNumericSubtotal: opponentPreview.numericSubtotal,
+      opponentParticipantId: "opponent-1",
+      opponentParticipantName: "The Gladiator",
+      opponentRoll: { dieResult: 10, openEndedD10s: [], rollD20: 10 },
+      opponentSkillId: "perception",
+      opponentSkillLabel: "Perception",
+      otherMod: -2,
+      participantId: "actor-1",
+      roll: { dieResult: 16, openEndedD10s: [], rollD20: 16 },
+      session: createSession(),
+      silent: true,
+      skillId: "stealth",
+      skillLabel: "Stealth",
+      supportSkillId: "streetwise",
+      supportSkillLabel: "Streetwise",
+    });
+
+    expect(normalizeRoleplayState(rolled).actionLog[0]).toMatchObject({
+      mode: "opposed",
+      numericSubtotal: 28,
+      opponentNumericSubtotal: 22,
+      opposedMargin: 6,
+      opposedResult: "win",
+      silent: true,
+      supportSkillLabel: "Streetwise",
     });
   });
 
