@@ -144,6 +144,57 @@ export const encounterAttackResolutionSchema = z.object({
   selectedWeaponItemId: idSchema.optional()
 });
 
+export const roleplayDifficultySchema = z.enum([
+  "easy",
+  "medium_minus",
+  "medium",
+  "medium_plus",
+  "hard",
+  "very_hard",
+  "critical",
+  "critical_plus",
+  "legendary"
+]);
+
+export const roleplayParticipantDescriptionSchema = z.object({
+  detailedDescription: z.string().default(""),
+  name: z.string().min(1).optional(),
+  shortDescription: z.string().default("")
+});
+
+export const roleplayPendingSkillRollSchema = z.object({
+  assignedAt: z.string().min(1),
+  difficulty: roleplayDifficultySchema,
+  id: idSchema,
+  participantId: idSchema,
+  silent: z.boolean().default(false),
+  skillId: idSchema,
+  skillLabel: z.string().min(1),
+  skillValue: z.number().int().optional()
+});
+
+export const roleplayActionLogEntrySchema = z.object({
+  calculationText: z.string().optional(),
+  createdAt: z.string().min(1),
+  difficulty: roleplayDifficultySchema.optional(),
+  id: idSchema,
+  participantId: idSchema.optional(),
+  roll: z.number().int().optional(),
+  silent: z.boolean().default(false),
+  skillId: idSchema.optional(),
+  skillLabel: z.string().optional(),
+  summary: z.string().min(1),
+  type: z.enum(["gm_message_updated", "skill_roll_assigned", "gm_skill_roll"])
+});
+
+export const roleplayStateSchema = z.object({
+  actionLog: z.array(roleplayActionLogEntrySchema).default([]),
+  gmMessage: z.string().default(""),
+  participantDescriptions: z.record(idSchema, roleplayParticipantDescriptionSchema).default({}),
+  pendingSkillRolls: z.array(roleplayPendingSkillRollSchema).default([]),
+  visibility: z.record(idSchema, z.record(idSchema, z.boolean())).default({})
+});
+
 export const encounterParticipantSchema = z.object({
   adHocName: z.string().min(1).optional(),
   characterId: idSchema.optional(),
@@ -179,6 +230,7 @@ export const encounterSessionSchema = z.object({
   id: idSchema,
   kind: encounterKindSchema.default("combat"),
   participants: z.array(encounterParticipantSchema).default([]),
+  roleplayState: roleplayStateSchema.optional(),
   scenarioId: idSchema.optional(),
   status: encounterStatusSchema.default("setup"),
   timelineLabel: z.string().optional(),
@@ -210,6 +262,11 @@ export type EncounterDamageResolution = z.infer<typeof encounterDamageResolution
 export type EncounterCriticalEffectSummary = z.infer<typeof encounterCriticalEffectSummarySchema>;
 export type EncounterCriticalRollResult = z.infer<typeof encounterCriticalRollResultSchema>;
 export type EncounterCriticalResolution = z.infer<typeof encounterCriticalResolutionSchema>;
+export type RoleplayDifficulty = z.infer<typeof roleplayDifficultySchema>;
+export type RoleplayParticipantDescription = z.infer<typeof roleplayParticipantDescriptionSchema>;
+export type RoleplayPendingSkillRoll = z.infer<typeof roleplayPendingSkillRollSchema>;
+export type RoleplayActionLogEntry = z.infer<typeof roleplayActionLogEntrySchema>;
+export type RoleplayState = z.infer<typeof roleplayStateSchema>;
 export type EncounterAttackResolution = z.infer<typeof encounterAttackResolutionSchema>;
 export type EncounterParticipant = z.infer<typeof encounterParticipantSchema>;
 export type EncounterSession = z.infer<typeof encounterSessionSchema>;

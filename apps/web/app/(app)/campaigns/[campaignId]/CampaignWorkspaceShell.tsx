@@ -29,6 +29,7 @@ import CampaignDetailPageContent from "./CampaignDetailPageContent";
 import ScenarioDetailPageContent from "./scenarios/[scenarioId]/ScenarioDetailPageContent";
 import ScenarioPlayerPageContent from "./scenarios/[scenarioId]/player/ScenarioPlayerPageContent";
 import ScenarioPlayerCombatPageContent from "./scenarios/[scenarioId]/player/combat/ScenarioPlayerCombatPageContent";
+import { PlayerRoleplayingEncounterScreen } from "../../encounters/[id]/RoleplayEncounterScreens";
 
 interface CampaignWorkspaceShellProps {
   campaignId: string;
@@ -390,7 +391,14 @@ export default function CampaignWorkspaceShell({
 
       {accessMode !== "none" && workspaceState.activeTab === "player-encounter" ? (
         <section style={{ display: "grid", gap: "1rem" }}>
-          {workspaceState.activeScenarioId && workspaceState.activeEncounterId ? (
+          {workspaceState.activeScenarioId && workspaceState.activeEncounterId && activeEncounter?.kind === "roleplay" ? (
+            <PlayerRoleplayingEncounterScreen
+              campaignId={campaignId}
+              embedded
+              encounterId={workspaceState.activeEncounterId}
+              scenarioId={workspaceState.activeScenarioId}
+            />
+          ) : workspaceState.activeScenarioId && workspaceState.activeEncounterId ? (
             <ScenarioPlayerCombatPageContent
               campaignId={campaignId}
               encounterId={workspaceState.activeEncounterId}

@@ -7,5 +7,6 @@ export * from "./campaign/scenario";
 export * from "./content/skills";
 export * from "./docs/glantriTerms";
 export * from "./encounter/session";
+export * from "./encounter/roleplay";
 export * from "./equipment";
 export * from "./profession/professions";

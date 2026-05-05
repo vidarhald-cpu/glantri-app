@@ -10,6 +10,14 @@ function readEncounterDetailSource(): string {
 }
 
 describe("EncounterDetail table rendering", () => {
+  it("routes roleplay encounters to the GM roleplaying screen", () => {
+    const source = readEncounterDetailSource();
+
+    expect(source).toContain("GmRoleplayingEncounterScreen");
+    expect(source).toContain('encounter.kind === "roleplay"');
+    expect(source).toContain("onPersist={persistEncounter}");
+  });
+
   it("uses stable unique ids for repeated GM encounter header labels", () => {
     const source = readEncounterDetailSource();
 

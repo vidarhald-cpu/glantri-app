@@ -42,6 +42,7 @@ import RememberedCampaignWorkspaceEffect from "../../../../src/lib/campaigns/Rem
 import { buildCampaignWorkspaceHref } from "../../../../src/lib/campaigns/workspace";
 import { LocalEncounterRepository } from "../../../../src/lib/offline/repositories/localEncounterRepository";
 import { LocalCharacterRepository, UNNAMED_CHARACTER_PLACEHOLDER } from "../../../../src/lib/offline/repositories/localCharacterRepository";
+import { GmRoleplayingEncounterScreen } from "./RoleplayEncounterScreens";
 
 interface EncounterDetailProps {
   campaignId?: string;
@@ -478,6 +479,21 @@ export default function EncounterDetail({
           {isNestedScenarioFlow ? "Back to scenario encounters" : "Back to encounters"}
         </Link>
       </section>
+    );
+  }
+
+  if (encounter.kind === "roleplay") {
+    return (
+      <GmRoleplayingEncounterScreen
+        campaignId={campaignId}
+        content={content}
+        embedded={embedded}
+        encounter={encounter}
+        onPersist={persistEncounter}
+        scenario={scenarioRecord}
+        scenarioId={scenarioId}
+        scenarioParticipants={scenarioParticipants}
+      />
     );
   }
 
