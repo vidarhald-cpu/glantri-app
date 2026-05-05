@@ -144,17 +144,21 @@ export const encounterAttackResolutionSchema = z.object({
   selectedWeaponItemId: idSchema.optional()
 });
 
-export const roleplayDifficultySchema = z.enum([
-  "easy",
-  "medium_minus",
-  "medium",
-  "medium_plus",
-  "hard",
-  "very_hard",
-  "critical",
-  "critical_plus",
-  "legendary"
-]);
+export const roleplayDifficultySchema = z.preprocess(
+  (input) => (input === "critical_plus" ? "legendary" : input),
+  z.enum([
+    "trivial_success",
+    "easy",
+    "medium_minus",
+    "medium",
+    "medium_plus",
+    "hard",
+    "very_hard",
+    "critical",
+    "legendary",
+    "godly"
+  ])
+);
 
 export const roleplayParticipantDescriptionSchema = z.object({
   detailedDescription: z.string().default(""),
@@ -181,16 +185,27 @@ export const roleplayPendingSkillRollSchema = z.object({
 }).merge(roleplayRollModifierSchema);
 
 export const roleplayActionLogEntrySchema = z.object({
+  achievedSuccessLevelId: z.string().min(1).optional(),
+  achievedSuccessLevelLabel: z.string().min(1).optional(),
+  autoSuccess: z.boolean().default(false),
   calculationText: z.string().optional(),
   createdAt: z.string().min(1),
+  dieResult: z.number().int().optional(),
   difficulty: roleplayDifficultySchema.optional(),
+  finalTotal: z.number().int().optional(),
+  fumble: z.boolean().default(false),
   id: idSchema,
   numericSubtotal: z.number().int().optional(),
+  openEndedD10s: z.array(z.number().int().min(1).max(10)).default([]),
+  partial: z.boolean().default(false),
   participantId: idSchema.optional(),
+  resultModifier: z.number().int().optional(),
   roll: z.number().int().optional(),
+  rollD20: z.number().int().min(1).max(20).optional(),
   silent: z.boolean().default(false),
   skillId: idSchema.optional(),
   skillLabel: z.string().optional(),
+  success: z.boolean().optional(),
   summary: z.string().min(1),
   type: z.enum(["gm_message_updated", "skill_roll_assigned", "gm_skill_roll"])
 }).merge(roleplayRollModifierSchema.partial());

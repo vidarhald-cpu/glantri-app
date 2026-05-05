@@ -9,6 +9,7 @@ import type {
 import { roleplayStateSchema } from "./session";
 
 export const roleplayDifficultyOptions: Array<{ id: RoleplayDifficulty; label: string }> = [
+  { id: "trivial_success", label: "Trivial success" },
   { id: "easy", label: "Easy" },
   { id: "medium_minus", label: "Medium -" },
   { id: "medium", label: "Medium" },
@@ -16,9 +17,78 @@ export const roleplayDifficultyOptions: Array<{ id: RoleplayDifficulty; label: s
   { id: "hard", label: "Hard" },
   { id: "very_hard", label: "Very hard" },
   { id: "critical", label: "Critical" },
-  { id: "critical_plus", label: "Critical +" },
   { id: "legendary", label: "Legendary" },
+  { id: "godly", label: "Godly" },
 ];
+
+export type RoleplayRollKind = "skill" | "stat";
+export type RoleplaySuccessLevelId =
+  | "fumble"
+  | "trivial_success"
+  | "easy"
+  | "medium_minus"
+  | "medium"
+  | "medium_plus"
+  | "hard"
+  | "very_hard"
+  | "critical"
+  | "legendary"
+  | "godly";
+
+export interface RoleplaySuccessLevel {
+  fumble: boolean;
+  id: RoleplaySuccessLevelId;
+  label: string;
+  rank: number;
+  range: string;
+  resultModifier: number;
+}
+
+export interface RoleplayOpenEndedD20Roll {
+  dieResult: number;
+  openEndedD10s: number[];
+  rollD20: number;
+}
+
+const ROLEPLAY_SUCCESS_LEVELS: RoleplaySuccessLevel[] = [
+  { fumble: true, id: "fumble", label: "Fumble", rank: 0, range: "Fumble", resultModifier: -2 },
+  { fumble: false, id: "trivial_success", label: "Trivial success", rank: 1, range: "Trivial success", resultModifier: 0 },
+  { fumble: false, id: "easy", label: "Easy", rank: 2, range: "Easy", resultModifier: 0 },
+  { fumble: false, id: "medium_minus", label: "Medium -", rank: 3, range: "Medium -", resultModifier: 0 },
+  { fumble: false, id: "medium", label: "Medium", rank: 4, range: "Medium", resultModifier: 0 },
+  { fumble: false, id: "medium_plus", label: "Medium +", rank: 5, range: "Medium +", resultModifier: 1 },
+  { fumble: false, id: "hard", label: "Hard", rank: 6, range: "Hard", resultModifier: 1 },
+  { fumble: false, id: "very_hard", label: "Very hard", rank: 7, range: "Very hard", resultModifier: 2 },
+  { fumble: false, id: "critical", label: "Critical", rank: 8, range: "Critical", resultModifier: 2 },
+  { fumble: false, id: "legendary", label: "Legendary", rank: 9, range: "Legendary", resultModifier: 3 },
+  { fumble: false, id: "godly", label: "Godly", rank: 10, range: "Godly", resultModifier: 3 },
+];
+
+const SUCCESS_LEVEL_BY_ID = new Map(ROLEPLAY_SUCCESS_LEVELS.map((level) => [level.id, level]));
+const SKILL_REQUIRED_LOWER_THRESHOLD: Record<RoleplayDifficulty, number> = {
+  trivial_success: 11,
+  easy: 16,
+  medium_minus: 21,
+  medium: 26,
+  medium_plus: 31,
+  hard: 36,
+  very_hard: 41,
+  critical: 46,
+  legendary: 51,
+  godly: 56,
+};
+const STAT_REQUIRED_LOWER_THRESHOLD: Record<RoleplayDifficulty, number> = {
+  trivial_success: 6,
+  easy: 11,
+  medium_minus: 16,
+  medium: 21,
+  medium_plus: 26,
+  hard: 31,
+  very_hard: 36,
+  critical: 41,
+  legendary: 46,
+  godly: 51,
+};
 
 export function normalizeRoleplayState(session: EncounterSession): RoleplayState {
   return roleplayStateSchema.parse(session.roleplayState ?? {});
@@ -55,8 +125,12 @@ export function updateRoleplayGmMessage(input: {
       ...state,
       actionLog: [
         {
+          autoSuccess: false,
           createdAt: nowIso(),
+          fumble: false,
           id: makeId("roleplay-log"),
+          openEndedD10s: [],
+          partial: false,
           silent: true,
           summary: "GM message updated.",
           type: "gm_message_updated",
@@ -143,10 +217,16 @@ export interface RoleplayRollModifiers {
 }
 
 export interface RoleplayCalculationPreview {
+  achievedSuccessLevel?: RoleplaySuccessLevel;
+  autoSuccess: boolean;
   calculationText: string;
   difficultyText?: string;
+  finalTotal?: number;
+  fumble: boolean;
   hasPlaceholderMods: boolean;
   numericSubtotal?: number;
+  partial: boolean;
+  success?: boolean;
 }
 
 function normalizeRollModifiers(input: RoleplayRollModifiers | undefined): Required<RoleplayRollModifiers> {
@@ -172,20 +252,117 @@ export function normalizeRoleplayOtherMod(value: unknown): number {
   return Math.trunc(numeric);
 }
 
+function rollDie(sides: number, rng: () => number): number {
+  return Math.floor(rng() * sides) + 1;
+}
+
+export function rollOpenEndedRoleplayD20(rng: () => number = Math.random): RoleplayOpenEndedD20Roll {
+  const rollD20 = rollDie(20, rng);
+  const openEndedD10s: number[] = [];
+  let dieResult = rollD20;
+
+  if (rollD20 === 20 || rollD20 === 1) {
+    const direction = rollD20 === 20 ? 1 : -1;
+    let keepRolling = true;
+
+    while (keepRolling) {
+      const d10 = rollDie(10, rng);
+      openEndedD10s.push(d10);
+      dieResult += direction * d10;
+      keepRolling = d10 === 10;
+    }
+  }
+
+  return { dieResult, openEndedD10s, rollD20 };
+}
+
+function getSuccessLevelFromTotal(input: {
+  finalTotal: number;
+  initialD20?: number;
+  kind: RoleplayRollKind;
+}): RoleplaySuccessLevel {
+  if (input.initialD20 === 1) {
+    return ROLEPLAY_SUCCESS_LEVELS[0]!;
+  }
+
+  const total = input.finalTotal;
+
+  if (input.kind === "stat") {
+    if (total <= 5) return ROLEPLAY_SUCCESS_LEVELS[0]!;
+    if (total <= 10) return ROLEPLAY_SUCCESS_LEVELS[1]!;
+    if (total <= 15) return ROLEPLAY_SUCCESS_LEVELS[2]!;
+    if (total <= 20) return ROLEPLAY_SUCCESS_LEVELS[3]!;
+    if (total <= 25) return ROLEPLAY_SUCCESS_LEVELS[4]!;
+    if (total <= 30) return ROLEPLAY_SUCCESS_LEVELS[5]!;
+    if (total <= 35) return ROLEPLAY_SUCCESS_LEVELS[6]!;
+    if (total <= 40) return ROLEPLAY_SUCCESS_LEVELS[7]!;
+    if (total <= 45) return ROLEPLAY_SUCCESS_LEVELS[8]!;
+    if (total <= 50) return ROLEPLAY_SUCCESS_LEVELS[9]!;
+    return ROLEPLAY_SUCCESS_LEVELS[10]!;
+  }
+
+  if (total <= 10) return ROLEPLAY_SUCCESS_LEVELS[0]!;
+  if (total <= 15) return ROLEPLAY_SUCCESS_LEVELS[1]!;
+  if (total <= 20) return ROLEPLAY_SUCCESS_LEVELS[2]!;
+  if (total <= 25) return ROLEPLAY_SUCCESS_LEVELS[3]!;
+  if (total <= 30) return ROLEPLAY_SUCCESS_LEVELS[4]!;
+  if (total <= 35) return ROLEPLAY_SUCCESS_LEVELS[5]!;
+  if (total <= 40) return ROLEPLAY_SUCCESS_LEVELS[6]!;
+  if (total <= 45) return ROLEPLAY_SUCCESS_LEVELS[7]!;
+  if (total <= 50) return ROLEPLAY_SUCCESS_LEVELS[8]!;
+  if (total <= 55) return ROLEPLAY_SUCCESS_LEVELS[9]!;
+  return ROLEPLAY_SUCCESS_LEVELS[10]!;
+}
+
+export function getSkillRollSuccessLevel(
+  finalTotal: number,
+  initialD20?: number
+): RoleplaySuccessLevel {
+  return getSuccessLevelFromTotal({ finalTotal, initialD20, kind: "skill" });
+}
+
+export function getStatRollSuccessLevel(
+  finalTotal: number,
+  initialD20?: number
+): RoleplaySuccessLevel {
+  return getSuccessLevelFromTotal({ finalTotal, initialD20, kind: "stat" });
+}
+
+export function getRoleplayRequiredLowerThreshold(
+  difficulty: RoleplayDifficulty,
+  kind: RoleplayRollKind = "skill"
+): number {
+  return kind === "stat"
+    ? STAT_REQUIRED_LOWER_THRESHOLD[difficulty]
+    : SKILL_REQUIRED_LOWER_THRESHOLD[difficulty];
+}
+
+function formatRoleplayDieRoll(roll: RoleplayOpenEndedD20Roll): string {
+  if (roll.openEndedD10s.length === 0) {
+    return String(roll.rollD20);
+  }
+
+  const separator = roll.rollD20 === 1 ? "-" : "+";
+  return `${roll.rollD20}${separator}${roll.openEndedD10s.join(separator)}`;
+}
+
 export function buildRoleplayCalculationPreview(input: {
   difficulty?: RoleplayDifficulty;
-  roll?: number;
+  kind?: RoleplayRollKind;
+  roll?: RoleplayOpenEndedD20Roll;
   skillLabel: string;
   skillValue?: number;
 } & RoleplayRollModifiers): RoleplayCalculationPreview {
   const modifiers = normalizeRollModifiers(input);
+  const kind = input.kind ?? "skill";
   const skillValue = input.skillValue ?? 0;
+  const effectiveValue = skillValue + modifiers.otherMod;
   const parts = [`${input.skillLabel} ${skillValue}`];
 
   if (input.roll == null) {
     parts.push("<DIE ROLL>");
   } else {
-    parts.push(`roll ${input.roll}`);
+    parts.push(`roll ${formatRoleplayDieRoll(input.roll)}`);
   }
 
   if (modifiers.useGenMod) {
@@ -207,22 +384,58 @@ export function buildRoleplayCalculationPreview(input: {
   const hasPlaceholderMods =
     modifiers.useGenMod || modifiers.useObSkillMod || modifiers.useDbMod;
   const numericSubtotal =
-    input.roll == null ? undefined : skillValue + input.roll + modifiers.otherMod;
-  const calculationText =
+    input.roll == null ? undefined : skillValue + input.roll.dieResult + modifiers.otherMod;
+  const achievedSuccessLevel =
     numericSubtotal == null
+      ? undefined
+      : getSuccessLevelFromTotal({
+          finalTotal: numericSubtotal,
+          initialD20: input.roll?.rollD20,
+          kind,
+        });
+  const success =
+    achievedSuccessLevel && input.difficulty
+      ? !achievedSuccessLevel.fumble &&
+        achievedSuccessLevel.rank >= (SUCCESS_LEVEL_BY_ID.get(input.difficulty)?.rank ?? 0)
+      : undefined;
+  const autoSuccess =
+    input.roll == null &&
+    input.difficulty != null &&
+    effectiveValue >= getRoleplayRequiredLowerThreshold(input.difficulty, kind) + 5;
+  const calculationText =
+    autoSuccess
+      ? `${parts.join(" + ")} = pending · Automatic success — no roll needed`
+      : numericSubtotal == null
       ? `${parts.join(" + ")} = pending`
-      : hasPlaceholderMods
-        ? `${parts.join(" + ")} = ${numericSubtotal} before placeholder mods`
-        : `${parts.join(" + ")} = ${numericSubtotal}`;
-  const difficultyText = input.difficulty
-    ? `Difficulty: ${formatRoleplayDifficulty(input.difficulty)} · Result: calculation pending difficulty rules`
-    : undefined;
+      : [
+          hasPlaceholderMods
+            ? `${parts.join(" + ")} = ${numericSubtotal} before unresolved placeholder mods`
+            : `${parts.join(" + ")} = ${numericSubtotal}`,
+          achievedSuccessLevel?.fumble
+            ? "FUMBLE — automatic fail"
+            : achievedSuccessLevel
+              ? `${achievedSuccessLevel.label}, modifier ${achievedSuccessLevel.resultModifier >= 0 ? "+" : ""}${achievedSuccessLevel.resultModifier}`
+              : undefined,
+          success == null ? undefined : success ? `SUCCESS vs ${formatRoleplayDifficulty(input.difficulty!)}` : `NOT SUCCESSFUL vs ${formatRoleplayDifficulty(input.difficulty!)}`,
+        ]
+          .filter(Boolean)
+          .join(" → ");
+  const difficultyText =
+    input.difficulty && numericSubtotal == null && !autoSuccess
+      ? `Required difficulty: ${formatRoleplayDifficulty(input.difficulty)}`
+      : undefined;
 
   return {
+    achievedSuccessLevel,
+    autoSuccess,
     calculationText,
     difficultyText,
+    finalTotal: numericSubtotal,
+    fumble: Boolean(achievedSuccessLevel?.fumble),
     hasPlaceholderMods,
     numericSubtotal,
+    partial: hasPlaceholderMods,
+    success,
   };
 }
 
@@ -245,10 +458,14 @@ export function assignRoleplaySkillRoll(input: {
       ...state,
       actionLog: [
         {
+          autoSuccess: false,
           createdAt: assignedAt,
           difficulty: input.difficulty,
+          fumble: false,
           id: makeId("roleplay-log"),
+          openEndedD10s: [],
           otherMod: modifiers.otherMod,
+          partial: false,
           participantId: input.participantId,
           silent: input.silent,
           skillId: input.skillId,
@@ -283,18 +500,27 @@ export function assignRoleplaySkillRoll(input: {
 }
 
 export function recordRoleplayGmSkillRoll(input: {
+  achievedSuccessLevel?: RoleplaySuccessLevel;
+  autoSuccess?: boolean;
   calculationText: string;
+  dieResult?: number;
   difficulty: RoleplayDifficulty;
+  finalTotal?: number;
+  fumble?: boolean;
+  openEndedD10s?: number[];
   participantId: string;
-  roll: number;
+  partial?: boolean;
+  roll: RoleplayOpenEndedD20Roll;
   session: EncounterSession;
   silent: boolean;
   skillId: string;
   skillLabel: string;
   numericSubtotal?: number;
+  success?: boolean;
 } & RoleplayRollModifiers): EncounterSession {
   const state = normalizeRoleplayState(input.session);
   const modifiers = normalizeRollModifiers(input);
+  const achievedSuccessLevel = input.achievedSuccessLevel;
 
   return withRoleplayState({
     session: input.session,
@@ -302,17 +528,28 @@ export function recordRoleplayGmSkillRoll(input: {
       ...state,
       actionLog: [
         {
+          achievedSuccessLevelId: achievedSuccessLevel?.id,
+          achievedSuccessLevelLabel: achievedSuccessLevel?.label,
+          autoSuccess: Boolean(input.autoSuccess),
           calculationText: input.calculationText,
           createdAt: nowIso(),
+          dieResult: input.dieResult ?? input.roll.dieResult,
           difficulty: input.difficulty,
+          finalTotal: input.finalTotal ?? input.numericSubtotal,
+          fumble: Boolean(input.fumble),
           id: makeId("roleplay-log"),
           numericSubtotal: input.numericSubtotal,
+          openEndedD10s: input.openEndedD10s ?? input.roll.openEndedD10s,
           otherMod: modifiers.otherMod,
+          partial: Boolean(input.partial),
           participantId: input.participantId,
-          roll: input.roll,
+          resultModifier: achievedSuccessLevel?.resultModifier,
+          roll: input.roll.rollD20,
+          rollD20: input.roll.rollD20,
           silent: input.silent,
           skillId: input.skillId,
           skillLabel: input.skillLabel,
+          success: input.success,
           summary: `GM rolled ${input.skillLabel}.`,
           type: "gm_skill_roll",
           useDbMod: modifiers.useDbMod,
@@ -332,6 +569,7 @@ export function rankRoleplayGmRollResults(
     .filter((entry) => entry.type === "gm_skill_roll" && entry.numericSubtotal != null)
     .sort(
       (left, right) =>
+        Number(Boolean(left.fumble)) - Number(Boolean(right.fumble)) ||
         (right.numericSubtotal ?? Number.NEGATIVE_INFINITY) -
           (left.numericSubtotal ?? Number.NEGATIVE_INFINITY) ||
         right.createdAt.localeCompare(left.createdAt)

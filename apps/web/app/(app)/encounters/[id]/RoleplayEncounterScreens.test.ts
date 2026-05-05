@@ -34,7 +34,7 @@ describe("RoleplayEncounterScreens", () => {
     expect(source).toContain("Action log");
   });
 
-  it("stores roleplay state through sessionJson helpers without inventing success math", () => {
+  it("stores roleplay state through sessionJson helpers and evaluates non-opposed success levels", () => {
     const source = readSource();
 
     expect(source).toContain("normalizeRoleplayState");
@@ -46,8 +46,9 @@ describe("RoleplayEncounterScreens", () => {
     expect(source).toContain("recordRoleplayGmSkillRoll");
     expect(source).toContain("buildRoleplayCalculationPreview");
     expect(source).toContain("rankRoleplayGmRollResults");
-    expect(source).toContain("calculation pending difficulty rules");
-    expect(source).toContain("rollD20");
+    expect(source).toContain("rollOpenEndedRoleplayD20");
+    expect(source).toContain("SUCCESS");
+    expect(source).toContain("NOT SUCCESSFUL");
   });
 
   it("keeps player roleplay screen minimal and hides GM-only sections", () => {
@@ -70,6 +71,7 @@ describe("RoleplayEncounterScreens", () => {
     expect(source).toContain("getPlayerFacingSkillBucketDefinitions");
     expect(source).toContain("getPlayerFacingSkillBucket");
     expect(source).toContain("readSystemSkillOptions");
+    expect(source).not.toContain("Critical +");
   });
 
   it("uses all canonical ordinary and secondary skills instead of only participant-known skills", () => {

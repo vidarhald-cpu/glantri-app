@@ -21,6 +21,7 @@ import {
   rankRoleplayGmRollResults,
   recordRoleplayGmSkillRoll,
   roleplayDifficultyOptions,
+  rollOpenEndedRoleplayD20,
   selectAllRoleplayVisibilityForViewer,
   updateRoleplayGmMessage,
   updateRoleplayParticipantDescription,
@@ -112,10 +113,6 @@ function formatShortDateTime(value: string): string {
   const minutes = String(date.getMinutes()).padStart(2, "0");
 
   return `${day}.${month} ${hours}:${minutes}`;
-}
-
-function rollD20(): number {
-  return Math.floor(Math.random() * 20) + 1;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -455,7 +452,7 @@ export function GmRoleplayingEncounterScreen({
       return;
     }
 
-    const roll = rollD20();
+    const roll = rollOpenEndedRoleplayD20();
     const preview = buildRoleplayCalculationPreview({
       difficulty: draft.difficulty,
       otherMod,
@@ -474,14 +471,22 @@ export function GmRoleplayingEncounterScreen({
       recordRoleplayGmSkillRoll({
         calculationText,
         difficulty: draft.difficulty,
+        achievedSuccessLevel: preview.achievedSuccessLevel,
+        autoSuccess: preview.autoSuccess,
+        dieResult: roll.dieResult,
+        finalTotal: preview.finalTotal,
+        fumble: preview.fumble,
         numericSubtotal: preview.numericSubtotal,
+        openEndedD10s: roll.openEndedD10s,
         otherMod,
+        partial: preview.partial,
         participantId: participant.id,
         roll,
         session: encounter,
         silent: draft.silent,
         skillId: selectedSkill.id,
         skillLabel: selectedSkill.label,
+        success: preview.success,
         useDbMod: draft.useDbMod,
         useGenMod: draft.useGenMod,
         useObSkillMod: draft.useObSkillMod,
@@ -785,8 +790,8 @@ export function GmRoleplayingEncounterScreen({
           </button>
         </div>
         <div style={{ color: "#5e5a50" }}>
-          Roleplay difficulty math is not finalized yet. GM Roll records a d20, numeric subtotal,
-          and selected modifier placeholders without inventing success logic.
+          GM Roll uses the roleplay open-ended d20 table for non-opposed skill rolls.
+          Gen, OB/Skill, and DB flags remain visible placeholder modifiers until numeric sources are defined.
         </div>
       </section>
 
@@ -803,9 +808,13 @@ export function GmRoleplayingEncounterScreen({
               return (
                 <div key={entry.id}>
                   {index + 1}. {participantLabel} · {entry.skillLabel ?? "Unknown skill"} ·{" "}
-                  {entry.numericSubtotal == null ? "unresolved" : `subtotal ${entry.numericSubtotal}`} ·{" "}
+                  {entry.fumble ? "FUMBLE" : entry.numericSubtotal == null ? "unresolved" : `total ${entry.numericSubtotal}`} ·{" "}
+                  {entry.achievedSuccessLevelLabel ?? "No level"} · modifier{" "}
+                  {entry.resultModifier == null ? "—" : `${entry.resultModifier >= 0 ? "+" : ""}${entry.resultModifier}`} ·{" "}
                   {entry.difficulty ? formatDifficulty(entry.difficulty) : "No difficulty"} ·{" "}
-                  calculation pending difficulty rules{entry.silent ? " · Silent" : ""} ·{" "}
+                  {entry.success == null ? "level only" : entry.success ? "SUCCESS" : "NOT SUCCESSFUL"}
+                  {entry.partial ? " · Partial" : ""}
+                  {entry.silent ? " · Silent" : ""} ·{" "}
                   {formatShortDateTime(entry.createdAt)}
                 </div>
               );
@@ -825,8 +834,15 @@ export function GmRoleplayingEncounterScreen({
                 {formatShortDateTime(entry.createdAt)} · {entry.summary}
                 {entry.skillLabel ? ` · ${entry.skillLabel}` : ""}
                 {entry.difficulty ? ` · ${formatDifficulty(entry.difficulty)}` : ""}
-                {entry.roll == null ? "" : ` · roll ${entry.roll}`}
-                {entry.numericSubtotal == null ? "" : ` · subtotal ${entry.numericSubtotal}`}
+                {entry.rollD20 == null ? "" : ` · d20 ${entry.rollD20}`}
+                {entry.openEndedD10s.length > 0 ? ` · d10s ${entry.openEndedD10s.join(", ")}` : ""}
+                {entry.dieResult == null ? "" : ` · die ${entry.dieResult}`}
+                {entry.numericSubtotal == null ? "" : ` · total ${entry.numericSubtotal}`}
+                {entry.achievedSuccessLevelLabel ? ` · ${entry.achievedSuccessLevelLabel}` : ""}
+                {entry.resultModifier == null ? "" : ` · modifier ${entry.resultModifier >= 0 ? "+" : ""}${entry.resultModifier}`}
+                {entry.success == null ? "" : entry.success ? " · SUCCESS" : " · NOT SUCCESSFUL"}
+                {entry.fumble ? " · FUMBLE" : ""}
+                {entry.partial ? " · Partial" : ""}
                 {entry.useGenMod ? " · Gen mod" : ""}
                 {entry.useObSkillMod ? " · OB/Skill mod" : ""}
                 {entry.useDbMod ? " · DB mod" : ""}

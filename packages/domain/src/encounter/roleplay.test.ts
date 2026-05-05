@@ -4,11 +4,15 @@ import type { EncounterParticipant, EncounterSession } from "./session";
 import {
   assignRoleplaySkillRoll,
   buildRoleplayCalculationPreview,
+  getSkillRollSuccessLevel,
+  getStatRollSuccessLevel,
+  rollOpenEndedRoleplayD20,
   normalizeRoleplayState,
   normalizeRoleplayOtherMod,
   orderRoleplayEncounterParticipants,
   rankRoleplayGmRollResults,
   recordRoleplayGmSkillRoll,
+  roleplayDifficultyOptions,
   selectAllRoleplayVisibilityForViewer,
   updateRoleplayGmMessage,
   updateRoleplayParticipantDescription,
@@ -60,6 +64,21 @@ describe("roleplay encounter state", () => {
       pendingSkillRolls: [],
       visibility: {},
     });
+  });
+
+  it("uses the roleplay success table difficulty labels", () => {
+    expect(roleplayDifficultyOptions.map((option) => option.label)).toEqual([
+      "Trivial success",
+      "Easy",
+      "Medium -",
+      "Medium",
+      "Medium +",
+      "Hard",
+      "Very hard",
+      "Critical",
+      "Legendary",
+      "Godly",
+    ]);
   });
 
   it("updates GM message, visibility, row select-all, and participant descriptions", () => {
@@ -140,32 +159,47 @@ describe("roleplay encounter state", () => {
       useGenMod: true,
     });
 
-    const rolled = recordRoleplayGmSkillRoll({
-      calculationText: "Perception 12 + roll 12 + Other -2 = 22 · calculation pending rules.",
+    const roll = { dieResult: 12, openEndedD10s: [], rollD20: 12 };
+    const preview = buildRoleplayCalculationPreview({
       difficulty: "hard",
-      numericSubtotal: 22,
+      otherMod: -2,
+      roll,
+      skillLabel: "Perception",
+      skillValue: 12,
+      useGenMod: true,
+    });
+    const rolled = recordRoleplayGmSkillRoll({
+      calculationText: preview.calculationText,
+      difficulty: "hard",
+      achievedSuccessLevel: preview.achievedSuccessLevel,
+      finalTotal: preview.finalTotal,
+      numericSubtotal: preview.numericSubtotal,
       otherMod: -2,
       participantId: "participant-1",
-      roll: 12,
+      roll,
       session: assigned,
       silent: false,
       skillId: "perception",
       skillLabel: "Perception",
+      success: preview.success,
       useGenMod: true,
     });
 
     expect(normalizeRoleplayState(rolled).actionLog[0]).toMatchObject({
-      calculationText: "Perception 12 + roll 12 + Other -2 = 22 · calculation pending rules.",
+      achievedSuccessLevelLabel: "Medium -",
+      calculationText: "Perception 12 + roll 12 + Gen mod + Other -2 = 22 before unresolved placeholder mods → Medium -, modifier +0 → NOT SUCCESSFUL vs Hard",
       numericSubtotal: 22,
       otherMod: -2,
       roll: 12,
+      rollD20: 12,
       silent: false,
+      success: false,
       type: "gm_skill_roll",
       useGenMod: true,
     });
   });
 
-  it("normalizes other mods and builds honest calculation previews", () => {
+  it("normalizes other mods and builds success-level calculation previews", () => {
     expect(normalizeRoleplayOtherMod("")).toBe(0);
     expect(normalizeRoleplayOtherMod("-2")).toBe(-2);
     expect(normalizeRoleplayOtherMod(3.8)).toBe(3);
@@ -175,40 +209,43 @@ describe("roleplay encounter state", () => {
       buildRoleplayCalculationPreview({
         difficulty: "medium",
         skillLabel: "Perception",
-        skillValue: 8,
+        skillValue: 31,
       })
     ).toMatchObject({
-      calculationText: "Perception 8 + <DIE ROLL> = pending",
-      difficultyText: "Difficulty: Medium · Result: calculation pending difficulty rules",
+      autoSuccess: true,
+      calculationText: "Perception 31 + <DIE ROLL> = pending · Automatic success — no roll needed",
       numericSubtotal: undefined,
     });
 
     expect(
       buildRoleplayCalculationPreview({
-        difficulty: "hard",
+        difficulty: "medium",
         otherMod: -2,
-        roll: 14,
+        roll: { dieResult: 14, openEndedD10s: [], rollD20: 14 },
         skillLabel: "Perception",
-        skillValue: 8,
+        skillValue: 20,
       })
     ).toMatchObject({
-      calculationText: "Perception 8 + roll 14 + Other -2 = 20",
-      numericSubtotal: 20,
+      achievedSuccessLevel: expect.objectContaining({ id: "medium_plus", resultModifier: 1 }),
+      calculationText: "Perception 20 + roll 14 + Other -2 = 32 → Medium +, modifier +1 → SUCCESS vs Medium",
+      numericSubtotal: 32,
+      success: true,
     });
 
     expect(
       buildRoleplayCalculationPreview({
         difficulty: "hard",
-        roll: 7,
+        roll: { dieResult: 7, openEndedD10s: [], rollD20: 7 },
         skillLabel: "Stealth",
         skillValue: 10,
         useDbMod: true,
         useGenMod: true,
       })
     ).toMatchObject({
-      calculationText: "Stealth 10 + roll 7 + Gen mod + DB mod = 17 before placeholder mods",
+      calculationText: "Stealth 10 + roll 7 + Gen mod + DB mod = 17 before unresolved placeholder mods → Easy, modifier +0 → NOT SUCCESSFUL vs Hard",
       hasPlaceholderMods: true,
       numericSubtotal: 17,
+      partial: true,
     });
   });
 
@@ -216,9 +253,10 @@ describe("roleplay encounter state", () => {
     const first = recordRoleplayGmSkillRoll({
       calculationText: "Bow 12 + roll 10 = 22",
       difficulty: "medium",
+      achievedSuccessLevel: getSkillRollSuccessLevel(22, 10),
       numericSubtotal: 22,
       participantId: "participant-1",
-      roll: 10,
+      roll: { dieResult: 10, openEndedD10s: [], rollD20: 10 },
       session: createSession(),
       silent: false,
       skillId: "bow",
@@ -227,9 +265,10 @@ describe("roleplay encounter state", () => {
     const second = recordRoleplayGmSkillRoll({
       calculationText: "Stealth 10 + roll 18 = 28",
       difficulty: "medium",
+      achievedSuccessLevel: getSkillRollSuccessLevel(28, 18),
       numericSubtotal: 28,
       participantId: "participant-2",
-      roll: 18,
+      roll: { dieResult: 18, openEndedD10s: [], rollD20: 18 },
       session: first,
       silent: true,
       skillId: "stealth",
@@ -240,6 +279,102 @@ describe("roleplay encounter state", () => {
       "Stealth",
       "Bow",
     ]);
+  });
+
+  it.each([
+    { d10s: [], d20: 14, total: 14 },
+    { d10s: [7], d20: 20, total: 27 },
+    { d10s: [10, 3], d20: 20, total: 33 },
+    { d10s: [6], d20: 1, total: -5 },
+    { d10s: [10, 4], d20: 1, total: -13 },
+  ])("rolls roleplay open-ended d20 totals", ({ d10s, d20, total }) => {
+    const rolls = [(d20 - 0.5) / 20, ...d10s.map((roll) => (roll - 0.5) / 10)];
+    const result = rollOpenEndedRoleplayD20(() => rolls.shift() ?? 0.5);
+
+    expect(result).toEqual({ dieResult: total, openEndedD10s: d10s, rollD20: d20 });
+  });
+
+  it.each([
+    [10, "fumble"],
+    [11, "trivial_success"],
+    [15, "trivial_success"],
+    [16, "easy"],
+    [20, "easy"],
+    [21, "medium_minus"],
+    [25, "medium_minus"],
+    [26, "medium"],
+    [30, "medium"],
+    [31, "medium_plus"],
+    [35, "medium_plus"],
+    [36, "hard"],
+    [40, "hard"],
+    [41, "very_hard"],
+    [45, "very_hard"],
+    [46, "critical"],
+    [50, "critical"],
+    [51, "legendary"],
+    [55, "legendary"],
+    [56, "godly"],
+  ])("maps skill total %i to %s", (total, expectedId) => {
+    expect(getSkillRollSuccessLevel(total).id).toBe(expectedId);
+  });
+
+  it.each([
+    [5, "fumble"],
+    [6, "trivial_success"],
+    [10, "trivial_success"],
+    [11, "easy"],
+    [15, "easy"],
+    [16, "medium_minus"],
+    [20, "medium_minus"],
+    [21, "medium"],
+    [25, "medium"],
+    [26, "medium_plus"],
+    [30, "medium_plus"],
+    [31, "hard"],
+    [35, "hard"],
+    [36, "very_hard"],
+    [40, "very_hard"],
+    [41, "critical"],
+    [45, "critical"],
+    [46, "legendary"],
+    [50, "legendary"],
+    [51, "godly"],
+  ])("maps stat total %i to %s", (total, expectedId) => {
+    expect(getStatRollSuccessLevel(total).id).toBe(expectedId);
+  });
+
+  it("treats initial d20 1 as fumble even when total would otherwise succeed", () => {
+    const preview = buildRoleplayCalculationPreview({
+      difficulty: "medium",
+      roll: { dieResult: -5, openEndedD10s: [6], rollD20: 1 },
+      skillLabel: "Perception",
+      skillValue: 40,
+    });
+
+    expect(preview).toMatchObject({
+      achievedSuccessLevel: expect.objectContaining({ id: "fumble" }),
+      calculationText: "Perception 40 + roll 1-6 = 35 → FUMBLE — automatic fail → NOT SUCCESSFUL vs Medium",
+      fumble: true,
+      success: false,
+    });
+  });
+
+  it("requires threshold plus five for automatic success", () => {
+    expect(
+      buildRoleplayCalculationPreview({
+        difficulty: "medium",
+        skillLabel: "Perception",
+        skillValue: 31,
+      }).autoSuccess
+    ).toBe(true);
+    expect(
+      buildRoleplayCalculationPreview({
+        difficulty: "medium",
+        skillLabel: "Perception",
+        skillValue: 30,
+      }).autoSuccess
+    ).toBe(false);
   });
 
   it("orders roleplay roster participants by PC, NPC, temporary/ad-hoc, then name", () => {
