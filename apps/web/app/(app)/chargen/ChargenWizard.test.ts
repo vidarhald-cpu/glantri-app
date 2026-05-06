@@ -29,10 +29,11 @@ const combatContent = {
   professionFamilies: [{ id: "warrior", name: "Warrior" }],
   professionSkills: [
     {
-      grantType: "group",
+      grantType: "group" as const,
       isCore: true,
       professionId: "warrior",
-      scope: "family",
+      ranks: 0,
+      scope: "family" as const,
       skillGroupId: "advanced_melee_training"
     }
   ],
@@ -51,9 +52,9 @@ const combatContent = {
         }
       ],
       skillMemberships: [
-        { relevance: "core", skillId: "dodge" },
-        { relevance: "core", skillId: "parry" },
-        { relevance: "core", skillId: "brawling" }
+        { relevance: "core" as const, skillId: "dodge" },
+        { relevance: "core" as const, skillId: "parry" },
+        { relevance: "core" as const, skillId: "brawling" }
       ],
       sortOrder: 1
     }
@@ -214,17 +215,19 @@ const overlappingProfessionContent = {
   professionFamilies: [{ id: "scout_family", name: "Scout" }],
   professionSkills: [
     {
-      grantType: "group",
+      grantType: "group" as const,
       isCore: true,
       professionId: "scout_family",
-      scope: "family",
+      ranks: 0,
+      scope: "family" as const,
       skillGroupId: "fieldcraft"
     },
     {
-      grantType: "skill",
+      grantType: "ordinary-skill" as const,
       isCore: true,
       professionId: "scout_family",
-      scope: "family",
+      ranks: 0,
+      scope: "family" as const,
       skillId: "stealth"
     }
   ],
@@ -338,7 +341,7 @@ const languageContent = {
     {
       allowsSpecializations: false,
       category: "ordinary" as const,
-      categoryId: "language",
+      categoryId: "language" as const,
       dependencies: [],
       dependencySkillIds: [],
       groupId: "scholarly",
@@ -354,7 +357,7 @@ const languageContent = {
     {
       allowsSpecializations: false,
       category: "ordinary" as const,
-      categoryId: "language",
+      categoryId: "language" as const,
       dependencies: [],
       dependencySkillIds: [],
       groupId: "scholarly",
@@ -550,9 +553,10 @@ const directGrantedSkillContent = {
   professionFamilies: [{ id: "envoy_family", name: "Envoy" }],
   professionSkills: [
     {
-      grantType: "skill" as const,
+      grantType: "ordinary-skill" as const,
       isCore: true,
       professionId: "envoy_family",
+      ranks: 0,
       scope: "family" as const,
       skillId: "etiquette"
     }
@@ -629,6 +633,7 @@ const overlappingOfficerTrainingContent = {
       grantType: "group" as const,
       isCore: true,
       professionId: "officer_family",
+      ranks: 0,
       scope: "family" as const,
       skillGroupId: "officer_training"
     }
@@ -2384,7 +2389,7 @@ describe("ChargenWizard concrete language rows", () => {
         skills: [
           {
             category: "ordinary",
-            categoryId: "language",
+            categoryId: "language" as const,
             grantedRanks: 2,
             groupId: "scholarly",
             languageName: "Old Common",
