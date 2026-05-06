@@ -9,6 +9,6 @@ async function start() {
 }
 
 start().catch((error) => {
-  console.error(error);
+  process.stderr.write(JSON.stringify({ level: "fatal", msg: "Failed to start server", err: String(error) }) + "\n");
   process.exit(1);
 });

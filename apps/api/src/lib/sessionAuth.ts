@@ -44,29 +44,43 @@ export function applyLocalCors(app: FastifyInstance): void {
   });
 }
 
+const isProduction = process.env.NODE_ENV === "production";
+
 export function buildSessionCookie(token: string, expiresAt: string): string {
   const maxAgeSeconds = Math.max(
     0,
     Math.floor((new Date(expiresAt).getTime() - Date.now()) / 1000)
   );
 
-  return [
+  const parts = [
     `${SESSION_COOKIE_NAME}=${encodeURIComponent(token)}`,
     "HttpOnly",
     "Path=/",
     "SameSite=Lax",
     `Max-Age=${maxAgeSeconds}`
-  ].join("; ");
+  ];
+
+  if (isProduction) {
+    parts.push("Secure");
+  }
+
+  return parts.join("; ");
 }
 
 export function buildExpiredSessionCookie(): string {
-  return [
+  const parts = [
     `${SESSION_COOKIE_NAME}=`,
     "HttpOnly",
     "Path=/",
     "SameSite=Lax",
     "Max-Age=0"
-  ].join("; ");
+  ];
+
+  if (isProduction) {
+    parts.push("Secure");
+  }
+
+  return parts.join("; ");
 }
 
 export function getSessionTokenFromRequest(request: FastifyRequest): string | undefined {

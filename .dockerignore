@@ -1,0 +1,24 @@
+# Avhengigheter og byggeartefakter
+**/node_modules
+**/dist
+**/.next
+**/coverage
+
+# Lokale miljøfiler
+.env
+.env.*
+!.env.example
+
+# Git og editor
+.git
+.gitignore
+.vscode
+.idea
+
+# Data som ikke trengs i image
+data/
+docs/
+
+# Docker selv
+**/Dockerfile
+**/.dockerignore

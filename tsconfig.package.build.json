@@ -2,7 +2,6 @@
   "$schema": "https://json.schemastore.org/tsconfig",
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
-    "paths": {},
     "declaration": true,
     "declarationMap": true,
     "module": "Node16",
@@ -10,7 +9,18 @@
     "noEmit": false,
     "outDir": "dist",
     "sourceMap": true,
-    "target": "ES2022"
+    "target": "ES2022",
+    "paths": {
+      "@glantri/auth/*": ["packages/auth/dist/*"],
+      "@glantri/content/*": ["packages/content/dist/*"],
+      "@glantri/domain/*": ["packages/domain/dist/*"],
+      "@glantri/shared/*": ["packages/shared/dist/*"],
+      "@glantri/schemas/*": ["packages/schemas/dist/*"],
+      "@glantri/rules-engine/*": ["packages/rules-engine/dist/*"],
+      "@glantri/database/*": ["packages/database/dist/*"],
+      "@glantri/importers/*": ["packages/importers/dist/*"],
+      "@glantri/test-scenarios/*": ["packages/test-scenarios/dist/*"]
+    }
   },
   "exclude": ["**/*.test.ts", "**/*.test.tsx", "**/__tests__/**"]
 }
