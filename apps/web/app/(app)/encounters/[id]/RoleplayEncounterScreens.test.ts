@@ -33,7 +33,6 @@ describe("RoleplayEncounterScreens", () => {
     expect(source).toContain("No level");
     expect(source).toContain("No opponent");
     expect(source).toContain("Open opponent block");
-    expect(source).toContain("Assign opposed");
     expect(source).toContain("Assign");
     expect(source).toContain("GM Roll");
     expect(source).toContain("GM Roll both");
@@ -56,7 +55,7 @@ describe("RoleplayEncounterScreens", () => {
     expect(source).toContain("recordRoleplayGmSkillRoll");
     expect(source).toContain("buildRoleplayCalculationPreview");
     expect(source).toContain("compareRoleplayOpposedRolls");
-    expect(source).toContain("rankRoleplayGmRollResults");
+    expect(source).toContain("currentRankedRollResults");
     expect(source).toContain("rollOpenEndedRoleplayD20");
     expect(source).toContain("SUCCESS");
     expect(source).toContain("NOT SUCCESSFUL");
@@ -88,7 +87,8 @@ describe("RoleplayEncounterScreens", () => {
   it("renders opposed roll state, support metadata, and opposed results in GM-only areas", () => {
     const source = readSource();
 
-    expect(source).toContain("mode: isOpposed ? \"opposed\" : \"difficulty\"");
+    expect(source).toContain("mode: \"opposed\"");
+    expect(source).toContain("mode: \"difficulty\"");
     expect(source).toContain("supportSkillId");
     expect(source).toContain("opponentParticipantId");
     expect(source).toContain("opponentSkillId");
@@ -101,6 +101,11 @@ describe("RoleplayEncounterScreens", () => {
     expect(source).toContain("opponentBlockOpen: nextDifficulty === \"none\" ? draft.opponentBlockOpen : false");
     expect(source).toContain("opponentBlockOpen: false");
     expect(source).toContain("opponentBlockOpen: true");
+    expect(source).toContain("handleAssignSkillRoll(draft, \"actor\")");
+    expect(source).toContain("handleAssignSkillRoll(draft, \"opponent\")");
+    expect(source).toContain("handleGmRoll(draft, \"actor\")");
+    expect(source).toContain("handleGmRoll(draft, \"opponent\")");
+    expect(source).toContain("handleGmRoll(draft, \"both\")");
   });
 
   it("keeps the roll preview concise with pending notes outside the formula", () => {
@@ -155,6 +160,7 @@ describe("RoleplayEncounterScreens", () => {
     expect(source).toContain("makeRollDraft({");
     expect(source).toContain("participantId: roster[0]?.id");
     expect(source).toContain("skillId: initialSkillId");
+    expect(source).toContain("setCurrentRankedRollResults([])");
     expect(source).toContain("difficulty: \"medium\"");
     expect(source).not.toContain("id: draft.id");
     expect(source).not.toContain("setGmMessageDraft(\"\")");
