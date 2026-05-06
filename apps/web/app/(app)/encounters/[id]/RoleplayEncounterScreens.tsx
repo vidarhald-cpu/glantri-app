@@ -134,15 +134,15 @@ const rollBlockShellStyle = {
   border: "1px solid #eee8dc",
   borderRadius: 10,
   display: "grid",
-  gap: "0.75rem",
+  gap: "0.6rem",
   padding: "0.75rem",
 } as const;
 
 const rollEditorStyle = {
   alignItems: "start",
   display: "grid",
-  gap: "1rem",
-  gridTemplateColumns: "minmax(0, 1.15fr) minmax(24rem, 0.85fr)",
+  gap: "0.85rem",
+  gridTemplateColumns: "minmax(0, 1fr) minmax(28rem, 1fr)",
   minWidth: 0,
 } as const;
 
@@ -182,13 +182,19 @@ const rollPreviewStyle = {
   borderRadius: 8,
   color: "#5e5a50",
   display: "grid",
-  gap: "0.55rem",
+  gap: "0.35rem",
   gridTemplateRows: "auto",
   justifySelf: "stretch",
-  minHeight: "15rem",
+  minHeight: "10.5rem",
   minWidth: 0,
-  padding: "0.75rem",
+  padding: "0.65rem",
   width: "100%",
+} as const;
+
+const calculationLineStyle = {
+  display: "block",
+  overflowX: "auto",
+  whiteSpace: "nowrap",
 } as const;
 
 function formatDifficulty(value: RoleplayDifficulty): string {
@@ -321,10 +327,10 @@ function readSystemSkillOptions(input: {
     .sort((left, right) => left.label.localeCompare(right.label));
 }
 
-function makeRollDraft(input: { participantId?: string; skillId?: string }): RoleplayRollDraft {
+function makeRollDraft(input: { id?: string; participantId?: string; skillId?: string }): RoleplayRollDraft {
   return {
     difficulty: "none",
-    id: `roll-draft-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    id: input.id ?? `roll-draft-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     otherModInput: "0",
     opponentBlockOpen: false,
     opponentOtherModInput: "0",
@@ -359,8 +365,8 @@ function RollCalculationPreview({
   preview?: ReturnType<typeof buildRoleplayCalculationPreview>;
 }) {
   return (
-    <div>
-      <strong>{label}:</strong> {preview?.compactCalculationText ?? "—"}
+    <div style={calculationLineStyle}>
+      <strong>{label}:</strong> {preview?.formulaText ?? "—"}
       {preview && pendingLabels && pendingLabels.length > 0 ? (
         <span> · Pending: {pendingLabels.join(", ")}</span>
       ) : null}
@@ -388,11 +394,11 @@ function getPreviewResultLabel(input: {
   }
 
   if (preview.autoSuccess) {
-    return "Automatic success";
+    return preview.resultText ?? "Automatic success";
   }
 
-  if (preview.success != null && input.difficulty) {
-    return `${preview.success ? "SUCCESS" : "NOT SUCCESSFUL"} vs ${formatDifficulty(input.difficulty)}`;
+  if (preview.resultText) {
+    return preview.resultText;
   }
 
   return preview.achievedSuccessLevel?.label ?? "—";
@@ -436,14 +442,14 @@ function RoleplayRollCalculationPanel({
   return (
     <div style={rollPreviewStyle}>
       <strong>Calculation</strong>
-      <div style={{ display: "grid", gap: "0.35rem" }}>
+      <div style={{ display: "grid", gap: "0.25rem" }}>
         <strong>Actor</strong>
         <RollCalculationPreview label="Support" preview={actorSupportPreview} />
         <RollCalculationPreview label="Main" pendingLabels={actorPendingLabels} preview={actorMainPreview} />
         <RoleplayRollResultLine difficulty={actorDifficulty} preview={actorMainPreview} />
       </div>
       {opponentOpen ? (
-        <div style={{ borderTop: "1px solid #eee8dc", display: "grid", gap: "0.35rem", paddingTop: "0.55rem" }}>
+        <div style={{ borderTop: "1px solid #eee8dc", display: "grid", gap: "0.25rem", paddingTop: "0.45rem" }}>
           <strong>Opponent</strong>
           <RollCalculationPreview label="Support" preview={opponentSupportPreview} />
           <RollCalculationPreview label="Main" pendingLabels={opponentPendingLabels} preview={opponentMainPreview} />
@@ -451,7 +457,7 @@ function RoleplayRollCalculationPanel({
         </div>
       ) : null}
       {comparison ? (
-        <div style={{ borderTop: "1px solid #eee8dc", paddingTop: "0.55rem" }}>
+        <div style={{ borderTop: "1px solid #eee8dc", paddingTop: "0.45rem" }}>
           <RoleplayRollResultLine comparison={comparison} label="Comparison" />
         </div>
       ) : null}
@@ -1053,7 +1059,24 @@ export function GmRoleplayingEncounterScreen({
 
             return (
               <div key={draft.id} style={rollBlockShellStyle}>
-                <strong>Roll {index + 1}</strong>
+                <div style={{ alignItems: "center", display: "flex", justifyContent: "space-between", gap: "0.75rem" }}>
+                  <strong>Roll {index + 1}</strong>
+                  <button
+                    onClick={() =>
+                      updateRollDraft(
+                        draft.id,
+                        makeRollDraft({
+                          id: draft.id,
+                          participantId: roster[0]?.id,
+                          skillId: initialSkillId,
+                        })
+                      )
+                    }
+                    type="button"
+                  >
+                    Clear
+                  </button>
+                </div>
                 <section style={rollEditorStyle}>
                   <div style={rollControlsStackStyle}>
                     <section style={rollControlsStyle}>

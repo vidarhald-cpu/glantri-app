@@ -37,6 +37,7 @@ describe("RoleplayEncounterScreens", () => {
     expect(source).toContain("Assign");
     expect(source).toContain("GM Roll");
     expect(source).toContain("GM Roll both");
+    expect(source).toContain("Clear");
     expect(source).toContain("Add roll");
     expect(source).toContain("Ranked roll results");
     expect(source).toContain("Action log");
@@ -106,7 +107,8 @@ describe("RoleplayEncounterScreens", () => {
     const source = readSource();
 
     expect(source).toContain("pendingModifierLabels");
-    expect(source).toContain("compactCalculationText");
+    expect(source).toContain("formulaText");
+    expect(source).toContain("resultText");
     expect(source).toContain("Pending:");
     expect(source).toContain("RollCalculationPreview");
     expect(source).not.toContain("pending support-rule effect");
@@ -117,13 +119,14 @@ describe("RoleplayEncounterScreens", () => {
   it("uses persistent two-column roll blocks with structured calculation panels", () => {
     const source = readSource();
 
-    expect(source).toContain("gridTemplateColumns: \"minmax(0, 1.15fr) minmax(24rem, 0.85fr)\"");
+    expect(source).toContain("gridTemplateColumns: \"minmax(0, 1fr) minmax(28rem, 1fr)\"");
     expect(source).toContain("<strong>Calculation</strong>");
     expect(source).toContain("<strong>Actor</strong>");
     expect(source).toContain("<strong>Opponent</strong>");
     expect(source).toContain("label=\"Comparison\"");
-    expect(source).toContain("minHeight: \"15rem\"");
-    expect(source).toContain("<strong>{label}:</strong> {preview?.compactCalculationText ?? \"—\"}");
+    expect(source).toContain("minHeight: \"10.5rem\"");
+    expect(source).toContain("whiteSpace: \"nowrap\"");
+    expect(source).toContain("<strong>{label}:</strong> {preview?.formulaText ?? \"—\"}");
     expect(source).toContain("function RoleplayRollCalculationPanel");
     expect(source).toContain("style={rollControlRowStyle}");
     expect(source).toContain("style={{ ...compactInputStyle, width: \"4.5rem\" }}");
@@ -139,6 +142,16 @@ describe("RoleplayEncounterScreens", () => {
     expect(source).toContain("!draft.opponentBlockOpen || draft.opponentSkillId === \"\"");
     expect(source).toContain("opponentSkillId: \"\"");
     expect(source).toContain("value={context.opponent.id}");
+  });
+
+  it("clears draft-only roll editor state without touching persisted logs", () => {
+    const source = readSource();
+
+    expect(source).toContain("makeRollDraft({");
+    expect(source).toContain("id: draft.id");
+    expect(source).toContain("participantId: roster[0]?.id");
+    expect(source).toContain("skillId: initialSkillId");
+    expect(source).not.toContain("setGmMessageDraft(\"\")");
   });
 
   it("uses all canonical ordinary and secondary skills instead of only participant-known skills", () => {

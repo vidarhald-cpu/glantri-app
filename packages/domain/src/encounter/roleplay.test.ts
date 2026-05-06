@@ -295,6 +295,44 @@ describe("roleplay encounter state", () => {
       compareRoleplayOpposedRolls({
         actorLabel: "Actor",
         actorPreview: buildRoleplayCalculationPreview({
+          roll: { dieResult: 20, openEndedD10s: [], rollD20: 20 },
+          skillLabel: "Low base",
+          skillValue: 0,
+        }),
+        opponentLabel: "Opponent",
+        opponentPreview: buildRoleplayCalculationPreview({
+          roll: { dieResult: 1, openEndedD10s: [], rollD20: 2 },
+          skillLabel: "High base",
+          skillValue: 18,
+        }),
+      })
+    ).toMatchObject({
+      margin: 1,
+      result: "win",
+      summary: "Actor wins by 1.",
+    });
+
+    expect(
+      compareRoleplayOpposedRolls({
+        actorLabel: "Actor",
+        actorPreview: buildRoleplayCalculationPreview({
+          roll: { dieResult: 19, openEndedD10s: [], rollD20: 19 },
+          skillLabel: "Low base",
+          skillValue: 0,
+        }),
+        opponentLabel: "Opponent",
+        opponentPreview: buildRoleplayCalculationPreview({
+          roll: { dieResult: 0, openEndedD10s: [1], rollD20: 1 },
+          skillLabel: "High base",
+          skillValue: 20,
+        }),
+      }).result
+    ).toBe("win");
+
+    expect(
+      compareRoleplayOpposedRolls({
+        actorLabel: "Actor",
+        actorPreview: buildRoleplayCalculationPreview({
           roll: { dieResult: 10, openEndedD10s: [], rollD20: 10 },
           skillLabel: "Stealth",
           skillValue: 12,
@@ -430,9 +468,11 @@ describe("roleplay encounter state", () => {
       achievedSuccessLevel: expect.objectContaining({ id: "medium_plus", resultModifier: 1 }),
       compactCalculationText: "Perception 20 + [ -2 ] -2 + 14 = 32 · Medium + · SUCCESS vs Medium",
       calculationText: "Perception 20 + roll 14 + Other -2 = 32 → Medium +, modifier +1 → SUCCESS vs Medium",
+      formulaText: "Perception 20 + [ -2 ] -2 + 14 = 32",
       numericModifierParts: [-2],
       numericModifierSum: -2,
       numericSubtotal: 32,
+      resultText: "Medium + · modifier +1 · SUCCESS vs Medium",
       success: true,
     });
 

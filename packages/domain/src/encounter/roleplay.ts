@@ -228,6 +228,7 @@ export interface RoleplayCalculationPreview {
   difficultyText?: string;
   dieText: string;
   finalTotal?: number;
+  formulaText: string;
   fumble: boolean;
   hasPlaceholderMods: boolean;
   numericModifierParts: number[];
@@ -235,6 +236,7 @@ export interface RoleplayCalculationPreview {
   numericSubtotal?: number;
   partial: boolean;
   pendingModifierLabels: string[];
+  resultText?: string;
   success?: boolean;
 }
 
@@ -440,6 +442,27 @@ export function buildRoleplayCalculationPreview(input: {
   const compactModifierBracket =
     numericModifierParts.length === 0 ? "[ ]" : `[ ${formatNumericModifierParts(numericModifierParts)} ]`;
   const compactBase = `${input.skillLabel} ${skillValue} + ${compactModifierBracket} ${numericModifierSum} + ${dieText}`;
+  const formulaText = numericSubtotal == null
+    ? `${compactBase} = pending`
+    : `${compactBase} = ${numericSubtotal}`;
+  const resultText =
+    autoSuccess
+      ? `Automatic success vs ${formatRoleplayDifficulty(input.difficulty!)}`
+      : achievedSuccessLevel?.fumble
+        ? "FUMBLE — automatic fail"
+        : achievedSuccessLevel
+          ? [
+              achievedSuccessLevel.label,
+              `modifier ${formatSignedNumber(achievedSuccessLevel.resultModifier)}`,
+              success == null
+                ? undefined
+                : success
+                  ? `SUCCESS vs ${formatRoleplayDifficulty(input.difficulty!)}`
+                  : `NOT SUCCESSFUL vs ${formatRoleplayDifficulty(input.difficulty!)}`,
+            ]
+              .filter(Boolean)
+              .join(" · ")
+          : undefined;
   const compactCalculationText =
     autoSuccess
       ? `${compactBase} = pending vs ${formatRoleplayDifficulty(input.difficulty!)} · Automatic success`
@@ -464,6 +487,7 @@ export function buildRoleplayCalculationPreview(input: {
     compactCalculationText,
     dieText,
     finalTotal: numericSubtotal,
+    formulaText,
     fumble: Boolean(achievedSuccessLevel?.fumble),
     hasPlaceholderMods,
     numericModifierParts,
@@ -471,6 +495,7 @@ export function buildRoleplayCalculationPreview(input: {
     numericSubtotal,
     partial: hasPlaceholderMods,
     pendingModifierLabels,
+    resultText,
     success,
   };
 }
