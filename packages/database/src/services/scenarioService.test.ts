@@ -50,6 +50,12 @@ const baseBuild: CharacterBuild = {
     skillGroups: [],
     skills: [],
     specializations: []
+  },
+  progressionState: {
+    availablePoints: 0,
+    checks: [],
+    history: [],
+    pendingAttempts: []
   }
 };
 

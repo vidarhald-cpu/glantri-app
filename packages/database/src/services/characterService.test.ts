@@ -42,6 +42,12 @@ const baseBuild: CharacterBuild = {
     skills: [],
     specializations: []
   },
+  progressionState: {
+    availablePoints: 0,
+    checks: [],
+    history: [],
+    pendingAttempts: []
+  },
   statModifiers: {
     str: 2
   }
