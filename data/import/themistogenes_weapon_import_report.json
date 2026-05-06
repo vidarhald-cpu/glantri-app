@@ -1,0 +1,514 @@
+{
+  "workbook": "Themistogenes 1.07.xlsx",
+  "importedWeaponCount": 58,
+  "skippedRows": [
+    {
+      "sheet": "Weapon1",
+      "row": 34,
+      "reason": "non-weapon action row",
+      "weaponName": "Movement"
+    },
+    {
+      "sheet": "Weapon1",
+      "row": 36,
+      "reason": "non-weapon action row",
+      "weaponName": "Action"
+    },
+    {
+      "sheet": "Weapon1",
+      "row": 37,
+      "reason": "shield row",
+      "weaponName": "Small shield"
+    },
+    {
+      "sheet": "Weapon1",
+      "row": 38,
+      "reason": "shield row",
+      "weaponName": "Medium shield"
+    },
+    {
+      "sheet": "Weapon1",
+      "row": 39,
+      "reason": "shield row",
+      "weaponName": "Large shield"
+    },
+    {
+      "sheet": "Weapon1",
+      "row": 40,
+      "reason": "brawling row",
+      "weaponName": "Punch"
+    },
+    {
+      "sheet": "Weapon1",
+      "row": 41,
+      "reason": "brawling row",
+      "weaponName": "Kick"
+    },
+    {
+      "sheet": "Weapon1",
+      "row": 42,
+      "reason": "brawling row",
+      "weaponName": "Garotte"
+    },
+    {
+      "sheet": "Weapon1",
+      "row": 43,
+      "reason": "shield row",
+      "weaponName": "Large thyasian shield"
+    }
+  ],
+  "warnings": [
+    {
+      "sheet": "Weapon1",
+      "row": 2,
+      "weaponName": "Knife",
+      "warning": "Knife mode-2: source table has no explicit secondary attack label column."
+    },
+    {
+      "sheet": "Weapon1",
+      "row": 3,
+      "weaponName": "Dagger",
+      "warning": "Dagger mode-2: source table has no explicit secondary attack label column."
+    },
+    {
+      "sheet": "Weapon1",
+      "row": 4,
+      "weaponName": "Short sword",
+      "warning": "Short sword mode-2: source table has no explicit secondary attack label column."
+    },
+    {
+      "sheet": "Weapon1",
+      "row": 5,
+      "weaponName": "Dirk",
+      "warning": "Dirk mode-2: source table has no explicit secondary attack label column."
+    },
+    {
+      "sheet": "Weapon1",
+      "row": 6,
+      "weaponName": "Falchion",
+      "warning": "Falchion mode-2: source table has no explicit secondary attack label column."
+    },
+    {
+      "sheet": "Weapon1",
+      "row": 7,
+      "weaponName": "Broad sword",
+      "warning": "Broad sword mode-2: source table has no explicit secondary attack label column."
+    },
+    {
+      "sheet": "Weapon1",
+      "row": 8,
+      "weaponName": "Cutlass",
+      "warning": "Cutlass mode-2: source table has no explicit secondary attack label column."
+    },
+    {
+      "sheet": "Weapon1",
+      "row": 9,
+      "weaponName": "Scimitar",
+      "warning": "Scimitar mode-2: source table has no explicit secondary attack label column."
+    },
+    {
+      "sheet": "Weapon1",
+      "row": 10,
+      "weaponName": "Long sword",
+      "warning": "Long sword mode-2: source table has no explicit secondary attack label column."
+    },
+    {
+      "sheet": "Weapon1",
+      "row": 15,
+      "weaponName": "Morning star",
+      "warning": "Morning star mode-2: source table has no explicit secondary attack label column."
+    },
+    {
+      "sheet": "Weapon1",
+      "row": 18,
+      "weaponName": "Hatchet",
+      "warning": "Hatchet mode-2: source table has no explicit secondary attack label column."
+    },
+    {
+      "sheet": "Weapon1",
+      "row": 19,
+      "weaponName": "Wood axe",
+      "warning": "Wood axe mode-2: source table has no explicit secondary attack label column."
+    },
+    {
+      "sheet": "Weapon1",
+      "row": 20,
+      "weaponName": "Hand axe",
+      "warning": "Hand axe mode-2: source table has no explicit secondary attack label column."
+    },
+    {
+      "sheet": "Weapon1",
+      "row": 22,
+      "weaponName": "Great sword",
+      "warning": "Great sword mode-2: source table has no explicit secondary attack label column."
+    },
+    {
+      "sheet": "Weapon1",
+      "row": 24,
+      "weaponName": "Battle Axe",
+      "warning": "Battle Axe mode-2: source table has no explicit secondary attack label column."
+    },
+    {
+      "sheet": "Weapon1",
+      "row": 27,
+      "weaponName": "1-h Javelin",
+      "warning": "1-h Javelin mode-2: source table has no explicit secondary attack label column."
+    },
+    {
+      "sheet": "Weapon1",
+      "row": 28,
+      "weaponName": "1-h Spear",
+      "warning": "1-h Spear mode-2: source table has no explicit secondary attack label column."
+    },
+    {
+      "sheet": "Weapon1",
+      "row": 29,
+      "weaponName": "2-h Javelin",
+      "warning": "2-h Javelin mode-2: source table has no explicit secondary attack label column."
+    },
+    {
+      "sheet": "Weapon1",
+      "row": 30,
+      "weaponName": "2-h Spear",
+      "warning": "2-h Spear mode-2: source table has no explicit secondary attack label column."
+    },
+    {
+      "sheet": "Weapon1",
+      "row": 31,
+      "weaponName": "Quarterstaff",
+      "warning": "Quarterstaff mode-2: source table has no explicit secondary attack label column."
+    },
+    {
+      "sheet": "Weapon1",
+      "row": 32,
+      "weaponName": "Halberd",
+      "warning": "Halberd mode-2: source table has no explicit secondary attack label column."
+    },
+    {
+      "sheet": "Weapon1",
+      "row": 33,
+      "weaponName": "Pole axe",
+      "warning": "Pole axe mode-2: source table has no explicit secondary attack label column."
+    },
+    {
+      "sheet": "Weapon1",
+      "row": 35,
+      "weaponName": "Lance",
+      "warning": "Lance mode-2: source table has no explicit secondary attack label column."
+    },
+    {
+      "sheet": "Weapon1",
+      "row": 44,
+      "weaponName": "Rapier",
+      "warning": "Rapier mode-2: source table has no explicit secondary attack label column."
+    },
+    {
+      "sheet": "Weapon1",
+      "row": 45,
+      "weaponName": "Fencing sword",
+      "warning": "Fencing sword mode-2: source table has no explicit secondary attack label column."
+    },
+    {
+      "sheet": "Weapon1",
+      "row": 46,
+      "weaponName": "Sabre",
+      "warning": "Sabre mode-2: source table has no explicit secondary attack label column."
+    },
+    {
+      "sheet": "Weapon1",
+      "row": 47,
+      "weaponName": "Main gauche",
+      "warning": "Main gauche mode-2: source table has no explicit secondary attack label column."
+    },
+    {
+      "sheet": "Weapon1",
+      "row": 48,
+      "weaponName": "Swordbreaker",
+      "warning": "Swordbreaker mode-2: source table has no explicit secondary attack label column."
+    },
+    {
+      "sheet": "Weapon2",
+      "row": 2,
+      "weaponName": "T. Knife",
+      "warning": "T. Knife mode-1: source table has no explicit attack label column on Weapon2."
+    },
+    {
+      "sheet": "Weapon2",
+      "row": 3,
+      "weaponName": "T. Dagger",
+      "warning": "T. Dagger mode-1: source table has no explicit attack label column on Weapon2."
+    },
+    {
+      "sheet": "Weapon2",
+      "row": 4,
+      "weaponName": "T. Th. dagger",
+      "warning": "T. Th. dagger mode-1: source table has no explicit attack label column on Weapon2."
+    },
+    {
+      "sheet": "Weapon2",
+      "row": 5,
+      "weaponName": "Shuriken",
+      "warning": "Shuriken mode-1: source table has no explicit attack label column on Weapon2."
+    },
+    {
+      "sheet": "Weapon2",
+      "row": 6,
+      "weaponName": "T. Hatchet",
+      "warning": "T. Hatchet mode-1: source table has no explicit attack label column on Weapon2."
+    },
+    {
+      "sheet": "Weapon2",
+      "row": 7,
+      "weaponName": "T. Wood axe",
+      "warning": "T. Wood axe mode-1: source table has no explicit attack label column on Weapon2."
+    },
+    {
+      "sheet": "Weapon2",
+      "row": 8,
+      "weaponName": "T. Hand axe",
+      "warning": "T. Hand axe mode-1: source table has no explicit attack label column on Weapon2."
+    },
+    {
+      "sheet": "Weapon2",
+      "row": 9,
+      "weaponName": "T. Javelin",
+      "warning": "T. Javelin mode-1: source table has no explicit attack label column on Weapon2."
+    },
+    {
+      "sheet": "Weapon2",
+      "row": 10,
+      "weaponName": "T. Spear",
+      "warning": "T. Spear mode-1: source table has no explicit attack label column on Weapon2."
+    },
+    {
+      "sheet": "Weapon2",
+      "row": 12,
+      "weaponName": "Sling",
+      "warning": "Sling mode-1: source table has no explicit attack label column on Weapon2."
+    },
+    {
+      "sheet": "Weapon2",
+      "row": 12,
+      "weaponName": "Sling",
+      "warning": "Sling mode-1: DMB '2d6' preserved as raw source text."
+    },
+    {
+      "sheet": "Weapon2",
+      "row": 14,
+      "weaponName": "Short bow",
+      "warning": "Short bow mode-1: source table has no explicit attack label column on Weapon2."
+    },
+    {
+      "sheet": "Weapon2",
+      "row": 14,
+      "weaponName": "Short bow",
+      "warning": "Short bow mode-1: DMB '2d6' preserved as raw source text."
+    },
+    {
+      "sheet": "Weapon2",
+      "row": 15,
+      "weaponName": "Composite bow",
+      "warning": "Composite bow mode-1: source table has no explicit attack label column on Weapon2."
+    },
+    {
+      "sheet": "Weapon2",
+      "row": 15,
+      "weaponName": "Composite bow",
+      "warning": "Composite bow mode-1: DMB '2d6 + GMstr' preserved as raw source text."
+    },
+    {
+      "sheet": "Weapon2",
+      "row": 17,
+      "weaponName": "Long bow",
+      "warning": "Long bow mode-1: source table has no explicit attack label column on Weapon2."
+    },
+    {
+      "sheet": "Weapon2",
+      "row": 17,
+      "weaponName": "Long bow",
+      "warning": "Long bow mode-1: DMB '3d6 + GMstr' preserved as raw source text."
+    },
+    {
+      "sheet": "Weapon2",
+      "row": 19,
+      "weaponName": "Musket",
+      "warning": "Musket mode-1: source table has no explicit attack label column on Weapon2."
+    },
+    {
+      "sheet": "Weapon2",
+      "row": 19,
+      "weaponName": "Musket",
+      "warning": "Musket mode-1: DMB '4d6' preserved as raw source text."
+    },
+    {
+      "sheet": "Weapon2",
+      "row": 20,
+      "weaponName": "Arquebus",
+      "warning": "Arquebus mode-1: source table has no explicit attack label column on Weapon2."
+    },
+    {
+      "sheet": "Weapon2",
+      "row": 20,
+      "weaponName": "Arquebus",
+      "warning": "Arquebus mode-1: DMB '4d6' preserved as raw source text."
+    },
+    {
+      "sheet": "Weapon2",
+      "row": 21,
+      "weaponName": "Cartridge Rifle",
+      "warning": "Cartridge Rifle mode-1: source table has no explicit attack label column on Weapon2."
+    },
+    {
+      "sheet": "Weapon2",
+      "row": 21,
+      "weaponName": "Cartridge Rifle",
+      "warning": "Cartridge Rifle mode-1: DMB '3d10-2' preserved as raw source text."
+    },
+    {
+      "sheet": "Weapon2",
+      "row": 22,
+      "weaponName": "Pistol",
+      "warning": "Pistol mode-1: source table has no explicit attack label column on Weapon2."
+    },
+    {
+      "sheet": "Weapon2",
+      "row": 22,
+      "weaponName": "Pistol",
+      "warning": "Pistol mode-1: DMB '3d6' preserved as raw source text."
+    },
+    {
+      "sheet": "Weapon2",
+      "row": 23,
+      "weaponName": "Cartridge Pistol",
+      "warning": "Cartridge Pistol mode-1: source table has no explicit attack label column on Weapon2."
+    },
+    {
+      "sheet": "Weapon2",
+      "row": 23,
+      "weaponName": "Cartridge Pistol",
+      "warning": "Cartridge Pistol mode-1: DMB '2d10' preserved as raw source text."
+    },
+    {
+      "sheet": "Weapon2",
+      "row": 24,
+      "weaponName": "Hand Cannon",
+      "warning": "Hand Cannon mode-1: source table has no explicit attack label column on Weapon2."
+    },
+    {
+      "sheet": "Weapon2",
+      "row": 24,
+      "weaponName": "Hand Cannon",
+      "warning": "Hand Cannon mode-1: DMB '4d6/2d10*' preserved as raw source text."
+    },
+    {
+      "sheet": "Weapon2",
+      "row": 26,
+      "weaponName": "Hand Crossbow",
+      "warning": "Hand Crossbow mode-1: source table has no explicit attack label column on Weapon2."
+    },
+    {
+      "sheet": "Weapon2",
+      "row": 26,
+      "weaponName": "Hand Crossbow",
+      "warning": "Hand Crossbow mode-1: DMB '1d8' preserved as raw source text."
+    },
+    {
+      "sheet": "Weapon2",
+      "row": 27,
+      "weaponName": "Mini Crossbow",
+      "warning": "Mini Crossbow mode-1: source table has no explicit attack label column on Weapon2."
+    },
+    {
+      "sheet": "Weapon2",
+      "row": 27,
+      "weaponName": "Mini Crossbow",
+      "warning": "Mini Crossbow mode-1: DMB '1d4' preserved as raw source text."
+    },
+    {
+      "sheet": "Weapon2",
+      "row": 28,
+      "weaponName": "Crossbow",
+      "warning": "Crossbow mode-1: source table has no explicit attack label column on Weapon2."
+    },
+    {
+      "sheet": "Weapon2",
+      "row": 28,
+      "weaponName": "Crossbow",
+      "warning": "Crossbow mode-1: DMB '2d8+1' preserved as raw source text."
+    },
+    {
+      "sheet": "Weapon2",
+      "row": 29,
+      "weaponName": "Heavy crossbow",
+      "warning": "Heavy crossbow mode-1: source table has no explicit attack label column on Weapon2."
+    },
+    {
+      "sheet": "Weapon2",
+      "row": 29,
+      "weaponName": "Heavy crossbow",
+      "warning": "Heavy crossbow mode-1: DMB '3d8+1' preserved as raw source text."
+    },
+    {
+      "sheet": "Weapon2",
+      "row": 30,
+      "weaponName": "Ballista",
+      "warning": "Ballista mode-1: source table has no explicit attack label column on Weapon2."
+    },
+    {
+      "sheet": "Weapon2",
+      "row": 30,
+      "weaponName": "Ballista",
+      "warning": "Ballista mode-1: DMB '4d8+1' preserved as raw source text."
+    },
+    {
+      "sheet": "Weapon2",
+      "row": 30,
+      "weaponName": "Ballista",
+      "warning": "Ballista: encumbrance '20+20' reduced to compatibility number 20."
+    }
+  ],
+  "sourceSheets": [
+    {
+      "sheet": "Weapon1",
+      "headerRow": 1,
+      "range": "Weapon1!A1:Q48",
+      "sourceColumns": {
+        "name": "A",
+        "skill": "B",
+        "primaryAttackLabel": "C",
+        "ob1": "D",
+        "dmb1": "E",
+        "ob2": "F",
+        "dmb2": "G",
+        "parry": "H",
+        "initiative": "I",
+        "range": "J",
+        "armorMod1": "K",
+        "armorMod2": "L",
+        "crit1": "M",
+        "crit2": "N",
+        "encumbrance": "O",
+        "defensiveValue": "P",
+        "secondCrit": "Q"
+      }
+    },
+    {
+      "sheet": "Weapon2",
+      "headerRow": 1,
+      "range": "Weapon2!A1:K30",
+      "sourceColumns": {
+        "name": "A",
+        "skill": "B",
+        "ob1": "C",
+        "dmb1": "D",
+        "parry": "E",
+        "initiative": "F",
+        "range": "G",
+        "armorMod1": "H",
+        "crit1": "I",
+        "encumbrance": "J",
+        "ammoEncumbrance": "K"
+      }
+    }
+  ]
+}

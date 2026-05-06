@@ -9,12 +9,17 @@
   "scripts": {
     "dev": "turbo dev",
     "build": "turbo build --force",
+    "dev:full": "pnpm --filter @glantri/content build && pnpm dev",
     "typecheck": "turbo typecheck --force",
     "lint": "turbo lint --force",
     "test": "turbo test --force",
     "db:up": "docker compose up -d postgres",
     "db:down": "docker compose down",
-    "db:generate": "pnpm --filter @glantri/database db:generate"
+    "db:migrate": "pnpm --filter @glantri/database db:migrate",
+    "db:generate": "pnpm --filter @glantri/database db:generate",
+    "db:backup": "pnpm --filter @glantri/database db:backup",
+    "db:seed": "pnpm --filter @glantri/database db:seed",
+    "db:reset:local": "pnpm --filter @glantri/database db:reset:local"
   },
   "devDependencies": {
     "@next/eslint-plugin-next": "^15.2.4",

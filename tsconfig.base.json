@@ -13,12 +13,18 @@
     "isolatedModules": true,
     "baseUrl": ".",
     "paths": {
+      "@glantri/auth": ["packages/auth/src/index.ts"],
       "@glantri/auth/*": ["packages/auth/src/*"],
+      "@glantri/content": ["packages/content/src/index.ts"],
       "@glantri/content/*": ["packages/content/src/*"],
+      "@glantri/domain": ["packages/domain/src/index.ts"],
       "@glantri/domain/*": ["packages/domain/src/*"],
+      "@glantri/shared": ["packages/shared/src/index.ts"],
       "@glantri/shared/*": ["packages/shared/src/*"],
       "@glantri/schemas/*": ["packages/schemas/src/*"],
+      "@glantri/rules-engine": ["packages/rules-engine/src/index.ts"],
       "@glantri/rules-engine/*": ["packages/rules-engine/src/*"],
+      "@glantri/database": ["packages/database/src/index.ts"],
       "@glantri/database/*": ["packages/database/src/*"],
       "@glantri/importers/*": ["packages/importers/src/*"],
       "@glantri/test-scenarios/*": ["packages/test-scenarios/src/*"]

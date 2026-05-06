@@ -2,6 +2,7 @@ import type {
   CharacterLoadout,
   EquipmentItem,
 } from "./types";
+import { isStoredCarryMode } from "./derived";
 
 export function validateEquipmentItem(item: EquipmentItem): string[] {
   const errors: string[] = [];
@@ -14,23 +15,32 @@ export function validateEquipmentItem(item: EquipmentItem): string[] {
     errors.push("templateId is required");
   }
 
-  if (!item.locationId) {
-    errors.push("locationId is required");
+  if (!item.storageAssignment.locationId) {
+    errors.push("storageAssignment.locationId is required");
   }
 
   if (item.quantity <= 0) {
     errors.push("quantity must be greater than zero");
   }
 
-  if (item.isEquipped && item.carryMode !== "equipped") {
-    errors.push("equipped items must use carryMode 'equipped'");
+  if (
+    item.isEquipped != null &&
+    item.isEquipped !== (item.storageAssignment.carryMode === "equipped")
+  ) {
+    errors.push("isEquipped must match storageAssignment.carryMode");
   }
 
-  if (item.conditionState === "broken" && item.isEquipped) {
+  if (
+    item.conditionState === "broken" &&
+    item.storageAssignment.carryMode === "equipped"
+  ) {
     errors.push("broken items cannot be equipped");
   }
 
-  if (item.conditionState === "lost" && item.carryMode !== "stored") {
+  if (
+    item.conditionState === "lost" &&
+    item.storageAssignment.carryMode !== "stored"
+  ) {
     errors.push("lost items cannot remain in an active carry mode");
   }
 
@@ -55,17 +65,39 @@ export function validateLoadout(
 ): string[] {
   const errors: string[] = [];
 
-  const referencedItemIds = [
-    loadout.activeArmorItemId,
-    loadout.activeShieldItemId,
-    loadout.activePrimaryWeaponItemId,
-    loadout.activeSecondaryWeaponItemId,
-    loadout.activeMissileWeaponItemId,
-    ...loadout.activeAmmoItemIds,
-    ...loadout.quickAccessItemIds,
-  ].filter(Boolean) as string[];
+  const slotEntries = [
+    {
+      category: "armor",
+      itemId: loadout.wornArmorItemId,
+      label: "wornArmorItemId",
+    },
+    {
+      category: "shield",
+      itemId: loadout.readyShieldItemId,
+      label: "readyShieldItemId",
+    },
+    {
+      category: "weapon",
+      itemId: loadout.activePrimaryWeaponItemId,
+      label: "activePrimaryWeaponItemId",
+    },
+    {
+      category: "weapon",
+      itemId: loadout.activeSecondaryWeaponItemId,
+      label: "activeSecondaryWeaponItemId",
+    },
+    {
+      category: "weapon",
+      itemId: loadout.activeMissileWeaponItemId,
+      label: "activeMissileWeaponItemId",
+    },
+  ] as const;
 
-  for (const itemId of referencedItemIds) {
+  for (const { category, itemId, label } of slotEntries) {
+    if (!itemId) {
+      continue;
+    }
+
     const item = ctx.itemsById[itemId];
 
     if (!item) {
@@ -73,7 +105,37 @@ export function validateLoadout(
       continue;
     }
 
-    if (item.carryMode === "stored") {
+    if (isStoredCarryMode(item.storageAssignment.carryMode)) {
+      errors.push(`Stored item cannot be part of active loadout: ${itemId}`);
+    }
+
+    if (item.conditionState === "broken" || item.conditionState === "lost") {
+      errors.push(
+        `Broken or lost item cannot be part of active loadout: ${itemId}`,
+      );
+    }
+
+    if (item.category !== category) {
+      errors.push(
+        `${label} must reference a ${category} item: ${itemId}`,
+      );
+    }
+  }
+
+  const ancillaryItemIds = [
+    ...loadout.activeAmmoItemIds,
+    ...loadout.quickAccessItemIds,
+  ];
+
+  for (const itemId of ancillaryItemIds) {
+    const item = ctx.itemsById[itemId];
+
+    if (!item) {
+      errors.push(`Referenced item not found: ${itemId}`);
+      continue;
+    }
+
+    if (isStoredCarryMode(item.storageAssignment.carryMode)) {
       errors.push(`Stored item cannot be part of active loadout: ${itemId}`);
     }
 

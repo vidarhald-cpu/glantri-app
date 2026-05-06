@@ -10,6 +10,7 @@ import type {
 } from "@glantri/domain";
 
 import { buildChargenDraftView, type ChargenDraftView } from "../chargen/primaryAllocation";
+import { getResolvedProfileStats } from "../chargen/statResolution";
 import {
   buildCharacterEquipmentLoadoutSummary,
   calculateEquipmentDrivenDodge,
@@ -29,6 +30,8 @@ interface CanonicalContentShape {
 
 export interface CharacterSheetCombatSkillSummary {
   baseOb: number;
+  // Canonical workbook-equivalent combat skill XP propagated from chargen.
+  // This is the skill value combat math should consume before linked stats.
   effectiveSkillNumber: number;
   name: string;
   parryValue: number;
@@ -60,6 +63,11 @@ export interface CharacterSheetSummary {
   professionName?: string;
   societyLabel?: string;
   seniority: number;
+  skillPoints: {
+    current: number;
+    original: number;
+    successfulProgressionGains: number;
+  };
   totalSkillPointsInvested: number;
 }
 
@@ -97,6 +105,7 @@ export function buildCharacterSheetSummary(input: {
   content: CanonicalContentShape;
   statModifiers?: Record<string, number>;
 }): CharacterSheetSummary {
+  const resolvedStats = getResolvedProfileStats(input.build.profile) ?? input.build.profile.rolledStats;
   const draftView = buildChargenDraftView({
     content: input.content,
     professionId: input.build.professionId,
@@ -106,8 +115,11 @@ export function buildCharacterSheetSummary(input: {
     societyLevel: input.build.societyLevel
   });
   const adjustedStats = calculateAdjustedStats({
-    baseStats: input.build.profile.rolledStats,
-    modifiers: input.statModifiers
+    baseStats: resolvedStats,
+    modifiers: {
+      ...(input.build.statModifiers ?? {}),
+      ...(input.statModifiers ?? {})
+    }
   });
   const equipment = buildCharacterEquipmentLoadoutSummary({
     build: input.build,
@@ -133,6 +145,13 @@ export function buildCharacterSheetSummary(input: {
     (sum, group) => sum + (group.gms ?? 0),
     0
   );
+  const successfulProgressionGains =
+    input.build.progressionState?.history.reduce(
+      (sum, entry) => sum + (entry.success ? entry.cost : 0),
+      0
+    ) ?? 0;
+  const originalSkillPoints = draftView.totalSkillPointsInvested;
+  const currentSkillPoints = originalSkillPoints + successfulProgressionGains;
 
   return {
     adjustedStats,
@@ -161,7 +180,12 @@ export function buildCharacterSheetSummary(input: {
     },
     professionName: getProfessionName(input.content, input.build.professionId),
     societyLabel: getSocietyLabel(input.content, input.build.societyId, input.build.societyLevel),
-    seniority: draftView.totalSkillPointsInvested,
-    totalSkillPointsInvested: draftView.totalSkillPointsInvested
+    seniority: currentSkillPoints,
+    skillPoints: {
+      current: currentSkillPoints,
+      original: originalSkillPoints,
+      successfulProgressionGains
+    },
+    totalSkillPointsInvested: currentSkillPoints
   };
 }

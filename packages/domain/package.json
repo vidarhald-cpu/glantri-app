@@ -8,6 +8,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./equipment": {
+      "types": "./dist/equipment/index.d.ts",
+      "default": "./dist/equipment/index.js"
     }
   },
   "scripts": {

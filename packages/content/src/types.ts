@@ -1,9 +1,13 @@
 import { z } from "zod";
 
 import {
+  civilizationDefinitionSchema,
+  languageDefinitionSchema,
   professionFamilyDefinitionSchema,
   professionDefinitionSchema,
   professionSkillMapSchema,
+  societyBandSkillAccessSchema,
+  societyDefinitionSchema,
   skillDefinitionSchema,
   skillGroupDefinitionSchema,
   skillSpecializationSchema,
@@ -11,13 +15,17 @@ import {
 } from "@glantri/domain";
 
 export const canonicalContentSchema = z.object({
+  civilizations: z.array(civilizationDefinitionSchema).default([]),
+  languages: z.array(languageDefinitionSchema).default([]),
   skillGroups: z.array(skillGroupDefinitionSchema).default([]),
   skills: z.array(skillDefinitionSchema).default([]),
   specializations: z.array(skillSpecializationSchema).default([]),
   professionFamilies: z.array(professionFamilyDefinitionSchema).default([]),
   professions: z.array(professionDefinitionSchema).default([]),
   professionSkills: z.array(professionSkillMapSchema).default([]),
-  societyLevels: z.array(societyLevelAccessSchema).default([])
+  societies: z.array(societyDefinitionSchema).default([]),
+  societyLevels: z.array(societyLevelAccessSchema).default([]),
+  societyBandSkillAccess: z.array(societyBandSkillAccessSchema).default([])
 });
 
 export type CanonicalContent = z.infer<typeof canonicalContentSchema>;

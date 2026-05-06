@@ -139,6 +139,9 @@ importers:
       '@glantri/auth':
         specifier: workspace:*
         version: link:../auth
+      '@glantri/content':
+        specifier: workspace:*
+        version: link:../content
       '@glantri/domain':
         specifier: workspace:*
         version: link:../domain
@@ -148,6 +151,9 @@ importers:
       '@glantri/shared':
         specifier: workspace:*
         version: link:../shared
+      '@glantri/test-scenarios':
+        specifier: workspace:*
+        version: link:../test-scenarios
       '@prisma/client':
         specifier: ^6.6.0
         version: 6.19.2(prisma@6.19.2(typescript@5.9.3))(typescript@5.9.3)
@@ -199,6 +205,9 @@ importers:
 
   packages/test-scenarios:
     dependencies:
+      '@glantri/content':
+        specifier: workspace:*
+        version: link:../content
       '@glantri/domain':
         specifier: workspace:*
         version: link:../domain

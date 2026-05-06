@@ -17,13 +17,21 @@
     "test": "vitest run --passWithNoTests",
     "postinstall": "prisma generate",
     "db:generate": "prisma generate",
-    "db:migrate": "prisma migrate dev"
+    "db:migrate": "prisma migrate dev",
+    "db:backup": "pnpm exec tsx ./scripts/backupLocalDb.ts",
+    "db:seed": "pnpm exec tsx ./scripts/seedLocalDev.ts",
+    "db:reset:local": "pnpm exec tsx ./scripts/resetLocalDb.ts"
+  },
+  "prisma": {
+    "seed": "pnpm exec tsx ./scripts/seedLocalDev.ts"
   },
   "dependencies": {
     "@glantri/auth": "workspace:*",
+    "@glantri/content": "workspace:*",
     "@glantri/domain": "workspace:*",
     "@glantri/rules-engine": "workspace:*",
     "@glantri/shared": "workspace:*",
+    "@glantri/test-scenarios": "workspace:*",
     "@prisma/client": "^6.6.0"
   },
   "devDependencies": {

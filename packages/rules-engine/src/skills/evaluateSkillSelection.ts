@@ -1,13 +1,16 @@
 import type {
   CharacterProgression,
   SkillDefinition,
+  SkillGroupDefinition,
   SkillSpecialization
 } from "@glantri/domain";
+import { getSkillNonRelationshipBaseLevel } from "./deriveSkillRelationships";
 
 const LITERACY_SKILL_ID = "literacy";
 
 interface SkillSelectionContentShape {
   skills: SkillDefinition[];
+  skillGroups?: SkillGroupDefinition[];
 }
 
 function getSkillDependencies(skill: SkillDefinition): SkillDefinition["dependencies"] {
@@ -41,6 +44,8 @@ export type SkillSelectionEvaluationReasonCode =
   | "missing-helpful-dependency"
   | "missing-required-literacy"
   | "missing-recommended-literacy"
+  | "missing-specialization-bridge-parent-skill"
+  | "specialization-bridge-parent-skill-too-low"
   | "invalid-specialization-parent-skill"
   | "missing-specialization-parent-skill"
   | "specialization-parent-disallows-specializations"
@@ -87,7 +92,25 @@ function getPurchasedSkillLevel(
   progression: CharacterProgression,
   skillId: string
 ): number {
-  return progression.skills.find((skill) => skill.skillId === skillId)?.ranks ?? 0;
+  return progression.skills
+    .filter((skill) => skill.skillId === skillId)
+    .reduce((highest, skill) => Math.max(highest, skill.ranks ?? 0), 0);
+}
+
+function getEffectiveSkillLevel(input: {
+  content: SkillSelectionContentShape;
+  progression: CharacterProgression;
+  skill: SkillDefinition;
+}): number {
+  return getNonDerivedSkillBaseLevel(input);
+}
+
+function getNonDerivedSkillBaseLevel(input: {
+  content: SkillSelectionContentShape;
+  progression: CharacterProgression;
+  skill: SkillDefinition;
+}): number {
+  return getSkillNonRelationshipBaseLevel(input);
 }
 
 function createEmptyEvaluation(): SkillSelectionEvaluationResult {
@@ -152,7 +175,16 @@ function evaluateSkillDependencies(input: {
   const result = createEmptyEvaluation();
 
   for (const dependency of getSkillDependencies(input.skill)) {
-    if (getPurchasedSkillLevel(input.progression, dependency.skillId) > 0) {
+    const dependencySkill = getSkillDefinitionById(input.content, dependency.skillId);
+    const effectiveDependencyLevel = dependencySkill
+      ? getEffectiveSkillLevel({
+          content: input.content,
+          progression: input.progression,
+          skill: dependencySkill
+        })
+      : getPurchasedSkillLevel(input.progression, dependency.skillId);
+
+    if (effectiveDependencyLevel > 0) {
       continue;
     }
 
@@ -180,13 +212,28 @@ function evaluateSkillDependencies(input: {
 }
 
 function evaluateLiteracyRequirement(input: {
+  content: SkillSelectionContentShape;
   progression: CharacterProgression;
   skill: SkillDefinition;
 }): SkillSelectionEvaluationResult {
   if (
     input.skill.id === LITERACY_SKILL_ID ||
     input.skill.requiresLiteracy === "no" ||
-    getPurchasedSkillLevel(input.progression, LITERACY_SKILL_ID) > 0
+    (() => {
+      const literacySkill = getSkillDefinitionById(input.content, LITERACY_SKILL_ID);
+
+      if (!literacySkill) {
+        return getPurchasedSkillLevel(input.progression, LITERACY_SKILL_ID) > 0;
+      }
+
+      return (
+        getEffectiveSkillLevel({
+          content: input.content,
+          progression: input.progression,
+          skill: literacySkill
+        }) > 0
+      );
+    })()
   ) {
     return createEmptyEvaluation();
   }
@@ -228,6 +275,75 @@ function evaluateLiteracyRequirement(input: {
   };
 }
 
+function evaluateSkillSpecializationBridge(input: {
+  content: SkillSelectionContentShape;
+  progression: CharacterProgression;
+  skill: SkillDefinition;
+}): SkillSelectionEvaluationResult {
+  const bridge = input.skill.specializationBridge;
+
+  if (!bridge) {
+    return createEmptyEvaluation();
+  }
+
+  const parentSkill = getSkillDefinitionById(input.content, bridge.parentSkillId);
+
+  if (!parentSkill) {
+    return {
+      advisories: [],
+      blockingReasons: [
+        {
+          code: "missing-specialization-bridge-parent-skill",
+          message: `${input.skill.name} requires ${bridge.parentSkillId}.`,
+          skillId: bridge.parentSkillId
+        }
+      ],
+      isAllowed: false,
+      warnings: []
+    };
+  }
+
+  const parentBaseLevel = getNonDerivedSkillBaseLevel({
+    content: input.content,
+    progression: input.progression,
+    skill: parentSkill
+  });
+
+  if (parentBaseLevel <= 0) {
+    return {
+      advisories: [],
+      blockingReasons: [
+        {
+          code: "missing-specialization-bridge-parent-skill",
+          message: `${input.skill.name} requires ${parentSkill.name}.`,
+          skillId: parentSkill.id
+        }
+      ],
+      isAllowed: false,
+      warnings: []
+    };
+  }
+
+  if (parentBaseLevel < bridge.threshold) {
+    return {
+      advisories: [],
+      blockingReasons: [
+        {
+          code: "specialization-bridge-parent-skill-too-low",
+          currentLevel: parentBaseLevel,
+          message: `${input.skill.name} requires ${parentSkill.name} level ${bridge.threshold} or higher (current ${parentBaseLevel}).`,
+          requiredLevel: bridge.threshold,
+          skillId: parentSkill.id
+        }
+      ],
+      isAllowed: false,
+      warnings: []
+    };
+  }
+
+  return createEmptyEvaluation();
+}
+
 function evaluateSpecializationGate(input: {
   content: SkillSelectionContentShape;
   progression: CharacterProgression;
@@ -251,7 +367,7 @@ function evaluateSpecializationGate(input: {
     };
   }
 
-  if (!parentSkill.allowsSpecializations) {
+  if (!input.specialization.specializationBridge && !parentSkill.allowsSpecializations) {
     return {
       advisories: [],
       blockingReasons: [
@@ -267,7 +383,11 @@ function evaluateSpecializationGate(input: {
     };
   }
 
-  const parentLevel = getPurchasedSkillLevel(input.progression, parentSkill.id);
+  const parentLevel = getNonDerivedSkillBaseLevel({
+    content: input.content,
+    progression: input.progression,
+    skill: parentSkill
+  });
 
   if (parentLevel <= 0) {
     return {
@@ -321,7 +441,13 @@ export function evaluateSkillSelection(
         progression: input.progression,
         skill: input.target.skill
       }),
+      evaluateSkillSpecializationBridge({
+        content: input.content,
+        progression: input.progression,
+        skill: input.target.skill
+      }),
       evaluateLiteracyRequirement({
+        content: input.content,
         progression: input.progression,
         skill: input.target.skill
       })

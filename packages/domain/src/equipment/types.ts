@@ -52,6 +52,10 @@ export type StorageLocationType =
   | "building"
   | "other";
 
+export type LocationAvailabilityClass =
+  | "with_you"
+  | "elsewhere";
+
 export type AccessTier =
   | "immediate"
   | "fast"
@@ -69,7 +73,22 @@ export type WeaponHandlingClass =
   | "polearm"
   | "other";
 
-export interface EquipmentTemplate {
+export type WeaponDamageClass =
+  | "blunt"
+  | "edged"
+  | "pointed";
+
+export type CanonicalMeleeMode =
+  | "slash"
+  | "strike"
+  | "thrust";
+
+export type WeaponAttackModeProvenance =
+  | "imported"
+  | "manual"
+  | "derived";
+
+export interface EquipmentTemplateBase {
   id: string;
   category: EquipmentCategory;
   name: string;
@@ -92,11 +111,151 @@ export interface WeaponDurabilityProfile {
   notes?: string | null;
 }
 
-export interface WeaponTemplate extends EquipmentTemplate {
+export interface WeaponAttackMode {
+  id: string;
+  label?: string | null;
+  canonicalMeleeMode?: CanonicalMeleeMode | null;
+  isPrimaryAttack?: boolean | null;
+  damageClass?: WeaponDamageClass | null;
+  ob?: number | null;
+  obRaw?: string | null;
+  dmb?: number | null;
+  dmbRaw?: string | null;
+  dmbFormula?: WeaponDamageModifierFormula | null;
+  crit?: string | null;
+  secondCrit?: string | null;
+  armorModifier?: string | null;
+  provenance: WeaponAttackModeProvenance;
+  notes?: string | null;
+}
+
+export interface WeaponDamageModifierFormula {
+  kind: "numeric" | "dice" | "special" | "unresolved";
+  raw: string;
+  numericValue?: number | null;
+  diceCount?: number | null;
+  diceSides?: number | null;
+  flatModifier?: number | null;
+  textModifier?: string | null;
+  specialValue?: string | null;
+  note?: string | null;
+}
+
+export interface WeaponEncumbranceFormula {
+  kind: "numeric" | "ammo_linked" | "special" | "unresolved";
+  raw: string;
+  numericValue?: number | null;
+  baseValue?: number | null;
+  ammoValue?: number | null;
+  specialValue?: string | null;
+  note?: string | null;
+}
+
+export interface ImportedWeaponSourceMetadata {
+  workbook: string;
+  sheet: string;
+  row: number;
+  sourceRange: string;
+  sourceColumns: Record<string, string>;
+  rawRow: Record<string, string>;
+}
+
+export interface ImportedShieldSourceMetadata {
+  workbook: string;
+  sheet: string;
+  row: number;
+  sourceRange: string;
+  sourceColumns: Record<string, string>;
+  rawRow: Record<string, string>;
+}
+
+export interface ArmorLocationValues {
+  head?: number | null;
+  frontArm?: number | null;
+  chest?: number | null;
+  backArm?: number | null;
+  abdomen?: number | null;
+  frontThigh?: number | null;
+  frontFoot?: number | null;
+  backThigh?: number | null;
+  backFoot?: number | null;
+}
+
+export interface ArmorLocationTypes {
+  head?: string | null;
+  frontArm?: string | null;
+  chest?: string | null;
+  backArm?: string | null;
+  abdomen?: string | null;
+  frontThigh?: string | null;
+  frontFoot?: string | null;
+  backThigh?: string | null;
+  backFoot?: string | null;
+  generalArmor?: string | null;
+}
+
+export interface ArmorComponentProfile {
+  name: string;
+  encumbranceFactor?: number | null;
+  movementFactor?: number | null;
+  generalArmor?: number | null;
+  generalArmorRounded?: number | null;
+  armorActivityModifier?: number | null;
+  perceptionModifier?: number | null;
+  locationValues?: ArmorLocationValues | null;
+  criticalModifierByArea?: ArmorLocationValues | null;
+  criticalModifierGeneral?: number | null;
+  sourceMetadata?: ImportedArmorSourceMetadata | null;
+}
+
+export interface ImportedArmorSourceMetadata {
+  workbook: string;
+  sheet: string;
+  finishedRow: number;
+  typeRow?: number | null;
+  componentRows?: number[] | null;
+  sourceRange: string;
+  sourceColumns: Record<string, string>;
+  rawRows: Record<string, Record<string, string>>;
+}
+
+export interface WeaponAttackModeManualOverride {
+  modeId: string;
+  fields: string[];
+  note?: string | null;
+}
+
+export interface WeaponTemplateManualEnrichment {
+  source: string;
+  notes?: string[] | null;
+  attackModeOverrides?: WeaponAttackModeManualOverride[] | null;
+  resolvedImportWarnings?: string[] | null;
+  unresolvedImportWarnings?: string[] | null;
+}
+
+export interface WeaponFormulaNormalizationEntry {
+  fieldPath: string;
+  kind: "dmb" | "encumbrance" | "ammo_encumbrance";
+  raw: string;
+  normalizedAs: string;
+  note?: string | null;
+}
+
+export interface WeaponTemplateFormulaNormalization {
+  source: string;
+  normalizedFields?: WeaponFormulaNormalizationEntry[] | null;
+  resolvedImportWarnings?: string[] | null;
+  unresolvedImportWarnings?: string[] | null;
+  notes?: string[] | null;
+}
+
+export interface WeaponTemplate extends EquipmentTemplateBase {
   category: "weapon";
   weaponClass: string;
   weaponSkill: string;
   handlingClass: WeaponHandlingClass;
+  attackModes?: WeaponAttackMode[] | null;
+  primeAttackType?: string | null;
   primaryAttackType?: string | null;
   secondaryAttackType?: string | null;
   ob1?: number | null;
@@ -112,8 +271,77 @@ export interface WeaponTemplate extends EquipmentTemplate {
   crit2?: string | null;
   secondCrit?: string | null;
   defensiveValue?: number | null;
+  baseEncumbranceFormula?: WeaponEncumbranceFormula | null;
+  ammoEncumbrance?: number | null;
+  ammoEncumbranceRaw?: string | null;
+  ammoEncumbranceFormula?: WeaponEncumbranceFormula | null;
+  sourceMetadata?: ImportedWeaponSourceMetadata | null;
+  importWarnings?: string[] | null;
+  manualEnrichment?: WeaponTemplateManualEnrichment | null;
+  formulaNormalization?: WeaponTemplateFormulaNormalization | null;
   durabilityProfile?: WeaponDurabilityProfile | null;
 }
+
+export interface ShieldTemplate extends EquipmentTemplateBase {
+  category: "shield";
+  weaponSkill?: string | null;
+  handlingClass?: WeaponHandlingClass | null;
+  attackModes?: WeaponAttackMode[] | null;
+  primeAttackType?: string | null;
+  primaryAttackType?: string | null;
+  secondaryAttackType?: string | null;
+  ob1?: number | null;
+  dmb1?: number | null;
+  ob2?: number | null;
+  dmb2?: number | null;
+  parry?: number | null;
+  initiative?: number | null;
+  range?: string | null;
+  armorMod1?: string | null;
+  armorMod2?: string | null;
+  crit1?: string | null;
+  crit2?: string | null;
+  secondCrit?: string | null;
+  shieldBonus?: number | null;
+  defensiveValue?: number | null;
+  movementModifier?: number | null;
+  offensiveSourceMetadata?: ImportedShieldSourceMetadata | null;
+  defensiveSourceMetadata?: ImportedShieldSourceMetadata | null;
+  importWarnings?: string[] | null;
+}
+
+export interface ArmorTemplate extends EquipmentTemplateBase {
+  category: "armor";
+  armorRating?: number | null;
+  generalArmorRounded?: number | null;
+  encumbranceFactor?: number | null;
+  mobilityPenalty?: number | null;
+  armorActivityModifier?: number | null;
+  movementFactor?: number | null;
+  perceptionModifier?: number | null;
+  locationValues?: ArmorLocationValues | null;
+  locationTypes?: ArmorLocationTypes | null;
+  criticalModifierByArea?: ArmorLocationValues | null;
+  criticalModifierGeneral?: number | null;
+  componentProfiles?: ArmorComponentProfile[] | null;
+  sourceMetadata?: ImportedArmorSourceMetadata | null;
+  importWarnings?: string[] | null;
+}
+
+export interface GearTemplate extends EquipmentTemplateBase {
+  category: "gear";
+}
+
+export interface ValuableTemplate extends EquipmentTemplateBase {
+  category: "valuables";
+}
+
+export type EquipmentTemplate =
+  | WeaponTemplate
+  | ShieldTemplate
+  | ArmorTemplate
+  | GearTemplate
+  | ValuableTemplate;
 
 export interface EquipmentSpecialProperties {
   magicEffects?: string[];
@@ -122,6 +350,11 @@ export interface EquipmentSpecialProperties {
   utilityEffects?: string[];
   roleplayTraits?: string[];
   customNotes?: string | null;
+}
+
+export interface ItemStorageAssignment {
+  locationId: string;
+  carryMode: CarryMode;
 }
 
 export interface EquipmentItem {
@@ -135,8 +368,8 @@ export interface EquipmentItem {
   isStackable: boolean;
   material: MaterialType;
   quality: QualityType;
-  locationId: string;
-  carryMode: CarryMode;
+  storageAssignment: ItemStorageAssignment;
+  previousStorageAssignment?: ItemStorageAssignment | null;
   conditionState: ItemConditionState;
   durabilityCurrent?: number | null;
   durabilityMax?: number | null;
@@ -144,7 +377,7 @@ export interface EquipmentItem {
   valueOverride?: number | null;
   specialProperties?: EquipmentSpecialProperties | null;
   notes?: string | null;
-  isEquipped: boolean;
+  isEquipped?: boolean | null;
   isFavorite?: boolean | null;
   acquiredFrom?: string | null;
   statusTags?: string[] | null;
@@ -155,6 +388,7 @@ export interface StorageLocation {
   characterId: string;
   name: string;
   type: StorageLocationType;
+  availabilityClass: LocationAvailabilityClass;
   parentLocationId?: string | null;
   isMobile: boolean;
   isAccessibleInEncounter: boolean;
@@ -166,8 +400,8 @@ export interface CharacterLoadout {
   characterId: string;
   name: string;
   isActive: boolean;
-  activeArmorItemId?: string | null;
-  activeShieldItemId?: string | null;
+  wornArmorItemId?: string | null;
+  readyShieldItemId?: string | null;
   activePrimaryWeaponItemId?: string | null;
   activeSecondaryWeaponItemId?: string | null;
   activeMissileWeaponItemId?: string | null;

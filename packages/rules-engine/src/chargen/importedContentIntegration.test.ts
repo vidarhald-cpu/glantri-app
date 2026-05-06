@@ -74,7 +74,7 @@ describe("imported content chargen integration", () => {
     }
 
     expect(purchase?.error).toBeUndefined();
-    expect(purchase?.spentCost).toBe(4);
+    expect(purchase?.spentCost).toBe(2);
   });
 
   it("allows at least one imported secondary skill purchase through chargen", () => {
@@ -115,7 +115,7 @@ describe("imported content chargen integration", () => {
     }
 
     expect(purchase?.error).toBeUndefined();
-    expect(purchase?.spentCost).toBe(2);
+    expect(purchase?.spentCost).toBe(1);
   });
 
   it("allows at least one imported specialization purchase through chargen when the gate is satisfied", () => {
@@ -189,5 +189,23 @@ describe("imported content chargen integration", () => {
 
     expect(purchase?.error).toBeUndefined();
     expect(purchase?.spentCost).toBeGreaterThan(0);
+  });
+
+  it("exposes literacy through society-band foundational access only when the selected band allows it", () => {
+    const levelThreeAccess = buildChargenSkillAccessSummary({
+      content: defaultCanonicalContent,
+      professionId: "temple_scribe",
+      societyId: "bronze_age_palace_state",
+      societyLevel: 4
+    });
+    const levelTwoAccess = buildChargenSkillAccessSummary({
+      content: defaultCanonicalContent,
+      professionId: "merchant",
+      societyId: "pastoral_clan_nomadic",
+      societyLevel: 4
+    });
+
+    expect(levelThreeAccess.normalSkillIds).toContain("literacy");
+    expect(levelTwoAccess.normalSkillIds).not.toContain("literacy");
   });
 });

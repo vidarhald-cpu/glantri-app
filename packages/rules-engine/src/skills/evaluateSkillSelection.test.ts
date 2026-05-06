@@ -170,6 +170,59 @@ const testContent = validateCanonicalContent({
       requiresLiteracy: "no",
       sortOrder: 9,
       allowsSpecializations: true
+    },
+    {
+      id: "bow",
+      groupId: "combat",
+      groupIds: ["combat"],
+      name: "Bow",
+      linkedStats: ["dex", "dex"],
+      dependencies: [],
+      dependencySkillIds: [],
+      category: "ordinary",
+      requiresLiteracy: "no",
+      sortOrder: 10,
+      allowsSpecializations: false
+    },
+    {
+      id: "crossbow",
+      groupId: "combat",
+      groupIds: ["combat"],
+      name: "Crossbow",
+      linkedStats: ["dex", "dex"],
+      dependencies: [],
+      dependencySkillIds: [],
+      category: "ordinary",
+      requiresLiteracy: "no",
+      sortOrder: 11,
+      allowsSpecializations: false
+    },
+    {
+      id: "longbow",
+      groupId: "combat",
+      groupIds: ["combat"],
+      name: "Longbow",
+      linkedStats: ["dex", "dex"],
+      dependencies: [],
+      dependencySkillIds: [],
+      category: "secondary",
+      requiresLiteracy: "no",
+      sortOrder: 12,
+      allowsSpecializations: false,
+      specializationOfSkillId: "bow"
+    },
+    {
+      id: "one_handed_edged",
+      groupId: "combat",
+      groupIds: ["combat"],
+      name: "1-h edged",
+      linkedStats: ["dex", "dex"],
+      dependencies: [],
+      dependencySkillIds: [],
+      category: "ordinary",
+      requiresLiteracy: "no",
+      sortOrder: 13,
+      allowsSpecializations: true
     }
   ],
   specializations: [
@@ -188,6 +241,34 @@ const testContent = validateCanonicalContent({
       minimumGroupLevel: 1,
       minimumParentLevel: 1,
       sortOrder: 2
+    },
+    {
+      id: "longbow",
+      skillId: "bow",
+      name: "Longbow",
+      minimumGroupLevel: 6,
+      minimumParentLevel: 6,
+      sortOrder: 3,
+      specializationBridge: {
+        parentExcessOffset: 5,
+        parentSkillId: "bow",
+        reverseFactor: 1,
+        threshold: 6
+      }
+    },
+    {
+      id: "fencing",
+      skillId: "one_handed_edged",
+      name: "Fencing",
+      minimumGroupLevel: 6,
+      minimumParentLevel: 6,
+      sortOrder: 4,
+      specializationBridge: {
+        parentExcessOffset: 5,
+        parentSkillId: "one_handed_edged",
+        reverseFactor: 1,
+        threshold: 6
+      }
     }
   ],
   professionFamilies: [],
@@ -243,9 +324,20 @@ function getSpecialization(specializationId: string): SkillSpecialization {
   return specialization;
 }
 
-function buildProgression(skillRanks: Record<string, number>): CharacterProgression {
+function buildProgression(
+  skillRanks: Record<string, number>,
+  groupRanks: Record<string, number> = {}
+): CharacterProgression {
   return {
     ...createChargenProgression(),
+    skillGroups: Object.entries(groupRanks).map(([groupId, ranks]) => ({
+      gms: 0,
+      grantedRanks: 0,
+      groupId,
+      primaryRanks: ranks,
+      ranks,
+      secondaryRanks: 0
+    })),
     skills: Object.entries(skillRanks).map(([skillId, ranks]) => {
       const skill = getSkill(skillId);
 
@@ -297,6 +389,20 @@ describe("evaluateSkillSelection", () => {
     expect(evaluation.advisories).toHaveLength(0);
   });
 
+  it("allows when a required dependency is satisfied through effective group XP", () => {
+    const evaluation = evaluateSkillSelection({
+      content: testContent,
+      progression: buildProgression({}, { scholarly: 1 }),
+      target: {
+        skill: getSkill("history"),
+        targetType: "skill"
+      }
+    });
+
+    expect(evaluation.isAllowed).toBe(true);
+    expect(evaluation.blockingReasons).toHaveLength(0);
+  });
+
   it("warns but allows when a recommended dependency is missing", () => {
     const evaluation = evaluateSkillSelection({
       content: testContent,
@@ -313,6 +419,20 @@ describe("evaluateSkillSelection", () => {
       "missing-recommended-dependency"
     ]);
     expect(evaluation.advisories).toHaveLength(0);
+  });
+
+  it("clears recommended dependency warnings when support is present through group XP", () => {
+    const evaluation = evaluateSkillSelection({
+      content: testContent,
+      progression: buildProgression({}, { social: 1 }),
+      target: {
+        skill: getSkill("appraisal"),
+        targetType: "skill"
+      }
+    });
+
+    expect(evaluation.isAllowed).toBe(true);
+    expect(evaluation.warnings).toHaveLength(0);
   });
 
   it("advises but allows when a helpful dependency is missing", () => {
@@ -368,6 +488,68 @@ describe("evaluateSkillSelection", () => {
     expect(evaluation.warnings[0]?.message).toBe("Diplomacy recommends Literacy.");
   });
 
+  it("blocks a specialization-bridge specialization when the parent source level is missing or too low", () => {
+    const missingParent = evaluateSkillSelection({
+      content: testContent,
+      progression: buildProgression({}),
+      target: {
+        specialization: getSpecialization("longbow"),
+        targetType: "specialization"
+      }
+    });
+    const tooLow = evaluateSkillSelection({
+      content: testContent,
+      progression: buildProgression({ bow: 5 }),
+      target: {
+        specialization: getSpecialization("longbow"),
+        targetType: "specialization"
+      }
+    });
+
+    expect(missingParent.isAllowed).toBe(false);
+    expect(missingParent.blockingReasons.map((reason) => reason.code)).toEqual([
+      "missing-specialization-parent-skill"
+    ]);
+    expect(tooLow.isAllowed).toBe(false);
+    expect(tooLow.blockingReasons.map((reason) => reason.code)).toEqual([
+      "specialization-parent-skill-too-low"
+    ]);
+    expect(tooLow.blockingReasons[0]?.requiredLevel).toBe(6);
+    expect(tooLow.blockingReasons[0]?.currentLevel).toBe(5);
+  });
+
+  it("allows a specialization-bridge specialization when the parent source level meets the threshold through non-derived base XP only", () => {
+    const directParent = evaluateSkillSelection({
+      content: testContent,
+      progression: buildProgression({ bow: 6 }),
+      target: {
+        specialization: getSpecialization("longbow"),
+        targetType: "specialization"
+      }
+    });
+    const groupParent = evaluateSkillSelection({
+      content: testContent,
+      progression: buildProgression({}, { combat: 6 }),
+      target: {
+        specialization: getSpecialization("longbow"),
+        targetType: "specialization"
+      }
+    });
+    const derivedLookingParent = evaluateSkillSelection({
+      content: testContent,
+      progression: buildProgression({ crossbow: 20 }),
+      target: {
+        specialization: getSpecialization("longbow"),
+        targetType: "specialization"
+      }
+    });
+
+    expect(directParent.isAllowed).toBe(true);
+    expect(groupParent.isAllowed).toBe(true);
+    expect(derivedLookingParent.isAllowed).toBe(false);
+    expect(derivedLookingParent.blockingReasons[0]?.code).toBe("missing-specialization-parent-skill");
+  });
+
   it("blocks a specialization when the parent skill is missing", () => {
     const evaluation = evaluateSkillSelection({
       content: testContent,
@@ -382,6 +564,31 @@ describe("evaluateSkillSelection", () => {
     expect(evaluation.blockingReasons.map((reason) => reason.code)).toEqual([
       "missing-specialization-parent-skill"
     ]);
+  });
+
+  it("allows a specialization-bridge specialization when the parent base meets the threshold and rejects derived-only parent XP", () => {
+    const allowed = evaluateSkillSelection({
+      content: testContent,
+      progression: buildProgression({ one_handed_edged: 8 }),
+      target: {
+        specialization: getSpecialization("fencing"),
+        targetType: "specialization"
+      }
+    });
+    const derivedOnly = evaluateSkillSelection({
+      content: testContent,
+      progression: buildProgression({ longbow: 20 }),
+      target: {
+        specialization: getSpecialization("fencing"),
+        targetType: "specialization"
+      }
+    });
+
+    expect(allowed.isAllowed).toBe(true);
+    expect(derivedOnly.isAllowed).toBe(false);
+    expect(derivedOnly.blockingReasons[0]?.code).toBe(
+      "missing-specialization-parent-skill"
+    );
   });
 
   it("blocks a specialization when the parent skill level is too low", () => {
@@ -430,6 +637,142 @@ describe("evaluateSkillSelection", () => {
 
     expect(evaluation.isAllowed).toBe(true);
     expect(evaluation.blockingReasons).toHaveLength(0);
+  });
+
+  it("allows a specialization when the parent skill threshold is met through effective group XP", () => {
+    const evaluation = evaluateSkillSelection({
+      content: testContent,
+      progression: buildProgression({}, { combat: 3 }),
+      target: {
+        specialization: getSpecialization("dueling"),
+        targetType: "specialization"
+      }
+    });
+
+    expect(evaluation.isAllowed).toBe(true);
+    expect(evaluation.blockingReasons).toHaveLength(0);
+  });
+
+  it("does not treat unselected slot weapons as present through group XP", () => {
+    const contentWithCombatSlots = validateCanonicalContent({
+      ...testContent,
+      skillGroups: [
+        ...testContent.skillGroups,
+        {
+          id: "advanced_melee_training",
+          name: "Advanced Melee Training",
+          selectionSlots: [
+            {
+              candidateSkillIds: ["longsword", "battleaxe", "spear"],
+              chooseCount: 1,
+              id: "melee_weapon_choice",
+              label: "Choose one melee weapon",
+              required: true
+            }
+          ],
+          sortOrder: 4
+        }
+      ],
+      skills: [
+        ...testContent.skills,
+        {
+          allowsSpecializations: false,
+          category: "ordinary",
+          dependencies: [],
+          dependencySkillIds: [],
+          groupId: "advanced_melee_training",
+          groupIds: ["advanced_melee_training"],
+          id: "longsword",
+          linkedStats: ["str", "dex"],
+          name: "Longsword",
+          requiresLiteracy: "no",
+          sortOrder: 10
+        },
+        {
+          allowsSpecializations: false,
+          category: "ordinary",
+          dependencies: [
+            {
+              skillId: "battleaxe",
+              strength: "required"
+            }
+          ],
+          dependencySkillIds: ["battleaxe"],
+          groupId: "social",
+          groupIds: ["social"],
+          id: "axe_mastery",
+          linkedStats: ["str", "dex"],
+          name: "Axe Mastery",
+          requiresLiteracy: "no",
+          sortOrder: 11
+        },
+        {
+          allowsSpecializations: false,
+          category: "ordinary",
+          dependencies: [],
+          dependencySkillIds: [],
+          groupId: "advanced_melee_training",
+          groupIds: ["advanced_melee_training"],
+          id: "battleaxe",
+          linkedStats: ["str", "dex"],
+          name: "Battleaxe",
+          requiresLiteracy: "no",
+          sortOrder: 12
+        },
+        {
+          allowsSpecializations: false,
+          category: "ordinary",
+          dependencies: [],
+          dependencySkillIds: [],
+          groupId: "advanced_melee_training",
+          groupIds: ["advanced_melee_training"],
+          id: "spear",
+          linkedStats: ["str", "dex"],
+          name: "Spear",
+          requiresLiteracy: "no",
+          sortOrder: 13
+        }
+      ],
+      specializations: testContent.specializations
+    });
+
+    const evaluation = evaluateSkillSelection({
+      content: contentWithCombatSlots,
+      progression: {
+        ...createChargenProgression(),
+        chargenSelections: {
+          selectedGroupSlots: [
+            {
+              groupId: "advanced_melee_training",
+              selectedSkillIds: ["longsword"],
+              slotId: "melee_weapon_choice"
+            }
+          ],
+          selectedLanguageIds: [],
+          selectedSkillIds: []
+        },
+        skillGroups: [
+          {
+            gms: 0,
+            grantedRanks: 0,
+            groupId: "advanced_melee_training",
+            primaryRanks: 3,
+            ranks: 3,
+            secondaryRanks: 0
+          }
+        ],
+        skills: []
+      },
+      target: {
+        skill: contentWithCombatSlots.skills.find((skill) => skill.id === "axe_mastery")!,
+        targetType: "skill"
+      }
+    });
+
+    expect(evaluation.isAllowed).toBe(false);
+    expect(evaluation.blockingReasons.map((reason) => reason.code)).toEqual([
+      "missing-required-dependency"
+    ]);
   });
 
   it("returns the correct mixed dependency state", () => {

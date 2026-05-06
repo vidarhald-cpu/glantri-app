@@ -1,10 +1,10 @@
 import type {
   CharacterLoadout,
   EquipmentItem,
+  EquipmentTemplate,
   StorageLocation,
-  WeaponTemplate,
 } from "@glantri/domain/equipment";
-import { weaponTemplates } from "@glantri/content/equipment";
+import { equipmentTemplates } from "@glantri/content/equipment";
 import {
   sampleActiveLoadout,
   sampleCharacterId,
@@ -17,7 +17,7 @@ function indexById<T extends { id: string }>(items: T[]): Record<string, T> {
   return Object.fromEntries(items.map((item) => [item.id, item]));
 }
 
-const weaponsById: Record<string, WeaponTemplate> = indexById(weaponTemplates);
+const templatesById: Record<string, EquipmentTemplate> = indexById(equipmentTemplates);
 const itemsById: Record<string, EquipmentItem> = indexById(sampleEquipmentItems);
 const locationsById: Record<string, StorageLocation> = indexById(sampleLocations);
 
@@ -27,7 +27,7 @@ const activeLoadoutByCharacterId: Record<string, CharacterLoadout> = {
 
 export const equipmentInitialState: EquipmentFeatureState = {
   templates: {
-    weaponsById,
+    templatesById,
   },
   itemsById,
   locationsById,

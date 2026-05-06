@@ -1,8 +1,22 @@
+/*
+  Terminology guardrail:
+  Rules code should preserve canonical Glantri terminology.
+  If terminology changes ripple into exported rules concepts or docs-facing strings,
+  update packages/domain/src/docs/glantriTerms.ts in the same patch.
+*/
+
 export * from "./advancement/advanceCharacter";
 export * from "./chargen/generateProfiles";
+export * from "./chargen/policy";
 export * from "./chargen/primaryAllocation";
+export * from "./chargen/selectionStructure";
 export * from "./chargen/selectProfile";
+export * from "./chargen/statResolution";
 export * from "./chargen/summarizeRolledProfile";
+export * from "./combat/combatAllocationState";
+export * from "./combat/combatSessionState";
+export * from "./combat/composeDefenseValues";
+export * from "./combat/workbookCombatMath";
 export * from "./calculators/ob/calculateBaseOB";
 export * from "./calculators/db/calculateDB";
 export * from "./calculators/parry/calculateParryValue";
@@ -18,7 +32,9 @@ export * from "./skills/calculateGms";
 export * from "./skills/calculateGroupLevel";
 export * from "./skills/calculateSkillLevel";
 export * from "./skills/calculateSpecializationLevel";
+export * from "./skills/deriveSkillRelationships";
 export * from "./skills/evaluateSkillSelection";
 export * from "./skills/selectBestSkillGroupContribution";
 export * from "./stats/calculateAdjustedStats";
+export * from "./stats/characteristicGms";
 export * from "./validation/validateCharacterBuild";

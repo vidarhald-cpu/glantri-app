@@ -1,51 +1,25 @@
 import type {
+  ChargenRuleSetParameters,
   GlantriCharacteristicBlock,
   RolledCharacterProfile
 } from "@glantri/domain";
 
-import { glantriCharacteristicOrder } from "@glantri/domain";
+import { createChargenMethodPolicy } from "./policy";
 
 export interface GenerateProfilesInput {
   count?: number;
+  ruleSet?: Partial<ChargenRuleSetParameters>;
   rollSets?: GlantriCharacteristicBlock[];
   rng?: () => number;
   socialClassTableId?: string;
 }
 
-const DEFAULT_PROFILE_COUNT = 20;
 const DEFAULT_SOCIAL_CLASS_TABLE_ID = "scandia_social_class_v1";
 const SOCIAL_CLASS_THRESHOLDS = [
   { educationValue: 2, maxRoll: 10, result: "Bønder" },
   { educationValue: 4, maxRoll: 15, result: "Håndverkere" },
   { educationValue: 6, maxRoll: 18, result: "Storbønder" },
   { educationValue: 8, maxRoll: 20, result: "Adelen" }
-] as const;
-const STAT_MODIFIER_TABLE = [
-  -5,
-  -4,
-  -4,
-  -3,
-  -3,
-  -2,
-  -2,
-  -1,
-  -1,
-  0,
-  0,
-  0,
-  1,
-  1,
-  2,
-  2,
-  3,
-  3,
-  4,
-  4,
-  5,
-  5,
-  6,
-  6,
-  7
 ] as const;
 
 function rollDie(rng: () => number, sides: number): number {
@@ -57,30 +31,8 @@ function rollFourD6DropLowest(rng: () => number): number {
   return rolls.reduce((sum, value) => sum + value, 0) - Math.min(...rolls);
 }
 
-function rollBestOfTwoD20(rng: () => number): number {
-  return Math.max(rollDie(rng, 20), rollDie(rng, 20));
-}
-
 function rollDistractionLevel(rng: () => number): number {
   return rollDie(rng, 3) + rollDie(rng, 3);
-}
-
-function getStatModifier(value: number): number {
-  return STAT_MODIFIER_TABLE[value - 1] ?? 0;
-}
-
-function getDexteritySizeModifier(siz: number): number {
-  const sizeGm = getStatModifier(siz);
-
-  if (siz > 14) {
-    return -(sizeGm - 1);
-  }
-
-  if (siz > 9) {
-    return 0;
-  }
-
-  return -sizeGm;
 }
 
 function rollSocialClass(input: {
@@ -96,7 +48,7 @@ function rollSocialClass(input: {
     throw new Error(`Unsupported social class table: ${input.tableId}`);
   }
 
-  const roll = rollBestOfTwoD20(input.rng);
+  const roll = rollDie(input.rng, 20);
   const threshold = SOCIAL_CLASS_THRESHOLDS.find((entry) => roll <= entry.maxRoll);
 
   return {
@@ -108,7 +60,7 @@ function rollSocialClass(input: {
 }
 
 function generateCharacteristicBlock(rng: () => number): GlantriCharacteristicBlock {
-  const raw = {
+  return {
     cha: rollFourD6DropLowest(rng),
     com: rollFourD6DropLowest(rng),
     con: rollFourD6DropLowest(rng),
@@ -120,25 +72,7 @@ function generateCharacteristicBlock(rng: () => number): GlantriCharacteristicBl
     siz: rollFourD6DropLowest(rng),
     str: rollFourD6DropLowest(rng),
     will: rollFourD6DropLowest(rng)
-  } as const;
-
-  const adjusted: GlantriCharacteristicBlock = {
-    cha: raw.cha + getStatModifier(raw.com),
-    com: raw.com,
-    con: raw.con,
-    dex: raw.dex + getDexteritySizeModifier(raw.siz),
-    health: raw.health + getStatModifier(raw.con),
-    int: raw.int,
-    lck: raw.lck,
-    pow: raw.pow,
-    siz: raw.siz,
-    str: raw.str + getStatModifier(raw.siz),
-    will: raw.will
   };
-
-  return Object.fromEntries(
-    glantriCharacteristicOrder.map((key) => [key, adjusted[key]])
-  ) as GlantriCharacteristicBlock;
 }
 
 function createRolledProfile(input: {
@@ -168,10 +102,11 @@ function createRolledProfile(input: {
 
 export function generateProfiles(input: GenerateProfilesInput): RolledCharacterProfile[] {
   const rng = input.rng ?? Math.random;
+  const policy = createChargenMethodPolicy(input.ruleSet);
   const socialClassTableId = input.socialClassTableId ?? DEFAULT_SOCIAL_CLASS_TABLE_ID;
   const rollSets =
     input.rollSets ??
-    Array.from({ length: input.count ?? DEFAULT_PROFILE_COUNT }, () =>
+    Array.from({ length: input.count ?? policy.displayedRollCount }, () =>
       generateCharacteristicBlock(rng)
     );
 

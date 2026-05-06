@@ -1,0 +1,15 @@
+{
+  "totalTemplates": 58,
+  "templatesWithManualEnrichment": 52,
+  "rawWarningCount": 68,
+  "resolvedWarningCount": 52,
+  "unresolvedWarningCount": 16,
+  "resolvedWarningCategories": {
+    "missing_secondary_attack_label": 28,
+    "missing_weapon2_attack_label": 24
+  },
+  "unresolvedWarningCategories": {
+    "non_numeric_dmb_preserved_raw": 15,
+    "non_numeric_encumbrance_compat": 1
+  }
+}

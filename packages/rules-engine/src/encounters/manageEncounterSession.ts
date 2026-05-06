@@ -262,6 +262,7 @@ export function createEncounterSession(title: string): EncounterSession {
     currentTurnIndex: 0,
     declarationsLocked: false,
     id: createId("encounter"),
+    kind: "combat",
     participants: [],
     status: "setup",
     title: title.trim() || "Untitled encounter",

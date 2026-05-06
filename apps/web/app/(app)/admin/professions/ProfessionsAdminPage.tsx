@@ -1,66 +1,212 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { useAdminContent } from "../../../../src/lib/admin/AdminContentContext";
-import {
-  replaceProfessionRelations,
-  updateProfessionInContent
-} from "../../../../src/lib/admin/editing";
 import { downloadCsv } from "../../../../src/lib/admin/exporters";
-import { buildProfessionAdminRows } from "../../../../src/lib/admin/viewModels";
+import {
+  buildProfessionAdminRows,
+  buildProfessionFamilyFilterOptions,
+  filterProfessionAdminRowsBySocietyStage,
+  getProfessionFamilyName
+} from "../../../../src/lib/admin/viewModels";
 import {
   AdminButton,
-  AdminCheckboxList,
-  AdminDataTable,
   AdminField,
-  AdminInput,
+  AdminMetric,
   AdminPageIntro,
   AdminPanel,
-  AdminTagList,
-  AdminTextarea
+  AdminSelect,
+  AdminTagList
 } from "../admin-ui";
 import ProfessionsWorkspaceTabs from "./ProfessionsWorkspaceTabs";
 
-interface ProfessionFormState {
-  description: string;
-  groupIds: string[];
-  name: string;
-  ordinarySkillIds: string[];
-  societyEntryIds: string[];
-  secondarySkillIds: string[];
+function summarizeList(values: string[], maxItems = 3): string {
+  if (values.length === 0) {
+    return "None";
+  }
+
+  if (values.length <= maxItems) {
+    return values.join(", ");
+  }
+
+  return `${values.slice(0, maxItems).join(", ")} +${values.length - maxItems} more`;
 }
 
-function createSocietyEntryId(input: { societyId: string; societyLevel: number }): string {
-  return `${input.societyId}:${input.societyLevel}`;
+function renderClampedCell(text: string, lines = 2) {
+  return (
+    <span
+      style={{
+        color: "#4f4635",
+        display: "-webkit-box",
+        lineHeight: 1.45,
+        overflow: "hidden",
+        WebkitBoxOrient: "vertical",
+        WebkitLineClamp: lines
+      }}
+      title={text}
+    >
+      {text}
+    </span>
+  );
 }
 
-function createProfessionFormState(input: {
-  description?: string;
-  groupIds: string[];
-  name: string;
-  ordinarySkillIds: string[];
-  societyEntryIds: string[];
-  secondarySkillIds: string[];
-}): ProfessionFormState {
-  return {
-    description: input.description ?? "",
-    groupIds: input.groupIds,
-    name: input.name,
-    ordinarySkillIds: input.ordinarySkillIds,
-    societyEntryIds: input.societyEntryIds,
-    secondarySkillIds: input.secondarySkillIds
-  };
+function formatSocietyStageFilterLabel(value: string) {
+  return value === "all" ? "All society levels" : `Level ${value}`;
+}
+
+const professionsReviewGridTemplate =
+  "minmax(11rem, 0.95fr) minmax(8rem, 0.75fr) minmax(22rem, 1.95fr) minmax(10rem, 0.95fr) minmax(10rem, 0.95fr) minmax(12rem, 1fr) 5rem 5.5rem";
+
+function ProfessionsReviewTable(props: {
+  onInspect: (rowId: string) => void;
+  rows: ReturnType<typeof buildProfessionAdminRows>;
+  selectedId?: string;
+}) {
+  if (props.rows.length === 0) {
+    return <div style={{ color: "#6d624d", padding: "1rem" }}>No professions found.</div>;
+  }
+
+  return (
+    <div
+      style={{
+        border: "1px solid rgba(85, 73, 48, 0.12)",
+        borderRadius: 18,
+        maxHeight: "70vh",
+        overflow: "auto",
+        position: "relative"
+      }}
+    >
+      <div style={{ minWidth: 1080 }}>
+        <div
+          style={{
+            background: "rgba(126, 93, 42, 0.08)",
+            borderBottom: "1px solid rgba(85, 73, 48, 0.1)",
+            display: "grid",
+            gridTemplateColumns: professionsReviewGridTemplate,
+            position: "sticky",
+            top: 0,
+            zIndex: 2
+          }}
+        >
+          {["Profession", "Family", "Description", "Core Groups", "Optional Groups", "Access", "Skills", "Inspect"].map(
+            (header) => (
+              <div
+                key={header}
+                style={{
+                  color: "#594320",
+                  fontSize: "0.8rem",
+                  fontWeight: 700,
+                  letterSpacing: "0.08em",
+                  padding: "0.8rem",
+                  textTransform: "uppercase",
+                  whiteSpace: "nowrap"
+                }}
+              >
+                {header}
+              </div>
+            )
+          )}
+        </div>
+
+        {props.rows.map((row) => {
+          const selected = row.id === props.selectedId;
+
+          return (
+            <div
+              key={row.id}
+              onClick={() => props.onInspect(row.id)}
+              style={{
+                background: selected ? "rgba(215, 226, 216, 0.72)" : "transparent",
+                borderTop: "1px solid rgba(85, 73, 48, 0.1)",
+                cursor: "pointer",
+                display: "grid",
+                gridTemplateColumns: professionsReviewGridTemplate
+              }}
+            >
+              <div style={{ padding: "0.9rem 0.8rem" }}>
+                <div style={{ color: "#2e2619", fontWeight: 700 }}>{row.name}</div>
+              </div>
+              <div style={{ color: "#2e2619", padding: "0.9rem 0.8rem" }}>
+                {row.familyName || <span style={{ color: "#8a7e63" }}>None</span>}
+              </div>
+              <div style={{ color: "#2e2619", padding: "0.9rem 0.8rem" }}>
+                {row.description ? renderClampedCell(row.description, 2) : <span style={{ color: "#8a7e63" }}>None</span>}
+              </div>
+              <div style={{ color: "#2e2619", padding: "0.9rem 0.8rem" }}>
+                {renderClampedCell(summarizeList(row.coreSkillGroups, 3), 2)}
+              </div>
+              <div style={{ color: "#2e2619", padding: "0.9rem 0.8rem" }}>
+                {renderClampedCell(summarizeList(row.optionalSkillGroups, 3), 2)}
+              </div>
+              <div style={{ color: "#2e2619", padding: "0.9rem 0.8rem" }}>
+                {renderClampedCell(
+                  `${row.societyStageSummary} · ${summarizeList(row.allowedSocietyEntries, 2)}`,
+                  2
+                )}
+              </div>
+              <div style={{ color: "#2e2619", padding: "0.9rem 0.8rem" }}>{row.totalReachableSkills}</div>
+              <div style={{ padding: "0.75rem 0.8rem" }}>
+                <AdminButton
+                  onClick={() => props.onInspect(row.id)}
+                  variant={selected ? "primary" : "secondary"}
+                >
+                  {selected ? "Open" : "Inspect"}
+                </AdminButton>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 export default function ProfessionsAdminPage() {
-  const { content, replaceContent } = useAdminContent();
-  const rows = buildProfessionAdminRows(content);
+  const { content } = useAdminContent();
+  const allRows = buildProfessionAdminRows(content);
+  const [familyFilter, setFamilyFilter] = useState("all");
+  const [groupFilter, setGroupFilter] = useState("all");
+  const [societyStageFilter, setSocietyStageFilter] = useState("all");
   const [selectedProfessionId, setSelectedProfessionId] = useState<string>();
+  const familyOptions = buildProfessionFamilyFilterOptions(
+    content,
+    allRows.map((row) => row.familyId)
+  );
+  const groupOptions = [
+    "all",
+    ...new Set(allRows.flatMap((row) => row.grantedSkillGroups))
+  ].sort((left, right) => {
+    if (left === "all") {
+      return -1;
+    }
+
+    if (right === "all") {
+      return 1;
+    }
+
+    return left.localeCompare(right);
+  });
+  const rows = filterProfessionAdminRowsBySocietyStage(allRows, societyStageFilter).filter((row) => {
+    if (familyFilter !== "all" && row.familyId !== familyFilter) {
+      return false;
+    }
+
+    if (groupFilter !== "all" && !row.grantedSkillGroups.includes(groupFilter)) {
+      return false;
+    }
+
+    return true;
+  });
+  const selectedVisibleRow = rows.find((row) => row.id === selectedProfessionId) ?? rows[0];
   const selectedProfession =
-    content.professions.find((profession) => profession.id === selectedProfessionId) ??
+    content.professions.find(
+      (profession) => profession.id === (selectedVisibleRow?.id ?? selectedProfessionId)
+    ) ??
     content.professions.slice().sort((left, right) => left.name.localeCompare(right.name))[0];
-  const [formState, setFormState] = useState<ProfessionFormState>();
+  const selectedRow =
+    selectedVisibleRow ?? allRows.find((row) => row.id === selectedProfession.id);
 
   useEffect(() => {
     if (!selectedProfessionId && rows[0]) {
@@ -68,96 +214,12 @@ export default function ProfessionsAdminPage() {
     }
   }, [rows, selectedProfessionId]);
 
-  useEffect(() => {
-    if (!selectedProfession) {
-      return;
-    }
-
-    const grants = content.professionSkills.filter(
-      (professionSkill) => professionSkill.professionId === selectedProfession.id
-    );
-    const societyEntryIds = content.societyLevels
-      .filter((societyLevel) => societyLevel.professionIds.includes(selectedProfession.id))
-      .map((societyLevel) =>
-        createSocietyEntryId({
-          societyId: societyLevel.societyId,
-          societyLevel: societyLevel.societyLevel
-        })
-      );
-
-    setSelectedProfessionId(selectedProfession.id);
-    setFormState(
-      createProfessionFormState({
-        description: selectedProfession.description,
-        groupIds: grants
-          .filter((grant) => grant.grantType === "group" && grant.skillGroupId)
-          .map((grant) => grant.skillGroupId ?? ""),
-        name: selectedProfession.name,
-        ordinarySkillIds: grants
-          .filter((grant) => grant.grantType === "ordinary-skill" && grant.skillId)
-          .map((grant) => grant.skillId ?? ""),
-        societyEntryIds,
-        secondarySkillIds: grants
-          .filter((grant) => grant.grantType === "secondary-skill" && grant.skillId)
-          .map((grant) => grant.skillId ?? "")
-      })
-    );
-  }, [content.professionSkills, content.societyLevels, selectedProfession]);
-
-  if (!selectedProfession || !formState) {
+  if (!selectedProfession) {
     return (
       <AdminPanel title="Professions">
         <div>No professions found.</div>
       </AdminPanel>
     );
-  }
-
-  const activeForm = formState;
-
-  function toggleRelation(key: "groupIds" | "ordinarySkillIds" | "secondarySkillIds" | "societyEntryIds", value: string) {
-    setFormState((current) =>
-      current
-        ? {
-            ...current,
-            [key]: current[key].includes(value)
-              ? current[key].filter((candidate) => candidate !== value)
-              : [...current[key], value]
-          }
-        : current
-    );
-  }
-
-  async function handleSave() {
-    const baseContent = updateProfessionInContent(content, {
-      ...selectedProfession,
-      description: activeForm.description.trim() || undefined,
-      name: activeForm.name.trim()
-    });
-    const withRelations = replaceProfessionRelations(baseContent, selectedProfession.id, {
-      groupIds: activeForm.groupIds,
-      ordinarySkillIds: activeForm.ordinarySkillIds,
-      secondarySkillIds: activeForm.secondarySkillIds
-    });
-    const nextContent = {
-      ...withRelations,
-      societyLevels: withRelations.societyLevels.map((societyLevel) => {
-        const entryId = createSocietyEntryId({
-          societyId: societyLevel.societyId,
-          societyLevel: societyLevel.societyLevel
-        });
-        const selected = activeForm.societyEntryIds.includes(entryId);
-        const professionIds = selected
-          ? [...new Set([...societyLevel.professionIds, selectedProfession.id])]
-          : societyLevel.professionIds.filter((professionId) => professionId !== selectedProfession.id);
-
-        return {
-          ...societyLevel,
-          professionIds
-        };
-      })
-    };
-
-    await replaceContent(nextContent, `Saved profession "${activeForm.name.trim()}".`);
   }
 
   return (
@@ -209,166 +271,286 @@ export default function ProfessionsAdminPage() {
 
       <ProfessionsWorkspaceTabs />
 
-      <div style={{ display: "grid", gap: "1rem", gridTemplateColumns: "minmax(0, 1.65fr) minmax(340px, 1fr)" }}>
+      <AdminPanel title="Review filters">
+        <div
+          style={{
+            display: "grid",
+            gap: "0.9rem",
+            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 280px))"
+          }}
+        >
+          <AdminField label="Family">
+            <AdminSelect
+              onChange={(event) => setFamilyFilter(event.target.value)}
+              value={familyFilter}
+            >
+              {familyOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option === "all"
+                    ? "All families"
+                    : getProfessionFamilyName(content, option)}
+                </option>
+              ))}
+            </AdminSelect>
+          </AdminField>
+
+          <AdminField label="Group">
+            <AdminSelect
+              onChange={(event) => setGroupFilter(event.target.value)}
+              value={groupFilter}
+            >
+              {groupOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option === "all" ? "All groups" : option}
+                </option>
+              ))}
+            </AdminSelect>
+          </AdminField>
+
+          <AdminField label="Society level">
+            <AdminSelect
+              onChange={(event) => setSocietyStageFilter(event.target.value)}
+              value={societyStageFilter}
+            >
+              {["all", "1", "2", "3", "4", "5", "6"].map((option) => (
+                <option key={option} value={option}>
+                  {formatSocietyStageFilterLabel(option)}
+                </option>
+              ))}
+            </AdminSelect>
+          </AdminField>
+        </div>
+        <div style={{ color: "#5f543a", fontSize: "0.92rem", marginTop: "0.9rem" }}>
+          Showing {rows.length} of {allRows.length} professions
+          {societyStageFilter === "all" ? "" : ` available at society stage ${societyStageFilter}`}.
+        </div>
+      </AdminPanel>
+
+      <div style={{ display: "grid", gap: "1rem", gridTemplateColumns: "minmax(0, 2.2fr) minmax(340px, 1fr)" }}>
         <AdminPanel title="Profession Catalog">
-          <AdminDataTable
-            columns={[
-              {
-                header: "Name",
-                render: (row) => <strong>{row.name}</strong>
-              },
-              {
-                header: "Description",
-                render: (row) => row.description || <span style={{ color: "#8a7e63" }}>None</span>
-              },
-              {
-                header: "Granted Skill Groups",
-                render: (row) => <AdminTagList values={row.grantedSkillGroups} />
-              },
-              {
-                header: "Directly Granted Skills",
-                render: (row) => <AdminTagList values={row.directlyGrantedSkills} />
-              },
-              {
-                header: "Reachable Through Groups",
-                render: (row) => <AdminTagList values={row.reachableGroupSkills} />
-              },
-              {
-                header: "Direct Skill Exceptions",
-                render: (row) => <AdminTagList values={row.directSkillExceptions} />
-              },
-              {
-                header: "Allowed Societies / Social Classes",
-                render: (row) => <AdminTagList values={row.allowedSocietyEntries} />
-              },
-              {
-                header: "Total Reachable Skills",
-                render: (row) => row.totalReachableSkills
-              },
-              {
-                header: "Notes",
-                render: () => <span style={{ color: "#8a7e63" }}>Not yet modeled</span>
-              }
-            ]}
-            emptyState="No professions found."
-            onSelect={setSelectedProfessionId}
+          <ProfessionsReviewTable
+            onInspect={setSelectedProfessionId}
             rows={rows}
             selectedId={selectedProfession.id}
           />
         </AdminPanel>
 
-        <AdminPanel
-          subtitle="Skill grants are edited here as relation sets. New persistence work can later add grant metadata such as ranks and core-flag editing without changing the page structure."
-          title={`Edit ${selectedProfession.name}`}
-        >
-          <form
-            onSubmit={(event) => {
-              event.preventDefault();
-              void handleSave();
-            }}
-            style={{ display: "grid", gap: "0.9rem" }}
+        <div style={{ display: "grid", gap: "1rem" }}>
+          <AdminPanel
+            subtitle={selectedProfession.description?.trim() || "No canonical profession description recorded."}
+            title={selectedProfession.name}
           >
-            <AdminField label="Profession id">
-              <AdminInput readOnly value={selectedProfession.id} />
-            </AdminField>
+            <div style={{ display: "grid", gap: "0.85rem" }}>
+              <div style={{ display: "grid", gap: "0.75rem", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))" }}>
+                <AdminMetric label="Core groups" value={selectedRow?.coreSkillGroups.length ?? 0} />
+                <AdminMetric label="Optional groups" value={selectedRow?.optionalSkillGroups.length ?? 0} />
+                <AdminMetric label="Reachable skills" value={selectedRow?.totalReachableSkills ?? 0} />
+              </div>
 
-            <AdminField label="Name">
-              <AdminInput
-                onChange={(event) => setFormState({ ...formState, name: event.target.value })}
-                value={activeForm.name}
-              />
-            </AdminField>
+              <div
+                style={{
+                  background: "rgba(126, 93, 42, 0.07)",
+                  border: "1px solid rgba(85, 73, 48, 0.12)",
+                  borderRadius: 16,
+                  color: "#5b5036",
+                  display: "grid",
+                  gap: "0.25rem",
+                  padding: "0.85rem 1rem"
+                }}
+              >
+                <div><strong>Family:</strong> {selectedRow?.familyName || "Unclassified"}</div>
+                <div>
+                  <strong>Direct skills:</strong>{" "}
+                  {selectedRow?.directlyGrantedSkills.length
+                    ? summarizeList(selectedRow.directlyGrantedSkills, 4)
+                    : "None"}
+                </div>
+              </div>
 
-            <AdminField
-              hint="Describe the profession as a grant package and play-facing identity. This helps later society-layer review explain why the package exists."
-              label="Description"
-            >
-              <AdminTextarea
-                onChange={(event) =>
-                  setFormState({ ...activeForm, description: event.target.value })
-                }
-                value={activeForm.description}
-              />
-            </AdminField>
+              <div>
+                <div style={{ color: "#5f543a", fontSize: "0.85rem", fontWeight: 700, marginBottom: "0.35rem", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                  Core groups
+                </div>
+                <AdminTagList values={selectedRow?.coreSkillGroups ?? []} />
+              </div>
 
-            <AdminField
-              hint="These group grants are the authoritative profession package. Most profession reach should come from groups rather than one-off direct skills."
-              label="Allowed skill groups"
-            >
-              <AdminCheckboxList
-                onToggle={(value) => toggleRelation("groupIds", value)}
-                options={content.skillGroups
-                  .slice()
-                  .sort((left, right) => left.sortOrder - right.sortOrder)
-                  .map((group) => ({
-                    label: group.name,
-                    selected: activeForm.groupIds.includes(group.id),
-                    value: group.id
-                  }))}
-              />
-            </AdminField>
+              <div>
+                <div style={{ color: "#5f543a", fontSize: "0.85rem", fontWeight: 700, marginBottom: "0.35rem", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                  Optional groups
+                </div>
+                {selectedRow?.optionalSkillGroups.length ? (
+                  <AdminTagList values={selectedRow.optionalSkillGroups} />
+                ) : (
+                  <div style={{ color: "#8a7e63" }}>No optional group grants are modeled for this profession.</div>
+                )}
+              </div>
 
-            <AdminField
-              hint="Use direct ordinary skills as explicit exceptions or additions when a profession needs skills outside its granted groups."
-              label="Individually allowed ordinary skills"
-            >
-              <AdminCheckboxList
-                onToggle={(value) => toggleRelation("ordinarySkillIds", value)}
-                options={content.skills
-                  .filter((skill) => skill.category === "ordinary")
-                  .sort((left, right) => left.sortOrder - right.sortOrder || left.name.localeCompare(right.name))
-                  .map((skill) => ({
-                    label: skill.name,
-                    selected: activeForm.ordinarySkillIds.includes(skill.id),
-                    value: skill.id
-                  }))}
-              />
-            </AdminField>
+              <div>
+                <div style={{ color: "#5f543a", fontSize: "0.85rem", fontWeight: 700, marginBottom: "0.45rem", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                  Access overview
+                </div>
+                <div
+                  style={{
+                    border: "1px solid rgba(85, 73, 48, 0.12)",
+                    borderRadius: 16,
+                    overflow: "hidden"
+                  }}
+                >
+                  <div
+                    style={{
+                      background: "rgba(126, 93, 42, 0.08)",
+                      display: "grid",
+                      gridTemplateColumns: "5.75rem repeat(4, minmax(0, 1fr))"
+                    }}
+                  >
+                    {["Level", "L1", "L2", "L3", "L4"].map((header) => (
+                      <div
+                        key={header}
+                        style={{
+                          color: "#594320",
+                          fontSize: "0.78rem",
+                          fontWeight: 700,
+                          letterSpacing: "0.08em",
+                          padding: "0.7rem 0.65rem",
+                          textTransform: "uppercase"
+                        }}
+                      >
+                        {header}
+                      </div>
+                    ))}
+                  </div>
+                  {Array.from({ length: 6 }, (_, index) => index + 1).map((canonicalLevel) => (
+                    <div
+                      key={canonicalLevel}
+                      style={{
+                        borderTop: "1px solid rgba(85, 73, 48, 0.08)",
+                        display: "grid",
+                        gridTemplateColumns: "5.75rem repeat(4, minmax(0, 1fr))"
+                      }}
+                    >
+                      <div
+                        style={{
+                          color: "#4d412d",
+                          fontSize: "0.85rem",
+                          fontWeight: 700,
+                          padding: "0.7rem 0.65rem"
+                        }}
+                      >
+                        S{canonicalLevel}
+                      </div>
+                      {Array.from({ length: 4 }, (_, bandIndex) => bandIndex + 1).map((accessBand) => {
+                        const matchingSlots =
+                          selectedRow?.allowedSocietySlots.filter(
+                            (slot) =>
+                              slot.canonicalSocietyLevel === canonicalLevel &&
+                              slot.accessBand === accessBand
+                          ) ?? [];
+                        const isAllowed = matchingSlots.length > 0;
 
-            <AdminField
-              hint="Use direct secondary skills sparingly when the profession should reach a secondary branch without granting the whole parent group."
-              label="Individually allowed secondary skills"
-            >
-              <AdminCheckboxList
-                onToggle={(value) => toggleRelation("secondarySkillIds", value)}
-                options={content.skills
-                  .filter((skill) => skill.category === "secondary")
-                  .sort((left, right) => left.sortOrder - right.sortOrder || left.name.localeCompare(right.name))
-                  .map((skill) => ({
-                    label: skill.name,
-                    selected: activeForm.secondarySkillIds.includes(skill.id),
-                    value: skill.id
-                  }))}
-              />
-            </AdminField>
+                        return (
+                          <div
+                            key={`${canonicalLevel}:${accessBand}`}
+                            style={{
+                              alignItems: "center",
+                              background: isAllowed ? "rgba(86, 112, 67, 0.13)" : "rgba(255, 255, 255, 0.55)",
+                              color: isAllowed ? "#36512b" : "#9b9077",
+                              display: "flex",
+                              justifyContent: "center",
+                              minHeight: "2.7rem",
+                              padding: "0.45rem",
+                              textAlign: "center"
+                            }}
+                            title={
+                              isAllowed
+                                ? matchingSlots
+                                    .map((slot) => `${slot.societyName} - ${slot.socialClass}`)
+                                    .join("\n")
+                                : `No access at society level ${canonicalLevel}, band L${accessBand}`
+                            }
+                          >
+                            {isAllowed ? (
+                              <span style={{ fontWeight: 700 }}>
+                                Yes{matchingSlots.length > 1 ? ` (${matchingSlots.length})` : ""}
+                              </span>
+                            ) : (
+                              <span>—</span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ))}
+                </div>
+              </div>
 
-            <AdminField
-              hint="These rows govern where the profession package is reachable. Society rows orchestrate access to professions rather than redefining the package."
-              label="Allowed societies / social classes"
-            >
-              <AdminCheckboxList
-                onToggle={(value) => toggleRelation("societyEntryIds", value)}
-                options={content.societyLevels
-                  .slice()
-                  .sort((left, right) => left.societyName.localeCompare(right.societyName) || left.societyLevel - right.societyLevel)
-                  .map((societyLevel) => {
-                    const value = createSocietyEntryId({
-                      societyId: societyLevel.societyId,
-                      societyLevel: societyLevel.societyLevel
-                    });
+              <div style={{ display: "grid", gap: "0.75rem" }}>
+                <div style={{ color: "#5f543a", fontSize: "0.85rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                  Group to skill fan
+                </div>
+                {selectedRow?.groupFans.length ? (
+                  selectedRow.groupFans.map((groupFan) => (
+                    <div
+                      key={`${groupFan.relevance}:${groupFan.groupName}`}
+                      style={{
+                        background: "rgba(255, 255, 255, 0.78)",
+                        border: "1px solid rgba(85, 73, 48, 0.12)",
+                        borderRadius: 16,
+                        display: "grid",
+                        gap: "0.55rem",
+                        padding: "0.85rem 0.95rem"
+                      }}
+                    >
+                      <div style={{ alignItems: "baseline", display: "flex", gap: "0.45rem", justifyContent: "space-between" }}>
+                        <strong style={{ color: "#2f2618" }}>{groupFan.groupName}</strong>
+                        <span style={{ color: "#7a6f5a", fontSize: "0.85rem", textTransform: "capitalize" }}>
+                          {groupFan.relevance} group · {groupFan.weightedContentPoints} pts
+                        </span>
+                      </div>
+                      <div>
+                        <div style={{ color: "#5f543a", fontSize: "0.78rem", fontWeight: 700, marginBottom: "0.3rem", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                          Core skills
+                        </div>
+                        <AdminTagList values={groupFan.coreSkills} />
+                      </div>
+                      <div>
+                        <div style={{ color: "#5f543a", fontSize: "0.78rem", fontWeight: 700, marginBottom: "0.3rem", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                          Optional skills
+                        </div>
+                        {groupFan.optionalSkills.length ? (
+                          <AdminTagList values={groupFan.optionalSkills} />
+                        ) : (
+                          <div style={{ color: "#8a7e63" }}>No optional cross-listed skills.</div>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div style={{ color: "#8a7e63" }}>No skill-group grants are modeled for this profession.</div>
+                )}
+              </div>
 
-                    return {
-                      label: `${societyLevel.societyName} L${societyLevel.societyLevel} - ${societyLevel.socialClass}`,
-                      selected: activeForm.societyEntryIds.includes(value),
-                      value
-                    };
-                  })}
-              />
-            </AdminField>
+              <div>
+                <div style={{ color: "#5f543a", fontSize: "0.78rem", fontWeight: 700, marginBottom: "0.35rem", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                  Detailed access rows
+                </div>
+                <AdminTagList values={selectedRow?.allowedSocietyEntries ?? []} />
+              </div>
 
-            <AdminButton type="submit">Save Profession</AdminButton>
-          </form>
-        </AdminPanel>
+              <div style={{ color: "#5f543a", fontSize: "0.92rem", lineHeight: 1.5 }}>
+                <Link href="/admin/skill-groups" style={{ color: "#7e5d2a", fontWeight: 700 }}>
+                  Open skill groups inspector
+                </Link>
+                {" "}
+                or{" "}
+                <Link href="/admin/societies" style={{ color: "#7e5d2a", fontWeight: 700 }}>
+                  open societies inspector
+                </Link>
+                {" "}
+                for the related access context.
+              </div>
+            </div>
+          </AdminPanel>
+        </div>
       </div>
     </section>
   );

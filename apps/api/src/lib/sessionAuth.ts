@@ -1,4 +1,4 @@
-import { hasRole, type AuthUser } from "@glantri/auth";
+import { canAccessAdmin, type AuthUser } from "@glantri/auth";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 
 import { AuthService } from "@glantri/database";
@@ -129,9 +129,9 @@ export async function requireAdminUser(
     return null;
   }
 
-  if (!hasRole(user.roles, "admin")) {
+  if (!canAccessAdmin(user.roles)) {
     await reply.code(403).send({
-      error: "Admin role required."
+      error: "Admin or GM role required."
     });
     return null;
   }

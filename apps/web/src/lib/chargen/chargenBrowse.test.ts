@@ -4,6 +4,8 @@ import {
   filterProfessionBrowseItems,
   filterSpecializationBrowseItems,
   getSkillAccessSourceLabels,
+  getPlayerFacingSkillBucket,
+  getPlayerFacingSkillBucketDefinitions,
   isRelevantSpecializationBrowseItem,
   matchesSkillBrowseFilters
 } from "./chargenBrowse";
@@ -43,6 +45,33 @@ describe("chargenBrowse helpers", () => {
         "profession-group"
       ])
     ).toEqual(["Direct profession skill", "Profession group", "Society access"]);
+  });
+
+  it("surfaces Social as the player-facing social bucket and normalizes old category ids", () => {
+    const definitions = getPlayerFacingSkillBucketDefinitions();
+
+    expect(definitions.map((definition) => definition.label)).toContain("Social");
+    expect(definitions.map((definition) => definition.label)).toContain("High Society");
+    expect(definitions.map((definition) => definition.label)).toContain("Performance");
+    expect(definitions.map((definition) => definition.label)).not.toContain("Court / Social");
+    expect(definitions.map((definition) => definition.label)).not.toContain("Leadership");
+    expect(getPlayerFacingSkillBucket({ categoryId: "court-social", id: "etiquette" })).toBe(
+      "social"
+    );
+    expect(getPlayerFacingSkillBucket({ categoryId: "high-society", id: "etiquette" })).toBe(
+      "high-society"
+    );
+    expect(getPlayerFacingSkillBucket({ categoryId: "performance", id: "singing" })).toBe(
+      "performance"
+    );
+    expect(
+      getPlayerFacingSkillBucket({
+        categoryId: "leadership",
+        groupId: "officer_training",
+        groupIds: ["officer_training"],
+        id: "captaincy"
+      })
+    ).toBe("military");
   });
 
   it("matches skill browse filters for owned, blocked, and purchasable rows", () => {
@@ -132,5 +161,47 @@ describe("chargenBrowse helpers", () => {
         search: "cross"
       }).map((item) => item.specializationName)
     ).toEqual(["Crossbow"]);
+  });
+
+  it("classifies mounted warrior weapon skills as combat", () => {
+    expect(
+      getPlayerFacingSkillBucket({
+        categoryId: "combat",
+        groupId: "mounted_warrior_training",
+        groupIds: ["mounted_warrior_training", "combat_group"],
+        id: "one_handed_edged"
+      })
+    ).toBe("combat");
+
+    expect(
+      getPlayerFacingSkillBucket({
+        categoryId: "combat",
+        groupId: "mounted_warrior_training",
+        groupIds: ["mounted_warrior_training", "combat_group"],
+        id: "lance"
+      })
+    ).toBe("combat");
+  });
+
+  it("prefers explicit skill category over legacy group inference", () => {
+    expect(
+      getPlayerFacingSkillBucket({
+        categoryId: "fieldcraft",
+        groupId: "combat_group",
+        groupIds: ["combat_group"],
+        id: "test_skill"
+      })
+    ).toBe("fieldcraft");
+  });
+
+  it("supports an explicit language player-facing category", () => {
+    expect(
+      getPlayerFacingSkillBucket({
+        categoryId: "language",
+        groupId: "language_group",
+        groupIds: ["language_group"],
+        id: "language"
+      })
+    ).toBe("language");
   });
 });

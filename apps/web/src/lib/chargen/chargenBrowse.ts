@@ -1,32 +1,14 @@
+﻿import { getPlayerFacingSkillCategoryId, type PlayerFacingSkillCategoryId, type SkillDefinition } from "@glantri/domain";
 import type { ChargenSkillAccessSource } from "@glantri/rules-engine";
 
-type PlayerFacingSkillBucketId = "ordinary" | "secondary" | "special-access";
-
-export type SkillBrowseTypeFilter = "all" | PlayerFacingSkillBucketId;
-
-export interface PlayerFacingSkillBucketDefinition {
-  description: string;
-  id: PlayerFacingSkillBucketId;
-  label: string;
-}
-
-const PLAYER_FACING_BUCKET_DEFINITIONS: PlayerFacingSkillBucketDefinition[] = [
-  {
-    description: "Skills accessible through your profession and society connections",
-    id: "ordinary",
-    label: "Primary Skills"
-  },
-  {
-    description: "Secondary skills derived from investing in primary skills",
-    id: "secondary",
-    label: "Secondary Skills"
-  },
-  {
-    description: "Theoretical and esoteric skills with unique or limited access requirements",
-    id: "special-access",
-    label: "Special Access"
-  }
-];
+/*
+  Terminology guardrail:
+  This module exposes player-facing Skill category buckets.
+  They are distinct from mechanical Type (ordinary / secondary / specialization).
+  Prefer explicit skill.categoryId when available; only fall back to legacy
+  primary-group inference for older transitional data.
+  If this wording changes, update packages/domain/src/docs/glantriTerms.ts too.
+*/
 
 export interface ProfessionBrowseItem {
   description?: string;
@@ -51,16 +33,134 @@ export interface SpecializationBrowseItem {
   specializationName: string;
 }
 
+export type PlayerFacingSkillBucketId = PlayerFacingSkillCategoryId;
+
+export type SkillBrowseTypeFilter = "all" | PlayerFacingSkillBucketId;
+
+export interface PlayerFacingSkillBucketDefinition {
+  description: string;
+  id: PlayerFacingSkillBucketId;
+  label: string;
+}
+
+export interface SkillBrowseRowLike {
+  skill: {
+    id: string;
+  };
+  sourceLabels: string[];
+}
+
+export interface SkillTypeGroupedRow {
+  skillName: string;
+  skillType: PlayerFacingSkillBucketId;
+}
+
+export interface SkillTypeGroup<T extends SkillTypeGroupedRow> {
+  bucketId: PlayerFacingSkillBucketId;
+  label: string;
+  rows: T[];
+}
+
 const ACCESS_SOURCE_LABELS: Record<ChargenSkillAccessSource, string> = {
   "profession-group": "Profession group",
   "profession-skill": "Direct profession skill",
+  "society-foundational-skill": "Society access",
   "society-skill": "Society access"
 };
 
 const ACCESS_SOURCE_ORDER: ChargenSkillAccessSource[] = [
   "profession-skill",
   "profession-group",
+  "society-foundational-skill",
   "society-skill"
+];
+
+const PLAYER_FACING_SKILL_BUCKETS: PlayerFacingSkillBucketDefinition[] = [
+  {
+    description: "Weapons, direct fighting, and practical battle skills.",
+    id: "combat",
+    label: "Combat"
+  },
+  {
+    description: "Soldiering, battlefield work, and organized service training.",
+    id: "military",
+    label: "Military"
+  },
+  {
+    description: "Travel, stealthy movement, animals, survival, and field utility.",
+    id: "fieldcraft",
+    label: "Fieldcraft"
+  },
+  {
+    description: "Ships, small craft, crews, and navigation.",
+    id: "maritime",
+    label: "Maritime"
+  },
+  {
+    description: "Care, remedies, diagnosis, and treatment.",
+    id: "healing",
+    label: "Healing"
+  },
+  {
+    description: "Commerce, records, administration, and practical livelihoods.",
+    id: "trade",
+    label: "Trade"
+  },
+  {
+    description: "Courtly manners, rank, heraldry, ceremony, and elite intrigue.",
+    id: "high-society",
+    label: "High Society"
+  },
+  {
+    description: "Song, music, dance, acting, and spoken performance.",
+    id: "performance",
+    label: "Performance"
+  },
+  {
+    description: "Influence, social reading, and interpersonal maneuvering.",
+    id: "social",
+    label: "Social"
+  },
+  {
+    description: "Infiltration, security work, theft, and deception.",
+    id: "covert",
+    label: "Covert"
+  },
+  {
+    description: "Spoken and learned tongues represented as concrete Language (X) skills.",
+    id: "language",
+    label: "Language"
+  },
+  {
+    description: "Literacy, scholarship, natural inquiry, and learned culture.",
+    id: "knowledge",
+    label: "Knowledge"
+  },
+  {
+    description: "Focus, discipline, inner control, and mental resilience.",
+    id: "mental",
+    label: "Mental"
+  },
+  {
+    description: "Ritual, omen-reading, magical theory, and mystical practice.",
+    id: "mystical",
+    label: "Mystical"
+  },
+  {
+    description: "Making, shaping, and artisan work.",
+    id: "craft",
+    label: "Craft"
+  },
+  {
+    description: "Athletic conditioning, mobility, and body training.",
+    id: "physical",
+    label: "Physical"
+  },
+  {
+    description: "Standalone direct profession skills outside the main training groups.",
+    id: "special-access",
+    label: "Special access"
+  }
 ];
 
 export function filterProfessionBrowseItems<T extends ProfessionBrowseItem>(input: {
@@ -114,7 +214,11 @@ export function matchesSkillBrowseFilters(input: {
     return false;
   }
 
-  if (input.skillTypeFilter && input.skillTypeFilter !== "all" && input.skillType !== input.skillTypeFilter) {
+  if (
+    input.skillTypeFilter &&
+    input.skillTypeFilter !== "all" &&
+    input.skillType !== input.skillTypeFilter
+  ) {
     return false;
   }
 
@@ -128,6 +232,81 @@ export function matchesSkillBrowseFilters(input: {
     case "purchasable":
       return input.isAllowed;
   }
+}
+
+export function getPlayerFacingSkillBucketDefinitions(): PlayerFacingSkillBucketDefinition[] {
+  return [...PLAYER_FACING_SKILL_BUCKETS];
+}
+
+export function getPlayerFacingSkillBucket(
+  skill:
+    | Pick<SkillDefinition, "id" | "categoryId" | "groupId" | "groupIds">
+    | { id: string; categoryId?: string; groupId?: string; groupIds?: string[] },
+  options?: { preferDirectProfession?: boolean }
+): PlayerFacingSkillBucketId {
+  return getPlayerFacingSkillCategoryId(skill, options);
+}
+
+export function mergeSkillBrowseRowsBySkillId<T extends SkillBrowseRowLike>(rows: T[]): T[] {
+  const merged = new Map<string, T>();
+
+  for (const row of rows) {
+    const existing = merged.get(row.skill.id);
+
+    if (!existing) {
+      merged.set(row.skill.id, {
+        ...row,
+        sourceLabels: [...row.sourceLabels]
+      });
+      continue;
+    }
+
+    merged.set(row.skill.id, {
+      ...existing,
+      ...row,
+      sourceLabels: [...new Set([...existing.sourceLabels, ...row.sourceLabels])]
+    });
+  }
+
+  return [...merged.values()];
+}
+
+export function formatDependencyOwnershipSummary(input: {
+  dependencyName: string;
+  directSkillLevel: number;
+  effectiveSkillLevel: number;
+}): string {
+  if (input.directSkillLevel <= 0 && input.effectiveSkillLevel > 0) {
+    return `${input.dependencyName}: currently counts as level ${input.effectiveSkillLevel} from your current skill ownership.`;
+  }
+
+  return `${input.dependencyName}: currently counts as level ${input.effectiveSkillLevel}.`;
+}
+
+export function groupRowsBySkillType<T extends SkillTypeGroupedRow>(rows: T[]): SkillTypeGroup<T>[] {
+  const grouped = new Map<PlayerFacingSkillBucketId, T[]>();
+
+  for (const row of rows) {
+    const existing = grouped.get(row.skillType) ?? [];
+    existing.push(row);
+    grouped.set(row.skillType, existing);
+  }
+
+  return PLAYER_FACING_SKILL_BUCKETS
+    .map((definition) => {
+      const bucketRows = grouped.get(definition.id);
+
+      if (!bucketRows || bucketRows.length === 0) {
+        return null;
+      }
+
+      return {
+        bucketId: definition.id,
+        label: definition.label,
+        rows: [...bucketRows].sort((left, right) => left.skillName.localeCompare(right.skillName))
+      } satisfies SkillTypeGroup<T>;
+    })
+    .filter((group): group is SkillTypeGroup<T> => group !== null);
 }
 
 export function isRelevantSpecializationBrowseItem(
@@ -160,87 +339,4 @@ export function filterSpecializationBrowseItems<T extends SpecializationBrowseIt
 
     return input.includeBlocked || isRelevantSpecializationBrowseItem(item);
   });
-}
-
-export function getPlayerFacingSkillBucketDefinitions(): PlayerFacingSkillBucketDefinition[] {
-  return PLAYER_FACING_BUCKET_DEFINITIONS;
-}
-
-export function getPlayerFacingSkillBucket(
-  skill: {
-    category?: "ordinary" | "secondary";
-    groupId: string;
-    groupIds: string[];
-    id: string;
-    isTheoretical?: boolean;
-    secondaryOfSkillId?: string;
-  },
-  options?: { preferDirectProfession?: boolean }
-): PlayerFacingSkillBucketId {
-  if (skill.category === "secondary" || skill.secondaryOfSkillId !== undefined) {
-    return "secondary";
-  }
-
-  if (skill.isTheoretical && !options?.preferDirectProfession) {
-    return "special-access";
-  }
-
-  return "ordinary";
-}
-
-export function mergeSkillBrowseRowsBySkillId<T extends { skill: { id: string } }>(
-  rows: T[]
-): T[] {
-  const seen = new Set<string>();
-
-  return rows.filter((row) => {
-    if (seen.has(row.skill.id)) {
-      return false;
-    }
-
-    seen.add(row.skill.id);
-    return true;
-  });
-}
-
-export function groupRowsBySkillType<T extends { skillType: PlayerFacingSkillBucketId }>(
-  rows: T[]
-): { bucketId: PlayerFacingSkillBucketId; label: string; rows: T[] }[] {
-  const bucketMap = new Map<PlayerFacingSkillBucketId, T[]>();
-
-  for (const row of rows) {
-    const existing = bucketMap.get(row.skillType);
-
-    if (existing) {
-      existing.push(row);
-    } else {
-      bucketMap.set(row.skillType, [row]);
-    }
-  }
-
-  return PLAYER_FACING_BUCKET_DEFINITIONS.filter((def) => bucketMap.has(def.id)).map((def) => ({
-    bucketId: def.id,
-    label: def.label,
-    rows: bucketMap.get(def.id)!
-  }));
-}
-
-export function formatDependencyOwnershipSummary(input: {
-  dependencyName: string;
-  directSkillLevel: number;
-  effectiveSkillLevel: number;
-}): string {
-  if (input.effectiveSkillLevel === 0) {
-    return `${input.dependencyName}: Not owned`;
-  }
-
-  if (input.directSkillLevel === 0) {
-    return `${input.dependencyName}: Level ${input.effectiveSkillLevel} (via group)`;
-  }
-
-  if (input.directSkillLevel < input.effectiveSkillLevel) {
-    return `${input.dependencyName}: Level ${input.effectiveSkillLevel} (${input.directSkillLevel} direct + group)`;
-  }
-
-  return `${input.dependencyName}: Level ${input.effectiveSkillLevel}`;
 }

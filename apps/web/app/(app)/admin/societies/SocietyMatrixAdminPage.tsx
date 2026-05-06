@@ -26,6 +26,7 @@ import SocietiesWorkspaceTabs from "./SocietiesWorkspaceTabs";
 type DirectOverrideFilter = "all" | "with-overrides" | "without-overrides";
 type GroupByOption = "none" | "society" | "level" | "reach-band";
 type ReachFilter = "all" | "broad" | "medium" | "narrow";
+type WarningNoiseFilter = "all" | "focused";
 
 function getGroupLabel(row: SocietyMatrixRow, groupBy: GroupByOption): string {
   if (groupBy === "society") {
@@ -61,6 +62,8 @@ export default function SocietyMatrixAdminPage() {
     useState<DirectOverrideFilter>("all");
   const [reachFilter, setReachFilter] = useState<ReachFilter>("all");
   const [groupBy, setGroupBy] = useState<GroupByOption>("society");
+  const [warningNoiseFilter, setWarningNoiseFilter] =
+    useState<WarningNoiseFilter>("focused");
 
   const societyOptions = useMemo(
     () => [...new Set(rows.map((row) => row.society))].sort((left, right) => left.localeCompare(right)),
@@ -109,8 +112,23 @@ export default function SocietyMatrixAdminPage() {
   );
   const visibleRowIdSet = useMemo(() => new Set(filteredRows.map((row) => row.id)), [filteredRows]);
   const filteredIssues = useMemo(
-    () => auditIssues.filter((issue) => visibleRowIdSet.has(issue.societyRowId)),
-    [auditIssues, visibleRowIdSet]
+    () =>
+      auditIssues.filter((issue) => {
+        if (!visibleRowIdSet.has(issue.societyRowId)) {
+          return false;
+        }
+
+        if (
+          warningNoiseFilter === "focused" &&
+          (issue.category === "Duplicate direct skills" ||
+            issue.category === "Duplicate direct groups")
+        ) {
+          return false;
+        }
+
+        return true;
+      }),
+    [auditIssues, visibleRowIdSet, warningNoiseFilter]
   );
   const groupedRows = useMemo(() => {
     if (filteredRows.length === 0 || groupBy === "none") {
@@ -262,6 +280,16 @@ export default function SocietyMatrixAdminPage() {
               <option value="society">Society</option>
               <option value="level">Level</option>
               <option value="reach-band">Reach band</option>
+            </AdminSelect>
+          </AdminField>
+
+          <AdminField label="Warning clutter">
+            <AdminSelect
+              onChange={(event) => setWarningNoiseFilter(event.target.value as WarningNoiseFilter)}
+              value={warningNoiseFilter}
+            >
+              <option value="focused">Hide duplicate direct skill/group noise</option>
+              <option value="all">Show all warnings</option>
             </AdminSelect>
           </AdminField>
         </div>
