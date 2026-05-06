@@ -115,6 +115,12 @@ describe("buildScenarioPlayerProjection", () => {
         skillGroups: [],
         skills: [],
         specializations: []
+      },
+      progressionState: {
+        availablePoints: 0,
+        checks: [],
+        history: [],
+        pendingAttempts: []
       }
     };
     const projection = buildScenarioPlayerProjection({
