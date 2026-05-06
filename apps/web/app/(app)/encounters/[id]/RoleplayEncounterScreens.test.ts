@@ -119,7 +119,10 @@ describe("RoleplayEncounterScreens", () => {
   it("uses persistent two-column roll blocks with structured calculation panels", () => {
     const source = readSource();
 
-    expect(source).toContain("gridTemplateColumns: \"minmax(0, 1fr) minmax(28rem, 1fr)\"");
+    expect(source).toContain("gridTemplateColumns: \"minmax(0, 1fr) minmax(22rem, 1fr)\"");
+    expect(source).toContain("alignSelf: \"stretch\"");
+    expect(source).toContain("boxSizing: \"border-box\"");
+    expect(source).toContain("overflow: \"hidden\"");
     expect(source).toContain("<strong>Calculation</strong>");
     expect(source).toContain("<strong>Actor</strong>");
     expect(source).toContain("<strong>Opponent</strong>");
@@ -147,10 +150,13 @@ describe("RoleplayEncounterScreens", () => {
   it("clears draft-only roll editor state without touching persisted logs", () => {
     const source = readSource();
 
+    expect(source).toContain("function resetRollDrafts()");
+    expect(source).toContain("setRollDrafts([");
     expect(source).toContain("makeRollDraft({");
-    expect(source).toContain("id: draft.id");
     expect(source).toContain("participantId: roster[0]?.id");
     expect(source).toContain("skillId: initialSkillId");
+    expect(source).toContain("difficulty: \"medium\"");
+    expect(source).not.toContain("id: draft.id");
     expect(source).not.toContain("setGmMessageDraft(\"\")");
   });
 

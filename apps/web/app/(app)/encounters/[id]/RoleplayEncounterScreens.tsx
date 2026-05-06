@@ -119,15 +119,15 @@ const compactControlStyle = {
 } as const;
 
 const compactInputStyle = {
-  maxWidth: "9.5rem",
+  maxWidth: "8.75rem",
   minHeight: "1.9rem",
-  width: "9.5rem",
+  width: "8.75rem",
 } as const;
 
 const compactSkillInputStyle = {
   ...compactInputStyle,
-  maxWidth: "12rem",
-  width: "12rem",
+  maxWidth: "10.5rem",
+  width: "10.5rem",
 } as const;
 
 const rollBlockShellStyle = {
@@ -136,13 +136,14 @@ const rollBlockShellStyle = {
   display: "grid",
   gap: "0.6rem",
   padding: "0.75rem",
+  overflow: "hidden",
 } as const;
 
 const rollEditorStyle = {
   alignItems: "start",
   display: "grid",
   gap: "0.85rem",
-  gridTemplateColumns: "minmax(0, 1fr) minmax(28rem, 1fr)",
+  gridTemplateColumns: "minmax(0, 1fr) minmax(22rem, 1fr)",
   minWidth: 0,
 } as const;
 
@@ -184,6 +185,8 @@ const rollPreviewStyle = {
   display: "grid",
   gap: "0.35rem",
   gridTemplateRows: "auto",
+  alignSelf: "stretch",
+  boxSizing: "border-box",
   justifySelf: "stretch",
   minHeight: "10.5rem",
   minWidth: 0,
@@ -329,7 +332,7 @@ function readSystemSkillOptions(input: {
 
 function makeRollDraft(input: { id?: string; participantId?: string; skillId?: string }): RoleplayRollDraft {
   return {
-    difficulty: "none",
+    difficulty: "medium",
     id: input.id ?? `roll-draft-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     otherModInput: "0",
     opponentBlockOpen: false,
@@ -648,6 +651,15 @@ export function GmRoleplayingEncounterScreen({
     setRollDrafts((currentDrafts) =>
       currentDrafts.map((draft) => (draft.id === draftId ? { ...draft, ...patch } : draft))
     );
+  }
+
+  function resetRollDrafts() {
+    setRollDrafts([
+      makeRollDraft({
+        participantId: roster[0]?.id,
+        skillId: initialSkillId,
+      }),
+    ]);
   }
 
   function getRollDraftContext(draft: RoleplayRollDraft) {
@@ -1030,7 +1042,12 @@ export function GmRoleplayingEncounterScreen({
       </section>
 
       <section style={panelStyle}>
-        <h2 style={{ margin: 0 }}>Skill roll assignment</h2>
+        <div style={{ alignItems: "center", display: "flex", justifyContent: "space-between", gap: "0.75rem" }}>
+          <h2 style={{ margin: 0 }}>Skill roll assignment</h2>
+          <button onClick={resetRollDrafts} type="button">
+            Clear
+          </button>
+        </div>
         <div style={{ display: "grid", gap: "0.75rem" }}>
           {rollDrafts.map((draft, index) => {
             const context = getRollDraftContext(draft);
@@ -1059,24 +1076,7 @@ export function GmRoleplayingEncounterScreen({
 
             return (
               <div key={draft.id} style={rollBlockShellStyle}>
-                <div style={{ alignItems: "center", display: "flex", justifyContent: "space-between", gap: "0.75rem" }}>
-                  <strong>Roll {index + 1}</strong>
-                  <button
-                    onClick={() =>
-                      updateRollDraft(
-                        draft.id,
-                        makeRollDraft({
-                          id: draft.id,
-                          participantId: roster[0]?.id,
-                          skillId: initialSkillId,
-                        })
-                      )
-                    }
-                    type="button"
-                  >
-                    Clear
-                  </button>
-                </div>
+                <strong>Roll {index + 1}</strong>
                 <section style={rollEditorStyle}>
                   <div style={rollControlsStackStyle}>
                     <section style={rollControlsStyle}>
