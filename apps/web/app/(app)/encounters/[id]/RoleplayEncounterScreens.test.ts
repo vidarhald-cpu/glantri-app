@@ -27,14 +27,13 @@ describe("RoleplayEncounterScreens", () => {
     expect(source).toContain("OB/Skill");
     expect(source).toContain("DB");
     expect(source).toContain("Other mod");
-    expect(source).toContain("Support cat.");
+    expect(source).toContain("Support category");
     expect(source).toContain("No support skill");
-    expect(source).toContain("VS");
     expect(source).toContain("Level");
     expect(source).toContain("No level");
     expect(source).toContain("No opponent");
-    expect(source).toContain("Opp. cat.");
-    expect(source).toContain("Opp. skill");
+    expect(source).toContain("Open opponent block");
+    expect(source).toContain("Assign opposed");
     expect(source).toContain("Assign");
     expect(source).toContain("GM Roll");
     expect(source).toContain("GM Roll both");
@@ -92,20 +91,25 @@ describe("RoleplayEncounterScreens", () => {
     expect(source).toContain("supportSkillId");
     expect(source).toContain("opponentParticipantId");
     expect(source).toContain("opponentSkillId");
+    expect(source).toContain("opponentSupportSkillId");
+    expect(source).toContain("opponentBlockOpen");
     expect(source).toContain("opposedResult");
     expect(source).toContain("opposedMargin");
     expect(source).toContain("difficulty: \"none\"");
-    expect(source).toContain("opponentParticipantId: nextDifficulty === \"none\" ? draft.opponentParticipantId : \"\"");
-    expect(source).toContain("opponentSkillId: nextDifficulty === \"none\" ? draft.opponentSkillId : \"\"");
+    expect(source).toContain("opponentBlockOpen: nextDifficulty === \"none\" ? draft.opponentBlockOpen : false");
+    expect(source).toContain("opponentBlockOpen: false");
+    expect(source).toContain("opponentBlockOpen: true");
   });
 
   it("keeps the roll preview concise with pending notes outside the formula", () => {
     const source = readSource();
 
     expect(source).toContain("pendingModifierLabels");
-    expect(source).toContain("Pending modifiers:");
-    expect(source).toContain("pending support rule");
+    expect(source).toContain("compactCalculationText");
+    expect(source).toContain("Pending:");
+    expect(source).toContain("RollCalculationPreview");
     expect(source).not.toContain("pending support-rule effect");
+    expect(source).not.toContain("pending support rule");
     expect(source).not.toContain("Required difficulty");
   });
 

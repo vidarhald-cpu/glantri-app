@@ -422,7 +422,10 @@ describe("roleplay encounter state", () => {
       })
     ).toMatchObject({
       achievedSuccessLevel: expect.objectContaining({ id: "medium_plus", resultModifier: 1 }),
+      compactCalculationText: "Perception 20 + [ -2 ] -2 + 14 = 32 · Medium + · SUCCESS vs Medium",
       calculationText: "Perception 20 + roll 14 + Other -2 = 32 → Medium +, modifier +1 → SUCCESS vs Medium",
+      numericModifierParts: [-2],
+      numericModifierSum: -2,
       numericSubtotal: 32,
       success: true,
     });
@@ -437,9 +440,12 @@ describe("roleplay encounter state", () => {
         useGenMod: true,
       })
     ).toMatchObject({
+      compactCalculationText: "Stealth 10 + [ ] 0 + 7 = 17 · Easy · NOT SUCCESSFUL vs Hard",
       calculationText: "Stealth 10 + roll 7 = 17 → Easy, modifier +0 → NOT SUCCESSFUL vs Hard",
       hasPlaceholderMods: true,
       numericSubtotal: 17,
+      numericModifierParts: [],
+      numericModifierSum: 0,
       pendingModifierLabels: ["Gen", "DB"],
       partial: true,
     });
