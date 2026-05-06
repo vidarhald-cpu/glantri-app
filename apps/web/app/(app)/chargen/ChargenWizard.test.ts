@@ -61,7 +61,7 @@ const combatContent = {
   skills: [
     {
       allowsSpecializations: false,
-      category: "ordinary",
+      category: "ordinary" as const,
       dependencies: [],
       dependencySkillIds: [],
       groupId: "advanced_melee_training",
@@ -70,13 +70,13 @@ const combatContent = {
       isTheoretical: false,
       linkedStats: ["dex"],
       name: "Dodge",
-      requiresLiteracy: "no",
+      requiresLiteracy: "no" as const,
       societyLevel: 1,
       sortOrder: 1
     },
     {
       allowsSpecializations: false,
-      category: "ordinary",
+      category: "ordinary" as const,
       dependencies: [],
       dependencySkillIds: [],
       groupId: "advanced_melee_training",
@@ -85,13 +85,13 @@ const combatContent = {
       isTheoretical: false,
       linkedStats: ["dex"],
       name: "Parry",
-      requiresLiteracy: "no",
+      requiresLiteracy: "no" as const,
       societyLevel: 1,
       sortOrder: 2
     },
     {
       allowsSpecializations: false,
-      category: "ordinary",
+      category: "ordinary" as const,
       dependencies: [],
       dependencySkillIds: [],
       groupId: "advanced_melee_training",
@@ -100,13 +100,13 @@ const combatContent = {
       isTheoretical: false,
       linkedStats: ["str"],
       name: "Brawling",
-      requiresLiteracy: "no",
+      requiresLiteracy: "no" as const,
       societyLevel: 1,
       sortOrder: 3
     },
     {
       allowsSpecializations: false,
-      category: "ordinary",
+      category: "ordinary" as const,
       dependencies: [],
       dependencySkillIds: [],
       groupId: "advanced_melee_training",
@@ -115,13 +115,13 @@ const combatContent = {
       isTheoretical: false,
       linkedStats: ["dex"],
       name: "Sword",
-      requiresLiteracy: "no",
+      requiresLiteracy: "no" as const,
       societyLevel: 1,
       sortOrder: 4
     },
     {
       allowsSpecializations: false,
-      category: "ordinary",
+      category: "ordinary" as const,
       dependencies: [],
       dependencySkillIds: [],
       groupId: "advanced_melee_training",
@@ -130,13 +130,13 @@ const combatContent = {
       isTheoretical: false,
       linkedStats: ["dex"],
       name: "Axe",
-      requiresLiteracy: "no",
+      requiresLiteracy: "no" as const,
       societyLevel: 1,
       sortOrder: 5
     },
     {
       allowsSpecializations: false,
-      category: "ordinary",
+      category: "ordinary" as const,
       dependencies: [],
       dependencySkillIds: [],
       groupId: "advanced_melee_training",
@@ -145,13 +145,13 @@ const combatContent = {
       isTheoretical: false,
       linkedStats: ["dex"],
       name: "Spear",
-      requiresLiteracy: "no",
+      requiresLiteracy: "no" as const,
       societyLevel: 1,
       sortOrder: 6
     },
     {
       allowsSpecializations: false,
-      category: "ordinary",
+      category: "ordinary" as const,
       dependencies: [],
       dependencySkillIds: [],
       groupId: "advanced_melee_training",
@@ -160,7 +160,7 @@ const combatContent = {
       isTheoretical: false,
       linkedStats: ["dex"],
       name: "Mace",
-      requiresLiteracy: "no",
+      requiresLiteracy: "no" as const,
       societyLevel: 1,
       sortOrder: 7
     }
@@ -235,7 +235,7 @@ const overlappingProfessionContent = {
   skills: [
     {
       allowsSpecializations: false,
-      category: "ordinary",
+      category: "ordinary" as const,
       dependencies: [],
       dependencySkillIds: [],
       groupId: "fieldcraft",
@@ -244,13 +244,13 @@ const overlappingProfessionContent = {
       isTheoretical: false,
       linkedStats: ["dex"],
       name: "Stealth",
-      requiresLiteracy: "no",
+      requiresLiteracy: "no" as const,
       societyLevel: 1,
       sortOrder: 1
     },
     {
       allowsSpecializations: false,
-      category: "ordinary",
+      category: "ordinary" as const,
       dependencies: [],
       dependencySkillIds: [],
       groupId: "fieldcraft",
@@ -259,7 +259,7 @@ const overlappingProfessionContent = {
       isTheoretical: false,
       linkedStats: ["int"],
       name: "Tracking",
-      requiresLiteracy: "no",
+      requiresLiteracy: "no" as const,
       societyLevel: 1,
       sortOrder: 2
     }
@@ -337,7 +337,7 @@ const languageContent = {
   skills: [
     {
       allowsSpecializations: false,
-      category: "ordinary",
+      category: "ordinary" as const,
       categoryId: "language",
       dependencies: [],
       dependencySkillIds: [],
@@ -347,13 +347,13 @@ const languageContent = {
       isTheoretical: false,
       linkedStats: ["int"],
       name: "Literacy",
-      requiresLiteracy: "no",
+      requiresLiteracy: "no" as const,
       societyLevel: 1,
       sortOrder: 1
     },
     {
       allowsSpecializations: false,
-      category: "ordinary",
+      category: "ordinary" as const,
       categoryId: "language",
       dependencies: [],
       dependencySkillIds: [],
@@ -363,7 +363,7 @@ const languageContent = {
       isTheoretical: false,
       linkedStats: ["int"],
       name: "Language",
-      requiresLiteracy: "no",
+      requiresLiteracy: "no" as const,
       societyLevel: 1,
       sortOrder: 2
     }
