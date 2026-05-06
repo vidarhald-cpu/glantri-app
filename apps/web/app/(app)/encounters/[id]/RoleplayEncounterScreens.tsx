@@ -11,7 +11,6 @@ import type {
   RoleplayCalculationPreview,
   RoleplayDifficulty,
   RoleplayOpenEndedD20Roll,
-  RoleplayOpposedResult,
   RoleplayParticipantDescription,
   Scenario,
   ScenarioParticipant,
@@ -728,61 +727,6 @@ export function GmRoleplayingEncounterScreen({
     };
   }
 
-  function makeLocalOpposedRankedRollEntry(input: {
-    actorPreview: RoleplayCalculationPreview;
-    actorRoll: RoleplayOpenEndedD20Roll;
-    draftId: string;
-    opponent: EncounterParticipant;
-    opponentPreview: RoleplayCalculationPreview;
-    opponentResult: RoleplayOpposedResult;
-    opponentRoll: RoleplayOpenEndedD20Roll;
-    opponentSilent: boolean;
-    opponentSkill: SkillOption;
-    participant: EncounterParticipant;
-    selectedSkill: SkillOption;
-    silent: boolean;
-  }): RoleplayActionLogEntry {
-    return {
-      achievedSuccessLevelId: input.actorPreview.achievedSuccessLevel?.id,
-      achievedSuccessLevelLabel: input.actorPreview.achievedSuccessLevel?.label,
-      autoSuccess: input.actorPreview.autoSuccess,
-      calculationText: `Actor: ${input.actorPreview.calculationText} · VERSUS · Opponent: ${input.opponentPreview.calculationText} · ${input.opponentResult.summary}`,
-      createdAt: new Date().toISOString(),
-      dieResult: input.actorRoll.dieResult,
-      difficulty: undefined,
-      finalTotal: input.actorPreview.finalTotal,
-      fumble: input.actorPreview.fumble,
-      id: `local-roll-${input.draftId}-opposed`,
-      mode: "opposed",
-      numericSubtotal: input.actorPreview.numericSubtotal,
-      openEndedD10s: input.actorRoll.openEndedD10s,
-      opposedMargin: input.opponentResult.margin,
-      opposedResult: input.opponentResult.result,
-      opponentAchievedSuccessLevelLabel: input.opponentPreview.achievedSuccessLevel?.label,
-      opponentDieResult: input.opponentRoll.dieResult,
-      opponentFumble: input.opponentPreview.fumble,
-      opponentNumericSubtotal: input.opponentPreview.numericSubtotal,
-      opponentOpenEndedD10s: input.opponentRoll.openEndedD10s,
-      opponentParticipantId: input.opponent.id,
-      opponentParticipantName: input.opponent.label,
-      opponentRollD20: input.opponentRoll.rollD20,
-      opponentSilent: input.opponentSilent,
-      opponentSkillId: input.opponentSkill.id,
-      opponentSkillLabel: input.opponentSkill.label,
-      partial: input.actorPreview.partial || input.opponentPreview.partial,
-      participantId: input.participant.id,
-      resultModifier: input.actorPreview.achievedSuccessLevel?.resultModifier,
-      roll: input.actorRoll.rollD20,
-      rollD20: input.actorRoll.rollD20,
-      silent: input.silent,
-      skillId: input.selectedSkill.id,
-      skillLabel: input.selectedSkill.label,
-      success: input.actorPreview.success,
-      summary: `GM rolled opposed ${input.selectedSkill.label} vs ${input.opponentSkill.label}.`,
-      type: "gm_skill_roll",
-    };
-  }
-
   function getRollDraftContext(draft: RoleplayRollDraft) {
     const participant = roster.find((row) => row.id === draft.participantId) ?? roster[0];
     const allSkillOptions = readSystemSkillOptions({
@@ -1126,37 +1070,8 @@ export function GmRoleplayingEncounterScreen({
       );
     }
 
-    if (preview && roll && opponent && selectedOpponentSkill && opponentPreview && opponentRoll && opposedResult) {
-      replaceDraftRankedRollResults(draft.id, [
-        makeLocalOpposedRankedRollEntry({
-          actorPreview: preview,
-          actorRoll: roll,
-          draftId: draft.id,
-          opponent,
-          opponentPreview,
-          opponentResult: opposedResult,
-          opponentRoll,
-          opponentSilent: draft.opponentSilent,
-          opponentSkill: selectedOpponentSkill,
-          participant,
-          selectedSkill,
-          silent: draft.silent,
-        }),
-      ]);
-    } else if (side === "opponent" && opponent && selectedOpponentSkill && opponentPreview && opponentRoll) {
-      replaceDraftRankedRollResults(draft.id, [
-        makeLocalRankedRollEntry({
-          draftId: draft.id,
-          idSuffix: "opponent",
-          participantId: opponent.id,
-          preview: opponentPreview,
-          roll: opponentRoll,
-          silent: draft.opponentSilent,
-          skillId: selectedOpponentSkill.id,
-          skillLabel: selectedOpponentSkill.label,
-          supportSkillLabel: selectedOpponentSupportSkill?.label,
-        }),
-      ]);
+    if (opponent) {
+      replaceDraftRankedRollResults(draft.id, []);
     } else if (preview && roll) {
       replaceDraftRankedRollResults(draft.id, [
         makeLocalRankedRollEntry({
@@ -1322,6 +1237,8 @@ export function GmRoleplayingEncounterScreen({
                     opponentPreview: context.opponentPreview,
                   }).summary
                 : undefined;
+            const actorLocked = Boolean(draft.actorRoll);
+            const opponentLocked = Boolean(draft.opponentRoll);
 
             return (
               <div key={draft.id} style={rollBlockShellStyle}>
@@ -1334,6 +1251,7 @@ export function GmRoleplayingEncounterScreen({
                       <label style={{ alignItems: "center", display: "flex", gap: "0.35rem" }}>
                         <input
                           checked={draft.silent}
+                          disabled={actorLocked}
                           onChange={(event) => updateRollDraft(draft.id, { silent: event.target.checked })}
                           type="checkbox"
                         />
@@ -1343,6 +1261,7 @@ export function GmRoleplayingEncounterScreen({
                       <label style={{ alignItems: "center", display: "flex", gap: "0.35rem" }}>
                         <input
                           checked={draft.useGenMod}
+                          disabled={actorLocked}
                           onChange={(event) => updateRollDraft(draft.id, { useGenMod: event.target.checked })}
                           type="checkbox"
                         />
@@ -1351,6 +1270,7 @@ export function GmRoleplayingEncounterScreen({
                       <label style={{ alignItems: "center", display: "flex", gap: "0.35rem" }}>
                         <input
                           checked={draft.useObSkillMod}
+                          disabled={actorLocked}
                           onChange={(event) => updateRollDraft(draft.id, { useObSkillMod: event.target.checked })}
                           type="checkbox"
                         />
@@ -1359,6 +1279,7 @@ export function GmRoleplayingEncounterScreen({
                       <label style={{ alignItems: "center", display: "flex", gap: "0.35rem" }}>
                         <input
                           checked={draft.useDbMod}
+                          disabled={actorLocked}
                           onChange={(event) => updateRollDraft(draft.id, { useDbMod: event.target.checked })}
                           type="checkbox"
                         />
@@ -1368,6 +1289,7 @@ export function GmRoleplayingEncounterScreen({
                         Other
                         <input
                           aria-label={`Roleplay roll ${index + 1} Other mod`}
+                          disabled={actorLocked}
                           onChange={(event) => updateRollDraft(draft.id, { otherModInput: event.target.value })}
                           step={1}
                           style={{ ...compactInputStyle, width: "4.5rem" }}
@@ -1381,6 +1303,7 @@ export function GmRoleplayingEncounterScreen({
                         <span>Character</span>
                         <select
                           aria-label={`Roleplay roll ${index + 1} participant`}
+                          disabled={actorLocked}
                           onChange={(event) => {
                             const participant = roster.find((row) => row.id === event.target.value);
                             const nextSkillId = readSystemSkillOptions({
@@ -1408,6 +1331,7 @@ export function GmRoleplayingEncounterScreen({
                         <span>Category</span>
                         <select
                           aria-label={`Roleplay roll ${index + 1} skill category`}
+                          disabled={actorLocked}
                           onChange={(event) => {
                             const nextCategoryId = event.target.value as RoleplayRollDraft["skillCategoryId"];
                             const nextSkillOptions =
@@ -1435,7 +1359,7 @@ export function GmRoleplayingEncounterScreen({
                         <span>Skill</span>
                         <select
                           aria-label={`Roleplay roll ${index + 1} skill`}
-                          disabled={context.skillOptions.length === 0}
+                          disabled={actorLocked || context.skillOptions.length === 0}
                           onChange={(event) => updateRollDraft(draft.id, { skillId: event.target.value })}
                           style={compactSkillInputStyle}
                           value={context.selectedSkill?.id ?? ""}
@@ -1455,6 +1379,7 @@ export function GmRoleplayingEncounterScreen({
                         <span>Support category</span>
                         <select
                           aria-label={`Roleplay roll ${index + 1} support skill category`}
+                          disabled={actorLocked}
                           onChange={(event) => {
                             const nextCategoryId = event.target.value as RoleplayRollDraft["supportSkillCategoryId"];
                             updateRollDraft(draft.id, {
@@ -1477,6 +1402,7 @@ export function GmRoleplayingEncounterScreen({
                         <span>Support</span>
                         <select
                           aria-label={`Roleplay roll ${index + 1} support skill`}
+                          disabled={actorLocked}
                           onChange={(event) => updateRollDraft(draft.id, { supportSkillId: event.target.value })}
                           style={compactSkillInputStyle}
                           value={context.selectedSupportSkill?.id ?? ""}
@@ -1495,6 +1421,7 @@ export function GmRoleplayingEncounterScreen({
                         <span>Level</span>
                         <select
                           aria-label={`Roleplay roll ${index + 1} difficulty`}
+                          disabled={actorLocked}
                           onChange={(event) => {
                             const nextDifficulty = event.target.value as RoleplayRollDraft["difficulty"];
                             updateRollDraft(draft.id, {
@@ -1523,6 +1450,7 @@ export function GmRoleplayingEncounterScreen({
                         <span>Opponent</span>
                         <select
                           aria-label={`Roleplay roll ${index + 1} opponent`}
+                          disabled={actorLocked}
                           onChange={(event) => {
                             updateRollDraft(draft.id, {
                               difficulty: "none",
@@ -1548,9 +1476,10 @@ export function GmRoleplayingEncounterScreen({
                       </label>
                     </div>
                     <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+                      {actorLocked ? <span style={{ color: "#5e5a50" }}>Rolled</span> : null}
                       {!context.opponent || draft.opponentBlockOpen ? (
                         <button
-                          disabled={!context.participant || !context.selectedSkill}
+                          disabled={actorLocked || !context.participant || !context.selectedSkill}
                           onClick={() => void handleAssignSkillRoll(draft, "actor")}
                           type="button"
                         >
@@ -1559,7 +1488,7 @@ export function GmRoleplayingEncounterScreen({
                       ) : null}
                       {!context.opponent || draft.opponentBlockOpen ? (
                         <button
-                          disabled={!context.participant || !context.selectedSkill}
+                          disabled={actorLocked || !context.participant || !context.selectedSkill}
                           onClick={() => void handleGmRoll(draft, "actor")}
                           type="button"
                         >
@@ -1567,7 +1496,7 @@ export function GmRoleplayingEncounterScreen({
                         </button>
                       ) : !draft.opponentBlockOpen ? (
                         <button
-                          disabled={!context.opponent}
+                          disabled={actorLocked || !context.opponent}
                           onClick={() => {
                             updateRollDraft(draft.id, {
                               opponentBlockOpen: true,
@@ -1584,7 +1513,13 @@ export function GmRoleplayingEncounterScreen({
                     {context.isOpposed ? (
                       <div style={{ display: "flex", justifyContent: "center" }}>
                         <button
-                          disabled={!context.participant || !context.selectedSkill || !context.selectedOpponentSkill}
+                          disabled={
+                            actorLocked ||
+                            opponentLocked ||
+                            !context.participant ||
+                            !context.selectedSkill ||
+                            !context.selectedOpponentSkill
+                          }
                           onClick={() => void handleGmRoll(draft, "both")}
                           type="button"
                         >
@@ -1600,6 +1535,7 @@ export function GmRoleplayingEncounterScreen({
                         <label style={{ alignItems: "center", display: "flex", gap: "0.35rem" }}>
                           <input
                             checked={draft.opponentSilent}
+                            disabled={opponentLocked}
                             onChange={(event) => updateRollDraft(draft.id, { opponentSilent: event.target.checked })}
                             type="checkbox"
                           />
@@ -1609,6 +1545,7 @@ export function GmRoleplayingEncounterScreen({
                         <label style={{ alignItems: "center", display: "flex", gap: "0.35rem" }}>
                           <input
                             checked={draft.opponentUseGenMod}
+                            disabled={opponentLocked}
                             onChange={(event) => updateRollDraft(draft.id, { opponentUseGenMod: event.target.checked })}
                             type="checkbox"
                           />
@@ -1617,6 +1554,7 @@ export function GmRoleplayingEncounterScreen({
                         <label style={{ alignItems: "center", display: "flex", gap: "0.35rem" }}>
                           <input
                             checked={draft.opponentUseObSkillMod}
+                            disabled={opponentLocked}
                             onChange={(event) => updateRollDraft(draft.id, { opponentUseObSkillMod: event.target.checked })}
                             type="checkbox"
                           />
@@ -1625,6 +1563,7 @@ export function GmRoleplayingEncounterScreen({
                         <label style={{ alignItems: "center", display: "flex", gap: "0.35rem" }}>
                           <input
                             checked={draft.opponentUseDbMod}
+                            disabled={opponentLocked}
                             onChange={(event) => updateRollDraft(draft.id, { opponentUseDbMod: event.target.checked })}
                             type="checkbox"
                           />
@@ -1634,6 +1573,7 @@ export function GmRoleplayingEncounterScreen({
                           Other
                           <input
                             aria-label={`Roleplay roll ${index + 1} opponent Other mod`}
+                            disabled={opponentLocked}
                             onChange={(event) => updateRollDraft(draft.id, { opponentOtherModInput: event.target.value })}
                             step={1}
                             style={{ ...compactInputStyle, width: "4.5rem" }}
@@ -1647,6 +1587,7 @@ export function GmRoleplayingEncounterScreen({
                           <span>Opponent</span>
                           <select
                             aria-label={`Roleplay roll ${index + 1} opponent block participant`}
+                            disabled={opponentLocked}
                             onChange={(event) => {
                               updateRollDraft(draft.id, {
                                 opponentParticipantId: event.target.value,
@@ -1671,6 +1612,7 @@ export function GmRoleplayingEncounterScreen({
                           <span>Category</span>
                           <select
                             aria-label={`Roleplay roll ${index + 1} opponent skill category`}
+                            disabled={opponentLocked}
                             onChange={(event) => {
                               const nextCategoryId = event.target.value as RoleplayRollDraft["opponentSkillCategoryId"];
                               updateRollDraft(draft.id, {
@@ -1694,7 +1636,7 @@ export function GmRoleplayingEncounterScreen({
                           <span>Skill</span>
                           <select
                             aria-label={`Roleplay roll ${index + 1} opponent skill`}
-                            disabled={context.opponentSkillOptions.length === 0}
+                            disabled={opponentLocked || context.opponentSkillOptions.length === 0}
                             onChange={(event) => updateRollDraft(draft.id, { opponentSkillId: event.target.value })}
                             style={compactSkillInputStyle}
                             value={context.selectedOpponentSkill?.id ?? ""}
@@ -1715,6 +1657,7 @@ export function GmRoleplayingEncounterScreen({
                           <span>Support category</span>
                           <select
                             aria-label={`Roleplay roll ${index + 1} opponent support skill category`}
+                            disabled={opponentLocked}
                             onChange={(event) => {
                               const nextCategoryId = event.target.value as RoleplayRollDraft["opponentSupportSkillCategoryId"];
                               updateRollDraft(draft.id, {
@@ -1737,6 +1680,7 @@ export function GmRoleplayingEncounterScreen({
                           <span>Support</span>
                           <select
                             aria-label={`Roleplay roll ${index + 1} opponent support skill`}
+                            disabled={opponentLocked}
                             onChange={(event) => updateRollDraft(draft.id, { opponentSupportSkillId: event.target.value })}
                             style={compactSkillInputStyle}
                             value={context.selectedOpponentSupportSkill?.id ?? ""}
@@ -1751,15 +1695,16 @@ export function GmRoleplayingEncounterScreen({
                         </label>
                       </div>
                       <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+                        {opponentLocked ? <span style={{ color: "#5e5a50" }}>Rolled</span> : null}
                         <button
-                          disabled={!context.opponent || !context.selectedOpponentSkill}
+                          disabled={opponentLocked || !context.opponent || !context.selectedOpponentSkill}
                           onClick={() => void handleAssignSkillRoll(draft, "opponent")}
                           type="button"
                         >
                           Assign
                         </button>
                         <button
-                          disabled={!context.opponent || !context.selectedOpponentSkill}
+                          disabled={opponentLocked || !context.opponent || !context.selectedOpponentSkill}
                           onClick={() => void handleGmRoll(draft, "opponent")}
                           type="button"
                         >
@@ -1814,34 +1759,8 @@ export function GmRoleplayingEncounterScreen({
 
               return (
                 <div key={entry.id}>
-                  {index + 1}. {entry.mode === "opposed" ? (
-                    <>
-                      {participantLabel} {entry.skillLabel ?? "Unknown skill"}{" "}
-                      {entry.numericSubtotal == null ? "unresolved" : entry.numericSubtotal} vs{" "}
-                      {entry.opponentParticipantName ?? "Unknown opponent"}{" "}
-                      {entry.opponentSkillLabel ?? "Unknown skill"}{" "}
-                      {entry.opponentNumericSubtotal == null ? "unresolved" : entry.opponentNumericSubtotal} —{" "}
-                      {entry.opposedResult === "win"
-                        ? `actor wins by ${entry.opposedMargin ?? 0}`
-                        : entry.opposedResult === "loss"
-                          ? `opponent wins by ${entry.opposedMargin ?? 0}`
-                          : entry.opposedResult === "tie"
-                            ? "tie"
-                            : "pending"}
-                    </>
-                  ) : (
-                    <>
-                      {participantLabel} · {entry.skillLabel ?? "Unknown skill"} ·{" "}
-                      {entry.numericSubtotal == null ? "unresolved" : `total ${entry.numericSubtotal}`} ·{" "}
-                      {entry.achievedSuccessLevelLabel ?? "No level"} · modifier{" "}
-                      {entry.resultModifier == null ? "—" : `${entry.resultModifier >= 0 ? "+" : ""}${entry.resultModifier}`} ·{" "}
-                      {entry.difficulty ? formatDifficulty(entry.difficulty) : "No difficulty"} ·{" "}
-                      {entry.success == null ? "level only" : entry.success ? "SUCCESS" : "NOT SUCCESSFUL"}
-                    </>
-                  )}
-                  {entry.partial ? " · Partial" : ""}
-                  {entry.silent ? " · Silent" : ""} ·{" "}
-                  {formatShortDateTime(entry.createdAt)}
+                  {index + 1}. {participantLabel} · {entry.skillLabel ?? "Unknown skill"} ·{" "}
+                  {entry.numericSubtotal == null ? "unresolved" : `total ${entry.numericSubtotal}`}
                 </div>
               );
             })}

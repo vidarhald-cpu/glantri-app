@@ -122,12 +122,31 @@ describe("RoleplayEncounterScreens", () => {
     expect(source).not.toContain("Required difficulty");
   });
 
-  it("shows ranked fumble rows with numeric totals instead of replacing totals with FUMBLE", () => {
+  it("shows ranked rows only through total and keeps fumble details out of ranked rows", () => {
+    const source = readSource();
+    const rankedSource = source.slice(
+      source.indexOf("<h2 style={{ margin: 0 }}>Ranked roll results</h2>"),
+      source.indexOf("<h2 style={{ margin: 0 }}>Action log</h2>")
+    );
+
+    expect(rankedSource).toContain("entry.numericSubtotal == null ? \"unresolved\" : `total ${entry.numericSubtotal}`");
+    expect(source).toContain("if (opponent) {");
+    expect(source).toContain("replaceDraftRankedRollResults(draft.id, []);");
+    expect(rankedSource).not.toContain("entry.mode === \"opposed\"");
+    expect(rankedSource).not.toContain("{entry.fumble ? \" · FUMBLE\" : \"\"}");
+    expect(rankedSource).not.toContain("entry.fumble ? \"FUMBLE\"");
+  });
+
+  it("locks actor and opponent roll controls independently after each side rolls", () => {
     const source = readSource();
 
-    expect(source).toContain("entry.numericSubtotal == null ? \"unresolved\" : `total ${entry.numericSubtotal}`");
-    expect(source).toContain("{entry.fumble ? \" · FUMBLE\" : \"\"}");
-    expect(source).not.toContain("entry.fumble ? \"FUMBLE\"");
+    expect(source).toContain("const actorLocked = Boolean(draft.actorRoll)");
+    expect(source).toContain("const opponentLocked = Boolean(draft.opponentRoll)");
+    expect(source).toContain("disabled={actorLocked || !context.participant || !context.selectedSkill}");
+    expect(source).toContain("disabled={opponentLocked || !context.opponent || !context.selectedOpponentSkill}");
+    expect(source).toContain("actorLocked ||");
+    expect(source).toContain("opponentLocked ||");
+    expect(source).toContain("setCurrentRankedRollResults([])");
   });
 
   it("uses persistent two-column roll blocks with structured calculation panels", () => {
