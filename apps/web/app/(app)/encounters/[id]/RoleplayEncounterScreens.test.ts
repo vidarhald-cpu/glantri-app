@@ -113,6 +113,29 @@ describe("RoleplayEncounterScreens", () => {
     expect(source).not.toContain("Required difficulty");
   });
 
+  it("uses persistent two-column roll blocks with structured calculation panels", () => {
+    const source = readSource();
+
+    expect(source).toContain("gridTemplateColumns: \"minmax(0, 3fr) minmax(22rem, 2fr)\"");
+    expect(source).toContain("gridTemplateRows: \"minmax(2.25rem, auto) minmax(3.25rem, auto) minmax(2rem, auto)\"");
+    expect(source).toContain("minHeight: \"9.5rem\"");
+    expect(source).toContain("<strong>{label}:</strong> {preview?.compactCalculationText ?? \"—\"}");
+    expect(source).toContain("<strong>Result:</strong>");
+    expect(source).toContain("style={rollControlRowStyle}");
+    expect(source).toContain("style={{ ...compactInputStyle, width: \"4.5rem\" }}");
+  });
+
+  it("preselects the chosen opponent block participant without auto-selecting an opponent skill", () => {
+    const source = readSource();
+
+    expect(source).toContain("opponentParticipantId: event.target.value");
+    expect(source).toContain("opponentRoll: undefined");
+    expect(source).toContain("opponentBlockOpen: Boolean(event.target.value) && draft.opponentBlockOpen");
+    expect(source).toContain("!draft.opponentBlockOpen || draft.opponentSkillId === \"\"");
+    expect(source).toContain("opponentSkillId: \"\"");
+    expect(source).toContain("value={context.opponent.id}");
+  });
+
   it("uses all canonical ordinary and secondary skills instead of only participant-known skills", () => {
     const source = readSource();
 
