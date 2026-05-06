@@ -2,318 +2,2294 @@
 // Do not hand-edit unless you are intentionally changing the repo-local import mapping.
 
 export const generatedRepoLocalGlantriSeed = {
+  "civilizations": [
+    {
+      "historicalAnalogue": "Early medieval Scandinavia / Norse jarldoms",
+      "id": "scandia",
+      "linkedSocietyId": "feudal_manorial_kingdom",
+      "motherTongueLanguageName": "Scandian",
+      "name": "Scandia",
+      "notes": "Glantri-facing northern culture analogue with sea raiding, thing-style assemblies, and carved runic literacy.",
+      "optionalLanguageNames": [],
+      "period": "c. 800-1000 CE",
+      "shortDescription": "Sea-going northern kingdom culture of jarls, oath-bands, and coastal trade.",
+      "spokenLanguageName": "Scandian",
+      "writtenLanguageName": "Runic Scandian",
+      "linkedSocietyLevel": 4
+    },
+    {
+      "historicalAnalogue": "Italian Renaissance city-states",
+      "id": "iest",
+      "linkedSocietyId": "renaissance_city_state",
+      "motherTongueLanguageName": "Common",
+      "name": "Iest",
+      "notes": "Glantri-facing mercantile principality analogue centered on guild money, diplomacy, and urban courts.",
+      "optionalLanguageNames": [],
+      "period": "c. 1300-1500 CE",
+      "shortDescription": "Merchant-principality culture of bankers, guild captains, and walled-city politics.",
+      "spokenLanguageName": "Common",
+      "writtenLanguageName": "Common",
+      "linkedSocietyLevel": 6
+    },
+    {
+      "historicalAnalogue": "Roman imperial high civilization",
+      "id": "thyatis",
+      "linkedSocietyId": "imperial_classical_high_civ",
+      "motherTongueLanguageName": "Common",
+      "name": "Thyatis",
+      "notes": "Glantri-facing Roman analogue where Common is the everyday imperial language of administration and soldiery.",
+      "optionalLanguageNames": [],
+      "period": "c. 100 BCE-200 CE",
+      "shortDescription": "Imperial civic culture of roads, legions, bureaucracy, and metropolitan law.",
+      "spokenLanguageName": "Common",
+      "writtenLanguageName": "Common",
+      "linkedSocietyLevel": 5
+    },
+    {
+      "historicalAnalogue": "Classical Greek polis culture",
+      "id": "scyria",
+      "linkedSocietyId": "classical_polis_city_state",
+      "motherTongueLanguageName": "Old Common",
+      "name": "Scyria",
+      "notes": "Glantri-facing Greek city-state analogue with rhetoric, civic competition, and maritime urbanism.",
+      "optionalLanguageNames": [],
+      "period": "c. 500-250 BCE",
+      "shortDescription": "Urban polis culture of debate, hoplite citizenship, and maritime trade.",
+      "spokenLanguageName": "Old Common",
+      "writtenLanguageName": "Old Common",
+      "linkedSocietyLevel": 5
+    },
+    {
+      "historicalAnalogue": "Feudal western and central Europe",
+      "id": "glantri",
+      "linkedSocietyId": "feudal_manorial_kingdom",
+      "motherTongueLanguageName": "Common",
+      "name": "Glantri",
+      "notes": "Glantri-facing core feudal analogue with knightly households, castles, and landed obligations.",
+      "optionalLanguageNames": [
+        "Old Common"
+      ],
+      "period": "c. 800-1100 CE",
+      "shortDescription": "Feudal landed culture of noble households, retainers, and local obligations.",
+      "spokenLanguageName": "Common",
+      "writtenLanguageName": "Common",
+      "linkedSocietyLevel": 4
+    },
+    {
+      "historicalAnalogue": "Ancient Carthage",
+      "id": "lankhmar",
+      "linkedSocietyId": "imperial_classical_high_civ",
+      "motherTongueLanguageName": "Phoenician",
+      "name": "Lankhmar",
+      "notes": "Glantri-facing Carthaginian analogue centered on maritime commerce, urban oligarchy, and literate Mediterranean trade networks.",
+      "optionalLanguageNames": [],
+      "period": "c. 600-146 BCE",
+      "shortDescription": "Maritime mercantile high civilization of harbor cities, merchant houses, and overseas commercial reach.",
+      "spokenLanguageName": "Phoenician",
+      "writtenLanguageName": "Phoenician",
+      "linkedSocietyLevel": 5
+    },
+    {
+      "historicalAnalogue": "Medieval Rus and eastern Christian principalities",
+      "id": "olog",
+      "linkedSocietyId": "court_bureaucratic_empire",
+      "motherTongueLanguageName": "Ologian",
+      "name": "Olog",
+      "notes": "Glantri-facing eastern court culture analogue with princely service hierarchies and scribal religion.",
+      "optionalLanguageNames": [],
+      "period": "c. 1100-1300 CE",
+      "shortDescription": "Eastern court culture of princely households, tribute, and church-backed literacy.",
+      "spokenLanguageName": "Ologian",
+      "writtenLanguageName": "Church Ologian",
+      "linkedSocietyLevel": 5
+    },
+    {
+      "historicalAnalogue": "Pre-Hellenistic Egypt",
+      "id": "mogreb",
+      "linkedSocietyId": "temple_state_literate",
+      "motherTongueLanguageName": "Mogrebi",
+      "name": "Mogreb",
+      "notes": "Glantri-facing Nile temple culture analogue built on sacred estates, scribes, and river administration.",
+      "optionalLanguageNames": [],
+      "period": "c. 1500-400 BCE",
+      "shortDescription": "River-valley temple civilization with sacred estates, priests, and early recordkeeping.",
+      "spokenLanguageName": "Mogrebi",
+      "writtenLanguageName": "Sacred Mogrebi",
+      "linkedSocietyLevel": 3
+    },
+    {
+      "historicalAnalogue": "Sub-Saharan court kingdom",
+      "id": "nkolo",
+      "linkedSocietyId": "imperial_agrarian_bureaucracy",
+      "motherTongueLanguageName": "N'kolian",
+      "name": "N'Kolo",
+      "notes": "Glantri-facing sub-Saharan royal culture analogue with court hierarchy, trade routes, and dynastic authority.",
+      "optionalLanguageNames": [],
+      "period": "c. 900-1100 CE",
+      "shortDescription": "Court kingdom culture of royal households, regional trade, and sacred kingship.",
+      "spokenLanguageName": "N'kolian",
+      "writtenLanguageName": "Royal N'kolian",
+      "linkedSocietyLevel": 4
+    },
+    {
+      "historicalAnalogue": "Southern African San forager bands",
+      "id": "san_forager_bands",
+      "linkedSocietyId": "forager_ritual_tribal",
+      "motherTongueLanguageName": "Tuu",
+      "name": "San Forager Bands",
+      "optionalLanguageNames": [],
+      "period": "Pre-state to early modern continuity",
+      "shortDescription": "Ritual-forager culture of small kin bands, seasonal movement, and oral spiritual practice.",
+      "spokenLanguageName": "Tuu",
+      "writtenLanguageName": null,
+      "linkedSocietyLevel": 1
+    },
+    {
+      "historicalAnalogue": "Scythian and related steppe nomads",
+      "id": "scythians",
+      "linkedSocietyId": "pastoral_clan_nomadic",
+      "motherTongueLanguageName": "Scythian",
+      "name": "Scythians",
+      "optionalLanguageNames": [],
+      "period": "c. 700-200 BCE",
+      "shortDescription": "Mounted pastoral-warrior culture organized through clans, mobile camps, and raiding confederations.",
+      "spokenLanguageName": "Scythian",
+      "writtenLanguageName": null,
+      "linkedSocietyLevel": 2
+    },
+    {
+      "historicalAnalogue": "Latial and early Italic chiefdoms",
+      "id": "latial_chiefdoms",
+      "linkedSocietyId": "early_agrarian_proto_state",
+      "motherTongueLanguageName": "Old Latin",
+      "name": "Latial Chiefdoms",
+      "optionalLanguageNames": [],
+      "period": "c. 900-600 BCE",
+      "shortDescription": "Early agrarian hill-and-valley chiefdom culture with clan elites, fortified villages, and emerging civic centers.",
+      "spokenLanguageName": "Old Latin",
+      "writtenLanguageName": "Old Italic",
+      "linkedSocietyLevel": 2
+    },
+    {
+      "historicalAnalogue": "Mycenaean Greece",
+      "id": "mycenaean_greece",
+      "linkedSocietyId": "bronze_age_palace_state",
+      "motherTongueLanguageName": "Mycenaean Greek",
+      "name": "Mycenaean Greece",
+      "optionalLanguageNames": [],
+      "period": "c. 1600-1100 BCE",
+      "shortDescription": "Palace-centered bronze age culture with elite households, redistribution, and fortified royal seats.",
+      "spokenLanguageName": "Mycenaean Greek",
+      "writtenLanguageName": "Linear B",
+      "linkedSocietyLevel": 3
+    },
+    {
+      "historicalAnalogue": "Sumerian city-states",
+      "id": "sumer",
+      "linkedSocietyId": "temple_state_literate",
+      "motherTongueLanguageName": "Sumerian",
+      "name": "Sumer",
+      "optionalLanguageNames": [],
+      "period": "c. 3000-2000 BCE",
+      "shortDescription": "Temple-centered literate agrarian civilization with scribes, canal management, and sacred urban estates.",
+      "spokenLanguageName": "Sumerian",
+      "writtenLanguageName": "Cuneiform",
+      "linkedSocietyLevel": 3
+    },
+    {
+      "historicalAnalogue": "Achaemenid Persian imperial administration",
+      "id": "achaemenid_persia",
+      "linkedSocietyId": "imperial_agrarian_bureaucracy",
+      "motherTongueLanguageName": "Old Persian",
+      "name": "Achaemenid Persia",
+      "optionalLanguageNames": [],
+      "period": "c. 550-330 BCE",
+      "shortDescription": "Imperial agrarian bureaucracy with satrapies, royal roads, scribal governance, and layered provincial rule.",
+      "spokenLanguageName": "Old Persian",
+      "writtenLanguageName": "Imperial Aramaic",
+      "linkedSocietyLevel": 4
+    },
+    {
+      "historicalAnalogue": "Byzantine Empire",
+      "id": "byzantine_empire",
+      "linkedSocietyId": "court_bureaucratic_empire",
+      "motherTongueLanguageName": "Old Common",
+      "name": "Byzantine Empire",
+      "optionalLanguageNames": [],
+      "period": "c. 700-1200 CE",
+      "shortDescription": "Court-bureaucratic imperial culture of palace service, provincial administration, and orthodox scribal institutions.",
+      "spokenLanguageName": "Old Common",
+      "writtenLanguageName": "Old Common",
+      "linkedSocietyLevel": 5
+    }
+  ],
+  "languages": [
+    {
+      "id": "church_ologian_language",
+      "name": "Church Ologian"
+    },
+    {
+      "id": "common_language",
+      "name": "Common"
+    },
+    {
+      "id": "cuneiform_language",
+      "name": "Cuneiform"
+    },
+    {
+      "id": "imperial_aramaic_language",
+      "name": "Imperial Aramaic"
+    },
+    {
+      "id": "linear_b_language",
+      "name": "Linear B"
+    },
+    {
+      "id": "mogrebi_language",
+      "name": "Mogrebi"
+    },
+    {
+      "id": "mycenaean_greek_language",
+      "name": "Mycenaean Greek"
+    },
+    {
+      "id": "n_kolian_language",
+      "name": "N'kolian"
+    },
+    {
+      "id": "old_common_language",
+      "name": "Old Common"
+    },
+    {
+      "id": "old_italic_language",
+      "name": "Old Italic"
+    },
+    {
+      "id": "old_latin_language",
+      "name": "Old Latin"
+    },
+    {
+      "id": "old_persian_language",
+      "name": "Old Persian"
+    },
+    {
+      "id": "ologian_language",
+      "name": "Ologian"
+    },
+    {
+      "id": "phoenician_language",
+      "name": "Phoenician"
+    },
+    {
+      "id": "royal_n_kolian_language",
+      "name": "Royal N'kolian"
+    },
+    {
+      "id": "runic_scandian_language",
+      "name": "Runic Scandian"
+    },
+    {
+      "id": "sacred_mogrebi_language",
+      "name": "Sacred Mogrebi"
+    },
+    {
+      "id": "scandian_language",
+      "name": "Scandian"
+    },
+    {
+      "id": "scythian_language",
+      "name": "Scythian"
+    },
+    {
+      "id": "sumerian_language",
+      "name": "Sumerian"
+    },
+    {
+      "id": "tuu_language",
+      "name": "Tuu"
+    }
+  ],
   "skillGroups": [
     {
       "description": "Basic literate education for scribes, scholars, clerks, and formal learners.",
       "id": "literate_foundation",
       "name": "Literate Foundation",
+      "skillMemberships": [
+        {
+          "relevance": "core",
+          "skillId": "literacy"
+        },
+        {
+          "relevance": "core",
+          "skillId": "language"
+        },
+        {
+          "relevance": "core",
+          "skillId": "history"
+        }
+      ],
+      "selectionSlots": [],
       "sortOrder": 1
     },
     {
       "description": "Formal literate office, law, and rhetorical culture.",
       "id": "civic_learning",
       "name": "Civic Learning",
+      "skillMemberships": [
+        {
+          "relevance": "core",
+          "skillId": "law"
+        },
+        {
+          "relevance": "core",
+          "skillId": "bureaucratic_writing"
+        },
+        {
+          "relevance": "core",
+          "skillId": "rhetorical_composition"
+        }
+      ],
+      "selectionSlots": [],
       "sortOrder": 2
     },
     {
       "description": "Priestly, doctrinal, and ritual-intellectual training.",
       "id": "sacred_learning",
       "name": "Sacred Learning",
+      "skillMemberships": [
+        {
+          "relevance": "core",
+          "skillId": "theology"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "history"
+        },
+        {
+          "relevance": "core",
+          "skillId": "ritual_interpretation"
+        }
+      ],
+      "selectionSlots": [],
       "sortOrder": 3
     },
     {
       "description": "Practical trade, bargaining, and valuation training.",
       "id": "mercantile_practice",
       "name": "Mercantile Practice",
+      "skillMemberships": [
+        {
+          "relevance": "core",
+          "skillId": "bargaining"
+        },
+        {
+          "relevance": "core",
+          "skillId": "trading"
+        },
+        {
+          "relevance": "core",
+          "skillId": "appraisal"
+        }
+      ],
+      "selectionSlots": [],
       "sortOrder": 4
     },
     {
       "description": "Record-heavy office and mercantile administration training.",
       "id": "commercial_administration",
       "name": "Commercial Administration",
+      "skillMemberships": [
+        {
+          "relevance": "core",
+          "skillId": "bookkeeping"
+        },
+        {
+          "relevance": "core",
+          "skillId": "administration"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "bureaucratic_writing"
+        }
+      ],
+      "selectionSlots": [],
       "sortOrder": 5
     },
     {
       "description": "Basic training in elite manners, rank, and ceremonial conduct.",
       "id": "courtly_formation",
       "name": "Courtly Formation",
+      "skillMemberships": [
+        {
+          "relevance": "core",
+          "skillId": "etiquette"
+        },
+        {
+          "relevance": "core",
+          "skillId": "heraldry"
+        },
+        {
+          "relevance": "core",
+          "skillId": "courtly_protocol"
+        }
+      ],
+      "selectionSlots": [],
       "sortOrder": 6
     },
     {
       "description": "Reading people, factions, and elite social situations.",
       "id": "political_acumen",
       "name": "Political Acumen",
+      "skillMemberships": [
+        {
+          "relevance": "core",
+          "skillId": "intrigue"
+        },
+        {
+          "relevance": "core",
+          "skillId": "insight"
+        },
+        {
+          "relevance": "core",
+          "skillId": "social_perception"
+        }
+      ],
+      "selectionSlots": [],
       "sortOrder": 7
     },
     {
       "description": "Practical organized healing and immediate care.",
       "id": "healing_practice",
       "name": "Healing Practice",
+      "skillMemberships": [
+        {
+          "relevance": "core",
+          "skillId": "medicine"
+        },
+        {
+          "relevance": "core",
+          "skillId": "first_aid"
+        },
+        {
+          "relevance": "core",
+          "skillId": "nursing"
+        }
+      ],
+      "selectionSlots": [],
       "sortOrder": 8
     },
     {
       "description": "Plant, remedy, and poison-related healing knowledge.",
       "id": "herb_and_remedy_craft",
       "name": "Herb and Remedy Craft",
+      "skillMemberships": [
+        {
+          "relevance": "core",
+          "skillId": "herb_lore"
+        },
+        {
+          "relevance": "core",
+          "skillId": "pharmacy"
+        },
+        {
+          "relevance": "core",
+          "skillId": "poison_lore"
+        }
+      ],
+      "selectionSlots": [],
       "sortOrder": 9
     },
     {
       "description": "Basic sailor and working seamanship training.",
       "id": "maritime_crew_training",
       "name": "Maritime Crew Training",
+      "skillMemberships": [
+        {
+          "relevance": "core",
+          "skillId": "sailing"
+        },
+        {
+          "relevance": "core",
+          "skillId": "ropework"
+        },
+        {
+          "relevance": "core",
+          "skillId": "boat_handling"
+        }
+      ],
+      "selectionSlots": [],
       "sortOrder": 10
     },
     {
       "description": "Advanced maritime route-finding.",
       "id": "maritime_navigation",
       "name": "Maritime Navigation",
+      "skillMemberships": [
+        {
+          "relevance": "core",
+          "skillId": "navigation"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "sailing"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "measurement"
+        }
+      ],
+      "selectionSlots": [],
       "sortOrder": 11
     },
     {
       "description": "Practical stock, herd, and animal-working training.",
       "id": "animal_husbandry",
       "name": "Animal Husbandry",
+      "skillMemberships": [
+        {
+          "relevance": "core",
+          "skillId": "animal_care"
+        },
+        {
+          "relevance": "core",
+          "skillId": "herding"
+        },
+        {
+          "relevance": "core",
+          "skillId": "animal_training"
+        }
+      ],
+      "selectionSlots": [],
       "sortOrder": 12
     },
     {
       "description": "Riding and mounted practical service training.",
       "id": "mounted_service",
       "name": "Mounted Service",
+      "skillMemberships": [
+        {
+          "relevance": "core",
+          "skillId": "riding"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "animal_training"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "animal_care"
+        }
+      ],
+      "selectionSlots": [],
       "sortOrder": 13
     },
     {
       "description": "Overland freight and movement.",
       "id": "transport_and_caravan_work",
       "name": "Transport and Caravan Work",
+      "skillMemberships": [
+        {
+          "relevance": "core",
+          "skillId": "teamstering"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "animal_care"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "trading"
+        }
+      ],
+      "selectionSlots": [],
       "sortOrder": 14
     },
     {
       "description": "Burglary, stealth entry, and covert access skills.",
       "id": "covert_entry",
       "name": "Covert Entry",
+      "skillMemberships": [
+        {
+          "relevance": "core",
+          "skillId": "stealth"
+        },
+        {
+          "relevance": "core",
+          "skillId": "hide"
+        },
+        {
+          "relevance": "core",
+          "skillId": "lockpicking"
+        },
+        {
+          "relevance": "core",
+          "skillId": "search"
+        },
+        {
+          "relevance": "core",
+          "skillId": "trap_handling"
+        }
+      ],
+      "selectionSlots": [],
       "sortOrder": 15
     },
     {
       "description": "Urban theft and covert carry.",
       "id": "street_theft",
       "name": "Street Theft",
+      "skillMemberships": [
+        {
+          "relevance": "core",
+          "skillId": "pickpocket"
+        },
+        {
+          "relevance": "core",
+          "skillId": "conceal_object"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "stealth"
+        }
+      ],
+      "selectionSlots": [],
       "sortOrder": 16
-    },
-    {
-      "description": "Technical intrusion and trap-handling.",
-      "id": "trap_and_intrusion_work",
-      "name": "Trap and Intrusion Work",
-      "sortOrder": 17
     },
     {
       "description": "Rural stealth, concealment, and ambush skills.",
       "id": "fieldcraft_stealth",
       "name": "Fieldcraft Stealth",
+      "skillMemberships": [
+        {
+          "relevance": "optional",
+          "skillId": "stealth"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "hide"
+        },
+        {
+          "relevance": "core",
+          "skillId": "camouflage"
+        }
+      ],
+      "selectionSlots": [],
       "sortOrder": 18
     },
     {
       "description": "General movement and body-control training.",
       "id": "athletic_conditioning",
       "name": "Athletic Conditioning",
+      "skillMemberships": [
+        {
+          "relevance": "core",
+          "skillId": "climb"
+        },
+        {
+          "relevance": "core",
+          "skillId": "run"
+        },
+        {
+          "relevance": "core",
+          "skillId": "jump"
+        },
+        {
+          "relevance": "core",
+          "skillId": "balance"
+        }
+      ],
+      "selectionSlots": [],
       "sortOrder": 19
     },
     {
       "description": "Interpersonal judgment and emotional awareness.",
       "id": "social_reading",
       "name": "Social Reading",
+      "skillMemberships": [
+        {
+          "relevance": "optional",
+          "skillId": "insight"
+        },
+        {
+          "relevance": "core",
+          "skillId": "detect_lies"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "social_perception"
+        }
+      ],
+      "selectionSlots": [],
       "sortOrder": 20
     },
     {
       "description": "Broad entertainer and expressive performance package.",
       "id": "performance_basics",
       "name": "Performance Basics",
+      "skillMemberships": [
+        {
+          "relevance": "core",
+          "skillId": "singing"
+        },
+        {
+          "relevance": "core",
+          "skillId": "dancing"
+        },
+        {
+          "relevance": "core",
+          "skillId": "storytelling"
+        },
+        {
+          "relevance": "core",
+          "skillId": "music"
+        }
+      ],
+      "selectionSlots": [],
       "sortOrder": 21
     },
     {
       "description": "Elite, staged, or formal speaking/performance training.",
       "id": "formal_performance",
       "name": "Formal Performance",
+      "skillMemberships": [
+        {
+          "relevance": "core",
+          "skillId": "acting"
+        },
+        {
+          "relevance": "core",
+          "skillId": "recitation"
+        },
+        {
+          "relevance": "core",
+          "skillId": "oratory"
+        }
+      ],
+      "selectionSlots": [],
       "sortOrder": 22
     },
     {
       "description": "Trained inner control and focus.",
       "id": "mental_discipline",
       "name": "Mental Discipline",
+      "skillMemberships": [
+        {
+          "relevance": "core",
+          "skillId": "concentration"
+        },
+        {
+          "relevance": "core",
+          "skillId": "memory"
+        },
+        {
+          "relevance": "core",
+          "skillId": "self_control"
+        },
+        {
+          "relevance": "core",
+          "skillId": "meditation"
+        }
+      ],
+      "selectionSlots": [],
       "sortOrder": 23
     },
     {
       "description": "Practical technical, surveying, and measurement training.",
       "id": "technical_measurement",
       "name": "Technical Measurement",
+      "skillMemberships": [
+        {
+          "relevance": "core",
+          "skillId": "measurement"
+        },
+        {
+          "relevance": "core",
+          "skillId": "mathematics"
+        },
+        {
+          "relevance": "core",
+          "skillId": "surveying"
+        }
+      ],
+      "selectionSlots": [],
       "sortOrder": 24
     },
     {
       "description": "Advanced scientific and scholarly investigation.",
       "id": "learned_natural_inquiry",
       "name": "Learned Natural Inquiry",
+      "skillMemberships": [
+        {
+          "relevance": "optional",
+          "skillId": "mathematics"
+        },
+        {
+          "relevance": "core",
+          "skillId": "astronomy"
+        },
+        {
+          "relevance": "core",
+          "skillId": "natural_philosophy"
+        },
+        {
+          "relevance": "core",
+          "skillId": "alchemy"
+        }
+      ],
+      "selectionSlots": [],
       "sortOrder": 25
     },
     {
       "description": "Practical divinatory and ritual-interpretive training.",
       "id": "omen_and_ritual_practice",
       "name": "Omen and Ritual Practice",
+      "skillMemberships": [
+        {
+          "relevance": "core",
+          "skillId": "divination"
+        },
+        {
+          "relevance": "core",
+          "skillId": "omen_reading"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "ritual_interpretation"
+        }
+      ],
+      "selectionSlots": [],
       "sortOrder": 26
     },
     {
-      "description": "One melee attack skill plus Dodge and Parry.",
+      "description": "Dodge, parry, and brawling plus one required melee weapon skill.",
       "id": "basic_melee_training",
       "name": "Basic Melee Training",
+      "skillMemberships": [
+        {
+          "relevance": "core",
+          "skillId": "dodge"
+        },
+        {
+          "relevance": "core",
+          "skillId": "parry"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "brawling"
+        }
+      ],
+      "selectionSlots": [
+        {
+          "candidateSkillIds": [
+            "one_handed_edged",
+            "one_handed_concussion_axe",
+            "polearms",
+            "lance",
+            "two_handed_edged",
+            "two_handed_concussion_axe"
+          ],
+          "chooseCount": 1,
+          "id": "melee_weapon_choice",
+          "label": "Choose one melee weapon skill",
+          "required": true
+        }
+      ],
       "sortOrder": 27
     },
     {
-      "description": "Two related melee attack skills plus Dodge and Parry.",
+      "description": "Dodge, parry, and brawling plus three required melee weapon skills.",
       "id": "advanced_melee_training",
       "name": "Advanced Melee Training",
+      "skillMemberships": [
+        {
+          "relevance": "optional",
+          "skillId": "dodge"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "parry"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "brawling"
+        }
+      ],
+      "selectionSlots": [
+        {
+          "candidateSkillIds": [
+            "one_handed_edged",
+            "one_handed_concussion_axe",
+            "polearms",
+            "lance",
+            "two_handed_edged",
+            "two_handed_concussion_axe"
+          ],
+          "chooseCount": 3,
+          "id": "advanced_melee_weapon_choices",
+          "label": "Choose three melee weapon skills",
+          "required": true
+        }
+      ],
       "sortOrder": 28
     },
     {
-      "description": "One missile attack skill plus Dodge and Perception.",
+      "description": "Range focus, target awareness, weapon upkeep, and one required missile weapon skill.",
       "id": "basic_missile_training",
       "name": "Basic Missile Training",
+      "skillMemberships": [
+        {
+          "relevance": "core",
+          "skillId": "perception"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "concentration"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "weapon_maintenance"
+        }
+      ],
+      "selectionSlots": [
+        {
+          "candidateSkillIds": [
+            "throwing",
+            "sling",
+            "bow",
+            "crossbow"
+          ],
+          "chooseCount": 1,
+          "id": "missile_weapon_choice",
+          "label": "Choose one missile weapon skill",
+          "required": true
+        }
+      ],
       "sortOrder": 29
     },
     {
-      "description": "Broader trained ranged-combat package.",
+      "description": "Advanced range focus, battlefield judgment, weapon upkeep, and three required missile weapon skills.",
       "id": "advanced_missile_training",
       "name": "Advanced Missile Training",
+      "skillMemberships": [
+        {
+          "relevance": "optional",
+          "skillId": "perception"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "concentration"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "weapon_maintenance"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "battlefield_awareness"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "combat_experience"
+        }
+      ],
+      "selectionSlots": [
+        {
+          "candidateSkillIds": [
+            "throwing",
+            "sling",
+            "bow",
+            "crossbow"
+          ],
+          "chooseCount": 3,
+          "id": "advanced_missile_weapon_choices",
+          "label": "Choose three missile weapon skills",
+          "required": true
+        }
+      ],
       "sortOrder": 30
     },
     {
-      "description": "Defensive discipline and line-fighting package.",
+      "description": "Formation discipline, battlefield awareness, combat hardening, and practical aid for defensive service.",
       "id": "defensive_soldiering",
       "name": "Defensive Soldiering",
+      "skillMemberships": [
+        {
+          "relevance": "core",
+          "skillId": "formation_fighting"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "battlefield_awareness"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "perception"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "combat_experience"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "first_aid"
+        }
+      ],
+      "selectionSlots": [],
       "sortOrder": 31
     },
     {
       "description": "Proper mounted combat package.",
       "id": "mounted_warrior_training",
       "name": "Mounted Warrior Training",
+      "skillMemberships": [
+        {
+          "relevance": "optional",
+          "skillId": "riding"
+        },
+        {
+          "relevance": "core",
+          "skillId": "lance"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "one_handed_edged"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "dodge"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "parry"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "mounted_combat"
+        }
+      ],
+      "selectionSlots": [],
       "sortOrder": 32
     },
     {
-      "description": "Practical field-combat adaptation package.",
-      "id": "field_soldiering",
-      "name": "Field Soldiering",
+      "description": "Combat experience, battlefield awareness, field care, and equipment upkeep for experienced soldiers.",
+      "id": "veteran_soldiering",
+      "name": "Veteran Soldiering",
+      "skillMemberships": [
+        {
+          "relevance": "core",
+          "skillId": "combat_experience"
+        },
+        {
+          "relevance": "core",
+          "skillId": "battlefield_awareness"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "perception"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "first_aid"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "weapon_maintenance"
+        }
+      ],
+      "selectionSlots": [],
       "sortOrder": 33
     },
     {
-      "description": "Hardened battlefield survival and veteran composure package.",
-      "id": "veteran_soldiering",
-      "name": "Veteran Soldiering",
-      "sortOrder": 34
-    },
-    {
       "description": "Battlefield leadership and control package.",
-      "id": "officer_training",
-      "name": "Officer Training",
-      "sortOrder": 35
-    },
-    {
-      "description": "Seasoned military command under pressure.",
       "id": "veteran_leadership",
       "name": "Veteran Leadership",
-      "sortOrder": 36
+      "skillMemberships": [
+        {
+          "relevance": "core",
+          "skillId": "tactics"
+        },
+        {
+          "relevance": "core",
+          "skillId": "captaincy"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "perception"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "combat_experience"
+        }
+      ],
+      "selectionSlots": [],
+      "sortOrder": 35
     },
     {
       "description": "Animal care, training, riding, and related work.",
       "id": "animal_handling",
       "name": "Animal Handling",
+      "skillMemberships": [
+        {
+          "relevance": "optional",
+          "skillId": "animal_care"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "animal_training"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "herding"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "riding"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "teamstering"
+        },
+        {
+          "relevance": "core",
+          "skillId": "falconry"
+        }
+      ],
+      "selectionSlots": [],
       "sortOrder": 37
     },
     {
       "description": "Movement, balance, climbing, swimming, and body control.",
       "id": "athletics",
       "name": "Athletics",
+      "skillMemberships": [
+        {
+          "relevance": "optional",
+          "skillId": "climb"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "run"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "jump"
+        },
+        {
+          "relevance": "core",
+          "skillId": "swim"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "balance"
+        },
+        {
+          "relevance": "core",
+          "skillId": "acrobatics"
+        }
+      ],
+      "selectionSlots": [],
       "sortOrder": 38
     },
     {
       "description": "Literacy, language, history, theology, law, and related learned culture.",
       "id": "humanities",
       "name": "Humanities",
+      "skillMemberships": [
+        {
+          "relevance": "optional",
+          "skillId": "literacy"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "language"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "history"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "theology"
+        },
+        {
+          "relevance": "core",
+          "skillId": "philosophy"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "law"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "rhetorical_composition"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "etiquette"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "heraldry"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "courtly_protocol"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "insight"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "social_perception"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "detect_lies"
+        },
+        {
+          "relevance": "core",
+          "skillId": "seduction"
+        }
+      ],
+      "selectionSlots": [],
       "sortOrder": 39
     },
     {
       "description": "Healing, remedies, surgery, and related care.",
       "id": "medicine_group",
       "name": "Medicine",
+      "skillMemberships": [
+        {
+          "relevance": "optional",
+          "skillId": "medicine"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "first_aid"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "herb_lore"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "poison_lore"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "pharmacy"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "nursing"
+        }
+      ],
+      "selectionSlots": [],
       "sortOrder": 40
     },
     {
       "description": "Trade, administration, accounting, and practical organization.",
       "id": "operations",
       "name": "Operations",
+      "skillMemberships": [
+        {
+          "relevance": "optional",
+          "skillId": "bureaucratic_writing"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "bargaining"
+        },
+        {
+          "relevance": "core",
+          "skillId": "gambling"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "trading"
+        },
+        {
+          "relevance": "core",
+          "skillId": "banking"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "administration"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "intrigue"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "bookkeeping"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "appraisal"
+        }
+      ],
+      "selectionSlots": [],
       "sortOrder": 41
     },
     {
       "description": "Expressive, staged, musical, and spoken performance.",
       "id": "performance_group",
       "name": "Performance",
+      "skillMemberships": [
+        {
+          "relevance": "optional",
+          "skillId": "singing"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "dancing"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "storytelling"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "music"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "acting"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "recitation"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "oratory"
+        }
+      ],
+      "selectionSlots": [],
       "sortOrder": 42
     },
     {
       "description": "Measurement, mathematics, astronomy, and related inquiry.",
       "id": "physical_science",
       "name": "Physical Science",
+      "skillMemberships": [
+        {
+          "relevance": "optional",
+          "skillId": "measurement"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "mathematics"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "astronomy"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "alchemy"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "natural_philosophy"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "surveying"
+        },
+        {
+          "relevance": "core",
+          "skillId": "mechanics"
+        }
+      ],
+      "selectionSlots": [],
       "sortOrder": 43
     },
     {
       "description": "Search, locks, traps, concealment, and related covert handling.",
       "id": "security",
       "name": "Security",
+      "skillMemberships": [
+        {
+          "relevance": "optional",
+          "skillId": "perception"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "search"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "conceal_object"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "trap_handling"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "lockpicking"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "pickpocket"
+        }
+      ],
+      "selectionSlots": [],
       "sortOrder": 44
     },
     {
       "description": "Stealth, hiding, camouflage, and disguise.",
       "id": "stealth_group",
       "name": "Stealth",
+      "skillMemberships": [
+        {
+          "relevance": "optional",
+          "skillId": "stealth"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "hide"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "camouflage"
+        },
+        {
+          "relevance": "core",
+          "skillId": "disguise"
+        }
+      ],
+      "selectionSlots": [],
       "sortOrder": 45
     },
     {
       "description": "Attack, defense, weapon-family skills, and combat styles.",
       "id": "combat_group",
       "name": "Combat",
+      "skillMemberships": [
+        {
+          "relevance": "optional",
+          "skillId": "dodge"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "parry"
+        },
+        {
+          "relevance": "core",
+          "skillId": "brawling"
+        },
+        {
+          "relevance": "core",
+          "skillId": "one_handed_edged"
+        },
+        {
+          "relevance": "core",
+          "skillId": "one_handed_concussion_axe"
+        },
+        {
+          "relevance": "core",
+          "skillId": "two_handed_edged"
+        },
+        {
+          "relevance": "core",
+          "skillId": "polearms"
+        },
+        {
+          "relevance": "core",
+          "skillId": "two_handed_concussion_axe"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "lance"
+        },
+        {
+          "relevance": "core",
+          "skillId": "throwing"
+        },
+        {
+          "relevance": "core",
+          "skillId": "sling"
+        },
+        {
+          "relevance": "core",
+          "skillId": "bow"
+        },
+        {
+          "relevance": "core",
+          "skillId": "longbow"
+        },
+        {
+          "relevance": "core",
+          "skillId": "crossbow"
+        },
+        {
+          "relevance": "core",
+          "skillId": "mounted_combat"
+        }
+      ],
+      "selectionSlots": [],
       "sortOrder": 46
     },
     {
       "description": "Leadership, battlefield skill, veteran nerve, and unit fighting.",
       "id": "military_group",
       "name": "Military",
+      "skillMemberships": [
+        {
+          "relevance": "optional",
+          "skillId": "perception"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "weapon_maintenance"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "combat_experience"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "battlefield_awareness"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "formation_fighting"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "mounted_combat"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "tactics"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "captaincy"
+        }
+      ],
+      "selectionSlots": [],
       "sortOrder": 47
     },
     {
       "description": "Pottery, weaving, carpentry, smithing, and related making skills.",
       "id": "craft_group",
       "name": "Craft",
+      "skillMemberships": [
+        {
+          "relevance": "core",
+          "skillId": "pottery"
+        },
+        {
+          "relevance": "core",
+          "skillId": "weaving"
+        },
+        {
+          "relevance": "core",
+          "skillId": "leatherworking"
+        },
+        {
+          "relevance": "core",
+          "skillId": "carpentry"
+        },
+        {
+          "relevance": "core",
+          "skillId": "tailoring"
+        },
+        {
+          "relevance": "core",
+          "skillId": "baking"
+        },
+        {
+          "relevance": "core",
+          "skillId": "brewing"
+        },
+        {
+          "relevance": "core",
+          "skillId": "stoneworking"
+        },
+        {
+          "relevance": "core",
+          "skillId": "smithing"
+        },
+        {
+          "relevance": "core",
+          "skillId": "weapon_maintenance"
+        }
+      ],
+      "selectionSlots": [],
       "sortOrder": 48
     },
     {
       "description": "Concentration, memory, self-control, meditation, and awareness.",
       "id": "mental_group",
       "name": "Mental",
+      "skillMemberships": [
+        {
+          "relevance": "optional",
+          "skillId": "concentration"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "memory"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "self_control"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "meditation"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "perception"
+        }
+      ],
+      "selectionSlots": [],
       "sortOrder": 49
     },
     {
       "description": "Divination, omen reading, ritual interpretation, and astrology.",
       "id": "mystical_group",
       "name": "Mystical",
+      "skillMemberships": [
+        {
+          "relevance": "optional",
+          "skillId": "divination"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "omen_reading"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "ritual_interpretation"
+        },
+        {
+          "relevance": "core",
+          "skillId": "astrology"
+        }
+      ],
+      "selectionSlots": [],
       "sortOrder": 50
     },
     {
       "description": "Seamanship, navigation, riding, animal handling, and outdoor survival-adjacent practice.",
       "id": "wilderness_group",
       "name": "Wilderness",
+      "skillMemberships": [
+        {
+          "relevance": "optional",
+          "skillId": "animal_care"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "animal_training"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "herding"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "riding"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "teamstering"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "falconry"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "sailing"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "navigation"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "ropework"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "boat_handling"
+        }
+      ],
+      "selectionSlots": [],
       "sortOrder": 51
+    },
+    {
+      "description": "Arena awareness, showmanship, professional discipline, and practical weapon upkeep.",
+      "id": "arena_training",
+      "name": "Arena Training",
+      "skillMemberships": [
+        {
+          "relevance": "optional",
+          "skillId": "combat_experience"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "perception"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "acting"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "oratory"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "weapon_maintenance"
+        }
+      ],
+      "selectionSlots": [],
+      "sortOrder": 52
+    },
+    {
+      "description": "Road awareness, animal handling, search, and practical care for guarding overland routes.",
+      "id": "route_security",
+      "name": "Route Security",
+      "skillMemberships": [
+        {
+          "relevance": "optional",
+          "skillId": "perception"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "search"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "riding"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "animal_care"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "teamstering"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "first_aid"
+        }
+      ],
+      "selectionSlots": [],
+      "sortOrder": 53
+    },
+    {
+      "description": "Vessel command, navigation oversight, crew coordination, and shipboard judgment.",
+      "id": "ship_command",
+      "name": "Ship Command",
+      "skillMemberships": [
+        {
+          "relevance": "optional",
+          "skillId": "captaincy"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "sailing"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "navigation"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "perception"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "insight"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "oratory"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "administration"
+        }
+      ],
+      "selectionSlots": [],
+      "sortOrder": 54
+    },
+    {
+      "description": "Concealment, route movement, trading, and social judgment for moving restricted goods.",
+      "id": "smuggling_illicit_trade",
+      "name": "Smuggling / Illicit Trade",
+      "skillMemberships": [
+        {
+          "relevance": "optional",
+          "skillId": "conceal_object"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "stealth"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "trading"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "bargaining"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "teamstering"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "sailing"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "appraisal"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "insight"
+        }
+      ],
+      "selectionSlots": [],
+      "sortOrder": 55
+    },
+    {
+      "description": "Observation, search, basic law, and defensive procedure for civic watch and detention work.",
+      "id": "watch_civic_guard",
+      "name": "Watch / Civic Guard",
+      "skillMemberships": [
+        {
+          "relevance": "optional",
+          "skillId": "perception"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "search"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "law"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "insight"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "social_perception"
+        }
+      ],
+      "selectionSlots": [],
+      "sortOrder": 56
+    },
+    {
+      "description": "A chosen craft specialty for common artisan training.",
+      "id": "craft_specialty",
+      "name": "Craft Specialty",
+      "skillMemberships": [],
+      "selectionSlots": [
+        {
+          "candidateSkillIds": [
+            "pottery",
+            "weaving",
+            "leatherworking",
+            "carpentry",
+            "tailoring",
+            "baking",
+            "brewing",
+            "stoneworking",
+            "smithing",
+            "weapon_maintenance"
+          ],
+          "chooseCount": 1,
+          "id": "craft_specialty_choice",
+          "label": "Choose one craft specialty",
+          "required": true
+        }
+      ],
+      "sortOrder": 57
+    },
+    {
+      "description": "Two chosen craft specialties for master artisan and guild-level craft training.",
+      "id": "craft_specialty_advanced",
+      "name": "Advanced Craft Specialty",
+      "skillMemberships": [],
+      "selectionSlots": [
+        {
+          "candidateSkillIds": [
+            "pottery",
+            "weaving",
+            "leatherworking",
+            "carpentry",
+            "tailoring",
+            "baking",
+            "brewing",
+            "stoneworking",
+            "smithing",
+            "weapon_maintenance"
+          ],
+          "chooseCount": 1,
+          "id": "advanced_craft_specialty_choices",
+          "label": "Choose one craft specialty",
+          "required": true
+        }
+      ],
+      "sortOrder": 58
+    },
+    {
+      "description": "Construction specialty choices for master builders and masons.",
+      "id": "construction_specialty",
+      "name": "Construction Specialty",
+      "skillMemberships": [],
+      "selectionSlots": [
+        {
+          "candidateSkillIds": [
+            "stoneworking",
+            "carpentry",
+            "smithing",
+            "mechanics"
+          ],
+          "chooseCount": 2,
+          "id": "construction_specialty_choices",
+          "label": "Choose two construction specialties",
+          "required": true
+        }
+      ],
+      "sortOrder": 59
+    },
+    {
+      "description": "Herd movement, watchfulness, animal care, and practical field care for grazing work.",
+      "id": "pastoral_work",
+      "name": "Pastoral Work",
+      "skillMemberships": [
+        {
+          "relevance": "optional",
+          "skillId": "perception"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "search"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "animal_care"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "herding"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "riding"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "first_aid"
+        }
+      ],
+      "selectionSlots": [],
+      "sortOrder": 60
+    },
+    {
+      "description": "Household production, animal care, basic repair, and practical rural self-sufficiency.",
+      "id": "farm_household_work",
+      "name": "Farm / Household Work",
+      "skillMemberships": [
+        {
+          "relevance": "optional",
+          "skillId": "animal_care"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "herding"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "baking"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "brewing"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "carpentry"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "first_aid"
+        }
+      ],
+      "selectionSlots": [],
+      "sortOrder": 61
+    },
+    {
+      "description": "Coastal provisioning, boat handling, search, and practical safety for local fishers.",
+      "id": "coastal_fishing",
+      "name": "Coastal Fishing",
+      "skillMemberships": [
+        {
+          "relevance": "optional",
+          "skillId": "perception"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "search"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "sailing"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "ropework"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "boat_handling"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "swim"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "first_aid"
+        }
+      ],
+      "selectionSlots": [],
+      "sortOrder": 62
+    },
+    {
+      "description": "Woodland resource work, climbing, searching, rough labor, and basic timber craft.",
+      "id": "forestry_resource_work",
+      "name": "Forestry / Resource Work",
+      "skillMemberships": [
+        {
+          "relevance": "optional",
+          "skillId": "perception"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "search"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "climb"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "run"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "carpentry"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "first_aid"
+        }
+      ],
+      "selectionSlots": [],
+      "sortOrder": 63
+    },
+    {
+      "description": "Underground and quarry work, stone handling, searching, mechanics, and practical safety.",
+      "id": "mining_extraction",
+      "name": "Mining / Extraction",
+      "skillMemberships": [
+        {
+          "relevance": "optional",
+          "skillId": "perception"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "search"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "climb"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "run"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "stoneworking"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "mechanics"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "first_aid"
+        }
+      ],
+      "selectionSlots": [],
+      "sortOrder": 64
+    },
+    {
+      "description": "Formal study, learned argument, memory, and intellectual tradition.",
+      "id": "scholarly_formation",
+      "name": "Scholarly Formation",
+      "skillMemberships": [
+        {
+          "relevance": "optional",
+          "skillId": "history"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "philosophy"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "rhetorical_composition"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "memory"
+        }
+      ],
+      "selectionSlots": [],
+      "sortOrder": 65
+    },
+    {
+      "description": "Law, documents, advocacy, formal argument, and legal judgment.",
+      "id": "legal_practice",
+      "name": "Legal Practice",
+      "skillMemberships": [
+        {
+          "relevance": "optional",
+          "skillId": "law"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "oratory"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "bureaucratic_writing"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "rhetorical_composition"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "insight"
+        }
+      ],
+      "selectionSlots": [],
+      "sortOrder": 66
+    },
+    {
+      "description": "Tax, ledgers, valuation, accounts, and fiscal office work.",
+      "id": "fiscal_administration",
+      "name": "Fiscal Administration",
+      "skillMemberships": [
+        {
+          "relevance": "optional",
+          "skillId": "administration"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "bookkeeping"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "law"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "bargaining"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "appraisal"
+        }
+      ],
+      "selectionSlots": [],
+      "sortOrder": 67
+    },
+    {
+      "description": "Practical religious office, temple administration, public ritual, and formal religious service.",
+      "id": "temple_service",
+      "name": "Temple Service",
+      "skillMemberships": [
+        {
+          "relevance": "optional",
+          "skillId": "theology"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "ritual_interpretation"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "administration"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "oratory"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "etiquette"
+        }
+      ],
+      "selectionSlots": [],
+      "sortOrder": 68
+    },
+    {
+      "description": "Funerary preparation, ritual body care, remedy handling, and mortuary discipline.",
+      "id": "mortuary_practice",
+      "name": "Mortuary Practice",
+      "skillMemberships": [
+        {
+          "relevance": "optional",
+          "skillId": "medicine"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "pharmacy"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "ritual_interpretation"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "theology"
+        },
+        {
+          "relevance": "optional",
+          "skillId": "concentration"
+        }
+      ],
+      "selectionSlots": [],
+      "sortOrder": 69
     }
   ],
   "skills": [
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "knowledge",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Literacy Read and write a script used by the character’s culture. Gateway skill for learned and administrative roles.",
@@ -324,7 +2300,7 @@ export const generatedRepoLocalGlantriSeed = {
         "humanities"
       ],
       "id": "literacy",
-      "isTheoretical": false,
+      "isTheoretical": true,
       "linkedStats": [
         "int",
         "int"
@@ -336,17 +2312,19 @@ export const generatedRepoLocalGlantriSeed = {
       "sortOrder": 10
     },
     {
-      "allowsSpecializations": true,
+      "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "knowledge",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Language Speak and understand a language. Spoken language is universal; written use depends on Literacy.",
-      "groupId": "humanities",
+      "groupId": "literate_foundation",
       "groupIds": [
+        "literate_foundation",
         "humanities"
       ],
       "id": "language",
-      "isTheoretical": false,
+      "isTheoretical": true,
       "linkedStats": [
         "int",
         "int"
@@ -360,6 +2338,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "knowledge",
       "dependencies": [
         {
           "skillId": "language",
@@ -376,10 +2355,11 @@ export const generatedRepoLocalGlantriSeed = {
       "groupIds": [
         "literate_foundation",
         "sacred_learning",
-        "humanities"
+        "humanities",
+        "scholarly_formation"
       ],
       "id": "history",
-      "isTheoretical": false,
+      "isTheoretical": true,
       "linkedStats": [
         "int",
         "int"
@@ -393,6 +2373,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "knowledge",
       "dependencies": [
         {
           "skillId": "language",
@@ -408,10 +2389,12 @@ export const generatedRepoLocalGlantriSeed = {
       "groupId": "sacred_learning",
       "groupIds": [
         "sacred_learning",
-        "humanities"
+        "humanities",
+        "mortuary_practice",
+        "temple_service"
       ],
       "id": "theology",
-      "isTheoretical": false,
+      "isTheoretical": true,
       "linkedStats": [
         "int",
         "int"
@@ -425,6 +2408,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "knowledge",
       "dependencies": [
         {
           "skillId": "literacy",
@@ -441,7 +2425,8 @@ export const generatedRepoLocalGlantriSeed = {
       "description": "Use structured reasoning about ethics, logic, metaphysics, and knowledge. High-culture intellectual skill.",
       "groupId": "humanities",
       "groupIds": [
-        "humanities"
+        "humanities",
+        "scholarly_formation"
       ],
       "id": "philosophy",
       "isTheoretical": true,
@@ -458,6 +2443,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "knowledge",
       "dependencies": [
         {
           "skillId": "literacy",
@@ -469,7 +2455,10 @@ export const generatedRepoLocalGlantriSeed = {
       "groupId": "civic_learning",
       "groupIds": [
         "civic_learning",
-        "humanities"
+        "humanities",
+        "fiscal_administration",
+        "legal_practice",
+        "watch_civic_guard"
       ],
       "id": "law",
       "isTheoretical": true,
@@ -486,6 +2475,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "secondary",
+      "categoryId": "knowledge",
       "dependencies": [
         {
           "skillId": "literacy",
@@ -508,10 +2498,11 @@ export const generatedRepoLocalGlantriSeed = {
       "groupIds": [
         "civic_learning",
         "commercial_administration",
-        "operations"
+        "operations",
+        "legal_practice"
       ],
       "id": "bureaucratic_writing",
-      "isTheoretical": false,
+      "isTheoretical": true,
       "linkedStats": [
         "int",
         "int"
@@ -525,6 +2516,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "secondary",
+      "categoryId": "knowledge",
       "dependencies": [
         {
           "skillId": "literacy",
@@ -547,7 +2539,9 @@ export const generatedRepoLocalGlantriSeed = {
       "groupId": "civic_learning",
       "groupIds": [
         "civic_learning",
-        "humanities"
+        "humanities",
+        "legal_practice",
+        "scholarly_formation"
       ],
       "id": "rhetorical_composition",
       "isTheoretical": true,
@@ -564,6 +2558,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "knowledge",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Apply length, area, weight, volume, and proportion in practical use. Practical learned gateway.",
@@ -574,7 +2569,7 @@ export const generatedRepoLocalGlantriSeed = {
         "physical_science"
       ],
       "id": "measurement",
-      "isTheoretical": false,
+      "isTheoretical": true,
       "linkedStats": [
         "int",
         "int"
@@ -588,6 +2583,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "knowledge",
       "dependencies": [
         {
           "skillId": "measurement",
@@ -617,6 +2613,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "knowledge",
       "dependencies": [
         {
           "skillId": "mathematics",
@@ -649,6 +2646,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "knowledge",
       "dependencies": [
         {
           "skillId": "measurement",
@@ -685,6 +2683,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "secondary",
+      "categoryId": "knowledge",
       "dependencies": [
         {
           "skillId": "literacy",
@@ -719,7 +2718,8 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "allowsSpecializations": false,
-      "category": "secondary",
+      "category": "ordinary",
+      "categoryId": "knowledge",
       "dependencies": [
         {
           "skillId": "measurement",
@@ -736,7 +2736,7 @@ export const generatedRepoLocalGlantriSeed = {
         "physical_science"
       ],
       "id": "surveying",
-      "isTheoretical": false,
+      "isTheoretical": true,
       "linkedStats": [
         "int",
         "int"
@@ -749,7 +2749,8 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "allowsSpecializations": false,
-      "category": "secondary",
+      "category": "ordinary",
+      "categoryId": "knowledge",
       "dependencies": [
         {
           "skillId": "measurement",
@@ -764,7 +2765,9 @@ export const generatedRepoLocalGlantriSeed = {
       "description": "Understand simple machines, force transfer, moving parts, and practical mechanisms. Applied technical skill for devices, structural motion, simple machines, and engineering problem-solving.",
       "groupId": "physical_science",
       "groupIds": [
-        "physical_science"
+        "physical_science",
+        "construction_specialty",
+        "mining_extraction"
       ],
       "id": "mechanics",
       "isTheoretical": false,
@@ -781,13 +2784,16 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "trade",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Bargaining Negotiate prices, terms, favors, and exchanges. Universal exchange skill.",
       "groupId": "mercantile_practice",
       "groupIds": [
         "mercantile_practice",
-        "operations"
+        "operations",
+        "fiscal_administration",
+        "smuggling_illicit_trade"
       ],
       "id": "bargaining",
       "isTheoretical": false,
@@ -803,7 +2809,8 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "allowsSpecializations": false,
-      "category": "ordinary",
+      "category": "secondary",
+      "categoryId": "social",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Gambling Understand games of chance, betting behavior, and risk-taking. Flavorful, broad social/practical skill.",
@@ -826,6 +2833,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "trade",
       "dependencies": [
         {
           "skillId": "bargaining",
@@ -842,7 +2850,8 @@ export const generatedRepoLocalGlantriSeed = {
       "groupIds": [
         "mercantile_practice",
         "transport_and_caravan_work",
-        "operations"
+        "operations",
+        "smuggling_illicit_trade"
       ],
       "id": "trading",
       "isTheoretical": false,
@@ -859,6 +2868,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "trade",
       "dependencies": [
         {
           "skillId": "literacy",
@@ -884,7 +2894,7 @@ export const generatedRepoLocalGlantriSeed = {
         "operations"
       ],
       "id": "banking",
-      "isTheoretical": false,
+      "isTheoretical": true,
       "linkedStats": [
         "int",
         "dex"
@@ -898,6 +2908,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "trade",
       "dependencies": [
         {
           "skillId": "literacy",
@@ -911,10 +2922,13 @@ export const generatedRepoLocalGlantriSeed = {
       "groupId": "commercial_administration",
       "groupIds": [
         "commercial_administration",
-        "operations"
+        "operations",
+        "fiscal_administration",
+        "ship_command",
+        "temple_service"
       ],
       "id": "administration",
-      "isTheoretical": false,
+      "isTheoretical": true,
       "linkedStats": [
         "int",
         "dex"
@@ -928,6 +2942,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "high-society",
       "dependencies": [
         {
           "skillId": "insight",
@@ -963,7 +2978,8 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "allowsSpecializations": false,
-      "category": "secondary",
+      "category": "ordinary",
+      "categoryId": "trade",
       "dependencies": [
         {
           "skillId": "literacy",
@@ -981,7 +2997,8 @@ export const generatedRepoLocalGlantriSeed = {
       "groupId": "commercial_administration",
       "groupIds": [
         "commercial_administration",
-        "operations"
+        "operations",
+        "fiscal_administration"
       ],
       "id": "bookkeeping",
       "isTheoretical": false,
@@ -997,7 +3014,8 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "allowsSpecializations": false,
-      "category": "secondary",
+      "category": "ordinary",
+      "categoryId": "trade",
       "dependencies": [
         {
           "skillId": "bargaining",
@@ -1013,7 +3031,9 @@ export const generatedRepoLocalGlantriSeed = {
       "groupId": "mercantile_practice",
       "groupIds": [
         "mercantile_practice",
-        "operations"
+        "operations",
+        "fiscal_administration",
+        "smuggling_illicit_trade"
       ],
       "id": "appraisal",
       "isTheoretical": false,
@@ -1030,16 +3050,18 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": true,
       "category": "ordinary",
+      "categoryId": "high-society",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Know expected manners, forms of respect, and socially correct behavior. Broad elite-social core.",
       "groupId": "courtly_formation",
       "groupIds": [
         "courtly_formation",
-        "humanities"
+        "humanities",
+        "temple_service"
       ],
       "id": "etiquette",
-      "isTheoretical": false,
+      "isTheoretical": true,
       "linkedStats": [
         "cha",
         "int"
@@ -1053,6 +3075,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "high-society",
       "dependencies": [
         {
           "skillId": "etiquette",
@@ -1069,7 +3092,7 @@ export const generatedRepoLocalGlantriSeed = {
         "humanities"
       ],
       "id": "heraldry",
-      "isTheoretical": false,
+      "isTheoretical": true,
       "linkedStats": [
         "cha",
         "int"
@@ -1082,7 +3105,8 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "allowsSpecializations": false,
-      "category": "secondary",
+      "category": "ordinary",
+      "categoryId": "high-society",
       "dependencies": [
         {
           "skillId": "etiquette",
@@ -1099,7 +3123,7 @@ export const generatedRepoLocalGlantriSeed = {
         "humanities"
       ],
       "id": "courtly_protocol",
-      "isTheoretical": false,
+      "isTheoretical": true,
       "linkedStats": [
         "cha",
         "int"
@@ -1113,6 +3137,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "social",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Read mood, intention, sincerity, fear, uncertainty, or emotional state. Broad social-reading core.",
@@ -1120,7 +3145,11 @@ export const generatedRepoLocalGlantriSeed = {
       "groupIds": [
         "political_acumen",
         "social_reading",
-        "humanities"
+        "humanities",
+        "legal_practice",
+        "ship_command",
+        "smuggling_illicit_trade",
+        "watch_civic_guard"
       ],
       "id": "insight",
       "isTheoretical": false,
@@ -1137,6 +3166,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "secondary",
+      "categoryId": "social",
       "dependencies": [
         {
           "skillId": "insight",
@@ -1151,7 +3181,8 @@ export const generatedRepoLocalGlantriSeed = {
       "groupIds": [
         "political_acumen",
         "social_reading",
-        "humanities"
+        "humanities",
+        "watch_civic_guard"
       ],
       "id": "social_perception",
       "isTheoretical": false,
@@ -1168,6 +3199,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "secondary",
+      "categoryId": "social",
       "dependencies": [
         {
           "skillId": "insight",
@@ -1202,6 +3234,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "secondary",
+      "categoryId": "social",
       "dependencies": [
         {
           "skillId": "insight",
@@ -1235,6 +3268,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "performance",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Use the voice for song, pitch, rhythm, and expression. Broad expressive and social primary.",
@@ -1258,6 +3292,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "performance",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Dancing Perform structured or improvised movement for ritual, celebration, or display. Broad expressive and social primary.",
@@ -1281,6 +3316,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "performance",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Hold attention through spoken narrative, pacing, memory, and dramatic delivery. Strong oral-performance core.",
@@ -1304,6 +3340,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "performance",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Play or perform structured instrumental music. Performance profession core.",
@@ -1326,7 +3363,8 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "allowsSpecializations": false,
-      "category": "secondary",
+      "category": "ordinary",
+      "categoryId": "performance",
       "dependencies": [
         {
           "skillId": "storytelling",
@@ -1338,7 +3376,8 @@ export const generatedRepoLocalGlantriSeed = {
       "groupId": "formal_performance",
       "groupIds": [
         "formal_performance",
-        "performance_group"
+        "performance_group",
+        "arena_training"
       ],
       "id": "acting",
       "isTheoretical": false,
@@ -1355,6 +3394,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "secondary",
+      "categoryId": "performance",
       "dependencies": [
         {
           "skillId": "language",
@@ -1382,7 +3422,8 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "allowsSpecializations": false,
-      "category": "secondary",
+      "category": "ordinary",
+      "categoryId": "performance",
       "dependencies": [
         {
           "skillId": "language",
@@ -1400,7 +3441,11 @@ export const generatedRepoLocalGlantriSeed = {
       "groupId": "formal_performance",
       "groupIds": [
         "formal_performance",
-        "performance_group"
+        "performance_group",
+        "arena_training",
+        "legal_practice",
+        "ship_command",
+        "temple_service"
       ],
       "id": "oratory",
       "isTheoretical": false,
@@ -1417,13 +3462,17 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "mental",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Sustain attention and mental focus under distraction or pressure. Broad mental-discipline core.",
       "groupId": "mental_discipline",
       "groupIds": [
         "mental_discipline",
-        "mental_group"
+        "mental_group",
+        "basic_missile_training",
+        "advanced_missile_training",
+        "mortuary_practice"
       ],
       "id": "concentration",
       "isTheoretical": false,
@@ -1440,13 +3489,15 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "mental",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Retain, recall, and organize learned details or patterns. Broad cognitive core.",
       "groupId": "mental_discipline",
       "groupIds": [
         "mental_discipline",
-        "mental_group"
+        "mental_group",
+        "scholarly_formation"
       ],
       "id": "memory",
       "isTheoretical": false,
@@ -1463,6 +3514,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "mental",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Govern impulse, fear, pain response, and emotional reaction under pressure. Broad mental and emotional control core.",
@@ -1485,7 +3537,8 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "allowsSpecializations": false,
-      "category": "secondary",
+      "category": "ordinary",
+      "categoryId": "mental",
       "dependencies": [
         {
           "skillId": "concentration",
@@ -1516,17 +3569,28 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "combat",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Perception Notice relevant details, threats, movement, and hidden information. Core observation skill in and out of combat.",
       "groupId": "basic_missile_training",
       "groupIds": [
         "basic_missile_training",
-        "officer_training",
+        "advanced_missile_training",
+        "veteran_leadership",
         "veteran_soldiering",
         "security",
         "military_group",
-        "mental_group"
+        "mental_group",
+        "arena_training",
+        "defensive_soldiering",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction",
+        "pastoral_work",
+        "route_security",
+        "ship_command",
+        "watch_civic_guard"
       ],
       "id": "perception",
       "isTheoretical": false,
@@ -1543,6 +3607,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "fieldcraft",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Animal care Feed, calm, house, and maintain animals in routine condition. Broad baseline animal profession skill.",
@@ -1552,7 +3617,10 @@ export const generatedRepoLocalGlantriSeed = {
         "mounted_service",
         "transport_and_caravan_work",
         "animal_handling",
-        "wilderness_group"
+        "wilderness_group",
+        "farm_household_work",
+        "pastoral_work",
+        "route_security"
       ],
       "id": "animal_care",
       "isTheoretical": false,
@@ -1569,6 +3637,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "fieldcraft",
       "dependencies": [
         {
           "skillId": "animal_care",
@@ -1601,6 +3670,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "fieldcraft",
       "dependencies": [
         {
           "skillId": "animal_care",
@@ -1613,7 +3683,9 @@ export const generatedRepoLocalGlantriSeed = {
       "groupIds": [
         "animal_husbandry",
         "animal_handling",
-        "wilderness_group"
+        "wilderness_group",
+        "farm_household_work",
+        "pastoral_work"
       ],
       "id": "herding",
       "isTheoretical": false,
@@ -1630,6 +3702,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "fieldcraft",
       "dependencies": [
         {
           "skillId": "animal_training",
@@ -1643,7 +3716,9 @@ export const generatedRepoLocalGlantriSeed = {
         "mounted_service",
         "mounted_warrior_training",
         "animal_handling",
-        "wilderness_group"
+        "wilderness_group",
+        "pastoral_work",
+        "route_security"
       ],
       "id": "riding",
       "isTheoretical": false,
@@ -1659,7 +3734,8 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "allowsSpecializations": false,
-      "category": "secondary",
+      "category": "ordinary",
+      "categoryId": "fieldcraft",
       "dependencies": [
         {
           "skillId": "animal_care",
@@ -1672,7 +3748,9 @@ export const generatedRepoLocalGlantriSeed = {
       "groupIds": [
         "transport_and_caravan_work",
         "animal_handling",
-        "wilderness_group"
+        "wilderness_group",
+        "route_security",
+        "smuggling_illicit_trade"
       ],
       "id": "teamstering",
       "isTheoretical": false,
@@ -1689,6 +3767,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "secondary",
+      "categoryId": "fieldcraft",
       "dependencies": [
         {
           "skillId": "animal_training",
@@ -1719,6 +3798,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "maritime",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Sailing Handle sails and work aboard a vessel under routine maritime conditions. Core sailor profession skill.",
@@ -1726,7 +3806,10 @@ export const generatedRepoLocalGlantriSeed = {
       "groupIds": [
         "maritime_crew_training",
         "maritime_navigation",
-        "wilderness_group"
+        "wilderness_group",
+        "coastal_fishing",
+        "ship_command",
+        "smuggling_illicit_trade"
       ],
       "id": "sailing",
       "isTheoretical": false,
@@ -1743,6 +3826,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": true,
       "category": "ordinary",
+      "categoryId": "maritime",
       "dependencies": [
         {
           "skillId": "sailing",
@@ -1760,10 +3844,11 @@ export const generatedRepoLocalGlantriSeed = {
       "groupId": "maritime_navigation",
       "groupIds": [
         "maritime_navigation",
-        "wilderness_group"
+        "wilderness_group",
+        "ship_command"
       ],
       "id": "navigation",
-      "isTheoretical": false,
+      "isTheoretical": true,
       "linkedStats": [
         "dex",
         "int"
@@ -1777,6 +3862,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "secondary",
+      "categoryId": "maritime",
       "dependencies": [
         {
           "skillId": "sailing",
@@ -1788,7 +3874,8 @@ export const generatedRepoLocalGlantriSeed = {
       "groupId": "maritime_crew_training",
       "groupIds": [
         "maritime_crew_training",
-        "wilderness_group"
+        "wilderness_group",
+        "coastal_fishing"
       ],
       "id": "ropework",
       "isTheoretical": false,
@@ -1805,6 +3892,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "secondary",
+      "categoryId": "maritime",
       "dependencies": [
         {
           "skillId": "sailing",
@@ -1816,7 +3904,8 @@ export const generatedRepoLocalGlantriSeed = {
       "groupId": "maritime_crew_training",
       "groupIds": [
         "maritime_crew_training",
-        "wilderness_group"
+        "wilderness_group",
+        "coastal_fishing"
       ],
       "id": "boat_handling",
       "isTheoretical": false,
@@ -1833,13 +3922,16 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "physical",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Climb Climb natural or built surfaces safely and efficiently. Broad adventuring physical core.",
       "groupId": "athletic_conditioning",
       "groupIds": [
         "athletic_conditioning",
-        "athletics"
+        "athletics",
+        "forestry_resource_work",
+        "mining_extraction"
       ],
       "id": "climb",
       "isTheoretical": false,
@@ -1856,13 +3948,16 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "physical",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Run Sprint, pace, pursue, and move rapidly on foot. Broad movement core.",
       "groupId": "athletic_conditioning",
       "groupIds": [
         "athletic_conditioning",
-        "athletics"
+        "athletics",
+        "forestry_resource_work",
+        "mining_extraction"
       ],
       "id": "run",
       "isTheoretical": false,
@@ -1879,6 +3974,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "physical",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Leap gaps, obstacles, and vertical distances with control. Broad movement core.",
@@ -1901,13 +3997,15 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "allowsSpecializations": false,
-      "category": "ordinary",
+      "category": "secondary",
+      "categoryId": "physical",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Swim Move safely and effectively through water. Broad physical survival and adventure core.",
       "groupId": "athletics",
       "groupIds": [
-        "athletics"
+        "athletics",
+        "coastal_fishing"
       ],
       "id": "swim",
       "isTheoretical": false,
@@ -1924,6 +4022,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "secondary",
+      "categoryId": "physical",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Keep footing on narrow, unstable, moving, or slippery surfaces. Cheap narrow movement enhancer.",
@@ -1947,6 +4046,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "secondary",
+      "categoryId": "physical",
       "dependencies": [
         {
           "skillId": "balance",
@@ -1978,14 +4078,20 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "covert",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Search persons, containers, rooms, or sites for hidden items or traces. Broad enough to support several roles.",
       "groupId": "covert_entry",
       "groupIds": [
         "covert_entry",
-        "trap_and_intrusion_work",
-        "security"
+        "security",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction",
+        "pastoral_work",
+        "route_security",
+        "watch_civic_guard"
       ],
       "id": "search",
       "isTheoretical": false,
@@ -2002,6 +4108,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "secondary",
+      "categoryId": "covert",
       "dependencies": [
         {
           "skillId": "stealth",
@@ -2013,7 +4120,8 @@ export const generatedRepoLocalGlantriSeed = {
       "groupId": "street_theft",
       "groupIds": [
         "street_theft",
-        "security"
+        "security",
+        "smuggling_illicit_trade"
       ],
       "id": "conceal_object",
       "isTheoretical": false,
@@ -2030,6 +4138,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "secondary",
+      "categoryId": "covert",
       "dependencies": [
         {
           "skillId": "search",
@@ -2040,9 +4149,9 @@ export const generatedRepoLocalGlantriSeed = {
         "search"
       ],
       "description": "Detect, avoid, disarm, or set traps and trigger mechanisms. Useful narrow technical secondary.",
-      "groupId": "trap_and_intrusion_work",
+      "groupId": "covert_entry",
       "groupIds": [
-        "trap_and_intrusion_work",
+        "covert_entry",
         "security"
       ],
       "id": "trap_handling",
@@ -2059,7 +4168,8 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "allowsSpecializations": false,
-      "category": "secondary",
+      "category": "ordinary",
+      "categoryId": "covert",
       "dependencies": [
         {
           "skillId": "search",
@@ -2073,7 +4183,6 @@ export const generatedRepoLocalGlantriSeed = {
       "groupId": "covert_entry",
       "groupIds": [
         "covert_entry",
-        "trap_and_intrusion_work",
         "security"
       ],
       "id": "lockpicking",
@@ -2091,6 +4200,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "secondary",
+      "categoryId": "covert",
       "dependencies": [
         {
           "skillId": "stealth",
@@ -2119,14 +4229,17 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "covert",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Stealth Move quietly, stay unnoticed, and avoid attention while approaching or withdrawing. Core covert movement skill.",
       "groupId": "covert_entry",
       "groupIds": [
         "covert_entry",
+        "street_theft",
         "fieldcraft_stealth",
-        "stealth_group"
+        "stealth_group",
+        "smuggling_illicit_trade"
       ],
       "id": "stealth",
       "isTheoretical": false,
@@ -2143,6 +4256,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "secondary",
+      "categoryId": "covert",
       "dependencies": [
         {
           "skillId": "stealth",
@@ -2174,6 +4288,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "secondary",
+      "categoryId": "fieldcraft",
       "dependencies": [
         {
           "skillId": "stealth",
@@ -2204,6 +4319,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "secondary",
+      "categoryId": "covert",
       "dependencies": [
         {
           "skillId": "stealth",
@@ -2237,12 +4353,15 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "craft",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Shape, fire, and finish clay vessels and ceramic goods. Very early settled craft.",
       "groupId": "craft_group",
       "groupIds": [
-        "craft_group"
+        "craft_group",
+        "craft_specialty",
+        "craft_specialty_advanced"
       ],
       "id": "pottery",
       "isTheoretical": false,
@@ -2259,12 +4378,15 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "craft",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Produce woven cloth, bands, and simple textiles. Very early settled craft.",
       "groupId": "craft_group",
       "groupIds": [
-        "craft_group"
+        "craft_group",
+        "craft_specialty",
+        "craft_specialty_advanced"
       ],
       "id": "weaving",
       "isTheoretical": false,
@@ -2281,12 +4403,15 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "craft",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Cut, cure, shape, and repair leather goods and hide equipment. Broad practical craft core.",
       "groupId": "craft_group",
       "groupIds": [
-        "craft_group"
+        "craft_group",
+        "craft_specialty",
+        "craft_specialty_advanced"
       ],
       "id": "leatherworking",
       "isTheoretical": false,
@@ -2303,12 +4428,18 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "craft",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Make and repair wooden structures, fittings, tools, and objects. Broad craft core.",
       "groupId": "craft_group",
       "groupIds": [
-        "craft_group"
+        "craft_group",
+        "craft_specialty",
+        "craft_specialty_advanced",
+        "construction_specialty",
+        "farm_household_work",
+        "forestry_resource_work"
       ],
       "id": "carpentry",
       "isTheoretical": false,
@@ -2324,7 +4455,8 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "allowsSpecializations": false,
-      "category": "secondary",
+      "category": "ordinary",
+      "categoryId": "craft",
       "dependencies": [
         {
           "skillId": "weaving",
@@ -2335,7 +4467,9 @@ export const generatedRepoLocalGlantriSeed = {
       "description": "Cut, fit, alter, and finish garments. Attractive support craft.",
       "groupId": "craft_group",
       "groupIds": [
-        "craft_group"
+        "craft_group",
+        "craft_specialty",
+        "craft_specialty_advanced"
       ],
       "id": "tailoring",
       "isTheoretical": false,
@@ -2351,13 +4485,17 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "allowsSpecializations": false,
-      "category": "secondary",
+      "category": "ordinary",
+      "categoryId": "craft",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Prepare and bake bread and staple oven foods reliably. Useful domestic and provisioning secondary.",
       "groupId": "craft_group",
       "groupIds": [
-        "craft_group"
+        "craft_group",
+        "craft_specialty",
+        "craft_specialty_advanced",
+        "farm_household_work"
       ],
       "id": "baking",
       "isTheoretical": false,
@@ -2373,13 +4511,17 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "allowsSpecializations": false,
-      "category": "secondary",
+      "category": "ordinary",
+      "categoryId": "craft",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Produce fermented drink from grain, fruit, honey, or similar materials. Useful domestic and commercial secondary.",
       "groupId": "craft_group",
       "groupIds": [
-        "craft_group"
+        "craft_group",
+        "craft_specialty",
+        "craft_specialty_advanced",
+        "farm_household_work"
       ],
       "id": "brewing",
       "isTheoretical": false,
@@ -2396,12 +4538,17 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "craft",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Cut, dress, shape, and fit stone for tools, structures, and finishes. Strong structural craft core.",
       "groupId": "craft_group",
       "groupIds": [
-        "craft_group"
+        "craft_group",
+        "craft_specialty",
+        "craft_specialty_advanced",
+        "construction_specialty",
+        "mining_extraction"
       ],
       "id": "stoneworking",
       "isTheoretical": false,
@@ -2418,12 +4565,16 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": true,
       "category": "ordinary",
+      "categoryId": "craft",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Forge, shape, and repair metal tools, fittings, and simple equipment. Broad metalworking core.",
       "groupId": "craft_group",
       "groupIds": [
-        "craft_group"
+        "craft_group",
+        "craft_specialty",
+        "craft_specialty_advanced",
+        "construction_specialty"
       ],
       "id": "smithing",
       "isTheoretical": false,
@@ -2440,6 +4591,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "secondary",
+      "categoryId": "craft",
       "dependencies": [
         {
           "skillId": "smithing",
@@ -2451,7 +4603,13 @@ export const generatedRepoLocalGlantriSeed = {
       "groupId": "craft_group",
       "groupIds": [
         "craft_group",
-        "military_group"
+        "military_group",
+        "craft_specialty",
+        "craft_specialty_advanced",
+        "arena_training",
+        "basic_missile_training",
+        "advanced_missile_training",
+        "veteran_soldiering"
       ],
       "id": "weapon_maintenance",
       "isTheoretical": false,
@@ -2468,6 +4626,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": true,
       "category": "ordinary",
+      "categoryId": "healing",
       "dependencies": [
         {
           "skillId": "literacy",
@@ -2479,7 +4638,8 @@ export const generatedRepoLocalGlantriSeed = {
       "groupId": "healing_practice",
       "groupIds": [
         "healing_practice",
-        "medicine_group"
+        "medicine_group",
+        "mortuary_practice"
       ],
       "id": "medicine",
       "isTheoretical": true,
@@ -2496,13 +4656,22 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "secondary",
+      "categoryId": "healing",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "First aid Give immediate practical treatment to stabilize wounds, bleeding, shock, and urgent injury. Intentionally secondary; light, in-the-moment care.",
       "groupId": "healing_practice",
       "groupIds": [
         "healing_practice",
-        "medicine_group"
+        "medicine_group",
+        "defensive_soldiering",
+        "coastal_fishing",
+        "farm_household_work",
+        "forestry_resource_work",
+        "mining_extraction",
+        "pastoral_work",
+        "route_security",
+        "veteran_soldiering"
       ],
       "id": "first_aid",
       "isTheoretical": false,
@@ -2519,6 +4688,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "healing",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Herb lore Know medicinal, harmful, and useful plants and their common uses. Strong low-tech or hybrid healing core.",
@@ -2542,6 +4712,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "healing",
       "dependencies": [
         {
           "skillId": "herb_lore",
@@ -2573,7 +4744,8 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "allowsSpecializations": false,
-      "category": "secondary",
+      "category": "ordinary",
+      "categoryId": "healing",
       "dependencies": [
         {
           "skillId": "medicine",
@@ -2593,7 +4765,8 @@ export const generatedRepoLocalGlantriSeed = {
       "groupId": "herb_and_remedy_craft",
       "groupIds": [
         "herb_and_remedy_craft",
-        "medicine_group"
+        "medicine_group",
+        "mortuary_practice"
       ],
       "id": "pharmacy",
       "isTheoretical": false,
@@ -2610,6 +4783,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "secondary",
+      "categoryId": "healing",
       "dependencies": [
         {
           "skillId": "first_aid",
@@ -2638,6 +4812,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "mystical",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Interpret signs, omens, visions, or ritual indicators for hidden meaning. Broad mystical core.",
@@ -2661,6 +4836,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": true,
       "category": "secondary",
+      "categoryId": "mystical",
       "dependencies": [
         {
           "skillId": "divination",
@@ -2677,7 +4853,7 @@ export const generatedRepoLocalGlantriSeed = {
         "mystical_group"
       ],
       "id": "omen_reading",
-      "isTheoretical": false,
+      "isTheoretical": true,
       "linkedStats": [
         "pow",
         "int"
@@ -2690,7 +4866,8 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "allowsSpecializations": false,
-      "category": "secondary",
+      "category": "ordinary",
+      "categoryId": "knowledge",
       "dependencies": [
         {
           "skillId": "divination",
@@ -2709,10 +4886,12 @@ export const generatedRepoLocalGlantriSeed = {
       "groupIds": [
         "sacred_learning",
         "omen_and_ritual_practice",
-        "mystical_group"
+        "mystical_group",
+        "mortuary_practice",
+        "temple_service"
       ],
       "id": "ritual_interpretation",
-      "isTheoretical": false,
+      "isTheoretical": true,
       "linkedStats": [
         "pow",
         "int"
@@ -2725,7 +4904,8 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "allowsSpecializations": false,
-      "category": "secondary",
+      "category": "ordinary",
+      "categoryId": "mystical",
       "dependencies": [
         {
           "skillId": "divination",
@@ -2749,7 +4929,7 @@ export const generatedRepoLocalGlantriSeed = {
         "mystical_group"
       ],
       "id": "astrology",
-      "isTheoretical": false,
+      "isTheoretical": true,
       "linkedStats": [
         "pow",
         "int"
@@ -2762,19 +4942,16 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "allowsSpecializations": false,
-      "category": "ordinary",
+      "category": "secondary",
+      "categoryId": "combat",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Dodge Avoid attacks through movement, timing, and body positioning. Core defense; part of real melee training.",
       "groupId": "basic_melee_training",
       "groupIds": [
         "basic_melee_training",
-        "basic_missile_training",
         "advanced_melee_training",
-        "advanced_missile_training",
-        "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "combat_group"
       ],
       "id": "dodge",
@@ -2791,7 +4968,8 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "allowsSpecializations": false,
-      "category": "ordinary",
+      "category": "secondary",
+      "categoryId": "combat",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Parry Defend with weapon or shield by turning aside or controlling an attack. Core defense; includes shield use in base model.",
@@ -2799,7 +4977,6 @@ export const generatedRepoLocalGlantriSeed = {
       "groupIds": [
         "basic_melee_training",
         "advanced_melee_training",
-        "defensive_soldiering",
         "mounted_warrior_training",
         "combat_group"
       ],
@@ -2817,13 +4994,16 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "allowsSpecializations": false,
-      "category": "ordinary",
+      "category": "secondary",
+      "categoryId": "combat",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Brawling Fight effectively with punches, kicks, grapples, and rough unarmed violence. Baseline unarmed attack skill.",
       "groupId": "combat_group",
       "groupIds": [
-        "combat_group"
+        "combat_group",
+        "basic_melee_training",
+        "advanced_melee_training"
       ],
       "id": "brawling",
       "isTheoretical": false,
@@ -2839,14 +5019,17 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "allowsSpecializations": true,
-      "category": "ordinary",
+      "category": "secondary",
+      "categoryId": "combat",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "1-h edged Fight with one-handed bladed weapons. Core melee attack family.",
-      "groupId": "mounted_warrior_training",
+      "groupId": "combat_group",
       "groupIds": [
+        "combat_group",
         "mounted_warrior_training",
-        "combat_group"
+        "basic_melee_training",
+        "advanced_melee_training"
       ],
       "id": "one_handed_edged",
       "isTheoretical": false,
@@ -2862,13 +5045,16 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "allowsSpecializations": false,
-      "category": "ordinary",
+      "category": "secondary",
+      "categoryId": "combat",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "1-h conc./axe Fight with one-handed crushing or chopping weapons such as maces and axes. Core melee attack family.",
       "groupId": "combat_group",
       "groupIds": [
-        "combat_group"
+        "combat_group",
+        "basic_melee_training",
+        "advanced_melee_training"
       ],
       "id": "one_handed_concussion_axe",
       "isTheoretical": false,
@@ -2884,13 +5070,16 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "allowsSpecializations": false,
-      "category": "ordinary",
+      "category": "secondary",
+      "categoryId": "combat",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "2-h edged Fight with large two-handed bladed weapons using strength, reach, and committed technique. Heavy cutting or slashing weapon family. Split from the former broad 2-handed Weapons row to align better with the source combat structure.",
       "groupId": "combat_group",
       "groupIds": [
-        "combat_group"
+        "combat_group",
+        "basic_melee_training",
+        "advanced_melee_training"
       ],
       "id": "two_handed_edged",
       "isTheoretical": false,
@@ -2906,13 +5095,16 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "allowsSpecializations": false,
-      "category": "ordinary",
+      "category": "secondary",
+      "categoryId": "combat",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Polearms Fight with spears and longer pole weapons used at reach. Very important common-soldier weapon family.",
       "groupId": "combat_group",
       "groupIds": [
-        "combat_group"
+        "combat_group",
+        "basic_melee_training",
+        "advanced_melee_training"
       ],
       "id": "polearms",
       "isTheoretical": false,
@@ -2928,13 +5120,16 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "allowsSpecializations": false,
-      "category": "ordinary",
+      "category": "secondary",
+      "categoryId": "combat",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "2-h conc./axe Fight with large two-handed crushing or chopping weapons such as great axes, hammers, or mauls. Heavy impact/chopping weapon family. Split from the former broad 2-handed Weapons row to align better with the source combat structure.",
       "groupId": "combat_group",
       "groupIds": [
-        "combat_group"
+        "combat_group",
+        "basic_melee_training",
+        "advanced_melee_training"
       ],
       "id": "two_handed_concussion_axe",
       "isTheoretical": false,
@@ -2950,7 +5145,8 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "allowsSpecializations": false,
-      "category": "ordinary",
+      "category": "secondary",
+      "categoryId": "combat",
       "dependencies": [
         {
           "skillId": "riding",
@@ -2962,7 +5158,9 @@ export const generatedRepoLocalGlantriSeed = {
       "groupId": "mounted_warrior_training",
       "groupIds": [
         "mounted_warrior_training",
-        "combat_group"
+        "combat_group",
+        "basic_melee_training",
+        "advanced_melee_training"
       ],
       "id": "lance",
       "isTheoretical": false,
@@ -2978,13 +5176,16 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "allowsSpecializations": false,
-      "category": "ordinary",
+      "category": "secondary",
+      "categoryId": "combat",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Throwing Attack accurately with thrown weapons such as javelins, knives, or axes. Practical ranged family.",
       "groupId": "combat_group",
       "groupIds": [
-        "combat_group"
+        "combat_group",
+        "basic_missile_training",
+        "advanced_missile_training"
       ],
       "id": "throwing",
       "isTheoretical": false,
@@ -3000,13 +5201,16 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "allowsSpecializations": false,
-      "category": "ordinary",
+      "category": "secondary",
+      "categoryId": "combat",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Sling Use sling-based missile weapons effectively in combat or hunting. Distinct missile family.",
       "groupId": "combat_group",
       "groupIds": [
-        "combat_group"
+        "combat_group",
+        "basic_missile_training",
+        "advanced_missile_training"
       ],
       "id": "sling",
       "isTheoretical": false,
@@ -3022,13 +5226,16 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "allowsSpecializations": false,
-      "category": "ordinary",
+      "category": "secondary",
+      "categoryId": "combat",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Bow Use ordinary bows effectively in combat or hunting. Core ranged family.",
       "groupId": "combat_group",
       "groupIds": [
-        "combat_group"
+        "combat_group",
+        "basic_missile_training",
+        "advanced_missile_training"
       ],
       "id": "bow",
       "isTheoretical": false,
@@ -3044,7 +5251,8 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "allowsSpecializations": false,
-      "category": "ordinary",
+      "category": "secondary",
+      "categoryId": "combat",
       "dependencies": [
         {
           "skillId": "bow",
@@ -3071,13 +5279,16 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "allowsSpecializations": false,
-      "category": "ordinary",
+      "category": "secondary",
+      "categoryId": "combat",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Crossbow Use mechanically spanned missile weapons effectively in combat. Later-society missile family.",
       "groupId": "combat_group",
       "groupIds": [
-        "combat_group"
+        "combat_group",
+        "basic_missile_training",
+        "advanced_missile_training"
       ],
       "id": "crossbow",
       "isTheoretical": false,
@@ -3094,6 +5305,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "secondary",
+      "categoryId": "military",
       "dependencies": [],
       "dependencySkillIds": [],
       "description": "Stay functional and rational under lethal danger and battlefield shock. Veteran-facing secondary; not baseline novice training.",
@@ -3101,7 +5313,10 @@ export const generatedRepoLocalGlantriSeed = {
       "groupIds": [
         "veteran_soldiering",
         "veteran_leadership",
-        "military_group"
+        "military_group",
+        "arena_training",
+        "advanced_missile_training",
+        "defensive_soldiering"
       ],
       "id": "combat_experience",
       "isTheoretical": false,
@@ -3118,6 +5333,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "secondary",
+      "categoryId": "military",
       "dependencies": [
         {
           "skillId": "perception",
@@ -3128,11 +5344,12 @@ export const generatedRepoLocalGlantriSeed = {
         "perception"
       ],
       "description": "Read immediate battlefield danger, openings, movement, and changing threats under pressure. Military layer above general Perception.",
-      "groupId": "field_soldiering",
+      "groupId": "veteran_soldiering",
       "groupIds": [
-        "field_soldiering",
         "veteran_soldiering",
-        "military_group"
+        "military_group",
+        "advanced_missile_training",
+        "defensive_soldiering"
       ],
       "id": "battlefield_awareness",
       "isTheoretical": false,
@@ -3149,6 +5366,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "secondary",
+      "categoryId": "military",
       "dependencies": [
         {
           "skillId": "parry",
@@ -3177,6 +5395,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "secondary",
+      "categoryId": "combat",
       "dependencies": [
         {
           "skillId": "riding",
@@ -3190,7 +5409,8 @@ export const generatedRepoLocalGlantriSeed = {
       "groupId": "combat_group",
       "groupIds": [
         "combat_group",
-        "military_group"
+        "military_group",
+        "mounted_warrior_training"
       ],
       "id": "mounted_combat",
       "isTheoretical": false,
@@ -3207,6 +5427,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "military",
       "dependencies": [
         {
           "skillId": "perception",
@@ -3219,9 +5440,8 @@ export const generatedRepoLocalGlantriSeed = {
       ],
       "dependencySkillIds": [],
       "description": "Understand battlefield positioning, timing, coordination, and practical combat plans. Officer and planner skill distinct from direct troop-control.",
-      "groupId": "officer_training",
+      "groupId": "veteran_leadership",
       "groupIds": [
-        "officer_training",
         "veteran_leadership",
         "military_group"
       ],
@@ -3240,6 +5460,7 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "allowsSpecializations": false,
       "category": "ordinary",
+      "categoryId": "military",
       "dependencies": [
         {
           "skillId": "insight",
@@ -3256,11 +5477,11 @@ export const generatedRepoLocalGlantriSeed = {
       ],
       "dependencySkillIds": [],
       "description": "Captaincy Lead fighters, maintain order, and get people to act coherently under pressure. Practical troop-control and morale skill; distinct from Tactics.",
-      "groupId": "officer_training",
+      "groupId": "veteran_leadership",
       "groupIds": [
-        "officer_training",
         "veteran_leadership",
-        "military_group"
+        "military_group",
+        "ship_command"
       ],
       "id": "captaincy",
       "isTheoretical": false,
@@ -3276,15 +5497,6 @@ export const generatedRepoLocalGlantriSeed = {
     }
   ],
   "specializations": [
-    {
-      "description": "Mastery of one specific language. Best for scholars, diplomats, merchants, and elite specialists.",
-      "id": "specific_language",
-      "minimumGroupLevel": 6,
-      "minimumParentLevel": 6,
-      "name": "Specific Language",
-      "skillId": "language",
-      "sortOrder": 12
-    },
     {
       "description": "Apply etiquette within one specific culture or court tradition. Strong diplomat and court specialization.",
       "id": "etiquette_by_culture",
@@ -3462,6 +5674,46 @@ export const generatedRepoLocalGlantriSeed = {
       "description": "Martial professional trained for armed combat, defense, and battlefield survival. Broad military family; subtype varies strongly. Real melee training normally includes attack skill plus Dodge and Parry.",
       "id": "soldier",
       "name": "Soldier"
+    },
+    {
+      "description": "Arena-focused combat performer family for staged personal fighting rather than battlefield soldiering.",
+      "id": "arena_fighter",
+      "name": "Arena Fighter"
+    },
+    {
+      "description": "Illicit trade and contraband-moving professions whose package is narrower than ordinary merchant work.",
+      "id": "illicit_trader",
+      "name": "Illicit Trader"
+    },
+    {
+      "description": "Social and performance-oriented companion roles distinct from elite courtly influence offices.",
+      "id": "social_companion",
+      "name": "Social Companion"
+    },
+    {
+      "description": "Craft and guild professions whose package is defined by common foundations plus chosen craft specialties.",
+      "id": "craft_guild",
+      "name": "Craft / Guild"
+    },
+    {
+      "description": "Rural and local service professions with focused route, household, and practical field packages.",
+      "id": "rural_local_service",
+      "name": "Rural / Local Service"
+    },
+    {
+      "description": "Maritime labor and coastal provisioning professions distinct from ship command and full navigation careers.",
+      "id": "maritime_labor",
+      "name": "Maritime Labor"
+    },
+    {
+      "description": "Resource labor professions such as woodland and extraction work, separated from technical engineering roles.",
+      "id": "resource_labor",
+      "name": "Resource Labor"
+    },
+    {
+      "description": "Focused low and mid military/security professions whose training is defined by subtype packages rather than broad Soldier-family defaults.",
+      "id": "military_security",
+      "name": "Military / Security"
     }
   ],
   "professions": [
@@ -3502,7 +5754,7 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "description": "Construction specialist focused on durable works and physical building. Emphasizes stone, timber, layout, and practical site work.",
-      "familyId": "engineer_builder",
+      "familyId": "craft_guild",
       "id": "builder_master_mason",
       "name": "Builder / Master Mason",
       "subtypeName": "Builder / Master Mason"
@@ -3551,10 +5803,10 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "description": "Mounted combatant using mobility and multiple mounted weapons in war. Proper cavalry should normally know both Lance and 1-handed Edged plus Ride, Dodge, and Parry.",
-      "familyId": "soldier",
+      "familyId": "military_security",
       "id": "cavalry_mounted_retainer",
-      "name": "Cavalry / Mounted Retainer",
-      "subtypeName": "Cavalry / Mounted Retainer"
+      "name": "Mounted Retainer",
+      "subtypeName": "Mounted Retainer"
     },
     {
       "description": "Role-based performer using speech, presentation, and imitation for stage or social effect. This subtype fits staged performance, civic spectacle, court entertainment, and social impersonation traditions.",
@@ -3593,7 +5845,7 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "description": "Protective combat specialist focused on keeping a client or patron alive in dangerous situations. Protective martial specialist serving an individual, household, or patron.",
-      "familyId": "soldier",
+      "familyId": "military_security",
       "id": "bodyguard",
       "name": "Bodyguard",
       "subtypeName": "Bodyguard"
@@ -3628,7 +5880,7 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "description": "Elite personal combat specialist known for superior martial skill and reputation. Fits dueling, elite retainer, household, arena, or heroic combat cultures.",
-      "familyId": "soldier",
+      "familyId": "military_security",
       "id": "champion",
       "name": "Champion",
       "subtypeName": "Champion"
@@ -3663,7 +5915,7 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "description": "General artisan subtype covering trained making, repair, and workshop practice. Broad catch-all craft subtype when a more specific building, smithing, or production role is not needed.",
-      "familyId": "engineer_builder",
+      "familyId": "craft_guild",
       "id": "crafter",
       "name": "Crafter",
       "subtypeName": "Crafter"
@@ -3697,27 +5949,6 @@ export const generatedRepoLocalGlantriSeed = {
       "subtypeName": "Entertainer"
     },
     {
-      "description": "Entertainers Dancer/Acrobat source-listed occupation subtype. Source-listed occupation retained in the pack and awaiting deeper rule-detail refinement if needed.",
-      "familyId": "performer",
-      "id": "entertainers_dancer_acrobat",
-      "name": "Entertainers Dancer/Acrobat",
-      "subtypeName": "Entertainers Dancer/Acrobat"
-    },
-    {
-      "description": "Entertainers Singer/Musician source-listed occupation subtype. Source-listed occupation retained in the pack and awaiting deeper rule-detail refinement if needed.",
-      "familyId": "performer",
-      "id": "entertainers_singer_musician",
-      "name": "Entertainers Singer/Musician",
-      "subtypeName": "Entertainers Singer/Musician"
-    },
-    {
-      "description": "Entertainers Trickster/Fool source-listed occupation subtype. Source-listed occupation retained in the pack and awaiting deeper rule-detail refinement if needed.",
-      "familyId": "performer",
-      "id": "entertainers_trickster_fool",
-      "name": "Entertainers Trickster/Fool",
-      "subtypeName": "Entertainers Trickster/Fool"
-    },
-    {
       "description": "Agrarian producer trained in routine husbandry, food production, and practical rural work. Broad rural livelihood subtype with more emphasis on routine production than mobile pastoral life.",
       "familyId": "herdsman_rider",
       "id": "farmer",
@@ -3726,7 +5957,7 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "description": "Water-working livelihood subtype focused on practical fishing, nets, boats, and local waters. Lower-threshold maritime subtype for coastal, river, and lake communities.",
-      "familyId": "sailor_navigator",
+      "familyId": "maritime_labor",
       "id": "fisher",
       "name": "Fisher",
       "subtypeName": "Fisher"
@@ -3740,7 +5971,7 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "description": "Gladiator source-listed occupation subtype. Source-listed occupation retained in the pack and awaiting deeper rule-detail refinement if needed.",
-      "familyId": "soldier",
+      "familyId": "arena_fighter",
       "id": "gladiator",
       "name": "Gladiator",
       "subtypeName": "Gladiator"
@@ -3831,7 +6062,7 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "description": "Master Craftsmen source-listed occupation subtype. Source-listed occupation retained in the pack and awaiting deeper rule-detail refinement if needed.",
-      "familyId": "engineer_builder",
+      "familyId": "craft_guild",
       "id": "master_craftsmen",
       "name": "Master Craftsmen",
       "subtypeName": "Master Craftsmen"
@@ -3845,7 +6076,7 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "description": "Messenger source-listed occupation subtype. Source-listed occupation retained in the pack and awaiting deeper rule-detail refinement if needed.",
-      "familyId": "herdsman_rider",
+      "familyId": "rural_local_service",
       "id": "messenger",
       "name": "Messenger",
       "subtypeName": "Messenger"
@@ -3859,7 +6090,7 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "description": "Extractive labor specialist working underground or in exposed deposits to obtain stone or metal-bearing material. Heavy practical subtype tied to labor, geology-by-experience, and dangerous extraction work.",
-      "familyId": "engineer_builder",
+      "familyId": "resource_labor",
       "id": "miner",
       "name": "Miner",
       "subtypeName": "Miner"
@@ -3949,11 +6180,11 @@ export const generatedRepoLocalGlantriSeed = {
       "subtypeName": "Prostitute"
     },
     {
-      "description": "Sexual-social specialist whose role ranges from survival trade to elite influence depending context. Handled here as the courtly/high-social end of the source label; lower-end prostitution can be modeled more simply in play.",
-      "familyId": "courtier_diplomat",
+      "description": "Social and performance-oriented companion in urban or patronage settings, distinct from elite courtly courtesans.",
+      "familyId": "social_companion",
       "id": "prostitute_courtesan",
-      "name": "Prostitute – Courtesan",
-      "subtypeName": "Prostitute – Courtesan"
+      "name": "Companion",
+      "subtypeName": "Companion"
     },
     {
       "description": "General seafaring worker trained in ordinary shipboard labor, vessel routine, and waterborne travel. This is the generic sailor subtype beneath more specialized navigators and officers. It fits commercial, military, and fishing vessels.",
@@ -3992,7 +6223,7 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "description": "Illicit trader moving goods across borders, tolls, law, or social restrictions. Commercial-criminal subtype balancing trade skill with concealment and route knowledge.",
-      "familyId": "merchant_trader",
+      "familyId": "illicit_trader",
       "id": "smuggler",
       "name": "Smuggler",
       "subtypeName": "Smuggler"
@@ -4055,10 +6286,108 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "description": "Practical rural labor subtype specializing in timber cutting, woodland work, and heavy manual extraction. Best treated as a rough craft/labor profession rather than a full engineer or builder in the learned sense.",
-      "familyId": "engineer_builder",
+      "familyId": "resource_labor",
       "id": "woodcutter",
       "name": "Woodcutter",
       "subtypeName": "Woodcutter"
+    },
+    {
+      "description": "Local village, manor, gate, or storehouse guard focused on everyday security and basic civic order.",
+      "familyId": "military_security",
+      "id": "village_guard",
+      "name": "Village Guard",
+      "subtypeName": "Village Guard"
+    },
+    {
+      "description": "Part-time local defender or levy fighter with basic melee, missile, and defensive drill.",
+      "familyId": "military_security",
+      "id": "militia_fighter",
+      "name": "Militia Fighter",
+      "subtypeName": "Militia Fighter"
+    },
+    {
+      "description": "Professional fort, town, or garrison soldier with organized melee, defensive, and soldiering training.",
+      "familyId": "military_security",
+      "id": "garrison_soldier",
+      "name": "Garrison Soldier",
+      "subtypeName": "Garrison Soldier"
+    },
+    {
+      "description": "Experienced squad, patrol, or garrison-section leader with practical authority and soldiering experience rather than formal officer education.",
+      "familyId": "military_security",
+      "id": "veteran_sergeant",
+      "name": "Veteran Sergeant",
+      "subtypeName": "Veteran Sergeant"
+    },
+    {
+      "description": "Commander in an organized urban watch or civic guard, responsible for patrols, detention staff, gate guards, and civic security detachments.",
+      "familyId": "military_security",
+      "id": "city_watch_officer",
+      "name": "City Watch Officer",
+      "subtypeName": "City Watch Officer"
+    },
+    {
+      "description": "Military logistics official responsible for stores, equipment, pay, provisions, transport, and operational support.",
+      "familyId": "military_security",
+      "id": "quartermaster",
+      "name": "Quartermaster",
+      "subtypeName": "Quartermaster"
+    },
+    {
+      "description": "Formal military staff and planning officer trained for literate administration, orders, records, and support to command.",
+      "familyId": "military_security",
+      "id": "staff_officer",
+      "name": "Staff Officer",
+      "subtypeName": "Staff Officer"
+    },
+    {
+      "description": "High-state bureaucratic line officer trained through elite institutions, military basics, law, administration, court culture, and formal command.",
+      "familyId": "military_security",
+      "id": "imperial_officer",
+      "name": "Imperial / Bureaucratic Officer",
+      "subtypeName": "Imperial / Bureaucratic Officer"
+    },
+    {
+      "description": "Mounted unit commander for cavalry patrols, household mounted troops, or formal cavalry detachments.",
+      "familyId": "military_security",
+      "id": "cavalry_officer",
+      "name": "Cavalry Officer",
+      "subtypeName": "Cavalry Officer"
+    },
+    {
+      "description": "Commander of palace, household, noble, or elite guard details, combining court security, protection, and command foundations.",
+      "familyId": "military_security",
+      "id": "elite_guard_officer",
+      "name": "Elite Guard Officer",
+      "subtypeName": "Elite Guard Officer"
+    },
+    {
+      "description": "Senior guild official or master workshop owner with craft authority, commercial administration, and civic influence.",
+      "familyId": "merchant_trader",
+      "id": "guild_master",
+      "name": "Guild Master",
+      "subtypeName": "Guild Master"
+    },
+    {
+      "description": "Agent of a merchant house, guild, estate, or trading company who handles contracts, goods, credit, and negotiation.",
+      "familyId": "merchant_trader",
+      "id": "merchant_factor",
+      "name": "Merchant Factor",
+      "subtypeName": "Merchant Factor"
+    },
+    {
+      "description": "Finance professional focused on credit, debt, contracts, ledgers, valuation, and commercial risk.",
+      "familyId": "merchant_trader",
+      "id": "banker_moneylender",
+      "name": "Banker / Moneylender",
+      "subtypeName": "Banker / Moneylender"
+    },
+    {
+      "description": "Major merchant-house owner, financier, or trade magnate with commercial, civic, and political power.",
+      "familyId": "merchant_trader",
+      "id": "great_merchant",
+      "name": "Great Merchant",
+      "subtypeName": "Great Merchant"
     }
   ],
   "professionSkills": [
@@ -4072,147 +6401,11 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "grantType": "group",
-      "isCore": true,
+      "isCore": false,
       "professionId": "scholar_scribe",
       "ranks": 0,
       "scope": "family",
       "skillGroupId": "civic_learning"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "scholar_scribe",
-      "ranks": 0,
-      "scope": "family",
-      "skillId": "history"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "scholar_scribe",
-      "ranks": 0,
-      "scope": "family",
-      "skillId": "theology"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "scholar_scribe",
-      "ranks": 0,
-      "scope": "family",
-      "skillId": "administration"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "scholar_scribe",
-      "ranks": 0,
-      "scope": "family",
-      "skillId": "philosophy"
-    },
-    {
-      "grantType": "secondary-skill",
-      "isCore": false,
-      "professionId": "scholar_scribe",
-      "ranks": 0,
-      "scope": "family",
-      "skillId": "rhetorical_composition"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "scholar_scribe",
-      "ranks": 0,
-      "scope": "family",
-      "skillId": "law"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "scholar_scribe",
-      "ranks": 0,
-      "scope": "family",
-      "skillId": "etiquette"
-    },
-    {
-      "grantType": "group",
-      "isCore": true,
-      "professionId": "merchant_trader",
-      "ranks": 0,
-      "scope": "family",
-      "skillGroupId": "mercantile_practice"
-    },
-    {
-      "grantType": "group",
-      "isCore": false,
-      "professionId": "merchant_trader",
-      "ranks": 0,
-      "scope": "family",
-      "skillGroupId": "commercial_administration"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "merchant_trader",
-      "ranks": 0,
-      "scope": "family",
-      "skillId": "language"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "merchant_trader",
-      "ranks": 0,
-      "scope": "family",
-      "skillId": "etiquette"
-    },
-    {
-      "grantType": "secondary-skill",
-      "isCore": false,
-      "professionId": "merchant_trader",
-      "ranks": 0,
-      "scope": "family",
-      "skillId": "teamstering"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "merchant_trader",
-      "ranks": 0,
-      "scope": "family",
-      "skillId": "riding"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "merchant_trader",
-      "ranks": 0,
-      "scope": "family",
-      "skillId": "sailing"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "merchant_trader",
-      "ranks": 0,
-      "scope": "family",
-      "skillId": "banking"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "merchant_trader",
-      "ranks": 0,
-      "scope": "family",
-      "skillId": "insight"
-    },
-    {
-      "grantType": "secondary-skill",
-      "isCore": false,
-      "professionId": "merchant_trader",
-      "ranks": 0,
-      "scope": "family",
-      "skillId": "appraisal"
     },
     {
       "grantType": "group",
@@ -4280,7 +6473,7 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "grantType": "group",
-      "isCore": false,
+      "isCore": true,
       "professionId": "healer",
       "ranks": 0,
       "scope": "family",
@@ -4295,46 +6488,6 @@ export const generatedRepoLocalGlantriSeed = {
       "skillGroupId": "herb_and_remedy_craft"
     },
     {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "healer",
-      "ranks": 0,
-      "scope": "family",
-      "skillId": "theology"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "healer",
-      "ranks": 0,
-      "scope": "family",
-      "skillId": "concentration"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "healer",
-      "ranks": 0,
-      "scope": "family",
-      "skillId": "medicine"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "healer",
-      "ranks": 0,
-      "scope": "family",
-      "skillId": "administration"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "healer",
-      "ranks": 0,
-      "scope": "family",
-      "skillId": "etiquette"
-    },
-    {
       "grantType": "group",
       "isCore": true,
       "professionId": "engineer_builder",
@@ -4343,7 +6496,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillGroupId": "technical_measurement"
     },
     {
-      "grantType": "secondary-skill",
+      "grantType": "ordinary-skill",
       "isCore": false,
       "professionId": "engineer_builder",
       "ranks": 0,
@@ -4351,7 +6504,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "surveying"
     },
     {
-      "grantType": "secondary-skill",
+      "grantType": "ordinary-skill",
       "isCore": false,
       "professionId": "engineer_builder",
       "ranks": 0,
@@ -4484,7 +6637,7 @@ export const generatedRepoLocalGlantriSeed = {
       "professionId": "thief_infiltrator",
       "ranks": 0,
       "scope": "family",
-      "skillGroupId": "trap_and_intrusion_work"
+      "skillGroupId": "covert_entry"
     },
     {
       "grantType": "group",
@@ -4608,187 +6761,115 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "grantType": "group",
-      "isCore": false,
-      "professionId": "soldier",
-      "ranks": 0,
-      "scope": "family",
-      "skillGroupId": "officer_training"
-    },
-    {
-      "grantType": "group",
-      "isCore": false,
-      "professionId": "soldier",
-      "ranks": 0,
-      "scope": "family",
-      "skillGroupId": "veteran_leadership"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "soldier",
-      "ranks": 0,
-      "scope": "family",
-      "skillId": "perception"
-    },
-    {
-      "grantType": "secondary-skill",
-      "isCore": false,
-      "professionId": "soldier",
-      "ranks": 0,
-      "scope": "family",
-      "skillId": "formation_fighting"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "soldier",
-      "ranks": 0,
-      "scope": "family",
-      "skillId": "riding"
-    },
-    {
-      "grantType": "secondary-skill",
-      "isCore": false,
-      "professionId": "soldier",
-      "ranks": 0,
-      "scope": "family",
-      "skillId": "battlefield_awareness"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "soldier",
-      "ranks": 0,
-      "scope": "family",
-      "skillId": "tactics"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "soldier",
-      "ranks": 0,
-      "scope": "family",
-      "skillId": "captaincy"
-    },
-    {
-      "grantType": "secondary-skill",
-      "isCore": false,
-      "professionId": "soldier",
-      "ranks": 0,
-      "scope": "family",
-      "skillId": "first_aid"
-    },
-    {
-      "grantType": "secondary-skill",
-      "isCore": false,
-      "professionId": "soldier",
-      "ranks": 0,
-      "scope": "family",
-      "skillId": "weapon_maintenance"
-    },
-    {
-      "grantType": "ordinary-skill",
       "isCore": true,
       "professionId": "temple_scribe",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "theology"
+      "skillGroupId": "literate_foundation"
     },
     {
       "grantType": "group",
-      "isCore": false,
+      "isCore": true,
+      "professionId": "temple_scribe",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "civic_learning"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
       "professionId": "temple_scribe",
       "ranks": 0,
       "scope": "profession",
       "skillGroupId": "sacred_learning"
     },
     {
-      "grantType": "secondary-skill",
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "temple_scribe",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "temple_service"
+    },
+    {
+      "grantType": "group",
       "isCore": false,
       "professionId": "temple_scribe",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "ritual_interpretation"
+      "skillGroupId": "scholarly_formation"
     },
     {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "temple_scribe",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "divination"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "temple_scribe",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "history"
-    },
-    {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": true,
       "professionId": "court_scribe_clerk",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "administration"
+      "skillGroupId": "literate_foundation"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "court_scribe_clerk",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "civic_learning"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "court_scribe_clerk",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "commercial_administration"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "court_scribe_clerk",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "courtly_formation"
+    },
+    {
+      "grantType": "group",
       "isCore": false,
       "professionId": "court_scribe_clerk",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "etiquette"
+      "skillGroupId": "scholarly_formation"
     },
     {
-      "grantType": "secondary-skill",
-      "isCore": false,
-      "professionId": "court_scribe_clerk",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "courtly_protocol"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "court_scribe_clerk",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "law"
-    },
-    {
-      "grantType": "secondary-skill",
-      "isCore": false,
-      "professionId": "court_scribe_clerk",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "bureaucratic_writing"
-    },
-    {
-      "grantType": "secondary-skill",
+      "grantType": "group",
       "isCore": true,
       "professionId": "local_trader",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "bookkeeping"
+      "skillGroupId": "mercantile_practice"
     },
     {
-      "grantType": "secondary-skill",
-      "isCore": false,
+      "grantType": "group",
+      "isCore": true,
       "professionId": "local_trader",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "teamstering"
+      "skillGroupId": "commercial_administration"
     },
     {
       "grantType": "ordinary-skill",
+      "isCore": true,
+      "professionId": "local_trader",
+      "ranks": 0,
+      "scope": "profession",
+      "skillId": "language"
+    },
+    {
+      "grantType": "group",
       "isCore": false,
       "professionId": "local_trader",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "animal_care"
+      "skillGroupId": "social_reading"
     },
     {
       "grantType": "ordinary-skill",
@@ -4831,24 +6912,8 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "social_perception"
     },
     {
-      "grantType": "ordinary-skill",
-      "isCore": true,
-      "professionId": "folk_healer",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "herb_lore"
-    },
-    {
-      "grantType": "secondary-skill",
-      "isCore": true,
-      "professionId": "folk_healer",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "first_aid"
-    },
-    {
       "grantType": "group",
-      "isCore": false,
+      "isCore": true,
       "professionId": "folk_healer",
       "ranks": 0,
       "scope": "profession",
@@ -4856,19 +6921,19 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "grantType": "group",
-      "isCore": false,
+      "isCore": true,
       "professionId": "folk_healer",
       "ranks": 0,
       "scope": "profession",
       "skillGroupId": "herb_and_remedy_craft"
     },
     {
-      "grantType": "secondary-skill",
+      "grantType": "group",
       "isCore": false,
       "professionId": "folk_healer",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "nursing"
+      "skillGroupId": "social_reading"
     },
     {
       "grantType": "ordinary-skill",
@@ -4876,15 +6941,7 @@ export const generatedRepoLocalGlantriSeed = {
       "professionId": "folk_healer",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "poison_lore"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "folk_healer",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "insight"
+      "skillId": "concentration"
     },
     {
       "grantType": "group",
@@ -4895,28 +6952,28 @@ export const generatedRepoLocalGlantriSeed = {
       "skillGroupId": "technical_measurement"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": true,
       "professionId": "builder_master_mason",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "stoneworking"
+      "skillGroupId": "construction_specialty"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": true,
       "professionId": "builder_master_mason",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "carpentry"
+      "skillGroupId": "commercial_administration"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": false,
       "professionId": "builder_master_mason",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "administration"
+      "skillGroupId": "civic_learning"
     },
     {
       "grantType": "group",
@@ -4943,7 +7000,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "ropework"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "secondary-skill",
       "isCore": false,
       "professionId": "deck_sailor",
       "ranks": 0,
@@ -4956,31 +7013,15 @@ export const generatedRepoLocalGlantriSeed = {
       "professionId": "herdsman_subtype",
       "ranks": 0,
       "scope": "profession",
-      "skillGroupId": "animal_husbandry"
+      "skillGroupId": "animal_handling"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": true,
       "professionId": "herdsman_subtype",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "herding"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": true,
-      "professionId": "herdsman_subtype",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "animal_care"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "herdsman_subtype",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "bargaining"
+      "skillGroupId": "pastoral_work"
     },
     {
       "grantType": "group",
@@ -4988,10 +7029,10 @@ export const generatedRepoLocalGlantriSeed = {
       "professionId": "burglar",
       "ranks": 0,
       "scope": "profession",
-      "skillGroupId": "covert_entry"
+      "skillGroupId": "security"
     },
     {
-      "grantType": "secondary-skill",
+      "grantType": "ordinary-skill",
       "isCore": true,
       "professionId": "burglar",
       "ranks": 0,
@@ -5012,7 +7053,7 @@ export const generatedRepoLocalGlantriSeed = {
       "professionId": "burglar",
       "ranks": 0,
       "scope": "profession",
-      "skillGroupId": "trap_and_intrusion_work"
+      "skillGroupId": "covert_entry"
     },
     {
       "grantType": "secondary-skill",
@@ -5071,7 +7112,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "perception"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "secondary-skill",
       "isCore": false,
       "professionId": "tribal_warrior",
       "ranks": 0,
@@ -5079,7 +7120,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "brawling"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "secondary-skill",
       "isCore": false,
       "professionId": "tribal_warrior",
       "ranks": 0,
@@ -5087,7 +7128,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "throwing"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "secondary-skill",
       "isCore": false,
       "professionId": "tribal_warrior",
       "ranks": 0,
@@ -5127,7 +7168,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "first_aid"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "secondary-skill",
       "isCore": false,
       "professionId": "levy_infantry",
       "ranks": 0,
@@ -5135,7 +7176,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "polearms"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "secondary-skill",
       "isCore": false,
       "professionId": "levy_infantry",
       "ranks": 0,
@@ -5159,12 +7200,12 @@ export const generatedRepoLocalGlantriSeed = {
       "skillGroupId": "mounted_warrior_training"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": true,
       "professionId": "cavalry_mounted_retainer",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "perception"
+      "skillGroupId": "mounted_service"
     },
     {
       "grantType": "group",
@@ -5172,7 +7213,7 @@ export const generatedRepoLocalGlantriSeed = {
       "professionId": "cavalry_mounted_retainer",
       "ranks": 0,
       "scope": "profession",
-      "skillGroupId": "officer_training"
+      "skillGroupId": "courtly_formation"
     },
     {
       "grantType": "group",
@@ -5180,23 +7221,7 @@ export const generatedRepoLocalGlantriSeed = {
       "professionId": "cavalry_mounted_retainer",
       "ranks": 0,
       "scope": "profession",
-      "skillGroupId": "veteran_soldiering"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "cavalry_mounted_retainer",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "animal_care"
-    },
-    {
-      "grantType": "secondary-skill",
-      "isCore": false,
-      "professionId": "cavalry_mounted_retainer",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "battlefield_awareness"
+      "skillGroupId": "route_security"
     },
     {
       "grantType": "group",
@@ -5207,7 +7232,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillGroupId": "formal_performance"
     },
     {
-      "grantType": "secondary-skill",
+      "grantType": "ordinary-skill",
       "isCore": true,
       "professionId": "actor",
       "ranks": 0,
@@ -5263,20 +7288,12 @@ export const generatedRepoLocalGlantriSeed = {
       "skillGroupId": "animal_husbandry"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": true,
       "professionId": "animal_trainer",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "animal_training"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": true,
-      "professionId": "animal_trainer",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "animal_care"
+      "skillGroupId": "animal_handling"
     },
     {
       "grantType": "group",
@@ -5284,31 +7301,7 @@ export const generatedRepoLocalGlantriSeed = {
       "professionId": "animal_trainer",
       "ranks": 0,
       "scope": "profession",
-      "skillGroupId": "mounted_service"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "animal_trainer",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "riding"
-    },
-    {
-      "grantType": "secondary-skill",
-      "isCore": false,
-      "professionId": "animal_trainer",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "falconry"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "animal_trainer",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "herding"
+      "skillGroupId": "route_security"
     },
     {
       "grantType": "group",
@@ -5367,7 +7360,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "poison_lore"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "secondary-skill",
       "isCore": false,
       "professionId": "assassin",
       "ranks": 0,
@@ -5407,7 +7400,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "bargaining"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "secondary-skill",
       "isCore": false,
       "professionId": "bandit",
       "ranks": 0,
@@ -5415,7 +7408,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "one_handed_concussion_axe"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "secondary-skill",
       "isCore": false,
       "professionId": "bandit",
       "ranks": 0,
@@ -5471,20 +7464,20 @@ export const generatedRepoLocalGlantriSeed = {
       "skillGroupId": "advanced_melee_training"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": true,
       "professionId": "bodyguard",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "perception"
+      "skillGroupId": "watch_civic_guard"
     },
     {
-      "grantType": "secondary-skill",
+      "grantType": "group",
       "isCore": true,
       "professionId": "bodyguard",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "battlefield_awareness"
+      "skillGroupId": "defensive_soldiering"
     },
     {
       "grantType": "group",
@@ -5492,39 +7485,7 @@ export const generatedRepoLocalGlantriSeed = {
       "professionId": "bodyguard",
       "ranks": 0,
       "scope": "profession",
-      "skillGroupId": "veteran_soldiering"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "bodyguard",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "insight"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "bodyguard",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "captaincy"
-    },
-    {
-      "grantType": "group",
-      "isCore": true,
-      "professionId": "bounty_hunter",
-      "ranks": 0,
-      "scope": "profession",
-      "skillGroupId": "covert_entry"
-    },
-    {
-      "grantType": "group",
-      "isCore": true,
-      "professionId": "bounty_hunter",
-      "ranks": 0,
-      "scope": "profession",
-      "skillGroupId": "fieldcraft_stealth"
+      "skillGroupId": "courtly_formation"
     },
     {
       "grantType": "ordinary-skill",
@@ -5543,36 +7504,20 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "perception"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": false,
       "professionId": "bounty_hunter",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "stealth"
+      "skillGroupId": "watch_civic_guard"
     },
     {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "bounty_hunter",
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "bureaucrat",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "captaincy"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "bounty_hunter",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "one_handed_edged"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "bounty_hunter",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "brawling"
+      "skillGroupId": "literate_foundation"
     },
     {
       "grantType": "group",
@@ -5591,52 +7536,28 @@ export const generatedRepoLocalGlantriSeed = {
       "skillGroupId": "commercial_administration"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": true,
       "professionId": "bureaucrat",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "administration"
+      "skillGroupId": "fiscal_administration"
     },
     {
-      "grantType": "secondary-skill",
-      "isCore": true,
-      "professionId": "bureaucrat",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "bureaucratic_writing"
-    },
-    {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": false,
       "professionId": "bureaucrat",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "law"
+      "skillGroupId": "legal_practice"
     },
     {
-      "grantType": "secondary-skill",
+      "grantType": "group",
       "isCore": false,
       "professionId": "bureaucrat",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "bookkeeping"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "bureaucrat",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "etiquette"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "bureaucrat",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "history"
+      "skillGroupId": "courtly_formation"
     },
     {
       "grantType": "group",
@@ -5647,36 +7568,12 @@ export const generatedRepoLocalGlantriSeed = {
       "skillGroupId": "basic_melee_training"
     },
     {
-      "grantType": "ordinary-skill",
-      "isCore": true,
-      "professionId": "caravan_guard",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "perception"
-    },
-    {
       "grantType": "group",
       "isCore": false,
       "professionId": "caravan_guard",
       "ranks": 0,
       "scope": "profession",
-      "skillGroupId": "field_soldiering"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "caravan_guard",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "riding"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "caravan_guard",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "throwing"
+      "skillGroupId": "route_security"
     },
     {
       "grantType": "secondary-skill",
@@ -5684,7 +7581,7 @@ export const generatedRepoLocalGlantriSeed = {
       "professionId": "caravan_guard",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "first_aid"
+      "skillId": "throwing"
     },
     {
       "grantType": "group",
@@ -5693,6 +7590,14 @@ export const generatedRepoLocalGlantriSeed = {
       "ranks": 0,
       "scope": "profession",
       "skillGroupId": "mounted_warrior_training"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "cavalry",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "basic_melee_training"
     },
     {
       "grantType": "ordinary-skill",
@@ -5716,7 +7621,7 @@ export const generatedRepoLocalGlantriSeed = {
       "professionId": "cavalry",
       "ranks": 0,
       "scope": "profession",
-      "skillGroupId": "veteran_soldiering"
+      "skillGroupId": "defensive_soldiering"
     },
     {
       "grantType": "ordinary-skill",
@@ -5733,14 +7638,6 @@ export const generatedRepoLocalGlantriSeed = {
       "ranks": 0,
       "scope": "profession",
       "skillId": "battlefield_awareness"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "cavalry",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "captaincy"
     },
     {
       "grantType": "group",
@@ -5751,20 +7648,12 @@ export const generatedRepoLocalGlantriSeed = {
       "skillGroupId": "advanced_melee_training"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": true,
       "professionId": "champion",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "perception"
-    },
-    {
-      "grantType": "secondary-skill",
-      "isCore": true,
-      "professionId": "champion",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "battlefield_awareness"
+      "skillGroupId": "arena_training"
     },
     {
       "grantType": "group",
@@ -5772,23 +7661,7 @@ export const generatedRepoLocalGlantriSeed = {
       "professionId": "champion",
       "ranks": 0,
       "scope": "profession",
-      "skillGroupId": "veteran_soldiering"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "champion",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "brawling"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "champion",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "captaincy"
+      "skillGroupId": "courtly_formation"
     },
     {
       "grantType": "group",
@@ -5799,22 +7672,6 @@ export const generatedRepoLocalGlantriSeed = {
       "skillGroupId": "transport_and_caravan_work"
     },
     {
-      "grantType": "secondary-skill",
-      "isCore": true,
-      "professionId": "chariot_driver",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "teamstering"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": true,
-      "professionId": "chariot_driver",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "animal_care"
-    },
-    {
       "grantType": "group",
       "isCore": false,
       "professionId": "chariot_driver",
@@ -5823,23 +7680,15 @@ export const generatedRepoLocalGlantriSeed = {
       "skillGroupId": "mounted_service"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": false,
       "professionId": "chariot_driver",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "riding"
+      "skillGroupId": "route_security"
     },
     {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "chariot_driver",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "captaincy"
-    },
-    {
-      "grantType": "ordinary-skill",
+      "grantType": "secondary-skill",
       "isCore": false,
       "professionId": "chariot_driver",
       "ranks": 0,
@@ -5863,7 +7712,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "perception"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "secondary-skill",
       "isCore": true,
       "professionId": "clan_warriors",
       "ranks": 0,
@@ -5871,15 +7720,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "one_handed_concussion_axe"
     },
     {
-      "grantType": "group",
-      "isCore": false,
-      "professionId": "clan_warriors",
-      "ranks": 0,
-      "scope": "profession",
-      "skillGroupId": "field_soldiering"
-    },
-    {
-      "grantType": "ordinary-skill",
+      "grantType": "secondary-skill",
       "isCore": false,
       "professionId": "clan_warriors",
       "ranks": 0,
@@ -5887,7 +7728,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "throwing"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "secondary-skill",
       "isCore": false,
       "professionId": "clan_warriors",
       "ranks": 0,
@@ -6023,44 +7864,20 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "intrigue"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": true,
       "professionId": "crafter",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "carpentry"
+      "skillGroupId": "technical_measurement"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": true,
       "professionId": "crafter",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "leatherworking"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "crafter",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "weaving"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "crafter",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "pottery"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "crafter",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "smithing"
+      "skillGroupId": "craft_specialty"
     },
     {
       "grantType": "secondary-skill",
@@ -6071,7 +7888,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "ropework"
     },
     {
-      "grantType": "secondary-skill",
+      "grantType": "ordinary-skill",
       "isCore": true,
       "professionId": "docker",
       "ranks": 0,
@@ -6119,44 +7936,28 @@ export const generatedRepoLocalGlantriSeed = {
       "skillGroupId": "healing_practice"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": true,
       "professionId": "embalmer",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "medicine"
+      "skillGroupId": "herb_and_remedy_craft"
     },
     {
-      "grantType": "secondary-skill",
+      "grantType": "group",
       "isCore": true,
       "professionId": "embalmer",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "pharmacy"
+      "skillGroupId": "mortuary_practice"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": false,
       "professionId": "embalmer",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "theology"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "embalmer",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "poison_lore"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "embalmer",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "history"
+      "skillGroupId": "sacred_learning"
     },
     {
       "grantType": "group",
@@ -6207,7 +8008,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "dancing"
     },
     {
-      "grantType": "secondary-skill",
+      "grantType": "ordinary-skill",
       "isCore": false,
       "professionId": "entertainer",
       "ranks": 0,
@@ -6231,44 +8032,12 @@ export const generatedRepoLocalGlantriSeed = {
       "skillGroupId": "animal_husbandry"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": true,
       "professionId": "farmer",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "animal_care"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": true,
-      "professionId": "farmer",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "herding"
-    },
-    {
-      "grantType": "secondary-skill",
-      "isCore": false,
-      "professionId": "farmer",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "baking"
-    },
-    {
-      "grantType": "secondary-skill",
-      "isCore": false,
-      "professionId": "farmer",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "brewing"
-    },
-    {
-      "grantType": "secondary-skill",
-      "isCore": false,
-      "professionId": "farmer",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "teamstering"
+      "skillGroupId": "farm_household_work"
     },
     {
       "grantType": "group",
@@ -6279,44 +8048,20 @@ export const generatedRepoLocalGlantriSeed = {
       "skillGroupId": "maritime_crew_training"
     },
     {
-      "grantType": "secondary-skill",
+      "grantType": "group",
       "isCore": true,
       "professionId": "fisher",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "boat_handling"
+      "skillGroupId": "coastal_fishing"
     },
     {
-      "grantType": "ordinary-skill",
-      "isCore": true,
-      "professionId": "fisher",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "sailing"
-    },
-    {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": false,
       "professionId": "fisher",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "navigation"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "fisher",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "swim"
-    },
-    {
-      "grantType": "secondary-skill",
-      "isCore": false,
-      "professionId": "fisher",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "ropework"
+      "skillGroupId": "mercantile_practice"
     },
     {
       "grantType": "group",
@@ -6332,23 +8077,15 @@ export const generatedRepoLocalGlantriSeed = {
       "professionId": "fixer",
       "ranks": 0,
       "scope": "profession",
+      "skillGroupId": "commercial_administration"
+    },
+    {
+      "grantType": "group",
+      "isCore": false,
+      "professionId": "fixer",
+      "ranks": 0,
+      "scope": "profession",
       "skillGroupId": "political_acumen"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": true,
-      "professionId": "fixer",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "bargaining"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": true,
-      "professionId": "fixer",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "insight"
     },
     {
       "grantType": "ordinary-skill",
@@ -6356,7 +8093,7 @@ export const generatedRepoLocalGlantriSeed = {
       "professionId": "fixer",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "intrigue"
+      "skillId": "language"
     },
     {
       "grantType": "ordinary-skill",
@@ -6372,7 +8109,23 @@ export const generatedRepoLocalGlantriSeed = {
       "professionId": "fixer",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "trading"
+      "skillId": "banking"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "gladiator",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "advanced_melee_training"
+    },
+    {
+      "grantType": "group",
+      "isCore": false,
+      "professionId": "gladiator",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "arena_training"
     },
     {
       "grantType": "group",
@@ -6391,52 +8144,12 @@ export const generatedRepoLocalGlantriSeed = {
       "skillGroupId": "herb_and_remedy_craft"
     },
     {
-      "grantType": "ordinary-skill",
-      "isCore": true,
-      "professionId": "healer",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "medicine"
-    },
-    {
-      "grantType": "secondary-skill",
-      "isCore": true,
-      "professionId": "healer",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "first_aid"
-    },
-    {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": false,
       "professionId": "healer",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "herb_lore"
-    },
-    {
-      "grantType": "secondary-skill",
-      "isCore": false,
-      "professionId": "healer",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "nursing"
-    },
-    {
-      "grantType": "secondary-skill",
-      "isCore": false,
-      "professionId": "healer",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "pharmacy"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "healer",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "poison_lore"
+      "skillGroupId": "mental_discipline"
     },
     {
       "grantType": "group",
@@ -6455,7 +8168,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillGroupId": "defensive_soldiering"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "secondary-skill",
       "isCore": true,
       "professionId": "heavy_infantry",
       "ranks": 0,
@@ -6471,7 +8184,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "formation_fighting"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "secondary-skill",
       "isCore": false,
       "professionId": "heavy_infantry",
       "ranks": 0,
@@ -6479,7 +8192,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "polearms"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "secondary-skill",
       "isCore": false,
       "professionId": "heavy_infantry",
       "ranks": 0,
@@ -6511,7 +8224,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "heraldry"
     },
     {
-      "grantType": "secondary-skill",
+      "grantType": "ordinary-skill",
       "isCore": true,
       "professionId": "herald",
       "ranks": 0,
@@ -6527,7 +8240,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "etiquette"
     },
     {
-      "grantType": "secondary-skill",
+      "grantType": "ordinary-skill",
       "isCore": false,
       "professionId": "herald",
       "ranks": 0,
@@ -6551,20 +8264,12 @@ export const generatedRepoLocalGlantriSeed = {
       "skillGroupId": "herb_and_remedy_craft"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": true,
       "professionId": "herbalist",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "herb_lore"
-    },
-    {
-      "grantType": "secondary-skill",
-      "isCore": true,
-      "professionId": "herbalist",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "pharmacy"
+      "skillGroupId": "healing_practice"
     },
     {
       "grantType": "group",
@@ -6572,15 +8277,7 @@ export const generatedRepoLocalGlantriSeed = {
       "professionId": "herbalist",
       "ranks": 0,
       "scope": "profession",
-      "skillGroupId": "healing_practice"
-    },
-    {
-      "grantType": "secondary-skill",
-      "isCore": false,
-      "professionId": "herbalist",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "first_aid"
+      "skillGroupId": "mercantile_practice"
     },
     {
       "grantType": "ordinary-skill",
@@ -6588,15 +8285,15 @@ export const generatedRepoLocalGlantriSeed = {
       "professionId": "herbalist",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "poison_lore"
+      "skillId": "concentration"
     },
     {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "herbalist",
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "herder",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "medicine"
+      "skillGroupId": "pastoral_work"
     },
     {
       "grantType": "group",
@@ -6607,7 +8304,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillGroupId": "mental_discipline"
     },
     {
-      "grantType": "secondary-skill",
+      "grantType": "ordinary-skill",
       "isCore": true,
       "professionId": "hermit",
       "ranks": 0,
@@ -6657,6 +8354,30 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "grantType": "group",
       "isCore": true,
+      "professionId": "homemaker",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "craft_group"
+    },
+    {
+      "grantType": "group",
+      "isCore": false,
+      "professionId": "homemaker",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "social_reading"
+    },
+    {
+      "grantType": "ordinary-skill",
+      "isCore": false,
+      "professionId": "homemaker",
+      "ranks": 0,
+      "scope": "profession",
+      "skillId": "bargaining"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
       "professionId": "hunter",
       "ranks": 0,
       "scope": "profession",
@@ -6679,7 +8400,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "stealth"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "secondary-skill",
       "isCore": false,
       "professionId": "hunter",
       "ranks": 0,
@@ -6687,7 +8408,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "bow"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "secondary-skill",
       "isCore": false,
       "professionId": "hunter",
       "ranks": 0,
@@ -6713,50 +8434,74 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "grantType": "group",
       "isCore": true,
+      "professionId": "inn_keeper",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "mercantile_practice"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "inn_keeper",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "commercial_administration"
+    },
+    {
+      "grantType": "ordinary-skill",
+      "isCore": true,
+      "professionId": "inn_keeper",
+      "ranks": 0,
+      "scope": "profession",
+      "skillId": "baking"
+    },
+    {
+      "grantType": "ordinary-skill",
+      "isCore": true,
+      "professionId": "inn_keeper",
+      "ranks": 0,
+      "scope": "profession",
+      "skillId": "brewing"
+    },
+    {
+      "grantType": "group",
+      "isCore": false,
+      "professionId": "inn_keeper",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "social_reading"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
       "professionId": "jailer",
       "ranks": 0,
       "scope": "profession",
       "skillGroupId": "basic_melee_training"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
+      "isCore": false,
+      "professionId": "jailer",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "defensive_soldiering"
+    },
+    {
+      "grantType": "group",
+      "isCore": false,
+      "professionId": "jailer",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "watch_civic_guard"
+    },
+    {
+      "grantType": "group",
       "isCore": true,
-      "professionId": "jailer",
+      "professionId": "lawyer",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "perception"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": true,
-      "professionId": "jailer",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "captaincy"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "jailer",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "insight"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "jailer",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "search"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "jailer",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "parry"
+      "skillGroupId": "literate_foundation"
     },
     {
       "grantType": "group",
@@ -6767,52 +8512,36 @@ export const generatedRepoLocalGlantriSeed = {
       "skillGroupId": "civic_learning"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": true,
       "professionId": "lawyer",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "law"
+      "skillGroupId": "legal_practice"
     },
     {
-      "grantType": "secondary-skill",
-      "isCore": true,
-      "professionId": "lawyer",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "oratory"
-    },
-    {
-      "grantType": "secondary-skill",
+      "grantType": "group",
       "isCore": false,
       "professionId": "lawyer",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "rhetorical_composition"
+      "skillGroupId": "scholarly_formation"
     },
     {
-      "grantType": "secondary-skill",
+      "grantType": "group",
       "isCore": false,
       "professionId": "lawyer",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "bureaucratic_writing"
+      "skillGroupId": "courtly_formation"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": false,
       "professionId": "lawyer",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "insight"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "lawyer",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "etiquette"
+      "skillGroupId": "social_reading"
     },
     {
       "grantType": "group",
@@ -6823,20 +8552,12 @@ export const generatedRepoLocalGlantriSeed = {
       "skillGroupId": "basic_missile_training"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": true,
       "professionId": "light_infantry",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "perception"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": true,
-      "professionId": "light_infantry",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "dodge"
+      "skillGroupId": "basic_melee_training"
     },
     {
       "grantType": "group",
@@ -6844,31 +8565,39 @@ export const generatedRepoLocalGlantriSeed = {
       "professionId": "light_infantry",
       "ranks": 0,
       "scope": "profession",
-      "skillGroupId": "field_soldiering"
+      "skillGroupId": "defensive_soldiering"
     },
     {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "light_infantry",
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "master_craftsmen",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "throwing"
+      "skillGroupId": "craft_specialty_advanced"
     },
     {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "light_infantry",
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "master_craftsmen",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "bow"
+      "skillGroupId": "mercantile_practice"
     },
     {
-      "grantType": "secondary-skill",
-      "isCore": false,
-      "professionId": "light_infantry",
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "master_craftsmen",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "battlefield_awareness"
+      "skillGroupId": "commercial_administration"
+    },
+    {
+      "grantType": "group",
+      "isCore": false,
+      "professionId": "master_craftsmen",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "technical_measurement"
     },
     {
       "grantType": "group",
@@ -6879,12 +8608,12 @@ export const generatedRepoLocalGlantriSeed = {
       "skillGroupId": "mercantile_practice"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": true,
       "professionId": "merchant",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "trading"
+      "skillGroupId": "commercial_administration"
     },
     {
       "grantType": "ordinary-skill",
@@ -6892,7 +8621,7 @@ export const generatedRepoLocalGlantriSeed = {
       "professionId": "merchant",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "bargaining"
+      "skillId": "language"
     },
     {
       "grantType": "group",
@@ -6900,23 +8629,7 @@ export const generatedRepoLocalGlantriSeed = {
       "professionId": "merchant",
       "ranks": 0,
       "scope": "profession",
-      "skillGroupId": "commercial_administration"
-    },
-    {
-      "grantType": "secondary-skill",
-      "isCore": false,
-      "professionId": "merchant",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "appraisal"
-    },
-    {
-      "grantType": "secondary-skill",
-      "isCore": false,
-      "professionId": "merchant",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "bookkeeping"
+      "skillGroupId": "transport_and_caravan_work"
     },
     {
       "grantType": "ordinary-skill",
@@ -6924,15 +8637,55 @@ export const generatedRepoLocalGlantriSeed = {
       "professionId": "merchant",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "language"
+      "skillId": "banking"
     },
     {
-      "grantType": "secondary-skill",
+      "grantType": "ordinary-skill",
       "isCore": false,
       "professionId": "merchant",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "teamstering"
+      "skillId": "insight"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "messenger",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "mounted_service"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "messenger",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "transport_and_caravan_work"
+    },
+    {
+      "grantType": "ordinary-skill",
+      "isCore": true,
+      "professionId": "messenger",
+      "ranks": 0,
+      "scope": "profession",
+      "skillId": "language"
+    },
+    {
+      "grantType": "group",
+      "isCore": false,
+      "professionId": "messenger",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "route_security"
+    },
+    {
+      "grantType": "group",
+      "isCore": false,
+      "professionId": "messenger",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "athletic_conditioning"
     },
     {
       "grantType": "group",
@@ -6940,7 +8693,23 @@ export const generatedRepoLocalGlantriSeed = {
       "professionId": "military_officer",
       "ranks": 0,
       "scope": "profession",
-      "skillGroupId": "officer_training"
+      "skillGroupId": "basic_melee_training"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "military_officer",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "defensive_soldiering"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "military_officer",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "veteran_leadership"
     },
     {
       "grantType": "ordinary-skill",
@@ -6964,7 +8733,7 @@ export const generatedRepoLocalGlantriSeed = {
       "professionId": "military_officer",
       "ranks": 0,
       "scope": "profession",
-      "skillGroupId": "veteran_leadership"
+      "skillGroupId": "civic_learning"
     },
     {
       "grantType": "ordinary-skill",
@@ -6975,7 +8744,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "perception"
     },
     {
-      "grantType": "secondary-skill",
+      "grantType": "ordinary-skill",
       "isCore": false,
       "professionId": "military_officer",
       "ranks": 0,
@@ -7007,44 +8776,20 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "combat_experience"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": true,
       "professionId": "miner",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "stoneworking"
+      "skillGroupId": "technical_measurement"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": true,
       "professionId": "miner",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "self_control"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "miner",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "run"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "miner",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "climb"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "miner",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "smithing"
+      "skillGroupId": "mining_extraction"
     },
     {
       "grantType": "group",
@@ -7055,20 +8800,12 @@ export const generatedRepoLocalGlantriSeed = {
       "skillGroupId": "performance_basics"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": true,
       "professionId": "mourner",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "singing"
-    },
-    {
-      "grantType": "secondary-skill",
-      "isCore": true,
-      "professionId": "mourner",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "recitation"
+      "skillGroupId": "omen_and_ritual_practice"
     },
     {
       "grantType": "group",
@@ -7076,31 +8813,7 @@ export const generatedRepoLocalGlantriSeed = {
       "professionId": "mourner",
       "ranks": 0,
       "scope": "profession",
-      "skillGroupId": "omen_and_ritual_practice"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "mourner",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "theology"
-    },
-    {
-      "grantType": "secondary-skill",
-      "isCore": false,
-      "professionId": "mourner",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "ritual_interpretation"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "mourner",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "history"
+      "skillGroupId": "temple_service"
     },
     {
       "grantType": "group",
@@ -7191,7 +8904,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "insight"
     },
     {
-      "grantType": "secondary-skill",
+      "grantType": "ordinary-skill",
       "isCore": false,
       "professionId": "noble",
       "ranks": 0,
@@ -7217,42 +8930,66 @@ export const generatedRepoLocalGlantriSeed = {
     {
       "grantType": "group",
       "isCore": true,
+      "professionId": "outrider_scout",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "basic_missile_training"
+    },
+    {
+      "grantType": "group",
+      "isCore": false,
+      "professionId": "outrider_scout",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "mounted_service"
+    },
+    {
+      "grantType": "group",
+      "isCore": false,
+      "professionId": "outrider_scout",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "fieldcraft_stealth"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
       "professionId": "peddler",
       "ranks": 0,
       "scope": "profession",
       "skillGroupId": "mercantile_practice"
     },
     {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "peddler",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "transport_and_caravan_work"
+    },
+    {
       "grantType": "ordinary-skill",
       "isCore": true,
       "professionId": "peddler",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "bargaining"
+      "skillId": "language"
     },
     {
-      "grantType": "ordinary-skill",
-      "isCore": true,
-      "professionId": "peddler",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "trading"
-    },
-    {
-      "grantType": "secondary-skill",
+      "grantType": "group",
       "isCore": false,
       "professionId": "peddler",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "teamstering"
+      "skillGroupId": "mounted_service"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": false,
       "professionId": "peddler",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "animal_care"
+      "skillGroupId": "social_reading"
     },
     {
       "grantType": "ordinary-skill",
@@ -7287,7 +9024,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "insight"
     },
     {
-      "grantType": "secondary-skill",
+      "grantType": "ordinary-skill",
       "isCore": false,
       "professionId": "personal_servant",
       "ranks": 0,
@@ -7301,6 +9038,46 @@ export const generatedRepoLocalGlantriSeed = {
       "ranks": 0,
       "scope": "profession",
       "skillId": "social_perception"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "philosopher",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "literate_foundation"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "philosopher",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "scholarly_formation"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "philosopher",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "mental_discipline"
+    },
+    {
+      "grantType": "group",
+      "isCore": false,
+      "professionId": "philosopher",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "civic_learning"
+    },
+    {
+      "grantType": "group",
+      "isCore": false,
+      "professionId": "philosopher",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "social_reading"
     },
     {
       "grantType": "group",
@@ -7375,7 +9152,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "intrigue"
     },
     {
-      "grantType": "secondary-skill",
+      "grantType": "ordinary-skill",
       "isCore": true,
       "professionId": "politician",
       "ranks": 0,
@@ -7431,52 +9208,36 @@ export const generatedRepoLocalGlantriSeed = {
       "skillGroupId": "omen_and_ritual_practice"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": true,
       "professionId": "priest",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "theology"
+      "skillGroupId": "temple_service"
     },
     {
-      "grantType": "secondary-skill",
-      "isCore": true,
-      "professionId": "priest",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "ritual_interpretation"
-    },
-    {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": false,
       "professionId": "priest",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "history"
+      "skillGroupId": "literate_foundation"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": false,
       "professionId": "priest",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "divination"
+      "skillGroupId": "civic_learning"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": false,
       "professionId": "priest",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "literacy"
-    },
-    {
-      "grantType": "secondary-skill",
-      "isCore": false,
-      "professionId": "priest",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "oratory"
+      "skillGroupId": "healing_practice"
     },
     {
       "grantType": "ordinary-skill",
@@ -7503,7 +9264,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "stoneworking"
     },
     {
-      "grantType": "secondary-skill",
+      "grantType": "ordinary-skill",
       "isCore": false,
       "professionId": "prospector",
       "ranks": 0,
@@ -7519,6 +9280,62 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "run"
     },
     {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "prostitute",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "mercantile_practice"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "prostitute",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "social_reading"
+    },
+    {
+      "grantType": "secondary-skill",
+      "isCore": true,
+      "professionId": "prostitute",
+      "ranks": 0,
+      "scope": "profession",
+      "skillId": "seduction"
+    },
+    {
+      "grantType": "group",
+      "isCore": false,
+      "professionId": "prostitute",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "performance_basics"
+    },
+    {
+      "grantType": "ordinary-skill",
+      "isCore": false,
+      "professionId": "prostitute",
+      "ranks": 0,
+      "scope": "profession",
+      "skillId": "bargaining"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "prostitute_courtesan",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "social_reading"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "prostitute_courtesan",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "performance_basics"
+    },
+    {
       "grantType": "secondary-skill",
       "isCore": true,
       "professionId": "prostitute_courtesan",
@@ -7527,12 +9344,12 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "seduction"
     },
     {
-      "grantType": "ordinary-skill",
-      "isCore": true,
+      "grantType": "group",
+      "isCore": false,
       "professionId": "prostitute_courtesan",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "insight"
+      "skillGroupId": "formal_performance"
     },
     {
       "grantType": "ordinary-skill",
@@ -7541,22 +9358,6 @@ export const generatedRepoLocalGlantriSeed = {
       "ranks": 0,
       "scope": "profession",
       "skillId": "bargaining"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "prostitute_courtesan",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "etiquette"
-    },
-    {
-      "grantType": "secondary-skill",
-      "isCore": false,
-      "professionId": "prostitute_courtesan",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "detect_lies"
     },
     {
       "grantType": "group",
@@ -7591,7 +9392,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "boat_handling"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "secondary-skill",
       "isCore": false,
       "professionId": "sailor",
       "ranks": 0,
@@ -7615,20 +9416,20 @@ export const generatedRepoLocalGlantriSeed = {
       "skillGroupId": "literate_foundation"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": true,
       "professionId": "scribe",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "literacy"
+      "skillGroupId": "civic_learning"
     },
     {
-      "grantType": "secondary-skill",
+      "grantType": "group",
       "isCore": true,
       "professionId": "scribe",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "bureaucratic_writing"
+      "skillGroupId": "commercial_administration"
     },
     {
       "grantType": "group",
@@ -7636,31 +9437,7 @@ export const generatedRepoLocalGlantriSeed = {
       "professionId": "scribe",
       "ranks": 0,
       "scope": "profession",
-      "skillGroupId": "civic_learning"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "scribe",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "history"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "scribe",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "theology"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "scribe",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "administration"
+      "skillGroupId": "scholarly_formation"
     },
     {
       "grantType": "group",
@@ -7671,24 +9448,8 @@ export const generatedRepoLocalGlantriSeed = {
       "skillGroupId": "omen_and_ritual_practice"
     },
     {
-      "grantType": "ordinary-skill",
-      "isCore": true,
-      "professionId": "shaman",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "divination"
-    },
-    {
-      "grantType": "secondary-skill",
-      "isCore": true,
-      "professionId": "shaman",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "ritual_interpretation"
-    },
-    {
       "grantType": "group",
-      "isCore": false,
+      "isCore": true,
       "professionId": "shaman",
       "ranks": 0,
       "scope": "profession",
@@ -7696,35 +9457,19 @@ export const generatedRepoLocalGlantriSeed = {
     },
     {
       "grantType": "group",
-      "isCore": false,
+      "isCore": true,
       "professionId": "shaman",
       "ranks": 0,
       "scope": "profession",
       "skillGroupId": "herb_and_remedy_craft"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": false,
       "professionId": "shaman",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "theology"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "shaman",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "herb_lore"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "shaman",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "concentration"
+      "skillGroupId": "mental_discipline"
     },
     {
       "grantType": "ordinary-skill",
@@ -7740,55 +9485,7 @@ export const generatedRepoLocalGlantriSeed = {
       "professionId": "ships_officer",
       "ranks": 0,
       "scope": "profession",
-      "skillGroupId": "maritime_crew_training"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": true,
-      "professionId": "ships_officer",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "sailing"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": true,
-      "professionId": "ships_officer",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "captaincy"
-    },
-    {
-      "grantType": "group",
-      "isCore": false,
-      "professionId": "ships_officer",
-      "ranks": 0,
-      "scope": "profession",
-      "skillGroupId": "maritime_navigation"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "ships_officer",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "navigation"
-    },
-    {
-      "grantType": "secondary-skill",
-      "isCore": false,
-      "professionId": "ships_officer",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "ropework"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "ships_officer",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "perception"
+      "skillGroupId": "ship_command"
     },
     {
       "grantType": "ordinary-skill",
@@ -7836,31 +9533,15 @@ export const generatedRepoLocalGlantriSeed = {
       "professionId": "smuggler",
       "ranks": 0,
       "scope": "profession",
-      "skillGroupId": "mercantile_practice"
+      "skillGroupId": "smuggling_illicit_trade"
     },
     {
-      "grantType": "ordinary-skill",
-      "isCore": true,
-      "professionId": "smuggler",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "trading"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": true,
-      "professionId": "smuggler",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "bargaining"
-    },
-    {
-      "grantType": "secondary-skill",
+      "grantType": "group",
       "isCore": false,
       "professionId": "smuggler",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "conceal_object"
+      "skillGroupId": "covert_entry"
     },
     {
       "grantType": "ordinary-skill",
@@ -7868,23 +9549,7 @@ export const generatedRepoLocalGlantriSeed = {
       "professionId": "smuggler",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "stealth"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "smuggler",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "sailing"
-    },
-    {
-      "grantType": "secondary-skill",
-      "isCore": false,
-      "professionId": "smuggler",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "teamstering"
+      "skillId": "language"
     },
     {
       "grantType": "group",
@@ -7895,44 +9560,44 @@ export const generatedRepoLocalGlantriSeed = {
       "skillGroupId": "omen_and_ritual_practice"
     },
     {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "soothsayer",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "healing_practice"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "soothsayer",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "herb_and_remedy_craft"
+    },
+    {
       "grantType": "ordinary-skill",
       "isCore": true,
-      "professionId": "soothsayer",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "divination"
-    },
-    {
-      "grantType": "secondary-skill",
-      "isCore": true,
-      "professionId": "soothsayer",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "omen_reading"
-    },
-    {
-      "grantType": "secondary-skill",
-      "isCore": false,
-      "professionId": "soothsayer",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "ritual_interpretation"
-    },
-    {
-      "grantType": "secondary-skill",
-      "isCore": false,
       "professionId": "soothsayer",
       "ranks": 0,
       "scope": "profession",
       "skillId": "astrology"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": false,
       "professionId": "soothsayer",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "insight"
+      "skillGroupId": "mental_discipline"
+    },
+    {
+      "grantType": "group",
+      "isCore": false,
+      "professionId": "soothsayer",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "social_reading"
     },
     {
       "grantType": "group",
@@ -7999,7 +9664,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "search"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "secondary-skill",
       "isCore": true,
       "professionId": "street_thug",
       "ranks": 0,
@@ -8015,7 +9680,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "insight"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "secondary-skill",
       "isCore": false,
       "professionId": "street_thug",
       "ranks": 0,
@@ -8047,20 +9712,20 @@ export const generatedRepoLocalGlantriSeed = {
       "skillGroupId": "literate_foundation"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": true,
       "professionId": "student",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "literacy"
+      "skillGroupId": "civic_learning"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": true,
       "professionId": "student",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "language"
+      "skillGroupId": "scholarly_formation"
     },
     {
       "grantType": "group",
@@ -8068,31 +9733,15 @@ export const generatedRepoLocalGlantriSeed = {
       "professionId": "student",
       "ranks": 0,
       "scope": "profession",
-      "skillGroupId": "civic_learning"
+      "skillGroupId": "mental_discipline"
     },
     {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "student",
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "tax_collector",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "history"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "student",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "theology"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "student",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "philosophy"
+      "skillGroupId": "literate_foundation"
     },
     {
       "grantType": "group",
@@ -8111,52 +9760,28 @@ export const generatedRepoLocalGlantriSeed = {
       "skillGroupId": "commercial_administration"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": true,
       "professionId": "tax_collector",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "administration"
+      "skillGroupId": "fiscal_administration"
     },
     {
-      "grantType": "secondary-skill",
-      "isCore": true,
-      "professionId": "tax_collector",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "bookkeeping"
-    },
-    {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": false,
       "professionId": "tax_collector",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "law"
+      "skillGroupId": "social_reading"
     },
     {
-      "grantType": "secondary-skill",
+      "grantType": "group",
       "isCore": false,
       "professionId": "tax_collector",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "bureaucratic_writing"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "tax_collector",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "insight"
-    },
-    {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "tax_collector",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "bargaining"
+      "skillGroupId": "courtly_formation"
     },
     {
       "grantType": "group",
@@ -8191,15 +9816,7 @@ export const generatedRepoLocalGlantriSeed = {
       "skillId": "search"
     },
     {
-      "grantType": "group",
-      "isCore": false,
-      "professionId": "thief",
-      "ranks": 0,
-      "scope": "profession",
-      "skillGroupId": "trap_and_intrusion_work"
-    },
-    {
-      "grantType": "secondary-skill",
+      "grantType": "ordinary-skill",
       "isCore": false,
       "professionId": "thief",
       "ranks": 0,
@@ -8271,14 +9888,6 @@ export const generatedRepoLocalGlantriSeed = {
       "skillGroupId": "basic_melee_training"
     },
     {
-      "grantType": "ordinary-skill",
-      "isCore": true,
-      "professionId": "watchman",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "perception"
-    },
-    {
       "grantType": "group",
       "isCore": false,
       "professionId": "watchman",
@@ -8287,60 +9896,922 @@ export const generatedRepoLocalGlantriSeed = {
       "skillGroupId": "defensive_soldiering"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": false,
       "professionId": "watchman",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "search"
+      "skillGroupId": "watch_civic_guard"
     },
     {
-      "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "watchman",
-      "ranks": 0,
-      "scope": "profession",
-      "skillId": "captaincy"
-    },
-    {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": true,
       "professionId": "woodcutter",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "carpentry"
+      "skillGroupId": "technical_measurement"
     },
     {
-      "grantType": "ordinary-skill",
+      "grantType": "group",
       "isCore": true,
       "professionId": "woodcutter",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "run"
+      "skillGroupId": "forestry_resource_work"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "village_guard",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "basic_melee_training"
+    },
+    {
+      "grantType": "group",
+      "isCore": false,
+      "professionId": "village_guard",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "watch_civic_guard"
+    },
+    {
+      "grantType": "group",
+      "isCore": false,
+      "professionId": "village_guard",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "defensive_soldiering"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "militia_fighter",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "basic_melee_training"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "militia_fighter",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "basic_missile_training"
+    },
+    {
+      "grantType": "group",
+      "isCore": false,
+      "professionId": "militia_fighter",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "defensive_soldiering"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "garrison_soldier",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "basic_melee_training"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "garrison_soldier",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "defensive_soldiering"
+    },
+    {
+      "grantType": "group",
+      "isCore": false,
+      "professionId": "garrison_soldier",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "veteran_soldiering"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "veteran_sergeant",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "basic_melee_training"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "veteran_sergeant",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "basic_missile_training"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "veteran_sergeant",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "defensive_soldiering"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "veteran_sergeant",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "veteran_soldiering"
+    },
+    {
+      "grantType": "group",
+      "isCore": false,
+      "professionId": "veteran_sergeant",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "veteran_leadership"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "city_watch_officer",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "basic_melee_training"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "city_watch_officer",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "watch_civic_guard"
+    },
+    {
+      "grantType": "group",
+      "isCore": false,
+      "professionId": "city_watch_officer",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "defensive_soldiering"
+    },
+    {
+      "grantType": "group",
+      "isCore": false,
+      "professionId": "city_watch_officer",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "veteran_leadership"
+    },
+    {
+      "grantType": "group",
+      "isCore": false,
+      "professionId": "city_watch_officer",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "civic_learning"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "quartermaster",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "civic_learning"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "quartermaster",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "commercial_administration"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "quartermaster",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "literate_foundation"
+    },
+    {
+      "grantType": "group",
+      "isCore": false,
+      "professionId": "quartermaster",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "route_security"
+    },
+    {
+      "grantType": "group",
+      "isCore": false,
+      "professionId": "quartermaster",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "defensive_soldiering"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "staff_officer",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "veteran_leadership"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "staff_officer",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "civic_learning"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "staff_officer",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "literate_foundation"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "staff_officer",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "veteran_soldiering"
+    },
+    {
+      "grantType": "group",
+      "isCore": false,
+      "professionId": "staff_officer",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "courtly_formation"
+    },
+    {
+      "grantType": "group",
+      "isCore": false,
+      "professionId": "staff_officer",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "commercial_administration"
+    },
+    {
+      "grantType": "group",
+      "isCore": false,
+      "professionId": "staff_officer",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "political_acumen"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "imperial_officer",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "basic_melee_training"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "imperial_officer",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "defensive_soldiering"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "imperial_officer",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "veteran_soldiering"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "imperial_officer",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "veteran_leadership"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "imperial_officer",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "civic_learning"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "imperial_officer",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "literate_foundation"
+    },
+    {
+      "grantType": "group",
+      "isCore": false,
+      "professionId": "imperial_officer",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "courtly_formation"
+    },
+    {
+      "grantType": "group",
+      "isCore": false,
+      "professionId": "imperial_officer",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "political_acumen"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "cavalry_officer",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "mounted_warrior_training"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "cavalry_officer",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "veteran_soldiering"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "cavalry_officer",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "veteran_leadership"
+    },
+    {
+      "grantType": "group",
+      "isCore": false,
+      "professionId": "cavalry_officer",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "defensive_soldiering"
+    },
+    {
+      "grantType": "group",
+      "isCore": false,
+      "professionId": "cavalry_officer",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "civic_learning"
+    },
+    {
+      "grantType": "group",
+      "isCore": false,
+      "professionId": "cavalry_officer",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "courtly_formation"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "elite_guard_officer",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "watch_civic_guard"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "elite_guard_officer",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "basic_melee_training"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "elite_guard_officer",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "defensive_soldiering"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "elite_guard_officer",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "courtly_formation"
+    },
+    {
+      "grantType": "group",
+      "isCore": false,
+      "professionId": "elite_guard_officer",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "veteran_soldiering"
+    },
+    {
+      "grantType": "group",
+      "isCore": false,
+      "professionId": "elite_guard_officer",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "veteran_leadership"
+    },
+    {
+      "grantType": "group",
+      "isCore": false,
+      "professionId": "elite_guard_officer",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "political_acumen"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "guild_master",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "craft_group"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "guild_master",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "mercantile_practice"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "guild_master",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "commercial_administration"
+    },
+    {
+      "grantType": "group",
+      "isCore": false,
+      "professionId": "guild_master",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "civic_learning"
+    },
+    {
+      "grantType": "group",
+      "isCore": false,
+      "professionId": "guild_master",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "political_acumen"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "merchant_factor",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "mercantile_practice"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "merchant_factor",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "commercial_administration"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "merchant_factor",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "operations"
     },
     {
       "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "woodcutter",
+      "isCore": true,
+      "professionId": "merchant_factor",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "climb"
+      "skillId": "language"
     },
     {
       "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "woodcutter",
+      "isCore": true,
+      "professionId": "merchant_factor",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "self_control"
+      "skillId": "etiquette"
+    },
+    {
+      "grantType": "group",
+      "isCore": false,
+      "professionId": "merchant_factor",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "civic_learning"
+    },
+    {
+      "grantType": "group",
+      "isCore": false,
+      "professionId": "merchant_factor",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "political_acumen"
+    },
+    {
+      "grantType": "group",
+      "isCore": false,
+      "professionId": "merchant_factor",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "social_reading"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "banker_moneylender",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "commercial_administration"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "banker_moneylender",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "mercantile_practice"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "banker_moneylender",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "operations"
+    },
+    {
+      "grantType": "group",
+      "isCore": false,
+      "professionId": "banker_moneylender",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "civic_learning"
+    },
+    {
+      "grantType": "group",
+      "isCore": false,
+      "professionId": "banker_moneylender",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "social_reading"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "great_merchant",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "mercantile_practice"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "great_merchant",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "commercial_administration"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "great_merchant",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "operations"
+    },
+    {
+      "grantType": "group",
+      "isCore": true,
+      "professionId": "great_merchant",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "political_acumen"
     },
     {
       "grantType": "ordinary-skill",
-      "isCore": false,
-      "professionId": "woodcutter",
+      "isCore": true,
+      "professionId": "great_merchant",
       "ranks": 0,
       "scope": "profession",
-      "skillId": "leatherworking"
+      "skillId": "language"
+    },
+    {
+      "grantType": "group",
+      "isCore": false,
+      "professionId": "great_merchant",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "courtly_formation"
+    },
+    {
+      "grantType": "group",
+      "isCore": false,
+      "professionId": "great_merchant",
+      "ranks": 0,
+      "scope": "profession",
+      "skillGroupId": "civic_learning"
+    }
+  ],
+  "societyBandSkillAccess": [
+    {
+      "linkedSocietyLevel": 3,
+      "notes": "Foundational access only: Literacy is available for main skill-point spending from this society-band slot, not granted for free.",
+      "skillId": "literacy",
+      "socialBand": 4,
+      "societyId": "bronze_age_palace_state",
+      "societyName": "Bronze Age palace state"
+    },
+    {
+      "linkedSocietyLevel": 3,
+      "notes": "Foundational access only: Literacy is available for main skill-point spending from this society-band slot, not granted for free.",
+      "skillId": "literacy",
+      "socialBand": 4,
+      "societyId": "temple_state_literate",
+      "societyName": "Temple-state / early literate agrarian state"
+    },
+    {
+      "linkedSocietyLevel": 4,
+      "notes": "Foundational access only: Literacy is available for main skill-point spending from this society-band slot, not granted for free.",
+      "skillId": "literacy",
+      "socialBand": 3,
+      "societyId": "imperial_agrarian_bureaucracy",
+      "societyName": "Imperial agrarian bureaucracy"
+    },
+    {
+      "linkedSocietyLevel": 4,
+      "notes": "Foundational access only: Literacy is available for main skill-point spending from this society-band slot, not granted for free.",
+      "skillId": "literacy",
+      "socialBand": 4,
+      "societyId": "imperial_agrarian_bureaucracy",
+      "societyName": "Imperial agrarian bureaucracy"
+    },
+    {
+      "linkedSocietyLevel": 4,
+      "notes": "Foundational access only: Literacy is available for main skill-point spending from this society-band slot, not granted for free.",
+      "skillId": "literacy",
+      "socialBand": 3,
+      "societyId": "feudal_manorial_kingdom",
+      "societyName": "Feudal / manorial kingdom"
+    },
+    {
+      "linkedSocietyLevel": 4,
+      "notes": "Foundational access only: Literacy is available for main skill-point spending from this society-band slot, not granted for free.",
+      "skillId": "literacy",
+      "socialBand": 4,
+      "societyId": "feudal_manorial_kingdom",
+      "societyName": "Feudal / manorial kingdom"
+    },
+    {
+      "linkedSocietyLevel": 5,
+      "notes": "Foundational access only: Literacy is available for main skill-point spending from this society-band slot, not granted for free.",
+      "skillId": "literacy",
+      "socialBand": 2,
+      "societyId": "classical_polis_city_state",
+      "societyName": "Classical polis / city-state civilization"
+    },
+    {
+      "linkedSocietyLevel": 5,
+      "notes": "Foundational access only: Literacy is available for main skill-point spending from this society-band slot, not granted for free.",
+      "skillId": "literacy",
+      "socialBand": 3,
+      "societyId": "classical_polis_city_state",
+      "societyName": "Classical polis / city-state civilization"
+    },
+    {
+      "linkedSocietyLevel": 5,
+      "notes": "Foundational access only: Literacy is available for main skill-point spending from this society-band slot, not granted for free.",
+      "skillId": "literacy",
+      "socialBand": 4,
+      "societyId": "classical_polis_city_state",
+      "societyName": "Classical polis / city-state civilization"
+    },
+    {
+      "linkedSocietyLevel": 5,
+      "notes": "Foundational access only: Literacy is available for main skill-point spending from this society-band slot, not granted for free.",
+      "skillId": "literacy",
+      "socialBand": 2,
+      "societyId": "imperial_classical_high_civ",
+      "societyName": "Imperial classical / Hellenistic-Roman high civilization"
+    },
+    {
+      "linkedSocietyLevel": 5,
+      "notes": "Foundational access only: Literacy is available for main skill-point spending from this society-band slot, not granted for free.",
+      "skillId": "literacy",
+      "socialBand": 3,
+      "societyId": "imperial_classical_high_civ",
+      "societyName": "Imperial classical / Hellenistic-Roman high civilization"
+    },
+    {
+      "linkedSocietyLevel": 5,
+      "notes": "Foundational access only: Literacy is available for main skill-point spending from this society-band slot, not granted for free.",
+      "skillId": "literacy",
+      "socialBand": 4,
+      "societyId": "imperial_classical_high_civ",
+      "societyName": "Imperial classical / Hellenistic-Roman high civilization"
+    },
+    {
+      "linkedSocietyLevel": 5,
+      "notes": "Foundational access only: Literacy is available for main skill-point spending from this society-band slot, not granted for free.",
+      "skillId": "literacy",
+      "socialBand": 2,
+      "societyId": "court_bureaucratic_empire",
+      "societyName": "Court-bureaucratic high medieval empire"
+    },
+    {
+      "linkedSocietyLevel": 5,
+      "notes": "Foundational access only: Literacy is available for main skill-point spending from this society-band slot, not granted for free.",
+      "skillId": "literacy",
+      "socialBand": 3,
+      "societyId": "court_bureaucratic_empire",
+      "societyName": "Court-bureaucratic high medieval empire"
+    },
+    {
+      "linkedSocietyLevel": 5,
+      "notes": "Foundational access only: Literacy is available for main skill-point spending from this society-band slot, not granted for free.",
+      "skillId": "literacy",
+      "socialBand": 4,
+      "societyId": "court_bureaucratic_empire",
+      "societyName": "Court-bureaucratic high medieval empire"
+    },
+    {
+      "linkedSocietyLevel": 6,
+      "notes": "Foundational access only: Literacy is available for main skill-point spending from this society-band slot, not granted for free.",
+      "skillId": "literacy",
+      "socialBand": 1,
+      "societyId": "renaissance_city_state",
+      "societyName": "Commercial renaissance city-state / principality"
+    },
+    {
+      "linkedSocietyLevel": 6,
+      "notes": "Foundational access only: Literacy is available for main skill-point spending from this society-band slot, not granted for free.",
+      "skillId": "literacy",
+      "socialBand": 2,
+      "societyId": "renaissance_city_state",
+      "societyName": "Commercial renaissance city-state / principality"
+    },
+    {
+      "linkedSocietyLevel": 6,
+      "notes": "Foundational access only: Literacy is available for main skill-point spending from this society-band slot, not granted for free.",
+      "skillId": "literacy",
+      "socialBand": 3,
+      "societyId": "renaissance_city_state",
+      "societyName": "Commercial renaissance city-state / principality"
+    },
+    {
+      "linkedSocietyLevel": 6,
+      "notes": "Foundational access only: Literacy is available for main skill-point spending from this society-band slot, not granted for free.",
+      "skillId": "literacy",
+      "socialBand": 4,
+      "societyId": "renaissance_city_state",
+      "societyName": "Commercial renaissance city-state / principality"
+    }
+  ],
+  "societies": [
+    {
+      "baselineLanguageIds": [
+        "tuu_language"
+      ],
+      "historicalReference": "England/Stonehenge",
+      "id": "forager_ritual_tribal",
+      "name": "Forager / ritual-tribal",
+      "notes": "Source sheet note: bronze age",
+      "shortDescription": "Mobile or semi-settled society with oral tradition, limited formal hierarchy, and little bureaucracy.",
+      "societyLevel": 1
+    },
+    {
+      "baselineLanguageIds": [
+        "scythian_language"
+      ],
+      "glantriExamples": "Scandia",
+      "historicalReference": "old Norse, England 600s",
+      "id": "pastoral_clan_nomadic",
+      "name": "Pastoral clan / nomadic warrior",
+      "shortDescription": "Kin-based, mobile, animal-centered society with practical martial and survival training.",
+      "societyLevel": 2
+    },
+    {
+      "baselineLanguageIds": [
+        "old_latin_language"
+      ],
+      "historicalReference": "Ancient Sumer, Ancient crete",
+      "id": "early_agrarian_proto_state",
+      "name": "Early agrarian chiefdom / proto-state",
+      "notes": "Source sheet note: bronze age",
+      "shortDescription": "Settled farming society with local hierarchy and growing specialization.",
+      "societyLevel": 2
+    },
+    {
+      "baselineLanguageIds": [
+        "mycenaean_greek_language"
+      ],
+      "historicalReference": "Ancient Sumer, Ancient crete",
+      "id": "bronze_age_palace_state",
+      "name": "Bronze Age palace state",
+      "notes": "Use as palace-state variant of the source row",
+      "shortDescription": "Palace-centered society with elite coordination, recordkeeping, and specialized craft.",
+      "societyLevel": 3
+    },
+    {
+      "baselineLanguageIds": [
+        "sumerian_language"
+      ],
+      "historicalReference": "Ancient Sumer, Ancient crete",
+      "id": "temple_state_literate",
+      "name": "Temple-state / early literate agrarian state",
+      "notes": "Literate temple-state interpretation of source row",
+      "shortDescription": "Early literate state with priesthood, scribal culture, taxation, and formal ritual order.",
+      "societyLevel": 3
+    },
+    {
+      "baselineLanguageIds": [
+        "old_persian_language"
+      ],
+      "historicalReference": "Ancient Egypt, newer kingdom",
+      "id": "imperial_agrarian_bureaucracy",
+      "name": "Imperial agrarian bureaucracy",
+      "shortDescription": "Large organized state with formal offices, recordkeeping, and infrastructure.",
+      "societyLevel": 4
+    },
+    {
+      "baselineLanguageIds": [
+        "common_language"
+      ],
+      "glantriExamples": "Glantri",
+      "historicalReference": "medevieal feudals",
+      "id": "feudal_manorial_kingdom",
+      "name": "Feudal / manorial kingdom",
+      "shortDescription": "Rank-based landholding society with noble households, retainers, and local obligations.",
+      "societyLevel": 4
+    },
+    {
+      "baselineLanguageIds": [
+        "old_common_language"
+      ],
+      "glantriExamples": "Scyria",
+      "historicalReference": "Athens 300bc",
+      "id": "classical_polis_city_state",
+      "name": "Classical polis / city-state civilization",
+      "shortDescription": "Urban civic society with rhetoric, education, public life, and structured elite culture.",
+      "societyLevel": 5
+    },
+    {
+      "baselineLanguageIds": [
+        "phoenician_language"
+      ],
+      "glantriExamples": "Thyasis",
+      "historicalReference": "late rome, byszantine empire",
+      "id": "imperial_classical_high_civ",
+      "name": "Imperial classical / Hellenistic-Roman high civilization",
+      "shortDescription": "Highly organized urban imperial culture with law, engineering, and broad learned life.",
+      "societyLevel": 5
+    },
+    {
+      "baselineLanguageIds": [
+        "old_common_language"
+      ],
+      "glantriExamples": "Thyasis",
+      "historicalReference": "late rome, byszantine empire",
+      "id": "court_bureaucratic_empire",
+      "name": "Court-bureaucratic high medieval empire",
+      "notes": "Court-bureaucratic interpretation of source civilization row",
+      "shortDescription": "Literate imperial court culture with ceremony, bureaucracy, and high-status administration.",
+      "societyLevel": 5
+    },
+    {
+      "baselineLanguageIds": [
+        "common_language"
+      ],
+      "glantriExamples": "Iest",
+      "historicalReference": "italian city states",
+      "id": "renaissance_city_state",
+      "name": "Commercial renaissance city-state / principality",
+      "notes": "Source sheet note: modern",
+      "shortDescription": "Urban commercial elite culture with diplomacy, finance, advanced technique, and refined court life.",
+      "societyLevel": 6
     }
   ],
   "societyLevels": [
@@ -8359,9 +10830,6 @@ export const generatedRepoLocalGlantriSeed = {
         "crafter",
         "dancer_acrobat",
         "entertainer",
-        "entertainers_dancer_acrobat",
-        "entertainers_singer_musician",
-        "entertainers_trickster_fool",
         "farmer",
         "fisher",
         "herbalist",
@@ -8373,7 +10841,9 @@ export const generatedRepoLocalGlantriSeed = {
         "prospector",
         "shaman",
         "street_thug",
-        "woodcutter"
+        "woodcutter",
+        "village_guard",
+        "militia_fighter"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -8397,9 +10867,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -8413,7 +10881,23 @@ export const generatedRepoLocalGlantriSeed = {
         "military_group",
         "craft_group",
         "mental_group",
-        "wilderness_group"
+        "wilderness_group",
+        "arena_training",
+        "route_security",
+        "ship_command",
+        "smuggling_illicit_trade",
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Common Folk",
@@ -8436,9 +10920,6 @@ export const generatedRepoLocalGlantriSeed = {
         "crafter",
         "dancer_acrobat",
         "entertainer",
-        "entertainers_dancer_acrobat",
-        "entertainers_singer_musician",
-        "entertainers_trickster_fool",
         "farmer",
         "fisher",
         "herbalist",
@@ -8450,7 +10931,9 @@ export const generatedRepoLocalGlantriSeed = {
         "prospector",
         "shaman",
         "street_thug",
-        "woodcutter"
+        "woodcutter",
+        "village_guard",
+        "militia_fighter"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -8474,9 +10957,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -8490,7 +10971,23 @@ export const generatedRepoLocalGlantriSeed = {
         "military_group",
         "craft_group",
         "mental_group",
-        "wilderness_group"
+        "wilderness_group",
+        "arena_training",
+        "route_security",
+        "ship_command",
+        "smuggling_illicit_trade",
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Trades and Guilds",
@@ -8506,16 +11003,11 @@ export const generatedRepoLocalGlantriSeed = {
         "folk_healer",
         "herdsman_subtype",
         "folk_performer",
-        "tribal_warrior",
         "bandit",
         "beggar",
-        "clan_warriors",
         "crafter",
         "dancer_acrobat",
         "entertainer",
-        "entertainers_dancer_acrobat",
-        "entertainers_singer_musician",
-        "entertainers_trickster_fool",
         "farmer",
         "fisher",
         "herbalist",
@@ -8527,7 +11019,8 @@ export const generatedRepoLocalGlantriSeed = {
         "prospector",
         "shaman",
         "street_thug",
-        "woodcutter"
+        "woodcutter",
+        "militia_fighter"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -8551,9 +11044,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -8567,7 +11058,23 @@ export const generatedRepoLocalGlantriSeed = {
         "military_group",
         "craft_group",
         "mental_group",
-        "wilderness_group"
+        "wilderness_group",
+        "arena_training",
+        "route_security",
+        "ship_command",
+        "smuggling_illicit_trade",
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Established Households",
@@ -8581,30 +11088,16 @@ export const generatedRepoLocalGlantriSeed = {
       "notes": "Mobile or semi-settled society with oral tradition, limited formal hierarchy, and little bureaucracy. Historical reference: England/Stonehenge. Source sheet note: bronze age",
       "professionIds": [
         "folk_healer",
-        "herdsman_subtype",
         "folk_performer",
-        "tribal_warrior",
-        "bandit",
-        "beggar",
-        "clan_warriors",
         "crafter",
         "dancer_acrobat",
         "entertainer",
-        "entertainers_dancer_acrobat",
-        "entertainers_singer_musician",
-        "entertainers_trickster_fool",
-        "farmer",
-        "fisher",
         "herbalist",
-        "herder",
         "hermit",
         "hunter",
         "messenger",
-        "peddler",
         "prospector",
-        "shaman",
-        "street_thug",
-        "woodcutter"
+        "shaman"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -8628,9 +11121,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -8644,7 +11135,23 @@ export const generatedRepoLocalGlantriSeed = {
         "military_group",
         "craft_group",
         "mental_group",
-        "wilderness_group"
+        "wilderness_group",
+        "arena_training",
+        "route_security",
+        "ship_command",
+        "smuggling_illicit_trade",
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Court and Elite",
@@ -8661,15 +11168,13 @@ export const generatedRepoLocalGlantriSeed = {
         "herdsman_subtype",
         "folk_performer",
         "tribal_warrior",
+        "levy_infantry",
         "bandit",
         "beggar",
         "clan_warriors",
         "crafter",
         "dancer_acrobat",
         "entertainer",
-        "entertainers_dancer_acrobat",
-        "entertainers_singer_musician",
-        "entertainers_trickster_fool",
         "farmer",
         "fisher",
         "herbalist",
@@ -8681,7 +11186,9 @@ export const generatedRepoLocalGlantriSeed = {
         "prospector",
         "shaman",
         "street_thug",
-        "woodcutter"
+        "woodcutter",
+        "village_guard",
+        "militia_fighter"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -8705,9 +11212,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -8721,7 +11226,23 @@ export const generatedRepoLocalGlantriSeed = {
         "military_group",
         "craft_group",
         "mental_group",
-        "wilderness_group"
+        "wilderness_group",
+        "arena_training",
+        "route_security",
+        "ship_command",
+        "smuggling_illicit_trade",
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Common Folk",
@@ -8749,7 +11270,6 @@ export const generatedRepoLocalGlantriSeed = {
         "bodyguard",
         "bounty_hunter",
         "caravan_guard",
-        "cavalry",
         "chariot_driver",
         "clan_warriors",
         "conman",
@@ -8757,22 +11277,17 @@ export const generatedRepoLocalGlantriSeed = {
         "dancer_acrobat",
         "docker",
         "entertainer",
-        "entertainers_dancer_acrobat",
-        "entertainers_singer_musician",
-        "entertainers_trickster_fool",
         "farmer",
         "fisher",
         "fixer",
         "gladiator",
         "healer",
-        "heavy_infantry",
         "herbalist",
         "herder",
         "hermit",
         "homemaker",
         "hunter",
         "inn_keeper",
-        "jailer",
         "light_infantry",
         "merchant",
         "messenger",
@@ -8792,8 +11307,9 @@ export const generatedRepoLocalGlantriSeed = {
         "street_thug",
         "thief",
         "torturer",
-        "watchman",
-        "woodcutter"
+        "woodcutter",
+        "village_guard",
+        "militia_fighter"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -8809,7 +11325,6 @@ export const generatedRepoLocalGlantriSeed = {
         "transport_and_caravan_work",
         "covert_entry",
         "street_theft",
-        "trap_and_intrusion_work",
         "fieldcraft_stealth",
         "athletic_conditioning",
         "social_reading",
@@ -8822,9 +11337,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -8839,7 +11352,25 @@ export const generatedRepoLocalGlantriSeed = {
         "craft_group",
         "mental_group",
         "mystical_group",
-        "wilderness_group"
+        "wilderness_group",
+        "arena_training",
+        "route_security",
+        "ship_command",
+        "smuggling_illicit_trade",
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced",
+        "construction_specialty",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "temple_service",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Trades and Guilds",
@@ -8858,7 +11389,6 @@ export const generatedRepoLocalGlantriSeed = {
         "herdsman_subtype",
         "burglar",
         "folk_performer",
-        "tribal_warrior",
         "levy_infantry",
         "cavalry_mounted_retainer",
         "animal_trainer",
@@ -8867,30 +11397,23 @@ export const generatedRepoLocalGlantriSeed = {
         "bodyguard",
         "bounty_hunter",
         "caravan_guard",
-        "cavalry",
         "chariot_driver",
-        "clan_warriors",
         "conman",
         "crafter",
         "dancer_acrobat",
         "docker",
         "entertainer",
-        "entertainers_dancer_acrobat",
-        "entertainers_singer_musician",
-        "entertainers_trickster_fool",
         "farmer",
         "fisher",
         "fixer",
         "gladiator",
         "healer",
-        "heavy_infantry",
         "herbalist",
         "herder",
         "hermit",
         "homemaker",
         "hunter",
         "inn_keeper",
-        "jailer",
         "light_infantry",
         "merchant",
         "messenger",
@@ -8910,8 +11433,8 @@ export const generatedRepoLocalGlantriSeed = {
         "street_thug",
         "thief",
         "torturer",
-        "watchman",
-        "woodcutter"
+        "woodcutter",
+        "militia_fighter"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -8927,7 +11450,6 @@ export const generatedRepoLocalGlantriSeed = {
         "transport_and_caravan_work",
         "covert_entry",
         "street_theft",
-        "trap_and_intrusion_work",
         "fieldcraft_stealth",
         "athletic_conditioning",
         "social_reading",
@@ -8940,9 +11462,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -8957,7 +11477,25 @@ export const generatedRepoLocalGlantriSeed = {
         "craft_group",
         "mental_group",
         "mystical_group",
-        "wilderness_group"
+        "wilderness_group",
+        "arena_training",
+        "route_security",
+        "ship_command",
+        "smuggling_illicit_trade",
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced",
+        "construction_specialty",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "temple_service",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Established Households",
@@ -8970,45 +11508,26 @@ export const generatedRepoLocalGlantriSeed = {
       "classRollTableId": "pastoral_clan_nomadic_social_band_v1",
       "notes": "Kin-based, mobile, animal-centered society with practical martial and survival training. Historical reference: old Norse, England 600s. Glantri examples: Scandia.",
       "professionIds": [
-        "local_trader",
         "folk_healer",
         "deck_sailor",
-        "herdsman_subtype",
         "burglar",
         "folk_performer",
-        "tribal_warrior",
-        "levy_infantry",
-        "cavalry_mounted_retainer",
         "animal_trainer",
-        "bandit",
-        "beggar",
         "bodyguard",
         "bounty_hunter",
         "caravan_guard",
-        "cavalry",
         "chariot_driver",
-        "clan_warriors",
         "conman",
         "crafter",
         "dancer_acrobat",
-        "docker",
         "entertainer",
-        "entertainers_dancer_acrobat",
-        "entertainers_singer_musician",
-        "entertainers_trickster_fool",
-        "farmer",
-        "fisher",
         "fixer",
         "gladiator",
         "healer",
-        "heavy_infantry",
         "herbalist",
-        "herder",
         "hermit",
         "homemaker",
         "hunter",
-        "inn_keeper",
-        "jailer",
         "light_infantry",
         "merchant",
         "messenger",
@@ -9016,20 +11535,14 @@ export const generatedRepoLocalGlantriSeed = {
         "mourner",
         "musician",
         "outrider_scout",
-        "peddler",
-        "pickpocket",
         "prospector",
         "prostitute",
-        "prostitute_courtesan",
         "sailor",
         "shaman",
         "smuggler",
         "soothsayer",
-        "street_thug",
         "thief",
-        "torturer",
-        "watchman",
-        "woodcutter"
+        "torturer"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -9045,7 +11558,6 @@ export const generatedRepoLocalGlantriSeed = {
         "transport_and_caravan_work",
         "covert_entry",
         "street_theft",
-        "trap_and_intrusion_work",
         "fieldcraft_stealth",
         "athletic_conditioning",
         "social_reading",
@@ -9058,9 +11570,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -9075,7 +11585,25 @@ export const generatedRepoLocalGlantriSeed = {
         "craft_group",
         "mental_group",
         "mystical_group",
-        "wilderness_group"
+        "wilderness_group",
+        "arena_training",
+        "route_security",
+        "ship_command",
+        "smuggling_illicit_trade",
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced",
+        "construction_specialty",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "temple_service",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Court and Elite",
@@ -9092,15 +11620,13 @@ export const generatedRepoLocalGlantriSeed = {
         "herdsman_subtype",
         "folk_performer",
         "tribal_warrior",
+        "levy_infantry",
         "bandit",
         "beggar",
         "clan_warriors",
         "crafter",
         "dancer_acrobat",
         "entertainer",
-        "entertainers_dancer_acrobat",
-        "entertainers_singer_musician",
-        "entertainers_trickster_fool",
         "farmer",
         "fisher",
         "herbalist",
@@ -9112,7 +11638,9 @@ export const generatedRepoLocalGlantriSeed = {
         "prospector",
         "shaman",
         "street_thug",
-        "woodcutter"
+        "woodcutter",
+        "village_guard",
+        "militia_fighter"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -9136,9 +11664,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -9152,7 +11678,23 @@ export const generatedRepoLocalGlantriSeed = {
         "military_group",
         "craft_group",
         "mental_group",
-        "wilderness_group"
+        "wilderness_group",
+        "arena_training",
+        "route_security",
+        "ship_command",
+        "smuggling_illicit_trade",
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Common Folk",
@@ -9180,7 +11722,6 @@ export const generatedRepoLocalGlantriSeed = {
         "bodyguard",
         "bounty_hunter",
         "caravan_guard",
-        "cavalry",
         "chariot_driver",
         "clan_warriors",
         "conman",
@@ -9188,22 +11729,17 @@ export const generatedRepoLocalGlantriSeed = {
         "dancer_acrobat",
         "docker",
         "entertainer",
-        "entertainers_dancer_acrobat",
-        "entertainers_singer_musician",
-        "entertainers_trickster_fool",
         "farmer",
         "fisher",
         "fixer",
         "gladiator",
         "healer",
-        "heavy_infantry",
         "herbalist",
         "herder",
         "hermit",
         "homemaker",
         "hunter",
         "inn_keeper",
-        "jailer",
         "light_infantry",
         "merchant",
         "messenger",
@@ -9223,8 +11759,9 @@ export const generatedRepoLocalGlantriSeed = {
         "street_thug",
         "thief",
         "torturer",
-        "watchman",
-        "woodcutter"
+        "woodcutter",
+        "village_guard",
+        "militia_fighter"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -9240,7 +11777,6 @@ export const generatedRepoLocalGlantriSeed = {
         "transport_and_caravan_work",
         "covert_entry",
         "street_theft",
-        "trap_and_intrusion_work",
         "fieldcraft_stealth",
         "athletic_conditioning",
         "social_reading",
@@ -9253,9 +11789,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -9270,7 +11804,25 @@ export const generatedRepoLocalGlantriSeed = {
         "craft_group",
         "mental_group",
         "mystical_group",
-        "wilderness_group"
+        "wilderness_group",
+        "arena_training",
+        "route_security",
+        "ship_command",
+        "smuggling_illicit_trade",
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced",
+        "construction_specialty",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "temple_service",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Trades and Guilds",
@@ -9289,7 +11841,6 @@ export const generatedRepoLocalGlantriSeed = {
         "herdsman_subtype",
         "burglar",
         "folk_performer",
-        "tribal_warrior",
         "levy_infantry",
         "cavalry_mounted_retainer",
         "animal_trainer",
@@ -9298,30 +11849,23 @@ export const generatedRepoLocalGlantriSeed = {
         "bodyguard",
         "bounty_hunter",
         "caravan_guard",
-        "cavalry",
         "chariot_driver",
-        "clan_warriors",
         "conman",
         "crafter",
         "dancer_acrobat",
         "docker",
         "entertainer",
-        "entertainers_dancer_acrobat",
-        "entertainers_singer_musician",
-        "entertainers_trickster_fool",
         "farmer",
         "fisher",
         "fixer",
         "gladiator",
         "healer",
-        "heavy_infantry",
         "herbalist",
         "herder",
         "hermit",
         "homemaker",
         "hunter",
         "inn_keeper",
-        "jailer",
         "light_infantry",
         "merchant",
         "messenger",
@@ -9341,8 +11885,8 @@ export const generatedRepoLocalGlantriSeed = {
         "street_thug",
         "thief",
         "torturer",
-        "watchman",
-        "woodcutter"
+        "woodcutter",
+        "militia_fighter"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -9358,7 +11902,6 @@ export const generatedRepoLocalGlantriSeed = {
         "transport_and_caravan_work",
         "covert_entry",
         "street_theft",
-        "trap_and_intrusion_work",
         "fieldcraft_stealth",
         "athletic_conditioning",
         "social_reading",
@@ -9371,9 +11914,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -9388,7 +11929,25 @@ export const generatedRepoLocalGlantriSeed = {
         "craft_group",
         "mental_group",
         "mystical_group",
-        "wilderness_group"
+        "wilderness_group",
+        "arena_training",
+        "route_security",
+        "ship_command",
+        "smuggling_illicit_trade",
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced",
+        "construction_specialty",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "temple_service",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Established Households",
@@ -9401,45 +11960,26 @@ export const generatedRepoLocalGlantriSeed = {
       "classRollTableId": "early_agrarian_proto_state_social_band_v1",
       "notes": "Settled farming society with local hierarchy and growing specialization. Historical reference: Ancient Sumer, Ancient crete. Source sheet note: bronze age",
       "professionIds": [
-        "local_trader",
         "folk_healer",
         "deck_sailor",
-        "herdsman_subtype",
         "burglar",
         "folk_performer",
-        "tribal_warrior",
-        "levy_infantry",
-        "cavalry_mounted_retainer",
         "animal_trainer",
-        "bandit",
-        "beggar",
         "bodyguard",
         "bounty_hunter",
         "caravan_guard",
-        "cavalry",
         "chariot_driver",
-        "clan_warriors",
         "conman",
         "crafter",
         "dancer_acrobat",
-        "docker",
         "entertainer",
-        "entertainers_dancer_acrobat",
-        "entertainers_singer_musician",
-        "entertainers_trickster_fool",
-        "farmer",
-        "fisher",
         "fixer",
         "gladiator",
         "healer",
-        "heavy_infantry",
         "herbalist",
-        "herder",
         "hermit",
         "homemaker",
         "hunter",
-        "inn_keeper",
-        "jailer",
         "light_infantry",
         "merchant",
         "messenger",
@@ -9447,20 +11987,14 @@ export const generatedRepoLocalGlantriSeed = {
         "mourner",
         "musician",
         "outrider_scout",
-        "peddler",
-        "pickpocket",
         "prospector",
         "prostitute",
-        "prostitute_courtesan",
         "sailor",
         "shaman",
         "smuggler",
         "soothsayer",
-        "street_thug",
         "thief",
-        "torturer",
-        "watchman",
-        "woodcutter"
+        "torturer"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -9476,7 +12010,6 @@ export const generatedRepoLocalGlantriSeed = {
         "transport_and_caravan_work",
         "covert_entry",
         "street_theft",
-        "trap_and_intrusion_work",
         "fieldcraft_stealth",
         "athletic_conditioning",
         "social_reading",
@@ -9489,9 +12022,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -9506,7 +12037,25 @@ export const generatedRepoLocalGlantriSeed = {
         "craft_group",
         "mental_group",
         "mystical_group",
-        "wilderness_group"
+        "wilderness_group",
+        "arena_training",
+        "route_security",
+        "ship_command",
+        "smuggling_illicit_trade",
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced",
+        "construction_specialty",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "temple_service",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Court and Elite",
@@ -9522,16 +12071,12 @@ export const generatedRepoLocalGlantriSeed = {
         "folk_healer",
         "herdsman_subtype",
         "folk_performer",
-        "tribal_warrior",
+        "levy_infantry",
         "bandit",
         "beggar",
-        "clan_warriors",
         "crafter",
         "dancer_acrobat",
         "entertainer",
-        "entertainers_dancer_acrobat",
-        "entertainers_singer_musician",
-        "entertainers_trickster_fool",
         "farmer",
         "fisher",
         "herbalist",
@@ -9543,7 +12088,8 @@ export const generatedRepoLocalGlantriSeed = {
         "prospector",
         "shaman",
         "street_thug",
-        "woodcutter"
+        "woodcutter",
+        "militia_fighter"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -9567,9 +12113,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -9583,7 +12127,23 @@ export const generatedRepoLocalGlantriSeed = {
         "military_group",
         "craft_group",
         "mental_group",
-        "wilderness_group"
+        "wilderness_group",
+        "arena_training",
+        "route_security",
+        "ship_command",
+        "smuggling_illicit_trade",
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Common Folk",
@@ -9602,7 +12162,6 @@ export const generatedRepoLocalGlantriSeed = {
         "herdsman_subtype",
         "burglar",
         "folk_performer",
-        "tribal_warrior",
         "levy_infantry",
         "cavalry_mounted_retainer",
         "animal_trainer",
@@ -9613,15 +12172,11 @@ export const generatedRepoLocalGlantriSeed = {
         "caravan_guard",
         "cavalry",
         "chariot_driver",
-        "clan_warriors",
         "conman",
         "crafter",
         "dancer_acrobat",
         "docker",
         "entertainer",
-        "entertainers_dancer_acrobat",
-        "entertainers_singer_musician",
-        "entertainers_trickster_fool",
         "farmer",
         "fisher",
         "fixer",
@@ -9655,7 +12210,9 @@ export const generatedRepoLocalGlantriSeed = {
         "thief",
         "torturer",
         "watchman",
-        "woodcutter"
+        "woodcutter",
+        "militia_fighter",
+        "garrison_soldier"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -9671,7 +12228,6 @@ export const generatedRepoLocalGlantriSeed = {
         "transport_and_caravan_work",
         "covert_entry",
         "street_theft",
-        "trap_and_intrusion_work",
         "fieldcraft_stealth",
         "athletic_conditioning",
         "social_reading",
@@ -9684,9 +12240,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -9701,7 +12255,25 @@ export const generatedRepoLocalGlantriSeed = {
         "craft_group",
         "mental_group",
         "mystical_group",
-        "wilderness_group"
+        "wilderness_group",
+        "arena_training",
+        "route_security",
+        "ship_command",
+        "smuggling_illicit_trade",
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced",
+        "construction_specialty",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "temple_service",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Trades and Guilds",
@@ -9722,7 +12294,6 @@ export const generatedRepoLocalGlantriSeed = {
         "herdsman_subtype",
         "burglar",
         "folk_performer",
-        "tribal_warrior",
         "levy_infantry",
         "cavalry_mounted_retainer",
         "actor",
@@ -9736,16 +12307,12 @@ export const generatedRepoLocalGlantriSeed = {
         "cavalry",
         "champion",
         "chariot_driver",
-        "clan_warriors",
         "conman",
         "crafter",
         "dancer_acrobat",
         "docker",
         "embalmer",
         "entertainer",
-        "entertainers_dancer_acrobat",
-        "entertainers_singer_musician",
-        "entertainers_trickster_fool",
         "farmer",
         "fisher",
         "fixer",
@@ -9788,7 +12355,10 @@ export const generatedRepoLocalGlantriSeed = {
         "thief",
         "torturer",
         "watchman",
-        "woodcutter"
+        "woodcutter",
+        "militia_fighter",
+        "garrison_soldier",
+        "veteran_sergeant"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -9806,7 +12376,6 @@ export const generatedRepoLocalGlantriSeed = {
         "transport_and_caravan_work",
         "covert_entry",
         "street_theft",
-        "trap_and_intrusion_work",
         "fieldcraft_stealth",
         "athletic_conditioning",
         "social_reading",
@@ -9821,9 +12390,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -9839,7 +12406,25 @@ export const generatedRepoLocalGlantriSeed = {
         "craft_group",
         "mental_group",
         "mystical_group",
-        "wilderness_group"
+        "wilderness_group",
+        "arena_training",
+        "route_security",
+        "ship_command",
+        "smuggling_illicit_trade",
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced",
+        "construction_specialty",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "temple_service",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Established Households",
@@ -9853,50 +12438,31 @@ export const generatedRepoLocalGlantriSeed = {
       "notes": "Palace-centered society with elite coordination, recordkeeping, and specialized craft. Historical reference: Ancient Sumer, Ancient crete. Use as palace-state variant of the source row",
       "professionIds": [
         "temple_scribe",
-        "local_trader",
         "folk_healer",
         "builder_master_mason",
         "deck_sailor",
-        "herdsman_subtype",
         "burglar",
         "folk_performer",
-        "tribal_warrior",
-        "levy_infantry",
-        "cavalry_mounted_retainer",
         "actor",
         "animal_trainer",
         "assassin",
-        "bandit",
-        "beggar",
         "bodyguard",
         "bounty_hunter",
         "caravan_guard",
-        "cavalry",
         "champion",
         "chariot_driver",
-        "clan_warriors",
         "conman",
         "crafter",
         "dancer_acrobat",
-        "docker",
         "embalmer",
         "entertainer",
-        "entertainers_dancer_acrobat",
-        "entertainers_singer_musician",
-        "entertainers_trickster_fool",
-        "farmer",
-        "fisher",
         "fixer",
         "gladiator",
         "healer",
-        "heavy_infantry",
         "herbalist",
-        "herder",
         "hermit",
         "homemaker",
         "hunter",
-        "inn_keeper",
-        "jailer",
         "light_infantry",
         "master_craftsmen",
         "merchant",
@@ -9905,14 +12471,11 @@ export const generatedRepoLocalGlantriSeed = {
         "mourner",
         "musician",
         "outrider_scout",
-        "peddler",
         "personal_servant",
         "philosopher",
-        "pickpocket",
         "priest",
         "prospector",
         "prostitute",
-        "prostitute_courtesan",
         "sailor",
         "scribe",
         "shaman",
@@ -9921,12 +12484,9 @@ export const generatedRepoLocalGlantriSeed = {
         "smuggler",
         "soothsayer",
         "spy",
-        "street_thug",
         "student",
         "thief",
-        "torturer",
-        "watchman",
-        "woodcutter"
+        "torturer"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -9944,7 +12504,6 @@ export const generatedRepoLocalGlantriSeed = {
         "transport_and_caravan_work",
         "covert_entry",
         "street_theft",
-        "trap_and_intrusion_work",
         "fieldcraft_stealth",
         "athletic_conditioning",
         "social_reading",
@@ -9959,9 +12518,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -9977,7 +12534,25 @@ export const generatedRepoLocalGlantriSeed = {
         "craft_group",
         "mental_group",
         "mystical_group",
-        "wilderness_group"
+        "wilderness_group",
+        "arena_training",
+        "route_security",
+        "ship_command",
+        "smuggling_illicit_trade",
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced",
+        "construction_specialty",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "temple_service",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Court and Elite",
@@ -9993,16 +12568,12 @@ export const generatedRepoLocalGlantriSeed = {
         "folk_healer",
         "herdsman_subtype",
         "folk_performer",
-        "tribal_warrior",
+        "levy_infantry",
         "bandit",
         "beggar",
-        "clan_warriors",
         "crafter",
         "dancer_acrobat",
         "entertainer",
-        "entertainers_dancer_acrobat",
-        "entertainers_singer_musician",
-        "entertainers_trickster_fool",
         "farmer",
         "fisher",
         "herbalist",
@@ -10014,7 +12585,8 @@ export const generatedRepoLocalGlantriSeed = {
         "prospector",
         "shaman",
         "street_thug",
-        "woodcutter"
+        "woodcutter",
+        "militia_fighter"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -10038,9 +12610,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -10054,7 +12624,23 @@ export const generatedRepoLocalGlantriSeed = {
         "military_group",
         "craft_group",
         "mental_group",
-        "wilderness_group"
+        "wilderness_group",
+        "arena_training",
+        "route_security",
+        "ship_command",
+        "smuggling_illicit_trade",
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Common Folk",
@@ -10073,7 +12659,6 @@ export const generatedRepoLocalGlantriSeed = {
         "herdsman_subtype",
         "burglar",
         "folk_performer",
-        "tribal_warrior",
         "levy_infantry",
         "cavalry_mounted_retainer",
         "animal_trainer",
@@ -10084,15 +12669,11 @@ export const generatedRepoLocalGlantriSeed = {
         "caravan_guard",
         "cavalry",
         "chariot_driver",
-        "clan_warriors",
         "conman",
         "crafter",
         "dancer_acrobat",
         "docker",
         "entertainer",
-        "entertainers_dancer_acrobat",
-        "entertainers_singer_musician",
-        "entertainers_trickster_fool",
         "farmer",
         "fisher",
         "fixer",
@@ -10126,7 +12707,9 @@ export const generatedRepoLocalGlantriSeed = {
         "thief",
         "torturer",
         "watchman",
-        "woodcutter"
+        "woodcutter",
+        "militia_fighter",
+        "garrison_soldier"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -10142,7 +12725,6 @@ export const generatedRepoLocalGlantriSeed = {
         "transport_and_caravan_work",
         "covert_entry",
         "street_theft",
-        "trap_and_intrusion_work",
         "fieldcraft_stealth",
         "athletic_conditioning",
         "social_reading",
@@ -10155,9 +12737,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -10172,7 +12752,25 @@ export const generatedRepoLocalGlantriSeed = {
         "craft_group",
         "mental_group",
         "mystical_group",
-        "wilderness_group"
+        "wilderness_group",
+        "arena_training",
+        "route_security",
+        "ship_command",
+        "smuggling_illicit_trade",
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced",
+        "construction_specialty",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "temple_service",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Trades and Guilds",
@@ -10193,7 +12791,6 @@ export const generatedRepoLocalGlantriSeed = {
         "herdsman_subtype",
         "burglar",
         "folk_performer",
-        "tribal_warrior",
         "levy_infantry",
         "cavalry_mounted_retainer",
         "actor",
@@ -10207,16 +12804,12 @@ export const generatedRepoLocalGlantriSeed = {
         "cavalry",
         "champion",
         "chariot_driver",
-        "clan_warriors",
         "conman",
         "crafter",
         "dancer_acrobat",
         "docker",
         "embalmer",
         "entertainer",
-        "entertainers_dancer_acrobat",
-        "entertainers_singer_musician",
-        "entertainers_trickster_fool",
         "farmer",
         "fisher",
         "fixer",
@@ -10259,7 +12852,10 @@ export const generatedRepoLocalGlantriSeed = {
         "thief",
         "torturer",
         "watchman",
-        "woodcutter"
+        "woodcutter",
+        "militia_fighter",
+        "garrison_soldier",
+        "veteran_sergeant"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -10277,7 +12873,6 @@ export const generatedRepoLocalGlantriSeed = {
         "transport_and_caravan_work",
         "covert_entry",
         "street_theft",
-        "trap_and_intrusion_work",
         "fieldcraft_stealth",
         "athletic_conditioning",
         "social_reading",
@@ -10292,9 +12887,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -10310,7 +12903,25 @@ export const generatedRepoLocalGlantriSeed = {
         "craft_group",
         "mental_group",
         "mystical_group",
-        "wilderness_group"
+        "wilderness_group",
+        "arena_training",
+        "route_security",
+        "ship_command",
+        "smuggling_illicit_trade",
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced",
+        "construction_specialty",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "temple_service",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Established Households",
@@ -10324,50 +12935,31 @@ export const generatedRepoLocalGlantriSeed = {
       "notes": "Early literate state with priesthood, scribal culture, taxation, and formal ritual order. Historical reference: Ancient Sumer, Ancient crete. Literate temple-state interpretation of source row",
       "professionIds": [
         "temple_scribe",
-        "local_trader",
         "folk_healer",
         "builder_master_mason",
         "deck_sailor",
-        "herdsman_subtype",
         "burglar",
         "folk_performer",
-        "tribal_warrior",
-        "levy_infantry",
-        "cavalry_mounted_retainer",
         "actor",
         "animal_trainer",
         "assassin",
-        "bandit",
-        "beggar",
         "bodyguard",
         "bounty_hunter",
         "caravan_guard",
-        "cavalry",
         "champion",
         "chariot_driver",
-        "clan_warriors",
         "conman",
         "crafter",
         "dancer_acrobat",
-        "docker",
         "embalmer",
         "entertainer",
-        "entertainers_dancer_acrobat",
-        "entertainers_singer_musician",
-        "entertainers_trickster_fool",
-        "farmer",
-        "fisher",
         "fixer",
         "gladiator",
         "healer",
-        "heavy_infantry",
         "herbalist",
-        "herder",
         "hermit",
         "homemaker",
         "hunter",
-        "inn_keeper",
-        "jailer",
         "light_infantry",
         "master_craftsmen",
         "merchant",
@@ -10376,14 +12968,11 @@ export const generatedRepoLocalGlantriSeed = {
         "mourner",
         "musician",
         "outrider_scout",
-        "peddler",
         "personal_servant",
         "philosopher",
-        "pickpocket",
         "priest",
         "prospector",
         "prostitute",
-        "prostitute_courtesan",
         "sailor",
         "scribe",
         "shaman",
@@ -10392,12 +12981,9 @@ export const generatedRepoLocalGlantriSeed = {
         "smuggler",
         "soothsayer",
         "spy",
-        "street_thug",
         "student",
         "thief",
-        "torturer",
-        "watchman",
-        "woodcutter"
+        "torturer"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -10415,7 +13001,6 @@ export const generatedRepoLocalGlantriSeed = {
         "transport_and_caravan_work",
         "covert_entry",
         "street_theft",
-        "trap_and_intrusion_work",
         "fieldcraft_stealth",
         "athletic_conditioning",
         "social_reading",
@@ -10430,9 +13015,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -10448,7 +13031,25 @@ export const generatedRepoLocalGlantriSeed = {
         "craft_group",
         "mental_group",
         "mystical_group",
-        "wilderness_group"
+        "wilderness_group",
+        "arena_training",
+        "route_security",
+        "ship_command",
+        "smuggling_illicit_trade",
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced",
+        "construction_specialty",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "temple_service",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Court and Elite",
@@ -10464,16 +13065,12 @@ export const generatedRepoLocalGlantriSeed = {
         "folk_healer",
         "herdsman_subtype",
         "folk_performer",
-        "tribal_warrior",
+        "levy_infantry",
         "bandit",
         "beggar",
-        "clan_warriors",
         "crafter",
         "dancer_acrobat",
         "entertainer",
-        "entertainers_dancer_acrobat",
-        "entertainers_singer_musician",
-        "entertainers_trickster_fool",
         "farmer",
         "fisher",
         "herbalist",
@@ -10509,9 +13106,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -10525,7 +13120,23 @@ export const generatedRepoLocalGlantriSeed = {
         "military_group",
         "craft_group",
         "mental_group",
-        "wilderness_group"
+        "wilderness_group",
+        "arena_training",
+        "route_security",
+        "ship_command",
+        "smuggling_illicit_trade",
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Common Folk",
@@ -10544,7 +13155,6 @@ export const generatedRepoLocalGlantriSeed = {
         "herdsman_subtype",
         "burglar",
         "folk_performer",
-        "tribal_warrior",
         "levy_infantry",
         "cavalry_mounted_retainer",
         "animal_trainer",
@@ -10555,15 +13165,11 @@ export const generatedRepoLocalGlantriSeed = {
         "caravan_guard",
         "cavalry",
         "chariot_driver",
-        "clan_warriors",
         "conman",
         "crafter",
         "dancer_acrobat",
         "docker",
         "entertainer",
-        "entertainers_dancer_acrobat",
-        "entertainers_singer_musician",
-        "entertainers_trickster_fool",
         "farmer",
         "fisher",
         "fixer",
@@ -10597,7 +13203,8 @@ export const generatedRepoLocalGlantriSeed = {
         "thief",
         "torturer",
         "watchman",
-        "woodcutter"
+        "woodcutter",
+        "garrison_soldier"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -10613,7 +13220,6 @@ export const generatedRepoLocalGlantriSeed = {
         "transport_and_caravan_work",
         "covert_entry",
         "street_theft",
-        "trap_and_intrusion_work",
         "fieldcraft_stealth",
         "athletic_conditioning",
         "social_reading",
@@ -10626,9 +13232,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -10643,7 +13247,25 @@ export const generatedRepoLocalGlantriSeed = {
         "craft_group",
         "mental_group",
         "mystical_group",
-        "wilderness_group"
+        "wilderness_group",
+        "arena_training",
+        "route_security",
+        "ship_command",
+        "smuggling_illicit_trade",
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced",
+        "construction_specialty",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "temple_service",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Trades and Guilds",
@@ -10664,7 +13286,6 @@ export const generatedRepoLocalGlantriSeed = {
         "herdsman_subtype",
         "burglar",
         "folk_performer",
-        "tribal_warrior",
         "levy_infantry",
         "cavalry_mounted_retainer",
         "actor",
@@ -10678,16 +13299,12 @@ export const generatedRepoLocalGlantriSeed = {
         "cavalry",
         "champion",
         "chariot_driver",
-        "clan_warriors",
         "conman",
         "crafter",
         "dancer_acrobat",
         "docker",
         "embalmer",
         "entertainer",
-        "entertainers_dancer_acrobat",
-        "entertainers_singer_musician",
-        "entertainers_trickster_fool",
         "farmer",
         "fisher",
         "fixer",
@@ -10730,7 +13347,15 @@ export const generatedRepoLocalGlantriSeed = {
         "thief",
         "torturer",
         "watchman",
-        "woodcutter"
+        "woodcutter",
+        "garrison_soldier",
+        "veteran_sergeant",
+        "city_watch_officer",
+        "quartermaster",
+        "cavalry_officer",
+        "guild_master",
+        "merchant_factor",
+        "banker_moneylender"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -10748,7 +13373,6 @@ export const generatedRepoLocalGlantriSeed = {
         "transport_and_caravan_work",
         "covert_entry",
         "street_theft",
-        "trap_and_intrusion_work",
         "fieldcraft_stealth",
         "athletic_conditioning",
         "social_reading",
@@ -10763,9 +13387,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -10781,7 +13403,25 @@ export const generatedRepoLocalGlantriSeed = {
         "craft_group",
         "mental_group",
         "mystical_group",
-        "wilderness_group"
+        "wilderness_group",
+        "arena_training",
+        "route_security",
+        "ship_command",
+        "smuggling_illicit_trade",
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced",
+        "construction_specialty",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "temple_service",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Established Households",
@@ -10796,54 +13436,35 @@ export const generatedRepoLocalGlantriSeed = {
       "professionIds": [
         "temple_scribe",
         "court_scribe_clerk",
-        "local_trader",
         "household_courtier",
         "folk_healer",
         "builder_master_mason",
         "deck_sailor",
-        "herdsman_subtype",
         "burglar",
         "folk_performer",
-        "tribal_warrior",
-        "levy_infantry",
-        "cavalry_mounted_retainer",
         "actor",
         "animal_trainer",
         "assassin",
-        "bandit",
-        "beggar",
         "bodyguard",
         "bounty_hunter",
         "bureaucrat",
         "caravan_guard",
-        "cavalry",
         "champion",
         "chariot_driver",
-        "clan_warriors",
         "conman",
         "courtesan",
         "crafter",
         "dancer_acrobat",
-        "docker",
         "embalmer",
         "entertainer",
-        "entertainers_dancer_acrobat",
-        "entertainers_singer_musician",
-        "entertainers_trickster_fool",
-        "farmer",
-        "fisher",
         "fixer",
         "gladiator",
         "healer",
-        "heavy_infantry",
         "herald",
         "herbalist",
-        "herder",
         "hermit",
         "homemaker",
         "hunter",
-        "inn_keeper",
-        "jailer",
         "lawyer",
         "light_infantry",
         "master_craftsmen",
@@ -10855,15 +13476,12 @@ export const generatedRepoLocalGlantriSeed = {
         "musician",
         "noble",
         "outrider_scout",
-        "peddler",
         "personal_servant",
         "philosopher",
-        "pickpocket",
         "politician",
         "priest",
         "prospector",
         "prostitute",
-        "prostitute_courtesan",
         "sailor",
         "scribe",
         "shaman",
@@ -10872,13 +13490,16 @@ export const generatedRepoLocalGlantriSeed = {
         "smuggler",
         "soothsayer",
         "spy",
-        "street_thug",
         "student",
         "tax_collector",
         "thief",
         "torturer",
-        "watchman",
-        "woodcutter"
+        "city_watch_officer",
+        "quartermaster",
+        "cavalry_officer",
+        "guild_master",
+        "merchant_factor",
+        "banker_moneylender"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -10897,7 +13518,6 @@ export const generatedRepoLocalGlantriSeed = {
         "transport_and_caravan_work",
         "covert_entry",
         "street_theft",
-        "trap_and_intrusion_work",
         "fieldcraft_stealth",
         "athletic_conditioning",
         "social_reading",
@@ -10913,9 +13533,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -10931,7 +13549,25 @@ export const generatedRepoLocalGlantriSeed = {
         "craft_group",
         "mental_group",
         "mystical_group",
-        "wilderness_group"
+        "wilderness_group",
+        "arena_training",
+        "route_security",
+        "ship_command",
+        "smuggling_illicit_trade",
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced",
+        "construction_specialty",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "temple_service",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Court and Elite",
@@ -10947,16 +13583,12 @@ export const generatedRepoLocalGlantriSeed = {
         "folk_healer",
         "herdsman_subtype",
         "folk_performer",
-        "tribal_warrior",
+        "levy_infantry",
         "bandit",
         "beggar",
-        "clan_warriors",
         "crafter",
         "dancer_acrobat",
         "entertainer",
-        "entertainers_dancer_acrobat",
-        "entertainers_singer_musician",
-        "entertainers_trickster_fool",
         "farmer",
         "fisher",
         "herbalist",
@@ -10992,9 +13624,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -11008,7 +13638,23 @@ export const generatedRepoLocalGlantriSeed = {
         "military_group",
         "craft_group",
         "mental_group",
-        "wilderness_group"
+        "wilderness_group",
+        "arena_training",
+        "route_security",
+        "ship_command",
+        "smuggling_illicit_trade",
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Common Folk",
@@ -11027,7 +13673,6 @@ export const generatedRepoLocalGlantriSeed = {
         "herdsman_subtype",
         "burglar",
         "folk_performer",
-        "tribal_warrior",
         "levy_infantry",
         "cavalry_mounted_retainer",
         "animal_trainer",
@@ -11038,15 +13683,11 @@ export const generatedRepoLocalGlantriSeed = {
         "caravan_guard",
         "cavalry",
         "chariot_driver",
-        "clan_warriors",
         "conman",
         "crafter",
         "dancer_acrobat",
         "docker",
         "entertainer",
-        "entertainers_dancer_acrobat",
-        "entertainers_singer_musician",
-        "entertainers_trickster_fool",
         "farmer",
         "fisher",
         "fixer",
@@ -11080,7 +13721,8 @@ export const generatedRepoLocalGlantriSeed = {
         "thief",
         "torturer",
         "watchman",
-        "woodcutter"
+        "woodcutter",
+        "garrison_soldier"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -11096,7 +13738,6 @@ export const generatedRepoLocalGlantriSeed = {
         "transport_and_caravan_work",
         "covert_entry",
         "street_theft",
-        "trap_and_intrusion_work",
         "fieldcraft_stealth",
         "athletic_conditioning",
         "social_reading",
@@ -11109,9 +13750,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -11126,7 +13765,25 @@ export const generatedRepoLocalGlantriSeed = {
         "craft_group",
         "mental_group",
         "mystical_group",
-        "wilderness_group"
+        "wilderness_group",
+        "arena_training",
+        "route_security",
+        "ship_command",
+        "smuggling_illicit_trade",
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced",
+        "construction_specialty",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "temple_service",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Trades and Guilds",
@@ -11147,7 +13804,6 @@ export const generatedRepoLocalGlantriSeed = {
         "herdsman_subtype",
         "burglar",
         "folk_performer",
-        "tribal_warrior",
         "levy_infantry",
         "cavalry_mounted_retainer",
         "actor",
@@ -11161,16 +13817,12 @@ export const generatedRepoLocalGlantriSeed = {
         "cavalry",
         "champion",
         "chariot_driver",
-        "clan_warriors",
         "conman",
         "crafter",
         "dancer_acrobat",
         "docker",
         "embalmer",
         "entertainer",
-        "entertainers_dancer_acrobat",
-        "entertainers_singer_musician",
-        "entertainers_trickster_fool",
         "farmer",
         "fisher",
         "fixer",
@@ -11213,7 +13865,15 @@ export const generatedRepoLocalGlantriSeed = {
         "thief",
         "torturer",
         "watchman",
-        "woodcutter"
+        "woodcutter",
+        "garrison_soldier",
+        "veteran_sergeant",
+        "city_watch_officer",
+        "quartermaster",
+        "cavalry_officer",
+        "guild_master",
+        "merchant_factor",
+        "banker_moneylender"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -11231,7 +13891,6 @@ export const generatedRepoLocalGlantriSeed = {
         "transport_and_caravan_work",
         "covert_entry",
         "street_theft",
-        "trap_and_intrusion_work",
         "fieldcraft_stealth",
         "athletic_conditioning",
         "social_reading",
@@ -11246,9 +13905,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -11264,7 +13921,25 @@ export const generatedRepoLocalGlantriSeed = {
         "craft_group",
         "mental_group",
         "mystical_group",
-        "wilderness_group"
+        "wilderness_group",
+        "arena_training",
+        "route_security",
+        "ship_command",
+        "smuggling_illicit_trade",
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced",
+        "construction_specialty",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "temple_service",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Established Households",
@@ -11279,54 +13954,35 @@ export const generatedRepoLocalGlantriSeed = {
       "professionIds": [
         "temple_scribe",
         "court_scribe_clerk",
-        "local_trader",
         "household_courtier",
         "folk_healer",
         "builder_master_mason",
         "deck_sailor",
-        "herdsman_subtype",
         "burglar",
         "folk_performer",
-        "tribal_warrior",
-        "levy_infantry",
-        "cavalry_mounted_retainer",
         "actor",
         "animal_trainer",
         "assassin",
-        "bandit",
-        "beggar",
         "bodyguard",
         "bounty_hunter",
         "bureaucrat",
         "caravan_guard",
-        "cavalry",
         "champion",
         "chariot_driver",
-        "clan_warriors",
         "conman",
         "courtesan",
         "crafter",
         "dancer_acrobat",
-        "docker",
         "embalmer",
         "entertainer",
-        "entertainers_dancer_acrobat",
-        "entertainers_singer_musician",
-        "entertainers_trickster_fool",
-        "farmer",
-        "fisher",
         "fixer",
         "gladiator",
         "healer",
-        "heavy_infantry",
         "herald",
         "herbalist",
-        "herder",
         "hermit",
         "homemaker",
         "hunter",
-        "inn_keeper",
-        "jailer",
         "lawyer",
         "light_infantry",
         "master_craftsmen",
@@ -11338,15 +13994,12 @@ export const generatedRepoLocalGlantriSeed = {
         "musician",
         "noble",
         "outrider_scout",
-        "peddler",
         "personal_servant",
         "philosopher",
-        "pickpocket",
         "politician",
         "priest",
         "prospector",
         "prostitute",
-        "prostitute_courtesan",
         "sailor",
         "scribe",
         "shaman",
@@ -11355,13 +14008,16 @@ export const generatedRepoLocalGlantriSeed = {
         "smuggler",
         "soothsayer",
         "spy",
-        "street_thug",
         "student",
         "tax_collector",
         "thief",
         "torturer",
-        "watchman",
-        "woodcutter"
+        "city_watch_officer",
+        "quartermaster",
+        "cavalry_officer",
+        "guild_master",
+        "merchant_factor",
+        "banker_moneylender"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -11380,7 +14036,6 @@ export const generatedRepoLocalGlantriSeed = {
         "transport_and_caravan_work",
         "covert_entry",
         "street_theft",
-        "trap_and_intrusion_work",
         "fieldcraft_stealth",
         "athletic_conditioning",
         "social_reading",
@@ -11396,9 +14051,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -11414,7 +14067,25 @@ export const generatedRepoLocalGlantriSeed = {
         "craft_group",
         "mental_group",
         "mystical_group",
-        "wilderness_group"
+        "wilderness_group",
+        "arena_training",
+        "route_security",
+        "ship_command",
+        "smuggling_illicit_trade",
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced",
+        "construction_specialty",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "temple_service",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Court and Elite",
@@ -11430,16 +14101,10 @@ export const generatedRepoLocalGlantriSeed = {
         "folk_healer",
         "herdsman_subtype",
         "folk_performer",
-        "tribal_warrior",
-        "bandit",
         "beggar",
-        "clan_warriors",
         "crafter",
         "dancer_acrobat",
         "entertainer",
-        "entertainers_dancer_acrobat",
-        "entertainers_singer_musician",
-        "entertainers_trickster_fool",
         "farmer",
         "fisher",
         "herbalist",
@@ -11475,9 +14140,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -11491,7 +14154,23 @@ export const generatedRepoLocalGlantriSeed = {
         "military_group",
         "craft_group",
         "mental_group",
-        "wilderness_group"
+        "wilderness_group",
+        "arena_training",
+        "route_security",
+        "ship_command",
+        "smuggling_illicit_trade",
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Common Folk",
@@ -11510,26 +14189,18 @@ export const generatedRepoLocalGlantriSeed = {
         "herdsman_subtype",
         "burglar",
         "folk_performer",
-        "tribal_warrior",
-        "levy_infantry",
-        "cavalry_mounted_retainer",
         "animal_trainer",
-        "bandit",
         "beggar",
         "bodyguard",
         "bounty_hunter",
         "caravan_guard",
         "cavalry",
         "chariot_driver",
-        "clan_warriors",
         "conman",
         "crafter",
         "dancer_acrobat",
         "docker",
         "entertainer",
-        "entertainers_dancer_acrobat",
-        "entertainers_singer_musician",
-        "entertainers_trickster_fool",
         "farmer",
         "fisher",
         "fixer",
@@ -11563,7 +14234,8 @@ export const generatedRepoLocalGlantriSeed = {
         "thief",
         "torturer",
         "watchman",
-        "woodcutter"
+        "woodcutter",
+        "garrison_soldier"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -11579,7 +14251,6 @@ export const generatedRepoLocalGlantriSeed = {
         "transport_and_caravan_work",
         "covert_entry",
         "street_theft",
-        "trap_and_intrusion_work",
         "fieldcraft_stealth",
         "athletic_conditioning",
         "social_reading",
@@ -11592,9 +14263,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -11609,7 +14278,25 @@ export const generatedRepoLocalGlantriSeed = {
         "craft_group",
         "mental_group",
         "mystical_group",
-        "wilderness_group"
+        "wilderness_group",
+        "arena_training",
+        "route_security",
+        "ship_command",
+        "smuggling_illicit_trade",
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced",
+        "construction_specialty",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "temple_service",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Trades and Guilds",
@@ -11630,13 +14317,9 @@ export const generatedRepoLocalGlantriSeed = {
         "herdsman_subtype",
         "burglar",
         "folk_performer",
-        "tribal_warrior",
-        "levy_infantry",
-        "cavalry_mounted_retainer",
         "actor",
         "animal_trainer",
         "assassin",
-        "bandit",
         "beggar",
         "bodyguard",
         "bounty_hunter",
@@ -11644,16 +14327,12 @@ export const generatedRepoLocalGlantriSeed = {
         "cavalry",
         "champion",
         "chariot_driver",
-        "clan_warriors",
         "conman",
         "crafter",
         "dancer_acrobat",
         "docker",
         "embalmer",
         "entertainer",
-        "entertainers_dancer_acrobat",
-        "entertainers_singer_musician",
-        "entertainers_trickster_fool",
         "farmer",
         "fisher",
         "fixer",
@@ -11696,7 +14375,15 @@ export const generatedRepoLocalGlantriSeed = {
         "thief",
         "torturer",
         "watchman",
-        "woodcutter"
+        "woodcutter",
+        "garrison_soldier",
+        "veteran_sergeant",
+        "city_watch_officer",
+        "quartermaster",
+        "cavalry_officer",
+        "guild_master",
+        "merchant_factor",
+        "banker_moneylender"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -11714,7 +14401,6 @@ export const generatedRepoLocalGlantriSeed = {
         "transport_and_caravan_work",
         "covert_entry",
         "street_theft",
-        "trap_and_intrusion_work",
         "fieldcraft_stealth",
         "athletic_conditioning",
         "social_reading",
@@ -11729,9 +14415,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -11747,7 +14431,25 @@ export const generatedRepoLocalGlantriSeed = {
         "craft_group",
         "mental_group",
         "mystical_group",
-        "wilderness_group"
+        "wilderness_group",
+        "arena_training",
+        "route_security",
+        "ship_command",
+        "smuggling_illicit_trade",
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced",
+        "construction_specialty",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "temple_service",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Established Households",
@@ -11762,54 +14464,35 @@ export const generatedRepoLocalGlantriSeed = {
       "professionIds": [
         "temple_scribe",
         "court_scribe_clerk",
-        "local_trader",
         "household_courtier",
         "folk_healer",
         "builder_master_mason",
         "deck_sailor",
-        "herdsman_subtype",
         "burglar",
         "folk_performer",
-        "tribal_warrior",
-        "levy_infantry",
-        "cavalry_mounted_retainer",
         "actor",
         "animal_trainer",
         "assassin",
-        "bandit",
-        "beggar",
         "bodyguard",
         "bounty_hunter",
         "bureaucrat",
         "caravan_guard",
-        "cavalry",
         "champion",
         "chariot_driver",
-        "clan_warriors",
         "conman",
         "courtesan",
         "crafter",
         "dancer_acrobat",
-        "docker",
         "embalmer",
         "entertainer",
-        "entertainers_dancer_acrobat",
-        "entertainers_singer_musician",
-        "entertainers_trickster_fool",
-        "farmer",
-        "fisher",
         "fixer",
         "gladiator",
         "healer",
-        "heavy_infantry",
         "herald",
         "herbalist",
-        "herder",
         "hermit",
         "homemaker",
         "hunter",
-        "inn_keeper",
-        "jailer",
         "lawyer",
         "light_infantry",
         "master_craftsmen",
@@ -11821,15 +14504,12 @@ export const generatedRepoLocalGlantriSeed = {
         "musician",
         "noble",
         "outrider_scout",
-        "peddler",
         "personal_servant",
         "philosopher",
-        "pickpocket",
         "politician",
         "priest",
         "prospector",
         "prostitute",
-        "prostitute_courtesan",
         "sailor",
         "scribe",
         "shaman",
@@ -11838,13 +14518,19 @@ export const generatedRepoLocalGlantriSeed = {
         "smuggler",
         "soothsayer",
         "spy",
-        "street_thug",
         "student",
         "tax_collector",
         "thief",
         "torturer",
-        "watchman",
-        "woodcutter"
+        "city_watch_officer",
+        "quartermaster",
+        "staff_officer",
+        "cavalry_officer",
+        "elite_guard_officer",
+        "guild_master",
+        "merchant_factor",
+        "banker_moneylender",
+        "great_merchant"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -11863,7 +14549,6 @@ export const generatedRepoLocalGlantriSeed = {
         "transport_and_caravan_work",
         "covert_entry",
         "street_theft",
-        "trap_and_intrusion_work",
         "fieldcraft_stealth",
         "athletic_conditioning",
         "social_reading",
@@ -11879,9 +14564,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -11897,7 +14580,25 @@ export const generatedRepoLocalGlantriSeed = {
         "craft_group",
         "mental_group",
         "mystical_group",
-        "wilderness_group"
+        "wilderness_group",
+        "arena_training",
+        "route_security",
+        "ship_command",
+        "smuggling_illicit_trade",
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced",
+        "construction_specialty",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "temple_service",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Court and Elite",
@@ -11913,16 +14614,10 @@ export const generatedRepoLocalGlantriSeed = {
         "folk_healer",
         "herdsman_subtype",
         "folk_performer",
-        "tribal_warrior",
-        "bandit",
         "beggar",
-        "clan_warriors",
         "crafter",
         "dancer_acrobat",
         "entertainer",
-        "entertainers_dancer_acrobat",
-        "entertainers_singer_musician",
-        "entertainers_trickster_fool",
         "farmer",
         "fisher",
         "herbalist",
@@ -11958,9 +14653,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -11974,7 +14667,23 @@ export const generatedRepoLocalGlantriSeed = {
         "military_group",
         "craft_group",
         "mental_group",
-        "wilderness_group"
+        "wilderness_group",
+        "arena_training",
+        "route_security",
+        "ship_command",
+        "smuggling_illicit_trade",
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Common Folk",
@@ -11993,26 +14702,18 @@ export const generatedRepoLocalGlantriSeed = {
         "herdsman_subtype",
         "burglar",
         "folk_performer",
-        "tribal_warrior",
-        "levy_infantry",
-        "cavalry_mounted_retainer",
         "animal_trainer",
-        "bandit",
         "beggar",
         "bodyguard",
         "bounty_hunter",
         "caravan_guard",
         "cavalry",
         "chariot_driver",
-        "clan_warriors",
         "conman",
         "crafter",
         "dancer_acrobat",
         "docker",
         "entertainer",
-        "entertainers_dancer_acrobat",
-        "entertainers_singer_musician",
-        "entertainers_trickster_fool",
         "farmer",
         "fisher",
         "fixer",
@@ -12046,7 +14747,8 @@ export const generatedRepoLocalGlantriSeed = {
         "thief",
         "torturer",
         "watchman",
-        "woodcutter"
+        "woodcutter",
+        "garrison_soldier"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -12062,7 +14764,6 @@ export const generatedRepoLocalGlantriSeed = {
         "transport_and_caravan_work",
         "covert_entry",
         "street_theft",
-        "trap_and_intrusion_work",
         "fieldcraft_stealth",
         "athletic_conditioning",
         "social_reading",
@@ -12075,9 +14776,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -12092,7 +14791,25 @@ export const generatedRepoLocalGlantriSeed = {
         "craft_group",
         "mental_group",
         "mystical_group",
-        "wilderness_group"
+        "wilderness_group",
+        "arena_training",
+        "route_security",
+        "ship_command",
+        "smuggling_illicit_trade",
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced",
+        "construction_specialty",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "temple_service",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Trades and Guilds",
@@ -12113,13 +14830,9 @@ export const generatedRepoLocalGlantriSeed = {
         "herdsman_subtype",
         "burglar",
         "folk_performer",
-        "tribal_warrior",
-        "levy_infantry",
-        "cavalry_mounted_retainer",
         "actor",
         "animal_trainer",
         "assassin",
-        "bandit",
         "beggar",
         "bodyguard",
         "bounty_hunter",
@@ -12127,16 +14840,12 @@ export const generatedRepoLocalGlantriSeed = {
         "cavalry",
         "champion",
         "chariot_driver",
-        "clan_warriors",
         "conman",
         "crafter",
         "dancer_acrobat",
         "docker",
         "embalmer",
         "entertainer",
-        "entertainers_dancer_acrobat",
-        "entertainers_singer_musician",
-        "entertainers_trickster_fool",
         "farmer",
         "fisher",
         "fixer",
@@ -12179,7 +14888,15 @@ export const generatedRepoLocalGlantriSeed = {
         "thief",
         "torturer",
         "watchman",
-        "woodcutter"
+        "woodcutter",
+        "garrison_soldier",
+        "veteran_sergeant",
+        "city_watch_officer",
+        "quartermaster",
+        "cavalry_officer",
+        "guild_master",
+        "merchant_factor",
+        "banker_moneylender"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -12197,7 +14914,6 @@ export const generatedRepoLocalGlantriSeed = {
         "transport_and_caravan_work",
         "covert_entry",
         "street_theft",
-        "trap_and_intrusion_work",
         "fieldcraft_stealth",
         "athletic_conditioning",
         "social_reading",
@@ -12212,9 +14928,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -12230,7 +14944,25 @@ export const generatedRepoLocalGlantriSeed = {
         "craft_group",
         "mental_group",
         "mystical_group",
-        "wilderness_group"
+        "wilderness_group",
+        "arena_training",
+        "route_security",
+        "ship_command",
+        "smuggling_illicit_trade",
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced",
+        "construction_specialty",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "temple_service",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Established Households",
@@ -12245,54 +14977,35 @@ export const generatedRepoLocalGlantriSeed = {
       "professionIds": [
         "temple_scribe",
         "court_scribe_clerk",
-        "local_trader",
         "household_courtier",
         "folk_healer",
         "builder_master_mason",
         "deck_sailor",
-        "herdsman_subtype",
         "burglar",
         "folk_performer",
-        "tribal_warrior",
-        "levy_infantry",
-        "cavalry_mounted_retainer",
         "actor",
         "animal_trainer",
         "assassin",
-        "bandit",
-        "beggar",
         "bodyguard",
         "bounty_hunter",
         "bureaucrat",
         "caravan_guard",
-        "cavalry",
         "champion",
         "chariot_driver",
-        "clan_warriors",
         "conman",
         "courtesan",
         "crafter",
         "dancer_acrobat",
-        "docker",
         "embalmer",
         "entertainer",
-        "entertainers_dancer_acrobat",
-        "entertainers_singer_musician",
-        "entertainers_trickster_fool",
-        "farmer",
-        "fisher",
         "fixer",
         "gladiator",
         "healer",
-        "heavy_infantry",
         "herald",
         "herbalist",
-        "herder",
         "hermit",
         "homemaker",
         "hunter",
-        "inn_keeper",
-        "jailer",
         "lawyer",
         "light_infantry",
         "master_craftsmen",
@@ -12304,15 +15017,12 @@ export const generatedRepoLocalGlantriSeed = {
         "musician",
         "noble",
         "outrider_scout",
-        "peddler",
         "personal_servant",
         "philosopher",
-        "pickpocket",
         "politician",
         "priest",
         "prospector",
         "prostitute",
-        "prostitute_courtesan",
         "sailor",
         "scribe",
         "shaman",
@@ -12321,13 +15031,19 @@ export const generatedRepoLocalGlantriSeed = {
         "smuggler",
         "soothsayer",
         "spy",
-        "street_thug",
         "student",
         "tax_collector",
         "thief",
         "torturer",
-        "watchman",
-        "woodcutter"
+        "city_watch_officer",
+        "quartermaster",
+        "staff_officer",
+        "cavalry_officer",
+        "elite_guard_officer",
+        "guild_master",
+        "merchant_factor",
+        "banker_moneylender",
+        "great_merchant"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -12346,7 +15062,6 @@ export const generatedRepoLocalGlantriSeed = {
         "transport_and_caravan_work",
         "covert_entry",
         "street_theft",
-        "trap_and_intrusion_work",
         "fieldcraft_stealth",
         "athletic_conditioning",
         "social_reading",
@@ -12362,9 +15077,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -12380,7 +15093,25 @@ export const generatedRepoLocalGlantriSeed = {
         "craft_group",
         "mental_group",
         "mystical_group",
-        "wilderness_group"
+        "wilderness_group",
+        "arena_training",
+        "route_security",
+        "ship_command",
+        "smuggling_illicit_trade",
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced",
+        "construction_specialty",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "temple_service",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Court and Elite",
@@ -12396,16 +15127,10 @@ export const generatedRepoLocalGlantriSeed = {
         "folk_healer",
         "herdsman_subtype",
         "folk_performer",
-        "tribal_warrior",
-        "bandit",
         "beggar",
-        "clan_warriors",
         "crafter",
         "dancer_acrobat",
         "entertainer",
-        "entertainers_dancer_acrobat",
-        "entertainers_singer_musician",
-        "entertainers_trickster_fool",
         "farmer",
         "fisher",
         "herbalist",
@@ -12441,9 +15166,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -12457,7 +15180,23 @@ export const generatedRepoLocalGlantriSeed = {
         "military_group",
         "craft_group",
         "mental_group",
-        "wilderness_group"
+        "wilderness_group",
+        "arena_training",
+        "route_security",
+        "ship_command",
+        "smuggling_illicit_trade",
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Common Folk",
@@ -12476,26 +15215,18 @@ export const generatedRepoLocalGlantriSeed = {
         "herdsman_subtype",
         "burglar",
         "folk_performer",
-        "tribal_warrior",
-        "levy_infantry",
-        "cavalry_mounted_retainer",
         "animal_trainer",
-        "bandit",
         "beggar",
         "bodyguard",
         "bounty_hunter",
         "caravan_guard",
         "cavalry",
         "chariot_driver",
-        "clan_warriors",
         "conman",
         "crafter",
         "dancer_acrobat",
         "docker",
         "entertainer",
-        "entertainers_dancer_acrobat",
-        "entertainers_singer_musician",
-        "entertainers_trickster_fool",
         "farmer",
         "fisher",
         "fixer",
@@ -12529,7 +15260,8 @@ export const generatedRepoLocalGlantriSeed = {
         "thief",
         "torturer",
         "watchman",
-        "woodcutter"
+        "woodcutter",
+        "garrison_soldier"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -12545,7 +15277,6 @@ export const generatedRepoLocalGlantriSeed = {
         "transport_and_caravan_work",
         "covert_entry",
         "street_theft",
-        "trap_and_intrusion_work",
         "fieldcraft_stealth",
         "athletic_conditioning",
         "social_reading",
@@ -12558,9 +15289,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -12575,7 +15304,25 @@ export const generatedRepoLocalGlantriSeed = {
         "craft_group",
         "mental_group",
         "mystical_group",
-        "wilderness_group"
+        "wilderness_group",
+        "arena_training",
+        "route_security",
+        "ship_command",
+        "smuggling_illicit_trade",
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced",
+        "construction_specialty",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "temple_service",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Trades and Guilds",
@@ -12596,13 +15343,9 @@ export const generatedRepoLocalGlantriSeed = {
         "herdsman_subtype",
         "burglar",
         "folk_performer",
-        "tribal_warrior",
-        "levy_infantry",
-        "cavalry_mounted_retainer",
         "actor",
         "animal_trainer",
         "assassin",
-        "bandit",
         "beggar",
         "bodyguard",
         "bounty_hunter",
@@ -12610,16 +15353,12 @@ export const generatedRepoLocalGlantriSeed = {
         "cavalry",
         "champion",
         "chariot_driver",
-        "clan_warriors",
         "conman",
         "crafter",
         "dancer_acrobat",
         "docker",
         "embalmer",
         "entertainer",
-        "entertainers_dancer_acrobat",
-        "entertainers_singer_musician",
-        "entertainers_trickster_fool",
         "farmer",
         "fisher",
         "fixer",
@@ -12662,7 +15401,15 @@ export const generatedRepoLocalGlantriSeed = {
         "thief",
         "torturer",
         "watchman",
-        "woodcutter"
+        "woodcutter",
+        "garrison_soldier",
+        "veteran_sergeant",
+        "city_watch_officer",
+        "quartermaster",
+        "cavalry_officer",
+        "guild_master",
+        "merchant_factor",
+        "banker_moneylender"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -12680,7 +15427,6 @@ export const generatedRepoLocalGlantriSeed = {
         "transport_and_caravan_work",
         "covert_entry",
         "street_theft",
-        "trap_and_intrusion_work",
         "fieldcraft_stealth",
         "athletic_conditioning",
         "social_reading",
@@ -12695,9 +15441,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -12713,7 +15457,25 @@ export const generatedRepoLocalGlantriSeed = {
         "craft_group",
         "mental_group",
         "mystical_group",
-        "wilderness_group"
+        "wilderness_group",
+        "arena_training",
+        "route_security",
+        "ship_command",
+        "smuggling_illicit_trade",
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced",
+        "construction_specialty",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "temple_service",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Established Households",
@@ -12728,54 +15490,35 @@ export const generatedRepoLocalGlantriSeed = {
       "professionIds": [
         "temple_scribe",
         "court_scribe_clerk",
-        "local_trader",
         "household_courtier",
         "folk_healer",
         "builder_master_mason",
         "deck_sailor",
-        "herdsman_subtype",
         "burglar",
         "folk_performer",
-        "tribal_warrior",
-        "levy_infantry",
-        "cavalry_mounted_retainer",
         "actor",
         "animal_trainer",
         "assassin",
-        "bandit",
-        "beggar",
         "bodyguard",
         "bounty_hunter",
         "bureaucrat",
         "caravan_guard",
-        "cavalry",
         "champion",
         "chariot_driver",
-        "clan_warriors",
         "conman",
         "courtesan",
         "crafter",
         "dancer_acrobat",
-        "docker",
         "embalmer",
         "entertainer",
-        "entertainers_dancer_acrobat",
-        "entertainers_singer_musician",
-        "entertainers_trickster_fool",
-        "farmer",
-        "fisher",
         "fixer",
         "gladiator",
         "healer",
-        "heavy_infantry",
         "herald",
         "herbalist",
-        "herder",
         "hermit",
         "homemaker",
         "hunter",
-        "inn_keeper",
-        "jailer",
         "lawyer",
         "light_infantry",
         "master_craftsmen",
@@ -12787,15 +15530,12 @@ export const generatedRepoLocalGlantriSeed = {
         "musician",
         "noble",
         "outrider_scout",
-        "peddler",
         "personal_servant",
         "philosopher",
-        "pickpocket",
         "politician",
         "priest",
         "prospector",
         "prostitute",
-        "prostitute_courtesan",
         "sailor",
         "scribe",
         "shaman",
@@ -12804,13 +15544,19 @@ export const generatedRepoLocalGlantriSeed = {
         "smuggler",
         "soothsayer",
         "spy",
-        "street_thug",
         "student",
         "tax_collector",
         "thief",
         "torturer",
-        "watchman",
-        "woodcutter"
+        "city_watch_officer",
+        "quartermaster",
+        "staff_officer",
+        "cavalry_officer",
+        "elite_guard_officer",
+        "guild_master",
+        "merchant_factor",
+        "banker_moneylender",
+        "great_merchant"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -12829,7 +15575,6 @@ export const generatedRepoLocalGlantriSeed = {
         "transport_and_caravan_work",
         "covert_entry",
         "street_theft",
-        "trap_and_intrusion_work",
         "fieldcraft_stealth",
         "athletic_conditioning",
         "social_reading",
@@ -12845,9 +15590,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -12863,7 +15606,25 @@ export const generatedRepoLocalGlantriSeed = {
         "craft_group",
         "mental_group",
         "mystical_group",
-        "wilderness_group"
+        "wilderness_group",
+        "arena_training",
+        "route_security",
+        "ship_command",
+        "smuggling_illicit_trade",
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced",
+        "construction_specialty",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "temple_service",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Court and Elite",
@@ -12879,16 +15640,10 @@ export const generatedRepoLocalGlantriSeed = {
         "folk_healer",
         "herdsman_subtype",
         "folk_performer",
-        "tribal_warrior",
-        "bandit",
         "beggar",
-        "clan_warriors",
         "crafter",
         "dancer_acrobat",
         "entertainer",
-        "entertainers_dancer_acrobat",
-        "entertainers_singer_musician",
-        "entertainers_trickster_fool",
         "farmer",
         "fisher",
         "herbalist",
@@ -12896,11 +15651,8 @@ export const generatedRepoLocalGlantriSeed = {
         "hermit",
         "hunter",
         "messenger",
-        "peddler",
         "prospector",
-        "shaman",
-        "street_thug",
-        "woodcutter"
+        "shaman"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -12924,9 +15676,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -12940,7 +15690,23 @@ export const generatedRepoLocalGlantriSeed = {
         "military_group",
         "craft_group",
         "mental_group",
-        "wilderness_group"
+        "wilderness_group",
+        "arena_training",
+        "route_security",
+        "ship_command",
+        "smuggling_illicit_trade",
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Common Folk",
@@ -12953,45 +15719,31 @@ export const generatedRepoLocalGlantriSeed = {
       "classRollTableId": "renaissance_city_state_social_band_v1",
       "notes": "Urban commercial elite culture with diplomacy, finance, advanced technique, and refined court life. Historical reference: italian city states. Glantri examples: Iest. Source sheet note: modern",
       "professionIds": [
-        "local_trader",
         "folk_healer",
         "deck_sailor",
         "herdsman_subtype",
         "burglar",
         "folk_performer",
-        "tribal_warrior",
-        "levy_infantry",
-        "cavalry_mounted_retainer",
         "animal_trainer",
-        "bandit",
         "beggar",
         "bodyguard",
         "bounty_hunter",
         "caravan_guard",
-        "cavalry",
         "chariot_driver",
-        "clan_warriors",
         "conman",
         "crafter",
         "dancer_acrobat",
-        "docker",
         "entertainer",
-        "entertainers_dancer_acrobat",
-        "entertainers_singer_musician",
-        "entertainers_trickster_fool",
         "farmer",
         "fisher",
         "fixer",
         "gladiator",
         "healer",
-        "heavy_infantry",
         "herbalist",
         "herder",
         "hermit",
         "homemaker",
         "hunter",
-        "inn_keeper",
-        "jailer",
         "light_infantry",
         "merchant",
         "messenger",
@@ -12999,20 +15751,14 @@ export const generatedRepoLocalGlantriSeed = {
         "mourner",
         "musician",
         "outrider_scout",
-        "peddler",
-        "pickpocket",
         "prospector",
         "prostitute",
-        "prostitute_courtesan",
         "sailor",
         "shaman",
         "smuggler",
         "soothsayer",
-        "street_thug",
         "thief",
-        "torturer",
-        "watchman",
-        "woodcutter"
+        "torturer"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -13028,7 +15774,6 @@ export const generatedRepoLocalGlantriSeed = {
         "transport_and_caravan_work",
         "covert_entry",
         "street_theft",
-        "trap_and_intrusion_work",
         "fieldcraft_stealth",
         "athletic_conditioning",
         "social_reading",
@@ -13041,9 +15786,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -13058,7 +15801,25 @@ export const generatedRepoLocalGlantriSeed = {
         "craft_group",
         "mental_group",
         "mystical_group",
-        "wilderness_group"
+        "wilderness_group",
+        "arena_training",
+        "route_security",
+        "ship_command",
+        "smuggling_illicit_trade",
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced",
+        "construction_specialty",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "temple_service",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Trades and Guilds",
@@ -13072,50 +15833,36 @@ export const generatedRepoLocalGlantriSeed = {
       "notes": "Urban commercial elite culture with diplomacy, finance, advanced technique, and refined court life. Historical reference: italian city states. Glantri examples: Iest. Source sheet note: modern",
       "professionIds": [
         "temple_scribe",
-        "local_trader",
         "folk_healer",
         "builder_master_mason",
         "deck_sailor",
         "herdsman_subtype",
         "burglar",
         "folk_performer",
-        "tribal_warrior",
-        "levy_infantry",
-        "cavalry_mounted_retainer",
         "actor",
         "animal_trainer",
         "assassin",
-        "bandit",
         "beggar",
         "bodyguard",
         "bounty_hunter",
         "caravan_guard",
-        "cavalry",
         "champion",
         "chariot_driver",
-        "clan_warriors",
         "conman",
         "crafter",
         "dancer_acrobat",
-        "docker",
         "embalmer",
         "entertainer",
-        "entertainers_dancer_acrobat",
-        "entertainers_singer_musician",
-        "entertainers_trickster_fool",
         "farmer",
         "fisher",
         "fixer",
         "gladiator",
         "healer",
-        "heavy_infantry",
         "herbalist",
         "herder",
         "hermit",
         "homemaker",
         "hunter",
-        "inn_keeper",
-        "jailer",
         "light_infantry",
         "master_craftsmen",
         "merchant",
@@ -13124,14 +15871,11 @@ export const generatedRepoLocalGlantriSeed = {
         "mourner",
         "musician",
         "outrider_scout",
-        "peddler",
         "personal_servant",
         "philosopher",
-        "pickpocket",
         "priest",
         "prospector",
         "prostitute",
-        "prostitute_courtesan",
         "sailor",
         "scribe",
         "shaman",
@@ -13140,12 +15884,15 @@ export const generatedRepoLocalGlantriSeed = {
         "smuggler",
         "soothsayer",
         "spy",
-        "street_thug",
         "student",
         "thief",
         "torturer",
-        "watchman",
-        "woodcutter"
+        "city_watch_officer",
+        "quartermaster",
+        "cavalry_officer",
+        "guild_master",
+        "merchant_factor",
+        "banker_moneylender"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -13163,7 +15910,6 @@ export const generatedRepoLocalGlantriSeed = {
         "transport_and_caravan_work",
         "covert_entry",
         "street_theft",
-        "trap_and_intrusion_work",
         "fieldcraft_stealth",
         "athletic_conditioning",
         "social_reading",
@@ -13178,9 +15924,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -13196,7 +15940,25 @@ export const generatedRepoLocalGlantriSeed = {
         "craft_group",
         "mental_group",
         "mystical_group",
-        "wilderness_group"
+        "wilderness_group",
+        "arena_training",
+        "route_security",
+        "ship_command",
+        "smuggling_illicit_trade",
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced",
+        "construction_specialty",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "temple_service",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Established Households",
@@ -13211,54 +15973,35 @@ export const generatedRepoLocalGlantriSeed = {
       "professionIds": [
         "temple_scribe",
         "court_scribe_clerk",
-        "local_trader",
         "household_courtier",
         "folk_healer",
         "builder_master_mason",
         "deck_sailor",
-        "herdsman_subtype",
         "burglar",
         "folk_performer",
-        "tribal_warrior",
-        "levy_infantry",
-        "cavalry_mounted_retainer",
         "actor",
         "animal_trainer",
         "assassin",
-        "bandit",
-        "beggar",
         "bodyguard",
         "bounty_hunter",
         "bureaucrat",
         "caravan_guard",
-        "cavalry",
         "champion",
         "chariot_driver",
-        "clan_warriors",
         "conman",
         "courtesan",
         "crafter",
         "dancer_acrobat",
-        "docker",
         "embalmer",
         "entertainer",
-        "entertainers_dancer_acrobat",
-        "entertainers_singer_musician",
-        "entertainers_trickster_fool",
-        "farmer",
-        "fisher",
         "fixer",
         "gladiator",
         "healer",
-        "heavy_infantry",
         "herald",
         "herbalist",
-        "herder",
         "hermit",
         "homemaker",
         "hunter",
-        "inn_keeper",
-        "jailer",
         "lawyer",
         "light_infantry",
         "master_craftsmen",
@@ -13270,15 +16013,12 @@ export const generatedRepoLocalGlantriSeed = {
         "musician",
         "noble",
         "outrider_scout",
-        "peddler",
         "personal_servant",
         "philosopher",
-        "pickpocket",
         "politician",
         "priest",
         "prospector",
         "prostitute",
-        "prostitute_courtesan",
         "sailor",
         "scribe",
         "shaman",
@@ -13287,13 +16027,20 @@ export const generatedRepoLocalGlantriSeed = {
         "smuggler",
         "soothsayer",
         "spy",
-        "street_thug",
         "student",
         "tax_collector",
         "thief",
         "torturer",
-        "watchman",
-        "woodcutter"
+        "city_watch_officer",
+        "quartermaster",
+        "staff_officer",
+        "imperial_officer",
+        "cavalry_officer",
+        "elite_guard_officer",
+        "guild_master",
+        "merchant_factor",
+        "banker_moneylender",
+        "great_merchant"
       ],
       "skillGroupIds": [
         "literate_foundation",
@@ -13312,7 +16059,6 @@ export const generatedRepoLocalGlantriSeed = {
         "transport_and_caravan_work",
         "covert_entry",
         "street_theft",
-        "trap_and_intrusion_work",
         "fieldcraft_stealth",
         "athletic_conditioning",
         "social_reading",
@@ -13328,9 +16074,7 @@ export const generatedRepoLocalGlantriSeed = {
         "advanced_missile_training",
         "defensive_soldiering",
         "mounted_warrior_training",
-        "field_soldiering",
         "veteran_soldiering",
-        "officer_training",
         "veteran_leadership",
         "animal_handling",
         "athletics",
@@ -13346,7 +16090,25 @@ export const generatedRepoLocalGlantriSeed = {
         "craft_group",
         "mental_group",
         "mystical_group",
-        "wilderness_group"
+        "wilderness_group",
+        "arena_training",
+        "route_security",
+        "ship_command",
+        "smuggling_illicit_trade",
+        "watch_civic_guard",
+        "craft_specialty",
+        "craft_specialty_advanced",
+        "construction_specialty",
+        "pastoral_work",
+        "farm_household_work",
+        "coastal_fishing",
+        "forestry_resource_work",
+        "mining_extraction",
+        "scholarly_formation",
+        "legal_practice",
+        "fiscal_administration",
+        "temple_service",
+        "mortuary_practice"
       ],
       "skillIds": [],
       "socialClass": "Court and Elite",

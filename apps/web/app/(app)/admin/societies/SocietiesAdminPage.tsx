@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { useAdminContent } from "../../../../src/lib/admin/AdminContentContext";
@@ -7,53 +8,199 @@ import { downloadCsv } from "../../../../src/lib/admin/exporters";
 import { buildSocietyAdminRows } from "../../../../src/lib/admin/viewModels";
 import {
   AdminButton,
-  AdminCheckboxList,
-  AdminDataTable,
-  AdminField,
-  AdminInput,
+  AdminMetric,
   AdminPageIntro,
   AdminPanel,
-  AdminTagList,
-  AdminTextarea
+  AdminTagList
 } from "../admin-ui";
 import SocietiesWorkspaceTabs from "./SocietiesWorkspaceTabs";
-
-interface SocietyFormState {
-  baseEducation: string;
-  notes: string;
-  professionIds: string[];
-  skillGroupIds: string[];
-  skillIds: string[];
-  socialClass: string;
-  societyName: string;
-}
 
 function createSocietyRowId(input: { societyId: string; societyLevel: number }): string {
   return `${input.societyId}:${input.societyLevel}`;
 }
 
-function createSocietyFormState(input: {
-  baseEducation?: number;
-  notes?: string;
-  professionIds: string[];
-  skillGroupIds: string[];
-  skillIds: string[];
-  socialClass: string;
-  societyName: string;
-}): SocietyFormState {
-  return {
-    baseEducation: input.baseEducation === undefined ? "" : String(input.baseEducation),
-    notes: input.notes ?? "",
-    professionIds: input.professionIds,
-    skillGroupIds: input.skillGroupIds,
-    skillIds: input.skillIds,
-    socialClass: input.socialClass,
-    societyName: input.societyName
-  };
+function summarizeList(values: string[], maxItems = 3): string {
+  if (values.length === 0) {
+    return "None";
+  }
+
+  if (values.length <= maxItems) {
+    return values.join(", ");
+  }
+
+  return `${values.slice(0, maxItems).join(", ")} +${values.length - maxItems} more`;
+}
+
+function summarizeText(value: string | undefined, maxLength = 90): string {
+  const trimmed = value?.trim();
+
+  if (!trimmed) {
+    return "";
+  }
+
+  if (trimmed.length <= maxLength) {
+    return trimmed;
+  }
+
+  return `${trimmed.slice(0, maxLength - 1).trimEnd()}…`;
+}
+
+function renderClampedCell(text: string, options?: { lines?: number; width?: string }) {
+  return (
+    <span
+      style={{
+        color: "#4f4635",
+        display: "-webkit-box",
+        lineHeight: 1.45,
+        maxWidth: options?.width ?? "100%",
+        overflow: "hidden",
+        WebkitBoxOrient: "vertical",
+        WebkitLineClamp: options?.lines ?? 2
+      }}
+      title={text}
+    >
+      {text}
+    </span>
+  );
+}
+
+const societiesReviewGridTemplate =
+  "minmax(10rem, 1.1fr) 3.5rem 3.75rem 8rem 4rem 5.25rem minmax(24rem, 2.5fr) minmax(9rem, 0.95fr) minmax(8rem, 0.9fr) minmax(15rem, 1.45fr) 4.5rem";
+
+function SocietiesReviewTable(props: {
+  onInspect: (rowId: string) => void;
+  rows: ReturnType<typeof buildSocietyAdminRows>;
+  selectedId?: string;
+}) {
+  if (props.rows.length === 0) {
+    return <div style={{ color: "#6d624d", padding: "1rem" }}>No society rows found.</div>;
+  }
+
+  return (
+    <div
+      style={{
+        border: "1px solid rgba(85, 73, 48, 0.12)",
+        borderRadius: 18,
+        maxHeight: "70vh",
+        overflow: "auto",
+        position: "relative"
+      }}
+    >
+      <div style={{ minWidth: 1360 }}>
+        <div
+          style={{
+            background: "rgba(126, 93, 42, 0.08)",
+            borderBottom: "1px solid rgba(85, 73, 48, 0.1)",
+            display: "grid",
+            gridTemplateColumns: societiesReviewGridTemplate,
+            position: "sticky",
+            top: 0,
+            zIndex: 2
+          }}
+        >
+          {[
+            "Society",
+            "Level",
+            "Band",
+            "Class",
+            "Edu",
+            "Literacy",
+            "Description",
+            "Historical Ref.",
+            "Glantri Examples",
+            "Professions",
+            "Inspect"
+          ].map((header) => (
+            <div
+              key={header}
+              style={{
+                color: "#594320",
+                fontSize: "0.8rem",
+                fontWeight: 700,
+                letterSpacing: "0.08em",
+                padding: "0.8rem",
+                textTransform: "uppercase",
+                whiteSpace: "nowrap"
+              }}
+            >
+              {header}
+            </div>
+          ))}
+        </div>
+
+        {props.rows.map((row) => {
+          const selected = row.id === props.selectedId;
+
+          return (
+            <div
+              key={row.id}
+              onClick={() => props.onInspect(row.id)}
+              style={{
+                background: selected ? "rgba(215, 226, 216, 0.72)" : "transparent",
+                borderTop: "1px solid rgba(85, 73, 48, 0.1)",
+                cursor: "pointer",
+                display: "grid",
+                gridTemplateColumns: societiesReviewGridTemplate
+              }}
+            >
+              <div style={{ color: "#2e2619", fontWeight: 700, padding: "0.9rem 0.8rem" }}>{row.society}</div>
+              <div style={{ color: "#2e2619", padding: "0.9rem 0.8rem" }}>
+                {row.canonicalSocietyLevel ?? <span style={{ color: "#8a7e63" }}>None</span>}
+              </div>
+              <div style={{ color: "#2e2619", padding: "0.9rem 0.8rem" }}>{`L${row.societyLevel}`}</div>
+              <div style={{ color: "#2e2619", padding: "0.9rem 0.8rem" }}>
+                {renderClampedCell(row.societyClassName, { lines: 2 })}
+              </div>
+              <div style={{ color: "#2e2619", padding: "0.9rem 0.8rem" }}>
+                {row.baseEducation || <span style={{ color: "#8a7e63" }}>None</span>}
+              </div>
+              <div style={{ color: "#2e2619", padding: "0.9rem 0.8rem" }}>
+                {row.literacyAccessSummary}
+              </div>
+              <div style={{ color: "#2e2619", padding: "0.9rem 0.8rem" }}>
+                {row.shortDescription || row.notes ? (
+                  renderClampedCell(summarizeText(row.shortDescription || row.notes, 220), {
+                    lines: 2
+                  })
+                ) : (
+                  <span style={{ color: "#8a7e63" }}>None</span>
+                )}
+              </div>
+              <div style={{ color: "#2e2619", padding: "0.9rem 0.8rem" }}>
+                {row.historicalReference ? (
+                  renderClampedCell(summarizeText(row.historicalReference, 90), { lines: 2 })
+                ) : (
+                  <span style={{ color: "#8a7e63" }}> </span>
+                )}
+              </div>
+              <div style={{ color: "#2e2619", padding: "0.9rem 0.8rem" }}>
+                {row.glantriExamples ? (
+                  renderClampedCell(summarizeText(row.glantriExamples, 90), { lines: 2 })
+                ) : (
+                  <span style={{ color: "#8a7e63" }}> </span>
+                )}
+              </div>
+              <div style={{ color: "#2e2619", padding: "0.9rem 0.8rem" }}>
+                {renderClampedCell(summarizeList(row.reachableProfessions, 5), { lines: 2 })}
+              </div>
+              <div style={{ padding: "0.75rem 0.8rem" }}>
+                <AdminButton
+                  onClick={() => props.onInspect(row.id)}
+                  variant={selected ? "primary" : "secondary"}
+                >
+                  {selected ? "Open" : "Inspect"}
+                </AdminButton>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 export default function SocietiesAdminPage() {
-  const { content, replaceContent } = useAdminContent();
+  const { content } = useAdminContent();
   const rows = buildSocietyAdminRows(content);
   const [selectedRowId, setSelectedRowId] = useState<string>();
   const selectedSocietyLevel =
@@ -64,10 +211,17 @@ export default function SocietiesAdminPage() {
           societyLevel: societyLevel.societyLevel
         }) === selectedRowId
     ) ??
+    content.societyLevels.find((societyLevel) => {
+      return (
+        createSocietyRowId({
+          societyId: societyLevel.societyId,
+          societyLevel: societyLevel.societyLevel
+        }) === rows[0]?.id
+      );
+    }) ??
     content.societyLevels
       .slice()
       .sort((left, right) => left.societyName.localeCompare(right.societyName) || left.societyLevel - right.societyLevel)[0];
-  const [formState, setFormState] = useState<SocietyFormState>();
 
   useEffect(() => {
     if (!selectedRowId && rows[0]) {
@@ -75,31 +229,7 @@ export default function SocietiesAdminPage() {
     }
   }, [rows, selectedRowId]);
 
-  useEffect(() => {
-    if (!selectedSocietyLevel) {
-      return;
-    }
-
-    setSelectedRowId(
-      createSocietyRowId({
-        societyId: selectedSocietyLevel.societyId,
-        societyLevel: selectedSocietyLevel.societyLevel
-      })
-    );
-    setFormState(
-      createSocietyFormState({
-        baseEducation: selectedSocietyLevel.baseEducation,
-        notes: selectedSocietyLevel.notes,
-        professionIds: selectedSocietyLevel.professionIds,
-        skillGroupIds: selectedSocietyLevel.skillGroupIds,
-        skillIds: selectedSocietyLevel.skillIds,
-        socialClass: selectedSocietyLevel.socialClass,
-        societyName: selectedSocietyLevel.societyName
-      })
-    );
-  }, [selectedSocietyLevel]);
-
-  if (!selectedSocietyLevel || !formState) {
+  if (!selectedSocietyLevel) {
     return (
       <AdminPanel title="Societies">
         <div>No society/social-class rows found.</div>
@@ -107,67 +237,11 @@ export default function SocietiesAdminPage() {
     );
   }
 
-  const activeForm = formState;
-
-  function toggleRelation(key: "professionIds" | "skillGroupIds" | "skillIds", value: string) {
-    setFormState((current) =>
-      current
-        ? {
-            ...current,
-            [key]: current[key].includes(value)
-              ? current[key].filter((candidate) => candidate !== value)
-              : [...current[key], value]
-          }
-        : current
-    );
-  }
-
-  async function handleSave() {
-    const nextContent = {
-      ...content,
-      societyLevels: content.societyLevels.map((societyLevel) => {
-        const matchingSociety = societyLevel.societyId === selectedSocietyLevel.societyId;
-
-        if (
-          matchingSociety &&
-          societyLevel.societyLevel === selectedSocietyLevel.societyLevel
-        ) {
-          return {
-            ...societyLevel,
-            baseEducation:
-              activeForm.baseEducation.trim().length > 0
-                ? Number(activeForm.baseEducation)
-                : undefined,
-            notes: activeForm.notes.trim() || undefined,
-            professionIds: [...new Set(activeForm.professionIds)],
-            skillGroupIds: [...new Set(activeForm.skillGroupIds)],
-            skillIds: [...new Set(activeForm.skillIds)],
-            socialClass: activeForm.socialClass.trim(),
-            societyName: activeForm.societyName.trim()
-          };
-        }
-
-        if (!matchingSociety) {
-          return societyLevel;
-        }
-
-        return {
-          ...societyLevel,
-          societyName: activeForm.societyName.trim()
-        };
-      })
-    };
-
-    await replaceContent(
-      nextContent,
-      `Saved society row "${activeForm.societyName.trim()} L${selectedSocietyLevel.societyLevel}".`
-    );
-  }
-
   const selectedRowDisplayId = createSocietyRowId({
     societyId: selectedSocietyLevel.societyId,
     societyLevel: selectedSocietyLevel.societyLevel
   });
+  const selectedRow = rows.find((row) => row.id === selectedRowDisplayId);
 
   return (
     <section style={{ display: "grid", gap: "1.25rem" }}>
@@ -215,198 +289,185 @@ export default function SocietiesAdminPage() {
           </AdminButton>
         }
         eyebrow="Admin / Societies"
-        summary="Society/social-class rows define who can start with which professions, skill groups, and direct skills. This page keeps those access rows legible as one matrix instead of a scattered set of ids."
+        summary="Review societies as compact access rows first, then drill into a selected row to inspect baseline languages, reachable professions, and the downstream profession → group → skill fan."
         title="Societies / Social Classes"
       />
 
       <SocietiesWorkspaceTabs />
 
-      <div style={{ display: "grid", gap: "1rem", gridTemplateColumns: "minmax(0, 1.7fr) minmax(340px, 1fr)" }}>
-        <AdminPanel title="Society Access Rows">
-          <AdminDataTable
-            columns={[
-              {
-                header: "Society",
-                render: (row) => <strong>{row.society}</strong>
-              },
-              {
-                header: "Band / Level",
-                render: (row) => row.societyLevel
-              },
-              {
-                header: "Die Range",
-                render: (row) => row.dieRange
-              },
-              {
-                header: "Class Name",
-                render: (row) => row.societyClassName
-              },
-              {
-                header: "Base Education",
-                render: (row) => row.baseEducation || <span style={{ color: "#8a7e63" }}>None</span>
-              },
-              {
-                header: "Reachable Professions",
-                render: (row) => <AdminTagList values={row.reachableProfessions} />
-              },
-              {
-                header: "Direct Skill Groups",
-                render: (row) => <AdminTagList values={row.directSkillGroups} />
-              },
-              {
-                header: "Direct Skills",
-                render: (row) => <AdminTagList values={row.directSkills} />
-              },
-              {
-                header: "Profession-Derived Reach",
-                render: (row) => <AdminTagList values={row.effectiveProfessionSkills} />
-              },
-              {
-                header: "Direct-Only Extra Skills",
-                render: (row) => <AdminTagList values={row.directOnlySkills} />
-              },
-              {
-                header: "Total Effective Reach",
-                render: (row) => row.totalEffectiveReachableSkills
-              },
-              {
-                header: "Notes",
-                render: (row) => row.notes || <span style={{ color: "#8a7e63" }}>None</span>
-              }
-            ]}
-            emptyState="No society rows found."
-            onSelect={setSelectedRowId}
+      <div style={{ display: "grid", gap: "1rem", gridTemplateColumns: "minmax(0, 2.8fr) minmax(340px, 1fr)" }}>
+        <AdminPanel title="Society Access Review">
+          <SocietiesReviewTable
+            onInspect={setSelectedRowId}
             rows={rows}
             selectedId={selectedRowDisplayId}
           />
         </AdminPanel>
 
-        <AdminPanel
-          subtitle="The society name is shared across all bands for a society id, so saving that field propagates to the sibling rows automatically."
-          title={`Edit ${selectedSocietyLevel.societyName} L${selectedSocietyLevel.societyLevel}`}
-        >
-          <form
-            onSubmit={(event) => {
-              event.preventDefault();
-              void handleSave();
-            }}
-            style={{ display: "grid", gap: "0.9rem" }}
+        <div style={{ display: "grid", gap: "1rem" }}>
+          <AdminPanel
+            subtitle={
+              selectedRow?.shortDescription?.trim() ||
+              selectedRow?.notes?.trim() ||
+              "No canonical society description recorded."
+            }
+            title={`${selectedSocietyLevel.societyName} L${selectedSocietyLevel.societyLevel}`}
           >
-            <AdminField label="Society id">
-              <AdminInput readOnly value={selectedSocietyLevel.societyId} />
-            </AdminField>
+            <div style={{ display: "grid", gap: "0.85rem" }}>
+              <div style={{ display: "grid", gap: "0.75rem", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))" }}>
+                <AdminMetric
+                  hint="Canonical society scale"
+                  label="Society Level"
+                  value={selectedRow?.canonicalSocietyLevel ?? "—"}
+                />
+                <AdminMetric
+                  hint="Access row within the society"
+                  label="Access Band"
+                  value={`L${selectedSocietyLevel.societyLevel}`}
+                />
+                <AdminMetric
+                  hint="Row metadata"
+                  label="Base Education"
+                  value={selectedRow?.baseEducation || "—"}
+                />
+              </div>
 
-            <AdminField
-              hint="This row's neutral access band within the society. It is distinct from skill-layer society level, which lives on individual skills."
-              label="Neutral band / level"
-            >
-              <AdminInput readOnly value={String(selectedSocietyLevel.societyLevel)} />
-            </AdminField>
+              <div>
+                <div style={{ color: "#5f543a", fontSize: "0.85rem", fontWeight: 700, marginBottom: "0.35rem", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                  Baseline languages
+                </div>
+                {selectedRow?.baselineLanguages.length ? (
+                  <AdminTagList values={selectedRow.baselineLanguages} />
+                ) : (
+                  <div style={{ color: "#8a7e63" }}>No baseline languages recorded.</div>
+                )}
+              </div>
 
-            <AdminField label="Die range">
-              <AdminInput readOnly value={rows.find((row) => row.id === selectedRowDisplayId)?.dieRange ?? "Custom"} />
-            </AdminField>
+              <div>
+                <div style={{ color: "#5f543a", fontSize: "0.85rem", fontWeight: 700, marginBottom: "0.35rem", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                  Society description
+                </div>
+                <div style={{ color: "#4f4635", lineHeight: 1.5 }}>
+                  {selectedRow?.shortDescription || "No canonical society description recorded."}
+                </div>
+              </div>
 
-            <AdminField label="Society">
-              <AdminInput
-                onChange={(event) =>
-                  setFormState({ ...activeForm, societyName: event.target.value })
-                }
-                value={activeForm.societyName}
-              />
-            </AdminField>
+              <div
+                style={{
+                  display: "grid",
+                  gap: "0.85rem",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))"
+                }}
+              >
+                <div>
+                  <div style={{ color: "#5f543a", fontSize: "0.85rem", fontWeight: 700, marginBottom: "0.35rem", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                    Historical reference
+                  </div>
+                  <div style={{ color: "#4f4635", lineHeight: 1.5 }}>
+                    {selectedRow?.historicalReference || <span style={{ color: "#8a7e63" }}>None</span>}
+                  </div>
+                </div>
 
-            <AdminField
-              hint="Display label for this access row inside the selected society at this neutral band."
-              label="Society-specific class name"
-            >
-              <AdminInput
-                onChange={(event) =>
-                  setFormState({ ...activeForm, socialClass: event.target.value })
-                }
-                value={activeForm.socialClass}
-              />
-            </AdminField>
+                <div>
+                  <div style={{ color: "#5f543a", fontSize: "0.85rem", fontWeight: 700, marginBottom: "0.35rem", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                    Glantri examples
+                  </div>
+                  <div style={{ color: "#4f4635", lineHeight: 1.5 }}>
+                    {selectedRow?.glantriExamples || <span style={{ color: "#8a7e63" }}>None</span>}
+                  </div>
+                </div>
+              </div>
 
-            <AdminField
-              hint="Base education is row metadata, not a direct skill grant. Use it to describe the educational floor implied by this society/class band."
-              label="Base education"
-            >
-              <AdminInput
-                onChange={(event) =>
-                  setFormState({ ...activeForm, baseEducation: event.target.value })
-                }
-                type="number"
-                value={activeForm.baseEducation}
-              />
-            </AdminField>
+              <div>
+                <div style={{ color: "#5f543a", fontSize: "0.85rem", fontWeight: 700, marginBottom: "0.35rem", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                  Reachable professions
+                </div>
+                <AdminTagList values={selectedRow?.reachableProfessions ?? []} />
+              </div>
 
-            <AdminField
-              hint="These professions are the main access packages this row unlocks. Society rows should usually orchestrate professions first, then add limited direct overrides only when needed."
-              label="Allowed professions"
-            >
-              <AdminCheckboxList
-                onToggle={(value) => toggleRelation("professionIds", value)}
-                options={content.professions
-                  .slice()
-                  .sort((left, right) => left.name.localeCompare(right.name))
-                  .map((profession) => ({
-                    label: profession.name,
-                    selected: activeForm.professionIds.includes(profession.id),
-                    value: profession.id
-                  }))}
-              />
-            </AdminField>
+              <div style={{ display: "grid", gap: "0.75rem" }}>
+                <div style={{ color: "#5f543a", fontSize: "0.85rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                  Profession → groups → skills fan
+                </div>
+                {selectedRow?.professionFans.length ? (
+                  selectedRow.professionFans.map((fan) => (
+                    <details
+                      key={fan.professionName}
+                      style={{
+                        background: "rgba(255, 252, 245, 0.88)",
+                        border: "1px solid rgba(85, 73, 48, 0.12)",
+                        borderRadius: 16,
+                        padding: "0.85rem 1rem"
+                      }}
+                    >
+                      <summary style={{ cursor: "pointer", fontWeight: 700, color: "#2e2619" }}>
+                        {fan.professionName} · {fan.reachableSkills.length} reachable skills
+                      </summary>
+                      <div style={{ display: "grid", gap: "0.8rem", marginTop: "0.8rem" }}>
+                        <div>
+                          <div style={{ color: "#5f543a", fontSize: "0.82rem", fontWeight: 700, marginBottom: "0.3rem", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                            Core groups
+                          </div>
+                          {fan.coreGroups.length ? (
+                            <div style={{ display: "grid", gap: "0.55rem" }}>
+                              {fan.coreGroups.map((group) => (
+                                <div key={group.groupName} style={{ color: "#4f4635", lineHeight: 1.45 }}>
+                                  <strong>{group.groupName}</strong>
+                                  <div>Core: {summarizeList(group.coreSkills, 4)}</div>
+                                  {group.optionalSkills.length ? <div>Optional: {summarizeList(group.optionalSkills, 4)}</div> : null}
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div style={{ color: "#8a7e63" }}>No core groups modeled.</div>
+                          )}
+                        </div>
 
-            <AdminField
-              hint="Direct skill-group overrides add access beyond the profession-derived package. Use sparingly when the society row needs extra group-level reach."
-              label="Allowed skill groups"
-            >
-              <AdminCheckboxList
-                onToggle={(value) => toggleRelation("skillGroupIds", value)}
-                options={content.skillGroups
-                  .slice()
-                  .sort((left, right) => left.sortOrder - right.sortOrder)
-                  .map((group) => ({
-                    label: group.name,
-                    selected: activeForm.skillGroupIds.includes(group.id),
-                    value: group.id
-                  }))}
-              />
-            </AdminField>
+                        <div>
+                          <div style={{ color: "#5f543a", fontSize: "0.82rem", fontWeight: 700, marginBottom: "0.3rem", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                            Optional groups
+                          </div>
+                          {fan.optionalGroups.length ? (
+                            <div style={{ display: "grid", gap: "0.55rem" }}>
+                              {fan.optionalGroups.map((group) => (
+                                <div key={group.groupName} style={{ color: "#4f4635", lineHeight: 1.45 }}>
+                                  <strong>{group.groupName}</strong>
+                                  <div>Core: {summarizeList(group.coreSkills, 4)}</div>
+                                  {group.optionalSkills.length ? <div>Optional: {summarizeList(group.optionalSkills, 4)}</div> : null}
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div style={{ color: "#8a7e63" }}>No optional groups modeled.</div>
+                          )}
+                        </div>
 
-            <AdminField
-              hint="Direct skill overrides are best for narrowly targeted additions on top of profession-derived reach."
-              label="Individually allowed skills"
-            >
-              <AdminCheckboxList
-                onToggle={(value) => toggleRelation("skillIds", value)}
-                options={content.skills
-                  .slice()
-                  .sort((left, right) => left.sortOrder - right.sortOrder || left.name.localeCompare(right.name))
-                  .map((skill) => ({
-                    label: skill.name,
-                    selected: activeForm.skillIds.includes(skill.id),
-                    value: skill.id
-                  }))}
-              />
-            </AdminField>
+                        <div>
+                          <div style={{ color: "#5f543a", fontSize: "0.82rem", fontWeight: 700, marginBottom: "0.3rem", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                            Total reachable skills
+                          </div>
+                          <div style={{ color: "#4f4635", lineHeight: 1.45 }}>
+                            {summarizeList(fan.reachableSkills, 8)}
+                          </div>
+                        </div>
+                      </div>
+                    </details>
+                  ))
+                ) : (
+                  <div style={{ color: "#8a7e63" }}>No profession fan is available for this row yet.</div>
+                )}
+              </div>
 
-            <AdminField
-              hint="Use notes for row-specific rationale or exceptions that help reviewers understand why this access orchestration differs from neighboring levels."
-              label="Notes"
-            >
-              <AdminTextarea
-                onChange={(event) =>
-                  setFormState({ ...activeForm, notes: event.target.value })
-                }
-                value={activeForm.notes}
-              />
-            </AdminField>
-
-            <AdminButton type="submit">Save Society Row</AdminButton>
-          </form>
-        </AdminPanel>
+              <div style={{ color: "#5f543a", fontSize: "0.92rem", lineHeight: 1.5 }}>
+                <Link href="/admin/professions" style={{ color: "#7e5d2a", fontWeight: 700 }}>
+                  Open professions inspector
+                </Link>
+                {" "}
+                to review the profession packages this access row unlocks.
+              </div>
+            </div>
+          </AdminPanel>
+        </div>
       </div>
     </section>
   );

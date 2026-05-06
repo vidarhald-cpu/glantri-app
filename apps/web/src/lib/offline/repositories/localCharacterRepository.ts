@@ -34,13 +34,35 @@ export class LocalCharacterRepository {
     };
   }
 
-  async list(): Promise<LocalCharacterRecord[]> {
+  async listFinalized(): Promise<LocalCharacterRecord[]> {
     const records = await localDb.localCharacters.orderBy("finalizedAt").reverse().toArray();
 
     return records.map((record) => ({
       ...record,
       build: characterBuildSchema.parse(record.build)
     }));
+  }
+
+  async list(): Promise<LocalCharacterRecord[]> {
+    return this.listFinalized();
+  }
+
+  async reconcileSyncedRecords(serverCharacterIds: string[]): Promise<void> {
+    const serverCharacterIdSet = new Set(serverCharacterIds);
+    const syncedRecords = await localDb.localCharacters
+      .where("syncStatus")
+      .equals("synced")
+      .toArray();
+
+    const staleRecordIds = syncedRecords
+      .filter((record) => !serverCharacterIdSet.has(record.id))
+      .map((record) => record.id);
+
+    if (staleRecordIds.length === 0) {
+      return;
+    }
+
+    await localDb.localCharacters.bulkDelete(staleRecordIds);
   }
 
   async save(input: SaveLocalCharacterInput): Promise<LocalCharacterRecord> {

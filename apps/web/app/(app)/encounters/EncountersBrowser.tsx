@@ -6,42 +6,87 @@ import { useEffect, useState } from "react";
 import type { EncounterSession } from "@glantri/domain";
 import { createEncounterSession } from "@glantri/rules-engine";
 
+import { buildCampaignWorkspaceHref } from "../../../src/lib/campaigns/workspace";
 import { LocalEncounterRepository } from "../../../src/lib/offline/repositories/localEncounterRepository";
 
 const localEncounterRepository = new LocalEncounterRepository();
 
-export default function EncountersBrowser() {
+interface EncountersBrowserProps {
+  campaignId?: string;
+  scenarioId?: string;
+}
+
+export default function EncountersBrowser({
+  campaignId,
+  scenarioId
+}: EncountersBrowserProps) {
   const [encounters, setEncounters] = useState<EncounterSession[]>([]);
   const [feedback, setFeedback] = useState<string>();
   const [loading, setLoading] = useState(true);
   const [titleInput, setTitleInput] = useState("");
 
+  const isNestedScenarioFlow = Boolean(campaignId && scenarioId);
+  const backHref = isNestedScenarioFlow
+    ? buildCampaignWorkspaceHref({
+        campaignId: campaignId as string,
+        scenarioId: scenarioId as string,
+        tab: "scenario",
+      })
+    : "/campaigns";
+
   async function refreshEncounters() {
     const records = await localEncounterRepository.list();
-    setEncounters(records);
+    setEncounters(
+      scenarioId ? records.filter((record) => record.scenarioId === scenarioId) : records
+    );
   }
 
   useEffect(() => {
     refreshEncounters().finally(() => {
       setLoading(false);
     });
-  }, []);
+  }, [scenarioId]);
 
   async function handleCreateEncounter() {
-    const session = createEncounterSession(titleInput);
+    const session: EncounterSession = {
+      ...createEncounterSession(titleInput),
+      campaignId,
+      scenarioId
+    };
     await localEncounterRepository.save(session);
     setTitleInput("");
     await refreshEncounters();
     setFeedback(`Created encounter "${session.title}".`);
   }
 
+  function getEncounterHref(encounter: EncounterSession): string {
+    if (isNestedScenarioFlow) {
+      return buildCampaignWorkspaceHref({
+        campaignId: campaignId as string,
+        encounterId: encounter.id,
+        scenarioId: scenarioId as string,
+        tab: "gm-encounter",
+      });
+    }
+
+    return `/encounters/${encounter.id}`;
+  }
+
   return (
     <section style={{ display: "grid", gap: "1rem", maxWidth: 880 }}>
       <div>
-        <h1 style={{ marginBottom: "0.5rem" }}>Encounters</h1>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
+          <Link href={backHref}>
+            {isNestedScenarioFlow ? "Back to scenario" : "Back to campaigns"}
+          </Link>
+        </div>
+        <h1 style={{ marginBottom: "0.5rem" }}>
+          {isNestedScenarioFlow ? "Scenario encounters" : "Encounter workbench"}
+        </h1>
         <p style={{ margin: 0 }}>
-          Local-first encounter/session records collect saved characters into a combat-facing
-          context without starting full combat resolution yet.
+          {isNestedScenarioFlow
+            ? "Encounters belong to this scenario. Use them for GM combat management, then hand players the combat screen from encounter context."
+            : "Legacy local encounter records are still available here, but the intended play flow is Campaigns -> Campaign -> Scenario -> Encounter."}
         </p>
       </div>
 
@@ -55,7 +100,9 @@ export default function EncountersBrowser() {
           padding: "1rem"
         }}
       >
-        <h2 style={{ margin: 0 }}>Create encounter</h2>
+        <h2 style={{ margin: 0 }}>
+          {isNestedScenarioFlow ? "Create encounter in this scenario" : "Create encounter"}
+        </h2>
         <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
           <input
             onChange={(event) => setTitleInput(event.target.value)}
@@ -91,7 +138,7 @@ export default function EncountersBrowser() {
               <div>Participants: {encounter.participants.length}</div>
               <div>Updated: {encounter.updatedAt}</div>
               <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
-                <Link href={`/encounters/${encounter.id}`}>Open encounter</Link>
+                <Link href={getEncounterHref(encounter)}>Open encounter</Link>
               </div>
             </div>
           ))}

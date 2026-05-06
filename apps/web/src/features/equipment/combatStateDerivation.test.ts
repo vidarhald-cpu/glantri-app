@@ -1,0 +1,944 @@
+import { describe, expect, it } from "vitest";
+
+import type {
+  CharacterLoadout,
+  EquipmentItem,
+  EquipmentTemplate,
+  StorageLocation,
+} from "@glantri/domain";
+import { equipmentTemplates } from "@glantri/content/equipment";
+import {
+  createCombatSession,
+  type CharacterSheetSummary,
+  type CombatAllocationState,
+} from "@glantri/rules-engine";
+import type { EquipmentFeatureState } from "./types";
+import {
+  buildCombatStateCharacterInputs,
+  deriveCombatStateSnapshot,
+  getActorCombatState,
+} from "./combatStateDerivation";
+
+const sampleCharacterId = "char-themistogenes";
+
+function indexById<T extends { id: string }>(items: T[]): Record<string, T> {
+  return Object.fromEntries(items.map((item) => [item.id, item]));
+}
+
+const sampleLocations: StorageLocation[] = [
+  {
+    id: `${sampleCharacterId}:loc-equipped`,
+    characterId: sampleCharacterId,
+    name: "Equipped",
+    type: "equipped_system",
+    availabilityClass: "with_you",
+    parentLocationId: null,
+    isMobile: true,
+    isAccessibleInEncounter: true,
+    notes: null,
+  },
+  {
+    id: `${sampleCharacterId}:loc-person`,
+    characterId: sampleCharacterId,
+    name: "On Person",
+    type: "person_system",
+    availabilityClass: "with_you",
+    parentLocationId: null,
+    isMobile: true,
+    isAccessibleInEncounter: true,
+    notes: null,
+  },
+  {
+    id: `${sampleCharacterId}:loc-backpack`,
+    characterId: sampleCharacterId,
+    name: "Backpack",
+    type: "backpack_system",
+    availabilityClass: "with_you",
+    parentLocationId: null,
+    isMobile: true,
+    isAccessibleInEncounter: true,
+    notes: null,
+  },
+  {
+    id: `${sampleCharacterId}:loc-mount`,
+    characterId: sampleCharacterId,
+    name: "Mount",
+    type: "mount_system",
+    availabilityClass: "with_you",
+    parentLocationId: null,
+    isMobile: true,
+    isAccessibleInEncounter: true,
+    notes: null,
+  },
+  {
+    id: `${sampleCharacterId}:loc-home`,
+    characterId: sampleCharacterId,
+    name: "Home",
+    type: "home",
+    availabilityClass: "elsewhere",
+    parentLocationId: null,
+    isMobile: false,
+    isAccessibleInEncounter: false,
+    notes: null,
+  },
+];
+
+const sampleEquipmentItems: EquipmentItem[] = [
+  {
+    id: "weapon-item-longsword-1",
+    characterId: sampleCharacterId,
+    templateId: "weapon-template-longsword",
+    category: "weapon",
+    displayName: null,
+    specificityType: "generic",
+    quantity: 1,
+    isStackable: false,
+    material: "steel",
+    quality: "standard",
+    storageAssignment: {
+      locationId: `${sampleCharacterId}:loc-equipped`,
+      carryMode: "equipped",
+    },
+    conditionState: "intact",
+    durabilityCurrent: 12,
+    durabilityMax: 12,
+    encumbranceOverride: null,
+    valueOverride: null,
+    specialProperties: null,
+    notes: null,
+    isEquipped: true,
+    isFavorite: null,
+    acquiredFrom: null,
+    statusTags: null,
+  },
+  {
+    id: "shield-item-round-1",
+    characterId: sampleCharacterId,
+    templateId: "shield-template-medium-shield",
+    category: "shield",
+    displayName: null,
+    specificityType: "generic",
+    quantity: 1,
+    isStackable: false,
+    material: "wood",
+    quality: "standard",
+    storageAssignment: {
+      locationId: `${sampleCharacterId}:loc-equipped`,
+      carryMode: "equipped",
+    },
+    conditionState: "intact",
+    durabilityCurrent: null,
+    durabilityMax: null,
+    encumbranceOverride: null,
+    valueOverride: null,
+    specialProperties: null,
+    notes: null,
+    isEquipped: true,
+    isFavorite: null,
+    acquiredFrom: null,
+    statusTags: null,
+  },
+  {
+    id: "armor-item-jerkin-1",
+    characterId: sampleCharacterId,
+    templateId: "armor-template-leather-jerkin",
+    category: "armor",
+    displayName: null,
+    specificityType: "generic",
+    quantity: 1,
+    isStackable: false,
+    material: "leather",
+    quality: "standard",
+    storageAssignment: {
+      locationId: `${sampleCharacterId}:loc-equipped`,
+      carryMode: "equipped",
+    },
+    conditionState: "intact",
+    durabilityCurrent: null,
+    durabilityMax: null,
+    encumbranceOverride: null,
+    valueOverride: null,
+    specialProperties: null,
+    notes: null,
+    isEquipped: true,
+    isFavorite: null,
+    acquiredFrom: null,
+    statusTags: null,
+  },
+  {
+    id: "gear-item-rope-1",
+    characterId: sampleCharacterId,
+    templateId: "gear-template-rope",
+    category: "gear",
+    displayName: null,
+    specificityType: "generic",
+    quantity: 1,
+    isStackable: false,
+    material: "cloth",
+    quality: "standard",
+    storageAssignment: {
+      locationId: `${sampleCharacterId}:loc-person`,
+      carryMode: "on_person",
+    },
+    conditionState: "intact",
+    durabilityCurrent: null,
+    durabilityMax: null,
+    encumbranceOverride: null,
+    valueOverride: null,
+    specialProperties: null,
+    notes: null,
+    isEquipped: false,
+    isFavorite: null,
+    acquiredFrom: null,
+    statusTags: null,
+  },
+];
+
+const sampleActiveLoadout: CharacterLoadout = {
+  id: `${sampleCharacterId}:loadout-active`,
+  characterId: sampleCharacterId,
+  name: "Current",
+  isActive: true,
+  wornArmorItemId: "armor-item-jerkin-1",
+  readyShieldItemId: "shield-item-round-1",
+  activePrimaryWeaponItemId: "weapon-item-longsword-1",
+  activeSecondaryWeaponItemId: null,
+  activeMissileWeaponItemId: null,
+  activeAmmoItemIds: [],
+  quickAccessItemIds: [],
+  notes: null,
+};
+
+  const sampleCharacterInputs = {
+  constitution: 11,
+  dexterityGm: 0,
+  dexterity: 11,
+  parryCombatSkillXp: 13,
+  brawlingCombatSkillXp: 9,
+  combatSkillXpByName: {
+    "1-h edged": 15,
+    Brawling: 9,
+    Dodge: 15,
+    Parry: 13,
+  },
+  dodgeCombatSkillXp: 15,
+  size: 13,
+  sizeGm: 1,
+  strengthGm: 3,
+  strength: 17,
+} as const;
+
+function createAllocationInputs(input?: Partial<CombatAllocationState>): CombatAllocationState {
+  return {
+    defensePosture: "none",
+    ...input,
+    parry: {
+      allocatedOb: null,
+      source: "none",
+      ...input?.parry,
+    },
+    situationalModifiers: {
+      attack: 0,
+      defense: 0,
+      movement: 0,
+      perception: 0,
+      ...input?.situationalModifiers,
+    },
+  };
+}
+
+function cloneState(): EquipmentFeatureState {
+  return {
+    templates: {
+      templatesById: indexById<EquipmentTemplate>(equipmentTemplates),
+    },
+    itemsById: indexById(structuredClone(sampleEquipmentItems)),
+    locationsById: indexById(structuredClone(sampleLocations)),
+    activeLoadoutByCharacterId: {
+      [sampleCharacterId]: structuredClone(sampleActiveLoadout),
+    },
+  };
+}
+
+function getRowBySlotLabel(
+  snapshot: ReturnType<typeof deriveCombatStateSnapshot>,
+  slotLabel: string,
+) {
+  return snapshot.weaponRows.find((row) => row.slotLabel === slotLabel);
+}
+
+describe("combatStateDerivation", () => {
+  it("derives current one-handed plus shield combat rows from the persisted loadout", () => {
+    const snapshot = deriveCombatStateSnapshot(
+      cloneState(),
+      "char-themistogenes",
+      sampleCharacterInputs,
+    );
+    const primaryRow = getRowBySlotLabel(snapshot, "Primary weapon");
+    const shieldRow = getRowBySlotLabel(snapshot, "Shield");
+    const combinedRow = getRowBySlotLabel(snapshot, "Combined");
+    const brawlingRow = getRowBySlotLabel(snapshot, "Brawling");
+    const punchRow = getRowBySlotLabel(snapshot, "Punch");
+    const kickRow = getRowBySlotLabel(snapshot, "Kick");
+
+    expect(snapshot.gripSummary).toBe("One-handed + shield");
+    expect(snapshot.wornArmorLabel).toBe("Leather Jerkin");
+    expect(snapshot.readyShieldLabel).toBe("Medium shield");
+    expect(primaryRow).toMatchObject({
+      slotLabel: "Primary weapon",
+      currentItemLabel: "Long sword",
+      initiative: 1,
+      ob1: 14,
+      dmb1: 9,
+      attack1: "Slash",
+      crit1: "FS",
+      sec: "—",
+      armorMod1: "C",
+      ob2: 13,
+      dmb2: 7,
+      attack2: "Thrust",
+      crit2: "EP",
+      armorMod2: "C",
+      db: 13,
+      dm: 0,
+      parry: 8,
+    });
+    expect(primaryRow?.attack3).toBe("—");
+    expect(primaryRow?.notes).toContain("Thrust Pointed | AM C");
+    expect(shieldRow).toMatchObject({
+      slotLabel: "Shield",
+      currentItemLabel: "Medium shield",
+      attack1: "Strike",
+      ob1: 0,
+      dmb1: 0,
+      crit1: "AC",
+      sec: "—",
+      attack2: "—",
+      db: 18,
+      dm: 0,
+      parry: 13,
+    });
+    expect(combinedRow).toMatchObject({
+      slotLabel: "Combined",
+      modeLabel: "Combined",
+      currentItemLabel: "Long sword + Medium shield",
+      db: 19,
+      dm: 0,
+      parry: 14,
+      attack1: "—",
+    });
+    expect(brawlingRow).toMatchObject({
+      slotLabel: "Brawling",
+      modeLabel: "Unarmed",
+      currentItemLabel: "Brawling",
+      ob1: 10,
+      db: 12,
+      dm: 0,
+      parry: 8,
+      attack1: "—",
+    });
+    expect(
+      snapshot.weaponRows.findIndex((row) => row.slotLabel === "Combined"),
+    ).toBeLessThan(snapshot.weaponRows.findIndex((row) => row.slotLabel === "Brawling"));
+    expect(getRowBySlotLabel(snapshot, "Unarmed / brawling")).toBeUndefined();
+    expect(punchRow).toMatchObject({
+      slotLabel: "Punch",
+      currentItemLabel: "Punch",
+      modeLabel: "Unarmed",
+      initiative: 0,
+      attack1: "Strike",
+      crit1: "AC",
+      armorMod1: "A",
+      db: "—",
+      dm: "—",
+      parry: "—",
+    });
+    expect(kickRow).toMatchObject({
+      slotLabel: "Kick",
+      currentItemLabel: "Kick",
+      modeLabel: "Unarmed",
+      initiative: 0,
+      attack1: "Strike",
+      crit1: "AC",
+      armorMod1: "A",
+      db: "—",
+      dm: "—",
+      parry: "—",
+    });
+    expect(getRowBySlotLabel(snapshot, "Secondary weapon")).toBeUndefined();
+    expect(snapshot.defenseSummary).toContain("DB 13");
+    expect(snapshot.defenseSummary).toContain("DM 0");
+    expect(snapshot.defenseSummary).toContain("Parry 8");
+    expect(snapshot.combinedParryLabel).toBe("Combined parry");
+    expect(snapshot.combinedParrySummary).toBe("—");
+    expect(snapshot.unarmedSummary).toContain("Punch and Kick");
+    expect(snapshot.unarmedDbSummary).toBe(12);
+    expect(snapshot.unarmedDmSummary).toBe(0);
+    expect(snapshot.oneItemDefenseLabel).toContain("Long sword");
+    expect(snapshot.oneItemDbSummary).toBe(13);
+    expect(snapshot.oneItemDmSummary).toBe(0);
+    expect(snapshot.twoItemDefenseLabel).toContain("Medium shield");
+    expect(snapshot.twoItemDbSummary).toBe(19);
+    expect(snapshot.twoItemDmSummary).toBe(0);
+  });
+
+  it("derives the displayed secondary melee DMB from the secondary mode values", () => {
+    const snapshot = deriveCombatStateSnapshot(
+      cloneState(),
+      "char-themistogenes",
+      sampleCharacterInputs,
+    );
+    const primaryRow = getRowBySlotLabel(snapshot, "Primary weapon");
+
+    expect(primaryRow?.ob1).toBe(14);
+    expect(primaryRow?.dmb1).toBe(9);
+    expect(primaryRow?.ob2).toBe(13);
+    expect(primaryRow?.dmb2).toBe(7);
+  });
+
+  it("surfaces clean formula-based missile DMB and special encumbrance notes without fake numeric rolls", () => {
+    const state = cloneState();
+
+    state.itemsById["weapon-item-longsword-1"].storageAssignment = {
+      carryMode: "on_person",
+      locationId: "char-themistogenes:loc-person",
+    };
+    state.itemsById["weapon-item-longsword-1"].isEquipped = false;
+    state.activeLoadoutByCharacterId["char-themistogenes"] = {
+      ...state.activeLoadoutByCharacterId["char-themistogenes"],
+      readyShieldItemId: null,
+      activePrimaryWeaponItemId: null,
+      activeMissileWeaponItemId: "weapon-item-longsword-1",
+    };
+    state.itemsById["weapon-item-longsword-1"].templateId = "weapon-template-ballista";
+
+    const snapshot = deriveCombatStateSnapshot(state, "char-themistogenes");
+    const missileRow = getRowBySlotLabel(snapshot, "Missile weapon");
+
+    expect(snapshot.gripSummary).toBe("Missile ready");
+    expect(missileRow?.currentItemLabel).toBe("Ballista");
+    expect(missileRow?.dmb1).toBe("4d8+1");
+    expect(missileRow?.attack1).toBe("Shot");
+    expect(missileRow?.db).toBe("—");
+    expect(missileRow?.notes).toContain("Source encumbrance 20+20 is ammo-linked");
+    expect(snapshot.loadNotes).toContain("Source encumbrance 20+20 is ammo-linked");
+  });
+
+  it("uses explicit combat allocation inputs for parry posture and situation modifiers", () => {
+    const snapshot = deriveCombatStateSnapshot(
+      cloneState(),
+      sampleCharacterId,
+      sampleCharacterInputs,
+      createAllocationInputs({
+        defensePosture: "parry",
+        parry: {
+          allocatedOb: 15,
+          source: "primary",
+        },
+        situationalModifiers: {
+          attack: 2,
+          defense: 1,
+          movement: -1,
+          perception: -2,
+        },
+      }),
+    );
+
+    const primaryRow = getRowBySlotLabel(snapshot, "Primary weapon");
+
+    expect(primaryRow?.ob1).toBe(16);
+    expect(primaryRow?.db).toBe(13);
+    expect(primaryRow?.parry).toBe(8);
+    expect(snapshot.readinessSummary).toContain("Posture Parry");
+    expect(snapshot.defenseSummary).toContain("Posture Parry");
+    expect(snapshot.defenseSummary).toContain("DB 13");
+    expect(snapshot.defenseSummary).toContain("Parry 8");
+    expect(snapshot.encumbranceLevel).toBe(4);
+    expect(snapshot.shieldMovementModifierSummary).toBe(2);
+    expect(snapshot.movementModifierSummary).toBe(4);
+    expect(snapshot.movementSummary).toBe(8);
+    expect(snapshot.perceptionSummary).toContain("Current perception modifier -2");
+  });
+
+  it("reuses session actor allocation to derive actor combat state without duplicating logic", () => {
+    const session = createCombatSession([
+      {
+        actorId: "actor-longsword",
+        characterId: sampleCharacterId,
+        allocation: createAllocationInputs({
+          defensePosture: "parry",
+          parry: {
+            allocatedOb: 15,
+            source: "primary",
+          },
+          situationalModifiers: {
+            attack: 2,
+            defense: 1,
+            movement: -1,
+            perception: -2,
+          },
+        }),
+      },
+    ]);
+
+    const snapshot = getActorCombatState(session, "actor-longsword", {
+      equipmentState: cloneState(),
+      characterStats: sampleCharacterInputs,
+    });
+
+    expect(snapshot).not.toBeNull();
+    expect(getRowBySlotLabel(snapshot!, "Primary weapon")?.ob1).toBe(16);
+    expect(getRowBySlotLabel(snapshot!, "Primary weapon")?.db).toBe(13);
+    expect(getRowBySlotLabel(snapshot!, "Primary weapon")?.parry).toBe(8);
+    expect(snapshot?.readinessSummary).toContain("Posture Parry");
+  });
+
+  it("shows a fully derived secondary weapon row only when a secondary weapon is equipped", () => {
+    const state = cloneState();
+    state.itemsById["weapon-item-dagger-1"] = {
+      id: "weapon-item-dagger-1",
+      characterId: sampleCharacterId,
+      templateId: "weapon-template-dagger",
+      category: "weapon",
+      displayName: null,
+      specificityType: "generic",
+      quantity: 1,
+      isStackable: false,
+      material: "steel",
+      quality: "standard",
+      storageAssignment: {
+        locationId: `${sampleCharacterId}:loc-equipped`,
+        carryMode: "equipped",
+      },
+      conditionState: "intact",
+      durabilityCurrent: 12,
+      durabilityMax: 12,
+      encumbranceOverride: null,
+      valueOverride: null,
+      specialProperties: null,
+      notes: null,
+      isEquipped: true,
+      isFavorite: null,
+      acquiredFrom: null,
+      statusTags: null,
+    };
+    state.activeLoadoutByCharacterId[sampleCharacterId] = {
+      ...state.activeLoadoutByCharacterId[sampleCharacterId],
+      readyShieldItemId: null,
+      activeSecondaryWeaponItemId: "weapon-item-dagger-1",
+    };
+
+    const snapshot = deriveCombatStateSnapshot(state, sampleCharacterId, sampleCharacterInputs);
+    const secondaryRow = getRowBySlotLabel(snapshot, "Secondary weapon");
+
+    expect(getRowBySlotLabel(snapshot, "Shield")).toBeUndefined();
+    expect(secondaryRow).toMatchObject({
+      slotLabel: "Secondary weapon",
+      currentItemLabel: "Dagger",
+      attack1: "Thrust",
+      ob1: 14,
+      dmb1: 4,
+      parry: 5,
+    });
+    expect(snapshot.combinedParryLabel).toBe("Combined parry");
+    expect(snapshot.combinedParrySummary).toBe("—");
+  });
+
+  it("uses workbook-faithful melee initiative for equipped weapons and brawling rows", () => {
+    const snapshot = deriveCombatStateSnapshot(
+      cloneState(),
+      sampleCharacterId,
+      sampleCharacterInputs,
+    );
+
+    expect(getRowBySlotLabel(snapshot, "Primary weapon")?.initiative).toBe(1);
+    expect(getRowBySlotLabel(snapshot, "Punch")?.initiative).toBe(0);
+    expect(getRowBySlotLabel(snapshot, "Kick")?.initiative).toBe(0);
+  });
+
+  it("shows missing defense pairs instead of misleading fallback values when Dodge XP is absent", () => {
+    const snapshot = deriveCombatStateSnapshot(cloneState(), sampleCharacterId, {
+      ...sampleCharacterInputs,
+      combatSkillXpByName: {
+        "1-h edged": 15,
+        Brawling: 9,
+        Parry: 13,
+      },
+      dodgeCombatSkillXp: null,
+    });
+
+    expect(snapshot.unarmedDbSummary).toBe("—");
+    expect(snapshot.unarmedDmSummary).toBe("—");
+    expect(snapshot.oneItemDbSummary).toBe("—");
+    expect(snapshot.oneItemDmSummary).toBe("—");
+    expect(snapshot.twoItemDbSummary).toBe("—");
+    expect(snapshot.twoItemDmSummary).toBe("—");
+  });
+
+  it("maps Dodge XP into combat inputs when it exists in the sheet summary skill rows", () => {
+    const sheetSummary = {
+      adjustedStats: {
+        con: 11,
+        dex: 11,
+        siz: 13,
+        str: 17,
+      },
+      combat: {
+        combatGroups: [],
+        dodge: 0,
+        hasShield: false,
+        parry: 0,
+        weaponSkills: [],
+      },
+      distractionLevel: 0,
+      draftView: {
+        education: {
+          baseEducation: 0,
+          gmInt: 0,
+          socialClassEducationValue: 0,
+          theoreticalSkillCount: 0,
+        },
+        groups: [],
+        primaryPoolAvailable: 0,
+        secondaryPoolAvailable: 0,
+        skills: [
+          {
+            category: "ordinary",
+            effectiveSkillNumber: 10,
+            groupId: "basic_melee_training",
+            groupIds: ["basic_melee_training"],
+            groupLevel: 10,
+            linkedStatAverage: 0,
+            name: "Dodge",
+            primaryRanks: 0,
+            requiresLiteracy: "no",
+            secondaryRanks: 0,
+            skillId: "dodge",
+            skillKey: "dodge",
+            specificSkillLevel: 0,
+            totalSkill: 10,
+          },
+          {
+            category: "ordinary",
+            effectiveSkillNumber: 11,
+            groupId: "basic_melee_training",
+            groupIds: ["basic_melee_training"],
+            groupLevel: 10,
+            linkedStatAverage: 0,
+            name: "1-h edged",
+            primaryRanks: 1,
+            requiresLiteracy: "no",
+            secondaryRanks: 0,
+            skillId: "one_h_edged",
+            skillKey: "one_h_edged",
+            specificSkillLevel: 1,
+            totalSkill: 11,
+          },
+          {
+            category: "ordinary",
+            effectiveSkillNumber: 10,
+            groupId: "basic_melee_training",
+            groupIds: ["basic_melee_training"],
+            groupLevel: 10,
+            linkedStatAverage: 0,
+            name: "Parry",
+            primaryRanks: 0,
+            requiresLiteracy: "no",
+            secondaryRanks: 0,
+            skillId: "parry",
+            skillKey: "parry",
+            specificSkillLevel: 0,
+            totalSkill: 10,
+          },
+        ],
+        specializations: [],
+        totalSkillPointsInvested: 0,
+      },
+      equipment: {
+        armorSummary: "",
+        carriedItems: [],
+        equippedArmor: [],
+        equippedShields: [],
+        equippedWeapons: [],
+        hasEquippedShield: false,
+        readinessLabel: "",
+        shieldBonus: 0,
+      },
+      gms: {
+        byGroup: [],
+        total: 0,
+      },
+      seniority: 0,
+      skillPoints: {
+        current: 0,
+        original: 0,
+        successfulProgressionGains: 0,
+      },
+      totalSkillPointsInvested: 0,
+    } satisfies CharacterSheetSummary;
+
+    const inputs = buildCombatStateCharacterInputs(sheetSummary);
+
+    expect(inputs.dodgeCombatSkillXp).toBe(10);
+    expect(inputs.combatSkillXpByName.Dodge).toBe(10);
+    expect(inputs.parryCombatSkillXp).toBe(10);
+    expect(inputs.combatSkillXpByName["1-h edged"]).toBe(11);
+  });
+
+  it("uses workbook-equivalent total skill XP rather than direct specific ranks for initiative lookup", () => {
+    const sheetSummary = {
+      adjustedStats: {
+        dex: 13,
+        str: 11,
+      },
+      combat: {
+        combatGroups: [],
+        dodge: 0,
+        hasShield: false,
+        parry: 0,
+        weaponSkills: [],
+      },
+      distractionLevel: 0,
+      draftView: {
+        education: {
+          baseEducation: 0,
+          gmInt: 0,
+          socialClassEducationValue: 0,
+          theoreticalSkillCount: 0,
+        },
+        groups: [],
+        primaryPoolAvailable: 0,
+        secondaryPoolAvailable: 0,
+        skills: [
+          {
+            category: "ordinary",
+            effectiveSkillNumber: 6,
+            groupId: "martial",
+            groupIds: ["martial"],
+            groupLevel: 4,
+            linkedStatAverage: 0,
+            name: "1-h edged",
+            primaryRanks: 2,
+            requiresLiteracy: "no",
+            secondaryRanks: 0,
+            skillId: "skill-1h-edged",
+            skillKey: "skill-1h-edged",
+            specificSkillLevel: 2,
+            totalSkill: 6,
+          },
+        ],
+        specializations: [],
+        totalSkillPointsInvested: 6,
+      },
+      equipment: {
+        armorSummary: "None",
+        carriedItems: [],
+        equippedWeapons: [],
+        equippedArmor: [],
+        equippedShields: [],
+        hasEquippedShield: false,
+        readinessLabel: "Unarmed",
+        shieldBonus: 0,
+      },
+      gms: {
+        byGroup: [],
+        total: 0,
+      },
+      seniority: 6,
+      skillPoints: {
+        current: 6,
+        original: 6,
+        successfulProgressionGains: 0,
+      },
+      totalSkillPointsInvested: 6,
+    } satisfies CharacterSheetSummary;
+
+    const inputs = buildCombatStateCharacterInputs(sheetSummary);
+    const snapshot = deriveCombatStateSnapshot(
+      cloneState(),
+      sampleCharacterId,
+      {
+        ...sampleCharacterInputs,
+        dexterity: 13,
+        dexterityGm: 1,
+        combatSkillXpByName: {
+          ...sampleCharacterInputs.combatSkillXpByName,
+          "1-h edged": inputs.combatSkillXpByName["1-h edged"],
+        },
+      },
+    );
+
+    expect(inputs.combatSkillXpByName["1-h edged"]).toBe(6);
+    expect(getRowBySlotLabel(snapshot, "Primary weapon")?.initiative).toBe(1);
+  });
+
+  it("gives longsword, punch, and kick initiative 1 for dex gm 1 and combat skill xp 6", () => {
+    const snapshot = deriveCombatStateSnapshot(cloneState(), sampleCharacterId, {
+      ...sampleCharacterInputs,
+      dexterity: 13,
+      dexterityGm: 1,
+      combatSkillXpByName: {
+        ...sampleCharacterInputs.combatSkillXpByName,
+        "1-h edged": 6,
+        Brawling: 6,
+      },
+    });
+
+    expect(getRowBySlotLabel(snapshot, "Primary weapon")?.initiative).toBe(1);
+    expect(getRowBySlotLabel(snapshot, "Punch")?.initiative).toBe(1);
+    expect(getRowBySlotLabel(snapshot, "Kick")?.initiative).toBe(1);
+  });
+
+  it("uses the workbook weapon-row parry formula for longsword rows", () => {
+    const snapshot = deriveCombatStateSnapshot(cloneState(), sampleCharacterId, {
+      ...sampleCharacterInputs,
+      parryCombatSkillXp: 11,
+      combatSkillXpByName: {
+        ...sampleCharacterInputs.combatSkillXpByName,
+        Parry: 11,
+      },
+    });
+
+    expect(getRowBySlotLabel(snapshot, "Primary weapon")?.parry).toBe(7);
+    expect(getRowBySlotLabel(snapshot, "Shield")?.parry).toBe(12);
+    expect(snapshot.combinedParryLabel).toBe("Combined parry");
+    expect(snapshot.combinedParrySummary).toBe("—");
+    expect(getRowBySlotLabel(snapshot, "Punch")?.parry).toBe("—");
+    expect(getRowBySlotLabel(snapshot, "Kick")?.parry).toBe("—");
+    expect(getRowBySlotLabel(snapshot, "Brawling")?.parry).toBe(7);
+  });
+
+  it("uses the worksheet shield-row parry formula for medium metal shields", () => {
+    const state = cloneState();
+    state.itemsById["shield-item-round-1"] = {
+      ...state.itemsById["shield-item-round-1"],
+      templateId: "shield-template-medium-metal-shield",
+      material: "steel",
+    };
+
+    const snapshot = deriveCombatStateSnapshot(state, sampleCharacterId, {
+      ...sampleCharacterInputs,
+      parryCombatSkillXp: 11,
+      combatSkillXpByName: {
+        ...sampleCharacterInputs.combatSkillXpByName,
+        Parry: 11,
+      },
+    });
+
+    expect(getRowBySlotLabel(snapshot, "Shield")?.currentItemLabel).toBe("Medium metal shield");
+    expect(getRowBySlotLabel(snapshot, "Shield")?.parry).toBe(12);
+    expect(snapshot.combinedParryLabel).toBe("Combined parry");
+    expect(snapshot.combinedParrySummary).toBe("—");
+  });
+
+  it("uses the workbook projectile OB formula for non-melee bow rows", () => {
+    const state = cloneState();
+
+    state.itemsById["weapon-item-longsword-1"].storageAssignment = {
+      carryMode: "on_person",
+      locationId: "char-themistogenes:loc-person",
+    };
+    state.itemsById["weapon-item-longsword-1"].isEquipped = false;
+    state.activeLoadoutByCharacterId["char-themistogenes"] = {
+      ...state.activeLoadoutByCharacterId["char-themistogenes"],
+      readyShieldItemId: null,
+      activePrimaryWeaponItemId: null,
+      activeMissileWeaponItemId: "weapon-item-longsword-1",
+    };
+    state.itemsById["weapon-item-longsword-1"].templateId = "weapon-template-bow";
+
+    const snapshot = deriveCombatStateSnapshot(state, sampleCharacterId, {
+      ...sampleCharacterInputs,
+      combatSkillXpByName: {
+        ...sampleCharacterInputs.combatSkillXpByName,
+        Bow: 6,
+      },
+    });
+
+    expect(getRowBySlotLabel(snapshot, "Missile weapon")?.ob1).toBe(7);
+  });
+
+  it("uses the workbook projectile OB formula for composite bow and keeps dexterity-adjusted missile initiative", () => {
+    const state = cloneState();
+
+    state.itemsById["weapon-item-longsword-1"].storageAssignment = {
+      carryMode: "on_person",
+      locationId: "char-themistogenes:loc-person",
+    };
+    state.itemsById["weapon-item-longsword-1"].isEquipped = false;
+    state.activeLoadoutByCharacterId["char-themistogenes"] = {
+      ...state.activeLoadoutByCharacterId["char-themistogenes"],
+      readyShieldItemId: null,
+      activePrimaryWeaponItemId: null,
+      activeMissileWeaponItemId: "weapon-item-longsword-1",
+    };
+    state.itemsById["weapon-item-longsword-1"].templateId = "weapon-template-composite-bow";
+
+    const snapshot = deriveCombatStateSnapshot(state, sampleCharacterId, {
+      ...sampleCharacterInputs,
+      combatSkillXpByName: {
+        ...sampleCharacterInputs.combatSkillXpByName,
+        Bow: 3,
+      },
+      dexterity: 13,
+      dexterityGm: 1,
+    });
+
+    expect(getRowBySlotLabel(snapshot, "Missile weapon")?.ob1).toBe(6);
+    expect(getRowBySlotLabel(snapshot, "Missile weapon")?.initiative).toBe(-1);
+    expect(getRowBySlotLabel(snapshot, "Missile weapon")?.dmb1).toBe("2d6+3");
+  });
+
+  it("adds a visible thrown row when dagger is selected as the throwing weapon", () => {
+    const state = cloneState();
+    state.itemsById["weapon-item-longsword-1"].templateId = "weapon-template-dagger";
+
+    const snapshot = deriveCombatStateSnapshot(
+      state,
+      sampleCharacterId,
+      {
+        ...sampleCharacterInputs,
+        combatSkillXpByName: {
+          ...sampleCharacterInputs.combatSkillXpByName,
+          Throwing: 4,
+        },
+      },
+      undefined,
+      "weapon-item-longsword-1",
+    );
+
+    expect(getRowBySlotLabel(snapshot, "Throwing weapon")).toMatchObject({
+      attack1: "Throw",
+      currentItemLabel: "Dagger",
+      modeLabel: "Thrown",
+      ob1: 5,
+      dmb1: 3,
+    });
+  });
+
+  it("uses the thrown skill path rather than the base melee skill for thrown dagger OB", () => {
+    const state = cloneState();
+    state.itemsById["weapon-item-longsword-1"].templateId = "weapon-template-dagger";
+
+    const snapshot = deriveCombatStateSnapshot(
+      state,
+      sampleCharacterId,
+      {
+        ...sampleCharacterInputs,
+        combatSkillXpByName: {
+          ...sampleCharacterInputs.combatSkillXpByName,
+          "1-h edged": 21,
+          Throwing: 4,
+        },
+      },
+      undefined,
+      "weapon-item-longsword-1",
+    );
+
+    expect(getRowBySlotLabel(snapshot, "Throwing weapon")).toMatchObject({
+      currentItemLabel: "Dagger",
+      modeLabel: "Thrown",
+      ob1: 5,
+    });
+  });
+});

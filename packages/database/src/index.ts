@@ -1,6 +1,15 @@
 export { prisma } from "./client";
 export * from "./repositories/authRepository";
 export * from "./repositories/characterRepository";
+export * from "./repositories/chargenRuleSetRepository";
+export * from "./repositories/characterEquipmentRepository";
 export * from "./repositories/contentRepository";
+export * from "./repositories/encounterRepository";
+export * from "./repositories/scenarioRepository";
 export * from "./services/authService";
 export * from "./services/characterService";
+export * from "./services/chargenRuleSetService";
+export * from "./services/characterEquipmentReadModelService";
+export * from "./services/characterEquipmentWriteService";
+export * from "./services/encounterService";
+export * from "./services/scenarioService";

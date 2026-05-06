@@ -14,44 +14,136 @@ export interface AdminNavItem {
   label: string;
 }
 
+export interface AdminNavGroup {
+  items: AdminNavItem[];
+  label: string;
+}
+
 export interface AdminTableColumn<TRow> {
   header: string;
   render: (row: TRow) => ReactNode;
   width?: string;
 }
 
-export const adminNavItems: AdminNavItem[] = [
+export const adminNavGroups: AdminNavGroup[] = [
   {
-    description: "Summary, draft status, and export entry points.",
-    href: "/admin",
-    label: "Overview"
+    label: "Overview",
+    items: [
+      {
+        description: "Summary, draft status, publishing controls, and grouped route map.",
+        href: "/admin",
+        label: "Overview"
+      }
+    ]
   },
   {
-    description: "Inspect and edit skill definitions and access.",
-    href: "/admin/skills",
-    label: "Skills"
+    label: "Skills & Societies",
+    items: [
+      {
+        description: "Inspect and edit skill definitions and access.",
+        href: "/admin/skills",
+        label: "Skills"
+      },
+      {
+        description: "Inspect and edit skill group structure.",
+        href: "/admin/skill-groups",
+        label: "Skill Groups"
+      },
+      {
+        description: "Inspect and edit professions and grants.",
+        href: "/admin/professions",
+        label: "Professions"
+      },
+      {
+        description: "Inspect and edit society/social-class rows.",
+        href: "/admin/societies",
+        label: "Societies"
+      },
+      {
+        description: "Read relationship views across professions and society rows.",
+        href: "/admin/access",
+        label: "Access"
+      }
+    ]
   },
   {
-    description: "Inspect and edit skill group structure.",
-    href: "/admin/skill-groups",
-    label: "Skill Groups"
+    label: "Weapons & Equipment",
+    items: [
+      {
+        description: "Inspect the system melee weapon catalog with split mode columns.",
+        href: "/admin/melee-weapons",
+        label: "Melee weapons"
+      },
+      {
+        description: "Inspect the system missile weapon catalog with missile-appropriate attack columns.",
+        href: "/admin/missile-weapons",
+        label: "Missile weapons"
+      },
+      {
+        description: "Inspect the system shield catalog with merged offensive and defensive workbook data.",
+        href: "/admin/shields",
+        label: "Shields"
+      },
+      {
+        description: "Inspect the system armor catalog imported from the workbook Armor sheet.",
+        href: "/admin/armor",
+        label: "Armor"
+      },
+      {
+        description: "Inspect the system gear catalog with shared encumbrance, value, and notes columns.",
+        href: "/admin/gear",
+        label: "Gear"
+      },
+      {
+        description: "Inspect the system valuables catalog with shared encumbrance, value, and notes columns.",
+        href: "/admin/valuables",
+        label: "Valuables"
+      }
+    ]
   },
   {
-    description: "Inspect and edit professions and grants.",
-    href: "/admin/professions",
-    label: "Professions"
+    label: "Accounts & Setup",
+    items: [
+      {
+        description: "Manage named chargen rule sets for current and future characters.",
+        href: "/admin/chargen-setup",
+        label: "Chargen Setup"
+      },
+      {
+        description: "Manage local users and assign Player, GM, or Admin roles.",
+        href: "/admin/players",
+        label: "Players"
+      }
+    ]
   },
   {
-    description: "Inspect and edit society/social-class rows.",
-    href: "/admin/societies",
-    label: "Societies"
-  },
-  {
-    description: "Read relationship views across professions and society rows.",
-    href: "/admin/access",
-    label: "Access"
+    label: "Rules & Documentation",
+    items: [
+      {
+        description: "Read repo-local markdown references for rules, formulas, and displayed calculations.",
+        href: "/admin/rules-docs",
+        label: "Rules Docs"
+      },
+      {
+        description: "Inspect the canonical civilization layer that links named cultures to society models and language names.",
+        href: "/admin/civilizations",
+        label: "Civilizations"
+      },
+      {
+        description: "Read the canonical Glantri app terminology definitions and usage guidance.",
+        href: "/admin/glantri-terms",
+        label: "Glantri App Terms"
+      },
+      {
+        description: "Inspect workbook-backed reference tables used by current combat and movement calculations.",
+        href: "/admin/tables",
+        label: "Tables"
+      }
+    ]
   }
 ];
+
+export const adminNavItems: AdminNavItem[] = adminNavGroups.flatMap((group) => group.items);
 
 const panelStyle: CSSProperties = {
   background: "rgba(250, 245, 234, 0.88)",
@@ -143,6 +235,23 @@ export function AdminPanel(props: { children: ReactNode; title?: string; subtitl
       ) : null}
       {props.children}
     </section>
+  );
+}
+
+export function AdminReadOnlyNotice(props: { message?: string }) {
+  return (
+    <div
+      style={{
+        background: "rgba(255, 252, 245, 0.88)",
+        border: "1px solid rgba(85, 73, 48, 0.12)",
+        borderRadius: 18,
+        color: "#5f543a",
+        lineHeight: 1.5,
+        padding: "0.95rem 1rem"
+      }}
+    >
+      {props.message ?? "This page is view-only for your current role."}
+    </div>
   );
 }
 

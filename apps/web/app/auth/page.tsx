@@ -1,13 +1,17 @@
 "use client";
 
+import { formatAuthRoleLabel } from "@glantri/auth";
 import { useEffect, useState } from "react";
 
 import {
+  bootstrapGameMasterRole,
+  getBootstrapGameMasterAvailability,
   getCurrentSessionUser,
   loginLocalUser,
-  logoutLocalUser,
   registerLocalUser
 } from "../../src/lib/api/localServiceClient";
+import { canShowClaimGameMasterAction } from "../../src/lib/auth/authBootstrap";
+import { useSessionUser } from "../../src/lib/auth/SessionUserContext";
 
 const sectionStyle = {
   background: "#f6f5ef",
@@ -19,25 +23,34 @@ const sectionStyle = {
 } as const;
 
 export default function AuthPage() {
-  const [currentUser, setCurrentUser] = useState<Awaited<ReturnType<typeof getCurrentSessionUser>>>();
+  const { currentUser, setCurrentUser, signOut } = useSessionUser();
+  const [bootstrapAvailable, setBootstrapAvailable] = useState(false);
+  const [claimingBootstrapRole, setClaimingBootstrapRole] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [feedback, setFeedback] = useState<string>();
   const [loading, setLoading] = useState(true);
 
+  async function refreshAuthState() {
+    const [user, canBootstrap] = await Promise.all([
+      getCurrentSessionUser(),
+      getBootstrapGameMasterAvailability(),
+    ]);
+
+    setCurrentUser(user);
+    setBootstrapAvailable(canBootstrap);
+  }
+
   useEffect(() => {
-    getCurrentSessionUser()
-      .then((user) => {
-        setCurrentUser(user);
-      })
+    refreshAuthState()
       .catch((error: unknown) => {
         setFeedback(error instanceof Error ? error.message : "Unable to load current session.");
       })
       .finally(() => {
         setLoading(false);
       });
-  }, []);
+  }, [setCurrentUser]);
 
   async function handleRegister() {
     try {
@@ -47,6 +60,7 @@ export default function AuthPage() {
         password
       });
       setCurrentUser(user);
+      setBootstrapAvailable(await getBootstrapGameMasterAvailability());
       setFeedback(`Registered and signed in as ${user.email}.`);
     } catch (error) {
       setFeedback(error instanceof Error ? error.message : "Registration failed.");
@@ -60,6 +74,7 @@ export default function AuthPage() {
         password
       });
       setCurrentUser(user);
+      setBootstrapAvailable(await getBootstrapGameMasterAvailability());
       setFeedback(`Signed in as ${user.email}.`);
     } catch (error) {
       setFeedback(error instanceof Error ? error.message : "Login failed.");
@@ -68,11 +83,27 @@ export default function AuthPage() {
 
   async function handleLogout() {
     try {
-      await logoutLocalUser();
-      setCurrentUser(null);
+      await signOut();
+      setBootstrapAvailable(await getBootstrapGameMasterAvailability());
       setFeedback("Signed out.");
     } catch (error) {
       setFeedback(error instanceof Error ? error.message : "Logout failed.");
+    }
+  }
+
+  async function handleClaimGameMasterRole() {
+    setClaimingBootstrapRole(true);
+
+    try {
+      const result = await bootstrapGameMasterRole();
+      setCurrentUser(result.user);
+      setBootstrapAvailable(result.canBootstrapGameMaster);
+      setFeedback(`Claimed GM role for ${result.user.email}.`);
+    } catch (error) {
+      setFeedback(error instanceof Error ? error.message : "Unable to claim GM role.");
+      setBootstrapAvailable(await getBootstrapGameMasterAvailability().catch(() => false));
+    } finally {
+      setClaimingBootstrapRole(false);
     }
   }
 
@@ -92,7 +123,27 @@ export default function AuthPage() {
             <div style={{ display: "grid", gap: "0.5rem" }}>
               <div>Email: {currentUser.email}</div>
               <div>Display name: {currentUser.displayName ?? "Not set"}</div>
-              <div>Roles: {currentUser.roles.join(", ")}</div>
+              <div>Roles: {currentUser.roles.map((role) => formatAuthRoleLabel(role)).join(", ")}</div>
+              {canShowClaimGameMasterAction({ bootstrapAvailable, currentUser }) ? (
+                <div>
+                  <button
+                    onClick={() => void handleClaimGameMasterRole()}
+                    style={{
+                      background: "#7e5d2a",
+                      border: "1px solid transparent",
+                      borderRadius: 10,
+                      color: "#fffaf0",
+                      cursor: claimingBootstrapRole ? "wait" : "pointer",
+                      font: "inherit",
+                      padding: "0.6rem 0.9rem"
+                    }}
+                    disabled={claimingBootstrapRole}
+                    type="button"
+                  >
+                    Claim GM role
+                  </button>
+                </div>
+              ) : null}
               <div>
                 <button onClick={() => void handleLogout()} type="button">
                   Logout

@@ -1,6 +1,12 @@
 import { createHash, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 
-import type { AuthSession, AuthUser, CredentialLoginInput, CredentialRegisterInput } from "@glantri/auth";
+import type {
+  AuthRole,
+  AuthSession,
+  AuthUser,
+  CredentialLoginInput,
+  CredentialRegisterInput
+} from "@glantri/auth";
 
 import {
   createPrismaAuthRepository,
@@ -11,6 +17,10 @@ const SESSION_DURATION_MS = 1000 * 60 * 60 * 24 * 7;
 
 export class AuthService {
   constructor(private readonly repository = createPrismaAuthRepository()) {}
+
+  async canBootstrapGameMaster(): Promise<boolean> {
+    return !(await this.repository.anyPrivilegedUserExists());
+  }
 
   async registerLocalUser(input: CredentialRegisterInput): Promise<AuthUser> {
     return this.repository.createUser({
@@ -30,6 +40,24 @@ export class AuthService {
 
   async findUserByEmail(email: string): Promise<AuthUser | null> {
     return this.repository.findUserByEmail(email);
+  }
+
+  async listUsers(): Promise<AuthUser[]> {
+    return this.repository.listUsers();
+  }
+
+  async replaceUserRoles(userId: string, roles: AuthRole[]): Promise<AuthUser | null> {
+    return this.repository.replaceUserRoles(userId, roles);
+  }
+
+  async bootstrapGameMasterForUser(userId: string): Promise<AuthUser | null> {
+    const bootstrapAvailable = await this.canBootstrapGameMaster();
+
+    if (!bootstrapAvailable) {
+      return null;
+    }
+
+    return this.repository.replaceUserRoles(userId, ["game_master"]);
   }
 
   async createSessionForUser(userId: string): Promise<{ session: AuthSession; token: string }> {

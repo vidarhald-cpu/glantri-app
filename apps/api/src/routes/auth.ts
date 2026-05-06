@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from "fastify";
 
 import {
+  authRoleSchema,
   credentialLoginInputSchema,
   credentialRegisterInputSchema
 } from "@glantri/auth";
@@ -10,7 +11,9 @@ import {
   buildExpiredSessionCookie,
   buildSessionCookie,
   getAuthenticatedUser,
-  getSessionTokenFromRequest
+  getSessionTokenFromRequest,
+  requireAdminUser,
+  requireAuthenticatedUser
 } from "../lib/sessionAuth";
 
 const authService = new AuthService();
@@ -18,9 +21,17 @@ const authService = new AuthService();
 export const authRoutes: FastifyPluginAsync = async (app) => {
   app.get("/me", async (request) => {
     const user = await getAuthenticatedUser(request, authService);
+    const canBootstrapGameMaster = await authService.canBootstrapGameMaster();
 
     return {
+      canBootstrapGameMaster,
       user
+    };
+  });
+
+  app.get("/bootstrap-status", async () => {
+    return {
+      canBootstrapGameMaster: await authService.canBootstrapGameMaster()
     };
   });
 
@@ -73,6 +84,71 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
 
     return {
       ok: true
+    };
+  });
+
+  app.get("/users", async (request, reply) => {
+    const user = await requireAuthenticatedUser(request, reply, authService);
+
+    if (!user) {
+      return;
+    }
+
+    const users = await authService.listUsers();
+
+    return {
+      users
+    };
+  });
+
+  app.post("/users/:id/role", async (request, reply) => {
+    const user = await requireAdminUser(request, reply, authService);
+
+    if (!user) {
+      return;
+    }
+
+    const candidate = request.body as { role?: unknown };
+    const role = authRoleSchema.parse(candidate.role);
+    const targetUserId = (request.params as { id?: string }).id;
+
+    if (!targetUserId) {
+      return reply.code(400).send({
+        error: "User id is required."
+      });
+    }
+
+    const updatedUser = await authService.replaceUserRoles(targetUserId, [role]);
+
+    if (!updatedUser) {
+      return reply.code(404).send({
+        error: "User not found."
+      });
+    }
+
+    return {
+      user: updatedUser
+    };
+  });
+
+  app.post("/bootstrap-gm", async (request, reply) => {
+    const user = await requireAuthenticatedUser(request, reply, authService);
+
+    if (!user) {
+      return;
+    }
+
+    const updatedUser = await authService.bootstrapGameMasterForUser(user.id);
+
+    if (!updatedUser) {
+      return reply.code(403).send({
+        error: "Bootstrap GM claim is no longer available."
+      });
+    }
+
+    return {
+      canBootstrapGameMaster: false,
+      user: updatedUser
     };
   });
 };

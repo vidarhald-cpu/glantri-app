@@ -1,14 +1,89 @@
-import type { CanonicalContent } from "@glantri/content";
-import { getSkillGroupIds } from "@glantri/domain";
-import { resolveEffectiveProfessionPackage } from "@glantri/rules-engine";
+import { collectCanonicalContentWarnings, type CanonicalContent } from "@glantri/content";
+import { equipmentTemplates } from "@glantri/content/equipment";
+import {
+  getPlayerFacingSkillCategoryId,
+  getSkillGroupIds,
+  type SkillDefinition
+} from "@glantri/domain";
+import { getMeleeCrossTrainingFactor, resolveEffectiveProfessionPackage } from "@glantri/rules-engine";
+import type { ArmorTemplate, GearTemplate, ShieldTemplate, ValuableTemplate, WeaponTemplate } from "@glantri/domain";
+
+import {
+  isCatalogMeleeWeaponTemplate,
+  isCatalogMissileWeaponTemplate
+} from "../../features/equipment/weaponCatalogTables";
+
+/*
+  Terminology guardrail:
+  Keep mechanical Type separate from player-facing Skill category.
+  When changing shared wording in admin review models, update
+  packages/domain/src/docs/glantriTerms.ts in the same patch.
+*/
 
 export interface SkillAdminRow {
   characteristics: string;
   dependencies: string[];
+  foundationalAccessBandsSummary: string;
+  foundationalAccessMatrixRows: Array<{
+    canonicalSocietyLevel?: number;
+    societyName: string;
+    socialBands: number[];
+  }>;
+  foundationalAccessSlots: Array<{
+    accessBand: number;
+    canonicalSocietyLevel?: number;
+    societyName: string;
+  }>;
   groupNames: string[];
+  hasSkillRelationships: boolean;
   id: string;
+  incomingDerivedGrants: Array<{
+    factorPercent: number;
+    sourceSkillId: string;
+    sourceSkillName: string;
+  }>;
+  incomingMeleeCrossTraining: Array<{
+    factorPercent: number;
+    sourceSkillId: string;
+    sourceSkillName: string;
+  }>;
+  incomingSpecializationBridges: Array<{
+    factorPercent: number;
+    sourceName: string;
+    sourceType: "skill" | "specialization";
+  }>;
+  meleeCrossTraining?:
+    | {
+        attackStyle: string;
+        handClass: string;
+      }
+    | undefined;
   name: string;
+  optionalGroupCount: number;
+  optionalGroupNames: string[];
+  outgoingDerivedGrants: Array<{
+    factorPercent: number;
+    targetSkillId: string;
+    targetSkillName: string;
+  }>;
+  outgoingMeleeCrossTraining: Array<{
+    factorPercent: number;
+    targetSkillId: string;
+    targetSkillName: string;
+  }>;
+  outgoingSpecializationBridges: Array<{
+    parentExcessOffset: number;
+    reverseFactorPercent: number;
+    targetName: string;
+    targetType: "skill" | "specialization";
+    threshold: number;
+  }>;
+  primaryGroup: string;
+  professionNames: string[];
+  relationshipSummaryBadges: string[];
   secondaryOf: string;
+  description: string;
+  skillCategory: string;
   shortDescription: string;
   skillType: string;
   societyLevel: number;
@@ -50,23 +125,66 @@ export interface SkillAuditIssue {
 
 export interface SkillGroupAdminRow {
   allowedProfessions: string[];
+  associatedProfessionLinks: Array<{
+    familyId: string;
+    familyName: string;
+    professionId: string;
+    professionName: string;
+  }>;
+  coreSkills: string[];
+  fixedSkills: Array<{
+    name: string;
+    relevance: "core" | "optional";
+  }>;
+  fixedSkillNames: string[];
   id: string;
   includedSkills: string[];
   name: string;
   notes: string;
+  optionalSkills: string[];
+  selectionSlotCount: number;
+  selectionSlots: Array<{
+    candidateSkills: string[];
+    chooseCount: number;
+    id: string;
+    label: string;
+    required: boolean;
+  }>;
   sortOrder: number;
+  visibleProfessionFamilyIds: string[];
+  warningDetails: string[];
+  weightedContentPoints: number;
 }
 
 export interface ProfessionAdminRow {
   allowedSocietyEntries: string[];
+  allowedSocietySlots: Array<{
+    accessBand: number;
+    canonicalSocietyLevel?: number;
+    socialClass: string;
+    societyName: string;
+  }>;
+  coreSkillGroups: string[];
   description: string;
   directSkillExceptions: string[];
   directlyGrantedSkills: string[];
+  familyId: string;
+  familyName: string;
+  groupFans: Array<{
+    coreSkills: string[];
+    groupName: string;
+    optionalSkills: string[];
+    relevance: "core" | "optional";
+    weightedContentPoints: number;
+  }>;
   grantedSkillGroups: string[];
   id: string;
   name: string;
   notes: string;
+  optionalSkillGroups: string[];
   reachableGroupSkills: string[];
+  societyStageLevels: number[];
+  societyStageSummary: string;
   totalReachableSkills: number;
 }
 
@@ -102,19 +220,42 @@ export interface ProfessionAuditIssue {
 
 export interface SocietyAdminRow {
   baseEducation: string;
+  baselineLanguages: string[];
+  canonicalSocietyLevel?: number;
   directOnlySkills: string[];
   directSkillGroups: string[];
   directSkills: string[];
   dieRange: string;
   effectiveProfessionSkills: string[];
+  glantriExamples?: string;
+  historicalReference?: string;
   id: string;
+  literacyAccessSummary: string;
   notes: string;
+  professionFans: Array<{
+    coreGroups: Array<{
+      coreSkills: string[];
+      groupName: string;
+      optionalSkills: string[];
+    }>;
+    optionalGroups: Array<{
+      coreSkills: string[];
+      groupName: string;
+      optionalSkills: string[];
+    }>;
+    professionName: string;
+    reachableSkills: string[];
+  }>;
   reachableProfessions: string[];
+  shortDescription: string;
   society: string;
   societyClassName: string;
   societyLevel: number;
   totalEffectiveReachableSkills: number;
 }
+
+const LOW_WEIGHTED_GROUP_POINTS_THRESHOLD = 5;
+const HIGH_WEIGHTED_GROUP_POINTS_THRESHOLD = 12;
 
 export interface SocietyMatrixRow {
   baseEducation: string;
@@ -147,6 +288,31 @@ export interface SocietyAuditIssue {
   societyRowName: string;
 }
 
+export function getProfessionFamilyName(content: CanonicalContent, familyId: string): string {
+  return content.professionFamilies.find((family) => family.id === familyId)?.name ?? familyId;
+}
+
+export function buildProfessionFamilyFilterOptions(
+  content: CanonicalContent,
+  familyIds: Iterable<string>
+): string[] {
+  return ["all", ...new Set(Array.from(familyIds).filter((value) => value.length > 0))].sort(
+    (left, right) => {
+      if (left === "all") {
+        return -1;
+      }
+
+      if (right === "all") {
+        return 1;
+      }
+
+      return getProfessionFamilyName(content, left).localeCompare(
+        getProfessionFamilyName(content, right)
+      );
+    }
+  );
+}
+
 export interface ProfessionAccessRow {
   id: string;
   name: string;
@@ -164,10 +330,22 @@ export interface SocietyAccessRow {
 }
 
 export interface AdminOverviewStats {
+  accountCount?: number;
+  armorCount: number;
+  documentsCount?: number;
+  gearCount: number;
+  languageCount: number;
+  languageCountLabel: string;
+  meleeWeaponCount: number;
+  missileWeaponCount: number;
   professionCount: number;
+  societyCount: number;
+  societyAccessRowCount: number;
+  shieldCount: number;
   skillCount: number;
   skillGroupCount: number;
-  societyEntryCount: number;
+  tablesCount?: number;
+  valuablesCount: number;
 }
 
 function uniqueSorted(values: string[]): string[] {
@@ -176,6 +354,28 @@ function uniqueSorted(values: string[]): string[] {
 
 function joinDisplayName(name: string, suffix?: string): string {
   return suffix ? `${name} (${suffix})` : name;
+}
+
+function getWeightedSkillPoints(skill: CanonicalContent["skills"][number]): number {
+  return skill.category === "secondary" ? 1 : 2;
+}
+
+function getGroupMemberships(
+  content: CanonicalContent,
+  groupId: string
+): Array<{ relevance: "core" | "optional"; skillId: string }> {
+  const group = content.skillGroups.find((candidate) => candidate.id === groupId);
+
+  if (group?.skillMemberships?.length) {
+    return group.skillMemberships;
+  }
+
+  return content.skills
+    .filter((skill) => getSkillGroupIds(skill).includes(groupId))
+    .map((skill) => ({
+      relevance: skill.groupId === groupId ? ("core" as const) : ("optional" as const),
+      skillId: skill.id
+    }));
 }
 
 function formatSocietyEntryLabel(societyName: string, level: number, socialClass: string): string {
@@ -199,6 +399,38 @@ function getDieRange(level: number): string {
     default:
       return "Custom";
   }
+}
+
+function summarizeAccessBands(bands: number[]): string {
+  if (bands.length === 0) {
+    return "—";
+  }
+
+  const uniqueBands = [...new Set(bands)].sort((left, right) => left - right);
+  const ranges: string[] = [];
+  let rangeStart = uniqueBands[0] ?? 0;
+  let previous = uniqueBands[0] ?? 0;
+
+  for (let index = 1; index < uniqueBands.length; index += 1) {
+    const current = uniqueBands[index];
+
+    if (current === previous + 1) {
+      previous = current;
+      continue;
+    }
+
+    ranges.push(rangeStart === previous ? `L${rangeStart}` : `L${rangeStart}-L${previous}`);
+    rangeStart = current ?? previous;
+    previous = current ?? previous;
+  }
+
+  ranges.push(rangeStart === previous ? `L${rangeStart}` : `L${rangeStart}-L${previous}`);
+
+  return ranges.join(", ");
+}
+
+function summarizeSocietyStages(levels: number[]): string {
+  return summarizeAccessBands(levels).replaceAll("L", "S");
 }
 
 function getAuditSeverityRank(severity: AuditSeverity): number {
@@ -314,22 +546,376 @@ function buildSkillRelationshipContext(content: CanonicalContent) {
   };
 }
 
-export function buildAdminOverviewStats(content: CanonicalContent): AdminOverviewStats {
+export function buildSkillRelationshipSummary(input: {
+  content: CanonicalContent;
+  skillId: string;
+}) {
+  const skillsById = new Map(input.content.skills.map((skill) => [skill.id, skill]));
+  const specializationsById = new Map(
+    input.content.specializations.map((specialization) => [specialization.id, specialization])
+  );
+  const skill = skillsById.get(input.skillId);
+  const specialization = specializationsById.get(input.skillId);
+
+  if (!skill && !specialization) {
+    return {
+      hasSkillRelationships: false,
+      incomingDerivedGrants: [],
+      incomingMeleeCrossTraining: [],
+      incomingSpecializationBridges: [],
+      meleeCrossTraining: undefined,
+      outgoingDerivedGrants: [],
+      outgoingMeleeCrossTraining: [],
+      outgoingSpecializationBridges: [],
+      relationshipSummaryBadges: []
+    };
+  }
+
+  if (!skill && specialization) {
+    const parentSkill = skillsById.get(specialization.skillId);
+    const incomingSpecializationBridges = specialization.specializationBridge
+      ? [
+          {
+            factorPercent: Math.floor(specialization.specializationBridge.reverseFactor * 100),
+            sourceName:
+              skillsById.get(specialization.specializationBridge.parentSkillId)?.name ??
+              specialization.specializationBridge.parentSkillId,
+            sourceType: "skill" as const
+          }
+        ]
+      : [];
+    const relationshipSummaryBadges = [
+      ...(incomingSpecializationBridges.length > 0
+        ? [`Specialized from ${incomingSpecializationBridges.length}`]
+        : []),
+      ...(parentSkill ? [`Parent ${parentSkill.name}`] : [])
+    ];
+
+    return {
+      hasSkillRelationships: incomingSpecializationBridges.length > 0,
+      incomingDerivedGrants: [],
+      incomingMeleeCrossTraining: [],
+      incomingSpecializationBridges,
+      meleeCrossTraining: undefined,
+      outgoingDerivedGrants: [],
+      outgoingMeleeCrossTraining: [],
+      outgoingSpecializationBridges: [],
+      relationshipSummaryBadges
+    };
+  }
+
+  if (!skill) {
+    throw new Error(`Missing skill row for relationship summary "${input.skillId}".`);
+  }
+
+  const correspondingSpecializationBridge = specialization?.specializationBridge;
+
+  const outgoingDerivedGrants = (skill.derivedGrants ?? [])
+    .map((grant) => ({
+      factorPercent: Math.floor(grant.factor * 100),
+      targetSkillId: grant.skillId,
+      targetSkillName: skillsById.get(grant.skillId)?.name ?? grant.skillId
+    }))
+    .sort(
+      (left, right) =>
+        left.targetSkillName.localeCompare(right.targetSkillName) ||
+        left.factorPercent - right.factorPercent
+    );
+
+  const incomingDerivedGrants = input.content.skills
+    .flatMap((candidate) =>
+      (candidate.derivedGrants ?? [])
+        .filter((grant) => grant.skillId === skill.id)
+        .map((grant) => ({
+          factorPercent: Math.floor(grant.factor * 100),
+          sourceSkillId: candidate.id,
+          sourceSkillName: candidate.name
+        }))
+    )
+    .sort(
+      (left, right) =>
+        left.sourceSkillName.localeCompare(right.sourceSkillName) ||
+        left.factorPercent - right.factorPercent
+    );
+
+  const outgoingMeleeCrossTraining = input.content.skills
+    .filter((candidate) => candidate.id !== skill.id)
+    .flatMap((candidate) => {
+      const factor = getMeleeCrossTrainingFactor({
+        source: skill.meleeCrossTraining,
+        target: candidate.meleeCrossTraining
+      });
+
+      if (factor <= 0) {
+        return [];
+      }
+
+      return [
+        {
+          factorPercent: Math.floor(factor * 100),
+          targetSkillId: candidate.id,
+          targetSkillName: candidate.name
+        }
+      ];
+    })
+    .sort(
+      (left, right) =>
+        right.factorPercent - left.factorPercent ||
+        left.targetSkillName.localeCompare(right.targetSkillName)
+    );
+
+  const incomingMeleeCrossTraining = input.content.skills
+    .filter((candidate) => candidate.id !== skill.id)
+    .flatMap((candidate) => {
+      const factor = getMeleeCrossTrainingFactor({
+        source: candidate.meleeCrossTraining,
+        target: skill.meleeCrossTraining
+      });
+
+      if (factor <= 0) {
+        return [];
+      }
+
+      return [
+        {
+          factorPercent: Math.floor(factor * 100),
+          sourceSkillId: candidate.id,
+          sourceSkillName: candidate.name
+        }
+      ];
+    })
+    .sort(
+      (left, right) =>
+        right.factorPercent - left.factorPercent ||
+        left.sourceSkillName.localeCompare(right.sourceSkillName)
+    );
+
+  const meleeCrossTraining = skill.meleeCrossTraining
+    ? {
+        attackStyle: skill.meleeCrossTraining.attackStyle,
+        handClass: skill.meleeCrossTraining.handClass
+      }
+    : undefined;
+
+  const outgoingSpecializationBridges = [
+    ...input.content.skills
+      .filter((candidate) => candidate.specializationBridge?.parentSkillId === skill.id)
+      .map((candidate) => ({
+        parentExcessOffset: candidate.specializationBridge!.parentExcessOffset,
+        reverseFactorPercent: Math.floor(candidate.specializationBridge!.reverseFactor * 100),
+        targetName: candidate.name,
+        targetType: "skill" as const,
+        threshold: candidate.specializationBridge!.threshold
+      })),
+    ...input.content.specializations
+      .filter((candidate) => candidate.specializationBridge?.parentSkillId === skill.id)
+      .map((candidate) => ({
+        parentExcessOffset: candidate.specializationBridge!.parentExcessOffset,
+        reverseFactorPercent: Math.floor(candidate.specializationBridge!.reverseFactor * 100),
+        targetName: candidate.name,
+        targetType: "specialization" as const,
+        threshold: candidate.specializationBridge!.threshold
+      }))
+  ].sort(
+    (left, right) =>
+      left.targetName.localeCompare(right.targetName) ||
+      left.threshold - right.threshold
+  );
+
+  const incomingSpecializationBridges = [
+    ...(skill.specializationBridge ?? correspondingSpecializationBridge
+      ? [
+          {
+            factorPercent: Math.floor(
+              (skill.specializationBridge ?? correspondingSpecializationBridge)!.reverseFactor * 100
+            ),
+            sourceName:
+              skillsById.get(
+                (skill.specializationBridge ?? correspondingSpecializationBridge)!.parentSkillId
+              )?.name ?? (skill.specializationBridge ?? correspondingSpecializationBridge)!.parentSkillId,
+            sourceType: "skill" as const
+          }
+        ]
+      : []),
+    ...input.content.skills
+      .filter((candidate) => candidate.specializationBridge?.parentSkillId === skill.id)
+      .map((candidate) => ({
+        factorPercent: Math.floor(candidate.specializationBridge!.reverseFactor * 100),
+        sourceName: candidate.name,
+        sourceType: "skill" as const
+      })),
+    ...input.content.specializations
+      .filter((candidate) => candidate.specializationBridge?.parentSkillId === skill.id)
+      .map((candidate) => ({
+        factorPercent: Math.floor(candidate.specializationBridge!.reverseFactor * 100),
+        sourceName: candidate.name,
+        sourceType: "specialization" as const
+      }))
+  ].sort(
+    (left, right) =>
+      left.sourceName.localeCompare(right.sourceName) ||
+      left.factorPercent - right.factorPercent
+  );
+
+  const relationshipSummaryBadges = [
+    ...(outgoingDerivedGrants.length > 0 ? [`Grants ${outgoingDerivedGrants.length}`] : []),
+    ...(incomingDerivedGrants.length > 0 ? [`Receives ${incomingDerivedGrants.length}`] : []),
+    ...(outgoingMeleeCrossTraining.length > 0
+      ? [`Cross-trains ${outgoingMeleeCrossTraining.length}`]
+      : []),
+    ...(incomingMeleeCrossTraining.length > 0
+      ? [`Cross-trained from ${incomingMeleeCrossTraining.length}`]
+      : []),
+    ...(outgoingSpecializationBridges.length > 0
+      ? [`Specializes ${outgoingSpecializationBridges.length}`]
+      : []),
+    ...(incomingSpecializationBridges.length > 0
+      ? [`Specialized from ${incomingSpecializationBridges.length}`]
+      : [])
+  ];
+
   return {
+    hasSkillRelationships:
+      outgoingDerivedGrants.length > 0 ||
+      incomingDerivedGrants.length > 0 ||
+      outgoingMeleeCrossTraining.length > 0 ||
+      incomingMeleeCrossTraining.length > 0 ||
+      outgoingSpecializationBridges.length > 0 ||
+      incomingSpecializationBridges.length > 0,
+    incomingDerivedGrants,
+    incomingMeleeCrossTraining,
+    incomingSpecializationBridges,
+    meleeCrossTraining,
+    outgoingDerivedGrants,
+    outgoingMeleeCrossTraining,
+    outgoingSpecializationBridges,
+    relationshipSummaryBadges
+  };
+}
+
+export function buildAdminOverviewStats(content: CanonicalContent): AdminOverviewStats {
+  const meleeWeaponCount = equipmentTemplates.filter(
+    (template): template is WeaponTemplate =>
+      template.category === "weapon" && isCatalogMeleeWeaponTemplate(template)
+  ).length;
+  const missileWeaponCount = equipmentTemplates.filter(
+    (template): template is WeaponTemplate =>
+      template.category === "weapon" && isCatalogMissileWeaponTemplate(template)
+  ).length;
+  const shieldCount = equipmentTemplates.filter(
+    (template): template is ShieldTemplate => template.category === "shield"
+  ).length;
+  const armorCount = equipmentTemplates.filter(
+    (template): template is ArmorTemplate => template.category === "armor"
+  ).length;
+  const gearCount = equipmentTemplates.filter(
+    (template): template is GearTemplate => template.category === "gear"
+  ).length;
+  const valuablesCount = equipmentTemplates.filter(
+    (template): template is ValuableTemplate => template.category === "valuables"
+  ).length;
+
+  return {
+    accountCount: undefined,
+    armorCount,
+    documentsCount: undefined,
+    gearCount,
+    languageCount: content.languages.length,
+    languageCountLabel: "Baseline / provisional languages",
+    meleeWeaponCount,
+    missileWeaponCount,
     professionCount: content.professions.length,
+    societyCount: content.societies.length,
+    societyAccessRowCount: content.societyLevels.length,
+    shieldCount,
     skillCount: content.skills.length,
     skillGroupCount: content.skillGroups.length,
-    societyEntryCount: content.societyLevels.length
+    tablesCount: undefined,
+    valuablesCount
   };
 }
 
 export function buildSkillAdminRows(content: CanonicalContent): SkillAdminRow[] {
   const { skillGroupsById, skillsById } = buildSkillMaps(content);
+  const professionPackages = content.professions.map((profession) => {
+    const resolvedPackage = resolveProfessionGrantPackage(content, profession.id);
 
-  return [...content.skills]
-    .sort((left, right) => left.sortOrder - right.sortOrder || left.name.localeCompare(right.name))
-    .map((skill) => {
+    return {
+      name: profession.name,
+      reachableSkillIds: resolvedPackage.reachableSkillIds
+    };
+  });
+
+  function buildSkillRow(skill: SkillDefinition): SkillAdminRow {
+      const relationshipSummary = buildSkillRelationshipSummary({
+        content,
+        skillId: skill.id
+      });
       const groupIds = getSkillGroupIds(skill);
+      const primaryGroupId = skill.groupId ?? groupIds[0];
+      const primaryGroup = primaryGroupId
+        ? skillGroupsById.get(primaryGroupId)?.name ?? primaryGroupId
+        : "";
+      const optionalGroupNames = uniqueSorted(
+        groupIds
+          .filter((groupId) => groupId !== primaryGroupId)
+          .map((groupId) => skillGroupsById.get(groupId)?.name ?? groupId)
+      );
+      const professionNames = uniqueSorted(
+        professionPackages
+          .filter((professionPackage) => professionPackage.reachableSkillIds.includes(skill.id))
+          .map((professionPackage) => professionPackage.name)
+      );
+      const foundationalAccessSlots = content.societyBandSkillAccess
+        .filter((entry) => entry.skillId === skill.id)
+        .map((entry) => ({
+          accessBand: entry.socialBand,
+          canonicalSocietyLevel: entry.linkedSocietyLevel,
+          societyName: entry.societyName
+        }))
+        .sort(
+          (left, right) =>
+            (left.canonicalSocietyLevel ?? 99) - (right.canonicalSocietyLevel ?? 99) ||
+          left.societyName.localeCompare(right.societyName) ||
+          left.accessBand - right.accessBand
+        );
+      const foundationalAccessMatrixRows = Array.from(
+        foundationalAccessSlots.reduce(
+          (map, slot) => {
+            const existing = map.get(slot.societyName);
+
+            if (existing) {
+              existing.socialBands.push(slot.accessBand);
+              return map;
+            }
+
+            map.set(slot.societyName, {
+              canonicalSocietyLevel: slot.canonicalSocietyLevel,
+              societyName: slot.societyName,
+              socialBands: [slot.accessBand]
+            });
+
+            return map;
+          },
+          new Map<
+            string,
+            {
+              canonicalSocietyLevel?: number;
+              societyName: string;
+              socialBands: number[];
+            }
+          >()
+        ).values()
+      )
+        .map((row) => ({
+          ...row,
+          socialBands: [...new Set(row.socialBands)].sort((left, right) => left - right)
+        }))
+        .sort(
+          (left, right) =>
+            (left.canonicalSocietyLevel ?? 99) - (right.canonicalSocietyLevel ?? 99) ||
+            left.societyName.localeCompare(right.societyName)
+        );
 
       return {
         characteristics: formatCharacteristicList(skill.linkedStats),
@@ -338,12 +924,32 @@ export function buildSkillAdminRows(content: CanonicalContent): SkillAdminRow[] 
             (dependencySkillId) => skillsById.get(dependencySkillId)?.name ?? dependencySkillId
           )
         ),
+        foundationalAccessBandsSummary: summarizeAccessBands(
+          foundationalAccessSlots.map((slot) => slot.accessBand)
+        ),
+        foundationalAccessMatrixRows,
+        foundationalAccessSlots,
         groupNames: groupIds.map((groupId) => skillGroupsById.get(groupId)?.name ?? groupId),
+        hasSkillRelationships: relationshipSummary.hasSkillRelationships,
         id: skill.id,
+        incomingDerivedGrants: relationshipSummary.incomingDerivedGrants,
+        incomingMeleeCrossTraining: relationshipSummary.incomingMeleeCrossTraining,
+        incomingSpecializationBridges: relationshipSummary.incomingSpecializationBridges,
+        meleeCrossTraining: relationshipSummary.meleeCrossTraining,
         name: skill.name,
+        optionalGroupCount: optionalGroupNames.length,
+        optionalGroupNames,
+        outgoingDerivedGrants: relationshipSummary.outgoingDerivedGrants,
+        outgoingMeleeCrossTraining: relationshipSummary.outgoingMeleeCrossTraining,
+        outgoingSpecializationBridges: relationshipSummary.outgoingSpecializationBridges,
+        primaryGroup,
+        professionNames,
+        relationshipSummaryBadges: relationshipSummary.relationshipSummaryBadges,
         secondaryOf: skill.secondaryOfSkillId
           ? skillsById.get(skill.secondaryOfSkillId)?.name ?? skill.secondaryOfSkillId
           : "",
+        description: skill.description ?? "",
+        skillCategory: getPlayerFacingSkillCategoryId(skill),
         shortDescription: skill.shortDescription ?? "",
         skillType: skill.category,
         societyLevel: skill.societyLevel,
@@ -353,14 +959,90 @@ export function buildSkillAdminRows(content: CanonicalContent): SkillAdminRow[] 
           : "",
         theoretical: skill.isTheoretical
       };
+  }
+
+  function buildSpecializationOnlyRow(
+    specialization: CanonicalContent["specializations"][number]
+  ): SkillAdminRow | null {
+    const parentSkill = skillsById.get(specialization.skillId);
+
+    if (!parentSkill) {
+      return null;
+    }
+
+    const relationshipSummary = buildSkillRelationshipSummary({
+      content,
+      skillId: specialization.id
     });
+    const groupIds = getSkillGroupIds(parentSkill);
+    const primaryGroupId = parentSkill.groupId ?? groupIds[0];
+    const primaryGroup = primaryGroupId
+      ? skillGroupsById.get(primaryGroupId)?.name ?? primaryGroupId
+      : "";
+    const optionalGroupNames = uniqueSorted(
+      groupIds
+        .filter((groupId) => groupId !== primaryGroupId)
+        .map((groupId) => skillGroupsById.get(groupId)?.name ?? groupId)
+    );
+    const professionNames = uniqueSorted(
+      professionPackages
+        .filter((professionPackage) =>
+          professionPackage.reachableSkillIds.includes(parentSkill.id)
+        )
+        .map((professionPackage) => professionPackage.name)
+    );
+
+    return {
+      characteristics: formatCharacteristicList(parentSkill.linkedStats),
+      dependencies: [parentSkill.name],
+      description: specialization.description ?? "",
+      foundationalAccessBandsSummary: "—",
+      foundationalAccessMatrixRows: [],
+      foundationalAccessSlots: [],
+      groupNames: groupIds.map((groupId) => skillGroupsById.get(groupId)?.name ?? groupId),
+      hasSkillRelationships: relationshipSummary.hasSkillRelationships,
+      id: specialization.id,
+      incomingDerivedGrants: relationshipSummary.incomingDerivedGrants,
+      incomingMeleeCrossTraining: relationshipSummary.incomingMeleeCrossTraining,
+      incomingSpecializationBridges: relationshipSummary.incomingSpecializationBridges,
+      meleeCrossTraining: relationshipSummary.meleeCrossTraining,
+      name: specialization.name,
+      optionalGroupCount: optionalGroupNames.length,
+      optionalGroupNames,
+      outgoingDerivedGrants: relationshipSummary.outgoingDerivedGrants,
+      outgoingMeleeCrossTraining: relationshipSummary.outgoingMeleeCrossTraining,
+      outgoingSpecializationBridges: relationshipSummary.outgoingSpecializationBridges,
+      primaryGroup,
+      professionNames,
+      relationshipSummaryBadges: relationshipSummary.relationshipSummaryBadges,
+      secondaryOf: "",
+      skillCategory: getPlayerFacingSkillCategoryId(parentSkill),
+      shortDescription: specialization.description ?? "",
+      skillType: "specialization",
+      societyLevel: specialization.minimumParentLevel,
+      sortOrder: specialization.sortOrder,
+      specializationOf: parentSkill.name,
+      theoretical: parentSkill.isTheoretical
+    };
+  }
+
+  const skillRows = content.skills.map(buildSkillRow);
+  const skillIds = new Set(content.skills.map((skill) => skill.id));
+  const specializationRows = content.specializations
+    .filter((specialization) => !skillIds.has(specialization.id))
+    .map(buildSpecializationOnlyRow)
+    .filter((row): row is SkillAdminRow => row !== null);
+
+  return [...skillRows, ...specializationRows].sort(
+    (left, right) => left.name.localeCompare(right.name) || left.sortOrder - right.sortOrder
+  );
 }
 
 export function buildSkillMatrixRows(content: CanonicalContent): SkillMatrixRow[] {
   const relationshipContext = buildSkillRelationshipContext(content);
 
   return [...content.skills]
-    .sort((left, right) => left.sortOrder - right.sortOrder || left.name.localeCompare(right.name))
+    .sort((left, right) => left.name.localeCompare(right.name) || left.sortOrder - right.sortOrder)
     .map((skill) => {
       const groupIds = getSkillGroupIds(skill);
       const dependencyNames = uniqueSorted(
@@ -1110,13 +1792,83 @@ export function buildSocietyAuditIssues(content: CanonicalContent): SocietyAudit
 }
 
 export function buildSkillGroupAdminRows(content: CanonicalContent): SkillGroupAdminRow[] {
+  const warningsByGroupId = new Map<string, string[]>();
+
+  for (const warning of collectCanonicalContentWarnings(content)) {
+    const match = warning.detail.match(/\(([^)]+)\)/);
+
+    if (!match) {
+      continue;
+    }
+
+    const existing = warningsByGroupId.get(match[1]) ?? [];
+    existing.push(warning.detail);
+    warningsByGroupId.set(match[1], existing);
+  }
+
   return [...content.skillGroups]
-    .sort((left, right) => left.sortOrder - right.sortOrder || left.name.localeCompare(right.name))
+    .sort((left, right) => left.name.localeCompare(right.name) || left.sortOrder - right.sortOrder)
     .map((group) => {
-      const includedSkills = content.skills
-        .filter((skill) => getSkillGroupIds(skill).includes(group.id))
+      const associatedProfessionLinks = content.professionSkills
+        .filter((professionSkill) => professionSkill.skillGroupId === group.id)
+        .map((professionSkill) => {
+          const profession = content.professions.find(
+            (candidate) => candidate.id === professionSkill.professionId
+          );
+
+          if (!profession) {
+            return undefined;
+          }
+
+          return {
+            familyId: profession.familyId,
+            familyName: getProfessionFamilyName(content, profession.familyId),
+            professionId: profession.id,
+            professionName: profession.name
+          };
+        })
+        .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry))
+        .sort(
+          (left, right) =>
+            left.familyName.localeCompare(right.familyName) ||
+            left.professionName.localeCompare(right.professionName)
+        );
+      const memberships = getGroupMemberships(content, group.id);
+      const fixedSkillRows = memberships
+        .map((membership) => {
+          const skill = content.skills.find((candidate) => candidate.id === membership.skillId);
+
+          if (!skill) {
+            return undefined;
+          }
+
+          return {
+            name: skill.name,
+            points: getWeightedSkillPoints(skill),
+            relevance: membership.relevance,
+            sortOrder: skill.sortOrder
+          };
+        })
+        .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry))
+        .sort((left, right) => left.sortOrder - right.sortOrder || left.name.localeCompare(right.name));
+      const fixedSkillNames = fixedSkillRows.map((skill) => skill.name);
+      const coreSkills = fixedSkillRows
+        .filter((skill) => skill.relevance === "core")
+        .map((skill) => skill.name);
+      const optionalSkills = fixedSkillRows
+        .filter((skill) => skill.relevance === "optional")
         .sort((left, right) => left.sortOrder - right.sortOrder || left.name.localeCompare(right.name))
         .map((skill) => skill.name);
+      const selectionSlots = (group.selectionSlots ?? []).map((slot) => ({
+        candidateSkills: slot.candidateSkillIds
+          .map((skillId) => content.skills.find((candidate) => candidate.id === skillId)?.name)
+          .filter((name): name is string => Boolean(name))
+          .sort((left, right) => left.localeCompare(right)),
+        chooseCount: slot.chooseCount,
+        id: slot.id,
+        label: slot.label,
+        required: slot.required
+      }));
       const allowedProfessions = content.professionSkills
         .filter((professionSkill) => professionSkill.skillGroupId === group.id)
         .map((professionSkill) => {
@@ -1129,48 +1881,291 @@ export function buildSkillGroupAdminRows(content: CanonicalContent): SkillGroupA
         .filter((name): name is string => Boolean(name))
         .sort((left, right) => left.localeCompare(right));
 
+      const weightedContentPoints = fixedSkillRows.reduce((sum, skill) => sum + skill.points, 0);
+      const warningDetails = [...(warningsByGroupId.get(group.id) ?? [])];
+
+      if (weightedContentPoints <= LOW_WEIGHTED_GROUP_POINTS_THRESHOLD) {
+        warningDetails.push(
+          `Weighted content points are ${weightedContentPoints}, which is at or below the low-size review threshold (${LOW_WEIGHTED_GROUP_POINTS_THRESHOLD}).`
+        );
+      }
+
+      if (weightedContentPoints >= HIGH_WEIGHTED_GROUP_POINTS_THRESHOLD) {
+        warningDetails.push(
+          `Weighted content points are ${weightedContentPoints}, which is at or above the high-size review threshold (${HIGH_WEIGHTED_GROUP_POINTS_THRESHOLD}).`
+        );
+      }
+
       return {
         allowedProfessions: uniqueSorted(allowedProfessions),
+        associatedProfessionLinks,
+        coreSkills,
+        fixedSkills: fixedSkillRows.map((skill) => ({
+          name: skill.name,
+          relevance: skill.relevance
+        })),
+        fixedSkillNames,
         id: group.id,
-        includedSkills,
+        includedSkills: fixedSkillNames,
         name: group.name,
         notes: group.description ?? "",
-        sortOrder: group.sortOrder
+        optionalSkills,
+        selectionSlotCount: selectionSlots.length,
+        selectionSlots,
+        sortOrder: group.sortOrder,
+        visibleProfessionFamilyIds: uniqueSorted(
+          associatedProfessionLinks.map((link) => link.familyId)
+        ),
+        warningDetails: uniqueSorted(warningDetails),
+        weightedContentPoints
       };
     });
 }
 
 export function buildProfessionAdminRows(content: CanonicalContent): ProfessionAdminRow[] {
-  return buildProfessionMatrixRows(content).map((profession) => ({
-    allowedSocietyEntries: profession.allowedSocietyEntries,
-    description: profession.description,
-    directSkillExceptions: profession.directSkillExceptions,
-    directlyGrantedSkills: profession.directlyGrantedSkills,
-    grantedSkillGroups: profession.grantedSkillGroups,
-    id: profession.id,
-    name: profession.name,
-    notes: profession.notes,
-    reachableGroupSkills: profession.reachableGroupSkills,
-    totalReachableSkills: profession.totalReachableSkills
-  }));
+  const familiesById = new Map(
+    content.professionFamilies.map((family) => [family.id, family.name])
+  );
+  const professionsById = new Map(
+    content.professions.map((profession) => [profession.id, profession])
+  );
+  const societiesById = new Map(
+    content.societies.map((society) => [society.id, society])
+  );
+
+  return buildProfessionMatrixRows(content).map((profession) => {
+    const groupGrants = content.professionSkills
+      .filter(
+        (professionSkill) =>
+          professionSkill.professionId === profession.id &&
+          professionSkill.grantType === "group" &&
+          professionSkill.skillGroupId
+      )
+      .map((professionSkill) => {
+        const group = content.skillGroups.find(
+          (candidate) => candidate.id === professionSkill.skillGroupId
+        );
+        const memberships = professionSkill.skillGroupId
+          ? getGroupMemberships(content, professionSkill.skillGroupId)
+          : [];
+        const membershipRows = memberships
+          .map((membership) => {
+            const skill = content.skills.find((candidate) => candidate.id === membership.skillId);
+
+            if (!skill) {
+              return undefined;
+            }
+
+            return {
+              name: skill.name,
+              points: getWeightedSkillPoints(skill),
+              relevance: membership.relevance,
+              sortOrder: skill.sortOrder
+            };
+          })
+          .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry))
+          .sort((left, right) => left.sortOrder - right.sortOrder || left.name.localeCompare(right.name));
+
+        return {
+          coreSkills: membershipRows
+            .filter((membership) => membership.relevance === "core")
+            .map((membership) => membership.name),
+          isCore: professionSkill.isCore,
+          name: group?.name ?? professionSkill.skillGroupId ?? "",
+          optionalSkills: membershipRows
+            .filter((membership) => membership.relevance === "optional")
+            .map((membership) => membership.name),
+          relevance: professionSkill.isCore ? ("core" as const) : ("optional" as const),
+          weightedContentPoints: membershipRows.reduce(
+            (sum, membership) => sum + membership.points,
+            0
+          )
+        };
+      });
+    const professionDefinition = professionsById.get(profession.id);
+    const allowedSocietySlots = content.societyLevels
+      .filter((societyLevel) => societyLevel.professionIds.includes(profession.id))
+      .map((societyLevel) => ({
+        accessBand: societyLevel.societyLevel,
+        canonicalSocietyLevel: societiesById.get(societyLevel.societyId)?.societyLevel,
+        socialClass: societyLevel.socialClass,
+        societyName: societyLevel.societyName
+      }))
+      .sort(
+        (left, right) =>
+          (left.canonicalSocietyLevel ?? 99) - (right.canonicalSocietyLevel ?? 99) ||
+          left.societyName.localeCompare(right.societyName) ||
+          left.accessBand - right.accessBand ||
+          left.socialClass.localeCompare(right.socialClass)
+      );
+    const societyStageLevels = [
+      ...new Set(
+        allowedSocietySlots
+          .map((slot) => slot.canonicalSocietyLevel)
+          .filter((level): level is number => typeof level === "number")
+      )
+    ].sort((left, right) => left - right);
+
+    return {
+      allowedSocietyEntries: profession.allowedSocietyEntries,
+      allowedSocietySlots,
+      coreSkillGroups: uniqueSorted(
+        groupGrants.filter((grant) => grant.isCore).map((grant) => grant.name)
+      ),
+      description: profession.description,
+      directSkillExceptions: profession.directSkillExceptions,
+      directlyGrantedSkills: profession.directlyGrantedSkills,
+      familyId: professionDefinition?.familyId ?? "",
+      familyName: professionDefinition
+        ? familiesById.get(professionDefinition.familyId) ?? professionDefinition.familyId
+        : "",
+      groupFans: groupGrants
+        .map((grant) => ({
+          coreSkills: grant.coreSkills,
+          groupName: grant.name,
+          optionalSkills: grant.optionalSkills,
+          relevance: grant.relevance,
+          weightedContentPoints: grant.weightedContentPoints
+        }))
+        .sort(
+          (left, right) =>
+            (left.relevance === "core" ? 0 : 1) - (right.relevance === "core" ? 0 : 1) ||
+            left.groupName.localeCompare(right.groupName)
+        ),
+      grantedSkillGroups: profession.grantedSkillGroups,
+      id: profession.id,
+      name: profession.name,
+      notes: profession.notes,
+      optionalSkillGroups: uniqueSorted(
+        groupGrants.filter((grant) => !grant.isCore).map((grant) => grant.name)
+      ),
+      reachableGroupSkills: profession.reachableGroupSkills,
+      societyStageLevels,
+      societyStageSummary: summarizeSocietyStages(societyStageLevels),
+      totalReachableSkills: profession.totalReachableSkills
+    };
+  });
+}
+
+export function filterProfessionAdminRowsBySocietyStage(
+  rows: ProfessionAdminRow[],
+  societyStage: "all" | number | string
+): ProfessionAdminRow[] {
+  if (societyStage === "all") {
+    return rows;
+  }
+
+  const parsedSocietyStage =
+    typeof societyStage === "number" ? societyStage : Number(societyStage);
+
+  if (!Number.isInteger(parsedSocietyStage)) {
+    return rows;
+  }
+
+  return rows.filter((row) => row.societyStageLevels.includes(parsedSocietyStage));
 }
 
 export function buildSocietyAdminRows(content: CanonicalContent): SocietyAdminRow[] {
-  return buildSocietyMatrixRows(content).map((societyRow) => ({
-    baseEducation: societyRow.baseEducation,
-    directOnlySkills: societyRow.directOnlySkills,
-    directSkillGroups: societyRow.directSkillGroups,
-    directSkills: societyRow.directSkills,
-    dieRange: societyRow.dieRange,
-    effectiveProfessionSkills: societyRow.effectiveProfessionSkills,
-    id: societyRow.id,
-    notes: societyRow.notes,
-    reachableProfessions: societyRow.reachableProfessions,
-    society: societyRow.society,
-    societyClassName: societyRow.societyClassName,
-    societyLevel: societyRow.societyLevel,
-    totalEffectiveReachableSkills: societyRow.totalEffectiveReachableSkills
-  }));
+  return buildSocietyMatrixRows(content)
+    .map((societyRow) => {
+    const society = content.societies.find((candidate) => candidate.id === societyRow.id.split(":")[0]);
+    const literacyAccessSummary = summarizeAccessBands(
+      content.societyBandSkillAccess
+        .filter(
+          (entry) => entry.societyId === societyRow.id.split(":")[0] && entry.skillId === "literacy"
+        )
+        .map((entry) => entry.socialBand)
+    );
+    const baselineLanguages = (society?.baselineLanguageIds ?? [])
+      .map((languageId) => content.languages.find((candidate) => candidate.id === languageId)?.name ?? languageId);
+    const professionFans = societyRow.reachableProfessions.map((professionName) => {
+      const profession = content.professions.find((candidate) => candidate.name === professionName);
+
+      if (!profession) {
+        return {
+          coreGroups: [],
+          optionalGroups: [],
+          professionName,
+          reachableSkills: []
+        };
+      }
+
+      const grants = content.professionSkills.filter(
+        (candidate) =>
+          candidate.professionId === profession.id &&
+          candidate.grantType === "group" &&
+          candidate.skillGroupId
+      );
+      const mapGroup = (skillGroupId: string) => {
+        const group = content.skillGroups.find((candidate) => candidate.id === skillGroupId);
+        const memberships =
+          group?.skillMemberships?.length
+            ? group.skillMemberships
+            : content.skills
+                .filter((skill) => getSkillGroupIds(skill).includes(skillGroupId))
+                .map((skill) => ({
+                  relevance: skill.groupId === skillGroupId ? ("core" as const) : ("optional" as const),
+                  skillId: skill.id
+                }));
+
+        return {
+          coreSkills: memberships
+            .filter((membership) => membership.relevance === "core")
+            .map((membership) => content.skills.find((skill) => skill.id === membership.skillId)?.name ?? membership.skillId),
+          groupName: group?.name ?? skillGroupId,
+          optionalSkills: memberships
+            .filter((membership) => membership.relevance === "optional")
+            .map((membership) => content.skills.find((skill) => skill.id === membership.skillId)?.name ?? membership.skillId)
+        };
+      };
+      const resolvedPackage = resolveProfessionGrantPackage(content, profession.id);
+
+      return {
+        coreGroups: grants
+          .filter((grant) => grant.isCore && grant.skillGroupId)
+          .map((grant) => mapGroup(grant.skillGroupId ?? "")),
+        optionalGroups: grants
+          .filter((grant) => !grant.isCore && grant.skillGroupId)
+          .map((grant) => mapGroup(grant.skillGroupId ?? "")),
+        professionName,
+        reachableSkills: uniqueSorted(
+          resolvedPackage.reachableSkillIds.map(
+            (skillId) => content.skills.find((skill) => skill.id === skillId)?.name ?? skillId
+          )
+        )
+      };
+    });
+
+    return {
+      baseEducation: societyRow.baseEducation,
+      baselineLanguages,
+      canonicalSocietyLevel: society?.societyLevel,
+      directOnlySkills: societyRow.directOnlySkills,
+      directSkillGroups: societyRow.directSkillGroups,
+      directSkills: societyRow.directSkills,
+      dieRange: societyRow.dieRange,
+      effectiveProfessionSkills: societyRow.effectiveProfessionSkills,
+      glantriExamples: society?.glantriExamples,
+      historicalReference: society?.historicalReference,
+      id: societyRow.id,
+      literacyAccessSummary,
+      notes: societyRow.notes,
+      professionFans,
+      reachableProfessions: societyRow.reachableProfessions,
+      shortDescription: society?.shortDescription ?? "",
+      society: societyRow.society,
+      societyClassName: societyRow.societyClassName,
+      societyLevel: societyRow.societyLevel,
+      totalEffectiveReachableSkills: societyRow.totalEffectiveReachableSkills
+    };
+  })
+    .sort(
+      (left, right) =>
+        left.society.localeCompare(right.society) ||
+        (left.canonicalSocietyLevel ?? left.societyLevel) -
+          (right.canonicalSocietyLevel ?? right.societyLevel) ||
+        left.societyLevel - right.societyLevel
+    );
 }
 
 export function buildProfessionAccessRows(content: CanonicalContent): ProfessionAccessRow[] {

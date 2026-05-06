@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
-import type { EncounterSession } from "@glantri/domain";
+import type { EncounterSession, Scenario, ScenarioParticipant } from "@glantri/domain";
 import {
   advanceEncounterRound,
   addAdHocParticipant,
@@ -24,16 +24,35 @@ import {
   updateEncounterParticipantTurnData
 } from "@glantri/rules-engine";
 
-import { loadLocalEncounterContext } from "../../../../src/lib/encounters/loadLocalEncounterContext";
-import type { LocalCharacterRecord } from "../../../../src/lib/offline/glantriDexie";
+import {
+  addScenarioParticipantFromEntityOnServer,
+  loadEncounterById,
+  loadScenarioById,
+  loadServerCharacters,
+  loadScenarioParticipants,
+  updateEncounterOnServer,
+  type ServerCharacterRecord,
+} from "../../../../src/lib/api/localServiceClient";
+import {
+  buildGmEncounterParticipantRows,
+  deriveGmEncounterControlState,
+} from "../../../../src/lib/campaigns/gmEncounter";
+import { loadCanonicalContent } from "../../../../src/lib/content/loadCanonicalContent";
+import RememberedCampaignWorkspaceEffect from "../../../../src/lib/campaigns/RememberedCampaignWorkspaceEffect";
+import { buildCampaignWorkspaceHref } from "../../../../src/lib/campaigns/workspace";
 import { LocalEncounterRepository } from "../../../../src/lib/offline/repositories/localEncounterRepository";
-import { UNNAMED_CHARACTER_PLACEHOLDER } from "../../../../src/lib/offline/repositories/localCharacterRepository";
+import { LocalCharacterRepository, UNNAMED_CHARACTER_PLACEHOLDER } from "../../../../src/lib/offline/repositories/localCharacterRepository";
+import { GmRoleplayingEncounterScreen } from "./RoleplayEncounterScreens";
 
 interface EncounterDetailProps {
+  campaignId?: string;
+  embedded?: boolean;
   id: string;
+  scenarioId?: string;
 }
 
 const localEncounterRepository = new LocalEncounterRepository();
+const localCharacterRepository = new LocalCharacterRepository();
 const ACTION_OPTIONS = [
   { label: "No declaration", value: "none" },
   { label: "Attack", value: "attack" },
@@ -63,29 +82,71 @@ const DEFENSE_FOCUS_OPTIONS = [
   { label: "Shield side", value: "shield-side" }
 ] as const;
 
-function getCharacterName(record: LocalCharacterRecord): string {
-  return record.build.name.trim() || UNNAMED_CHARACTER_PLACEHOLDER;
+type EncounterCharacterRecord = Pick<ServerCharacterRecord, "build" | "id" | "name">;
+
+function getCharacterName(record: EncounterCharacterRecord): string {
+  return record.build.name.trim() || record.name.trim() || UNNAMED_CHARACTER_PLACEHOLDER;
 }
 
 function rollPercentile(): number {
   return Math.floor(Math.random() * 100) + 1;
 }
 
-export default function EncounterDetail({ id }: EncounterDetailProps) {
+export default function EncounterDetail({
+  campaignId,
+  embedded = false,
+  id,
+  scenarioId
+}: EncounterDetailProps) {
   const [adHocName, setAdHocName] = useState("");
-  const [characters, setCharacters] = useState<LocalCharacterRecord[]>([]);
-  const [content, setContent] = useState<
-    Awaited<ReturnType<typeof loadLocalEncounterContext>>["content"] | undefined
-  >();
+  const [characters, setCharacters] = useState<EncounterCharacterRecord[]>([]);
+  const [content, setContent] = useState<Awaited<ReturnType<typeof loadCanonicalContent>>>();
   const [encounter, setEncounter] = useState<EncounterSession>();
   const [feedback, setFeedback] = useState<string>();
   const [loading, setLoading] = useState(true);
   const [selectedCharacterId, setSelectedCharacterId] = useState("");
+  const [scenarioParticipants, setScenarioParticipants] = useState<ScenarioParticipant[]>([]);
+  const [scenarioRecord, setScenarioRecord] = useState<Scenario | null>(null);
 
   useEffect(() => {
     let cancelled = false;
+    const loadContext = async () => {
+      if (campaignId && scenarioId) {
+        const [nextCharacters, nextContent, nextEncounter] = await Promise.all([
+          loadServerCharacters(),
+          loadCanonicalContent(),
+          loadEncounterById(id),
+        ]);
 
-    loadLocalEncounterContext(id)
+        return {
+          characters: nextCharacters.map((character) => ({
+            build: character.build,
+            id: character.id,
+            name: character.name,
+          })),
+          content: nextContent,
+          encounter: nextEncounter,
+        };
+      }
+
+      const [nextCharacters, nextContent, nextEncounter] = await Promise.all([
+        localCharacterRepository.list(),
+        loadCanonicalContent(),
+        localEncounterRepository.get(id),
+      ]);
+
+      return {
+        characters: nextCharacters.map((character) => ({
+          build: character.build,
+          id: character.id,
+          name: character.build.name,
+        })),
+        content: nextContent,
+        encounter: nextEncounter,
+      };
+    };
+
+    loadContext()
       .then((result) => {
         if (cancelled) {
           return;
@@ -105,7 +166,47 @@ export default function EncounterDetail({ id }: EncounterDetailProps) {
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [campaignId, id, scenarioId]);
+
+  useEffect(() => {
+    if (!scenarioId) {
+      setScenarioParticipants([]);
+      setScenarioRecord(null);
+      return;
+    }
+
+    const activeScenarioId = scenarioId;
+    let cancelled = false;
+
+    async function refreshScenarioWorkspace() {
+      try {
+        const [nextScenario, nextParticipants] = await Promise.all([
+          loadScenarioById(activeScenarioId),
+          loadScenarioParticipants(activeScenarioId),
+        ]);
+
+        if (cancelled) {
+          return;
+        }
+
+        setScenarioRecord(nextScenario);
+        setScenarioParticipants(nextParticipants);
+      } catch {
+        if (cancelled) {
+          return;
+        }
+
+        setScenarioRecord(null);
+        setScenarioParticipants([]);
+      }
+    }
+
+    void refreshScenarioWorkspace();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [scenarioId]);
 
   const characterBuildsById = useMemo(
     () => Object.fromEntries(characters.map((character) => [character.id, character.build])),
@@ -123,9 +224,49 @@ export default function EncounterDetail({ id }: EncounterDetailProps) {
       session: encounter
     });
   }, [characters, content, encounter]);
+  const isNestedScenarioFlow = Boolean(campaignId && scenarioId);
+  const gmEncounterRows = useMemo(
+    () =>
+      isNestedScenarioFlow
+        ? buildGmEncounterParticipantRows({
+            encounterParticipants: encounter?.participants ?? [],
+            scenarioParticipants,
+          })
+        : [],
+    [encounter?.participants, isNestedScenarioFlow, scenarioParticipants],
+  );
+  const gmEncounterControlState = useMemo(
+    () =>
+      deriveGmEncounterControlState({
+        rows: gmEncounterRows,
+        scenario: scenarioRecord,
+      }),
+    [gmEncounterRows, scenarioRecord],
+  );
+  const backHref = isNestedScenarioFlow
+    ? buildCampaignWorkspaceHref({
+        campaignId: campaignId as string,
+        scenarioId: scenarioId as string,
+        tab: "scenario",
+      })
+    : "/encounters";
+  const playerCombatHref = isNestedScenarioFlow
+    ? buildCampaignWorkspaceHref({
+        campaignId: campaignId as string,
+        encounterId: id,
+        scenarioId: scenarioId as string,
+        tab: "player-encounter",
+      })
+    : undefined;
 
   async function persistEncounter(nextEncounter: EncounterSession, message?: string) {
-    const savedEncounter = await localEncounterRepository.save(nextEncounter);
+    const savedEncounter =
+      campaignId && scenarioId
+        ? await updateEncounterOnServer({
+            encounterId: nextEncounter.id,
+            session: nextEncounter,
+          })
+        : await localEncounterRepository.save(nextEncounter);
     setEncounter(savedEncounter);
 
     if (message) {
@@ -162,12 +303,29 @@ export default function EncounterDetail({ id }: EncounterDetailProps) {
       return;
     }
 
+    const trimmedName = adHocName.trim();
+
+    if (isNestedScenarioFlow && scenarioId) {
+      await addScenarioParticipantFromEntityOnServer({
+        entityInput: {
+          kind: "npc",
+          name: trimmedName
+        },
+        isTemporary: true,
+        joinSource: "gm_added",
+        role: "npc",
+        scenarioId
+      });
+    }
+
     await persistEncounter(
       addAdHocParticipant({
-        label: adHocName,
+        label: trimmedName,
         session: encounter
       }),
-      `Added ${adHocName.trim()} to the encounter.`
+      isNestedScenarioFlow
+        ? `Added ${trimmedName} to the encounter and scenario participants.`
+        : `Added ${trimmedName} to the encounter.`
     );
     setAdHocName("");
   }
@@ -302,8 +460,40 @@ export default function EncounterDetail({ id }: EncounterDetailProps) {
     return (
       <section style={{ display: "grid", gap: "1rem", maxWidth: 720 }}>
         <h1 style={{ margin: 0 }}>Encounter not found</h1>
-        <Link href="/encounters">Back to encounters</Link>
+        <Link href={backHref}>
+          {isNestedScenarioFlow ? "Back to scenario encounters" : "Back to encounters"}
+        </Link>
       </section>
+    );
+  }
+
+  if (
+    (campaignId && encounter.campaignId && encounter.campaignId !== campaignId) ||
+    (scenarioId && encounter.scenarioId && encounter.scenarioId !== scenarioId)
+  ) {
+    return (
+      <section style={{ display: "grid", gap: "1rem", maxWidth: 720 }}>
+        <h1 style={{ margin: 0 }}>Encounter not found</h1>
+        <div>This encounter does not belong to the current campaign/scenario flow.</div>
+        <Link href={backHref}>
+          {isNestedScenarioFlow ? "Back to scenario encounters" : "Back to encounters"}
+        </Link>
+      </section>
+    );
+  }
+
+  if (encounter.kind === "roleplay") {
+    return (
+      <GmRoleplayingEncounterScreen
+        campaignId={campaignId}
+        content={content}
+        embedded={embedded}
+        encounter={encounter}
+        onPersist={persistEncounter}
+        scenario={scenarioRecord}
+        scenarioId={scenarioId}
+        scenarioParticipants={scenarioParticipants}
+      />
     );
   }
 
@@ -311,15 +501,40 @@ export default function EncounterDetail({ id }: EncounterDetailProps) {
 
   return (
     <section style={{ display: "grid", gap: "1rem", maxWidth: 1040 }}>
-      <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
-        <Link href="/encounters">Back to encounters</Link>
-      </div>
+      {isNestedScenarioFlow ? (
+        <RememberedCampaignWorkspaceEffect
+          campaignId={campaignId as string}
+          encounterId={id}
+          scenarioId={scenarioId as string}
+          tab="gm-encounter"
+        />
+      ) : null}
+      {!embedded ? (
+        <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
+          <Link href={backHref}>
+            {isNestedScenarioFlow ? "Back to scenario workspace" : "Back to encounters"}
+          </Link>
+          {isNestedScenarioFlow ? (
+            <Link
+              href={buildCampaignWorkspaceHref({
+                campaignId: campaignId as string,
+                scenarioId: scenarioId as string,
+                tab: "scenario",
+              })}
+            >
+              Back to scenario
+            </Link>
+          ) : null}
+          {playerCombatHref ? <Link href={playerCombatHref}>Open player combat screen</Link> : null}
+        </div>
+      ) : null}
 
       <div>
         <h1 style={{ marginBottom: "0.5rem" }}>{encounter.title}</h1>
         <p style={{ margin: 0 }}>
-          Local-first encounter shell with participant summaries, round declarations, manual turn
-          ordering, and position/orientation placeholders for future combat resolution work.
+          {isNestedScenarioFlow
+            ? "GM encounter management for this scenario, with round scaffolding, declarations, turn order, and the handoff point to the player combat screen."
+            : "Legacy local encounter shell with participant summaries, round declarations, manual turn ordering, and position/orientation placeholders for future combat resolution work."}
         </p>
       </div>
 
@@ -333,6 +548,131 @@ export default function EncounterDetail({ id }: EncounterDetailProps) {
           }}
         >
           {feedback}
+        </section>
+      ) : null}
+
+      {isNestedScenarioFlow ? (
+        <section
+          style={{
+            background: "#f6f5ef",
+            border: "1px solid #d9ddd8",
+            borderRadius: 12,
+            display: "grid",
+            gap: "0.9rem",
+            padding: "1rem",
+          }}
+        >
+          <div
+            style={{
+              alignItems: "center",
+              display: "flex",
+              flexWrap: "wrap",
+              gap: "0.75rem",
+              justifyContent: "space-between",
+            }}
+          >
+            <div style={{ display: "grid", gap: "0.25rem" }}>
+              <h2 style={{ margin: 0 }}>GM combat test view</h2>
+              <div style={{ color: "#5e5a50" }}>
+                Shared scenario participant declarations for the canonical GM encounter workspace.
+              </div>
+            </div>
+            <button
+              disabled={gmEncounterControlState.disabled}
+              style={{
+                background: gmEncounterControlState.disabled ? "#e4e0d6" : "#ded4b1",
+                border: "1px solid #bdb39a",
+                borderRadius: 10,
+                color: gmEncounterControlState.disabled ? "#8a8477" : "#2f2415",
+                cursor: gmEncounterControlState.disabled ? "not-allowed" : "pointer",
+                fontWeight: 700,
+                minHeight: 44,
+                padding: "0.7rem 1rem",
+              }}
+              type="button"
+            >
+              {gmEncounterControlState.label}
+            </button>
+          </div>
+
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ borderCollapse: "collapse", minWidth: 980, width: "100%" }}>
+              <thead>
+                <tr>
+                  <th rowSpan={2} style={gmEncounterHeaderCellStyle}>
+                    Participant
+                  </th>
+                  <th colSpan={2} style={gmEncounterHeaderCellStyle}>
+                    Selected actions
+                  </th>
+                  <th colSpan={4} style={gmEncounterHeaderCellStyle}>
+                    Phase 1
+                  </th>
+                  <th colSpan={4} style={gmEncounterHeaderCellStyle}>
+                    Phase 2
+                  </th>
+                </tr>
+                <tr>
+                  {[
+                    { id: "selected-action", label: "Action" },
+                    { id: "selected-target", label: "Target" },
+                    { id: "phase-one-action", label: "Action" },
+                    { id: "phase-one-initiative", label: "Initiative" },
+                    { id: "phase-one-adjustments", label: "Adjustments" },
+                    { id: "phase-one-results", label: "Results" },
+                    { id: "phase-two-action", label: "Action" },
+                    { id: "phase-two-initiative", label: "Initiative" },
+                    { id: "phase-two-adjustments", label: "Adjustments" },
+                    { id: "phase-two-results", label: "Results" },
+                  ].map((column) => (
+                    <th key={column.id} style={gmEncounterHeaderCellStyle}>
+                      {column.label}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {gmEncounterRows.map((row) => (
+                  <tr key={row.encounterParticipantId}>
+                    <td style={gmEncounterBodyCellStyle}>{row.displayName}</td>
+                    <td style={gmEncounterBodyCellStyle}>{row.selectedAction}</td>
+                    <td style={gmEncounterBodyCellStyle}>{row.target}</td>
+                    <td style={gmEncounterBodyCellStyle}>{row.phaseOneAction}</td>
+                    <td style={gmEncounterBodyCellStyle}>{row.phaseOneInitiative}</td>
+                    <td style={gmEncounterBodyCellStyle}>{row.phaseOneAdjustments}</td>
+                    <td style={gmEncounterBodyCellStyle}>{row.phaseOneResults}</td>
+                    <td style={gmEncounterBodyCellStyle}>{row.phaseTwoAction}</td>
+                    <td style={gmEncounterBodyCellStyle}>{row.phaseTwoInitiative}</td>
+                    <td style={gmEncounterBodyCellStyle}>{row.phaseTwoAdjustments}</td>
+                    <td style={gmEncounterBodyCellStyle}>{row.phaseTwoResults}</td>
+                  </tr>
+                ))}
+                {gmEncounterRows.length === 0 ? (
+                  <tr>
+                    <td colSpan={11} style={gmEncounterEmptyCellStyle}>
+                      No encounter participants are available yet.
+                    </td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
+
+          <section
+            style={{
+              background: "#fffdf8",
+              border: "1px solid #d9ddd8",
+              borderRadius: 10,
+              display: "grid",
+              gap: "0.35rem",
+              padding: "0.85rem",
+            }}
+          >
+            <strong>Round tracker</strong>
+            <div>Round: {scenarioRecord?.liveState?.roundNumber ?? encounterView.currentRound}</div>
+            <div>Phase: {scenarioRecord?.liveState?.phase ?? 1}</div>
+            <div>Combat status: {scenarioRecord?.liveState?.combatStatus ?? "not_started"}</div>
+          </section>
         </section>
       ) : null}
 
@@ -1157,3 +1497,24 @@ export default function EncounterDetail({ id }: EncounterDetailProps) {
     </section>
   );
 }
+
+const gmEncounterHeaderCellStyle = {
+  background: "#ece7d8",
+  border: "1px solid #d9ddd8",
+  fontSize: "0.92rem",
+  padding: "0.6rem 0.7rem",
+  textAlign: "left",
+} as const;
+
+const gmEncounterBodyCellStyle = {
+  border: "1px solid #d9ddd8",
+  fontSize: "0.94rem",
+  padding: "0.55rem 0.7rem",
+  verticalAlign: "top",
+} as const;
+
+const gmEncounterEmptyCellStyle = {
+  ...gmEncounterBodyCellStyle,
+  color: "#5e5a50",
+  textAlign: "center",
+} as const;

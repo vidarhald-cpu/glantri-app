@@ -1,11 +1,15 @@
 import type {
+  CivilizationDefinition,
   CharacterBuild,
+  CharacterChargenSelections,
   CharacterProgression,
   CharacterSkill,
   CharacterSkillGroup,
   CharacterSpecialization,
+  ChargenRuleSetParameters,
   ChargenMode,
   GlantriCharacteristicKey,
+  LanguageDefinition,
   ProfessionDefinition,
   ProfessionFamilyDefinition,
   ProfessionSkillMap,
@@ -13,33 +17,57 @@ import type {
   SkillDefinition,
   SkillGroupDefinition,
   SkillSpecialization,
+  SocietyBandSkillAccess,
+  SocietyDefinition,
   SocietyLevelAccess
 } from "@glantri/domain";
-import { getSkillGroupIds } from "@glantri/domain";
+import {
+  getAccessibleFoundationalSkillIdsForSocietyBand,
+  getCharacterSkillKey,
+  normalizeCharacterSkillLanguageName,
+  getSkillGroupIds
+} from "@glantri/domain";
 
 import { calculateEducation, type EducationBreakdown } from "../education/calculateEducation";
 import { resolveEffectiveProfessionPackage } from "../professions/resolveEffectiveProfessionPackage";
 import { calculateGroupLevel } from "../skills/calculateGroupLevel";
 import { calculateSpecializationLevel } from "../skills/calculateSpecializationLevel";
+import {
+  applyRelationshipMinimumGrants,
+  resolveRelationshipMinimumGrants,
+  type SkillRelationshipSourceType
+} from "../skills/deriveSkillRelationships";
 import { evaluateSkillSelection } from "../skills/evaluateSkillSelection";
+import { getActiveSkillGroupIds } from "../skills/getActiveSkillGroupIds";
 import { selectBestSkillGroupContribution } from "../skills/selectBestSkillGroupContribution";
+import { createChargenMethodPolicy, STANDARD_CHARGEN_METHOD_POLICY } from "./policy";
+import {
+  buildChargenLanguageSelectionSummary,
+  buildChargenSelectableSkillSummary,
+  syncChargenLanguageSkillRows,
+  syncChargenMotherTongueSkillRow,
+  syncChargenSelectionSkillRows
+} from "./selectionStructure";
+import { getResolvedProfileStats } from "./statResolution";
 
-const GROUP_POINT_COST = 4;
 const ORDINARY_SKILL_POINT_COST = 2;
 const SECONDARY_SKILL_POINT_COST = 1;
+const LEGACY_GROUP_POINT_COST = 4;
 const NEW_SPECIALIZATION_COST = 4;
 const EXISTING_SPECIALIZATION_COST = 2;
-const DEFAULT_PRIMARY_POOL_TOTAL = 60;
-const DEFAULT_SECONDARY_POOL_TOTAL = 0;
-const ORDINARY_POOL_TOTAL = 60;
 const LITERACY_SKILL_ID = "literacy";
+const LANGUAGE_SKILL_ID = "language";
 
 interface CanonicalContentShape {
+  civilizations?: CivilizationDefinition[];
+  languages?: LanguageDefinition[];
   professionFamilies: ProfessionFamilyDefinition[];
   professionSkills: ProfessionSkillMap[];
   professions: ProfessionDefinition[];
   skillGroups: SkillGroupDefinition[];
   skills: SkillDefinition[];
+  societyBandSkillAccess?: SocietyBandSkillAccess[];
+  societies?: SocietyDefinition[];
   societyLevels: SocietyLevelAccess[];
   specializations: SkillSpecialization[];
 }
@@ -50,6 +78,7 @@ export interface SpendPrimaryPointInput {
   progression: CharacterProgression;
   societyId?: string;
   societyLevel: number;
+  targetLanguageName?: string;
   targetId: string;
   targetType: "group" | "skill";
 }
@@ -61,6 +90,7 @@ export interface SpendSecondaryPointInput {
   progression: CharacterProgression;
   societyId?: string;
   societyLevel: number;
+  targetLanguageName?: string;
   targetId: string;
   targetType: "skill" | "specialization";
 }
@@ -72,8 +102,15 @@ export interface AllocateChargenPointInput {
   progression: CharacterProgression;
   societyId?: string;
   societyLevel: number;
+  targetLanguageName?: string;
   targetId: string;
   targetType: "group" | "skill";
+}
+
+export interface ChargenRuleSetInput {
+  id?: string;
+  name?: string;
+  parameters?: Partial<ChargenRuleSetParameters>;
 }
 
 export interface SpendPointResult {
@@ -95,11 +132,21 @@ export interface ChargenGroupView {
 
 export interface ChargenSkillView {
   category: "ordinary" | "secondary";
+  categoryId?: SkillDefinition["categoryId"];
   contributingGroupId?: string;
+  relationshipGrantedPreviewLevel?: number;
+  relationshipGrantedSkillLevel?: number;
+  relationshipSourceSkillId?: string;
+  relationshipSourceSkillName?: string;
+  relationshipSourceType?: SkillRelationshipSourceType;
+  // Canonical workbook-equivalent combat skill XP. This is the full skill XP
+  // used by combat math, combining the best contributing group with direct
+  // skill ranks, before any linked-stat average is added.
   effectiveSkillNumber: number;
   groupId: string;
   groupIds: string[];
   groupLevel: number;
+  languageName?: string;
   linkedStatAverage: number;
   literacyWarning?: string;
   name: string;
@@ -107,11 +154,53 @@ export interface ChargenSkillView {
   requiresLiteracy: SkillDefinition["requiresLiteracy"];
   secondaryRanks: number;
   skillId: string;
+  skillKey: string;
+  sourceTag?: CharacterSkill["sourceTag"];
   specificSkillLevel: number;
   totalSkill: number;
 }
 
+export function getCombatSkillXp(skill: Pick<ChargenSkillView, "effectiveSkillNumber">): number {
+  return skill.effectiveSkillNumber;
+}
+
+export function getChargenSkillContributionForGroup(input: {
+  content: CanonicalContentShape;
+  groupId: string;
+  progression: CharacterProgression;
+  skill: SkillDefinition;
+}): number {
+  const progression = recalculateProgression(structuredClone(input.progression));
+  const activeGroupIds = new Set(
+    getActiveSkillGroupIds({
+      progression,
+      skill: input.skill,
+      skillGroups: input.content.skillGroups
+    })
+  );
+
+  if (!activeGroupIds.has(input.groupId)) {
+    return 0;
+  }
+
+  const group = progression.skillGroups.find((candidate) => candidate.groupId === input.groupId);
+
+  if (!group || group.ranks <= 0) {
+    return 0;
+  }
+
+  return calculateGroupLevel({
+    gms: group.gms,
+    ranks: group.ranks
+  });
+}
+
 export interface ChargenSpecializationView {
+  relationshipGrantedPreviewLevel?: number;
+  relationshipGrantedSourceSkillId?: string;
+  relationshipGrantedSourceSkillName?: string;
+  relationshipGrantedSourceType?: "specialization-bridge-parent";
+  relationshipGrantedSpecializationLevel?: number;
   effectiveSpecializationNumber: number;
   name: string;
   parentSkillName: string;
@@ -133,6 +222,7 @@ export interface ChargenDraftView {
 export type ChargenSkillAccessSource =
   | "profession-group"
   | "profession-skill"
+  | "society-foundational-skill"
   | "society-skill";
 
 export interface ChargenSkillAccessSummary {
@@ -143,10 +233,12 @@ export interface ChargenSkillAccessSummary {
 }
 
 export interface ReviewChargenDraftInput {
+  civilizationId?: string;
   content: CanonicalContentShape;
   professionId?: string;
   profile?: RolledCharacterProfile;
   progression: CharacterProgression;
+  ruleSet?: ChargenRuleSetInput;
   socialClass?: string;
   societyId?: string;
   societyLevel?: number;
@@ -187,11 +279,13 @@ function createEmptyGroup(groupId: string): CharacterSkillGroup {
 function createEmptySkill(skill: SkillDefinition): CharacterSkill {
   return {
     category: skill.category,
+    categoryId: skill.categoryId,
     grantedRanks: 0,
     groupId: getSkillDefinitionGroupIds(skill)[0],
     level: 0,
     primaryRanks: 0,
     ranks: 0,
+    relationshipGrantedRanks: 0,
     secondaryRanks: 0,
     skillId: skill.id
   };
@@ -201,6 +295,7 @@ function createEmptySpecialization(specialization: SkillSpecialization): Charact
   return {
     level: 0,
     ranks: 0,
+    relationshipGrantedRanks: 0,
     secondaryRanks: 0,
     skillId: specialization.skillId,
     specializationId: specialization.id
@@ -225,47 +320,82 @@ function normalizeGroup(group: CharacterSkillGroup): CharacterSkillGroup {
 function normalizeSkill(skill: CharacterSkill): CharacterSkill {
   const grantedRanks = skill.grantedRanks ?? 0;
   const primaryRanks = skill.primaryRanks ?? 0;
+  const relationshipGrantedRanks = skill.relationshipGrantedRanks ?? 0;
   const secondaryRanks = skill.secondaryRanks ?? 0;
 
   return {
     ...skill,
     category: skill.category ?? "ordinary",
+    categoryId: skill.categoryId,
     grantedRanks,
     groupId: skill.groupId,
+    languageName: normalizeCharacterSkillLanguageName(skill.languageName),
     level: skill.level ?? 0,
     primaryRanks,
-    ranks: grantedRanks + primaryRanks + secondaryRanks,
-    secondaryRanks
+    ranks: grantedRanks + primaryRanks + relationshipGrantedRanks + secondaryRanks,
+    relationshipGrantedRanks,
+    secondaryRanks,
+    sourceTag: skill.sourceTag
   };
 }
 
 function normalizeSpecialization(
   specialization: CharacterSpecialization
 ): CharacterSpecialization {
+  const relationshipGrantedRanks = specialization.relationshipGrantedRanks ?? 0;
   const secondaryRanks = specialization.secondaryRanks ?? 0;
 
   return {
     ...specialization,
     level: specialization.level ?? 0,
-    ranks: secondaryRanks,
+    ranks: relationshipGrantedRanks + secondaryRanks,
+    relationshipGrantedRanks,
     secondaryRanks,
     skillId: specialization.skillId
   };
 }
 
 function recalculateProgression(progression: CharacterProgression): CharacterProgression {
+  const chargenSelections: CharacterChargenSelections = {
+    selectedLanguageIds: [...new Set(progression.chargenSelections?.selectedLanguageIds ?? [])],
+    selectedSkillIds: [...new Set(progression.chargenSelections?.selectedSkillIds ?? [])],
+    selectedGroupSlots: [
+      ...new Map(
+        (progression.chargenSelections?.selectedGroupSlots ?? []).map((selection) => [
+          `${selection.groupId}:${selection.slotId}`,
+          {
+            groupId: selection.groupId,
+            selectedSkillIds: [...new Set(selection.selectedSkillIds ?? [])],
+            slotId: selection.slotId
+          }
+        ])
+      ).values()
+    ]
+  };
+
   return {
     ...progression,
     chargenMode: progression.chargenMode ?? "standard",
+    chargenSelections,
     educationPoints: progression.educationPoints ?? 0,
     primaryPoolSpent: progression.primaryPoolSpent ?? 0,
-    primaryPoolTotal: progression.primaryPoolTotal ?? DEFAULT_PRIMARY_POOL_TOTAL,
+    primaryPoolTotal:
+      progression.primaryPoolTotal ?? STANDARD_CHARGEN_METHOD_POLICY.primaryPoolTotal,
     secondaryPoolSpent: progression.secondaryPoolSpent ?? 0,
-    secondaryPoolTotal: progression.secondaryPoolTotal ?? DEFAULT_SECONDARY_POOL_TOTAL,
+    secondaryPoolTotal:
+      progression.secondaryPoolTotal ?? STANDARD_CHARGEN_METHOD_POLICY.secondaryPoolTotal,
+    flexiblePointFactor:
+      progression.flexiblePointFactor ?? STANDARD_CHARGEN_METHOD_POLICY.flexiblePointFactor,
     skillGroups: progression.skillGroups.map(normalizeGroup),
     skills: progression.skills.map(normalizeSkill),
-    specializations: progression.specializations.map(normalizeSpecialization)
+    specializations: progression.specializations
+      .map(normalizeSpecialization)
+      .filter((specialization) => specialization.skillId !== LANGUAGE_SKILL_ID)
   };
+}
+
+function getRuleSetParameters(ruleSet?: ChargenRuleSetInput): Partial<ChargenRuleSetParameters> {
+  return ruleSet?.parameters ?? {};
 }
 
 function getSocietyAccess(
@@ -349,6 +479,13 @@ function buildChargenSkillAccessSummaryInternal(input: {
   ]);
   const societySkillIds =
     getSocietyAccess(input.content, input.societyLevel, input.societyId)?.skillIds ?? [];
+  const foundationalSkillIds = getAccessibleFoundationalSkillIdsForSocietyBand(
+    input.content.societyBandSkillAccess ?? [],
+    {
+      socialBand: input.societyLevel,
+      societyId: input.societyId ?? ""
+    }
+  );
   const skillSources = new Map<string, Set<ChargenSkillAccessSource>>();
 
   for (const skill of input.content.skills) {
@@ -364,6 +501,12 @@ function buildChargenSkillAccessSummaryInternal(input: {
   for (const skillId of societySkillIds) {
     const sources = skillSources.get(skillId) ?? new Set<ChargenSkillAccessSource>();
     sources.add("society-skill");
+    skillSources.set(skillId, sources);
+  }
+
+  for (const skillId of foundationalSkillIds) {
+    const sources = skillSources.get(skillId) ?? new Set<ChargenSkillAccessSource>();
+    sources.add("society-foundational-skill");
     skillSources.set(skillId, sources);
   }
 
@@ -492,6 +635,44 @@ function getBestPurchasedParentGroup(
   return candidates.find((candidate) => candidate.contribution.groupId === bestContribution?.groupId)?.group;
 }
 
+function getBestActiveGroupContribution(input: {
+  content: CanonicalContentShape;
+  groupViewById: Map<string, ChargenGroupView>;
+  progression: CharacterProgression;
+  skill: SkillDefinition;
+}):
+  | {
+      groupId: string;
+      groupLevel: number;
+      name: string;
+      sortOrder: number;
+    }
+  | undefined {
+  return selectBestSkillGroupContribution(
+    getActiveSkillGroupIds({
+      progression: input.progression,
+      skill: input.skill,
+      skillGroups: input.content.skillGroups
+    })
+      .map((groupId) => {
+        const groupView = input.groupViewById.get(groupId);
+        const groupDefinition = getSkillGroupDefinition(input.content, groupId);
+
+        if (!groupView) {
+          return null;
+        }
+
+        return {
+          groupId,
+          groupLevel: groupView.groupLevel,
+          name: groupView.name,
+          sortOrder: groupDefinition?.sortOrder ?? Number.MAX_SAFE_INTEGER
+        };
+      })
+      .filter(isDefined)
+  );
+}
+
 function getSpecializationById(
   content: CanonicalContentShape,
   specializationId: string
@@ -503,27 +684,96 @@ function getLinkedStatAverage(
   profile: RolledCharacterProfile | undefined,
   skill: SkillDefinition
 ): number {
-  if (!profile) {
+  const resolvedStats = getResolvedProfileStats(profile);
+
+  if (!resolvedStats) {
     return 0;
   }
 
-  const values = skill.linkedStats.map(
-    (stat) => profile.rolledStats[stat as GlantriCharacteristicKey] ?? 0
-  );
+  const values = skill.linkedStats.map((stat) => resolvedStats[stat as GlantriCharacteristicKey] ?? 0);
   const total = values.reduce((sum, value) => sum + value, 0);
 
   return Math.floor(total / values.length);
 }
 
-function getSkillSpendCost(skill: SkillDefinition, exists: boolean): number {
-  const baseCost =
-    skill.category === "secondary" ? SECONDARY_SKILL_POINT_COST : ORDINARY_SKILL_POINT_COST;
-
-  return exists ? baseCost : baseCost * 2;
+function getSkillSpendCost(skill: SkillDefinition): number {
+  return skill.category === "secondary" ? SECONDARY_SKILL_POINT_COST : ORDINARY_SKILL_POINT_COST;
 }
 
-function getGroupSpendCost(exists: boolean): number {
-  return exists ? GROUP_POINT_COST : GROUP_POINT_COST * 2;
+function getSelectedSkillIdsForGroupSlot(input: {
+  groupId: string;
+  progression: CharacterProgression;
+  slotId: string;
+}): string[] {
+  return (
+    input.progression.chargenSelections?.selectedGroupSlots.find(
+      (selection) => selection.groupId === input.groupId && selection.slotId === input.slotId
+    )?.selectedSkillIds ?? []
+  );
+}
+
+function getActiveGroupSkillCost(input: {
+  content: CanonicalContentShape;
+  groupId: string;
+  progression: CharacterProgression;
+}): { cost?: number; error?: string } {
+  const group = input.content.skillGroups.find((candidate) => candidate.id === input.groupId);
+
+  if (!group) {
+    return { error: "Skill group definition not found." };
+  }
+
+  const skillsById = new Map(input.content.skills.map((skill) => [skill.id, skill]));
+  const fixedGroupSkillIds = (group.skillMemberships ?? []).map((membership) => membership.skillId);
+  const hasSelectionSlots = (group.selectionSlots?.length ?? 0) > 0;
+  const activeSkillIds = new Set(
+    fixedGroupSkillIds.length > 0
+      ? fixedGroupSkillIds
+      : hasSelectionSlots
+        ? []
+      : input.content.skills
+          .filter((skill) => getSkillGroupIds(skill).includes(input.groupId))
+          .map((skill) => skill.id)
+  );
+
+  for (const slot of group.selectionSlots ?? []) {
+    const candidateSkillIds = new Set(slot.candidateSkillIds);
+    const selectedSkillIds = getSelectedSkillIdsForGroupSlot({
+      groupId: input.groupId,
+      progression: input.progression,
+      slotId: slot.id
+    }).filter((skillId) => candidateSkillIds.has(skillId));
+
+    if (slot.required && selectedSkillIds.length < slot.chooseCount) {
+      return { error: `${group.name}: ${slot.label}.` };
+    }
+
+    for (const skillId of selectedSkillIds.slice(0, slot.chooseCount)) {
+      activeSkillIds.add(skillId);
+    }
+  }
+
+  const totalIndividualCost = [...activeSkillIds].reduce((total, skillId) => {
+    const skill = skillsById.get(skillId);
+
+    return skill ? total + getSkillSpendCost(skill) : total;
+  }, 0);
+
+  if (totalIndividualCost <= 0) {
+    return { error: "This skill group has no active skills to price." };
+  }
+
+  return {
+    cost: Math.max(1, Math.floor(totalIndividualCost * 0.6))
+  };
+}
+
+export function getActiveGroupSkillPurchaseCost(input: {
+  content: CanonicalContentShape;
+  groupId: string;
+  progression: CharacterProgression;
+}): { cost?: number; error?: string } {
+  return getActiveGroupSkillCost(input);
 }
 
 function getSpecializationSpendCost(exists: boolean): number {
@@ -547,17 +797,65 @@ function ensureGroupExists(
 
 function ensureSkillExists(
   progression: CharacterProgression,
-  skill: SkillDefinition
+  skill: SkillDefinition,
+  variant?: Pick<CharacterSkill, "languageName">
 ): CharacterSkill {
-  const existing = progression.skills.find((item) => item.skillId === skill.id);
+  const existing = progression.skills.find(
+    (item) =>
+      getCharacterSkillKey(item) ===
+      getCharacterSkillKey({
+        languageName: variant?.languageName,
+        skillId: skill.id
+      })
+  );
 
   if (existing) {
     return existing;
   }
 
   const created = createEmptySkill(skill);
+  created.languageName = variant?.languageName;
   progression.skills.push(created);
   return created;
+}
+
+function getProgressionSkillRows(
+  progression: CharacterProgression,
+  skillId: string
+): CharacterSkill[] {
+  return progression.skills.filter((skill) => skill.skillId === skillId);
+}
+
+function getPreferredProgressionSkillRow(
+  progression: CharacterProgression,
+  skillId: string
+): CharacterSkill | undefined {
+  const rows = getProgressionSkillRows(progression, skillId);
+
+  return (
+    rows.find((skill) => skill.sourceTag === "mother-tongue") ??
+    rows.find((skill) => skill.languageName) ??
+    rows[0]
+  );
+}
+
+function getTargetedProgressionSkillRow(input: {
+  progression: CharacterProgression;
+  skillId: string;
+  targetLanguageName?: string;
+}): CharacterSkill | undefined {
+  if (input.targetLanguageName) {
+    return input.progression.skills.find(
+      (skill) =>
+        getCharacterSkillKey(skill) ===
+        getCharacterSkillKey({
+          languageName: input.targetLanguageName,
+          skillId: input.skillId
+        })
+    );
+  }
+
+  return getPreferredProgressionSkillRow(input.progression, input.skillId);
 }
 
 function ensureSpecializationExists(
@@ -609,29 +907,49 @@ function getEvaluationMessages(input: {
   return [...input.warnings, ...input.advisories].map((item) => item.message);
 }
 
-export function getOrdinaryPoolTotal(): number {
-  return ORDINARY_POOL_TOTAL;
+export function getOrdinaryPoolTotal(progression?: CharacterProgression): number {
+  return progression?.primaryPoolTotal ?? STANDARD_CHARGEN_METHOD_POLICY.primaryPoolTotal;
 }
 
 export function getFlexiblePoolTotal(
-  profile: RolledCharacterProfile | undefined
+  profile: RolledCharacterProfile | undefined,
+  progression?: Pick<CharacterProgression, "flexiblePointFactor" | "secondaryPoolTotal">
 ): number {
-  if (!profile) {
-    return 0;
+  const resolvedStats = getResolvedProfileStats(profile);
+
+  if (!resolvedStats) {
+    return progression?.secondaryPoolTotal ?? 0;
   }
 
-  return (profile.rolledStats.int ?? 0) + (profile.rolledStats.lck ?? 0);
+  return Math.floor(
+    ((resolvedStats.int ?? 0) + (resolvedStats.lck ?? 0)) *
+      (progression?.flexiblePointFactor ?? STANDARD_CHARGEN_METHOD_POLICY.flexiblePointFactor)
+  );
 }
 
-export function createChargenProgression(mode: ChargenMode = "standard"): CharacterProgression {
+function getAvailableFlexiblePoolTotal(input: {
+  profile: RolledCharacterProfile | undefined;
+  progression: CharacterProgression;
+}): number {
+  const profileDrivenTotal = getFlexiblePoolTotal(input.profile, input.progression);
+  return profileDrivenTotal > 0 ? profileDrivenTotal : input.progression.secondaryPoolTotal;
+}
+
+export function createChargenProgression(
+  mode: ChargenMode = "standard",
+  ruleSet?: Partial<ChargenRuleSetParameters>
+): CharacterProgression {
+  const policy = createChargenMethodPolicy(ruleSet);
+
   return recalculateProgression({
     chargenMode: mode,
     educationPoints: 0,
+    flexiblePointFactor: policy.flexiblePointFactor,
     level: 1,
     primaryPoolSpent: 0,
-    primaryPoolTotal: DEFAULT_PRIMARY_POOL_TOTAL,
+    primaryPoolTotal: policy.primaryPoolTotal,
     secondaryPoolSpent: 0,
-    secondaryPoolTotal: DEFAULT_SECONDARY_POOL_TOTAL,
+    secondaryPoolTotal: STANDARD_CHARGEN_METHOD_POLICY.secondaryPoolTotal,
     skillGroups: [],
     skills: [],
     specializations: []
@@ -648,8 +966,9 @@ export function applyProfessionGrants(input: {
   content: CanonicalContentShape;
   mode?: ChargenMode;
   professionId: string;
+  ruleSet?: Partial<ChargenRuleSetParameters>;
 }): CharacterProgression {
-  return createChargenProgression(input.mode ?? "standard");
+  return createChargenProgression(input.mode ?? "standard", input.ruleSet);
 }
 
 function chooseChargenPool(input: {
@@ -658,8 +977,9 @@ function chooseChargenPool(input: {
   profile?: RolledCharacterProfile;
   progression: CharacterProgression;
 }): "primary" | "secondary" | null {
-  const ordinaryRemaining = getOrdinaryPoolTotal() - input.progression.primaryPoolSpent;
-  const flexibleRemaining = getFlexiblePoolTotal(input.profile) - input.progression.secondaryPoolSpent;
+  const ordinaryRemaining = getOrdinaryPoolTotal(input.progression) - input.progression.primaryPoolSpent;
+  const flexibleRemaining =
+    getFlexiblePoolTotal(input.profile, input.progression) - input.progression.secondaryPoolSpent;
 
   if (input.normalAccess && ordinaryRemaining >= input.cost) {
     return "primary";
@@ -693,8 +1013,21 @@ export function allocateChargenPoint(input: AllocateChargenPointInput): SpendPoi
       };
     }
 
-    const existingGroup = progression.skillGroups.find((group) => group.groupId === input.targetId);
-    const cost = getGroupSpendCost(Boolean(existingGroup && existingGroup.ranks > 0));
+    const groupCost = getActiveGroupSkillCost({
+      content: input.content,
+      groupId: input.targetId,
+      progression
+    });
+
+    if (groupCost.error || groupCost.cost === undefined) {
+      return {
+        error: groupCost.error ?? "Skill group cost could not be calculated.",
+        progression,
+        warnings
+      };
+    }
+
+    const cost = groupCost.cost;
     const pool = chooseChargenPool({
       cost,
       normalAccess,
@@ -759,38 +1092,40 @@ export function allocateChargenPoint(input: AllocateChargenPointInput): SpendPoi
     };
   }
 
+  const skill = ensureSkillExists(progression, skillDefinition, {
+    languageName: input.targetLanguageName
+  });
+  const cost = getSkillSpendCost(skillDefinition);
   const pool = chooseChargenPool({
-    cost: 1,
+    cost,
     normalAccess,
     profile: input.profile,
     progression
   });
 
   if (!pool) {
-      return {
+    return {
       error: normalAccess
-        ? "No ordinary or flexible points remain for this skill."
+        ? `No ordinary or flexible points remain for this skill. Cost: ${cost}.`
         : "No flexible points remain for this other skill.",
       progression,
       warnings
     };
   }
 
-  const skill = ensureSkillExists(progression, skillDefinition);
-
   if (pool === "primary") {
     skill.primaryRanks += 1;
-    progression.primaryPoolSpent += 1;
+    progression.primaryPoolSpent += cost;
   } else {
     skill.secondaryRanks += 1;
-    progression.secondaryPoolSpent += 1;
+    progression.secondaryPoolSpent += cost;
   }
 
   skill.ranks = skill.grantedRanks + skill.primaryRanks + skill.secondaryRanks;
 
   return {
     progression: recalculateProgression(progression),
-    spentCost: 1,
+    spentCost: cost,
     warnings
   };
 }
@@ -814,8 +1149,22 @@ export function spendPrimaryPoint(input: SpendPrimaryPointInput): SpendPointResu
       };
     }
 
+    const groupCost = getActiveGroupSkillCost({
+      content: input.content,
+      groupId: input.targetId,
+      progression
+    });
+
+    if (groupCost.error || groupCost.cost === undefined) {
+      return {
+        error: groupCost.error ?? "Skill group cost could not be calculated.",
+        progression,
+        warnings
+      };
+    }
+
     const group = ensureGroupExists(progression, input.targetId);
-    const cost = getGroupSpendCost(group.ranks > 0);
+    const cost = groupCost.cost;
 
     if (progression.primaryPoolSpent + cost > progression.primaryPoolTotal) {
       return {
@@ -877,8 +1226,10 @@ export function spendPrimaryPoint(input: SpendPrimaryPointInput): SpendPointResu
     };
   }
 
-  const skill = ensureSkillExists(progression, skillDefinition);
-  const cost = getSkillSpendCost(skillDefinition, skill.ranks > 0);
+  const skill = ensureSkillExists(progression, skillDefinition, {
+    languageName: input.targetLanguageName
+  });
+  const cost = getSkillSpendCost(skillDefinition);
 
   if (progression.primaryPoolSpent + cost > progression.primaryPoolTotal) {
     return {
@@ -980,10 +1331,13 @@ function getPrimarySkillRemovalError(input: {
   content: CanonicalContentShape;
   progression: CharacterProgression;
   skillDefinition: SkillDefinition;
+  targetLanguageName?: string;
 }): string | undefined {
-  const skill = input.progression.skills.find(
-    (item) => item.skillId === input.skillDefinition.id
-  );
+  const skill = getTargetedProgressionSkillRow({
+    progression: input.progression,
+    skillId: input.skillDefinition.id,
+    targetLanguageName: input.targetLanguageName
+  });
 
   if (!skill || skill.primaryRanks < 1) {
     return "No primary-point skill purchase to remove.";
@@ -1085,10 +1439,13 @@ function getChargenSkillRemovalError(input: {
   content: CanonicalContentShape;
   progression: CharacterProgression;
   skillDefinition: SkillDefinition;
+  targetLanguageName?: string;
 }): string | undefined {
-  const skill = input.progression.skills.find(
-    (item) => item.skillId === input.skillDefinition.id
-  );
+  const skill = getTargetedProgressionSkillRow({
+    progression: input.progression,
+    skillId: input.skillDefinition.id,
+    targetLanguageName: input.targetLanguageName
+  });
 
   if (!skill || skill.primaryRanks + skill.secondaryRanks < 1) {
     return "No allocated skill points to remove.";
@@ -1157,7 +1514,21 @@ export function removePrimaryPoint(input: SpendPrimaryPointInput): SpendPointRes
 
     group.primaryRanks -= 1;
     group.ranks = group.grantedRanks + group.primaryRanks + group.secondaryRanks;
-    const refundedCost = getGroupSpendCost(group.ranks > 0);
+    const groupCost = getActiveGroupSkillCost({
+      content: input.content,
+      groupId: input.targetId,
+      progression
+    });
+    const refundedCost = groupCost.cost;
+
+    if (refundedCost === undefined) {
+      return {
+        error: groupCost.error ?? "Skill group refund could not be calculated.",
+        progression,
+        warnings
+      };
+    }
+
     progression.primaryPoolSpent = Math.max(0, progression.primaryPoolSpent - refundedCost);
 
     return {
@@ -1177,11 +1548,16 @@ export function removePrimaryPoint(input: SpendPrimaryPointInput): SpendPointRes
     };
   }
 
-  const skill = progression.skills.find((item) => item.skillId === input.targetId);
+  const skill = getTargetedProgressionSkillRow({
+    progression,
+    skillId: input.targetId,
+    targetLanguageName: input.targetLanguageName
+  });
   const error = getPrimarySkillRemovalError({
     content: input.content,
     progression,
-    skillDefinition
+    skillDefinition,
+    targetLanguageName: input.targetLanguageName
   });
 
   if (!skill || error) {
@@ -1194,7 +1570,7 @@ export function removePrimaryPoint(input: SpendPrimaryPointInput): SpendPointRes
 
   skill.primaryRanks -= 1;
   skill.ranks = skill.grantedRanks + skill.primaryRanks + skill.secondaryRanks;
-  const refundedCost = getSkillSpendCost(skillDefinition, skill.ranks > 0);
+  const refundedCost = getSkillSpendCost(skillDefinition);
   progression.primaryPoolSpent = Math.max(0, progression.primaryPoolSpent - refundedCost);
 
   return {
@@ -1233,7 +1609,20 @@ export function removeChargenPoint(
       };
     }
 
-    const refundCost = getGroupSpendCost(group.primaryRanks + group.secondaryRanks - 1 > 0);
+    const groupCost = getActiveGroupSkillCost({
+      content: input.content,
+      groupId: input.targetId,
+      progression
+    });
+    const refundCost = groupCost.cost;
+
+    if (refundCost === undefined) {
+      return {
+        error: groupCost.error ?? "Skill group refund could not be calculated.",
+        progression,
+        warnings
+      };
+    }
 
     if (group.secondaryRanks > 0) {
       group.secondaryRanks -= 1;
@@ -1262,11 +1651,16 @@ export function removeChargenPoint(
     };
   }
 
-  const skill = progression.skills.find((item) => item.skillId === input.targetId);
+  const skill = getTargetedProgressionSkillRow({
+    progression,
+    skillId: input.targetId,
+    targetLanguageName: input.targetLanguageName
+  });
   const error = getChargenSkillRemovalError({
     content: input.content,
     progression,
-    skillDefinition
+    skillDefinition,
+    targetLanguageName: input.targetLanguageName
   });
 
   if (!skill || error) {
@@ -1277,19 +1671,26 @@ export function removeChargenPoint(
     };
   }
 
-  if (skill.secondaryRanks > 0) {
+  const usedSecondaryPool = skill.secondaryRanks > 0;
+
+  if (usedSecondaryPool) {
     skill.secondaryRanks -= 1;
-    progression.secondaryPoolSpent = Math.max(0, progression.secondaryPoolSpent - 1);
   } else {
     skill.primaryRanks -= 1;
-    progression.primaryPoolSpent = Math.max(0, progression.primaryPoolSpent - 1);
   }
 
   skill.ranks = skill.grantedRanks + skill.primaryRanks + skill.secondaryRanks;
+  const refundedCost = getSkillSpendCost(skillDefinition);
+
+  if (usedSecondaryPool) {
+    progression.secondaryPoolSpent = Math.max(0, progression.secondaryPoolSpent - refundedCost);
+  } else {
+    progression.primaryPoolSpent = Math.max(0, progression.primaryPoolSpent - refundedCost);
+  }
 
   return {
     progression: cleanupProgression(progression),
-    spentCost: 1,
+    spentCost: refundedCost,
     warnings
   };
 }
@@ -1309,7 +1710,11 @@ export function removeSecondaryPoint(input: SpendSecondaryPointInput): SpendPoin
       };
     }
 
-    const skill = progression.skills.find((item) => item.skillId === input.targetId);
+    const skill = getTargetedProgressionSkillRow({
+      progression,
+      skillId: input.targetId,
+      targetLanguageName: input.targetLanguageName
+    });
 
     if (!skill || skill.secondaryRanks < 1) {
       return {
@@ -1322,7 +1727,8 @@ export function removeSecondaryPoint(input: SpendSecondaryPointInput): SpendPoin
     const error = getChargenSkillRemovalError({
       content: input.content,
       progression,
-      skillDefinition
+      skillDefinition,
+      targetLanguageName: input.targetLanguageName
     });
 
     if (error) {
@@ -1335,7 +1741,7 @@ export function removeSecondaryPoint(input: SpendSecondaryPointInput): SpendPoin
 
     skill.secondaryRanks -= 1;
     skill.ranks = skill.grantedRanks + skill.primaryRanks + skill.secondaryRanks;
-    const refundedCost = getSkillSpendCost(skillDefinition, skill.ranks > 0);
+    const refundedCost = getSkillSpendCost(skillDefinition);
     progression.secondaryPoolSpent = Math.max(0, progression.secondaryPoolSpent - refundedCost);
 
     return {
@@ -1369,7 +1775,7 @@ export function removeSecondaryPoint(input: SpendSecondaryPointInput): SpendPoin
 
   specialization.secondaryRanks -= 1;
   specialization.ranks = specialization.secondaryRanks;
-  const refundedCost = getSpecializationSpendCost(specialization.ranks > 0);
+  const refundedCost = getSpecializationSpendCost(specialization.secondaryRanks > 0);
   progression.secondaryPoolSpent = Math.max(0, progression.secondaryPoolSpent - refundedCost);
 
   return {
@@ -1430,10 +1836,18 @@ export function spendSecondaryPoint(input: SpendSecondaryPointInput): SpendPoint
       };
     }
 
-    const skill = ensureSkillExists(progression, skillDefinition);
-    const cost = getSkillSpendCost(skillDefinition, skill.ranks > 0);
+    const skill = ensureSkillExists(progression, skillDefinition, {
+      languageName: input.targetLanguageName
+    });
+    const cost = getSkillSpendCost(skillDefinition);
 
-    if (progression.secondaryPoolSpent + cost > progression.secondaryPoolTotal) {
+    if (
+      progression.secondaryPoolSpent + cost >
+      getAvailableFlexiblePoolTotal({
+        profile: input.profile,
+        progression
+      })
+    ) {
       return {
         error: "Not enough secondary points remaining for that skill purchase.",
         progression,
@@ -1493,32 +1907,41 @@ export function spendSecondaryPoint(input: SpendSecondaryPointInput): SpendPoint
     };
   }
 
-  const allowedParentGroupIds = getSkillDefinitionGroupIds(parentSkillDefinition).filter((groupId) =>
-    allowedGroupIds.includes(groupId)
-  );
+  if (!specializationDefinition.specializationBridge) {
+    const allowedParentGroupIds = getSkillDefinitionGroupIds(parentSkillDefinition).filter((groupId) =>
+      allowedGroupIds.includes(groupId)
+    );
 
-  if (allowedParentGroupIds.length === 0) {
-    return {
-      error: "That specialization is not exactly one society level above the current character.",
-      progression,
-      warnings
-    };
-  }
+    if (allowedParentGroupIds.length === 0) {
+      return {
+        error:
+          "This specialization is outside the current society/profession access for its parent skill.",
+        progression,
+        warnings
+      };
+    }
 
-  const parentGroup = getBestPurchasedParentGroup(input.content, progression, parentSkillDefinition);
+    const parentGroup = getBestPurchasedParentGroup(input.content, progression, parentSkillDefinition);
 
-  if (!parentGroup) {
-    return {
-      error: "Acquire the parent group before purchasing a specialization.",
-      progression,
-      warnings
-    };
+    if (!parentGroup) {
+      return {
+        error: "Acquire the parent group before purchasing a specialization.",
+        progression,
+        warnings
+      };
+    }
   }
 
   const specialization = ensureSpecializationExists(progression, specializationDefinition);
-  const cost = getSpecializationSpendCost(specialization.ranks > 0);
+  const cost = getSpecializationSpendCost(specialization.secondaryRanks > 0);
 
-  if (progression.secondaryPoolSpent + cost > progression.secondaryPoolTotal) {
+  if (
+    progression.secondaryPoolSpent + cost >
+    getAvailableFlexiblePoolTotal({
+      profile: input.profile,
+      progression
+    })
+  ) {
     return {
       error: "Not enough secondary points remaining for that specialization purchase.",
       progression,
@@ -1539,6 +1962,7 @@ export function spendSecondaryPoint(input: SpendSecondaryPointInput): SpendPoint
 }
 
 export function buildChargenDraftView(input: {
+  civilizationId?: string;
   content: CanonicalContentShape;
   professionId?: string;
   profile?: RolledCharacterProfile;
@@ -1546,15 +1970,36 @@ export function buildChargenDraftView(input: {
   societyId?: string;
   societyLevel?: number;
 }): ChargenDraftView {
-  const progression = recalculateProgression(input.progression);
+  const selectionSyncedProgression = recalculateProgression(
+    syncChargenSelectionSkillRows({
+      content: input.content,
+      progression: recalculateProgression(input.progression)
+    })
+  );
+  const languageSyncedProgression = recalculateProgression(
+    syncChargenLanguageSkillRows({
+      civilizationId: input.civilizationId,
+      content: input.content,
+      progression: selectionSyncedProgression,
+      societyId: input.societyId
+    })
+  );
   const education = buildEducationBreakdown({
     content: input.content,
     professionId: input.professionId,
     profile: input.profile,
-    progression: input.progression,
+    progression: languageSyncedProgression,
     societyId: input.societyId,
     societyLevel: input.societyLevel
   });
+  const progression = recalculateProgression(
+    syncChargenMotherTongueSkillRow({
+      civilizationId: input.civilizationId,
+      content: input.content,
+      educationLevel: education.theoreticalSkillCount,
+      progression: languageSyncedProgression
+    })
+  );
 
   const groups = progression.skillGroups
     .map((group) => {
@@ -1575,82 +2020,139 @@ export function buildChargenDraftView(input: {
     })
     .sort((left, right) => left.name.localeCompare(right.name));
   const groupViewById = new Map(groups.map((group) => [group.groupId, group]));
+  const relationshipGrants = resolveRelationshipMinimumGrants({
+    content: input.content,
+    progression
+  });
 
-  const skills = progression.skills
-    .map((skill) => {
-      const definition = getSkillById(input.content, skill.skillId);
-
-      if (!definition) {
-        return null;
+  const skills = input.content.skills
+    .flatMap((definition) => {
+      if (definition.specializationOfSkillId) {
+        return [];
       }
 
+      const progressionSkillRows = getProgressionSkillRows(progression, definition.id);
       const groupIds = getSkillDefinitionGroupIds(definition);
-      const bestContributingGroup = selectBestSkillGroupContribution(
-        groupIds
-          .map((groupId) => {
-            const groupView = groupViewById.get(groupId);
-            const groupDefinition = getSkillGroupDefinition(input.content, groupId);
-
-            if (!groupView) {
-              return null;
-            }
-
-            return {
-              groupId,
-              groupLevel: groupView.groupLevel,
-              name: groupView.name,
-              sortOrder: groupDefinition?.sortOrder ?? Number.MAX_SAFE_INTEGER
-            };
-          })
-          .filter(isDefined)
-      );
+      const bestContributingGroup = getBestActiveGroupContribution({
+        content: input.content,
+        groupViewById,
+        progression,
+        skill: definition
+      });
       const fallbackGroupId = getBestGroupIdByDefinitionOrder(input.content, groupIds);
       const resolvedGroupId = bestContributingGroup?.groupId ?? fallbackGroupId;
+      const groupContribution = bestContributingGroup?.groupLevel ?? 0;
+      const relationshipGrant = relationshipGrants.bySkillId.get(definition.id);
+      const relationshipGrantedLevel = relationshipGrant?.relationshipGrantedRanks ?? 0;
+      const skillRows =
+        progressionSkillRows.length > 0
+          ? progressionSkillRows
+          : groupContribution > 0 || relationshipGrantedLevel > 0
+            ? [undefined]
+            : [];
 
       if (!resolvedGroupId) {
-        return null;
+        return [];
       }
 
-      const specificSkillLevel = skill.ranks;
-      const effectiveSkillNumber = (bestContributingGroup?.groupLevel ?? 0) + specificSkillLevel;
-      const linkedStatAverage = getLinkedStatAverage(input.profile, definition);
-      const literacyWarning =
-        definition.requiresLiteracy === "recommended" && !hasLiteracy(progression)
-          ? "Literacy recommended"
-          : undefined;
+      return skillRows.map((skill) => {
+        const specificSkillLevel =
+          (skill?.grantedRanks ?? 0) + (skill?.primaryRanks ?? 0) + (skill?.secondaryRanks ?? 0);
+        const rowRelationshipGrantedLevel = skill?.languageName ? 0 : relationshipGrantedLevel;
+        const relationshipGrantedPreviewLevel = skill?.languageName
+          ? 0
+          : relationshipGrant?.previewAdditionalRanks ?? 0;
+        const shouldSurfaceRelationshipSource =
+          rowRelationshipGrantedLevel > 0 || relationshipGrantedPreviewLevel > 0;
+        const effectiveSkillNumber =
+          groupContribution + specificSkillLevel + rowRelationshipGrantedLevel;
+        const linkedStatAverage = getLinkedStatAverage(input.profile, definition);
+        const literacyWarning =
+          definition.requiresLiteracy === "recommended" && !hasLiteracy(progression)
+            ? "Literacy recommended"
+            : undefined;
 
-      const view: ChargenSkillView = {
-        category: skill.category,
-        contributingGroupId: bestContributingGroup?.groupId,
-        effectiveSkillNumber,
-        groupId: resolvedGroupId,
-        groupIds,
-        groupLevel: bestContributingGroup?.groupLevel ?? 0,
-        linkedStatAverage,
-        literacyWarning,
-        name: definition.name,
-        primaryRanks: skill.primaryRanks,
-        requiresLiteracy: definition.requiresLiteracy,
-        secondaryRanks: skill.secondaryRanks,
-        skillId: skill.skillId,
-        specificSkillLevel,
-        totalSkill: effectiveSkillNumber + linkedStatAverage
-      };
+        const view: ChargenSkillView = {
+          category: skill?.category ?? definition.category,
+          categoryId: skill?.categoryId ?? definition.categoryId,
+          contributingGroupId: bestContributingGroup?.groupId,
+          relationshipGrantedPreviewLevel,
+          relationshipGrantedSkillLevel: rowRelationshipGrantedLevel,
+          relationshipSourceSkillId: skill?.languageName
+            ? undefined
+            : shouldSurfaceRelationshipSource
+              ? (relationshipGrant?.sourceSkillId ??
+                skill?.relationshipGrantSourceSkillId)
+              : undefined,
+          relationshipSourceSkillName: skill?.languageName
+            ? undefined
+            : shouldSurfaceRelationshipSource
+              ? (relationshipGrant?.sourceSkillName ??
+                skill?.relationshipGrantSourceName)
+              : undefined,
+          relationshipSourceType: skill?.languageName
+            ? undefined
+            : shouldSurfaceRelationshipSource
+              ? (relationshipGrant?.sourceType ??
+                skill?.relationshipGrantSourceType)
+              : undefined,
+          effectiveSkillNumber,
+          groupId: resolvedGroupId,
+          groupIds,
+          groupLevel: groupContribution,
+          languageName: skill?.languageName,
+          linkedStatAverage,
+          literacyWarning,
+          name: definition.name,
+          primaryRanks: skill?.primaryRanks ?? 0,
+          requiresLiteracy: definition.requiresLiteracy,
+          secondaryRanks: skill?.secondaryRanks ?? 0,
+          skillId: definition.id,
+          skillKey: getCharacterSkillKey({
+            languageName: skill?.languageName,
+            skillId: definition.id
+          }),
+          sourceTag: skill?.sourceTag,
+          specificSkillLevel,
+          totalSkill: effectiveSkillNumber + linkedStatAverage
+        };
 
-      return view;
+        return view;
+      });
     })
-    .filter(isDefined)
-    .sort((left, right) => left.name.localeCompare(right.name));
+    .sort(
+      (left, right) =>
+        left.name.localeCompare(right.name) ||
+        (left.languageName ?? "").localeCompare(right.languageName ?? "")
+    );
 
   const specializations = progression.specializations
-    .map((specialization) => {
-      const definition = getSpecializationById(input.content, specialization.specializationId);
+    .map((specialization) => specialization.specializationId)
+    .concat(
+      input.content.specializations
+        .filter(
+          (definition) =>
+            (relationshipGrants.bySpecializationId.get(definition.id)?.relationshipGrantedRanks ??
+              0) > 0
+        )
+        .map((definition) => definition.id)
+    )
+    .filter((specializationId, index, specializationIds) => specializationIds.indexOf(specializationId) === index)
+    .map((specializationId) => {
+      const progressionSpecialization = progression.specializations.find(
+        (specialization) => specialization.specializationId === specializationId
+      );
+      const definition = getSpecializationById(input.content, specializationId);
       const parentSkillDefinition = definition
         ? getSkillById(input.content, definition.skillId)
         : undefined;
       const groupView = parentSkillDefinition
         ? selectBestSkillGroupContribution(
-            getSkillDefinitionGroupIds(parentSkillDefinition)
+            getActiveSkillGroupIds({
+              progression,
+              skill: parentSkillDefinition,
+              skillGroups: input.content.skillGroups
+            })
               .map((groupId) => {
                 const groupView = groupViewById.get(groupId);
                 const groupDefinition = getSkillGroupDefinition(input.content, groupId);
@@ -1670,20 +2172,50 @@ export function buildChargenDraftView(input: {
           )
         : undefined;
 
-      if (!definition || !parentSkillDefinition || !groupView) {
+      if (!definition || !parentSkillDefinition) {
         return null;
       }
 
+      const relationshipGrant = relationshipGrants.bySpecializationId.get(definition.id);
+      const relationshipGrantedSpecializationLevel =
+        relationshipGrant?.relationshipGrantedRanks ?? 0;
+      const relationshipGrantedPreviewLevel = relationshipGrant?.previewAdditionalRanks ?? 0;
+      const shouldSurfaceRelationshipSource =
+        relationshipGrantedSpecializationLevel > 0 || relationshipGrantedPreviewLevel > 0;
+      const persistedRelationshipSourceType =
+        progressionSpecialization?.relationshipGrantSourceType === "specialization-bridge-parent"
+          ? progressionSpecialization.relationshipGrantSourceType
+          : undefined;
+      const specializationLevel =
+        (progressionSpecialization?.secondaryRanks ?? 0) +
+        relationshipGrantedSpecializationLevel;
+
       const view: ChargenSpecializationView = {
         effectiveSpecializationNumber: calculateSpecializationLevel({
-          groupLevel: groupView.groupLevel,
-          specializationLevel: specialization.ranks
+          groupLevel: groupView?.groupLevel ?? 0,
+          specializationLevel
         }),
+        relationshipGrantedPreviewLevel,
+        relationshipGrantedSourceSkillId:
+          shouldSurfaceRelationshipSource
+            ? (relationshipGrant?.sourceSkillId ??
+              progressionSpecialization?.relationshipGrantSourceSkillId)
+            : undefined,
+        relationshipGrantedSourceSkillName:
+          shouldSurfaceRelationshipSource
+            ? (relationshipGrant?.sourceSkillName ??
+              progressionSpecialization?.relationshipGrantSourceName)
+            : undefined,
+        relationshipGrantedSourceType:
+          shouldSurfaceRelationshipSource
+            ? relationshipGrant?.sourceType ?? persistedRelationshipSourceType
+            : undefined,
+        relationshipGrantedSpecializationLevel,
         name: definition.name,
         parentSkillName: parentSkillDefinition.name,
-        secondaryRanks: specialization.secondaryRanks,
-        specializationId: specialization.specializationId,
-        specializationLevel: specialization.ranks
+        secondaryRanks: progressionSpecialization?.secondaryRanks ?? 0,
+        specializationId: definition.id,
+        specializationLevel
       };
 
       return view;
@@ -1694,10 +2226,10 @@ export function buildChargenDraftView(input: {
   return {
     education,
     groups,
-    primaryPoolAvailable: Math.max(0, getOrdinaryPoolTotal() - progression.primaryPoolSpent),
+    primaryPoolAvailable: Math.max(0, getOrdinaryPoolTotal(progression) - progression.primaryPoolSpent),
     secondaryPoolAvailable: Math.max(
       0,
-      getFlexiblePoolTotal(input.profile) - progression.secondaryPoolSpent
+      getFlexiblePoolTotal(input.profile, progression) - progression.secondaryPoolSpent
     ),
     skills,
     specializations,
@@ -1708,7 +2240,31 @@ export function buildChargenDraftView(input: {
 export function reviewChargenDraft(
   input: ReviewChargenDraftInput
 ): ReviewChargenDraftResult {
-  const progression = recalculateProgression(input.progression);
+  const normalizedProgression = recalculateProgression(input.progression);
+  const languageSyncedProgression = recalculateProgression(
+    syncChargenLanguageSkillRows({
+      civilizationId: input.civilizationId,
+      content: input.content,
+      progression: normalizedProgression,
+      societyId: input.societyId
+    })
+  );
+  const education = buildEducationBreakdown({
+    content: input.content,
+    professionId: input.professionId,
+    profile: input.profile,
+    progression: languageSyncedProgression,
+    societyId: input.societyId,
+    societyLevel: input.societyLevel
+  });
+  const progression = recalculateProgression(
+    syncChargenMotherTongueSkillRow({
+      civilizationId: input.civilizationId,
+      content: input.content,
+      educationLevel: education.theoreticalSkillCount,
+      progression: languageSyncedProgression
+    })
+  );
   const access =
     input.professionId && input.societyLevel !== undefined
       ? buildChargenSkillAccessSummaryInternal({
@@ -1724,6 +2280,7 @@ export function reviewChargenDraft(
           skillSources: {}
         };
   const draftView = buildChargenDraftView({
+    civilizationId: input.civilizationId,
     content: input.content,
     professionId: input.professionId,
     profile: input.profile,
@@ -1747,11 +2304,11 @@ export function reviewChargenDraft(
     errorSet.add("Select a profession before finalizing.");
   }
 
-  if (progression.primaryPoolSpent > getOrdinaryPoolTotal()) {
+  if (progression.primaryPoolSpent > getOrdinaryPoolTotal(progression)) {
     errorSet.add("Ordinary pool is overspent.");
   }
 
-  if (progression.secondaryPoolSpent > getFlexiblePoolTotal(input.profile)) {
+  if (progression.secondaryPoolSpent > getFlexiblePoolTotal(input.profile, progression)) {
     errorSet.add("Flexible pool is overspent.");
   }
 
@@ -1817,6 +2374,30 @@ export function reviewChargenDraft(
     }
   }
 
+  const selectableSkillSummary = buildChargenSelectableSkillSummary({
+    content: input.content,
+    professionId: input.professionId,
+    progression,
+    societyId: input.societyId,
+    societyLevel: input.societyLevel
+  });
+
+  const ownedGroupIds = new Set(
+    progression.skillGroups
+      .filter((group) => (group.ranks ?? 0) > 0 || (group.grantedRanks ?? 0) > 0)
+      .map((group) => group.groupId)
+  );
+
+  for (const slot of selectableSkillSummary.selectionSlots) {
+    if (!ownedGroupIds.has(slot.groupId)) {
+      continue;
+    }
+
+    if (slot.required && !slot.isSatisfied) {
+      errorSet.add(`${slot.groupName}: ${slot.label}.`);
+    }
+  }
+
   return {
     canFinalize: errorSet.size === 0,
     draftView,
@@ -1837,11 +2418,67 @@ export function finalizeChargenDraft(
     };
   }
 
-  const progression = recalculateProgression(structuredClone(input.progression));
+  let progression = recalculateProgression(structuredClone(input.progression));
+  progression = recalculateProgression(
+    syncChargenSelectionSkillRows({
+      content: input.content,
+      progression
+    })
+  );
+  progression = recalculateProgression(
+    syncChargenLanguageSkillRows({
+      civilizationId: input.civilizationId,
+      content: input.content,
+      progression,
+      societyId: input.societyId
+    })
+  );
+  progression = recalculateProgression(
+    syncChargenMotherTongueSkillRow({
+      civilizationId: input.civilizationId,
+      content: input.content,
+      educationLevel: review.draftView.education.theoreticalSkillCount,
+      progression
+    })
+  );
   progression.educationPoints = review.draftView.education.theoreticalSkillCount;
+  const languageSummary = buildChargenLanguageSelectionSummary({
+    civilizationId: input.civilizationId,
+    content: input.content,
+    progression,
+    societyId: input.societyId
+  });
+  const selectableSkillSummary = buildChargenSelectableSkillSummary({
+    content: input.content,
+    professionId: input.professionId,
+    progression,
+    societyId: input.societyId,
+    societyLevel: input.societyLevel
+  });
+  progression.chargenSelections = {
+    selectedLanguageIds: languageSummary.selectedLanguageIds,
+    selectedSkillIds: selectableSkillSummary.selectedSkillIds,
+    selectedGroupSlots: progression.chargenSelections?.selectedGroupSlots ?? []
+  };
+  progression = recalculateProgression(
+    applyRelationshipMinimumGrants({
+      content: input.content,
+      progression
+    })
+  );
 
   const profession = getProfessionById(input.content, input.professionId);
+  const ruleSetParameters = getRuleSetParameters(input.ruleSet);
+  const ruleSetPolicy = createChargenMethodPolicy(ruleSetParameters);
   const build: CharacterBuild = {
+    chargenRuleSet: {
+      exchangeCount: ruleSetPolicy.maxExchanges,
+      flexiblePointFactor: ruleSetPolicy.flexiblePointFactor,
+      id: input.ruleSet?.id,
+      name: input.ruleSet?.name?.trim() || "Legacy default",
+      ordinarySkillPoints: ruleSetPolicy.primaryPoolTotal,
+      statRollCount: ruleSetPolicy.displayedRollCount
+    },
     equipment: {
       items: []
     },
@@ -1855,6 +2492,12 @@ export function finalizeChargenDraft(
     profile: input.profile,
     professionId: input.professionId,
     progression,
+    progressionState: {
+      availablePoints: 0,
+      checks: [],
+      history: [],
+      pendingAttempts: []
+    },
     socialClass: input.socialClass,
     societyId: input.societyId,
     societyLevel: input.societyLevel
@@ -1872,23 +2515,25 @@ export function getPrimaryPurchaseCostForGroup(
   groupId: string
 ): number {
   const group = progression.skillGroups.find((item) => item.groupId === groupId);
-  return getGroupSpendCost(Boolean(group && group.ranks > 0));
+  return group && group.ranks > 0 ? LEGACY_GROUP_POINT_COST : LEGACY_GROUP_POINT_COST * 2;
 }
 
 export function getPrimaryPurchaseCostForSkill(
   progression: CharacterProgression,
   skillDefinition: SkillDefinition
 ): number {
-  const skill = progression.skills.find((item) => item.skillId === skillDefinition.id);
-  return getSkillSpendCost(skillDefinition, Boolean(skill && skill.ranks > 0));
+  void progression;
+
+  return getSkillSpendCost(skillDefinition);
 }
 
 export function getSecondaryPurchaseCostForSkill(
   progression: CharacterProgression,
   skillDefinition: SkillDefinition
 ): number {
-  const skill = progression.skills.find((item) => item.skillId === skillDefinition.id);
-  return getSkillSpendCost(skillDefinition, Boolean(skill && skill.ranks > 0));
+  void progression;
+
+  return getSkillSpendCost(skillDefinition);
 }
 
 export function getSecondaryPurchaseCostForSpecialization(
@@ -1898,7 +2543,7 @@ export function getSecondaryPurchaseCostForSpecialization(
   const specialization = progression.specializations.find(
     (item) => item.specializationId === specializationDefinition.id
   );
-  return getSpecializationSpendCost(Boolean(specialization && specialization.ranks > 0));
+  return getSpecializationSpendCost(Boolean(specialization && specialization.secondaryRanks > 0));
 }
 
 export function getAllowedPrimaryGroupIds(

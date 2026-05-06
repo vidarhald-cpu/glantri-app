@@ -2,11 +2,19 @@ import { z } from "zod";
 
 const idSchema = z.string().min(1);
 
-export const encounterStatusSchema = z.enum(["setup", "active", "complete"]);
+export const encounterKindSchema = z.enum(["combat", "roleplay"]);
+export const encounterStatusSchema = z.enum([
+  "setup",
+  "planned",
+  "active",
+  "paused",
+  "complete",
+  "archived"
+]);
 export const encounterTurnOrderModeSchema = z.enum(["manual"]);
 export const encounterFacingSchema = z.enum(["north", "east", "south", "west"]);
 export const encounterOrientationSchema = z.enum(["neutral", "front", "side", "behind"]);
-export const encounterParticipantTypeSchema = z.enum(["character", "ad-hoc"]);
+export const encounterParticipantTypeSchema = z.enum(["character", "ad-hoc", "scenario"]);
 export const encounterActionTypeSchema = z.enum(["none", "attack", "move", "defend", "ready", "other"]);
 export const encounterDefensePostureSchema = z.enum([
   "none",
@@ -136,6 +144,116 @@ export const encounterAttackResolutionSchema = z.object({
   selectedWeaponItemId: idSchema.optional()
 });
 
+export const roleplayDifficultySchema = z.preprocess(
+  (input) => (input === "critical_plus" ? "legendary" : input),
+  z.enum([
+    "trivial_success",
+    "easy",
+    "medium_minus",
+    "medium",
+    "medium_plus",
+    "hard",
+    "very_hard",
+    "critical",
+    "legendary",
+    "godly"
+  ])
+);
+
+const roleplayOptionalDifficultySchema = z.preprocess(
+  (input) => (input === "none" ? undefined : input),
+  roleplayDifficultySchema.optional()
+);
+
+export const roleplayParticipantDescriptionSchema = z.object({
+  detailedDescription: z.string().default(""),
+  name: z.string().min(1).optional(),
+  shortDescription: z.string().default("")
+});
+
+const roleplayRollModifierSchema = z.object({
+  otherMod: z.number().int().default(0),
+  useDbMod: z.boolean().default(false),
+  useGenMod: z.boolean().default(false),
+  useObSkillMod: z.boolean().default(false)
+});
+
+export const roleplayPendingSkillRollSchema = z.object({
+  assignedAt: z.string().min(1),
+  difficulty: roleplayOptionalDifficultySchema,
+  id: idSchema,
+  mode: z.enum(["difficulty", "opposed"]).default("difficulty"),
+  opponentParticipantId: idSchema.optional(),
+  opponentParticipantName: z.string().min(1).optional(),
+  opponentSkillId: idSchema.optional(),
+  opponentSkillLabel: z.string().min(1).optional(),
+  opponentSkillValue: z.number().int().optional(),
+  opponentSilent: z.boolean().default(false),
+  opponentSupportSkillId: idSchema.optional(),
+  opponentSupportSkillLabel: z.string().min(1).optional(),
+  participantId: idSchema,
+  rollSetId: idSchema.optional(),
+  silent: z.boolean().default(false),
+  skillId: idSchema,
+  skillLabel: z.string().min(1),
+  skillValue: z.number().int().optional(),
+  supportSkillId: idSchema.optional(),
+  supportSkillLabel: z.string().min(1).optional()
+}).merge(roleplayRollModifierSchema);
+
+export const roleplayActionLogEntrySchema = z.object({
+  achievedSuccessLevelId: z.string().min(1).optional(),
+  achievedSuccessLevelLabel: z.string().min(1).optional(),
+  autoSuccess: z.boolean().default(false),
+  calculationText: z.string().optional(),
+  createdAt: z.string().min(1),
+  dieResult: z.number().int().optional(),
+  difficulty: roleplayOptionalDifficultySchema,
+  finalTotal: z.number().int().optional(),
+  fumble: z.boolean().default(false),
+  id: idSchema,
+  mode: z.enum(["difficulty", "opposed"]).default("difficulty"),
+  numericSubtotal: z.number().int().optional(),
+  openEndedD10s: z.array(z.number().int().min(1).max(10)).default([]),
+  opposedMargin: z.number().int().optional(),
+  opposedResult: z.enum(["win", "loss", "tie", "pending"]).optional(),
+  opponentAchievedSuccessLevelLabel: z.string().min(1).optional(),
+  opponentDieResult: z.number().int().optional(),
+  opponentFumble: z.boolean().default(false),
+  opponentNumericSubtotal: z.number().int().optional(),
+  opponentOpenEndedD10s: z.array(z.number().int().min(1).max(10)).default([]),
+  opponentParticipantId: idSchema.optional(),
+  opponentParticipantName: z.string().min(1).optional(),
+  opponentRollD20: z.number().int().min(1).max(20).optional(),
+  opponentSkillId: idSchema.optional(),
+  opponentSkillLabel: z.string().min(1).optional(),
+  opponentSilent: z.boolean().default(false),
+  opponentSupportSkillId: idSchema.optional(),
+  opponentSupportSkillLabel: z.string().min(1).optional(),
+  partial: z.boolean().default(false),
+  participantId: idSchema.optional(),
+  resultModifier: z.number().int().optional(),
+  roll: z.number().int().optional(),
+  rollD20: z.number().int().min(1).max(20).optional(),
+  rollSetId: idSchema.optional(),
+  silent: z.boolean().default(false),
+  skillId: idSchema.optional(),
+  skillLabel: z.string().optional(),
+  success: z.boolean().optional(),
+  summary: z.string().min(1),
+  supportSkillId: idSchema.optional(),
+  supportSkillLabel: z.string().min(1).optional(),
+  type: z.enum(["gm_message_updated", "skill_roll_assigned", "gm_skill_roll"])
+}).merge(roleplayRollModifierSchema.partial());
+
+export const roleplayStateSchema = z.object({
+  actionLog: z.array(roleplayActionLogEntrySchema).default([]),
+  gmMessage: z.string().default(""),
+  participantDescriptions: z.record(idSchema, roleplayParticipantDescriptionSchema).default({}),
+  pendingSkillRolls: z.array(roleplayPendingSkillRollSchema).default([]),
+  visibility: z.record(idSchema, z.record(idSchema, z.boolean())).default({})
+});
+
 export const encounterParticipantSchema = z.object({
   adHocName: z.string().min(1).optional(),
   characterId: idSchema.optional(),
@@ -156,24 +274,32 @@ export const encounterParticipantSchema = z.object({
     x: 0,
     y: 0,
     zone: "center"
-  })
+  }),
+  scenarioParticipantId: idSchema.optional()
 });
 
 export const encounterSessionSchema = z.object({
   actionLog: z.array(encounterAttackResolutionSchema).default([]),
+  campaignId: idSchema.optional(),
   createdAt: z.string().min(1),
   currentRound: z.number().int().positive().default(1),
   currentTurnIndex: z.number().int().nonnegative().default(0),
   declarationsLocked: z.boolean().default(false),
+  description: z.string().optional(),
   id: idSchema,
+  kind: encounterKindSchema.default("combat"),
   participants: z.array(encounterParticipantSchema).default([]),
+  roleplayState: roleplayStateSchema.optional(),
+  scenarioId: idSchema.optional(),
   status: encounterStatusSchema.default("setup"),
+  timelineLabel: z.string().optional(),
   title: z.string().min(1),
   turnOrderMode: encounterTurnOrderModeSchema.default("manual"),
   updatedAt: z.string().min(1)
 });
 
 export type EncounterStatus = z.infer<typeof encounterStatusSchema>;
+export type EncounterKind = z.infer<typeof encounterKindSchema>;
 export type EncounterTurnOrderMode = z.infer<typeof encounterTurnOrderModeSchema>;
 export type EncounterFacing = z.infer<typeof encounterFacingSchema>;
 export type EncounterOrientation = z.infer<typeof encounterOrientationSchema>;
@@ -195,6 +321,11 @@ export type EncounterDamageResolution = z.infer<typeof encounterDamageResolution
 export type EncounterCriticalEffectSummary = z.infer<typeof encounterCriticalEffectSummarySchema>;
 export type EncounterCriticalRollResult = z.infer<typeof encounterCriticalRollResultSchema>;
 export type EncounterCriticalResolution = z.infer<typeof encounterCriticalResolutionSchema>;
+export type RoleplayDifficulty = z.infer<typeof roleplayDifficultySchema>;
+export type RoleplayParticipantDescription = z.infer<typeof roleplayParticipantDescriptionSchema>;
+export type RoleplayPendingSkillRoll = z.infer<typeof roleplayPendingSkillRollSchema>;
+export type RoleplayActionLogEntry = z.infer<typeof roleplayActionLogEntrySchema>;
+export type RoleplayState = z.infer<typeof roleplayStateSchema>;
 export type EncounterAttackResolution = z.infer<typeof encounterAttackResolutionSchema>;
 export type EncounterParticipant = z.infer<typeof encounterParticipantSchema>;
 export type EncounterSession = z.infer<typeof encounterSessionSchema>;

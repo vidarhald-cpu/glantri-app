@@ -8,6 +8,13 @@ export interface CharacterRecord {
   id: string;
   name: string;
   level: number;
+  owner?:
+    | {
+        displayName?: string | null;
+        email: string;
+        id: string;
+      }
+    | null;
   ownerId?: string | null;
   updatedAt: string;
 }
@@ -21,6 +28,9 @@ export interface CreateCharacterRecordInput {
 }
 
 export interface CharacterRepository {
+  findById(id: string): Promise<CharacterRecord | null>;
+  findOwnedById(ownerId: string, id: string): Promise<CharacterRecord | null>;
+  listAll(): Promise<CharacterRecord[]>;
   saveOwned(input: CreateCharacterRecordInput): Promise<CharacterRecord>;
   listByOwner(ownerId: string): Promise<CharacterRecord[]>;
 }
@@ -31,6 +41,11 @@ function mapCharacterRecord(character: {
   id: string;
   level: number;
   name: string;
+  owner?: {
+    displayName: string | null;
+    email: string;
+    id: string;
+  } | null;
   ownerId: string | null;
   updatedAt: Date;
 }): CharacterRecord {
@@ -40,6 +55,13 @@ function mapCharacterRecord(character: {
     id: character.id,
     level: character.level,
     name: character.name,
+    owner: character.owner
+      ? {
+          displayName: character.owner.displayName,
+          email: character.owner.email,
+          id: character.owner.id
+        }
+      : null,
     ownerId: character.ownerId,
     updatedAt: character.updatedAt.toISOString()
   };
@@ -47,6 +69,61 @@ function mapCharacterRecord(character: {
 
 export function createPrismaCharacterRepository(): CharacterRepository {
   return {
+    async findById(id) {
+      const character = await prisma.character.findUnique({
+        include: {
+          owner: {
+            select: {
+              displayName: true,
+              email: true,
+              id: true
+            }
+          }
+        },
+        where: {
+          id
+        }
+      });
+
+      return character ? mapCharacterRecord(character) : null;
+    },
+    async findOwnedById(ownerId, id) {
+      const character = await prisma.character.findFirst({
+        include: {
+          owner: {
+            select: {
+              displayName: true,
+              email: true,
+              id: true
+            }
+          }
+        },
+        where: {
+          id,
+          ownerId
+        }
+      });
+
+      return character ? mapCharacterRecord(character) : null;
+    },
+    async listAll() {
+      const characters = await prisma.character.findMany({
+        include: {
+          owner: {
+            select: {
+              displayName: true,
+              email: true,
+              id: true
+            }
+          }
+        },
+        orderBy: {
+          createdAt: "desc"
+        }
+      });
+
+      return characters.map(mapCharacterRecord);
+    },
     async saveOwned(input) {
       const existing = await prisma.character.findUnique({
         where: {
@@ -84,6 +161,15 @@ export function createPrismaCharacterRepository(): CharacterRepository {
     },
     async listByOwner(ownerId) {
       const characters = await prisma.character.findMany({
+        include: {
+          owner: {
+            select: {
+              displayName: true,
+              email: true,
+              id: true
+            }
+          }
+        },
         orderBy: {
           createdAt: "desc"
         },

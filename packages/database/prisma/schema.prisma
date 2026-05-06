@@ -7,15 +7,170 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum EquipmentCategory {
+  weapon
+  shield
+  armor
+  gear
+  valuables
+}
+
+enum CarryMode {
+  equipped
+  on_person
+  backpack
+  mount
+  stored
+}
+
+enum StorageLocationType {
+  equipped_system
+  person_system
+  backpack_system
+  mount_system
+  home
+  camp
+  boat
+  wagon
+  cache
+  building
+  other
+}
+
+enum LocationAvailabilityClass {
+  with_you
+  elsewhere
+}
+
+enum MaterialType {
+  steel
+  bronze
+  wood
+  leather
+  cloth
+  bone
+  stone
+  silver
+  gold
+  other
+}
+
+enum QualityType {
+  standard
+  extraordinary
+}
+
+enum SpecificityType {
+  generic
+  specific
+}
+
+enum ItemConditionState {
+  intact
+  worn
+  damaged
+  broken
+  lost
+}
+
+enum CampaignStatus {
+  draft
+  active
+  archived
+}
+
+enum ScenarioKind {
+  combat
+  social
+  travel
+  mixed
+}
+
+enum ScenarioStatus {
+  draft
+  prepared
+  live
+  completed
+  archived
+}
+
+enum ScenarioCombatStatus {
+  not_started
+  in_progress
+  paused
+  ended
+}
+
+enum ScenarioParticipantSourceType {
+  character
+  entity
+}
+
+enum ScenarioParticipantRole {
+  player_character
+  npc
+  monster
+  animal
+  neutral
+  ally
+  enemy
+}
+
+enum ScenarioParticipantJoinSource {
+  gm_added
+  player_joined
+  imported_from_template
+}
+
+enum ScenarioRelationshipType {
+  continues_from
+}
+
+enum ScenarioVisibility {
+  hidden
+  visible_to_all
+  gm_only
+}
+
+enum CampaignAssetType {
+  map
+  image
+  document
+  handout
+  drawing
+}
+
+enum ReusableEntityKind {
+  npc
+  monster
+  animal
+}
+
+enum CampaignRosterSourceType {
+  character
+  reusableEntity
+  template
+}
+
+enum CampaignRosterCategory {
+  pc
+  npc
+  template
+}
+
 model Character {
-  id        String   @id @default(cuid())
-  name      String
-  level     Int      @default(1)
-  build     Json
-  ownerId   String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  owner     User?    @relation(fields: [ownerId], references: [id])
+  id               String                    @id @default(cuid())
+  name             String
+  level            Int                       @default(1)
+  build            Json
+  ownerId          String?
+  createdAt        DateTime                  @default(now())
+  updatedAt        DateTime                  @updatedAt
+  owner            User?                     @relation(fields: [ownerId], references: [id])
+  equipmentItems   CharacterEquipmentItem[]
+  storageLocations CharacterStorageLocation[]
+  loadouts         CharacterLoadout[]
+  scenarioParticipants ScenarioParticipant[]
 }
 
 model Weapon {
@@ -27,10 +182,19 @@ model Weapon {
 }
 
 model Encounter {
-  id        String   @id @default(cuid())
-  name      String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id              String   @id @default(cuid())
+  name            String
+  campaignId      String?
+  scenarioId      String?
+  status          String   @default("setup")
+  sessionJson     Json?
+  createdByUserId String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([campaignId])
+  @@index([scenarioId])
+  @@index([scenarioId, updatedAt])
 }
 
 model User {
@@ -40,8 +204,13 @@ model User {
   passwordHash String
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
+  campaigns   Campaign[]
   characters  Character[]
+  createdAssets CampaignAsset[]
+  controlledScenarioParticipants ScenarioParticipant[] @relation("ScenarioParticipantController")
+  reusableEntities ReusableEntity[]
   roles       UserRole[]
+  scenarioEvents ScenarioEventLog[]
   sessions    Session[]
 }
 
@@ -79,4 +248,244 @@ model CanonicalContentSnapshot {
   revision  Int
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model CharacterEquipmentItem {
+  id                    String             @id
+  characterId           String
+  templateId            String
+  category              EquipmentCategory
+  displayName           String?
+  specificityType       SpecificityType
+  quantity              Int
+  isStackable           Boolean
+  material              MaterialType
+  quality               QualityType
+  locationId            String
+  carryMode             CarryMode
+  previousLocationId    String?
+  previousCarryMode     CarryMode?
+  conditionState        ItemConditionState
+  durabilityCurrent     Int?
+  durabilityMax         Int?
+  encumbranceOverride   Float?
+  valueOverride         Float?
+  specialPropertiesJson Json?
+  notes                 String?
+  isEquipped            Boolean?
+  isFavorite            Boolean?
+  acquiredFrom          String?
+  statusTagsJson        Json?
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+  character             Character          @relation(fields: [characterId], references: [id], onDelete: Cascade)
+
+  @@index([characterId])
+  @@index([characterId, locationId])
+}
+
+model CharacterStorageLocation {
+  id                      String              @id
+  characterId             String
+  name                    String
+  type                    StorageLocationType
+  availabilityClass       LocationAvailabilityClass
+  parentLocationId        String?
+  isMobile                Boolean
+  isAccessibleInEncounter Boolean
+  notes                   String?
+  createdAt               DateTime            @default(now())
+  updatedAt               DateTime            @updatedAt
+  character               Character           @relation(fields: [characterId], references: [id], onDelete: Cascade)
+
+  @@index([characterId])
+  @@unique([characterId, name])
+}
+
+model CharacterLoadout {
+  id                        String      @id
+  characterId               String
+  name                      String
+  isActive                  Boolean
+  wornArmorItemId           String?
+  readyShieldItemId         String?
+  activePrimaryWeaponItemId String?
+  activeSecondaryWeaponItemId String?
+  activeMissileWeaponItemId String?
+  activeAmmoItemIds         String[]
+  quickAccessItemIdsJson    Json
+  notes                     String?
+  createdAt                 DateTime    @default(now())
+  updatedAt                 DateTime    @updatedAt
+  character                 Character   @relation(fields: [characterId], references: [id], onDelete: Cascade)
+
+  @@index([characterId])
+  @@index([characterId, isActive])
+}
+
+model Campaign {
+  id          String          @id @default(cuid())
+  name        String
+  slug        String          @unique
+  description String
+  gmUserId    String
+  status      CampaignStatus
+  settingsJson Json
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  assets      CampaignAsset[]
+  gmUser      User            @relation(fields: [gmUserId], references: [id], onDelete: Cascade)
+  rosterEntries CampaignRosterEntry[]
+  scenarioRelationships ScenarioRelationship[]
+  scenarios   Scenario[]
+}
+
+model Scenario {
+  id            String             @id @default(cuid())
+  campaignId    String
+  name          String
+  description   String
+  kind          ScenarioKind
+  status        ScenarioStatus
+  mapAssetId    String?
+  liveStateJson Json?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+  campaign      Campaign           @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  eventLogs     ScenarioEventLog[]
+  mapAsset      CampaignAsset?     @relation("ScenarioMapAsset", fields: [mapAssetId], references: [id], onDelete: SetNull)
+  participants  ScenarioParticipant[]
+  relationshipsFrom ScenarioRelationship[] @relation("ScenarioRelationshipFrom")
+  relationshipsTo   ScenarioRelationship[] @relation("ScenarioRelationshipTo")
+
+  @@index([campaignId])
+  @@index([campaignId, status])
+}
+
+model ScenarioRelationship {
+  id             String                   @id @default(cuid())
+  campaignId     String
+  fromScenarioId String
+  toScenarioId   String
+  relationType   ScenarioRelationshipType
+  sortOrder      Int?
+  createdAt      DateTime                 @default(now())
+  updatedAt      DateTime                 @updatedAt
+  campaign       Campaign                 @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  fromScenario   Scenario                 @relation("ScenarioRelationshipFrom", fields: [fromScenarioId], references: [id], onDelete: Cascade)
+  toScenario     Scenario                 @relation("ScenarioRelationshipTo", fields: [toScenarioId], references: [id], onDelete: Cascade)
+
+  @@index([campaignId])
+  @@index([fromScenarioId])
+  @@index([toScenarioId])
+  @@index([campaignId, relationType])
+}
+
+model ReusableEntity {
+  id          String             @id @default(cuid())
+  gmUserId    String
+  name        String
+  kind        ReusableEntityKind
+  description String?
+  notes       String?
+  snapshotJson Json?
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  gmUser      User               @relation(fields: [gmUserId], references: [id], onDelete: Cascade)
+  scenarioParticipants ScenarioParticipant[]
+
+  @@index([gmUserId])
+}
+
+model ScenarioParticipant {
+  id          String                        @id @default(cuid())
+  scenarioId  String
+  sourceType  ScenarioParticipantSourceType
+  characterId String?
+  entityId    String?
+  role        ScenarioParticipantRole
+  controlledByUserId String?
+  factionId   String?
+  tacticalGroupId String?
+  roleTag     String?
+  displayOrder Int?
+  joinSource  ScenarioParticipantJoinSource
+  initiativeSlot Int?
+  positionJson Json?
+  visibilityOverridesJson Json?
+  stateJson   Json
+  snapshotJson Json
+  isActive    Boolean                       @default(true)
+  createdAt   DateTime                      @default(now())
+  updatedAt   DateTime                      @updatedAt
+  character   Character?                    @relation(fields: [characterId], references: [id], onDelete: SetNull)
+  controlledByUser User?                    @relation("ScenarioParticipantController", fields: [controlledByUserId], references: [id], onDelete: SetNull)
+  entity      ReusableEntity?               @relation(fields: [entityId], references: [id], onDelete: SetNull)
+  scenario    Scenario                      @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+  eventLogs   ScenarioEventLog[]
+
+  @@index([scenarioId])
+  @@index([characterId])
+  @@index([entityId])
+  @@index([controlledByUserId])
+  @@index([scenarioId, controlledByUserId])
+  @@index([scenarioId, factionId])
+  @@index([scenarioId, tacticalGroupId])
+}
+
+model CampaignAsset {
+  id          String             @id @default(cuid())
+  campaignId  String
+  type        CampaignAssetType
+  title       String
+  description String?
+  storageUrl  String
+  mimeType    String?
+  visibility  ScenarioVisibility
+  createdByUserId String
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  campaign    Campaign           @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  createdByUser User             @relation(fields: [createdByUserId], references: [id], onDelete: Cascade)
+  mappedScenarios Scenario[]     @relation("ScenarioMapAsset")
+
+  @@index([campaignId])
+}
+
+model CampaignRosterEntry {
+  id              String                   @id @default(cuid())
+  campaignId      String
+  sourceType      CampaignRosterSourceType
+  sourceId        String
+  category        CampaignRosterCategory
+  labelSnapshot   String?
+  notes           String?
+  createdByUserId String?
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
+  campaign        Campaign                 @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@index([campaignId])
+  @@index([sourceType, sourceId])
+  @@unique([campaignId, sourceType, sourceId])
+}
+
+model ScenarioEventLog {
+  id            String   @id @default(cuid())
+  scenarioId     String
+  roundNumber    Int?
+  phase          Int?
+  eventType      String
+  actorUserId    String?
+  participantId  String?
+  summary        String
+  payloadJson    Json?
+  createdAt      DateTime @default(now())
+  actorUser      User?    @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+  participant    ScenarioParticipant? @relation(fields: [participantId], references: [id], onDelete: SetNull)
+  scenario       Scenario @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+
+  @@index([scenarioId])
+  @@index([participantId])
+  @@index([actorUserId])
 }

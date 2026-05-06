@@ -1,33 +1,43 @@
 import type {
   CharacterBuild,
   CharacterProgression,
+  CharacterProgressionCheck,
+  CharacterProgressionHistoryEntry,
+  CharacterProgressionPendingAttempt,
+  CharacterProgressionState,
   CharacterSkill,
   CharacterSkillGroup,
   CharacterSpecialization,
+  GlantriCharacteristicKey,
   ProfessionFamilyDefinition,
   ProfessionDefinition,
   ProfessionSkillMap,
+  ProgressionTargetType,
   SkillDefinition,
   SkillGroupDefinition,
   SkillSpecialization,
   SocietyLevelAccess
 } from "@glantri/domain";
-import { getSkillGroupIds } from "@glantri/domain";
-
-import { calculateGroupLevel } from "../skills/calculateGroupLevel";
-import { calculateSpecializationLevel } from "../skills/calculateSpecializationLevel";
-import { selectBestSkillGroupContribution } from "../skills/selectBestSkillGroupContribution";
 import {
-  buildChargenDraftView,
-  getPrimaryPurchaseCostForGroup,
+  getSkillGroupIds,
+  glantriCharacteristicKeySchema,
+  glantriCharacteristicLabels,
+  glantriCharacteristicOrder
+} from "@glantri/domain";
+
+import {
+  buildCharacterSheetSummary,
+  type CharacterSheetSummary
+} from "../sheets/buildCharacterSheetSummary";
+import {
+  getActiveGroupSkillPurchaseCost,
   getPrimaryPurchaseCostForSkill,
   getSecondaryPurchaseCostForSkill,
   getSecondaryPurchaseCostForSpecialization,
   normalizeChargenProgression,
   type ChargenDraftView
 } from "../chargen/primaryAllocation";
-
-const LITERACY_SKILL_ID = "literacy";
+import { applyRelationshipMinimumGrants } from "../skills/deriveSkillRelationships";
 
 interface CanonicalContentShape {
   professionFamilies: ProfessionFamilyDefinition[];
@@ -39,40 +49,65 @@ interface CanonicalContentShape {
   specializations: SkillSpecialization[];
 }
 
-export interface CharacterAdvancementView {
-  advancementPointsAvailable: number;
-  advancementPointsSpent: number;
-  advancementPointsTotal: number;
-  draftView: ChargenDraftView;
-  seniority: number;
-  totalSkillPointsInvested: number;
-}
-
-export interface ReviewCharacterAdvancementInput {
-  advancementPointsSpent: number;
-  advancementPointsTotal: number;
-  build: CharacterBuild;
-  content: CanonicalContentShape;
-}
-
-export interface ReviewCharacterAdvancementResult {
-  canSave: boolean;
-  errors: string[];
-  view: CharacterAdvancementView;
-  warnings: string[];
-}
-
-export interface SpendAdvancementPointInput extends ReviewCharacterAdvancementInput {
+export interface CharacterProgressionTargetRow {
+  approved: boolean;
+  approvedCheckId?: string;
+  checked: boolean;
+  checkId?: string;
+  cost?: number;
+  currentValue: number;
+  disabledReason?: string;
+  label: string;
+  pending: boolean;
+  provisional: boolean;
+  requested: boolean;
+  requestedCheckId?: string;
   targetId: string;
-  targetType: "group" | "skill" | "specialization";
+  targetType: ProgressionTargetType;
 }
 
-export interface SpendAdvancementPointResult {
-  advancementPointsSpent: number;
-  build: CharacterBuild;
-  error?: string;
-  spentCost?: number;
-  warnings: string[];
+export interface CharacterProgressionView {
+  availablePoints: number;
+  checks: CharacterProgressionCheck[];
+  draftView: ChargenDraftView;
+  history: CharacterProgressionHistoryEntry[];
+  pendingAttempts: CharacterProgressionPendingAttempt[];
+  rows: CharacterProgressionTargetRow[];
+  sheetSummary: CharacterSheetSummary;
+}
+
+export interface OpenEndedProgressionRoll {
+  openEndedD10s: number[];
+  rollD20: number;
+  rollTotal: number;
+}
+
+function createEmptyProgressionState(): CharacterProgressionState {
+  return {
+    availablePoints: 0,
+    checks: [],
+    history: [],
+    pendingAttempts: []
+  };
+}
+
+export function getCharacterProgressionState(
+  build: Pick<CharacterBuild, "progressionState">
+): CharacterProgressionState {
+  return build.progressionState ?? createEmptyProgressionState();
+}
+
+function createId(prefix: string): string {
+  const randomSuffix =
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : Math.random().toString(36).slice(2);
+
+  return `${prefix}-${randomSuffix}`;
+}
+
+function nowIso(): string {
+  return new Date().toISOString();
 }
 
 function getSkillById(
@@ -82,6 +117,13 @@ function getSkillById(
   return content.skills.find((skill) => skill.id === skillId);
 }
 
+function getGroupById(
+  content: CanonicalContentShape,
+  groupId: string
+): SkillGroupDefinition | undefined {
+  return content.skillGroups.find((group) => group.id === groupId);
+}
+
 function getSpecializationById(
   content: CanonicalContentShape,
   specializationId: string
@@ -89,44 +131,202 @@ function getSpecializationById(
   return content.specializations.find((specialization) => specialization.id === specializationId);
 }
 
-function hasLiteracy(progression: CharacterProgression): boolean {
-  return progression.skills.some((skill) => skill.skillId === LITERACY_SKILL_ID && skill.ranks > 0);
+function isValidProgressionTarget(input: {
+  content: CanonicalContentShape;
+  targetId: string;
+  targetType: ProgressionTargetType;
+}): boolean {
+  if (input.targetType === "skill") {
+    return Boolean(getSkillById(input.content, input.targetId));
+  }
+
+  if (input.targetType === "skillGroup") {
+    return Boolean(getGroupById(input.content, input.targetId));
+  }
+
+  if (input.targetType === "specialization") {
+    return Boolean(getSpecializationById(input.content, input.targetId));
+  }
+
+  return glantriCharacteristicKeySchema.safeParse(input.targetId).success;
 }
 
-function createEmptyGroup(groupId: string): CharacterSkillGroup {
+function findCheck(
+  state: CharacterProgressionState,
+  targetType: ProgressionTargetType,
+  targetId: string
+): CharacterProgressionCheck | undefined {
+  return state.checks.find(
+    (check) => check.targetType === targetType && check.targetId === targetId
+  );
+}
+
+function findApprovedCheck(
+  state: CharacterProgressionState,
+  targetType: ProgressionTargetType,
+  targetId: string
+): CharacterProgressionCheck | undefined {
+  return state.checks.find(
+    (check) =>
+      check.targetType === targetType &&
+      check.targetId === targetId &&
+      (check.status ?? "approved") === "approved"
+  );
+}
+
+function findRequestedCheck(
+  state: CharacterProgressionState,
+  targetType: ProgressionTargetType,
+  targetId: string
+): CharacterProgressionCheck | undefined {
+  return state.checks.find(
+    (check) =>
+      check.targetType === targetType &&
+      check.targetId === targetId &&
+      (check.status ?? "approved") === "requested"
+  );
+}
+
+function hasPendingAttempt(
+  state: CharacterProgressionState,
+  targetType: ProgressionTargetType,
+  targetId: string
+): boolean {
+  return state.pendingAttempts.some(
+    (attempt) => attempt.targetType === targetType && attempt.targetId === targetId
+  );
+}
+
+function getStatValue(
+  build: CharacterBuild,
+  stat: GlantriCharacteristicKey
+): number {
+  return (build.profile.resolvedStats?.[stat] ?? build.profile.rolledStats[stat] ?? 0) +
+    (build.statModifiers?.[stat] ?? 0);
+}
+
+function getTargetLabel(input: {
+  build: CharacterBuild;
+  content: CanonicalContentShape;
+  targetId: string;
+  targetType: ProgressionTargetType;
+}): string {
+  if (input.targetType === "skill") {
+    return getSkillById(input.content, input.targetId)?.name ?? input.targetId;
+  }
+
+  if (input.targetType === "skillGroup") {
+    return getGroupById(input.content, input.targetId)?.name ?? input.targetId;
+  }
+
+  if (input.targetType === "specialization") {
+    return getSpecializationById(input.content, input.targetId)?.name ?? input.targetId;
+  }
+
+  return input.targetId.toUpperCase();
+}
+
+function getTargetCurrentValue(input: {
+  build: CharacterBuild;
+  content: CanonicalContentShape;
+  sheetSummary: CharacterSheetSummary;
+  targetId: string;
+  targetType: ProgressionTargetType;
+}): number {
+  if (input.targetType === "skill") {
+    return input.sheetSummary.draftView.skills.find((skill) => skill.skillId === input.targetId)
+      ?.effectiveSkillNumber ?? 0;
+  }
+
+  if (input.targetType === "skillGroup") {
+    return input.sheetSummary.draftView.groups.find((group) => group.groupId === input.targetId)
+      ?.groupLevel ?? 0;
+  }
+
+  if (input.targetType === "specialization") {
+    return input.sheetSummary.draftView.specializations.find(
+      (specialization) => specialization.specializationId === input.targetId
+    )?.effectiveSpecializationNumber ?? 0;
+  }
+
+  return getStatValue(input.build, input.targetId as GlantriCharacteristicKey);
+}
+
+function getProgressionAttemptCost(input: {
+  build: CharacterBuild;
+  content: CanonicalContentShape;
+  targetId: string;
+  targetType: ProgressionTargetType;
+}): { cost?: number; error?: string } {
+  if (input.targetType === "stat") {
+    return { error: "Stat advancement is not enabled yet." };
+  }
+
+  const progression = normalizeChargenProgression(input.build.progression);
+
+  if (input.targetType === "skillGroup") {
+    return getActiveGroupSkillPurchaseCost({
+      content: input.content,
+      groupId: input.targetId,
+      progression
+    });
+  }
+
+  if (input.targetType === "skill") {
+    const skill = getSkillById(input.content, input.targetId);
+
+    if (!skill) {
+      return { error: "Skill definition not found." };
+    }
+
+    return {
+      cost:
+        skill.category === "secondary"
+          ? getSecondaryPurchaseCostForSkill(progression, skill)
+          : getPrimaryPurchaseCostForSkill(progression, skill)
+    };
+  }
+
+  const specialization = getSpecializationById(input.content, input.targetId);
+
+  if (!specialization) {
+    return { error: "Specialization definition not found." };
+  }
+
   return {
-    gms: 0,
-    grantedRanks: 0,
-    groupId,
-    primaryRanks: 0,
-    secondaryRanks: 0,
-    ranks: 0
+    cost: getSecondaryPurchaseCostForSpecialization(progression, specialization)
   };
 }
 
 function createEmptySkill(skill: SkillDefinition): CharacterSkill {
   return {
     category: skill.category,
+    categoryId: skill.categoryId,
     grantedRanks: 0,
-    groupId: getSkillGroupIds(skill)[0],
+    groupId: getSkillGroupIds(skill)[0] ?? skill.groupId,
+    groupIds: getSkillGroupIds(skill),
     level: 0,
     primaryRanks: 0,
     ranks: 0,
+    relationshipGrantedRanks: 0,
     secondaryRanks: 0,
     skillId: skill.id
   };
 }
 
-function createEmptySpecialization(
-  specialization: SkillSpecialization
-): CharacterSpecialization {
-  return {
-    level: 0,
-    ranks: 0,
-    secondaryRanks: 0,
-    skillId: specialization.skillId,
-    specializationId: specialization.id
-  };
+function ensureSkillExists(
+  progression: CharacterProgression,
+  skill: SkillDefinition
+): CharacterSkill {
+  const existing = progression.skills.find((entry) => entry.skillId === skill.id);
+
+  if (existing) {
+    return existing;
+  }
+
+  const created = createEmptySkill(skill);
+  progression.skills.push(created);
+  return created;
 }
 
 function ensureGroupExists(
@@ -139,23 +339,15 @@ function ensureGroupExists(
     return existing;
   }
 
-  const created = createEmptyGroup(groupId);
+  const created: CharacterSkillGroup = {
+    gms: 0,
+    grantedRanks: 0,
+    groupId,
+    primaryRanks: 0,
+    ranks: 0,
+    secondaryRanks: 0
+  };
   progression.skillGroups.push(created);
-  return created;
-}
-
-function ensureSkillExists(
-  progression: CharacterProgression,
-  skill: SkillDefinition
-): CharacterSkill {
-  const existing = progression.skills.find((item) => item.skillId === skill.id);
-
-  if (existing) {
-    return existing;
-  }
-
-  const created = createEmptySkill(skill);
-  progression.skills.push(created);
   return created;
 }
 
@@ -164,287 +356,43 @@ function ensureSpecializationExists(
   specialization: SkillSpecialization
 ): CharacterSpecialization {
   const existing = progression.specializations.find(
-    (item) => item.specializationId === specialization.id
+    (entry) => entry.specializationId === specialization.id
   );
 
   if (existing) {
     return existing;
   }
 
-  const created = createEmptySpecialization(specialization);
+  const created: CharacterSpecialization = {
+    level: 0,
+    ranks: 0,
+    relationshipGrantedRanks: 0,
+    secondaryRanks: 0,
+    skillId: specialization.skillId,
+    specializationId: specialization.id
+  };
   progression.specializations.push(created);
   return created;
 }
 
-function getGroupLevel(input: {
+function applySuccessfulIncrease(input: {
   build: CharacterBuild;
   content: CanonicalContentShape;
-  group: CharacterSkillGroup;
-}): number {
-  return calculateGroupLevel({
-    gms: input.group.gms,
-    ranks: input.group.ranks
-  });
-}
-
-function getSkillGroupDefinition(
-  content: CanonicalContentShape,
-  groupId: string
-): SkillGroupDefinition | undefined {
-  return content.skillGroups.find((group) => group.id === groupId);
-}
-
-function getBestPurchasedParentGroup(
-  content: CanonicalContentShape,
-  progression: CharacterProgression,
-  skillDefinition: SkillDefinition
-): CharacterSkillGroup | undefined {
-  const groupIds = new Set(getSkillGroupIds(skillDefinition));
-  const candidates = progression.skillGroups
-    .filter((group) => group.ranks > 0 && groupIds.has(group.groupId))
-    .map((group) => {
-      const definition = getSkillGroupDefinition(content, group.groupId);
-
-      return {
-        group,
-        contribution: {
-          groupId: group.groupId,
-          groupLevel: calculateGroupLevel({
-            gms: group.gms,
-            ranks: group.ranks
-          }),
-          name: definition?.name ?? group.groupId,
-          sortOrder: definition?.sortOrder ?? Number.MAX_SAFE_INTEGER
-        }
-      };
-    });
-  const best = selectBestSkillGroupContribution(
-    candidates.map((candidate) => candidate.contribution)
-  );
-
-  return candidates.find((candidate) => candidate.contribution.groupId === best?.groupId)?.group;
-}
-
-export function getAdvancementPurchaseCostForSkill(
-  progression: CharacterProgression,
-  skillDefinition: SkillDefinition
-): number {
-  return skillDefinition.category === "secondary"
-    ? getSecondaryPurchaseCostForSkill(progression, skillDefinition)
-    : getPrimaryPurchaseCostForSkill(progression, skillDefinition);
-}
-
-export function buildCharacterAdvancementView(
-  input: ReviewCharacterAdvancementInput
-): CharacterAdvancementView {
-  const draftView = buildChargenDraftView({
-    content: input.content,
-    professionId: input.build.professionId,
-    profile: input.build.profile,
-    progression: input.build.progression,
-    societyId: input.build.societyId,
-    societyLevel: input.build.societyLevel
-  });
-  const totalSkillPointsInvested =
-    draftView.totalSkillPointsInvested + input.advancementPointsSpent;
-
-  return {
-    advancementPointsAvailable: input.advancementPointsTotal - input.advancementPointsSpent,
-    advancementPointsSpent: input.advancementPointsSpent,
-    advancementPointsTotal: input.advancementPointsTotal,
-    draftView,
-    seniority: totalSkillPointsInvested,
-    totalSkillPointsInvested
-  };
-}
-
-export function reviewCharacterAdvancement(
-  input: ReviewCharacterAdvancementInput
-): ReviewCharacterAdvancementResult {
-  const progression = normalizeChargenProgression(input.build.progression);
-  const view = buildCharacterAdvancementView(input);
-  const errors = new Set<string>();
-  const warnings = new Set<string>();
-  const literacyPresent = hasLiteracy(progression);
-
-  if (input.advancementPointsSpent > input.advancementPointsTotal) {
-    errors.add("Advancement points are overspent.");
-  }
-
-  for (const skill of progression.skills) {
-    const definition = getSkillById(input.content, skill.skillId);
-
-    if (!definition) {
-      errors.add(`Missing skill definition for ${skill.skillId}.`);
-      continue;
-    }
-
-    const parentGroup = getBestPurchasedParentGroup(input.content, progression, definition);
-
-    if (!parentGroup || parentGroup.ranks < 1) {
-      errors.add(`${definition.name} requires the parent group to exist.`);
-    }
-
-    if (
-      definition.id !== LITERACY_SKILL_ID &&
-      definition.requiresLiteracy === "required" &&
-      skill.ranks > 0 &&
-      !literacyPresent
-    ) {
-      errors.add(`${definition.name} requires Literacy before it can be retained.`);
-    }
-
-    if (
-      definition.id !== LITERACY_SKILL_ID &&
-      definition.requiresLiteracy === "recommended" &&
-      skill.ranks > 0 &&
-      !literacyPresent
-    ) {
-      warnings.add(`${definition.name} recommends Literacy.`);
-    }
-  }
-
-  for (const specialization of progression.specializations) {
-    const definition = getSpecializationById(input.content, specialization.specializationId);
-
-    if (!definition) {
-      errors.add(`Missing specialization definition for ${specialization.specializationId}.`);
-      continue;
-    }
-
-    const parentSkillDefinition = getSkillById(input.content, definition.skillId);
-
-    if (!parentSkillDefinition || !parentSkillDefinition.allowsSpecializations) {
-      errors.add(`${definition.name} does not have a valid parent skill.`);
-      continue;
-    }
-
-    const parentSkill = progression.skills.find(
-      (skill) => skill.skillId === definition.skillId && skill.ranks > 0
-    );
-
-    if (!parentSkill) {
-      errors.add(`${definition.name} requires the parent skill to exist.`);
-      continue;
-    }
-
-    const parentGroup = getBestPurchasedParentGroup(
-      input.content,
-      progression,
-      parentSkillDefinition
-    );
-
-    if (!parentGroup) {
-      errors.add(`${definition.name} requires the parent group to exist.`);
-      continue;
-    }
-
-    const groupLevel = getGroupLevel({
-      build: input.build,
-      content: input.content,
-      group: parentGroup
-    });
-
-    if (groupLevel < definition.minimumGroupLevel) {
-      errors.add(`${definition.name} requires group level ${definition.minimumGroupLevel} or higher.`);
-    }
-  }
-
-  return {
-    canSave: errors.size === 0,
-    errors: [...errors],
-    view,
-    warnings: [...warnings]
-  };
-}
-
-export function spendAdvancementPoint(
-  input: SpendAdvancementPointInput
-): SpendAdvancementPointResult {
-  const build: CharacterBuild = structuredClone(input.build);
+  targetId: string;
+  targetType: ProgressionTargetType;
+}): CharacterBuild {
+  const build = structuredClone(input.build);
   const progression = normalizeChargenProgression(build.progression);
-  const warnings: string[] = [];
 
-  if (input.targetType === "group") {
-    const cost = getPrimaryPurchaseCostForGroup(progression, input.targetId);
-
-    if (input.advancementPointsSpent + cost > input.advancementPointsTotal) {
-      return {
-        advancementPointsSpent: input.advancementPointsSpent,
-        build,
-        error: "Not enough advancement points remaining for that group purchase.",
-        warnings
-      };
-    }
-
+  if (input.targetType === "skillGroup") {
     const group = ensureGroupExists(progression, input.targetId);
     group.primaryRanks += 1;
     group.ranks = group.grantedRanks + group.primaryRanks + group.secondaryRanks;
-    build.progression = normalizeChargenProgression(progression);
-
-    return {
-      advancementPointsSpent: input.advancementPointsSpent + cost,
-      build,
-      spentCost: cost,
-      warnings
-    };
-  }
-
-  if (input.targetType === "skill") {
+  } else if (input.targetType === "skill") {
     const skillDefinition = getSkillById(input.content, input.targetId);
 
     if (!skillDefinition) {
-      return {
-        advancementPointsSpent: input.advancementPointsSpent,
-        build,
-        error: "Skill definition not found.",
-        warnings
-      };
-    }
-
-    const parentGroup = getBestPurchasedParentGroup(input.content, progression, skillDefinition);
-
-    if (!parentGroup || parentGroup.ranks < 1) {
-      return {
-        advancementPointsSpent: input.advancementPointsSpent,
-        build,
-        error: "Buy or gain the parent group before purchasing this skill.",
-        warnings
-      };
-    }
-
-    const literacyPresent = hasLiteracy(progression);
-
-    if (
-      skillDefinition.id !== LITERACY_SKILL_ID &&
-      skillDefinition.requiresLiteracy === "required" &&
-      !literacyPresent
-    ) {
-      return {
-        advancementPointsSpent: input.advancementPointsSpent,
-        build,
-        error: "Literacy is required before this skill can be purchased.",
-        warnings
-      };
-    }
-
-    if (
-      skillDefinition.id !== LITERACY_SKILL_ID &&
-      skillDefinition.requiresLiteracy === "recommended" &&
-      !literacyPresent
-    ) {
-      warnings.push("Literacy is recommended for this skill, but the purchase is allowed.");
-    }
-
-    const cost = getAdvancementPurchaseCostForSkill(progression, skillDefinition);
-
-    if (input.advancementPointsSpent + cost > input.advancementPointsTotal) {
-      return {
-        advancementPointsSpent: input.advancementPointsSpent,
-        build,
-        error: "Not enough advancement points remaining for that skill purchase.",
-        warnings
-      };
+      return input.build;
     }
 
     const skill = ensureSkillExists(progression, skillDefinition);
@@ -455,132 +403,558 @@ export function spendAdvancementPoint(
       skill.primaryRanks += 1;
     }
 
-    skill.ranks = skill.grantedRanks + skill.primaryRanks + skill.secondaryRanks;
-    build.progression = normalizeChargenProgression(progression);
+    skill.ranks =
+      skill.grantedRanks +
+      skill.primaryRanks +
+      skill.secondaryRanks +
+      (skill.relationshipGrantedRanks ?? 0);
+  } else if (input.targetType === "specialization") {
+    const specializationDefinition = getSpecializationById(input.content, input.targetId);
 
-    return {
-      advancementPointsSpent: input.advancementPointsSpent + cost,
-      build,
-      spentCost: cost,
-      warnings
-    };
+    if (!specializationDefinition) {
+      return input.build;
+    }
+
+    const specialization = ensureSpecializationExists(progression, specializationDefinition);
+    specialization.secondaryRanks += 1;
+    specialization.ranks =
+      specialization.secondaryRanks + (specialization.relationshipGrantedRanks ?? 0);
   }
 
-  const specializationDefinition = getSpecializationById(input.content, input.targetId);
-
-  if (!specializationDefinition) {
-    return {
-      advancementPointsSpent: input.advancementPointsSpent,
-      build,
-      error: "Specialization definition not found.",
-      warnings
-    };
-  }
-
-  const parentSkillDefinition = getSkillById(input.content, specializationDefinition.skillId);
-
-  if (!parentSkillDefinition || !parentSkillDefinition.allowsSpecializations) {
-    return {
-      advancementPointsSpent: input.advancementPointsSpent,
-      build,
-      error: "That specialization is not available for purchase.",
-      warnings
-    };
-  }
-
-  const parentGroup = getBestPurchasedParentGroup(input.content, progression, parentSkillDefinition);
-
-  if (!parentGroup) {
-    return {
-      advancementPointsSpent: input.advancementPointsSpent,
-      build,
-      error: "Acquire the parent group before purchasing a specialization.",
-      warnings
-    };
-  }
-
-  const parentSkill = progression.skills.find(
-    (skill) => skill.skillId === specializationDefinition.skillId && skill.ranks > 0
+  build.progression = normalizeChargenProgression(
+    applyRelationshipMinimumGrants({
+      content: input.content,
+      progression
+    })
   );
+  return build;
+}
 
-  if (!parentSkill) {
-    return {
-      advancementPointsSpent: input.advancementPointsSpent,
-      build,
-      error: "Acquire the parent skill before purchasing a specialization.",
-      warnings
-    };
+export function rollOpenEndedProgressionD20(rng: () => number = Math.random): OpenEndedProgressionRoll {
+  const rollDie = (sides: number) => Math.floor(rng() * sides) + 1;
+  const rollD20 = rollDie(20);
+  const openEndedD10s: number[] = [];
+  let rollTotal = rollD20;
+
+  if (rollD20 === 20) {
+    let nextD10 = 0;
+
+    do {
+      nextD10 = rollDie(10);
+      openEndedD10s.push(nextD10);
+      rollTotal += nextD10;
+    } while (nextD10 === 10);
   }
-
-  const parentGroupLevel = getGroupLevel({
-    build,
-    content: input.content,
-    group: parentGroup
-  });
-
-  if (parentGroupLevel < specializationDefinition.minimumGroupLevel) {
-    return {
-      advancementPointsSpent: input.advancementPointsSpent,
-      build,
-      error: `Group level ${specializationDefinition.minimumGroupLevel} or higher is required before acquiring a specialization.`,
-      warnings
-    };
-  }
-
-  const cost = getSecondaryPurchaseCostForSpecialization(progression, specializationDefinition);
-
-  if (input.advancementPointsSpent + cost > input.advancementPointsTotal) {
-    return {
-      advancementPointsSpent: input.advancementPointsSpent,
-      build,
-      error: "Not enough advancement points remaining for that specialization purchase.",
-      warnings
-    };
-  }
-
-  const specialization = ensureSpecializationExists(progression, specializationDefinition);
-  specialization.secondaryRanks += 1;
-  specialization.ranks = specialization.secondaryRanks;
-  specialization.skillId = specializationDefinition.skillId;
-  build.progression = normalizeChargenProgression(progression);
 
   return {
-    advancementPointsSpent: input.advancementPointsSpent + cost,
-    build,
-    spentCost: cost,
-    warnings
+    openEndedD10s,
+    rollD20,
+    rollTotal
   };
 }
 
-export function getEffectiveSpecializationNumber(input: {
+export function grantCharacterProgressionPoints(input: {
+  amount: number;
+  build: CharacterBuild;
+}): CharacterBuild {
+  const build = structuredClone(input.build);
+  const state = getCharacterProgressionState(build);
+
+  build.progressionState = {
+    ...state,
+    availablePoints: Math.max(0, state.availablePoints + Math.trunc(input.amount))
+  };
+  return build;
+}
+
+export function addCharacterProgressionCheck(input: {
+  build: CharacterBuild;
+  checkedBy?: string;
+  content: CanonicalContentShape;
+  notes?: string;
+  provisional?: boolean;
+  targetId: string;
+  targetType: ProgressionTargetType;
+}): CharacterBuild {
+  const build = structuredClone(input.build);
+  const state = getCharacterProgressionState(build);
+  const existing = findCheck(state, input.targetType, input.targetId);
+
+  if (existing || !isValidProgressionTarget(input)) {
+    return build;
+  }
+
+  build.progressionState = {
+    ...state,
+    checks: [
+      ...state.checks,
+      {
+        checkedAt: nowIso(),
+        checkedBy: input.checkedBy,
+        id: createId("check"),
+        notes: input.notes,
+        provisional: input.provisional,
+        status: "approved",
+        targetId: input.targetId,
+        targetLabel: getTargetLabel(input),
+        targetType: input.targetType
+      }
+    ]
+  };
+  return build;
+}
+
+export function requestCharacterProgressionCheck(input: {
   build: CharacterBuild;
   content: CanonicalContentShape;
-  specializationId: string;
-}): number | undefined {
-  const specializationDefinition = getSpecializationById(input.content, input.specializationId);
+  notes?: string;
+  provisional?: boolean;
+  requestedBy?: string;
+  targetId: string;
+  targetType: ProgressionTargetType;
+}): CharacterBuild {
+  const build = structuredClone(input.build);
+  const state = getCharacterProgressionState(build);
+  const existing = findCheck(state, input.targetType, input.targetId);
 
-  if (!specializationDefinition) {
-    return undefined;
+  if (existing || !isValidProgressionTarget(input)) {
+    return build;
   }
 
-  const specialization = input.build.progression.specializations.find(
-    (item) => item.specializationId === input.specializationId
-  );
-  const parentSkillDefinition = getSkillById(input.content, specializationDefinition.skillId);
-  const parentGroup = parentSkillDefinition
-    ? getBestPurchasedParentGroup(input.content, input.build.progression, parentSkillDefinition)
-    : undefined;
+  build.progressionState = {
+    ...state,
+    checks: [
+      ...state.checks,
+      {
+        checkedAt: nowIso(),
+        id: createId("check"),
+        notes: input.notes,
+        provisional: input.provisional,
+        requestedBy: input.requestedBy,
+        status: "requested",
+        targetId: input.targetId,
+        targetLabel: getTargetLabel(input),
+        targetType: input.targetType
+      }
+    ]
+  };
+  return build;
+}
 
-  if (!specialization || !parentGroup) {
-    return undefined;
+export function approveCharacterProgressionCheck(input: {
+  build: CharacterBuild;
+  checkedBy?: string;
+  content: CanonicalContentShape;
+  provisional?: boolean;
+  targetId: string;
+  targetType: ProgressionTargetType;
+}): CharacterBuild {
+  const build = structuredClone(input.build);
+  const state = getCharacterProgressionState(build);
+  const existing = findCheck(state, input.targetType, input.targetId);
+
+  if (!isValidProgressionTarget(input)) {
+    return build;
   }
 
-  return calculateSpecializationLevel({
-    groupLevel: getGroupLevel({
+  if (!existing) {
+    return addCharacterProgressionCheck(input);
+  }
+
+  build.progressionState = {
+    ...state,
+    checks: state.checks.map((check) =>
+      check.id === existing.id
+        ? {
+            ...check,
+            checkedBy: input.checkedBy ?? check.checkedBy,
+            provisional: input.provisional ?? check.provisional,
+            status: "approved"
+          }
+        : check
+    )
+  };
+  return build;
+}
+
+export function removeCharacterProgressionCheck(input: {
+  build: CharacterBuild;
+  targetId: string;
+  targetType: ProgressionTargetType;
+}): CharacterBuild {
+  const build = structuredClone(input.build);
+  const state = getCharacterProgressionState(build);
+
+  build.progressionState = {
+    ...state,
+    checks: state.checks.filter(
+      (check) => check.targetType !== input.targetType || check.targetId !== input.targetId
+    )
+  };
+  return build;
+}
+
+export function buyCharacterProgressionAttempt(input: {
+  build: CharacterBuild;
+  content: CanonicalContentShape;
+  purchasedBy?: string;
+  targetId: string;
+  targetType: ProgressionTargetType;
+}): {
+  attempt?: CharacterProgressionPendingAttempt;
+  build: CharacterBuild;
+  error?: string;
+} {
+  const build = structuredClone(input.build);
+  const state = getCharacterProgressionState(build);
+  const check = findApprovedCheck(state, input.targetType, input.targetId);
+
+  if (!check) {
+    return { build, error: "This target needs a GM-approved check before buying a progression attempt." };
+  }
+
+  if (hasPendingAttempt(state, input.targetType, input.targetId)) {
+    return { build, error: "This target already has a pending progression attempt." };
+  }
+
+  const costResult = getProgressionAttemptCost(input);
+
+  if (costResult.error || costResult.cost === undefined) {
+    return { build, error: costResult.error ?? "Could not price this progression attempt." };
+  }
+
+  if (state.availablePoints < costResult.cost) {
+    return { build, error: "Not enough progression points for that attempt." };
+  }
+
+  const attempt: CharacterProgressionPendingAttempt = {
+    checkId: check.id,
+    cost: costResult.cost,
+    id: createId("attempt"),
+    purchasedAt: nowIso(),
+    purchasedBy: input.purchasedBy,
+    targetId: input.targetId,
+    targetLabel: check.targetLabel,
+    targetType: input.targetType
+  };
+
+  build.progressionState = {
+    ...state,
+    availablePoints: state.availablePoints - costResult.cost,
+    pendingAttempts: [...state.pendingAttempts, attempt]
+  };
+  return { attempt, build };
+}
+
+export function resolveCharacterProgressionAttempts(input: {
+  build: CharacterBuild;
+  content: CanonicalContentShape;
+  resolvedAt?: string;
+  rng?: () => number;
+}): { build: CharacterBuild; history: CharacterProgressionHistoryEntry[] } {
+  let build = structuredClone(input.build);
+  const startingState = getCharacterProgressionState(build);
+  const resolvedAt = input.resolvedAt ?? nowIso();
+  const resolvedHistory: CharacterProgressionHistoryEntry[] = [];
+  let checks = [...startingState.checks];
+
+  for (const attempt of startingState.pendingAttempts) {
+    const sheetSummary = buildCharacterSheetSummary({
+      build,
+      content: input.content
+    });
+    const beforeValue = getTargetCurrentValue({
+      build,
+      content: input.content,
+      sheetSummary,
+      targetId: attempt.targetId,
+      targetType: attempt.targetType
+    });
+    const roll = rollOpenEndedProgressionD20(input.rng);
+    const success = attempt.targetType !== "stat" && roll.rollTotal >= beforeValue;
+    const nextBuild = success
+      ? applySuccessfulIncrease({
+          build,
+          content: input.content,
+          targetId: attempt.targetId,
+          targetType: attempt.targetType
+        })
+      : build;
+    const nextSheetSummary = buildCharacterSheetSummary({
+      build: nextBuild,
+      content: input.content
+    });
+    const afterValue = success
+      ? getTargetCurrentValue({
+          build: nextBuild,
+          content: input.content,
+          sheetSummary: nextSheetSummary,
+          targetId: attempt.targetId,
+          targetType: attempt.targetType
+        })
+      : beforeValue;
+    const historyEntry: CharacterProgressionHistoryEntry = {
+      afterValue,
+      beforeValue,
+      cost: attempt.cost,
+      id: createId("history"),
+      openEndedD10s: roll.openEndedD10s,
+      resolvedAt,
+      rollD20: roll.rollD20,
+      rollTotal: roll.rollTotal,
+      success,
+      targetId: attempt.targetId,
+      targetLabel: attempt.targetLabel,
+      targetType: attempt.targetType,
+      threshold: beforeValue
+    };
+
+    resolvedHistory.push(historyEntry);
+    checks = checks.filter((check) => check.id !== attempt.checkId);
+    build = nextBuild;
+  }
+
+  build.progressionState = {
+    ...getCharacterProgressionState(build),
+    checks,
+    history: [...startingState.history, ...resolvedHistory],
+    pendingAttempts: []
+  };
+
+  return {
+    build,
+    history: resolvedHistory
+  };
+}
+
+export function buildCharacterProgressionView(input: {
+  build: CharacterBuild;
+  content: CanonicalContentShape;
+}): CharacterProgressionView {
+  const state = getCharacterProgressionState(input.build);
+  const sheetSummary = buildCharacterSheetSummary(input);
+  const rowsByKey = new Map<string, CharacterProgressionTargetRow>();
+
+  const addRow = (
+    row: Omit<
+      CharacterProgressionTargetRow,
+      | "approved"
+      | "approvedCheckId"
+      | "checked"
+      | "checkId"
+      | "pending"
+      | "requested"
+      | "requestedCheckId"
+    >
+  ) => {
+    const check = findCheck(state, row.targetType, row.targetId);
+    const approvedCheck = findApprovedCheck(state, row.targetType, row.targetId);
+    const requestedCheck = findRequestedCheck(state, row.targetType, row.targetId);
+    const pending = hasPendingAttempt(state, row.targetType, row.targetId);
+    rowsByKey.set(`${row.targetType}:${row.targetId}`, {
+      ...row,
+      approved: Boolean(approvedCheck),
+      approvedCheckId: approvedCheck?.id,
+      checked: Boolean(approvedCheck),
+      checkId: check?.id,
+      pending,
+      requested: Boolean(requestedCheck),
+      requestedCheckId: requestedCheck?.id
+    });
+  };
+
+  for (const stat of glantriCharacteristicOrder) {
+    const costResult = getProgressionAttemptCost({
       build: input.build,
       content: input.content,
-      group: parentGroup
-    }),
-    specializationLevel: specialization.ranks
+      targetId: stat,
+      targetType: "stat"
+    });
+    addRow({
+      cost: costResult.cost,
+      currentValue: getStatValue(input.build, stat),
+      disabledReason: costResult.error,
+      label: glantriCharacteristicLabels[stat],
+      provisional: false,
+      targetId: stat,
+      targetType: "stat"
+    });
+  }
+
+  for (const group of sheetSummary.draftView.groups) {
+    const costResult = getProgressionAttemptCost({
+      build: input.build,
+      content: input.content,
+      targetId: group.groupId,
+      targetType: "skillGroup"
+    });
+    addRow({
+      cost: costResult.cost,
+      currentValue: group.groupLevel,
+      disabledReason: costResult.error,
+      label: group.name,
+      provisional: false,
+      targetId: group.groupId,
+      targetType: "skillGroup"
+    });
+  }
+
+  for (const skill of sheetSummary.draftView.skills) {
+    const costResult = getProgressionAttemptCost({
+      build: input.build,
+      content: input.content,
+      targetId: skill.skillId,
+      targetType: "skill"
+    });
+    addRow({
+      cost: costResult.cost,
+      currentValue: skill.effectiveSkillNumber,
+      disabledReason: costResult.error,
+      label: skill.name,
+      provisional: false,
+      targetId: skill.skillId,
+      targetType: "skill"
+    });
+  }
+
+  for (const specialization of sheetSummary.draftView.specializations) {
+    const costResult = getProgressionAttemptCost({
+      build: input.build,
+      content: input.content,
+      targetId: specialization.specializationId,
+      targetType: "specialization"
+    });
+    addRow({
+      cost: costResult.cost,
+      currentValue: specialization.effectiveSpecializationNumber,
+      disabledReason: costResult.error,
+      label: specialization.name,
+      provisional: false,
+      targetId: specialization.specializationId,
+      targetType: "specialization"
+    });
+  }
+
+  for (const check of state.checks) {
+    const key = `${check.targetType}:${check.targetId}`;
+
+    if (rowsByKey.has(key)) {
+      continue;
+    }
+
+    const costResult = getProgressionAttemptCost({
+      build: input.build,
+      content: input.content,
+      targetId: check.targetId,
+      targetType: check.targetType
+    });
+    rowsByKey.set(key, {
+      approved: (check.status ?? "approved") === "approved",
+      approvedCheckId: (check.status ?? "approved") === "approved" ? check.id : undefined,
+      checked: (check.status ?? "approved") === "approved",
+      checkId: check.id,
+      cost: costResult.cost,
+      currentValue:
+        check.targetType === "stat"
+          ? getStatValue(input.build, check.targetId as GlantriCharacteristicKey)
+          : 0,
+      disabledReason: costResult.error,
+      label: check.targetLabel,
+      pending: hasPendingAttempt(state, check.targetType, check.targetId),
+      provisional: Boolean(check.provisional),
+      requested: (check.status ?? "approved") === "requested",
+      requestedCheckId: (check.status ?? "approved") === "requested" ? check.id : undefined,
+      targetId: check.targetId,
+      targetType: check.targetType
+    });
+  }
+
+  return {
+    availablePoints: state.availablePoints,
+    checks: state.checks,
+    draftView: sheetSummary.draftView,
+    history: state.history,
+    pendingAttempts: state.pendingAttempts,
+    rows: [...rowsByKey.values()].sort((left, right) =>
+      left.targetType.localeCompare(right.targetType) || left.label.localeCompare(right.label)
+    ),
+    sheetSummary
+  };
+}
+
+export function reviewCharacterAdvancement(input: {
+  advancementPointsSpent?: number;
+  advancementPointsTotal?: number;
+  build: CharacterBuild;
+  content: CanonicalContentShape;
+}): {
+  canSave: boolean;
+  errors: string[];
+  view: {
+    advancementPointsAvailable: number;
+    advancementPointsSpent: number;
+    advancementPointsTotal: number;
+    draftView: ChargenDraftView;
+    seniority: number;
+    totalSkillPointsInvested: number;
+  };
+  warnings: string[];
+} {
+  const progressionView = buildCharacterProgressionView(input);
+
+  return {
+    canSave: true,
+    errors: [],
+    view: {
+      advancementPointsAvailable: progressionView.availablePoints,
+      advancementPointsSpent: input.build.progressionState?.history.reduce(
+        (total, entry) => total + entry.cost,
+        0
+      ) ?? 0,
+      advancementPointsTotal:
+        progressionView.availablePoints +
+        (input.build.progressionState?.history.reduce((total, entry) => total + entry.cost, 0) ??
+          0) +
+        (input.build.progressionState?.pendingAttempts.reduce(
+          (total, entry) => total + entry.cost,
+          0
+        ) ?? 0),
+      draftView: progressionView.draftView,
+      seniority: progressionView.sheetSummary.seniority,
+      totalSkillPointsInvested: progressionView.sheetSummary.totalSkillPointsInvested
+    },
+    warnings: []
+  };
+}
+
+export function spendAdvancementPoint(input: {
+  advancementPointsSpent?: number;
+  advancementPointsTotal?: number;
+  build: CharacterBuild;
+  content: CanonicalContentShape;
+  targetId: string;
+  targetType: "group" | "skill" | "specialization";
+}): {
+  advancementPointsSpent: number;
+  build: CharacterBuild;
+  error?: string;
+  spentCost?: number;
+  warnings: string[];
+} {
+  const mappedTargetType = input.targetType === "group" ? "skillGroup" : input.targetType;
+  const result = buyCharacterProgressionAttempt({
+    build: input.build,
+    content: input.content,
+    targetId: input.targetId,
+    targetType: mappedTargetType
   });
+  const state = getCharacterProgressionState(result.build);
+
+  return {
+    advancementPointsSpent: state.pendingAttempts.reduce((total, attempt) => total + attempt.cost, 0),
+    build: result.build,
+    error: result.error,
+    spentCost: result.attempt?.cost,
+    warnings: []
+  };
 }

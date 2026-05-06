@@ -1,6 +1,7 @@
-import type {
+﻿import type {
   CarryMode,
   CharacterLoadout,
+  LocationAvailabilityClass,
   StorageLocation,
   StorageLocationType,
 } from "@glantri/domain/equipment";
@@ -10,7 +11,7 @@ import type { EquipmentFeatureState } from "./types";
 function cloneState(state: EquipmentFeatureState): EquipmentFeatureState {
   return {
     templates: {
-      weaponsById: { ...state.templates.weaponsById },
+      templatesById: { ...state.templates.templatesById },
     },
     itemsById: { ...state.itemsById },
     locationsById: { ...state.locationsById },
@@ -38,8 +39,10 @@ export function moveItem(
 
   next.itemsById[itemId] = {
     ...item,
-    locationId,
-    carryMode,
+    storageAssignment: {
+      locationId,
+      carryMode,
+    },
     isEquipped: carryMode === "equipped",
   };
 
@@ -51,6 +54,7 @@ export function createCustomLocation(
   characterId: string,
   name: string,
   type: StorageLocationType,
+  availabilityClass: LocationAvailabilityClass = "elsewhere",
 ): EquipmentFeatureState {
   const id = `${characterId}:loc-${name
     .trim()
@@ -65,9 +69,10 @@ export function createCustomLocation(
     characterId,
     name: name.trim(),
     type,
+    availabilityClass,
     parentLocationId: null,
-    isMobile: false,
-    isAccessibleInEncounter: false,
+    isMobile: availabilityClass === "with_you",
+    isAccessibleInEncounter: availabilityClass === "with_you",
     notes: null,
   };
 
@@ -128,4 +133,42 @@ export function setActiveMissileWeapon(
     ...loadout,
     activeMissileWeaponItemId: itemId,
   }));
+}
+
+export function setReadyShield(
+  state: EquipmentFeatureState,
+  characterId: string,
+  itemId: string | null,
+): EquipmentFeatureState {
+  return updateLoadout(state, characterId, (loadout) => ({
+    ...loadout,
+    readyShieldItemId: itemId,
+  }));
+}
+
+export function setWornArmor(
+  state: EquipmentFeatureState,
+  characterId: string,
+  itemId: string | null,
+): EquipmentFeatureState {
+  return updateLoadout(state, characterId, (loadout) => ({
+    ...loadout,
+    wornArmorItemId: itemId,
+  }));
+}
+
+export function setActiveShield(
+  state: EquipmentFeatureState,
+  characterId: string,
+  itemId: string | null,
+): EquipmentFeatureState {
+  return setReadyShield(state, characterId, itemId);
+}
+
+export function setActiveArmor(
+  state: EquipmentFeatureState,
+  characterId: string,
+  itemId: string | null,
+): EquipmentFeatureState {
+  return setWornArmor(state, characterId, itemId);
 }
