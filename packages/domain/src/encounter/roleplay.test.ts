@@ -67,6 +67,32 @@ describe("roleplay encounter state", () => {
     });
   });
 
+  it("normalizes stored no-level difficulty as no required difficulty", () => {
+    const state = normalizeRoleplayState(
+      createSession({
+        roleplayState: {
+          actionLog: [],
+          gmMessage: "",
+          participantDescriptions: {},
+          pendingSkillRolls: [
+            {
+              assignedAt: "2026-01-01T00:00:00.000Z",
+              difficulty: "none",
+              id: "roll-1",
+              participantId: "participant-1",
+              silent: false,
+              skillId: "perception",
+              skillLabel: "Perception",
+            },
+          ],
+          visibility: {},
+        } as never,
+      })
+    );
+
+    expect(state.pendingSkillRolls[0]?.difficulty).toBeUndefined();
+  });
+
   it("uses the roleplay success table difficulty labels", () => {
     expect(roleplayDifficultyOptions.map((option) => option.label)).toEqual([
       "Trivial success",
@@ -188,7 +214,7 @@ describe("roleplay encounter state", () => {
 
     expect(normalizeRoleplayState(rolled).actionLog[0]).toMatchObject({
       achievedSuccessLevelLabel: "Medium -",
-      calculationText: "Perception 12 + roll 12 + Gen mod + Other -2 = 22 before unresolved placeholder mods → Medium -, modifier +0 → NOT SUCCESSFUL vs Hard",
+      calculationText: "Perception 12 + roll 12 + Other -2 = 22 → Medium -, modifier +0 → NOT SUCCESSFUL vs Hard",
       numericSubtotal: 22,
       otherMod: -2,
       roll: 12,
@@ -382,7 +408,7 @@ describe("roleplay encounter state", () => {
       })
     ).toMatchObject({
       autoSuccess: true,
-      calculationText: "Perception 31 + <DIE ROLL> = pending · Automatic success — no roll needed",
+      calculationText: "Perception 31 + <DIE ROLL> = pending vs Medium · Automatic success — no roll needed",
       numericSubtotal: undefined,
     });
 
@@ -411,9 +437,10 @@ describe("roleplay encounter state", () => {
         useGenMod: true,
       })
     ).toMatchObject({
-      calculationText: "Stealth 10 + roll 7 + Gen mod + DB mod = 17 before unresolved placeholder mods → Easy, modifier +0 → NOT SUCCESSFUL vs Hard",
+      calculationText: "Stealth 10 + roll 7 = 17 → Easy, modifier +0 → NOT SUCCESSFUL vs Hard",
       hasPlaceholderMods: true,
       numericSubtotal: 17,
+      pendingModifierLabels: ["Gen", "DB"],
       partial: true,
     });
   });

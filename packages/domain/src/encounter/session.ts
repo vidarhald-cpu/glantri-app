@@ -160,6 +160,11 @@ export const roleplayDifficultySchema = z.preprocess(
   ])
 );
 
+const roleplayOptionalDifficultySchema = z.preprocess(
+  (input) => (input === "none" ? undefined : input),
+  roleplayDifficultySchema.optional()
+);
+
 export const roleplayParticipantDescriptionSchema = z.object({
   detailedDescription: z.string().default(""),
   name: z.string().min(1).optional(),
@@ -175,7 +180,7 @@ const roleplayRollModifierSchema = z.object({
 
 export const roleplayPendingSkillRollSchema = z.object({
   assignedAt: z.string().min(1),
-  difficulty: roleplayDifficultySchema,
+  difficulty: roleplayOptionalDifficultySchema,
   id: idSchema,
   mode: z.enum(["difficulty", "opposed"]).default("difficulty"),
   opponentParticipantId: idSchema.optional(),
@@ -200,7 +205,7 @@ export const roleplayActionLogEntrySchema = z.object({
   calculationText: z.string().optional(),
   createdAt: z.string().min(1),
   dieResult: z.number().int().optional(),
-  difficulty: roleplayDifficultySchema.optional(),
+  difficulty: roleplayOptionalDifficultySchema,
   finalTotal: z.number().int().optional(),
   fumble: z.boolean().default(false),
   id: idSchema,

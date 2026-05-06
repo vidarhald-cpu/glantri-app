@@ -21,24 +21,27 @@ describe("RoleplayEncounterScreens", () => {
     expect(source).toContain("Roleplay roster descriptions");
     expect(source).toContain("Skill roll assignment");
     expect(source).toContain("Silent");
-    expect(source).toContain("Skill category");
+    expect(source).toContain("Category");
     expect(source).toContain("All categories");
-    expect(source).toContain("Gen mod");
-    expect(source).toContain("OB/Skill mod");
-    expect(source).toContain("DB mod");
+    expect(source).toContain("Gen");
+    expect(source).toContain("OB/Skill");
+    expect(source).toContain("DB");
     expect(source).toContain("Other mod");
-    expect(source).toContain("Support category");
+    expect(source).toContain("Support cat.");
     expect(source).toContain("No support skill");
-    expect(source).toContain("Difficulty OR Opponent");
-    expect(source).toContain("VERSUS");
+    expect(source).toContain("VS");
+    expect(source).toContain("Level");
+    expect(source).toContain("No level");
     expect(source).toContain("No opponent");
-    expect(source).toContain("Opponent skill category");
+    expect(source).toContain("Opp. cat.");
+    expect(source).toContain("Opp. skill");
     expect(source).toContain("Assign");
     expect(source).toContain("GM Roll");
     expect(source).toContain("GM Roll both");
     expect(source).toContain("Add roll");
     expect(source).toContain("Ranked roll results");
     expect(source).toContain("Action log");
+    expect(source).not.toContain("Difficulty OR Opponent");
   });
 
   it("stores roleplay state through sessionJson helpers and evaluates non-opposed success levels", () => {
@@ -91,7 +94,19 @@ describe("RoleplayEncounterScreens", () => {
     expect(source).toContain("opponentSkillId");
     expect(source).toContain("opposedResult");
     expect(source).toContain("opposedMargin");
-    expect(source).toContain("Opponent selected: opposed roll uses comparison; difficulty is ignored for now.");
+    expect(source).toContain("difficulty: \"none\"");
+    expect(source).toContain("opponentParticipantId: nextDifficulty === \"none\" ? draft.opponentParticipantId : \"\"");
+    expect(source).toContain("opponentSkillId: nextDifficulty === \"none\" ? draft.opponentSkillId : \"\"");
+  });
+
+  it("keeps the roll preview concise with pending notes outside the formula", () => {
+    const source = readSource();
+
+    expect(source).toContain("pendingModifierLabels");
+    expect(source).toContain("Pending modifiers:");
+    expect(source).toContain("pending support rule");
+    expect(source).not.toContain("pending support-rule effect");
+    expect(source).not.toContain("Required difficulty");
   });
 
   it("uses all canonical ordinary and secondary skills instead of only participant-known skills", () => {

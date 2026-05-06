@@ -229,6 +229,7 @@ export interface RoleplayCalculationPreview {
   hasPlaceholderMods: boolean;
   numericSubtotal?: number;
   partial: boolean;
+  pendingModifierLabels: string[];
   success?: boolean;
 }
 
@@ -367,23 +368,16 @@ export function buildRoleplayCalculationPreview(input: {
   const skillValue = input.skillValue ?? 0;
   const effectiveValue = skillValue + modifiers.otherMod;
   const parts = [`${input.skillLabel} ${skillValue}`];
+  const pendingModifierLabels = [
+    modifiers.useGenMod ? "Gen" : undefined,
+    modifiers.useObSkillMod ? "OB/Skill" : undefined,
+    modifiers.useDbMod ? "DB" : undefined,
+  ].filter((label): label is string => Boolean(label));
 
   if (input.roll == null) {
     parts.push("<DIE ROLL>");
   } else {
     parts.push(`roll ${formatRoleplayDieRoll(input.roll)}`);
-  }
-
-  if (modifiers.useGenMod) {
-    parts.push("Gen mod");
-  }
-
-  if (modifiers.useObSkillMod) {
-    parts.push("OB/Skill mod");
-  }
-
-  if (modifiers.useDbMod) {
-    parts.push("DB mod");
   }
 
   if (modifiers.otherMod !== 0) {
@@ -413,13 +407,11 @@ export function buildRoleplayCalculationPreview(input: {
     effectiveValue >= getRoleplayRequiredLowerThreshold(input.difficulty, kind) + 5;
   const calculationText =
     autoSuccess
-      ? `${parts.join(" + ")} = pending · Automatic success — no roll needed`
+      ? `${parts.join(" + ")} = pending vs ${formatRoleplayDifficulty(input.difficulty!)} · Automatic success — no roll needed`
       : numericSubtotal == null
-      ? `${parts.join(" + ")} = pending`
+      ? `${parts.join(" + ")} = pending${input.difficulty ? ` vs ${formatRoleplayDifficulty(input.difficulty)}` : ""}`
       : [
-          hasPlaceholderMods
-            ? `${parts.join(" + ")} = ${numericSubtotal} before unresolved placeholder mods`
-            : `${parts.join(" + ")} = ${numericSubtotal}`,
+          `${parts.join(" + ")} = ${numericSubtotal}`,
           achievedSuccessLevel?.fumble
             ? "FUMBLE — automatic fail"
             : achievedSuccessLevel
@@ -429,21 +421,17 @@ export function buildRoleplayCalculationPreview(input: {
         ]
           .filter(Boolean)
           .join(" → ");
-  const difficultyText =
-    input.difficulty && numericSubtotal == null && !autoSuccess
-      ? `Required difficulty: ${formatRoleplayDifficulty(input.difficulty)}`
-      : undefined;
 
   return {
     achievedSuccessLevel,
     autoSuccess,
     calculationText,
-    difficultyText,
     finalTotal: numericSubtotal,
     fumble: Boolean(achievedSuccessLevel?.fumble),
     hasPlaceholderMods,
     numericSubtotal,
     partial: hasPlaceholderMods,
+    pendingModifierLabels,
     success,
   };
 }
@@ -501,7 +489,7 @@ export function compareRoleplayOpposedRolls(input: {
 }
 
 export function assignRoleplaySkillRoll(input: {
-  difficulty: RoleplayDifficulty;
+  difficulty?: RoleplayDifficulty;
   mode?: "difficulty" | "opposed";
   opponentParticipantId?: string;
   opponentParticipantName?: string;
@@ -597,7 +585,7 @@ export function recordRoleplayGmSkillRoll(input: {
   autoSuccess?: boolean;
   calculationText: string;
   dieResult?: number;
-  difficulty: RoleplayDifficulty;
+  difficulty?: RoleplayDifficulty;
   finalTotal?: number;
   fumble?: boolean;
   mode?: "difficulty" | "opposed";

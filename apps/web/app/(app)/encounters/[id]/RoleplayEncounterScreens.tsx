@@ -77,7 +77,7 @@ interface SkillOption {
 }
 
 interface RoleplayRollDraft {
-  difficulty: RoleplayDifficulty;
+  difficulty: "none" | RoleplayDifficulty;
   id: string;
   otherModInput: string;
   opponentParticipantId: string;
@@ -100,6 +100,16 @@ const panelStyle = {
   display: "grid",
   gap: "0.75rem",
   padding: "1rem",
+} as const;
+
+const compactControlStyle = {
+  display: "grid",
+  gap: "0.2rem",
+} as const;
+
+const compactInputStyle = {
+  maxWidth: "10rem",
+  minHeight: "1.9rem",
 } as const;
 
 function formatDifficulty(value: RoleplayDifficulty): string {
@@ -234,7 +244,7 @@ function readSystemSkillOptions(input: {
 
 function makeRollDraft(input: { participantId?: string; skillId?: string }): RoleplayRollDraft {
   return {
-    difficulty: "medium",
+    difficulty: "none",
     id: `roll-draft-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     otherModInput: "0",
     opponentParticipantId: "",
@@ -464,7 +474,7 @@ export function GmRoleplayingEncounterScreen({
     const isOpposed = Boolean(opponent && selectedOpponentSkill);
     const preview = selectedSkill
       ? buildRoleplayCalculationPreview({
-          difficulty: isOpposed ? undefined : draft.difficulty,
+          difficulty: isOpposed || draft.difficulty === "none" ? undefined : draft.difficulty,
           otherMod,
           skillLabel: selectedSkill.label,
           skillValue: selectedSkill.value,
@@ -516,7 +526,7 @@ export function GmRoleplayingEncounterScreen({
 
     await persist(
       assignRoleplaySkillRoll({
-        difficulty: draft.difficulty,
+        difficulty: isOpposed || draft.difficulty === "none" ? undefined : draft.difficulty,
         mode: isOpposed ? "opposed" : "difficulty",
         opponentParticipantId: isOpposed ? opponent?.id : undefined,
         opponentParticipantName: isOpposed ? opponent?.label : undefined,
@@ -558,7 +568,7 @@ export function GmRoleplayingEncounterScreen({
     const roll = rollOpenEndedRoleplayD20();
     const opponentRoll = isOpposed ? rollOpenEndedRoleplayD20() : undefined;
     const preview = buildRoleplayCalculationPreview({
-      difficulty: isOpposed ? undefined : draft.difficulty,
+      difficulty: isOpposed || draft.difficulty === "none" ? undefined : draft.difficulty,
       otherMod,
       roll,
       skillLabel: selectedSkill.label,
@@ -585,11 +595,10 @@ export function GmRoleplayingEncounterScreen({
           })
         : undefined;
     const calculationText = [
-      selectedSupportSkill ? `Support: ${selectedSupportSkill.label} (pending support-rule effect)` : undefined,
+      selectedSupportSkill ? `Support: ${selectedSupportSkill.label} (pending support rule)` : undefined,
       isOpposed && opponentPreview
         ? `Actor: ${preview.calculationText} · VERSUS · Opponent: ${opponentPreview.calculationText} · ${opposedResult?.summary ?? "Opposed result pending."}`
         : preview.calculationText,
-      !isOpposed ? preview.difficultyText : undefined,
     ]
       .filter(Boolean)
       .join(" · ");
@@ -597,7 +606,7 @@ export function GmRoleplayingEncounterScreen({
     await persist(
       recordRoleplayGmSkillRoll({
         calculationText,
-        difficulty: draft.difficulty,
+        difficulty: isOpposed || draft.difficulty === "none" ? undefined : draft.difficulty,
         achievedSuccessLevel: preview.achievedSuccessLevel,
         autoSuccess: preview.autoSuccess,
         dieResult: roll.dieResult,
@@ -774,32 +783,36 @@ export function GmRoleplayingEncounterScreen({
                 style={{ border: "1px solid #eee8dc", borderRadius: 10, display: "grid", gap: "0.65rem", padding: "0.75rem" }}
               >
                 <strong>Roll {index + 1}</strong>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
-                  <select
-                    aria-label={`Roleplay roll ${index + 1} participant`}
-                    onChange={(event) => {
-                      const participant = roster.find((row) => row.id === event.target.value);
-                      const nextSkillId = readSystemSkillOptions({
-                        content,
-                        encounterParticipant: participant,
-                        scenarioParticipants,
-                      })[0]?.id ?? "";
-                      updateRollDraft(draft.id, {
-                        participantId: event.target.value,
-                        skillCategoryId: "all",
-                        skillId: nextSkillId,
-                      });
-                    }}
-                    value={context.participant?.id ?? ""}
-                  >
-                    {roster.map((participant) => (
-                      <option key={participant.id} value={participant.id}>
-                        {participant.label}
-                      </option>
-                    ))}
-                  </select>
-                  <label style={{ display: "grid", gap: "0.25rem" }}>
-                    <span>Skill category</span>
+                <div style={{ alignItems: "end", display: "flex", flexWrap: "wrap", gap: "0.45rem" }}>
+                  <label style={compactControlStyle}>
+                    <span>Character</span>
+                    <select
+                      aria-label={`Roleplay roll ${index + 1} participant`}
+                      onChange={(event) => {
+                        const participant = roster.find((row) => row.id === event.target.value);
+                        const nextSkillId = readSystemSkillOptions({
+                          content,
+                          encounterParticipant: participant,
+                          scenarioParticipants,
+                        })[0]?.id ?? "";
+                        updateRollDraft(draft.id, {
+                          participantId: event.target.value,
+                          skillCategoryId: "all",
+                          skillId: nextSkillId,
+                        });
+                      }}
+                      style={compactInputStyle}
+                      value={context.participant?.id ?? ""}
+                    >
+                      {roster.map((participant) => (
+                        <option key={participant.id} value={participant.id}>
+                          {participant.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label style={compactControlStyle}>
+                    <span>Category</span>
                     <select
                       aria-label={`Roleplay roll ${index + 1} skill category`}
                       onChange={(event) => {
@@ -814,6 +827,7 @@ export function GmRoleplayingEncounterScreen({
                           skillId: nextSkillOptions[0]?.id ?? "",
                         });
                       }}
+                      style={compactInputStyle}
                       value={draft.skillCategoryId}
                     >
                       <option value="all">All categories</option>
@@ -824,24 +838,28 @@ export function GmRoleplayingEncounterScreen({
                       ))}
                     </select>
                   </label>
-                  <select
-                    aria-label={`Roleplay roll ${index + 1} skill`}
-                    disabled={context.skillOptions.length === 0}
-                    onChange={(event) => updateRollDraft(draft.id, { skillId: event.target.value })}
-                    value={context.selectedSkill?.id ?? ""}
-                  >
-                    {context.skillOptions.length > 0 ? (
-                      context.skillOptions.map((skill) => (
-                        <option key={skill.id} value={skill.id}>
-                          {skill.label} ({skill.value ?? 0})
-                        </option>
-                      ))
-                    ) : (
-                      <option value="">No skills available</option>
-                    )}
-                  </select>
-                  <label style={{ display: "grid", gap: "0.25rem" }}>
-                    <span>Support category</span>
+                  <label style={compactControlStyle}>
+                    <span>Skill</span>
+                    <select
+                      aria-label={`Roleplay roll ${index + 1} skill`}
+                      disabled={context.skillOptions.length === 0}
+                      onChange={(event) => updateRollDraft(draft.id, { skillId: event.target.value })}
+                      style={compactInputStyle}
+                      value={context.selectedSkill?.id ?? ""}
+                    >
+                      {context.skillOptions.length > 0 ? (
+                        context.skillOptions.map((skill) => (
+                          <option key={skill.id} value={skill.id}>
+                            {skill.label} ({skill.value ?? 0})
+                          </option>
+                        ))
+                      ) : (
+                        <option value="">No skills available</option>
+                      )}
+                    </select>
+                  </label>
+                  <label style={compactControlStyle}>
+                    <span>Support cat.</span>
                     <select
                       aria-label={`Roleplay roll ${index + 1} support skill category`}
                       onChange={(event) => {
@@ -851,6 +869,7 @@ export function GmRoleplayingEncounterScreen({
                           supportSkillId: "",
                         });
                       }}
+                      style={compactInputStyle}
                       value={draft.supportSkillCategoryId}
                     >
                       <option value="all">All categories</option>
@@ -861,59 +880,78 @@ export function GmRoleplayingEncounterScreen({
                       ))}
                     </select>
                   </label>
-                  <select
-                    aria-label={`Roleplay roll ${index + 1} support skill`}
-                    onChange={(event) => updateRollDraft(draft.id, { supportSkillId: event.target.value })}
-                    value={context.selectedSupportSkill?.id ?? ""}
-                  >
-                    <option value="">No support skill</option>
-                    {context.supportSkillOptions.map((skill) => (
-                      <option key={skill.id} value={skill.id}>
-                        {skill.label} ({skill.value ?? 0})
-                      </option>
-                    ))}
-                  </select>
-                  <strong style={{ alignSelf: "center" }}>Difficulty OR Opponent</strong>
-                  <select
-                    aria-label={`Roleplay roll ${index + 1} difficulty`}
-                    onChange={(event) =>
-                      updateRollDraft(draft.id, { difficulty: event.target.value as RoleplayDifficulty })
-                    }
-                    value={draft.difficulty}
-                  >
-                    {roleplayDifficultyOptions.map((option) => (
-                      <option key={option.id} value={option.id}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                  <strong style={{ alignSelf: "center" }}>VERSUS</strong>
-                  <select
-                    aria-label={`Roleplay roll ${index + 1} opponent`}
-                    onChange={(event) => {
-                      const opponent = roster.find((row) => row.id === event.target.value);
-                      const nextOpponentSkillId = readSystemSkillOptions({
-                        content,
-                        encounterParticipant: opponent,
-                        scenarioParticipants,
-                      })[0]?.id ?? "";
-                      updateRollDraft(draft.id, {
-                        opponentParticipantId: event.target.value,
-                        opponentSkillCategoryId: "all",
-                        opponentSkillId: event.target.value ? nextOpponentSkillId : "",
-                      });
-                    }}
-                    value={context.opponent?.id ?? ""}
-                  >
-                    <option value="">No opponent</option>
-                    {roster.map((participant) => (
-                      <option key={participant.id} value={participant.id}>
-                        {participant.label}
-                      </option>
-                    ))}
-                  </select>
-                  <label style={{ display: "grid", gap: "0.25rem" }}>
-                    <span>Opponent skill category</span>
+                  <label style={compactControlStyle}>
+                    <span>Support</span>
+                    <select
+                      aria-label={`Roleplay roll ${index + 1} support skill`}
+                      onChange={(event) => updateRollDraft(draft.id, { supportSkillId: event.target.value })}
+                      style={compactInputStyle}
+                      value={context.selectedSupportSkill?.id ?? ""}
+                    >
+                      <option value="">No support skill</option>
+                      {context.supportSkillOptions.map((skill) => (
+                        <option key={skill.id} value={skill.id}>
+                          {skill.label} ({skill.value ?? 0})
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <strong style={{ alignSelf: "center", paddingBottom: "0.35rem" }}>VS</strong>
+                  <label style={compactControlStyle}>
+                    <span>Level</span>
+                    <select
+                      aria-label={`Roleplay roll ${index + 1} difficulty`}
+                      onChange={(event) => {
+                        const nextDifficulty = event.target.value as RoleplayRollDraft["difficulty"];
+                        updateRollDraft(draft.id, {
+                          difficulty: nextDifficulty,
+                          opponentParticipantId: nextDifficulty === "none" ? draft.opponentParticipantId : "",
+                          opponentSkillCategoryId: nextDifficulty === "none" ? draft.opponentSkillCategoryId : "all",
+                          opponentSkillId: nextDifficulty === "none" ? draft.opponentSkillId : "",
+                        });
+                      }}
+                      style={compactInputStyle}
+                      value={draft.difficulty}
+                    >
+                      <option value="none">No level</option>
+                      {roleplayDifficultyOptions.map((option) => (
+                        <option key={option.id} value={option.id}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label style={compactControlStyle}>
+                    <span>Opponent</span>
+                    <select
+                      aria-label={`Roleplay roll ${index + 1} opponent`}
+                      onChange={(event) => {
+                        const opponent = roster.find((row) => row.id === event.target.value);
+                        const nextOpponentSkillId = readSystemSkillOptions({
+                          content,
+                          encounterParticipant: opponent,
+                          scenarioParticipants,
+                        })[0]?.id ?? "";
+                        updateRollDraft(draft.id, {
+                          difficulty: "none",
+                          opponentParticipantId: event.target.value,
+                          opponentSkillCategoryId: "all",
+                          opponentSkillId: event.target.value ? nextOpponentSkillId : "",
+                        });
+                      }}
+                      style={compactInputStyle}
+                      value={context.opponent?.id ?? ""}
+                    >
+                      <option value="">No opponent</option>
+                      {roster.map((participant) => (
+                        <option key={participant.id} value={participant.id}>
+                          {participant.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label style={compactControlStyle}>
+                    <span>Opp. cat.</span>
                     <select
                       aria-label={`Roleplay roll ${index + 1} opponent skill category`}
                       disabled={!context.opponent}
@@ -929,6 +967,7 @@ export function GmRoleplayingEncounterScreen({
                           opponentSkillId: nextSkillOptions[0]?.id ?? "",
                         });
                       }}
+                      style={compactInputStyle}
                       value={draft.opponentSkillCategoryId}
                     >
                       <option value="all">All categories</option>
@@ -939,24 +978,39 @@ export function GmRoleplayingEncounterScreen({
                       ))}
                     </select>
                   </label>
-                  <select
-                    aria-label={`Roleplay roll ${index + 1} opponent skill`}
-                    disabled={!context.opponent || context.opponentSkillOptions.length === 0}
-                    onChange={(event) => updateRollDraft(draft.id, { opponentSkillId: event.target.value })}
-                    value={context.selectedOpponentSkill?.id ?? ""}
-                  >
-                    {context.opponentSkillOptions.length > 0 ? (
-                      context.opponentSkillOptions.map((skill) => (
-                        <option key={skill.id} value={skill.id}>
-                          {skill.label} ({skill.value ?? 0})
-                        </option>
-                      ))
-                    ) : (
-                      <option value="">No opponent skill</option>
-                    )}
-                  </select>
+                  <label style={compactControlStyle}>
+                    <span>Opp. skill</span>
+                    <select
+                      aria-label={`Roleplay roll ${index + 1} opponent skill`}
+                      disabled={!context.opponent || context.opponentSkillOptions.length === 0}
+                      onChange={(event) => updateRollDraft(draft.id, { opponentSkillId: event.target.value })}
+                      style={compactInputStyle}
+                      value={context.selectedOpponentSkill?.id ?? ""}
+                    >
+                      {context.opponentSkillOptions.length > 0 ? (
+                        context.opponentSkillOptions.map((skill) => (
+                          <option key={skill.id} value={skill.id}>
+                            {skill.label} ({skill.value ?? 0})
+                          </option>
+                        ))
+                      ) : (
+                        <option value="">No opponent skill</option>
+                      )}
+                    </select>
+                  </label>
+                  <label style={compactControlStyle}>
+                    <span>Other</span>
+                    <input
+                      aria-label={`Roleplay roll ${index + 1} Other mod`}
+                      onChange={(event) => updateRollDraft(draft.id, { otherModInput: event.target.value })}
+                      step={1}
+                      style={{ ...compactInputStyle, width: "4.5rem" }}
+                      type="number"
+                      value={draft.otherModInput}
+                    />
+                  </label>
                 </div>
-                <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
+                <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: "0.55rem" }}>
                   <label style={{ alignItems: "center", display: "flex", gap: "0.35rem" }}>
                     <input
                       checked={draft.silent}
@@ -972,7 +1026,7 @@ export function GmRoleplayingEncounterScreen({
                       onChange={(event) => updateRollDraft(draft.id, { useGenMod: event.target.checked })}
                       type="checkbox"
                     />
-                    Gen mod
+                    Gen
                   </label>
                   <label style={{ alignItems: "center", display: "flex", gap: "0.35rem" }}>
                     <input
@@ -980,7 +1034,7 @@ export function GmRoleplayingEncounterScreen({
                       onChange={(event) => updateRollDraft(draft.id, { useObSkillMod: event.target.checked })}
                       type="checkbox"
                     />
-                    OB/Skill mod
+                    OB/Skill
                   </label>
                   <label style={{ alignItems: "center", display: "flex", gap: "0.35rem" }}>
                     <input
@@ -988,33 +1042,20 @@ export function GmRoleplayingEncounterScreen({
                       onChange={(event) => updateRollDraft(draft.id, { useDbMod: event.target.checked })}
                       type="checkbox"
                     />
-                    DB mod
-                  </label>
-                  <label style={{ alignItems: "center", display: "flex", gap: "0.35rem" }}>
-                    <span>Other mod</span>
-                    <input
-                      aria-label={`Roleplay roll ${index + 1} Other mod`}
-                      onChange={(event) => updateRollDraft(draft.id, { otherModInput: event.target.value })}
-                      step={1}
-                      style={{ width: "5rem" }}
-                      type="number"
-                      value={draft.otherModInput}
-                    />
+                    DB
                   </label>
                 </div>
                 {context.preview ? (
                   <div style={{ color: "#5e5a50" }}>
-                    {context.selectedSupportSkill ? (
-                      <div>Support: {context.selectedSupportSkill.label} (pending support-rule effect)</div>
-                    ) : null}
-                    <div>Actor: {context.preview.calculationText}</div>
+                    <div>{context.isOpposed ? `Actor: ${context.preview.calculationText}` : context.preview.calculationText}</div>
                     {context.isOpposed && context.opponentPreview ? (
-                      <>
-                        <div>Opponent: {context.opponentPreview.calculationText}</div>
-                        <div>Opponent selected: opposed roll uses comparison; difficulty is ignored for now.</div>
-                      </>
-                    ) : context.preview.difficultyText ? (
-                      <div>{context.preview.difficultyText}</div>
+                      <div>Opponent: {context.opponentPreview.calculationText}</div>
+                    ) : null}
+                    {context.preview.pendingModifierLabels.length > 0 ? (
+                      <div>Pending modifiers: {context.preview.pendingModifierLabels.join(", ")}</div>
+                    ) : null}
+                    {context.selectedSupportSkill ? (
+                      <div>Support: {context.selectedSupportSkill.label} — pending support rule</div>
                     ) : null}
                   </div>
                 ) : null}
