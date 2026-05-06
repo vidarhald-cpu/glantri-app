@@ -28,12 +28,7 @@ describe("chargen stat resolution", () => {
     const firstExchange = applyChargenStatExchange({
       firstStat: "str",
       policy: {
-        displayedRollCount: 3,
-        flexiblePointFactor: 1,
-        maxBuilds: 2,
-        maxExchanges: 1,
-        primaryPoolTotal: 60,
-        secondaryPoolTotal: 0
+        maxExchanges: 1
       },
       secondStat: "dex",
       state: initialState
@@ -41,12 +36,7 @@ describe("chargen stat resolution", () => {
     const secondExchange = applyChargenStatExchange({
       firstStat: "con",
       policy: {
-        displayedRollCount: 3,
-        flexiblePointFactor: 1,
-        maxBuilds: 2,
-        maxExchanges: 1,
-        primaryPoolTotal: 60,
-        secondaryPoolTotal: 0
+        maxExchanges: 1
       },
       secondStat: "int",
       state: firstExchange.state

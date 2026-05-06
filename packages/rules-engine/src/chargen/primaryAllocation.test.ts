@@ -567,7 +567,7 @@ describe("derived skill relationships in chargen drafts", () => {
     const buyGroup = (input: {
       groupId: string;
       professionId: string;
-      selectedGroupSlots?: CharacterProgression["chargenSelections"]["selectedGroupSlots"];
+      selectedGroupSlots?: NonNullable<CharacterProgression["chargenSelections"]>["selectedGroupSlots"];
     }) => {
       const row = rowFor(input.professionId, input.groupId);
       const progression = {
@@ -1988,7 +1988,7 @@ describe("chargen purchase gate integration", () => {
         skills: [
           {
             category: "ordinary",
-            categoryId: "lore",
+            categoryId: "knowledge",
             level: 0,
             primaryRanks: 1,
             ranks: 1,
