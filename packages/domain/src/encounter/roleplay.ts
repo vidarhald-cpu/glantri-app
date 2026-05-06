@@ -133,6 +133,7 @@ export function updateRoleplayGmMessage(input: {
           openEndedD10s: [],
           opponentFumble: false,
           opponentOpenEndedD10s: [],
+          opponentSilent: false,
           partial: false,
           silent: true,
           summary: "GM message updated.",
@@ -534,6 +535,7 @@ export function assignRoleplaySkillRoll(input: {
   opponentSkillId?: string;
   opponentSkillLabel?: string;
   opponentSkillValue?: number;
+  opponentSilent?: boolean;
   opponentSupportSkillId?: string;
   opponentSupportSkillLabel?: string;
   participantId: string;
@@ -568,6 +570,7 @@ export function assignRoleplaySkillRoll(input: {
           opponentOpenEndedD10s: [],
           opponentParticipantId: input.opponentParticipantId,
           opponentParticipantName: input.opponentParticipantName,
+          opponentSilent: Boolean(input.opponentSilent),
           opponentSkillId: input.opponentSkillId,
           opponentSkillLabel: input.opponentSkillLabel,
           opponentSupportSkillId: input.opponentSupportSkillId,
@@ -600,6 +603,7 @@ export function assignRoleplaySkillRoll(input: {
           mode,
           opponentParticipantId: input.opponentParticipantId,
           opponentParticipantName: input.opponentParticipantName,
+          opponentSilent: Boolean(input.opponentSilent),
           opponentSkillId: input.opponentSkillId,
           opponentSkillLabel: input.opponentSkillLabel,
           opponentSkillValue: input.opponentSkillValue,
@@ -645,6 +649,7 @@ export function recordRoleplayGmSkillRoll(input: {
   opponentParticipantId?: string;
   opponentParticipantName?: string;
   opponentRoll?: RoleplayOpenEndedD20Roll;
+  opponentSilent?: boolean;
   opponentSkillId?: string;
   opponentSkillLabel?: string;
   opponentSupportSkillId?: string;
@@ -697,6 +702,7 @@ export function recordRoleplayGmSkillRoll(input: {
           opponentParticipantId: input.opponentParticipantId,
           opponentParticipantName: input.opponentParticipantName,
           opponentRollD20: opponentRoll?.rollD20,
+          opponentSilent: Boolean(input.opponentSilent),
           opponentSkillId: input.opponentSkillId,
           opponentSkillLabel: input.opponentSkillLabel,
           opponentSupportSkillId: input.opponentSupportSkillId,

@@ -91,6 +91,7 @@ describe("RoleplayEncounterScreens", () => {
     expect(source).toContain("supportSkillId");
     expect(source).toContain("opponentParticipantId");
     expect(source).toContain("opponentSkillId");
+    expect(source).toContain("opponentSilent");
     expect(source).toContain("opponentSupportSkillId");
     expect(source).toContain("opponentBlockOpen");
     expect(source).toContain("opposedResult");
@@ -116,13 +117,17 @@ describe("RoleplayEncounterScreens", () => {
   it("uses persistent two-column roll blocks with structured calculation panels", () => {
     const source = readSource();
 
-    expect(source).toContain("gridTemplateColumns: \"minmax(0, 3fr) minmax(22rem, 2fr)\"");
-    expect(source).toContain("gridTemplateRows: \"minmax(2.25rem, auto) minmax(3.25rem, auto) minmax(2rem, auto)\"");
-    expect(source).toContain("minHeight: \"9.5rem\"");
+    expect(source).toContain("gridTemplateColumns: \"minmax(0, 1.15fr) minmax(24rem, 0.85fr)\"");
+    expect(source).toContain("<strong>Calculation</strong>");
+    expect(source).toContain("<strong>Actor</strong>");
+    expect(source).toContain("<strong>Opponent</strong>");
+    expect(source).toContain("label=\"Comparison\"");
+    expect(source).toContain("minHeight: \"15rem\"");
     expect(source).toContain("<strong>{label}:</strong> {preview?.compactCalculationText ?? \"—\"}");
-    expect(source).toContain("<strong>Result:</strong>");
+    expect(source).toContain("function RoleplayRollCalculationPanel");
     expect(source).toContain("style={rollControlRowStyle}");
     expect(source).toContain("style={{ ...compactInputStyle, width: \"4.5rem\" }}");
+    expect(source).not.toContain("<RoleplayRollPreviewPanel");
   });
 
   it("preselects the chosen opponent block participant without auto-selecting an opponent skill", () => {

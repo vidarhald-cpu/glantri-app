@@ -86,6 +86,7 @@ interface RoleplayRollDraft {
   opponentOtherModInput: string;
   opponentParticipantId: string;
   opponentRoll?: RoleplayOpenEndedD20Roll;
+  opponentSilent: boolean;
   opponentSkillCategoryId: "all" | PlayerFacingSkillBucketId;
   opponentSkillId: string;
   opponentSupportSkillCategoryId: "all" | PlayerFacingSkillBucketId;
@@ -137,17 +138,30 @@ const rollBlockShellStyle = {
   padding: "0.75rem",
 } as const;
 
-const rollSideStyle = {
+const rollEditorStyle = {
   alignItems: "start",
   display: "grid",
   gap: "1rem",
-  gridTemplateColumns: "minmax(0, 3fr) minmax(22rem, 2fr)",
+  gridTemplateColumns: "minmax(0, 1.15fr) minmax(24rem, 0.85fr)",
+  minWidth: 0,
+} as const;
+
+const rollControlsStackStyle = {
+  display: "grid",
+  gap: "0.9rem",
   minWidth: 0,
 } as const;
 
 const rollControlsStyle = {
   display: "grid",
   gap: "0.65rem",
+  minWidth: 0,
+} as const;
+
+const opponentControlsStyle = {
+  ...rollControlsStyle,
+  borderTop: "1px solid #eee8dc",
+  paddingTop: "0.9rem",
 } as const;
 
 const rollControlRowStyle = {
@@ -169,9 +183,9 @@ const rollPreviewStyle = {
   color: "#5e5a50",
   display: "grid",
   gap: "0.55rem",
-  gridTemplateRows: "minmax(2.25rem, auto) minmax(3.25rem, auto) minmax(2rem, auto)",
+  gridTemplateRows: "auto",
   justifySelf: "stretch",
-  minHeight: "9.5rem",
+  minHeight: "15rem",
   minWidth: 0,
   padding: "0.75rem",
   width: "100%",
@@ -317,6 +331,7 @@ function makeRollDraft(input: { participantId?: string; skillId?: string }): Rol
     opponentParticipantId: "",
     opponentSkillCategoryId: "all",
     opponentSkillId: "",
+    opponentSilent: false,
     opponentSupportSkillCategoryId: "all",
     opponentSupportSkillId: "",
     opponentUseDbMod: false,
@@ -383,24 +398,63 @@ function getPreviewResultLabel(input: {
   return preview.achievedSuccessLevel?.label ?? "—";
 }
 
-function RoleplayRollPreviewPanel({
+function RoleplayRollResultLine({
   comparison,
   difficulty,
-  mainPreview,
-  pendingLabels,
-  supportPreview,
+  label = "Result",
+  preview,
 }: {
   comparison?: string;
   difficulty?: RoleplayDifficulty;
-  mainPreview?: ReturnType<typeof buildRoleplayCalculationPreview>;
-  pendingLabels?: string[];
-  supportPreview?: ReturnType<typeof buildRoleplayCalculationPreview>;
+  label?: string;
+  preview?: ReturnType<typeof buildRoleplayCalculationPreview>;
+}) {
+  return <div><strong>{label}:</strong> {getPreviewResultLabel({ comparison, difficulty, preview })}</div>;
+}
+
+function RoleplayRollCalculationPanel({
+  actorDifficulty,
+  actorMainPreview,
+  actorPendingLabels,
+  actorSupportPreview,
+  comparison,
+  opponentMainPreview,
+  opponentOpen,
+  opponentPendingLabels,
+  opponentSupportPreview,
+}: {
+  actorDifficulty?: RoleplayDifficulty;
+  actorMainPreview?: ReturnType<typeof buildRoleplayCalculationPreview>;
+  actorPendingLabels?: string[];
+  actorSupportPreview?: ReturnType<typeof buildRoleplayCalculationPreview>;
+  comparison?: string;
+  opponentMainPreview?: ReturnType<typeof buildRoleplayCalculationPreview>;
+  opponentOpen: boolean;
+  opponentPendingLabels?: string[];
+  opponentSupportPreview?: ReturnType<typeof buildRoleplayCalculationPreview>;
 }) {
   return (
     <div style={rollPreviewStyle}>
-      <RollCalculationPreview label="Support" preview={supportPreview} />
-      <RollCalculationPreview label="Main" pendingLabels={pendingLabels} preview={mainPreview} />
-      <div><strong>Result:</strong> {getPreviewResultLabel({ comparison, difficulty, preview: mainPreview })}</div>
+      <strong>Calculation</strong>
+      <div style={{ display: "grid", gap: "0.35rem" }}>
+        <strong>Actor</strong>
+        <RollCalculationPreview label="Support" preview={actorSupportPreview} />
+        <RollCalculationPreview label="Main" pendingLabels={actorPendingLabels} preview={actorMainPreview} />
+        <RoleplayRollResultLine difficulty={actorDifficulty} preview={actorMainPreview} />
+      </div>
+      {opponentOpen ? (
+        <div style={{ borderTop: "1px solid #eee8dc", display: "grid", gap: "0.35rem", paddingTop: "0.55rem" }}>
+          <strong>Opponent</strong>
+          <RollCalculationPreview label="Support" preview={opponentSupportPreview} />
+          <RollCalculationPreview label="Main" pendingLabels={opponentPendingLabels} preview={opponentMainPreview} />
+          <RoleplayRollResultLine preview={opponentMainPreview} />
+        </div>
+      ) : null}
+      {comparison ? (
+        <div style={{ borderTop: "1px solid #eee8dc", paddingTop: "0.55rem" }}>
+          <RoleplayRollResultLine comparison={comparison} label="Comparison" />
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -723,6 +777,7 @@ export function GmRoleplayingEncounterScreen({
         opponentSkillId: isOpposed ? selectedOpponentSkill?.id : undefined,
         opponentSkillLabel: isOpposed ? selectedOpponentSkill?.label : undefined,
         opponentSkillValue: isOpposed ? selectedOpponentSkill?.value : undefined,
+        opponentSilent: isOpposed ? draft.opponentSilent : undefined,
         opponentSupportSkillId: isOpposed ? selectedOpponentSupportSkill?.id : undefined,
         opponentSupportSkillLabel: isOpposed ? selectedOpponentSupportSkill?.label : undefined,
         otherMod,
@@ -828,6 +883,7 @@ export function GmRoleplayingEncounterScreen({
         opponentParticipantId: isOpposed ? opponent?.id : undefined,
         opponentParticipantName: isOpposed ? opponent?.label : undefined,
         opponentRoll,
+        opponentSilent: isOpposed ? draft.opponentSilent : undefined,
         opponentSkillId: isOpposed ? selectedOpponentSkill?.id : undefined,
         opponentSkillLabel: isOpposed ? selectedOpponentSkill?.label : undefined,
         opponentSupportSkillId: isOpposed ? selectedOpponentSupportSkill?.id : undefined,
@@ -998,8 +1054,9 @@ export function GmRoleplayingEncounterScreen({
             return (
               <div key={draft.id} style={rollBlockShellStyle}>
                 <strong>Roll {index + 1}</strong>
-                <section style={rollSideStyle}>
-                  <div style={rollControlsStyle}>
+                <section style={rollEditorStyle}>
+                  <div style={rollControlsStackStyle}>
+                    <section style={rollControlsStyle}>
                     <strong>Actor</strong>
                     <div style={rollControlRowStyle}>
                       <label style={{ alignItems: "center", display: "flex", gap: "0.35rem" }}>
@@ -1268,19 +1325,19 @@ export function GmRoleplayingEncounterScreen({
                         </button>
                       ) : null}
                     </div>
-                  </div>
-                  <RoleplayRollPreviewPanel
-                    difficulty={draft.difficulty === "none" || context.isOpposed ? undefined : draft.difficulty}
-                    mainPreview={context.preview}
-                    pendingLabels={context.preview?.pendingModifierLabels}
-                    supportPreview={context.supportPreview}
-                  />
-                </section>
-                {context.opponent && draft.opponentBlockOpen ? (
-                  <section style={rollSideStyle}>
-                    <div style={rollControlsStyle}>
+                    </section>
+                    {context.opponent && draft.opponentBlockOpen ? (
+                    <section style={opponentControlsStyle}>
                       <strong>Opponent</strong>
                       <div style={rollControlRowStyle}>
+                        <label style={{ alignItems: "center", display: "flex", gap: "0.35rem" }}>
+                          <input
+                            checked={draft.opponentSilent}
+                            onChange={(event) => updateRollDraft(draft.id, { opponentSilent: event.target.checked })}
+                            type="checkbox"
+                          />
+                          Silent
+                        </label>
                         <span>Use:</span>
                         <label style={{ alignItems: "center", display: "flex", gap: "0.35rem" }}>
                           <input
@@ -1426,15 +1483,21 @@ export function GmRoleplayingEncounterScreen({
                           </select>
                         </label>
                       </div>
-                    </div>
-                    <RoleplayRollPreviewPanel
-                      comparison={comparison}
-                      mainPreview={context.opponentPreview}
-                      pendingLabels={context.opponentPreview?.pendingModifierLabels}
-                      supportPreview={context.opponentSupportPreview}
-                    />
-                  </section>
-                ) : null}
+                    </section>
+                    ) : null}
+                  </div>
+                  <RoleplayRollCalculationPanel
+                    actorDifficulty={draft.difficulty === "none" || context.isOpposed ? undefined : draft.difficulty}
+                    actorMainPreview={context.preview}
+                    actorPendingLabels={context.preview?.pendingModifierLabels}
+                    actorSupportPreview={context.supportPreview}
+                    comparison={comparison}
+                    opponentMainPreview={context.opponentPreview}
+                    opponentOpen={Boolean(context.opponent && draft.opponentBlockOpen)}
+                    opponentPendingLabels={context.opponentPreview?.pendingModifierLabels}
+                    opponentSupportPreview={context.opponentSupportPreview}
+                  />
+                </section>
               </div>
             );
           })}
@@ -1537,6 +1600,7 @@ export function GmRoleplayingEncounterScreen({
                 {entry.useDbMod ? " · DB mod" : ""}
                 {entry.otherMod ? ` · Other ${entry.otherMod > 0 ? "+" : ""}${entry.otherMod}` : ""}
                 {entry.silent ? " · Silent" : ""}
+                {entry.opponentSilent ? " · Opponent silent" : ""}
                 {entry.calculationText ? ` · ${entry.calculationText}` : ""}
               </div>
             ))}

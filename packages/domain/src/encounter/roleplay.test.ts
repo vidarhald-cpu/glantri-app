@@ -91,6 +91,7 @@ describe("roleplay encounter state", () => {
     );
 
     expect(state.pendingSkillRolls[0]?.difficulty).toBeUndefined();
+    expect(state.pendingSkillRolls[0]?.opponentSilent).toBe(false);
   });
 
   it("uses the roleplay success table difficulty labels", () => {
@@ -235,6 +236,7 @@ describe("roleplay encounter state", () => {
       opponentSkillId: "perception",
       opponentSkillLabel: "Perception",
       opponentSkillValue: 12,
+      opponentSilent: true,
       participantId: "actor-1",
       session: createSession(),
       silent: true,
@@ -249,12 +251,14 @@ describe("roleplay encounter state", () => {
     expect(state.pendingSkillRolls[0]).toMatchObject({
       mode: "opposed",
       opponentParticipantId: "opponent-1",
+      opponentSilent: true,
       opponentSkillId: "perception",
       opponentSkillValue: 12,
       supportSkillId: "streetwise",
     });
     expect(state.actionLog[0]).toMatchObject({
       mode: "opposed",
+      opponentSilent: true,
       opponentSkillLabel: "Perception",
       supportSkillLabel: "Streetwise",
       type: "skill_roll_assigned",
@@ -372,6 +376,7 @@ describe("roleplay encounter state", () => {
       opponentRoll: { dieResult: 10, openEndedD10s: [], rollD20: 10 },
       opponentSkillId: "perception",
       opponentSkillLabel: "Perception",
+      opponentSilent: true,
       otherMod: -2,
       participantId: "actor-1",
       roll: { dieResult: 16, openEndedD10s: [], rollD20: 16 },
@@ -387,6 +392,7 @@ describe("roleplay encounter state", () => {
       mode: "opposed",
       numericSubtotal: 28,
       opponentNumericSubtotal: 22,
+      opponentSilent: true,
       opposedMargin: 6,
       opposedResult: "win",
       silent: true,
