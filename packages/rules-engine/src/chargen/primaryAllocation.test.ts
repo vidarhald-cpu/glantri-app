@@ -1989,6 +1989,8 @@ describe("chargen purchase gate integration", () => {
           {
             category: "ordinary",
             categoryId: "knowledge",
+            grantedRanks: 0,
+            groupId: "scholarly",
             level: 0,
             primaryRanks: 1,
             ranks: 1,
