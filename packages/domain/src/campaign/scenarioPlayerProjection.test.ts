@@ -50,6 +50,13 @@ function createParticipant(input: {
     sourceType: input.sourceType ?? "character",
     state: {
       combat: {
+        combatContext: {
+          modifierBuckets: {
+            general: [],
+            situationDb: [],
+            situationObSkill: []
+          }
+        },
         engaged: false
       },
       conditions: [],
@@ -99,6 +106,7 @@ describe("buildScenarioPlayerProjection", () => {
       progression: {
         chargenMode: "standard",
         educationPoints: 0,
+        flexiblePointFactor: 1,
         level: 1,
         primaryPoolSpent: 0,
         primaryPoolTotal: 60,
