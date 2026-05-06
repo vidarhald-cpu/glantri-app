@@ -777,7 +777,7 @@ describe("validateCanonicalContent", () => {
     const skillIdsFor = (professionId: string) =>
       grantsFor(professionId)
         .filter((grant) => grant.skillId)
-        .map((grant) => grant.skillId);
+        .map((grant) => grant.skillId!);
     const groupSkillIdsFor = (groupId: string) =>
       defaultCanonicalContent.skillGroups
         .find((group) => group.id === groupId)
@@ -828,7 +828,7 @@ describe("validateCanonicalContent", () => {
             grant.professionId === professionFamilyId &&
             grant.skillId
         )
-        .map((grant) => grant.skillId);
+        .map((grant) => grant.skillId!);
 
     expect(soldierFamily).toBeDefined();
     expect(familySkillIdsFor("soldier")).toEqual([]);
