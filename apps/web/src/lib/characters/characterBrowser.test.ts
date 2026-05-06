@@ -44,6 +44,7 @@ function createLocalRecord(input: Partial<LocalCharacterRecord> & Pick<LocalChar
       progression: input.build?.progression ?? {
         chargenMode: "standard",
         educationPoints: 0,
+        flexiblePointFactor: 1,
         level: 1,
         primaryPoolSpent: 0,
         primaryPoolTotal: 60,
@@ -52,6 +53,12 @@ function createLocalRecord(input: Partial<LocalCharacterRecord> & Pick<LocalChar
         skillGroups: [],
         skills: [],
         specializations: []
+      },
+      progressionState: input.build?.progressionState ?? {
+        availablePoints: 0,
+        checks: [],
+        history: [],
+        pendingAttempts: []
       },
       socialClass: input.build?.socialClass,
       societyId: input.build?.societyId
