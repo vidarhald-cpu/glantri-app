@@ -114,11 +114,20 @@ describe("RoleplayEncounterScreens", () => {
     expect(source).toContain("pendingModifierLabels");
     expect(source).toContain("formulaText");
     expect(source).toContain("resultText");
+    expect(source).toContain("return preview.resultText ?? \"FUMBLE\"");
     expect(source).toContain("Pending:");
     expect(source).toContain("RollCalculationPreview");
     expect(source).not.toContain("pending support-rule effect");
     expect(source).not.toContain("pending support rule");
     expect(source).not.toContain("Required difficulty");
+  });
+
+  it("shows ranked fumble rows with numeric totals instead of replacing totals with FUMBLE", () => {
+    const source = readSource();
+
+    expect(source).toContain("entry.numericSubtotal == null ? \"unresolved\" : `total ${entry.numericSubtotal}`");
+    expect(source).toContain("{entry.fumble ? \" · FUMBLE\" : \"\"}");
+    expect(source).not.toContain("entry.fumble ? \"FUMBLE\"");
   });
 
   it("uses persistent two-column roll blocks with structured calculation panels", () => {

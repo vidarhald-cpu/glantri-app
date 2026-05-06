@@ -367,6 +367,10 @@ function formatSignedNumber(value: number): string {
   return `${value >= 0 ? "+" : ""}${value}`;
 }
 
+function formatSignedTerm(value: number): string {
+  return `${value >= 0 ? "+" : "-"} ${Math.abs(value)}`;
+}
+
 function formatNumericModifierParts(parts: number[]): string {
   return parts.length === 0 ? "" : parts.map(formatSignedNumber).join(" ");
 }
@@ -385,7 +389,7 @@ export function buildRoleplayCalculationPreview(input: {
   const parts = [`${input.skillLabel} ${skillValue}`];
   const numericModifierParts = modifiers.otherMod === 0 ? [] : [modifiers.otherMod];
   const numericModifierSum = numericModifierParts.reduce((sum, value) => sum + value, 0);
-  const dieText = input.roll == null ? "<die>" : String(input.roll.dieResult);
+  const dieText = input.roll == null ? "+ 1d20" : formatSignedTerm(input.roll.dieResult);
   const pendingModifierLabels = [
     modifiers.useGenMod ? "Gen" : undefined,
     modifiers.useObSkillMod ? "OB/Skill" : undefined,
@@ -393,7 +397,7 @@ export function buildRoleplayCalculationPreview(input: {
   ].filter((label): label is string => Boolean(label));
 
   if (input.roll == null) {
-    parts.push("<DIE ROLL>");
+    parts.push("1d20");
   } else {
     parts.push(`roll ${formatRoleplayDieRoll(input.roll)}`);
   }
@@ -441,7 +445,7 @@ export function buildRoleplayCalculationPreview(input: {
           .join(" → ");
   const compactModifierBracket =
     numericModifierParts.length === 0 ? "[ ]" : `[ ${formatNumericModifierParts(numericModifierParts)} ]`;
-  const compactBase = `${input.skillLabel} ${skillValue} + ${compactModifierBracket} ${numericModifierSum} + ${dieText}`;
+  const compactBase = `${input.skillLabel} ${skillValue} + ${compactModifierBracket} ${numericModifierSum} ${dieText}`;
   const formulaText = numericSubtotal == null
     ? `${compactBase} = pending`
     : `${compactBase} = ${numericSubtotal}`;
@@ -449,7 +453,12 @@ export function buildRoleplayCalculationPreview(input: {
     autoSuccess
       ? `Automatic success vs ${formatRoleplayDifficulty(input.difficulty!)}`
       : achievedSuccessLevel?.fumble
-        ? "FUMBLE — automatic fail"
+        ? [
+            "FUMBLE",
+            success == null ? undefined : `NOT SUCCESSFUL vs ${formatRoleplayDifficulty(input.difficulty!)}`,
+          ]
+            .filter(Boolean)
+            .join(" · ")
         : achievedSuccessLevel
           ? [
               achievedSuccessLevel.label,

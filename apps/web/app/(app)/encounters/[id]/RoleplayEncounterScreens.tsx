@@ -395,7 +395,7 @@ function getPreviewResultLabel(input: {
   }
 
   if (preview.fumble) {
-    return "FUMBLE";
+    return preview.resultText ?? "FUMBLE";
   }
 
   if (preview.autoSuccess) {
@@ -1832,7 +1832,7 @@ export function GmRoleplayingEncounterScreen({
                   ) : (
                     <>
                       {participantLabel} · {entry.skillLabel ?? "Unknown skill"} ·{" "}
-                      {entry.fumble ? "FUMBLE" : entry.numericSubtotal == null ? "unresolved" : `total ${entry.numericSubtotal}`} ·{" "}
+                      {entry.numericSubtotal == null ? "unresolved" : `total ${entry.numericSubtotal}`} ·{" "}
                       {entry.achievedSuccessLevelLabel ?? "No level"} · modifier{" "}
                       {entry.resultModifier == null ? "—" : `${entry.resultModifier >= 0 ? "+" : ""}${entry.resultModifier}`} ·{" "}
                       {entry.difficulty ? formatDifficulty(entry.difficulty) : "No difficulty"} ·{" "}

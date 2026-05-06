@@ -452,7 +452,8 @@ describe("roleplay encounter state", () => {
       })
     ).toMatchObject({
       autoSuccess: true,
-      calculationText: "Perception 31 + <DIE ROLL> = pending vs Medium · Automatic success — no roll needed",
+      calculationText: "Perception 31 + 1d20 = pending vs Medium · Automatic success — no roll needed",
+      formulaText: "Perception 31 + [ ] 0 + 1d20 = pending",
       numericSubtotal: undefined,
     });
 
@@ -494,6 +495,30 @@ describe("roleplay encounter state", () => {
       numericModifierSum: 0,
       pendingModifierLabels: ["Gen", "DB"],
       partial: true,
+    });
+
+    expect(
+      buildRoleplayCalculationPreview({
+        roll: { dieResult: -6, openEndedD10s: [6], rollD20: 1 },
+        skillLabel: "Dodge",
+        skillValue: 0,
+      })
+    ).toMatchObject({
+      compactCalculationText: "Dodge 0 + [ ] 0 - 6 = -6 · FUMBLE",
+      formulaText: "Dodge 0 + [ ] 0 - 6 = -6",
+      resultText: "FUMBLE",
+    });
+
+    expect(
+      buildRoleplayCalculationPreview({
+        difficulty: "medium",
+        roll: { dieResult: -6, openEndedD10s: [6], rollD20: 1 },
+        skillLabel: "Dodge",
+        skillValue: 0,
+      })
+    ).toMatchObject({
+      resultText: "FUMBLE · NOT SUCCESSFUL vs Medium",
+      success: false,
     });
   });
 
@@ -604,6 +629,7 @@ describe("roleplay encounter state", () => {
       achievedSuccessLevel: expect.objectContaining({ id: "fumble" }),
       calculationText: "Perception 40 + roll 1-6 = 35 → FUMBLE — automatic fail → NOT SUCCESSFUL vs Medium",
       fumble: true,
+      resultText: "FUMBLE · NOT SUCCESSFUL vs Medium",
       success: false,
     });
   });
