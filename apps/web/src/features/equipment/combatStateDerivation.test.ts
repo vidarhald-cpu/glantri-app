@@ -614,6 +614,7 @@ describe("combatStateDerivation", () => {
             requiresLiteracy: "no",
             secondaryRanks: 0,
             skillId: "dodge",
+            skillKey: "dodge",
             specificSkillLevel: 0,
             totalSkill: 10,
           },
@@ -629,6 +630,7 @@ describe("combatStateDerivation", () => {
             requiresLiteracy: "no",
             secondaryRanks: 0,
             skillId: "one_h_edged",
+            skillKey: "one_h_edged",
             specificSkillLevel: 1,
             totalSkill: 11,
           },
@@ -644,6 +646,7 @@ describe("combatStateDerivation", () => {
             requiresLiteracy: "no",
             secondaryRanks: 0,
             skillId: "parry",
+            skillKey: "parry",
             specificSkillLevel: 0,
             totalSkill: 10,
           },
@@ -666,6 +669,11 @@ describe("combatStateDerivation", () => {
         total: 0,
       },
       seniority: 0,
+      skillPoints: {
+        current: 0,
+        original: 0,
+        successfulProgressionGains: 0,
+      },
       totalSkillPointsInvested: 0,
     } satisfies CharacterSheetSummary;
 
@@ -714,6 +722,7 @@ describe("combatStateDerivation", () => {
             requiresLiteracy: "no",
             secondaryRanks: 0,
             skillId: "skill-1h-edged",
+            skillKey: "skill-1h-edged",
             specificSkillLevel: 2,
             totalSkill: 6,
           },
@@ -736,6 +745,11 @@ describe("combatStateDerivation", () => {
         total: 0,
       },
       seniority: 6,
+      skillPoints: {
+        current: 6,
+        original: 6,
+        successfulProgressionGains: 0,
+      },
       totalSkillPointsInvested: 6,
     } satisfies CharacterSheetSummary;
 

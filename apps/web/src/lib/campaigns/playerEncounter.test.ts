@@ -29,9 +29,19 @@ function createScenarioParticipant(
     state:
       overrides.state ??
       ({
-        combat: {},
+        combat: {
+          combatContext: {
+            modifierBuckets: {
+              general: [],
+              situationDb: [],
+              situationObSkill: [],
+            },
+          },
+          engaged: false,
+        },
         conditions: [],
         health: {
+          bleeding: 0,
           currentHp: 10,
           dead: false,
           maxHp: 10,
@@ -41,7 +51,7 @@ function createScenarioParticipant(
         modifiers: [],
         resources: {},
         snapshotVersion: 1,
-      } satisfies ScenarioParticipant["state"]),
+      } as unknown as ScenarioParticipant["state"]),
     updatedAt: "2026-04-25T10:00:00.000Z",
     ...overrides,
   };

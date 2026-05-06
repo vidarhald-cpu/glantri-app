@@ -19,7 +19,7 @@ function createCharacter(input: {
       name: input.name,
       profile: {},
       progression: { groups: [], level: 1, skillAllocations: [], skills: [] },
-    } as ServerCharacterRecord["build"],
+    } as unknown as ServerCharacterRecord["build"],
     createdAt: "2026-04-23T00:00:00.000Z",
     id: input.id,
     level: 1,
@@ -43,7 +43,16 @@ function createParticipant(input: {
     snapshot: { displayName: "Participant" },
     sourceType: "character",
     state: {
-      combat: {},
+      combat: {
+        combatContext: {
+          modifierBuckets: {
+            general: [],
+            situationDb: [],
+            situationObSkill: [],
+          },
+        },
+        engaged: false,
+      },
       conditions: [],
       equipment: {},
       health: {
