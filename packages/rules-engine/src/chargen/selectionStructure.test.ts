@@ -183,6 +183,7 @@ const content = {
 
 const progression: CharacterProgression = {
   chargenMode: "standard",
+  flexiblePointFactor: 1,
   chargenSelections: {
     selectedLanguageIds: [],
     selectedGroupSlots: [
