@@ -67,9 +67,11 @@ const combatContent = {
       groupId: "advanced_melee_training",
       groupIds: ["advanced_melee_training"],
       id: "dodge",
+      isTheoretical: false,
       linkedStats: ["dex"],
       name: "Dodge",
       requiresLiteracy: "no",
+      societyLevel: 1,
       sortOrder: 1
     },
     {
@@ -80,9 +82,11 @@ const combatContent = {
       groupId: "advanced_melee_training",
       groupIds: ["advanced_melee_training"],
       id: "parry",
+      isTheoretical: false,
       linkedStats: ["dex"],
       name: "Parry",
       requiresLiteracy: "no",
+      societyLevel: 1,
       sortOrder: 2
     },
     {
@@ -93,9 +97,11 @@ const combatContent = {
       groupId: "advanced_melee_training",
       groupIds: ["advanced_melee_training"],
       id: "brawling",
+      isTheoretical: false,
       linkedStats: ["str"],
       name: "Brawling",
       requiresLiteracy: "no",
+      societyLevel: 1,
       sortOrder: 3
     },
     {
@@ -106,9 +112,11 @@ const combatContent = {
       groupId: "advanced_melee_training",
       groupIds: ["advanced_melee_training"],
       id: "sword",
+      isTheoretical: false,
       linkedStats: ["dex"],
       name: "Sword",
       requiresLiteracy: "no",
+      societyLevel: 1,
       sortOrder: 4
     },
     {
@@ -119,9 +127,11 @@ const combatContent = {
       groupId: "advanced_melee_training",
       groupIds: ["advanced_melee_training"],
       id: "axe",
+      isTheoretical: false,
       linkedStats: ["dex"],
       name: "Axe",
       requiresLiteracy: "no",
+      societyLevel: 1,
       sortOrder: 5
     },
     {
@@ -132,9 +142,11 @@ const combatContent = {
       groupId: "advanced_melee_training",
       groupIds: ["advanced_melee_training"],
       id: "spear",
+      isTheoretical: false,
       linkedStats: ["dex"],
       name: "Spear",
       requiresLiteracy: "no",
+      societyLevel: 1,
       sortOrder: 6
     },
     {
@@ -145,9 +157,11 @@ const combatContent = {
       groupId: "advanced_melee_training",
       groupIds: ["advanced_melee_training"],
       id: "mace",
+      isTheoretical: false,
       linkedStats: ["dex"],
       name: "Mace",
       requiresLiteracy: "no",
+      societyLevel: 1,
       sortOrder: 7
     }
   ],
@@ -190,6 +204,7 @@ const combatContent = {
       societyName: "Glantri"
     }
   ],
+  societyBandSkillAccess: [],
   specializations: []
 };
 
@@ -226,9 +241,11 @@ const overlappingProfessionContent = {
       groupId: "fieldcraft",
       groupIds: ["fieldcraft"],
       id: "stealth",
+      isTheoretical: false,
       linkedStats: ["dex"],
       name: "Stealth",
       requiresLiteracy: "no",
+      societyLevel: 1,
       sortOrder: 1
     },
     {
@@ -239,9 +256,11 @@ const overlappingProfessionContent = {
       groupId: "fieldcraft",
       groupIds: ["fieldcraft"],
       id: "tracking",
+      isTheoretical: false,
       linkedStats: ["int"],
       name: "Tracking",
       requiresLiteracy: "no",
+      societyLevel: 1,
       sortOrder: 2
     }
   ],
@@ -284,6 +303,7 @@ const overlappingProfessionContent = {
       societyName: "Glantri"
     }
   ],
+  societyBandSkillAccess: [],
   specializations: []
 };
 
@@ -324,9 +344,11 @@ const languageContent = {
       groupId: "scholarly",
       groupIds: ["scholarly"],
       id: "literacy",
+      isTheoretical: false,
       linkedStats: ["int"],
       name: "Literacy",
       requiresLiteracy: "no",
+      societyLevel: 1,
       sortOrder: 1
     },
     {
@@ -393,6 +415,7 @@ const languageContent = {
       societyName: "Glantri"
     }
   ],
+  societyBandSkillAccess: [],
   specializations: []
 };
 
@@ -470,9 +493,11 @@ const hiddenOtherSkillContent = {
       groupId: "courtly",
       groupIds: ["courtly"],
       id: "etiquette",
+      isTheoretical: false,
       linkedStats: ["com"],
       name: "Etiquette",
       requiresLiteracy: "no" as const,
+      societyLevel: 1,
       sortOrder: 1
     }
   ],
@@ -515,6 +540,7 @@ const hiddenOtherSkillContent = {
       societyName: "Glantri"
     }
   ],
+  societyBandSkillAccess: [],
   specializations: []
 };
 
@@ -543,9 +569,11 @@ const directGrantedSkillContent = {
       groupId: "courtly",
       groupIds: ["courtly"],
       id: "etiquette",
+      isTheoretical: false,
       linkedStats: ["com"],
       name: "Etiquette",
       requiresLiteracy: "no" as const,
+      societyLevel: 1,
       sortOrder: 1
     }
   ],
@@ -588,6 +616,7 @@ const directGrantedSkillContent = {
       societyName: "Glantri"
     }
   ],
+  societyBandSkillAccess: [],
   specializations: []
 };
 
@@ -621,9 +650,11 @@ const overlappingOfficerTrainingContent = {
       groupId: "basic_awareness",
       groupIds: ["basic_awareness", "officer_training"],
       id: "perception",
+      isTheoretical: false,
       linkedStats: ["int"],
       name: "Perception",
       requiresLiteracy: "no" as const,
+      societyLevel: 1,
       sortOrder: 1
     },
     {
@@ -635,9 +666,11 @@ const overlappingOfficerTrainingContent = {
       groupId: "officer_training",
       groupIds: ["officer_training"],
       id: "tactics",
+      isTheoretical: false,
       linkedStats: ["int"],
       name: "Tactics",
       requiresLiteracy: "no" as const,
+      societyLevel: 1,
       sortOrder: 2
     },
     {
@@ -649,9 +682,11 @@ const overlappingOfficerTrainingContent = {
       groupId: "officer_training",
       groupIds: ["officer_training"],
       id: "captaincy",
+      isTheoretical: false,
       linkedStats: ["pow"],
       name: "Captaincy",
       requiresLiteracy: "no" as const,
+      societyLevel: 1,
       sortOrder: 3
     }
   ],
@@ -694,6 +729,7 @@ const overlappingOfficerTrainingContent = {
       societyName: "Glantri"
     }
   ],
+  societyBandSkillAccess: [],
   specializations: []
 };
 
@@ -704,7 +740,7 @@ function createProgressionWithOtherSkillCandidate() {
 }
 
 function getOtherSkillIds(input: {
-  content: Parameters<typeof buildChargenSkillAccessSummary>[0]["content"];
+  content: Parameters<typeof getSkillDisplayGroupId>[0]["content"];
   draftView: ReturnType<typeof buildChargenDraftView>;
   professionId: string;
   societyId: string;
