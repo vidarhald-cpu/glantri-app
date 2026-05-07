@@ -33,11 +33,15 @@ resource apiApp 'Microsoft.Web/sites@2023-12-01' = {
           value: '@Microsoft.KeyVault(SecretUri=${keyVaultUri}secrets/web-origin/)'
         }
         {
+          name: 'WEBSITES_PORT'
+          value: '4000'
+        }
+        {
           name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
           value: '@Microsoft.KeyVault(SecretUri=${keyVaultUri}secrets/appinsights-connection-string/)'
         }
       ]
-      appCommandLine: 'node dist/server.js'
+      appCommandLine: ''
     }
   }
 }
@@ -57,15 +61,15 @@ resource webApp 'Microsoft.Web/sites@2023-12-01' = {
           value: 'production'
         }
         {
-          name: 'NEXT_PUBLIC_API_URL'
-          value: 'https://${prefix}-api.azurewebsites.net'
+          name: 'WEBSITES_PORT'
+          value: '3000'
         }
         {
           name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
           value: '@Microsoft.KeyVault(SecretUri=${keyVaultUri}secrets/appinsights-connection-string/)'
         }
       ]
-      appCommandLine: 'node apps/web/server.js'
+      appCommandLine: ''
     }
   }
 }
