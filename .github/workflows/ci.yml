@@ -31,3 +31,50 @@ jobs:
 
       - name: Test
         run: pnpm test
+
+  docker-test:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: glantri_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build API image
+        run: docker build -t glantri-api-test -f apps/api/Dockerfile .
+
+      - name: Start API container
+        run: |
+          docker run -d --name api-test \
+            --network host \
+            -e DATABASE_URL="postgresql://postgres:postgres@localhost:5432/glantri_test" \
+            -e WEB_ORIGIN="http://localhost:3000" \
+            -e NODE_ENV="production" \
+            glantri-api-test
+
+      - name: Wait for API to be ready
+        run: |
+          for i in $(seq 1 12); do
+            if curl -fsS http://localhost:4000/health; then
+              echo ""
+              echo "Health check passed on attempt $i"
+              exit 0
+            fi
+            echo "Attempt $i/12 failed, retrying in 5s..."
+            sleep 5
+          done
+          echo "API failed to start after 60s. Container logs:"
+          docker logs api-test
+          exit 1
