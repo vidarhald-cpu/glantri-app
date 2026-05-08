@@ -57,15 +57,16 @@ jobs:
       - name: Log in to Container Registry
         run: az acr login --name ${{ secrets.REGISTRY_NAME }}
 
-      - name: Deploy infrastructure
-        env:
-          GLANTRI_DB_PASSWORD: ${{ secrets.AZURE_DB_ADMIN_PASSWORD }}
+      - name: Sync app settings
         run: |
-          az deployment group create \
+          az webapp config appsettings set \
             --resource-group rg_glantri \
-            --template-file infra/main.bicep \
-            --parameters infra/dev.bicepparam \
-            --mode Incremental
+            --name ${{ secrets.AZURE_API_APP_NAME }} \
+            --settings WEBSITES_PORT=4000
+          az webapp config appsettings set \
+            --resource-group rg_glantri \
+            --name ${{ secrets.AZURE_WEB_APP_NAME }} \
+            --settings WEBSITES_PORT=3000
 
       - name: Build and push API image
         run: |
