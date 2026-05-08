@@ -67,6 +67,14 @@ jobs:
             --resource-group rg_glantri \
             --name ${{ secrets.AZURE_WEB_APP_NAME }} \
             --settings WEBSITES_PORT=3000
+          az webapp config set \
+            --resource-group rg_glantri \
+            --name ${{ secrets.AZURE_API_APP_NAME }} \
+            --startup-file ""
+          az webapp config set \
+            --resource-group rg_glantri \
+            --name ${{ secrets.AZURE_WEB_APP_NAME }} \
+            --startup-file ""
 
       - name: Build and push API image
         run: |
