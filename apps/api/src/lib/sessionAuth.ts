@@ -56,7 +56,7 @@ export function buildSessionCookie(token: string, expiresAt: string): string {
     `${SESSION_COOKIE_NAME}=${encodeURIComponent(token)}`,
     "HttpOnly",
     "Path=/",
-    "SameSite=Lax",
+    isProduction ? "SameSite=None" : "SameSite=Lax",
     `Max-Age=${maxAgeSeconds}`
   ];
 
@@ -72,7 +72,7 @@ export function buildExpiredSessionCookie(): string {
     `${SESSION_COOKIE_NAME}=`,
     "HttpOnly",
     "Path=/",
-    "SameSite=Lax",
+    isProduction ? "SameSite=None" : "SameSite=Lax",
     "Max-Age=0"
   ];
 
