@@ -12,7 +12,7 @@ RUN pnpm install --frozen-lockfile
 RUN pnpm --filter @glantri/database exec prisma generate
 RUN pnpm --filter @glantri/api... run build
 RUN pnpm --filter @glantri/api deploy --prod /deploy
-RUN cp -r /build/apps/api/dist /deploy/dist && ls /deploy/dist/server.js
+RUN cp -r /build/apps/api/dist /deploy/dist && ls /deploy/dist/apps/api/src/server.js
 RUN find /build/node_modules -name ".prisma" -type d | while IFS= read -r src; do \
       rel="${src#/build/node_modules/}"; \
       dst="/deploy/node_modules/${rel}"; \
@@ -25,4 +25,4 @@ WORKDIR /app
 COPY --from=builder /deploy ./
 ENV NODE_ENV=production
 EXPOSE 4000
-CMD ["node", "dist/server.js"]
+CMD ["node", "dist/apps/api/src/server.js"]
