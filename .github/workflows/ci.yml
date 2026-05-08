@@ -52,8 +52,32 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.6.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run database migrations
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/glantri_test
+        run: pnpm --filter @glantri/database exec prisma migrate deploy
+
       - name: Build API image
         run: docker build -t glantri-api-test -f apps/api/Dockerfile .
+
+      - name: Build Web image
+        run: |
+          docker build \
+            --build-arg NEXT_PUBLIC_API_BASE_URL=http://localhost:4000 \
+            -t glantri-web-test \
+            -f apps/web/Dockerfile .
 
       - name: Start API container
         run: |
@@ -63,6 +87,13 @@ jobs:
             -e WEB_ORIGIN="http://localhost:3000" \
             -e NODE_ENV="production" \
             glantri-api-test
+
+      - name: Start Web container
+        run: |
+          docker run -d --name web-test \
+            --network host \
+            -e NODE_ENV="production" \
+            glantri-web-test
 
       - name: Wait for API to be ready
         run: |
@@ -77,4 +108,18 @@ jobs:
           done
           echo "API failed to start after 60s. Container logs:"
           docker logs api-test
+          exit 1
+
+      - name: Wait for Web to be ready
+        run: |
+          for i in $(seq 1 12); do
+            if curl -fsS -o /dev/null http://localhost:3000; then
+              echo "Web started on attempt $i"
+              exit 0
+            fi
+            echo "Attempt $i/12 failed, retrying in 5s..."
+            sleep 5
+          done
+          echo "Web failed to start after 60s. Container logs:"
+          docker logs web-test
           exit 1
