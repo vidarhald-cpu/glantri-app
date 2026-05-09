@@ -74,6 +74,7 @@ export default defineConfig({
     coverage: {
       exclude: [
         "**/.next/**",
+        "**/.claude/**",
         "**/coverage/**",
         "**/dist/**",
         "**/node_modules/**",
@@ -89,7 +90,8 @@ export default defineConfig({
       provider: "v8",
       reporter: ["text", "json-summary", "html"],
     },
+    environment: "node",
+    exclude: ["**/.claude/**", "**/node_modules/**", "**/dist/**"],
     globals: true,
-    environment: "node"
   }
 });
