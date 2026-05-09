@@ -9,7 +9,7 @@ export default mergeConfig(
   baseConfig,
   defineConfig({
     test: {
-      exclude: ["**/*.component.test.tsx"],
+      exclude: ["**/*.component.test.tsx", "**/e2e/**"],
     },
   }),
 );
