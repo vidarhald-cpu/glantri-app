@@ -1,6 +1,7 @@
 import { characterBuildSchema, type CharacterBuild } from "@glantri/domain";
+import type { PrismaClient } from "@prisma/client";
 
-import { prisma } from "../client";
+import { prisma as defaultPrisma } from "../client";
 
 export interface CharacterRecord {
   build: CharacterBuild;
@@ -67,7 +68,9 @@ function mapCharacterRecord(character: {
   };
 }
 
-export function createPrismaCharacterRepository(): CharacterRepository {
+export function createPrismaCharacterRepository(client?: PrismaClient): CharacterRepository {
+  const prisma = client ?? defaultPrisma;
+
   return {
     async findById(id) {
       const character = await prisma.character.findUnique({
