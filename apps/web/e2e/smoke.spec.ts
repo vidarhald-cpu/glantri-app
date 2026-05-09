@@ -59,6 +59,6 @@ test.describe("campaign workspace", () => {
     await page.goto(`/campaigns/${testState.campaignId}`);
 
     await expect(page.getByText("Smoke Test Campaign")).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByText("Smoke Test Scenario")).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText("Smoke Test Scenario", { exact: true })).toBeVisible({ timeout: 10_000 });
   });
 });
