@@ -32,6 +32,12 @@ jobs:
       - name: Test
         run: pnpm test
 
+      - name: Coverage
+        run: pnpm coverage
+
+      - name: Build
+        run: pnpm build
+
   docker-test:
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
@@ -68,6 +74,11 @@ jobs:
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/glantri_test
         run: pnpm --filter @glantri/database exec prisma migrate deploy
+
+      - name: Run integration tests
+        env:
+          DATABASE_URL_TEST: postgresql://postgres:postgres@localhost:5432/glantri_test
+        run: pnpm --filter @glantri/database test
 
       - name: Build API image
         run: docker build -t glantri-api-test -f apps/api/Dockerfile .

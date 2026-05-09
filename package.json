@@ -13,6 +13,7 @@
     "typecheck": "turbo typecheck --force",
     "lint": "turbo lint --force",
     "test": "turbo test --force",
+    "coverage": "vitest run --coverage --passWithNoTests",
     "db:up": "docker compose up -d postgres",
     "db:down": "docker compose down",
     "db:migrate": "pnpm --filter @glantri/database db:migrate",
@@ -22,16 +23,17 @@
     "db:reset:local": "pnpm --filter @glantri/database db:reset:local"
   },
   "devDependencies": {
-    "@next/eslint-plugin-next": "^15.2.4",
     "@eslint/js": "^9.39.1",
+    "@next/eslint-plugin-next": "^15.2.4",
     "@types/node": "^22.14.0",
+    "@vitest/coverage-v8": "2.1.9",
     "eslint": "^9.39.4",
     "globals": "^15.15.0",
     "prettier": "^3.8.1",
     "tsx": "^4.19.0",
     "turbo": "^2.8.15",
-    "typescript-eslint": "^8.46.3",
     "typescript": "^5.9.3",
+    "typescript-eslint": "^8.46.3",
     "vitest": "^2.1.0"
   }
 }
