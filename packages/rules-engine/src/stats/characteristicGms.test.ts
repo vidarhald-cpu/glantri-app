@@ -65,14 +65,14 @@ describe("getDexteritySizeModifier", () => {
   it("returns a positive value for small size (< 10)", () => {
     // siz 8: getGlantriStatModifier(8) = −1, result = −(−1) = 1
     expect(getDexteritySizeModifier(8)).toBe(1);
-    // siz 5: getGlantriStatModifier(5) = −2, result = −(−2) = 2
-    expect(getDexteritySizeModifier(5)).toBe(2);
+    // siz 5: getGlantriStatModifier(5) = −3, result = −(−3) = 3
+    expect(getDexteritySizeModifier(5)).toBe(3);
   });
 
   it("returns a negative value for large size (> 14)", () => {
-    // siz 18: getGlantriStatModifier(18) = 4, result = −(4 − 1) = −3
-    expect(getDexteritySizeModifier(18)).toBe(-3);
-    // siz 20: getGlantriStatModifier(20) = 5, result = −(5 − 1) = −4
-    expect(getDexteritySizeModifier(20)).toBe(-4);
+    // siz 18: getGlantriStatModifier(18) = 3, result = −(3 − 1) = −2
+    expect(getDexteritySizeModifier(18)).toBe(-2);
+    // siz 20: getGlantriStatModifier(20) = 4, result = −(4 − 1) = −3
+    expect(getDexteritySizeModifier(20)).toBe(-3);
   });
 });
