@@ -1,4 +1,4 @@
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 
 import { createPrismaCharacterRepository } from "../repositories/characterRepository";
 import { getTestPrismaClient, resetTestDatabase } from "../testing/testDatabase";
@@ -11,10 +11,6 @@ if (!process.env.DATABASE_URL_TEST) {
   describe.skip("CharacterService integration tests (DATABASE_URL_TEST not set)", () => {});
 } else {
   describe("CharacterService integration", () => {
-    afterAll(async () => {
-      await prisma!.$disconnect();
-    });
-
     beforeEach(async () => {
       await resetTestDatabase(prisma!);
     });
