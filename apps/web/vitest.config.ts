@@ -9,6 +9,7 @@ export default mergeConfig(
     plugins: [react()],
     test: {
       environmentMatchGlobs: [["**/*.component.test.tsx", "happy-dom"]],
+      exclude: ["e2e/**", "**/node_modules/**", "**/dist/**"],
       setupFiles: ["./src/test/setup.ts"]
     }
   })

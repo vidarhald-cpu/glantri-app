@@ -35,3 +35,9 @@ apps/web/src/features/equipment/*.js
 apps/web/src/features/equipment/*.js.map
 apps/web/src/features/equipment/*.d.ts
 apps/web/src/features/equipment/*.d.ts.map
+
+# Playwright
+apps/web/e2e/.auth/
+apps/web/e2e/test-state.json
+apps/web/playwright-report/
+apps/web/test-results/

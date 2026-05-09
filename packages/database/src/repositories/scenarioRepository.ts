@@ -25,9 +25,9 @@ import {
   type ScenarioRelationship,
   type ScenarioRelationshipType
 } from "@glantri/domain";
-import { Prisma } from "@prisma/client";
+import { Prisma, PrismaClient } from "@prisma/client";
 
-import { prisma } from "../client";
+import { prisma as defaultPrisma } from "../client";
 
 function asJson(value: unknown): Prisma.InputJsonValue {
   return value as Prisma.InputJsonValue;
@@ -397,7 +397,8 @@ export interface ScenarioRepository {
   listScenarioEventLogs(scenarioId: string): Promise<ScenarioEventLog[]>;
 }
 
-export function createPrismaScenarioRepository(): ScenarioRepository {
+export function createPrismaScenarioRepository(client?: PrismaClient): ScenarioRepository {
+  const prisma = client ?? defaultPrisma;
   return {
     async createCampaign(input) {
       const record = await prisma.campaign.create({
