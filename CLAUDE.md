@@ -56,6 +56,52 @@ PLAYWRIGHT_BASE_URL=http://localhost:3000 PLAYWRIGHT_API_URL=http://localhost:40
 - API-kall går via domeneklienter i `src/lib/api/` — ikke direkte `fetch` i komponenter
 - `localServiceClient.ts` er en barrel-eksport for bakoverkompatibilitet — ny kode importerer fra domeneklientene direkte
 
+### Ny kode — hvor legger du det?
+
+| Kode | Rett sted |
+|------|-----------|
+| Ny UI-feature | `apps/web/src/features/<feature>/` med tynn route i `app/.../page.tsx` |
+| Ny API-rutegruppe | `apps/api/src/routes/<feature>/` med `routes.ts`, `handlers.ts`, `parse.ts`, `access.ts` |
+| Ny domenetype eller Zod-schema | `packages/domain/src/<domain>/` |
+| Ren spillregelberegning | `packages/rules-engine/src/<domain>/` |
+| Ny databaseoperasjon | `packages/database/src/services/<domain>/` — repositories er interne |
+| API request/response-kontrakt | `packages/domain/src/api/` eller `packages/shared/src/contracts/` |
+| Ny testfixture | `packages/test-scenarios` — kun `*.test.ts`, `*.test.tsx`, `e2e/` |
+
+### Importregler
+
+1. `apps/*` kan importere fra `packages/*` — aldri omvendt
+2. `packages/rules-engine` importerer kun fra `packages/domain` — ikke fra `apps/*` eller `packages/database`
+3. `packages/domain` er bunn i lagkaken: ingen imports fra `content`, `database`, `rules-engine`, `apps/*`
+4. `@glantri/test-scenarios` er forbudt utenfor `*.test.ts`, `*.test.tsx` og `e2e/`
+5. `apps/web/app/` bruker `@/`-alias til `apps/web/src/` — ikke lange `../../src/`-stier
+6. Repositories i `packages/database` er interne — utsiden bruker services
+7. Ny beregningslogikk hører i `packages/rules-engine`, ikke i web-features
+
+### Feature-mønster (`apps/web/src/features/<feature>/`)
+
+Store features følger denne strukturen:
+
+```
+<feature>/
+  README.md          ← ansvar, entrypoints, state, API-kall, testkommandoer
+  index.ts
+  components/        ← rene presentasjonskomponenter, ingen sideeffekter
+  hooks/             ← datalasting og sideeffekter (useXData.ts)
+  state/             ← reducer/state machine med useReducer, ikke mange useState
+  view-models/       ← filtrering, sortering og displaymodeller (rene funksjoner)
+  tests/
+```
+
+- `page.tsx` i `app/` er tynn wrapper — ingen state, ingen fetch, bare layout
+- State-maskin i `state/` er testbar uten React
+- View models er rene funksjoner — testbare uten DOM
+- Komponenter i `components/` renderer data, sender events — ingen forretningslogikk
+
+### Filstørrelse
+
+Over ~500 linjer er et tegn på at filen har for mange ansvar. Unntakene er generert data og testfiler. Se `routes/scenarios/` (API) og feature-mønsteret (web) som referanse for hvordan splitt gjøres.
+
 ## Dokumentasjonspolicy
 
 **Oppdater alltid dette før ny kode:**

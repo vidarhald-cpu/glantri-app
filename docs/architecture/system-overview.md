@@ -71,6 +71,29 @@ Fastify-serveren eksponerer følgende rute-grupper:
 
 Delt parsing-logikk: `scenarios/parsing.ts`. Tilgangskontroll: `scenarios/access.ts`.
 
+## Pakkeavhengigheter
+
+Avhengighetsretningen er lagdelt og skal alltid gå nedover:
+
+```
+apps/web  ──────────────────────────────┐
+apps/api  ──────────────────────────────┤
+                                        ↓
+                          packages/database
+                          packages/content
+                          packages/rules-engine
+                          packages/shared
+                                        ↓
+                          packages/domain
+                          packages/auth
+```
+
+Regler:
+- `apps/*` kan importere fra `packages/*` — aldri omvendt
+- `packages/rules-engine` importerer fra `packages/domain`, **ikke** fra `apps/*` eller `packages/database`
+- `packages/domain` er bunn: ingen imports fra andre pakker i dette repoet
+- `packages/test-scenarios` er kun for `*.test.ts`, `*.test.tsx` og `e2e/`
+
 ## Pakkeansvar
 
 ### `packages/domain`
@@ -80,7 +103,7 @@ Kilden til sannhet for alle TypeScript-typer og Zod-skjemaer som brukes på tver
 Prisma-klient og all databasetilgang. Eksponerer services (ikke repositories direkte) til API-laget. Repositories er interne. Services: `AuthService`, `CharacterService`, `CharacterEquipmentWriteService`, `ChargenRuleSetService`, `EncounterService`, `ScenarioService`.
 
 ### `packages/rules-engine`
-Ren beregningslogikk uten I/O. Implementerer Rolemaster-reglene: stats, ferdigheter, kamp, utvikling. Alle beregninger er deterministiske funksjoner — testes med golden tests mot kildearkeark.
+Ren beregningslogikk uten I/O. Implementerer Rolemaster-reglene: stats, ferdigheter, kamp, utvikling. Alle beregninger er deterministiske funksjoner — testes med golden tests mot kildearbeidsbok. All combat- og utstyrsderivasjon hører her, ikke i web-features.
 
 ### `packages/content`
 Statisk spillinnhold kompilert inn i applikasjonen: våpen-templates, rustning, skjold, ferdighetsrelasjoner. Importert fra Themistogenes-arbeidsboken via `packages/importers`.
@@ -105,6 +128,27 @@ app/
 ```
 
 API-klient: `apps/web/src/lib/api/` med domenespesifikke klienter (`authClient.ts`, `campaignClient.ts`, `characterClient.ts`, `chargenClient.ts`, `encounterClient.ts`, `equipmentClient.ts`, `scenarioClient.ts`). `localServiceClient.ts` er en bakoverkompatibel barrel-eksport. `apiConfig.ts` er eneste sted `NEXT_PUBLIC_API_BASE_URL` refereres.
+
+### Feature-mappestruktur (anbefalt mønster)
+
+Nye features i `apps/web/src/features/<feature>/` følger dette mønsteret:
+
+```
+<feature>/
+  README.md          ← ansvar, entrypoints, state, API-kall, testkommandoer
+  index.ts
+  components/        ← rene presentasjonskomponenter
+  hooks/             ← datalasting og sideeffekter
+  state/             ← reducer/state machine (useReducer)
+  view-models/       ← rene beregningsfunksjoner for display
+  tests/
+```
+
+`page.tsx` i `app/` er tynn wrapper — ingen state, ingen fetch. Forretningslogikk hører i `packages/rules-engine`, ikke i features. State-machines og view models skal være testbare uten React.
+
+### Offline/lokal state
+
+Web har Dexie-integrasjon i `src/lib/offline/` for lokalt lagrede karakterer, drafts, chargen-sesjoner og innholdscache. Features som blander lokal og server-persistens dokumenterer dette i sin README.
 
 ## Infrastruktur
 
