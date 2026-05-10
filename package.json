@@ -11,6 +11,8 @@
     "build": "turbo build --force",
     "dev:full": "pnpm --filter @glantri/content build && pnpm dev",
     "typecheck": "turbo typecheck --force",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "lint": "turbo lint --force",
     "test": "turbo test --force",
     "coverage": "vitest run --coverage --passWithNoTests",
