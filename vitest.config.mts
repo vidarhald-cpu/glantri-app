@@ -1,6 +1,6 @@
 import { defineConfig, mergeConfig } from "vitest/config";
 
-import baseConfig from "./packages/config/vitest.base";
+import baseConfig from "./packages/config/vitest.base.ts";
 
 // Root coverage excludes component tests: they need the React plugin and happy-dom,
 // both of which are only configured in apps/web/vitest.config.ts. Component tests

@@ -17,6 +17,45 @@ Likely important areas
 • shared content/types/validators in packages/...
 • rules and progression logic in rules-engine/domain packages
 
+Architecture and import rules
+
+Package dependency direction is strictly top-down:
+• apps/* may import from packages/* — never the reverse
+• packages/rules-engine imports only from packages/domain — not from apps/* or packages/database
+• packages/domain has no imports from other repo packages (it is the bottom layer)
+• @glantri/test-scenarios is forbidden outside *.test.ts, *.test.tsx, and e2e/
+• apps/web/app/ uses @/ alias to apps/web/src/ — do not write long relative ../../src/ paths
+• packages/database repositories are internal — external callers use services only
+• All game rule calculations go in packages/rules-engine, not in web features
+
+Where to place new code
+
+• New UI feature → apps/web/src/features/<feature>/ with thin route in app/.../page.tsx
+• New API route group → apps/api/src/routes/<feature>/ with routes.ts, handlers.ts, parse.ts
+• New domain type or Zod schema → packages/domain/src/<domain>/
+• New game rule calculation → packages/rules-engine/src/<domain>/
+• New database operation → packages/database/src/services/<domain>/ (repositories are internal)
+• New API request/response contract → packages/domain/src/api/ or packages/shared/src/contracts/
+• New test fixture → packages/test-scenarios — only usable from tests/e2e
+
+Feature folder structure for apps/web/src/features/<feature>/
+
+Large features must follow this layout:
+  README.md         — responsibility, entrypoints, state location, API calls, test commands
+  index.ts
+  components/       — pure presentational components, no side effects
+  hooks/            — data loading and side effects (useXData.ts)
+  state/            — reducer/state machine using useReducer, not many useState
+  view-models/      — pure functions for filtering, sorting, display models
+  tests/
+
+page.tsx files in app/ are thin wrappers — no state, no fetch, layout only.
+State machines and view models must be testable without React.
+
+File size guideline
+
+Files over ~500 lines are a signal of too many responsibilities. Exceptions are generated data and large test files. See routes/scenarios/ (API) and the feature folder structure (web) as reference splits.
+
 Working style
 • Start from existing code patterns
 • Reuse existing helpers where reasonable
