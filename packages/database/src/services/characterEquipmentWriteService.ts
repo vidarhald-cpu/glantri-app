@@ -29,6 +29,13 @@ import {
 
 export type ActiveWeaponSlot = "primary" | "secondary" | "missile";
 
+export interface SampleCharacterEquipment {
+  sampleCharacterId: string;
+  sampleLocations: StorageLocation[];
+  sampleEquipmentItems: EquipmentItem[];
+  sampleActiveLoadout: CharacterLoadout;
+}
+
 interface AddCharacterEquipmentItemInput {
   templateId: string;
   quantity: number;
@@ -577,14 +584,11 @@ export class CharacterEquipmentWriteService {
 
   async bootstrapSampleCharacterEquipment(
     characterId: string,
+    sampleEquipment: SampleCharacterEquipment,
     options?: {
       overwrite?: boolean;
     },
   ): Promise<void> {
-    const sampleModule = await import(
-      "@glantri/test-scenarios/equipment/sampleCharacterEquipment"
-    );
-
     const snapshot = await this.ensureCharacterEquipmentInitialized(characterId);
     const hasCustomLocations = snapshot.locations.some(
       (location) => !location.type.endsWith("_system"),
@@ -600,19 +604,19 @@ export class CharacterEquipmentWriteService {
       throw new Error("Sample equipment overwrite is not supported yet.");
     }
 
-    for (const location of sampleModule.sampleLocations.filter(
+    for (const location of sampleEquipment.sampleLocations.filter(
       (entry) => !entry.type.endsWith("_system"),
     )) {
       await this.repository.createCharacterStorageLocation(
         StorageLocationSchema.parse({
           ...location,
           characterId,
-          id: location.id.replace(sampleModule.sampleCharacterId, characterId),
+          id: location.id.replace(sampleEquipment.sampleCharacterId, characterId),
         }),
       );
     }
 
-    for (const item of sampleModule.sampleEquipmentItems) {
+    for (const item of sampleEquipment.sampleEquipmentItems) {
       await this.repository.createCharacterEquipmentItem(
         EquipmentItemSchema.parse({
           ...item,
@@ -621,7 +625,7 @@ export class CharacterEquipmentWriteService {
           storageAssignment: {
             ...item.storageAssignment,
             locationId: item.storageAssignment.locationId.replace(
-              sampleModule.sampleCharacterId,
+              sampleEquipment.sampleCharacterId,
               characterId,
             ),
           },
@@ -631,37 +635,37 @@ export class CharacterEquipmentWriteService {
 
     await this.repository.upsertCharacterLoadout(
       CharacterLoadoutSchema.parse({
-        ...sampleModule.sampleActiveLoadout,
-        activeMissileWeaponItemId: sampleModule.sampleActiveLoadout.activeMissileWeaponItemId
+        ...sampleEquipment.sampleActiveLoadout,
+        activeMissileWeaponItemId: sampleEquipment.sampleActiveLoadout.activeMissileWeaponItemId
           ? buildBootstrapItemId(
               characterId,
-              sampleModule.sampleActiveLoadout.activeMissileWeaponItemId,
+              sampleEquipment.sampleActiveLoadout.activeMissileWeaponItemId,
             )
           : null,
-        activePrimaryWeaponItemId: sampleModule.sampleActiveLoadout.activePrimaryWeaponItemId
+        activePrimaryWeaponItemId: sampleEquipment.sampleActiveLoadout.activePrimaryWeaponItemId
           ? buildBootstrapItemId(
               characterId,
-              sampleModule.sampleActiveLoadout.activePrimaryWeaponItemId,
+              sampleEquipment.sampleActiveLoadout.activePrimaryWeaponItemId,
             )
           : null,
-        activeSecondaryWeaponItemId: sampleModule.sampleActiveLoadout.activeSecondaryWeaponItemId
+        activeSecondaryWeaponItemId: sampleEquipment.sampleActiveLoadout.activeSecondaryWeaponItemId
           ? buildBootstrapItemId(
               characterId,
-              sampleModule.sampleActiveLoadout.activeSecondaryWeaponItemId,
+              sampleEquipment.sampleActiveLoadout.activeSecondaryWeaponItemId,
             )
           : null,
         characterId,
         id: `${characterId}:loadout-current`,
-        readyShieldItemId: sampleModule.sampleActiveLoadout.readyShieldItemId
+        readyShieldItemId: sampleEquipment.sampleActiveLoadout.readyShieldItemId
           ? buildBootstrapItemId(
               characterId,
-              sampleModule.sampleActiveLoadout.readyShieldItemId,
+              sampleEquipment.sampleActiveLoadout.readyShieldItemId,
             )
           : null,
-        wornArmorItemId: sampleModule.sampleActiveLoadout.wornArmorItemId
+        wornArmorItemId: sampleEquipment.sampleActiveLoadout.wornArmorItemId
           ? buildBootstrapItemId(
               characterId,
-              sampleModule.sampleActiveLoadout.wornArmorItemId,
+              sampleEquipment.sampleActiveLoadout.wornArmorItemId,
             )
           : null,
       }),

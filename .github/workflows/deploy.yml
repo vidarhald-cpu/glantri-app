@@ -122,15 +122,15 @@ jobs:
           app-name: ${{ secrets.AZURE_WEB_APP_NAME }}
           images: ${{ env.WEB_IMAGE }}:${{ github.sha }}
 
-      - name: Smoke test API health
+      - name: Smoke test API readiness
         run: |
           for i in $(seq 1 12); do
-            if curl -fsS https://${{ secrets.AZURE_API_APP_NAME }}.azurewebsites.net/health; then
-              echo "Health check passed"
+            if curl -fsS https://${{ secrets.AZURE_API_APP_NAME }}.azurewebsites.net/ready; then
+              echo "Readiness check passed"
               exit 0
             fi
             echo "Attempt $i/12 failed, retrying in 15s..."
             sleep 15
           done
-          echo "Health check failed after 3 minutes"
+          echo "Readiness check failed after 3 minutes"
           exit 1

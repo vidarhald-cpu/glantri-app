@@ -85,13 +85,13 @@ import {
   loadActiveChargenRuleSet,
   saveCharacterToServer
 } from "../../../src/lib/api/localServiceClient";
+import { API_BASE_URL } from "../../../src/lib/api/apiConfig";
 import { ChargenSessionRepository } from "../../../src/lib/offline/repositories/chargenSessionRepository";
 import { ContentCacheRepository } from "../../../src/lib/offline/repositories/contentCacheRepository";
 import { LocalCharacterRepository } from "../../../src/lib/offline/repositories/localCharacterRepository";
 
 const SESSION_ID = "chargen-vertical-slice";
 const CONTENT_CACHE_KEY = "canonical-content";
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
 
 const chargenSessionRepository = new ChargenSessionRepository();
 const contentCacheRepository = new ContentCacheRepository();

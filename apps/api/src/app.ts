@@ -1,6 +1,7 @@
 import Fastify from "fastify";
 
 import { applyLocalCors } from "./lib/sessionAuth";
+import { checkReadiness } from "./lib/readiness";
 import { adminContentRoutes } from "./routes/adminContent";
 import { authRoutes } from "./routes/auth";
 import { characterEquipmentRoutes } from "./routes/characterEquipment";
@@ -25,6 +26,23 @@ export function buildApiServer() {
     service: "@glantri/api",
     status: "ok"
   }));
+
+  app.get("/ready", async (_request, reply) => {
+    const readiness = await checkReadiness();
+
+    if (readiness.status === "ready") {
+      return {
+        service: "@glantri/api",
+        status: "ready"
+      };
+    }
+
+    return reply.code(503).send({
+      service: "@glantri/api",
+      status: "not_ready",
+      reason: readiness.reason
+    });
+  });
 
   app.register(authRoutes, { prefix: "/auth" });
   app.register(adminContentRoutes, { prefix: "/api/admin" });

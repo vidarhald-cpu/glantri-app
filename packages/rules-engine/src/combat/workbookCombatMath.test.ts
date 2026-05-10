@@ -78,6 +78,107 @@ describe("workbookCombatMath", () => {
     });
   });
 
+  it("locks workbook golden rows for representative melee OB and DMB cases", () => {
+    const cases = [
+      {
+        name: "Long sword",
+        source:
+          "Themistogenes 1.07.xlsx -> Weapon1!A10:O10, Calculations!R19/W19/Z19 formulas",
+        weaponOb: 2,
+        weaponDmb: 5,
+        expected: {
+          finalDmb: 9,
+          finalOb: 14,
+          rawDmb: 8,
+          rawOb: 12
+        }
+      },
+      {
+        name: "Hand axe",
+        source:
+          "Themistogenes 1.07.xlsx -> Weapon1!A20:O20, Calculations!R19/W19/Z19 formulas",
+        weaponOb: 1,
+        weaponDmb: 6,
+        expected: {
+          finalDmb: 10,
+          finalOb: 13,
+          rawDmb: 9,
+          rawOb: 12
+        }
+      },
+      {
+        name: "2-h Spear",
+        source:
+          "Themistogenes 1.07.xlsx -> Weapon1!A30:O30, Calculations!R19/W19/Z19 formulas",
+        weaponOb: 3,
+        weaponDmb: 6,
+        expected: {
+          finalDmb: 9,
+          finalOb: 16,
+          rawDmb: 9,
+          rawOb: 12
+        }
+      }
+    ];
+
+    for (const testCase of cases) {
+      const effectiveSkillNumber = 15;
+      const ob = calculateWorkbookMeleeOb({
+        dexterityGm: 3,
+        skillXp: effectiveSkillNumber,
+        strengthGm: 3,
+        weaponOb: testCase.weaponOb
+      });
+      const dmb = calculateWorkbookMeleeDmb({
+        dexterityGm: 3,
+        skillXp: effectiveSkillNumber,
+        strengthGm: 3,
+        weaponDmb: testCase.weaponDmb,
+        weaponOb: testCase.weaponOb
+      });
+
+      expect.soft(ob, testCase.source).toMatchObject({
+        finalOb: testCase.expected.finalOb,
+        rawOb: testCase.expected.rawOb
+      });
+      expect.soft(dmb, testCase.source).toMatchObject({
+        finalDmb: testCase.expected.finalDmb,
+        rawDmb: testCase.expected.rawDmb
+      });
+    }
+  });
+
+  it("uses total effectiveSkillNumber for workbook melee skill XP input", () => {
+    // Source: Themistogenes 1.07.xlsx -> Calculations!Q19/R19/W19.
+    // Q19 is the workbook skill XP lookup, and R19 uses ROUND(Q19/2,0).
+    const directSkillXpOnly = 4;
+    const groupDerivedSkillXp = 11;
+    const effectiveSkillNumber = directSkillXpOnly + groupDerivedSkillXp;
+
+    expect(
+      calculateWorkbookMeleeOb({
+        dexterityGm: 3,
+        skillXp: effectiveSkillNumber,
+        strengthGm: 3,
+        weaponOb: 3
+      })
+    ).toMatchObject({
+      finalOb: 16,
+      rawOb: 12
+    });
+    expect(
+      calculateWorkbookMeleeOb({
+        dexterityGm: 3,
+        skillXp: directSkillXpOnly,
+        strengthGm: 3,
+        weaponOb: 3
+      })
+    ).not.toMatchObject({
+      finalOb: 16,
+      rawOb: 12
+    });
+  });
+
   it("matches the workbook projectile OB pattern for a composite bow style row", () => {
     expect(
       calculateWorkbookProjectileOb({
@@ -91,6 +192,83 @@ describe("workbookCombatMath", () => {
       combinedModifier: 2,
       finalOb: 6,
       rawOb: 4,
+    });
+  });
+
+  it("locks workbook golden rows for thrown projectile OB and numeric DMB cases", () => {
+    const cases = [
+      {
+        name: "T. Spear",
+        source:
+          "Themistogenes 1.07.xlsx -> Weapon2!A10:J10, Calculations!R27/W27/Z27 formulas",
+        weaponDmb: 6,
+        weaponOb: 2,
+        expected: {
+          finalDmb: 9,
+          finalOb: 13,
+          rawOb: 11
+        }
+      },
+      {
+        name: "T. Th. dagger",
+        source:
+          "Themistogenes 1.07.xlsx -> Weapon2!A4:J4, Calculations!R29/W29/Z29 formulas",
+        weaponDmb: 0,
+        weaponOb: 3,
+        expected: {
+          finalDmb: 3,
+          finalOb: 14,
+          rawOb: 11
+        }
+      }
+    ];
+
+    for (const testCase of cases) {
+      const effectiveSkillNumber = 13;
+      const ob = calculateWorkbookProjectileOb({
+        armorActivityModifier: 0,
+        dexterityGm: 3,
+        skillXp: effectiveSkillNumber,
+        weaponOb: testCase.weaponOb
+      });
+      const numericThrownDmb = 3 + testCase.weaponDmb;
+
+      expect.soft(ob, testCase.source).toMatchObject({
+        finalOb: testCase.expected.finalOb,
+        rawOb: testCase.expected.rawOb
+      });
+      expect.soft(numericThrownDmb, testCase.source).toBe(testCase.expected.finalDmb);
+    }
+  });
+
+  it("uses total effectiveSkillNumber for workbook projectile skill XP input", () => {
+    // Source: Themistogenes 1.07.xlsx -> Calculations!Q27/R27/W27.
+    // Q27 is the workbook skill XP lookup, and R27 uses ROUND(Q27/2,0).
+    const directSkillXpOnly = 5;
+    const groupDerivedSkillXp = 8;
+    const effectiveSkillNumber = directSkillXpOnly + groupDerivedSkillXp;
+
+    expect(
+      calculateWorkbookProjectileOb({
+        armorActivityModifier: 0,
+        dexterityGm: 3,
+        skillXp: effectiveSkillNumber,
+        weaponOb: 2
+      })
+    ).toMatchObject({
+      finalOb: 13,
+      rawOb: 11
+    });
+    expect(
+      calculateWorkbookProjectileOb({
+        armorActivityModifier: 0,
+        dexterityGm: 3,
+        skillXp: directSkillXpOnly,
+        weaponOb: 2
+      })
+    ).not.toMatchObject({
+      finalOb: 13,
+      rawOb: 11
     });
   });
 
