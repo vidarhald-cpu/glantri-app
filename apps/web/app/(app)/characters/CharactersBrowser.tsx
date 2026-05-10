@@ -7,12 +7,12 @@ import {
   addScenarioParticipantFromCharacterOnServer,
   loadJoinableScenarios,
   loadServerCharacters
-} from "../../../src/lib/api/localServiceClient";
-import { useSessionUser } from "../../../src/lib/auth/SessionUserContext";
+} from "@/lib/api/localServiceClient";
+import { useSessionUser } from "@/lib/auth/SessionUserContext";
 import {
   REMEMBERED_SELECTION_KEYS,
   useRememberedSelection,
-} from "../../../src/lib/browser/rememberedSelection";
+} from "@/lib/browser/rememberedSelection";
 import {
   canBrowseAllCharacterOwners,
   buildCharacterBrowserOwnerOptions,
@@ -21,9 +21,9 @@ import {
   type CharacterBrowserOwnerFilter,
   type CharacterBrowserSourceFilter,
   type CharacterBrowserTypeFilter
-} from "../../../src/lib/characters/characterBrowser";
-import { buildCampaignWorkspaceHref } from "../../../src/lib/campaigns/workspace";
-import { LocalCharacterRepository } from "../../../src/lib/offline/repositories/localCharacterRepository";
+} from "@/lib/characters/characterBrowser";
+import { buildCampaignWorkspaceHref } from "@/lib/campaigns/workspace";
+import { LocalCharacterRepository } from "@/lib/offline/repositories/localCharacterRepository";
 
 const localCharacterRepository = new LocalCharacterRepository();
 

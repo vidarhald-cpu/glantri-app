@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-import { buildCampaignWorkspaceHref } from "../../../../../../../src/lib/campaigns/workspace";
+import { buildCampaignWorkspaceHref } from "@/lib/campaigns/workspace";
 
 interface ScenarioPlayerPageProps {
   params: Promise<{

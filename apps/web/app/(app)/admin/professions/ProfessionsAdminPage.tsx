@@ -3,14 +3,14 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
-import { useAdminContent } from "../../../../src/lib/admin/AdminContentContext";
-import { downloadCsv } from "../../../../src/lib/admin/exporters";
+import { useAdminContent } from "@/lib/admin/AdminContentContext";
+import { downloadCsv } from "@/lib/admin/exporters";
 import {
   buildProfessionAdminRows,
   buildProfessionFamilyFilterOptions,
   filterProfessionAdminRowsBySocietyStage,
   getProfessionFamilyName
-} from "../../../../src/lib/admin/viewModels";
+} from "@/lib/admin/viewModels";
 import {
   AdminButton,
   AdminField,

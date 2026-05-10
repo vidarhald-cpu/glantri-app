@@ -12,8 +12,8 @@ import {
   createChargenRuleSet,
   loadChargenRuleSets,
   type ChargenRuleSetStoreResponse
-} from "../../../../src/lib/api/localServiceClient";
-import { useCanAccessAdmin } from "../../../../src/lib/auth/SessionUserContext";
+} from "@/lib/api/localServiceClient";
+import { useCanAccessAdmin } from "@/lib/auth/SessionUserContext";
 import {
   AdminButton,
   AdminMetric,

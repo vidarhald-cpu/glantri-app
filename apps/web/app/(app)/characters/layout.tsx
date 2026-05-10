@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-import { RequireAuthenticatedUser } from "../../../src/lib/auth/RouteAccessGate";
+import { RequireAuthenticatedUser } from "@/lib/auth/RouteAccessGate";
 import CharactersSubmenu from "./CharactersSubmenu";
 
 interface CharactersLayoutProps {

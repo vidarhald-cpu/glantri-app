@@ -3,9 +3,9 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
-import { useAdminContent } from "../../../../src/lib/admin/AdminContentContext";
-import { downloadCsv } from "../../../../src/lib/admin/exporters";
-import { buildSocietyAdminRows } from "../../../../src/lib/admin/viewModels";
+import { useAdminContent } from "@/lib/admin/AdminContentContext";
+import { downloadCsv } from "@/lib/admin/exporters";
+import { buildSocietyAdminRows } from "@/lib/admin/viewModels";
 import {
   AdminButton,
   AdminMetric,

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 
-import { AdminContentProvider } from "../../../src/lib/admin/AdminContentContext";
+import { AdminContentProvider } from "@/lib/admin/AdminContentContext";
 import { adminNavGroups } from "./admin-ui";
 
 function findActiveSection(pathname: string): string {

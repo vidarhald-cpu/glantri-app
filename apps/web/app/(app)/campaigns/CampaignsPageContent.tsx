@@ -6,10 +6,10 @@ import { useEffect, useState } from "react";
 import {
   createCampaignOnServer,
   type AccessibleCampaignRecord,
-} from "../../../src/lib/api/localServiceClient";
-import { useSessionUser } from "../../../src/lib/auth/SessionUserContext";
-import { canManageCampaignWorkspace, loadCampaignBrowserRecordsForUser } from "../../../src/lib/campaigns/access";
-import { buildCampaignWorkspaceHref } from "../../../src/lib/campaigns/workspace";
+} from "@/lib/api/localServiceClient";
+import { useSessionUser } from "@/lib/auth/SessionUserContext";
+import { canManageCampaignWorkspace, loadCampaignBrowserRecordsForUser } from "@/lib/campaigns/access";
+import { buildCampaignWorkspaceHref } from "@/lib/campaigns/workspace";
 
 export default function CampaignsPageContent() {
   const { currentUser, loading: sessionLoading } = useSessionUser();

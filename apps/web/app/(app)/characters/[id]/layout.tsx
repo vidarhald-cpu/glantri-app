@@ -1,8 +1,8 @@
 import type { ReactNode } from "react";
 
-import { RequireOwnedLocalCharacter } from "../../../../src/lib/auth/LocalCharacterAccessGate";
-import RememberedSelectionEffect from "../../../../src/lib/browser/RememberedSelectionEffect";
-import { REMEMBERED_SELECTION_KEYS } from "../../../../src/lib/browser/rememberedSelection";
+import { RequireOwnedLocalCharacter } from "@/lib/auth/LocalCharacterAccessGate";
+import RememberedSelectionEffect from "@/lib/browser/RememberedSelectionEffect";
+import { REMEMBERED_SELECTION_KEYS } from "@/lib/browser/rememberedSelection";
 
 interface CharacterScopedLayoutProps {
   children: ReactNode;

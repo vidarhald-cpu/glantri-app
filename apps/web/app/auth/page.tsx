@@ -9,9 +9,9 @@ import {
   getCurrentSessionUser,
   loginLocalUser,
   registerLocalUser
-} from "../../src/lib/api/localServiceClient";
-import { canShowClaimGameMasterAction } from "../../src/lib/auth/authBootstrap";
-import { useSessionUser } from "../../src/lib/auth/SessionUserContext";
+} from "@/lib/api/localServiceClient";
+import { canShowClaimGameMasterAction } from "@/lib/auth/authBootstrap";
+import { useSessionUser } from "@/lib/auth/SessionUserContext";
 
 const sectionStyle = {
   background: "#f6f5ef",

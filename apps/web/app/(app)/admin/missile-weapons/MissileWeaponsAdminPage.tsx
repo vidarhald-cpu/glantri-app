@@ -12,7 +12,7 @@ import {
   buildMissileWeaponCatalogTable,
   getAdminWeaponCatalogRows,
   isCatalogMissileWeaponTemplate,
-} from "../../../../src/features/equipment/weaponCatalogTables";
+} from "@/features/equipment/weaponCatalogTables";
 
 const materialOptions: MaterialType[] = ["steel", "bronze"];
 const qualityOptions: QualityType[] = ["standard", "extraordinary"];

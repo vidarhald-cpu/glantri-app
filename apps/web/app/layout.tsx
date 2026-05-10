@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
-import { SessionUserProvider } from "../src/lib/auth/SessionUserContext";
-import { AppHeader } from "../src/lib/layout/AppHeader";
+import { SessionUserProvider } from "@/lib/auth/SessionUserContext";
+import { AppHeader } from "@/lib/layout/AppHeader";
 
 export const metadata: Metadata = {
   title: "Glantri",

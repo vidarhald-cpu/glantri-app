@@ -12,9 +12,16 @@ const nextConfig: NextConfig = {
     "@glantri/content",
     "@glantri/domain",
     "@glantri/rules-engine",
-    "@glantri/schemas",
     "@glantri/shared"
-  ]
+  ],
+  webpack(config) {
+    config.resolve.alias = {
+      ...(config.resolve.alias ?? {}),
+      "@": path.join(__dirname, "src")
+    };
+
+    return config;
+  }
 };
 
 export default {

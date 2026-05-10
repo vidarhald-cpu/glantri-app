@@ -22,7 +22,7 @@
   - Added `@glantri/auth` for shared auth roles, user/session schemas, and role checks.
   - Kept `@glantri/rules-engine`, but expanded it with pure scaffolding modules for chargen, stats, skills, education, and validation.
   - Kept `@glantri/database`, but added repository/service boundaries and minimal Prisma auth models.
-  - Kept `@glantri/schemas` as a compatibility wrapper around the new domain package.
+  - Removed the old schemas compatibility wrapper after its remaining schemas moved into `@glantri/domain`.
 - Wired workspace dependencies explicitly with `workspace:*` and package exports.
 
 ## What was added
