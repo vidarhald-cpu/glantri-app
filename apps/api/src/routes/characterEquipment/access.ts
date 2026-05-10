@@ -1,6 +1,7 @@
 import type { AuthUser } from "@glantri/auth";
 import { CharacterService } from "@glantri/database";
 import { loadAccessibleCharacterInApi } from "../../lib/characterEditAccess";
+import { NotFoundError } from "../../lib/errors";
 
 const characterService = new CharacterService();
 
@@ -15,6 +16,6 @@ export async function requireAccessibleCharacter(
   });
 
   if (!character) {
-    throw new Error("Character not found.");
+    throw new NotFoundError("Character not found.");
   }
 }

@@ -4,6 +4,7 @@ import {
   CharacterEquipmentWriteService,
 } from "@glantri/database";
 import { requireAuthenticatedUser } from "../../lib/sessionAuth";
+import { handleRouteError } from "../../lib/errors";
 import { requireAccessibleCharacter } from "./access";
 import { toEquipmentFeatureState } from "./helpers";
 import {
@@ -38,13 +39,7 @@ export const equipmentLocationRoutes: FastifyPluginAsync = async (app) => {
         ),
       };
     } catch (error) {
-      if (error instanceof Error && error.message === "Character not found.") {
-        return reply.code(404).send({ error: error.message });
-      }
-      if (error instanceof Error) {
-        return reply.code(400).send({ error: error.message });
-      }
-      throw error;
+      return handleRouteError(error, reply);
     }
   });
 
@@ -65,13 +60,7 @@ export const equipmentLocationRoutes: FastifyPluginAsync = async (app) => {
         ),
       };
     } catch (error) {
-      if (error instanceof Error && error.message === "Character not found.") {
-        return reply.code(404).send({ error: error.message });
-      }
-      if (error instanceof Error) {
-        return reply.code(400).send({ error: error.message });
-      }
-      throw error;
+      return handleRouteError(error, reply);
     }
   });
 };
