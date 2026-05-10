@@ -9,6 +9,10 @@ export default defineConfig({
   resolve: {
     alias: [
       {
+        find: /^@\//,
+        replacement: `${path.join(repoRoot, "apps/web/src")}/`,
+      },
+      {
         find: /^@glantri\/auth$/,
         replacement: path.join(repoRoot, "packages/auth/src/index.ts"),
       },
