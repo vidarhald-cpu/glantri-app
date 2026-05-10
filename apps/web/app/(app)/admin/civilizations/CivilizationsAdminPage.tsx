@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 
-import { useAdminContent } from "../../../../src/lib/admin/AdminContentContext";
+import { useAdminContent } from "@/lib/admin/AdminContentContext";
 import { AdminPageIntro, AdminPanel } from "../admin-ui";
 
 export default function CivilizationsAdminPage() {

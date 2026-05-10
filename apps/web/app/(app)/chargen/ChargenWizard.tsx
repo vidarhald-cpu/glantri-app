@@ -31,7 +31,7 @@ import {
   glantriCharacteristicLabels,
   glantriCharacteristicOrder
 } from "@glantri/domain";
-import { formatDerivedSkillSourceLabel } from "../../../src/lib/characters/derivedSkillLabels";
+import { formatDerivedSkillSourceLabel } from "@/lib/characters/derivedSkillLabels";
 import {
   applyProfessionGrants,
   buildChargenLanguageSelectionSummary,
@@ -79,16 +79,16 @@ import {
   type SkillBrowseTypeFilter,
   type ProfessionBrowseItem,
   type SkillVisibilityFilter
-} from "../../../src/lib/chargen/chargenBrowse";
+} from "@/lib/chargen/chargenBrowse";
 import {
   getCurrentSessionUser,
   loadActiveChargenRuleSet,
   saveCharacterToServer
-} from "../../../src/lib/api/localServiceClient";
-import { API_BASE_URL } from "../../../src/lib/api/apiConfig";
-import { ChargenSessionRepository } from "../../../src/lib/offline/repositories/chargenSessionRepository";
-import { ContentCacheRepository } from "../../../src/lib/offline/repositories/contentCacheRepository";
-import { LocalCharacterRepository } from "../../../src/lib/offline/repositories/localCharacterRepository";
+} from "@/lib/api/localServiceClient";
+import { API_BASE_URL } from "@/lib/api/apiConfig";
+import { ChargenSessionRepository } from "@/lib/offline/repositories/chargenSessionRepository";
+import { ContentCacheRepository } from "@/lib/offline/repositories/contentCacheRepository";
+import { LocalCharacterRepository } from "@/lib/offline/repositories/localCharacterRepository";
 
 const SESSION_ID = "chargen-vertical-slice";
 const CONTENT_CACHE_KEY = "canonical-content";

@@ -29,9 +29,9 @@ import {
   removeCampaignRosterEntryOnServer,
   type ServerCharacterRecord,
   updateCampaignAssetVisibilityOnServer
-} from "../../../../src/lib/api/localServiceClient";
-import { getCampaignActorMetadata } from "../../../../src/lib/campaigns/campaignActors";
-import { buildCampaignWorkspaceHref } from "../../../../src/lib/campaigns/workspace";
+} from "@/lib/api/localServiceClient";
+import { getCampaignActorMetadata } from "@/lib/campaigns/campaignActors";
+import { buildCampaignWorkspaceHref } from "@/lib/campaigns/workspace";
 
 interface CampaignDetailPageContentProps {
   campaignId: string;

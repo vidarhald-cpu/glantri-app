@@ -32,16 +32,16 @@ import {
   loadScenarioParticipants,
   updateEncounterOnServer,
   type ServerCharacterRecord,
-} from "../../../../src/lib/api/localServiceClient";
+} from "@/lib/api/localServiceClient";
 import {
   buildGmEncounterParticipantRows,
   deriveGmEncounterControlState,
-} from "../../../../src/lib/campaigns/gmEncounter";
-import { loadCanonicalContent } from "../../../../src/lib/content/loadCanonicalContent";
-import RememberedCampaignWorkspaceEffect from "../../../../src/lib/campaigns/RememberedCampaignWorkspaceEffect";
-import { buildCampaignWorkspaceHref } from "../../../../src/lib/campaigns/workspace";
-import { LocalEncounterRepository } from "../../../../src/lib/offline/repositories/localEncounterRepository";
-import { LocalCharacterRepository, UNNAMED_CHARACTER_PLACEHOLDER } from "../../../../src/lib/offline/repositories/localCharacterRepository";
+} from "@/lib/campaigns/gmEncounter";
+import { loadCanonicalContent } from "@/lib/content/loadCanonicalContent";
+import RememberedCampaignWorkspaceEffect from "@/lib/campaigns/RememberedCampaignWorkspaceEffect";
+import { buildCampaignWorkspaceHref } from "@/lib/campaigns/workspace";
+import { LocalEncounterRepository } from "@/lib/offline/repositories/localEncounterRepository";
+import { LocalCharacterRepository, UNNAMED_CHARACTER_PLACEHOLDER } from "@/lib/offline/repositories/localCharacterRepository";
 import { GmRoleplayingEncounterScreen } from "./RoleplayEncounterScreens";
 
 interface EncounterDetailProps {

@@ -3,21 +3,21 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
-import type { AccessibleCampaignRecord } from "../../../../src/lib/api/localServiceClient";
-import { useSessionUser } from "../../../../src/lib/auth/SessionUserContext";
+import type { AccessibleCampaignRecord } from "@/lib/api/localServiceClient";
+import { useSessionUser } from "@/lib/auth/SessionUserContext";
 import {
   REMEMBERED_SELECTION_KEYS,
   readRememberedSelection,
   useRememberedSelection,
-} from "../../../../src/lib/browser/rememberedSelection";
+} from "@/lib/browser/rememberedSelection";
 import {
   loadCampaignBrowserRecordsForUser,
   resolveCampaignResumeDestination,
-} from "../../../../src/lib/campaigns/access";
+} from "@/lib/campaigns/access";
 import {
   getCampaignWorkspaceSelectionKeys,
   getPlayerEncounterParticipantSelectionKey,
-} from "../../../../src/lib/campaigns/RememberedCampaignWorkspaceEffect";
+} from "@/lib/campaigns/RememberedCampaignWorkspaceEffect";
 
 export default function CampaignsResumePageContent() {
   const router = useRouter();

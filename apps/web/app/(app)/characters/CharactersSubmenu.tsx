@@ -3,11 +3,11 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-import { useHasAnyRole } from "../../../src/lib/auth/SessionUserContext";
+import { useHasAnyRole } from "@/lib/auth/SessionUserContext";
 import {
   REMEMBERED_SELECTION_KEYS,
   useRememberedSelection,
-} from "../../../src/lib/browser/rememberedSelection";
+} from "@/lib/browser/rememberedSelection";
 
 interface CharactersSubmenuItem {
   href: string;

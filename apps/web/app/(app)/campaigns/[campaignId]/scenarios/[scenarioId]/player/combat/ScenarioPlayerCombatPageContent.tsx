@@ -17,9 +17,9 @@ import {
 import {
   buildEquipmentLoadoutModuleModel,
   EquipmentLoadoutModule,
-} from "../../../../../../../../src/features/equipment/loadoutModule";
-import type { EquipmentFeatureState } from "../../../../../../../../src/features/equipment/types";
-import { useSessionUser } from "../../../../../../../../src/lib/auth/SessionUserContext";
+} from "@/features/equipment/loadoutModule";
+import type { EquipmentFeatureState } from "@/features/equipment/types";
+import { useSessionUser } from "@/lib/auth/SessionUserContext";
 import type { CombatAllocationState } from "@glantri/rules-engine";
 import {
   buildPlayerEncounterPhaseSummary,
@@ -37,8 +37,8 @@ import {
   PLAYER_ENCOUNTER_PARRY_SOURCE_OPTIONS,
   type PlayerEncounterActionId,
   type PlayerEncounterMovementId,
-} from "../../../../../../../../src/lib/campaigns/playerEncounter";
-import { loadCanonicalContent } from "../../../../../../../../src/lib/content/loadCanonicalContent";
+} from "@/lib/campaigns/playerEncounter";
+import { loadCanonicalContent } from "@/lib/content/loadCanonicalContent";
 import {
   loadCharacterEquipmentState,
   loadScenarioParticipants,
@@ -46,14 +46,14 @@ import {
   loadServerCharacterById,
   updateScenarioParticipantStateOnServer,
   type ServerCharacterRecord,
-} from "../../../../../../../../src/lib/api/localServiceClient";
+} from "@/lib/api/localServiceClient";
 import {
   buildRememberedScopedSelectionKey,
   REMEMBERED_SELECTION_KEYS,
   useRememberedSelection,
-} from "../../../../../../../../src/lib/browser/rememberedSelection";
-import RememberedCampaignWorkspaceEffect from "../../../../../../../../src/lib/campaigns/RememberedCampaignWorkspaceEffect";
-import { buildCampaignWorkspaceHref } from "../../../../../../../../src/lib/campaigns/workspace";
+} from "@/lib/browser/rememberedSelection";
+import RememberedCampaignWorkspaceEffect from "@/lib/campaigns/RememberedCampaignWorkspaceEffect";
+import { buildCampaignWorkspaceHref } from "@/lib/campaigns/workspace";
 
 interface ScenarioPlayerCombatPageContentProps {
   campaignId: string;

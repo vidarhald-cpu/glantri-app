@@ -11,7 +11,7 @@ import {
   evaluateSkillSelection,
   removeChargenPoint
 } from "@glantri/rules-engine";
-import { getPlayerFacingSkillBucket } from "../../../src/lib/chargen/chargenBrowse";
+import { getPlayerFacingSkillBucket } from "@/lib/chargen/chargenBrowse";
 
 import {
   buildConcreteLanguageBrowseRows,

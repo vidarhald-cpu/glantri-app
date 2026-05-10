@@ -5,10 +5,10 @@ import { useEffect, useState } from "react";
 
 import type { EncounterSession, ScenarioPlayerProjection } from "@glantri/domain";
 
-import { buildCampaignWorkspaceHref } from "../../../../../../../src/lib/campaigns/workspace";
+import { buildCampaignWorkspaceHref } from "@/lib/campaigns/workspace";
 
-import { loadScenarioPlayerProjection } from "../../../../../../../src/lib/api/localServiceClient";
-import { useSessionUser } from "../../../../../../../src/lib/auth/SessionUserContext";
+import { loadScenarioPlayerProjection } from "@/lib/api/localServiceClient";
+import { useSessionUser } from "@/lib/auth/SessionUserContext";
 
 interface ScenarioPlayerPageContentProps {
   campaignId?: string;

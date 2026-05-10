@@ -6,24 +6,24 @@ import { useEffect, useMemo, useState } from "react";
 
 import type { Campaign, EncounterSession, Scenario } from "@glantri/domain";
 
-import { loadScenarioEncounters } from "../../../../src/lib/api/localServiceClient";
+import { loadScenarioEncounters } from "@/lib/api/localServiceClient";
 import {
   REMEMBERED_SELECTION_KEYS,
   useRememberedSelection,
-} from "../../../../src/lib/browser/rememberedSelection";
-import { useSessionUser } from "../../../../src/lib/auth/SessionUserContext";
-import { canManageCampaignWorkspace, loadCampaignWorkspaceAccessForUser } from "../../../../src/lib/campaigns/access";
+} from "@/lib/browser/rememberedSelection";
+import { useSessionUser } from "@/lib/auth/SessionUserContext";
+import { canManageCampaignWorkspace, loadCampaignWorkspaceAccessForUser } from "@/lib/campaigns/access";
 import {
   getCampaignWorkspaceVisibleEncounters,
   getScenarioVisibleEncounters,
-} from "../../../../src/lib/campaigns/encounters";
-import { getCampaignWorkspaceSelectionKeys } from "../../../../src/lib/campaigns/RememberedCampaignWorkspaceEffect";
+} from "@/lib/campaigns/encounters";
+import { getCampaignWorkspaceSelectionKeys } from "@/lib/campaigns/RememberedCampaignWorkspaceEffect";
 import {
   buildCampaignWorkspaceHref,
   buildCampaignWorkspaceTabs,
   resolveCampaignWorkspaceState,
   type CampaignWorkspaceTabId
-} from "../../../../src/lib/campaigns/workspace";
+} from "@/lib/campaigns/workspace";
 import EncounterDetail from "../../encounters/[id]/EncounterDetail";
 import CampaignDetailPageContent from "./CampaignDetailPageContent";
 import ScenarioDetailPageContent from "./scenarios/[scenarioId]/ScenarioDetailPageContent";

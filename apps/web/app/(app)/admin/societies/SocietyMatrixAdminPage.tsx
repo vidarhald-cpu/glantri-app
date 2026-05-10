@@ -2,13 +2,13 @@
 
 import { useMemo, useState } from "react";
 
-import { useAdminContent } from "../../../../src/lib/admin/AdminContentContext";
+import { useAdminContent } from "@/lib/admin/AdminContentContext";
 import {
   buildSocietyAuditIssues,
   buildSocietyMatrixRows,
   type SocietyAuditIssue,
   type SocietyMatrixRow
-} from "../../../../src/lib/admin/viewModels";
+} from "@/lib/admin/viewModels";
 import {
   AdminAuditLegend,
   AdminDataTable,

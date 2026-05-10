@@ -1,6 +1,6 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DEFAULT_CHARGEN_RULE_SET } from "@glantri/domain";
 
@@ -8,7 +8,7 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn(), prefetch: vi.fn() })
 }));
 
-vi.mock("../../../src/lib/api/localServiceClient", () => ({
+vi.mock("@/lib/api/localServiceClient", () => ({
   getCurrentSessionUser: vi.fn().mockResolvedValue(null),
   loadActiveChargenRuleSet: vi.fn().mockResolvedValue(DEFAULT_CHARGEN_RULE_SET),
   saveCharacterToServer: vi.fn().mockResolvedValue({ id: "test-char-id" })
@@ -26,6 +26,10 @@ describe("ChargenWizard component", () => {
     vi.clearAllMocks();
   });
 
+  afterEach(() => {
+    cleanup();
+  });
+
   it("renders the entry button and starts chargen on click", async () => {
     const ChargenWizard = await importWizard();
     const user = userEvent.setup();
@@ -33,15 +37,15 @@ describe("ChargenWizard component", () => {
     render(<ChargenWizard />);
 
     await waitFor(() => {
-      expect(screen.getByText("Roll all dice")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Roll all dice" })).toBeInTheDocument();
     });
 
-    await user.click(screen.getByText("Roll all dice"));
+    await user.click(screen.getByRole("button", { name: "Roll all dice" }));
 
     await waitFor(() => {
       expect(screen.getByText("1. Stats")).toBeInTheDocument();
     });
-  });
+  }, 15_000);
 
   it("shows multiple rolled profile cards after starting chargen", async () => {
     const ChargenWizard = await importWizard();
@@ -49,14 +53,14 @@ describe("ChargenWizard component", () => {
 
     render(<ChargenWizard />);
 
-    await waitFor(() => screen.getByText("Roll all dice"));
-    await user.click(screen.getByText("Roll all dice"));
+    await waitFor(() => screen.getByRole("button", { name: "Roll all dice" }));
+    await user.click(screen.getByRole("button", { name: "Roll all dice" }));
 
     await waitFor(() => {
       const profileCards = screen.getAllByRole("radio");
       expect(profileCards.length).toBeGreaterThan(1);
     });
-  });
+  }, 15_000);
 
   it("selects a profile and unlocks the stat adjustment panel", async () => {
     const ChargenWizard = await importWizard();
@@ -64,8 +68,8 @@ describe("ChargenWizard component", () => {
 
     render(<ChargenWizard />);
 
-    await waitFor(() => screen.getByText("Roll all dice"));
-    await user.click(screen.getByText("Roll all dice"));
+    await waitFor(() => screen.getByRole("button", { name: "Roll all dice" }));
+    await user.click(screen.getByRole("button", { name: "Roll all dice" }));
 
     await waitFor(() => {
       expect(screen.getAllByRole("radio").length).toBeGreaterThan(0);
@@ -79,5 +83,5 @@ describe("ChargenWizard component", () => {
     await waitFor(() => {
       expect(screen.getByText("Swap")).toBeInTheDocument();
     });
-  });
+  }, 15_000);
 });

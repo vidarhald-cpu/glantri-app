@@ -35,15 +35,15 @@ import {
   loadCampaignById,
   loadEncounterById,
   loadScenarioById,
-} from "../../../../src/lib/api/localServiceClient";
-import RememberedCampaignWorkspaceEffect from "../../../../src/lib/campaigns/RememberedCampaignWorkspaceEffect";
-import { buildCampaignWorkspaceHref } from "../../../../src/lib/campaigns/workspace";
+} from "@/lib/api/localServiceClient";
+import RememberedCampaignWorkspaceEffect from "@/lib/campaigns/RememberedCampaignWorkspaceEffect";
+import { buildCampaignWorkspaceHref } from "@/lib/campaigns/workspace";
 import {
   getPlayerFacingSkillBucket,
   getPlayerFacingSkillBucketDefinitions,
   type PlayerFacingSkillBucketId,
-} from "../../../../src/lib/chargen/chargenBrowse";
-import type { loadCanonicalContent } from "../../../../src/lib/content/loadCanonicalContent";
+} from "@/lib/chargen/chargenBrowse";
+import type { loadCanonicalContent } from "@/lib/content/loadCanonicalContent";
 
 interface RoleplayTopInfoProps {
   campaignName?: string;
