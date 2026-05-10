@@ -18,9 +18,9 @@ import {
   removeCharacterProgressionCheck
 } from "@glantri/rules-engine";
 
-import { updateServerCharacter } from "../../../../../src/lib/api/localServiceClient";
-import { useHasAnyRole } from "../../../../../src/lib/auth/SessionUserContext";
-import { getPlayerFacingSkillBucket, groupRowsBySkillType } from "../../../../../src/lib/chargen/chargenBrowse";
+import { updateServerCharacter } from "@/lib/api/localServiceClient";
+import { useHasAnyRole } from "@/lib/auth/SessionUserContext";
+import { getPlayerFacingSkillBucket, groupRowsBySkillType } from "@/lib/chargen/chargenBrowse";
 import {
   addCharacterSkillGroup,
   buildAvailableCharacterEditSkillGroups,
@@ -37,10 +37,10 @@ import {
   setCharacterSpecializationXp,
   setCharacterSkillGroupLevel,
   setCharacterSkillXp
-} from "../../../../../src/lib/characters/characterEdit";
-import { loadServerCharacterEditContext } from "../../../../../src/lib/characters/loadServerCharacterEditContext";
-import type { LocalCharacterRecord } from "../../../../../src/lib/offline/glantriDexie";
-import { LocalCharacterRepository } from "../../../../../src/lib/offline/repositories/localCharacterRepository";
+} from "@/lib/characters/characterEdit";
+import { loadServerCharacterEditContext } from "@/lib/characters/loadServerCharacterEditContext";
+import type { LocalCharacterRecord } from "@/lib/offline/glantriDexie";
+import { LocalCharacterRepository } from "@/lib/offline/repositories/localCharacterRepository";
 
 interface CharacterEditPageProps {
   id: string;

@@ -49,10 +49,6 @@ export default defineConfig({
         replacement: path.join(repoRoot, "packages/rules-engine/src/$1"),
       },
       {
-        find: /^@glantri\/schemas\/(.*)$/,
-        replacement: path.join(repoRoot, "packages/schemas/src/$1"),
-      },
-      {
         find: /^@glantri\/shared$/,
         replacement: path.join(repoRoot, "packages/shared/src/index.ts"),
       },

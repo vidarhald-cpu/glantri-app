@@ -15,8 +15,8 @@ import {
   getInventoryMoveOptions,
   getInventoryRows,
   getItemsGroupedForInventoryPage
-} from "../../../../../src/features/equipment/equipmentSelectors";
-import type { EquipmentFeatureState } from "../../../../../src/features/equipment/types";
+} from "@/features/equipment/equipmentSelectors";
+import type { EquipmentFeatureState } from "@/features/equipment/types";
 import {
   addCharacterEquipmentItemOnServer,
   bootstrapSampleCharacterEquipmentOnServer,
@@ -28,22 +28,22 @@ import {
   updateServerCharacter,
   updateCharacterEquipmentMetadataOnServer,
   updateCharacterEquipmentQuantityOnServer
-} from "../../../../../src/lib/api/localServiceClient";
-import { loadLocalCharacterContext } from "../../../../../src/lib/characters/loadLocalCharacterContext";
-import type { LocalCharacterRecord } from "../../../../../src/lib/offline/glantriDexie";
-import { LocalCharacterRepository } from "../../../../../src/lib/offline/repositories/localCharacterRepository";
-import { UNNAMED_CHARACTER_PLACEHOLDER } from "../../../../../src/lib/offline/repositories/localCharacterRepository";
-import { getWorkbookCharacterSize } from "../../../../../src/features/equipment/armorSummary";
-import { formatEncumbranceDisplay } from "../../../../../src/features/equipment/displayFormatting";
+} from "@/lib/api/localServiceClient";
+import { loadLocalCharacterContext } from "@/lib/characters/loadLocalCharacterContext";
+import type { LocalCharacterRecord } from "@/lib/offline/glantriDexie";
+import { LocalCharacterRepository } from "@/lib/offline/repositories/localCharacterRepository";
+import { UNNAMED_CHARACTER_PLACEHOLDER } from "@/lib/offline/repositories/localCharacterRepository";
+import { getWorkbookCharacterSize } from "@/features/equipment/armorSummary";
+import { formatEncumbranceDisplay } from "@/features/equipment/displayFormatting";
 import {
   buildInventoryTemplateGroups,
   filterInventoryTemplateOptions,
   type InventoryTemplateFilter,
-} from "../../../../../src/features/equipment/inventoryTemplateGroups";
+} from "@/features/equipment/inventoryTemplateGroups";
 import {
   getPlayerFacingEquipmentLocationTemplateOptions,
   getPlayerFacingEquipmentTemplateName,
-} from "../../../../../src/features/equipment/playerFacingTemplateOptions";
+} from "@/features/equipment/playerFacingTemplateOptions";
 
 interface CharacterEquipmentPageProps {
   params: Promise<{

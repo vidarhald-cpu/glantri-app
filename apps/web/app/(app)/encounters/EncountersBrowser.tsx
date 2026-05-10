@@ -6,8 +6,8 @@ import { useEffect, useState } from "react";
 import type { EncounterSession } from "@glantri/domain";
 import { createEncounterSession } from "@glantri/rules-engine";
 
-import { buildCampaignWorkspaceHref } from "../../../src/lib/campaigns/workspace";
-import { LocalEncounterRepository } from "../../../src/lib/offline/repositories/localEncounterRepository";
+import { buildCampaignWorkspaceHref } from "@/lib/campaigns/workspace";
+import { LocalEncounterRepository } from "@/lib/offline/repositories/localEncounterRepository";
 
 const localEncounterRepository = new LocalEncounterRepository();
 

@@ -34,15 +34,15 @@ import {
   updateEncounterOnServer,
   updateScenarioParticipantMetadataOnServer,
   updateScenarioOnServer
-} from "../../../../../../src/lib/api/localServiceClient";
+} from "@/lib/api/localServiceClient";
 import {
   buildScenarioActorInputFromTemplate,
   getCampaignActorMetadata,
-} from "../../../../../../src/lib/campaigns/campaignActors";
-import RememberedCampaignWorkspaceEffect from "../../../../../../src/lib/campaigns/RememberedCampaignWorkspaceEffect";
-import type { ServerCharacterRecord } from "../../../../../../src/lib/api/localServiceClient";
-import { getScenarioCharacterDefaultControllerId } from "../../../../../../src/lib/campaigns/scenarioCharacters";
-import { buildCampaignWorkspaceHref } from "../../../../../../src/lib/campaigns/workspace";
+} from "@/lib/campaigns/campaignActors";
+import RememberedCampaignWorkspaceEffect from "@/lib/campaigns/RememberedCampaignWorkspaceEffect";
+import type { ServerCharacterRecord } from "@/lib/api/localServiceClient";
+import { getScenarioCharacterDefaultControllerId } from "@/lib/campaigns/scenarioCharacters";
+import { buildCampaignWorkspaceHref } from "@/lib/campaigns/workspace";
 
 interface ScenarioDetailPageContentProps {
   campaignId: string;

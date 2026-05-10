@@ -15,8 +15,8 @@ Starter monorepo for the Glantri RPG app.
 ## Packages
 - apps/web
 - packages/database
+- packages/domain
 - packages/shared
-- packages/schemas
 - packages/rules-engine
 - packages/importers
 - packages/test-scenarios

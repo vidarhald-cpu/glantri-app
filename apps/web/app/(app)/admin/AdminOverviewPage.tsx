@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 
-import { useAdminContent } from "../../../src/lib/admin/AdminContentContext";
-import { buildAdminOverviewStats } from "../../../src/lib/admin/viewModels";
+import { useAdminContent } from "@/lib/admin/AdminContentContext";
+import { buildAdminOverviewStats } from "@/lib/admin/viewModels";
 import {
   AdminButton,
   AdminMetric,

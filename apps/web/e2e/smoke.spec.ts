@@ -2,9 +2,11 @@ import { expect, test } from "@playwright/test";
 import fs from "node:fs";
 import path from "node:path";
 
-const testState = JSON.parse(
-  fs.readFileSync(path.join(__dirname, "test-state.json"), "utf-8"),
-) as { campaignId: string; characterId: string };
+function loadTestState(): { campaignId: string; characterId: string } {
+  return JSON.parse(
+    fs.readFileSync(path.join(__dirname, "test-state.json"), "utf-8"),
+  ) as { campaignId: string; characterId: string };
+}
 
 // ---------------------------------------------------------------------------
 // 1. Login flow
@@ -56,6 +58,8 @@ test.describe("campaign workspace", () => {
   test.use({ storageState: "e2e/.auth/gm.json" });
 
   test("opens campaign workspace and shows the seeded scenario", async ({ page }) => {
+    const testState = loadTestState();
+
     await page.goto(`/campaigns/${testState.campaignId}`);
 
     await expect(page.getByText("Smoke Test Campaign")).toBeVisible({ timeout: 10_000 });

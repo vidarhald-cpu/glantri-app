@@ -2,8 +2,8 @@ import { z } from "zod";
 
 export const characterSchema = z.object({
   id: z.string(),
-  name: z.string(),
-  level: z.number().int().nonnegative()
+  level: z.number().int().nonnegative(),
+  name: z.string()
 });
 
 export type Character = z.infer<typeof characterSchema>;

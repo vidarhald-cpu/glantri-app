@@ -5,7 +5,7 @@ import { equipmentTemplates } from "@glantri/content/equipment";
 import type { ShieldTemplate } from "@glantri/domain";
 
 import { AdminPageIntro, AdminPanel } from "../admin-ui";
-import { formatWeaponModeDmb } from "../../../../src/features/equipment/meleeWeaponDisplay";
+import { formatWeaponModeDmb } from "@/features/equipment/meleeWeaponDisplay";
 
 function formatOptionalDisplayValue(value: number | string | null | undefined): string {
   if (value === null || value === undefined) {

@@ -11,14 +11,14 @@ import {
   buildCharacterSheetSummary,
 } from "@glantri/rules-engine";
 
-import { updateServerCharacter } from "../../../../src/lib/api/localServiceClient";
+import { updateServerCharacter } from "@/lib/api/localServiceClient";
 import {
   setCharacterAge,
   setCharacterGender,
   setCharacterName,
   setCharacterNotes,
   setCharacterTitle
-} from "../../../../src/lib/characters/characterEdit";
+} from "@/lib/characters/characterEdit";
 import {
   buildCharacterSheetProfileStatRows,
   buildCharacterSheetSkillRows,
@@ -26,13 +26,13 @@ import {
   characterSheetSkillsTableColumns,
   characterSheetSpecializationsTableColumns,
   characterSheetStatsTableColumns
-} from "../../../../src/lib/characters/characterSheet";
-import { loadLocalCharacterContext } from "../../../../src/lib/characters/loadLocalCharacterContext";
-import type { LocalCharacterRecord } from "../../../../src/lib/offline/glantriDexie";
+} from "@/lib/characters/characterSheet";
+import { loadLocalCharacterContext } from "@/lib/characters/loadLocalCharacterContext";
+import type { LocalCharacterRecord } from "@/lib/offline/glantriDexie";
 import {
   LocalCharacterRepository,
   UNNAMED_CHARACTER_PLACEHOLDER
-} from "../../../../src/lib/offline/repositories/localCharacterRepository";
+} from "@/lib/offline/repositories/localCharacterRepository";
 
 interface CharacterDetailProps {
   id: string;

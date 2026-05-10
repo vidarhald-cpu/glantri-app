@@ -1,4 +1,4 @@
-import { RequireRole } from "../../../../../src/lib/auth/RouteAccessGate";
+import { RequireRole } from "@/lib/auth/RouteAccessGate";
 import CharacterEditPage from "./CharacterEditPage";
 
 interface CharacterEditRouteProps {

@@ -19,7 +19,6 @@ glantri-app/
 │   ├── domain/       # Delte TypeScript-typer og domene-skjemaer (Zod)
 │   ├── importers/    # Import av spilldata fra Excel-arbeidsbok (Themistogenes)
 │   ├── rules-engine/ # Spillregelberegninger (stats, ferdigheter, kamp, utvikling)
-│   ├── schemas/      # Delte Zod-validerings-skjemaer
 │   ├── shared/       # Felles hjelpefunksjoner på tvers av pakker
 │   └── test-scenarios/ # Testfiksturer — kun for tester, aldri runtime
 ├── infra/            # Azure Bicep-infrastruktur

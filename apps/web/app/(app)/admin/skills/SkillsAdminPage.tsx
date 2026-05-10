@@ -2,9 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-import { useAdminContent } from "../../../../src/lib/admin/AdminContentContext";
-import { downloadCsv } from "../../../../src/lib/admin/exporters";
-import { buildSkillAdminRows } from "../../../../src/lib/admin/viewModels";
+import { useAdminContent } from "@/lib/admin/AdminContentContext";
+import { downloadCsv } from "@/lib/admin/exporters";
+import { buildSkillAdminRows } from "@/lib/admin/viewModels";
 import {
   AdminButton,
   AdminField,

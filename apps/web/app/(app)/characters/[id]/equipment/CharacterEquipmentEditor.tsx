@@ -16,14 +16,14 @@ import {
   upsertCharacterEquipmentItem
 } from "@glantri/rules-engine";
 
-import { saveCharacterToServer } from "../../../../../src/lib/api/localServiceClient";
-import { loadLocalCharacterAdvancementContext } from "../../../../../src/lib/characters/loadLocalCharacterAdvancementContext";
+import { saveCharacterToServer } from "@/lib/api/localServiceClient";
+import { loadLocalCharacterAdvancementContext } from "@/lib/characters/loadLocalCharacterAdvancementContext";
 import type {
   LocalCharacterDraft,
   LocalCharacterRecord
-} from "../../../../../src/lib/offline/glantriDexie";
-import { CharacterDraftRepository } from "../../../../../src/lib/offline/repositories/characterDraftRepository";
-import { LocalCharacterRepository } from "../../../../../src/lib/offline/repositories/localCharacterRepository";
+} from "@/lib/offline/glantriDexie";
+import { CharacterDraftRepository } from "@/lib/offline/repositories/characterDraftRepository";
+import { LocalCharacterRepository } from "@/lib/offline/repositories/localCharacterRepository";
 
 interface CharacterEquipmentEditorProps {
   id: string;

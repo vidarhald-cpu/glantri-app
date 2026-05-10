@@ -3,8 +3,8 @@
 import { useEffect, useState } from "react";
 import { formatAuthRoleLabel, type AuthRole, type AuthUser } from "@glantri/auth";
 
-import { loadAuthUsers, updateAuthUserRole } from "../../../../src/lib/api/localServiceClient";
-import { useCanAccessAdmin } from "../../../../src/lib/auth/SessionUserContext";
+import { loadAuthUsers, updateAuthUserRole } from "@/lib/api/localServiceClient";
+import { useCanAccessAdmin } from "@/lib/auth/SessionUserContext";
 import { AdminPageIntro, AdminPanel, AdminReadOnlyNotice } from "../admin-ui";
 
 const roleOptions: AuthRole[] = ["player", "game_master", "admin"];

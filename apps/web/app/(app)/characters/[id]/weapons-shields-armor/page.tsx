@@ -14,26 +14,26 @@ import {
   getCharacterShieldItems,
   getCharacterWeaponItems,
   getEquipmentTemplateById
-} from "../../../../../src/features/equipment/equipmentSelectors";
+} from "@/features/equipment/equipmentSelectors";
 import {
   buildCharacterArmorSummary,
   getWorkbookCharacterSize,
-} from "../../../../../src/features/equipment/armorSummary";
-import { formatEncumbranceDisplay } from "../../../../../src/features/equipment/displayFormatting";
+} from "@/features/equipment/armorSummary";
+import { formatEncumbranceDisplay } from "@/features/equipment/displayFormatting";
 import {
   formatOptionalDisplayValue,
   formatWeaponModeDmb,
-} from "../../../../../src/features/equipment/meleeWeaponDisplay";
+} from "@/features/equipment/meleeWeaponDisplay";
 import {
   buildMeleeWeaponCatalogTable,
   buildMissileWeaponCatalogTable,
   getCharacterWeaponCatalogRows,
   truncateWeaponCatalogNote,
-} from "../../../../../src/features/equipment/weaponCatalogTables";
-import type { EquipmentFeatureState } from "../../../../../src/features/equipment/types";
-import { loadCharacterEquipmentState } from "../../../../../src/lib/api/localServiceClient";
-import { loadLocalCharacterContext } from "../../../../../src/lib/characters/loadLocalCharacterContext";
-import { UNNAMED_CHARACTER_PLACEHOLDER } from "../../../../../src/lib/offline/repositories/localCharacterRepository";
+} from "@/features/equipment/weaponCatalogTables";
+import type { EquipmentFeatureState } from "@/features/equipment/types";
+import { loadCharacterEquipmentState } from "@/lib/api/localServiceClient";
+import { loadLocalCharacterContext } from "@/lib/characters/loadLocalCharacterContext";
+import { UNNAMED_CHARACTER_PLACEHOLDER } from "@/lib/offline/repositories/localCharacterRepository";
 
 interface WeaponsShieldsArmorPageProps {
   params: Promise<{
