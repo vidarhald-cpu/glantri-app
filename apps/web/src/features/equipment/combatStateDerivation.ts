@@ -11,13 +11,12 @@ import {
 } from "@glantri/domain";
 import {
   calculateBaseOB,
-  type CharacterSheetSummary,
   type CombatAllocationState,
   type CombatParrySource,
   type CombatSessionState,
+  type CombatStateCharacterInputs,
   defaultCombatAllocationState,
   getCombatDefensePostureLabel,
-  getWorkbookStatGm,
   calculateWorkbookBaseDb,
   calculateWorkbookCombinedParry,
   calculateWorkbookDefensePair,
@@ -29,6 +28,7 @@ import {
   lookupWorkbookToHitModifier,
   normalizeCombatAllocationState,
 } from "@glantri/rules-engine";
+import { kickTemplate, punchTemplate } from "@glantri/content/equipment";
 
 import {
   getBackpackItems,
@@ -45,22 +45,6 @@ import { buildWorkbookMovementSummary } from "./movementSummary";
 import type { EquipmentFeatureState } from "./types";
 
 export type DerivedCombatValue = string | number;
-
-export interface CombatStateCharacterInputs {
-  constitution: number | null;
-  dexterityGm: number | null;
-  dexterity: number | null;
-  // Canonical workbook-equivalent combat skill XP used by combat calculations.
-  // This is effectiveSkillNumber: best group contribution + direct skill ranks.
-  combatSkillXpByName: Record<string, number>;
-  dodgeCombatSkillXp: number | null;
-  parryCombatSkillXp: number | null;
-  brawlingCombatSkillXp: number | null;
-  size: number | null;
-  sizeGm: number | null;
-  strengthGm: number | null;
-  strength: number | null;
-}
 
 export interface DerivedCombatWeaponRow {
   slotLabel: string;
@@ -144,181 +128,6 @@ export interface ActorCombatStateInputs {
 export type CombatStateAllocationInputs = CombatAllocationState;
 export type CombatStateParrySource = CombatParrySource;
 export const defaultCombatStateAllocationInputs = defaultCombatAllocationState;
-
-const BRAWLING_SKILL_NAME = "Brawling";
-const PARRY_SKILL_NAME = "Parry";
-
-const PUNCH_TEMPLATE: WeaponTemplate = {
-  id: "virtual-weapon-template-punch",
-  category: "weapon",
-  name: "Punch",
-  subtype: "brawling",
-  tags: ["brawling", "melee", "virtual-workbook"],
-  specificityTypeDefault: "generic",
-  defaultMaterial: "other",
-  baseEncumbrance: 0,
-  baseValue: null,
-  rulesNotes: "Workbook-backed virtual combat row from Themistogenes Weapon1.",
-  roleplayNotes: null,
-  weaponClass: "brawling",
-  weaponSkill: BRAWLING_SKILL_NAME,
-  handlingClass: "one_handed",
-  attackModes: [
-    {
-      id: "mode-1",
-      label: "Strike",
-      damageClass: "blunt",
-      ob: 1,
-      obRaw: "1.0",
-      dmb: 0,
-      dmbRaw: "0.0",
-      crit: "AC",
-      armorModifier: "A",
-      provenance: "imported",
-      notes: null,
-    },
-  ],
-  primeAttackType: "Strike",
-  primaryAttackType: "Strike",
-  secondaryAttackType: null,
-  ob1: 1,
-  dmb1: 0,
-  ob2: null,
-  dmb2: null,
-  parry: 0,
-  initiative: 0,
-  range: "1.0",
-  armorMod1: "A",
-  armorMod2: null,
-  crit1: "AC",
-  crit2: null,
-  secondCrit: null,
-  defensiveValue: 0,
-  ammoEncumbrance: null,
-  ammoEncumbranceRaw: null,
-  sourceMetadata: {
-    workbook: "Themistogenes 1.07.xlsx",
-    sheet: "Weapon1",
-    row: 40,
-    sourceRange: "Weapon1!A40:Q40",
-    sourceColumns: {
-      name: "A",
-      skill: "B",
-      primaryAttackLabel: "C",
-      ob1: "D",
-      dmb1: "E",
-      ob2: "F",
-      dmb2: "G",
-      parry: "H",
-      initiative: "I",
-      range: "J",
-      armorMod1: "K",
-      armorMod2: "L",
-      crit1: "M",
-      crit2: "N",
-      encumbrance: "O",
-      defensiveValue: "P",
-      secondCrit: "Q",
-    },
-    rawRow: {
-      A: "Punch",
-      B: "Brawling",
-      C: "Strike",
-      D: "1.0",
-      E: "0.0",
-      F: "",
-      G: "",
-      H: "0.0",
-      I: "0.0",
-      J: "1.0",
-      K: "A",
-      L: "",
-      M: "AC",
-      N: "",
-      O: "0.0",
-      P: "0.0",
-    },
-  },
-  importWarnings: null,
-  durabilityProfile: null,
-};
-
-const KICK_TEMPLATE: WeaponTemplate = {
-  ...PUNCH_TEMPLATE,
-  id: "virtual-weapon-template-kick",
-  name: "Kick",
-  attackModes: [
-    {
-      id: "mode-1",
-      label: "Strike",
-      damageClass: "blunt",
-      ob: 0,
-      obRaw: "0.0",
-      dmb: 2,
-      dmbRaw: "2.0",
-      crit: "AC",
-      armorModifier: "A",
-      provenance: "imported",
-      notes: null,
-    },
-  ],
-  ob1: 0,
-  dmb1: 2,
-  sourceMetadata: {
-    workbook: "Themistogenes 1.07.xlsx",
-    sheet: "Weapon1",
-    row: 41,
-    sourceRange: "Weapon1!A41:Q41",
-    sourceColumns: PUNCH_TEMPLATE.sourceMetadata!.sourceColumns,
-    rawRow: {
-      A: "Kick",
-      B: "Brawling",
-      C: "Strike",
-      D: "0.0",
-      E: "2.0",
-      F: "",
-      G: "",
-      H: "0.0",
-      I: "0.0",
-      J: "1.0",
-      K: "A",
-      L: "",
-      M: "AC",
-      N: "",
-      O: "0.0",
-      P: "0.0",
-    },
-  },
-};
-
-export function buildCombatStateCharacterInputs(
-  sheet: CharacterSheetSummary,
-): CombatStateCharacterInputs {
-  const combatSkillXpByName = Object.fromEntries(
-    sheet.draftView.skills.map((skill) => [
-      skill.name,
-      skill.effectiveSkillNumber,
-    ]),
-  );
-  const strength = sheet.adjustedStats.str ?? null;
-  const constitution = sheet.adjustedStats.con ?? null;
-  const dexterity = sheet.adjustedStats.dex ?? null;
-  const size = sheet.adjustedStats.siz ?? null;
-
-  return {
-    brawlingCombatSkillXp: combatSkillXpByName[BRAWLING_SKILL_NAME] ?? null,
-    combatSkillXpByName,
-    constitution,
-    dexterity,
-    dexterityGm: getWorkbookStatGm(dexterity),
-    dodgeCombatSkillXp: combatSkillXpByName.Dodge ?? null,
-    parryCombatSkillXp: combatSkillXpByName[PARRY_SKILL_NAME] ?? null,
-    size,
-    sizeGm: getWorkbookStatGm(size),
-    strength,
-    strengthGm: getWorkbookStatGm(strength),
-  };
-}
 
 function formatLabel(value: string): string {
   return value
@@ -1643,7 +1452,7 @@ export function deriveCombatStateSnapshot(
       armorTemplate,
       characterInputs,
       encumbranceLevel: workbookMovement.encumbranceLevel,
-      template: PUNCH_TEMPLATE,
+      template: punchTemplate,
     }),
   );
 
@@ -1653,7 +1462,7 @@ export function deriveCombatStateSnapshot(
       armorTemplate,
       characterInputs,
       state,
-      template: PUNCH_TEMPLATE,
+      template: punchTemplate,
     }),
   );
 
@@ -1663,7 +1472,7 @@ export function deriveCombatStateSnapshot(
       armorTemplate,
       characterInputs,
       state,
-      template: KICK_TEMPLATE,
+      template: kickTemplate,
     }),
   );
 

@@ -7,10 +7,9 @@ import type {
   StorageLocation,
 } from "@glantri/domain";
 import { equipmentTemplates } from "@glantri/content/equipment";
-import { defaultCombatAllocationState } from "@glantri/rules-engine";
+import { defaultCombatAllocationState, type CombatStateCharacterInputs } from "@glantri/rules-engine";
 import { buildCombatStatePanelModel } from "./combatStatePanel";
 import { getInventoryRows, getPersonalEncumbranceSummary } from "./equipmentSelectors";
-import type { CombatStateCharacterInputs } from "./combatStateDerivation";
 import type { EquipmentFeatureState } from "./types";
 
 const characterId = "char-throwing-panel";
