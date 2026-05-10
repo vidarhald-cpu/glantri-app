@@ -1,4 +1,4 @@
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 
 import { createPrismaCharacterRepository } from "../repositories/characterRepository";
 import { getTestPrismaClient, resetTestDatabase } from "../testing/testDatabase";
@@ -11,10 +11,6 @@ if (!process.env.DATABASE_URL_TEST) {
   describe.skip("CharacterService integration tests (DATABASE_URL_TEST not set)", () => {});
 } else {
   describe("CharacterService integration", () => {
-    afterAll(async () => {
-      await prisma!.$disconnect();
-    });
-
     beforeEach(async () => {
       await resetTestDatabase(prisma!);
     });
@@ -78,6 +74,64 @@ if (!process.env.DATABASE_URL_TEST) {
       expect(result).not.toBeNull();
       expect(result!.id).toBe(character.id);
       expect(result!.ownerId).toBe(user.id);
+    });
+
+    it("getCharacterById returns the full character build with serialized fields", async () => {
+      const repository = createPrismaCharacterRepository(prisma!);
+      const service = new CharacterService(repository);
+
+      const user = await createTestUser(prisma!);
+      const character = await createTestCharacter(prisma!, user.id, { level: 2, name: "Serialized Hero" });
+
+      const result = await service.getCharacterById(character.id);
+
+      expect(result).not.toBeNull();
+      expect(result!.id).toBe(character.id);
+      expect(result!.name).toBe("Serialized Hero");
+      expect(result!.build.id).toBe(character.id);
+      expect(result!.build.progression.level).toBe(2);
+      expect(Array.isArray(result!.build.progression.skills)).toBe(true);
+    });
+
+    it("saveExistingCharacter returns null when the character does not exist", async () => {
+      const repository = createPrismaCharacterRepository(prisma!);
+      const service = new CharacterService(repository);
+
+      const user = await createTestUser(prisma!);
+      const character = await createTestCharacter(prisma!, user.id);
+      const existing = await service.getCharacterById(character.id);
+
+      const result = await service.saveExistingCharacter({
+        build: existing!.build,
+        characterId: "nonexistent-character-id-xyz"
+      });
+
+      expect(result).toBeNull();
+    });
+
+    it("saveExistingCharacter updates an existing character and persists the new name", async () => {
+      const repository = createPrismaCharacterRepository(prisma!);
+      const service = new CharacterService(repository);
+
+      const user = await createTestUser(prisma!);
+      const character = await createTestCharacter(prisma!, user.id, { name: "Before Update" });
+
+      const existing = await service.getCharacterById(character.id);
+      expect(existing).not.toBeNull();
+
+      const updatedBuild = { ...existing!.build, name: "After Update" };
+
+      const result = await service.saveExistingCharacter({
+        build: updatedBuild,
+        characterId: character.id
+      });
+
+      expect(result).not.toBeNull();
+      expect(result!.name).toBe("After Update");
+      expect(result!.id).toBe(character.id);
+
+      const refetched = await service.getCharacterById(character.id);
+      expect(refetched!.name).toBe("After Update");
     });
   });
 }

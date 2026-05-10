@@ -134,3 +134,20 @@ jobs:
           echo "Web failed to start after 60s. Container logs:"
           docker logs web-test
           exit 1
+
+      - name: Install Playwright browsers
+        run: pnpm --filter @glantri/web exec playwright install --with-deps chromium
+
+      - name: Run Playwright smoke tests
+        env:
+          PLAYWRIGHT_BASE_URL: http://localhost:3000
+          PLAYWRIGHT_API_URL: http://localhost:4000
+        run: pnpm --filter @glantri/web exec playwright test
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: apps/web/playwright-report/
+          retention-days: 7

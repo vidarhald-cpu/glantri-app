@@ -46,6 +46,8 @@ describe("calculateGroupLevel", () => {
   });
 });
 
+// Glantri Character Sheet Workbook · Skills sheet · "Eff. Skill No." column formula:
+// effectiveSkillNumber = bestGroupLevel + directSkillRanks + directSkillGms
 describe("calculateSkillLevel", () => {
   it("sums group level, ranks, and gms", () => {
     expect(calculateSkillLevel({ groupLevel: 3, ranks: 2, gms: 1 })).toBe(6);
@@ -61,6 +63,24 @@ describe("calculateSkillLevel", () => {
 
   it("handles negative gms (penalty)", () => {
     expect(calculateSkillLevel({ groupLevel: 6, ranks: 3, gms: -2 })).toBe(7);
+  });
+
+  it("effectiveSkillNumber includes group-derived contribution alongside direct skill ranks", () => {
+    // Character Sheet · Skills sheet · "Eff. Skill No." column:
+    // Weapon Group has 8 ranks + gms 0 → groupLevel 8 (via calculateGroupLevel).
+    // Sword (direct): ranks 5, gms 1.
+    // effectiveSkillNumber = 8 (group) + 5 (direct ranks) + 1 (direct gms) = 14
+    const groupLevel = calculateGroupLevel({ ranks: 8, gms: 0 });
+    expect(calculateSkillLevel({ groupLevel, ranks: 5, gms: 1 })).toBe(14);
+  });
+
+  it("effectiveSkillNumber equals groupLevel when skill has no direct ranks (pure group-derived)", () => {
+    // Character Sheet · Skills sheet · "Eff. Skill No." column:
+    // Combat Group has 10 ranks + gms 2 → groupLevel 12 (via calculateGroupLevel).
+    // Brawling (direct): ranks 0, gms 0 — skill XP comes entirely from the group.
+    // effectiveSkillNumber = 12 (group) + 0 + 0 = 12
+    const groupLevel = calculateGroupLevel({ ranks: 10, gms: 2 });
+    expect(calculateSkillLevel({ groupLevel, ranks: 0, gms: 0 })).toBe(12);
   });
 });
 
