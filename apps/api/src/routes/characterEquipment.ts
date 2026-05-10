@@ -17,6 +17,12 @@ import {
   StorageLocationTypeSchema
 } from "@glantri/domain/equipment";
 
+import {
+  sampleActiveLoadout,
+  sampleCharacterId,
+  sampleEquipmentItems,
+  sampleLocations,
+} from "@glantri/content/equipment";
 import { loadAccessibleCharacterInApi } from "../lib/characterEditAccess";
 import { requireAuthenticatedUser } from "../lib/sessionAuth";
 
@@ -26,7 +32,7 @@ const equipmentWriteService = new CharacterEquipmentWriteService();
 const isProduction = process.env.NODE_ENV === "production";
 
 async function loadDevSampleCharacterEquipment(): Promise<SampleCharacterEquipment> {
-  return import("@glantri/test-scenarios/equipment/sampleCharacterEquipment");
+  return { sampleCharacterId, sampleLocations, sampleEquipmentItems, sampleActiveLoadout };
 }
 
 function parseCharacterId(params: unknown): string {

@@ -4,13 +4,13 @@ import type {
   EquipmentTemplate,
   StorageLocation,
 } from "@glantri/domain/equipment";
-import { equipmentTemplates } from "@glantri/content/equipment";
 import {
+  equipmentTemplates,
   sampleActiveLoadout,
   sampleCharacterId,
   sampleEquipmentItems,
   sampleLocations,
-} from "@glantri/test-scenarios/equipment/sampleCharacterEquipment";
+} from "@glantri/content/equipment";
 import type { EquipmentFeatureState } from "./types";
 
 function indexById<T extends { id: string }>(items: T[]): Record<string, T> {
