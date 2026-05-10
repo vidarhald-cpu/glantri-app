@@ -21,160 +21,20 @@ import {
 
 import { requireAdminUser, requireAuthenticatedUser } from "../lib/sessionAuth";
 import { canEditCharacterInApi } from "../lib/characterEditAccess";
+import { resolveScenarioWorkspaceAccess } from "./scenarios/access";
+import {
+  parseBodyObject,
+  parseId,
+  parseOptionalBoolean,
+  parseOptionalInteger,
+  parseOptionalNullableString,
+  parseOptionalString,
+  parseRequiredString
+} from "./scenarios/parsing";
 
 const characterService = new CharacterService();
 const encounterService = new EncounterService();
 const scenarioService = new ScenarioService();
-
-function parseId(params: unknown, key: string, label: string): string {
-  const value =
-    params && typeof params === "object" && key in params ? (params as Record<string, unknown>)[key] : undefined;
-
-  if (typeof value !== "string" || value.trim().length === 0) {
-    throw new Error(`${label} is required.`);
-  }
-
-  return value;
-}
-
-function parseOptionalInteger(
-  object: Record<string, unknown>,
-  key: string
-): number | undefined {
-  const value = object[key];
-
-  if (value == null || value === "") {
-    return undefined;
-  }
-
-  if (typeof value !== "number" || !Number.isInteger(value)) {
-    throw new Error(`${key} must be an integer when provided.`);
-  }
-
-  return value;
-}
-
-function parseBodyObject(body: unknown, label: string): Record<string, unknown> {
-  if (!body || typeof body !== "object") {
-    throw new Error(`${label} is required.`);
-  }
-
-  return body as Record<string, unknown>;
-}
-
-function parseOptionalString(
-  object: Record<string, unknown>,
-  key: string
-): string | undefined {
-  const value = object[key];
-
-  if (value == null) {
-    return undefined;
-  }
-
-  if (typeof value !== "string") {
-    throw new Error(`${key} must be a string when provided.`);
-  }
-
-  return value;
-}
-
-function parseRequiredString(
-  object: Record<string, unknown>,
-  key: string
-): string {
-  const value = object[key];
-
-  if (typeof value !== "string" || value.trim().length === 0) {
-    throw new Error(`${key} is required.`);
-  }
-
-  return value;
-}
-
-async function resolveScenarioWorkspaceAccess(input: {
-  scenarioId: string;
-  userId: string;
-  userRoles: string[];
-}): Promise<
-  | {
-      campaignId: string;
-      mode: "gm" | "player";
-    }
-  | null
-> {
-  const scenario = await scenarioService.getScenarioById(input.scenarioId);
-
-  if (!scenario) {
-    return null;
-  }
-
-  const campaign = await scenarioService.getCampaignById(scenario.campaignId);
-
-  if (!campaign) {
-    return null;
-  }
-
-  const isAdmin = input.userRoles.includes("admin");
-  const isGameMaster = input.userRoles.includes("game_master");
-
-  if (isAdmin || (isGameMaster && campaign.gmUserId === input.userId)) {
-    return {
-      campaignId: campaign.id,
-      mode: "gm",
-    };
-  }
-
-  const hasPlayerAccess = await scenarioService.userHasPlayerScenarioAccess({
-    scenarioId: input.scenarioId,
-    userId: input.userId,
-  });
-
-  return hasPlayerAccess
-    ? {
-        campaignId: campaign.id,
-        mode: "player",
-      }
-    : null;
-}
-
-function parseOptionalNullableString(
-  object: Record<string, unknown>,
-  key: string
-): string | null | undefined {
-  const value = object[key];
-
-  if (value === undefined) {
-    return undefined;
-  }
-
-  if (value === null) {
-    return null;
-  }
-
-  if (typeof value !== "string") {
-    throw new Error(`${key} must be a string or null when provided.`);
-  }
-
-  return value;
-}
-
-function parseOptionalBoolean(
-  object: Record<string, unknown>,
-  key: string
-): boolean | undefined {
-  const value = object[key];
-
-  if (value == null) {
-    return undefined;
-  }
-
-  if (typeof value !== "boolean") {
-    throw new Error(`${key} must be a boolean when provided.`);
-  }
-
-  return value;
-}
 
 export const scenariosRoutes: FastifyPluginAsync = async (app) => {
   app.get("/templates", async (request, reply) => {
@@ -897,7 +757,7 @@ export const scenariosRoutes: FastifyPluginAsync = async (app) => {
 
     try {
       const scenarioId = parseId(request.params, "scenarioId", "Scenario id");
-      const access = await resolveScenarioWorkspaceAccess({
+      const access = await resolveScenarioWorkspaceAccess(scenarioService, {
         scenarioId,
         userId: user.id,
         userRoles: user.roles,
@@ -928,7 +788,7 @@ export const scenariosRoutes: FastifyPluginAsync = async (app) => {
 
     try {
       const scenarioId = parseId(request.params, "scenarioId", "Scenario id");
-      const access = await resolveScenarioWorkspaceAccess({
+      const access = await resolveScenarioWorkspaceAccess(scenarioService, {
         scenarioId,
         userId: user.id,
         userRoles: user.roles,
@@ -983,7 +843,7 @@ export const scenariosRoutes: FastifyPluginAsync = async (app) => {
         });
       }
 
-      const access = await resolveScenarioWorkspaceAccess({
+      const access = await resolveScenarioWorkspaceAccess(scenarioService, {
         scenarioId: encounter.scenarioId,
         userId: user.id,
         userRoles: user.roles,
@@ -1020,7 +880,7 @@ export const scenariosRoutes: FastifyPluginAsync = async (app) => {
         });
       }
 
-      const access = await resolveScenarioWorkspaceAccess({
+      const access = await resolveScenarioWorkspaceAccess(scenarioService, {
         scenarioId: existingEncounter.scenarioId,
         userId: user.id,
         userRoles: user.roles,

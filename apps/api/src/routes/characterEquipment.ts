@@ -5,7 +5,8 @@ import {
   CharacterEquipmentReadModelService,
   CharacterEquipmentWriteService,
   CharacterService,
-  type ActiveWeaponSlot
+  type ActiveWeaponSlot,
+  type SampleCharacterEquipment
 } from "@glantri/database";
 import {
   CarryModeSchema,
@@ -22,6 +23,11 @@ import { requireAuthenticatedUser } from "../lib/sessionAuth";
 const characterService = new CharacterService();
 const equipmentReadModelService = new CharacterEquipmentReadModelService();
 const equipmentWriteService = new CharacterEquipmentWriteService();
+const isProduction = process.env.NODE_ENV === "production";
+
+async function loadDevSampleCharacterEquipment(): Promise<SampleCharacterEquipment> {
+  return import("@glantri/test-scenarios/equipment/sampleCharacterEquipment");
+}
 
 function parseCharacterId(params: unknown): string {
   const id =
@@ -420,6 +426,12 @@ export const characterEquipmentRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.post("/:id/equipment/bootstrap-sample", async (request, reply) => {
+    if (isProduction) {
+      return reply.code(404).send({
+        error: "Not found."
+      });
+    }
+
     const user = await requireAuthenticatedUser(request, reply);
 
     if (!user) {
@@ -431,9 +443,13 @@ export const characterEquipmentRoutes: FastifyPluginAsync = async (app) => {
     try {
       const body = parseBootstrapSampleBody(request.body);
       await requireAccessibleCharacter(user, id);
-      await equipmentWriteService.bootstrapSampleCharacterEquipment(id, {
-        overwrite: body.overwrite
-      });
+      await equipmentWriteService.bootstrapSampleCharacterEquipment(
+        id,
+        await loadDevSampleCharacterEquipment(),
+        {
+          overwrite: body.overwrite
+        }
+      );
 
       return {
         state: toEquipmentFeatureState(
