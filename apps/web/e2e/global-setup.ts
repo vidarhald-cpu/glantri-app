@@ -91,7 +91,7 @@ export default async function globalSetup() {
     await apiPost(`/campaigns/${campaignId}/scenarios`, { name: "Smoke Test Scenario" }, gmCookie);
   } catch {
     const { campaigns } = await apiGet<{ campaigns: Array<{ id: string; name: string }> }>(
-      "/campaigns/accessible",
+      "/campaigns",
       gmCookie,
     );
     const found = campaigns.find((c) => c.name === "Smoke Test Campaign");
