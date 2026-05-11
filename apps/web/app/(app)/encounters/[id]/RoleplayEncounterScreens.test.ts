@@ -71,6 +71,11 @@ describe("RoleplayEncounterScreens", () => {
     expect(playerSource).not.toContain("Roleplay roster descriptions");
     expect(playerSource).not.toContain("Skill roll assignment");
     expect(playerSource).not.toContain("Action log");
+    expect(playerSource).not.toContain("participantDescriptions");
+    expect(playerSource).not.toContain("pendingSkillRolls");
+    expect(playerSource).not.toContain("visibility[");
+    expect(playerSource).not.toContain("entry.silent");
+    expect(playerSource).not.toContain("opponentSilent");
   });
 
   it("orders and labels roleplay participants and difficulty options", () => {
