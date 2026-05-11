@@ -23,8 +23,10 @@ Use this command when you need a coverage snapshot:
 pnpm coverage
 ```
 
-Coverage is intentionally report-only for now. The first goal is to make weak
-spots visible without blocking useful cleanup because of old test debt.
+Coverage is report-only for most packages, but refactor-critical packages use
+baseline Vitest thresholds that pass today's suite while preventing silent
+regression: rules-engine protects statements and branches, domain protects
+statements, and database protects service statements.
 
 ## Database Integration Tests
 

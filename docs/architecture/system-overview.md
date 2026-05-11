@@ -128,6 +128,8 @@ app/
 
 API-klient: `apps/web/src/lib/api/` med domenespesifikke klienter (`authClient.ts`, `campaignClient.ts`, `characterClient.ts`, `chargenClient.ts`, `encounterClient.ts`, `equipmentClient.ts`, `scenarioClient.ts`). `localServiceClient.ts` er en bakoverkompatibel barrel-eksport. `apiConfig.ts` er eneste sted `NEXT_PUBLIC_API_BASE_URL` refereres.
 
+Chargen-ruten under `apps/web/app/(app)/chargen` er en tynn wrapper. Wizard-komponenter og steg lever i `apps/web/src/features/chargen/`.
+
 ### Feature-mappestruktur (anbefalt mønster)
 
 Nye features i `apps/web/src/features/<feature>/` følger dette mønsteret:
