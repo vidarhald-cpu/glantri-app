@@ -1,12 +1,12 @@
 import type { FastifyPluginAsync } from "fastify";
 
-import { ScenarioService } from "@glantri/database";
+import { CampaignService } from "@glantri/database";
 import { reusableEntityKindSchema } from "@glantri/domain";
 
 import { requireAdminUser } from "../../lib/sessionAuth";
 import { parseBodyObject, parseId, parseOptionalString, parseRequiredString } from "./parsing";
 
-const scenarioService = new ScenarioService();
+const campaignService = new CampaignService();
 
 export const templateRoutes: FastifyPluginAsync = async (app) => {
   app.get("/templates", async (request, reply) => {
@@ -17,7 +17,7 @@ export const templateRoutes: FastifyPluginAsync = async (app) => {
     }
 
     try {
-      const entities = await scenarioService.listReusableEntitiesByGameMaster(user.id);
+      const entities = await campaignService.listReusableEntitiesByGameMaster(user.id);
       return { templates: entities };
     } catch (error) {
       return reply.code(400).send({
@@ -40,7 +40,7 @@ export const templateRoutes: FastifyPluginAsync = async (app) => {
           ? { ...(body.snapshot as Record<string, unknown>), actorClass: "template" }
           : { actorClass: "template" };
 
-      const template = await scenarioService.createReusableEntity({
+      const template = await campaignService.createReusableEntity({
         description: parseOptionalString(body, "description"),
         gmUserId: user.id,
         kind: reusableEntityKindSchema.parse(body.kind),
@@ -66,7 +66,7 @@ export const templateRoutes: FastifyPluginAsync = async (app) => {
 
     try {
       const { templateId } = request.params as { templateId: string };
-      const existing = await scenarioService.getReusableEntityById(templateId);
+      const existing = await campaignService.getReusableEntityById(templateId);
 
       if (!existing) {
         return reply.code(404).send({
@@ -86,7 +86,7 @@ export const templateRoutes: FastifyPluginAsync = async (app) => {
           ? { ...(body.snapshot as Record<string, unknown>), actorClass: "template" }
           : { actorClass: "template" };
 
-      const template = await scenarioService.updateReusableEntity({
+      const template = await campaignService.updateReusableEntity({
         description: parseOptionalString(body, "description"),
         entityId: templateId,
         kind: reusableEntityKindSchema.parse(body.kind),
@@ -112,7 +112,7 @@ export const templateRoutes: FastifyPluginAsync = async (app) => {
 
     try {
       const entityId = parseId(request.params, "entityId", "Entity id");
-      const entity = await scenarioService.getReusableEntityById(entityId);
+      const entity = await campaignService.getReusableEntityById(entityId);
 
       if (!entity || entity.gmUserId !== user.id) {
         return reply.code(404).send({

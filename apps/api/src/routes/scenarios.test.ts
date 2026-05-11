@@ -12,16 +12,18 @@ const mocks = vi.hoisted(() => {
     id: "player-1",
     roles: ["player"],
   };
+  const campaignService = {
+    createCampaign: vi.fn(),
+    getCampaignById: vi.fn(),
+    listCampaignsByGameMaster: vi.fn(),
+  };
   const characterService = {};
   const encounterService = {
     listEncountersByScenario: vi.fn(),
   };
   const scenarioService = {
-    createCampaign: vi.fn(),
     createScenario: vi.fn(),
-    getCampaignById: vi.fn(),
     getScenarioById: vi.fn(),
-    listCampaignsByGameMaster: vi.fn(),
     listScenariosByCampaign: vi.fn(),
     listScenarioParticipants: vi.fn(),
     updateScenario: vi.fn(),
@@ -29,6 +31,7 @@ const mocks = vi.hoisted(() => {
   };
   return {
     adminUser,
+    campaignService,
     characterService,
     encounterService,
     playerUser,
@@ -39,6 +42,7 @@ const mocks = vi.hoisted(() => {
 });
 
 vi.mock("@glantri/database", () => ({
+  CampaignService: vi.fn(() => mocks.campaignService),
   CharacterService: vi.fn(() => mocks.characterService),
   EncounterService: vi.fn(() => mocks.encounterService),
   ScenarioService: vi.fn(() => mocks.scenarioService),
@@ -75,7 +79,7 @@ describe("scenarios route contract", () => {
       status: "active",
       updatedAt: "2026-05-09T12:00:00.000Z",
     };
-    mocks.scenarioService.listCampaignsByGameMaster.mockResolvedValue([campaign]);
+    mocks.campaignService.listCampaignsByGameMaster.mockResolvedValue([campaign]);
     const app = await buildScenarioTestApp();
 
     const response = await app.inject({
@@ -89,7 +93,7 @@ describe("scenarios route contract", () => {
     expect(response.json()).toEqual({
       campaigns: [campaign],
     });
-    expect(mocks.scenarioService.listCampaignsByGameMaster).toHaveBeenCalledWith("gm-1");
+    expect(mocks.campaignService.listCampaignsByGameMaster).toHaveBeenCalledWith("gm-1");
   });
 
   it("returns a validation error instead of calling the service for invalid campaign creation", async () => {
@@ -109,7 +113,7 @@ describe("scenarios route contract", () => {
     expect(response.json()).toEqual({
       error: "name is required.",
     });
-    expect(mocks.scenarioService.createCampaign).not.toHaveBeenCalled();
+    expect(mocks.campaignService.createCampaign).not.toHaveBeenCalled();
   });
 
   it("creates a scenario under a campaign owned by the game master", async () => {
@@ -126,7 +130,7 @@ describe("scenarios route contract", () => {
       name: "Bridge Ambush",
       status: "prepared",
     };
-    mocks.scenarioService.getCampaignById.mockResolvedValue(campaign);
+    mocks.campaignService.getCampaignById.mockResolvedValue(campaign);
     mocks.scenarioService.createScenario.mockResolvedValue(scenario);
     const app = await buildScenarioTestApp();
 
@@ -177,7 +181,7 @@ describe("scenarios route contract", () => {
       scenarioId: "scenario-1",
     };
     mocks.scenarioService.getScenarioById.mockResolvedValue(scenario);
-    mocks.scenarioService.getCampaignById.mockResolvedValue(campaign);
+    mocks.campaignService.getCampaignById.mockResolvedValue(campaign);
     mocks.scenarioService.userHasPlayerScenarioAccess.mockResolvedValue(true);
     mocks.encounterService.listEncountersByScenario.mockResolvedValue([encounter]);
     const app = await buildScenarioTestApp();

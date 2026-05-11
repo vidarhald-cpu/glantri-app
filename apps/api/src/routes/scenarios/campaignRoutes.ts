@@ -1,6 +1,6 @@
 import type { FastifyPluginAsync } from "fastify";
 
-import { ScenarioService } from "@glantri/database";
+import { CampaignService, ScenarioService } from "@glantri/database";
 import {
   campaignAssetTypeSchema,
   campaignRosterCategorySchema,
@@ -22,6 +22,7 @@ import {
   parseRequiredString
 } from "./parsing";
 
+const campaignService = new CampaignService();
 const scenarioService = new ScenarioService();
 
 export const campaignRoutes: FastifyPluginAsync = async (app) => {
@@ -32,7 +33,7 @@ export const campaignRoutes: FastifyPluginAsync = async (app) => {
       return;
     }
 
-    const campaigns = await scenarioService.listCampaignsByGameMaster(user.id);
+    const campaigns = await campaignService.listCampaignsByGameMaster(user.id);
 
     return { campaigns };
   });
@@ -45,7 +46,7 @@ export const campaignRoutes: FastifyPluginAsync = async (app) => {
     }
 
     try {
-      const campaigns = await scenarioService.listCampaignsByPlayerAccess(user.id);
+      const campaigns = await campaignService.listCampaignsByPlayerAccess(user.id);
       const accessibleCampaigns = await Promise.all(
         campaigns.map(async (campaign) => ({
           campaign,
@@ -70,7 +71,7 @@ export const campaignRoutes: FastifyPluginAsync = async (app) => {
 
     try {
       const campaignId = parseId(request.params, "campaignId", "Campaign id");
-      const campaign = await scenarioService.getCampaignById(campaignId);
+      const campaign = await campaignService.getCampaignById(campaignId);
 
       if (!campaign) {
         return reply.code(404).send({
@@ -108,7 +109,7 @@ export const campaignRoutes: FastifyPluginAsync = async (app) => {
 
     try {
       const body = parseBodyObject(request.body, "Campaign payload");
-      const campaign = await scenarioService.createCampaign({
+      const campaign = await campaignService.createCampaign({
         description: parseOptionalString(body, "description"),
         gmUserId: user.id,
         name: parseRequiredString(body, "name"),
@@ -133,7 +134,7 @@ export const campaignRoutes: FastifyPluginAsync = async (app) => {
 
     try {
       const campaignId = parseId(request.params, "campaignId", "Campaign id");
-      const campaign = await scenarioService.getCampaignById(campaignId);
+      const campaign = await campaignService.getCampaignById(campaignId);
 
       if (!campaign || campaign.gmUserId !== user.id) {
         return reply.code(404).send({
@@ -158,7 +159,7 @@ export const campaignRoutes: FastifyPluginAsync = async (app) => {
 
     try {
       const campaignId = parseId(request.params, "campaignId", "Campaign id");
-      const campaign = await scenarioService.getCampaignById(campaignId);
+      const campaign = await campaignService.getCampaignById(campaignId);
 
       if (!campaign || campaign.gmUserId !== user.id) {
         return reply.code(404).send({
@@ -185,7 +186,7 @@ export const campaignRoutes: FastifyPluginAsync = async (app) => {
 
     try {
       const campaignId = parseId(request.params, "campaignId", "Campaign id");
-      const campaign = await scenarioService.getCampaignById(campaignId);
+      const campaign = await campaignService.getCampaignById(campaignId);
 
       if (!campaign || campaign.gmUserId !== user.id) {
         return reply.code(404).send({
@@ -221,7 +222,7 @@ export const campaignRoutes: FastifyPluginAsync = async (app) => {
 
     try {
       const campaignId = parseId(request.params, "campaignId", "Campaign id");
-      const campaign = await scenarioService.getCampaignById(campaignId);
+      const campaign = await campaignService.getCampaignById(campaignId);
 
       if (!campaign || campaign.gmUserId !== user.id) {
         return reply.code(404).send({
@@ -248,7 +249,7 @@ export const campaignRoutes: FastifyPluginAsync = async (app) => {
 
     try {
       const campaignId = parseId(request.params, "campaignId", "Campaign id");
-      const campaign = await scenarioService.getCampaignById(campaignId);
+      const campaign = await campaignService.getCampaignById(campaignId);
 
       if (!campaign || campaign.gmUserId !== user.id) {
         return reply.code(404).send({
@@ -256,7 +257,7 @@ export const campaignRoutes: FastifyPluginAsync = async (app) => {
         });
       }
 
-      const roster = await scenarioService.listCampaignRosterEntries(campaignId);
+      const roster = await campaignService.listCampaignRosterEntries(campaignId);
 
       return { roster };
     } catch (error) {
@@ -275,7 +276,7 @@ export const campaignRoutes: FastifyPluginAsync = async (app) => {
 
     try {
       const campaignId = parseId(request.params, "campaignId", "Campaign id");
-      const campaign = await scenarioService.getCampaignById(campaignId);
+      const campaign = await campaignService.getCampaignById(campaignId);
 
       if (!campaign || campaign.gmUserId !== user.id) {
         return reply.code(404).send({
@@ -284,7 +285,7 @@ export const campaignRoutes: FastifyPluginAsync = async (app) => {
       }
 
       const body = parseBodyObject(request.body, "Campaign roster payload");
-      const rosterEntry = await scenarioService.addCampaignRosterEntry({
+      const rosterEntry = await campaignService.addCampaignRosterEntry({
         campaignId,
         category: campaignRosterCategorySchema.parse(body.category),
         createdByUserId: user.id,
@@ -311,7 +312,7 @@ export const campaignRoutes: FastifyPluginAsync = async (app) => {
     try {
       const campaignId = parseId(request.params, "campaignId", "Campaign id");
       const rosterEntryId = parseId(request.params, "rosterEntryId", "Roster entry id");
-      const campaign = await scenarioService.getCampaignById(campaignId);
+      const campaign = await campaignService.getCampaignById(campaignId);
 
       if (!campaign || campaign.gmUserId !== user.id) {
         return reply.code(404).send({
@@ -319,7 +320,7 @@ export const campaignRoutes: FastifyPluginAsync = async (app) => {
         });
       }
 
-      await scenarioService.removeCampaignRosterEntry({
+      await campaignService.removeCampaignRosterEntry({
         campaignId,
         rosterEntryId
       });
@@ -341,7 +342,7 @@ export const campaignRoutes: FastifyPluginAsync = async (app) => {
 
     try {
       const campaignId = parseId(request.params, "campaignId", "Campaign id");
-      const campaign = await scenarioService.getCampaignById(campaignId);
+      const campaign = await campaignService.getCampaignById(campaignId);
 
       if (!campaign || campaign.gmUserId !== user.id) {
         return reply.code(404).send({
@@ -349,7 +350,7 @@ export const campaignRoutes: FastifyPluginAsync = async (app) => {
         });
       }
 
-      const entities = await scenarioService.listReusableEntitiesByGameMaster(campaign.gmUserId);
+      const entities = await campaignService.listReusableEntitiesByGameMaster(campaign.gmUserId);
 
       return { entities };
     } catch (error) {
@@ -368,7 +369,7 @@ export const campaignRoutes: FastifyPluginAsync = async (app) => {
 
     try {
       const campaignId = parseId(request.params, "campaignId", "Campaign id");
-      const campaign = await scenarioService.getCampaignById(campaignId);
+      const campaign = await campaignService.getCampaignById(campaignId);
 
       if (!campaign || campaign.gmUserId !== user.id) {
         return reply.code(404).send({
@@ -377,7 +378,7 @@ export const campaignRoutes: FastifyPluginAsync = async (app) => {
       }
 
       const body = parseBodyObject(request.body, "Reusable entity payload");
-      const entity = await scenarioService.createReusableEntity({
+      const entity = await campaignService.createReusableEntity({
         description: parseOptionalString(body, "description"),
         gmUserId: user.id,
         kind: reusableEntityKindSchema.parse(body.kind),
@@ -403,7 +404,7 @@ export const campaignRoutes: FastifyPluginAsync = async (app) => {
 
     try {
       const campaignId = parseId(request.params, "campaignId", "Campaign id");
-      const campaign = await scenarioService.getCampaignById(campaignId);
+      const campaign = await campaignService.getCampaignById(campaignId);
 
       if (!campaign || campaign.gmUserId !== user.id) {
         return reply.code(404).send({
@@ -411,7 +412,7 @@ export const campaignRoutes: FastifyPluginAsync = async (app) => {
         });
       }
 
-      const assets = await scenarioService.listCampaignAssets(campaignId);
+      const assets = await campaignService.listCampaignAssets(campaignId);
 
       return { assets };
     } catch (error) {
@@ -430,7 +431,7 @@ export const campaignRoutes: FastifyPluginAsync = async (app) => {
 
     try {
       const campaignId = parseId(request.params, "campaignId", "Campaign id");
-      const campaign = await scenarioService.getCampaignById(campaignId);
+      const campaign = await campaignService.getCampaignById(campaignId);
 
       if (!campaign || campaign.gmUserId !== user.id) {
         return reply.code(404).send({
@@ -439,7 +440,7 @@ export const campaignRoutes: FastifyPluginAsync = async (app) => {
       }
 
       const body = parseBodyObject(request.body, "Campaign asset payload");
-      const asset = await scenarioService.createCampaignAsset({
+      const asset = await campaignService.createCampaignAsset({
         campaignId,
         createdByUserId: user.id,
         description: parseOptionalString(body, "description"),
@@ -467,7 +468,7 @@ export const campaignRoutes: FastifyPluginAsync = async (app) => {
 
     try {
       const assetId = parseId(request.params, "assetId", "Asset id");
-      const existingAsset = await scenarioService.getCampaignAssetById(assetId);
+      const existingAsset = await campaignService.getCampaignAssetById(assetId);
 
       if (!existingAsset) {
         return reply.code(404).send({
@@ -476,7 +477,7 @@ export const campaignRoutes: FastifyPluginAsync = async (app) => {
       }
 
       const body = parseBodyObject(request.body, "Asset visibility payload");
-      const asset = await scenarioService.updateCampaignAssetVisibility({
+      const asset = await campaignService.updateCampaignAssetVisibility({
         assetId,
         visibility: scenarioVisibilitySchema.parse(body.visibility)
       });
