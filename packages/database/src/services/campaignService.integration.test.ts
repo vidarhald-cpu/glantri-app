@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
 import { createPrismaScenarioRepository } from "../repositories/scenarioRepository";
 import { createTestUser } from "../testing/factories";
@@ -15,8 +15,12 @@ if (!process.env.DATABASE_URL_TEST) {
       await resetTestDatabase(prisma!);
     });
 
+    afterAll(async () => {
+      await resetTestDatabase(prisma!);
+    });
+
     it("creates a campaign and lists it by game master", async () => {
-      const gm = await createTestUser(prisma!, { roles: ["gm"] });
+      const gm = await createTestUser(prisma!, { roles: ["game_master"] });
       const repo = createPrismaScenarioRepository(prisma!);
       const service = new CampaignService(repo);
 
@@ -36,8 +40,8 @@ if (!process.env.DATABASE_URL_TEST) {
     });
 
     it("only returns campaigns belonging to the requesting GM", async () => {
-      const gmA = await createTestUser(prisma!, { roles: ["gm"] });
-      const gmB = await createTestUser(prisma!, { roles: ["gm"] });
+      const gmA = await createTestUser(prisma!, { roles: ["game_master"] });
+      const gmB = await createTestUser(prisma!, { roles: ["game_master"] });
       const repo = createPrismaScenarioRepository(prisma!);
       const service = new CampaignService(repo);
 
