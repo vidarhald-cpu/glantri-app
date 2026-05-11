@@ -3,7 +3,7 @@ import type {
   EquipmentItem,
   StorageLocation,
 } from "@glantri/domain/equipment";
-import { createDefaultEquipmentLocations } from "@glantri/content/equipment";
+import { createDefaultEquipmentLocations } from "./systemLocations";
 
 export const sampleCharacterId = "char-themistogenes";
 

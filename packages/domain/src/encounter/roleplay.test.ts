@@ -265,6 +265,73 @@ describe("roleplay encounter state", () => {
     });
   });
 
+  it("preserves side-specific silent flags for opposed roll assignments and GM rolls", () => {
+    const assigned = assignRoleplaySkillRoll({
+      mode: "opposed",
+      opponentParticipantId: "opponent-1",
+      opponentParticipantName: "Hidden Watcher",
+      opponentSilent: true,
+      opponentSkillId: "perception",
+      opponentSkillLabel: "Perception",
+      participantId: "actor-1",
+      session: createSession(),
+      silent: false,
+      skillId: "stealth",
+      skillLabel: "Stealth",
+    });
+    expect(normalizeRoleplayState(assigned).pendingSkillRolls[0]).toMatchObject({
+      mode: "opposed",
+      opponentSilent: true,
+      silent: false,
+    });
+
+    const actorPreview = buildRoleplayCalculationPreview({
+      roll: { dieResult: 12, openEndedD10s: [], rollD20: 12 },
+      skillLabel: "Stealth",
+      skillValue: 10,
+    });
+    const opponentPreview = buildRoleplayCalculationPreview({
+      roll: { dieResult: 8, openEndedD10s: [], rollD20: 8 },
+      skillLabel: "Perception",
+      skillValue: 10,
+    });
+    const opposed = compareRoleplayOpposedRolls({
+      actorLabel: "Scout",
+      actorPreview,
+      opponentLabel: "Hidden Watcher",
+      opponentPreview,
+    });
+    const rolled = recordRoleplayGmSkillRoll({
+      achievedSuccessLevel: actorPreview.achievedSuccessLevel,
+      calculationText: "opposed roll",
+      mode: "opposed",
+      numericSubtotal: actorPreview.numericSubtotal,
+      opposedMargin: opposed.margin,
+      opposedResult: opposed.result,
+      opponentAchievedSuccessLevel: opponentPreview.achievedSuccessLevel,
+      opponentNumericSubtotal: opponentPreview.numericSubtotal,
+      opponentParticipantId: "opponent-1",
+      opponentParticipantName: "Hidden Watcher",
+      opponentRoll: { dieResult: 8, openEndedD10s: [], rollD20: 8 },
+      opponentSilent: true,
+      opponentSkillId: "perception",
+      opponentSkillLabel: "Perception",
+      participantId: "actor-1",
+      roll: { dieResult: 12, openEndedD10s: [], rollD20: 12 },
+      session: assigned,
+      silent: false,
+      skillId: "stealth",
+      skillLabel: "Stealth",
+    });
+
+    expect(normalizeRoleplayState(rolled).actionLog[0]).toMatchObject({
+      mode: "opposed",
+      opponentSilent: true,
+      silent: false,
+      type: "gm_skill_roll",
+    });
+  });
+
   it("compares opposed rolls by total, ties, and fumbles deterministically", () => {
     const actor = buildRoleplayCalculationPreview({
       roll: { dieResult: 16, openEndedD10s: [], rollD20: 16 },
@@ -379,6 +446,48 @@ describe("roleplay encounter state", () => {
         }),
       }).summary
     ).toBe("Both sides fumbled; tied result.");
+  });
+
+  it("compares opposed rolls using final totals instead of base skill values", () => {
+    const lowerBaseWins = compareRoleplayOpposedRolls({
+      actorLabel: "Low base actor",
+      actorPreview: buildRoleplayCalculationPreview({
+        roll: { dieResult: 19, openEndedD10s: [], rollD20: 19 },
+        skillLabel: "Stealth",
+        skillValue: 5,
+      }),
+      opponentLabel: "High base opponent",
+      opponentPreview: buildRoleplayCalculationPreview({
+        roll: { dieResult: 2, openEndedD10s: [], rollD20: 2 },
+        skillLabel: "Perception",
+        skillValue: 20,
+      }),
+    });
+    expect(lowerBaseWins).toMatchObject({
+      margin: 2,
+      result: "win",
+      summary: "Low base actor wins by 2.",
+    });
+
+    const lowerBaseLoses = compareRoleplayOpposedRolls({
+      actorLabel: "High base actor",
+      actorPreview: buildRoleplayCalculationPreview({
+        roll: { dieResult: 2, openEndedD10s: [], rollD20: 2 },
+        skillLabel: "Perception",
+        skillValue: 20,
+      }),
+      opponentLabel: "Low base opponent",
+      opponentPreview: buildRoleplayCalculationPreview({
+        roll: { dieResult: 19, openEndedD10s: [], rollD20: 19 },
+        skillLabel: "Stealth",
+        skillValue: 5,
+      }),
+    });
+    expect(lowerBaseLoses).toMatchObject({
+      margin: 2,
+      result: "loss",
+      summary: "Low base opponent wins by 2.",
+    });
   });
 
   it("records opposed GM rolls with both sides and comparison result", () => {
