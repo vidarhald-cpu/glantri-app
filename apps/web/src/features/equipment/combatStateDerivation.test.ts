@@ -8,13 +8,13 @@ import type {
 } from "@glantri/domain";
 import { equipmentTemplates } from "@glantri/content/equipment";
 import {
+  buildCombatStateCharacterInputs,
   createCombatSession,
   type CharacterSheetSummary,
   type CombatAllocationState,
 } from "@glantri/rules-engine";
 import type { EquipmentFeatureState } from "./types";
 import {
-  buildCombatStateCharacterInputs,
   deriveCombatStateSnapshot,
   getActorCombatState,
 } from "./combatStateDerivation";

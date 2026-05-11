@@ -6,13 +6,14 @@ import type { CharacterBuild } from "@glantri/domain";
 import { getAccessTier, isWithYouLocation, type CarryMode } from "@glantri/domain/equipment";
 import {
   buildCharacterSheetSummary,
+  buildCombatStateCharacterInputs,
   defaultCombatAllocationState,
   lookupWorkbookPercentageAdjustment,
   lookupWorkbookSkillInitiativeModifier
 } from "@glantri/rules-engine";
 
 import { buildCharacterArmorSummary, getWorkbookCharacterSize } from "./armorSummary";
-import { buildCombatStateCharacterInputs, deriveCombatStateSnapshot } from "./combatStateDerivation";
+import { deriveCombatStateSnapshot } from "./combatStateDerivation";
 import { buildLoadoutCombatStatsTable } from "./loadoutCombatStats";
 import { buildLoadoutMeleeWeaponOptions, buildLoadoutMissileWeaponOptions, buildLoadoutThrowingWeaponOptions } from "./loadoutWeaponOptions";
 import {

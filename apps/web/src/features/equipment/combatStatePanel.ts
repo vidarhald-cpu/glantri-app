@@ -1,8 +1,7 @@
 import type { ArmorTemplate, EquipmentItem, EquipmentTemplate, ShieldTemplate, WeaponTemplate } from "@glantri/domain";
-import type { CombatAllocationState } from "@glantri/rules-engine";
+import type { CombatAllocationState, CombatStateCharacterInputs } from "@glantri/rules-engine";
 
 import {
-  type CombatStateCharacterInputs,
   deriveCombatStateSnapshot,
   type DerivedCombatValue,
 } from "./combatStateDerivation";

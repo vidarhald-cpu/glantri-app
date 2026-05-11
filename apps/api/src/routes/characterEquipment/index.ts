@@ -1,0 +1,1 @@
+export { characterEquipmentRoutes } from "./routes";
