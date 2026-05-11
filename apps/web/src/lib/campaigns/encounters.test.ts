@@ -15,6 +15,7 @@ function createEncounter(input: Partial<EncounterSession> & Pick<EncounterSessio
     currentTurnIndex: 0,
     declarationsLocked: false,
     id: input.id,
+    kind: input.kind ?? "combat",
     participants: [],
     status: "setup",
     title: input.title,

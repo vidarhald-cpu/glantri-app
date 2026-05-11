@@ -11,7 +11,7 @@
     "./vitest": "./vitest.base.ts"
   },
   "scripts": {
-    "build": "mkdir -p dist && cp eslint.base.cjs prettier.base.cjs vitest.base.ts tsconfig.package.json dist/",
+    "build": "node -e \"const fs=require('fs'); fs.rmSync('dist',{recursive:true,force:true}); fs.mkdirSync('dist',{recursive:true}); for (const file of ['eslint.base.cjs','prettier.base.cjs','vitest.base.ts','tsconfig.package.json']) fs.copyFileSync(file, 'dist/'+file);\"",
     "typecheck": "tsc -p tsconfig.package.json --noEmit",
     "lint": "eslint .",
     "test": "vitest run --passWithNoTests"

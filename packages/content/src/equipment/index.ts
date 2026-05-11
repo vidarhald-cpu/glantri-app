@@ -6,7 +6,9 @@ export * from "./themistogenesWeaponEnrichments";
 export * from "./themistogenesWeaponFormulaNormalization";
 export * from "./weaponTemplates";
 export * from "./shieldTemplates";
+export * from "./brawlingTemplates";
 export * from "./systemLocations";
+export * from "./sampleLoadouts";
 
 import { armorTemplates } from "./armorTemplates";
 import { gearTemplates } from "./gearTemplates";

@@ -1,7 +1,7 @@
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { AuthService, ScenarioService, hashPassword, prisma } from "../src/index";
+import { AuthService, CampaignService, hashPassword, prisma } from "../src/index";
 
 function loadDatabaseEnv(): void {
   const scriptDir = dirname(fileURLToPath(import.meta.url));
@@ -62,7 +62,7 @@ async function ensureLocalGameMaster(authService: AuthService, config: ReturnTyp
   return updatedUser;
 }
 
-async function ensureSampleCampaign(scenarioService: ScenarioService, gmUserId: string, campaignName: string) {
+async function ensureSampleCampaign(campaignService: CampaignService, gmUserId: string, campaignName: string) {
   const existingCampaign = await prisma.campaign.findFirst({
     orderBy: {
       createdAt: "asc"
@@ -74,10 +74,10 @@ async function ensureSampleCampaign(scenarioService: ScenarioService, gmUserId: 
   });
 
   if (existingCampaign) {
-    return scenarioService.getCampaignById(existingCampaign.id);
+    return campaignService.getCampaignById(existingCampaign.id);
   }
 
-  return scenarioService.createCampaign({
+  return campaignService.createCampaign({
     description: "Local bootstrap campaign for development resets.",
     gmUserId,
     name: campaignName,
@@ -90,7 +90,7 @@ async function ensureSampleCampaign(scenarioService: ScenarioService, gmUserId: 
 }
 
 async function ensureSampleEntity(
-  scenarioService: ScenarioService,
+  campaignService: CampaignService,
   gmUserId: string,
   entityName: string
 ) {
@@ -105,10 +105,10 @@ async function ensureSampleEntity(
   });
 
   if (existingEntity) {
-    return scenarioService.getReusableEntityById(existingEntity.id);
+    return campaignService.getReusableEntityById(existingEntity.id);
   }
 
-  return scenarioService.createReusableEntity({
+  return campaignService.createReusableEntity({
     description: "Baseline reusable entity for quick local scenario setup.",
     gmUserId,
     kind: "npc",
@@ -128,11 +128,11 @@ async function main(): Promise<void> {
 
   const config = getSeedConfig();
   const authService = new AuthService();
-  const scenarioService = new ScenarioService();
+  const campaignService = new CampaignService();
 
   const user = await ensureLocalGameMaster(authService, config);
-  const campaign = await ensureSampleCampaign(scenarioService, user.id, config.campaignName);
-  const entity = await ensureSampleEntity(scenarioService, user.id, config.entityName);
+  const campaign = await ensureSampleCampaign(campaignService, user.id, config.campaignName);
+  const entity = await ensureSampleEntity(campaignService, user.id, config.entityName);
 
   console.log("Local development seed complete.");
   console.log(`Login email: ${config.email}`);

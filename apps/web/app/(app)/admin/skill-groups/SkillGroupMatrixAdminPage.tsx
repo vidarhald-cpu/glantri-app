@@ -2,8 +2,8 @@
 
 import { useMemo, useState } from "react";
 
-import { useAdminContent } from "../../../../src/lib/admin/AdminContentContext";
-import { buildSkillGroupAdminRows } from "../../../../src/lib/admin/viewModels";
+import { useAdminContent } from "@/lib/admin/AdminContentContext";
+import { buildSkillGroupAdminRows } from "@/lib/admin/viewModels";
 import {
   AdminDataTable,
   AdminField,

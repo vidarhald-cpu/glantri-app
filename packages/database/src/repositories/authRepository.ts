@@ -1,6 +1,7 @@
 import type { AuthRole, AuthSession, AuthUser } from "@glantri/auth";
+import type { PrismaClient } from "@prisma/client";
 
-import { prisma } from "../client";
+import { prisma as defaultPrisma } from "../client";
 
 export interface CreateUserInput {
   displayName?: string;
@@ -51,7 +52,9 @@ function mapRoles(roles: Array<{ role: { name: string } }>): AuthRole[] {
     .filter((role): role is AuthRole => role !== null);
 }
 
-export function createPrismaAuthRepository(): AuthRepository {
+export function createPrismaAuthRepository(client?: PrismaClient): AuthRepository {
+  const prisma = client ?? defaultPrisma;
+
   return {
     async anyPrivilegedUserExists() {
       const privilegedUserCount = await prisma.user.count({

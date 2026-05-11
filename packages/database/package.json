@@ -14,7 +14,7 @@
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint .",
-    "test": "vitest run --passWithNoTests",
+    "test": "vitest run --coverage --passWithNoTests",
     "postinstall": "prisma generate",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
@@ -31,7 +31,6 @@
     "@glantri/domain": "workspace:*",
     "@glantri/rules-engine": "workspace:*",
     "@glantri/shared": "workspace:*",
-    "@glantri/test-scenarios": "workspace:*",
     "@prisma/client": "^6.6.0"
   },
   "devDependencies": {

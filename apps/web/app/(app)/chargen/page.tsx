@@ -1,5 +1,5 @@
 import ChargenWizard from "./ChargenWizard";
-import { RequireAuthenticatedUser } from "../../../src/lib/auth/RouteAccessGate";
+import { RequireAuthenticatedUser } from "@/lib/auth/RouteAccessGate";
 
 export default function ChargenPage() {
   return (

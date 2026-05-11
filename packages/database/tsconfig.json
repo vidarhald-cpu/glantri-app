@@ -1,6 +1,7 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
+    "moduleResolution": "node",
     "rootDir": "../.."
   },
   "include": ["src/**/*.ts", "prisma/**/*.ts"]

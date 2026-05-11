@@ -1,4 +1,3 @@
-import { execFileSync } from "node:child_process";
 import * as path from "node:path";
 
 import type {
@@ -6,6 +5,7 @@ import type {
   ShieldTemplate,
   WeaponAttackMode,
 } from "@glantri/domain/equipment";
+import { readZipEntryUtf8 } from "./readZipEntryUtf8";
 
 const THEMISTOGENES_WORKBOOK_PATH = path.resolve(
   __dirname,
@@ -69,12 +69,6 @@ export interface ImportedShieldsReport {
 export interface ImportedShieldsResult {
   report: ImportedShieldsReport;
   templates: ShieldTemplate[];
-}
-
-function readZipEntryUtf8(workbookPath: string, entryPath: string): string {
-  return execFileSync("unzip", ["-p", workbookPath, entryPath], {
-    encoding: "utf8",
-  });
 }
 
 function decodeXmlText(value: string): string {

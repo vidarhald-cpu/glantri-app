@@ -118,8 +118,15 @@ const content = validateCanonicalContent({
 
 function createBuild(): CharacterBuild {
   return {
+    equipment: { items: [] },
     id: "character-1",
     name: "Progressor",
+    progressionState: {
+      availablePoints: 0,
+      checks: [],
+      history: [],
+      pendingAttempts: []
+    },
     profile: {
       distractionLevel: 3,
       id: "profile-1",

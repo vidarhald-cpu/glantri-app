@@ -26,6 +26,7 @@ describe("campaign workspace", () => {
           currentTurnIndex: 0,
           declarationsLocked: false,
           id: "enc-1",
+          kind: "combat",
           participants: [],
           scenarioId: "scn-1",
           status: "setup",
@@ -42,11 +43,9 @@ describe("campaign workspace", () => {
           campaignId: "camp-1",
           createdAt: "2026-04-23T00:00:00.000Z",
           description: "",
-          gmUserId: "gm-1",
           id: "scn-1",
           kind: "mixed",
           name: "Session one",
-          participantIds: [],
           status: "draft",
           updatedAt: "2026-04-23T00:00:00.000Z"
         }
@@ -71,11 +70,9 @@ describe("campaign workspace", () => {
           campaignId: "camp-1",
           createdAt: "2026-04-23T00:00:00.000Z",
           description: "",
-          gmUserId: "gm-1",
           id: "scn-1",
           kind: "mixed",
           name: "Session one",
-          participantIds: [],
           status: "draft",
           updatedAt: "2026-04-23T00:00:00.000Z"
         }
@@ -99,6 +96,7 @@ describe("campaign workspace", () => {
           currentTurnIndex: 0,
           declarationsLocked: false,
           id: "enc-1",
+          kind: "combat",
           participants: [],
           scenarioId: "scn-1",
           status: "setup",
@@ -118,11 +116,9 @@ describe("campaign workspace", () => {
           campaignId: "camp-1",
           createdAt: "2026-04-23T00:00:00.000Z",
           description: "",
-          gmUserId: "gm-1",
           id: "scn-1",
           kind: "mixed",
           name: "Session one",
-          participantIds: [],
           status: "draft",
           updatedAt: "2026-04-23T00:00:00.000Z"
         }
@@ -147,6 +143,7 @@ describe("campaign workspace", () => {
           currentTurnIndex: 0,
           declarationsLocked: false,
           id: "enc-1",
+          kind: "combat",
           participants: [],
           scenarioId: "scn-1",
           status: "setup",
@@ -166,11 +163,9 @@ describe("campaign workspace", () => {
           campaignId: "camp-1",
           createdAt: "2026-04-23T00:00:00.000Z",
           description: "",
-          gmUserId: "gm-1",
           id: "scn-1",
           kind: "mixed",
           name: "Session one",
-          participantIds: [],
           status: "draft",
           updatedAt: "2026-04-23T00:00:00.000Z"
         }
@@ -198,11 +193,9 @@ describe("campaign workspace", () => {
           campaignId: "camp-1",
           createdAt: "2026-04-23T00:00:00.000Z",
           description: "",
-          gmUserId: "gm-1",
           id: "scn-1",
           kind: "mixed",
           name: "Session one",
-          participantIds: [],
           status: "draft",
           updatedAt: "2026-04-23T00:00:00.000Z"
         }

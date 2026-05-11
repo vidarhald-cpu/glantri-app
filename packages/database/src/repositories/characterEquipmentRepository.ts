@@ -10,9 +10,9 @@ import {
   type StorageLocation,
 } from "@glantri/domain";
 import { createDefaultEquipmentLocations } from "@glantri/content";
-import { Prisma } from "@prisma/client";
+import { Prisma, PrismaClient } from "@prisma/client";
 
-import { prisma } from "../client";
+import { prisma as defaultPrisma } from "../client";
 
 function parseSpecialProperties(
   value: unknown,
@@ -194,7 +194,8 @@ export interface CharacterEquipmentRepository {
   }>;
 }
 
-export function createPrismaCharacterEquipmentRepository(): CharacterEquipmentRepository {
+export function createPrismaCharacterEquipmentRepository(client?: PrismaClient): CharacterEquipmentRepository {
+  const prisma = client ?? defaultPrisma;
   return {
     async createCharacterStorageLocation(location) {
       const created = await prisma.characterStorageLocation.create({

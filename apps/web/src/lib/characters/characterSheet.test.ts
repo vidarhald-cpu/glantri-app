@@ -124,7 +124,7 @@ const skills: SkillDefinition[] = [
     isTheoretical: true,
     linkedStats: ["int", "pow"],
     name: "Philosophy",
-    requiresLiteracy: "yes",
+    requiresLiteracy: "required",
     societyLevel: 1,
     sortOrder: 7
   }
@@ -208,6 +208,7 @@ const baseBuild: CharacterBuild = {
   progression: {
     chargenMode: "standard",
     educationPoints: 0,
+    flexiblePointFactor: 1,
     level: 1,
     primaryPoolSpent: 0,
     primaryPoolTotal: 60,
@@ -216,6 +217,12 @@ const baseBuild: CharacterBuild = {
     skillGroups: [],
     skills: [],
     specializations: []
+  },
+  progressionState: {
+    availablePoints: 0,
+    checks: [],
+    history: [],
+    pendingAttempts: []
   },
   statModifiers: {}
 };

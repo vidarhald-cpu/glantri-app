@@ -25,19 +25,19 @@ import {
   createTemplateOnServer,
   loadTemplates,
   updateTemplateOnServer
-} from "../../../src/lib/api/localServiceClient";
-import { getCampaignActorMetadata } from "../../../src/lib/campaigns/campaignActors";
-import { loadCanonicalContent } from "../../../src/lib/content/loadCanonicalContent";
+} from "@/lib/api/localServiceClient";
+import { getCampaignActorMetadata } from "@/lib/campaigns/campaignActors";
+import { loadCanonicalContent } from "@/lib/content/loadCanonicalContent";
 import {
   filterInventoryTemplateOptions,
   type InventoryTemplateFilter
-} from "../../../src/features/equipment/inventoryTemplateGroups";
-import { getPlayerFacingEquipmentTemplateName } from "../../../src/features/equipment/playerFacingTemplateOptions";
+} from "@/features/equipment/inventoryTemplateGroups";
+import { getPlayerFacingEquipmentTemplateName } from "@/features/equipment/playerFacingTemplateOptions";
 import {
   groupRowsBySkillType,
   type PlayerFacingSkillBucketId,
   getPlayerFacingSkillBucketDefinitions
-} from "../../../src/lib/chargen/chargenBrowse";
+} from "@/lib/chargen/chargenBrowse";
 import {
   NPC_ARCHETYPE_SENIORITY_OPTIONS,
   buildGeneratedHumanoidNpcSnapshot,
@@ -56,7 +56,7 @@ import {
   type HumanoidNpcArchetypeDraft,
   type NpcArchetypeSeniority,
   type NpcArchetypeSkillRelevance
-} from "../../../src/lib/templates/npcArchetypeTemplates";
+} from "@/lib/templates/npcArchetypeTemplates";
 
 type TemplateKindFilter = "all" | ReusableEntity["kind"];
 type TemplatesPageTab = "create-template" | "generate-npc" | "library";

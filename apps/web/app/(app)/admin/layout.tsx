@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-import { RequireAuthenticatedUser } from "../../../src/lib/auth/RouteAccessGate";
+import { RequireAuthenticatedUser } from "@/lib/auth/RouteAccessGate";
 import AdminLayoutShell from "./AdminLayoutShell";
 
 export default function AdminLayout({ children }: { children: ReactNode }) {

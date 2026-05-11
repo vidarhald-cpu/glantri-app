@@ -21,7 +21,6 @@
       "@glantri/domain/*": ["packages/domain/src/*"],
       "@glantri/shared": ["packages/shared/src/index.ts"],
       "@glantri/shared/*": ["packages/shared/src/*"],
-      "@glantri/schemas/*": ["packages/schemas/src/*"],
       "@glantri/rules-engine": ["packages/rules-engine/src/index.ts"],
       "@glantri/rules-engine/*": ["packages/rules-engine/src/*"],
       "@glantri/database": ["packages/database/src/index.ts"],

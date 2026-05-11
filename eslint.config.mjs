@@ -41,6 +41,35 @@ export default tseslint.config(
     }
   },
   {
+    // Production code must not import from test-scenarios
+    files: ["apps/**/*.{ts,tsx}", "packages/**/*.{ts,tsx}"],
+    ignores: ["**/*.test.ts", "**/*.test.tsx", "**/e2e/**", "**/test-scenarios/**"],
+    rules: {
+      "no-restricted-imports": ["error", {
+        patterns: [
+          {
+            group: ["@glantri/test-scenarios", "@glantri/test-scenarios/*"],
+            message: "test-scenarios is for tests only. Move shared data to packages/content or packages/domain."
+          }
+        ]
+      }]
+    }
+  },
+  {
+    // apps/web must not import directly from @glantri/database
+    files: ["apps/web/**/*.{ts,tsx}"],
+    rules: {
+      "no-restricted-imports": ["error", {
+        patterns: [
+          {
+            group: ["@glantri/database", "@glantri/database/*"],
+            message: "apps/web must not import from @glantri/database. Use domain clients in src/lib/api/ instead."
+          }
+        ]
+      }]
+    }
+  },
+  {
     files: ["**/*.cjs"],
     languageOptions: {
       sourceType: "commonjs"

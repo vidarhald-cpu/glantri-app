@@ -1,4 +1,4 @@
-import { getPlayerFacingSkillCategoryId, type PlayerFacingSkillCategoryId, type SkillDefinition } from "@glantri/domain";
+﻿import { getPlayerFacingSkillCategoryId, type PlayerFacingSkillCategoryId, type SkillDefinition } from "@glantri/domain";
 import type { ChargenSkillAccessSource } from "@glantri/rules-engine";
 
 /*

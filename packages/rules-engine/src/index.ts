@@ -13,6 +13,7 @@ export * from "./chargen/selectionStructure";
 export * from "./chargen/selectProfile";
 export * from "./chargen/statResolution";
 export * from "./chargen/summarizeRolledProfile";
+export * from "./combat/characterInputs";
 export * from "./combat/combatAllocationState";
 export * from "./combat/combatSessionState";
 export * from "./combat/composeDefenseValues";

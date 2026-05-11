@@ -18,5 +18,8 @@
     "@glantri/rules-engine": "workspace:*",
     "@glantri/shared": "workspace:*",
     "fastify": "^5.6.1"
+  },
+  "devDependencies": {
+    "@glantri/test-scenarios": "workspace:*"
   }
 }

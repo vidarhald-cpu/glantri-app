@@ -2,13 +2,13 @@
 
 import { use, useEffect, useMemo, useState } from "react";
 
-import { getEquipmentTemplateById } from "../../../../../src/features/equipment/equipmentSelectors";
+import { getEquipmentTemplateById } from "@/features/equipment/equipmentSelectors";
 import {
   buildEquipmentLoadoutModuleModel,
   EquipmentLoadoutModule
-} from "../../../../../src/features/equipment/loadoutModule";
-import { isValidLoadoutThrowingWeaponItem } from "../../../../../src/features/equipment/loadoutWeaponOptions";
-import type { EquipmentFeatureState } from "../../../../../src/features/equipment/types";
+} from "@/features/equipment/loadoutModule";
+import { isValidLoadoutThrowingWeaponItem } from "@/features/equipment/loadoutWeaponOptions";
+import type { EquipmentFeatureState } from "@/features/equipment/types";
 import {
   loadCharacterEquipmentState,
   setCharacterActiveMissileWeaponOnServer,
@@ -16,8 +16,8 @@ import {
   setCharacterActiveSecondaryWeaponOnServer,
   setCharacterReadyShieldOnServer,
   setCharacterWornArmorOnServer
-} from "../../../../../src/lib/api/localServiceClient";
-import { loadLocalCharacterContext } from "../../../../../src/lib/characters/loadLocalCharacterContext";
+} from "@/lib/api/localServiceClient";
+import { loadLocalCharacterContext } from "@/lib/characters/loadLocalCharacterContext";
 
 interface CharacterLoadoutPageProps {
   params: Promise<{

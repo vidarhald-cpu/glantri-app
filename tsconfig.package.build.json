@@ -1,4 +1,4 @@
-{
+﻿{
   "$schema": "https://json.schemastore.org/tsconfig",
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
@@ -15,7 +15,6 @@
       "@glantri/content/*": ["packages/content/dist/*"],
       "@glantri/domain/*": ["packages/domain/dist/*"],
       "@glantri/shared/*": ["packages/shared/dist/*"],
-      "@glantri/schemas/*": ["packages/schemas/dist/*"],
       "@glantri/rules-engine/*": ["packages/rules-engine/dist/*"],
       "@glantri/database/*": ["packages/database/dist/*"],
       "@glantri/importers/*": ["packages/importers/dist/*"],

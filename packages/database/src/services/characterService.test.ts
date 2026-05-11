@@ -32,6 +32,7 @@ const baseBuild: CharacterBuild = {
   progression: {
     chargenMode: "standard",
     educationPoints: 0,
+    flexiblePointFactor: 1,
     level: 2,
     primaryPoolSpent: 0,
     primaryPoolTotal: 60,
@@ -40,6 +41,12 @@ const baseBuild: CharacterBuild = {
     skillGroups: [],
     skills: [],
     specializations: []
+  },
+  progressionState: {
+    availablePoints: 0,
+    checks: [],
+    history: [],
+    pendingAttempts: []
   },
   statModifiers: {
     str: 2

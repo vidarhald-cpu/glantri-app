@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { getRulesDocumentationPageModel } from "../../../../src/lib/rulesDocs";
+import { getRulesDocumentationPageModel } from "@/lib/rulesDocs";
 import { AdminPageIntro, AdminPanel, AdminStatusBadge } from "../admin-ui";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 

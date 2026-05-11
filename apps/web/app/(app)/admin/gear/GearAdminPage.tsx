@@ -8,7 +8,7 @@ import { AdminPageIntro, AdminPanel } from "../admin-ui";
 import {
   buildTemplateCatalogTable,
   getAdminTemplateCatalogRows,
-} from "../../../../src/features/equipment/templateCatalogTables";
+} from "@/features/equipment/templateCatalogTables";
 
 const materialOptions: MaterialType[] = ["steel", "bronze", "wood", "leather", "cloth"];
 const qualityOptions: QualityType[] = ["standard", "extraordinary"];

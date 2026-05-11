@@ -8,8 +8,8 @@ import type {
 } from "@glantri/domain";
 
 import { equipmentTemplates } from "@glantri/content/equipment";
+import type { CombatStateCharacterInputs } from "@glantri/rules-engine";
 import { buildWorkbookMovementSummary } from "./movementSummary";
-import type { CombatStateCharacterInputs } from "./combatStateDerivation";
 import type { EquipmentFeatureState } from "./types";
 
 const characterId = "char-movement";

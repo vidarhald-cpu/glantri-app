@@ -3,14 +3,14 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { loadServerCharacters } from "../../../../src/lib/api/localServiceClient";
-import { useSessionUser } from "../../../../src/lib/auth/SessionUserContext";
+import { loadServerCharacters } from "@/lib/api/localServiceClient";
+import { useSessionUser } from "@/lib/auth/SessionUserContext";
 import {
   REMEMBERED_SELECTION_KEYS,
   useRememberedSelection,
-} from "../../../../src/lib/browser/rememberedSelection";
-import { buildCharacterBrowserEntries } from "../../../../src/lib/characters/characterBrowser";
-import { LocalCharacterRepository } from "../../../../src/lib/offline/repositories/localCharacterRepository";
+} from "@/lib/browser/rememberedSelection";
+import { buildCharacterBrowserEntries } from "@/lib/characters/characterBrowser";
+import { LocalCharacterRepository } from "@/lib/offline/repositories/localCharacterRepository";
 
 const localCharacterRepository = new LocalCharacterRepository();
 

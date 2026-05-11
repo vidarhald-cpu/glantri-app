@@ -8,6 +8,7 @@ import {
   calculateWorkbookEncumbranceLevel,
   calculateWorkbookMovement,
   calculateWorkbookMovementModifier,
+  type CombatStateCharacterInputs,
 } from "@glantri/rules-engine";
 
 import {
@@ -15,7 +16,6 @@ import {
   getLoadoutEquipment,
   getPersonalEncumbranceSummary,
 } from "./equipmentSelectors";
-import type { CombatStateCharacterInputs } from "./combatStateDerivation";
 import type { EquipmentFeatureState } from "./types";
 
 export interface WorkbookMovementSummary {

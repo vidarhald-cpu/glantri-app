@@ -13,16 +13,16 @@ import {
   resolveCharacterProgressionAttempts
 } from "@glantri/rules-engine";
 
-import { updateServerCharacter } from "../../../../../src/lib/api/localServiceClient";
-import { getPlayerFacingSkillBucket, groupRowsBySkillType } from "../../../../../src/lib/chargen/chargenBrowse";
-import { buildCharacterSheetProfileStatRows } from "../../../../../src/lib/characters/characterSheet";
-import { loadLocalCharacterAdvancementContext } from "../../../../../src/lib/characters/loadLocalCharacterAdvancementContext";
+import { updateServerCharacter } from "@/lib/api/localServiceClient";
+import { getPlayerFacingSkillBucket, groupRowsBySkillType } from "@/lib/chargen/chargenBrowse";
+import { buildCharacterSheetProfileStatRows } from "@/lib/characters/characterSheet";
+import { loadLocalCharacterAdvancementContext } from "@/lib/characters/loadLocalCharacterAdvancementContext";
 import type {
   LocalCharacterDraft,
   LocalCharacterRecord
-} from "../../../../../src/lib/offline/glantriDexie";
-import { CharacterDraftRepository } from "../../../../../src/lib/offline/repositories/characterDraftRepository";
-import { LocalCharacterRepository } from "../../../../../src/lib/offline/repositories/localCharacterRepository";
+} from "@/lib/offline/glantriDexie";
+import { CharacterDraftRepository } from "@/lib/offline/repositories/characterDraftRepository";
+import { LocalCharacterRepository } from "@/lib/offline/repositories/localCharacterRepository";
 
 interface CharacterAdvanceProps {
   id: string;
