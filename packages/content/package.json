@@ -16,6 +16,7 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
+    "export:skill-system-ai": "pnpm exec tsx ./scripts/exportSkillSystemForAi.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint .",
     "test": "vitest run --passWithNoTests"
