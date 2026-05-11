@@ -157,4 +157,121 @@ describe("CampaignService campaign roster", () => {
 
     await expect(service.listCampaignRosterEntries("campaign-1")).resolves.toEqual([]);
   });
+
+  it("keeps roster membership scoped to each campaign/source pair", async () => {
+    const { repository, rosterEntries } = createScenarioRepositoryStub();
+    const characters = new Map([
+      ["character-1", createCharacterRecord({ id: "character-1", name: "Ari", ownerId: "user-1" })],
+    ]);
+    const service = new CampaignService(
+      repository,
+      {
+        getCharacterById: async (characterId: string) => characters.get(characterId) ?? null,
+      } as never,
+    );
+
+    const campaignOneEntry = await service.addCampaignRosterEntry({
+      campaignId: "campaign-1",
+      category: "pc",
+      sourceId: "character-1",
+      sourceType: "character",
+    });
+    const campaignOneDuplicate = await service.addCampaignRosterEntry({
+      campaignId: "campaign-1",
+      category: "pc",
+      sourceId: "character-1",
+      sourceType: "character",
+    });
+    const campaignTwoEntry = await service.addCampaignRosterEntry({
+      campaignId: "campaign-2",
+      category: "pc",
+      sourceId: "character-1",
+      sourceType: "character",
+    });
+
+    expect(campaignOneDuplicate.id).toBe(campaignOneEntry.id);
+    expect(campaignTwoEntry.id).not.toBe(campaignOneEntry.id);
+    expect(rosterEntries).toHaveLength(2);
+    await expect(service.listCampaignRosterEntries("campaign-1")).resolves.toEqual([campaignOneEntry]);
+    await expect(service.listCampaignRosterEntries("campaign-2")).resolves.toEqual([campaignTwoEntry]);
+  });
+
+  it("removes only roster links and leaves source characters and templates available", async () => {
+    const { repository, rosterEntries } = createScenarioRepositoryStub();
+    const characters = new Map([
+      ["character-1", createCharacterRecord({ id: "character-1", name: "Ari", ownerId: "user-1" })],
+    ]);
+    const reusableEntities = new Map<string, ReusableEntity>([
+      [
+        "template-1",
+        {
+          createdAt: "2026-04-21T00:00:00.000Z",
+          gmUserId: "gm-1",
+          id: "template-1",
+          kind: "npc",
+          name: "Bandit Template",
+          snapshot: {
+            actorClass: "template",
+          },
+          updatedAt: "2026-04-21T00:00:00.000Z",
+        },
+      ],
+    ]);
+    repository.getReusableEntityById = async (entityId) => reusableEntities.get(entityId) ?? null;
+    const service = new CampaignService(
+      repository,
+      {
+        getCharacterById: async (characterId: string) => characters.get(characterId) ?? null,
+      } as never,
+    );
+
+    const characterEntry = await service.addCampaignRosterEntry({
+      campaignId: "campaign-1",
+      category: "pc",
+      sourceId: "character-1",
+      sourceType: "character",
+    });
+    const templateEntry = await service.addCampaignRosterEntry({
+      campaignId: "campaign-1",
+      category: "template",
+      sourceId: "template-1",
+      sourceType: "template",
+    });
+
+    await service.removeCampaignRosterEntry({
+      campaignId: "campaign-1",
+      rosterEntryId: characterEntry.id,
+    });
+    await service.removeCampaignRosterEntry({
+      campaignId: "campaign-1",
+      rosterEntryId: templateEntry.id,
+    });
+
+    expect(rosterEntries).toHaveLength(0);
+    expect(characters.get("character-1")?.name).toBe("Ari");
+    expect(reusableEntities.get("template-1")?.name).toBe("Bandit Template");
+
+    await expect(
+      service.addCampaignRosterEntry({
+        campaignId: "campaign-1",
+        category: "pc",
+        sourceId: "character-1",
+        sourceType: "character",
+      }),
+    ).resolves.toMatchObject({
+      labelSnapshot: "Ari",
+      sourceId: "character-1",
+    });
+    await expect(
+      service.addCampaignRosterEntry({
+        campaignId: "campaign-1",
+        category: "template",
+        sourceId: "template-1",
+        sourceType: "template",
+      }),
+    ).resolves.toMatchObject({
+      labelSnapshot: "Bandit Template",
+      sourceId: "template-1",
+    });
+  });
 });
