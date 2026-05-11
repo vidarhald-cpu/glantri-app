@@ -1,6 +1,6 @@
 import type { FastifyPluginAsync } from "fastify";
 
-import { ScenarioService } from "@glantri/database";
+import { CampaignService, EncounterService, ScenarioService } from "@glantri/database";
 import {
   buildScenarioPlayerProjection,
   scenarioKindSchema,
@@ -16,6 +16,8 @@ import {
   parseOptionalString
 } from "./parsing";
 
+const campaignService = new CampaignService();
+const encounterService = new EncounterService();
 const scenarioService = new ScenarioService();
 
 export const scenarioRoutes: FastifyPluginAsync = async (app) => {
@@ -30,9 +32,9 @@ export const scenarioRoutes: FastifyPluginAsync = async (app) => {
       const isGameMaster = user.roles.includes("game_master") || user.roles.includes("admin");
       const campaigns = isGameMaster
         ? user.roles.includes("admin")
-          ? await scenarioService.listCampaignsAllowingPlayerSelfJoin()
-          : await scenarioService.listCampaignsByGameMaster(user.id)
-        : await scenarioService.listCampaignsAllowingPlayerSelfJoin();
+          ? await campaignService.listCampaignsAllowingPlayerSelfJoin()
+          : await campaignService.listCampaignsByGameMaster(user.id)
+        : await campaignService.listCampaignsAllowingPlayerSelfJoin();
 
       const scenarioGroups = await Promise.all(
         campaigns.map(async (campaign) => ({
@@ -136,7 +138,7 @@ export const scenarioRoutes: FastifyPluginAsync = async (app) => {
         });
       }
 
-      const campaign = await scenarioService.getCampaignById(existingScenario.campaignId);
+      const campaign = await campaignService.getCampaignById(existingScenario.campaignId);
 
       if (!campaign || campaign.gmUserId !== user.id) {
         return reply.code(404).send({
@@ -179,7 +181,7 @@ export const scenarioRoutes: FastifyPluginAsync = async (app) => {
         });
       }
 
-      const campaign = await scenarioService.getCampaignById(existingScenario.campaignId);
+      const campaign = await campaignService.getCampaignById(existingScenario.campaignId);
 
       if (!campaign || campaign.gmUserId !== user.id) {
         return reply.code(404).send({
@@ -188,7 +190,7 @@ export const scenarioRoutes: FastifyPluginAsync = async (app) => {
       }
 
       const body = parseBodyObject(request.body, "Scenario live state payload");
-      const scenario = await scenarioService.updateScenarioLiveState({
+      const scenario = await encounterService.updateScenarioLiveState({
         liveState: scenarioLiveStateSchema.parse(body.liveState),
         scenarioId
       });

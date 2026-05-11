@@ -7,6 +7,7 @@ export * from "./repositories/contentRepository";
 export * from "./repositories/encounterRepository";
 export * from "./repositories/scenarioRepository";
 export * from "./services/authService";
+export * from "./services/campaignService";
 export * from "./services/characterService";
 export * from "./services/chargenRuleSetService";
 export * from "./services/characterEquipmentReadModelService";

@@ -1,7 +1,10 @@
-import type { ScenarioService } from "@glantri/database";
+import type { CampaignService, ScenarioService } from "@glantri/database";
 
 export async function resolveScenarioWorkspaceAccess(
-  scenarioService: ScenarioService,
+  services: {
+    campaignService: Pick<CampaignService, "getCampaignById">;
+    scenarioService: Pick<ScenarioService, "getScenarioById" | "userHasPlayerScenarioAccess">;
+  },
   input: {
     scenarioId: string;
     userId: string;
@@ -14,13 +17,13 @@ export async function resolveScenarioWorkspaceAccess(
     }
   | null
 > {
-  const scenario = await scenarioService.getScenarioById(input.scenarioId);
+  const scenario = await services.scenarioService.getScenarioById(input.scenarioId);
 
   if (!scenario) {
     return null;
   }
 
-  const campaign = await scenarioService.getCampaignById(scenario.campaignId);
+  const campaign = await services.campaignService.getCampaignById(scenario.campaignId);
 
   if (!campaign) {
     return null;
@@ -36,7 +39,7 @@ export async function resolveScenarioWorkspaceAccess(
     };
   }
 
-  const hasPlayerAccess = await scenarioService.userHasPlayerScenarioAccess({
+  const hasPlayerAccess = await services.scenarioService.userHasPlayerScenarioAccess({
     scenarioId: input.scenarioId,
     userId: input.userId,
   });

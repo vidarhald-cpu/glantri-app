@@ -1,6 +1,6 @@
 import type { FastifyPluginAsync } from "fastify";
 
-import { CharacterService, ScenarioService } from "@glantri/database";
+import { CampaignService, CharacterService, EncounterService, ScenarioService } from "@glantri/database";
 import {
   reusableEntityKindSchema,
   scenarioParticipantJoinSourceSchema,
@@ -21,6 +21,8 @@ import {
 } from "./parsing";
 
 const characterService = new CharacterService();
+const campaignService = new CampaignService();
+const encounterService = new EncounterService();
 const scenarioService = new ScenarioService();
 
 export const participantRoutes: FastifyPluginAsync = async (app) => {
@@ -68,7 +70,7 @@ export const participantRoutes: FastifyPluginAsync = async (app) => {
         });
       }
 
-      const campaign = await scenarioService.getCampaignById(scenario.campaignId);
+      const campaign = await campaignService.getCampaignById(scenario.campaignId);
 
       if (!campaign) {
         return reply.code(404).send({
@@ -196,7 +198,7 @@ export const participantRoutes: FastifyPluginAsync = async (app) => {
       const scenarioId = parseId(request.params, "scenarioId", "Scenario id");
       const participantId = parseId(request.params, "participantId", "Participant id");
       const body = parseBodyObject(request.body, "Participant state payload");
-      const participant = await scenarioService.updateScenarioParticipantState({
+      const participant = await encounterService.updateScenarioParticipantState({
         participantId,
         scenarioId,
         state: scenarioParticipantStateSchema.parse(body.state)

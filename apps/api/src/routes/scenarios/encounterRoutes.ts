@@ -1,12 +1,13 @@
 import type { FastifyPluginAsync } from "fastify";
 
-import { EncounterService, ScenarioService } from "@glantri/database";
+import { CampaignService, EncounterService, ScenarioService } from "@glantri/database";
 import { encounterSessionSchema } from "@glantri/domain";
 
 import { requireAdminUser, requireAuthenticatedUser } from "../../lib/sessionAuth";
 import { parseBodyObject, parseId } from "./parsing";
 import { resolveScenarioWorkspaceAccess } from "./access";
 
+const campaignService = new CampaignService();
 const encounterService = new EncounterService();
 const scenarioService = new ScenarioService();
 
@@ -20,11 +21,17 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
 
     try {
       const scenarioId = parseId(request.params, "scenarioId", "Scenario id");
-      const access = await resolveScenarioWorkspaceAccess(scenarioService, {
-        scenarioId,
-        userId: user.id,
-        userRoles: user.roles
-      });
+      const access = await resolveScenarioWorkspaceAccess(
+        {
+          campaignService,
+          scenarioService,
+        },
+        {
+          scenarioId,
+          userId: user.id,
+          userRoles: user.roles
+        }
+      );
 
       if (!access) {
         return reply.code(404).send({
@@ -51,11 +58,17 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
 
     try {
       const scenarioId = parseId(request.params, "scenarioId", "Scenario id");
-      const access = await resolveScenarioWorkspaceAccess(scenarioService, {
-        scenarioId,
-        userId: user.id,
-        userRoles: user.roles
-      });
+      const access = await resolveScenarioWorkspaceAccess(
+        {
+          campaignService,
+          scenarioService,
+        },
+        {
+          scenarioId,
+          userId: user.id,
+          userRoles: user.roles
+        }
+      );
 
       if (!access || access.mode !== "gm") {
         return reply.code(404).send({
@@ -106,11 +119,17 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         });
       }
 
-      const access = await resolveScenarioWorkspaceAccess(scenarioService, {
-        scenarioId: encounter.scenarioId,
-        userId: user.id,
-        userRoles: user.roles
-      });
+      const access = await resolveScenarioWorkspaceAccess(
+        {
+          campaignService,
+          scenarioService,
+        },
+        {
+          scenarioId: encounter.scenarioId,
+          userId: user.id,
+          userRoles: user.roles
+        }
+      );
 
       if (!access) {
         return reply.code(404).send({
@@ -143,11 +162,17 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         });
       }
 
-      const access = await resolveScenarioWorkspaceAccess(scenarioService, {
-        scenarioId: existingEncounter.scenarioId,
-        userId: user.id,
-        userRoles: user.roles
-      });
+      const access = await resolveScenarioWorkspaceAccess(
+        {
+          campaignService,
+          scenarioService,
+        },
+        {
+          scenarioId: existingEncounter.scenarioId,
+          userId: user.id,
+          userRoles: user.roles
+        }
+      );
 
       if (!access || access.mode !== "gm") {
         return reply.code(404).send({
