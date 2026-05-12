@@ -105,6 +105,8 @@ describe("RoleplayEncounterScreens", () => {
     expect(playerSource).toContain("rollSetId: pendingRoll.rollSetId");
     expect(playerSource).toContain("cleanPendingText");
     expect(playerSource).toContain("showPendingLabels={false}");
+    expect(playerSource).toContain("Skill not known (-3 default).");
+    expect(playerSource).toContain("localOtherModInput");
     expect(playerSource).toContain("Ranked roll results");
     expect(playerSource).toContain("Character log");
     expect(playerSource).toContain("buildPlayerGeneralEncounterView");
@@ -254,6 +256,10 @@ describe("RoleplayEncounterScreens", () => {
     expect(source).toContain("input.content.skills");
     expect(source).toContain("skill.category === \"ordinary\" || skill.category === \"secondary\"");
     expect(source).toContain("!skill.specializationOfSkillId");
-    expect(source).toContain("value: getParticipantSkillValue");
+    expect(source).toContain("resolveParticipantSkillRollProfile");
+    expect(source).toContain("value: profile.rollBaseValue");
+    expect(source).toContain("Skill not known (-3 default). GM may adjust or forbid.");
+    expect(source).toContain("applyUnknownSkillDefaultOtherMod");
+    expect(source).toContain("otherModTouched");
   });
 });

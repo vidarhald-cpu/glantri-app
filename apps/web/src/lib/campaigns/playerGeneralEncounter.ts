@@ -32,6 +32,7 @@ export interface PlayerGeneralEncounterAssignedRoll {
   skillValue?: number;
   result?: PlayerGeneralEncounterRollResult;
   rollSetId?: string;
+  supportSkillId?: string;
   supportSkillLabel?: string;
   supportSkillValue?: number;
   useDbMod: boolean;
@@ -178,6 +179,7 @@ function buildAssignedRoll(input: {
     skillId: input.pendingRoll.skillId,
     skillLabel: input.pendingRoll.skillLabel,
     skillValue: input.pendingRoll.skillValue,
+    supportSkillId: input.pendingRoll.supportSkillId,
     supportSkillLabel: input.pendingRoll.supportSkillLabel,
     supportSkillValue: undefined,
     useDbMod: input.pendingRoll.useDbMod,

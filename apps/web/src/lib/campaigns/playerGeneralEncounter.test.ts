@@ -186,7 +186,7 @@ function makeEncounter(): EncounterSession {
     status: "active",
     title: "Market Watch",
     updatedAt: "2026-01-01T00:00:00.000Z",
-  } as EncounterSession;
+  } as unknown as EncounterSession;
 }
 
 describe("playerGeneralEncounter", () => {
