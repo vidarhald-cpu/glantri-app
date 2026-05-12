@@ -1,6 +1,7 @@
 import type {
   EncounterParticipant,
   EncounterSession,
+  RoleplayDifficulty,
   RoleplayActionLogEntry,
   RoleplayPendingSkillRoll,
   ScenarioParticipant,
@@ -18,15 +19,22 @@ export interface PlayerGeneralEncounterVisibleParticipant {
 }
 
 export interface PlayerGeneralEncounterAssignedRoll {
+  difficulty?: RoleplayDifficulty;
   difficultyLabel: string;
   id: string;
   mode: "difficulty" | "opposed";
+  otherMod: number;
   opponentLabel?: string;
   participantId: string;
   participantName: string;
   skillId: string;
   skillLabel: string;
+  skillValue?: number;
   supportSkillLabel?: string;
+  supportSkillValue?: number;
+  useDbMod: boolean;
+  useGenMod: boolean;
+  useObSkillMod: boolean;
 }
 
 export interface PlayerGeneralEncounterRankedResult {
@@ -39,6 +47,8 @@ export interface PlayerGeneralEncounterRankedResult {
 export interface PlayerGeneralEncounterView {
   assignedRolls: PlayerGeneralEncounterAssignedRoll[];
   controlledParticipantIds: string[];
+  currentRollRoundId?: string;
+  currentRollRoundResultId?: string;
   gmMessage: string;
   rankedResults: PlayerGeneralEncounterRankedResult[];
   visibleParticipantIds: string[];
@@ -111,11 +121,13 @@ function buildAssignedRoll(input: {
     : undefined;
 
   return {
+    difficulty: input.pendingRoll.difficulty,
     difficultyLabel: input.pendingRoll.difficulty
       ? difficultyLabels[input.pendingRoll.difficulty] ?? input.pendingRoll.difficulty
       : "No level",
     id: input.pendingRoll.id,
     mode: input.pendingRoll.mode,
+    otherMod: input.pendingRoll.otherMod,
     opponentLabel:
       opponentParticipant && input.pendingRoll.opponentSkillLabel
         ? `${getPlayerSafeParticipantName({
@@ -134,7 +146,12 @@ function buildAssignedRoll(input: {
       : "Assigned participant",
     skillId: input.pendingRoll.skillId,
     skillLabel: input.pendingRoll.skillLabel,
+    skillValue: input.pendingRoll.skillValue,
     supportSkillLabel: input.pendingRoll.supportSkillLabel,
+    supportSkillValue: undefined,
+    useDbMod: input.pendingRoll.useDbMod,
+    useGenMod: input.pendingRoll.useGenMod,
+    useObSkillMod: input.pendingRoll.useObSkillMod,
   };
 }
 
@@ -210,8 +227,22 @@ export function buildPlayerGeneralEncounterView(input: {
         visibleParticipantIds,
       })
     );
-  const rankedResults = state.actionLog
-    .filter((entry) => isPlayerVisibleRankedResult({ entry, visibleParticipantIds }))
+  const visibleRankedEntries = state.actionLog.filter((entry) =>
+    isPlayerVisibleRankedResult({ entry, visibleParticipantIds })
+  );
+  const latestVisibleRankedEntry = [...visibleRankedEntries].sort((left, right) =>
+    right.createdAt.localeCompare(left.createdAt)
+  )[0];
+  const currentRollRoundId = latestVisibleRankedEntry?.rollSetId;
+  const currentRollRoundResultId = currentRollRoundId ? undefined : latestVisibleRankedEntry?.id;
+  const rankedResults = visibleRankedEntries
+    .filter((entry) =>
+      currentRollRoundId
+        ? entry.rollSetId === currentRollRoundId
+        : currentRollRoundResultId
+          ? entry.id === currentRollRoundResultId
+          : false
+    )
     .sort(
       (left, right) =>
         Number(Boolean(left.fumble)) - Number(Boolean(right.fumble)) ||
@@ -241,6 +272,8 @@ export function buildPlayerGeneralEncounterView(input: {
   return {
     assignedRolls,
     controlledParticipantIds: [...controlledParticipantIds],
+    currentRollRoundId,
+    currentRollRoundResultId,
     gmMessage: state.gmMessage,
     rankedResults,
     visibleParticipantIds: [...visibleParticipantIds],

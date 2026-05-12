@@ -65,8 +65,16 @@ describe("RoleplayEncounterScreens", () => {
     const source = readSource();
     const playerSource = source.slice(source.indexOf("export function PlayerRoleplayingEncounterScreen"));
 
-    expect(playerSource).toContain("<RoleplayTopInfo");
-    expect(playerSource).toContain("GM message");
+    expect(source).toContain("Player encounter summary");
+    expect(source).toContain("{encounter.title} · {encounter.kind === \"roleplay\" ? \"Roleplaying\" : \"Combat\"}");
+    expect(source).toContain("Scenario: ${scenarioName}");
+    expect(source).toContain("Campaign: ${campaignName}");
+    expect(source).toContain("encounter.description");
+    expect(playerSource).toContain("<PlayerEncounterTopInfo");
+    expect(playerSource).toContain("Situation");
+    expect(playerSource).toContain("whiteSpace: \"pre-wrap\"");
+    expect(playerSource).toContain("overflowY: \"auto\"");
+    expect(playerSource).toContain("aria-readonly=\"true\"");
     expect(playerSource).toContain("PCs/NPCs visibility");
     expect(playerSource).toContain("Short description");
     expect(playerSource).toContain("Skill roll grid");
@@ -74,6 +82,15 @@ describe("RoleplayEncounterScreens", () => {
     expect(playerSource).toContain("Roll 1d20");
     expect(playerSource).toContain("Ranked roll results");
     expect(playerSource).toContain("buildPlayerGeneralEncounterView");
+    expect(playerSource).toContain("<RoleplayRollCalculationPanel");
+    expect(playerSource).toContain("Support category");
+    expect(playerSource).toContain("No support skill");
+    expect(playerSource).not.toContain("<RoleplayTopInfo");
+    expect(playerSource).not.toContain("Status:");
+    expect(playerSource).not.toContain("Character");
+    expect(playerSource).not.toContain("GM Roll");
+    expect(playerSource).not.toContain("GM Roll both");
+    expect(playerSource).not.toContain("Silent");
     expect(playerSource).not.toContain("Visibility grid");
     expect(playerSource).not.toContain("Roleplay roster descriptions");
     expect(playerSource).not.toContain("Skill roll assignment");

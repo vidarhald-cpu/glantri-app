@@ -64,6 +64,17 @@ function makeEncounter(): EncounterSession {
           type: "gm_skill_roll",
         },
         {
+          createdAt: "2026-01-01T00:00:30.000Z",
+          id: "historical-visible-result",
+          mode: "difficulty",
+          numericSubtotal: 50,
+          participantId: "scenario-pc-1",
+          silent: false,
+          skillLabel: "Spot hidden",
+          summary: "GM rolled Spot hidden.",
+          type: "gm_skill_roll",
+        },
+        {
           createdAt: "2026-01-01T00:03:00.000Z",
           id: "hidden-result",
           mode: "difficulty",
@@ -185,7 +196,7 @@ describe("playerGeneralEncounter", () => {
     expect(JSON.stringify(view.assignedRolls)).not.toContain("silent-roll");
   });
 
-  it("keeps ranked results player-safe by hiding hidden, silent, and opposed rolls", () => {
+  it("keeps ranked results player-safe by hiding hidden, silent, opposed, and historical rolls", () => {
     const view = buildPlayerGeneralEncounterView({
       currentUserId: "player-1",
       encounter: makeEncounter(),
@@ -204,5 +215,6 @@ describe("playerGeneralEncounter", () => {
         total: 30,
       },
     ]);
+    expect(JSON.stringify(view.rankedResults)).not.toContain("historical-visible-result");
   });
 });

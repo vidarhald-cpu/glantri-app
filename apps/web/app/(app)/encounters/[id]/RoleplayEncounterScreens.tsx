@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import type {
   Campaign,
@@ -498,6 +498,19 @@ function RoleplayTopInfo({ campaignName, encounter, scenarioName }: RoleplayTopI
         {scenarioName ? <span>Scenario: {scenarioName}</span> : null}
         {campaignName ? <span>Campaign: {campaignName}</span> : null}
       </div>
+      {encounter.description ? <div>{encounter.description}</div> : null}
+    </section>
+  );
+}
+
+function PlayerEncounterTopInfo({ campaignName, encounter, scenarioName }: RoleplayTopInfoProps) {
+  return (
+    <section aria-label="Player encounter summary" style={panelStyle}>
+      <h1 style={{ fontSize: "1.35rem", lineHeight: 1.3, margin: 0 }}>
+        {encounter.title} · {encounter.kind === "roleplay" ? "Roleplaying" : "Combat"}
+        {scenarioName ? ` · Scenario: ${scenarioName}` : ""}
+        {campaignName ? ` · Campaign: ${campaignName}` : ""}
+      </h1>
       {encounter.description ? <div>{encounter.description}</div> : null}
     </section>
   );
@@ -1890,6 +1903,7 @@ export function PlayerRoleplayingEncounterScreen({
   const [scenarioParticipants, setScenarioParticipants] = useState<ScenarioParticipant[]>([]);
   const [loading, setLoading] = useState(true);
   const { currentUser } = useSessionUser();
+  const situationRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -1921,6 +1935,14 @@ export function PlayerRoleplayingEncounterScreen({
       cancelled = true;
     };
   }, [campaignId, encounterId, scenarioId]);
+
+  useEffect(() => {
+    const situationElement = situationRef.current;
+
+    if (situationElement) {
+      situationElement.scrollTop = situationElement.scrollHeight;
+    }
+  }, [encounter?.roleplayState?.gmMessage]);
 
   if (loading) {
     return <section>Loading roleplaying encounter...</section>;
@@ -2009,7 +2031,7 @@ export function PlayerRoleplayingEncounterScreen({
           Back to scenario
         </Link>
       ) : null}
-      <RoleplayTopInfo
+      <PlayerEncounterTopInfo
         campaignName={campaign?.name}
         encounter={encounter}
         scenarioName={scenario?.name}
@@ -2017,8 +2039,24 @@ export function PlayerRoleplayingEncounterScreen({
       {feedback ? <section style={panelStyle}>{feedback}</section> : null}
       {playerView.gmMessage ? (
         <section style={panelStyle}>
-          <h2 style={{ margin: 0 }}>GM message</h2>
-          <div>{playerView.gmMessage}</div>
+          <h2 style={{ margin: 0 }}>Situation</h2>
+          <div
+            aria-readonly="true"
+            ref={situationRef}
+            role="textbox"
+            style={{
+              background: "#fbfaf7",
+              border: "1px solid #eee8dc",
+              borderRadius: 8,
+              maxHeight: "16rem",
+              minHeight: "8rem",
+              overflowY: "auto",
+              padding: "0.75rem",
+              whiteSpace: "pre-wrap"
+            }}
+          >
+            {playerView.gmMessage}
+          </div>
         </section>
       ) : null}
 
@@ -2061,52 +2099,114 @@ export function PlayerRoleplayingEncounterScreen({
       <section style={panelStyle}>
         <h2 style={{ margin: 0 }}>Skill roll grid</h2>
         {playerView.assignedRolls.length > 0 ? (
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ borderCollapse: "collapse", minWidth: 860, width: "100%" }}>
-              <thead>
-                <tr style={{ borderBottom: "1px solid #d9ddd8", textAlign: "left" }}>
-                  <th style={{ padding: "0.5rem 0.75rem 0.5rem 0" }}>Participant</th>
-                  <th style={{ padding: "0.5rem 0.75rem" }}>Skill category</th>
-                  <th style={{ padding: "0.5rem 0.75rem" }}>Skill</th>
-                  <th style={{ padding: "0.5rem 0.75rem" }}>Support</th>
-                  <th style={{ padding: "0.5rem 0.75rem" }}>Level / opposed</th>
-                  <th style={{ padding: "0.5rem 0.75rem" }}>Roll</th>
-                </tr>
-              </thead>
-              <tbody>
-                {playerView.assignedRolls.map((roll) => {
-                  const contentSkill = content?.skills.find((skill) => skill.id === roll.skillId);
-                  const categoryLabel = contentSkill
-                    ? getPlayerFacingSkillBucketDefinitions().find(
-                        (category) => category.id === getPlayerFacingSkillBucket(contentSkill)
-                      )?.label ?? "Assigned"
-                    : "Assigned";
+          <div style={{ display: "grid", gap: "0.75rem" }}>
+            {playerView.assignedRolls.map((roll, index) => {
+              const contentSkill = content?.skills.find((skill) => skill.id === roll.skillId);
+              const categoryLabel = contentSkill
+                ? getPlayerFacingSkillBucketDefinitions().find(
+                    (category) => category.id === getPlayerFacingSkillBucket(contentSkill)
+                  )?.label ?? "Assigned"
+                : "Assigned";
+              const mainPreview = buildRoleplayCalculationPreview({
+                difficulty: roll.mode === "difficulty" ? roll.difficulty : undefined,
+                otherMod: roll.otherMod,
+                skillLabel: roll.skillLabel,
+                skillValue: roll.skillValue,
+                useDbMod: roll.useDbMod,
+                useGenMod: roll.useGenMod,
+                useObSkillMod: roll.useObSkillMod,
+              });
+              const supportPreview = roll.supportSkillLabel
+                ? buildRoleplayCalculationPreview({
+                    skillLabel: roll.supportSkillLabel,
+                    skillValue: roll.supportSkillValue,
+                  })
+                : undefined;
 
-                  return (
-                    <tr key={roll.id} style={{ borderBottom: "1px solid #eee8dc" }}>
-                      <td style={{ padding: "0.6rem 0.75rem 0.6rem 0" }}>{roll.participantName}</td>
-                      <td style={{ padding: "0.6rem 0.75rem" }}>{categoryLabel}</td>
-                      <td style={{ padding: "0.6rem 0.75rem" }}>{roll.skillLabel}</td>
-                      <td style={{ padding: "0.6rem 0.75rem" }}>
-                        {roll.supportSkillLabel ?? "—"}
-                      </td>
-                      <td style={{ padding: "0.6rem 0.75rem" }}>
-                        {roll.mode === "opposed"
-                          ? roll.opponentLabel
-                            ? `Opposed: ${roll.opponentLabel}`
-                            : "Opposed"
-                          : roll.difficultyLabel}
-                      </td>
-                      <td style={{ padding: "0.6rem 0.75rem" }}>
-                        <button onClick={() => void handlePlayerRoll(roll.id)} type="button">
-                          Roll 1d20
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+              return (
+                <div key={roll.id} style={rollBlockShellStyle}>
+                  <strong>Assigned roll {index + 1}</strong>
+                  <section style={rollEditorStyle}>
+                    <div style={rollControlsStackStyle}>
+                      <section style={rollControlsStyle}>
+                        <div style={rollFieldRowStyle}>
+                          <label style={compactControlStyle}>
+                            <span>Participant</span>
+                            <input
+                              readOnly
+                              style={compactInputStyle}
+                              value={roll.participantName}
+                            />
+                          </label>
+                          <label style={compactControlStyle}>
+                            <span>Category</span>
+                            <select disabled style={compactInputStyle} value={categoryLabel}>
+                              <option value={categoryLabel}>{categoryLabel}</option>
+                            </select>
+                          </label>
+                          <label style={compactControlStyle}>
+                            <span>Skill</span>
+                            <select disabled style={compactSkillInputStyle} value={roll.skillId}>
+                              <option value={roll.skillId}>
+                                {roll.skillLabel} ({roll.skillValue ?? 0})
+                              </option>
+                            </select>
+                          </label>
+                          <label style={compactControlStyle}>
+                            <span>Support category</span>
+                            <select disabled style={compactInputStyle} value="assigned">
+                              <option value="assigned">{roll.supportSkillLabel ? "Assigned" : "None"}</option>
+                            </select>
+                          </label>
+                          <label style={compactControlStyle}>
+                            <span>Support</span>
+                            <select disabled style={compactSkillInputStyle} value={roll.supportSkillLabel ?? ""}>
+                              <option value={roll.supportSkillLabel ?? ""}>
+                                {roll.supportSkillLabel ?? "No support skill"}
+                              </option>
+                            </select>
+                          </label>
+                        </div>
+                        <div style={rollFieldRowStyle}>
+                          <label style={compactControlStyle}>
+                            <span>Level</span>
+                            <select disabled style={compactInputStyle} value={roll.difficultyLabel}>
+                              <option value={roll.difficultyLabel}>{roll.difficultyLabel}</option>
+                            </select>
+                          </label>
+                          <label style={compactControlStyle}>
+                            <span>Opponent</span>
+                            <input
+                              readOnly
+                              style={compactInputStyle}
+                              value={roll.mode === "opposed" ? roll.opponentLabel ?? "Opposed" : "No opponent"}
+                            />
+                          </label>
+                          <label style={compactControlStyle}>
+                            <span>Other mod</span>
+                            <input
+                              readOnly
+                              style={{ ...compactInputStyle, width: "4.5rem" }}
+                              value={roll.otherMod}
+                            />
+                          </label>
+                          <button onClick={() => void handlePlayerRoll(roll.id)} type="button">
+                            Roll 1d20
+                          </button>
+                        </div>
+                      </section>
+                    </div>
+                    <RoleplayRollCalculationPanel
+                      actorDifficulty={roll.mode === "difficulty" ? roll.difficulty : undefined}
+                      actorMainPreview={mainPreview}
+                      actorPendingLabels={mainPreview.pendingModifierLabels}
+                      actorSupportPreview={supportPreview}
+                      opponentOpen={false}
+                    />
+                  </section>
+                </div>
+              );
+            })}
           </div>
         ) : (
           <div>No skill rolls assigned.</div>
