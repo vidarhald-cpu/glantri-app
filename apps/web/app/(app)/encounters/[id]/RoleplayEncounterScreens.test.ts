@@ -61,20 +61,25 @@ describe("RoleplayEncounterScreens", () => {
     expect(source).toContain("NOT SUCCESSFUL");
   });
 
-  it("keeps player roleplay screen minimal and hides GM-only sections", () => {
+  it("renders the player general encounter shell without GM-only sections", () => {
     const source = readSource();
     const playerSource = source.slice(source.indexOf("export function PlayerRoleplayingEncounterScreen"));
 
-    expect(playerSource).toContain("Roleplaying encounter player tools will appear here.");
     expect(playerSource).toContain("<RoleplayTopInfo");
+    expect(playerSource).toContain("GM message");
+    expect(playerSource).toContain("PCs/NPCs visibility");
+    expect(playerSource).toContain("Short description");
+    expect(playerSource).toContain("Skill roll grid");
+    expect(playerSource).toContain("No skill rolls assigned.");
+    expect(playerSource).toContain("Roll 1d20");
+    expect(playerSource).toContain("Ranked roll results");
+    expect(playerSource).toContain("buildPlayerGeneralEncounterView");
     expect(playerSource).not.toContain("Visibility grid");
     expect(playerSource).not.toContain("Roleplay roster descriptions");
     expect(playerSource).not.toContain("Skill roll assignment");
     expect(playerSource).not.toContain("Action log");
-    expect(playerSource).not.toContain("participantDescriptions");
-    expect(playerSource).not.toContain("pendingSkillRolls");
+    expect(playerSource).not.toContain("Select all");
     expect(playerSource).not.toContain("visibility[");
-    expect(playerSource).not.toContain("entry.silent");
     expect(playerSource).not.toContain("opponentSilent");
   });
 

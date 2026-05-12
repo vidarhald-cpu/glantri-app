@@ -35,15 +35,19 @@ import {
   loadCampaignById,
   loadEncounterById,
   loadScenarioById,
+  loadScenarioParticipants,
+  updateEncounterOnServer,
 } from "@/lib/api/localServiceClient";
+import { useSessionUser } from "@/lib/auth/SessionUserContext";
 import RememberedCampaignWorkspaceEffect from "@/lib/campaigns/RememberedCampaignWorkspaceEffect";
+import { buildPlayerGeneralEncounterView } from "@/lib/campaigns/playerGeneralEncounter";
 import { buildCampaignWorkspaceHref } from "@/lib/campaigns/workspace";
 import {
   getPlayerFacingSkillBucket,
   getPlayerFacingSkillBucketDefinitions,
   type PlayerFacingSkillBucketId,
 } from "@/lib/chargen/chargenBrowse";
-import type { loadCanonicalContent } from "@/lib/content/loadCanonicalContent";
+import { loadCanonicalContent } from "@/lib/content/loadCanonicalContent";
 
 interface RoleplayTopInfoProps {
   campaignName?: string;
@@ -1879,18 +1883,24 @@ export function PlayerRoleplayingEncounterScreen({
   scenarioId,
 }: PlayerRoleplayingEncounterScreenProps) {
   const [campaign, setCampaign] = useState<Campaign | null>(null);
+  const [content, setContent] = useState<Awaited<ReturnType<typeof loadCanonicalContent>>>();
   const [encounter, setEncounter] = useState<EncounterSession | null>(null);
+  const [feedback, setFeedback] = useState<string>();
   const [scenario, setScenario] = useState<Scenario | null>(null);
+  const [scenarioParticipants, setScenarioParticipants] = useState<ScenarioParticipant[]>([]);
   const [loading, setLoading] = useState(true);
+  const { currentUser } = useSessionUser();
 
   useEffect(() => {
     let cancelled = false;
 
     async function loadRoleplayEncounter() {
-      const [nextEncounter, nextScenario, nextCampaign] = await Promise.all([
+      const [nextEncounter, nextScenario, nextCampaign, nextParticipants, nextContent] = await Promise.all([
         loadEncounterById(encounterId),
         loadScenarioById(scenarioId),
         loadCampaignById(campaignId).catch(() => null),
+        loadScenarioParticipants(scenarioId),
+        loadCanonicalContent(),
       ]);
 
       if (cancelled) {
@@ -1900,6 +1910,8 @@ export function PlayerRoleplayingEncounterScreen({
       setEncounter(nextEncounter);
       setScenario(nextScenario);
       setCampaign(nextCampaign);
+      setScenarioParticipants(nextParticipants);
+      setContent(nextContent);
       setLoading(false);
     }
 
@@ -1918,10 +1930,74 @@ export function PlayerRoleplayingEncounterScreen({
     return <section>Roleplaying encounter not found.</section>;
   }
 
-  const roleplayState = normalizeRoleplayState(encounter);
+  const playerView = buildPlayerGeneralEncounterView({
+    currentUserId: currentUser?.id,
+    encounter,
+    scenarioParticipants,
+  });
+
+  async function handlePlayerRoll(rollId: string) {
+    const roleplayState = normalizeRoleplayState(encounter as EncounterSession);
+    const pendingRoll = roleplayState.pendingSkillRolls.find((roll) => roll.id === rollId);
+
+    if (!pendingRoll || pendingRoll.silent) {
+      return;
+    }
+
+    const participant = encounter?.participants.find((entry) => entry.id === pendingRoll.participantId);
+
+    if (!encounter || !participant) {
+      return;
+    }
+
+    const roll = rollOpenEndedRoleplayD20();
+    const preview = buildRoleplayCalculationPreview({
+      difficulty: pendingRoll.mode === "difficulty" ? pendingRoll.difficulty : undefined,
+      otherMod: pendingRoll.otherMod,
+      roll,
+      skillLabel: pendingRoll.skillLabel,
+      skillValue: pendingRoll.skillValue,
+      useDbMod: pendingRoll.useDbMod,
+      useGenMod: pendingRoll.useGenMod,
+      useObSkillMod: pendingRoll.useObSkillMod,
+    });
+    const nextEncounter = recordRoleplayGmSkillRoll({
+      achievedSuccessLevel: preview.achievedSuccessLevel,
+      autoSuccess: preview.autoSuccess,
+      calculationText: preview.calculationText,
+      dieResult: roll.dieResult,
+      difficulty: pendingRoll.mode === "difficulty" ? pendingRoll.difficulty : undefined,
+      finalTotal: preview.finalTotal,
+      fumble: preview.fumble,
+      mode: pendingRoll.mode,
+      numericSubtotal: preview.numericSubtotal,
+      openEndedD10s: roll.openEndedD10s,
+      otherMod: pendingRoll.otherMod,
+      participantId: pendingRoll.participantId,
+      partial: preview.partial,
+      roll,
+      session: encounter,
+      silent: false,
+      skillId: pendingRoll.skillId,
+      skillLabel: pendingRoll.skillLabel,
+      success: preview.success,
+      supportSkillId: pendingRoll.supportSkillId,
+      supportSkillLabel: pendingRoll.supportSkillLabel,
+      useDbMod: pendingRoll.useDbMod,
+      useGenMod: pendingRoll.useGenMod,
+      useObSkillMod: pendingRoll.useObSkillMod,
+    });
+    const savedEncounter = await updateEncounterOnServer({
+      encounterId: encounter.id,
+      session: nextEncounter,
+    });
+
+    setEncounter(savedEncounter);
+    setFeedback(`Rolled ${pendingRoll.skillLabel}: total ${preview.numericSubtotal ?? "unresolved"}.`);
+  }
 
   return (
-    <section style={{ display: "grid", gap: "1rem", maxWidth: 900 }}>
+    <section style={{ display: "grid", gap: "1rem", maxWidth: 980 }}>
       <RememberedCampaignWorkspaceEffect
         campaignId={campaignId}
         encounterId={encounterId}
@@ -1938,14 +2014,118 @@ export function PlayerRoleplayingEncounterScreen({
         encounter={encounter}
         scenarioName={scenario?.name}
       />
-      {roleplayState.gmMessage ? (
+      {feedback ? <section style={panelStyle}>{feedback}</section> : null}
+      {playerView.gmMessage ? (
         <section style={panelStyle}>
           <h2 style={{ margin: 0 }}>GM message</h2>
-          <div>{roleplayState.gmMessage}</div>
+          <div>{playerView.gmMessage}</div>
         </section>
       ) : null}
+
       <section style={panelStyle}>
-        Roleplaying encounter player tools will appear here.
+        <h2 style={{ margin: 0 }}>PCs/NPCs visibility</h2>
+        {currentUser ? (
+          playerView.visibleParticipants.length > 0 ? (
+            <div style={{ maxHeight: "30rem", overflow: "auto" }}>
+              <table style={{ borderCollapse: "collapse", minWidth: 720, width: "100%" }}>
+                <thead>
+                  <tr style={{ borderBottom: "1px solid #d9ddd8", textAlign: "left" }}>
+                    <th style={{ padding: "0.5rem 0.75rem 0.5rem 0" }}>Short description</th>
+                    <th style={{ padding: "0.5rem 0.75rem" }}>Name</th>
+                    <th style={{ padding: "0.5rem 0.75rem" }}>Description</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {playerView.visibleParticipants.map((participant) => (
+                    <tr key={participant.id} style={{ borderBottom: "1px solid #eee8dc" }}>
+                      <td style={{ padding: "0.6rem 0.75rem 0.6rem 0" }}>
+                        {participant.shortDescription || "—"}
+                      </td>
+                      <td style={{ padding: "0.6rem 0.75rem" }}>{participant.name}</td>
+                      <td style={{ padding: "0.6rem 0.75rem" }}>
+                        {participant.description || "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div>No visible participants are available for this player yet.</div>
+          )
+        ) : (
+          <div>Sign in to view player-visible encounter participants.</div>
+        )}
+      </section>
+
+      <section style={panelStyle}>
+        <h2 style={{ margin: 0 }}>Skill roll grid</h2>
+        {playerView.assignedRolls.length > 0 ? (
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ borderCollapse: "collapse", minWidth: 860, width: "100%" }}>
+              <thead>
+                <tr style={{ borderBottom: "1px solid #d9ddd8", textAlign: "left" }}>
+                  <th style={{ padding: "0.5rem 0.75rem 0.5rem 0" }}>Participant</th>
+                  <th style={{ padding: "0.5rem 0.75rem" }}>Skill category</th>
+                  <th style={{ padding: "0.5rem 0.75rem" }}>Skill</th>
+                  <th style={{ padding: "0.5rem 0.75rem" }}>Support</th>
+                  <th style={{ padding: "0.5rem 0.75rem" }}>Level / opposed</th>
+                  <th style={{ padding: "0.5rem 0.75rem" }}>Roll</th>
+                </tr>
+              </thead>
+              <tbody>
+                {playerView.assignedRolls.map((roll) => {
+                  const contentSkill = content?.skills.find((skill) => skill.id === roll.skillId);
+                  const categoryLabel = contentSkill
+                    ? getPlayerFacingSkillBucketDefinitions().find(
+                        (category) => category.id === getPlayerFacingSkillBucket(contentSkill)
+                      )?.label ?? "Assigned"
+                    : "Assigned";
+
+                  return (
+                    <tr key={roll.id} style={{ borderBottom: "1px solid #eee8dc" }}>
+                      <td style={{ padding: "0.6rem 0.75rem 0.6rem 0" }}>{roll.participantName}</td>
+                      <td style={{ padding: "0.6rem 0.75rem" }}>{categoryLabel}</td>
+                      <td style={{ padding: "0.6rem 0.75rem" }}>{roll.skillLabel}</td>
+                      <td style={{ padding: "0.6rem 0.75rem" }}>
+                        {roll.supportSkillLabel ?? "—"}
+                      </td>
+                      <td style={{ padding: "0.6rem 0.75rem" }}>
+                        {roll.mode === "opposed"
+                          ? roll.opponentLabel
+                            ? `Opposed: ${roll.opponentLabel}`
+                            : "Opposed"
+                          : roll.difficultyLabel}
+                      </td>
+                      <td style={{ padding: "0.6rem 0.75rem" }}>
+                        <button onClick={() => void handlePlayerRoll(roll.id)} type="button">
+                          Roll 1d20
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div>No skill rolls assigned.</div>
+        )}
+      </section>
+
+      <section style={panelStyle}>
+        <h2 style={{ margin: 0 }}>Ranked roll results</h2>
+        {playerView.rankedResults.length > 0 ? (
+          <ol style={{ margin: 0, paddingLeft: "1.5rem" }}>
+            {playerView.rankedResults.map((entry) => (
+              <li key={entry.id}>
+                {entry.participantName} · {entry.skillLabel} · total {entry.total}
+              </li>
+            ))}
+          </ol>
+        ) : (
+          <div>No player-visible ranked results yet.</div>
+        )}
       </section>
     </section>
   );
