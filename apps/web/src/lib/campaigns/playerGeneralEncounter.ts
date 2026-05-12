@@ -44,8 +44,16 @@ export interface PlayerGeneralEncounterRankedResult {
   total: number;
 }
 
+export interface PlayerGeneralEncounterLogEntry {
+  id: string;
+  skillLabel: string;
+  timestamp: string;
+  total?: number;
+}
+
 export interface PlayerGeneralEncounterView {
   assignedRolls: PlayerGeneralEncounterAssignedRoll[];
+  characterLog: PlayerGeneralEncounterLogEntry[];
   controlledParticipantIds: string[];
   currentRollRoundId?: string;
   currentRollRoundResultId?: string;
@@ -169,6 +177,27 @@ function isPlayerVisibleRankedResult(input: {
   );
 }
 
+function buildPlayerCharacterLog(input: {
+  controlledParticipantIds: Set<string>;
+  entries: RoleplayActionLogEntry[];
+}): PlayerGeneralEncounterLogEntry[] {
+  return input.entries
+    .filter(
+      (entry) =>
+        entry.type === "gm_skill_roll" &&
+        !entry.silent &&
+        entry.participantId != null &&
+        input.controlledParticipantIds.has(entry.participantId)
+    )
+    .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
+    .map((entry) => ({
+      id: entry.id,
+      skillLabel: entry.skillLabel ?? "Skill",
+      timestamp: entry.createdAt,
+      total: entry.numericSubtotal ?? entry.finalTotal,
+    }));
+}
+
 export function buildPlayerGeneralEncounterView(input: {
   currentUserId?: string;
   encounter: EncounterSession;
@@ -201,7 +230,10 @@ export function buildPlayerGeneralEncounterView(input: {
       .map((participant) => participant.id)
   );
   const visibleParticipants = orderedParticipants
-    .filter((participant) => visibleParticipantIds.has(participant.id))
+    .filter(
+      (participant) =>
+        visibleParticipantIds.has(participant.id) && !controlledParticipantIds.has(participant.id)
+    )
     .map((participant) => {
       const description = state.participantDescriptions[participant.id];
 
@@ -268,9 +300,14 @@ export function buildPlayerGeneralEncounterView(input: {
         total: entry.numericSubtotal ?? entry.finalTotal ?? 0,
       };
     });
+  const characterLog = buildPlayerCharacterLog({
+    controlledParticipantIds,
+    entries: state.actionLog,
+  });
 
   return {
     assignedRolls,
+    characterLog,
     controlledParticipantIds: [...controlledParticipantIds],
     currentRollRoundId,
     currentRollRoundResultId,

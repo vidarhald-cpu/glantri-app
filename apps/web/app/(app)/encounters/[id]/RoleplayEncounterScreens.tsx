@@ -205,6 +205,31 @@ const calculationLineStyle = {
   whiteSpace: "nowrap",
 } as const;
 
+const playerReadOnlyPanelStyle = {
+  background: "#fbfaf7",
+  border: "1px solid #eee8dc",
+  borderRadius: 8,
+  padding: "0.75rem",
+  whiteSpace: "pre-wrap",
+} as const;
+
+const playerMetadataTagStyle = {
+  flex: "0 1 auto",
+  fontSize: "0.95rem",
+  fontWeight: 400,
+  minWidth: 0,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+} as const;
+
+const playerRollSkillColumnsStyle = {
+  alignItems: "end",
+  display: "grid",
+  gap: "0.45rem",
+  gridTemplateColumns: "minmax(8rem, 9rem) minmax(10rem, 12rem)",
+} as const;
+
 function formatDifficulty(value: RoleplayDifficulty): string {
   return roleplayDifficultyOptions.find((option) => option.id === value)?.label ?? value;
 }
@@ -506,12 +531,26 @@ function RoleplayTopInfo({ campaignName, encounter, scenarioName }: RoleplayTopI
 function PlayerEncounterTopInfo({ campaignName, encounter, scenarioName }: RoleplayTopInfoProps) {
   return (
     <section aria-label="Player encounter summary" style={panelStyle}>
-      <h1 style={{ fontSize: "1.35rem", lineHeight: 1.3, margin: 0 }}>
-        {encounter.title} · {encounter.kind === "roleplay" ? "Roleplaying" : "Combat"}
-        {scenarioName ? ` · Scenario: ${scenarioName}` : ""}
-        {campaignName ? ` · Campaign: ${campaignName}` : ""}
-      </h1>
-      {encounter.description ? <div>{encounter.description}</div> : null}
+      <div style={{ alignItems: "baseline", display: "flex", gap: "0.5rem", minWidth: 0, overflow: "hidden", whiteSpace: "nowrap" }}>
+        <h1 style={{ flex: "0 0 auto", fontSize: "1.35rem", lineHeight: 1.2, margin: 0 }}>
+          {encounter.title}
+        </h1>
+        <span aria-hidden="true" style={playerMetadataTagStyle}>·</span>
+        <span style={playerMetadataTagStyle}>{encounter.kind === "roleplay" ? "Roleplaying" : "Combat"}</span>
+        {scenarioName ? (
+          <>
+            <span aria-hidden="true" style={playerMetadataTagStyle}>·</span>
+            <span style={playerMetadataTagStyle}>Scenario: {scenarioName}</span>
+          </>
+        ) : null}
+        {campaignName ? (
+          <>
+            <span aria-hidden="true" style={playerMetadataTagStyle}>·</span>
+            <span style={playerMetadataTagStyle}>Campaign: {campaignName}</span>
+          </>
+        ) : null}
+      </div>
+      {encounter.description ? <div style={playerReadOnlyPanelStyle}>{encounter.description}</div> : null}
     </section>
   );
 }
@@ -1902,6 +1941,7 @@ export function PlayerRoleplayingEncounterScreen({
   const [scenario, setScenario] = useState<Scenario | null>(null);
   const [scenarioParticipants, setScenarioParticipants] = useState<ScenarioParticipant[]>([]);
   const [loading, setLoading] = useState(true);
+  const [dismissedAssignedRollIds, setDismissedAssignedRollIds] = useState<Set<string>>(() => new Set());
   const { currentUser } = useSessionUser();
   const situationRef = useRef<HTMLDivElement>(null);
 
@@ -1957,6 +1997,21 @@ export function PlayerRoleplayingEncounterScreen({
     encounter,
     scenarioParticipants,
   });
+  const visibleAssignedRolls = playerView.assignedRolls.filter(
+    (roll) => !dismissedAssignedRollIds.has(roll.id)
+  );
+
+  function handleClearAssignedRolls() {
+    setDismissedAssignedRollIds((currentIds) => {
+      const nextIds = new Set(currentIds);
+
+      for (const roll of visibleAssignedRolls) {
+        nextIds.add(roll.id);
+      }
+
+      return nextIds;
+    });
+  }
 
   async function handlePlayerRoll(rollId: string) {
     const roleplayState = normalizeRoleplayState(encounter as EncounterSession);
@@ -2045,14 +2100,10 @@ export function PlayerRoleplayingEncounterScreen({
             ref={situationRef}
             role="textbox"
             style={{
-              background: "#fbfaf7",
-              border: "1px solid #eee8dc",
-              borderRadius: 8,
+              ...playerReadOnlyPanelStyle,
               maxHeight: "16rem",
               minHeight: "8rem",
               overflowY: "auto",
-              padding: "0.75rem",
-              whiteSpace: "pre-wrap"
             }}
           >
             {playerView.gmMessage}
@@ -2061,11 +2112,16 @@ export function PlayerRoleplayingEncounterScreen({
       ) : null}
 
       <section style={panelStyle}>
-        <h2 style={{ margin: 0 }}>PCs/NPCs visibility</h2>
+        <h2 style={{ margin: 0 }}>PCs and NPCs</h2>
         {currentUser ? (
           playerView.visibleParticipants.length > 0 ? (
             <div style={{ maxHeight: "30rem", overflow: "auto" }}>
               <table style={{ borderCollapse: "collapse", minWidth: 720, width: "100%" }}>
+                <colgroup>
+                  <col style={{ width: "22%" }} />
+                  <col style={{ width: "22%" }} />
+                  <col style={{ width: "56%" }} />
+                </colgroup>
                 <thead>
                   <tr style={{ borderBottom: "1px solid #d9ddd8", textAlign: "left" }}>
                     <th style={{ padding: "0.5rem 0.75rem 0.5rem 0" }}>Short description</th>
@@ -2089,7 +2145,7 @@ export function PlayerRoleplayingEncounterScreen({
               </table>
             </div>
           ) : (
-            <div>No visible participants are available for this player yet.</div>
+            <div>No other visible participants.</div>
           )
         ) : (
           <div>Sign in to view player-visible encounter participants.</div>
@@ -2097,10 +2153,15 @@ export function PlayerRoleplayingEncounterScreen({
       </section>
 
       <section style={panelStyle}>
-        <h2 style={{ margin: 0 }}>Skill roll grid</h2>
-        {playerView.assignedRolls.length > 0 ? (
+        <div style={{ alignItems: "center", display: "flex", justifyContent: "space-between", gap: "0.75rem" }}>
+          <h2 style={{ margin: 0 }}>Skill roll grid</h2>
+          <button disabled={visibleAssignedRolls.length === 0} onClick={handleClearAssignedRolls} type="button">
+            Clear
+          </button>
+        </div>
+        {visibleAssignedRolls.length > 0 ? (
           <div style={{ display: "grid", gap: "0.75rem" }}>
-            {playerView.assignedRolls.map((roll, index) => {
+            {visibleAssignedRolls.map((roll, index) => {
               const contentSkill = content?.skills.find((skill) => skill.id === roll.skillId);
               const categoryLabel = contentSkill
                 ? getPlayerFacingSkillBucketDefinitions().find(
@@ -2125,47 +2186,61 @@ export function PlayerRoleplayingEncounterScreen({
 
               return (
                 <div key={roll.id} style={rollBlockShellStyle}>
-                  <strong>Assigned roll {index + 1}</strong>
+                  <strong>Assigned roll {index + 1} · {roll.participantName}</strong>
                   <section style={rollEditorStyle}>
                     <div style={rollControlsStackStyle}>
                       <section style={rollControlsStyle}>
-                        <div style={rollFieldRowStyle}>
+                        <div style={rollControlRowStyle}>
+                          <span>Use:</span>
+                          <label>
+                            <input checked={roll.useGenMod} disabled readOnly type="checkbox" /> Gen
+                          </label>
+                          <label>
+                            <input checked={roll.useObSkillMod} disabled readOnly type="checkbox" /> OB/Skill
+                          </label>
+                          <label>
+                            <input checked={roll.useDbMod} disabled readOnly type="checkbox" /> DB
+                          </label>
                           <label style={compactControlStyle}>
-                            <span>Participant</span>
+                            <span>Other mod</span>
                             <input
                               readOnly
-                              style={compactInputStyle}
-                              value={roll.participantName}
+                              style={{ ...compactInputStyle, width: "4.5rem" }}
+                              value={roll.otherMod}
                             />
                           </label>
-                          <label style={compactControlStyle}>
-                            <span>Category</span>
-                            <select disabled style={compactInputStyle} value={categoryLabel}>
-                              <option value={categoryLabel}>{categoryLabel}</option>
-                            </select>
-                          </label>
-                          <label style={compactControlStyle}>
-                            <span>Skill</span>
-                            <select disabled style={compactSkillInputStyle} value={roll.skillId}>
-                              <option value={roll.skillId}>
-                                {roll.skillLabel} ({roll.skillValue ?? 0})
-                              </option>
-                            </select>
-                          </label>
-                          <label style={compactControlStyle}>
-                            <span>Support category</span>
-                            <select disabled style={compactInputStyle} value="assigned">
-                              <option value="assigned">{roll.supportSkillLabel ? "Assigned" : "None"}</option>
-                            </select>
-                          </label>
-                          <label style={compactControlStyle}>
-                            <span>Support</span>
-                            <select disabled style={compactSkillInputStyle} value={roll.supportSkillLabel ?? ""}>
-                              <option value={roll.supportSkillLabel ?? ""}>
-                                {roll.supportSkillLabel ?? "No support skill"}
-                              </option>
-                            </select>
-                          </label>
+                        </div>
+                        <div style={rollFieldRowStyle}>
+                          <div style={playerRollSkillColumnsStyle}>
+                            <label style={compactControlStyle}>
+                              <span>Category</span>
+                              <select disabled style={compactInputStyle} value={categoryLabel}>
+                                <option value={categoryLabel}>{categoryLabel}</option>
+                              </select>
+                            </label>
+                            <label style={compactControlStyle}>
+                              <span>Skill</span>
+                              <select disabled style={compactSkillInputStyle} value={roll.skillId}>
+                                <option value={roll.skillId}>
+                                  {roll.skillLabel} ({roll.skillValue ?? 0})
+                                </option>
+                              </select>
+                            </label>
+                            <label style={compactControlStyle}>
+                              <span>Support category</span>
+                              <select disabled style={compactInputStyle} value="assigned">
+                                <option value="assigned">{roll.supportSkillLabel ? "Assigned" : "None"}</option>
+                              </select>
+                            </label>
+                            <label style={compactControlStyle}>
+                              <span>Support</span>
+                              <select disabled style={compactSkillInputStyle} value={roll.supportSkillLabel ?? ""}>
+                                <option value={roll.supportSkillLabel ?? ""}>
+                                  {roll.supportSkillLabel ?? "No support skill"}
+                                </option>
+                              </select>
+                            </label>
+                          </div>
                         </div>
                         <div style={rollFieldRowStyle}>
                           <label style={compactControlStyle}>
@@ -2182,16 +2257,8 @@ export function PlayerRoleplayingEncounterScreen({
                               value={roll.mode === "opposed" ? roll.opponentLabel ?? "Opposed" : "No opponent"}
                             />
                           </label>
-                          <label style={compactControlStyle}>
-                            <span>Other mod</span>
-                            <input
-                              readOnly
-                              style={{ ...compactInputStyle, width: "4.5rem" }}
-                              value={roll.otherMod}
-                            />
-                          </label>
                           <button onClick={() => void handlePlayerRoll(roll.id)} type="button">
-                            Roll 1d20
+                            {roll.supportSkillLabel ? "Roll both 1d20s" : "Roll 1d20"}
                           </button>
                         </div>
                       </section>
@@ -2225,6 +2292,22 @@ export function PlayerRoleplayingEncounterScreen({
           </ol>
         ) : (
           <div>No player-visible ranked results yet.</div>
+        )}
+      </section>
+
+      <section style={panelStyle}>
+        <h2 style={{ margin: 0 }}>Character log</h2>
+        {playerView.characterLog.length > 0 ? (
+          <ul style={{ display: "grid", gap: "0.35rem", margin: 0, paddingLeft: "1.25rem" }}>
+            {playerView.characterLog.map((entry) => (
+              <li key={entry.id}>
+                {formatShortDateTime(entry.timestamp)} · {entry.skillLabel}
+                {entry.total == null ? "" : ` · total ${entry.total}`}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <div>No character log entries yet.</div>
         )}
       </section>
     </section>

@@ -97,6 +97,17 @@ function makeEncounter(): EncounterSession {
           type: "gm_skill_roll",
         },
         {
+          createdAt: "2026-01-01T00:01:30.000Z",
+          id: "other-participant-result",
+          mode: "difficulty",
+          numericSubtotal: 18,
+          participantId: "scenario-npc-visible",
+          silent: false,
+          skillLabel: "Haggle",
+          summary: "GM rolled Haggle.",
+          type: "gm_skill_roll",
+        },
+        {
           createdAt: "2026-01-01T00:01:00.000Z",
           id: "opposed-result",
           mode: "opposed",
@@ -110,6 +121,11 @@ function makeEncounter(): EncounterSession {
       ],
       gmMessage: "The market is loud and tense.",
       participantDescriptions: {
+        "scenario-pc-1": {
+          detailedDescription: "GM-only player note.",
+          name: "Player hero",
+          shortDescription: "Self",
+        },
         "scenario-npc-hidden": {
           detailedDescription: "GM-only secret identity.",
           name: "Disguised spy",
@@ -168,11 +184,11 @@ describe("playerGeneralEncounter", () => {
     });
 
     expect(view.gmMessage).toBe("The market is loud and tense.");
-    expect(view.visibleParticipants.map((participant) => participant.name)).toEqual([
-      "Player hero",
-      "Street merchant",
-    ]);
+    expect(view.controlledParticipantIds).toEqual(["scenario-pc-1"]);
+    expect(view.visibleParticipantIds).toEqual(["scenario-pc-1", "scenario-npc-visible"]);
+    expect(view.visibleParticipants.map((participant) => participant.name)).toEqual(["Street merchant"]);
     expect(view.visibleParticipants.map((participant) => participant.name)).not.toContain("Disguised spy");
+    expect(view.visibleParticipants.map((participant) => participant.name)).not.toContain("Player hero");
     expect(view.visibleParticipants.map((participant) => participant.shortDescription)).toContain(
       "A nervous seller"
     );
@@ -216,5 +232,39 @@ describe("playerGeneralEncounter", () => {
       },
     ]);
     expect(JSON.stringify(view.rankedResults)).not.toContain("historical-visible-result");
+  });
+
+  it("shows a conservative character log for the controlled participant only", () => {
+    const view = buildPlayerGeneralEncounterView({
+      currentUserId: "player-1",
+      encounter: makeEncounter(),
+      scenarioParticipants: [
+        makeScenarioParticipant({ controlledByUserId: "player-1", id: "pc-1", name: "Player hero" }),
+        makeScenarioParticipant({ id: "npc-visible", name: "Visible NPC" }),
+      ],
+    });
+
+    expect(view.characterLog).toEqual([
+      {
+        id: "visible-result",
+        skillLabel: "Perception",
+        timestamp: "2026-01-01T00:04:00.000Z",
+        total: 30,
+      },
+      {
+        id: "opposed-result",
+        skillLabel: "Hide",
+        timestamp: "2026-01-01T00:01:00.000Z",
+        total: 25,
+      },
+      {
+        id: "historical-visible-result",
+        skillLabel: "Spot hidden",
+        timestamp: "2026-01-01T00:00:30.000Z",
+        total: 50,
+      },
+    ]);
+    expect(JSON.stringify(view.characterLog)).not.toContain("silent-result");
+    expect(JSON.stringify(view.characterLog)).not.toContain("other-participant-result");
   });
 });
