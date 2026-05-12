@@ -257,6 +257,7 @@ describe("RoleplayEncounterScreens", () => {
     expect(source).toContain("skill.category === \"ordinary\" || skill.category === \"secondary\"");
     expect(source).toContain("!skill.specializationOfSkillId");
     expect(source).toContain("resolveParticipantSkillRollProfile");
+    expect(source).toContain("content: input.content");
     expect(source).toContain("value: profile.rollBaseValue");
     expect(source).toContain("Skill not known (-3 default). GM may adjust or forbid.");
     expect(source).toContain("applyUnknownSkillDefaultOtherMod");

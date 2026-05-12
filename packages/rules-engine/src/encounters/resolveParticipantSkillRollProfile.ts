@@ -1,6 +1,18 @@
-import type { SkillDefinition } from "@glantri/domain";
+import {
+  getSkillGroupIds,
+  type CharacterBuild,
+  type ProfessionDefinition,
+  type ProfessionFamilyDefinition,
+  type ProfessionSkillMap,
+  type SkillDefinition,
+  type SkillGroupDefinition,
+  type SkillSpecialization,
+  type SocietyLevelAccess,
+} from "@glantri/domain";
 
 import { getResolvedProfileStats } from "../chargen/statResolution";
+import { buildCharacterSheetSummary } from "../sheets/buildCharacterSheetSummary";
+import { selectBestSkillGroupContribution } from "../skills/selectBestSkillGroupContribution";
 
 export interface ParticipantSkillRollProfile {
   avgStats: number;
@@ -23,10 +35,19 @@ export interface ParticipantSkillRollProfile {
 
 export interface ResolveParticipantSkillRollProfileInput {
   build?: unknown;
+  content?: {
+    professionFamilies: ProfessionFamilyDefinition[];
+    professions: ProfessionDefinition[];
+    professionSkills: ProfessionSkillMap[];
+    skillGroups: SkillGroupDefinition[];
+    skills: SkillDefinition[];
+    societyLevels: SocietyLevelAccess[];
+    specializations: SkillSpecialization[];
+  };
   participantId?: string;
   participantName?: string;
   sheetSummary?: unknown;
-  skill: Pick<SkillDefinition, "id" | "linkedStats" | "name">;
+  skill: Pick<SkillDefinition, "groupId" | "groupIds" | "id" | "linkedStats" | "name">;
 }
 
 const UNKNOWN_SKILL_WARNING =
@@ -114,19 +135,81 @@ function findSkillView(input: {
   );
 }
 
+function hasDraftViewSkills(sheetSummary: unknown): boolean {
+  return (
+    isRecord(sheetSummary) &&
+    isRecord(sheetSummary.draftView) &&
+    Array.isArray(sheetSummary.draftView.skills)
+  );
+}
+
+function buildSheetSummaryFromSnapshot(input: ResolveParticipantSkillRollProfileInput): unknown {
+  if (hasDraftViewSkills(input.sheetSummary) || !input.content || !input.build) {
+    return input.sheetSummary;
+  }
+
+  try {
+    return buildCharacterSheetSummary({
+      build: input.build as CharacterBuild,
+      content: input.content,
+    });
+  } catch {
+    return input.sheetSummary;
+  }
+}
+
+function readBestGroupXp(input: {
+  sheetSummary?: unknown;
+  skill: Pick<SkillDefinition, "groupId" | "groupIds" | "id">;
+}): number | undefined {
+  if (!isRecord(input.sheetSummary) || !isRecord(input.sheetSummary.draftView)) {
+    return undefined;
+  }
+
+  const groups = input.sheetSummary.draftView.groups;
+
+  if (!Array.isArray(groups)) {
+    return undefined;
+  }
+
+  const groupContributions = getSkillGroupIds(input.skill)
+    .map((groupId) => {
+      const groupView = groups.find(
+        (group): group is Record<string, unknown> =>
+          isRecord(group) && readString(group.groupId) === groupId
+      );
+      const groupLevel = readNumber(groupView?.groupLevel);
+
+      if (!groupView || groupLevel == null || groupLevel <= 0) {
+        return null;
+      }
+
+      return {
+        groupId,
+        groupLevel,
+        name: readString(groupView.name) ?? groupId,
+        sortOrder: readNumber(groupView.sortOrder) ?? Number.MAX_SAFE_INTEGER,
+      };
+    })
+    .filter((group): group is NonNullable<typeof group> => group !== null);
+
+  return selectBestSkillGroupContribution(groupContributions)?.groupLevel;
+}
+
 export function resolveParticipantSkillRollProfile(
   input: ResolveParticipantSkillRollProfileInput
 ): ParticipantSkillRollProfile {
+  const sheetSummary = buildSheetSummaryFromSnapshot(input);
   const skillView = findSkillView({
-    sheetSummary: input.sheetSummary,
+    sheetSummary,
     skillId: input.skill.id,
   });
-  const stats = readProfileStats(input.build) ?? readSheetStats(input.sheetSummary);
+  const stats = readProfileStats(input.build) ?? readSheetStats(sheetSummary);
   const avgStats =
     readNumber(skillView?.linkedStatAverage) ??
     getLinkedStatAverage({ linkedStats: input.skill.linkedStats, stats }) ??
     0;
-  const groupXP = readNumber(skillView?.groupLevel) ?? 0;
+  const groupXP = readBestGroupXp({ sheetSummary, skill: input.skill }) ?? readNumber(skillView?.groupLevel) ?? 0;
   const skillXP = readNumber(skillView?.specificSkillLevel) ?? 0;
   const derivedXP = readNumber(skillView?.relationshipGrantedSkillLevel) ?? 0;
   const totalXP = readNumber(skillView?.effectiveSkillNumber) ?? groupXP + skillXP + derivedXP;

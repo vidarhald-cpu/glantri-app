@@ -1,20 +1,74 @@
 import { describe, expect, it } from "vitest";
 
+import type { CharacterBuild, SkillDefinition, SkillGroupDefinition } from "@glantri/domain";
+
 import { resolveParticipantSkillRollProfile } from "./resolveParticipantSkillRollProfile";
 
-const perceptionSkill = {
+const perceptionSkill: Pick<SkillDefinition, "groupId" | "groupIds" | "id" | "linkedStats" | "name"> = {
+  groupId: "watchfulness",
+  groupIds: ["watchfulness"],
   id: "perception",
   linkedStats: ["int", "pow"],
   name: "Perception",
 };
 
-const surgerySkill = {
+const surgerySkill: Pick<SkillDefinition, "groupId" | "groupIds" | "id" | "linkedStats" | "name"> = {
+  groupId: "medicine_group",
+  groupIds: ["medicine_group"],
   id: "surgery",
   linkedStats: ["dex", "int"],
   name: "Surgery",
 };
 
-const build = {
+const firstAidSkill: SkillDefinition = {
+  allowsSpecializations: false,
+  category: "secondary",
+  dependencies: [],
+  dependencySkillIds: [],
+  groupId: "healing_practice",
+  groupIds: ["healing_practice"],
+  id: "first_aid",
+  isTheoretical: false,
+  linkedStats: ["int", "dex"],
+  name: "First aid",
+  requiresLiteracy: "no",
+  societyLevel: 1,
+  sortOrder: 1,
+};
+
+const medicineSkill: SkillDefinition = {
+  ...firstAidSkill,
+  category: "ordinary",
+  derivedGrants: [{ factor: 1, skillId: "first_aid" }],
+  id: "medicine",
+  linkedStats: ["int"],
+  name: "Medicine",
+  sortOrder: 2,
+};
+
+const healingGroup: SkillGroupDefinition = {
+  description: "",
+  id: "healing_practice",
+  name: "Healing Practice",
+  skillMemberships: [{ relevance: "core", skillId: "first_aid" }],
+  selectionSlots: [],
+  sortOrder: 1,
+};
+
+const content = {
+  professionFamilies: [],
+  professionSkills: [],
+  professions: [],
+  skillGroups: [healingGroup],
+  skills: [firstAidSkill, medicineSkill],
+  societyLevels: [],
+  specializations: [],
+};
+
+const build: CharacterBuild = {
+  equipment: { items: [] },
+  id: "character-1",
+  name: "The Gladiator",
   profile: {
     id: "profile-1",
     label: "Test profile",
@@ -32,7 +86,28 @@ const build = {
       str: 10,
       will: 13,
     },
+    societyLevel: 0,
   },
+  progression: {
+    chargenMode: "standard",
+    educationPoints: 0,
+    flexiblePointFactor: 1,
+    level: 1,
+    primaryPoolSpent: 0,
+    primaryPoolTotal: 60,
+    secondaryPoolSpent: 0,
+    secondaryPoolTotal: 20,
+    skillGroups: [],
+    skills: [],
+    specializations: [],
+  },
+  progressionState: {
+    availablePoints: 0,
+    checks: [],
+    history: [],
+    pendingAttempts: [],
+  },
+  statModifiers: {},
 };
 
 describe("resolveParticipantSkillRollProfile", () => {
@@ -91,6 +166,109 @@ describe("resolveParticipantSkillRollProfile", () => {
     expect(profile.totalXP).toBe(0);
     expect(profile.unknownSkillPenalty).toBe(-3);
     expect(profile.warning).toContain("Skill not known");
+  });
+
+  it("rebuilds the Character Sheet summary from a scenario snapshot build for known skills", () => {
+    const gladiatorBuild: CharacterBuild = {
+      ...build,
+      progression: {
+        ...build.progression,
+        skillGroups: [
+          {
+            groupId: "healing_practice",
+            primaryRanks: 6,
+            ranks: 6,
+          },
+        ],
+        skills: [
+          {
+            category: "secondary",
+            groupId: "healing_practice",
+            level: 2,
+            primaryRanks: 0,
+            ranks: 2,
+            secondaryRanks: 2,
+            skillId: "first_aid",
+          },
+        ],
+      },
+    };
+
+    const profile = resolveParticipantSkillRollProfile({
+      build: gladiatorBuild,
+      content,
+      sheetSummary: {},
+      skill: firstAidSkill,
+    });
+
+    expect(profile).toMatchObject({
+      avgStats: 15,
+      groupXP: 6,
+      skillXP: 2,
+      derivedXP: 0,
+      totalXP: 8,
+      totalSkillLevel: 23,
+      rollBaseValue: 23,
+      known: true,
+      unknownSkillPenalty: 0,
+      warning: undefined,
+    });
+  });
+
+  it("counts group-only Character Sheet rows as known skills", () => {
+    const profile = resolveParticipantSkillRollProfile({
+      sheetSummary: {
+        draftView: {
+          groups: [{ groupId: "healing_practice", groupLevel: 6, name: "Healing Practice" }],
+          skills: [
+            {
+              linkedStatAverage: 15,
+              skillId: "first_aid",
+              specificSkillLevel: 0,
+            },
+          ],
+        },
+      },
+      skill: firstAidSkill,
+    });
+
+    expect(profile).toMatchObject({
+      known: true,
+      groupXP: 6,
+      skillXP: 0,
+      totalXP: 6,
+      totalSkillLevel: 21,
+      rollBaseValue: 21,
+      warning: undefined,
+    });
+  });
+
+  it("counts derived-only Character Sheet rows as known skills", () => {
+    const profile = resolveParticipantSkillRollProfile({
+      sheetSummary: {
+        draftView: {
+          groups: [],
+          skills: [
+            {
+              linkedStatAverage: 15,
+              relationshipGrantedSkillLevel: 4,
+              skillId: "first_aid",
+              specificSkillLevel: 0,
+            },
+          ],
+        },
+      },
+      skill: firstAidSkill,
+    });
+
+    expect(profile).toMatchObject({
+      known: true,
+      derivedXP: 4,
+      totalXP: 4,
+      totalSkillLevel: 19,
+      rollBaseValue: 19,
+      warning: undefined,
+    });
   });
 
   it("does not mutate snapshot skill data when resolving an unknown skill", () => {

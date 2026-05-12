@@ -294,6 +294,7 @@ function getScenarioParticipantForEncounterParticipant(input: {
 }
 
 function getSkillRollProfile(input: {
+  content?: Awaited<ReturnType<typeof loadCanonicalContent>>;
   encounterParticipant?: EncounterParticipant;
   scenarioParticipants: ScenarioParticipant[];
   skill: ResolveParticipantSkillRollProfileInput["skill"];
@@ -305,6 +306,7 @@ function getSkillRollProfile(input: {
 
   return resolveParticipantSkillRollProfile({
     build: scenarioParticipant?.snapshot.build,
+    content: input.content,
     participantId: input.encounterParticipant?.id,
     participantName: input.encounterParticipant?.label,
     sheetSummary: scenarioParticipant?.snapshot.sheetSummary,
@@ -374,6 +376,7 @@ function readSystemSkillOptions(input: {
     .map((skill) => {
       const categoryId = getPlayerFacingSkillBucket(skill);
       const profile = getSkillRollProfile({
+        content: input.content,
         encounterParticipant: input.encounterParticipant,
         scenarioParticipants: input.scenarioParticipants,
         skill,
@@ -2581,6 +2584,7 @@ export function PlayerRoleplayingEncounterScreen({
               const assignedSkillProfile =
                 contentSkill && assignedParticipant
                   ? getSkillRollProfile({
+                      content,
                       encounterParticipant: assignedParticipant,
                       scenarioParticipants,
                       skill: contentSkill,
@@ -2590,6 +2594,7 @@ export function PlayerRoleplayingEncounterScreen({
               const assignedSupportSkillProfile =
                 assignedSupportSkill && assignedParticipant
                   ? getSkillRollProfile({
+                      content,
                       encounterParticipant: assignedParticipant,
                       scenarioParticipants,
                       skill: assignedSupportSkill,
