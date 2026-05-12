@@ -30,11 +30,22 @@ export interface PlayerGeneralEncounterAssignedRoll {
   skillId: string;
   skillLabel: string;
   skillValue?: number;
+  result?: PlayerGeneralEncounterRollResult;
+  rollSetId?: string;
   supportSkillLabel?: string;
   supportSkillValue?: number;
   useDbMod: boolean;
   useGenMod: boolean;
   useObSkillMod: boolean;
+}
+
+export interface PlayerGeneralEncounterRollResult {
+  dieResult?: number;
+  fumble: boolean;
+  id: string;
+  openEndedD10s: number[];
+  rollD20?: number;
+  total?: number;
 }
 
 export interface PlayerGeneralEncounterRankedResult {
@@ -116,6 +127,7 @@ function isParticipantVisibleToPlayer(input: {
 function buildAssignedRoll(input: {
   encounterParticipantsById: Map<string, EncounterParticipant>;
   pendingRoll: RoleplayPendingSkillRoll;
+  result?: RoleplayActionLogEntry;
   state: ReturnType<typeof normalizeRoleplayState>;
   visibleParticipantIds: Set<string>;
 }): PlayerGeneralEncounterAssignedRoll {
@@ -152,6 +164,17 @@ function buildAssignedRoll(input: {
           state: input.state,
         })
       : "Assigned participant",
+    result: input.result
+      ? {
+          dieResult: input.result.dieResult,
+          fumble: input.result.fumble,
+          id: input.result.id,
+          openEndedD10s: input.result.openEndedD10s,
+          rollD20: input.result.rollD20,
+          total: input.result.numericSubtotal ?? input.result.finalTotal,
+        }
+      : undefined,
+    rollSetId: input.pendingRoll.rollSetId,
     skillId: input.pendingRoll.skillId,
     skillLabel: input.pendingRoll.skillLabel,
     skillValue: input.pendingRoll.skillValue,
@@ -161,6 +184,23 @@ function buildAssignedRoll(input: {
     useGenMod: input.pendingRoll.useGenMod,
     useObSkillMod: input.pendingRoll.useObSkillMod,
   };
+}
+
+function findVisibleResultForPendingRoll(input: {
+  entries: RoleplayActionLogEntry[];
+  pendingRoll: RoleplayPendingSkillRoll;
+}): RoleplayActionLogEntry | undefined {
+  const matchingEntries = input.entries.filter(
+    (entry) =>
+      entry.type === "gm_skill_roll" &&
+      entry.mode !== "opposed" &&
+      !entry.silent &&
+      entry.participantId === input.pendingRoll.participantId &&
+      entry.skillId === input.pendingRoll.skillId &&
+      (input.pendingRoll.rollSetId ? entry.rollSetId === input.pendingRoll.rollSetId : true)
+  );
+
+  return matchingEntries.sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0];
 }
 
 function isPlayerVisibleRankedResult(input: {
@@ -244,17 +284,32 @@ export function buildPlayerGeneralEncounterView(input: {
         shortDescription: description?.shortDescription ?? "",
       };
     });
-  const assignedRolls = state.pendingSkillRolls
-    .filter(
-      (roll) =>
-        !roll.silent &&
-        controlledParticipantIds.has(roll.participantId) &&
-        visibleParticipantIds.has(roll.participantId)
+  const visiblePendingRolls = state.pendingSkillRolls.filter(
+    (roll) =>
+      !roll.silent &&
+      controlledParticipantIds.has(roll.participantId) &&
+      visibleParticipantIds.has(roll.participantId)
+  );
+  const latestPendingRoll = [...visiblePendingRolls].sort((left, right) =>
+    right.assignedAt.localeCompare(left.assignedAt)
+  )[0];
+  const latestPendingRollSetId = latestPendingRoll?.rollSetId;
+  const assignedRolls = visiblePendingRolls
+    .filter((roll) =>
+      latestPendingRollSetId
+        ? roll.rollSetId === latestPendingRollSetId
+        : latestPendingRoll
+          ? roll.id === latestPendingRoll.id
+          : false
     )
     .map((pendingRoll) =>
       buildAssignedRoll({
         encounterParticipantsById,
         pendingRoll,
+        result: findVisibleResultForPendingRoll({
+          entries: state.actionLog,
+          pendingRoll,
+        }),
         state,
         visibleParticipantIds,
       })

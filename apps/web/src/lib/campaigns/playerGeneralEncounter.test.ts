@@ -54,12 +54,17 @@ function makeEncounter(): EncounterSession {
       actionLog: [
         {
           createdAt: "2026-01-01T00:04:00.000Z",
+          dieResult: 14,
           id: "visible-result",
           mode: "difficulty",
           numericSubtotal: 30,
+          openEndedD10s: [],
           participantId: "scenario-pc-1",
+          rollD20: 14,
+          rollSetId: "roll-set-visible",
           silent: false,
           skillLabel: "Perception",
+          skillId: "perception",
           summary: "GM rolled Perception.",
           type: "gm_skill_roll",
         },
@@ -140,13 +145,26 @@ function makeEncounter(): EncounterSession {
       pendingSkillRolls: [
         {
           assignedAt: "2026-01-01T00:00:00.000Z",
+          difficulty: "easy",
+          id: "older-visible-roll",
+          mode: "difficulty",
+          participantId: "scenario-pc-1",
+          rollSetId: "roll-set-old",
+          silent: false,
+          skillId: "listen",
+          skillLabel: "Listen",
+        },
+        {
+          assignedAt: "2026-01-01T00:05:00.000Z",
           difficulty: "medium",
           id: "visible-roll",
           mode: "difficulty",
           participantId: "scenario-pc-1",
+          rollSetId: "roll-set-visible",
           silent: false,
           skillId: "perception",
           skillLabel: "Perception",
+          skillValue: 16,
         },
         {
           assignedAt: "2026-01-01T00:00:00.000Z",
@@ -205,9 +223,17 @@ describe("playerGeneralEncounter", () => {
     });
 
     expect(view.assignedRolls).toHaveLength(1);
+    expect(view.assignedRolls.map((roll) => roll.id)).not.toContain("older-visible-roll");
     expect(view.assignedRolls[0]).toMatchObject({
       difficultyLabel: "Medium",
+      result: {
+        dieResult: 14,
+        id: "visible-result",
+        total: 30,
+      },
+      rollSetId: "roll-set-visible",
       skillLabel: "Perception",
+      skillValue: 16,
     });
     expect(JSON.stringify(view.assignedRolls)).not.toContain("silent-roll");
   });

@@ -84,7 +84,15 @@ describe("RoleplayEncounterScreens", () => {
     expect(playerSource).toContain("Skill roll grid");
     expect(playerSource).toContain("handleClearAssignedRolls");
     expect(playerSource).toContain("dismissedAssignedRollIds");
+    expect(playerSource).toContain("dismissedRankedResultIds");
+    expect(playerSource).toContain("localRankedResults");
+    expect(playerSource).toContain("PlayerLocalRollDraft");
+    expect(playerSource).toContain("visibleRankedResults");
     expect(playerSource).toContain("No skill rolls assigned.");
+    expect(playerSource).toContain("Local roll 1");
+    expect(playerSource).toContain("No skills available");
+    expect(playerSource).toContain("handleLocalPlayerRoll");
+    expect(playerSource).toContain("unresolvedAssignedRolls");
     expect(playerSource).toContain("Roll 1d20");
     expect(playerSource).toContain("Roll both 1d20s");
     expect(playerSource).toContain("Assigned roll {index + 1} · {roll.participantName}");
@@ -93,6 +101,10 @@ describe("RoleplayEncounterScreens", () => {
     expect(playerSource).toContain("checked={roll.useObSkillMod}");
     expect(playerSource).toContain("checked={roll.useDbMod}");
     expect(playerSource).toContain("playerRollSkillColumnsStyle");
+    expect(playerSource).toContain("buildPlayerRollResult");
+    expect(playerSource).toContain("rollSetId: pendingRoll.rollSetId");
+    expect(playerSource).toContain("cleanPendingText");
+    expect(playerSource).toContain("showPendingLabels={false}");
     expect(playerSource).toContain("Ranked roll results");
     expect(playerSource).toContain("Character log");
     expect(playerSource).toContain("buildPlayerGeneralEncounterView");
@@ -105,6 +117,7 @@ describe("RoleplayEncounterScreens", () => {
     expect(playerSource).not.toContain("GM Roll");
     expect(playerSource).not.toContain("GM Roll both");
     expect(playerSource).not.toContain("Silent");
+    expect(playerSource).not.toContain("Pending:");
     expect(playerSource).not.toContain("Visibility grid");
     expect(playerSource).not.toContain("Roleplay roster descriptions");
     expect(playerSource).not.toContain("Skill roll assignment");
@@ -203,7 +216,7 @@ describe("RoleplayEncounterScreens", () => {
     expect(source).toContain("label=\"Comparison\"");
     expect(source).toContain("minHeight: \"10.5rem\"");
     expect(source).toContain("whiteSpace: \"nowrap\"");
-    expect(source).toContain("<strong>{label}:</strong> {preview?.formulaText ?? \"—\"}");
+    expect(source).toContain("<strong>{label}:</strong> {formulaText}");
     expect(source).toContain("function RoleplayRollCalculationPanel");
     expect(source).toContain("style={rollControlRowStyle}");
     expect(source).toContain("style={{ ...compactInputStyle, width: \"4.5rem\" }}");

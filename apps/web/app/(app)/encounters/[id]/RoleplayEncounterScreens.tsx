@@ -110,6 +110,20 @@ interface RoleplayRollDraft {
   useObSkillMod: boolean;
 }
 
+interface PlayerLocalRollDraft {
+  difficulty: "none" | RoleplayDifficulty;
+  otherModInput: string;
+  opponentParticipantId: string;
+  roll?: RoleplayOpenEndedD20Roll;
+  skillCategoryId: "all" | PlayerFacingSkillBucketId;
+  skillId: string;
+  supportSkillCategoryId: "all" | PlayerFacingSkillBucketId;
+  supportSkillId: string;
+  useDbMod: boolean;
+  useGenMod: boolean;
+  useObSkillMod: boolean;
+}
+
 const panelStyle = {
   border: "1px solid #d9ddd8",
   borderRadius: 12,
@@ -388,19 +402,44 @@ function makeRollDraft(input: { id?: string; participantId?: string; skillId?: s
   };
 }
 
+function makePlayerLocalRollDraft(input: { skillId?: string } = {}): PlayerLocalRollDraft {
+  return {
+    difficulty: "medium",
+    otherModInput: "0",
+    opponentParticipantId: "",
+    skillCategoryId: "all",
+    skillId: input.skillId ?? "",
+    supportSkillCategoryId: "all",
+    supportSkillId: "",
+    useDbMod: false,
+    useGenMod: false,
+    useObSkillMod: false,
+  };
+}
+
 function RollCalculationPreview({
+  cleanPendingText = false,
   label,
   pendingLabels,
   preview,
+  showPendingLabels = true,
 }: {
+  cleanPendingText?: boolean;
   label: string;
   pendingLabels?: string[];
   preview?: ReturnType<typeof buildRoleplayCalculationPreview>;
+  showPendingLabels?: boolean;
 }) {
+  const formulaText = preview
+    ? cleanPendingText
+      ? preview.formulaText.replace(" = pending", " = —")
+      : preview.formulaText
+    : "—";
+
   return (
     <div style={calculationLineStyle}>
-      <strong>{label}:</strong> {preview?.formulaText ?? "—"}
-      {preview && pendingLabels && pendingLabels.length > 0 ? (
+      <strong>{label}:</strong> {formulaText}
+      {showPendingLabels && preview && pendingLabels && pendingLabels.length > 0 ? (
         <span> · Pending: {pendingLabels.join(", ")}</span>
       ) : null}
     </div>
@@ -456,20 +495,24 @@ function RoleplayRollCalculationPanel({
   actorMainPreview,
   actorPendingLabels,
   actorSupportPreview,
+  cleanPendingText = false,
   comparison,
   opponentMainPreview,
   opponentOpen,
   opponentPendingLabels,
+  showPendingLabels = true,
   opponentSupportPreview,
 }: {
   actorDifficulty?: RoleplayDifficulty;
   actorMainPreview?: ReturnType<typeof buildRoleplayCalculationPreview>;
   actorPendingLabels?: string[];
   actorSupportPreview?: ReturnType<typeof buildRoleplayCalculationPreview>;
+  cleanPendingText?: boolean;
   comparison?: string;
   opponentMainPreview?: ReturnType<typeof buildRoleplayCalculationPreview>;
   opponentOpen: boolean;
   opponentPendingLabels?: string[];
+  showPendingLabels?: boolean;
   opponentSupportPreview?: ReturnType<typeof buildRoleplayCalculationPreview>;
 }) {
   return (
@@ -477,15 +520,27 @@ function RoleplayRollCalculationPanel({
       <strong>Calculation</strong>
       <div style={{ display: "grid", gap: "0.25rem" }}>
         <strong>Actor</strong>
-        <RollCalculationPreview label="Support" preview={actorSupportPreview} />
-        <RollCalculationPreview label="Main" pendingLabels={actorPendingLabels} preview={actorMainPreview} />
+        <RollCalculationPreview cleanPendingText={cleanPendingText} label="Support" preview={actorSupportPreview} />
+        <RollCalculationPreview
+          cleanPendingText={cleanPendingText}
+          label="Main"
+          pendingLabels={actorPendingLabels}
+          preview={actorMainPreview}
+          showPendingLabels={showPendingLabels}
+        />
         <RoleplayRollResultLine difficulty={actorDifficulty} preview={actorMainPreview} />
       </div>
       {opponentOpen ? (
         <div style={{ borderTop: "1px solid #eee8dc", display: "grid", gap: "0.25rem", paddingTop: "0.45rem" }}>
           <strong>Opponent</strong>
-          <RollCalculationPreview label="Support" preview={opponentSupportPreview} />
-          <RollCalculationPreview label="Main" pendingLabels={opponentPendingLabels} preview={opponentMainPreview} />
+          <RollCalculationPreview cleanPendingText={cleanPendingText} label="Support" preview={opponentSupportPreview} />
+          <RollCalculationPreview
+            cleanPendingText={cleanPendingText}
+            label="Main"
+            pendingLabels={opponentPendingLabels}
+            preview={opponentMainPreview}
+            showPendingLabels={showPendingLabels}
+          />
           <RoleplayRollResultLine preview={opponentMainPreview} />
         </div>
       ) : null}
@@ -553,6 +608,41 @@ function PlayerEncounterTopInfo({ campaignName, encounter, scenarioName }: Rolep
       {encounter.description ? <div style={playerReadOnlyPanelStyle}>{encounter.description}</div> : null}
     </section>
   );
+}
+
+function buildPlayerRollResult(input?: {
+  dieResult?: number;
+  openEndedD10s: number[];
+  rollD20?: number;
+}): RoleplayOpenEndedD20Roll | undefined {
+  if (!input || input.dieResult == null || input.rollD20 == null) {
+    return undefined;
+  }
+
+  return {
+    dieResult: input.dieResult,
+    openEndedD10s: input.openEndedD10s,
+    rollD20: input.rollD20,
+  };
+}
+
+function rankPlayerVisibleResults(
+  entries: Array<{ id: string; participantName: string; skillLabel: string; total: number }>
+) {
+  return [...entries].sort((left, right) => right.total - left.total || left.participantName.localeCompare(right.participantName));
+}
+
+function mergePlayerVisibleResults(
+  left: Array<{ id: string; participantName: string; skillLabel: string; total: number }>,
+  right: Array<{ id: string; participantName: string; skillLabel: string; total: number }>
+) {
+  const byId = new Map<string, { id: string; participantName: string; skillLabel: string; total: number }>();
+
+  for (const entry of [...left, ...right]) {
+    byId.set(entry.id, entry);
+  }
+
+  return rankPlayerVisibleResults([...byId.values()]);
 }
 
 export function GmRoleplayingEncounterScreen({
@@ -795,6 +885,32 @@ export function GmRoleplayingEncounterScreen({
         ? allSkillOptions
         : allSkillOptions.filter((skill) => skill.categoryId === draft.skillCategoryId);
     const selectedSkill = skillOptions.find((skill) => skill.id === draft.skillId) ?? skillOptions[0];
+    const matchingPendingRoll = selectedSkill
+      ? [...roleplayState.pendingSkillRolls]
+          .filter(
+            (roll) =>
+              !roll.silent &&
+              roll.participantId === participant?.id &&
+              roll.skillId === selectedSkill.id &&
+              roll.rollSetId
+          )
+          .sort((left, right) => right.assignedAt.localeCompare(left.assignedAt))[0]
+      : undefined;
+    const matchingResult = matchingPendingRoll
+      ? roleplayState.actionLog
+          .filter(
+            (entry) =>
+              entry.type === "gm_skill_roll" &&
+              !entry.silent &&
+              entry.participantId === matchingPendingRoll.participantId &&
+              entry.skillId === matchingPendingRoll.skillId &&
+              entry.rollSetId === matchingPendingRoll.rollSetId &&
+              entry.dieResult != null &&
+              entry.rollD20 != null
+          )
+          .sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0]
+      : undefined;
+    const actorExternalRoll = buildPlayerRollResult(matchingResult);
     const supportSkillOptions =
       draft.supportSkillCategoryId === "all"
         ? allSkillOptions
@@ -833,7 +949,7 @@ export function GmRoleplayingEncounterScreen({
       ? buildRoleplayCalculationPreview({
           difficulty: isOpposed || draft.difficulty === "none" ? undefined : draft.difficulty,
           otherMod,
-          roll: draft.actorRoll,
+          roll: draft.actorRoll ?? actorExternalRoll,
           skillLabel: selectedSkill.label,
           skillValue: selectedSkill.value,
           useDbMod: draft.useDbMod,
@@ -843,7 +959,7 @@ export function GmRoleplayingEncounterScreen({
       : undefined;
     const supportPreview = selectedSupportSkill
       ? buildRoleplayCalculationPreview({
-          roll: draft.actorRoll,
+          roll: draft.actorRoll ?? actorExternalRoll,
           skillLabel: selectedSupportSkill.label,
           skillValue: selectedSupportSkill.value,
         })
@@ -871,6 +987,7 @@ export function GmRoleplayingEncounterScreen({
     return {
       allOpponentSkillOptions,
       allSkillOptions,
+      actorExternalResult: matchingResult,
       isOpposed,
       opponent,
       opponentPreview,
@@ -1942,6 +2059,14 @@ export function PlayerRoleplayingEncounterScreen({
   const [scenarioParticipants, setScenarioParticipants] = useState<ScenarioParticipant[]>([]);
   const [loading, setLoading] = useState(true);
   const [dismissedAssignedRollIds, setDismissedAssignedRollIds] = useState<Set<string>>(() => new Set());
+  const [dismissedRankedResultIds, setDismissedRankedResultIds] = useState<Set<string>>(() => new Set());
+  const [localRankedResults, setLocalRankedResults] = useState<Array<{ id: string; participantName: string; skillLabel: string; total: number }>>([]);
+  const [playerLocalRollDraft, setPlayerLocalRollDraft] = useState<PlayerLocalRollDraft>(() =>
+    makePlayerLocalRollDraft()
+  );
+  const [playerLocalRollRoundId, setPlayerLocalRollRoundId] = useState(
+    () => `player-local-roll-set-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+  );
   const { currentUser } = useSessionUser();
   const situationRef = useRef<HTMLDivElement>(null);
 
@@ -2000,8 +2125,65 @@ export function PlayerRoleplayingEncounterScreen({
   const visibleAssignedRolls = playerView.assignedRolls.filter(
     (roll) => !dismissedAssignedRollIds.has(roll.id)
   );
+  const readModelRankedResults = playerView.rankedResults.filter(
+    (entry) => !dismissedRankedResultIds.has(entry.id)
+  );
+  const visibleRankedResults = mergePlayerVisibleResults(localRankedResults, readModelRankedResults);
+  const unresolvedAssignedRolls = visibleAssignedRolls.filter((roll) => !roll.result);
+  const controlledParticipant = encounter.participants.find(
+    (participant) => participant.id === playerView.controlledParticipantIds[0]
+  );
+  const localAllSkillOptions = readSystemSkillOptions({
+    content,
+    encounterParticipant: controlledParticipant,
+    scenarioParticipants,
+  });
+  const localSkillOptions =
+    playerLocalRollDraft.skillCategoryId === "all"
+      ? localAllSkillOptions
+      : localAllSkillOptions.filter((skill) => skill.categoryId === playerLocalRollDraft.skillCategoryId);
+  const localSelectedSkill =
+    localSkillOptions.find((skill) => skill.id === playerLocalRollDraft.skillId) ?? localSkillOptions[0];
+  const localSupportSkillOptions =
+    playerLocalRollDraft.supportSkillCategoryId === "all"
+      ? localAllSkillOptions
+      : localAllSkillOptions.filter((skill) => skill.categoryId === playerLocalRollDraft.supportSkillCategoryId);
+  const localSelectedSupportSkill =
+    playerLocalRollDraft.supportSkillId === ""
+      ? undefined
+      : localSupportSkillOptions.find((skill) => skill.id === playerLocalRollDraft.supportSkillId);
+  const localOtherMod = normalizeRoleplayOtherMod(playerLocalRollDraft.otherModInput);
+  const localPreview = localSelectedSkill
+    ? buildRoleplayCalculationPreview({
+        difficulty:
+          playerLocalRollDraft.difficulty === "none" || playerLocalRollDraft.opponentParticipantId
+            ? undefined
+            : playerLocalRollDraft.difficulty,
+        otherMod: localOtherMod,
+        roll: playerLocalRollDraft.roll,
+        skillLabel: localSelectedSkill.label,
+        skillValue: localSelectedSkill.value,
+        useDbMod: playerLocalRollDraft.useDbMod,
+        useGenMod: playerLocalRollDraft.useGenMod,
+        useObSkillMod: playerLocalRollDraft.useObSkillMod,
+      })
+    : buildRoleplayCalculationPreview({
+        skillLabel: "Skill",
+        skillValue: 0,
+      });
+  const localSupportPreview = localSelectedSupportSkill
+    ? buildRoleplayCalculationPreview({
+        roll: playerLocalRollDraft.roll,
+        skillLabel: localSelectedSupportSkill.label,
+        skillValue: localSelectedSupportSkill.value,
+      })
+    : undefined;
 
   function handleClearAssignedRolls() {
+    if (unresolvedAssignedRolls.length > 0) {
+      return;
+    }
+
     setDismissedAssignedRollIds((currentIds) => {
       const nextIds = new Set(currentIds);
 
@@ -2011,6 +2193,18 @@ export function PlayerRoleplayingEncounterScreen({
 
       return nextIds;
     });
+    setDismissedRankedResultIds((currentIds) => {
+      const nextIds = new Set(currentIds);
+
+      for (const entry of visibleRankedResults) {
+        nextIds.add(entry.id);
+      }
+
+      return nextIds;
+    });
+    setLocalRankedResults([]);
+    setPlayerLocalRollDraft(makePlayerLocalRollDraft({ skillId: localAllSkillOptions[0]?.id }));
+    setPlayerLocalRollRoundId(`player-local-roll-set-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
   }
 
   async function handlePlayerRoll(rollId: string) {
@@ -2053,6 +2247,7 @@ export function PlayerRoleplayingEncounterScreen({
       participantId: pendingRoll.participantId,
       partial: preview.partial,
       roll,
+      rollSetId: pendingRoll.rollSetId,
       session: encounter,
       silent: false,
       skillId: pendingRoll.skillId,
@@ -2070,7 +2265,85 @@ export function PlayerRoleplayingEncounterScreen({
     });
 
     setEncounter(savedEncounter);
+    setLocalRankedResults((currentResults) =>
+      mergePlayerVisibleResults(currentResults, [
+        ...readModelRankedResults,
+        {
+          id: `player-roll-${pendingRoll.id}-${roll.rollD20}-${roll.dieResult}`,
+          participantName: playerView.assignedRolls.find((entry) => entry.id === pendingRoll.id)?.participantName ?? participant.label,
+          skillLabel: pendingRoll.skillLabel,
+          total: preview.numericSubtotal ?? preview.finalTotal ?? 0,
+        },
+      ])
+    );
     setFeedback(`Rolled ${pendingRoll.skillLabel}: total ${preview.numericSubtotal ?? "unresolved"}.`);
+  }
+
+  async function handleLocalPlayerRoll() {
+    if (!encounter || !controlledParticipant || !localSelectedSkill || playerLocalRollDraft.opponentParticipantId) {
+      return;
+    }
+
+    const roll = rollOpenEndedRoleplayD20();
+    const preview = buildRoleplayCalculationPreview({
+      difficulty: playerLocalRollDraft.difficulty === "none" ? undefined : playerLocalRollDraft.difficulty,
+      otherMod: localOtherMod,
+      roll,
+      skillLabel: localSelectedSkill.label,
+      skillValue: localSelectedSkill.value,
+      useDbMod: playerLocalRollDraft.useDbMod,
+      useGenMod: playerLocalRollDraft.useGenMod,
+      useObSkillMod: playerLocalRollDraft.useObSkillMod,
+    });
+    const nextEncounter = recordRoleplayGmSkillRoll({
+      achievedSuccessLevel: preview.achievedSuccessLevel,
+      autoSuccess: preview.autoSuccess,
+      calculationText: preview.calculationText,
+      dieResult: roll.dieResult,
+      difficulty: playerLocalRollDraft.difficulty === "none" ? undefined : playerLocalRollDraft.difficulty,
+      finalTotal: preview.finalTotal,
+      fumble: preview.fumble,
+      mode: "difficulty",
+      numericSubtotal: preview.numericSubtotal,
+      openEndedD10s: roll.openEndedD10s,
+      otherMod: localOtherMod,
+      participantId: controlledParticipant.id,
+      partial: preview.partial,
+      roll,
+      rollSetId: playerLocalRollRoundId,
+      session: encounter,
+      silent: false,
+      skillId: localSelectedSkill.id,
+      skillLabel: localSelectedSkill.label,
+      success: preview.success,
+      supportSkillId: localSelectedSupportSkill?.id,
+      supportSkillLabel: localSelectedSupportSkill?.label,
+      useDbMod: playerLocalRollDraft.useDbMod,
+      useGenMod: playerLocalRollDraft.useGenMod,
+      useObSkillMod: playerLocalRollDraft.useObSkillMod,
+    });
+    const savedEncounter = await updateEncounterOnServer({
+      encounterId: encounter.id,
+      session: nextEncounter,
+    });
+
+    setEncounter(savedEncounter);
+    setPlayerLocalRollDraft((currentDraft) => ({
+      ...currentDraft,
+      roll,
+    }));
+    setLocalRankedResults((currentResults) =>
+      mergePlayerVisibleResults(currentResults, [
+        ...readModelRankedResults,
+        {
+          id: `player-local-roll-${playerLocalRollRoundId}-${roll.rollD20}-${roll.dieResult}`,
+          participantName: controlledParticipant.label,
+          skillLabel: localSelectedSkill.label,
+          total: preview.numericSubtotal ?? preview.finalTotal ?? 0,
+        },
+      ])
+    );
+    setFeedback(`Rolled ${localSelectedSkill.label}: total ${preview.numericSubtotal ?? "unresolved"}.`);
   }
 
   return (
@@ -2155,7 +2428,7 @@ export function PlayerRoleplayingEncounterScreen({
       <section style={panelStyle}>
         <div style={{ alignItems: "center", display: "flex", justifyContent: "space-between", gap: "0.75rem" }}>
           <h2 style={{ margin: 0 }}>Skill roll grid</h2>
-          <button disabled={visibleAssignedRolls.length === 0} onClick={handleClearAssignedRolls} type="button">
+          <button disabled={unresolvedAssignedRolls.length > 0} onClick={handleClearAssignedRolls} type="button">
             Clear
           </button>
         </div>
@@ -2168,9 +2441,11 @@ export function PlayerRoleplayingEncounterScreen({
                     (category) => category.id === getPlayerFacingSkillBucket(contentSkill)
                   )?.label ?? "Assigned"
                 : "Assigned";
+              const resultRoll = buildPlayerRollResult(roll.result);
               const mainPreview = buildRoleplayCalculationPreview({
                 difficulty: roll.mode === "difficulty" ? roll.difficulty : undefined,
                 otherMod: roll.otherMod,
+                roll: resultRoll,
                 skillLabel: roll.skillLabel,
                 skillValue: roll.skillValue,
                 useDbMod: roll.useDbMod,
@@ -2257,7 +2532,7 @@ export function PlayerRoleplayingEncounterScreen({
                               value={roll.mode === "opposed" ? roll.opponentLabel ?? "Opposed" : "No opponent"}
                             />
                           </label>
-                          <button onClick={() => void handlePlayerRoll(roll.id)} type="button">
+                          <button disabled={Boolean(roll.result)} onClick={() => void handlePlayerRoll(roll.id)} type="button">
                             {roll.supportSkillLabel ? "Roll both 1d20s" : "Roll 1d20"}
                           </button>
                         </div>
@@ -2268,7 +2543,9 @@ export function PlayerRoleplayingEncounterScreen({
                       actorMainPreview={mainPreview}
                       actorPendingLabels={mainPreview.pendingModifierLabels}
                       actorSupportPreview={supportPreview}
+                      cleanPendingText
                       opponentOpen={false}
+                      showPendingLabels={false}
                     />
                   </section>
                 </div>
@@ -2276,15 +2553,249 @@ export function PlayerRoleplayingEncounterScreen({
             })}
           </div>
         ) : (
-          <div>No skill rolls assigned.</div>
+          <div style={{ display: "grid", gap: "0.75rem" }}>
+            <div>No skill rolls assigned.</div>
+            <div style={rollBlockShellStyle}>
+              <strong>Local roll 1</strong>
+              <section style={rollEditorStyle}>
+                <div style={rollControlsStackStyle}>
+                  <section style={rollControlsStyle}>
+                    <div style={rollControlRowStyle}>
+                      <span>Use:</span>
+                      <label>
+                        <input
+                          checked={playerLocalRollDraft.useGenMod}
+                          onChange={(event) =>
+                            setPlayerLocalRollDraft((currentDraft) => ({
+                              ...currentDraft,
+                              useGenMod: event.target.checked,
+                            }))
+                          }
+                          type="checkbox"
+                        /> Gen
+                      </label>
+                      <label>
+                        <input
+                          checked={playerLocalRollDraft.useObSkillMod}
+                          onChange={(event) =>
+                            setPlayerLocalRollDraft((currentDraft) => ({
+                              ...currentDraft,
+                              useObSkillMod: event.target.checked,
+                            }))
+                          }
+                          type="checkbox"
+                        /> OB/Skill
+                      </label>
+                      <label>
+                        <input
+                          checked={playerLocalRollDraft.useDbMod}
+                          onChange={(event) =>
+                            setPlayerLocalRollDraft((currentDraft) => ({
+                              ...currentDraft,
+                              useDbMod: event.target.checked,
+                            }))
+                          }
+                          type="checkbox"
+                        /> DB
+                      </label>
+                      <label style={compactControlStyle}>
+                        <span>Other mod</span>
+                        <input
+                          onChange={(event) =>
+                            setPlayerLocalRollDraft((currentDraft) => ({
+                              ...currentDraft,
+                              otherModInput: event.target.value,
+                              roll: undefined,
+                            }))
+                          }
+                          style={{ ...compactInputStyle, width: "4.5rem" }}
+                          type="number"
+                          value={playerLocalRollDraft.otherModInput}
+                        />
+                      </label>
+                    </div>
+                    <div style={rollFieldRowStyle}>
+                      <div style={playerRollSkillColumnsStyle}>
+                        <label style={compactControlStyle}>
+                          <span>Category</span>
+                          <select
+                            onChange={(event) => {
+                              const nextCategoryId = event.target.value as PlayerLocalRollDraft["skillCategoryId"];
+                              const nextSkillOptions =
+                                nextCategoryId === "all"
+                                  ? localAllSkillOptions
+                                  : localAllSkillOptions.filter((skill) => skill.categoryId === nextCategoryId);
+
+                              setPlayerLocalRollDraft((currentDraft) => ({
+                                ...currentDraft,
+                                roll: undefined,
+                                skillCategoryId: nextCategoryId,
+                                skillId: nextSkillOptions[0]?.id ?? "",
+                              }));
+                            }}
+                            style={compactInputStyle}
+                            value={playerLocalRollDraft.skillCategoryId}
+                          >
+                            <option value="all">All categories</option>
+                            {getPlayerFacingSkillBucketDefinitions()
+                              .filter((category) => localAllSkillOptions.some((skill) => skill.categoryId === category.id))
+                              .map((category) => (
+                                <option key={category.id} value={category.id}>
+                                  {category.label}
+                                </option>
+                              ))}
+                          </select>
+                        </label>
+                        <label style={compactControlStyle}>
+                          <span>Skill</span>
+                          <select
+                            disabled={localSkillOptions.length === 0}
+                            onChange={(event) =>
+                              setPlayerLocalRollDraft((currentDraft) => ({
+                                ...currentDraft,
+                                roll: undefined,
+                                skillId: event.target.value,
+                              }))
+                            }
+                            style={compactSkillInputStyle}
+                            value={localSelectedSkill?.id ?? ""}
+                          >
+                            {localSkillOptions.length > 0 ? (
+                              localSkillOptions.map((skill) => (
+                                <option key={skill.id} value={skill.id}>
+                                  {skill.label} ({skill.value ?? 0})
+                                </option>
+                              ))
+                            ) : (
+                              <option value="">No skills available</option>
+                            )}
+                          </select>
+                        </label>
+                        <label style={compactControlStyle}>
+                          <span>Support category</span>
+                          <select
+                            onChange={(event) =>
+                              setPlayerLocalRollDraft((currentDraft) => ({
+                                ...currentDraft,
+                                roll: undefined,
+                                supportSkillCategoryId: event.target.value as PlayerLocalRollDraft["supportSkillCategoryId"],
+                                supportSkillId: "",
+                              }))
+                            }
+                            style={compactInputStyle}
+                            value={playerLocalRollDraft.supportSkillCategoryId}
+                          >
+                            <option value="all">All categories</option>
+                            {getPlayerFacingSkillBucketDefinitions()
+                              .filter((category) => localAllSkillOptions.some((skill) => skill.categoryId === category.id))
+                              .map((category) => (
+                                <option key={category.id} value={category.id}>
+                                  {category.label}
+                                </option>
+                              ))}
+                          </select>
+                        </label>
+                        <label style={compactControlStyle}>
+                          <span>Support</span>
+                          <select
+                            onChange={(event) =>
+                              setPlayerLocalRollDraft((currentDraft) => ({
+                                ...currentDraft,
+                                roll: undefined,
+                                supportSkillId: event.target.value,
+                              }))
+                            }
+                            style={compactSkillInputStyle}
+                            value={localSelectedSupportSkill?.id ?? ""}
+                          >
+                            <option value="">No support skill</option>
+                            {localSupportSkillOptions.map((skill) => (
+                              <option key={skill.id} value={skill.id}>
+                                {skill.label} ({skill.value ?? 0})
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      </div>
+                    </div>
+                    <div style={rollFieldRowStyle}>
+                      <label style={compactControlStyle}>
+                        <span>Level</span>
+                        <select
+                          onChange={(event) =>
+                            setPlayerLocalRollDraft((currentDraft) => ({
+                              ...currentDraft,
+                              difficulty: event.target.value as PlayerLocalRollDraft["difficulty"],
+                              opponentParticipantId: event.target.value === "none" ? currentDraft.opponentParticipantId : "",
+                              roll: undefined,
+                            }))
+                          }
+                          style={compactInputStyle}
+                          value={playerLocalRollDraft.difficulty}
+                        >
+                          <option value="none">No level</option>
+                          {roleplayDifficultyOptions.map((option) => (
+                            <option key={option.id} value={option.id}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label style={compactControlStyle}>
+                        <span>Opponent</span>
+                        <select
+                          onChange={(event) =>
+                            setPlayerLocalRollDraft((currentDraft) => ({
+                              ...currentDraft,
+                              difficulty: event.target.value ? "none" : currentDraft.difficulty,
+                              opponentParticipantId: event.target.value,
+                              roll: undefined,
+                            }))
+                          }
+                          style={compactInputStyle}
+                          value={playerLocalRollDraft.opponentParticipantId}
+                        >
+                          <option value="">No opponent</option>
+                          {playerView.visibleParticipants.map((participant) => (
+                            <option key={participant.id} value={participant.id}>
+                              {participant.name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <button
+                        disabled={!controlledParticipant || !localSelectedSkill || Boolean(playerLocalRollDraft.opponentParticipantId)}
+                        onClick={() => void handleLocalPlayerRoll()}
+                        type="button"
+                      >
+                        {localSelectedSupportSkill ? "Roll both 1d20s" : "Roll 1d20"}
+                      </button>
+                    </div>
+                  </section>
+                </div>
+                <RoleplayRollCalculationPanel
+                  actorDifficulty={
+                    playerLocalRollDraft.difficulty === "none" || playerLocalRollDraft.opponentParticipantId
+                      ? undefined
+                      : playerLocalRollDraft.difficulty
+                  }
+                  actorMainPreview={localPreview}
+                  actorSupportPreview={localSupportPreview}
+                  cleanPendingText
+                  opponentOpen={false}
+                  showPendingLabels={false}
+                />
+              </section>
+            </div>
+          </div>
         )}
       </section>
 
       <section style={panelStyle}>
         <h2 style={{ margin: 0 }}>Ranked roll results</h2>
-        {playerView.rankedResults.length > 0 ? (
+        {visibleRankedResults.length > 0 ? (
           <ol style={{ margin: 0, paddingLeft: "1.5rem" }}>
-            {playerView.rankedResults.map((entry) => (
+            {visibleRankedResults.map((entry) => (
               <li key={entry.id}>
                 {entry.participantName} · {entry.skillLabel} · total {entry.total}
               </li>
