@@ -237,7 +237,12 @@ export default function ScenarioPlayerPageContent({
               >
                 <strong>{encounter.title}</strong>
                 <div>Status: {encounter.status}</div>
-                <div>Participants: {encounter.participants.length}</div>
+                <div>
+                  Participants:{" "}
+                  {encounter.participants.length > 0
+                    ? encounter.participants.length
+                    : `${projection.visibleParticipants.length} active scenario participants (default)`}
+                </div>
                 {campaignId ? (
                   <Link
                     href={buildCampaignWorkspaceHref({

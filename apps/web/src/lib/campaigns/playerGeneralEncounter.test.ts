@@ -189,6 +189,26 @@ function makeEncounter(): EncounterSession {
   } as unknown as EncounterSession;
 }
 
+function makeEmptyParticipantEncounter(): EncounterSession {
+  return {
+    createdAt: "2026-01-01T00:00:00.000Z",
+    id: "encounter-empty",
+    kind: "roleplay",
+    participants: [],
+    roleplayState: {
+      actionLog: [],
+      gmMessage: "The doors open.",
+      participantDescriptions: {},
+      pendingSkillRolls: [],
+      visibility: {},
+    },
+    scenarioId: "scenario-1",
+    status: "active",
+    title: "Open scene",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+  } as unknown as EncounterSession;
+}
+
 describe("playerGeneralEncounter", () => {
   it("shows only participants visible to the current player and strips GM-only descriptions", () => {
     const view = buildPlayerGeneralEncounterView({
@@ -292,5 +312,35 @@ describe("playerGeneralEncounter", () => {
     ]);
     expect(JSON.stringify(view.characterLog)).not.toContain("silent-result");
     expect(JSON.stringify(view.characterLog)).not.toContain("other-participant-result");
+  });
+
+  it("uses active scenario participants as fallback encounter participants when membership is empty", () => {
+    const view = buildPlayerGeneralEncounterView({
+      currentUserId: "player-1",
+      encounter: makeEmptyParticipantEncounter(),
+      scenarioParticipants: [
+        makeScenarioParticipant({ controlledByUserId: "player-1", id: "pc-1", name: "Player hero" }),
+        makeScenarioParticipant({ id: "npc-visible", name: "Visible NPC" }),
+      ],
+    });
+
+    expect(view.controlledParticipantIds).toEqual(["scenario-fallback-pc-1"]);
+    expect(view.visibleParticipantIds).toEqual(["scenario-fallback-pc-1", "scenario-fallback-npc-visible"]);
+    expect(view.visibleParticipants.map((participant) => participant.name)).toEqual(["Visible NPC"]);
+  });
+
+  it("does not fall back to scenario participants after explicit encounter membership exists", () => {
+    const view = buildPlayerGeneralEncounterView({
+      currentUserId: "player-1",
+      encounter: makeEncounter(),
+      scenarioParticipants: [
+        makeScenarioParticipant({ controlledByUserId: "player-1", id: "not-in-encounter", name: "Player hero" }),
+        makeScenarioParticipant({ id: "npc-visible", name: "Visible NPC" }),
+      ],
+    });
+
+    expect(view.controlledParticipantIds).toEqual([]);
+    expect(view.visibleParticipants).toEqual([]);
+    expect(view.assignedRolls).toEqual([]);
   });
 });

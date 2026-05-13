@@ -1,5 +1,7 @@
 import type { EncounterSession, Scenario, ScenarioParticipant } from "@glantri/domain";
 
+import { getScenarioParticipantFallbackEncounterParticipants } from "./encounterParticipantFallback";
+
 export type CampaignWorkspaceTabId =
   | "campaign"
   | "scenario"
@@ -168,8 +170,12 @@ function isPlayerAssignedToEncounter(input: {
       .map((participant) => participant.characterId)
       .filter((characterId): characterId is string => Boolean(characterId))
   );
+  const encounterParticipants = getScenarioParticipantFallbackEncounterParticipants({
+    encounter: input.encounter,
+    scenarioParticipants: input.scenarioParticipants,
+  });
 
-  return input.encounter.participants.some(
+  return encounterParticipants.some(
     (participant) =>
       (participant.scenarioParticipantId &&
         controlledScenarioParticipantIds.has(participant.scenarioParticipantId)) ||

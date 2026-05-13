@@ -29,5 +29,6 @@ describe("CampaignWorkspaceShell roleplay encounter routing", () => {
     expect(source).toContain("Choose a scenario to open the player scenario view.");
     expect(source).toContain("No player encounter is currently available.");
     expect(source).toContain("Waiting for GM to add you to an encounter.");
+    expect(source).toContain("You are in this scenario, but not assigned to this encounter.");
   });
 });

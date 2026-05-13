@@ -47,6 +47,7 @@ import {
 } from "@/lib/api/localServiceClient";
 import { useSessionUser } from "@/lib/auth/SessionUserContext";
 import RememberedCampaignWorkspaceEffect from "@/lib/campaigns/RememberedCampaignWorkspaceEffect";
+import { getScenarioParticipantFallbackEncounterParticipants } from "@/lib/campaigns/encounterParticipantFallback";
 import { buildPlayerGeneralEncounterView } from "@/lib/campaigns/playerGeneralEncounter";
 import { buildCampaignWorkspaceHref } from "@/lib/campaigns/workspace";
 import {
@@ -2283,6 +2284,10 @@ export function PlayerRoleplayingEncounterScreen({
     encounter,
     scenarioParticipants,
   });
+  const effectivePlayerEncounterParticipants = getScenarioParticipantFallbackEncounterParticipants({
+    encounter,
+    scenarioParticipants,
+  });
   const visibleAssignedRolls = playerView.assignedRolls.filter(
     (roll) => !dismissedAssignedRollIds.has(roll.id)
   );
@@ -2291,7 +2296,7 @@ export function PlayerRoleplayingEncounterScreen({
   );
   const visibleRankedResults = mergePlayerVisibleResults(localRankedResults, readModelRankedResults);
   const unresolvedAssignedRolls = visibleAssignedRolls.filter((roll) => !roll.result);
-  const controlledParticipant = encounter.participants.find(
+  const controlledParticipant = effectivePlayerEncounterParticipants.find(
     (participant) => participant.id === playerView.controlledParticipantIds[0]
   );
   const localAllSkillOptions = readSystemSkillOptions({
@@ -2381,7 +2386,7 @@ export function PlayerRoleplayingEncounterScreen({
       return;
     }
 
-    const participant = encounter?.participants.find((entry) => entry.id === pendingRoll.participantId);
+    const participant = effectivePlayerEncounterParticipants.find((entry) => entry.id === pendingRoll.participantId);
 
     if (!encounter || !participant) {
       return;
@@ -2602,7 +2607,7 @@ export function PlayerRoleplayingEncounterScreen({
           <div style={{ display: "grid", gap: "0.75rem" }}>
             {visibleAssignedRolls.map((roll, index) => {
               const contentSkill = content?.skills.find((skill) => skill.id === roll.skillId);
-              const assignedParticipant = encounter.participants.find((participant) => participant.id === roll.participantId);
+              const assignedParticipant = effectivePlayerEncounterParticipants.find((participant) => participant.id === roll.participantId);
               const assignedSkillProfile =
                 contentSkill && assignedParticipant
                   ? getSkillRollProfile({

@@ -11,6 +11,8 @@ import {
   orderRoleplayEncounterParticipants,
 } from "@glantri/domain";
 
+import { getScenarioParticipantFallbackEncounterParticipants } from "./encounterParticipantFallback";
+
 export interface PlayerGeneralEncounterVisibleParticipant {
   description: string;
   id: string;
@@ -109,6 +111,7 @@ function getPlayerSafeParticipantName(input: {
 
 function isParticipantVisibleToPlayer(input: {
   controlledParticipantIds: Set<string>;
+  defaultVisibleWhenNoMatrix?: boolean;
   participantId: string;
   state: ReturnType<typeof normalizeRoleplayState>;
 }): boolean {
@@ -117,7 +120,16 @@ function isParticipantVisibleToPlayer(input: {
   }
 
   for (const viewerId of input.controlledParticipantIds) {
-    if (input.state.visibility[viewerId]?.[input.participantId]) {
+    const viewerVisibility = input.state.visibility[viewerId];
+
+    if (viewerVisibility?.[input.participantId]) {
+      return true;
+    }
+
+    if (
+      input.defaultVisibleWhenNoMatrix &&
+      (!viewerVisibility || Object.keys(viewerVisibility).length === 0)
+    ) {
       return true;
     }
   }
@@ -246,7 +258,12 @@ export function buildPlayerGeneralEncounterView(input: {
   scenarioParticipants: ScenarioParticipant[];
 }): PlayerGeneralEncounterView {
   const state = normalizeRoleplayState(input.encounter);
-  const orderedParticipants = orderRoleplayEncounterParticipants(input.encounter.participants);
+  const effectiveEncounterParticipants = getScenarioParticipantFallbackEncounterParticipants({
+    encounter: input.encounter,
+    scenarioParticipants: input.scenarioParticipants,
+  });
+  const usesFallbackParticipants = input.encounter.participants.length === 0;
+  const orderedParticipants = orderRoleplayEncounterParticipants(effectiveEncounterParticipants);
   const encounterParticipantsById = new Map(orderedParticipants.map((participant) => [participant.id, participant]));
   const scenarioParticipantsById = new Map(
     input.scenarioParticipants.map((participant) => [participant.id, participant])
@@ -265,6 +282,7 @@ export function buildPlayerGeneralEncounterView(input: {
       .filter((participant) =>
         isParticipantVisibleToPlayer({
           controlledParticipantIds,
+          defaultVisibleWhenNoMatrix: usesFallbackParticipants,
           participantId: participant.id,
           state,
         })

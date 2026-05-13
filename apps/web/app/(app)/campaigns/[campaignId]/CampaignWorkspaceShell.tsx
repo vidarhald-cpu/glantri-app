@@ -167,6 +167,20 @@ export default function CampaignWorkspaceShell({
   const activeEncounter = activeScenarioEncounters.find(
     (encounter) => encounter.id === workspaceState.activeEncounterId
   );
+  const currentUserActiveScenarioParticipant = scenarioParticipants.find(
+    (participant) =>
+      Boolean(currentUser?.id) &&
+      participant.scenarioId === workspaceState.activeScenarioId &&
+      participant.isActive &&
+      participant.role === "player_character" &&
+      participant.controlledByUserId === currentUser?.id
+  );
+  const playerEncounterEmptyDetail =
+    workspaceState.activeScenarioId &&
+    currentUserActiveScenarioParticipant &&
+    activeScenarioEncounters.some((encounter) => encounter.status !== "archived")
+      ? "You are in this scenario, but not assigned to this encounter."
+      : "Waiting for GM to add you to an encounter.";
 
   function buildWorkspaceHref(partial: {
     encounterId?: string | null;
@@ -455,7 +469,7 @@ export default function CampaignWorkspaceShell({
           ) : (
             <section style={panelStyle}>
               <strong>No player encounter is currently available.</strong>
-              <div>Waiting for GM to add you to an encounter.</div>
+              <div>{playerEncounterEmptyDetail}</div>
               {workspaceState.activeScenarioId ? (
                 <Link
                   href={buildWorkspaceHref({
