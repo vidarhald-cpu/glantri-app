@@ -1,6 +1,6 @@
 import type { EncounterSession, Scenario, ScenarioParticipant } from "@glantri/domain";
 
-import { getScenarioParticipantFallbackEncounterParticipants } from "./encounterParticipantFallback";
+import { isUserAssignedToEffectiveEncounter } from "./encounterParticipantFallback";
 
 export type CampaignWorkspaceTabId =
   | "campaign"
@@ -135,52 +135,16 @@ function getEncounterStatusRank(status: EncounterSession["status"]): number {
   }
 }
 
-function isPlayerControlledScenarioParticipant(input: {
-  participant: ScenarioParticipant;
-  userId?: string | null;
-}): boolean {
-  return Boolean(
-    input.userId &&
-      input.participant.isActive &&
-      input.participant.role === "player_character" &&
-      input.participant.controlledByUserId === input.userId
-  );
-}
-
 function isPlayerAssignedToEncounter(input: {
   encounter: EncounterSession;
   scenarioParticipants: ScenarioParticipant[];
   userId?: string | null;
 }): boolean {
-  if (!input.userId || input.encounter.status === "archived") {
-    return false;
-  }
-
-  const controlledScenarioParticipants = input.scenarioParticipants.filter((participant) =>
-    isPlayerControlledScenarioParticipant({
-      participant,
-      userId: input.userId,
-    })
-  );
-  const controlledScenarioParticipantIds = new Set(
-    controlledScenarioParticipants.map((participant) => participant.id)
-  );
-  const controlledCharacterIds = new Set(
-    controlledScenarioParticipants
-      .map((participant) => participant.characterId)
-      .filter((characterId): characterId is string => Boolean(characterId))
-  );
-  const encounterParticipants = getScenarioParticipantFallbackEncounterParticipants({
+  return isUserAssignedToEffectiveEncounter({
     encounter: input.encounter,
     scenarioParticipants: input.scenarioParticipants,
+    userId: input.userId,
   });
-
-  return encounterParticipants.some(
-    (participant) =>
-      (participant.scenarioParticipantId &&
-        controlledScenarioParticipantIds.has(participant.scenarioParticipantId)) ||
-      (participant.characterId && controlledCharacterIds.has(participant.characterId))
-  );
 }
 
 function resolvePlayerEncounterSelection(input: {

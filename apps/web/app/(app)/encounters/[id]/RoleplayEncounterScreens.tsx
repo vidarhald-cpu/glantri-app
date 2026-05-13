@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type {
   Campaign,
@@ -2232,10 +2232,8 @@ export function PlayerRoleplayingEncounterScreen({
   const { currentUser } = useSessionUser();
   const situationRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadRoleplayEncounter() {
+  const fetchRoleplayEncounter = useCallback(
+    async () => {
       const [nextEncounter, nextScenario, nextCampaign, nextParticipants, nextContent] = await Promise.all([
         loadEncounterById(encounterId),
         loadScenarioById(scenarioId),
@@ -2244,24 +2242,73 @@ export function PlayerRoleplayingEncounterScreen({
         loadCanonicalContent(),
       ]);
 
+      return {
+        nextCampaign,
+        nextContent,
+        nextEncounter,
+        nextParticipants,
+        nextScenario,
+      };
+    },
+    [campaignId, encounterId, scenarioId]
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function refreshRoleplayEncounter(input: { showLoading?: boolean } = {}) {
+      if (input.showLoading) {
+        setLoading(true);
+      }
+
+      try {
+        const nextData = await fetchRoleplayEncounter();
+
+        if (cancelled) {
+          return;
+        }
+
+        setEncounter(nextData.nextEncounter);
+        setScenario(nextData.nextScenario);
+        setCampaign(nextData.nextCampaign);
+        setScenarioParticipants(nextData.nextParticipants);
+        setContent(nextData.nextContent);
+        setLoading(false);
+      } catch {
+        if (!cancelled && input.showLoading) {
+          setLoading(false);
+        }
+      }
+    }
+
+    void refreshRoleplayEncounter({ showLoading: true });
+
+    const intervalId = window.setInterval(() => {
       if (cancelled) {
         return;
       }
 
-      setEncounter(nextEncounter);
-      setScenario(nextScenario);
-      setCampaign(nextCampaign);
-      setScenarioParticipants(nextParticipants);
-      setContent(nextContent);
-      setLoading(false);
+      void refreshRoleplayEncounter();
+    }, 5000);
+
+    function refreshOnFocus() {
+      if (cancelled || document.visibilityState === "hidden") {
+        return;
+      }
+
+      void refreshRoleplayEncounter();
     }
 
-    void loadRoleplayEncounter();
+    window.addEventListener("focus", refreshOnFocus);
+    document.addEventListener("visibilitychange", refreshOnFocus);
 
     return () => {
       cancelled = true;
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", refreshOnFocus);
+      document.removeEventListener("visibilitychange", refreshOnFocus);
     };
-  }, [campaignId, encounterId, scenarioId]);
+  }, [fetchRoleplayEncounter]);
 
   useEffect(() => {
     const situationElement = situationRef.current;
@@ -2288,6 +2335,34 @@ export function PlayerRoleplayingEncounterScreen({
     encounter,
     scenarioParticipants,
   });
+
+  if (currentUser && playerView.controlledParticipantIds.length === 0) {
+    return (
+      <section style={{ display: "grid", gap: "1rem", maxWidth: 980 }}>
+        <RememberedCampaignWorkspaceEffect
+          campaignId={campaignId}
+          encounterId={encounterId}
+          scenarioId={scenarioId}
+          tab="player-encounter"
+        />
+        {!embedded ? (
+          <Link href={buildCampaignWorkspaceHref({ campaignId, scenarioId, tab: "scenario" })}>
+            Back to scenario
+          </Link>
+        ) : null}
+        <PlayerEncounterTopInfo
+          campaignName={campaign?.name}
+          encounter={encounter}
+          scenarioName={scenario?.name}
+        />
+        <section style={panelStyle}>
+          <strong>No player encounter is currently available.</strong>
+          <div>You are in this scenario, but not assigned to this encounter.</div>
+        </section>
+      </section>
+    );
+  }
+
   const visibleAssignedRolls = playerView.assignedRolls.filter(
     (roll) => !dismissedAssignedRollIds.has(roll.id)
   );

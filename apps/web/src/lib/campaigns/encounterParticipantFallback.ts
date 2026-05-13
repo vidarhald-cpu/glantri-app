@@ -45,3 +45,39 @@ export function formatEncounterParticipantCountLabel(input: {
   const fallbackCount = getScenarioParticipantFallbackEncounterParticipants(input).length;
   return `${fallbackCount} active scenario participants (default)`;
 }
+
+export function isUserAssignedToEffectiveEncounter(input: {
+  encounter: EncounterSession;
+  scenarioParticipants: ScenarioParticipant[];
+  userId?: string | null;
+}): boolean {
+  if (!input.userId || input.encounter.status === "archived") {
+    return false;
+  }
+
+  const controlledScenarioParticipants = input.scenarioParticipants.filter(
+    (participant) =>
+      participant.isActive &&
+      participant.role === "player_character" &&
+      participant.controlledByUserId === input.userId
+  );
+  const controlledScenarioParticipantIds = new Set(
+    controlledScenarioParticipants.map((participant) => participant.id)
+  );
+  const controlledCharacterIds = new Set(
+    controlledScenarioParticipants
+      .map((participant) => participant.characterId)
+      .filter((characterId): characterId is string => Boolean(characterId))
+  );
+  const effectiveParticipants = getScenarioParticipantFallbackEncounterParticipants({
+    encounter: input.encounter,
+    scenarioParticipants: input.scenarioParticipants,
+  });
+
+  return effectiveParticipants.some(
+    (participant) =>
+      (participant.scenarioParticipantId &&
+        controlledScenarioParticipantIds.has(participant.scenarioParticipantId)) ||
+      (participant.characterId && controlledCharacterIds.has(participant.characterId))
+  );
+}

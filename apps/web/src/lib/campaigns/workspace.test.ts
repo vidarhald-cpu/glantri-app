@@ -419,6 +419,60 @@ describe("campaign workspace", () => {
     expect(state.activeTab).toBe("player-encounter");
   });
 
+  it("invalidates remembered fallback access when explicit membership later excludes the player", () => {
+    const scenarioParticipants = [
+      scenarioParticipant({
+        controlledByUserId: "player-1",
+        id: "participant-1",
+        scenarioId: "scn-1",
+      }),
+      scenarioParticipant({
+        controlledByUserId: "other-player",
+        id: "other-participant",
+        scenarioId: "scn-1",
+      }),
+    ];
+    const fallbackState = resolveCampaignWorkspaceState({
+      activeCampaignId: "camp-1",
+      canAccessGmEncounter: false,
+      currentUserId: "player-1",
+      encounters: [
+        encounter({
+          id: "enc-changing",
+          scenarioId: "scn-1",
+          status: "active",
+        }),
+      ],
+      rememberedEncounterId: "enc-changing",
+      rememberedScenarioId: "scn-1",
+      rememberedTab: "player-encounter",
+      scenarioParticipants,
+      scenarios: [scenario({ id: "scn-1", name: "Session one" })],
+    });
+    const explicitState = resolveCampaignWorkspaceState({
+      activeCampaignId: "camp-1",
+      canAccessGmEncounter: false,
+      currentUserId: "player-1",
+      encounters: [
+        encounter({
+          id: "enc-changing",
+          scenarioId: "scn-1",
+          scenarioParticipantId: "other-participant",
+          status: "active",
+        }),
+      ],
+      rememberedEncounterId: "enc-changing",
+      rememberedScenarioId: "scn-1",
+      rememberedTab: "player-encounter",
+      scenarioParticipants,
+      scenarios: [scenario({ id: "scn-1", name: "Session one" })],
+    });
+
+    expect(fallbackState.activeEncounterId).toBe("enc-changing");
+    expect(explicitState.activeEncounterId).toBeUndefined();
+    expect(explicitState.activeTab).toBe("player-encounter");
+  });
+
   it("keeps the player encounter tab for a waiting state when no assigned encounter exists", () => {
     const state = resolveCampaignWorkspaceState({
       activeCampaignId: "camp-1",

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import type { Campaign, EncounterSession, Scenario, ScenarioParticipant } from "@glantri/domain";
 
@@ -75,7 +75,7 @@ export default function CampaignWorkspaceShell({
     workspaceSelectionKeys.workspaceTab,
   );
 
-  async function refreshWorkspaceContext() {
+  const refreshWorkspaceContext = useCallback(async () => {
     const workspaceAccess = await loadCampaignWorkspaceAccessForUser({
       campaignId,
       user: currentUser,
@@ -101,7 +101,23 @@ export default function CampaignWorkspaceShell({
         scenarioIds,
       }),
     );
-  }
+  }, [campaignId, currentUser]);
+
+  const refreshWorkspaceContextWithErrorHandling = useCallback(async () => {
+    try {
+      await refreshWorkspaceContext();
+      setError(undefined);
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error ? caughtError.message : "Unable to load campaign workspace.",
+      );
+      setAccessMode("none");
+      setAccessibleCampaign(null);
+      setScenarios([]);
+      setScenarioParticipants([]);
+      setEncounters([]);
+    }
+  }, [refreshWorkspaceContext]);
 
   useEffect(() => {
     if (sessionLoading) {
@@ -109,22 +125,39 @@ export default function CampaignWorkspaceShell({
     }
 
     setLoading(true);
-    refreshWorkspaceContext()
-      .then(() => {
-        setError(undefined);
-      })
-      .catch((caughtError) => {
-        setError(
-          caughtError instanceof Error ? caughtError.message : "Unable to load campaign workspace.",
-        );
-        setAccessMode("none");
-        setAccessibleCampaign(null);
-        setScenarios([]);
-        setScenarioParticipants([]);
-        setEncounters([]);
-      })
+    refreshWorkspaceContextWithErrorHandling()
       .finally(() => setLoading(false));
-  }, [campaignId, currentUser, sessionLoading]);
+  }, [refreshWorkspaceContextWithErrorHandling, sessionLoading]);
+
+  useEffect(() => {
+    if (sessionLoading || loading) {
+      return;
+    }
+
+    void refreshWorkspaceContextWithErrorHandling();
+  }, [loading, refreshWorkspaceContextWithErrorHandling, searchParams, sessionLoading]);
+
+  useEffect(() => {
+    if (sessionLoading) {
+      return;
+    }
+
+    function refreshVisibleWorkspace() {
+      if (document.visibilityState === "hidden") {
+        return;
+      }
+
+      void refreshWorkspaceContextWithErrorHandling();
+    }
+
+    window.addEventListener("focus", refreshVisibleWorkspace);
+    document.addEventListener("visibilitychange", refreshVisibleWorkspace);
+
+    return () => {
+      window.removeEventListener("focus", refreshVisibleWorkspace);
+      document.removeEventListener("visibilitychange", refreshVisibleWorkspace);
+    };
+  }, [refreshWorkspaceContextWithErrorHandling, sessionLoading]);
 
   const workspaceState = useMemo(
     () =>

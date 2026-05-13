@@ -112,6 +112,9 @@ describe("RoleplayEncounterScreens", () => {
     expect(playerSource).toContain("Ranked roll results");
     expect(playerSource).toContain("Character log");
     expect(playerSource).toContain("buildPlayerGeneralEncounterView");
+    expect(playerSource).toContain("fetchRoleplayEncounter");
+    expect(playerSource).toContain("window.setInterval");
+    expect(playerSource).toContain("You are in this scenario, but not assigned to this encounter.");
     expect(playerSource).toContain("<RoleplayRollCalculationPanel");
     expect(playerSource).toContain("Support category");
     expect(playerSource).toContain("No support skill");

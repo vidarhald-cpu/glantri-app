@@ -140,11 +140,13 @@ function isParticipantVisibleToPlayer(input: {
 function buildAssignedRoll(input: {
   encounterParticipantsById: Map<string, EncounterParticipant>;
   pendingRoll: RoleplayPendingSkillRoll;
+  participant?: EncounterParticipant;
   result?: RoleplayActionLogEntry;
   state: ReturnType<typeof normalizeRoleplayState>;
   visibleParticipantIds: Set<string>;
 }): PlayerGeneralEncounterAssignedRoll {
-  const participant = input.encounterParticipantsById.get(input.pendingRoll.participantId);
+  const participant =
+    input.participant ?? input.encounterParticipantsById.get(input.pendingRoll.participantId);
   const opponentVisible =
     input.pendingRoll.opponentParticipantId &&
     !input.pendingRoll.opponentSilent &&
@@ -169,7 +171,7 @@ function buildAssignedRoll(input: {
             state: input.state,
           })} · ${input.pendingRoll.opponentSkillLabel}`
         : undefined,
-    participantId: input.pendingRoll.participantId,
+    participantId: participant?.id ?? input.pendingRoll.participantId,
     participantName: participant
       ? getPlayerSafeParticipantName({
           fallbackLabel: participant.label,
@@ -234,14 +236,20 @@ function isPlayerVisibleRankedResult(input: {
 function buildPlayerCharacterLog(input: {
   controlledParticipantIds: Set<string>;
   entries: RoleplayActionLogEntry[];
+  resolveParticipant: (participantId?: string | null) => EncounterParticipant | undefined;
 }): PlayerGeneralEncounterLogEntry[] {
   return input.entries
     .filter(
-      (entry) =>
-        entry.type === "gm_skill_roll" &&
-        !entry.silent &&
-        entry.participantId != null &&
-        input.controlledParticipantIds.has(entry.participantId)
+      (entry) => {
+        const participant = input.resolveParticipant(entry.participantId);
+
+        return (
+          entry.type === "gm_skill_roll" &&
+          !entry.silent &&
+          participant != null &&
+          input.controlledParticipantIds.has(participant.id)
+        );
+      }
     )
     .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
     .map((entry) => ({
@@ -268,6 +276,20 @@ export function buildPlayerGeneralEncounterView(input: {
   const scenarioParticipantsById = new Map(
     input.scenarioParticipants.map((participant) => [participant.id, participant])
   );
+  const resolveParticipant = (participantId?: string | null): EncounterParticipant | undefined => {
+    if (!participantId) {
+      return undefined;
+    }
+
+    return (
+      encounterParticipantsById.get(participantId) ??
+      orderedParticipants.find(
+        (participant) =>
+          participant.scenarioParticipantId === participantId ||
+          participant.characterId === participantId
+      )
+    );
+  };
   const controlledParticipantIds = new Set(
     orderedParticipants
       .filter(
@@ -305,10 +327,16 @@ export function buildPlayerGeneralEncounterView(input: {
       };
     });
   const visiblePendingRolls = state.pendingSkillRolls.filter(
-    (roll) =>
-      !roll.silent &&
-      controlledParticipantIds.has(roll.participantId) &&
-      visibleParticipantIds.has(roll.participantId)
+    (roll) => {
+      const participant = resolveParticipant(roll.participantId);
+
+      return (
+        !roll.silent &&
+        participant != null &&
+        controlledParticipantIds.has(participant.id) &&
+        visibleParticipantIds.has(participant.id)
+      );
+    }
   );
   const latestPendingRoll = [...visiblePendingRolls].sort((left, right) =>
     right.assignedAt.localeCompare(left.assignedAt)
@@ -326,6 +354,7 @@ export function buildPlayerGeneralEncounterView(input: {
       buildAssignedRoll({
         encounterParticipantsById,
         pendingRoll,
+        participant: resolveParticipant(pendingRoll.participantId),
         result: findVisibleResultForPendingRoll({
           entries: state.actionLog,
           pendingRoll,
@@ -334,9 +363,19 @@ export function buildPlayerGeneralEncounterView(input: {
         visibleParticipantIds,
       })
     );
-  const visibleRankedEntries = state.actionLog.filter((entry) =>
-    isPlayerVisibleRankedResult({ entry, visibleParticipantIds })
-  );
+  const visibleRankedEntries = state.actionLog.filter((entry) => {
+    const participant = resolveParticipant(entry.participantId);
+
+    return (
+      participant != null &&
+      isPlayerVisibleRankedResult({
+        entry,
+        visibleParticipantIds: new Set(
+          visibleParticipantIds.has(participant.id) ? [entry.participantId ?? participant.id] : []
+        ),
+      })
+    );
+  });
   const latestVisibleRankedEntry = [...visibleRankedEntries].sort((left, right) =>
     right.createdAt.localeCompare(left.createdAt)
   )[0];
@@ -358,9 +397,7 @@ export function buildPlayerGeneralEncounterView(input: {
         right.createdAt.localeCompare(left.createdAt)
     )
     .map((entry) => {
-      const participant = entry.participantId
-        ? encounterParticipantsById.get(entry.participantId)
-        : undefined;
+      const participant = resolveParticipant(entry.participantId);
 
       return {
         id: entry.id,
@@ -378,6 +415,7 @@ export function buildPlayerGeneralEncounterView(input: {
   const characterLog = buildPlayerCharacterLog({
     controlledParticipantIds,
     entries: state.actionLog,
+    resolveParticipant,
   });
 
   return {

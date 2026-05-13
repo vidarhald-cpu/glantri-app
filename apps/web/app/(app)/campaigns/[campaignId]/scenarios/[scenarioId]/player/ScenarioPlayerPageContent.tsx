@@ -3,12 +3,22 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
-import type { EncounterSession, ScenarioPlayerProjection } from "@glantri/domain";
+import type {
+  EncounterSession,
+  ScenarioParticipant,
+  ScenarioPlayerProjection,
+} from "@glantri/domain";
 
-import { buildCampaignWorkspaceHref } from "@/lib/campaigns/workspace";
-
-import { loadScenarioPlayerProjection } from "@/lib/api/localServiceClient";
+import {
+  loadScenarioParticipants,
+  loadScenarioPlayerProjection,
+} from "@/lib/api/localServiceClient";
 import { useSessionUser } from "@/lib/auth/SessionUserContext";
+import {
+  formatEncounterParticipantCountLabel,
+  isUserAssignedToEffectiveEncounter,
+} from "@/lib/campaigns/encounterParticipantFallback";
+import { buildCampaignWorkspaceHref } from "@/lib/campaigns/workspace";
 
 interface ScenarioPlayerPageContentProps {
   campaignId?: string;
@@ -34,6 +44,7 @@ export default function ScenarioPlayerPageContent({
   const [error, setError] = useState<string>();
   const [loading, setLoading] = useState(true);
   const [projection, setProjection] = useState<ScenarioPlayerProjection>();
+  const [scenarioParticipants, setScenarioParticipants] = useState<ScenarioParticipant[]>([]);
 
   useEffect(() => {
     if (sessionLoading) {
@@ -52,13 +63,17 @@ export default function ScenarioPlayerPageContent({
       setLoading(true);
 
       try {
-        const nextProjection = await loadScenarioPlayerProjection(scenarioId);
+        const [nextProjection, nextScenarioParticipants] = await Promise.all([
+          loadScenarioPlayerProjection(scenarioId),
+          loadScenarioParticipants(scenarioId),
+        ]);
 
         if (cancelled) {
           return;
         }
 
         setProjection(nextProjection);
+        setScenarioParticipants(nextScenarioParticipants);
         setError(undefined);
       } catch (caughtError) {
         if (cancelled) {
@@ -223,40 +238,51 @@ export default function ScenarioPlayerPageContent({
         <h2 style={{ margin: 0 }}>Encounter access</h2>
         {encounters.length > 0 ? (
           <div style={{ display: "grid", gap: "0.6rem" }}>
-            {encounters.map((encounter) => (
-              <div
-                key={encounter.id}
-                style={{
-                  background: "#ffffff",
-                  border: "1px solid #ddd7c9",
-                  borderRadius: 10,
-                  display: "grid",
-                  gap: "0.25rem",
-                  padding: "0.75rem",
-                }}
-              >
-                <strong>{encounter.title}</strong>
-                <div>Status: {encounter.status}</div>
-                <div>
-                  Participants:{" "}
-                  {encounter.participants.length > 0
-                    ? encounter.participants.length
-                    : `${projection.visibleParticipants.length} active scenario participants (default)`}
-                </div>
-                {campaignId ? (
-                  <Link
-                    href={buildCampaignWorkspaceHref({
-                      campaignId,
-                      encounterId: encounter.id,
-                      scenarioId,
-                      tab: "player-encounter",
+            {encounters.map((encounter) => {
+              const isAssignedToEncounter = isUserAssignedToEffectiveEncounter({
+                encounter,
+                scenarioParticipants,
+                userId: currentUser.id,
+              });
+
+              return (
+                <div
+                  key={encounter.id}
+                  style={{
+                    background: "#ffffff",
+                    border: "1px solid #ddd7c9",
+                    borderRadius: 10,
+                    display: "grid",
+                    gap: "0.25rem",
+                    padding: "0.75rem",
+                  }}
+                >
+                  <strong>{encounter.title}</strong>
+                  <div>Status: {encounter.status}</div>
+                  <div>
+                    Participants:{" "}
+                    {formatEncounterParticipantCountLabel({
+                      encounter,
+                      scenarioParticipants,
                     })}
-                  >
-                    Open encounter
-                  </Link>
-                ) : null}
-              </div>
-            ))}
+                  </div>
+                  {campaignId && isAssignedToEncounter ? (
+                    <Link
+                      href={buildCampaignWorkspaceHref({
+                        campaignId,
+                        encounterId: encounter.id,
+                        scenarioId,
+                        tab: "player-encounter",
+                      })}
+                    >
+                      Open encounter
+                    </Link>
+                  ) : (
+                    <div>You are not assigned to this encounter.</div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         ) : (
           <div>No accessible encounters are currently linked to this scenario.</div>

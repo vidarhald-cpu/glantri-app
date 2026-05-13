@@ -258,6 +258,46 @@ describe("playerGeneralEncounter", () => {
     expect(JSON.stringify(view.assignedRolls)).not.toContain("silent-roll");
   });
 
+  it("matches assigned rolls by scenario participant id when needed", () => {
+    const baseEncounter = makeEncounter();
+    const encounter = {
+      ...baseEncounter,
+      roleplayState: {
+        ...baseEncounter.roleplayState,
+        pendingSkillRolls: [
+          {
+            assignedAt: "2026-01-01T00:06:00.000Z",
+            difficulty: "medium",
+            id: "scenario-participant-roll",
+            mode: "difficulty",
+            participantId: "pc-1",
+            rollSetId: "roll-set-scenario-participant",
+            silent: false,
+            skillId: "first-aid",
+            skillLabel: "First aid",
+            skillValue: 23,
+          },
+        ],
+      },
+    } as EncounterSession;
+    const view = buildPlayerGeneralEncounterView({
+      currentUserId: "player-1",
+      encounter,
+      scenarioParticipants: [
+        makeScenarioParticipant({ controlledByUserId: "player-1", id: "pc-1", name: "Player hero" }),
+      ],
+    });
+
+    expect(view.assignedRolls).toHaveLength(1);
+    expect(view.assignedRolls[0]).toMatchObject({
+      id: "scenario-participant-roll",
+      participantId: "scenario-pc-1",
+      participantName: "Player hero",
+      skillLabel: "First aid",
+      skillValue: 23,
+    });
+  });
+
   it("keeps ranked results player-safe by hiding hidden, silent, opposed, and historical rolls", () => {
     const view = buildPlayerGeneralEncounterView({
       currentUserId: "player-1",
