@@ -4,9 +4,9 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
-import type { Campaign, EncounterSession, Scenario } from "@glantri/domain";
+import type { Campaign, EncounterSession, Scenario, ScenarioParticipant } from "@glantri/domain";
 
-import { loadScenarioEncounters } from "@/lib/api/localServiceClient";
+import { loadScenarioEncounters, loadScenarioParticipants } from "@/lib/api/localServiceClient";
 import {
   REMEMBERED_SELECTION_KEYS,
   useRememberedSelection,
@@ -55,6 +55,7 @@ export default function CampaignWorkspaceShell({
   const [encounters, setEncounters] = useState<EncounterSession[]>([]);
   const [error, setError] = useState<string>();
   const [loading, setLoading] = useState(true);
+  const [scenarioParticipants, setScenarioParticipants] = useState<ScenarioParticipant[]>([]);
   const [scenarios, setScenarios] = useState<Scenario[]>([]);
   const canAccessGmEncounter = canManageCampaignWorkspace(currentUser);
   const rememberedCampaignSelection = useRememberedSelection(
@@ -83,11 +84,16 @@ export default function CampaignWorkspaceShell({
     const encounterGroups = await Promise.all(
       workspaceAccess.scenarios.map((scenario) => loadScenarioEncounters(scenario.id)),
     );
+    const participantGroups = await Promise.all(
+      workspaceAccess.scenarios.map((scenario) => loadScenarioParticipants(scenario.id)),
+    );
     const nextEncounters = encounterGroups.flat();
+    const nextScenarioParticipants = participantGroups.flat();
 
     setAccessibleCampaign(workspaceAccess.campaign ?? null);
     setAccessMode(workspaceAccess.accessMode);
     setScenarios(workspaceAccess.scenarios);
+    setScenarioParticipants(nextScenarioParticipants);
     setEncounters(
       getCampaignWorkspaceVisibleEncounters({
         campaignId,
@@ -114,6 +120,7 @@ export default function CampaignWorkspaceShell({
         setAccessMode("none");
         setAccessibleCampaign(null);
         setScenarios([]);
+        setScenarioParticipants([]);
         setEncounters([]);
       })
       .finally(() => setLoading(false));
@@ -124,6 +131,7 @@ export default function CampaignWorkspaceShell({
       resolveCampaignWorkspaceState({
         activeCampaignId: campaignId,
         canAccessGmEncounter,
+        currentUserId: currentUser?.id,
         encounters,
         rememberedEncounterId: rememberedEncounterSelection.value,
         rememberedScenarioId: rememberedScenarioSelection.value,
@@ -131,15 +139,18 @@ export default function CampaignWorkspaceShell({
         requestedEncounterId: searchParams.get("encounterId"),
         requestedScenarioId: searchParams.get("scenarioId"),
         requestedTab: searchParams.get("tab"),
+        scenarioParticipants,
         scenarios
       }),
     [
       campaignId,
       canAccessGmEncounter,
+      currentUser?.id,
       encounters,
       rememberedEncounterSelection.value,
       rememberedScenarioSelection.value,
       rememberedWorkspaceTab.value,
+      scenarioParticipants,
       scenarios,
       searchParams,
     ]
@@ -339,10 +350,24 @@ export default function CampaignWorkspaceShell({
                 {accessibleCampaign?.description || "This player account can access the scenarios below."}
               </div>
               <div>
-                Accessible scenarios:{" "}
-                {scenarios.length > 0
-                  ? scenarios.map((scenario) => scenario.name).join(", ")
-                  : "None"}
+                Accessible scenarios:
+                {scenarios.length > 0 ? (
+                  <span style={{ display: "inline-flex", flexWrap: "wrap", gap: "0.5rem", marginLeft: "0.5rem" }}>
+                    {scenarios.map((scenario) => (
+                      <Link
+                        key={scenario.id}
+                        href={buildWorkspaceHref({
+                          scenarioId: scenario.id,
+                          tab: "scenario",
+                        })}
+                      >
+                        {scenario.name}
+                      </Link>
+                    ))}
+                  </span>
+                ) : (
+                  " None"
+                )}
               </div>
             </section>
           )}
@@ -366,7 +391,27 @@ export default function CampaignWorkspaceShell({
               />
             )
           ) : (
-            <section style={panelStyle}>Open a scenario from the campaign Scenarios list to load this tab.</section>
+            <section style={panelStyle}>
+              <strong>No accessible scenario selected.</strong>
+              {scenarios.length > 0 ? (
+                <div style={{ display: "grid", gap: "0.5rem" }}>
+                  <div>Choose a scenario to open the player scenario view.</div>
+                  {scenarios.map((scenario) => (
+                    <Link
+                      key={scenario.id}
+                      href={buildWorkspaceHref({
+                        scenarioId: scenario.id,
+                        tab: "scenario",
+                      })}
+                    >
+                      {scenario.name}
+                    </Link>
+                  ))}
+                </div>
+              ) : (
+                <div>No accessible scenarios are available for this player account.</div>
+              )}
+            </section>
           )}
         </section>
       ) : null}
@@ -409,8 +454,33 @@ export default function CampaignWorkspaceShell({
             />
           ) : (
             <section style={panelStyle}>
-              Select a scenario and encounter from the workspace picker to open the player
-              encounter tab.
+              <strong>No player encounter is currently available.</strong>
+              <div>Waiting for GM to add you to an encounter.</div>
+              {workspaceState.activeScenarioId ? (
+                <Link
+                  href={buildWorkspaceHref({
+                    scenarioId: workspaceState.activeScenarioId,
+                    tab: "scenario",
+                  })}
+                >
+                  Back to scenario
+                </Link>
+              ) : scenarios.length > 0 ? (
+                <div style={{ display: "grid", gap: "0.5rem" }}>
+                  <div>Choose a scenario to check for player encounters.</div>
+                  {scenarios.map((scenario) => (
+                    <Link
+                      key={scenario.id}
+                      href={buildWorkspaceHref({
+                        scenarioId: scenario.id,
+                        tab: "player-encounter",
+                      })}
+                    >
+                      {scenario.name}
+                    </Link>
+                  ))}
+                </div>
+              ) : null}
             </section>
           )}
         </section>

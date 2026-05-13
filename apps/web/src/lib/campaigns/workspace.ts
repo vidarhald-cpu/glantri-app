@@ -1,4 +1,4 @@
-import type { EncounterSession, Scenario } from "@glantri/domain";
+import type { EncounterSession, Scenario, ScenarioParticipant } from "@glantri/domain";
 
 export type CampaignWorkspaceTabId =
   | "campaign"
@@ -96,7 +96,7 @@ function resolveRequestedCampaignWorkspaceTab(input: {
     case "campaign":
       return "campaign";
     case "scenario":
-      return input.activeScenarioId ? "scenario" : "campaign";
+      return input.activeScenarioId || !input.canAccessGmEncounter ? "scenario" : "campaign";
     case "gm-encounter":
       if (!input.activeScenarioId || !input.activeEncounterId) {
         return fallbackTab;
@@ -104,35 +104,136 @@ function resolveRequestedCampaignWorkspaceTab(input: {
 
       return input.canAccessGmEncounter ? "gm-encounter" : "player-encounter";
     case "player-encounter":
-      return input.activeScenarioId && input.activeEncounterId
-        ? "player-encounter"
-        : fallbackTab;
+      if (!input.canAccessGmEncounter) {
+        return "player-encounter";
+      }
+
+      return input.activeScenarioId && input.activeEncounterId ? "player-encounter" : fallbackTab;
     default:
       return fallbackTab;
   }
+}
+
+function getEncounterStatusRank(status: EncounterSession["status"]): number {
+  switch (status) {
+    case "active":
+      return 0;
+    case "planned":
+      return 1;
+    case "paused":
+      return 2;
+    case "setup":
+      return 3;
+    case "complete":
+      return 4;
+    case "archived":
+      return 99;
+    default:
+      return 50;
+  }
+}
+
+function isPlayerControlledScenarioParticipant(input: {
+  participant: ScenarioParticipant;
+  userId?: string | null;
+}): boolean {
+  return Boolean(
+    input.userId &&
+      input.participant.isActive &&
+      input.participant.role === "player_character" &&
+      input.participant.controlledByUserId === input.userId
+  );
+}
+
+function isPlayerAssignedToEncounter(input: {
+  encounter: EncounterSession;
+  scenarioParticipants: ScenarioParticipant[];
+  userId?: string | null;
+}): boolean {
+  if (!input.userId || input.encounter.status === "archived") {
+    return false;
+  }
+
+  const controlledScenarioParticipants = input.scenarioParticipants.filter((participant) =>
+    isPlayerControlledScenarioParticipant({
+      participant,
+      userId: input.userId,
+    })
+  );
+  const controlledScenarioParticipantIds = new Set(
+    controlledScenarioParticipants.map((participant) => participant.id)
+  );
+  const controlledCharacterIds = new Set(
+    controlledScenarioParticipants
+      .map((participant) => participant.characterId)
+      .filter((characterId): characterId is string => Boolean(characterId))
+  );
+
+  return input.encounter.participants.some(
+    (participant) =>
+      (participant.scenarioParticipantId &&
+        controlledScenarioParticipantIds.has(participant.scenarioParticipantId)) ||
+      (participant.characterId && controlledCharacterIds.has(participant.characterId))
+  );
+}
+
+function resolvePlayerEncounterSelection(input: {
+  activeScenarioId?: string;
+  encounters: EncounterSession[];
+  requestedEncounterId?: string | null;
+  scenarioParticipants: ScenarioParticipant[];
+  userId?: string | null;
+}): EncounterSession | undefined {
+  const candidateEncounters = input.encounters
+    .filter((encounter) => !input.activeScenarioId || encounter.scenarioId === input.activeScenarioId)
+    .filter((encounter) =>
+      isPlayerAssignedToEncounter({
+        encounter,
+        scenarioParticipants: input.scenarioParticipants,
+        userId: input.userId,
+      })
+    );
+
+  if (input.requestedEncounterId) {
+    const requestedEncounter = candidateEncounters.find(
+      (encounter) => encounter.id === input.requestedEncounterId
+    );
+
+    if (requestedEncounter) {
+      return requestedEncounter;
+    }
+  }
+
+  return [...candidateEncounters].sort(
+    (left, right) =>
+      getEncounterStatusRank(left.status) - getEncounterStatusRank(right.status) ||
+      left.title.localeCompare(right.title)
+  )[0];
 }
 
 export function resolveCampaignWorkspaceState(input: {
   activeCampaignId: string;
   canAccessGmEncounter: boolean;
   encounters: EncounterSession[];
+  currentUserId?: string | null;
   rememberedEncounterId?: string | null;
   rememberedScenarioId?: string | null;
   rememberedTab?: string | null;
   requestedEncounterId?: string | null;
   requestedScenarioId?: string | null;
   requestedTab?: string | null;
+  scenarioParticipants?: ScenarioParticipant[];
   scenarios: Scenario[];
 }): CampaignWorkspaceState {
   const requestedScenarioId = input.requestedScenarioId ?? input.rememberedScenarioId;
   const requestedEncounterId = input.requestedEncounterId ?? input.rememberedEncounterId;
   const requestedTab = input.requestedTab ?? input.rememberedTab;
-  const activeScenarioId = input.scenarios.some(
+  let activeScenarioId = input.scenarios.some(
     (scenario) => scenario.id === requestedScenarioId
   )
     ? requestedScenarioId ?? undefined
     : undefined;
-  const activeEncounterId = input.encounters.some(
+  let activeEncounterId = input.encounters.some(
     (encounter) =>
       Boolean(activeScenarioId) &&
       encounter.id === requestedEncounterId &&
@@ -140,6 +241,33 @@ export function resolveCampaignWorkspaceState(input: {
   )
     ? requestedEncounterId ?? undefined
     : undefined;
+
+  if (!input.canAccessGmEncounter) {
+    if (!activeScenarioId && requestedTab === "scenario" && input.scenarios.length === 1) {
+      activeScenarioId = input.scenarios[0]?.id;
+    }
+
+    if (!activeScenarioId && requestedTab === "player-encounter" && input.scenarios.length === 1) {
+      activeScenarioId = input.scenarios[0]?.id;
+    }
+
+    if (requestedTab === "player-encounter") {
+      const playerEncounter = resolvePlayerEncounterSelection({
+        activeScenarioId,
+        encounters: input.encounters,
+        requestedEncounterId,
+        scenarioParticipants: input.scenarioParticipants ?? [],
+        userId: input.currentUserId,
+      });
+
+      if (playerEncounter) {
+        activeEncounterId = playerEncounter.id;
+        activeScenarioId = playerEncounter.scenarioId ?? activeScenarioId;
+      } else {
+        activeEncounterId = undefined;
+      }
+    }
+  }
 
   return {
     activeCampaignId: input.activeCampaignId,
