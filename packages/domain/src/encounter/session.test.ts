@@ -1,6 +1,56 @@
 import { describe, expect, it } from "vitest";
 
-import { encounterSessionSchema } from "./session";
+import type { ScenarioParticipant } from "../campaign/scenario";
+
+import {
+  encounterSessionSchema,
+  formatEncounterParticipantMembershipLabel,
+  isUserAssignedToEncounterMembership,
+  resolveEncounterParticipantMembership,
+  type EncounterSession,
+} from "./session";
+
+function scenarioParticipant(input: {
+  controlledByUserId?: string;
+  id: string;
+  isActive?: boolean;
+  name?: string;
+}): ScenarioParticipant {
+  return {
+    controlledByUserId: input.controlledByUserId,
+    createdAt: "2026-01-01T00:00:00.000Z",
+    id: input.id,
+    isActive: input.isActive ?? true,
+    joinSource: "gm_added",
+    role: "player_character",
+    scenarioId: "scenario-1",
+    snapshot: {
+      displayName: input.name ?? input.id,
+    },
+    sourceType: "character",
+    state: {},
+    updatedAt: "2026-01-01T00:00:00.000Z",
+  } as ScenarioParticipant;
+}
+
+function encounter(input: Partial<EncounterSession> = {}): EncounterSession {
+  return encounterSessionSchema.parse({
+    actionLog: [],
+    createdAt: "2026-01-01T00:00:00.000Z",
+    currentRound: 1,
+    currentTurnIndex: 0,
+    declarationsLocked: false,
+    id: "encounter-1",
+    kind: "roleplay",
+    participants: [],
+    scenarioId: "scenario-1",
+    status: "planned",
+    title: "Market shadows",
+    turnOrderMode: "manual",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+    ...input,
+  });
+}
 
 describe("encounter session normalization invariants", () => {
   it("normalizes older roleplay session JSON with safe defaults and legacy difficulty values", () => {
@@ -146,5 +196,47 @@ describe("encounter session normalization invariants", () => {
     expect(session.roleplayState?.visibility["encounter-participant-1"]?.["encounter-participant-2"]).toBe(true);
     expect(session.roleplayState?.participantDescriptions).not.toHaveProperty("scenario-participant-1");
     expect(session.roleplayState?.visibility).not.toHaveProperty("scenario-participant-1");
+  });
+
+  it("falls back to active scenario participants only before explicit membership is set", () => {
+    const membership = resolveEncounterParticipantMembership({
+      encounter: encounter(),
+      scenarioParticipants: [
+        scenarioParticipant({ controlledByUserId: "player-1", id: "participant-1" }),
+        scenarioParticipant({ id: "participant-2", isActive: false }),
+      ],
+    });
+
+    expect(membership.source).toBe("defaultFallback");
+    expect(membership.participants.map((participant) => participant.scenarioParticipantId)).toEqual([
+      "participant-1",
+    ]);
+    expect(formatEncounterParticipantMembershipLabel({
+      encounter: encounter(),
+      scenarioParticipants: [scenarioParticipant({ id: "participant-1" })],
+    })).toBe("1 active scenario participants (default)");
+  });
+
+  it("keeps explicit membership strict even when the explicit list is empty", () => {
+    const explicitEmptyEncounter = encounter({
+      participantMembershipMode: "explicit",
+      participants: [],
+    });
+    const membership = resolveEncounterParticipantMembership({
+      encounter: explicitEmptyEncounter,
+      scenarioParticipants: [scenarioParticipant({ controlledByUserId: "player-1", id: "participant-1" })],
+    });
+
+    expect(membership.source).toBe("explicit");
+    expect(membership.participants).toEqual([]);
+    expect(isUserAssignedToEncounterMembership({
+      encounter: explicitEmptyEncounter,
+      scenarioParticipants: [scenarioParticipant({ controlledByUserId: "player-1", id: "participant-1" })],
+      userId: "player-1",
+    })).toBe(false);
+    expect(formatEncounterParticipantMembershipLabel({
+      encounter: explicitEmptyEncounter,
+      scenarioParticipants: [scenarioParticipant({ id: "participant-1" })],
+    })).toBe("0 assigned");
   });
 });

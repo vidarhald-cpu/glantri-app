@@ -104,7 +104,7 @@ describe("RoleplayEncounterScreens", () => {
     expect(playerSource).toContain("checked={roll.useDbMod}");
     expect(playerSource).toContain("playerRollSkillColumnsStyle");
     expect(playerSource).toContain("buildPlayerRollResult");
-    expect(playerSource).toContain("rollSetId: pendingRoll.rollSetId");
+    expect(playerSource).toContain("resolveEncounterParticipantByRollParticipantId");
     expect(playerSource).toContain("cleanPendingText");
     expect(playerSource).toContain("showPendingLabels={false}");
     expect(playerSource).toContain("Skill not known (-3 default).");
@@ -112,6 +112,7 @@ describe("RoleplayEncounterScreens", () => {
     expect(playerSource).toContain("Ranked roll results");
     expect(playerSource).toContain("Character log");
     expect(playerSource).toContain("buildPlayerGeneralEncounterView");
+    expect(playerSource).toContain("submitPlayerRoleplayRollOnServer");
     expect(playerSource).toContain("fetchRoleplayEncounter");
     expect(playerSource).toContain("window.setInterval");
     expect(playerSource).toContain("You are in this scenario, but not assigned to this encounter.");

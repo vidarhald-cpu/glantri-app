@@ -67,6 +67,7 @@ export {
   createEncounterOnServer,
   loadEncounterById,
   loadScenarioEncounters,
+  submitPlayerRoleplayRollOnServer,
   updateEncounterOnServer
 } from "./encounterClient";
 export {

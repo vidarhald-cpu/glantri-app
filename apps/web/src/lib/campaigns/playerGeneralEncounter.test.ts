@@ -383,4 +383,22 @@ describe("playerGeneralEncounter", () => {
     expect(view.visibleParticipants).toEqual([]);
     expect(view.assignedRolls).toEqual([]);
   });
+
+  it("does not fall back when explicit membership is empty", () => {
+    const view = buildPlayerGeneralEncounterView({
+      currentUserId: "player-1",
+      encounter: {
+        ...makeEmptyParticipantEncounter(),
+        participantMembershipMode: "explicit",
+      },
+      scenarioParticipants: [
+        makeScenarioParticipant({ controlledByUserId: "player-1", id: "pc-1", name: "Player hero" }),
+        makeScenarioParticipant({ id: "npc-visible", name: "Visible NPC" }),
+      ],
+    });
+
+    expect(view.controlledParticipantIds).toEqual([]);
+    expect(view.visibleParticipantIds).toEqual([]);
+    expect(view.visibleParticipants).toEqual([]);
+  });
 });

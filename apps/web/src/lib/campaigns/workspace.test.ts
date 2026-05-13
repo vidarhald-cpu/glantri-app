@@ -19,6 +19,7 @@ function scenario(input: Pick<Scenario, "id" | "name">): Scenario {
 
 function encounter(input: {
   id: string;
+  participantMembershipMode?: EncounterSession["participantMembershipMode"];
   scenarioId: string;
   status?: EncounterSession["status"];
   title?: string;
@@ -33,6 +34,7 @@ function encounter(input: {
     declarationsLocked: false,
     id: input.id,
     kind: "roleplay",
+    participantMembershipMode: input.participantMembershipMode,
     participants: input.scenarioParticipantId
       ? [
           {
@@ -372,6 +374,37 @@ describe("campaign workspace", () => {
           controlledByUserId: "player-1",
           id: "participant-1",
           isActive: false,
+          scenarioId: "scn-1",
+        }),
+      ],
+      scenarios: [scenario({ id: "scn-1", name: "Session one" })],
+    });
+
+    expect(state.activeScenarioId).toBe("scn-1");
+    expect(state.activeEncounterId).toBeUndefined();
+    expect(state.activeTab).toBe("player-encounter");
+  });
+
+  it("does not fall back when explicit membership mode has an empty list", () => {
+    const state = resolveCampaignWorkspaceState({
+      activeCampaignId: "camp-1",
+      canAccessGmEncounter: false,
+      currentUserId: "player-1",
+      encounters: [
+        encounter({
+          id: "enc-explicit-empty",
+          participantMembershipMode: "explicit",
+          scenarioId: "scn-1",
+          status: "active",
+        }),
+      ],
+      requestedEncounterId: null,
+      requestedScenarioId: "scn-1",
+      requestedTab: "player-encounter",
+      scenarioParticipants: [
+        scenarioParticipant({
+          controlledByUserId: "player-1",
+          id: "participant-1",
           scenarioId: "scn-1",
         }),
       ],

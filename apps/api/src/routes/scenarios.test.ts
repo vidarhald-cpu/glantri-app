@@ -19,7 +19,9 @@ const mocks = vi.hoisted(() => {
   };
   const characterService = {};
   const encounterService = {
+    getEncounterById: vi.fn(),
     listEncountersByScenario: vi.fn(),
+    updateEncounter: vi.fn(),
   };
   const scenarioService = {
     createScenario: vi.fn(),
@@ -202,5 +204,291 @@ describe("scenarios route contract", () => {
       userId: "player-1",
     });
     expect(mocks.encounterService.listEncountersByScenario).toHaveBeenCalledWith("scenario-1");
+  });
+
+  it("allows a player to submit their own non-silent assigned roleplay roll", async () => {
+    const encounter = {
+      actionLog: [],
+      createdAt: "2026-01-01T00:00:00.000Z",
+      currentRound: 1,
+      currentTurnIndex: 0,
+      declarationsLocked: false,
+      id: "encounter-1",
+      kind: "roleplay",
+      participants: [
+        {
+          id: "scenario-participant-1",
+          label: "Player hero",
+          participantType: "scenario",
+          scenarioParticipantId: "participant-1",
+        },
+      ],
+      roleplayState: {
+        actionLog: [],
+        pendingSkillRolls: [
+          {
+            assignedAt: "2026-01-01T00:00:00.000Z",
+            difficulty: "medium",
+            id: "roll-1",
+            mode: "difficulty",
+            otherMod: 0,
+            participantId: "scenario-participant-1",
+            rollSetId: "roll-set-1",
+            silent: false,
+            skillId: "perception",
+            skillLabel: "Perception",
+            skillValue: 10,
+            useDbMod: false,
+            useGenMod: false,
+            useObSkillMod: false,
+          },
+        ],
+      },
+      scenarioId: "scenario-1",
+      status: "active",
+      title: "Courtyard",
+      turnOrderMode: "manual",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    };
+    const scenario = {
+      campaignId: "campaign-1",
+      id: "scenario-1",
+      kind: "combat",
+      name: "Bridge Ambush",
+      status: "live",
+    };
+    const campaign = {
+      gmUserId: "gm-1",
+      id: "campaign-1",
+      name: "Border Trouble",
+      status: "active",
+    };
+    mocks.encounterService.getEncounterById.mockResolvedValue(encounter);
+    mocks.encounterService.updateEncounter.mockImplementation(async (nextEncounter: unknown) => nextEncounter);
+    mocks.scenarioService.getScenarioById.mockResolvedValue(scenario);
+    mocks.campaignService.getCampaignById.mockResolvedValue(campaign);
+    mocks.scenarioService.userHasPlayerScenarioAccess.mockResolvedValue(true);
+    mocks.scenarioService.listScenarioParticipants.mockResolvedValue([
+      {
+        controlledByUserId: "player-1",
+        id: "participant-1",
+        isActive: true,
+        role: "player_character",
+        scenarioId: "scenario-1",
+        snapshot: {
+          displayName: "Player hero",
+        },
+        sourceType: "character",
+      },
+    ]);
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        pendingRollId: "roll-1",
+        roll: {
+          dieResult: 12,
+          openEndedD10s: [],
+          rollD20: 12,
+        },
+      },
+      url: "/encounters/encounter-1/player-roll",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0];
+    expect(updatedEncounter.roleplayState.actionLog[0]).toMatchObject({
+      participantId: "scenario-participant-1",
+      rollD20: 12,
+      silent: false,
+      skillId: "perception",
+      type: "gm_skill_roll",
+    });
+  });
+
+  it("rejects player roleplay rolls for other-participant assignments", async () => {
+    const encounter = {
+      actionLog: [],
+      createdAt: "2026-01-01T00:00:00.000Z",
+      currentRound: 1,
+      currentTurnIndex: 0,
+      declarationsLocked: false,
+      id: "encounter-1",
+      kind: "roleplay",
+      participants: [
+        {
+          id: "scenario-other-participant",
+          label: "Other hero",
+          participantType: "scenario",
+          scenarioParticipantId: "other-participant",
+        },
+      ],
+      roleplayState: {
+        actionLog: [],
+        pendingSkillRolls: [
+          {
+            assignedAt: "2026-01-01T00:00:00.000Z",
+            id: "roll-1",
+            participantId: "scenario-other-participant",
+            silent: false,
+            skillId: "perception",
+            skillLabel: "Perception",
+          },
+          {
+            assignedAt: "2026-01-01T00:00:00.000Z",
+            id: "silent-roll",
+            participantId: "scenario-other-participant",
+            silent: true,
+            skillId: "stealth",
+            skillLabel: "Stealth",
+          },
+        ],
+      },
+      scenarioId: "scenario-1",
+      status: "active",
+      title: "Courtyard",
+      turnOrderMode: "manual",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    };
+    mocks.encounterService.getEncounterById.mockResolvedValue(encounter);
+    mocks.scenarioService.getScenarioById.mockResolvedValue({
+      campaignId: "campaign-1",
+      id: "scenario-1",
+      name: "Bridge Ambush",
+    });
+    mocks.campaignService.getCampaignById.mockResolvedValue({
+      gmUserId: "gm-1",
+      id: "campaign-1",
+      name: "Border Trouble",
+    });
+    mocks.scenarioService.userHasPlayerScenarioAccess.mockResolvedValue(true);
+    mocks.scenarioService.listScenarioParticipants.mockResolvedValue([
+      {
+        controlledByUserId: "player-1",
+        id: "participant-1",
+        isActive: true,
+        role: "player_character",
+        scenarioId: "scenario-1",
+        snapshot: {
+          displayName: "Player hero",
+        },
+        sourceType: "character",
+      },
+      {
+        controlledByUserId: "other-player",
+        id: "other-participant",
+        isActive: true,
+        role: "player_character",
+        scenarioId: "scenario-1",
+        snapshot: {
+          displayName: "Other hero",
+        },
+        sourceType: "character",
+      },
+    ]);
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        pendingRollId: "roll-1",
+        roll: {
+          dieResult: 12,
+          openEndedD10s: [],
+          rollD20: 12,
+        },
+      },
+      url: "/encounters/encounter-1/player-roll",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(403);
+    expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
+  });
+
+  it("rejects player roleplay rolls for silent assignments", async () => {
+    const encounter = {
+      actionLog: [],
+      createdAt: "2026-01-01T00:00:00.000Z",
+      currentRound: 1,
+      currentTurnIndex: 0,
+      declarationsLocked: false,
+      id: "encounter-1",
+      kind: "roleplay",
+      participants: [
+        {
+          id: "scenario-participant-1",
+          label: "Player hero",
+          participantType: "scenario",
+          scenarioParticipantId: "participant-1",
+        },
+      ],
+      roleplayState: {
+        actionLog: [],
+        pendingSkillRolls: [
+          {
+            assignedAt: "2026-01-01T00:00:00.000Z",
+            id: "silent-roll",
+            participantId: "scenario-participant-1",
+            silent: true,
+            skillId: "stealth",
+            skillLabel: "Stealth",
+          },
+        ],
+      },
+      scenarioId: "scenario-1",
+      status: "active",
+      title: "Courtyard",
+      turnOrderMode: "manual",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    };
+    mocks.encounterService.getEncounterById.mockResolvedValue(encounter);
+    mocks.scenarioService.getScenarioById.mockResolvedValue({
+      campaignId: "campaign-1",
+      id: "scenario-1",
+      name: "Bridge Ambush",
+    });
+    mocks.campaignService.getCampaignById.mockResolvedValue({
+      gmUserId: "gm-1",
+      id: "campaign-1",
+      name: "Border Trouble",
+    });
+    mocks.scenarioService.userHasPlayerScenarioAccess.mockResolvedValue(true);
+    mocks.scenarioService.listScenarioParticipants.mockResolvedValue([
+      {
+        controlledByUserId: "player-1",
+        id: "participant-1",
+        isActive: true,
+        role: "player_character",
+        scenarioId: "scenario-1",
+        snapshot: {
+          displayName: "Player hero",
+        },
+        sourceType: "character",
+      },
+    ]);
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        pendingRollId: "silent-roll",
+        roll: {
+          dieResult: 12,
+          openEndedD10s: [],
+          rollD20: 12,
+        },
+      },
+      url: "/encounters/encounter-1/player-roll",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(403);
+    expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
   });
 });

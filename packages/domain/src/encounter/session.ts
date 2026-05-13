@@ -1,8 +1,14 @@
 import { z } from "zod";
 
+import type { ScenarioParticipant } from "../campaign/scenario";
+
 const idSchema = z.string().min(1);
 
 export const encounterKindSchema = z.enum(["combat", "roleplay"]);
+export const encounterParticipantMembershipModeSchema = z.enum([
+  "defaultAllActive",
+  "explicit"
+]);
 export const encounterStatusSchema = z.enum([
   "setup",
   "planned",
@@ -288,6 +294,7 @@ export const encounterSessionSchema = z.object({
   description: z.string().optional(),
   id: idSchema,
   kind: encounterKindSchema.default("combat"),
+  participantMembershipMode: encounterParticipantMembershipModeSchema.optional(),
   participants: z.array(encounterParticipantSchema).default([]),
   roleplayState: roleplayStateSchema.optional(),
   scenarioId: idSchema.optional(),
@@ -300,6 +307,9 @@ export const encounterSessionSchema = z.object({
 
 export type EncounterStatus = z.infer<typeof encounterStatusSchema>;
 export type EncounterKind = z.infer<typeof encounterKindSchema>;
+export type EncounterParticipantMembershipMode = z.infer<
+  typeof encounterParticipantMembershipModeSchema
+>;
 export type EncounterTurnOrderMode = z.infer<typeof encounterTurnOrderModeSchema>;
 export type EncounterFacing = z.infer<typeof encounterFacingSchema>;
 export type EncounterOrientation = z.infer<typeof encounterOrientationSchema>;
@@ -328,4 +338,118 @@ export type RoleplayActionLogEntry = z.infer<typeof roleplayActionLogEntrySchema
 export type RoleplayState = z.infer<typeof roleplayStateSchema>;
 export type EncounterAttackResolution = z.infer<typeof encounterAttackResolutionSchema>;
 export type EncounterParticipant = z.infer<typeof encounterParticipantSchema>;
+
+export interface EffectiveEncounterParticipants {
+  explicitMode: boolean;
+  participants: EncounterParticipant[];
+  source: "defaultFallback" | "explicit";
+}
+
+export function resolveEncounterParticipantMembership(input: {
+  encounter: EncounterSession;
+  scenarioParticipants: ScenarioParticipant[];
+}): EffectiveEncounterParticipants {
+  const explicitMode =
+    input.encounter.participantMembershipMode === "explicit" ||
+    input.encounter.participants.length > 0;
+
+  if (explicitMode) {
+    return {
+      explicitMode: true,
+      participants: input.encounter.participants,
+      source: "explicit",
+    };
+  }
+
+  return {
+    explicitMode: false,
+    participants: input.scenarioParticipants
+      .filter((participant) => participant.scenarioId === input.encounter.scenarioId)
+      .filter((participant) => participant.isActive)
+      .map((participant, index) => ({
+        declaration: {
+          actionType: "none",
+          defenseFocus: "none",
+          defensePosture: "none",
+          targetLocation: "any",
+        },
+        facing: "north",
+        id: `scenario-fallback-${participant.id}`,
+        initiative: 0,
+        label: participant.snapshot.displayName,
+        order: participant.displayOrder ?? index,
+        orientation: "neutral",
+        participantType: "scenario",
+        position: {
+          x: 0,
+          y: 0,
+          zone: "center",
+        },
+        scenarioParticipantId: participant.id,
+      })),
+    source: "defaultFallback",
+  };
+}
+
+export function resolveEncounterParticipantByRollParticipantId(input: {
+  participantId?: string | null;
+  participants: EncounterParticipant[];
+}): EncounterParticipant | undefined {
+  if (!input.participantId) {
+    return undefined;
+  }
+
+  return (
+    input.participants.find((participant) => participant.id === input.participantId) ??
+    input.participants.find(
+      (participant) =>
+        participant.scenarioParticipantId === input.participantId ||
+        participant.characterId === input.participantId
+    )
+  );
+}
+
+export function formatEncounterParticipantMembershipLabel(input: {
+  encounter: EncounterSession;
+  scenarioParticipants: ScenarioParticipant[];
+}): string {
+  const membership = resolveEncounterParticipantMembership(input);
+
+  return membership.source === "defaultFallback"
+    ? `${membership.participants.length} active scenario participants (default)`
+    : `${membership.participants.length} assigned`;
+}
+
+export function isUserAssignedToEncounterMembership(input: {
+  encounter: EncounterSession;
+  scenarioParticipants: ScenarioParticipant[];
+  userId?: string | null;
+}): boolean {
+  if (!input.userId || input.encounter.status === "archived") {
+    return false;
+  }
+
+  const controlledScenarioParticipants = input.scenarioParticipants.filter(
+    (participant) =>
+      participant.isActive &&
+      participant.role === "player_character" &&
+      participant.controlledByUserId === input.userId
+  );
+  const controlledScenarioParticipantIds = new Set(
+    controlledScenarioParticipants.map((participant) => participant.id)
+  );
+  const controlledCharacterIds = new Set(
+    controlledScenarioParticipants
+      .map((participant) => participant.characterId)
+      .filter((characterId): characterId is string => Boolean(characterId))
+  );
+  const membership = resolveEncounterParticipantMembership(input);
+
+  return membership.participants.some(
+    (participant) =>
+      (participant.scenarioParticipantId &&
+        controlledScenarioParticipantIds.has(participant.scenarioParticipantId)) ||
+      (participant.characterId && controlledCharacterIds.has(participant.characterId))
+  );
+}
 export type EncounterSession = z.infer<typeof encounterSessionSchema>;

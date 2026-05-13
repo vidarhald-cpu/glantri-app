@@ -51,3 +51,26 @@ export async function updateEncounterOnServer(input: {
 
   return payload.encounter;
 }
+
+export async function submitPlayerRoleplayRollOnServer(input: {
+  encounterId: string;
+  pendingRollId: string;
+  roll: {
+    dieResult: number;
+    openEndedD10s: number[];
+    rollD20: number;
+  };
+}): Promise<EncounterSession> {
+  const payload = await sendJson<{ encounter: EncounterSession }>(
+    `/encounters/${input.encounterId}/player-roll`,
+    {
+      body: JSON.stringify({
+        pendingRollId: input.pendingRollId,
+        roll: input.roll,
+      }),
+      method: "POST",
+    },
+  );
+
+  return payload.encounter;
+}

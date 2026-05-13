@@ -23,6 +23,7 @@ import {
   normalizeRoleplayOtherMod,
   orderRoleplayEncounterParticipants,
   recordRoleplayGmSkillRoll,
+  resolveEncounterParticipantByRollParticipantId,
   roleplayDifficultyOptions,
   rollOpenEndedRoleplayD20,
   selectAllRoleplayVisibilityForViewer,
@@ -43,7 +44,7 @@ import {
   loadEncounterById,
   loadScenarioById,
   loadScenarioParticipants,
-  updateEncounterOnServer,
+  submitPlayerRoleplayRollOnServer,
 } from "@/lib/api/localServiceClient";
 import { useSessionUser } from "@/lib/auth/SessionUserContext";
 import RememberedCampaignWorkspaceEffect from "@/lib/campaigns/RememberedCampaignWorkspaceEffect";
@@ -2461,7 +2462,10 @@ export function PlayerRoleplayingEncounterScreen({
       return;
     }
 
-    const participant = effectivePlayerEncounterParticipants.find((entry) => entry.id === pendingRoll.participantId);
+    const participant = resolveEncounterParticipantByRollParticipantId({
+      participantId: pendingRoll.participantId,
+      participants: effectivePlayerEncounterParticipants,
+    });
 
     if (!encounter || !participant) {
       return;
@@ -2478,36 +2482,10 @@ export function PlayerRoleplayingEncounterScreen({
       useGenMod: pendingRoll.useGenMod,
       useObSkillMod: pendingRoll.useObSkillMod,
     });
-    const nextEncounter = recordRoleplayGmSkillRoll({
-      achievedSuccessLevel: preview.achievedSuccessLevel,
-      autoSuccess: preview.autoSuccess,
-      calculationText: preview.calculationText,
-      dieResult: roll.dieResult,
-      difficulty: pendingRoll.mode === "difficulty" ? pendingRoll.difficulty : undefined,
-      finalTotal: preview.finalTotal,
-      fumble: preview.fumble,
-      mode: pendingRoll.mode,
-      numericSubtotal: preview.numericSubtotal,
-      openEndedD10s: roll.openEndedD10s,
-      otherMod: pendingRoll.otherMod,
-      participantId: pendingRoll.participantId,
-      partial: preview.partial,
-      roll,
-      rollSetId: pendingRoll.rollSetId,
-      session: encounter,
-      silent: false,
-      skillId: pendingRoll.skillId,
-      skillLabel: pendingRoll.skillLabel,
-      success: preview.success,
-      supportSkillId: pendingRoll.supportSkillId,
-      supportSkillLabel: pendingRoll.supportSkillLabel,
-      useDbMod: pendingRoll.useDbMod,
-      useGenMod: pendingRoll.useGenMod,
-      useObSkillMod: pendingRoll.useObSkillMod,
-    });
-    const savedEncounter = await updateEncounterOnServer({
+    const savedEncounter = await submitPlayerRoleplayRollOnServer({
       encounterId: encounter.id,
-      session: nextEncounter,
+      pendingRollId: pendingRoll.id,
+      roll,
     });
 
     setEncounter(savedEncounter);
@@ -2541,39 +2519,6 @@ export function PlayerRoleplayingEncounterScreen({
       useGenMod: playerLocalRollDraft.useGenMod,
       useObSkillMod: playerLocalRollDraft.useObSkillMod,
     });
-    const nextEncounter = recordRoleplayGmSkillRoll({
-      achievedSuccessLevel: preview.achievedSuccessLevel,
-      autoSuccess: preview.autoSuccess,
-      calculationText: preview.calculationText,
-      dieResult: roll.dieResult,
-      difficulty: playerLocalRollDraft.difficulty === "none" ? undefined : playerLocalRollDraft.difficulty,
-      finalTotal: preview.finalTotal,
-      fumble: preview.fumble,
-      mode: "difficulty",
-      numericSubtotal: preview.numericSubtotal,
-      openEndedD10s: roll.openEndedD10s,
-      otherMod: localOtherMod,
-      participantId: controlledParticipant.id,
-      partial: preview.partial,
-      roll,
-      rollSetId: playerLocalRollRoundId,
-      session: encounter,
-      silent: false,
-      skillId: localSelectedSkill.id,
-      skillLabel: localSelectedSkill.label,
-      success: preview.success,
-      supportSkillId: localSelectedSupportSkill?.id,
-      supportSkillLabel: localSelectedSupportSkill?.label,
-      useDbMod: playerLocalRollDraft.useDbMod,
-      useGenMod: playerLocalRollDraft.useGenMod,
-      useObSkillMod: playerLocalRollDraft.useObSkillMod,
-    });
-    const savedEncounter = await updateEncounterOnServer({
-      encounterId: encounter.id,
-      session: nextEncounter,
-    });
-
-    setEncounter(savedEncounter);
     setPlayerLocalRollDraft((currentDraft) => ({
       ...currentDraft,
       roll,
@@ -2682,7 +2627,10 @@ export function PlayerRoleplayingEncounterScreen({
           <div style={{ display: "grid", gap: "0.75rem" }}>
             {visibleAssignedRolls.map((roll, index) => {
               const contentSkill = content?.skills.find((skill) => skill.id === roll.skillId);
-              const assignedParticipant = effectivePlayerEncounterParticipants.find((participant) => participant.id === roll.participantId);
+              const assignedParticipant = resolveEncounterParticipantByRollParticipantId({
+                participantId: roll.participantId,
+                participants: effectivePlayerEncounterParticipants,
+              });
               const assignedSkillProfile =
                 contentSkill && assignedParticipant
                   ? getSkillRollProfile({

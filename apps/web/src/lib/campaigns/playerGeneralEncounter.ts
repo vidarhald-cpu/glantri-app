@@ -9,9 +9,9 @@ import type {
 import {
   normalizeRoleplayState,
   orderRoleplayEncounterParticipants,
+  resolveEncounterParticipantByRollParticipantId,
+  resolveEncounterParticipantMembership,
 } from "@glantri/domain";
-
-import { getScenarioParticipantFallbackEncounterParticipants } from "./encounterParticipantFallback";
 
 export interface PlayerGeneralEncounterVisibleParticipant {
   description: string;
@@ -266,29 +266,22 @@ export function buildPlayerGeneralEncounterView(input: {
   scenarioParticipants: ScenarioParticipant[];
 }): PlayerGeneralEncounterView {
   const state = normalizeRoleplayState(input.encounter);
-  const effectiveEncounterParticipants = getScenarioParticipantFallbackEncounterParticipants({
+  const membership = resolveEncounterParticipantMembership({
     encounter: input.encounter,
     scenarioParticipants: input.scenarioParticipants,
   });
-  const usesFallbackParticipants = input.encounter.participants.length === 0;
+  const effectiveEncounterParticipants = membership.participants;
+  const usesFallbackParticipants = membership.source === "defaultFallback";
   const orderedParticipants = orderRoleplayEncounterParticipants(effectiveEncounterParticipants);
   const encounterParticipantsById = new Map(orderedParticipants.map((participant) => [participant.id, participant]));
   const scenarioParticipantsById = new Map(
     input.scenarioParticipants.map((participant) => [participant.id, participant])
   );
   const resolveParticipant = (participantId?: string | null): EncounterParticipant | undefined => {
-    if (!participantId) {
-      return undefined;
-    }
-
-    return (
-      encounterParticipantsById.get(participantId) ??
-      orderedParticipants.find(
-        (participant) =>
-          participant.scenarioParticipantId === participantId ||
-          participant.characterId === participantId
-      )
-    );
+    return resolveEncounterParticipantByRollParticipantId({
+      participantId,
+      participants: orderedParticipants,
+    });
   };
   const controlledParticipantIds = new Set(
     orderedParticipants
