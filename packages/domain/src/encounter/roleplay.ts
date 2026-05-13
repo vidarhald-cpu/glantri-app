@@ -220,6 +220,21 @@ export interface RoleplayRollModifiers {
   useObSkillMod?: boolean;
 }
 
+export interface RoleplayAppliedRollModifier {
+  bucket: "general" | "obSkill" | "db" | "other";
+  label: string;
+  notes?: string;
+  source: "manual" | "characterState" | "situationMap" | "equipment" | "gmOverride";
+  value: number;
+}
+
+export interface RoleplayRollModifierPipeline {
+  appliedModifiers: RoleplayAppliedRollModifier[];
+  percentageModifier: number;
+  rawModifierSum: number;
+  warnings: string[];
+}
+
 export interface RoleplayCalculationPreview {
   achievedSuccessLevel?: RoleplaySuccessLevel;
   autoSuccess: boolean;
@@ -231,11 +246,14 @@ export interface RoleplayCalculationPreview {
   formulaText: string;
   fumble: boolean;
   hasPlaceholderMods: boolean;
+  modifierWarnings: string[];
   numericModifierParts: number[];
   numericModifierSum: number;
   numericSubtotal?: number;
   partial: boolean;
   pendingModifierLabels: string[];
+  percentageModifier: number;
+  rawModifierSum: number;
   resultText?: string;
   success?: boolean;
 }
@@ -375,9 +393,22 @@ function formatNumericModifierParts(parts: number[]): string {
   return parts.length === 0 ? "" : parts.map(formatSignedNumber).join(" ");
 }
 
+function buildFallbackModifierPipeline(otherMod: number): RoleplayRollModifierPipeline {
+  return {
+    appliedModifiers:
+      otherMod === 0
+        ? []
+        : [{ bucket: "other", label: "Other", source: "manual", value: otherMod }],
+    percentageModifier: otherMod,
+    rawModifierSum: otherMod,
+    warnings: [],
+  };
+}
+
 export function buildRoleplayCalculationPreview(input: {
   difficulty?: RoleplayDifficulty;
   kind?: RoleplayRollKind;
+  modifierPipeline?: RoleplayRollModifierPipeline;
   roll?: RoleplayOpenEndedD20Roll;
   skillLabel: string;
   skillValue?: number;
@@ -385,10 +416,15 @@ export function buildRoleplayCalculationPreview(input: {
   const modifiers = normalizeRollModifiers(input);
   const kind = input.kind ?? "skill";
   const skillValue = input.skillValue ?? 0;
-  const effectiveValue = skillValue + modifiers.otherMod;
+  const modifierPipeline = input.modifierPipeline ?? buildFallbackModifierPipeline(modifiers.otherMod);
+  const percentageModifier = modifierPipeline.percentageModifier;
+  const rawModifierSum = modifierPipeline.rawModifierSum;
+  const effectiveValue = skillValue + percentageModifier;
   const parts = [`${input.skillLabel} ${skillValue}`];
-  const numericModifierParts = modifiers.otherMod === 0 ? [] : [modifiers.otherMod];
-  const numericModifierSum = numericModifierParts.reduce((sum, value) => sum + value, 0);
+  const numericModifierParts = modifierPipeline.appliedModifiers
+    .map((modifier) => modifier.value)
+    .filter((value) => value !== 0);
+  const numericModifierSum = rawModifierSum;
   const dieText = input.roll == null ? "+ 1d20" : formatSignedTerm(input.roll.dieResult);
   const pendingModifierLabels = [
     modifiers.useGenMod ? "Gen" : undefined,
@@ -396,20 +432,20 @@ export function buildRoleplayCalculationPreview(input: {
     modifiers.useDbMod ? "DB" : undefined,
   ].filter((label): label is string => Boolean(label));
 
+  if (rawModifierSum !== 0) {
+    parts.push(`Raw modifiers ${formatSignedNumber(rawModifierSum)} => ${formatSignedNumber(percentageModifier)}`);
+  }
+
   if (input.roll == null) {
     parts.push("1d20");
   } else {
     parts.push(`roll ${formatRoleplayDieRoll(input.roll)}`);
   }
 
-  if (modifiers.otherMod !== 0) {
-    parts.push(`Other ${modifiers.otherMod > 0 ? "+" : ""}${modifiers.otherMod}`);
-  }
-
   const hasPlaceholderMods =
     modifiers.useGenMod || modifiers.useObSkillMod || modifiers.useDbMod;
   const numericSubtotal =
-    input.roll == null ? undefined : skillValue + input.roll.dieResult + modifiers.otherMod;
+    input.roll == null ? undefined : skillValue + input.roll.dieResult + percentageModifier;
   const achievedSuccessLevel =
     numericSubtotal == null
       ? undefined
@@ -445,7 +481,7 @@ export function buildRoleplayCalculationPreview(input: {
           .join(" → ");
   const compactModifierBracket =
     numericModifierParts.length === 0 ? "[ ]" : `[ ${formatNumericModifierParts(numericModifierParts)} ]`;
-  const compactBase = `${input.skillLabel} ${skillValue} + ${compactModifierBracket} ${numericModifierSum} ${dieText}`;
+  const compactBase = `${input.skillLabel} ${skillValue} + ${compactModifierBracket} ${percentageModifier} ${dieText}`;
   const formulaText = numericSubtotal == null
     ? `${compactBase} = pending`
     : `${compactBase} = ${numericSubtotal}`;
@@ -499,11 +535,14 @@ export function buildRoleplayCalculationPreview(input: {
     formulaText,
     fumble: Boolean(achievedSuccessLevel?.fumble),
     hasPlaceholderMods,
+    modifierWarnings: modifierPipeline.warnings,
     numericModifierParts,
     numericModifierSum,
     numericSubtotal,
     partial: hasPlaceholderMods,
     pendingModifierLabels,
+    percentageModifier,
+    rawModifierSum,
     resultText,
     success,
   };

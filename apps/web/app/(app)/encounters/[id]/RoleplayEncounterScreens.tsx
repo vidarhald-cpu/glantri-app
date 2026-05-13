@@ -17,7 +17,7 @@ import type {
 } from "@glantri/domain";
 import {
   assignRoleplaySkillRoll,
-  buildRoleplayCalculationPreview,
+  buildRoleplayCalculationPreview as buildDomainRoleplayCalculationPreview,
   compareRoleplayOpposedRolls,
   normalizeRoleplayState,
   normalizeRoleplayOtherMod,
@@ -33,6 +33,7 @@ import {
 
 import {
   resolveParticipantSkillRollProfile,
+  resolveRoleplaySkillRollModifiers,
   type ParticipantSkillRollProfile,
   type ResolveParticipantSkillRollProfileInput,
 } from "@glantri/rules-engine";
@@ -457,6 +458,27 @@ function applyUnknownSkillDefaultOtherMod(input: {
   return input.currentValue === "-3"
     ? "0"
     : input.currentValue;
+}
+
+function buildRoleplayCalculationPreview(
+  input: Parameters<typeof buildDomainRoleplayCalculationPreview>[0]
+): ReturnType<typeof buildDomainRoleplayCalculationPreview> {
+  const otherMod = normalizeRoleplayOtherMod(input.otherMod);
+  const modifierPipeline =
+    input.modifierPipeline ??
+    resolveRoleplaySkillRollModifiers({
+      skillTotal: input.skillValue ?? 0,
+      modifiers:
+        otherMod === 0
+          ? []
+          : [{ bucket: "other", label: "Other", source: "manual", value: otherMod }],
+    });
+
+  return buildDomainRoleplayCalculationPreview({
+    ...input,
+    modifierPipeline,
+    otherMod,
+  });
 }
 
 function RollCalculationPreview({

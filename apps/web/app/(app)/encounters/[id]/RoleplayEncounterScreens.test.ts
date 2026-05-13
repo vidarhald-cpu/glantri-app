@@ -54,6 +54,8 @@ describe("RoleplayEncounterScreens", () => {
     expect(source).toContain("assignRoleplaySkillRoll");
     expect(source).toContain("recordRoleplayGmSkillRoll");
     expect(source).toContain("buildRoleplayCalculationPreview");
+    expect(source).toContain("resolveRoleplaySkillRollModifiers");
+    expect(source).toContain("modifierPipeline");
     expect(source).toContain("compareRoleplayOpposedRolls");
     expect(source).toContain("currentRankedRollResults");
     expect(source).toContain("rollOpenEndedRoleplayD20");
