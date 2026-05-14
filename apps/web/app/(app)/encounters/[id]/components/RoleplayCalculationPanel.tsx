@@ -3,18 +3,28 @@ import type { RoleplayCalculationPreview, RoleplayDifficulty } from "@glantri/do
 import { calculationLineStyle, rollPreviewStyle } from "./roleplayStyles";
 
 function RollCalculationPreview({
+  cleanPendingText = false,
   label,
   pendingLabels,
   preview,
+  showPendingLabels = true,
 }: {
+  cleanPendingText?: boolean;
   label: string;
   pendingLabels?: string[];
   preview?: RoleplayCalculationPreview;
+  showPendingLabels?: boolean;
 }) {
+  const formulaText = preview
+    ? cleanPendingText
+      ? preview.formulaText.replace(" = pending", " = —")
+      : preview.formulaText
+    : "—";
+
   return (
     <div style={calculationLineStyle}>
-      <strong>{label}:</strong> {preview?.formulaText ?? "—"}
-      {preview && pendingLabels && pendingLabels.length > 0 ? (
+      <strong>{label}:</strong> {formulaText}
+      {showPendingLabels && preview && pendingLabels && pendingLabels.length > 0 ? (
         <span> · Pending: {pendingLabels.join(", ")}</span>
       ) : null}
     </div>
@@ -65,41 +75,61 @@ function RoleplayRollResultLine({
   return <div><strong>{label}:</strong> {getPreviewResultLabel({ comparison, difficulty, preview })}</div>;
 }
 
-export function RoleplayCalculationPanel({
+export function RoleplayRollCalculationPanel({
   actorDifficulty,
+  actorLabel = "Actor",
   actorMainPreview,
   actorPendingLabels,
   actorSupportPreview,
+  cleanPendingText = false,
   comparison,
   opponentMainPreview,
+  opponentLabel = "Opponent",
   opponentOpen,
   opponentPendingLabels,
+  showPendingLabels = true,
   opponentSupportPreview,
 }: {
   actorDifficulty?: RoleplayDifficulty;
+  actorLabel?: string;
   actorMainPreview?: RoleplayCalculationPreview;
   actorPendingLabels?: string[];
   actorSupportPreview?: RoleplayCalculationPreview;
+  cleanPendingText?: boolean;
   comparison?: string;
   opponentMainPreview?: RoleplayCalculationPreview;
+  opponentLabel?: string;
   opponentOpen: boolean;
   opponentPendingLabels?: string[];
+  showPendingLabels?: boolean;
   opponentSupportPreview?: RoleplayCalculationPreview;
 }) {
   return (
     <div style={rollPreviewStyle}>
       <strong>Calculation</strong>
       <div style={{ display: "grid", gap: "0.25rem" }}>
-        <strong>Actor</strong>
-        <RollCalculationPreview label="Support" preview={actorSupportPreview} />
-        <RollCalculationPreview label="Main" pendingLabels={actorPendingLabels} preview={actorMainPreview} />
+        <strong>{actorLabel}</strong>
+        <RollCalculationPreview cleanPendingText={cleanPendingText} label="Support" preview={actorSupportPreview} />
+        <RollCalculationPreview
+          cleanPendingText={cleanPendingText}
+          label="Main"
+          pendingLabels={actorPendingLabels}
+          preview={actorMainPreview}
+          showPendingLabels={showPendingLabels}
+        />
         <RoleplayRollResultLine difficulty={actorDifficulty} preview={actorMainPreview} />
       </div>
       {opponentOpen ? (
         <div style={{ borderTop: "1px solid #eee8dc", display: "grid", gap: "0.25rem", paddingTop: "0.45rem" }}>
-          <strong>Opponent</strong>
-          <RollCalculationPreview label="Support" preview={opponentSupportPreview} />
-          <RollCalculationPreview label="Main" pendingLabels={opponentPendingLabels} preview={opponentMainPreview} />
+          <strong>{opponentLabel}</strong>
+          <RollCalculationPreview cleanPendingText={cleanPendingText} label="Support" preview={opponentSupportPreview} />
+          <RollCalculationPreview
+            cleanPendingText={cleanPendingText}
+            label="Main"
+            pendingLabels={opponentPendingLabels}
+            preview={opponentMainPreview}
+            showPendingLabels={showPendingLabels}
+          />
           <RoleplayRollResultLine preview={opponentMainPreview} />
         </div>
       ) : null}
@@ -111,3 +141,5 @@ export function RoleplayCalculationPanel({
     </div>
   );
 }
+
+export const RoleplayCalculationPanel = RoleplayRollCalculationPanel;

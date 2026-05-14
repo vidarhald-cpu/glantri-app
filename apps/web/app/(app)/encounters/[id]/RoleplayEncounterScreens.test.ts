@@ -4,14 +4,48 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 const sourcePath = join(dirname(fileURLToPath(import.meta.url)), "RoleplayEncounterScreens.tsx");
+const componentsPath = join(dirname(fileURLToPath(import.meta.url)), "components");
+const componentSourcePaths = [
+  "RoleplayCalculationPanel.tsx",
+  "RoleplayRollBlock.tsx",
+  "RoleplaySections.tsx",
+  "roleplayRollTypes.ts",
+  "roleplayStyles.ts",
+];
 
 function readSource(): string {
   return readFileSync(sourcePath, "utf8");
 }
 
+function readComponentSource(fileName: string): string {
+  return readFileSync(join(componentsPath, fileName), "utf8");
+}
+
+function readRoleplaySources(): string {
+  return [
+    readSource(),
+    ...componentSourcePaths.map((fileName) => readComponentSource(fileName)),
+  ].join("\n");
+}
+
+function readPlayerSource(): string {
+  const source = readSource();
+  const sectionsSource = readComponentSource("RoleplaySections.tsx");
+  const playerTopInfoSource = sectionsSource.slice(
+    sectionsSource.indexOf("export function PlayerEncounterTopInfo"),
+    sectionsSource.indexOf("export function GmMessageSection")
+  );
+
+  return [
+    source.slice(source.indexOf("export function PlayerRoleplayingEncounterScreen")),
+    playerTopInfoSource,
+    readComponentSource("roleplayStyles.ts"),
+  ].join("\n");
+}
+
 describe("RoleplayEncounterScreens", () => {
   it("renders GM top info, GM message, visibility, roster descriptions, skill rolls, and action log", () => {
-    const source = readSource();
+    const source = readRoleplaySources();
 
     expect(source).toContain("Type: Roleplaying");
     expect(source).toContain("GM message");
@@ -44,7 +78,7 @@ describe("RoleplayEncounterScreens", () => {
   });
 
   it("stores roleplay state through sessionJson helpers and evaluates non-opposed success levels", () => {
-    const source = readSource();
+    const source = readRoleplaySources();
 
     expect(source).toContain("normalizeRoleplayState");
     expect(source).toContain("updateRoleplayGmMessage");
@@ -64,8 +98,8 @@ describe("RoleplayEncounterScreens", () => {
   });
 
   it("renders the player general encounter shell without GM-only sections", () => {
-    const source = readSource();
-    const playerSource = source.slice(source.indexOf("export function PlayerRoleplayingEncounterScreen"));
+    const source = readRoleplaySources();
+    const playerSource = readPlayerSource();
 
     expect(source).toContain("Player encounter summary");
     expect(source).toContain("playerMetadataTagStyle");
@@ -136,7 +170,7 @@ describe("RoleplayEncounterScreens", () => {
   });
 
   it("orders and labels roleplay participants and difficulty options", () => {
-    const source = readSource();
+    const source = readRoleplaySources();
 
     expect(source).toContain("orderRoleplayEncounterParticipants");
     expect(source).toContain("roleplayDifficultyOptions");
@@ -147,7 +181,7 @@ describe("RoleplayEncounterScreens", () => {
   });
 
   it("renders opposed roll state, support metadata, and opposed results in GM-only areas", () => {
-    const source = readSource();
+    const source = readRoleplaySources();
 
     expect(source).toContain("mode: \"opposed\"");
     expect(source).toContain("mode: \"difficulty\"");
@@ -163,11 +197,13 @@ describe("RoleplayEncounterScreens", () => {
     expect(source).toContain("opponentBlockOpen: nextDifficulty === \"none\" ? draft.opponentBlockOpen : false");
     expect(source).toContain("opponentBlockOpen: false");
     expect(source).toContain("opponentBlockOpen: true");
-    expect(source).toContain("handleAssignSkillRoll(draft, \"actor\")");
-    expect(source).toContain("handleAssignSkillRoll(draft, \"opponent\")");
-    expect(source).toContain("handleGmRoll(draft, \"actor\")");
-    expect(source).toContain("handleGmRoll(draft, \"opponent\")");
-    expect(source).toContain("handleGmRoll(draft, \"both\")");
+    expect(source).toContain("onAssignSkillRoll={handleAssignSkillRoll}");
+    expect(source).toContain("onAssignSkillRoll(draft, \"actor\")");
+    expect(source).toContain("onAssignSkillRoll(draft, \"opponent\")");
+    expect(source).toContain("onGmRoll={handleGmRoll}");
+    expect(source).toContain("onGmRoll(draft, \"actor\")");
+    expect(source).toContain("onGmRoll(draft, \"opponent\")");
+    expect(source).toContain("onGmRoll(draft, \"both\")");
     expect(source).toContain("findRoleplayResultForSide");
     expect(source).toContain("rollSetId === draft.rollSetId");
     expect(source).toContain("activeOpposedRollSetId");
@@ -185,7 +221,7 @@ describe("RoleplayEncounterScreens", () => {
   });
 
   it("keeps the roll preview concise with pending notes outside the formula", () => {
-    const source = readSource();
+    const source = readRoleplaySources();
 
     expect(source).toContain("pendingModifierLabels");
     expect(source).toContain("formulaText");
@@ -199,10 +235,10 @@ describe("RoleplayEncounterScreens", () => {
   });
 
   it("shows ranked rows only through total and keeps fumble details out of ranked rows", () => {
-    const source = readSource();
-    const rankedSource = source.slice(
-      source.indexOf("<h2 style={{ margin: 0 }}>Ranked roll results</h2>"),
-      source.indexOf("<h2 style={{ margin: 0 }}>Action log</h2>")
+    const source = readRoleplaySources();
+    const rankedSource = readComponentSource("RoleplaySections.tsx").slice(
+      readComponentSource("RoleplaySections.tsx").indexOf("export function RankedRollResultsSection"),
+      readComponentSource("RoleplaySections.tsx").indexOf("function formatDifficulty")
     );
 
     expect(rankedSource).toContain("entry.numericSubtotal == null ? \"unresolved\" : `total ${entry.numericSubtotal}`");
@@ -216,7 +252,7 @@ describe("RoleplayEncounterScreens", () => {
   });
 
   it("locks actor and opponent roll controls independently after each side rolls", () => {
-    const source = readSource();
+    const source = readRoleplaySources();
 
     expect(source).toContain("const actorLocked = Boolean(draft.actorRoll || context.actorExternalResult)");
     expect(source).toContain("const opponentLocked = Boolean(draft.opponentRoll || context.opponentExternalResult)");
@@ -228,7 +264,7 @@ describe("RoleplayEncounterScreens", () => {
   });
 
   it("uses persistent two-column roll blocks with structured calculation panels", () => {
-    const source = readSource();
+    const source = readRoleplaySources();
 
     expect(source).toContain("gridTemplateColumns: \"minmax(0, 1fr) minmax(22rem, 1fr)\"");
     expect(source).toContain("alignSelf: \"stretch\"");
@@ -252,7 +288,7 @@ describe("RoleplayEncounterScreens", () => {
   });
 
   it("preselects the chosen opponent block participant without auto-selecting an opponent skill", () => {
-    const source = readSource();
+    const source = readRoleplaySources();
 
     expect(source).toContain("opponentParticipantId: event.target.value");
     expect(source).toContain("opponentRoll: undefined");
@@ -263,7 +299,7 @@ describe("RoleplayEncounterScreens", () => {
   });
 
   it("clears draft-only roll editor state without touching persisted logs", () => {
-    const source = readSource();
+    const source = readRoleplaySources();
 
     expect(source).toContain("function resetRollDrafts()");
     expect(source).toContain("setRollDrafts([");
@@ -277,7 +313,7 @@ describe("RoleplayEncounterScreens", () => {
   });
 
   it("uses all canonical ordinary and secondary skills instead of only participant-known skills", () => {
-    const source = readSource();
+    const source = readRoleplaySources();
 
     expect(source).toContain("input.content.skills");
     expect(source).toContain("skill.category === \"ordinary\" || skill.category === \"secondary\"");

@@ -12,7 +12,11 @@ import type {
 } from "@glantri/domain";
 import { roleplayDifficultyOptions } from "@glantri/domain";
 
-import { panelStyle } from "./roleplayStyles";
+import {
+  panelStyle,
+  playerMetadataTagStyle,
+  playerReadOnlyPanelStyle,
+} from "./roleplayStyles";
 
 interface EncounterInfoCardProps {
   campaignName?: string;
@@ -32,6 +36,35 @@ export function EncounterInfoCard({ campaignName, encounter, scenarioName }: Enc
         {campaignName ? <span>Campaign: {campaignName}</span> : null}
       </div>
       {encounter.description ? <div>{encounter.description}</div> : null}
+    </section>
+  );
+}
+
+export const RoleplayTopInfo = EncounterInfoCard;
+
+export function PlayerEncounterTopInfo({ campaignName, encounter, scenarioName }: EncounterInfoCardProps) {
+  return (
+    <section aria-label="Player encounter summary" style={panelStyle}>
+      <div style={{ alignItems: "baseline", display: "flex", gap: "0.5rem", minWidth: 0, overflow: "hidden", whiteSpace: "nowrap" }}>
+        <h1 style={{ flex: "0 0 auto", fontSize: "1.35rem", lineHeight: 1.2, margin: 0 }}>
+          {encounter.title}
+        </h1>
+        <span aria-hidden="true" style={playerMetadataTagStyle}>·</span>
+        <span style={playerMetadataTagStyle}>{encounter.kind === "roleplay" ? "Roleplaying" : "Combat"}</span>
+        {scenarioName ? (
+          <>
+            <span aria-hidden="true" style={playerMetadataTagStyle}>·</span>
+            <span style={playerMetadataTagStyle}>Scenario: {scenarioName}</span>
+          </>
+        ) : null}
+        {campaignName ? (
+          <>
+            <span aria-hidden="true" style={playerMetadataTagStyle}>·</span>
+            <span style={playerMetadataTagStyle}>Campaign: {campaignName}</span>
+          </>
+        ) : null}
+      </div>
+      {encounter.description ? <div style={playerReadOnlyPanelStyle}>{encounter.description}</div> : null}
     </section>
   );
 }
@@ -284,7 +317,7 @@ function formatDifficulty(value: RoleplayDifficulty): string {
   return roleplayDifficultyOptions.find((option) => option.id === value)?.label ?? value;
 }
 
-function formatShortDateTime(value: string): string {
+export function formatShortDateTime(value: string): string {
   const date = new Date(value);
 
   if (Number.isNaN(date.getTime())) {
