@@ -169,12 +169,18 @@ describe("RoleplayEncounterScreens", () => {
     expect(source).toContain("handleGmRoll(draft, \"opponent\")");
     expect(source).toContain("handleGmRoll(draft, \"both\")");
     expect(source).toContain("findRoleplayResultForSide");
+    expect(source).toContain("rollSetId === draft.rollSetId");
+    expect(source).toContain("activeOpposedRollSetId");
+    expect(source).toContain("matchingOpponentPendingRoll");
     expect(source).toContain("side: \"actor\"");
     expect(source).toContain("side: \"opponent\"");
     expect(source).toContain("pendingRollId: matchingPendingRoll?.id");
-    expect(source).toContain("rollSetId: matchingPendingRoll?.rollSetId");
+    expect(source).toContain("rollSetId: activeOpposedRollSetId");
     expect(source).toContain("scorePendingRoll");
     expect(source).toContain("duplicateOpponentAssignment");
+    expect(source).toContain("duplicateActorAssignment");
+    expect(source).toContain("Result received");
+    expect(source).toContain("Assigned · Pending player roll");
     expect(source).toContain("return;");
   });
 
@@ -202,6 +208,8 @@ describe("RoleplayEncounterScreens", () => {
     expect(rankedSource).toContain("entry.numericSubtotal == null ? \"unresolved\" : `total ${entry.numericSubtotal}`");
     expect(source).toContain("if (opponent) {");
     expect(source).toContain("replaceDraftRankedRollResults(draft.id, []);");
+    expect(source).toContain("entry.mode !== \"opposed\"");
+    expect(source).toContain("pendingRoll.mode !== \"opposed\"");
     expect(rankedSource).not.toContain("entry.mode === \"opposed\"");
     expect(rankedSource).not.toContain("{entry.fumble ? \" · FUMBLE\" : \"\"}");
     expect(rankedSource).not.toContain("entry.fumble ? \"FUMBLE\"");

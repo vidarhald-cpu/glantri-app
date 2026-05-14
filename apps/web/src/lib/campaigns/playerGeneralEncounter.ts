@@ -222,11 +222,14 @@ function findVisibleResultForPendingRoll(input: {
 
 function isPlayerVisibleRankedResult(input: {
   entry: RoleplayActionLogEntry;
+  opposedRollSetIds: Set<string>;
   visibleParticipantIds: Set<string>;
 }): boolean {
   return (
     input.entry.type === "gm_skill_roll" &&
     input.entry.mode !== "opposed" &&
+    !input.entry.side &&
+    (!input.entry.rollSetId || !input.opposedRollSetIds.has(input.entry.rollSetId)) &&
     !input.entry.silent &&
     input.entry.participantId != null &&
     input.visibleParticipantIds.has(input.entry.participantId) &&
@@ -267,6 +270,16 @@ export function buildPlayerGeneralEncounterView(input: {
   scenarioParticipants: ScenarioParticipant[];
 }): PlayerGeneralEncounterView {
   const state = normalizeRoleplayState(input.encounter);
+  const opposedRollSetIds = new Set(
+    [
+      ...state.pendingSkillRolls
+        .filter((roll) => roll.mode === "opposed" && roll.rollSetId)
+        .map((roll) => roll.rollSetId),
+      ...state.actionLog
+        .filter((entry) => (entry.mode === "opposed" || Boolean(entry.side)) && entry.rollSetId)
+        .map((entry) => entry.rollSetId),
+    ].filter((rollSetId): rollSetId is string => Boolean(rollSetId))
+  );
   const membership = resolveEncounterParticipantMembership({
     encounter: input.encounter,
     scenarioParticipants: input.scenarioParticipants,
@@ -364,6 +377,7 @@ export function buildPlayerGeneralEncounterView(input: {
       participant != null &&
       isPlayerVisibleRankedResult({
         entry,
+        opposedRollSetIds,
         visibleParticipantIds: new Set(
           visibleParticipantIds.has(participant.id) ? [entry.participantId ?? participant.id] : []
         ),

@@ -390,6 +390,56 @@ describe("playerGeneralEncounter", () => {
     expect(JSON.stringify(view.rankedResults)).not.toContain("historical-visible-result");
   });
 
+  it("excludes legacy side-specific opposed entries from ranked results by roll set", () => {
+    const encounter = makeEncounter();
+
+    encounter.roleplayState = {
+      ...encounter.roleplayState,
+      actionLog: [
+        {
+          createdAt: "2026-01-01T00:08:00.000Z",
+          id: "legacy-opposed-side-result",
+          mode: "difficulty",
+          numericSubtotal: 44,
+          participantId: "scenario-pc-1",
+          rollSetId: "opposed-set",
+          side: "actor",
+          silent: false,
+          skillId: "administration",
+          skillLabel: "Administration",
+          summary: "GM rolled Administration.",
+          type: "gm_skill_roll",
+        },
+        ...(encounter.roleplayState?.actionLog ?? []),
+      ],
+      pendingSkillRolls: [
+        {
+          assignedAt: "2026-01-01T00:07:00.000Z",
+          id: "opposed-pending",
+          mode: "opposed",
+          participantId: "scenario-pc-1",
+          rollSetId: "opposed-set",
+          side: "actor",
+          silent: false,
+          skillId: "administration",
+          skillLabel: "Administration",
+        },
+        ...(encounter.roleplayState?.pendingSkillRolls ?? []),
+      ],
+    };
+
+    const view = buildPlayerGeneralEncounterView({
+      currentUserId: "player-1",
+      encounter,
+      scenarioParticipants: [
+        makeScenarioParticipant({ controlledByUserId: "player-1", id: "pc-1", name: "Player hero" }),
+        makeScenarioParticipant({ id: "npc-visible", name: "Visible NPC" }),
+      ],
+    });
+
+    expect(view.rankedResults.map((entry) => entry.id)).not.toContain("legacy-opposed-side-result");
+  });
+
   it("shows a conservative character log for the controlled participant only", () => {
     const view = buildPlayerGeneralEncounterView({
       currentUserId: "player-1",
