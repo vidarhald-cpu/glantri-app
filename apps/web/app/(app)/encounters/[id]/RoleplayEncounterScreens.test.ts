@@ -173,6 +173,9 @@ describe("RoleplayEncounterScreens", () => {
     expect(source).toContain("side: \"opponent\"");
     expect(source).toContain("pendingRollId: matchingPendingRoll?.id");
     expect(source).toContain("rollSetId: matchingPendingRoll?.rollSetId");
+    expect(source).toContain("scorePendingRoll");
+    expect(source).toContain("duplicateOpponentAssignment");
+    expect(source).toContain("return;");
   });
 
   it("keeps the roll preview concise with pending notes outside the formula", () => {

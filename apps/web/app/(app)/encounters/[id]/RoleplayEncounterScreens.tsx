@@ -719,7 +719,7 @@ function findRoleplayResultForSide(input: {
   side: "actor" | "opponent";
   skillId?: string;
 }): RoleplayActionLogEntry | undefined {
-  return input.entries
+  const matches = input.entries
     .filter((entry) => {
       if (entry.type !== "gm_skill_roll") {
         return false;
@@ -745,6 +745,31 @@ function findRoleplayResultForSide(input: {
         return (
           (entry.opponentParticipantId === input.participantId && entry.opponentSkillId === input.skillId) ||
           (entry.participantId === input.participantId && entry.skillId === input.skillId)
+        );
+      }
+
+      return false;
+    })
+    .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+
+  if (matches[0]) {
+    return matches[0];
+  }
+
+  return input.entries
+    .filter((entry) => {
+      if (entry.type !== "gm_skill_roll") {
+        return false;
+      }
+
+      if (entry.side === input.side || (input.side === "actor" && !entry.side)) {
+        return entry.participantId === input.participantId && entry.skillId === input.skillId;
+      }
+
+      if (input.side === "opponent" && !entry.side) {
+        return (
+          entry.opponentParticipantId === input.participantId &&
+          entry.opponentSkillId === input.skillId
         );
       }
 
@@ -1070,22 +1095,47 @@ export function GmRoleplayingEncounterScreen({
     const otherMod = normalizeRoleplayOtherMod(actorOtherModInput);
     const opponentOtherMod = normalizeRoleplayOtherMod(opponentOtherModInput);
     const isOpposed = Boolean(opponent && draft.opponentBlockOpen && selectedOpponentSkill);
-    const matchingPendingRoll = selectedSkill
-      ? [...roleplayState.pendingSkillRolls]
-          .filter((roll) => {
-            const rollParticipant = resolveEncounterParticipantByRollParticipantId({
-              participantId: roll.participantId,
-              participants: roster,
-            });
+    const matchingPendingRollCandidates = selectedSkill
+      ? [...roleplayState.pendingSkillRolls].filter((roll) => {
+          const rollParticipant = resolveEncounterParticipantByRollParticipantId({
+            participantId: roll.participantId,
+            participants: roster,
+          });
 
-            return (
-              rollParticipant?.id === participant?.id &&
-              roll.skillId === selectedSkill.id &&
-              roll.rollSetId
-            );
-          })
-          .sort((left, right) => right.assignedAt.localeCompare(left.assignedAt))[0]
-      : undefined;
+          return (
+            rollParticipant?.id === participant?.id &&
+            roll.skillId === selectedSkill.id &&
+            roll.rollSetId
+          );
+        })
+      : [];
+    const scorePendingRoll = (roll: (typeof matchingPendingRollCandidates)[number]) => {
+      const actorResult = findRoleplayResultForSide({
+        entries: roleplayState.actionLog,
+        participantId: participant?.id,
+        pendingRollId: roll.id,
+        rollSetId: roll.rollSetId,
+        side: "actor",
+        skillId: selectedSkill?.id,
+      });
+      const opponentResult =
+        opponent && selectedOpponentSkill
+          ? findRoleplayResultForSide({
+              entries: roleplayState.actionLog,
+              participantId: opponent.id,
+              rollSetId: roll.rollSetId,
+              side: "opponent",
+              skillId: selectedOpponentSkill.id,
+            })
+          : undefined;
+
+      return Number(Boolean(actorResult)) * 4 + Number(Boolean(opponentResult)) * 2;
+    };
+    const matchingPendingRoll = matchingPendingRollCandidates.sort(
+      (left, right) =>
+        scorePendingRoll(right) - scorePendingRoll(left) ||
+        right.assignedAt.localeCompare(left.assignedAt)
+    )[0];
     const matchingResult = matchingPendingRoll
       ? findRoleplayResultForSide({
           entries: roleplayState.actionLog,
@@ -1194,6 +1244,20 @@ export function GmRoleplayingEncounterScreen({
     }
 
     const assigningOpponent = side === "opponent" && opponent && selectedOpponentSkill;
+    const duplicateOpponentAssignment =
+      assigningOpponent &&
+      matchingPendingRoll?.rollSetId &&
+      roleplayState.pendingSkillRolls.some(
+        (roll) =>
+          roll.rollSetId === matchingPendingRoll.rollSetId &&
+          (roll.side ?? (roll.mode === "opposed" ? "actor" : undefined)) === "opponent" &&
+          roll.participantId === opponent.id &&
+          roll.skillId === selectedOpponentSkill.id
+      );
+
+    if ((!assigningOpponent && isOpposed && matchingPendingRoll) || duplicateOpponentAssignment) {
+      return;
+    }
 
     await persist(
       assignRoleplaySkillRoll({
