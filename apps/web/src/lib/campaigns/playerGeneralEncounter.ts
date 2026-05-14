@@ -157,6 +157,20 @@ function buildAssignedRoll(input: {
   const opponentParticipant = opponentVisible
     ? input.encounterParticipantsById.get(input.pendingRoll.opponentParticipantId!)
     : undefined;
+  const participantName = participant
+    ? getPlayerSafeParticipantName({
+        fallbackLabel: participant.label,
+        participantId: participant.id,
+        state: input.state,
+      })
+    : "Assigned participant";
+  const opponentName = opponentParticipant
+    ? getPlayerSafeParticipantName({
+        fallbackLabel: opponentParticipant.label,
+        participantId: opponentParticipant.id,
+        state: input.state,
+      })
+    : undefined;
   const opponentResult =
     input.pendingRoll.mode === "opposed" && input.pendingRoll.rollSetId && opponentParticipant
       ? input.state.actionLog.find(
@@ -164,20 +178,33 @@ function buildAssignedRoll(input: {
             entry.type === "gm_skill_roll" &&
             !entry.silent &&
             entry.rollSetId === input.pendingRoll.rollSetId &&
-            entry.side === "opponent" &&
-            entry.participantId === opponentParticipant.id &&
-            entry.numericSubtotal != null
+            (
+              (
+                entry.side === "opponent" &&
+                entry.participantId === opponentParticipant.id &&
+                entry.numericSubtotal != null
+              ) ||
+              (
+                !entry.side &&
+                !entry.opponentSilent &&
+                entry.opponentParticipantId === opponentParticipant.id &&
+                entry.opponentNumericSubtotal != null
+              )
+            )
         )
       : undefined;
   const ownTotal = input.result?.numericSubtotal ?? input.result?.finalTotal;
-  const opponentTotal = opponentResult?.numericSubtotal ?? opponentResult?.finalTotal;
+  const opponentTotal =
+    opponentResult?.side === "opponent"
+      ? opponentResult.numericSubtotal ?? opponentResult.finalTotal
+      : opponentResult?.opponentNumericSubtotal;
   const comparison =
-    ownTotal != null && opponentTotal != null && opponentParticipant
+    ownTotal != null && opponentTotal != null && opponentName
       ? ownTotal === opponentTotal
         ? "Tie."
         : ownTotal > opponentTotal
-          ? `${participant?.label ?? "You"} wins by ${ownTotal - opponentTotal}.`
-          : `${opponentParticipant.label} wins by ${opponentTotal - ownTotal}.`
+          ? `${participantName} wins by ${ownTotal - opponentTotal}.`
+          : `${opponentName} wins by ${opponentTotal - ownTotal}.`
       : undefined;
 
   return {
@@ -198,13 +225,7 @@ function buildAssignedRoll(input: {
           })} · ${input.pendingRoll.opponentSkillLabel}`
         : undefined,
     participantId: participant?.id ?? input.pendingRoll.participantId,
-    participantName: participant
-      ? getPlayerSafeParticipantName({
-          fallbackLabel: participant.label,
-          participantId: participant.id,
-          state: input.state,
-        })
-      : "Assigned participant",
+    participantName,
     result: input.result
       ? {
           dieResult: input.result.dieResult,

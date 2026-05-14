@@ -323,6 +323,23 @@ describe("playerGeneralEncounter", () => {
             summary: "Player rolled Dodge.",
             type: "gm_skill_roll",
           },
+          {
+            createdAt: "2026-01-01T00:06:30.000Z",
+            dieResult: 23,
+            id: "opponent-opposed-result",
+            mode: "opposed",
+            numericSubtotal: 41,
+            openEndedD10s: [3],
+            participantId: "scenario-npc-visible",
+            rollD20: 20,
+            rollSetId: "opposed-set",
+            side: "opponent",
+            silent: false,
+            skillId: "brawling",
+            skillLabel: "Brawling",
+            summary: "GM rolled Brawling.",
+            type: "gm_skill_roll",
+          },
           ...(baseEncounter.roleplayState?.actionLog ?? []),
         ],
         pendingSkillRolls: [
@@ -357,6 +374,7 @@ describe("playerGeneralEncounter", () => {
     expect(view.assignedRolls[0]).toMatchObject({
       id: "opposed-roll",
       mode: "opposed",
+      comparison: "Player hero wins by 9.",
       result: {
         dieResult: 26,
         id: "player-opposed-result",
@@ -366,6 +384,81 @@ describe("playerGeneralEncounter", () => {
       skillLabel: "Dodge",
     });
     expect(view.rankedResults.map((entry) => entry.id)).not.toContain("player-opposed-result");
+  });
+
+  it("does not reveal hidden opposed opponent comparison details", () => {
+    const baseEncounter = makeEncounter();
+    const encounter = {
+      ...baseEncounter,
+      roleplayState: {
+        ...baseEncounter.roleplayState,
+        actionLog: [
+          {
+            createdAt: "2026-01-01T00:07:00.000Z",
+            dieResult: 12,
+            id: "player-opposed-result",
+            mode: "opposed",
+            numericSubtotal: 36,
+            openEndedD10s: [],
+            participantId: "scenario-pc-1",
+            pendingRollId: "opposed-roll",
+            rollD20: 12,
+            rollSetId: "hidden-opposed-set",
+            side: "actor",
+            silent: false,
+            skillId: "dodge",
+            skillLabel: "Dodge",
+            summary: "Player rolled Dodge.",
+            type: "gm_skill_roll",
+          },
+          {
+            createdAt: "2026-01-01T00:06:30.000Z",
+            dieResult: 18,
+            id: "hidden-opponent-opposed-result",
+            mode: "opposed",
+            numericSubtotal: 42,
+            openEndedD10s: [],
+            participantId: "scenario-npc-hidden",
+            rollD20: 18,
+            rollSetId: "hidden-opposed-set",
+            side: "opponent",
+            silent: false,
+            skillId: "brawling",
+            skillLabel: "Brawling",
+            summary: "GM rolled Brawling.",
+            type: "gm_skill_roll",
+          },
+        ],
+        pendingSkillRolls: [
+          {
+            assignedAt: "2026-01-01T00:06:00.000Z",
+            id: "opposed-roll",
+            mode: "opposed",
+            opponentParticipantId: "scenario-npc-hidden",
+            opponentSkillId: "brawling",
+            opponentSkillLabel: "Brawling",
+            participantId: "scenario-pc-1",
+            rollSetId: "hidden-opposed-set",
+            side: "actor",
+            silent: false,
+            skillId: "dodge",
+            skillLabel: "Dodge",
+            skillValue: 24,
+          },
+        ],
+      },
+    } as EncounterSession;
+    const view = buildPlayerGeneralEncounterView({
+      currentUserId: "player-1",
+      encounter,
+      scenarioParticipants: [
+        makeScenarioParticipant({ controlledByUserId: "player-1", id: "pc-1", name: "Player hero" }),
+        makeScenarioParticipant({ id: "npc-hidden", name: "Hidden spy" }),
+      ],
+    });
+
+    expect(view.assignedRolls[0]?.comparison).toBeUndefined();
+    expect(JSON.stringify(view.assignedRolls)).not.toContain("Hidden spy");
   });
 
   it("keeps ranked results player-safe by hiding hidden, silent, opposed, and historical rolls", () => {

@@ -214,6 +214,12 @@ const rollFieldRowStyle = {
   alignItems: "end",
 } as const;
 
+const rollSkillGridStyle = {
+  display: "grid",
+  gap: "0.45rem 0.65rem",
+  gridTemplateColumns: "repeat(2, minmax(0, max-content))",
+} as const;
+
 const rollPreviewStyle = {
   background: "#fbfaf7",
   border: "1px solid #eee8dc",
@@ -1788,11 +1794,46 @@ export function GmRoleplayingEncounterScreen({
 
             return (
               <div key={draft.id} style={rollBlockShellStyle}>
-                <strong>Roll {index + 1}</strong>
                 <section style={rollEditorStyle}>
                   <div style={rollControlsStackStyle}>
                     <section style={rollControlsStyle}>
-                    <strong>Actor</strong>
+                    <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: "0.55rem" }}>
+                      <strong>Roll {index + 1}</strong>
+                      <select
+                        aria-label={`Roleplay roll ${index + 1} participant`}
+                        disabled={actorLocked}
+                        onChange={(event) => {
+                          const participant = roster.find((row) => row.id === event.target.value);
+                          const nextSkillId = readSystemSkillOptions({
+                            content,
+                            encounterParticipant: participant,
+                            scenarioParticipants,
+                          })[0]?.id ?? "";
+                          updateRollDraft(draft.id, {
+                            otherModInput: applyUnknownSkillDefaultOtherMod({
+                              currentValue: draft.otherModInput,
+                              selectedSkill: readSystemSkillOptions({
+                                content,
+                                encounterParticipant: participant,
+                                scenarioParticipants,
+                              }).find((skill) => skill.id === nextSkillId),
+                              touched: draft.otherModTouched,
+                            }),
+                            participantId: event.target.value,
+                            skillCategoryId: "all",
+                            skillId: nextSkillId,
+                          });
+                        }}
+                        style={compactInputStyle}
+                        value={context.participant?.id ?? ""}
+                      >
+                        {roster.map((participant) => (
+                          <option key={participant.id} value={participant.id}>
+                            {participant.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                     <div style={rollControlRowStyle}>
                       <label style={{ alignItems: "center", display: "flex", gap: "0.35rem" }}>
                         <input
@@ -1849,44 +1890,7 @@ export function GmRoleplayingEncounterScreen({
                         />
                       </label>
                     </div>
-                    <div style={rollFieldRowStyle}>
-                      <label style={compactControlStyle}>
-                        <span>Character</span>
-                        <select
-                          aria-label={`Roleplay roll ${index + 1} participant`}
-                          disabled={actorLocked}
-                          onChange={(event) => {
-                            const participant = roster.find((row) => row.id === event.target.value);
-                            const nextSkillId = readSystemSkillOptions({
-                              content,
-                              encounterParticipant: participant,
-                              scenarioParticipants,
-                            })[0]?.id ?? "";
-                            updateRollDraft(draft.id, {
-                              otherModInput: applyUnknownSkillDefaultOtherMod({
-                                currentValue: draft.otherModInput,
-                                selectedSkill: readSystemSkillOptions({
-                                  content,
-                                  encounterParticipant: participant,
-                                  scenarioParticipants,
-                                }).find((skill) => skill.id === nextSkillId),
-                                touched: draft.otherModTouched,
-                              }),
-                              participantId: event.target.value,
-                              skillCategoryId: "all",
-                              skillId: nextSkillId,
-                            });
-                          }}
-                          style={compactInputStyle}
-                          value={context.participant?.id ?? ""}
-                        >
-                          {roster.map((participant) => (
-                            <option key={participant.id} value={participant.id}>
-                              {participant.label}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
+                    <div style={rollSkillGridStyle}>
                       <label style={compactControlStyle}>
                         <span>Category</span>
                         <select
@@ -2115,7 +2119,33 @@ export function GmRoleplayingEncounterScreen({
                     </section>
                     {context.opponent && draft.opponentBlockOpen ? (
                     <section style={opponentControlsStyle}>
-                      <strong>Opponent</strong>
+                      <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: "0.55rem" }}>
+                        <strong>Opponent</strong>
+                        <select
+                          aria-label={`Roleplay roll ${index + 1} opponent block participant`}
+                          disabled={opponentLocked}
+                          onChange={(event) => {
+                            updateRollDraft(draft.id, {
+                              opponentParticipantId: event.target.value,
+                              opponentRoll: undefined,
+                              opponentOtherModInput: "0",
+                              opponentOtherModTouched: false,
+                              opponentSkillCategoryId: "all",
+                              opponentSkillId: "",
+                              opponentSupportSkillCategoryId: "all",
+                              opponentSupportSkillId: "",
+                            });
+                          }}
+                          style={compactInputStyle}
+                          value={context.opponent.id}
+                        >
+                          {roster.map((participant) => (
+                            <option key={participant.id} value={participant.id}>
+                              {participant.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
                       <div style={rollControlRowStyle}>
                         <label style={{ alignItems: "center", display: "flex", gap: "0.35rem" }}>
                           <input
@@ -2172,34 +2202,7 @@ export function GmRoleplayingEncounterScreen({
                           />
                         </label>
                       </div>
-                      <div style={rollFieldRowStyle}>
-                        <label style={compactControlStyle}>
-                          <span>Opponent</span>
-                          <select
-                            aria-label={`Roleplay roll ${index + 1} opponent block participant`}
-                            disabled={opponentLocked}
-                            onChange={(event) => {
-                              updateRollDraft(draft.id, {
-                                opponentParticipantId: event.target.value,
-                                opponentRoll: undefined,
-                                opponentOtherModInput: "0",
-                                opponentOtherModTouched: false,
-                                opponentSkillCategoryId: "all",
-                                opponentSkillId: "",
-                                opponentSupportSkillCategoryId: "all",
-                                opponentSupportSkillId: "",
-                              });
-                            }}
-                            style={compactInputStyle}
-                            value={context.opponent.id}
-                          >
-                            {roster.map((participant) => (
-                              <option key={participant.id} value={participant.id}>
-                                {participant.label}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
+                      <div style={rollSkillGridStyle}>
                         <label style={compactControlStyle}>
                           <span>Category</span>
                           <select
