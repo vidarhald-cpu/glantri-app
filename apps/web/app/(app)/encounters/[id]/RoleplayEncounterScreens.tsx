@@ -692,6 +692,67 @@ function buildPlayerRollResult(input?: {
   };
 }
 
+function buildActionLogRollResult(
+  input?: RoleplayActionLogEntry,
+  side: "actor" | "opponent" = "actor"
+): RoleplayOpenEndedD20Roll | undefined {
+  if (!input) {
+    return undefined;
+  }
+
+  if (side === "opponent") {
+    return buildPlayerRollResult({
+      dieResult: input.side === "opponent" ? input.dieResult : input.opponentDieResult,
+      openEndedD10s: input.side === "opponent" ? input.openEndedD10s : input.opponentOpenEndedD10s,
+      rollD20: input.side === "opponent" ? input.rollD20 : input.opponentRollD20,
+    });
+  }
+
+  return buildPlayerRollResult(input);
+}
+
+function findRoleplayResultForSide(input: {
+  entries: RoleplayActionLogEntry[];
+  participantId?: string;
+  pendingRollId?: string;
+  rollSetId?: string;
+  side: "actor" | "opponent";
+  skillId?: string;
+}): RoleplayActionLogEntry | undefined {
+  return input.entries
+    .filter((entry) => {
+      if (entry.type !== "gm_skill_roll") {
+        return false;
+      }
+
+      if (input.pendingRollId && entry.pendingRollId === input.pendingRollId) {
+        return !entry.side || entry.side === input.side;
+      }
+
+      if (!input.rollSetId || entry.rollSetId !== input.rollSetId) {
+        return false;
+      }
+
+      if (entry.side === input.side) {
+        return entry.participantId === input.participantId && entry.skillId === input.skillId;
+      }
+
+      if (input.side === "actor" && !entry.side) {
+        return entry.participantId === input.participantId && entry.skillId === input.skillId;
+      }
+
+      if (input.side === "opponent" && !entry.side) {
+        return (
+          (entry.opponentParticipantId === input.participantId && entry.opponentSkillId === input.skillId) ||
+          (entry.participantId === input.participantId && entry.skillId === input.skillId)
+        );
+      }
+
+      return false;
+    })
+    .sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0];
+}
+
 function rankPlayerVisibleResults(
   entries: Array<{ id: string; participantName: string; skillLabel: string; total: number }>
 ) {
@@ -965,32 +1026,6 @@ export function GmRoleplayingEncounterScreen({
         ? allSkillOptions
         : allSkillOptions.filter((skill) => skill.categoryId === draft.skillCategoryId);
     const selectedSkill = skillOptions.find((skill) => skill.id === draft.skillId) ?? skillOptions[0];
-    const matchingPendingRoll = selectedSkill
-      ? [...roleplayState.pendingSkillRolls]
-          .filter(
-            (roll) =>
-              !roll.silent &&
-              roll.participantId === participant?.id &&
-              roll.skillId === selectedSkill.id &&
-              roll.rollSetId
-          )
-          .sort((left, right) => right.assignedAt.localeCompare(left.assignedAt))[0]
-      : undefined;
-    const matchingResult = matchingPendingRoll
-      ? roleplayState.actionLog
-          .filter(
-            (entry) =>
-              entry.type === "gm_skill_roll" &&
-              !entry.silent &&
-              entry.participantId === matchingPendingRoll.participantId &&
-              entry.skillId === matchingPendingRoll.skillId &&
-              entry.rollSetId === matchingPendingRoll.rollSetId &&
-              entry.dieResult != null &&
-              entry.rollD20 != null
-          )
-          .sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0]
-      : undefined;
-    const actorExternalRoll = buildPlayerRollResult(matchingResult);
     const supportSkillOptions =
       draft.supportSkillCategoryId === "all"
         ? allSkillOptions
@@ -1035,6 +1070,44 @@ export function GmRoleplayingEncounterScreen({
     const otherMod = normalizeRoleplayOtherMod(actorOtherModInput);
     const opponentOtherMod = normalizeRoleplayOtherMod(opponentOtherModInput);
     const isOpposed = Boolean(opponent && draft.opponentBlockOpen && selectedOpponentSkill);
+    const matchingPendingRoll = selectedSkill
+      ? [...roleplayState.pendingSkillRolls]
+          .filter((roll) => {
+            const rollParticipant = resolveEncounterParticipantByRollParticipantId({
+              participantId: roll.participantId,
+              participants: roster,
+            });
+
+            return (
+              rollParticipant?.id === participant?.id &&
+              roll.skillId === selectedSkill.id &&
+              roll.rollSetId
+            );
+          })
+          .sort((left, right) => right.assignedAt.localeCompare(left.assignedAt))[0]
+      : undefined;
+    const matchingResult = matchingPendingRoll
+      ? findRoleplayResultForSide({
+          entries: roleplayState.actionLog,
+          participantId: participant?.id,
+          pendingRollId: matchingPendingRoll.id,
+          rollSetId: matchingPendingRoll.rollSetId,
+          side: "actor",
+          skillId: selectedSkill?.id,
+        })
+      : undefined;
+    const matchingOpponentResult =
+      matchingPendingRoll && opponent && selectedOpponentSkill
+        ? findRoleplayResultForSide({
+            entries: roleplayState.actionLog,
+            participantId: opponent.id,
+            rollSetId: matchingPendingRoll.rollSetId,
+            side: "opponent",
+            skillId: selectedOpponentSkill.id,
+          })
+        : undefined;
+    const actorExternalRoll = buildActionLogRollResult(matchingResult, "actor");
+    const opponentExternalRoll = buildActionLogRollResult(matchingOpponentResult, "opponent");
     const preview = selectedSkill
       ? buildRoleplayCalculationPreview({
           difficulty: isOpposed || draft.difficulty === "none" ? undefined : draft.difficulty,
@@ -1058,7 +1131,7 @@ export function GmRoleplayingEncounterScreen({
       opponent && selectedOpponentSkill
         ? buildRoleplayCalculationPreview({
             otherMod: opponentOtherMod,
-            roll: draft.opponentRoll,
+            roll: draft.opponentRoll ?? opponentExternalRoll,
             skillLabel: selectedOpponentSkill.label,
             skillValue: selectedOpponentSkill.value,
             useDbMod: draft.opponentUseDbMod,
@@ -1068,7 +1141,7 @@ export function GmRoleplayingEncounterScreen({
         : undefined;
     const opponentSupportPreview = selectedOpponentSupportSkill
       ? buildRoleplayCalculationPreview({
-          roll: draft.opponentRoll,
+          roll: draft.opponentRoll ?? opponentExternalRoll,
           skillLabel: selectedOpponentSupportSkill.label,
           skillValue: selectedOpponentSupportSkill.value,
         })
@@ -1078,6 +1151,7 @@ export function GmRoleplayingEncounterScreen({
       allOpponentSkillOptions,
       allSkillOptions,
       actorExternalResult: matchingResult,
+      opponentExternalResult: matchingOpponentResult,
       isOpposed,
       actorOtherModInput,
       opponent,
@@ -1085,6 +1159,7 @@ export function GmRoleplayingEncounterScreen({
       opponentPreview,
       opponentSupportPreview,
       opponentSupportSkillOptions,
+      matchingPendingRoll,
       opponentSkillOptions,
       otherMod,
       opponentOtherMod,
@@ -1106,6 +1181,7 @@ export function GmRoleplayingEncounterScreen({
       opponent,
       otherMod,
       opponentOtherMod,
+      matchingPendingRoll,
       participant,
       selectedOpponentSkill,
       selectedOpponentSupportSkill,
@@ -1122,10 +1198,20 @@ export function GmRoleplayingEncounterScreen({
     await persist(
       assignRoleplaySkillRoll({
         difficulty: assigningOpponent || isOpposed || draft.difficulty === "none" ? undefined : draft.difficulty,
-        mode: "difficulty",
+        mode: assigningOpponent || isOpposed ? "opposed" : "difficulty",
         otherMod: assigningOpponent ? opponentOtherMod : otherMod,
+        opponentParticipantId: !assigningOpponent && isOpposed ? opponent?.id : undefined,
+        opponentParticipantName: !assigningOpponent && isOpposed ? opponent?.label : undefined,
+        opponentSilent: !assigningOpponent && isOpposed ? draft.opponentSilent : undefined,
+        opponentSkillId: !assigningOpponent && isOpposed ? selectedOpponentSkill?.id : undefined,
+        opponentSkillLabel: !assigningOpponent && isOpposed ? selectedOpponentSkill?.label : undefined,
+        opponentSkillValue: !assigningOpponent && isOpposed ? selectedOpponentSkill?.value : undefined,
+        opponentSupportSkillId: !assigningOpponent && isOpposed ? selectedOpponentSupportSkill?.id : undefined,
+        opponentSupportSkillLabel: !assigningOpponent && isOpposed ? selectedOpponentSupportSkill?.label : undefined,
         participantId: assigningOpponent ? opponent.id : participant.id,
+        rollSetId: assigningOpponent ? matchingPendingRoll?.rollSetId : undefined,
         session: encounter,
+        side: assigningOpponent ? "opponent" : isOpposed ? "actor" : undefined,
         silent: assigningOpponent ? draft.opponentSilent : draft.silent,
         skillId: assigningOpponent ? selectedOpponentSkill.id : selectedSkill.id,
         skillLabel: assigningOpponent ? selectedOpponentSkill.label : selectedSkill.label,
@@ -1146,6 +1232,7 @@ export function GmRoleplayingEncounterScreen({
       opponent,
       otherMod,
       opponentOtherMod,
+      matchingPendingRoll,
       participant,
       selectedOpponentSkill,
       selectedOpponentSupportSkill,
@@ -1227,14 +1314,16 @@ export function GmRoleplayingEncounterScreen({
           dieResult: opponentRoll.dieResult,
           finalTotal: opponentPreview.finalTotal,
           fumble: opponentPreview.fumble,
-          mode: "difficulty",
+          mode: matchingPendingRoll?.rollSetId ? "opposed" : "difficulty",
           numericSubtotal: opponentPreview.numericSubtotal,
           openEndedD10s: opponentRoll.openEndedD10s,
           otherMod: opponentOtherMod,
           partial: opponentPreview.partial,
           participantId: opponent.id,
           roll: opponentRoll,
+          rollSetId: matchingPendingRoll?.rollSetId,
           session: encounter,
+          side: matchingPendingRoll?.rollSetId ? "opponent" : undefined,
           silent: draft.opponentSilent,
           skillId: selectedOpponentSkill.id,
           skillLabel: selectedOpponentSkill.label,
@@ -1285,6 +1374,7 @@ export function GmRoleplayingEncounterScreen({
           partial: preview.partial || opponentPreview.partial,
           participantId: participant.id,
           roll,
+          rollSetId: matchingPendingRoll?.rollSetId,
           session: encounter,
           silent: draft.silent,
           skillId: selectedSkill.id,
@@ -1313,14 +1403,17 @@ export function GmRoleplayingEncounterScreen({
           dieResult: roll.dieResult,
           finalTotal: preview.finalTotal,
           fumble: preview.fumble,
-          mode: "difficulty",
+          mode: isOpposed && matchingPendingRoll?.rollSetId ? "opposed" : "difficulty",
           numericSubtotal: preview.numericSubtotal,
           openEndedD10s: roll.openEndedD10s,
           otherMod,
           partial: preview.partial,
+          pendingRollId: matchingPendingRoll?.id,
           participantId: participant.id,
           roll,
+          rollSetId: matchingPendingRoll?.rollSetId,
           session: encounter,
+          side: isOpposed && matchingPendingRoll?.rollSetId ? "actor" : undefined,
           silent: draft.silent,
           skillId: selectedSkill.id,
           skillLabel: selectedSkill.label,
@@ -1502,8 +1595,8 @@ export function GmRoleplayingEncounterScreen({
                     opponentPreview: context.opponentPreview,
                   }).summary
                 : undefined;
-            const actorLocked = Boolean(draft.actorRoll);
-            const opponentLocked = Boolean(draft.opponentRoll);
+            const actorLocked = Boolean(draft.actorRoll || context.actorExternalResult);
+            const opponentLocked = Boolean(draft.opponentRoll || context.opponentExternalResult);
 
             return (
               <div key={draft.id} style={rollBlockShellStyle}>

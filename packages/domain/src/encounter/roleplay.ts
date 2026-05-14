@@ -612,7 +612,9 @@ export function assignRoleplaySkillRoll(input: {
   opponentSupportSkillId?: string;
   opponentSupportSkillLabel?: string;
   participantId: string;
+  rollSetId?: string;
   session: EncounterSession;
+  side?: "actor" | "opponent";
   silent: boolean;
   skillId: string;
   skillLabel: string;
@@ -624,7 +626,9 @@ export function assignRoleplaySkillRoll(input: {
   const assignedAt = nowIso();
   const modifiers = normalizeRollModifiers(input);
   const mode = input.mode ?? "difficulty";
-  const rollSetId = makeId("roleplay-roll-set");
+  const rollSetId = input.rollSetId ?? makeId("roleplay-roll-set");
+  const pendingRollId = makeId("roleplay-roll");
+  const side = input.side ?? (mode === "opposed" ? "actor" : undefined);
 
   return withRoleplayState({
     session: input.session,
@@ -650,8 +654,10 @@ export function assignRoleplaySkillRoll(input: {
           opponentSupportSkillLabel: input.opponentSupportSkillLabel,
           otherMod: modifiers.otherMod,
           partial: false,
+          pendingRollId,
           participantId: input.participantId,
           rollSetId,
+          side,
           silent: input.silent,
           skillId: input.skillId,
           skillLabel: input.skillLabel,
@@ -672,7 +678,7 @@ export function assignRoleplaySkillRoll(input: {
         {
           assignedAt,
           difficulty: input.difficulty,
-          id: makeId("roleplay-roll"),
+          id: pendingRollId,
           mode,
           opponentParticipantId: input.opponentParticipantId,
           opponentParticipantName: input.opponentParticipantName,
@@ -685,6 +691,7 @@ export function assignRoleplaySkillRoll(input: {
           otherMod: modifiers.otherMod,
           participantId: input.participantId,
           rollSetId,
+          side,
           silent: input.silent,
           skillId: input.skillId,
           skillLabel: input.skillLabel,
@@ -727,11 +734,13 @@ export function recordRoleplayGmSkillRoll(input: {
   opponentSkillLabel?: string;
   opponentSupportSkillId?: string;
   opponentSupportSkillLabel?: string;
+  pendingRollId?: string;
   participantId: string;
   partial?: boolean;
   roll: RoleplayOpenEndedD20Roll;
   rollSetId?: string;
   session: EncounterSession;
+  side?: "actor" | "opponent";
   silent: boolean;
   skillId: string;
   skillLabel: string;
@@ -782,11 +791,13 @@ export function recordRoleplayGmSkillRoll(input: {
           opponentSupportSkillLabel: input.opponentSupportSkillLabel,
           otherMod: modifiers.otherMod,
           partial: Boolean(input.partial),
+          pendingRollId: input.pendingRollId,
           participantId: input.participantId,
           resultModifier: achievedSuccessLevel?.resultModifier,
           roll: input.roll.rollD20,
           rollD20: input.roll.rollD20,
           rollSetId: input.rollSetId,
+          side: input.side,
           silent: input.silent,
           skillId: input.skillId,
           skillLabel: input.skillLabel,

@@ -298,6 +298,76 @@ describe("playerGeneralEncounter", () => {
     });
   });
 
+  it("shows a player-submitted result for an assigned opposed actor roll", () => {
+    const baseEncounter = makeEncounter();
+    const encounter = {
+      ...baseEncounter,
+      roleplayState: {
+        ...baseEncounter.roleplayState,
+        actionLog: [
+          {
+            createdAt: "2026-01-01T00:07:00.000Z",
+            dieResult: 26,
+            id: "player-opposed-result",
+            mode: "opposed",
+            numericSubtotal: 50,
+            openEndedD10s: [6],
+            participantId: "scenario-pc-1",
+            pendingRollId: "opposed-roll",
+            rollD20: 20,
+            rollSetId: "opposed-set",
+            side: "actor",
+            silent: false,
+            skillId: "dodge",
+            skillLabel: "Dodge",
+            summary: "Player rolled Dodge.",
+            type: "gm_skill_roll",
+          },
+          ...(baseEncounter.roleplayState?.actionLog ?? []),
+        ],
+        pendingSkillRolls: [
+          {
+            assignedAt: "2026-01-01T00:06:00.000Z",
+            id: "opposed-roll",
+            mode: "opposed",
+            opponentParticipantId: "scenario-npc-visible",
+            opponentSkillId: "brawling",
+            opponentSkillLabel: "Brawling",
+            participantId: "scenario-pc-1",
+            rollSetId: "opposed-set",
+            side: "actor",
+            silent: false,
+            skillId: "dodge",
+            skillLabel: "Dodge",
+            skillValue: 24,
+          },
+        ],
+      },
+    } as EncounterSession;
+    const view = buildPlayerGeneralEncounterView({
+      currentUserId: "player-1",
+      encounter,
+      scenarioParticipants: [
+        makeScenarioParticipant({ controlledByUserId: "player-1", id: "pc-1", name: "Player hero" }),
+        makeScenarioParticipant({ id: "npc-visible", name: "Visible NPC" }),
+      ],
+    });
+
+    expect(view.assignedRolls).toHaveLength(1);
+    expect(view.assignedRolls[0]).toMatchObject({
+      id: "opposed-roll",
+      mode: "opposed",
+      result: {
+        dieResult: 26,
+        id: "player-opposed-result",
+        total: 50,
+      },
+      rollSetId: "opposed-set",
+      skillLabel: "Dodge",
+    });
+    expect(view.rankedResults.map((entry) => entry.id)).not.toContain("player-opposed-result");
+  });
+
   it("keeps ranked results player-safe by hiding hidden, silent, opposed, and historical rolls", () => {
     const view = buildPlayerGeneralEncounterView({
       currentUserId: "player-1",

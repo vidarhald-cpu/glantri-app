@@ -301,11 +301,118 @@ describe("scenarios route contract", () => {
     expect(response.statusCode).toBe(200);
     const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0];
     expect(updatedEncounter.roleplayState.actionLog[0]).toMatchObject({
+      pendingRollId: "roll-1",
       participantId: "scenario-participant-1",
       rollD20: 12,
       silent: false,
       skillId: "perception",
       type: "gm_skill_roll",
+    });
+  });
+
+  it("preserves roll set and actor side when a player submits an assigned opposed roll", async () => {
+    const encounter = {
+      actionLog: [],
+      createdAt: "2026-01-01T00:00:00.000Z",
+      currentRound: 1,
+      currentTurnIndex: 0,
+      declarationsLocked: false,
+      id: "encounter-1",
+      kind: "roleplay",
+      participants: [
+        {
+          id: "scenario-participant-1",
+          label: "Player hero",
+          participantType: "scenario",
+          scenarioParticipantId: "participant-1",
+        },
+      ],
+      roleplayState: {
+        actionLog: [],
+        pendingSkillRolls: [
+          {
+            assignedAt: "2026-01-01T00:00:00.000Z",
+            id: "roll-1",
+            mode: "opposed",
+            otherMod: 0,
+            opponentParticipantId: "scenario-participant-2",
+            opponentSkillId: "brawling",
+            opponentSkillLabel: "Brawling",
+            participantId: "scenario-participant-1",
+            rollSetId: "roll-set-1",
+            side: "actor",
+            silent: false,
+            skillId: "dodge",
+            skillLabel: "Dodge",
+            skillValue: 24,
+            useDbMod: false,
+            useGenMod: false,
+            useObSkillMod: false,
+          },
+        ],
+      },
+      scenarioId: "scenario-1",
+      status: "active",
+      title: "Courtyard",
+      turnOrderMode: "manual",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    };
+    mocks.encounterService.getEncounterById.mockResolvedValue(encounter);
+    mocks.encounterService.updateEncounter.mockImplementation(async (nextEncounter: unknown) => nextEncounter);
+    mocks.scenarioService.getScenarioById.mockResolvedValue({
+      campaignId: "campaign-1",
+      id: "scenario-1",
+      kind: "combat",
+      name: "Bridge Ambush",
+      status: "live",
+    });
+    mocks.campaignService.getCampaignById.mockResolvedValue({
+      gmUserId: "gm-1",
+      id: "campaign-1",
+      name: "Border Trouble",
+      status: "active",
+    });
+    mocks.scenarioService.userHasPlayerScenarioAccess.mockResolvedValue(true);
+    mocks.scenarioService.listScenarioParticipants.mockResolvedValue([
+      {
+        controlledByUserId: "player-1",
+        id: "participant-1",
+        isActive: true,
+        role: "player_character",
+        scenarioId: "scenario-1",
+        snapshot: {
+          displayName: "Player hero",
+        },
+        sourceType: "character",
+      },
+    ]);
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        pendingRollId: "roll-1",
+        roll: {
+          dieResult: 26,
+          openEndedD10s: [6],
+          rollD20: 20,
+        },
+      },
+      url: "/encounters/encounter-1/player-roll",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0];
+    expect(updatedEncounter.roleplayState.actionLog[0]).toMatchObject({
+      mode: "opposed",
+      pendingRollId: "roll-1",
+      rollSetId: "roll-set-1",
+      side: "actor",
+      participantId: "scenario-participant-1",
+      skillId: "dodge",
+      numericSubtotal: 50,
     });
   });
 
@@ -407,6 +514,106 @@ describe("scenarios route contract", () => {
     await app.close();
 
     expect(response.statusCode).toBe(403);
+    expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
+  });
+
+  it("rejects duplicate player submissions for the same assigned roll side", async () => {
+    const encounter = {
+      actionLog: [],
+      createdAt: "2026-01-01T00:00:00.000Z",
+      currentRound: 1,
+      currentTurnIndex: 0,
+      declarationsLocked: false,
+      id: "encounter-1",
+      kind: "roleplay",
+      participants: [
+        {
+          id: "scenario-participant-1",
+          label: "Player hero",
+          participantType: "scenario",
+          scenarioParticipantId: "participant-1",
+        },
+      ],
+      roleplayState: {
+        actionLog: [
+          {
+            createdAt: "2026-01-01T00:01:00.000Z",
+            id: "existing-result",
+            mode: "opposed",
+            participantId: "scenario-participant-1",
+            pendingRollId: "roll-1",
+            rollSetId: "roll-set-1",
+            side: "actor",
+            silent: false,
+            skillId: "dodge",
+            skillLabel: "Dodge",
+            summary: "Player rolled Dodge.",
+            type: "gm_skill_roll",
+          },
+        ],
+        pendingSkillRolls: [
+          {
+            assignedAt: "2026-01-01T00:00:00.000Z",
+            id: "roll-1",
+            mode: "opposed",
+            participantId: "scenario-participant-1",
+            rollSetId: "roll-set-1",
+            side: "actor",
+            silent: false,
+            skillId: "dodge",
+            skillLabel: "Dodge",
+          },
+        ],
+      },
+      scenarioId: "scenario-1",
+      status: "active",
+      title: "Courtyard",
+      turnOrderMode: "manual",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    };
+    mocks.encounterService.getEncounterById.mockResolvedValue(encounter);
+    mocks.scenarioService.getScenarioById.mockResolvedValue({
+      campaignId: "campaign-1",
+      id: "scenario-1",
+      name: "Bridge Ambush",
+    });
+    mocks.campaignService.getCampaignById.mockResolvedValue({
+      gmUserId: "gm-1",
+      id: "campaign-1",
+      name: "Border Trouble",
+    });
+    mocks.scenarioService.userHasPlayerScenarioAccess.mockResolvedValue(true);
+    mocks.scenarioService.listScenarioParticipants.mockResolvedValue([
+      {
+        controlledByUserId: "player-1",
+        id: "participant-1",
+        isActive: true,
+        role: "player_character",
+        scenarioId: "scenario-1",
+        snapshot: {
+          displayName: "Player hero",
+        },
+        sourceType: "character",
+      },
+    ]);
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        pendingRollId: "roll-1",
+        roll: {
+          dieResult: 12,
+          openEndedD10s: [],
+          rollD20: 12,
+        },
+      },
+      url: "/encounters/encounter-1/player-roll",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(409);
     expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
   });
 

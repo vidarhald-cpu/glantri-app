@@ -168,6 +168,11 @@ describe("RoleplayEncounterScreens", () => {
     expect(source).toContain("handleGmRoll(draft, \"actor\")");
     expect(source).toContain("handleGmRoll(draft, \"opponent\")");
     expect(source).toContain("handleGmRoll(draft, \"both\")");
+    expect(source).toContain("findRoleplayResultForSide");
+    expect(source).toContain("side: \"actor\"");
+    expect(source).toContain("side: \"opponent\"");
+    expect(source).toContain("pendingRollId: matchingPendingRoll?.id");
+    expect(source).toContain("rollSetId: matchingPendingRoll?.rollSetId");
   });
 
   it("keeps the roll preview concise with pending notes outside the formula", () => {
@@ -202,8 +207,8 @@ describe("RoleplayEncounterScreens", () => {
   it("locks actor and opponent roll controls independently after each side rolls", () => {
     const source = readSource();
 
-    expect(source).toContain("const actorLocked = Boolean(draft.actorRoll)");
-    expect(source).toContain("const opponentLocked = Boolean(draft.opponentRoll)");
+    expect(source).toContain("const actorLocked = Boolean(draft.actorRoll || context.actorExternalResult)");
+    expect(source).toContain("const opponentLocked = Boolean(draft.opponentRoll || context.opponentExternalResult)");
     expect(source).toContain("disabled={actorLocked || !context.participant || !context.selectedSkill}");
     expect(source).toContain("disabled={opponentLocked || !context.opponent || !context.selectedOpponentSkill}");
     expect(source).toContain("actorLocked ||");

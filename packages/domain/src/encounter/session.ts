@@ -184,6 +184,8 @@ const roleplayRollModifierSchema = z.object({
   useObSkillMod: z.boolean().default(false)
 });
 
+export const roleplayRollSideSchema = z.enum(["actor", "opponent"]);
+
 export const roleplayPendingSkillRollSchema = z.object({
   assignedAt: z.string().min(1),
   difficulty: roleplayOptionalDifficultySchema,
@@ -199,6 +201,7 @@ export const roleplayPendingSkillRollSchema = z.object({
   opponentSupportSkillLabel: z.string().min(1).optional(),
   participantId: idSchema,
   rollSetId: idSchema.optional(),
+  side: roleplayRollSideSchema.optional(),
   silent: z.boolean().default(false),
   skillId: idSchema,
   skillLabel: z.string().min(1),
@@ -237,11 +240,13 @@ export const roleplayActionLogEntrySchema = z.object({
   opponentSupportSkillId: idSchema.optional(),
   opponentSupportSkillLabel: z.string().min(1).optional(),
   partial: z.boolean().default(false),
+  pendingRollId: idSchema.optional(),
   participantId: idSchema.optional(),
   resultModifier: z.number().int().optional(),
   roll: z.number().int().optional(),
   rollD20: z.number().int().min(1).max(20).optional(),
   rollSetId: idSchema.optional(),
+  side: roleplayRollSideSchema.optional(),
   silent: z.boolean().default(false),
   skillId: idSchema.optional(),
   skillLabel: z.string().optional(),
@@ -333,6 +338,7 @@ export type EncounterCriticalRollResult = z.infer<typeof encounterCriticalRollRe
 export type EncounterCriticalResolution = z.infer<typeof encounterCriticalResolutionSchema>;
 export type RoleplayDifficulty = z.infer<typeof roleplayDifficultySchema>;
 export type RoleplayParticipantDescription = z.infer<typeof roleplayParticipantDescriptionSchema>;
+export type RoleplayRollSide = z.infer<typeof roleplayRollSideSchema>;
 export type RoleplayPendingSkillRoll = z.infer<typeof roleplayPendingSkillRollSchema>;
 export type RoleplayActionLogEntry = z.infer<typeof roleplayActionLogEntrySchema>;
 export type RoleplayState = z.infer<typeof roleplayStateSchema>;

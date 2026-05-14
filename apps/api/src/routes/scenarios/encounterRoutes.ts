@@ -318,6 +318,25 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         });
       }
 
+      const pendingRollSide = pendingRoll.side ?? (pendingRoll.mode === "opposed" ? "actor" : undefined);
+      const existingResult = state.actionLog.find(
+        (entry) =>
+          entry.type === "gm_skill_roll" &&
+          !entry.silent &&
+          ((entry.pendingRollId && entry.pendingRollId === pendingRoll.id) ||
+            (pendingRoll.rollSetId &&
+              entry.rollSetId === pendingRoll.rollSetId &&
+              (pendingRollSide ? entry.side === pendingRollSide : true) &&
+              entry.participantId === pendingRoll.participantId &&
+              entry.skillId === pendingRoll.skillId))
+      );
+
+      if (existingResult) {
+        return reply.code(409).send({
+          error: "Roll has already been submitted."
+        });
+      }
+
       if (
         !isUserAssignedToEncounterMembership({
           encounter,
@@ -388,9 +407,11 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         otherMod: pendingRoll.otherMod,
         participantId: participant.id,
         partial: preview.partial,
+        pendingRollId: pendingRoll.id,
         roll: body.roll,
         rollSetId: pendingRoll.rollSetId,
         session: encounter,
+        side: pendingRollSide,
         silent: false,
         skillId: pendingRoll.skillId,
         skillLabel: pendingRoll.skillLabel,

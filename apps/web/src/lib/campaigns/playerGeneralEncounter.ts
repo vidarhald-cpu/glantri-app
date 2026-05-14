@@ -209,11 +209,12 @@ function findVisibleResultForPendingRoll(input: {
   const matchingEntries = input.entries.filter(
     (entry) =>
       entry.type === "gm_skill_roll" &&
-      entry.mode !== "opposed" &&
       !entry.silent &&
-      entry.participantId === input.pendingRoll.participantId &&
-      entry.skillId === input.pendingRoll.skillId &&
-      (input.pendingRoll.rollSetId ? entry.rollSetId === input.pendingRoll.rollSetId : true)
+      ((entry.pendingRollId && entry.pendingRollId === input.pendingRoll.id) ||
+        (entry.participantId === input.pendingRoll.participantId &&
+          entry.skillId === input.pendingRoll.skillId &&
+          (input.pendingRoll.rollSetId ? entry.rollSetId === input.pendingRoll.rollSetId : true) &&
+          (input.pendingRoll.side ? entry.side === input.pendingRoll.side : true)))
   );
 
   return matchingEntries.sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0];

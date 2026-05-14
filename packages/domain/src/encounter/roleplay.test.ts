@@ -254,12 +254,15 @@ describe("roleplay encounter state", () => {
       opponentSilent: true,
       opponentSkillId: "perception",
       opponentSkillValue: 12,
+      side: "actor",
       supportSkillId: "streetwise",
     });
     expect(state.actionLog[0]).toMatchObject({
       mode: "opposed",
       opponentSilent: true,
       opponentSkillLabel: "Perception",
+      pendingRollId: state.pendingSkillRolls[0]?.id,
+      side: "actor",
       supportSkillLabel: "Streetwise",
       type: "skill_roll_assigned",
     });
@@ -316,9 +319,12 @@ describe("roleplay encounter state", () => {
       opponentSilent: true,
       opponentSkillId: "perception",
       opponentSkillLabel: "Perception",
+      pendingRollId: normalizeRoleplayState(assigned).pendingSkillRolls[0]?.id,
       participantId: "actor-1",
       roll: { dieResult: 12, openEndedD10s: [], rollD20: 12 },
+      rollSetId: normalizeRoleplayState(assigned).pendingSkillRolls[0]?.rollSetId,
       session: assigned,
+      side: "actor",
       silent: false,
       skillId: "stealth",
       skillLabel: "Stealth",
@@ -327,7 +333,9 @@ describe("roleplay encounter state", () => {
     expect(normalizeRoleplayState(rolled).actionLog[0]).toMatchObject({
       mode: "opposed",
       opponentSilent: true,
+      pendingRollId: normalizeRoleplayState(assigned).pendingSkillRolls[0]?.id,
       silent: false,
+      side: "actor",
       type: "gm_skill_roll",
     });
   });
