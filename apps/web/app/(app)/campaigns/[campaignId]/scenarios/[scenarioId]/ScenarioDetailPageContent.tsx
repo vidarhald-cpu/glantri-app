@@ -1,10 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import type { AuthUser } from "@glantri/auth";
-import { defaultCanonicalContent } from "@glantri/content";
 import type {
   CampaignRosterEntry,
   EncounterKind,
@@ -44,184 +43,29 @@ import type { ServerCharacterRecord } from "@/lib/api/localServiceClient";
 import { getScenarioCharacterDefaultControllerId } from "@/lib/campaigns/scenarioCharacters";
 import { buildCampaignWorkspaceHref } from "@/lib/campaigns/workspace";
 
+import { ScenarioCampaignRosterPickerSection } from "./components/ScenarioCampaignRosterPickerSection";
+import { ScenarioEncounterAssignmentSection } from "./components/ScenarioEncounterAssignmentSection";
+import { ScenarioEncountersSection } from "./components/ScenarioEncountersSection";
+import { ScenarioEventLogSection } from "./components/ScenarioEventLogSection";
+import { ScenarioSummarySection } from "./components/ScenarioSummarySection";
+import { ScenarioTemplateSourcesSection } from "./components/ScenarioTemplateSourcesSection";
+import {
+  formatEntityKind,
+  getCivilizationDisplayName,
+  getConcreteParticipantMetadata,
+  readSnapshotMetadata
+} from "./components/scenarioScreenHelpers";
+import type {
+  ScenarioControllerFilter,
+  ScenarioParticipantTypeFilter,
+  ScenarioRosterCandidate,
+  TemplateSource
+} from "./components/scenarioScreenTypes";
+
 interface ScenarioDetailPageContentProps {
   campaignId: string;
   embedded?: boolean;
   scenarioId: string;
-}
-
-interface ScenarioRosterCandidate {
-  civilizationLabel: string;
-  controllerFilter: ScenarioControllerFilter;
-  controllerLabel: string;
-  existingParticipant?: ScenarioParticipant;
-  name: string;
-  professionLabel: string;
-  rosterEntry: CampaignRosterEntry;
-  skillGroups: string[];
-  sourceKind: string;
-  typeFilter: ScenarioParticipantTypeFilter;
-  typeLabel: string;
-}
-
-interface TemplateSource {
-  entity: ReusableEntity;
-  label: string;
-}
-
-type ScenarioParticipantTypeFilter = "all" | "pc" | "npc" | "temporary" | "monster" | "other";
-type ScenarioControllerFilter = "all" | "players" | "gms";
-
-const civilizationNameById = new Map(
-  defaultCanonicalContent.civilizations.map((civilization) => [civilization.id, civilization.name])
-);
-const civilizationNameByName = new Map(
-  defaultCanonicalContent.civilizations.map((civilization) => [
-    civilization.name.toLowerCase(),
-    civilization.name
-  ])
-);
-const civilizationNamesBySocietyId = new Map<string, string[]>();
-
-for (const civilization of defaultCanonicalContent.civilizations) {
-  const existingNames = civilizationNamesBySocietyId.get(civilization.linkedSocietyId) ?? [];
-  civilizationNamesBySocietyId.set(civilization.linkedSocietyId, [
-    ...existingNames,
-    civilization.name
-  ]);
-}
-
-function formatEntityKind(kind: ReusableEntity["kind"]): string {
-  if (kind === "npc") {
-    return "NPC";
-  }
-
-  return `${kind.charAt(0).toUpperCase()}${kind.slice(1)}`;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
-function readOptionalString(value: unknown): string | undefined {
-  return typeof value === "string" && value.trim().length > 0 ? value : undefined;
-}
-
-function readStringList(value: unknown): string[] {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-
-  return value.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0);
-}
-
-function getCivilizationDisplayName(value?: string): string {
-  const normalizedValue = value?.trim();
-
-  if (!normalizedValue) {
-    return "—";
-  }
-
-  const exactCivilizationName =
-    civilizationNameById.get(normalizedValue) ??
-    civilizationNameByName.get(normalizedValue.toLowerCase());
-
-  if (exactCivilizationName) {
-    return exactCivilizationName;
-  }
-
-  const societyCivilizationNames = civilizationNamesBySocietyId.get(normalizedValue);
-
-  if (societyCivilizationNames && societyCivilizationNames.length > 0) {
-    return societyCivilizationNames.join(" / ");
-  }
-
-  return "—";
-}
-
-function readSnapshotMetadata(snapshot: unknown): {
-  civilizationLabel?: string;
-  professionLabel?: string;
-  skillGroups: string[];
-} {
-  if (!isRecord(snapshot)) {
-    return { skillGroups: [] };
-  }
-
-  const progression = isRecord(snapshot.progression) ? snapshot.progression : undefined;
-  const progressionSkillGroups = Array.isArray(progression?.skillGroups)
-    ? progression.skillGroups
-        .map((entry) => (isRecord(entry) ? readOptionalString(entry.groupId) : undefined))
-        .filter((entry): entry is string => Boolean(entry))
-    : [];
-
-  return {
-    civilizationLabel:
-      readOptionalString(snapshot.civilization) ??
-      readOptionalString(snapshot.civilizationId) ??
-      readOptionalString(snapshot.culture) ??
-      readOptionalString(snapshot.societyId) ??
-      readOptionalString(snapshot.society),
-    professionLabel: readOptionalString(snapshot.profession) ?? readOptionalString(snapshot.professionId),
-    skillGroups: [
-      ...readStringList(snapshot.skillGroups),
-      ...readStringList(snapshot.skillGroupIds),
-      ...readStringList(snapshot.trainingPackages),
-      ...progressionSkillGroups
-    ]
-  };
-}
-
-function getScenarioParticipantType(input: {
-  characterId?: string;
-  entityId?: string;
-  role: ScenarioParticipant["role"];
-  sourceType: ScenarioParticipant["sourceType"];
-}): {
-  label: string;
-  typeFilter: ScenarioParticipantTypeFilter;
-} {
-  if (input.role === "player_character" || input.sourceType === "character") {
-    return { label: "PC", typeFilter: "pc" };
-  }
-
-  if (input.role === "monster") {
-    return { label: input.entityId ? "Monster" : "Temporary monster", typeFilter: "monster" };
-  }
-
-  if (input.sourceType === "entity" && !input.entityId) {
-    return { label: "Temporary actor", typeFilter: "temporary" };
-  }
-
-  if (input.role === "npc" || input.role === "enemy" || input.role === "ally") {
-    return { label: "NPC", typeFilter: "npc" };
-  }
-
-  return { label: "Other", typeFilter: "other" };
-}
-
-function getConcreteParticipantMetadata(participant: ScenarioParticipant): {
-  civilizationLabel: string;
-  professionLabel: string;
-  skillGroups: string[];
-  typeFilter: ScenarioParticipantTypeFilter;
-  typeLabel: string;
-} {
-  const participantType = getScenarioParticipantType({
-    characterId: participant.characterId,
-    entityId: participant.entityId,
-    role: participant.role,
-    sourceType: participant.sourceType
-  });
-  const buildMetadata = readSnapshotMetadata(participant.snapshot.build);
-
-  return {
-    civilizationLabel: getCivilizationDisplayName(buildMetadata.civilizationLabel),
-    professionLabel: buildMetadata.professionLabel ?? "—",
-    skillGroups: buildMetadata.skillGroups,
-    typeFilter: participantType.typeFilter,
-    typeLabel: participantType.label
-  };
 }
 
 export default function ScenarioDetailPageContent({
@@ -585,28 +429,6 @@ export default function ScenarioDetailPageContent({
     }
 
     return user.email;
-  }
-
-  function formatEventType(value: string): string {
-    return value
-      .split("_")
-      .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
-      .join(" ");
-  }
-
-  function formatShortDateTime(value: string): string {
-    const date = new Date(value);
-
-    if (Number.isNaN(date.getTime())) {
-      return value;
-    }
-
-    const day = String(date.getDate()).padStart(2, "0");
-    const month = String(date.getMonth() + 1).padStart(2, "0");
-    const hours = String(date.getHours()).padStart(2, "0");
-    const minutes = String(date.getMinutes()).padStart(2, "0");
-
-    return `${day}.${month} ${hours}:${minutes}`;
   }
 
   function buildEncounterParticipant(
@@ -1080,652 +902,107 @@ export default function ScenarioDetailPageContent({
       {error ? <div>{error}</div> : null}
       {feedback ? <div>{feedback}</div> : null}
 
-      <section
-        aria-label="Scenario summary"
-        style={{
-          alignItems: "end",
-          border: "1px solid #d9ddd8",
-          borderRadius: 12,
-          display: "grid",
-          gap: "0.75rem",
-          gridTemplateColumns: "minmax(160px, 1fr) minmax(240px, 2fr) minmax(130px, 0.7fr) auto",
-          padding: "0.85rem 1rem"
-        }}
-      >
-        <label style={{ display: "grid", gap: "0.25rem" }}>
-          <span>Name</span>
-          <input onChange={(event) => setScenarioName(event.target.value)} value={scenarioName} />
-        </label>
-        <label style={{ display: "grid", gap: "0.25rem" }}>
-          <span>Description</span>
-          <input
-            onChange={(event) => setScenarioDescription(event.target.value)}
-            placeholder="No description yet."
-            type="text"
-            value={scenarioDescription}
-          />
-        </label>
-        <label style={{ display: "grid", gap: "0.25rem" }}>
-          <span>Status</span>
-          <select
-            onChange={(event) => setScenarioStatus(event.target.value as Scenario["status"])}
-            value={scenarioStatus}
-          >
-            <option value="draft">Draft</option>
-            <option value="prepared">Prepared</option>
-            <option value="live">Live</option>
-            <option value="completed">Completed</option>
-            <option value="archived">Archived</option>
-          </select>
-        </label>
-        <button onClick={() => void handleUpdateScenarioMetadata()} type="button">
-          Update scenario
-        </button>
-      </section>
+      <ScenarioSummarySection
+        onDescriptionChange={setScenarioDescription}
+        onNameChange={setScenarioName}
+        onStatusChange={setScenarioStatus}
+        onUpdate={() => void handleUpdateScenarioMetadata()}
+        scenarioDescription={scenarioDescription}
+        scenarioName={scenarioName}
+        scenarioStatus={scenarioStatus}
+      />
 
-      <section
-        style={{
-          border: "1px solid #d9ddd8",
-          borderRadius: 12,
-          display: "grid",
-          gap: "0.75rem",
-          padding: "1rem"
-        }}
-      >
-          <h2 style={{ margin: 0 }}>Encounters</h2>
-          <p style={{ margin: 0 }}>
-            Create combat or roleplaying encounters on one scenario timeline. More than one
-            encounter can be active at the same time.
-          </p>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
-            <input
-              onChange={(event) => setEncounterTitle(event.target.value)}
-              placeholder="Encounter name"
-              style={{ minWidth: 260, padding: "0.5rem" }}
-              type="text"
-              value={encounterTitle}
-            />
-            <select
-              onChange={(event) => setEncounterKind(event.target.value as EncounterKind)}
-              value={encounterKind}
-            >
-              <option value="combat">Combat</option>
-              <option value="roleplay">Roleplaying</option>
-            </select>
-            <input
-              onChange={(event) => setEncounterTimelineLabel(event.target.value)}
-              placeholder="Timeline label (optional)"
-              style={{ minWidth: 180, padding: "0.5rem" }}
-              type="text"
-              value={encounterTimelineLabel}
-            />
-            <input
-              onChange={(event) => setEncounterDescription(event.target.value)}
-              placeholder="Description / notes (optional)"
-              style={{ minWidth: 240, padding: "0.5rem" }}
-              type="text"
-              value={encounterDescription}
-            />
-            <button
-              disabled={encounterTitle.trim().length === 0}
-              onClick={() => void handleCreateEncounter()}
-              type="button"
-            >
-              Create encounter
-            </button>
-          </div>
-          {encounters.length > 0 ? (
-            <div style={{ overflowX: "auto" }}>
-              <table style={{ borderCollapse: "collapse", minWidth: 920, width: "100%" }}>
-                <thead>
-                  <tr style={{ borderBottom: "1px solid #d9ddd8", textAlign: "left" }}>
-                    <th style={{ padding: "0.5rem 0.75rem 0.5rem 0" }}>Name</th>
-                    <th style={{ padding: "0.5rem 0.75rem" }}>Type</th>
-                    <th style={{ padding: "0.5rem 0.75rem" }}>Status</th>
-                    <th style={{ padding: "0.5rem 0.75rem" }}>Timeline</th>
-                    <th style={{ padding: "0.5rem 0.75rem", textAlign: "center" }}>Participants</th>
-                    <th style={{ padding: "0.5rem 0.75rem" }}>Open</th>
-                    <th style={{ padding: "0.5rem 0" }}>Controls</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {orderedEncounters.map((encounter) => (
-                    <tr key={encounter.id} style={{ borderBottom: "1px solid #eee8dc", verticalAlign: "top" }}>
-                      <td style={{ padding: "0.6rem 0.75rem 0.6rem 0" }}>
-                        <strong>{encounter.title}</strong>
-                        {encounter.description ? (
-                          <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
-                            {encounter.description}
-                          </div>
-                        ) : null}
-                      </td>
-                      <td style={{ padding: "0.6rem 0.75rem" }}>
-                        {encounter.kind === "roleplay" ? "Roleplaying" : "Combat"}
-                      </td>
-                      <td style={{ padding: "0.6rem 0.75rem" }}>{encounter.status}</td>
-                      <td style={{ padding: "0.6rem 0.75rem" }}>
-                        {encounter.timelineLabel ?? encounter.createdAt}
-                      </td>
-                      <td style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>
-                        {encounter.participants.length}
-                      </td>
-                      <td style={{ padding: "0.6rem 0.75rem" }}>
-                        <div style={{ display: "grid", gap: "0.35rem" }}>
-                          <Link
-                            href={buildCampaignWorkspaceHref({
-                              campaignId,
-                              encounterId: encounter.id,
-                              scenarioId,
-                              tab: "gm-encounter",
-                            })}
-                          >
-                            GM
-                          </Link>
-                          <Link
-                            href={buildCampaignWorkspaceHref({
-                              campaignId,
-                              encounterId: encounter.id,
-                              scenarioId,
-                              tab: "player-encounter",
-                            })}
-                          >
-                            Player
-                          </Link>
-                        </div>
-                      </td>
-                      <td style={{ padding: "0.6rem 0" }}>
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: "0.35rem" }}>
-                          {encounter.status === "active" ? (
-                            <button
-                              onClick={() => void handleUpdateEncounterStatus(encounter, "paused")}
-                              type="button"
-                            >
-                              Pause
-                            </button>
-                          ) : encounter.status !== "archived" && encounter.status !== "complete" ? (
-                            <button
-                              onClick={() => void handleUpdateEncounterStatus(encounter, "active")}
-                              type="button"
-                            >
-                              {encounter.status === "paused" ? "Resume" : "Start"}
-                            </button>
-                          ) : null}
-                          {encounter.status !== "archived" ? (
-                            <button
-                              onClick={() => void handleUpdateEncounterStatus(encounter, "archived")}
-                              type="button"
-                            >
-                              Archive
-                            </button>
-                          ) : null}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <div>No encounters have been created for this scenario yet.</div>
-          )}
-      </section>
+      <ScenarioEncountersSection
+        campaignId={campaignId}
+        encounterDescription={encounterDescription}
+        encounterKind={encounterKind}
+        encounterTimelineLabel={encounterTimelineLabel}
+        encounterTitle={encounterTitle}
+        onCreateEncounter={() => void handleCreateEncounter()}
+        onDescriptionChange={setEncounterDescription}
+        onKindChange={setEncounterKind}
+        onTimelineLabelChange={setEncounterTimelineLabel}
+        onTitleChange={setEncounterTitle}
+        onUpdateEncounterStatus={(encounter, status) =>
+          void handleUpdateEncounterStatus(encounter, status)
+        }
+        orderedEncounters={orderedEncounters}
+        scenarioId={scenarioId}
+      />
 
-      <section style={{ border: "1px solid #d9ddd8", borderRadius: 12, display: "grid", gap: "0.75rem", padding: "1rem" }}>
-        <h2 style={{ margin: 0 }}>Encounter Assignment</h2>
-        <p style={{ margin: 0 }}>
-          Assign concrete scenario participants to planned, active, or paused encounters. Click a
-          participant name for scenario state and encounter-specific detail placeholders.
-        </p>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
-          <select
-            aria-label="Encounter assignment type filter"
-            onChange={(event) =>
-              setParticipantTypeFilter(event.target.value as ScenarioParticipantTypeFilter)
-            }
-            value={participantTypeFilter}
-          >
-            {participantTypeFilterOptions.map((option) => (
-              <option key={option.id} value={option.id}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-          <select
-            aria-label="Encounter assignment civilization filter"
-            onChange={(event) => setParticipantCivilizationFilter(event.target.value)}
-            value={participantCivilizationFilter}
-          >
-            <option value="">All civilizations</option>
-            {participantCivilizationOptions.map((civilization) => (
-              <option key={civilization} value={civilization}>
-                {civilization}
-              </option>
-            ))}
-          </select>
-          <select
-            aria-label="Encounter assignment profession filter"
-            onChange={(event) => setParticipantProfessionFilter(event.target.value)}
-            value={participantProfessionFilter}
-          >
-            <option value="">All professions</option>
-            {participantProfessionOptions.map((profession) => (
-              <option key={profession} value={profession}>
-                {profession}
-              </option>
-            ))}
-          </select>
-          <select
-            aria-label="Encounter assignment skill group filter"
-            onChange={(event) => setParticipantSkillGroupFilter(event.target.value)}
-            value={participantSkillGroupFilter}
-          >
-            <option value="">All skill groups</option>
-            {participantSkillGroupOptions.map((group) => (
-              <option key={group} value={group}>
-                {group}
-              </option>
-            ))}
-          </select>
-          <input
-            aria-label="Search encounter assignment participants"
-            onChange={(event) => setParticipantSearch(event.target.value)}
-            placeholder="Search encounter participants"
-            style={{ minWidth: 220 }}
-            type="search"
-            value={participantSearch}
-          />
-        </div>
-        {concreteParticipants.length > 0 ? (
-          <>
-            <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
-              <select
-                aria-label="Bulk assignment encounter"
-                disabled={nonArchivedEncounters.length === 0}
-                onChange={(event) => setBulkEncounterId(event.target.value)}
-                value={selectedBulkEncounterId}
-              >
-                {nonArchivedEncounters.length === 0 ? (
-                  <option value="">No assignable encounters</option>
-                ) : null}
-                {nonArchivedEncounters.map((encounter) => (
-                  <option key={encounter.id} value={encounter.id}>
-                    {encounter.title}
-                  </option>
-                ))}
-              </select>
-              <button
-                disabled={selectedAssignmentParticipantIds.length === 0 || !selectedBulkEncounterId}
-                onClick={() => void handleBulkEncounterAssignment(true)}
-                type="button"
-              >
-                Assign selected
-              </button>
-              <button
-                disabled={selectedAssignmentParticipantIds.length === 0 || !selectedBulkEncounterId}
-                onClick={() => void handleBulkEncounterAssignment(false)}
-                type="button"
-              >
-                Withdraw selected
-              </button>
-              <span style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
-                {selectedAssignmentParticipantIds.length} selected
-              </span>
-            </div>
-            <div style={{ maxHeight: "36rem", overflow: "auto" }}>
-              <table style={{ borderCollapse: "collapse", minWidth: 620 + nonArchivedEncounters.length * 120, width: "100%" }}>
-                <thead>
-                  <tr style={{ borderBottom: "1px solid #d9ddd8", textAlign: "left" }}>
-                    <th style={{ background: "#fff", padding: "0.5rem 0.75rem 0.5rem 0", position: "sticky", textAlign: "center", top: 0 }}>Select</th>
-                    <th style={{ background: "#fff", padding: "0.5rem 0.75rem", position: "sticky", top: 0 }}>Name</th>
-                    <th style={{ background: "#fff", padding: "0.5rem 0.75rem", position: "sticky", top: 0 }}>Type</th>
-                    {nonArchivedEncounters.map((encounter) => (
-                      <th
-                        key={encounter.id}
-                        style={{ background: "#fff", padding: "0.5rem 0.75rem", position: "sticky", textAlign: "center", top: 0 }}
-                        title={encounter.title}
-                      >
-                        {encounter.title.length > 16 ? `${encounter.title.slice(0, 15)}...` : encounter.title}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {assignmentParticipants.map((participant) => {
-                    const participantMetadata = getConcreteParticipantMetadata(participant);
-                    const expanded = expandedAssignmentParticipantIds.includes(participant.id);
-                    const joinedEncounters = nonArchivedEncounters.filter((encounter) =>
-                      isParticipantInEncounter(encounter, participant)
-                    );
+      <ScenarioEncounterAssignmentSection
+        assignmentParticipants={assignmentParticipants}
+        concreteParticipants={concreteParticipants}
+        expandedAssignmentParticipantIds={expandedAssignmentParticipantIds}
+        formatUserLabel={formatUserLabel}
+        isParticipantInEncounter={isParticipantInEncounter}
+        nonArchivedEncounters={nonArchivedEncounters}
+        onBulkEncounterAssignment={(member) => void handleBulkEncounterAssignment(member)}
+        onBulkEncounterIdChange={setBulkEncounterId}
+        onEncounterParticipantToggle={(encounter, participant, member) =>
+          void handleEncounterParticipantToggle(encounter, participant, member)
+        }
+        onParticipantActiveToggle={(participant, isActive) =>
+          void handleParticipantActiveToggle(participant, isActive)
+        }
+        onParticipantCivilizationFilterChange={setParticipantCivilizationFilter}
+        onParticipantProfessionFilterChange={setParticipantProfessionFilter}
+        onParticipantSearchChange={setParticipantSearch}
+        onParticipantSkillGroupFilterChange={setParticipantSkillGroupFilter}
+        onParticipantTypeFilterChange={setParticipantTypeFilter}
+        participantCivilizationFilter={participantCivilizationFilter}
+        participantCivilizationOptions={participantCivilizationOptions}
+        participantProfessionFilter={participantProfessionFilter}
+        participantProfessionOptions={participantProfessionOptions}
+        participantSearch={participantSearch}
+        participantSkillGroupFilter={participantSkillGroupFilter}
+        participantSkillGroupOptions={participantSkillGroupOptions}
+        participantTypeFilter={participantTypeFilter}
+        participantTypeFilterOptions={participantTypeFilterOptions}
+        selectedAssignmentParticipantIds={selectedAssignmentParticipantIds}
+        selectedBulkEncounterId={selectedBulkEncounterId}
+        setExpandedAssignmentParticipantIds={setExpandedAssignmentParticipantIds}
+        setSelectedAssignmentParticipantIds={setSelectedAssignmentParticipantIds}
+      />
 
-                    return (
-                      <Fragment key={participant.id}>
-                        <tr style={{ borderBottom: "1px solid #eee8dc" }}>
-                          <td style={{ padding: "0.6rem 0.75rem 0.6rem 0", textAlign: "center" }}>
-                            <input
-                              aria-label={`Select ${participant.snapshot.displayName} for bulk encounter assignment`}
-                              checked={selectedAssignmentParticipantIds.includes(participant.id)}
-                              onChange={(event) =>
-                                setSelectedAssignmentParticipantIds((current) =>
-                                  event.target.checked
-                                    ? [...new Set([...current, participant.id])]
-                                    : current.filter((id) => id !== participant.id)
-                                )
-                              }
-                              type="checkbox"
-                            />
-                          </td>
-                          <td style={{ padding: "0.6rem 0.75rem" }}>
-                            <button
-                              aria-expanded={expanded}
-                              aria-label={`Toggle ${participant.snapshot.displayName} assignment details`}
-                              onClick={() =>
-                                setExpandedAssignmentParticipantIds((current) =>
-                                  current.includes(participant.id)
-                                    ? current.filter((id) => id !== participant.id)
-                                    : [...current, participant.id]
-                                )
-                              }
-                              style={{
-                                background: "transparent",
-                                border: 0,
-                                color: "#184f3d",
-                                cursor: "pointer",
-                                font: "inherit",
-                                fontWeight: 700,
-                                padding: 0,
-                                textAlign: "left",
-                                textDecoration: "underline"
-                              }}
-                              type="button"
-                            >
-                              {participant.snapshot.displayName}
-                            </button>
-                          </td>
-                          <td style={{ padding: "0.6rem 0.75rem" }}>{participantMetadata.typeLabel}</td>
-                          {nonArchivedEncounters.map((encounter) => (
-                            <td key={encounter.id} style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>
-                              <input
-                                aria-label={`Toggle ${participant.snapshot.displayName} in ${encounter.title}`}
-                                checked={isParticipantInEncounter(encounter, participant)}
-                                onChange={(event) =>
-                                  void handleEncounterParticipantToggle(
-                                    encounter,
-                                    participant,
-                                    event.target.checked
-                                  )
-                                }
-                                type="checkbox"
-                              />
-                            </td>
-                          ))}
-                        </tr>
-                        {expanded ? (
-                          <tr key={`${participant.id}-details`}>
-                            <td colSpan={3 + nonArchivedEncounters.length} style={{ background: "#fbfaf6", padding: "0.75rem 1rem" }}>
-                              <div style={{ display: "grid", gap: "0.5rem" }}>
-                                <strong>Encounter-specific details</strong>
-                                <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
-                                  <label style={{ alignItems: "center", display: "flex", gap: "0.35rem" }}>
-                                    <input
-                                      aria-label={`Toggle ${participant.snapshot.displayName} active scenario status`}
-                                      checked={participant.isActive}
-                                      onChange={(event) =>
-                                        void handleParticipantActiveToggle(participant, event.target.checked)
-                                      }
-                                      type="checkbox"
-                                    />
-                                    Active
-                                  </label>
-                                  <span>Controller: {formatUserLabel(participant.controlledByUserId)}</span>
-                                  <span>Status: {participant.isActive ? "Active" : "Inactive"}</span>
-                                </div>
-                                {joinedEncounters.length > 0 ? (
-                                  joinedEncounters.map((encounter) => (
-                                    <div key={encounter.id}>
-                                      <strong>{encounter.title}:</strong>{" "}
-                                      appearance, disguise, clothing/equipment notes, encounter role,
-                                      visibility notes, and GM-only notes will live on this encounter
-                                      participant entry.
-                                    </div>
-                                  ))
-                                ) : (
-                                  <div>
-                                    This participant is not assigned to a non-archived encounter yet.
-                                    Assign them to an encounter before recording encounter-specific details.
-                                  </div>
-                                )}
-                                <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
-                                  Editing these fields is deferred; this placeholder is intentionally here
-                                  in Encounter Assignment, not a separate Scenario Participants roster.
-                                </div>
-                              </div>
-                            </td>
-                          </tr>
-                        ) : null}
-                      </Fragment>
-                    );
-                  })}
-                </tbody>
-              </table>
-              {assignmentParticipants.length === 0 ? (
-                <div style={{ padding: "0.75rem 0" }}>
-                  No concrete participants match the current encounter assignment filters.
-                </div>
-              ) : null}
-            </div>
-          </>
-        ) : concreteParticipants.length === 0 ? (
-          <div>Add a campaign roster member or create a temporary actor before assigning encounters.</div>
-        ) : (
-          <div>No concrete participants match the current encounter assignment filters.</div>
-        )}
-      </section>
+      <ScenarioCampaignRosterPickerSection
+        filteredScenarioRosterCandidates={filteredScenarioRosterCandidates}
+        onRosterCivilizationFilterChange={setRosterCivilizationFilter}
+        onRosterControllerFilterChange={setRosterControllerFilter}
+        onRosterParticipantToggle={(candidate, member) =>
+          void handleRosterParticipantToggle(candidate, member)
+        }
+        onRosterProfessionFilterChange={setRosterProfessionFilter}
+        onRosterSearchChange={setRosterSearch}
+        onRosterSkillGroupFilterChange={setRosterSkillGroupFilter}
+        onRosterTypeFilterChange={setRosterTypeFilter}
+        participantCivilizationOptions={participantCivilizationOptions}
+        participantProfessionOptions={participantProfessionOptions}
+        participantSkillGroupOptions={participantSkillGroupOptions}
+        rosterCivilizationFilter={rosterCivilizationFilter}
+        rosterControllerFilter={rosterControllerFilter}
+        rosterProfessionFilter={rosterProfessionFilter}
+        rosterSearch={rosterSearch}
+        rosterSkillGroupFilter={rosterSkillGroupFilter}
+        rosterTypeFilter={rosterTypeFilter}
+        rosterTypeFilterOptions={rosterTypeFilterOptions}
+        scenarioRosterCandidates={scenarioRosterCandidates}
+      />
 
-      <section style={{ border: "1px solid #d9ddd8", borderRadius: 12, display: "grid", gap: "0.75rem", padding: "1rem" }}>
-        <h2 style={{ margin: 0 }}>Add from campaign roster</h2>
-        <p style={{ margin: 0 }}>
-          Add existing concrete campaign roster members to this scenario. Templates stay in
-          Template sources below.
-        </p>
-        {scenarioRosterCandidates.length > 0 ? (
-          <>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
-              <select
-                aria-label="Campaign roster type filter"
-                onChange={(event) => setRosterTypeFilter(event.target.value as ScenarioParticipantTypeFilter)}
-                value={rosterTypeFilter}
-              >
-                {rosterTypeFilterOptions.map((option) => (
-                  <option key={option.id} value={option.id}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-              <select
-                aria-label="Campaign roster controller filter"
-                onChange={(event) => setRosterControllerFilter(event.target.value as ScenarioControllerFilter)}
-                value={rosterControllerFilter}
-              >
-                <option value="all">All controllers</option>
-                <option value="players">Players</option>
-                <option value="gms">GMs</option>
-              </select>
-              <select
-                aria-label="Campaign roster civilization filter"
-                onChange={(event) => setRosterCivilizationFilter(event.target.value)}
-                value={rosterCivilizationFilter}
-              >
-                <option value="">All civilizations</option>
-                {participantCivilizationOptions.map((civilization) => (
-                  <option key={civilization} value={civilization}>
-                    {civilization}
-                  </option>
-                ))}
-              </select>
-              <select
-                aria-label="Campaign roster profession filter"
-                onChange={(event) => setRosterProfessionFilter(event.target.value)}
-                value={rosterProfessionFilter}
-              >
-                <option value="">All professions</option>
-                {participantProfessionOptions.map((profession) => (
-                  <option key={profession} value={profession}>
-                    {profession}
-                  </option>
-                ))}
-              </select>
-              <select
-                aria-label="Campaign roster skill group filter"
-                onChange={(event) => setRosterSkillGroupFilter(event.target.value)}
-                value={rosterSkillGroupFilter}
-              >
-                <option value="">All skill groups</option>
-                {participantSkillGroupOptions.map((group) => (
-                  <option key={group} value={group}>
-                    {group}
-                  </option>
-                ))}
-              </select>
-              <input
-                aria-label="Search campaign roster candidates"
-                onChange={(event) => setRosterSearch(event.target.value)}
-                placeholder="Search campaign roster"
-                style={{ minWidth: 220 }}
-                type="search"
-                value={rosterSearch}
-              />
-            </div>
-            <div style={{ maxHeight: "24rem", overflow: "auto" }}>
-              <table style={{ borderCollapse: "collapse", minWidth: 780, width: "100%" }}>
-                <thead>
-                  <tr style={{ borderBottom: "1px solid #d9ddd8", textAlign: "left" }}>
-                    <th style={{ background: "#fff", padding: "0.5rem 0.75rem 0.5rem 0", position: "sticky", textAlign: "center", top: 0 }}>Add</th>
-                    <th style={{ background: "#fff", padding: "0.5rem 0.75rem", position: "sticky", top: 0 }}>Name</th>
-                    <th style={{ background: "#fff", padding: "0.5rem 0.75rem", position: "sticky", top: 0 }}>Type</th>
-                    <th style={{ background: "#fff", padding: "0.5rem 0.75rem", position: "sticky", top: 0 }}>Source</th>
-                    <th style={{ background: "#fff", padding: "0.5rem 0.75rem", position: "sticky", top: 0 }}>Controller</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredScenarioRosterCandidates.map((candidate) => (
-                    <tr key={candidate.rosterEntry.id} style={{ borderBottom: "1px solid #eee8dc" }}>
-                      <td style={{ padding: "0.6rem 0.75rem 0.6rem 0", textAlign: "center" }}>
-                        <input
-                          aria-label={`Toggle ${candidate.name} scenario participation`}
-                          checked={false}
-                          onChange={(event) =>
-                            void handleRosterParticipantToggle(candidate, event.target.checked)
-                          }
-                          type="checkbox"
-                        />
-                      </td>
-                      <td style={{ padding: "0.6rem 0.75rem" }}>
-                        <strong>{candidate.name}</strong>
-                      </td>
-                      <td style={{ padding: "0.6rem 0.75rem" }}>{candidate.typeLabel}</td>
-                      <td style={{ padding: "0.6rem 0.75rem" }}>{candidate.sourceKind}</td>
-                      <td style={{ padding: "0.6rem 0.75rem" }}>{candidate.controllerLabel}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              {filteredScenarioRosterCandidates.length === 0 ? (
-                <div style={{ padding: "0.75rem 0" }}>
-                  No campaign roster candidates match the current filters.
-                </div>
-              ) : null}
-            </div>
-          </>
-        ) : (
-          <div>No campaign roster entries are available. Add PCs, NPCs, or templates to the campaign roster first.</div>
-        )}
-      </section>
+      <ScenarioTemplateSourcesSection
+        onCreateTemporaryActor={() => void handleCreateTemporaryActorFromTemplate()}
+        onSelectedTemplateSourceIdChange={setSelectedTemplateSourceId}
+        onTemporaryActorCountChange={setTemporaryActorCount}
+        onTemporaryActorNameChange={setTemporaryActorName}
+        onTemporaryActorRoleChange={setTemporaryActorRole}
+        selectedTemplateSource={selectedTemplateSource}
+        temporaryActorCount={temporaryActorCount}
+        temporaryActorName={temporaryActorName}
+        temporaryActorRole={temporaryActorRole}
+        templateSources={templateSources}
+      />
 
-      <section style={{ border: "1px solid #d9ddd8", borderRadius: 12, display: "grid", gap: "0.75rem", padding: "1rem" }}>
-        <h2 style={{ margin: 0 }}>Template sources</h2>
-        <p style={{ margin: 0 }}>
-          Templates create scenario-local temporary actors. The template itself is not an active
-          scenario participant.
-        </p>
-        {templateSources.length > 0 ? (
-          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem", maxHeight: "28rem", overflowY: "auto" }}>
-            <select
-              onChange={(event) => setSelectedTemplateSourceId(event.target.value)}
-              style={{ minWidth: 240 }}
-              value={selectedTemplateSource?.entity.id ?? ""}
-            >
-              {templateSources.map((source) => (
-                <option key={source.entity.id} value={source.entity.id}>
-                  {source.label}
-                </option>
-              ))}
-            </select>
-            <input
-              onChange={(event) => setTemporaryActorName(event.target.value)}
-              placeholder="Temporary actor name override"
-              style={{ minWidth: 240 }}
-              value={temporaryActorName}
-            />
-            <select
-              onChange={(event) =>
-                setTemporaryActorRole(event.target.value as ScenarioParticipant["role"])
-              }
-              value={temporaryActorRole}
-            >
-              <option value="npc">NPC</option>
-              <option value="monster">Monster</option>
-              <option value="animal">Animal</option>
-              <option value="neutral">Neutral</option>
-              <option value="ally">Ally</option>
-              <option value="enemy">Enemy</option>
-            </select>
-            <label style={{ alignItems: "center", display: "flex", gap: "0.35rem" }}>
-              <span>Count</span>
-              <input
-                aria-label="Temporary actor count"
-                max={1}
-                min={1}
-                onChange={(event) => setTemporaryActorCount(Math.min(1, Math.max(1, Number(event.target.value) || 1)))}
-                style={{ width: "4rem" }}
-                title="Bulk temporary actor creation is planned; this pass supports one actor at a time."
-                type="number"
-                value={temporaryActorCount}
-              />
-            </label>
-            <button onClick={() => void handleCreateTemporaryActorFromTemplate()} type="button">
-              Create temporary actor
-            </button>
-          </div>
-        ) : (
-          <div>No template sources are available.</div>
-        )}
-      </section>
-
-      <section style={{ display: "grid", gap: "0.75rem" }}>
-        <h2 style={{ margin: 0 }}>Event log</h2>
-        {eventLogs.length > 0 ? (
-          eventLogs.map((eventLog) => (
-            <div
-              key={eventLog.id}
-              style={{
-                border: "1px solid #d9ddd8",
-                borderRadius: 12,
-                display: "grid",
-                gap: "0.25rem",
-                padding: "0.75rem 1rem"
-              }}
-            >
-              <strong>{formatEventType(eventLog.eventType)}</strong>
-              <div>{eventLog.summary}</div>
-              <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
-                {formatShortDateTime(eventLog.createdAt)}
-              </div>
-            </div>
-          ))
-        ) : (
-          <div>No event log entries yet.</div>
-        )}
-      </section>
+      <ScenarioEventLogSection eventLogs={eventLogs} />
     </section>
   );
 }
