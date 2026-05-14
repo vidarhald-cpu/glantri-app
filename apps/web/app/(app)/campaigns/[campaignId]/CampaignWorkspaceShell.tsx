@@ -394,12 +394,12 @@ export default function CampaignWorkspaceShell({
             <section style={panelStyle}>
               <h2 style={{ margin: 0 }}>{accessibleCampaign?.name ?? "Campaign"}</h2>
               <div>
-                {accessibleCampaign?.description || "This player account can access the scenarios below."}
+                {accessibleCampaign?.description || "No campaign description has been written yet."}
               </div>
-              <div>
-                Accessible scenarios:
+              <section style={{ display: "grid", gap: "0.5rem" }}>
+                <h3 style={{ margin: 0 }}>Available scenarios</h3>
                 {scenarios.length > 0 ? (
-                  <span style={{ display: "inline-flex", flexWrap: "wrap", gap: "0.5rem", marginLeft: "0.5rem" }}>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
                     {scenarios.map((scenario) => (
                       <Link
                         key={scenario.id}
@@ -411,11 +411,11 @@ export default function CampaignWorkspaceShell({
                         {scenario.name}
                       </Link>
                     ))}
-                  </span>
+                  </div>
                 ) : (
-                  " None"
+                  <div>No active scenario is currently available.</div>
                 )}
-              </div>
+              </section>
             </section>
           )}
         </section>
@@ -439,10 +439,9 @@ export default function CampaignWorkspaceShell({
             )
           ) : (
             <section style={panelStyle}>
-              <strong>No accessible scenario selected.</strong>
+              <strong>No active scenario is currently available.</strong>
               {scenarios.length > 0 ? (
                 <div style={{ display: "grid", gap: "0.5rem" }}>
-                  <div>Choose a scenario to open the player scenario view.</div>
                   {scenarios.map((scenario) => (
                     <Link
                       key={scenario.id}
@@ -456,7 +455,7 @@ export default function CampaignWorkspaceShell({
                   ))}
                 </div>
               ) : (
-                <div>No accessible scenarios are available for this player account.</div>
+                <div>No active scenario is currently available.</div>
               )}
             </section>
           )}
