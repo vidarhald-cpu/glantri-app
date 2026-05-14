@@ -60,6 +60,11 @@ export async function submitPlayerRoleplayRollOnServer(input: {
     openEndedD10s: number[];
     rollD20: number;
   };
+  supportRoll?: {
+    dieResult: number;
+    openEndedD10s: number[];
+    rollD20: number;
+  };
 }): Promise<EncounterSession> {
   const payload = await sendJson<{ encounter: EncounterSession }>(
     `/encounters/${input.encounterId}/player-roll`,
@@ -67,6 +72,7 @@ export async function submitPlayerRoleplayRollOnServer(input: {
       body: JSON.stringify({
         pendingRollId: input.pendingRollId,
         roll: input.roll,
+        supportRoll: input.supportRoll,
       }),
       method: "POST",
     },

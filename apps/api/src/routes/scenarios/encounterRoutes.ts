@@ -45,6 +45,11 @@ function parsePlayerRollBody(body: unknown): {
     openEndedD10s: number[];
     rollD20: number;
   };
+  supportRoll?: {
+    dieResult: number;
+    openEndedD10s: number[];
+    rollD20: number;
+  };
 } {
   const value = parseBodyObject(body, "Player roll payload");
   const pendingRollId = value.pendingRollId;
@@ -60,6 +65,12 @@ function parsePlayerRollBody(body: unknown): {
 
   const roll = rollValue as Record<string, unknown>;
   const openEndedD10sValue = roll.openEndedD10s;
+  const supportRollValue = value.supportRoll;
+  const supportRoll =
+    supportRollValue && typeof supportRollValue === "object"
+      ? supportRollValue as Record<string, unknown>
+      : undefined;
+  const supportOpenEndedD10sValue = supportRoll?.openEndedD10s;
 
   return {
     pendingRollId,
@@ -72,6 +83,17 @@ function parsePlayerRollBody(body: unknown): {
         : [],
       rollD20: parseIntegerInRange(roll.rollD20, "roll.rollD20", 1, 20),
     },
+    supportRoll: supportRoll
+      ? {
+          dieResult: parseInteger(supportRoll.dieResult, "supportRoll.dieResult"),
+          openEndedD10s: Array.isArray(supportOpenEndedD10sValue)
+            ? supportOpenEndedD10sValue.map((entry, index) =>
+                parseIntegerInRange(entry, `supportRoll.openEndedD10s[${index}]`, 1, 10)
+              )
+            : [],
+          rollD20: parseIntegerInRange(supportRoll.rollD20, "supportRoll.rollD20", 1, 20),
+        }
+      : undefined,
   };
 }
 
@@ -393,6 +415,14 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         useGenMod: pendingRoll.useGenMod,
         useObSkillMod: pendingRoll.useObSkillMod,
       });
+      const supportPreview =
+        pendingRoll.supportSkillId && body.supportRoll
+          ? buildRoleplayCalculationPreview({
+              roll: body.supportRoll,
+              skillLabel: pendingRoll.supportSkillLabel ?? "Support",
+              skillValue: pendingRoll.supportSkillValue,
+            })
+          : undefined;
       const nextEncounter = recordRoleplayGmSkillRoll({
         achievedSuccessLevel: preview.achievedSuccessLevel,
         autoSuccess: preview.autoSuccess,
@@ -406,6 +436,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         openEndedD10s: body.roll.openEndedD10s,
         otherMod: pendingRoll.otherMod,
         participantId: participant.id,
+        participantName: participant.label,
         partial: preview.partial,
         pendingRollId: pendingRoll.id,
         roll: body.roll,
@@ -415,9 +446,15 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         silent: false,
         skillId: pendingRoll.skillId,
         skillLabel: pendingRoll.skillLabel,
+        skillValue: pendingRoll.skillValue,
         success: preview.success,
+        summary: `${participant.label} rolled ${pendingRoll.skillLabel}.`,
+        supportCalculationText: supportPreview?.calculationText,
+        supportNumericSubtotal: supportPreview?.numericSubtotal,
+        supportRoll: body.supportRoll,
         supportSkillId: pendingRoll.supportSkillId,
         supportSkillLabel: pendingRoll.supportSkillLabel,
+        supportSkillValue: pendingRoll.supportSkillValue,
         useDbMod: pendingRoll.useDbMod,
         useGenMod: pendingRoll.useGenMod,
         useObSkillMod: pendingRoll.useObSkillMod,

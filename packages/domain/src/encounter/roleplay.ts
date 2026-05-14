@@ -137,6 +137,7 @@ export function updateRoleplayGmMessage(input: {
           partial: false,
           silent: true,
           summary: "GM message updated.",
+          supportOpenEndedD10s: [],
           type: "gm_message_updated",
         },
         ...state.actionLog,
@@ -612,6 +613,7 @@ export function assignRoleplaySkillRoll(input: {
   opponentSupportSkillId?: string;
   opponentSupportSkillLabel?: string;
   participantId: string;
+  participantName?: string;
   rollSetId?: string;
   session: EncounterSession;
   side?: "actor" | "opponent";
@@ -621,6 +623,7 @@ export function assignRoleplaySkillRoll(input: {
   skillValue?: number;
   supportSkillId?: string;
   supportSkillLabel?: string;
+  supportSkillValue?: number;
 } & RoleplayRollModifiers): EncounterSession {
   const state = normalizeRoleplayState(input.session);
   const assignedAt = nowIso();
@@ -656,6 +659,7 @@ export function assignRoleplaySkillRoll(input: {
           partial: false,
           pendingRollId,
           participantId: input.participantId,
+          participantName: input.participantName,
           rollSetId,
           side,
           silent: input.silent,
@@ -667,6 +671,8 @@ export function assignRoleplaySkillRoll(input: {
               : `Assigned ${input.skillLabel} roll.`,
           supportSkillId: input.supportSkillId,
           supportSkillLabel: input.supportSkillLabel,
+          supportSkillValue: input.supportSkillValue,
+          supportOpenEndedD10s: [],
           type: "skill_roll_assigned",
           useDbMod: modifiers.useDbMod,
           useGenMod: modifiers.useGenMod,
@@ -698,6 +704,7 @@ export function assignRoleplaySkillRoll(input: {
           skillValue: input.skillValue,
           supportSkillId: input.supportSkillId,
           supportSkillLabel: input.supportSkillLabel,
+          supportSkillValue: input.supportSkillValue,
           useDbMod: modifiers.useDbMod,
           useGenMod: modifiers.useGenMod,
           useObSkillMod: modifiers.useObSkillMod,
@@ -744,10 +751,17 @@ export function recordRoleplayGmSkillRoll(input: {
   silent: boolean;
   skillId: string;
   skillLabel: string;
+  skillValue?: number;
   numericSubtotal?: number;
+  participantName?: string;
   success?: boolean;
+  supportCalculationText?: string;
+  supportNumericSubtotal?: number;
+  supportRoll?: RoleplayOpenEndedD20Roll;
   supportSkillId?: string;
   supportSkillLabel?: string;
+  supportSkillValue?: number;
+  summary?: string;
 } & RoleplayRollModifiers): EncounterSession {
   const state = normalizeRoleplayState(input.session);
   const modifiers = normalizeRollModifiers(input);
@@ -793,6 +807,7 @@ export function recordRoleplayGmSkillRoll(input: {
           partial: Boolean(input.partial),
           pendingRollId: input.pendingRollId,
           participantId: input.participantId,
+          participantName: input.participantName,
           resultModifier: achievedSuccessLevel?.resultModifier,
           roll: input.roll.rollD20,
           rollD20: input.roll.rollD20,
@@ -801,13 +816,23 @@ export function recordRoleplayGmSkillRoll(input: {
           silent: input.silent,
           skillId: input.skillId,
           skillLabel: input.skillLabel,
+          skillValue: input.skillValue,
           success: input.success,
-          summary:
+          summary: input.summary ?? (
             mode === "opposed" && input.opponentSkillLabel
               ? `GM rolled opposed ${input.skillLabel} vs ${input.opponentSkillLabel}.`
-              : `GM rolled ${input.skillLabel}.`,
+              : input.participantName
+                ? `GM rolled ${input.skillLabel} for ${input.participantName}.`
+                : `GM rolled ${input.skillLabel}.`
+          ),
+          supportCalculationText: input.supportCalculationText,
+          supportDieResult: input.supportRoll?.dieResult,
+          supportNumericSubtotal: input.supportNumericSubtotal,
+          supportOpenEndedD10s: input.supportRoll?.openEndedD10s ?? [],
+          supportRollD20: input.supportRoll?.rollD20,
           supportSkillId: input.supportSkillId,
           supportSkillLabel: input.supportSkillLabel,
+          supportSkillValue: input.supportSkillValue,
           type: "gm_skill_roll",
           useDbMod: modifiers.useDbMod,
           useGenMod: modifiers.useGenMod,

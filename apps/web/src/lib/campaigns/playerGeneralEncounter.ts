@@ -21,6 +21,7 @@ export interface PlayerGeneralEncounterVisibleParticipant {
 }
 
 export interface PlayerGeneralEncounterAssignedRoll {
+  comparison?: string;
   difficulty?: RoleplayDifficulty;
   difficultyLabel: string;
   id: string;
@@ -34,6 +35,7 @@ export interface PlayerGeneralEncounterAssignedRoll {
   skillValue?: number;
   result?: PlayerGeneralEncounterRollResult;
   rollSetId?: string;
+  supportResult?: PlayerGeneralEncounterRollResult;
   supportSkillId?: string;
   supportSkillLabel?: string;
   supportSkillValue?: number;
@@ -59,6 +61,7 @@ export interface PlayerGeneralEncounterRankedResult {
 }
 
 export interface PlayerGeneralEncounterLogEntry {
+  detail: string;
   id: string;
   skillLabel: string;
   timestamp: string;
@@ -154,8 +157,31 @@ function buildAssignedRoll(input: {
   const opponentParticipant = opponentVisible
     ? input.encounterParticipantsById.get(input.pendingRoll.opponentParticipantId!)
     : undefined;
+  const opponentResult =
+    input.pendingRoll.mode === "opposed" && input.pendingRoll.rollSetId && opponentParticipant
+      ? input.state.actionLog.find(
+          (entry) =>
+            entry.type === "gm_skill_roll" &&
+            !entry.silent &&
+            entry.rollSetId === input.pendingRoll.rollSetId &&
+            entry.side === "opponent" &&
+            entry.participantId === opponentParticipant.id &&
+            entry.numericSubtotal != null
+        )
+      : undefined;
+  const ownTotal = input.result?.numericSubtotal ?? input.result?.finalTotal;
+  const opponentTotal = opponentResult?.numericSubtotal ?? opponentResult?.finalTotal;
+  const comparison =
+    ownTotal != null && opponentTotal != null && opponentParticipant
+      ? ownTotal === opponentTotal
+        ? "Tie."
+        : ownTotal > opponentTotal
+          ? `${participant?.label ?? "You"} wins by ${ownTotal - opponentTotal}.`
+          : `${opponentParticipant.label} wins by ${opponentTotal - ownTotal}.`
+      : undefined;
 
   return {
+    comparison,
     difficulty: input.pendingRoll.difficulty,
     difficultyLabel: input.pendingRoll.difficulty
       ? difficultyLabels[input.pendingRoll.difficulty] ?? input.pendingRoll.difficulty
@@ -187,7 +213,7 @@ function buildAssignedRoll(input: {
           openEndedD10s: input.result.openEndedD10s,
           rollD20: input.result.rollD20,
           total: input.result.numericSubtotal ?? input.result.finalTotal,
-        }
+      }
       : undefined,
     rollSetId: input.pendingRoll.rollSetId,
     skillId: input.pendingRoll.skillId,
@@ -195,7 +221,17 @@ function buildAssignedRoll(input: {
     skillValue: input.pendingRoll.skillValue,
     supportSkillId: input.pendingRoll.supportSkillId,
     supportSkillLabel: input.pendingRoll.supportSkillLabel,
-    supportSkillValue: undefined,
+    supportSkillValue: input.pendingRoll.supportSkillValue,
+    supportResult: input.result?.supportDieResult != null && input.result.supportRollD20 != null
+      ? {
+          dieResult: input.result.supportDieResult,
+          fumble: false,
+          id: `${input.result.id}-support`,
+          openEndedD10s: input.result.supportOpenEndedD10s,
+          rollD20: input.result.supportRollD20,
+          total: input.result.supportNumericSubtotal,
+        }
+      : undefined,
     useDbMod: input.pendingRoll.useDbMod,
     useGenMod: input.pendingRoll.useGenMod,
     useObSkillMod: input.pendingRoll.useObSkillMod,
@@ -256,12 +292,32 @@ function buildPlayerCharacterLog(input: {
       }
     )
     .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
-    .map((entry) => ({
-      id: entry.id,
-      skillLabel: entry.skillLabel ?? "Skill",
-      timestamp: entry.createdAt,
-      total: entry.numericSubtotal ?? entry.finalTotal,
-    }));
+    .map((entry) => {
+      const total = entry.numericSubtotal ?? entry.finalTotal;
+      const modifier = entry.otherMod ?? 0;
+      const detail = [
+        entry.participantName,
+        entry.skillLabel,
+        entry.supportCalculationText ? `support ${entry.supportCalculationText}` : undefined,
+        entry.skillValue == null ? undefined : `skill ${entry.skillValue}`,
+        `mod ${modifier >= 0 ? "+" : ""}${modifier}`,
+        entry.dieResult == null ? undefined : `roll ${entry.dieResult}`,
+        total == null ? undefined : `total ${total}`,
+        entry.opposedResult && entry.opposedMargin != null
+          ? `${entry.opposedResult === "win" ? "won" : entry.opposedResult === "loss" ? "lost" : "tied"} opposed${entry.opposedResult === "tie" ? "" : ` by ${entry.opposedMargin}`}`
+          : undefined,
+      ]
+        .filter(Boolean)
+        .join(" · ");
+
+      return {
+        detail,
+        id: entry.id,
+        skillLabel: entry.skillLabel ?? "Skill",
+        timestamp: entry.createdAt,
+        total,
+      };
+    });
 }
 
 export function buildPlayerGeneralEncounterView(input: {

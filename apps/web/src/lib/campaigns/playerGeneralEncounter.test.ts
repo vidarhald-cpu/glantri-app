@@ -452,18 +452,21 @@ describe("playerGeneralEncounter", () => {
 
     expect(view.characterLog).toEqual([
       {
+        detail: "Perception · mod +0 · roll 14 · total 30",
         id: "visible-result",
         skillLabel: "Perception",
         timestamp: "2026-01-01T00:04:00.000Z",
         total: 30,
       },
       {
+        detail: "Hide · mod +0 · total 25",
         id: "opposed-result",
         skillLabel: "Hide",
         timestamp: "2026-01-01T00:01:00.000Z",
         total: 25,
       },
       {
+        detail: "Spot hidden · mod +0 · total 50",
         id: "historical-visible-result",
         skillLabel: "Spot hidden",
         timestamp: "2026-01-01T00:00:30.000Z",

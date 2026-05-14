@@ -207,7 +207,8 @@ export const roleplayPendingSkillRollSchema = z.object({
   skillLabel: z.string().min(1),
   skillValue: z.number().int().optional(),
   supportSkillId: idSchema.optional(),
-  supportSkillLabel: z.string().min(1).optional()
+  supportSkillLabel: z.string().min(1).optional(),
+  supportSkillValue: z.number().int().optional()
 }).merge(roleplayRollModifierSchema);
 
 export const roleplayActionLogEntrySchema = z.object({
@@ -242,6 +243,7 @@ export const roleplayActionLogEntrySchema = z.object({
   partial: z.boolean().default(false),
   pendingRollId: idSchema.optional(),
   participantId: idSchema.optional(),
+  participantName: z.string().min(1).optional(),
   resultModifier: z.number().int().optional(),
   roll: z.number().int().optional(),
   rollD20: z.number().int().min(1).max(20).optional(),
@@ -250,10 +252,17 @@ export const roleplayActionLogEntrySchema = z.object({
   silent: z.boolean().default(false),
   skillId: idSchema.optional(),
   skillLabel: z.string().optional(),
+  skillValue: z.number().int().optional(),
   success: z.boolean().optional(),
   summary: z.string().min(1),
+  supportCalculationText: z.string().optional(),
+  supportDieResult: z.number().int().optional(),
+  supportNumericSubtotal: z.number().int().optional(),
+  supportOpenEndedD10s: z.array(z.number().int().min(1).max(10)).default([]),
+  supportRollD20: z.number().int().min(1).max(20).optional(),
   supportSkillId: idSchema.optional(),
   supportSkillLabel: z.string().min(1).optional(),
+  supportSkillValue: z.number().int().optional(),
   type: z.enum(["gm_message_updated", "skill_roll_assigned", "gm_skill_roll"])
 }).merge(roleplayRollModifierSchema.partial());
 

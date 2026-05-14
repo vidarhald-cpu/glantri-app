@@ -95,6 +95,7 @@ interface SkillOption {
 
 interface RoleplayRollDraft {
   actorRoll?: RoleplayOpenEndedD20Roll;
+  actorSupportRoll?: RoleplayOpenEndedD20Roll;
   difficulty: "none" | RoleplayDifficulty;
   id: string;
   otherModInput: string;
@@ -104,6 +105,7 @@ interface RoleplayRollDraft {
   opponentOtherModTouched: boolean;
   opponentParticipantId: string;
   opponentRoll?: RoleplayOpenEndedD20Roll;
+  opponentSupportRoll?: RoleplayOpenEndedD20Roll;
   opponentSilent: boolean;
   opponentSkillCategoryId: "all" | PlayerFacingSkillBucketId;
   opponentSkillId: string;
@@ -130,6 +132,7 @@ interface PlayerLocalRollDraft {
   otherModTouched: boolean;
   opponentParticipantId: string;
   roll?: RoleplayOpenEndedD20Roll;
+  supportRoll?: RoleplayOpenEndedD20Roll;
   skillCategoryId: "all" | PlayerFacingSkillBucketId;
   skillId: string;
   supportSkillCategoryId: "all" | PlayerFacingSkillBucketId;
@@ -560,24 +563,28 @@ function RoleplayRollResultLine({
 
 function RoleplayRollCalculationPanel({
   actorDifficulty,
+  actorLabel = "Actor",
   actorMainPreview,
   actorPendingLabels,
   actorSupportPreview,
   cleanPendingText = false,
   comparison,
   opponentMainPreview,
+  opponentLabel = "Opponent",
   opponentOpen,
   opponentPendingLabels,
   showPendingLabels = true,
   opponentSupportPreview,
 }: {
   actorDifficulty?: RoleplayDifficulty;
+  actorLabel?: string;
   actorMainPreview?: ReturnType<typeof buildRoleplayCalculationPreview>;
   actorPendingLabels?: string[];
   actorSupportPreview?: ReturnType<typeof buildRoleplayCalculationPreview>;
   cleanPendingText?: boolean;
   comparison?: string;
   opponentMainPreview?: ReturnType<typeof buildRoleplayCalculationPreview>;
+  opponentLabel?: string;
   opponentOpen: boolean;
   opponentPendingLabels?: string[];
   showPendingLabels?: boolean;
@@ -587,7 +594,7 @@ function RoleplayRollCalculationPanel({
     <div style={rollPreviewStyle}>
       <strong>Calculation</strong>
       <div style={{ display: "grid", gap: "0.25rem" }}>
-        <strong>Actor</strong>
+        <strong>{actorLabel}</strong>
         <RollCalculationPreview cleanPendingText={cleanPendingText} label="Support" preview={actorSupportPreview} />
         <RollCalculationPreview
           cleanPendingText={cleanPendingText}
@@ -600,7 +607,7 @@ function RoleplayRollCalculationPanel({
       </div>
       {opponentOpen ? (
         <div style={{ borderTop: "1px solid #eee8dc", display: "grid", gap: "0.25rem", paddingTop: "0.45rem" }}>
-          <strong>Opponent</strong>
+          <strong>{opponentLabel}</strong>
           <RollCalculationPreview cleanPendingText={cleanPendingText} label="Support" preview={opponentSupportPreview} />
           <RollCalculationPreview
             cleanPendingText={cleanPendingText}
@@ -711,6 +718,14 @@ function buildActionLogRollResult(
   }
 
   return buildPlayerRollResult(input);
+}
+
+function buildActionLogSupportRollResult(input?: RoleplayActionLogEntry): RoleplayOpenEndedD20Roll | undefined {
+  return buildPlayerRollResult({
+    dieResult: input?.supportDieResult,
+    openEndedD10s: input?.supportOpenEndedD10s ?? [],
+    rollD20: input?.supportRollD20,
+  });
 }
 
 function findRoleplayResultForSide(input: {
@@ -1042,6 +1057,7 @@ export function GmRoleplayingEncounterScreen({
       skillLabel: input.skillLabel,
       success: input.preview.success,
       summary: `GM rolled ${input.skillLabel}.`,
+      supportOpenEndedD10s: [],
       supportSkillLabel: input.supportSkillLabel,
       type: "gm_skill_roll",
     };
@@ -1184,6 +1200,8 @@ export function GmRoleplayingEncounterScreen({
         : undefined;
     const actorExternalRoll = buildActionLogRollResult(matchingResult, "actor");
     const opponentExternalRoll = buildActionLogRollResult(matchingOpponentResult, "opponent");
+    const actorExternalSupportRoll = buildActionLogSupportRollResult(matchingResult);
+    const opponentExternalSupportRoll = buildActionLogSupportRollResult(matchingOpponentResult);
     const preview = selectedSkill
       ? buildRoleplayCalculationPreview({
           difficulty: isOpposed || draft.difficulty === "none" ? undefined : draft.difficulty,
@@ -1198,7 +1216,7 @@ export function GmRoleplayingEncounterScreen({
       : undefined;
     const supportPreview = selectedSupportSkill
       ? buildRoleplayCalculationPreview({
-          roll: draft.actorRoll ?? actorExternalRoll,
+          roll: draft.actorSupportRoll ?? actorExternalSupportRoll,
           skillLabel: selectedSupportSkill.label,
           skillValue: selectedSupportSkill.value,
         })
@@ -1217,7 +1235,7 @@ export function GmRoleplayingEncounterScreen({
         : undefined;
     const opponentSupportPreview = selectedOpponentSupportSkill
       ? buildRoleplayCalculationPreview({
-          roll: draft.opponentRoll ?? opponentExternalRoll,
+          roll: draft.opponentSupportRoll ?? opponentExternalSupportRoll,
           skillLabel: selectedOpponentSupportSkill.label,
           skillValue: selectedOpponentSupportSkill.value,
         })
@@ -1311,6 +1329,7 @@ export function GmRoleplayingEncounterScreen({
         opponentSupportSkillId: !assigningOpponent && isOpposed ? selectedOpponentSupportSkill?.id : undefined,
         opponentSupportSkillLabel: !assigningOpponent && isOpposed ? selectedOpponentSupportSkill?.label : undefined,
         participantId: assigningOpponent ? opponent.id : participant.id,
+        participantName: assigningOpponent ? opponent.label : participant.label,
         rollSetId: assigningOpponent || isOpposed ? activeOpposedRollSetId : undefined,
         session: encounter,
         side: assigningOpponent ? "opponent" : isOpposed ? "actor" : undefined,
@@ -1320,6 +1339,7 @@ export function GmRoleplayingEncounterScreen({
         skillValue: assigningOpponent ? selectedOpponentSkill.value : selectedSkill.value,
         supportSkillId: assigningOpponent ? selectedOpponentSupportSkill?.id : selectedSupportSkill?.id,
         supportSkillLabel: assigningOpponent ? selectedOpponentSupportSkill?.label : selectedSupportSkill?.label,
+        supportSkillValue: assigningOpponent ? selectedOpponentSupportSkill?.value : selectedSupportSkill?.value,
         useDbMod: assigningOpponent ? draft.opponentUseDbMod : draft.useDbMod,
         useGenMod: assigningOpponent ? draft.opponentUseGenMod : draft.useGenMod,
         useObSkillMod: assigningOpponent ? draft.opponentUseObSkillMod : draft.useObSkillMod,
@@ -1356,6 +1376,14 @@ export function GmRoleplayingEncounterScreen({
     const shouldRollOpponent = side === "opponent" || side === "both";
     const roll = shouldRollActor ? rollOpenEndedRoleplayD20() : draft.actorRoll;
     const opponentRoll = shouldRollOpponent ? rollOpenEndedRoleplayD20() : draft.opponentRoll;
+    const actorSupportRoll =
+      shouldRollActor && selectedSupportSkill
+        ? rollOpenEndedRoleplayD20()
+        : draft.actorSupportRoll;
+    const opponentSupportRoll =
+      shouldRollOpponent && selectedOpponentSupportSkill
+        ? rollOpenEndedRoleplayD20()
+        : draft.opponentSupportRoll;
 
     if ((side === "actor" || side === "both") && !roll) {
       return;
@@ -1367,7 +1395,9 @@ export function GmRoleplayingEncounterScreen({
 
     updateRollDraft(draft.id, {
       actorRoll: roll,
+      actorSupportRoll,
       opponentRoll,
+      opponentSupportRoll,
     });
     const preview =
       roll
@@ -1394,6 +1424,22 @@ export function GmRoleplayingEncounterScreen({
             useObSkillMod: draft.opponentUseObSkillMod,
           })
         : undefined;
+    const supportPreview =
+      actorSupportRoll && selectedSupportSkill
+        ? buildRoleplayCalculationPreview({
+            roll: actorSupportRoll,
+            skillLabel: selectedSupportSkill.label,
+            skillValue: selectedSupportSkill.value,
+          })
+        : undefined;
+    const opponentSupportPreview =
+      opponentSupportRoll && selectedOpponentSupportSkill
+        ? buildRoleplayCalculationPreview({
+            roll: opponentSupportRoll,
+            skillLabel: selectedOpponentSupportSkill.label,
+            skillValue: selectedOpponentSupportSkill.value,
+          })
+        : undefined;
     const opposedResult =
       isOpposed && opponent && preview && opponentPreview
         ? compareRoleplayOpposedRolls({
@@ -1408,7 +1454,8 @@ export function GmRoleplayingEncounterScreen({
       await persist(
         recordRoleplayGmSkillRoll({
           calculationText: [
-            selectedOpponentSupportSkill ? `Support: ${selectedOpponentSupportSkill.label}` : undefined,
+            opponentSupportPreview ? `support ${opponentSupportPreview.calculationText}` : undefined,
+            selectedOpponentSupportSkill && !opponentSupportPreview ? `Support: ${selectedOpponentSupportSkill.label}` : undefined,
             opponentPreview.calculationText,
           ]
             .filter(Boolean)
@@ -1432,8 +1479,15 @@ export function GmRoleplayingEncounterScreen({
           silent: draft.opponentSilent,
           skillId: selectedOpponentSkill.id,
           skillLabel: selectedOpponentSkill.label,
+          skillValue: selectedOpponentSkill.value,
+          participantName: opponent.label,
+          summary: `GM rolled ${selectedOpponentSkill.label} for ${opponent.label}.`,
+          supportCalculationText: opponentSupportPreview?.calculationText,
+          supportNumericSubtotal: opponentSupportPreview?.numericSubtotal,
+          supportRoll: opponentSupportRoll,
           supportSkillId: selectedOpponentSupportSkill?.id,
           supportSkillLabel: selectedOpponentSupportSkill?.label,
+          supportSkillValue: selectedOpponentSupportSkill?.value,
           useDbMod: draft.opponentUseDbMod,
           useGenMod: draft.opponentUseGenMod,
           useObSkillMod: draft.opponentUseObSkillMod,
@@ -1442,8 +1496,8 @@ export function GmRoleplayingEncounterScreen({
       );
     } else if (side === "both" && opponent && selectedOpponentSkill && roll && opponentRoll && preview && opponentPreview) {
       const calculationText = [
-        selectedSupportSkill ? `Support: ${selectedSupportSkill.label}` : undefined,
-        selectedOpponentSupportSkill ? `Opponent support: ${selectedOpponentSupportSkill.label}` : undefined,
+        supportPreview ? `actor support ${supportPreview.calculationText}` : undefined,
+        opponentSupportPreview ? `opponent support ${opponentSupportPreview.calculationText}` : undefined,
         `Actor: ${preview.calculationText} · VERSUS · Opponent: ${opponentPreview.calculationText} · ${opposedResult?.summary ?? "Opposed result pending."}`,
       ]
         .filter(Boolean)
@@ -1478,15 +1532,22 @@ export function GmRoleplayingEncounterScreen({
           otherMod,
           partial: preview.partial || opponentPreview.partial,
           participantId: participant.id,
+          participantName: participant.label,
           roll,
           rollSetId: activeOpposedRollSetId,
           session: encounter,
           silent: draft.silent,
           skillId: selectedSkill.id,
           skillLabel: selectedSkill.label,
+          skillValue: selectedSkill.value,
           success: preview.success,
+          summary: `GM rolled opposed ${selectedSkill.label} for ${participant.label} vs ${selectedOpponentSkill.label} for ${opponent.label}.`,
+          supportCalculationText: supportPreview?.calculationText,
+          supportNumericSubtotal: supportPreview?.numericSubtotal,
+          supportRoll: actorSupportRoll,
           supportSkillId: selectedSupportSkill?.id,
           supportSkillLabel: selectedSupportSkill?.label,
+          supportSkillValue: selectedSupportSkill?.value,
           useDbMod: draft.useDbMod,
           useGenMod: draft.useGenMod,
           useObSkillMod: draft.useObSkillMod,
@@ -1497,7 +1558,8 @@ export function GmRoleplayingEncounterScreen({
       await persist(
         recordRoleplayGmSkillRoll({
           calculationText: [
-            selectedSupportSkill ? `Support: ${selectedSupportSkill.label}` : undefined,
+            supportPreview ? `support ${supportPreview.calculationText}` : undefined,
+            selectedSupportSkill && !supportPreview ? `Support: ${selectedSupportSkill.label}` : undefined,
             preview.calculationText,
           ]
             .filter(Boolean)
@@ -1515,6 +1577,7 @@ export function GmRoleplayingEncounterScreen({
           partial: preview.partial,
           pendingRollId: matchingPendingRoll?.id,
           participantId: participant.id,
+          participantName: participant.label,
           roll,
           rollSetId: activeOpposedRollSetId,
           session: encounter,
@@ -1522,9 +1585,15 @@ export function GmRoleplayingEncounterScreen({
           silent: draft.silent,
           skillId: selectedSkill.id,
           skillLabel: selectedSkill.label,
+          skillValue: selectedSkill.value,
           success: preview.success,
+          summary: `GM rolled ${selectedSkill.label} for ${participant.label}.`,
+          supportCalculationText: supportPreview?.calculationText,
+          supportNumericSubtotal: supportPreview?.numericSubtotal,
+          supportRoll: actorSupportRoll,
           supportSkillId: selectedSupportSkill?.id,
           supportSkillLabel: selectedSupportSkill?.label,
+          supportSkillValue: selectedSupportSkill?.value,
           useDbMod: draft.useDbMod,
           useGenMod: draft.useGenMod,
           useObSkillMod: draft.useObSkillMod,
@@ -2264,11 +2333,13 @@ export function GmRoleplayingEncounterScreen({
                   </div>
                   <RoleplayRollCalculationPanel
                     actorDifficulty={draft.difficulty === "none" || context.isOpposed ? undefined : draft.difficulty}
+                    actorLabel={`Actor — ${context.participant?.label ?? "Actor"}`}
                     actorMainPreview={context.preview}
                     actorPendingLabels={context.preview?.pendingModifierLabels}
                     actorSupportPreview={context.supportPreview}
                     comparison={comparison}
                     opponentMainPreview={context.opponentPreview}
+                    opponentLabel={`Opponent — ${context.opponent?.label ?? "Opponent"}`}
                     opponentOpen={Boolean(context.opponent && draft.opponentBlockOpen)}
                     opponentPendingLabels={context.opponentPreview?.pendingModifierLabels}
                     opponentSupportPreview={context.opponentSupportPreview}
@@ -2632,7 +2703,7 @@ export function PlayerRoleplayingEncounterScreen({
       });
   const localSupportPreview = localSelectedSupportSkill
     ? buildRoleplayCalculationPreview({
-        roll: playerLocalRollDraft.roll,
+        roll: playerLocalRollDraft.supportRoll,
         skillLabel: localSelectedSupportSkill.label,
         skillValue: localSelectedSupportSkill.value,
       })
@@ -2684,6 +2755,7 @@ export function PlayerRoleplayingEncounterScreen({
     }
 
     const roll = rollOpenEndedRoleplayD20();
+    const supportRoll = pendingRoll.supportSkillId ? rollOpenEndedRoleplayD20() : undefined;
     const preview = buildRoleplayCalculationPreview({
       difficulty: pendingRoll.mode === "difficulty" ? pendingRoll.difficulty : undefined,
       otherMod: pendingRoll.otherMod,
@@ -2698,6 +2770,7 @@ export function PlayerRoleplayingEncounterScreen({
       encounterId: encounter.id,
       pendingRollId: pendingRoll.id,
       roll,
+      supportRoll,
     });
 
     setEncounter(savedEncounter);
@@ -2723,6 +2796,7 @@ export function PlayerRoleplayingEncounterScreen({
     }
 
     const roll = rollOpenEndedRoleplayD20();
+    const supportRoll = localSelectedSupportSkill ? rollOpenEndedRoleplayD20() : undefined;
     const preview = buildRoleplayCalculationPreview({
       difficulty: playerLocalRollDraft.difficulty === "none" ? undefined : playerLocalRollDraft.difficulty,
       otherMod: localOtherMod,
@@ -2736,6 +2810,7 @@ export function PlayerRoleplayingEncounterScreen({
     setPlayerLocalRollDraft((currentDraft) => ({
       ...currentDraft,
       roll,
+      supportRoll,
     }));
     setLocalRankedResults((currentResults) =>
       mergePlayerVisibleResults(currentResults, [
@@ -2870,6 +2945,7 @@ export function PlayerRoleplayingEncounterScreen({
                   )?.label ?? "Assigned"
                 : "Assigned";
               const resultRoll = buildPlayerRollResult(roll.result);
+              const supportResultRoll = buildPlayerRollResult(roll.supportResult);
               const mainPreview = buildRoleplayCalculationPreview({
                 difficulty: roll.mode === "difficulty" ? roll.difficulty : undefined,
                 otherMod: roll.otherMod,
@@ -2882,6 +2958,7 @@ export function PlayerRoleplayingEncounterScreen({
               });
               const supportPreview = roll.supportSkillLabel
                 ? buildRoleplayCalculationPreview({
+                    roll: supportResultRoll,
                     skillLabel: roll.supportSkillLabel,
                     skillValue: assignedSupportSkillProfile?.rollBaseValue ?? roll.supportSkillValue,
                   })
@@ -2978,10 +3055,12 @@ export function PlayerRoleplayingEncounterScreen({
                     </div>
                     <RoleplayRollCalculationPanel
                       actorDifficulty={roll.mode === "difficulty" ? roll.difficulty : undefined}
+                      actorLabel={`Actor — ${roll.participantName}`}
                       actorMainPreview={mainPreview}
                       actorPendingLabels={mainPreview.pendingModifierLabels}
                       actorSupportPreview={supportPreview}
                       cleanPendingText
+                      comparison={roll.comparison}
                       opponentOpen={false}
                       showPendingLabels={false}
                     />
@@ -3268,8 +3347,7 @@ export function PlayerRoleplayingEncounterScreen({
           <ul style={{ display: "grid", gap: "0.35rem", margin: 0, paddingLeft: "1.25rem" }}>
             {playerView.characterLog.map((entry) => (
               <li key={entry.id}>
-                {formatShortDateTime(entry.timestamp)} · {entry.skillLabel}
-                {entry.total == null ? "" : ` · total ${entry.total}`}
+                {formatShortDateTime(entry.timestamp)} · {entry.detail}
               </li>
             ))}
           </ul>
