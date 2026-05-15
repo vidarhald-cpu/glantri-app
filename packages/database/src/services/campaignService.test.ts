@@ -34,6 +34,34 @@ describe("CampaignService access listing", () => {
 
     await expect(service.listCampaignsByPlayerAccess("player-1")).resolves.toEqual(expectedCampaigns);
   });
+
+  it("returns campaigns where a character is in the roster", async () => {
+    const { repository } = createScenarioRepositoryStub();
+    const expectedCampaigns: Campaign[] = [
+      {
+        createdAt: "2026-04-21T00:00:00.000Z",
+        description: "Roster campaign",
+        gmUserId: "gm-1",
+        id: "campaign-1",
+        name: "Campaign One",
+        settings: {
+          allowPlayerSelfJoin: false,
+          defaultVisibility: "hidden",
+        },
+        slug: "campaign-one",
+        status: "active",
+        updatedAt: "2026-04-21T00:00:00.000Z",
+      },
+    ];
+    repository.listCampaignsByCharacterRosterAccess = async (characterId) =>
+      characterId === "character-1" ? expectedCampaigns : [];
+
+    const service = new CampaignService(repository);
+
+    await expect(service.listCampaignsByCharacterRosterAccess("character-1")).resolves.toEqual(
+      expectedCampaigns,
+    );
+  });
 });
 
 describe("CampaignService campaign roster", () => {

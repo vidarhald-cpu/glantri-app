@@ -57,9 +57,10 @@ export interface ScenarioParticipantFromEntityInput {
   tacticalGroupId?: string | null;
 }
 
-export async function loadJoinableScenarios(): Promise<JoinableScenarioRecord[]> {
+export async function loadJoinableScenarios(characterId?: string): Promise<JoinableScenarioRecord[]> {
+  const query = characterId ? `?characterId=${encodeURIComponent(characterId)}` : "";
   const payload = await sendJson<{ joinableScenarios: JoinableScenarioRecord[] }>(
-    "/scenarios/joinable",
+    `/scenarios/joinable${query}`,
     {
       method: "GET"
     }

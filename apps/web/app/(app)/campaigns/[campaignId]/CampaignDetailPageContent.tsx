@@ -199,7 +199,6 @@ export default function CampaignDetailPageContent({
 
   const [scenarioName, setScenarioName] = useState("");
   const [scenarioDescription, setScenarioDescription] = useState("");
-  const [scenarioKind, setScenarioKind] = useState<Scenario["kind"]>("mixed");
   const [continuesFromScenarioId, setContinuesFromScenarioId] = useState("");
 
   const [assetTitle, setAssetTitle] = useState("");
@@ -440,7 +439,7 @@ export default function CampaignDetailPageContent({
         campaignId,
         continuesFromScenarioId: continuesFromScenarioId || undefined,
         description: scenarioDescription,
-        kind: scenarioKind,
+        kind: "mixed",
         name: scenarioName,
         status: "draft"
       });
@@ -679,7 +678,8 @@ export default function CampaignDetailPageContent({
                   <th style={{ background: "#fff", padding: "0.5rem 0.75rem", position: "sticky", top: 0 }}>Type</th>
                   <th style={{ background: "#fff", padding: "0.5rem 0.75rem", position: "sticky", top: 0 }}>Civilization</th>
                   <th style={{ background: "#fff", padding: "0.5rem 0.75rem", position: "sticky", top: 0 }}>Profession</th>
-                  <th style={{ background: "#fff", padding: "0.5rem 0", position: "sticky", top: 0 }}>Owner</th>
+                  <th style={{ background: "#fff", padding: "0.5rem 0.75rem", position: "sticky", top: 0 }}>Owner</th>
+                  <th style={{ background: "#fff", padding: "0.5rem 0", position: "sticky", top: 0 }}>Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -704,7 +704,19 @@ export default function CampaignDetailPageContent({
                     <td style={{ padding: "0.6rem 0.75rem" }}>{candidate.typeLabel}</td>
                     <td style={{ padding: "0.6rem 0.75rem" }}>{candidate.civilizationLabel}</td>
                     <td style={{ padding: "0.6rem 0.75rem" }}>{candidate.professionLabel}</td>
-                    <td style={{ padding: "0.6rem 0" }}>{candidate.ownerLabel}</td>
+                    <td style={{ padding: "0.6rem 0.75rem" }}>{candidate.ownerLabel}</td>
+                    <td style={{ padding: "0.6rem 0" }}>
+                      {candidate.member ? (
+                        <button
+                          onClick={() => void handleRosterMembershipToggle(candidate, false)}
+                          type="button"
+                        >
+                          Remove
+                        </button>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -728,15 +740,6 @@ export default function CampaignDetailPageContent({
           rows={3}
           value={scenarioDescription}
         />
-        <select
-          onChange={(event) => setScenarioKind(event.target.value as Scenario["kind"])}
-          value={scenarioKind}
-        >
-          <option value="combat">Combat</option>
-          <option value="social">Social</option>
-          <option value="travel">Travel</option>
-          <option value="mixed">Mixed</option>
-        </select>
         <select
           onChange={(event) => setContinuesFromScenarioId(event.target.value)}
           value={continuesFromScenarioId}
@@ -769,7 +772,6 @@ export default function CampaignDetailPageContent({
               <thead>
                 <tr style={{ borderBottom: "1px solid #d9ddd8", textAlign: "left" }}>
                   <th style={{ padding: "0.5rem 0.75rem 0.5rem 0" }}>Scenario</th>
-                  <th style={{ padding: "0.5rem 0.75rem" }}>Kind</th>
                   <th style={{ padding: "0.5rem 0.75rem" }}>Status</th>
                   <th style={{ padding: "0.5rem 0.75rem" }}>Follows</th>
                   <th style={{ padding: "0.5rem 0" }}>Action</th>
@@ -786,7 +788,6 @@ export default function CampaignDetailPageContent({
                         {scenario.description || "No description yet."}
                       </div>
                     </td>
-                    <td style={{ padding: "0.6rem 0.75rem" }}>{scenario.kind}</td>
                     <td style={{ padding: "0.6rem 0.75rem" }}>{scenario.status}</td>
                     <td style={{ padding: "0.6rem 0.75rem" }}>
                       {getContinuationLabel(scenario.id)}

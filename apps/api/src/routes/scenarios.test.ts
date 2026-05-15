@@ -15,9 +15,13 @@ const mocks = vi.hoisted(() => {
   const campaignService = {
     createCampaign: vi.fn(),
     getCampaignById: vi.fn(),
+    listCampaignRosterEntries: vi.fn(),
+    listCampaignsByCharacterRosterAccess: vi.fn(),
     listCampaignsByGameMaster: vi.fn(),
   };
-  const characterService = {};
+  const characterService = {
+    getOwnedCharacter: vi.fn(),
+  };
   const encounterService = {
     getEncounterById: vi.fn(),
     listEncountersByScenario: vi.fn(),
@@ -25,6 +29,7 @@ const mocks = vi.hoisted(() => {
   };
   const scenarioService = {
     createScenario: vi.fn(),
+    addCharacterParticipant: vi.fn(),
     getScenarioById: vi.fn(),
     listScenariosByCampaign: vi.fn(),
     listScenarioParticipants: vi.fn(),
@@ -161,6 +166,164 @@ describe("scenarios route contract", () => {
       name: "Bridge Ambush",
       status: "prepared",
     });
+  });
+
+  it("lists live roster-eligible scenarios for a character without campaign self-join", async () => {
+    const campaign = {
+      gmUserId: "gm-1",
+      id: "campaign-1",
+      name: "Border Trouble",
+      status: "active",
+    };
+    mocks.campaignService.listCampaignsByCharacterRosterAccess.mockResolvedValue([campaign]);
+    mocks.scenarioService.listScenariosByCampaign.mockResolvedValue([
+      {
+        campaignId: "campaign-1",
+        id: "scenario-live",
+        kind: "mixed",
+        name: "Live Scene",
+        status: "live",
+      },
+      {
+        campaignId: "campaign-1",
+        id: "scenario-draft",
+        kind: "mixed",
+        name: "Draft Scene",
+        status: "draft",
+      },
+    ]);
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/scenarios/joinable?characterId=character-1",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      joinableScenarios: [
+        {
+          campaignId: "campaign-1",
+          campaignName: "Border Trouble",
+          kind: "mixed",
+          scenarioId: "scenario-live",
+          scenarioName: "Live Scene",
+          status: "live",
+        },
+      ],
+    });
+    expect(mocks.campaignService.listCampaignsByCharacterRosterAccess).toHaveBeenCalledWith(
+      "character-1",
+    );
+  });
+
+  it("allows a player-owned roster character to join a live scenario", async () => {
+    const scenario = {
+      campaignId: "campaign-1",
+      id: "scenario-1",
+      kind: "mixed",
+      name: "Live Scene",
+      status: "live",
+    };
+    const campaign = {
+      gmUserId: "gm-1",
+      id: "campaign-1",
+      name: "Border Trouble",
+      settings: {
+        allowPlayerSelfJoin: false,
+      },
+      status: "active",
+    };
+    const participant = {
+      characterId: "character-1",
+      controlledByUserId: "player-1",
+      id: "participant-1",
+      scenarioId: "scenario-1",
+    };
+    mocks.scenarioService.getScenarioById.mockResolvedValue(scenario);
+    mocks.campaignService.getCampaignById.mockResolvedValue(campaign);
+    mocks.characterService.getOwnedCharacter.mockResolvedValue({
+      id: "character-1",
+      ownerId: "player-1",
+    });
+    mocks.campaignService.listCampaignRosterEntries.mockResolvedValue([
+      {
+        campaignId: "campaign-1",
+        id: "roster-1",
+        sourceId: "character-1",
+        sourceType: "character",
+      },
+    ]);
+    mocks.scenarioService.addCharacterParticipant.mockResolvedValue(participant);
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        characterId: "character-1",
+        controlledByUserId: "player-1",
+        joinSource: "player_joined",
+        role: "player_character",
+      },
+      url: "/scenarios/scenario-1/participants/character",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ participant });
+    expect(mocks.scenarioService.addCharacterParticipant).toHaveBeenCalledWith(
+      expect.objectContaining({
+        characterId: "character-1",
+        joinSource: "player_joined",
+        scenarioId: "scenario-1",
+      }),
+    );
+  });
+
+  it("rejects player scenario join when the character is not in the campaign roster", async () => {
+    mocks.scenarioService.getScenarioById.mockResolvedValue({
+      campaignId: "campaign-1",
+      id: "scenario-1",
+      kind: "mixed",
+      name: "Live Scene",
+      status: "live",
+    });
+    mocks.campaignService.getCampaignById.mockResolvedValue({
+      gmUserId: "gm-1",
+      id: "campaign-1",
+      name: "Border Trouble",
+      settings: {
+        allowPlayerSelfJoin: false,
+      },
+      status: "active",
+    });
+    mocks.characterService.getOwnedCharacter.mockResolvedValue({
+      id: "character-1",
+      ownerId: "player-1",
+    });
+    mocks.campaignService.listCampaignRosterEntries.mockResolvedValue([]);
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        characterId: "character-1",
+        joinSource: "player_joined",
+        role: "player_character",
+      },
+      url: "/scenarios/scenario-1/participants/character",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(403);
+    expect(response.json()).toEqual({
+      error: "This character is not currently assigned to a campaign.",
+    });
+    expect(mocks.scenarioService.addCharacterParticipant).not.toHaveBeenCalled();
   });
 
   it("lists encounters for a player with scenario workspace access", async () => {

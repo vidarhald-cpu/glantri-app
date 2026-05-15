@@ -99,6 +99,15 @@ export function createScenarioRepositoryStub() {
     getCampaignById: async () => null,
     listCampaignsByGameMaster: async () => [],
     listCampaignsAllowingPlayerSelfJoin: async () => [],
+    listCampaignsByCharacterRosterAccess: async (characterId) => {
+      const campaignIds = new Set(
+        rosterEntries
+          .filter((entry) => entry.sourceType === "character" && entry.sourceId === characterId)
+          .map((entry) => entry.campaignId),
+      );
+
+      return campaigns.filter((campaign) => campaignIds.has(campaign.id));
+    },
     listCampaignsByPlayerAccess: async () => campaigns,
     createScenario: async (input) => {
       const now = "2026-04-21T00:00:00.000Z";

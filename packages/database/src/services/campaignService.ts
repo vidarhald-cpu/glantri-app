@@ -56,6 +56,10 @@ export class CampaignService {
     return this.repository.listCampaignsAllowingPlayerSelfJoin();
   }
 
+  async listCampaignsByCharacterRosterAccess(characterId: string): Promise<Campaign[]> {
+    return this.repository.listCampaignsByCharacterRosterAccess(characterId);
+  }
+
   async listCampaignsByPlayerAccess(userId: string): Promise<Campaign[]> {
     return this.repository.listCampaignsByPlayerAccess(userId);
   }

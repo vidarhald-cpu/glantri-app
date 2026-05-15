@@ -33,6 +33,8 @@ Player responsibilities:
 
 Important rule: campaign roster means available to the campaign, not currently present in a scene. A roster member is not automatically in a scenario or encounter.
 
+Campaigns are not self-join spaces. The GM controls campaign roster membership. A character may join or open a live scenario only when that character is already in the campaign roster and the scenario is currently live.
+
 Player Campaign pages should not show:
 
 - GM-only notes.
@@ -65,6 +67,7 @@ Current design rules:
 
 - Scenario participants are concrete actors in a scenario.
 - Scenario participants are not the same as campaign roster entries.
+- Scenario kind is an internal/model-level classification for now, not a workflow control that should be emphasized in Campaign or Player pages.
 - Template sources are not participants until the GM creates concrete actors from them.
 - Player pages should not expose whether hidden or GM-only participants exist.
 

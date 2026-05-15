@@ -273,6 +273,7 @@ export interface ScenarioRepository {
   getCampaignById(campaignId: string): Promise<Campaign | null>;
   listCampaignsByGameMaster(gmUserId: string): Promise<Campaign[]>;
   listCampaignsAllowingPlayerSelfJoin(): Promise<Campaign[]>;
+  listCampaignsByCharacterRosterAccess(characterId: string): Promise<Campaign[]>;
   listCampaignsByPlayerAccess(userId: string): Promise<Campaign[]>;
   createScenario(input: {
     campaignId: string;
@@ -438,6 +439,21 @@ export function createPrismaScenarioRepository(client?: PrismaClient): ScenarioR
             equals: true
           }
         }
+      });
+
+      return records.map(mapCampaign);
+    },
+    async listCampaignsByCharacterRosterAccess(characterId) {
+      const records = await prisma.campaign.findMany({
+        orderBy: { updatedAt: "desc" },
+        where: {
+          rosterEntries: {
+            some: {
+              sourceId: characterId,
+              sourceType: "character",
+            },
+          },
+        },
       });
 
       return records.map(mapCampaign);
