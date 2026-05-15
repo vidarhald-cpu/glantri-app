@@ -155,6 +155,8 @@ export function createScenarioRepositoryStub() {
       participants.push(participant);
       return participant;
     },
+    getScenarioParticipantById: async (participantId, scenarioId) =>
+      participants.find((p) => p.id === participantId && p.scenarioId === scenarioId) ?? null,
     listScenarioParticipants: async (scenarioId) =>
       participants.filter((participant) => participant.scenarioId === scenarioId),
     updateScenarioLiveState: async () => scenario,
