@@ -289,7 +289,10 @@ describe("scenarios route contract", () => {
     await app.close();
 
     expect(response.statusCode).toBe(404);
-    expect(response.json()).toEqual({ error: "Campaign not found." });
+    expect(response.json()).toEqual({
+      code: "CAMPAIGN_NOT_FOUND",
+      error: "Campaign not found.",
+    });
     expect(mocks.campaignService.removeCampaignRosterEntryBySource).not.toHaveBeenCalled();
   });
 
@@ -336,7 +339,10 @@ describe("scenarios route contract", () => {
     await app.close();
 
     expect(response.statusCode).toBe(400);
-    expect(response.json().error).toContain("Invalid enum value");
+    expect(response.json()).toMatchObject({
+      code: "INVALID_ROSTER_SOURCE_TYPE",
+      error: "Invalid roster source type. Expected character, reusableEntity, or template.",
+    });
     expect(mocks.campaignService.removeCampaignRosterEntryBySource).not.toHaveBeenCalled();
   });
 

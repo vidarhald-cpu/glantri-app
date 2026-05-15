@@ -25,13 +25,72 @@ import {
 const campaignService = new CampaignService();
 const scenarioService = new ScenarioService();
 
+interface RouteError extends Error {
+  code?: string;
+  details?: unknown;
+}
+
+function createRosterRouteError(message: string, code: string, details?: unknown): RouteError {
+  const error = new Error(message) as RouteError;
+  error.code = code;
+  error.details = details;
+  return error;
+}
+
+function parseCampaignRosterSourceType(value: unknown) {
+  const parsed = campaignRosterSourceTypeSchema.safeParse(value);
+
+  if (!parsed.success) {
+    throw createRosterRouteError(
+      "Invalid roster source type. Expected character, reusableEntity, or template.",
+      "INVALID_ROSTER_SOURCE_TYPE",
+      parsed.error.issues
+    );
+  }
+
+  return parsed.data;
+}
+
+function buildRosterRouteErrorPayload(error: unknown) {
+  if (error instanceof Error && error.message === "Campaign not found.") {
+    return {
+      payload: {
+        code: "CAMPAIGN_NOT_FOUND",
+        error: "Campaign not found."
+      },
+      status: 404
+    };
+  }
+
+  if (error instanceof Error) {
+    const routeError = error as RouteError;
+
+    return {
+      payload: {
+        code: routeError.code ?? "CAMPAIGN_ROSTER_REMOVE_FAILED",
+        details: routeError.details,
+        error: routeError.message
+      },
+      status: 400
+    };
+  }
+
+  return {
+    payload: {
+      code: "CAMPAIGN_ROSTER_REMOVE_FAILED",
+      error: "Unable to remove campaign roster membership."
+    },
+    status: 400
+  };
+}
+
 async function removeCampaignRosterMembershipBySource(input: {
   campaignId: string;
   sourceId: string;
   sourceType: unknown;
   userId: string;
 }): Promise<void> {
-  const sourceType = campaignRosterSourceTypeSchema.parse(input.sourceType);
+  const sourceType = parseCampaignRosterSourceType(input.sourceType);
   const campaign = await campaignService.getCampaignById(input.campaignId);
 
   if (!campaign || campaign.gmUserId !== input.userId) {
@@ -377,16 +436,9 @@ export const campaignRoutes: FastifyPluginAsync = async (app) => {
 
       return { ok: true };
     } catch (error) {
-      const message =
-        error instanceof Error && error.message === "Campaign not found."
-          ? "Campaign not found."
-          : error instanceof Error
-            ? error.message
-            : "Unable to remove campaign roster membership.";
+      const { payload, status } = buildRosterRouteErrorPayload(error);
 
-      return reply.code(message === "Campaign not found." ? 404 : 400).send({
-        error: message
-      });
+      return reply.code(status).send(payload);
     }
   });
 
@@ -441,16 +493,9 @@ export const campaignRoutes: FastifyPluginAsync = async (app) => {
 
       return { ok: true };
     } catch (error) {
-      const message =
-        error instanceof Error && error.message === "Campaign not found."
-          ? "Campaign not found."
-          : error instanceof Error
-            ? error.message
-            : "Unable to remove campaign roster membership.";
+      const { payload, status } = buildRosterRouteErrorPayload(error);
 
-      return reply.code(message === "Campaign not found." ? 404 : 400).send({
-        error: message
-      });
+      return reply.code(status).send(payload);
     }
   });
 
