@@ -2,6 +2,7 @@ import type { FastifyPluginAsync } from "fastify";
 
 import { CampaignService, CharacterService, EncounterService, ScenarioService } from "@glantri/database";
 import {
+  buildScenarioPlayerVisibleParticipants,
   reusableEntityKindSchema,
   scenarioParticipantJoinSourceSchema,
   scenarioParticipantRoleSchema,
@@ -19,6 +20,7 @@ import {
   parseOptionalString,
   parseRequiredString
 } from "./parsing";
+import { resolveScenarioWorkspaceAccess } from "./access";
 
 const characterService = new CharacterService();
 const campaignService = new CampaignService();
@@ -35,9 +37,12 @@ export const participantRoutes: FastifyPluginAsync = async (app) => {
 
     try {
       const scenarioId = parseId(request.params, "scenarioId", "Scenario id");
-      const scenario = await scenarioService.getScenarioById(scenarioId);
+      const access = await resolveScenarioWorkspaceAccess(
+        { campaignService, scenarioService },
+        { scenarioId, userId: user.id, userRoles: user.roles }
+      );
 
-      if (!scenario) {
+      if (!access) {
         return reply.code(404).send({
           error: "Scenario not found."
         });
@@ -45,10 +50,49 @@ export const participantRoutes: FastifyPluginAsync = async (app) => {
 
       const participants = await scenarioService.listScenarioParticipants(scenarioId);
 
+      if (access.mode === "player") {
+        return {
+          participants: buildScenarioPlayerVisibleParticipants({ participants })
+        };
+      }
+
       return { participants };
     } catch (error) {
       return reply.code(400).send({
         error: error instanceof Error ? error.message : "Unable to list scenario participants."
+      });
+    }
+  });
+
+  app.get("/scenarios/:scenarioId/my-participant", async (request, reply) => {
+    const user = await requireAuthenticatedUser(request, reply);
+
+    if (!user) {
+      return;
+    }
+
+    try {
+      const scenarioId = parseId(request.params, "scenarioId", "Scenario id");
+      const access = await resolveScenarioWorkspaceAccess(
+        { campaignService, scenarioService },
+        { scenarioId, userId: user.id, userRoles: user.roles }
+      );
+
+      if (!access) {
+        return reply.code(404).send({
+          error: "Scenario not found."
+        });
+      }
+
+      const participants = await scenarioService.listScenarioParticipants(scenarioId);
+      const myParticipant = participants.find(
+        (p) => p.isActive && p.role === "player_character" && p.controlledByUserId === user.id
+      ) ?? null;
+
+      return { participant: myParticipant };
+    } catch (error) {
+      return reply.code(400).send({
+        error: error instanceof Error ? error.message : "Unable to load participant."
       });
     }
   });
