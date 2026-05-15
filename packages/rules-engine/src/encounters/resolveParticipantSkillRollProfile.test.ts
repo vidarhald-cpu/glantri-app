@@ -352,6 +352,112 @@ describe("resolveParticipantSkillRollProfile", () => {
     expect(opponentProfile.rollBaseValue).toBe(23);
   });
 
+  it("uses generated temporary actor stats for unknown skills", () => {
+    const profile = resolveParticipantSkillRollProfile({
+      build: {
+        actorClass: "generated_npc",
+        generatedHumanoidNpc: {
+          stats: {
+            final: {
+              cha: 10,
+              com: 10,
+              con: 10,
+              dex: 11,
+              health: 10,
+              int: 14,
+              lck: 10,
+              pow: 16,
+              siz: 10,
+              str: 10,
+              will: 10,
+            },
+          },
+        },
+      },
+      skill: perceptionSkill,
+    });
+
+    expect(profile).toMatchObject({
+      avgStats: 15,
+      known: false,
+      rollBaseValue: 15,
+      sourceQuality: "snapshot",
+      unknownSkillPenalty: -3,
+    });
+    expect(profile.warning).toContain("Skill not known");
+  });
+
+  it("uses generated temporary actor target levels for known skills", () => {
+    const profile = resolveParticipantSkillRollProfile({
+      build: {
+        actorClass: "generated_npc",
+        generatedHumanoidNpc: {
+          skills: [{ skillId: "perception", skillName: "Perception", targetLevel: 18 }],
+          stats: {
+            final: {
+              cha: 10,
+              com: 10,
+              con: 10,
+              dex: 11,
+              health: 10,
+              int: 14,
+              lck: 10,
+              pow: 16,
+              siz: 10,
+              str: 10,
+              will: 10,
+            },
+          },
+        },
+      },
+      skill: perceptionSkill,
+    });
+
+    expect(profile).toMatchObject({
+      avgStats: 15,
+      known: true,
+      rollBaseValue: 18,
+      sourceQuality: "snapshot",
+      totalSkillLevel: 18,
+      unknownSkillPenalty: 0,
+      warning: undefined,
+    });
+  });
+
+  it("uses humanoid archetype snapshot stats for temporary actors created directly from templates", () => {
+    const profile = resolveParticipantSkillRollProfile({
+      build: {
+        actorClass: "template",
+        humanoidNpcArchetype: {
+          stats: {
+            final: {
+              cha: 10,
+              com: 10,
+              con: 10,
+              dex: 11,
+              health: 10,
+              int: 13,
+              lck: 10,
+              pow: 15,
+              siz: 10,
+              str: 10,
+              will: 10,
+            },
+          },
+        },
+      },
+      skill: perceptionSkill,
+    });
+
+    expect(profile).toMatchObject({
+      avgStats: 14,
+      known: false,
+      rollBaseValue: 14,
+      sourceQuality: "snapshot",
+      unknownSkillPenalty: -3,
+    });
+  });
+
   it("returns a safe missing-source fallback for temporary actors without stats", () => {
     const profile = resolveParticipantSkillRollProfile({
       sheetSummary: {},
@@ -365,6 +471,6 @@ describe("resolveParticipantSkillRollProfile", () => {
       sourceQuality: "missing",
       unknownSkillPenalty: -3,
     });
-    expect(profile.warning).toContain("Linked stats could not be resolved");
+    expect(profile.warning).toBe("No stats available for this actor.");
   });
 });

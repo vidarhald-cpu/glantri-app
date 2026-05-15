@@ -176,6 +176,7 @@ describe("RoleplayEncounterScreens", () => {
     expect(source).toContain("unknownSkillPenalty");
     expect(source).toContain("otherModTouched");
     expect(source).toContain("Skill not known (-3 default). GM may adjust or forbid.");
+    expect(source).toContain("No stats available for this actor.");
     expect(typesSource).toContain("profile?: ParticipantSkillRollProfile");
     expect(typesSource).toContain("warning?: string");
   });

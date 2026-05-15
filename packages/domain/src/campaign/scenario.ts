@@ -533,6 +533,38 @@ export function createParticipantSnapshotFromCharacter(input: {
   };
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function looksLikeCharacterBuild(value: unknown): value is CharacterBuild {
+  return isRecord(value) && isRecord(value.profile) && isRecord(value.progression);
+}
+
+function readEntitySnapshotBuild(snapshot: unknown): unknown {
+  if (!isRecord(snapshot)) {
+    return snapshot;
+  }
+
+  if (looksLikeCharacterBuild(snapshot.build)) {
+    return snapshot.build;
+  }
+
+  if (looksLikeCharacterBuild(snapshot)) {
+    return snapshot;
+  }
+
+  return snapshot;
+}
+
+function readEntitySnapshotField(snapshot: unknown, field: "equipmentState" | "sheetSummary"): unknown {
+  if (!isRecord(snapshot)) {
+    return undefined;
+  }
+
+  return snapshot[field];
+}
+
 export function createParticipantSnapshotFromEntity(input: {
   entity: {
     description?: string | null;
@@ -548,10 +580,13 @@ export function createParticipantSnapshotFromEntity(input: {
   state: ScenarioParticipantState;
 } {
   const maxHp = Math.max(1, input.maxHp ?? 10);
+  const build = readEntitySnapshotBuild(input.entity.snapshot);
+  const equipmentState = readEntitySnapshotField(input.entity.snapshot, "equipmentState");
+  const sheetSummary = readEntitySnapshotField(input.entity.snapshot, "sheetSummary");
 
   return {
     snapshot: scenarioParticipantSnapshotSchema.parse({
-      build: input.entity.snapshot ?? undefined,
+      build: build ?? undefined,
       displayName: input.entity.name,
       entity: {
         description: input.entity.description ?? undefined,
@@ -559,6 +594,8 @@ export function createParticipantSnapshotFromEntity(input: {
         name: input.entity.name,
         notes: input.entity.notes ?? undefined
       },
+      equipmentState,
+      sheetSummary,
       sourceUpdatedAt: input.sourceUpdatedAt
     }),
     state: scenarioParticipantStateSchema.parse({
@@ -566,7 +603,7 @@ export function createParticipantSnapshotFromEntity(input: {
         engaged: false
       },
       conditions: [],
-      equipment: {},
+      equipment: inferEquipmentArrays(equipmentState),
       health: {
         bleeding: 0,
         currentHp: clampHealth(maxHp, maxHp),

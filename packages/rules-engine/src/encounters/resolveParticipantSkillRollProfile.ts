@@ -52,6 +52,7 @@ export interface ResolveParticipantSkillRollProfileInput {
 
 const UNKNOWN_SKILL_WARNING =
   "Skill not known: using linked stat average with -3 default modifier. GM may adjust or forbid.";
+const NO_STATS_WARNING = "No stats available for this actor.";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -98,6 +99,26 @@ function readSheetStats(sheetSummary: unknown): Record<string, number> | undefin
   );
 }
 
+function readStatsBlock(value: unknown): Record<string, number> | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  return readStatsFromRecord(value.final) ?? readStatsFromRecord(value.base) ?? readStatsFromRecord(value);
+}
+
+function readSnapshotStats(snapshot: unknown): Record<string, number> | undefined {
+  if (!isRecord(snapshot)) {
+    return undefined;
+  }
+
+  return (
+    (isRecord(snapshot.generatedHumanoidNpc) ? readStatsBlock(snapshot.generatedHumanoidNpc.stats) : undefined) ??
+    (isRecord(snapshot.humanoidNpcArchetype) ? readStatsBlock(snapshot.humanoidNpcArchetype.stats) : undefined) ??
+    readStatsBlock(snapshot.stats)
+  );
+}
+
 function getLinkedStatAverage(input: {
   linkedStats: readonly string[];
   stats?: Record<string, number>;
@@ -133,6 +154,38 @@ function findSkillView(input: {
     (skill): skill is Record<string, unknown> =>
       isRecord(skill) && readString(skill.skillId) === input.skillId
   );
+}
+
+function readSnapshotSkillView(input: {
+  snapshot?: unknown;
+  skillId: string;
+}): Record<string, unknown> | undefined {
+  if (!isRecord(input.snapshot)) {
+    return undefined;
+  }
+
+  const skillLists = [
+    isRecord(input.snapshot.generatedHumanoidNpc) ? input.snapshot.generatedHumanoidNpc.skills : undefined,
+    isRecord(input.snapshot.humanoidNpcArchetype) ? input.snapshot.humanoidNpcArchetype.skills : undefined,
+    input.snapshot.skills,
+  ];
+
+  for (const skills of skillLists) {
+    if (!Array.isArray(skills)) {
+      continue;
+    }
+
+    const skill = skills.find(
+      (entry): entry is Record<string, unknown> =>
+        isRecord(entry) && readString(entry.skillId) === input.skillId
+    );
+
+    if (skill) {
+      return skill;
+    }
+  }
+
+  return undefined;
 }
 
 function hasDraftViewSkills(sheetSummary: unknown): boolean {
@@ -204,20 +257,33 @@ export function resolveParticipantSkillRollProfile(
     sheetSummary,
     skillId: input.skill.id,
   });
-  const stats = readProfileStats(input.build) ?? readSheetStats(sheetSummary);
+  const snapshotSkillView = readSnapshotSkillView({
+    snapshot: input.build,
+    skillId: input.skill.id,
+  });
+  const stats = readProfileStats(input.build) ?? readSheetStats(sheetSummary) ?? readSnapshotStats(input.build);
   const avgStats =
     readNumber(skillView?.linkedStatAverage) ??
     getLinkedStatAverage({ linkedStats: input.skill.linkedStats, stats }) ??
     0;
+  const snapshotTotalSkill =
+    readNumber(snapshotSkillView?.totalSkill) ??
+    readNumber(snapshotSkillView?.totalSkillLevel) ??
+    readNumber(snapshotSkillView?.targetLevel) ??
+    readNumber(snapshotSkillView?.level);
   const groupXP = readBestGroupXp({ sheetSummary, skill: input.skill }) ?? readNumber(skillView?.groupLevel) ?? 0;
-  const skillXP = readNumber(skillView?.specificSkillLevel) ?? 0;
+  const skillXP =
+    readNumber(skillView?.specificSkillLevel) ??
+    (snapshotTotalSkill == null ? 0 : Math.max(0, snapshotTotalSkill - avgStats));
   const derivedXP = readNumber(skillView?.relationshipGrantedSkillLevel) ?? 0;
-  const totalXP = readNumber(skillView?.effectiveSkillNumber) ?? groupXP + skillXP + derivedXP;
-  const totalSkillLevel = readNumber(skillView?.totalSkill) ?? avgStats + totalXP;
-  const known = Boolean(skillView) && totalXP > 0;
+  const totalXP =
+    readNumber(skillView?.effectiveSkillNumber) ??
+    (snapshotTotalSkill == null ? groupXP + skillXP + derivedXP : Math.max(0, snapshotTotalSkill - avgStats));
+  const totalSkillLevel = readNumber(skillView?.totalSkill) ?? snapshotTotalSkill ?? avgStats + totalXP;
+  const known = (Boolean(skillView) && totalXP > 0) || (snapshotTotalSkill != null && snapshotTotalSkill > 0);
   const sourceQuality: ParticipantSkillRollProfile["sourceQuality"] = skillView
     ? "full"
-    : stats
+    : stats || snapshotSkillView
       ? "snapshot"
       : "missing";
 
@@ -240,7 +306,7 @@ export function resolveParticipantSkillRollProfile(
     warning: known
       ? undefined
       : sourceQuality === "missing"
-        ? `${UNKNOWN_SKILL_WARNING} Linked stats could not be resolved.`
+        ? NO_STATS_WARNING
         : UNKNOWN_SKILL_WARNING,
   };
 }
