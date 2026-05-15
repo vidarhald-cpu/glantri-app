@@ -4,7 +4,8 @@ import type {
   ScenarioEventLog,
   ScenarioLiveState,
   ScenarioParticipant,
-  ScenarioPlayerProjection
+  ScenarioPlayerProjection,
+  ScenarioPlayerVisibleParticipant
 } from "@glantri/domain";
 
 import { sendJson } from "./apiClient";
@@ -130,6 +131,32 @@ export async function updateScenarioLiveStateOnServer(input: {
 
 export async function loadScenarioParticipants(scenarioId: string): Promise<ScenarioParticipant[]> {
   const payload = await sendJson<{ participants: ScenarioParticipant[] }>(
+    `/scenarios/${scenarioId}/participants`,
+    {
+      method: "GET"
+    }
+  );
+
+  return payload.participants;
+}
+
+export async function loadScenarioMyParticipant(
+  scenarioId: string
+): Promise<ScenarioParticipant | null> {
+  const payload = await sendJson<{ participant: ScenarioParticipant | null }>(
+    `/scenarios/${scenarioId}/my-participant`,
+    {
+      method: "GET"
+    }
+  );
+
+  return payload.participant;
+}
+
+export async function loadScenarioVisibleParticipants(
+  scenarioId: string
+): Promise<ScenarioPlayerVisibleParticipant[]> {
+  const payload = await sendJson<{ participants: ScenarioPlayerVisibleParticipant[] }>(
     `/scenarios/${scenarioId}/participants`,
     {
       method: "GET"
