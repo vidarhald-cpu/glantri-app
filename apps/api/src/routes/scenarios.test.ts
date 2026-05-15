@@ -238,10 +238,37 @@ describe("scenarios route contract", () => {
     await app.close();
 
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({ ok: true, removed: true });
+    expect(response.json()).toEqual({ ok: true, removed: true, route: "source-key" });
     expect(mocks.campaignService.removeCampaignRosterEntryBySource).toHaveBeenCalledWith({
       campaignId: "campaign-1",
       sourceId: "character-1",
+      sourceType: "character",
+    });
+  });
+
+  it("accepts UUID character source ids on the source-key removal route", async () => {
+    const sourceId = "23831e49-9060-493d-9eaf-65667c210ce5";
+    mocks.campaignService.getCampaignById.mockResolvedValue({
+      gmUserId: "gm-1",
+      id: "campaign-1",
+      name: "Border Trouble",
+      status: "active",
+    });
+    mocks.campaignService.removeCampaignRosterEntryBySource.mockResolvedValue({ removed: true });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "DELETE",
+      url: `/campaigns/campaign-1/roster-membership/character/${sourceId}`,
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ ok: true, removed: true, route: "source-key" });
+    expect(mocks.campaignService.removeCampaignRosterEntryBySource).toHaveBeenCalledWith({
+      campaignId: "campaign-1",
+      sourceId,
       sourceType: "character",
     });
   });
@@ -264,7 +291,7 @@ describe("scenarios route contract", () => {
     await app.close();
 
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({ ok: true, removed: true });
+    expect(response.json()).toEqual({ ok: true, removed: true, route: "source-key" });
     expect(mocks.campaignService.removeCampaignRosterEntryBySource).toHaveBeenCalledWith({
       campaignId: "campaign-1",
       sourceId: "template-1",
@@ -289,9 +316,10 @@ describe("scenarios route contract", () => {
     await app.close();
 
     expect(response.statusCode).toBe(404);
-    expect(response.json()).toEqual({
+    expect(response.json()).toMatchObject({
       code: "CAMPAIGN_NOT_FOUND",
       error: "Campaign not found.",
+      route: "source-key",
     });
     expect(mocks.campaignService.removeCampaignRosterEntryBySource).not.toHaveBeenCalled();
   });
@@ -321,8 +349,8 @@ describe("scenarios route contract", () => {
 
     expect(firstResponse.statusCode).toBe(200);
     expect(secondResponse.statusCode).toBe(200);
-    expect(firstResponse.json()).toEqual({ ok: true, removed: true });
-    expect(secondResponse.json()).toEqual({ ok: true, removed: false });
+    expect(firstResponse.json()).toEqual({ ok: true, removed: true, route: "source-query" });
+    expect(secondResponse.json()).toEqual({ ok: true, removed: false, route: "source-query" });
     expect(mocks.campaignService.removeCampaignRosterEntryBySource).toHaveBeenCalledTimes(2);
   });
 
@@ -344,11 +372,46 @@ describe("scenarios route contract", () => {
     await app.close();
 
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({ ok: true, removed: false });
+    expect(response.json()).toEqual({ ok: true, removed: false, route: "source-key" });
     expect(mocks.campaignService.removeCampaignRosterEntryBySource).toHaveBeenCalledWith({
       campaignId: "campaign-1",
       sourceId: "missing-character",
       sourceType: "character",
+    });
+  });
+
+  it("returns source-key diagnostics when roster membership removal fails", async () => {
+    mocks.campaignService.getCampaignById.mockResolvedValue({
+      gmUserId: "gm-1",
+      id: "campaign-1",
+      name: "Border Trouble",
+      status: "active",
+    });
+    mocks.campaignService.removeCampaignRosterEntryBySource.mockRejectedValue(
+      new Error("Synthetic delete failure"),
+    );
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "DELETE",
+      url: "/campaigns/campaign-1/roster-membership/character/character-1",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({
+      code: "CAMPAIGN_ROSTER_REMOVE_FAILED",
+      details: {
+        campaignId: "campaign-1",
+        causeMessage: "Synthetic delete failure",
+        causeName: "Error",
+        route: "source-key",
+        sourceId: "character-1",
+        sourceType: "character",
+      },
+      error: "Synthetic delete failure",
+      route: "source-key",
     });
   });
 
@@ -372,6 +435,7 @@ describe("scenarios route contract", () => {
     expect(response.json()).toMatchObject({
       code: "INVALID_ROSTER_SOURCE_TYPE",
       error: "Invalid roster source type. Expected character, reusableEntity, or template.",
+      route: "source-key",
     });
     expect(mocks.campaignService.removeCampaignRosterEntryBySource).not.toHaveBeenCalled();
   });
