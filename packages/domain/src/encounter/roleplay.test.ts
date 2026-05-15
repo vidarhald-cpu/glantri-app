@@ -679,6 +679,38 @@ describe("roleplay encounter state", () => {
     ]);
   });
 
+  it("excludes opposed side results from ranked GM roll results", () => {
+    const opposed = recordRoleplayGmSkillRoll({
+      calculationText: "Stealth 10 + roll 18 = 28",
+      mode: "opposed",
+      numericSubtotal: 28,
+      participantId: "participant-1",
+      roll: { dieResult: 18, openEndedD10s: [], rollD20: 18 },
+      rollSetId: "opposed-set",
+      session: createSession(),
+      side: "actor",
+      silent: false,
+      skillId: "stealth",
+      skillLabel: "Stealth",
+    });
+    const normal = recordRoleplayGmSkillRoll({
+      calculationText: "Bow 12 + roll 10 = 22",
+      difficulty: "medium",
+      numericSubtotal: 22,
+      participantId: "participant-2",
+      roll: { dieResult: 10, openEndedD10s: [], rollD20: 10 },
+      rollSetId: "normal-set",
+      session: opposed,
+      silent: false,
+      skillId: "bow",
+      skillLabel: "Bow",
+    });
+
+    expect(rankRoleplayGmRollResults(normalizeRoleplayState(normal)).map((entry) => entry.skillLabel)).toEqual([
+      "Bow",
+    ]);
+  });
+
   it.each([
     { d10s: [], d20: 14, total: 14 },
     { d10s: [7], d20: 20, total: 27 },

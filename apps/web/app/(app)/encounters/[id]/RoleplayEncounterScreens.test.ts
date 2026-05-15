@@ -151,6 +151,9 @@ describe("RoleplayEncounterScreens", () => {
     expect(source).toContain('entry.mode !== "opposed"');
     expect(source).toContain('pendingRoll.mode !== "opposed"');
     expect(source).toContain("replaceDraftRankedRollResults(draft.id, [])");
+    expect(source).toContain("currentGmRollStackId");
+    expect(source).toContain("serverRankedRollResults");
+    expect(source).toContain("dedupeRankedRoleplayEntries");
     expect(rankedSource).toContain("entry.numericSubtotal == null");
     expect(rankedSource).not.toContain("entry.fumble ? \"FUMBLE\"");
     expect(rankedSource).not.toContain("entry.success");

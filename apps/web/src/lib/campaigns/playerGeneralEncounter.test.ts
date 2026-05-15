@@ -522,15 +522,128 @@ describe("playerGeneralEncounter", () => {
       ],
     });
 
-    expect(view.rankedResults).toEqual([
-      {
-        id: "visible-result",
-        participantName: "Player hero",
-        skillLabel: "Perception",
-        total: 30,
-      },
-    ]);
+    expect(view.rankedResults).toHaveLength(1);
+    expect(view.rankedResults[0]).toMatchObject({
+      id: "visible-result",
+      participantName: "Player hero",
+      skillLabel: "Perception",
+      total: 30,
+    });
     expect(JSON.stringify(view.rankedResults)).not.toContain("historical-visible-result");
+  });
+
+  it("ranks all visible non-opposed current stack results once", () => {
+    const baseEncounter = makeEncounter();
+    const encounter = {
+      ...baseEncounter,
+      participants: [
+        ...(baseEncounter.participants ?? []),
+        {
+          id: "scenario-npc-visible-2",
+          label: "Second visible NPC",
+          participantType: "scenario",
+          scenarioParticipantId: "npc-visible-2",
+        },
+      ],
+      roleplayState: {
+        ...baseEncounter.roleplayState,
+        actionLog: [
+          makeRoleplayActionLogEntry({
+            createdAt: "2026-01-01T00:10:00.000Z",
+            id: "scyrian-result",
+            mode: "difficulty",
+            numericSubtotal: 44,
+            participantId: "scenario-npc-visible-2",
+            rollSetId: "roll-set-current-stack",
+            silent: false,
+            skillId: "perception",
+            skillLabel: "Perception",
+            summary: "GM rolled Perception.",
+            type: "gm_skill_roll",
+          }),
+          makeRoleplayActionLogEntry({
+            createdAt: "2026-01-01T00:09:00.000Z",
+            id: "player-result",
+            mode: "difficulty",
+            numericSubtotal: 25,
+            participantId: "scenario-pc-1",
+            pendingRollId: "player-pending-roll",
+            rollSetId: "roll-set-current-stack",
+            silent: false,
+            skillId: "perception",
+            skillLabel: "Perception",
+            summary: "Player hero rolled Perception.",
+            type: "gm_skill_roll",
+          }),
+          makeRoleplayActionLogEntry({
+            createdAt: "2026-01-01T00:08:59.000Z",
+            id: "player-result-local-duplicate",
+            mode: "difficulty",
+            numericSubtotal: 25,
+            participantId: "scenario-pc-1",
+            pendingRollId: "player-pending-roll",
+            rollSetId: "roll-set-current-stack",
+            silent: false,
+            skillId: "perception",
+            skillLabel: "Perception",
+            summary: "Duplicate player result.",
+            type: "gm_skill_roll",
+          }),
+          makeRoleplayActionLogEntry({
+            createdAt: "2026-01-01T00:08:00.000Z",
+            id: "city-guard-result",
+            mode: "difficulty",
+            numericSubtotal: 12,
+            participantId: "scenario-npc-visible",
+            rollSetId: "roll-set-current-stack",
+            silent: false,
+            skillId: "perception",
+            skillLabel: "Perception",
+            summary: "GM rolled Perception.",
+            type: "gm_skill_roll",
+          }),
+          makeRoleplayActionLogEntry({
+            createdAt: "2026-01-01T00:07:00.000Z",
+            id: "hidden-current-stack-result",
+            mode: "difficulty",
+            numericSubtotal: 99,
+            participantId: "scenario-npc-hidden",
+            rollSetId: "roll-set-current-stack",
+            silent: false,
+            skillId: "perception",
+            skillLabel: "Perception",
+            summary: "GM rolled Perception.",
+            type: "gm_skill_roll",
+          }),
+          ...(baseEncounter.roleplayState?.actionLog ?? []),
+        ],
+        visibility: {
+          "scenario-pc-1": {
+            "scenario-npc-visible": true,
+            "scenario-npc-visible-2": true,
+          },
+        },
+      },
+    } as EncounterSession;
+
+    const view = buildPlayerGeneralEncounterView({
+      currentUserId: "player-1",
+      encounter,
+      scenarioParticipants: [
+        makeScenarioParticipant({ controlledByUserId: "player-1", id: "pc-1", name: "Player hero" }),
+        makeScenarioParticipant({ id: "npc-visible", name: "Visible NPC" }),
+        makeScenarioParticipant({ id: "npc-visible-2", name: "Second visible NPC" }),
+        makeScenarioParticipant({ id: "npc-hidden", name: "Hidden spy" }),
+      ],
+    });
+
+    expect(view.rankedResults.map((entry) => `${entry.participantName}:${entry.total}`)).toEqual([
+      "Second visible NPC:44",
+      "Player hero:25",
+      "Street merchant:12",
+    ]);
+    expect(view.rankedResults.filter((entry) => entry.participantName === "Player hero")).toHaveLength(1);
+    expect(JSON.stringify(view.rankedResults)).not.toContain("Hidden spy");
   });
 
   it("excludes legacy side-specific opposed entries from ranked results by roll set", () => {

@@ -848,7 +848,13 @@ export function rankRoleplayGmRollResults(
   state: RoleplayState
 ): RoleplayActionLogEntry[] {
   return state.actionLog
-    .filter((entry) => entry.type === "gm_skill_roll" && entry.numericSubtotal != null)
+    .filter(
+      (entry) =>
+        entry.type === "gm_skill_roll" &&
+        entry.mode !== "opposed" &&
+        !entry.side &&
+        entry.numericSubtotal != null
+    )
     .sort(
       (left, right) =>
         Number(Boolean(left.fumble)) - Number(Boolean(right.fumble)) ||

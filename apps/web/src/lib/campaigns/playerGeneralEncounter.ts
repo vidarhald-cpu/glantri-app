@@ -55,7 +55,11 @@ export interface PlayerGeneralEncounterRollResult {
 
 export interface PlayerGeneralEncounterRankedResult {
   id: string;
+  participantId?: string;
   participantName: string;
+  pendingRollId?: string;
+  rollSetId?: string;
+  skillId?: string;
   skillLabel: string;
   total: number;
 }
@@ -294,6 +298,23 @@ function isPlayerVisibleRankedResult(input: {
   );
 }
 
+function getPlayerRankedResultKey(entry: RoleplayActionLogEntry): string {
+  return entry.pendingRollId ??
+    (entry.rollSetId && entry.participantId && entry.skillId
+      ? `${entry.rollSetId}:${entry.participantId}:${entry.skillId}`
+      : entry.id);
+}
+
+function dedupePlayerRankedEntries(entries: RoleplayActionLogEntry[]): RoleplayActionLogEntry[] {
+  const byKey = new Map<string, RoleplayActionLogEntry>();
+
+  for (const entry of entries) {
+    byKey.set(getPlayerRankedResultKey(entry), entry);
+  }
+
+  return [...byKey.values()];
+}
+
 function buildPlayerCharacterLog(input: {
   controlledParticipantIds: Set<string>;
   entries: RoleplayActionLogEntry[];
@@ -466,7 +487,7 @@ export function buildPlayerGeneralEncounterView(input: {
   )[0];
   const currentRollRoundId = latestVisibleRankedEntry?.rollSetId;
   const currentRollRoundResultId = currentRollRoundId ? undefined : latestVisibleRankedEntry?.id;
-  const rankedResults = visibleRankedEntries
+  const rankedResults = dedupePlayerRankedEntries(visibleRankedEntries)
     .filter((entry) =>
       currentRollRoundId
         ? entry.rollSetId === currentRollRoundId
@@ -486,6 +507,7 @@ export function buildPlayerGeneralEncounterView(input: {
 
       return {
         id: entry.id,
+        participantId: participant?.id ?? entry.participantId,
         participantName: participant
           ? getPlayerSafeParticipantName({
               fallbackLabel: participant.label,
@@ -493,6 +515,9 @@ export function buildPlayerGeneralEncounterView(input: {
               state,
             })
           : "Participant",
+        pendingRollId: entry.pendingRollId,
+        rollSetId: entry.rollSetId,
+        skillId: entry.skillId,
         skillLabel: entry.skillLabel ?? "Skill",
         total: entry.numericSubtotal ?? entry.finalTotal ?? 0,
       };
