@@ -6,7 +6,6 @@ type State = ReturnType<typeof useChargenWizardState>;
 interface ProfessionStepProps {
   activeProfessionPreviewId: State["activeProfessionPreviewId"];
   availableProfessions: State["availableProfessions"];
-  availableProfessionCards: State["availableProfessionCards"];
   handleProfessionChange: State["handleProfessionChange"];
   professionFamilyFilter: State["professionFamilyFilter"];
   professionFamilyOptions: State["professionFamilyOptions"];
@@ -26,7 +25,6 @@ interface ProfessionStepProps {
 export function ProfessionStep({
   activeProfessionPreviewId,
   availableProfessions,
-  availableProfessionCards,
   handleProfessionChange,
   professionFamilyFilter,
   professionFamilyOptions,

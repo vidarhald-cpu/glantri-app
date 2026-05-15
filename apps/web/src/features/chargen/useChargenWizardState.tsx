@@ -79,7 +79,6 @@ import {
   formatSkillStats,
   getBadgeStyle,
   getGroupSlotCandidateSkillIds,
-  getGroupScopedSkillAllocationMetrics,
   getOrdinarySkillNextCost,
   getRowActionFeedbackKey,
   getRuleStatusColor,

@@ -89,7 +89,6 @@ export default function ChargenWizard() {
           <ProfessionStep
             activeProfessionPreviewId={state.activeProfessionPreviewId}
             availableProfessions={state.availableProfessions}
-            availableProfessionCards={state.availableProfessionCards}
             handleProfessionChange={state.handleProfessionChange}
             professionFamilyFilter={state.professionFamilyFilter}
             professionFamilyOptions={state.professionFamilyOptions}

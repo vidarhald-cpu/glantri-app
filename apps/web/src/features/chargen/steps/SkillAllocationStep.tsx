@@ -41,7 +41,6 @@ export function SkillAllocationStep({ state }: SkillAllocationStepProps) {
     motherTongueSummary,
     otherSkillFilterActive,
     otherSkillTypeOptions,
-    playerFacingSkillBucketDefinitions,
     progression,
     renderSkillRowsTable,
     rowActionFeedback,
