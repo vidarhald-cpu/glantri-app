@@ -387,7 +387,7 @@ describe("resolveParticipantSkillRollProfile", () => {
     expect(profile.warning).toContain("Skill not known");
   });
 
-  it("uses generated temporary actor target levels for known skills", () => {
+  it("adds generated temporary actor skill ranks to linked stat average for known skills", () => {
     const profile = resolveParticipantSkillRollProfile({
       build: {
         actorClass: "generated_npc",
@@ -416,11 +416,78 @@ describe("resolveParticipantSkillRollProfile", () => {
     expect(profile).toMatchObject({
       avgStats: 15,
       known: true,
-      rollBaseValue: 18,
+      rollBaseValue: 33,
       sourceQuality: "snapshot",
-      totalSkillLevel: 18,
+      skillXP: 18,
+      totalSkillLevel: 33,
+      totalXP: 18,
       unknownSkillPenalty: 0,
       warning: undefined,
+    });
+  });
+
+  it("uses explicit generated temporary actor final skill totals when the source stores totals", () => {
+    const profile = resolveParticipantSkillRollProfile({
+      build: {
+        actorClass: "generated_npc",
+        generatedHumanoidNpc: {
+          skills: [{ skillId: "perception", skillName: "Perception", totalSkill: 18 }],
+          stats: {
+            final: {
+              cha: 10,
+              com: 10,
+              con: 10,
+              dex: 11,
+              health: 10,
+              int: 14,
+              lck: 10,
+              pow: 16,
+              siz: 10,
+              str: 10,
+              will: 10,
+            },
+          },
+        },
+      },
+      skill: perceptionSkill,
+    });
+
+    expect(profile).toMatchObject({
+      avgStats: 15,
+      known: true,
+      rollBaseValue: 18,
+      skillXP: 3,
+      totalSkillLevel: 18,
+      totalXP: 3,
+      warning: undefined,
+    });
+  });
+
+  it("normalizes generated temporary actor stat keys before calculating linked stat averages", () => {
+    const profile = resolveParticipantSkillRollProfile({
+      build: {
+        actorClass: "generated_npc",
+        generatedHumanoidNpc: {
+          skills: [{ skillId: "perception", skillName: "Perception", targetLevel: 8 }],
+          stats: {
+            final: {
+              DEX: 11,
+              INT: 14,
+              POW: 16,
+              STR: 12,
+            },
+          },
+        },
+      },
+      skill: perceptionSkill,
+    });
+
+    expect(profile).toMatchObject({
+      avgStats: 15,
+      known: true,
+      rollBaseValue: 23,
+      skillXP: 8,
+      totalSkillLevel: 23,
     });
   });
 
@@ -455,6 +522,30 @@ describe("resolveParticipantSkillRollProfile", () => {
       rollBaseValue: 14,
       sourceQuality: "snapshot",
       unknownSkillPenalty: -3,
+    });
+  });
+
+  it("warns when a generated temporary actor has skill ranks but no stats", () => {
+    const profile = resolveParticipantSkillRollProfile({
+      build: {
+        actorClass: "generated_npc",
+        generatedHumanoidNpc: {
+          skills: [{ skillId: "perception", skillName: "Perception", targetLevel: 8 }],
+        },
+      },
+      skill: perceptionSkill,
+    });
+
+    expect(profile).toMatchObject({
+      avgStats: 0,
+      known: true,
+      rollBaseValue: 8,
+      sourceQuality: "snapshot",
+      skillXP: 8,
+      totalSkillLevel: 8,
+      totalXP: 8,
+      unknownSkillPenalty: 0,
+      warning: "Stats unavailable; using stored skill value only.",
     });
   });
 

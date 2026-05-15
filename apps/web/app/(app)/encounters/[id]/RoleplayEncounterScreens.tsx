@@ -223,11 +223,12 @@ function readSystemSkillOptions(input: {
         label: skill.name,
         profile,
         value: profile.rollBaseValue,
-        warning: profile.known
-          ? undefined
-          : profile.sourceQuality === "missing"
-            ? "No stats available for this actor."
-            : "Skill not known (-3 default). GM may adjust or forbid.",
+        warning: profile.warning
+          ? profile.warning ===
+              "Skill not known: using linked stat average with -3 default modifier. GM may adjust or forbid."
+            ? "Skill not known (-3 default). GM may adjust or forbid."
+            : profile.warning
+          : undefined,
       };
     })
     .sort((left, right) => left.label.localeCompare(right.label));
