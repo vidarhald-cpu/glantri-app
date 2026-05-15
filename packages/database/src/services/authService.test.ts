@@ -5,7 +5,7 @@ import { AuthService } from "./authService";
 
 function createRepositoryStub(options?: {
   anyPrivilegedUserExists?: boolean;
-  replacedUser?: {
+  bootstrapResult?: {
     displayName?: string;
     email: string;
     id: string;
@@ -13,11 +13,18 @@ function createRepositoryStub(options?: {
   } | null;
 }) {
   const calls = {
-    replaceUserRoles: [] as Array<{ roles: Array<"admin" | "game_master" | "player">; userId: string }>,
+    atomicBootstrapGameMaster: [] as string[],
   };
 
   const repository: AuthRepository = {
     anyPrivilegedUserExists: async () => options?.anyPrivilegedUserExists ?? false,
+    atomicBootstrapGameMaster: async (userId) => {
+      calls.atomicBootstrapGameMaster.push(userId);
+      if (options && "bootstrapResult" in options) {
+        return options.bootstrapResult ?? null;
+      }
+      return { id: userId, email: "gm@example.com", roles: ["game_master"] };
+    },
     createSession: async () => {
       throw new Error("not implemented");
     },
@@ -42,13 +49,8 @@ function createRepositoryStub(options?: {
     listUsers: async () => {
       throw new Error("not implemented");
     },
-    replaceUserRoles: async (userId, roles) => {
-      calls.replaceUserRoles.push({ roles, userId });
-      return options?.replacedUser ?? {
-        id: userId,
-        email: "gm@example.com",
-        roles: ["game_master"],
-      };
+    replaceUserRoles: async () => {
+      throw new Error("not implemented");
     },
   };
 
@@ -66,24 +68,21 @@ describe("AuthService bootstrap GM", () => {
     await expect(bootstrapClosed.canBootstrapGameMaster()).resolves.toBe(false);
   });
 
-  it("promotes the current user to game_master during bootstrap", async () => {
+  it("delegates bootstrap to the repository and returns the promoted user", async () => {
     const { calls, repository } = createRepositoryStub();
     const service = new AuthService(repository);
 
     const user = await service.bootstrapGameMasterForUser("user-1");
 
-    expect(calls.replaceUserRoles).toEqual([{ roles: ["game_master"], userId: "user-1" }]);
-    expect(user).toMatchObject({
-      id: "user-1",
-      roles: ["game_master"],
-    });
+    expect(calls.atomicBootstrapGameMaster).toEqual(["user-1"]);
+    expect(user).toMatchObject({ id: "user-1", roles: ["game_master"] });
   });
 
-  it("blocks bootstrap once a privileged user already exists", async () => {
-    const { calls, repository } = createRepositoryStub({ anyPrivilegedUserExists: true });
+  it("returns null when the repository reports bootstrap is no longer available", async () => {
+    const { calls, repository } = createRepositoryStub({ bootstrapResult: null });
     const service = new AuthService(repository);
 
     await expect(service.bootstrapGameMasterForUser("user-1")).resolves.toBeNull();
-    expect(calls.replaceUserRoles).toEqual([]);
+    expect(calls.atomicBootstrapGameMaster).toEqual(["user-1"]);
   });
 });
