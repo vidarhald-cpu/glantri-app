@@ -354,6 +354,7 @@ describe("playerGeneralEncounter", () => {
       ...baseEncounter,
       roleplayState: {
         ...baseEncounter.roleplayState,
+        currentRankedRollStackId: "roll-set-current-stack",
         actionLog: [
           makeRoleplayActionLogEntry({
             createdAt: "2026-01-01T00:07:00.000Z",
@@ -442,6 +443,7 @@ describe("playerGeneralEncounter", () => {
       ...baseEncounter,
       roleplayState: {
         ...baseEncounter.roleplayState,
+        currentRankedRollStackId: "roll-set-current-stack",
         actionLog: [
           makeRoleplayActionLogEntry({
             createdAt: "2026-01-01T00:07:00.000Z",
@@ -547,6 +549,7 @@ describe("playerGeneralEncounter", () => {
       ],
       roleplayState: {
         ...baseEncounter.roleplayState,
+        currentRankedRollStackId: "roll-set-current-stack",
         actionLog: [
           makeRoleplayActionLogEntry({
             createdAt: "2026-01-01T00:10:00.000Z",
@@ -683,6 +686,42 @@ describe("playerGeneralEncounter", () => {
     expect(view.characterLog.map((entry) => entry.id)).toContain("old-stack-result");
   });
 
+  it("does not resurrect action-log-only ranked results when no active stack is known", () => {
+    const encounter = makeEncounter();
+
+    encounter.roleplayState = {
+      actionLog: [
+        makeRoleplayActionLogEntry({
+          createdAt: "2026-01-01T00:10:00.000Z",
+          id: "unscoped-old-result",
+          mode: "difficulty",
+          numericSubtotal: 31,
+          participantId: "scenario-pc-1",
+          silent: false,
+          skillId: "acrobatics",
+          skillLabel: "Acrobatics",
+          summary: "Player hero rolled Acrobatics.",
+          type: "gm_skill_roll",
+        }),
+      ],
+      gmMessage: "",
+      participantDescriptions: {},
+      pendingSkillRolls: [],
+      visibility: {},
+    };
+
+    const view = buildPlayerGeneralEncounterView({
+      currentUserId: "player-1",
+      encounter,
+      scenarioParticipants: [
+        makeScenarioParticipant({ controlledByUserId: "player-1", id: "pc-1", name: "Player hero" }),
+      ],
+    });
+
+    expect(view.rankedResults).toEqual([]);
+    expect(view.characterLog.map((entry) => entry.id)).toContain("unscoped-old-result");
+  });
+
   it("shows only new ranked results after GM clears and a new stack rolls", () => {
     const baseEncounter = makeEncounter();
     const encounter = {
@@ -740,6 +779,7 @@ describe("playerGeneralEncounter", () => {
       ...baseEncounter,
       roleplayState: {
         ...baseEncounter.roleplayState,
+        currentRankedRollStackId: "roll-set-current-stack",
         actionLog: [
           makeRoleplayActionLogEntry({
             createdAt: "2026-01-01T00:10:00.000Z",

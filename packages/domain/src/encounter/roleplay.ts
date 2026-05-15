@@ -695,6 +695,7 @@ export function assignRoleplaySkillRoll(input: {
         },
         ...state.actionLog,
       ],
+      currentRankedRollStackId: mode === "opposed" ? state.currentRankedRollStackId : rollSetId,
       pendingSkillRolls: [
         {
           assignedAt,
@@ -855,6 +856,8 @@ export function recordRoleplayGmSkillRoll(input: {
         },
         ...state.actionLog,
       ],
+      currentRankedRollStackId:
+        mode === "opposed" || !input.rollSetId ? state.currentRankedRollStackId : input.rollSetId,
     },
   });
 }

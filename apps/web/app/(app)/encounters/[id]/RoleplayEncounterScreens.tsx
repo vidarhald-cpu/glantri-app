@@ -1631,6 +1631,18 @@ export function PlayerRoleplayingEncounterScreen({
     }
   }, [encounter?.roleplayState?.gmMessage]);
 
+  useEffect(() => {
+    const activeStackId = encounter?.roleplayState?.currentRankedRollStackId;
+
+    if (!activeStackId) {
+      return;
+    }
+
+    setLocalRankedResults((currentResults) =>
+      currentResults.filter((entry) => entry.rollSetId === activeStackId)
+    );
+  }, [encounter?.roleplayState?.currentRankedRollStackId]);
+
   if (loading) {
     return <section>Loading roleplaying encounter...</section>;
   }
@@ -1682,7 +1694,11 @@ export function PlayerRoleplayingEncounterScreen({
   const readModelRankedResults = playerView.rankedResults.filter(
     (entry) => !dismissedRankedResultIds.has(entry.id)
   );
-  const visibleRankedResults = mergePlayerVisibleResults(localRankedResults, readModelRankedResults);
+  const activeRankedStackId = playerView.currentRollRoundId;
+  const localVisibleRankedResults = activeRankedStackId
+    ? localRankedResults.filter((entry) => entry.rollSetId === activeRankedStackId)
+    : localRankedResults;
+  const visibleRankedResults = mergePlayerVisibleResults(localVisibleRankedResults, readModelRankedResults);
   const unresolvedAssignedRolls = visibleAssignedRolls.filter((roll) => !roll.result);
   const controlledParticipant = effectivePlayerEncounterParticipants.find(
     (participant) => participant.id === playerView.controlledParticipantIds[0]

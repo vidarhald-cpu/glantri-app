@@ -511,11 +511,8 @@ export function buildPlayerGeneralEncounterView(input: {
       })
     );
   });
-  const latestVisibleRankedEntry = [...visibleRankedEntries].sort((left, right) =>
-    right.createdAt.localeCompare(left.createdAt)
-  )[0];
-  const currentRollRoundId = state.currentRankedRollStackId ?? latestVisibleRankedEntry?.rollSetId;
-  const currentRollRoundResultId = currentRollRoundId ? undefined : latestVisibleRankedEntry?.id;
+  const currentRollRoundId = state.currentRankedRollStackId ?? latestPendingRollSetId;
+  const currentRollRoundResultId = undefined;
   const rankedResults = dedupePlayerRankedEntries(visibleRankedEntries)
     .filter((entry) =>
       currentRollRoundId

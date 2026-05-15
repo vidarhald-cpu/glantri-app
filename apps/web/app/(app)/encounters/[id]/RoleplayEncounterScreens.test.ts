@@ -156,6 +156,9 @@ describe("RoleplayEncounterScreens", () => {
     expect(source).toContain("replaceDraftRankedRollResults(draft.id, [])");
     expect(source).toContain("currentGmRollStackId");
     expect(source).toContain("currentRankedRollStackId");
+    expect(source).toContain("localVisibleRankedResults");
+    expect(source).toContain("entry.rollSetId === activeRankedStackId");
+    expect(source).toContain("currentResults.filter((entry) => entry.rollSetId === activeStackId)");
     expect(source).toContain("serverRankedRollResults");
     expect(source).toContain("dedupeRankedRoleplayEntries");
     expect(rankedSource).toContain("entry.numericSubtotal == null");
