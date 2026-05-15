@@ -16,6 +16,9 @@ describe("EncounterDetail table rendering", () => {
     expect(source).toContain("GmRoleplayingEncounterScreen");
     expect(source).toContain('encounter.kind === "roleplay"');
     expect(source).toContain("onPersist={persistEncounter}");
+    expect(source).toContain('encounter?.kind !== "roleplay"');
+    expect(source).toContain("window.setInterval");
+    expect(source).toContain("loadEncounterById(id)");
   });
 
   it("uses stable unique ids for repeated GM encounter header labels", () => {

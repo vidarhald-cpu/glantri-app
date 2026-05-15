@@ -480,6 +480,7 @@ export default function ScenarioDetailPageContent({
       encounterId: input.encounter.id,
       session: {
         ...input.encounter,
+        participantMembershipMode: "explicit",
         participants: input.participants,
         updatedAt: new Date().toISOString()
       }
@@ -488,7 +489,13 @@ export default function ScenarioDetailPageContent({
     setFeedback(input.feedbackMessage);
     setEncounters((current) =>
       current.map((entry) =>
-        entry.id === input.encounter.id ? { ...input.encounter, participants: input.participants } : entry
+        entry.id === input.encounter.id
+          ? {
+              ...input.encounter,
+              participantMembershipMode: "explicit",
+              participants: input.participants,
+            }
+          : entry
       )
     );
     await refreshScenario();

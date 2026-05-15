@@ -69,8 +69,9 @@ export default function CampaignsPageContent() {
       <div>
         <h1 style={{ marginBottom: "0.5rem" }}>Campaigns</h1>
         <p style={{ margin: 0 }}>
-          Basic GM campaign management for scenarios, campaign NPC rosters, and assets. Reusable
-          templates now live in the shared Templates library.
+          {canManageCampaigns
+            ? "Basic GM campaign management for scenarios, campaign NPC rosters, and assets. Reusable templates now live in the shared Templates library."
+            : "Choose an available campaign to continue your story."}
         </p>
       </div>
 
@@ -131,19 +132,32 @@ export default function CampaignsPageContent() {
               }}
             >
               <strong>{campaign.name}</strong>
-              <div>Status: {campaign.status}</div>
               <div>{campaign.description || "No description yet."}</div>
-              <div>
-                Player self-join: {campaign.settings.allowPlayerSelfJoin ? "Enabled" : "Disabled"}
-              </div>
-              {!canManageCampaigns ? (
-                <div>
-                  Accessible scenarios:{" "}
-                  {scenarios.length > 0
-                    ? scenarios.map((scenario) => scenario.name).join(", ")
-                    : "None"}
+              {canManageCampaigns ? (
+                <>
+                  <div>Status: {campaign.status}</div>
+                  <div>
+                    Player self-join: {campaign.settings.allowPlayerSelfJoin ? "Enabled" : "Disabled"}
+                  </div>
+                </>
+              ) : scenarios.length > 0 ? (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+                  {scenarios.map((scenario) => (
+                    <Link
+                      key={scenario.id}
+                      href={buildCampaignWorkspaceHref({
+                        campaignId: campaign.id,
+                        scenarioId: scenario.id,
+                        tab: "scenario",
+                      })}
+                    >
+                      {scenario.name}
+                    </Link>
+                  ))}
                 </div>
-              ) : null}
+              ) : (
+                <div>No active scenario is currently available.</div>
+              )}
               <div>
                 <Link
                   href={buildCampaignWorkspaceHref({

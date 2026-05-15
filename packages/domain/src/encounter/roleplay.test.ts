@@ -215,7 +215,7 @@ describe("roleplay encounter state", () => {
 
     expect(normalizeRoleplayState(rolled).actionLog[0]).toMatchObject({
       achievedSuccessLevelLabel: "Medium -",
-      calculationText: "Perception 12 + roll 12 + Other -2 = 22 → Medium -, modifier +0 → NOT SUCCESSFUL vs Hard",
+      calculationText: "Perception 12 + Raw modifiers -2 => -2 + roll 12 = 22 → Medium -, modifier +0 → NOT SUCCESSFUL vs Hard",
       numericSubtotal: 22,
       otherMod: -2,
       roll: 12,
@@ -254,12 +254,15 @@ describe("roleplay encounter state", () => {
       opponentSilent: true,
       opponentSkillId: "perception",
       opponentSkillValue: 12,
+      side: "actor",
       supportSkillId: "streetwise",
     });
     expect(state.actionLog[0]).toMatchObject({
       mode: "opposed",
       opponentSilent: true,
       opponentSkillLabel: "Perception",
+      pendingRollId: state.pendingSkillRolls[0]?.id,
+      side: "actor",
       supportSkillLabel: "Streetwise",
       type: "skill_roll_assigned",
     });
@@ -316,9 +319,12 @@ describe("roleplay encounter state", () => {
       opponentSilent: true,
       opponentSkillId: "perception",
       opponentSkillLabel: "Perception",
+      pendingRollId: normalizeRoleplayState(assigned).pendingSkillRolls[0]?.id,
       participantId: "actor-1",
       roll: { dieResult: 12, openEndedD10s: [], rollD20: 12 },
+      rollSetId: normalizeRoleplayState(assigned).pendingSkillRolls[0]?.rollSetId,
       session: assigned,
+      side: "actor",
       silent: false,
       skillId: "stealth",
       skillLabel: "Stealth",
@@ -327,7 +333,9 @@ describe("roleplay encounter state", () => {
     expect(normalizeRoleplayState(rolled).actionLog[0]).toMatchObject({
       mode: "opposed",
       opponentSilent: true,
+      pendingRollId: normalizeRoleplayState(assigned).pendingSkillRolls[0]?.id,
       silent: false,
+      side: "actor",
       type: "gm_skill_roll",
     });
   });
@@ -569,20 +577,28 @@ describe("roleplay encounter state", () => {
     expect(
       buildRoleplayCalculationPreview({
         difficulty: "medium",
+        modifierPipeline: {
+          appliedModifiers: [{ bucket: "other", label: "Other", source: "manual", value: -2 }],
+          percentageModifier: -4,
+          rawModifierSum: -2,
+          warnings: [],
+        },
         otherMod: -2,
         roll: { dieResult: 14, openEndedD10s: [], rollD20: 14 },
         skillLabel: "Perception",
         skillValue: 20,
       })
     ).toMatchObject({
-      achievedSuccessLevel: expect.objectContaining({ id: "medium_plus", resultModifier: 1 }),
-      compactCalculationText: "Perception 20 + [ -2 ] -2 + 14 = 32 · Medium + · SUCCESS vs Medium",
-      calculationText: "Perception 20 + roll 14 + Other -2 = 32 → Medium +, modifier +1 → SUCCESS vs Medium",
-      formulaText: "Perception 20 + [ -2 ] -2 + 14 = 32",
+      achievedSuccessLevel: expect.objectContaining({ id: "medium", resultModifier: 0 }),
+      compactCalculationText: "Perception 20 + [ -2 ] -4 + 14 = 30 · Medium · SUCCESS vs Medium",
+      calculationText: "Perception 20 + Raw modifiers -2 => -4 + roll 14 = 30 → Medium, modifier +0 → SUCCESS vs Medium",
+      formulaText: "Perception 20 + [ -2 ] -4 + 14 = 30",
       numericModifierParts: [-2],
       numericModifierSum: -2,
-      numericSubtotal: 32,
-      resultText: "Medium + · modifier +1 · SUCCESS vs Medium",
+      numericSubtotal: 30,
+      percentageModifier: -4,
+      rawModifierSum: -2,
+      resultText: "Medium · modifier +0 · SUCCESS vs Medium",
       success: true,
     });
 

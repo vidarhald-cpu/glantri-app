@@ -1,6 +1,80 @@
 import { describe, expect, it } from "vitest";
 
+import type { EncounterSession, Scenario, ScenarioParticipant } from "@glantri/domain";
+
 import { buildCampaignWorkspaceTabs, resolveCampaignWorkspaceState } from "./workspace";
+
+function scenario(input: Pick<Scenario, "id" | "name">): Scenario {
+  return {
+    campaignId: "camp-1",
+    createdAt: "2026-04-23T00:00:00.000Z",
+    description: "",
+    id: input.id,
+    kind: "mixed",
+    name: input.name,
+    status: "draft",
+    updatedAt: "2026-04-23T00:00:00.000Z",
+  };
+}
+
+function encounter(input: {
+  id: string;
+  participantMembershipMode?: EncounterSession["participantMembershipMode"];
+  scenarioId: string;
+  status?: EncounterSession["status"];
+  title?: string;
+  scenarioParticipantId?: string;
+}): EncounterSession {
+  return {
+    actionLog: [],
+    campaignId: "camp-1",
+    createdAt: "2026-04-23T00:00:00.000Z",
+    currentRound: 1,
+    currentTurnIndex: 0,
+    declarationsLocked: false,
+    id: input.id,
+    kind: "roleplay",
+    participantMembershipMode: input.participantMembershipMode,
+    participants: input.scenarioParticipantId
+      ? [
+          {
+            id: `encounter-participant-${input.scenarioParticipantId}`,
+            initiative: 0,
+            label: "The Gladiator",
+            order: 0,
+            participantType: "scenario",
+            scenarioParticipantId: input.scenarioParticipantId,
+          } as EncounterSession["participants"][number],
+        ]
+      : [],
+    scenarioId: input.scenarioId,
+    status: input.status ?? "planned",
+    title: input.title ?? "Market shadows",
+    turnOrderMode: "manual",
+    updatedAt: "2026-04-23T00:00:00.000Z",
+  };
+}
+
+function scenarioParticipant(input: {
+  controlledByUserId?: string;
+  id: string;
+  isActive?: boolean;
+  name?: string;
+  scenarioId: string;
+}): ScenarioParticipant {
+  return {
+    controlledByUserId: input.controlledByUserId,
+    id: input.id,
+    isActive: input.isActive ?? true,
+    joinSource: "gm_added",
+    role: "player_character",
+    scenarioId: input.scenarioId,
+    snapshot: {
+      displayName: input.name ?? input.id,
+    },
+    sourceType: "character",
+  } as ScenarioParticipant;
+}
 
 describe("campaign workspace", () => {
   it("keeps the intended left-to-right tab order and hides the GM tab for players", () => {
@@ -17,23 +91,15 @@ describe("campaign workspace", () => {
     const state = resolveCampaignWorkspaceState({
       activeCampaignId: "camp-1",
       canAccessGmEncounter: true,
+      currentUserId: "player-1",
       encounters: [
-        {
-          actionLog: [],
-          campaignId: "camp-1",
-          createdAt: "2026-04-23T00:00:00.000Z",
-          currentRound: 1,
-          currentTurnIndex: 0,
-          declarationsLocked: false,
+        encounter({
           id: "enc-1",
-          kind: "combat",
-          participants: [],
           scenarioId: "scn-1",
+          scenarioParticipantId: "participant-1",
           status: "setup",
           title: "Gate skirmish",
-          turnOrderMode: "manual",
-          updatedAt: "2026-04-23T00:00:00.000Z"
-        }
+        }),
       ],
       requestedEncounterId: "enc-1",
       requestedScenarioId: "missing-scenario",
@@ -111,6 +177,13 @@ describe("campaign workspace", () => {
       requestedEncounterId: null,
       requestedScenarioId: null,
       requestedTab: null,
+      scenarioParticipants: [
+        scenarioParticipant({
+          controlledByUserId: "player-1",
+          id: "participant-1",
+          scenarioId: "scn-1",
+        }),
+      ],
       scenarios: [
         {
           campaignId: "camp-1",
@@ -134,23 +207,15 @@ describe("campaign workspace", () => {
     const state = resolveCampaignWorkspaceState({
       activeCampaignId: "camp-1",
       canAccessGmEncounter: false,
+      currentUserId: "player-1",
       encounters: [
-        {
-          actionLog: [],
-          campaignId: "camp-1",
-          createdAt: "2026-04-23T00:00:00.000Z",
-          currentRound: 1,
-          currentTurnIndex: 0,
-          declarationsLocked: false,
+        encounter({
           id: "enc-1",
-          kind: "combat",
-          participants: [],
           scenarioId: "scn-1",
+          scenarioParticipantId: "participant-1",
           status: "setup",
           title: "Gate skirmish",
-          turnOrderMode: "manual",
-          updatedAt: "2026-04-23T00:00:00.000Z"
-        }
+        }),
       ],
       rememberedEncounterId: "enc-1",
       rememberedScenarioId: "scn-1",
@@ -158,18 +223,14 @@ describe("campaign workspace", () => {
       requestedEncounterId: null,
       requestedScenarioId: null,
       requestedTab: null,
-      scenarios: [
-        {
-          campaignId: "camp-1",
-          createdAt: "2026-04-23T00:00:00.000Z",
-          description: "",
-          id: "scn-1",
-          kind: "mixed",
-          name: "Session one",
-          status: "draft",
-          updatedAt: "2026-04-23T00:00:00.000Z"
-        }
-      ]
+      scenarioParticipants: [
+        scenarioParticipant({
+          controlledByUserId: "player-1",
+          id: "participant-1",
+          scenarioId: "scn-1",
+        }),
+      ],
+      scenarios: [scenario({ id: "scn-1", name: "Session one" })]
     });
 
     expect(state.activeScenarioId).toBe("scn-1");
@@ -205,5 +266,274 @@ describe("campaign workspace", () => {
     expect(state.activeScenarioId).toBe("scn-1");
     expect(state.activeEncounterId).toBeUndefined();
     expect(state.activeTab).toBe("scenario");
+  });
+
+  it("auto-selects the only accessible player scenario when opening the scenario tab without an id", () => {
+    const state = resolveCampaignWorkspaceState({
+      activeCampaignId: "camp-1",
+      canAccessGmEncounter: false,
+      encounters: [],
+      requestedEncounterId: null,
+      requestedScenarioId: null,
+      requestedTab: "scenario",
+      scenarios: [scenario({ id: "scn-1", name: "Session one" })],
+    });
+
+    expect(state.activeScenarioId).toBe("scn-1");
+    expect(state.activeTab).toBe("scenario");
+  });
+
+  it("resolves the first assigned player encounter when opening player encounter without ids", () => {
+    const state = resolveCampaignWorkspaceState({
+      activeCampaignId: "camp-1",
+      canAccessGmEncounter: false,
+      currentUserId: "player-1",
+      encounters: [
+        encounter({
+          id: "enc-paused",
+          scenarioId: "scn-1",
+          scenarioParticipantId: "participant-1",
+          status: "paused",
+          title: "Later scene",
+        }),
+        encounter({
+          id: "enc-active",
+          scenarioId: "scn-1",
+          scenarioParticipantId: "participant-1",
+          status: "active",
+          title: "Now scene",
+        }),
+      ],
+      requestedEncounterId: null,
+      requestedScenarioId: null,
+      requestedTab: "player-encounter",
+      scenarioParticipants: [
+        scenarioParticipant({
+          controlledByUserId: "player-1",
+          id: "participant-1",
+          scenarioId: "scn-1",
+        }),
+      ],
+      scenarios: [scenario({ id: "scn-1", name: "Session one" })],
+    });
+
+    expect(state.activeScenarioId).toBe("scn-1");
+    expect(state.activeEncounterId).toBe("enc-active");
+    expect(state.activeTab).toBe("player-encounter");
+  });
+
+  it("uses active scenario participants as the default player access list for empty encounters", () => {
+    const state = resolveCampaignWorkspaceState({
+      activeCampaignId: "camp-1",
+      canAccessGmEncounter: false,
+      currentUserId: "player-1",
+      encounters: [
+        encounter({
+          id: "enc-empty",
+          scenarioId: "scn-1",
+          status: "active",
+          title: "Default scene",
+        }),
+      ],
+      requestedEncounterId: null,
+      requestedScenarioId: "scn-1",
+      requestedTab: "player-encounter",
+      scenarioParticipants: [
+        scenarioParticipant({
+          controlledByUserId: "player-1",
+          id: "participant-1",
+          scenarioId: "scn-1",
+        }),
+      ],
+      scenarios: [scenario({ id: "scn-1", name: "Session one" })],
+    });
+
+    expect(state.activeScenarioId).toBe("scn-1");
+    expect(state.activeEncounterId).toBe("enc-empty");
+    expect(state.activeTab).toBe("player-encounter");
+  });
+
+  it("does not use inactive scenario participants for empty encounter player access", () => {
+    const state = resolveCampaignWorkspaceState({
+      activeCampaignId: "camp-1",
+      canAccessGmEncounter: false,
+      currentUserId: "player-1",
+      encounters: [
+        encounter({
+          id: "enc-empty",
+          scenarioId: "scn-1",
+          status: "active",
+          title: "Default scene",
+        }),
+      ],
+      requestedEncounterId: null,
+      requestedScenarioId: "scn-1",
+      requestedTab: "player-encounter",
+      scenarioParticipants: [
+        scenarioParticipant({
+          controlledByUserId: "player-1",
+          id: "participant-1",
+          isActive: false,
+          scenarioId: "scn-1",
+        }),
+      ],
+      scenarios: [scenario({ id: "scn-1", name: "Session one" })],
+    });
+
+    expect(state.activeScenarioId).toBe("scn-1");
+    expect(state.activeEncounterId).toBeUndefined();
+    expect(state.activeTab).toBe("player-encounter");
+  });
+
+  it("does not fall back when explicit membership mode has an empty list", () => {
+    const state = resolveCampaignWorkspaceState({
+      activeCampaignId: "camp-1",
+      canAccessGmEncounter: false,
+      currentUserId: "player-1",
+      encounters: [
+        encounter({
+          id: "enc-explicit-empty",
+          participantMembershipMode: "explicit",
+          scenarioId: "scn-1",
+          status: "active",
+        }),
+      ],
+      requestedEncounterId: null,
+      requestedScenarioId: "scn-1",
+      requestedTab: "player-encounter",
+      scenarioParticipants: [
+        scenarioParticipant({
+          controlledByUserId: "player-1",
+          id: "participant-1",
+          scenarioId: "scn-1",
+        }),
+      ],
+      scenarios: [scenario({ id: "scn-1", name: "Session one" })],
+    });
+
+    expect(state.activeScenarioId).toBe("scn-1");
+    expect(state.activeEncounterId).toBeUndefined();
+    expect(state.activeTab).toBe("player-encounter");
+  });
+
+  it("keeps explicit encounter membership strict once participants are assigned", () => {
+    const state = resolveCampaignWorkspaceState({
+      activeCampaignId: "camp-1",
+      canAccessGmEncounter: false,
+      currentUserId: "player-1",
+      encounters: [
+        encounter({
+          id: "enc-explicit",
+          scenarioId: "scn-1",
+          scenarioParticipantId: "other-participant",
+          status: "active",
+        }),
+      ],
+      requestedEncounterId: null,
+      requestedScenarioId: "scn-1",
+      requestedTab: "player-encounter",
+      scenarioParticipants: [
+        scenarioParticipant({
+          controlledByUserId: "player-1",
+          id: "participant-1",
+          scenarioId: "scn-1",
+        }),
+        scenarioParticipant({
+          controlledByUserId: "other-player",
+          id: "other-participant",
+          scenarioId: "scn-1",
+        }),
+      ],
+      scenarios: [scenario({ id: "scn-1", name: "Session one" })],
+    });
+
+    expect(state.activeScenarioId).toBe("scn-1");
+    expect(state.activeEncounterId).toBeUndefined();
+    expect(state.activeTab).toBe("player-encounter");
+  });
+
+  it("invalidates remembered fallback access when explicit membership later excludes the player", () => {
+    const scenarioParticipants = [
+      scenarioParticipant({
+        controlledByUserId: "player-1",
+        id: "participant-1",
+        scenarioId: "scn-1",
+      }),
+      scenarioParticipant({
+        controlledByUserId: "other-player",
+        id: "other-participant",
+        scenarioId: "scn-1",
+      }),
+    ];
+    const fallbackState = resolveCampaignWorkspaceState({
+      activeCampaignId: "camp-1",
+      canAccessGmEncounter: false,
+      currentUserId: "player-1",
+      encounters: [
+        encounter({
+          id: "enc-changing",
+          scenarioId: "scn-1",
+          status: "active",
+        }),
+      ],
+      rememberedEncounterId: "enc-changing",
+      rememberedScenarioId: "scn-1",
+      rememberedTab: "player-encounter",
+      scenarioParticipants,
+      scenarios: [scenario({ id: "scn-1", name: "Session one" })],
+    });
+    const explicitState = resolveCampaignWorkspaceState({
+      activeCampaignId: "camp-1",
+      canAccessGmEncounter: false,
+      currentUserId: "player-1",
+      encounters: [
+        encounter({
+          id: "enc-changing",
+          scenarioId: "scn-1",
+          scenarioParticipantId: "other-participant",
+          status: "active",
+        }),
+      ],
+      rememberedEncounterId: "enc-changing",
+      rememberedScenarioId: "scn-1",
+      rememberedTab: "player-encounter",
+      scenarioParticipants,
+      scenarios: [scenario({ id: "scn-1", name: "Session one" })],
+    });
+
+    expect(fallbackState.activeEncounterId).toBe("enc-changing");
+    expect(explicitState.activeEncounterId).toBeUndefined();
+    expect(explicitState.activeTab).toBe("player-encounter");
+  });
+
+  it("keeps the player encounter tab for a waiting state when no assigned encounter exists", () => {
+    const state = resolveCampaignWorkspaceState({
+      activeCampaignId: "camp-1",
+      canAccessGmEncounter: false,
+      currentUserId: "player-1",
+      encounters: [
+        encounter({
+          id: "enc-other",
+          scenarioId: "scn-1",
+          scenarioParticipantId: "other-participant",
+          status: "active",
+        }),
+      ],
+      requestedEncounterId: null,
+      requestedScenarioId: "scn-1",
+      requestedTab: "player-encounter",
+      scenarioParticipants: [
+        scenarioParticipant({
+          controlledByUserId: "other-player",
+          id: "other-participant",
+          scenarioId: "scn-1",
+        }),
+      ],
+      scenarios: [scenario({ id: "scn-1", name: "Session one" })],
+    });
+
+    expect(state.activeScenarioId).toBe("scn-1");
+    expect(state.activeEncounterId).toBeUndefined();
+    expect(state.activeTab).toBe("player-encounter");
   });
 });

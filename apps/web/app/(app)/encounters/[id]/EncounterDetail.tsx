@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import type { EncounterSession, Scenario, ScenarioParticipant } from "@glantri/domain";
 import {
@@ -108,45 +108,46 @@ export default function EncounterDetail({
   const [scenarioParticipants, setScenarioParticipants] = useState<ScenarioParticipant[]>([]);
   const [scenarioRecord, setScenarioRecord] = useState<Scenario | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    const loadContext = async () => {
-      if (campaignId && scenarioId) {
-        const [nextCharacters, nextContent, nextEncounter] = await Promise.all([
-          loadServerCharacters(),
-          loadCanonicalContent(),
-          loadEncounterById(id),
-        ]);
-
-        return {
-          characters: nextCharacters.map((character) => ({
-            build: character.build,
-            id: character.id,
-            name: character.name,
-          })),
-          content: nextContent,
-          encounter: nextEncounter,
-        };
-      }
-
+  const loadEncounterContext = useCallback(async () => {
+    if (campaignId && scenarioId) {
       const [nextCharacters, nextContent, nextEncounter] = await Promise.all([
-        localCharacterRepository.list(),
+        loadServerCharacters(),
         loadCanonicalContent(),
-        localEncounterRepository.get(id),
+        loadEncounterById(id),
       ]);
 
       return {
         characters: nextCharacters.map((character) => ({
           build: character.build,
           id: character.id,
-          name: character.build.name,
+          name: character.name,
         })),
         content: nextContent,
         encounter: nextEncounter,
       };
-    };
+    }
 
-    loadContext()
+    const [nextCharacters, nextContent, nextEncounter] = await Promise.all([
+      localCharacterRepository.list(),
+      loadCanonicalContent(),
+      localEncounterRepository.get(id),
+    ]);
+
+    return {
+      characters: nextCharacters.map((character) => ({
+        build: character.build,
+        id: character.id,
+        name: character.build.name,
+      })),
+      content: nextContent,
+      encounter: nextEncounter,
+    };
+  }, [campaignId, id, scenarioId]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    loadEncounterContext()
       .then((result) => {
         if (cancelled) {
           return;
@@ -166,7 +167,46 @@ export default function EncounterDetail({
     return () => {
       cancelled = true;
     };
-  }, [campaignId, id, scenarioId]);
+  }, [loadEncounterContext]);
+
+  useEffect(() => {
+    if (!campaignId || !scenarioId || encounter?.kind !== "roleplay") {
+      return;
+    }
+
+    let cancelled = false;
+
+    async function refreshEncounter() {
+      try {
+        const nextEncounter = await loadEncounterById(id);
+
+        if (!cancelled) {
+          setEncounter(nextEncounter);
+        }
+      } catch {
+        // Keep the current GM view if a background refresh misses once.
+      }
+    }
+
+    const intervalId = window.setInterval(() => {
+      void refreshEncounter();
+    }, 5000);
+    const refreshOnFocus = () => {
+      if (document.visibilityState !== "hidden") {
+        void refreshEncounter();
+      }
+    };
+
+    window.addEventListener("focus", refreshOnFocus);
+    document.addEventListener("visibilitychange", refreshOnFocus);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", refreshOnFocus);
+      document.removeEventListener("visibilitychange", refreshOnFocus);
+    };
+  }, [campaignId, encounter?.kind, id, scenarioId]);
 
   useEffect(() => {
     if (!scenarioId) {

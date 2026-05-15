@@ -3,12 +3,19 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
-import type { EncounterSession, ScenarioPlayerProjection } from "@glantri/domain";
+import type {
+  EncounterSession,
+  ScenarioParticipant,
+  ScenarioPlayerProjection,
+} from "@glantri/domain";
 
-import { buildCampaignWorkspaceHref } from "@/lib/campaigns/workspace";
-
-import { loadScenarioPlayerProjection } from "@/lib/api/localServiceClient";
+import {
+  loadScenarioParticipants,
+  loadScenarioPlayerProjection,
+} from "@/lib/api/localServiceClient";
 import { useSessionUser } from "@/lib/auth/SessionUserContext";
+import { isUserAssignedToEffectiveEncounter } from "@/lib/campaigns/encounterParticipantFallback";
+import { buildCampaignWorkspaceHref } from "@/lib/campaigns/workspace";
 
 interface ScenarioPlayerPageContentProps {
   campaignId?: string;
@@ -34,6 +41,7 @@ export default function ScenarioPlayerPageContent({
   const [error, setError] = useState<string>();
   const [loading, setLoading] = useState(true);
   const [projection, setProjection] = useState<ScenarioPlayerProjection>();
+  const [scenarioParticipants, setScenarioParticipants] = useState<ScenarioParticipant[]>([]);
 
   useEffect(() => {
     if (sessionLoading) {
@@ -52,13 +60,17 @@ export default function ScenarioPlayerPageContent({
       setLoading(true);
 
       try {
-        const nextProjection = await loadScenarioPlayerProjection(scenarioId);
+        const [nextProjection, nextScenarioParticipants] = await Promise.all([
+          loadScenarioPlayerProjection(scenarioId),
+          loadScenarioParticipants(scenarioId),
+        ]);
 
         if (cancelled) {
           return;
         }
 
         setProjection(nextProjection);
+        setScenarioParticipants(nextScenarioParticipants);
         setError(undefined);
       } catch (caughtError) {
         if (cancelled) {
@@ -115,115 +127,29 @@ export default function ScenarioPlayerPageContent({
     );
   }
 
+  const playerAvailableEncounters = encounters.filter((encounter) =>
+    isUserAssignedToEffectiveEncounter({
+      encounter,
+      scenarioParticipants,
+      userId: currentUser.id,
+    })
+  );
+  const hasUnavailableEncounters = encounters.length > 0 && playerAvailableEncounters.length === 0;
+
   return (
     <section style={{ display: "grid", gap: "1rem", maxWidth: 960 }}>
       <div style={{ display: "grid", gap: "0.5rem" }}>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
-          <Link href="/characters">Back to characters</Link>
-          <Link href="./combat">Open combat screen</Link>
-        </div>
         <h1 style={{ margin: 0 }}>{projection.scenario.name}</h1>
         <p style={{ margin: 0 }}>
           {projection.scenario.description || "No scenario briefing has been written yet."}
         </p>
       </div>
 
-      <section
-        style={{
-          display: "grid",
-          gap: "1rem",
-          gridTemplateColumns: "minmax(260px, 1fr) minmax(320px, 1.3fr)"
-        }}
-      >
-        <div style={panelStyle}>
-          <h2 style={{ margin: 0 }}>Scenario context</h2>
-          <div>Status: {projection.scenario.status}</div>
-          <div>Kind: {projection.scenario.kind}</div>
-          <div>Combat status: {projection.scenario.combatStatus}</div>
-          <div>Round: {projection.scenario.roundNumber}</div>
-          <div>Phase: {projection.scenario.phase}</div>
-          <div>Visibility model: {projection.visibilityMode}</div>
-        </div>
-
-        <div style={panelStyle}>
-          <h2 style={{ margin: 0 }}>Your character</h2>
-          {projection.hasControlledParticipant && projection.controlledParticipant ? (
-            <div style={{ display: "grid", gap: "0.5rem" }}>
-              <strong>{projection.controlledParticipant.displayName}</strong>
-              <div>
-                {projection.controlledParticipant.role} · {projection.controlledParticipant.sourceType}
-              </div>
-              <div>
-                HP: {projection.controlledParticipant.currentHp}/
-                {projection.controlledParticipant.maxHp}
-              </div>
-              <div>Conditions: {projection.controlledParticipant.conditionCount}</div>
-              <div>Faction: {projection.controlledParticipant.factionId ?? "Unassigned"}</div>
-            </div>
-          ) : (
-            <div style={{ display: "grid", gap: "0.5rem" }}>
-              <strong>No active character assigned</strong>
-              <div>
-                This account does not currently control an active player character in this scenario.
-                Ask the GM to assign one from the scenario participant list.
-              </div>
-            </div>
-          )}
-        </div>
-      </section>
-
       <section style={panelStyle}>
-        <h2 style={{ margin: 0 }}>Visible participants</h2>
-        {projection.hasControlledParticipant ? (
-          projection.visibleParticipants.length > 0 ? (
-            <div style={{ display: "grid", gap: "0.6rem" }}>
-              {projection.visibleParticipants.map((participant) => (
-                <div
-                  key={participant.id}
-                  style={{
-                    background: participant.isControlledByPlayer ? "#fffaf0" : "#ffffff",
-                    border: "1px solid #ddd7c9",
-                    borderRadius: 10,
-                    display: "grid",
-                    gap: "0.25rem",
-                    padding: "0.75rem"
-                  }}
-                >
-                  <strong>{participant.displayName}</strong>
-                  <div>
-                    {participant.role} · {participant.sourceType}
-                    {participant.isControlledByPlayer ? " · You" : ""}
-                  </div>
-                  <div>Faction: {participant.factionId ?? "Unassigned"}</div>
-                  <div>{participant.isActive ? "Active in scenario" : "Inactive"}</div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div>No participants are currently visible in this scenario view.</div>
-          )
-        ) : (
-          <div>
-            Participant visibility will appear here once the GM assigns you an active character in
-            this scenario.
-          </div>
-        )}
-      </section>
-
-      <section style={panelStyle}>
-        <h2 style={{ margin: 0 }}>Actions coming next</h2>
-        <div>{projection.actionStub.message}</div>
-        <div style={{ color: "#5e5a50" }}>
-          Future phases will add declaration hooks here for speech, movement, skill use, equipment
-          interactions, and encounter actions.
-        </div>
-      </section>
-
-      <section style={panelStyle}>
-        <h2 style={{ margin: 0 }}>Encounter access</h2>
-        {encounters.length > 0 ? (
+        <h2 style={{ margin: 0 }}>Encounter</h2>
+        {playerAvailableEncounters.length > 0 ? (
           <div style={{ display: "grid", gap: "0.6rem" }}>
-            {encounters.map((encounter) => (
+            {playerAvailableEncounters.map((encounter) => (
               <div
                 key={encounter.id}
                 style={{
@@ -236,8 +162,6 @@ export default function ScenarioPlayerPageContent({
                 }}
               >
                 <strong>{encounter.title}</strong>
-                <div>Status: {encounter.status}</div>
-                <div>Participants: {encounter.participants.length}</div>
                 {campaignId ? (
                   <Link
                     href={buildCampaignWorkspaceHref({
@@ -249,12 +173,16 @@ export default function ScenarioPlayerPageContent({
                   >
                     Open encounter
                   </Link>
-                ) : null}
+                ) : (
+                  <div>Open encounter from the campaign workspace.</div>
+                )}
               </div>
             ))}
           </div>
+        ) : hasUnavailableEncounters ? (
+          <div>You are not assigned to this encounter.</div>
         ) : (
-          <div>No accessible encounters are currently linked to this scenario.</div>
+          <div>No active encounter is currently available.</div>
         )}
       </section>
     </section>

@@ -16,5 +16,21 @@ describe("CampaignWorkspaceShell roleplay encounter routing", () => {
     expect(source).toContain("PlayerRoleplayingEncounterScreen");
     expect(source).toContain('activeEncounter?.kind === "roleplay"');
     expect(source).toContain("ScenarioPlayerCombatPageContent");
+    expect(source).toContain("loadScenarioParticipants");
+    expect(source).toContain("currentUserId: currentUser?.id");
+  });
+
+  it("renders player scenario links and useful empty states", () => {
+    const source = readSource();
+
+    expect(source).toContain("Available scenarios");
+    expect(source).toContain('tab: "scenario"');
+    expect(source).toContain("No active scenario is currently available.");
+    expect(source).toContain("No player encounter is currently available.");
+    expect(source).toContain("Waiting for GM to add you to an encounter.");
+    expect(source).toContain("You are in this scenario, but not assigned to this encounter.");
+    expect(source).toContain("refreshWorkspaceContextWithErrorHandling");
+    expect(source).toContain("visibilitychange");
+    expect(source).not.toContain("Accessible scenarios:");
   });
 });

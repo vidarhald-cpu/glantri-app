@@ -137,6 +137,7 @@ export function updateRoleplayGmMessage(input: {
           partial: false,
           silent: true,
           summary: "GM message updated.",
+          supportOpenEndedD10s: [],
           type: "gm_message_updated",
         },
         ...state.actionLog,
@@ -220,6 +221,21 @@ export interface RoleplayRollModifiers {
   useObSkillMod?: boolean;
 }
 
+export interface RoleplayAppliedRollModifier {
+  bucket: "general" | "obSkill" | "db" | "other";
+  label: string;
+  notes?: string;
+  source: "manual" | "characterState" | "situationMap" | "equipment" | "gmOverride";
+  value: number;
+}
+
+export interface RoleplayRollModifierPipeline {
+  appliedModifiers: RoleplayAppliedRollModifier[];
+  percentageModifier: number;
+  rawModifierSum: number;
+  warnings: string[];
+}
+
 export interface RoleplayCalculationPreview {
   achievedSuccessLevel?: RoleplaySuccessLevel;
   autoSuccess: boolean;
@@ -231,11 +247,14 @@ export interface RoleplayCalculationPreview {
   formulaText: string;
   fumble: boolean;
   hasPlaceholderMods: boolean;
+  modifierWarnings: string[];
   numericModifierParts: number[];
   numericModifierSum: number;
   numericSubtotal?: number;
   partial: boolean;
   pendingModifierLabels: string[];
+  percentageModifier: number;
+  rawModifierSum: number;
   resultText?: string;
   success?: boolean;
 }
@@ -375,9 +394,22 @@ function formatNumericModifierParts(parts: number[]): string {
   return parts.length === 0 ? "" : parts.map(formatSignedNumber).join(" ");
 }
 
+function buildFallbackModifierPipeline(otherMod: number): RoleplayRollModifierPipeline {
+  return {
+    appliedModifiers:
+      otherMod === 0
+        ? []
+        : [{ bucket: "other", label: "Other", source: "manual", value: otherMod }],
+    percentageModifier: otherMod,
+    rawModifierSum: otherMod,
+    warnings: [],
+  };
+}
+
 export function buildRoleplayCalculationPreview(input: {
   difficulty?: RoleplayDifficulty;
   kind?: RoleplayRollKind;
+  modifierPipeline?: RoleplayRollModifierPipeline;
   roll?: RoleplayOpenEndedD20Roll;
   skillLabel: string;
   skillValue?: number;
@@ -385,10 +417,15 @@ export function buildRoleplayCalculationPreview(input: {
   const modifiers = normalizeRollModifiers(input);
   const kind = input.kind ?? "skill";
   const skillValue = input.skillValue ?? 0;
-  const effectiveValue = skillValue + modifiers.otherMod;
+  const modifierPipeline = input.modifierPipeline ?? buildFallbackModifierPipeline(modifiers.otherMod);
+  const percentageModifier = modifierPipeline.percentageModifier;
+  const rawModifierSum = modifierPipeline.rawModifierSum;
+  const effectiveValue = skillValue + percentageModifier;
   const parts = [`${input.skillLabel} ${skillValue}`];
-  const numericModifierParts = modifiers.otherMod === 0 ? [] : [modifiers.otherMod];
-  const numericModifierSum = numericModifierParts.reduce((sum, value) => sum + value, 0);
+  const numericModifierParts = modifierPipeline.appliedModifiers
+    .map((modifier) => modifier.value)
+    .filter((value) => value !== 0);
+  const numericModifierSum = rawModifierSum;
   const dieText = input.roll == null ? "+ 1d20" : formatSignedTerm(input.roll.dieResult);
   const pendingModifierLabels = [
     modifiers.useGenMod ? "Gen" : undefined,
@@ -396,20 +433,20 @@ export function buildRoleplayCalculationPreview(input: {
     modifiers.useDbMod ? "DB" : undefined,
   ].filter((label): label is string => Boolean(label));
 
+  if (rawModifierSum !== 0) {
+    parts.push(`Raw modifiers ${formatSignedNumber(rawModifierSum)} => ${formatSignedNumber(percentageModifier)}`);
+  }
+
   if (input.roll == null) {
     parts.push("1d20");
   } else {
     parts.push(`roll ${formatRoleplayDieRoll(input.roll)}`);
   }
 
-  if (modifiers.otherMod !== 0) {
-    parts.push(`Other ${modifiers.otherMod > 0 ? "+" : ""}${modifiers.otherMod}`);
-  }
-
   const hasPlaceholderMods =
     modifiers.useGenMod || modifiers.useObSkillMod || modifiers.useDbMod;
   const numericSubtotal =
-    input.roll == null ? undefined : skillValue + input.roll.dieResult + modifiers.otherMod;
+    input.roll == null ? undefined : skillValue + input.roll.dieResult + percentageModifier;
   const achievedSuccessLevel =
     numericSubtotal == null
       ? undefined
@@ -445,7 +482,7 @@ export function buildRoleplayCalculationPreview(input: {
           .join(" → ");
   const compactModifierBracket =
     numericModifierParts.length === 0 ? "[ ]" : `[ ${formatNumericModifierParts(numericModifierParts)} ]`;
-  const compactBase = `${input.skillLabel} ${skillValue} + ${compactModifierBracket} ${numericModifierSum} ${dieText}`;
+  const compactBase = `${input.skillLabel} ${skillValue} + ${compactModifierBracket} ${percentageModifier} ${dieText}`;
   const formulaText = numericSubtotal == null
     ? `${compactBase} = pending`
     : `${compactBase} = ${numericSubtotal}`;
@@ -499,11 +536,14 @@ export function buildRoleplayCalculationPreview(input: {
     formulaText,
     fumble: Boolean(achievedSuccessLevel?.fumble),
     hasPlaceholderMods,
+    modifierWarnings: modifierPipeline.warnings,
     numericModifierParts,
     numericModifierSum,
     numericSubtotal,
     partial: hasPlaceholderMods,
     pendingModifierLabels,
+    percentageModifier,
+    rawModifierSum,
     resultText,
     success,
   };
@@ -573,19 +613,25 @@ export function assignRoleplaySkillRoll(input: {
   opponentSupportSkillId?: string;
   opponentSupportSkillLabel?: string;
   participantId: string;
+  participantName?: string;
+  rollSetId?: string;
   session: EncounterSession;
+  side?: "actor" | "opponent";
   silent: boolean;
   skillId: string;
   skillLabel: string;
   skillValue?: number;
   supportSkillId?: string;
   supportSkillLabel?: string;
+  supportSkillValue?: number;
 } & RoleplayRollModifiers): EncounterSession {
   const state = normalizeRoleplayState(input.session);
   const assignedAt = nowIso();
   const modifiers = normalizeRollModifiers(input);
   const mode = input.mode ?? "difficulty";
-  const rollSetId = makeId("roleplay-roll-set");
+  const rollSetId = input.rollSetId ?? makeId("roleplay-roll-set");
+  const pendingRollId = makeId("roleplay-roll");
+  const side = input.side ?? (mode === "opposed" ? "actor" : undefined);
 
   return withRoleplayState({
     session: input.session,
@@ -611,8 +657,11 @@ export function assignRoleplaySkillRoll(input: {
           opponentSupportSkillLabel: input.opponentSupportSkillLabel,
           otherMod: modifiers.otherMod,
           partial: false,
+          pendingRollId,
           participantId: input.participantId,
+          participantName: input.participantName,
           rollSetId,
+          side,
           silent: input.silent,
           skillId: input.skillId,
           skillLabel: input.skillLabel,
@@ -622,6 +671,8 @@ export function assignRoleplaySkillRoll(input: {
               : `Assigned ${input.skillLabel} roll.`,
           supportSkillId: input.supportSkillId,
           supportSkillLabel: input.supportSkillLabel,
+          supportSkillValue: input.supportSkillValue,
+          supportOpenEndedD10s: [],
           type: "skill_roll_assigned",
           useDbMod: modifiers.useDbMod,
           useGenMod: modifiers.useGenMod,
@@ -633,7 +684,7 @@ export function assignRoleplaySkillRoll(input: {
         {
           assignedAt,
           difficulty: input.difficulty,
-          id: makeId("roleplay-roll"),
+          id: pendingRollId,
           mode,
           opponentParticipantId: input.opponentParticipantId,
           opponentParticipantName: input.opponentParticipantName,
@@ -646,12 +697,14 @@ export function assignRoleplaySkillRoll(input: {
           otherMod: modifiers.otherMod,
           participantId: input.participantId,
           rollSetId,
+          side,
           silent: input.silent,
           skillId: input.skillId,
           skillLabel: input.skillLabel,
           skillValue: input.skillValue,
           supportSkillId: input.supportSkillId,
           supportSkillLabel: input.supportSkillLabel,
+          supportSkillValue: input.supportSkillValue,
           useDbMod: modifiers.useDbMod,
           useGenMod: modifiers.useGenMod,
           useObSkillMod: modifiers.useObSkillMod,
@@ -688,18 +741,27 @@ export function recordRoleplayGmSkillRoll(input: {
   opponentSkillLabel?: string;
   opponentSupportSkillId?: string;
   opponentSupportSkillLabel?: string;
+  pendingRollId?: string;
   participantId: string;
   partial?: boolean;
   roll: RoleplayOpenEndedD20Roll;
   rollSetId?: string;
   session: EncounterSession;
+  side?: "actor" | "opponent";
   silent: boolean;
   skillId: string;
   skillLabel: string;
+  skillValue?: number;
   numericSubtotal?: number;
+  participantName?: string;
   success?: boolean;
+  supportCalculationText?: string;
+  supportNumericSubtotal?: number;
+  supportRoll?: RoleplayOpenEndedD20Roll;
   supportSkillId?: string;
   supportSkillLabel?: string;
+  supportSkillValue?: number;
+  summary?: string;
 } & RoleplayRollModifiers): EncounterSession {
   const state = normalizeRoleplayState(input.session);
   const modifiers = normalizeRollModifiers(input);
@@ -743,21 +805,34 @@ export function recordRoleplayGmSkillRoll(input: {
           opponentSupportSkillLabel: input.opponentSupportSkillLabel,
           otherMod: modifiers.otherMod,
           partial: Boolean(input.partial),
+          pendingRollId: input.pendingRollId,
           participantId: input.participantId,
+          participantName: input.participantName,
           resultModifier: achievedSuccessLevel?.resultModifier,
           roll: input.roll.rollD20,
           rollD20: input.roll.rollD20,
           rollSetId: input.rollSetId,
+          side: input.side,
           silent: input.silent,
           skillId: input.skillId,
           skillLabel: input.skillLabel,
+          skillValue: input.skillValue,
           success: input.success,
-          summary:
+          summary: input.summary ?? (
             mode === "opposed" && input.opponentSkillLabel
               ? `GM rolled opposed ${input.skillLabel} vs ${input.opponentSkillLabel}.`
-              : `GM rolled ${input.skillLabel}.`,
+              : input.participantName
+                ? `GM rolled ${input.skillLabel} for ${input.participantName}.`
+                : `GM rolled ${input.skillLabel}.`
+          ),
+          supportCalculationText: input.supportCalculationText,
+          supportDieResult: input.supportRoll?.dieResult,
+          supportNumericSubtotal: input.supportNumericSubtotal,
+          supportOpenEndedD10s: input.supportRoll?.openEndedD10s ?? [],
+          supportRollD20: input.supportRoll?.rollD20,
           supportSkillId: input.supportSkillId,
           supportSkillLabel: input.supportSkillLabel,
+          supportSkillValue: input.supportSkillValue,
           type: "gm_skill_roll",
           useDbMod: modifiers.useDbMod,
           useGenMod: modifiers.useGenMod,
