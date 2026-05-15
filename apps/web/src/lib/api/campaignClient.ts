@@ -208,10 +208,16 @@ export async function addCampaignRosterEntryOnServer(input: {
 
 export async function removeCampaignRosterEntryOnServer(input: {
   campaignId: string;
-  rosterEntryId: string;
+  sourceId: string;
+  sourceType: CampaignRosterSourceType;
 }): Promise<void> {
+  const params = new URLSearchParams({
+    sourceId: input.sourceId,
+    sourceType: input.sourceType,
+  });
+
   await sendJson<{ ok: true }>(
-    `/campaigns/${input.campaignId}/roster/${input.rosterEntryId}`,
+    `/campaigns/${input.campaignId}/roster-membership?${params.toString()}`,
     {
       method: "DELETE"
     }

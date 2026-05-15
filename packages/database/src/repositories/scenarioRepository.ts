@@ -375,6 +375,11 @@ export interface ScenarioRepository {
     sourceType: CampaignRosterSourceType;
   }): Promise<CampaignRosterEntry>;
   deleteCampaignRosterEntry(entryId: string): Promise<void>;
+  deleteCampaignRosterEntryBySource(input: {
+    campaignId: string;
+    sourceId: string;
+    sourceType: CampaignRosterSourceType;
+  }): Promise<void>;
   getCampaignRosterEntryById(entryId: string): Promise<CampaignRosterEntry | null>;
   listCampaignRosterEntries(campaignId: string): Promise<CampaignRosterEntry[]>;
   createScenarioRelationship(input: {
@@ -739,6 +744,15 @@ export function createPrismaScenarioRepository(client?: PrismaClient): ScenarioR
     async deleteCampaignRosterEntry(entryId) {
       await prisma.campaignRosterEntry.delete({
         where: { id: entryId }
+      });
+    },
+    async deleteCampaignRosterEntryBySource(input) {
+      await prisma.campaignRosterEntry.deleteMany({
+        where: {
+          campaignId: input.campaignId,
+          sourceId: input.sourceId,
+          sourceType: input.sourceType
+        }
       });
     },
     async getCampaignRosterEntryById(entryId) {

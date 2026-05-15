@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => {
     listCampaignRosterEntries: vi.fn(),
     listCampaignsByCharacterRosterAccess: vi.fn(),
     listCampaignsByGameMaster: vi.fn(),
+    removeCampaignRosterEntryBySource: vi.fn(),
   };
   const characterService = {
     getOwnedCharacter: vi.fn(),
@@ -217,6 +218,79 @@ describe("scenarios route contract", () => {
     expect(mocks.campaignService.listCampaignsByCharacterRosterAccess).toHaveBeenCalledWith(
       "character-1",
     );
+  });
+
+  it("removes a campaign character roster membership by source identity", async () => {
+    mocks.campaignService.getCampaignById.mockResolvedValue({
+      gmUserId: "gm-1",
+      id: "campaign-1",
+      name: "Border Trouble",
+      status: "active",
+    });
+    mocks.campaignService.removeCampaignRosterEntryBySource.mockResolvedValue(undefined);
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "DELETE",
+      url: "/campaigns/campaign-1/roster-membership?sourceType=character&sourceId=character-1",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ ok: true });
+    expect(mocks.campaignService.removeCampaignRosterEntryBySource).toHaveBeenCalledWith({
+      campaignId: "campaign-1",
+      sourceId: "character-1",
+      sourceType: "character",
+    });
+  });
+
+  it("removes a campaign template roster membership by source identity", async () => {
+    mocks.campaignService.getCampaignById.mockResolvedValue({
+      gmUserId: "gm-1",
+      id: "campaign-1",
+      name: "Border Trouble",
+      status: "active",
+    });
+    mocks.campaignService.removeCampaignRosterEntryBySource.mockResolvedValue(undefined);
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "DELETE",
+      url: "/campaigns/campaign-1/roster-membership?sourceType=template&sourceId=template-1",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ ok: true });
+    expect(mocks.campaignService.removeCampaignRosterEntryBySource).toHaveBeenCalledWith({
+      campaignId: "campaign-1",
+      sourceId: "template-1",
+      sourceType: "template",
+    });
+  });
+
+  it("rejects roster membership removal outside the game master's campaign", async () => {
+    mocks.campaignService.getCampaignById.mockResolvedValue({
+      gmUserId: "other-gm",
+      id: "campaign-1",
+      name: "Border Trouble",
+      status: "active",
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "DELETE",
+      url: "/campaigns/campaign-1/roster-membership?sourceType=character&sourceId=character-1",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toEqual({ error: "Campaign not found." });
+    expect(mocks.campaignService.removeCampaignRosterEntryBySource).not.toHaveBeenCalled();
   });
 
   it("allows a player-owned roster character to join a live scenario", async () => {

@@ -255,6 +255,18 @@ export function createScenarioRepositoryStub() {
         rosterEntries.splice(index, 1);
       }
     },
+    deleteCampaignRosterEntryBySource: async (input) => {
+      const index = rosterEntries.findIndex(
+        (entry) =>
+          entry.campaignId === input.campaignId &&
+          entry.sourceId === input.sourceId &&
+          entry.sourceType === input.sourceType,
+      );
+
+      if (index >= 0) {
+        rosterEntries.splice(index, 1);
+      }
+    },
     getCampaignRosterEntryById: async (entryId) =>
       rosterEntries.find((entry) => entry.id === entryId) ?? null,
     listCampaignRosterEntries: async (campaignId) =>

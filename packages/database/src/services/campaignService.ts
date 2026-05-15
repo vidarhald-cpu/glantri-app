@@ -106,6 +106,14 @@ export class CampaignService {
     await this.repository.deleteCampaignRosterEntry(input.rosterEntryId);
   }
 
+  async removeCampaignRosterEntryBySource(input: {
+    campaignId: string;
+    sourceId: string;
+    sourceType: CampaignRosterSourceType;
+  }): Promise<void> {
+    await this.repository.deleteCampaignRosterEntryBySource(input);
+  }
+
   async createReusableEntity(input: {
     description?: string;
     gmUserId: string;

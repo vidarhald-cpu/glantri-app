@@ -360,6 +360,43 @@ export const campaignRoutes: FastifyPluginAsync = async (app) => {
     }
   });
 
+  app.delete("/campaigns/:campaignId/roster-membership", async (request, reply) => {
+    const user = await requireAdminUser(request, reply);
+
+    if (!user) {
+      return;
+    }
+
+    try {
+      const campaignId = parseId(request.params, "campaignId", "Campaign id");
+      const query =
+        request.query && typeof request.query === "object"
+          ? (request.query as Record<string, unknown>)
+          : {};
+      const sourceId = parseRequiredString(query, "sourceId");
+      const sourceType = campaignRosterSourceTypeSchema.parse(query.sourceType);
+      const campaign = await campaignService.getCampaignById(campaignId);
+
+      if (!campaign || campaign.gmUserId !== user.id) {
+        return reply.code(404).send({
+          error: "Campaign not found."
+        });
+      }
+
+      await campaignService.removeCampaignRosterEntryBySource({
+        campaignId,
+        sourceId,
+        sourceType
+      });
+
+      return { ok: true };
+    } catch (error) {
+      return reply.code(400).send({
+        error: error instanceof Error ? error.message : "Unable to remove campaign roster membership."
+      });
+    }
+  });
+
   app.post("/campaigns/:campaignId/entities", async (request, reply) => {
     const user = await requireAdminUser(request, reply);
 

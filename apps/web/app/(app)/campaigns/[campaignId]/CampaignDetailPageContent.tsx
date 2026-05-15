@@ -82,19 +82,15 @@ function buildRosterSourceKey(sourceType: CampaignRosterEntry["sourceType"], sou
   return `${sourceType}:${sourceId}`;
 }
 
-function removeRosterEntryFromList(
+function removeRosterSourceFromList(
   entries: CampaignRosterEntry[],
-  removedEntry: CampaignRosterEntry
+  removedSource: Pick<CampaignRosterEntry, "campaignId" | "sourceId" | "sourceType">
 ): CampaignRosterEntry[] {
-  const removedSourceKey = buildRosterSourceKey(removedEntry.sourceType, removedEntry.sourceId);
+  const removedSourceKey = buildRosterSourceKey(removedSource.sourceType, removedSource.sourceId);
 
   return entries.filter((entry) => {
-    if (entry.id === removedEntry.id) {
-      return false;
-    }
-
     return !(
-      entry.campaignId === removedEntry.campaignId &&
+      entry.campaignId === removedSource.campaignId &&
       buildRosterSourceKey(entry.sourceType, entry.sourceId) === removedSourceKey
     );
   });
@@ -487,12 +483,25 @@ export default function CampaignDetailPageContent({
 
         await removeCampaignRosterEntryOnServer({
           campaignId,
-          rosterEntryId: rosterEntry.id
+          sourceId: candidate.sourceId,
+          sourceType: candidate.sourceType
         });
 
         setFeedback(`Removed ${candidate.name} from the campaign roster.`);
-        setRoster((current) => removeRosterEntryFromList(current, rosterEntry));
-        setAllRosterEntries((current) => removeRosterEntryFromList(current, rosterEntry));
+        setRoster((current) =>
+          removeRosterSourceFromList(current, {
+            campaignId,
+            sourceId: candidate.sourceId,
+            sourceType: candidate.sourceType
+          })
+        );
+        setAllRosterEntries((current) =>
+          removeRosterSourceFromList(current, {
+            campaignId,
+            sourceId: candidate.sourceId,
+            sourceType: candidate.sourceType
+          })
+        );
       }
       await refreshPage();
     } catch (caughtError) {
@@ -678,8 +687,7 @@ export default function CampaignDetailPageContent({
                   <th style={{ background: "#fff", padding: "0.5rem 0.75rem", position: "sticky", top: 0 }}>Type</th>
                   <th style={{ background: "#fff", padding: "0.5rem 0.75rem", position: "sticky", top: 0 }}>Civilization</th>
                   <th style={{ background: "#fff", padding: "0.5rem 0.75rem", position: "sticky", top: 0 }}>Profession</th>
-                  <th style={{ background: "#fff", padding: "0.5rem 0.75rem", position: "sticky", top: 0 }}>Owner</th>
-                  <th style={{ background: "#fff", padding: "0.5rem 0", position: "sticky", top: 0 }}>Action</th>
+                  <th style={{ background: "#fff", padding: "0.5rem 0", position: "sticky", top: 0 }}>Owner</th>
                 </tr>
               </thead>
               <tbody>
@@ -704,19 +712,7 @@ export default function CampaignDetailPageContent({
                     <td style={{ padding: "0.6rem 0.75rem" }}>{candidate.typeLabel}</td>
                     <td style={{ padding: "0.6rem 0.75rem" }}>{candidate.civilizationLabel}</td>
                     <td style={{ padding: "0.6rem 0.75rem" }}>{candidate.professionLabel}</td>
-                    <td style={{ padding: "0.6rem 0.75rem" }}>{candidate.ownerLabel}</td>
-                    <td style={{ padding: "0.6rem 0" }}>
-                      {candidate.member ? (
-                        <button
-                          onClick={() => void handleRosterMembershipToggle(candidate, false)}
-                          type="button"
-                        >
-                          Remove
-                        </button>
-                      ) : (
-                        "—"
-                      )}
-                    </td>
+                    <td style={{ padding: "0.6rem 0" }}>{candidate.ownerLabel}</td>
                   </tr>
                 ))}
               </tbody>

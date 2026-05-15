@@ -224,6 +224,73 @@ describe("CampaignService campaign roster", () => {
     await expect(service.listCampaignRosterEntries("campaign-2")).resolves.toEqual([campaignTwoEntry]);
   });
 
+  it("removes roster membership by campaign source identity", async () => {
+    const { repository, rosterEntries } = createScenarioRepositoryStub();
+    const characters = new Map([
+      ["character-1", createCharacterRecord({ id: "character-1", name: "Ari", ownerId: "user-1" })],
+    ]);
+    const reusableEntities = new Map<string, ReusableEntity>([
+      [
+        "template-1",
+        {
+          createdAt: "2026-04-21T00:00:00.000Z",
+          gmUserId: "gm-1",
+          id: "template-1",
+          kind: "npc",
+          name: "Bandit Template",
+          snapshot: {
+            actorClass: "template",
+          },
+          updatedAt: "2026-04-21T00:00:00.000Z",
+        },
+      ],
+    ]);
+    repository.getReusableEntityById = async (entityId) => reusableEntities.get(entityId) ?? null;
+    const service = new CampaignService(
+      repository,
+      {
+        getCharacterById: async (characterId: string) => characters.get(characterId) ?? null,
+      } as never,
+    );
+
+    await service.addCampaignRosterEntry({
+      campaignId: "campaign-1",
+      category: "pc",
+      sourceId: "character-1",
+      sourceType: "character",
+    });
+    await service.addCampaignRosterEntry({
+      campaignId: "campaign-1",
+      category: "template",
+      sourceId: "template-1",
+      sourceType: "template",
+    });
+
+    await service.removeCampaignRosterEntryBySource({
+      campaignId: "campaign-1",
+      sourceId: "character-1",
+      sourceType: "character",
+    });
+
+    expect(rosterEntries).toHaveLength(1);
+    expect(rosterEntries[0]?.sourceType).toBe("template");
+
+    await service.removeCampaignRosterEntryBySource({
+      campaignId: "campaign-1",
+      sourceId: "template-1",
+      sourceType: "template",
+    });
+    await service.removeCampaignRosterEntryBySource({
+      campaignId: "campaign-1",
+      sourceId: "template-1",
+      sourceType: "template",
+    });
+
+    expect(rosterEntries).toHaveLength(0);
+    expect(characters.get("character-1")?.name).toBe("Ari");
+    expect(reusableEntities.get("template-1")?.name).toBe("Bandit Template");
+  });
+
   it("removes only roster links and leaves source characters and templates available", async () => {
     const { repository, rosterEntries } = createScenarioRepositoryStub();
     const characters = new Map([
