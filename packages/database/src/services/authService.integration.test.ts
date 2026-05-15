@@ -107,5 +107,52 @@ if (!process.env.DATABASE_URL_TEST) {
 
       expect(result).toBeNull();
     });
+
+    describe("bootstrapGameMasterForUser", () => {
+      it("promotes user to GM when no privileged users exist", async () => {
+        const repository = createPrismaAuthRepository(prisma!);
+        const service = new AuthService(repository);
+
+        const { id } = await createTestUser(prisma!, { email: "bootstrap@example.com" });
+
+        expect(await service.canBootstrapGameMaster()).toBe(true);
+
+        const result = await service.bootstrapGameMasterForUser(id);
+
+        expect(result).not.toBeNull();
+        expect(result!.roles).toContain("game_master");
+        expect(await service.canBootstrapGameMaster()).toBe(false);
+      });
+
+      it("returns null and makes no change when a privileged user already exists", async () => {
+        const repository = createPrismaAuthRepository(prisma!);
+        const service = new AuthService(repository);
+
+        const existing = await createTestUser(prisma!, {
+          email: "existing-gm@example.com",
+          roles: ["game_master"]
+        });
+        const newcomer = await createTestUser(prisma!, { email: "newcomer@example.com" });
+
+        const result = await service.bootstrapGameMasterForUser(newcomer.id);
+
+        expect(result).toBeNull();
+
+        const newcomerUser = await repository.findUserById(newcomer.id);
+        expect(newcomerUser!.roles).not.toContain("game_master");
+
+        const existingUser = await repository.findUserById(existing.id);
+        expect(existingUser!.roles).toContain("game_master");
+      });
+
+      it("returns null for a non-existent user id", async () => {
+        const repository = createPrismaAuthRepository(prisma!);
+        const service = new AuthService(repository);
+
+        const result = await service.bootstrapGameMasterForUser("non-existent-id");
+
+        expect(result).toBeNull();
+      });
+    });
   });
 }

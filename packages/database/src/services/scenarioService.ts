@@ -240,6 +240,13 @@ export class ScenarioService {
     return participant;
   }
 
+  async getScenarioParticipantById(
+    participantId: string,
+    scenarioId: string
+  ): Promise<ScenarioParticipant | null> {
+    return this.repository.getScenarioParticipantById(participantId, scenarioId);
+  }
+
   async listScenarioParticipants(scenarioId: string): Promise<ScenarioParticipant[]> {
     return this.repository.listScenarioParticipants(scenarioId);
   }

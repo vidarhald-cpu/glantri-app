@@ -1,5 +1,5 @@
 import type { AuthRole, AuthSession, AuthUser } from "@glantri/auth";
-import type { PrismaClient } from "@prisma/client";
+import { Prisma, type PrismaClient } from "@prisma/client";
 
 import { prisma as defaultPrisma } from "../client";
 
@@ -17,6 +17,7 @@ export interface CreateSessionInput {
 
 export interface AuthRepository {
   anyPrivilegedUserExists(): Promise<boolean>;
+  atomicBootstrapGameMaster(userId: string): Promise<AuthUser | null>;
   createSession(input: CreateSessionInput): Promise<AuthSession>;
   createUser(input: CreateUserInput): Promise<AuthUser>;
   deleteSessionByTokenHash(tokenHash: string): Promise<void>;
@@ -72,6 +73,65 @@ export function createPrismaAuthRepository(client?: PrismaClient): AuthRepositor
       });
 
       return privilegedUserCount > 0;
+    },
+    async atomicBootstrapGameMaster(userId) {
+      try {
+        return await prisma.$transaction(async (tx) => {
+          const count = await tx.user.count({
+            where: {
+              roles: {
+                some: {
+                  role: {
+                    name: {
+                      in: getStoredPrivilegedRoleNames()
+                    }
+                  }
+                }
+              }
+            }
+          });
+
+          if (count > 0) {
+            return null;
+          }
+
+          const targetUser = await tx.user.findUnique({
+            select: { id: true },
+            where: { id: userId }
+          });
+
+          if (!targetUser) {
+            return null;
+          }
+
+          const gmRole = await tx.role.upsert({
+            create: { name: "game_master" },
+            update: {},
+            where: { name: "game_master" }
+          });
+
+          await tx.userRole.deleteMany({ where: { userId } });
+          await tx.userRole.create({ data: { roleId: gmRole.id, userId } });
+
+          const user = await tx.user.findUnique({
+            include: { roles: { include: { role: true } } },
+            where: { id: userId }
+          });
+
+          if (!user) {
+            return null;
+          }
+
+          return {
+            displayName: user.displayName ?? undefined,
+            email: user.email,
+            id: user.id,
+            roles: mapRoles(user.roles)
+          };
+        }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+      } catch {
+        return null;
+      }
     },
     async createSession(input) {
       const session = await prisma.session.create({

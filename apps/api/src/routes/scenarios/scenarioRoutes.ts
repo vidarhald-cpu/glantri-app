@@ -9,6 +9,7 @@ import {
 } from "@glantri/domain";
 
 import { requireAdminUser, requireAuthenticatedUser } from "../../lib/sessionAuth";
+import { resolveScenarioWorkspaceAccess } from "./access";
 import {
   parseBodyObject,
   parseId,
@@ -78,13 +79,16 @@ export const scenarioRoutes: FastifyPluginAsync = async (app) => {
 
     try {
       const scenarioId = parseId(request.params, "scenarioId", "Scenario id");
-      const scenario = await scenarioService.getScenarioById(scenarioId);
+      const access = await resolveScenarioWorkspaceAccess(
+        { campaignService, scenarioService },
+        { scenarioId, userId: user.id, userRoles: user.roles }
+      );
 
-      if (!scenario) {
-        return reply.code(404).send({
-          error: "Scenario not found."
-        });
+      if (!access) {
+        return reply.code(404).send({ error: "Scenario not found." });
       }
+
+      const scenario = await scenarioService.getScenarioById(scenarioId);
 
       return { scenario };
     } catch (error) {
@@ -103,18 +107,20 @@ export const scenarioRoutes: FastifyPluginAsync = async (app) => {
 
     try {
       const scenarioId = parseId(request.params, "scenarioId", "Scenario id");
-      const scenario = await scenarioService.getScenarioById(scenarioId);
+      const access = await resolveScenarioWorkspaceAccess(
+        { campaignService, scenarioService },
+        { scenarioId, userId: user.id, userRoles: user.roles }
+      );
 
-      if (!scenario) {
-        return reply.code(404).send({
-          error: "Scenario not found."
-        });
+      if (!access) {
+        return reply.code(404).send({ error: "Scenario not found." });
       }
 
+      const scenario = await scenarioService.getScenarioById(scenarioId);
       const participants = await scenarioService.listScenarioParticipants(scenarioId);
       const projection = buildScenarioPlayerProjection({
         participants,
-        scenario,
+        scenario: scenario!,
         userId: user.id
       });
 
@@ -217,12 +223,13 @@ export const scenarioRoutes: FastifyPluginAsync = async (app) => {
 
     try {
       const scenarioId = parseId(request.params, "scenarioId", "Scenario id");
-      const scenario = await scenarioService.getScenarioById(scenarioId);
+      const access = await resolveScenarioWorkspaceAccess(
+        { campaignService, scenarioService },
+        { scenarioId, userId: user.id, userRoles: user.roles }
+      );
 
-      if (!scenario) {
-        return reply.code(404).send({
-          error: "Scenario not found."
-        });
+      if (!access || access.mode !== "gm") {
+        return reply.code(404).send({ error: "Scenario not found." });
       }
 
       const eventLogs = await scenarioService.listScenarioEventLogs(scenarioId);
