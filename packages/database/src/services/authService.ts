@@ -51,13 +51,7 @@ export class AuthService {
   }
 
   async bootstrapGameMasterForUser(userId: string): Promise<AuthUser | null> {
-    const bootstrapAvailable = await this.canBootstrapGameMaster();
-
-    if (!bootstrapAvailable) {
-      return null;
-    }
-
-    return this.repository.replaceUserRoles(userId, ["game_master"]);
+    return this.repository.atomicBootstrapGameMaster(userId);
   }
 
   async createSessionForUser(userId: string): Promise<{ session: AuthSession; token: string }> {
