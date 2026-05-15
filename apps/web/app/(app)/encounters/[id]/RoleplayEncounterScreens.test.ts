@@ -82,6 +82,20 @@ describe("RoleplayEncounterScreens", () => {
     expect(source).toContain("submitPlayerRoleplayRollOnServer");
   });
 
+  it("preserves GM roleplay text drafts while background refresh updates encounter props", () => {
+    const source = readSource();
+    const sectionsSource = readComponentSource("RoleplaySections.tsx");
+
+    expect(source).toContain("gmMessageDirty");
+    expect(source).toContain("if (!gmMessageDirty)");
+    expect(source).toContain("setGmMessageDirty(true)");
+    expect(source).toContain("setGmMessageDirty(false)");
+    expect(sectionsSource).toContain("dirtyFieldsRef");
+    expect(sectionsSource).toContain("focusedFieldsRef");
+    expect(sectionsSource).toContain("!dirtyFieldsRef.current.shortDescription");
+    expect(sectionsSource).toContain("!dirtyFieldsRef.current.detailedDescription");
+  });
+
   it("keeps the player screen free of GM-only controls and GM-only sections", () => {
     const playerSource = readPlayerScreenSource();
 

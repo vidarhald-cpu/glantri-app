@@ -479,10 +479,13 @@ export function GmRoleplayingEncounterScreen({
     makeRollDraft({ participantId: roster[0]?.id, skillId: initialSkillId }),
   ]);
   const [currentRankedRollResults, setCurrentRankedRollResults] = useState<RoleplayActionLogEntry[]>([]);
+  const [gmMessageDirty, setGmMessageDirty] = useState(false);
 
   useEffect(() => {
-    setGmMessageDraft(roleplayState.gmMessage);
-  }, [roleplayState.gmMessage]);
+    if (!gmMessageDirty) {
+      setGmMessageDraft(roleplayState.gmMessage);
+    }
+  }, [gmMessageDirty, roleplayState.gmMessage]);
 
   useEffect(() => {
     setRollDrafts((currentDrafts) =>
@@ -571,6 +574,7 @@ export function GmRoleplayingEncounterScreen({
       }),
       "Updated roleplaying encounter GM message."
     );
+    setGmMessageDirty(false);
   }
 
   async function handleVisibilityChange(input: {
@@ -1303,7 +1307,10 @@ export function GmRoleplayingEncounterScreen({
 
       <GmMessageSection
         gmMessageDraft={gmMessageDraft}
-        onChange={setGmMessageDraft}
+        onChange={(message) => {
+          setGmMessageDirty(true);
+          setGmMessageDraft(message);
+        }}
         onSave={handleSaveGmMessage}
       />
 
