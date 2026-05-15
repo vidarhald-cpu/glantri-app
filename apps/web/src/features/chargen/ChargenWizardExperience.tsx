@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 /*
@@ -92,6 +92,7 @@ import { FeedbackPanel } from "./components";
 import { ResolveStatsStep } from "./steps/ResolveStatsStep";
 import { StatsStep } from "./steps/StatsStep";
 import { StartStep } from "./steps/StartStep";
+import styles from "./ChargenWizardExperience.module.css";
 
 const SESSION_ID = "chargen-vertical-slice";
 const CONTENT_CACHE_KEY = "canonical-content";
@@ -407,30 +408,23 @@ function getSkillTierLabel(skill: Pick<SkillDefinition, "category">): string {
   return skill.category === "ordinary" ? "Primary" : "Secondary";
 }
 
-function getSkillTierTone(skill: Pick<SkillDefinition, "category">): CSSProperties {
-  return skill.category === "ordinary" ? getBadgeStyle() : getBadgeStyle({ muted: true });
+function getSkillTierClass(skill: Pick<SkillDefinition, "category">): string {
+  return skill.category === "ordinary" ? styles.badge : styles.badgeMuted;
 }
 
-function getRuleStatusColor(tone: RuleStatusTone): string {
+function getRuleStatusClass(tone: RuleStatusTone): string {
   switch (tone) {
     case "blocked":
-      return "#8a2d1f";
+      return styles.statusBlocked;
     case "warning":
-      return "#7a4b00";
+      return styles.statusWarning;
     case "advisory":
-      return "#5e5a50";
+      return styles.statusAdvisory;
   }
 }
 
-function getBadgeStyle(input?: { muted?: boolean }): CSSProperties {
-  return {
-    background: input?.muted ? "#f2efe6" : "#eef3ea",
-    border: "1px solid #d9ddd8",
-    borderRadius: 999,
-    color: "#4a4f45",
-    fontSize: "0.75rem",
-    padding: "0.15rem 0.5rem"
-  };
+function getBadgeClass(input?: { muted?: boolean }): string {
+  return input?.muted ? styles.badgeMuted : styles.badge;
 }
 
 function getRuleStatusItems(input: {
@@ -2023,25 +2017,8 @@ export default function ChargenWizard() {
     showTypeBadge?: boolean;
   }) {
     return (
-      <div
-        style={{
-          border: "1px solid #e7e2d7",
-          borderRadius: 10,
-          overflowX: "auto"
-        }}
-      >
-        <div
-          style={{
-            borderBottom: "1px solid #e7e2d7",
-            color: "#5e5a50",
-            display: "grid",
-            fontSize: "0.8rem",
-            gap: "0.75rem",
-            gridTemplateColumns:
-              "minmax(180px, 2fr) repeat(5, minmax(72px, 84px)) minmax(150px, 1fr)",
-            padding: "0.75rem 1rem"
-          }}
-        >
+      <div className={styles.tableContainer}>
+        <div className={`${styles.tableHeader} ${styles.skillTableHeader}`}>
           <strong>Skill</strong>
           <strong>Group XP</strong>
           <strong>Ordinary</strong>
@@ -2080,49 +2057,33 @@ export default function ChargenWizard() {
             });
 
             return (
-              <div
-                key={row.rowKey}
-                style={{
-                  borderTop: "1px solid #f0eadf",
-                  display: "grid",
-                  gap: "0.35rem",
-                  padding: "0.75rem 1rem"
-                }}
-              >
-                <div
-                  style={{
-                    alignItems: "center",
-                    display: "grid",
-                    gap: "0.75rem",
-                    gridTemplateColumns:
-                      "minmax(180px, 2fr) repeat(5, minmax(72px, 84px)) minmax(150px, 1fr)"
-                  }}
-                >
-                  <div style={{ display: "grid", gap: "0.35rem" }}>
-                    <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+              <div key={row.rowKey} className={styles.skillTableRow}>
+                <div className={styles.skillTableRowCols}>
+                  <div className={styles.grid035}>
+                    <div className={styles.flexWrap05}>
                       <span>{row.displayName}</span>
-                      <span style={getSkillTierTone(row.skill)}>{getSkillTierLabel(row.skill)}</span>
+                      <span className={getSkillTierClass(row.skill)}>{getSkillTierLabel(row.skill)}</span>
                       {row.sourceTag === "mother-tongue" ? (
-                        <span style={getBadgeStyle({ muted: true })}>Mother tongue</span>
+                        <span className={getBadgeClass({ muted: true })}>Mother tongue</span>
                       ) : null}
                       {row.skill.id === "literacy" && selectedProfessionCard?.hasLiteracyFoundation ? (
-                        <span style={getBadgeStyle()}>Foundation skill</span>
+                        <span className={getBadgeClass()}>Foundation skill</span>
                       ) : null}
                     </div>
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: "0.35rem" }}>
+                    <div className={styles.flexWrap035}>
                       {input.showTypeBadge ? (
-                        <span key={`${row.rowKey}-${skillType}`} style={getBadgeStyle({ muted: true })}>
+                        <span key={`${row.rowKey}-${skillType}`} className={getBadgeClass({ muted: true })}>
                           {skillTypeLabel}
                         </span>
                       ) : null}
                       {input.showOutsideNormalAccessBadge ? (
-                        <span style={getBadgeStyle({ muted: true })}>Outside normal access</span>
+                        <span className={getBadgeClass({ muted: true })}>Outside normal access</span>
                       ) : null}
                       <button onClick={() => toggleSkillDetails(row.rowKey)} type="button">
                         {isDetailOpen ? "Hide details" : "Details"}
                       </button>
                     </div>
-                    <div style={{ color: "#5e5a50", fontSize: "0.8rem" }}>
+                    <div className={styles.mutedXs}>
                       Next cost {nextCost} {row.isNormalAccess ? "ordinary/flexible" : "flexible"} points
                     </div>
                   </div>
@@ -2131,7 +2092,7 @@ export default function ChargenWizard() {
                   <div>{row.metrics.flexibleXp}</div>
                   <div>{row.metrics.grantedXp}</div>
                   <div>{row.metrics.totalXp}</div>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+                  <div className={styles.flexWrap05}>
                     <button
                       aria-label={`Add ${row.skill.name}`}
                       disabled={!skillAllocationContext || !row.evaluation.isAllowed}
@@ -2158,54 +2119,42 @@ export default function ChargenWizard() {
                   <div
                     key={`${row.rowKey}-${status.tone}-${status.message}`}
                     role="status"
-                    style={{
-                      color: getRuleStatusColor(status.tone),
-                      fontSize: "0.85rem"
-                    }}
+                    className={getRuleStatusClass(status.tone)}
                   >
                     {status.message}
                   </div>
                 ))}
                 {isDetailOpen ? (
-                  <div
-                    style={{
-                      background: "#f6f5ef",
-                      border: "1px solid #e7e2d7",
-                      borderRadius: 8,
-                      display: "grid",
-                      gap: "0.5rem",
-                      padding: "0.75rem"
-                    }}
-                  >
-                    <div style={{ color: "#4a4f45", fontSize: "0.9rem" }}>
+                  <div className={styles.innerCard}>
+                    <div className={styles.darkMuted}>
                       {row.skill.shortDescription ?? row.skill.description ?? "No short description yet."}
                     </div>
                     {row.skill.description &&
                     row.skill.description !== row.skill.shortDescription ? (
-                      <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
+                      <div className={styles.mutedSm}>
                         {row.skill.description}
                       </div>
                     ) : null}
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
-                      <span style={getBadgeStyle({ muted: true })}>
+                    <div className={styles.flexWrap05}>
+                      <span className={getBadgeClass({ muted: true })}>
                         Owned XP {row.metrics.skillXp}
                       </span>
-                      <span style={getBadgeStyle({ muted: true })}>
+                      <span className={getBadgeClass({ muted: true })}>
                         Group-derived value {row.metrics.groupXp}
                       </span>
-                      <span style={getBadgeStyle({ muted: true })}>
+                      <span className={getBadgeClass({ muted: true })}>
                         Derived/cross-training XP {row.metrics.grantedXp}
                       </span>
-                      <span style={getBadgeStyle({ muted: true })}>
+                      <span className={getBadgeClass({ muted: true })}>
                         Effective total {row.metrics.totalXp}
                       </span>
                     </div>
                     {row.grantedSourceLabel ? (
-                      <div style={{ color: "#5e5a50", fontSize: "0.82rem" }}>
+                      <div className={styles.mutedXs}>
                         {row.grantedSourceLabel}
                       </div>
                     ) : null}
-                    <div style={{ color: "#5e5a50", fontSize: "0.82rem" }}>
+                    <div className={styles.mutedXs}>
                       Access:{" "}
                       {row.sourceLabels.length > 0
                         ? row.sourceLabels.join(", ")
@@ -2214,10 +2163,10 @@ export default function ChargenWizard() {
                           : "Current section access"}
                     </div>
                     {dependencySummaries.length > 0 ? (
-                      <div style={{ display: "grid", gap: "0.25rem" }}>
-                        <strong style={{ fontSize: "0.85rem" }}>Prerequisites and support</strong>
+                      <div className={styles.grid025}>
+                        <strong className={styles.textSm}>Prerequisites and support</strong>
                         {dependencySummaries.map(({ dependency, dependencyName, dependencyRow }) => (
-                          <div key={`${row.rowKey}-${dependency.skillId}`} style={{ fontSize: "0.82rem" }}>
+                          <div key={`${row.rowKey}-${dependency.skillId}`} className={styles.textXs}>
                             {`${dependency.strength}. ${formatDependencyOwnershipSummary({
                               dependencyName,
                               directSkillLevel: dependencyRow?.metrics.skillXp ?? 0,
@@ -2228,7 +2177,7 @@ export default function ChargenWizard() {
                       </div>
                     ) : null}
                     {row.skill.requiresLiteracy !== "no" ? (
-                      <div style={{ color: "#5e5a50", fontSize: "0.82rem" }}>
+                      <div className={styles.mutedXs}>
                         {row.skill.requiresLiteracy === "required"
                           ? "Literacy is functionally required for full use of this skill."
                           : "Literacy is recommended for fuller use of this skill."}
@@ -2237,7 +2186,7 @@ export default function ChargenWizard() {
                   </div>
                 ) : null}
                 {rowFeedback ? (
-                  <div role="status" style={{ color: "#7a4b00", fontSize: "0.85rem" }}>
+                  <div role="status" className={styles.statusWarning}>
                     {rowFeedback}
                   </div>
                 ) : null}
@@ -2245,7 +2194,7 @@ export default function ChargenWizard() {
             );
           })
         ) : (
-          <div style={{ padding: "1rem" }}>{input.emptyMessage}</div>
+          <div className={styles.emptyTableRow}>{input.emptyMessage}</div>
         )}
       </div>
     );
@@ -2327,10 +2276,10 @@ export default function ChargenWizard() {
   }
 
   return (
-    <section style={{ display: "grid", gap: "1.5rem", maxWidth: 1080 }}>
-      <div>
-        <h1 style={{ marginBottom: "0.25rem" }}>Chargen</h1>
-        <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>Draft saved locally.</div>
+    <section className={styles.root}>
+      <div className={styles.chargenHeader}>
+        <h1>Chargen</h1>
+        <div className={styles.chargenSubtitle}>Draft saved locally.</div>
       </div>
 
       <FeedbackPanel messages={feedback} />
@@ -2372,35 +2321,19 @@ export default function ChargenWizard() {
         selectedResolvedStats={selectedResolvedStats}
         selectedRolledProfile={selectedRolledProfile}
       />
-      <section style={{ display: "grid", gap: "0.75rem", opacity: selectedProfile ? 1 : 0.6 }}>
-        <h2 style={{ margin: 0 }}>3. Choose civilization</h2>
-        <div style={{ fontSize: "0.95rem" }}>
+      <section className={`${styles.stepSection}${!selectedProfile ? ` ${styles.dimmed}` : ""}`}>
+        <h2 className={styles.heading}>3. Choose civilization</h2>
+        <div className={styles.hint}>
           Choose the civilization that frames this character&apos;s culture and language naming.
           Chargen will infer the linked society automatically for class labels, foundational
           access, education, and profession access.
         </div>
         {selectedCivilization && !showCivilizationChooser ? (
-          <div
-            style={{
-              background: "#f6f5ef",
-              border: "1px solid #d9ddd8",
-              borderRadius: 12,
-              display: "grid",
-              gap: "0.75rem",
-              padding: "1rem"
-            }}
-          >
-            <div
-              style={{
-                alignItems: "start",
-                display: "grid",
-                gap: "0.75rem",
-                gridTemplateColumns: "minmax(0, 1fr) auto"
-              }}
-            >
-              <div style={{ display: "grid", gap: "0.35rem" }}>
+          <div className={styles.card}>
+            <div className={styles.twoColAuto}>
+              <div className={styles.grid035}>
                 <strong>{selectedCivilization.name}</strong>
-                <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
+                <div className={styles.muted}>
                   {selectedCivilization.shortDescription ??
                     "Selected civilization for cultural framing and language naming."}
                 </div>
@@ -2413,7 +2346,7 @@ export default function ChargenWizard() {
                 Change civilization
               </button>
             </div>
-            <div style={{ display: "grid", gap: "0.35rem", fontSize: "0.9rem" }}>
+            <div className={`${styles.grid035} ${styles.textNote}`}>
               <div>
                 Spoken language: {selectedCivilization.spokenLanguageName}
                 {selectedCivilization.writtenLanguageName &&
@@ -2447,9 +2380,9 @@ export default function ChargenWizard() {
             </div>
           </div>
         ) : (
-          <div style={{ display: "grid", gap: "0.75rem" }}>
+          <div className={styles.grid075}>
             {selectedCivilization ? (
-              <div style={{ display: "flex", justifyContent: "flex-end" }}>
+              <div className={styles.flexEnd}>
                 <button
                   disabled={!selectedProfile}
                   onClick={() => setShowCivilizationChooser(false)}
@@ -2462,14 +2395,9 @@ export default function ChargenWizard() {
             {civilizations.map((civilization) => (
               <label
                 key={civilization.id}
-                style={{
-                  border: "1px solid #d9ddd8",
-                  borderRadius: 12,
-                  cursor: selectedProfile ? "pointer" : "not-allowed",
-                  padding: "1rem"
-                }}
+                className={selectedProfile ? styles.optionLabel : styles.optionLabelDisabled}
               >
-                <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                <div className={styles.flexCenter075}>
                   <input
                     checked={selectedCivilizationId === civilization.id}
                     disabled={!selectedProfile}
@@ -2479,29 +2407,29 @@ export default function ChargenWizard() {
                   />
                   <strong>{civilization.name}</strong>
                 </div>
-                <div style={{ marginTop: "0.5rem", color: "#5e5a50", fontSize: "0.9rem" }}>
+                <div className={styles.detailMt05}>
                   {civilization.shortDescription}
                 </div>
-                <div style={{ marginTop: "0.25rem" }}>
+                <div className={styles.detailMt025}>
                   Spoken language: {civilization.spokenLanguageName}
                   {civilization.writtenLanguageName &&
                   civilization.writtenLanguageName !== civilization.spokenLanguageName
                     ? ` • Written ${civilization.writtenLanguageName}`
                     : ""}
                 </div>
-                <div style={{ marginTop: "0.25rem" }}>
+                <div className={styles.detailMt025}>
                   Society: {civilization.linkedSocietyName} • Level {civilization.linkedSocietyLevel}
                 </div>
                 {civilization.historicalAnalogue ? (
-                  <div style={{ marginTop: "0.25rem" }}>
+                  <div className={styles.detailMt025}>
                     Historical analogue: {civilization.historicalAnalogue}
                   </div>
                 ) : null}
                 {civilizations.length === 1 ? (
-                  <div style={{ marginTop: "0.25rem" }}>Only available civilization at present.</div>
+                  <div className={styles.detailMt025}>Only available civilization at present.</div>
                 ) : null}
                 {civilization.notes ? (
-                  <div style={{ marginTop: "0.25rem" }}>{civilization.notes}</div>
+                  <div className={styles.detailMt025}>{civilization.notes}</div>
                 ) : null}
               </label>
             ))}
@@ -2509,26 +2437,13 @@ export default function ChargenWizard() {
         )}
       </section>
 
-      <section
-        style={{
-          display: "grid",
-          gap: "0.75rem",
-          opacity: selectedProfile && selectedSociety ? 1 : 0.6
-        }}
-      >
-        <h2 style={{ margin: 0 }}>4. Social class</h2>
-        <div style={{ fontSize: "0.95rem" }}>
+      <section className={`${styles.stepSection}${!(selectedProfile && selectedSociety) ? ` ${styles.dimmed}` : ""}`}>
+        <h2 className={styles.heading}>4. Social class</h2>
+        <div className={styles.hint}>
           Your social roll maps to one of four universal bands. Civilization is the cultural
           selector, while the inferred society determines the structural class label for that band.
         </div>
-        <div
-          style={{
-            background: "#f6f5ef",
-            border: "1px solid #d9ddd8",
-            borderRadius: 12,
-            padding: "1rem"
-          }}
-        >
+        <div className={styles.socialClassCard}>
           {selectedProfile && selectedSociety && selectedSocialBand !== undefined && selectedSocietyAccess ? (
             <>
               <div>Civilization: {selectedCivilization?.name ?? "Not selected"}</div>
@@ -2540,7 +2455,7 @@ export default function ChargenWizard() {
               <div>
                 Social class: <strong>{selectedSocietyAccess.socialClass}</strong>
               </div>
-              <div style={{ marginTop: "0.5rem" }}>
+              <div className={styles.socialClassMt05}>
                 This result determines later skill, base education, and profession access.
               </div>
             </>
@@ -2550,46 +2465,24 @@ export default function ChargenWizard() {
         </div>
       </section>
 
-      <section
-        style={{
-          display: "grid",
-          gap: "0.75rem",
-          opacity: selectedSocietyAccess ? 1 : 0.6
-        }}
-      >
-        <h2 style={{ margin: 0 }}>5. Choose profession</h2>
-        <div style={{ fontSize: "0.95rem" }}>
+      <section className={`${styles.stepSection}${!selectedSocietyAccess ? ` ${styles.dimmed}` : ""}`}>
+        <h2 className={styles.heading}>5. Choose profession</h2>
+        <div className={styles.hint}>
           Pick a profession subtype, then review the included profession packages. Favored package
           preview shows likely reach, not a direct grant by itself.
         </div>
-        <div style={{ display: "grid", gap: "0.75rem" }}>
+        <div className={styles.grid075}>
           {availableProfessions.length > 0 ? (
             <>
               {selectedProfessionCard && !showProfessionChooser ? (
-                <section
-                  style={{
-                    background: "#f6f5ef",
-                    border: "1px solid #d9ddd8",
-                    borderRadius: 12,
-                    display: "grid",
-                    gap: "0.75rem",
-                    padding: "1rem"
-                  }}
-                >
-                  <div
-                    style={{
-                      alignItems: "start",
-                      display: "grid",
-                      gap: "0.75rem",
-                      gridTemplateColumns: "minmax(0, 1fr) auto"
-                    }}
-                  >
-                    <div style={{ display: "grid", gap: "0.35rem" }}>
-                      <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+                <section className={styles.card}>
+                  <div className={styles.twoColAuto}>
+                    <div className={styles.grid035}>
+                      <div className={styles.flexWrap05}>
                         <strong>{selectedProfessionCard.subtypeName}</strong>
-                        <span style={getBadgeStyle()}>{selectedProfessionCard.familyName}</span>
+                        <span className={getBadgeClass()}>{selectedProfessionCard.familyName}</span>
                       </div>
-                      <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
+                      <div className={styles.muted}>
                         {selectedProfessionCard.description ??
                           selectedProfessionCard.familyDescription ??
                           "No notes yet."}
@@ -2599,21 +2492,21 @@ export default function ChargenWizard() {
                       Change profession
                     </button>
                   </div>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
-                    <span style={getBadgeStyle({ muted: true })}>
+                  <div className={styles.flexWrap05}>
+                    <span className={getBadgeClass({ muted: true })}>
                       Core reach {selectedProfessionCard.summary.totalEffectiveCoreReachableSkills}
                     </span>
-                    <span style={getBadgeStyle({ muted: true })}>
+                    <span className={getBadgeClass({ muted: true })}>
                       Favored reach {selectedProfessionCard.summary.totalEffectiveFavoredReachableSkills}
                     </span>
-                    <span style={getBadgeStyle({ muted: true })}>
+                    <span className={getBadgeClass({ muted: true })}>
                       Included training packages {selectedProfessionCard.normalAccessGroupNames.length}
                     </span>
                     {selectedProfessionCard.hasLiteracyFoundation ? (
-                      <span style={getBadgeStyle()}>Literacy matters here</span>
+                      <span className={getBadgeClass()}>Literacy matters here</span>
                     ) : null}
                   </div>
-                  <div style={{ display: "grid", gap: "0.35rem", fontSize: "0.9rem" }}>
+                  <div className={`${styles.grid035} ${styles.textNote}`}>
                     <div>
                       Included training packages:{" "}
                       {formatPreviewList(selectedProfessionCard.normalAccessGroupNames)}
@@ -2634,19 +2527,8 @@ export default function ChargenWizard() {
                 </section>
               ) : (
                 <>
-                  <div
-                    style={{
-                      alignItems: "end",
-                      background: "#f6f5ef",
-                      border: "1px solid #d9ddd8",
-                      borderRadius: 12,
-                      display: "grid",
-                      gap: "0.75rem",
-                      gridTemplateColumns: "minmax(220px, 1fr) minmax(220px, 280px)",
-                      padding: "1rem"
-                    }}
-                  >
-                    <label style={{ display: "grid", gap: "0.35rem" }}>
+                  <div className={styles.searchBar2Col}>
+                    <label className={styles.grid035}>
                       <span>Search professions</span>
                       <input
                         onChange={(event) => setProfessionSearch(event.target.value)}
@@ -2655,7 +2537,7 @@ export default function ChargenWizard() {
                         value={professionSearch}
                       />
                     </label>
-                    <label style={{ display: "grid", gap: "0.35rem" }}>
+                    <label className={styles.grid035}>
                       <span>Family</span>
                       <select
                         onChange={(event) => setProfessionFamilyFilter(event.target.value)}
@@ -2678,32 +2560,12 @@ export default function ChargenWizard() {
                       return (
                         <section
                           key={profession.id}
-                          style={{
-                            background: selectedProfessionId === profession.id ? "#fbfaf5" : "#fff",
-                            border: "1px solid #d9ddd8",
-                            borderRadius: 12,
-                            display: "grid",
-                            gap: "0.75rem",
-                            padding: "1rem"
-                          }}
+                          className={selectedProfessionId === profession.id ? styles.cardWhiteSelected : styles.cardWhite}
                         >
-                          <div
-                            style={{
-                              alignItems: "start",
-                              display: "grid",
-                              gap: "0.75rem",
-                              gridTemplateColumns: "minmax(0, 1fr) auto"
-                            }}
-                          >
-                            <div style={{ display: "grid", gap: "0.45rem" }}>
+                          <div className={styles.twoColAuto}>
+                            <div className={styles.grid035}>
                               <label
-                                style={{
-                                  alignItems: "center",
-                                  cursor: selectedSociety ? "pointer" : "not-allowed",
-                                  display: "flex",
-                                  flexWrap: "wrap",
-                                  gap: "0.75rem"
-                                }}
+                                className={selectedSociety ? styles.optionLabelFlex : styles.optionLabelFlexDisabled}
                               >
                                 <input
                                   checked={selectedProfessionId === profession.id}
@@ -2713,26 +2575,26 @@ export default function ChargenWizard() {
                                   type="radio"
                                 />
                                 <strong>{profession.subtypeName}</strong>
-                                <span style={getBadgeStyle()}>{profession.familyName}</span>
+                                <span className={getBadgeClass()}>{profession.familyName}</span>
                                 {selectedProfessionId === profession.id ? (
-                                  <span style={getBadgeStyle()}>Selected</span>
+                                  <span className={getBadgeClass()}>Selected</span>
                                 ) : null}
                               </label>
-                              <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
+                              <div className={styles.muted}>
                                 {profession.description ?? profession.familyDescription ?? "No notes yet."}
                               </div>
-                              <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
-                                <span style={getBadgeStyle({ muted: true })}>
+                              <div className={styles.flexWrap05}>
+                                <span className={getBadgeClass({ muted: true })}>
                                   Core reach {profession.summary.totalEffectiveCoreReachableSkills}
                                 </span>
-                                <span style={getBadgeStyle({ muted: true })}>
+                                <span className={getBadgeClass({ muted: true })}>
                                   Favored reach {profession.summary.totalEffectiveFavoredReachableSkills}
                                 </span>
-                                <span style={getBadgeStyle({ muted: true })}>
+                                <span className={getBadgeClass({ muted: true })}>
                                   Included training packages {profession.normalAccessGroupNames.length}
                                 </span>
                                 {profession.hasLiteracyFoundation ? (
-                                  <span style={getBadgeStyle()}>Literacy matters here</span>
+                                  <span className={getBadgeClass()}>Literacy matters here</span>
                                 ) : null}
                               </div>
                             </div>
@@ -2746,25 +2608,16 @@ export default function ChargenWizard() {
                           </div>
 
                           {isExpanded ? (
-                            <div
-                              style={{
-                                background: "#f6f5ef",
-                                border: "1px solid #e7e2d7",
-                                borderRadius: 10,
-                                display: "grid",
-                                gap: "0.75rem",
-                                padding: "1rem"
-                              }}
-                            >
-                              <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
+                            <div className={styles.innerCard}>
+                              <div className={styles.muted}>
                                 Skill areas organize the allocation view. Inside each area, you may
                                 have included training packages, and those packages open into the
                                 actual skills you can raise.
                               </div>
-                              <div style={{ display: "grid", gap: "0.35rem" }}>
-                                <div style={{ alignItems: "center", display: "flex", gap: "0.5rem" }}>
+                              <div className={styles.grid035}>
+                                <div className={styles.flexCenter075}>
                                   <strong>Included profession package</strong>
-                                  <span style={getBadgeStyle()}>Direct grant</span>
+                                  <span className={getBadgeClass()}>Direct grant</span>
                                 </div>
                                 <div>
                                   Included training packages: {formatPreviewList(profession.coreGroupNames)}
@@ -2775,10 +2628,10 @@ export default function ChargenWizard() {
                                   {formatPreviewList(profession.coreReachableSkillNames)}
                                 </div>
                               </div>
-                              <div style={{ display: "grid", gap: "0.35rem" }}>
-                                <div style={{ alignItems: "center", display: "flex", gap: "0.5rem" }}>
+                              <div className={styles.grid035}>
+                                <div className={styles.flexCenter075}>
                                   <strong>Favored package preview</strong>
-                                  <span style={getBadgeStyle({ muted: true })}>Preview only</span>
+                                  <span className={getBadgeClass({ muted: true })}>Preview only</span>
                                 </div>
                                 <div>
                                   Included training packages: {formatPreviewList(profession.favoredGroupNames)}
@@ -2789,20 +2642,20 @@ export default function ChargenWizard() {
                                   {formatPreviewList(profession.favoredReachableSkillNames)}
                                 </div>
                               </div>
-                              <div style={{ display: "grid", gap: "0.35rem" }}>
-                                <div style={{ alignItems: "center", display: "flex", gap: "0.5rem" }}>
+                              <div className={styles.grid035}>
+                                <div className={styles.flexCenter075}>
                                   <strong>Normal-access skill areas in this society</strong>
-                                  <span style={getBadgeStyle({ muted: true })}>Allocation view</span>
+                                  <span className={getBadgeClass({ muted: true })}>Allocation view</span>
                                 </div>
                                 <div>
                                   Buckets include: {formatPreviewList(profession.normalAccessGroupNames)}
                                 </div>
                               </div>
                               {profession.hasLiteracyFoundation ? (
-                                <div style={{ display: "grid", gap: "0.35rem" }}>
-                                  <div style={{ alignItems: "center", display: "flex", gap: "0.5rem" }}>
+                                <div className={styles.grid035}>
+                                  <div className={styles.flexCenter075}>
                                     <strong>Literacy foundation</strong>
-                                    <span style={getBadgeStyle()}>Important</span>
+                                    <span className={getBadgeClass()}>Important</span>
                                   </div>
                                   <div>
                                     This profession path reaches {profession.literacyGatedReachableSkillCount} literacy-linked skill
@@ -2816,14 +2669,7 @@ export default function ChargenWizard() {
                       );
                     })
                   ) : (
-                    <div
-                      style={{
-                        background: "#f6f5ef",
-                        border: "1px solid #d9ddd8",
-                        borderRadius: 12,
-                        padding: "1rem"
-                      }}
-                    >
+                    <div className={styles.cardPlaceholder}>
                       No professions match the current family filter and search text.
                     </div>
                   )}
@@ -2831,51 +2677,24 @@ export default function ChargenWizard() {
               )}
             </>
           ) : (
-            <div
-              style={{
-                background: "#f6f5ef",
-                border: "1px solid #d9ddd8",
-                borderRadius: 12,
-                padding: "1rem"
-              }}
-            >
+            <div className={styles.cardPlaceholder}>
               Select a rolled profile and civilization first.
             </div>
           )}
         </div>
       </section>
 
-      <section
-        style={{
-          display: "grid",
-          gap: "0.75rem",
-          opacity: selectedProfession ? 1 : 0.6
-        }}
-      >
-        <div style={{ display: "grid", gap: "1rem" }}>
-          <div
-            style={{
-              background: "rgba(246, 245, 239, 0.96)",
-              border: "1px solid #d9ddd8",
-              borderRadius: 12,
-              boxShadow: "0 6px 18px rgba(80, 72, 55, 0.08)",
-              display: "grid",
-              gap: "0.65rem",
-              gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-              padding: "0.75rem 0.9rem",
-              position: "sticky",
-              top: "0.5rem",
-              zIndex: 4
-            }}
-          >
-            <div style={{ display: "grid", gap: "0.2rem" }}>
-              <h2 style={{ margin: 0, fontSize: "1.1rem" }}>6. Skill allocation</h2>
-              <strong style={{ fontSize: "0.9rem" }}>Culture</strong>
+      <section className={`${styles.stepSection}${!selectedProfession ? ` ${styles.dimmed}` : ""}`}>
+        <div className={styles.grid1}>
+          <div className={styles.allocationStickyBar}>
+            <div className={styles.grid02}>
+              <h2 className={styles.allocationStickyHeading}>6. Skill allocation</h2>
+              <strong className={styles.allocationStickyLabel}>Culture</strong>
               <div>Civilization: {selectedCivilization?.name ?? "Not selected"}</div>
               <div>Society: {selectedSociety?.name ?? "Not selected"}</div>
             </div>
-            <div style={{ display: "grid", gap: "0.2rem" }}>
-              <strong style={{ fontSize: "0.9rem" }}>Access</strong>
+            <div className={styles.grid02}>
+              <strong className={styles.allocationStickyLabel}>Access</strong>
               <div>
                 Social status:{" "}
                 {selectedSocietyAccess && selectedSocietyBand !== undefined
@@ -2884,48 +2703,21 @@ export default function ChargenWizard() {
               </div>
               <div>Profession: {selectedProfession?.name ?? "Not selected"}</div>
             </div>
-            <div
-              style={{
-                background: "#fbfaf5",
-                border: "1px solid #e7e2d7",
-                borderRadius: 10,
-                display: "grid",
-                gap: "0.2rem",
-                padding: "0.65rem 0.8rem"
-              }}
-            >
-              <strong style={{ fontSize: "0.9rem" }}>Ordinary points</strong>
+            <div className={styles.poolCard}>
+              <strong className={styles.allocationStickyLabel}>Ordinary points</strong>
               <div>
                 Ordinary spent {progression.primaryPoolSpent} / Remaining {draftView.primaryPoolAvailable}
               </div>
             </div>
-            <div
-              style={{
-                background: "#fbfaf5",
-                border: "1px solid #e7e2d7",
-                borderRadius: 10,
-                display: "grid",
-                gap: "0.2rem",
-                padding: "0.65rem 0.8rem"
-              }}
-            >
-              <strong style={{ fontSize: "0.9rem" }}>Flexible points</strong>
+            <div className={styles.poolCard}>
+              <strong className={styles.allocationStickyLabel}>Flexible points</strong>
               <div>
                 Flexible spent {progression.secondaryPoolSpent} / Remaining {draftView.secondaryPoolAvailable}
               </div>
             </div>
           </div>
 
-          <section
-            style={{
-              background: "#fbfaf5",
-              border: "1px solid #d9ddd8",
-              borderRadius: 12,
-              display: "grid",
-              gap: "1rem",
-              padding: "1rem"
-            }}
-          >
+          <section className={styles.cardLight}>
             <strong>Society granted skills</strong>
 
             {renderSkillRowsTable({
@@ -2934,38 +2726,13 @@ export default function ChargenWizard() {
             })}
           </section>
 
-          <section
-            style={{
-              background: "#fbfaf5",
-              border: "1px solid #d9ddd8",
-              borderRadius: 12,
-              display: "grid",
-              gap: "1rem",
-              padding: "1rem"
-            }}
-          >
+          <section className={styles.cardLight}>
             <strong>Profession skills</strong>
 
             {coreProfessionSections.length > 0 ? (
-              <section
-                style={{
-                  background: "#fbfaf5",
-                  border: "1px solid #d9ddd8",
-                  borderRadius: 12,
-                  display: "grid",
-                  gap: "1rem",
-                  padding: "1rem"
-                }}
-              >
-                <div
-                  style={{
-                    alignItems: "start",
-                    display: "grid",
-                    gap: "0.75rem",
-                    gridTemplateColumns: "minmax(0, 1fr) auto"
-                  }}
-                >
-                  <div style={{ display: "grid", gap: "0.25rem" }}>
+              <section className={styles.cardLight}>
+                <div className={styles.twoColAuto}>
+                  <div className={styles.grid025}>
                     <strong>Profession groups</strong>
                   </div>
                   <button onClick={() => toggleAllocationSection("core-profession-skills")} type="button">
@@ -2974,42 +2741,33 @@ export default function ChargenWizard() {
                 </div>
 
                 {expandedAllocationSections.includes("core-profession-skills") ? (
-                  <div style={{ display: "grid", gap: "1rem" }}>
+                  <div className={styles.grid1}>
                     {motherTongueSummary.displayLabel || languageSelectionSummary.selectableLanguages.length > 0 ? (
-                      <section
-                        style={{
-                          background: "#fbfaf5",
-                          border: "1px solid #e7e2d7",
-                          borderRadius: 10,
-                          display: "grid",
-                          gap: "0.75rem",
-                          padding: "1rem"
-                        }}
-                      >
-                        <div style={{ display: "grid", gap: "0.25rem" }}>
+                      <section className={styles.innerCardLight}>
+                        <div className={styles.grid025}>
                           <strong>Languages</strong>
-                          <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
+                          <div className={styles.muted}>
                             Mother tongue is granted automatically. Extra civilization languages become real
                             {" "}Language entries when selected here.
                           </div>
                         </div>
 
                         {motherTongueSummary.displayLabel ? (
-                          <div style={{ color: "#4a4f45", fontSize: "0.9rem" }}>
+                          <div className={styles.darkMuted}>
                             Mother tongue: {motherTongueSummary.displayLabel} • Starting XP{" "}
                             {motherTongueSummary.startingLevel}
                           </div>
                         ) : null}
 
                         {languageSelectionSummary.selectableLanguages.length > 0 ? (
-                          <div style={{ display: "grid", gap: "0.5rem" }}>
-                            <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
-                              <span style={getBadgeStyle({ muted: true })}>Optional language choices</span>
-                              <span style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
+                          <div className={styles.grid05}>
+                            <div className={styles.flexWrap05}>
+                              <span className={getBadgeClass({ muted: true })}>Optional language choices</span>
+                              <span className={styles.mutedSm}>
                                 Select any civilization languages you want available in this draft.
                               </span>
                             </div>
-                            <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+                            <div className={styles.flexWrap05}>
                               {languageSelectionSummary.selectableLanguages.map((language) => {
                                 const isSelected =
                                   languageSelectionSummary.selectedOptionalLanguageIds.includes(language.id);
@@ -3017,14 +2775,8 @@ export default function ChargenWizard() {
                                 return (
                                   <button
                                     key={language.id}
+                                    className={isSelected ? styles.toggleButtonSelected : styles.toggleButton}
                                     onClick={() => handleToggleLanguageSelection(language.id)}
-                                    style={{
-                                      background: isSelected ? "#ece8da" : "#fff",
-                                      border: isSelected ? "1px solid #8b7345" : "1px solid #d9ddd8",
-                                      borderRadius: 999,
-                                      cursor: "pointer",
-                                      padding: "0.4rem 0.75rem"
-                                    }}
                                     type="button"
                                   >
                                     {language.name}
@@ -3036,7 +2788,7 @@ export default function ChargenWizard() {
                         ) : null}
 
                         {languageSkillViews.length > 0 ? (
-                          <div style={{ display: "grid", gap: "0.5rem" }}>
+                          <div className={styles.grid05}>
                             {languageSkillViews.map((skillView) => {
                               const rowFeedback = rowActionFeedback[
                                 getRowActionFeedbackKey(skillView.skillKey, "skill")
@@ -3053,46 +2805,26 @@ export default function ChargenWizard() {
                               return (
                                 <div
                                   key={skillView.skillKey}
-                                  style={{
-                                    borderTop: "1px solid #e7e2d7",
-                                    display: "grid",
-                                    gap: "0.5rem",
-                                    paddingTop: "0.75rem"
-                                  }}
+                                  className={styles.languageSkillRow}
                                 >
-                                  <div
-                                    style={{
-                                      alignItems: "center",
-                                      display: "grid",
-                                      gap: "0.75rem",
-                                      gridTemplateColumns:
-                                        "minmax(180px, 2fr) repeat(4, minmax(72px, 84px)) minmax(150px, 1fr)"
-                                    }}
-                                  >
-                                    <div style={{ display: "grid", gap: "0.3rem" }}>
-                                      <div
-                                        style={{
-                                          alignItems: "center",
-                                          display: "flex",
-                                          flexWrap: "wrap",
-                                          gap: "0.5rem"
-                                        }}
-                                      >
+                                  <div className={styles.languageSkillRowCols}>
+                                    <div className={styles.grid025}>
+                                      <div className={styles.flexWrap05}>
                                         <span>{getSkillDisplayName({ languageName: skillView.languageName, skill: { name: skillView.name } })}</span>
-                                        <span style={getSkillTierTone({ category: skillView.category })}>
+                                        <span className={getSkillTierClass({ category: skillView.category })}>
                                           {getSkillTierLabel({ category: skillView.category })}
                                         </span>
                                         {skillView.sourceTag === "mother-tongue" ? (
-                                          <span style={getBadgeStyle({ muted: true })}>Mother tongue</span>
+                                          <span className={getBadgeClass({ muted: true })}>Mother tongue</span>
                                         ) : null}
                                         {languageSelectionSummary.selectedOptionalLanguages.some(
                                           (language) => language.name === skillView.languageName
                                         ) ? (
-                                          <span style={getBadgeStyle({ muted: true })}>Selected option</span>
+                                          <span className={getBadgeClass({ muted: true })}>Selected option</span>
                                         ) : null}
                                       </div>
                                       {addPreview?.spentCost ? (
-                                        <div style={{ color: "#5e5a50", fontSize: "0.82rem" }}>
+                                        <div className={styles.mutedXs}>
                                           Next purchase cost: {addPreview.spentCost}
                                         </div>
                                       ) : null}
@@ -3101,7 +2833,7 @@ export default function ChargenWizard() {
                                     <div>{skillView.primaryRanks}</div>
                                     <div>{skillView.secondaryRanks}</div>
                                     <div>{skillView.effectiveSkillNumber}</div>
-                                    <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+                                    <div className={styles.flexWrap05}>
                                       <button
                                         disabled={!skillAllocationContext}
                                         onClick={() =>
@@ -3123,7 +2855,7 @@ export default function ChargenWizard() {
                                     </div>
                                   </div>
                                   {rowFeedback ? (
-                                    <div role="status" style={{ color: "#7a4b00", fontSize: "0.85rem" }}>
+                                    <div role="status" className={styles.statusWarning}>
                                       {rowFeedback}
                                     </div>
                                   ) : null}
@@ -3138,18 +2870,11 @@ export default function ChargenWizard() {
                     {coreProfessionSections.map((section) => (
                       <section
                         key={section.definition.id}
-                        style={{
-                          background: "#fff",
-                          border: "1px solid #e7e2d7",
-                          borderRadius: 10,
-                          display: "grid",
-                          gap: "0.75rem",
-                          padding: "1rem"
-                        }}
+                        className={styles.innerCardWhite}
                       >
-                        <div style={{ display: "grid", gap: "0.25rem" }}>
+                        <div className={styles.grid025}>
                           <strong>{section.definition.label}</strong>
-                          <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
+                          <div className={styles.muted}>
                             {section.definition.description}
                           </div>
                         </div>
@@ -3205,40 +2930,18 @@ export default function ChargenWizard() {
                           return (
                             <section
                               key={group.id}
-                              style={{
-                                background: "#fbfaf5",
-                                border: "1px solid #e7e2d7",
-                                borderRadius: 10,
-                                display: "grid",
-                                gap: "0.75rem",
-                                padding: "1rem"
-                              }}
+                              className={styles.innerCardLight}
                             >
-                              <div
-                                style={{
-                                  alignItems: "start",
-                                  display: "grid",
-                                  gap: "0.75rem",
-                                  gridTemplateColumns: "minmax(0, 1fr) auto"
-                                }}
-                              >
-                                <div style={{ display: "grid", gap: "0.2rem" }}>
+                              <div className={styles.twoColAuto}>
+                                <div className={styles.grid02}>
                                   <strong>{group.name}</strong>
-                                  <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
+                                  <div className={styles.mutedSm}>
                                     Included training package • {visibleSkillRows.length} actual skill
                                     {visibleSkillRows.length === 1 ? "" : "s"}
                                     {hasOwnedContent ? " • currently invested" : ""}
                                   </div>
                                 </div>
-                                <div
-                                  style={{
-                                    alignItems: "center",
-                                    display: "flex",
-                                    flexWrap: "wrap",
-                                    gap: "0.5rem",
-                                    justifyContent: "flex-end"
-                                  }}
-                                >
+                                <div className={styles.groupControlsRow}>
                                   <button
                                     disabled={!skillAllocationContext}
                                     onClick={() => handleAllocate(group.id, "group")}
@@ -3256,70 +2959,51 @@ export default function ChargenWizard() {
                                 </div>
                               </div>
 
-                              <div
-                                style={{
-                                  display: "grid",
-                                  gap: "0.5rem",
-                                  gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))"
-                                }}
-                              >
+                              <div className={styles.groupStatsGrid}>
                                 <div>
-                                  <div style={{ fontSize: "0.85rem" }}>Ordinary spent</div>
+                                  <div className={styles.textSm}>Ordinary spent</div>
                                   <strong>{groupView?.primaryRanks ?? 0}</strong>
                                 </div>
                                 <div>
-                                  <div style={{ fontSize: "0.85rem" }}>Flexible spent</div>
+                                  <div className={styles.textSm}>Flexible spent</div>
                                   <strong>{groupView?.secondaryRanks ?? 0}</strong>
                                 </div>
                                 <div>
-                                  <div style={{ fontSize: "0.85rem" }}>Current total</div>
+                                  <div className={styles.textSm}>Current total</div>
                                   <strong>{groupView?.totalRanks ?? 0}</strong>
                                 </div>
                               </div>
 
                               {addPreview?.spentCost ? <div>Next purchase cost: {addPreview.spentCost}</div> : null}
                               {addPreview?.error ? (
-                                <div style={{ color: "#8a3b12", fontSize: "0.9rem" }}>
+                                <div className={styles.errorText}>
                                   {addPreview.error}
                                 </div>
                               ) : null}
 
                               {groupSelectionSlots.length > 0 ? (
-                                <div style={{ display: "grid", gap: "0.5rem" }}>
+                                <div className={styles.grid05}>
                                   {groupSelectionSlots.map((slot) => (
                                     <div
                                       key={`${group.id}:${slot.slotId}`}
-                                      style={{
-                                        borderTop: "1px solid #e7e2d7",
-                                        display: "grid",
-                                        gap: "0.5rem",
-                                        paddingTop: "0.75rem"
-                                      }}
+                                      className={styles.groupSlotItem}
                                     >
-                                      <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
-                                        <span style={getBadgeStyle({ muted: !slot.isSatisfied })}>
+                                      <div className={styles.flexWrap05}>
+                                        <span className={getBadgeClass({ muted: !slot.isSatisfied })}>
                                           {slot.required ? "Required" : "Optional"} • Choose {slot.chooseCount}
                                         </span>
                                       </div>
-                                      <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+                                      <div className={styles.flexWrap05}>
                                         {slot.candidateSkills.map((skill) => {
                                           const isSelected = slot.selectedSkillIds.includes(skill.id);
 
                                           return (
                                             <button
                                               key={`${slot.slotId}-${skill.id}`}
+                                              className={isSelected ? styles.toggleButtonSelected : styles.toggleButton}
                                               onClick={() =>
                                                 handleSelectGroupSlotSkill(slot.groupId, slot.slotId, skill.id)
                                               }
-                                              style={{
-                                                background: isSelected ? "#ece8da" : "#fff",
-                                                border: isSelected
-                                                  ? "1px solid #8b7345"
-                                                  : "1px solid #d9ddd8",
-                                                borderRadius: 999,
-                                                cursor: "pointer",
-                                                padding: "0.4rem 0.75rem"
-                                              }}
                                               type="button"
                                             >
                                               {skill.name} • Type {skill.category}
@@ -3341,10 +3025,10 @@ export default function ChargenWizard() {
                         })}
 
                         {section.directRows.length > 0 ? (
-                          <div style={{ display: "grid", gap: "0.5rem" }}>
-                            <div style={{ alignItems: "center", display: "flex", gap: "0.5rem" }}>
+                          <div className={styles.grid05}>
+                            <div className={styles.flexCenter075}>
                               <strong>Direct skills in this area</strong>
-                              <span style={getBadgeStyle({ muted: true })}>No separate included package</span>
+                              <span className={getBadgeClass({ muted: true })}>No separate included package</span>
                             </div>
                             {renderSkillRowsTable({
                               emptyMessage: "No direct normal-access skills in this area.",
@@ -3360,25 +3044,9 @@ export default function ChargenWizard() {
             ) : null}
 
             {specialAccessSection ? (
-              <section
-                style={{
-                  background: "#fbfaf5",
-                  border: "1px solid #d9ddd8",
-                  borderRadius: 12,
-                  display: "grid",
-                  gap: "1rem",
-                  padding: "1rem"
-                }}
-              >
-                <div
-                  style={{
-                    alignItems: "start",
-                    display: "grid",
-                    gap: "0.75rem",
-                    gridTemplateColumns: "minmax(0, 1fr) auto"
-                  }}
-                >
-                  <div style={{ display: "grid", gap: "0.25rem" }}>
+              <section className={styles.cardLight}>
+                <div className={styles.twoColAuto}>
+                  <div className={styles.grid025}>
                     <strong>Special-access granted skills</strong>
                   </div>
                   <button onClick={() => toggleAllocationSection("special-access")} type="button">
@@ -3396,32 +3064,15 @@ export default function ChargenWizard() {
             ) : null}
           </section>
 
-          <section
-            style={{
-              background: "#fbfaf5",
-              border: "1px solid #d9ddd8",
-              borderRadius: 12,
-              display: "grid",
-              gap: "1rem",
-              order: 8,
-              padding: "1rem"
-            }}
-          >
-        <h2 style={{ margin: 0 }}>8. Specializations</h2>
+          <section className={styles.cardLight} style={{ order: 8 }}>
+        <h2 className={styles.heading}>8. Specializations</h2>
 
-        <div style={{ fontSize: "0.95rem" }}>
+        <div className={styles.hint}>
           Specializations use flexible points and are gated by the parent skill. The default list
           hides distant blocked rows so parentless entries do not overwhelm the page.
         </div>
-        <div
-          style={{
-            alignItems: "end",
-            display: "grid",
-            gap: "0.75rem",
-            gridTemplateColumns: "minmax(220px, 1fr) auto auto"
-          }}
-        >
-          <label style={{ display: "grid", gap: "0.35rem" }}>
+        <div className={styles.specializationSearchBar}>
+          <label className={styles.grid035}>
             <span>Search specializations</span>
             <input
               onChange={(event) => setSpecializationSearch(event.target.value)}
@@ -3430,14 +3081,7 @@ export default function ChargenWizard() {
               value={specializationSearch}
             />
           </label>
-          <label
-            style={{
-              alignItems: "center",
-              display: "flex",
-              gap: "0.5rem",
-              justifySelf: "start"
-            }}
-          >
+          <label className={styles.checkboxLabel}>
             <input
               checked={showAllSpecializations}
               onChange={(event) => setShowAllSpecializations(event.target.checked)}
@@ -3450,31 +3094,14 @@ export default function ChargenWizard() {
           </button>
         </div>
 
-        <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
+        <div className={styles.mutedSm}>
           Showing {visibleSpecializationRows.length} of {specializationRows.length} specialization
           rows.
         </div>
 
         {showSpecializations || specializationFilterActive ? (
-          <div
-            style={{
-              border: "1px solid #e7e2d7",
-              borderRadius: 10,
-              overflowX: "auto"
-            }}
-          >
-            <div
-              style={{
-                borderBottom: "1px solid #e7e2d7",
-                color: "#5e5a50",
-                display: "grid",
-                fontSize: "0.8rem",
-                gap: "0.75rem",
-                gridTemplateColumns:
-                  "minmax(180px, 2fr) minmax(160px, 1.6fr) repeat(2, minmax(88px, 104px)) minmax(150px, 1fr)",
-                padding: "0.75rem 1rem"
-              }}
-            >
+          <div className={styles.tableContainer}>
+            <div className={`${styles.tableHeader} ${styles.specializationTableHeader}`}>
               <strong>Specialization</strong>
               <strong>Parent skill</strong>
               <strong>Parent level</strong>
@@ -3499,45 +3126,34 @@ export default function ChargenWizard() {
               return (
                 <div
                   key={row.specialization.id}
+                  className={styles.specializationTableRow}
                   style={{
-                    borderTop: "1px solid #f0eadf",
-                    display: "grid",
-                    gap: "0.35rem",
                     opacity:
                       !row.evaluation.isAllowed && row.parentSkillLevel === 0 && row.specializationLevel === 0
                         ? 0.72
-                        : 1,
-                    padding: "0.75rem 1rem"
+                        : 1
                   }}
                 >
-                  <div
-                    style={{
-                      alignItems: "center",
-                      display: "grid",
-                      gap: "0.75rem",
-                      gridTemplateColumns:
-                        "minmax(180px, 2fr) minmax(160px, 1.6fr) repeat(2, minmax(88px, 104px)) minmax(150px, 1fr)"
-                    }}
-                  >
-                    <div style={{ display: "grid", gap: "0.25rem" }}>
-                      <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+                  <div className={styles.specializationTableRowCols}>
+                    <div className={styles.grid025}>
+                      <div className={styles.flexWrap05}>
                         <span>{row.specialization.name}</span>
-                        <span style={getBadgeStyle({ muted: true })}>Specialization</span>
+                        <span className={getBadgeClass({ muted: true })}>Specialization</span>
                       </div>
                       {row.grantedSourceLabel ? (
-                        <div style={{ color: "#5e5a50", fontSize: "0.8rem" }}>
+                        <div className={styles.mutedXs}>
                           {row.grantedSourceLabel}
                         </div>
                       ) : null}
                       {purchaseState.nextCost !== undefined ? (
-                        <div style={{ color: "#5e5a50", fontSize: "0.8rem" }}>
+                        <div className={styles.mutedXs}>
                           Next cost {purchaseState.nextCost} flexible points
                         </div>
                       ) : null}
                     </div>
                     <div>
                       <div>{row.parentSkillName}</div>
-                      <div style={{ color: "#5e5a50", fontSize: "0.8rem" }}>
+                      <div className={styles.mutedXs}>
                         Needs level {row.specialization.minimumParentLevel}
                       </div>
                     </div>
@@ -3545,12 +3161,12 @@ export default function ChargenWizard() {
                     <div>
                       <div>{row.secondaryRanks}</div>
                       {row.grantedSpecializationLevel > 0 ? (
-                        <div style={{ color: "#5e5a50", fontSize: "0.8rem" }}>
+                        <div className={styles.mutedXs}>
                           +{row.grantedSpecializationLevel} derived preview
                         </div>
                       ) : null}
                     </div>
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+                    <div className={styles.flexWrap05}>
                       <button
                         aria-label={`Add ${row.specialization.name}`}
                         disabled={!purchaseState.canAllocate}
@@ -3572,17 +3188,14 @@ export default function ChargenWizard() {
                   {ruleStatusItems.map((status) => (
                     <div
                       key={`${row.specialization.id}-${status.tone}-${status.message}`}
+                      className={getRuleStatusClass(status.tone)}
                       role="status"
-                      style={{
-                        color: getRuleStatusColor(status.tone),
-                        fontSize: "0.85rem"
-                      }}
                     >
                       {status.message}
                     </div>
                   ))}
                   {rowFeedback ? (
-                    <div role="status" style={{ color: "#7a4b00", fontSize: "0.85rem" }}>
+                    <div role="status" className={styles.statusWarning}>
                       {rowFeedback}
                     </div>
                   ) : null}
@@ -3591,7 +3204,7 @@ export default function ChargenWizard() {
             })}
 
             {visibleSpecializationRows.length === 0 ? (
-              <div style={{ padding: "1rem" }}>
+              <div className={styles.emptyTableRow}>
                 No specializations match the current search or visibility setting.
               </div>
             ) : null}
@@ -3599,30 +3212,13 @@ export default function ChargenWizard() {
         ) : null}
           </section>
 
-          <section
-            style={{
-              background: "#fbfaf5",
-              border: "1px solid #d9ddd8",
-              borderRadius: 12,
-              display: "grid",
-              gap: "0.75rem",
-              order: 7,
-              padding: "1rem"
-            }}
-          >
-        <h2 style={{ margin: 0 }}>7. Other skills</h2>
-        <div style={{ display: "grid", gap: "0.75rem" }}>
-            <div
-              style={{
-                alignItems: "start",
-                display: "grid",
-                gap: "0.75rem",
-                gridTemplateColumns: "minmax(0, 1fr) auto"
-              }}
-            >
-              <div style={{ display: "grid", gap: "0.3rem" }}>
-                <div style={{ fontSize: "0.9rem" }}>Other skills use flexible points</div>
-                <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
+          <section className={styles.cardLight} style={{ order: 7 }}>
+        <h2 className={styles.heading}>7. Other skills</h2>
+        <div className={styles.grid075}>
+            <div className={styles.twoColAuto}>
+              <div className={styles.grid025}>
+                <div className={styles.textNote}>Other skills use flexible points</div>
+                <div className={styles.mutedSm}>
                   {visibleOtherSkillRows.length} other skill
                   {visibleOtherSkillRows.length === 1 ? "" : "s"} visible
                 </div>
@@ -3636,31 +3232,19 @@ export default function ChargenWizard() {
         </div>
 
         {showOtherSkills || (otherSkillFilterActive && visibleOtherSkillRows.length > 0) ? (
-          <div style={{ display: "grid", gap: "0.75rem" }}>
-            <div
-              style={{
-                alignItems: "end",
-                background: "#f6f5ef",
-                border: "1px solid #d9ddd8",
-                borderRadius: 12,
-                display: "grid",
-                gap: "0.75rem",
-                gridTemplateColumns:
-                  "minmax(220px, 1fr) minmax(180px, 220px) minmax(180px, 240px)",
-                padding: "1rem"
-              }}
-            >
-              <label style={{ display: "grid", gap: "0.35rem" }}>
+          <div className={styles.grid075}>
+            <div className={styles.searchBar3Col}>
+              <label className={styles.grid035}>
                 <span>Search skills</span>
                 <input
-                  className="other-skill-search-input"
+                  className={styles.otherSkillSearchInput}
                   onChange={(event) => setSkillSearch(event.target.value)}
                   placeholder="Search by skill name"
                   type="search"
                   value={skillSearch}
                 />
               </label>
-              <label style={{ display: "grid", gap: "0.35rem" }}>
+              <label className={styles.grid035}>
                 <span>Show</span>
                 <select
                   onChange={(event) =>
@@ -3674,7 +3258,7 @@ export default function ChargenWizard() {
                   <option value="blocked">Blocked</option>
                 </select>
               </label>
-              <label style={{ display: "grid", gap: "0.35rem" }}>
+              <label className={styles.grid035}>
                 <span>Skill category</span>
                 <select
                   onChange={(event) =>
@@ -3704,60 +3288,23 @@ export default function ChargenWizard() {
         </div>
       </section>
 
-      <section
-        style={{
-          background: "#fbfaf5",
-          border: "1px solid #d9ddd8",
-          borderRadius: 12,
-          display: "grid",
-          gap: "1rem",
-          order: 9,
-          padding: "1rem"
-        }}
-      >
-        <h2 style={{ margin: 0 }}>9. Skills table</h2>
+      <section className={styles.cardLight} style={{ order: 9 }}>
+        <h2 className={styles.heading}>9. Skills table</h2>
 
         {groupedPlayerSkillTableRows.length > 0 ? (
-          <div
-            style={{ display: "grid", gap: "1rem" }}
-          >
+          <div className={styles.grid1}>
             {groupedPlayerSkillTableRows.map((group) => (
               <section
                 key={group.bucketId}
-                style={{
-                  border: "1px solid #e7e2d7",
-                  borderRadius: 10,
-                  overflowX: "auto"
-                }}
+                className={styles.tableContainer}
               >
-                <div
-                  style={{
-                    alignItems: "center",
-                    background: "#f6f5ef",
-                    borderBottom: "1px solid #e7e2d7",
-                    display: "flex",
-                    gap: "0.5rem",
-                    justifyContent: "space-between",
-                    padding: "0.75rem 1rem"
-                  }}
-                >
+                <div className={styles.skillsSummaryBucketHeader}>
                   <strong>{group.label}</strong>
-                  <span style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
+                  <span className={styles.mutedSm}>
                     {group.rows.length} skill{group.rows.length === 1 ? "" : "s"}
                   </span>
                 </div>
-                <div
-                  style={{
-                    borderBottom: "1px solid #e7e2d7",
-                    color: "#5e5a50",
-                    display: "grid",
-                    fontSize: "0.8rem",
-                    gap: "0.75rem",
-                    gridTemplateColumns:
-                      "minmax(180px, 2fr) minmax(120px, 1.2fr) repeat(6, minmax(72px, 88px))",
-                    padding: "0.75rem 1rem"
-                  }}
-                >
+                <div className={`${styles.tableHeader} ${styles.skillsSummaryTableHeader}`}>
                   <strong>Skill</strong>
                   <strong>Stats</strong>
                   <strong>Avg stats</strong>
@@ -3771,19 +3318,12 @@ export default function ChargenWizard() {
                 {group.rows.map((skill) => (
                   <div
                     key={skill.skillId}
-                    style={{
-                      borderTop: "1px solid #f0eadf",
-                      display: "grid",
-                      gap: "0.75rem",
-                      gridTemplateColumns:
-                        "minmax(180px, 2fr) minmax(120px, 1.2fr) repeat(6, minmax(72px, 88px))",
-                      padding: "0.75rem 1rem"
-                    }}
+                    className={styles.skillsSummaryTableRow}
                   >
                     <div>
                       <div>{skill.skillName}</div>
                       {skill.literacyWarning ? (
-                        <div style={{ color: "#5e5a50", fontSize: "0.8rem" }}>
+                        <div className={styles.mutedXs}>
                           {skill.literacyWarning}
                         </div>
                       ) : null}
@@ -3805,38 +3345,11 @@ export default function ChargenWizard() {
         )}
       </section>
 
-      <section
-        style={{
-          background: "#fbfaf5",
-          border: "1px solid #d9ddd8",
-          borderRadius: 12,
-          display: "grid",
-          gap: "1rem",
-          order: 10,
-          padding: "1rem"
-        }}
-      >
-        <h2 style={{ margin: 0 }}>9b. Specialization Table</h2>
+      <section className={styles.cardLight} style={{ order: 10 }}>
+        <h2 className={styles.heading}>9b. Specialization Table</h2>
         {draftView.specializations.length > 0 ? (
-          <div
-            style={{
-              border: "1px solid #e7e2d7",
-              borderRadius: 10,
-              overflowX: "auto"
-            }}
-          >
-            <div
-              style={{
-                borderBottom: "1px solid #e7e2d7",
-                color: "#5e5a50",
-                display: "grid",
-                fontSize: "0.8rem",
-                gap: "0.75rem",
-                gridTemplateColumns:
-                  "minmax(180px, 2fr) minmax(160px, 1.6fr) repeat(3, minmax(80px, 92px))",
-                padding: "0.75rem 1rem"
-              }}
-            >
+          <div className={styles.tableContainer}>
+            <div className={`${styles.tableHeader} ${styles.specializationSummaryHeader}`}>
               <strong>Specialization</strong>
               <strong>Parent skill</strong>
               <strong>Direct XP</strong>
@@ -3847,19 +3360,12 @@ export default function ChargenWizard() {
             {draftView.specializations.map((specialization) => (
               <div
                 key={specialization.specializationId}
-                style={{
-                  borderTop: "1px solid #f0eadf",
-                  display: "grid",
-                  gap: "0.75rem",
-                  gridTemplateColumns:
-                    "minmax(180px, 2fr) minmax(160px, 1.6fr) repeat(3, minmax(80px, 92px))",
-                  padding: "0.75rem 1rem"
-                }}
+                className={styles.specializationSummaryRow}
               >
                 <div>
                   <div>{specialization.name}</div>
                   {specialization.relationshipGrantedSourceSkillName ? (
-                    <div style={{ color: "#5e5a50", fontSize: "0.8rem" }}>
+                    <div className={styles.mutedXs}>
                       {formatDerivedSkillSourceLabel({
                         sourceSkillName: specialization.relationshipGrantedSourceSkillName,
                         sourceType: specialization.relationshipGrantedSourceType
@@ -3879,36 +3385,11 @@ export default function ChargenWizard() {
         )}
       </section>
 
-      <section
-        style={{
-          background: "#fbfaf5",
-          border: "1px solid #d9ddd8",
-          borderRadius: 12,
-          display: "grid",
-          gap: "1rem",
-          order: 11,
-          padding: "1rem"
-        }}
-      >
-        <h2 style={{ margin: 0 }}>10. Review summary</h2>
+      <section className={styles.cardLight} style={{ order: 11 }}>
+        <h2 className={styles.heading}>10. Review summary</h2>
 
-        <div
-          style={{
-            display: "grid",
-            gap: "1rem",
-            gridTemplateColumns: "repeat(2, minmax(0, 1fr))"
-          }}
-        >
-          <div
-            style={{
-              background: "#f6f5ef",
-              border: "1px solid #e7e2d7",
-              borderRadius: 10,
-              display: "grid",
-              gap: "0.35rem",
-              padding: "1rem"
-            }}
-          >
+        <div className={styles.reviewGrid}>
+          <div className={styles.reviewCard}>
             <strong>Character summary</strong>
             <div>Chargen rules: {chargenRuleSet.name}</div>
             <div>Profile: {selectedProfile?.label ?? "Not selected"}</div>
@@ -3933,16 +3414,7 @@ export default function ChargenWizard() {
             <div>Specializations: {draftView.specializations.length}</div>
           </div>
 
-          <div
-            style={{
-              background: "#f6f5ef",
-              border: "1px solid #e7e2d7",
-              borderRadius: 10,
-              display: "grid",
-              gap: "0.35rem",
-              padding: "1rem"
-            }}
-          >
+          <div className={styles.reviewCard}>
             <strong>Points and education</strong>
             <div>
               Rule set: {chargenRuleSet.name} ({chargenRuleSet.ordinarySkillPoints} ordinary, flexible x
@@ -3960,7 +3432,7 @@ export default function ChargenWizard() {
             <div>Base education: {draftView.education.baseEducation}</div>
             <div>Social class education value: {draftView.education.socialClassEducationValue}</div>
             <div>Education-linked skills: {educationLinkedSkillCount}</div>
-            <small style={{ color: "#6d665a" }}>
+            <small className={styles.noteMuted}>
               Education-linked skills are learned skills that add to Education. Review skill
               metadata in Admin -&gt; Skills.
             </small>
@@ -3970,34 +3442,14 @@ export default function ChargenWizard() {
         </div>
       </section>
 
-      <section
-        style={{
-          background: "#fbfaf5",
-          border: "1px solid #d9ddd8",
-          borderRadius: 12,
-          display: "grid",
-          gap: "0.75rem",
-          order: 12,
-          padding: "1rem"
-        }}
-      >
-        <h2 style={{ margin: 0 }}>11. Finalize character</h2>
-        <div style={{ fontSize: "0.95rem" }}>
+      <section className={styles.cardLight} style={{ order: 12 }}>
+        <h2 className={styles.heading}>11. Finalize character</h2>
+        <div className={styles.hint}>
           Confirm the name and create the local character record. The signed-in player is stored as
           the creator for attribution.
         </div>
-        <div
-          style={{
-            background: "#f6f5ef",
-            border: "1px solid #e7e2d7",
-            borderRadius: 10,
-            display: "grid",
-            gap: "1rem",
-            gridTemplateColumns: "minmax(0, 1fr) minmax(260px, 320px)",
-            padding: "1rem"
-          }}
-        >
-          <label style={{ display: "grid", gap: "0.35rem" }}>
+        <div className={styles.finalizeGrid}>
+          <label className={styles.grid035}>
             <span>Character name</span>
             <input
               onChange={(event) => setCharacterName(event.target.value)}
@@ -4006,17 +3458,17 @@ export default function ChargenWizard() {
               value={characterName}
             />
           </label>
-          <div style={{ display: "grid", gap: "0.35rem" }}>
+          <div className={styles.grid035}>
             <strong>Creator attribution</strong>
             <div>{formatPlayerLabel(currentUser)}</div>
             <button
+              className={styles.finalizeButton}
               disabled={!review.canFinalize || currentUser === undefined || isFinalizing}
               onClick={() => {
                 handleFinalize().catch((error) => {
                   console.error(error);
                 });
               }}
-              style={{ width: "fit-content" }}
               type="button"
             >
               {isFinalizing ? "Saving character..." : "Finalize character"}
@@ -4024,25 +3476,6 @@ export default function ChargenWizard() {
           </div>
         </div>
       </section>
-
-      <style jsx>{`
-        .other-skill-search-input {
-          appearance: none;
-          -webkit-appearance: none;
-          font-family: inherit;
-          font-size: 1rem;
-          line-height: 1.4;
-          padding: 0.5rem;
-        }
-
-        .other-skill-search-input::placeholder {
-          color: #6b6558;
-          font-family: inherit;
-          font-size: 1rem;
-          line-height: 1.4;
-          opacity: 1;
-        }
-      `}</style>
         </>
       ) : null}
     </section>

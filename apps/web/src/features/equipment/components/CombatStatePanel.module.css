@@ -1,0 +1,109 @@
+.sectionCard {
+  background: #fbfaf5;
+  border: 1px solid #d9ddd8;
+  border-radius: 12px;
+  display: grid;
+  gap: 0.75rem;
+  padding: 1rem;
+}
+
+.sectionCardHeader {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.sectionCardHeading {
+  margin: 0;
+}
+
+.sectionCardDescription {
+  color: #5e5a50;
+  font-size: 0.9rem;
+}
+
+.statGrid {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.battleStatCard {
+  background: #f6f5ef;
+  border: 1px solid #d9ddd8;
+  border-radius: 12px;
+  display: grid;
+  gap: 0.5rem;
+  padding: 1rem;
+}
+
+.battleStatCardHeader {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.battleStatCardSubtitle {
+  color: #5e5a50;
+  font-size: 0.85rem;
+}
+
+.detailRows {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.detailRow {
+  align-items: start;
+  display: grid;
+  gap: 0.35rem;
+  grid-template-columns: minmax(140px, 180px) 1fr;
+}
+
+.detailRowLabel {
+  color: #5e5a50;
+  font-size: 0.9rem;
+}
+
+.tableCard {
+  background: #f6f5ef;
+  border: 1px solid #d9ddd8;
+  border-radius: 12px;
+  display: grid;
+  gap: 0.75rem;
+  padding: 1rem;
+}
+
+.tableCardHeader {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.tableCardDescription {
+  color: #5e5a50;
+  font-size: 0.85rem;
+}
+
+.tableScroll {
+  overflow-x: auto;
+}
+
+.table {
+  border-collapse: collapse;
+  min-width: 100%;
+  width: 100%;
+}
+
+.th {
+  border-bottom: 1px solid #d9ddd8;
+  color: #5e5a50;
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 0.6rem;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.td {
+  font-size: 0.95rem;
+  padding: 0.6rem;
+  vertical-align: top;
+}

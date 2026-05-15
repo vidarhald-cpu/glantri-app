@@ -1,0 +1,13 @@
+.section {
+  display: grid;
+  gap: 0.75rem;
+  max-width: 720px;
+}
+
+.heading {
+  margin: 0;
+}
+
+.message {
+  margin: 0;
+}

@@ -1,0 +1,76 @@
+.controlSection {
+  background: #fbfaf5;
+  border: 1px solid #d9ddd8;
+  border-radius: 12px;
+  display: grid;
+  gap: 0.9rem;
+  padding: 1rem;
+}
+
+.controlSectionCompact {
+  gap: 0.65rem;
+  padding: 0.85rem;
+}
+
+.controlSectionSticky {
+  position: sticky;
+  top: 1rem;
+  z-index: 10;
+}
+
+.controlSectionHeading {
+  margin: 0;
+}
+
+.field {
+  background: #f6f5ef;
+  border: 1px solid #d9ddd8;
+  border-radius: 12px;
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.75rem 0.85rem;
+}
+
+.fieldError {
+  color: #8b3a1a;
+  font-size: 0.8rem;
+}
+
+.fieldLabel {
+  color: #5e5a50;
+  font-size: 0.9rem;
+}
+
+.fieldValue {
+  font-weight: 500;
+}
+
+.tableScroll {
+  overflow-x: auto;
+}
+
+.table {
+  border-collapse: collapse;
+  min-width: 100%;
+  width: 100%;
+}
+
+.tableHeaderRow {
+  border-bottom: 1px solid #d9ddd8;
+  text-align: left;
+}
+
+.th {
+  padding: 0.5rem 0.75rem 0.5rem 0;
+}
+
+.td {
+  padding: 0.6rem 0.75rem 0.6rem 0;
+  vertical-align: top;
+}
+
+.fieldsGrid {
+  display: grid;
+  gap: 0.6rem;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
