@@ -13,7 +13,7 @@ import type {
 import type { CanonicalContent } from "@glantri/content";
 
 import { CanonicalContentService } from "../lib/adminContentService";
-import { requireAdminUser, requireAuthenticatedUser } from "../lib/sessionAuth";
+import { requireAuthenticatedUser, requireStrictAdminUser } from "../lib/sessionAuth";
 
 const canonicalContentService = new CanonicalContentService();
 
@@ -57,7 +57,7 @@ export const adminContentRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.put("/content", async (request, reply) => {
-    const user = await requireAdminUser(request, reply);
+    const user = await requireStrictAdminUser(request, reply);
 
     if (!user) {
       return;

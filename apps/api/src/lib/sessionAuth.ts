@@ -1,4 +1,4 @@
-import { canAccessAdmin, type AuthUser } from "@glantri/auth";
+import { canAccessAdmin, isAdmin, type AuthUser } from "@glantri/auth";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 
 import { AuthService } from "@glantri/database";
@@ -132,6 +132,27 @@ export async function requireAdminUser(
   if (!canAccessAdmin(user.roles)) {
     await reply.code(403).send({
       error: "Admin or GM role required."
+    });
+    return null;
+  }
+
+  return user;
+}
+
+export async function requireStrictAdminUser(
+  request: FastifyRequest,
+  reply: FastifyReply,
+  authService = new AuthService()
+): Promise<AuthUser | null> {
+  const user = await requireAuthenticatedUser(request, reply, authService);
+
+  if (!user) {
+    return null;
+  }
+
+  if (!isAdmin(user.roles)) {
+    await reply.code(403).send({
+      error: "Admin role required."
     });
     return null;
   }
