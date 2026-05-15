@@ -175,18 +175,23 @@ describe("resolveParticipantSkillRollProfile", () => {
         ...build.progression,
         skillGroups: [
           {
+            gms: 0,
             groupId: "healing_practice",
+            grantedRanks: 0,
             primaryRanks: 6,
             ranks: 6,
+            secondaryRanks: 0,
           },
         ],
         skills: [
           {
             category: "secondary",
+            grantedRanks: 0,
             groupId: "healing_practice",
             level: 2,
             primaryRanks: 0,
             ranks: 2,
+            relationshipGrantedRanks: 0,
             secondaryRanks: 2,
             skillId: "first_aid",
           },

@@ -1,4 +1,9 @@
-import type { EncounterSession, ScenarioParticipant } from "@glantri/domain";
+import type {
+  EncounterSession,
+  RoleplayActionLogEntry,
+  RoleplayPendingSkillRoll,
+  ScenarioParticipant,
+} from "@glantri/domain";
 import { describe, expect, it } from "vitest";
 
 import { buildPlayerGeneralEncounterView } from "./playerGeneralEncounter";
@@ -23,6 +28,51 @@ function makeScenarioParticipant(input: {
     sourceType: "character",
     state: {},
   } as ScenarioParticipant;
+}
+
+function makeRoleplayActionLogEntry(
+  input: Partial<RoleplayActionLogEntry> & Pick<RoleplayActionLogEntry, "id" | "summary">
+): RoleplayActionLogEntry {
+  const { id, summary, ...rest } = input;
+  return {
+    autoSuccess: false,
+    createdAt: "2026-01-01T00:00:00.000Z",
+    fumble: false,
+    id,
+    mode: "difficulty",
+    openEndedD10s: [],
+    opponentFumble: false,
+    opponentOpenEndedD10s: [],
+    opponentSilent: false,
+    partial: false,
+    silent: false,
+    summary,
+    supportOpenEndedD10s: [],
+    type: "gm_skill_roll",
+    ...rest,
+  };
+}
+
+function makePendingSkillRoll(
+  input: Partial<RoleplayPendingSkillRoll> &
+    Pick<RoleplayPendingSkillRoll, "id" | "participantId" | "skillId" | "skillLabel">
+): RoleplayPendingSkillRoll {
+  const { id, participantId, skillId, skillLabel, ...rest } = input;
+  return {
+    assignedAt: "2026-01-01T00:00:00.000Z",
+    id,
+    mode: "difficulty",
+    opponentSilent: false,
+    otherMod: 0,
+    participantId,
+    silent: false,
+    skillId,
+    skillLabel,
+    useDbMod: false,
+    useGenMod: false,
+    useObSkillMod: false,
+    ...rest,
+  };
 }
 
 function makeEncounter(): EncounterSession {
@@ -52,7 +102,7 @@ function makeEncounter(): EncounterSession {
     ],
     roleplayState: {
       actionLog: [
-        {
+        makeRoleplayActionLogEntry({
           createdAt: "2026-01-01T00:04:00.000Z",
           dieResult: 14,
           id: "visible-result",
@@ -67,8 +117,8 @@ function makeEncounter(): EncounterSession {
           skillId: "perception",
           summary: "GM rolled Perception.",
           type: "gm_skill_roll",
-        },
-        {
+        }),
+        makeRoleplayActionLogEntry({
           createdAt: "2026-01-01T00:00:30.000Z",
           id: "historical-visible-result",
           mode: "difficulty",
@@ -78,8 +128,8 @@ function makeEncounter(): EncounterSession {
           skillLabel: "Spot hidden",
           summary: "GM rolled Spot hidden.",
           type: "gm_skill_roll",
-        },
-        {
+        }),
+        makeRoleplayActionLogEntry({
           createdAt: "2026-01-01T00:03:00.000Z",
           id: "hidden-result",
           mode: "difficulty",
@@ -89,8 +139,8 @@ function makeEncounter(): EncounterSession {
           skillLabel: "Sneaking",
           summary: "GM rolled Sneaking.",
           type: "gm_skill_roll",
-        },
-        {
+        }),
+        makeRoleplayActionLogEntry({
           createdAt: "2026-01-01T00:02:00.000Z",
           id: "silent-result",
           mode: "difficulty",
@@ -100,8 +150,8 @@ function makeEncounter(): EncounterSession {
           skillLabel: "Listen",
           summary: "GM rolled Listen.",
           type: "gm_skill_roll",
-        },
-        {
+        }),
+        makeRoleplayActionLogEntry({
           createdAt: "2026-01-01T00:01:30.000Z",
           id: "other-participant-result",
           mode: "difficulty",
@@ -111,8 +161,8 @@ function makeEncounter(): EncounterSession {
           skillLabel: "Haggle",
           summary: "GM rolled Haggle.",
           type: "gm_skill_roll",
-        },
-        {
+        }),
+        makeRoleplayActionLogEntry({
           createdAt: "2026-01-01T00:01:00.000Z",
           id: "opposed-result",
           mode: "opposed",
@@ -122,7 +172,7 @@ function makeEncounter(): EncounterSession {
           skillLabel: "Hide",
           summary: "GM rolled opposed Hide.",
           type: "gm_skill_roll",
-        },
+        }),
       ],
       gmMessage: "The market is loud and tense.",
       participantDescriptions: {
@@ -143,7 +193,7 @@ function makeEncounter(): EncounterSession {
         },
       },
       pendingSkillRolls: [
-        {
+        makePendingSkillRoll({
           assignedAt: "2026-01-01T00:00:00.000Z",
           difficulty: "easy",
           id: "older-visible-roll",
@@ -153,8 +203,8 @@ function makeEncounter(): EncounterSession {
           silent: false,
           skillId: "listen",
           skillLabel: "Listen",
-        },
-        {
+        }),
+        makePendingSkillRoll({
           assignedAt: "2026-01-01T00:05:00.000Z",
           difficulty: "medium",
           id: "visible-roll",
@@ -165,8 +215,8 @@ function makeEncounter(): EncounterSession {
           skillId: "perception",
           skillLabel: "Perception",
           skillValue: 16,
-        },
-        {
+        }),
+        makePendingSkillRoll({
           assignedAt: "2026-01-01T00:00:00.000Z",
           id: "silent-roll",
           mode: "difficulty",
@@ -174,7 +224,7 @@ function makeEncounter(): EncounterSession {
           silent: true,
           skillId: "hide",
           skillLabel: "Hide",
-        },
+        }),
       ],
       visibility: {
         "scenario-pc-1": {
@@ -265,7 +315,7 @@ describe("playerGeneralEncounter", () => {
       roleplayState: {
         ...baseEncounter.roleplayState,
         pendingSkillRolls: [
-          {
+          makePendingSkillRoll({
             assignedAt: "2026-01-01T00:06:00.000Z",
             difficulty: "medium",
             id: "scenario-participant-roll",
@@ -276,7 +326,7 @@ describe("playerGeneralEncounter", () => {
             skillId: "first-aid",
             skillLabel: "First aid",
             skillValue: 23,
-          },
+          }),
         ],
       },
     } as EncounterSession;
@@ -305,7 +355,7 @@ describe("playerGeneralEncounter", () => {
       roleplayState: {
         ...baseEncounter.roleplayState,
         actionLog: [
-          {
+          makeRoleplayActionLogEntry({
             createdAt: "2026-01-01T00:07:00.000Z",
             dieResult: 26,
             id: "player-opposed-result",
@@ -322,8 +372,8 @@ describe("playerGeneralEncounter", () => {
             skillLabel: "Dodge",
             summary: "Player rolled Dodge.",
             type: "gm_skill_roll",
-          },
-          {
+          }),
+          makeRoleplayActionLogEntry({
             createdAt: "2026-01-01T00:06:30.000Z",
             dieResult: 23,
             id: "opponent-opposed-result",
@@ -339,11 +389,11 @@ describe("playerGeneralEncounter", () => {
             skillLabel: "Brawling",
             summary: "GM rolled Brawling.",
             type: "gm_skill_roll",
-          },
+          }),
           ...(baseEncounter.roleplayState?.actionLog ?? []),
         ],
         pendingSkillRolls: [
-          {
+          makePendingSkillRoll({
             assignedAt: "2026-01-01T00:06:00.000Z",
             id: "opposed-roll",
             mode: "opposed",
@@ -357,7 +407,7 @@ describe("playerGeneralEncounter", () => {
             skillId: "dodge",
             skillLabel: "Dodge",
             skillValue: 24,
-          },
+          }),
         ],
       },
     } as EncounterSession;
@@ -393,7 +443,7 @@ describe("playerGeneralEncounter", () => {
       roleplayState: {
         ...baseEncounter.roleplayState,
         actionLog: [
-          {
+          makeRoleplayActionLogEntry({
             createdAt: "2026-01-01T00:07:00.000Z",
             dieResult: 12,
             id: "player-opposed-result",
@@ -410,8 +460,8 @@ describe("playerGeneralEncounter", () => {
             skillLabel: "Dodge",
             summary: "Player rolled Dodge.",
             type: "gm_skill_roll",
-          },
-          {
+          }),
+          makeRoleplayActionLogEntry({
             createdAt: "2026-01-01T00:06:30.000Z",
             dieResult: 18,
             id: "hidden-opponent-opposed-result",
@@ -427,10 +477,10 @@ describe("playerGeneralEncounter", () => {
             skillLabel: "Brawling",
             summary: "GM rolled Brawling.",
             type: "gm_skill_roll",
-          },
+          }),
         ],
         pendingSkillRolls: [
-          {
+          makePendingSkillRoll({
             assignedAt: "2026-01-01T00:06:00.000Z",
             id: "opposed-roll",
             mode: "opposed",
@@ -444,7 +494,7 @@ describe("playerGeneralEncounter", () => {
             skillId: "dodge",
             skillLabel: "Dodge",
             skillValue: 24,
-          },
+          }),
         ],
       },
     } as EncounterSession;
@@ -487,9 +537,11 @@ describe("playerGeneralEncounter", () => {
     const encounter = makeEncounter();
 
     encounter.roleplayState = {
-      ...encounter.roleplayState,
+      gmMessage: encounter.roleplayState?.gmMessage ?? "",
+      participantDescriptions: encounter.roleplayState?.participantDescriptions ?? {},
+      visibility: encounter.roleplayState?.visibility ?? {},
       actionLog: [
-        {
+        makeRoleplayActionLogEntry({
           createdAt: "2026-01-01T00:08:00.000Z",
           id: "legacy-opposed-side-result",
           mode: "difficulty",
@@ -502,11 +554,11 @@ describe("playerGeneralEncounter", () => {
           skillLabel: "Administration",
           summary: "GM rolled Administration.",
           type: "gm_skill_roll",
-        },
+        }),
         ...(encounter.roleplayState?.actionLog ?? []),
       ],
       pendingSkillRolls: [
-        {
+        makePendingSkillRoll({
           assignedAt: "2026-01-01T00:07:00.000Z",
           id: "opposed-pending",
           mode: "opposed",
@@ -516,7 +568,7 @@ describe("playerGeneralEncounter", () => {
           silent: false,
           skillId: "administration",
           skillLabel: "Administration",
-        },
+        }),
         ...(encounter.roleplayState?.pendingSkillRolls ?? []),
       ],
     };
