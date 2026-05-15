@@ -186,6 +186,18 @@ describe("CampaignService campaign roster", () => {
     await expect(service.listCampaignRosterEntries("campaign-1")).resolves.toEqual([]);
   });
 
+  it("treats already-removed roster entry ids as an idempotent no-op", async () => {
+    const { repository, rosterEntries } = createScenarioRepositoryStub();
+    const service = new CampaignService(repository);
+
+    await service.removeCampaignRosterEntry({
+      campaignId: "campaign-1",
+      rosterEntryId: "missing-roster-entry",
+    });
+
+    expect(rosterEntries).toHaveLength(0);
+  });
+
   it("keeps roster membership scoped to each campaign/source pair", async () => {
     const { repository, rosterEntries } = createScenarioRepositoryStub();
     const characters = new Map([

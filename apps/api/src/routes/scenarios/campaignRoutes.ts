@@ -25,6 +25,26 @@ import {
 const campaignService = new CampaignService();
 const scenarioService = new ScenarioService();
 
+async function removeCampaignRosterMembershipBySource(input: {
+  campaignId: string;
+  sourceId: string;
+  sourceType: unknown;
+  userId: string;
+}): Promise<void> {
+  const sourceType = campaignRosterSourceTypeSchema.parse(input.sourceType);
+  const campaign = await campaignService.getCampaignById(input.campaignId);
+
+  if (!campaign || campaign.gmUserId !== input.userId) {
+    throw new Error("Campaign not found.");
+  }
+
+  await campaignService.removeCampaignRosterEntryBySource({
+    campaignId: input.campaignId,
+    sourceId: input.sourceId,
+    sourceType
+  });
+}
+
 export const campaignRoutes: FastifyPluginAsync = async (app) => {
   app.get("/campaigns", async (request, reply) => {
     const user = await requireAdminUser(request, reply);
@@ -333,6 +353,43 @@ export const campaignRoutes: FastifyPluginAsync = async (app) => {
     }
   });
 
+  app.delete("/campaigns/:campaignId/roster-membership/:sourceType/:sourceId", async (request, reply) => {
+    const user = await requireAdminUser(request, reply);
+
+    if (!user) {
+      return;
+    }
+
+    try {
+      const campaignId = parseId(request.params, "campaignId", "Campaign id");
+      const params =
+        request.params && typeof request.params === "object"
+          ? (request.params as Record<string, unknown>)
+          : {};
+      const sourceId = parseRequiredString(params, "sourceId");
+
+      await removeCampaignRosterMembershipBySource({
+        campaignId,
+        sourceId,
+        sourceType: params.sourceType,
+        userId: user.id
+      });
+
+      return { ok: true };
+    } catch (error) {
+      const message =
+        error instanceof Error && error.message === "Campaign not found."
+          ? "Campaign not found."
+          : error instanceof Error
+            ? error.message
+            : "Unable to remove campaign roster membership.";
+
+      return reply.code(message === "Campaign not found." ? 404 : 400).send({
+        error: message
+      });
+    }
+  });
+
   app.get("/campaigns/:campaignId/entities", async (request, reply) => {
     const user = await requireAdminUser(request, reply);
 
@@ -374,25 +431,25 @@ export const campaignRoutes: FastifyPluginAsync = async (app) => {
           ? (request.query as Record<string, unknown>)
           : {};
       const sourceId = parseRequiredString(query, "sourceId");
-      const sourceType = campaignRosterSourceTypeSchema.parse(query.sourceType);
-      const campaign = await campaignService.getCampaignById(campaignId);
 
-      if (!campaign || campaign.gmUserId !== user.id) {
-        return reply.code(404).send({
-          error: "Campaign not found."
-        });
-      }
-
-      await campaignService.removeCampaignRosterEntryBySource({
+      await removeCampaignRosterMembershipBySource({
         campaignId,
         sourceId,
-        sourceType
+        sourceType: query.sourceType,
+        userId: user.id
       });
 
       return { ok: true };
     } catch (error) {
-      return reply.code(400).send({
-        error: error instanceof Error ? error.message : "Unable to remove campaign roster membership."
+      const message =
+        error instanceof Error && error.message === "Campaign not found."
+          ? "Campaign not found."
+          : error instanceof Error
+            ? error.message
+            : "Unable to remove campaign roster membership.";
+
+      return reply.code(message === "Campaign not found." ? 404 : 400).send({
+        error: message
       });
     }
   });

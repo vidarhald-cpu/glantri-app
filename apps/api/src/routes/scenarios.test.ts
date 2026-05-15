@@ -232,7 +232,7 @@ describe("scenarios route contract", () => {
 
     const response = await app.inject({
       method: "DELETE",
-      url: "/campaigns/campaign-1/roster-membership?sourceType=character&sourceId=character-1",
+      url: "/campaigns/campaign-1/roster-membership/character/character-1",
     });
 
     await app.close();
@@ -258,7 +258,7 @@ describe("scenarios route contract", () => {
 
     const response = await app.inject({
       method: "DELETE",
-      url: "/campaigns/campaign-1/roster-membership?sourceType=template&sourceId=template-1",
+      url: "/campaigns/campaign-1/roster-membership/template/template-1",
     });
 
     await app.close();
@@ -283,13 +283,60 @@ describe("scenarios route contract", () => {
 
     const response = await app.inject({
       method: "DELETE",
-      url: "/campaigns/campaign-1/roster-membership?sourceType=character&sourceId=character-1",
+      url: "/campaigns/campaign-1/roster-membership/character/character-1",
     });
 
     await app.close();
 
     expect(response.statusCode).toBe(404);
     expect(response.json()).toEqual({ error: "Campaign not found." });
+    expect(mocks.campaignService.removeCampaignRosterEntryBySource).not.toHaveBeenCalled();
+  });
+
+  it("keeps query-based roster membership removal as a compatibility no-op path", async () => {
+    mocks.campaignService.getCampaignById.mockResolvedValue({
+      gmUserId: "gm-1",
+      id: "campaign-1",
+      name: "Border Trouble",
+      status: "active",
+    });
+    mocks.campaignService.removeCampaignRosterEntryBySource.mockResolvedValue(undefined);
+    const app = await buildScenarioTestApp();
+
+    const firstResponse = await app.inject({
+      method: "DELETE",
+      url: "/campaigns/campaign-1/roster-membership?sourceType=character&sourceId=character-1",
+    });
+    const secondResponse = await app.inject({
+      method: "DELETE",
+      url: "/campaigns/campaign-1/roster-membership?sourceType=character&sourceId=character-1",
+    });
+
+    await app.close();
+
+    expect(firstResponse.statusCode).toBe(200);
+    expect(secondResponse.statusCode).toBe(200);
+    expect(mocks.campaignService.removeCampaignRosterEntryBySource).toHaveBeenCalledTimes(2);
+  });
+
+  it("returns a useful validation error for invalid roster source types", async () => {
+    mocks.campaignService.getCampaignById.mockResolvedValue({
+      gmUserId: "gm-1",
+      id: "campaign-1",
+      name: "Border Trouble",
+      status: "active",
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "DELETE",
+      url: "/campaigns/campaign-1/roster-membership/pc/character-1",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error).toContain("Invalid enum value");
     expect(mocks.campaignService.removeCampaignRosterEntryBySource).not.toHaveBeenCalled();
   });
 

@@ -162,6 +162,42 @@ describe("localServiceClient wire contract", () => {
     });
   });
 
+  it("deletes campaign roster membership by stable source identity", async () => {
+    const fetchMock = stubFetch({ ok: true });
+    const client = await loadClient();
+
+    await expect(
+      client.removeCampaignRosterEntryOnServer({
+        campaignId: "campaign-1",
+        sourceId: "character-1",
+        sourceType: "character",
+      }),
+    ).resolves.toBeUndefined();
+
+    expectFetchCall(fetchMock, {
+      method: "DELETE",
+      url: "https://api.example.test/campaigns/campaign-1/roster-membership/character/character-1",
+    });
+  });
+
+  it("preserves template source type when deleting campaign roster membership", async () => {
+    const fetchMock = stubFetch({ ok: true });
+    const client = await loadClient();
+
+    await expect(
+      client.removeCampaignRosterEntryOnServer({
+        campaignId: "campaign-1",
+        sourceId: "template-1",
+        sourceType: "template",
+      }),
+    ).resolves.toBeUndefined();
+
+    expectFetchCall(fetchMock, {
+      method: "DELETE",
+      url: "https://api.example.test/campaigns/campaign-1/roster-membership/template/template-1",
+    });
+  });
+
   it("puts scenario updates under the scenario domain", async () => {
     const scenario = {
       campaignId: "campaign-1",

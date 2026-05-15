@@ -99,7 +99,11 @@ export class CampaignService {
   }): Promise<void> {
     const entry = await this.repository.getCampaignRosterEntryById(input.rosterEntryId);
 
-    if (!entry || entry.campaignId !== input.campaignId) {
+    if (!entry) {
+      return;
+    }
+
+    if (entry.campaignId !== input.campaignId) {
       throw new Error("Campaign roster entry not found.");
     }
 

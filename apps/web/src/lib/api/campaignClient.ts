@@ -211,13 +211,8 @@ export async function removeCampaignRosterEntryOnServer(input: {
   sourceId: string;
   sourceType: CampaignRosterSourceType;
 }): Promise<void> {
-  const params = new URLSearchParams({
-    sourceId: input.sourceId,
-    sourceType: input.sourceType,
-  });
-
   await sendJson<{ ok: true }>(
-    `/campaigns/${input.campaignId}/roster-membership?${params.toString()}`,
+    `/campaigns/${input.campaignId}/roster-membership/${encodeURIComponent(input.sourceType)}/${encodeURIComponent(input.sourceId)}`,
     {
       method: "DELETE"
     }
