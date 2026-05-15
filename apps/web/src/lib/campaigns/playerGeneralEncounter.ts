@@ -298,21 +298,50 @@ function isPlayerVisibleRankedResult(input: {
   );
 }
 
-function getPlayerRankedResultKey(entry: RoleplayActionLogEntry): string {
-  return entry.pendingRollId ??
-    (entry.rollSetId && entry.participantId && entry.skillId
-      ? `${entry.rollSetId}:${entry.participantId}:${entry.skillId}`
-      : entry.id);
+function hasSameRankedStackIdentity(left: RoleplayActionLogEntry, right: RoleplayActionLogEntry): boolean {
+  return Boolean(
+    left.rollSetId &&
+      right.rollSetId &&
+      left.rollSetId === right.rollSetId &&
+      left.participantId &&
+      right.participantId &&
+      left.participantId === right.participantId &&
+      left.skillId &&
+      right.skillId &&
+      left.skillId === right.skillId
+  );
+}
+
+function isSamePlayerRankedEntry(left: RoleplayActionLogEntry, right: RoleplayActionLogEntry): boolean {
+  if (left.pendingRollId && right.pendingRollId) {
+    return left.pendingRollId === right.pendingRollId;
+  }
+
+  if (left.pendingRollId || right.pendingRollId) {
+    return hasSameRankedStackIdentity(left, right);
+  }
+
+  if (hasSameRankedStackIdentity(left, right)) {
+    return true;
+  }
+
+  return left.id === right.id;
 }
 
 function dedupePlayerRankedEntries(entries: RoleplayActionLogEntry[]): RoleplayActionLogEntry[] {
-  const byKey = new Map<string, RoleplayActionLogEntry>();
+  const deduped: RoleplayActionLogEntry[] = [];
 
   for (const entry of entries) {
-    byKey.set(getPlayerRankedResultKey(entry), entry);
+    const existingIndex = deduped.findIndex((existing) => isSamePlayerRankedEntry(existing, entry));
+
+    if (existingIndex >= 0) {
+      deduped[existingIndex] = entry;
+    } else {
+      deduped.push(entry);
+    }
   }
 
-  return [...byKey.values()];
+  return deduped;
 }
 
 function buildPlayerCharacterLog(input: {

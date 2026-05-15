@@ -439,65 +439,65 @@ function findRoleplayResultForSide(input: {
   return fallbackMatches.length === 1 ? fallbackMatches[0] : undefined;
 }
 
-function rankPlayerVisibleResults(
-  entries: Array<{
-    id: string;
-    participantId?: string;
-    participantName: string;
-    pendingRollId?: string;
-    rollSetId?: string;
-    skillId?: string;
-    skillLabel: string;
-    total: number;
-  }>
-) {
+type PlayerVisibleRankedResult = {
+  id: string;
+  participantId?: string;
+  participantName: string;
+  pendingRollId?: string;
+  rollSetId?: string;
+  skillId?: string;
+  skillLabel: string;
+  total: number;
+};
+
+function hasSamePlayerRankedStackIdentity(left: PlayerVisibleRankedResult, right: PlayerVisibleRankedResult): boolean {
+  return Boolean(
+    left.rollSetId &&
+      right.rollSetId &&
+      left.rollSetId === right.rollSetId &&
+      left.participantId &&
+      right.participantId &&
+      left.participantId === right.participantId &&
+      left.skillId &&
+      right.skillId &&
+      left.skillId === right.skillId
+  );
+}
+
+function isSamePlayerVisibleRankedResult(left: PlayerVisibleRankedResult, right: PlayerVisibleRankedResult): boolean {
+  if (left.pendingRollId && right.pendingRollId) {
+    return left.pendingRollId === right.pendingRollId;
+  }
+
+  if (left.pendingRollId || right.pendingRollId) {
+    return hasSamePlayerRankedStackIdentity(left, right);
+  }
+
+  if (hasSamePlayerRankedStackIdentity(left, right)) {
+    return true;
+  }
+
+  return left.id === right.id;
+}
+
+function rankPlayerVisibleResults(entries: PlayerVisibleRankedResult[]) {
   return [...entries].sort((left, right) => right.total - left.total || left.participantName.localeCompare(right.participantName));
 }
 
-function mergePlayerVisibleResults(
-  left: Array<{
-    id: string;
-    participantId?: string;
-    participantName: string;
-    pendingRollId?: string;
-    rollSetId?: string;
-    skillId?: string;
-    skillLabel: string;
-    total: number;
-  }>,
-  right: Array<{
-    id: string;
-    participantId?: string;
-    participantName: string;
-    pendingRollId?: string;
-    rollSetId?: string;
-    skillId?: string;
-    skillLabel: string;
-    total: number;
-  }>
-) {
-  const byId = new Map<string, {
-    id: string;
-    participantId?: string;
-    participantName: string;
-    pendingRollId?: string;
-    rollSetId?: string;
-    skillId?: string;
-    skillLabel: string;
-    total: number;
-  }>();
+function mergePlayerVisibleResults(left: PlayerVisibleRankedResult[], right: PlayerVisibleRankedResult[]) {
+  const merged: PlayerVisibleRankedResult[] = [];
 
   for (const entry of [...left, ...right]) {
-    byId.set(
-      entry.pendingRollId ??
-        (entry.rollSetId && entry.participantId && entry.skillId
-          ? `${entry.rollSetId}:${entry.participantId}:${entry.skillId}`
-          : entry.id),
-      entry
-    );
+    const existingIndex = merged.findIndex((existing) => isSamePlayerVisibleRankedResult(existing, entry));
+
+    if (existingIndex >= 0) {
+      merged[existingIndex] = entry;
+    } else {
+      merged.push(entry);
+    }
   }
 
-  return rankPlayerVisibleResults([...byId.values()]);
+  return rankPlayerVisibleResults(merged);
 }
 
 function getRankedRoleplayEntryKey(entry: RoleplayActionLogEntry): string {
@@ -1523,7 +1523,7 @@ export function PlayerRoleplayingEncounterScreen({
   const [loading, setLoading] = useState(true);
   const [dismissedAssignedRollIds, setDismissedAssignedRollIds] = useState<Set<string>>(() => new Set());
   const [dismissedRankedResultIds, setDismissedRankedResultIds] = useState<Set<string>>(() => new Set());
-  const [localRankedResults, setLocalRankedResults] = useState<Array<{ id: string; participantName: string; skillLabel: string; total: number }>>([]);
+  const [localRankedResults, setLocalRankedResults] = useState<PlayerVisibleRankedResult[]>([]);
   const [playerLocalRollDraft, setPlayerLocalRollDraft] = useState<PlayerLocalRollDraft>(() =>
     makePlayerLocalRollDraft()
   );

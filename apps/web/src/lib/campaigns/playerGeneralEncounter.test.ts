@@ -581,12 +581,11 @@ describe("playerGeneralEncounter", () => {
             mode: "difficulty",
             numericSubtotal: 25,
             participantId: "scenario-pc-1",
-            pendingRollId: "player-pending-roll",
             rollSetId: "roll-set-current-stack",
             silent: false,
             skillId: "perception",
             skillLabel: "Perception",
-            summary: "Duplicate player result.",
+            summary: "Duplicate player result without pending id.",
             type: "gm_skill_roll",
           }),
           makeRoleplayActionLogEntry({
@@ -644,6 +643,57 @@ describe("playerGeneralEncounter", () => {
     ]);
     expect(view.rankedResults.filter((entry) => entry.participantName === "Player hero")).toHaveLength(1);
     expect(JSON.stringify(view.rankedResults)).not.toContain("Hidden spy");
+  });
+
+  it("keeps distinct ranked rolls when assigned roll identities differ", () => {
+    const baseEncounter = makeEncounter();
+    const encounter = {
+      ...baseEncounter,
+      roleplayState: {
+        ...baseEncounter.roleplayState,
+        actionLog: [
+          makeRoleplayActionLogEntry({
+            createdAt: "2026-01-01T00:10:00.000Z",
+            id: "player-result-two",
+            mode: "difficulty",
+            numericSubtotal: 31,
+            participantId: "scenario-pc-1",
+            pendingRollId: "player-pending-roll-two",
+            rollSetId: "roll-set-current-stack",
+            silent: false,
+            skillId: "acrobatics",
+            skillLabel: "Acrobatics",
+            summary: "Player hero rolled Acrobatics.",
+            type: "gm_skill_roll",
+          }),
+          makeRoleplayActionLogEntry({
+            createdAt: "2026-01-01T00:09:00.000Z",
+            id: "player-result-one",
+            mode: "difficulty",
+            numericSubtotal: 25,
+            participantId: "scenario-pc-1",
+            pendingRollId: "player-pending-roll-one",
+            rollSetId: "roll-set-current-stack",
+            silent: false,
+            skillId: "acrobatics",
+            skillLabel: "Acrobatics",
+            summary: "Player hero rolled Acrobatics.",
+            type: "gm_skill_roll",
+          }),
+        ],
+        visibility: {},
+      },
+    } as EncounterSession;
+
+    const view = buildPlayerGeneralEncounterView({
+      currentUserId: "player-1",
+      encounter,
+      scenarioParticipants: [
+        makeScenarioParticipant({ controlledByUserId: "player-1", id: "pc-1", name: "Player hero" }),
+      ],
+    });
+
+    expect(view.rankedResults.map((entry) => entry.total)).toEqual([31, 25]);
   });
 
   it("excludes legacy side-specific opposed entries from ranked results by roll set", () => {
