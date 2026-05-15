@@ -82,6 +82,31 @@ function buildRosterSourceKey(sourceType: CampaignRosterEntry["sourceType"], sou
   return `${sourceType}:${sourceId}`;
 }
 
+function removeRosterSourceFromList(
+  entries: CampaignRosterEntry[],
+  removedSource: Pick<CampaignRosterEntry, "campaignId" | "sourceId" | "sourceType">
+): CampaignRosterEntry[] {
+  const removedSourceKey = buildRosterSourceKey(removedSource.sourceType, removedSource.sourceId);
+
+  return entries.filter((entry) => {
+    return !(
+      entry.campaignId === removedSource.campaignId &&
+      buildRosterSourceKey(entry.sourceType, entry.sourceId) === removedSourceKey
+    );
+  });
+}
+
+export function getRosterRemovalSource(input: {
+  rosterEntry?: Pick<CampaignRosterEntry, "sourceId" | "sourceType">;
+  sourceId: string;
+  sourceType: CampaignRosterEntry["sourceType"];
+}): Pick<CampaignRosterEntry, "sourceId" | "sourceType"> {
+  return {
+    sourceId: input.rosterEntry?.sourceId ?? input.sourceId,
+    sourceType: input.rosterEntry?.sourceType ?? input.sourceType
+  };
+}
+
 function formatEntityKind(kind: ReusableEntity["kind"]): string {
   if (kind === "npc") {
     return "NPC";
@@ -181,7 +206,6 @@ export default function CampaignDetailPageContent({
 
   const [scenarioName, setScenarioName] = useState("");
   const [scenarioDescription, setScenarioDescription] = useState("");
-  const [scenarioKind, setScenarioKind] = useState<Scenario["kind"]>("mixed");
   const [continuesFromScenarioId, setContinuesFromScenarioId] = useState("");
 
   const [assetTitle, setAssetTitle] = useState("");
@@ -422,7 +446,7 @@ export default function CampaignDetailPageContent({
         campaignId,
         continuesFromScenarioId: continuesFromScenarioId || undefined,
         description: scenarioDescription,
-        kind: scenarioKind,
+        kind: "mixed",
         name: scenarioName,
         status: "draft"
       });
@@ -454,6 +478,9 @@ export default function CampaignDetailPageContent({
         setRoster((current) =>
           current.some((rosterEntry) => rosterEntry.id === entry.id) ? current : [...current, entry]
         );
+        setAllRosterEntries((current) =>
+          current.some((rosterEntry) => rosterEntry.id === entry.id) ? current : [...current, entry]
+        );
       } else {
         const rosterEntry =
           candidate.rosterEntry ??
@@ -465,13 +492,33 @@ export default function CampaignDetailPageContent({
           return;
         }
 
+        const removalSource = getRosterRemovalSource({
+          rosterEntry,
+          sourceId: candidate.sourceId,
+          sourceType: candidate.sourceType
+        });
+
         await removeCampaignRosterEntryOnServer({
           campaignId,
-          rosterEntryId: rosterEntry.id
+          sourceId: removalSource.sourceId,
+          sourceType: removalSource.sourceType
         });
 
         setFeedback(`Removed ${candidate.name} from the campaign roster.`);
-        setRoster((current) => current.filter((entry) => entry.id !== rosterEntry.id));
+        setRoster((current) =>
+          removeRosterSourceFromList(current, {
+            campaignId,
+            sourceId: removalSource.sourceId,
+            sourceType: removalSource.sourceType
+          })
+        );
+        setAllRosterEntries((current) =>
+          removeRosterSourceFromList(current, {
+            campaignId,
+            sourceId: removalSource.sourceId,
+            sourceType: removalSource.sourceType
+          })
+        );
       }
       await refreshPage();
     } catch (caughtError) {
@@ -707,15 +754,6 @@ export default function CampaignDetailPageContent({
           value={scenarioDescription}
         />
         <select
-          onChange={(event) => setScenarioKind(event.target.value as Scenario["kind"])}
-          value={scenarioKind}
-        >
-          <option value="combat">Combat</option>
-          <option value="social">Social</option>
-          <option value="travel">Travel</option>
-          <option value="mixed">Mixed</option>
-        </select>
-        <select
           onChange={(event) => setContinuesFromScenarioId(event.target.value)}
           value={continuesFromScenarioId}
         >
@@ -747,9 +785,7 @@ export default function CampaignDetailPageContent({
               <thead>
                 <tr style={{ borderBottom: "1px solid #d9ddd8", textAlign: "left" }}>
                   <th style={{ padding: "0.5rem 0.75rem 0.5rem 0" }}>Scenario</th>
-                  <th style={{ padding: "0.5rem 0.75rem" }}>Kind</th>
                   <th style={{ padding: "0.5rem 0.75rem" }}>Status</th>
-                  <th style={{ padding: "0.5rem 0.75rem" }}>Combat</th>
                   <th style={{ padding: "0.5rem 0.75rem" }}>Follows</th>
                   <th style={{ padding: "0.5rem 0" }}>Action</th>
                 </tr>
@@ -765,11 +801,7 @@ export default function CampaignDetailPageContent({
                         {scenario.description || "No description yet."}
                       </div>
                     </td>
-                    <td style={{ padding: "0.6rem 0.75rem" }}>{scenario.kind}</td>
                     <td style={{ padding: "0.6rem 0.75rem" }}>{scenario.status}</td>
-                    <td style={{ padding: "0.6rem 0.75rem" }}>
-                      {scenario.liveState?.combatStatus ?? "not_started"}
-                    </td>
                     <td style={{ padding: "0.6rem 0.75rem" }}>
                       {getContinuationLabel(scenario.id)}
                     </td>

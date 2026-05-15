@@ -41,13 +41,16 @@ export async function sendJson<TResponse>(
   path: string,
   init?: Omit<RequestInit, "credentials">
 ): Promise<TResponse> {
+  const headers = new Headers(init?.headers);
+
+  if (init?.body != null && !headers.has("content-type")) {
+    headers.set("content-type", "application/json");
+  }
+
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...init,
     credentials: "include",
-    headers: {
-      "content-type": "application/json",
-      ...(init?.headers ?? {})
-    }
+    headers
   });
 
   return parseResponse<TResponse>(response);

@@ -132,12 +132,6 @@ export const participantRoutes: FastifyPluginAsync = async (app) => {
         });
       }
 
-      if (!isGameMaster && !campaign.settings.allowPlayerSelfJoin) {
-        return reply.code(403).send({
-          error: "Player self-join is not enabled for this campaign."
-        });
-      }
-
       if (!canEditCharacterInApi(user)) {
         const character = await characterService.getOwnedCharacter(user.id, characterId);
 
@@ -148,16 +142,39 @@ export const participantRoutes: FastifyPluginAsync = async (app) => {
         }
       }
 
+      if (!isGameMaster) {
+        if (scenario.status !== "live") {
+          return reply.code(403).send({
+            error: "No live scenario is currently available for this character."
+          });
+        }
+
+        const campaignRoster = await campaignService.listCampaignRosterEntries(campaign.id);
+        const characterIsInCampaignRoster = campaignRoster.some(
+          (entry) => entry.sourceType === "character" && entry.sourceId === characterId
+        );
+
+        if (!characterIsInCampaignRoster) {
+          return reply.code(403).send({
+            error: "This character is not currently assigned to a campaign."
+          });
+        }
+      }
+
       const participant = await scenarioService.addCharacterParticipant({
         characterId,
-        controlledByUserId: parseOptionalNullableString(body, "controlledByUserId") ?? user.id,
+        controlledByUserId: isGameMaster
+          ? parseOptionalNullableString(body, "controlledByUserId") ?? user.id
+          : user.id,
         displayOrder: parseOptionalInteger(body, "displayOrder"),
         factionId: parseOptionalNullableString(body, "factionId"),
         joinSource:
           body.joinSource == null
             ? "gm_added"
             : scenarioParticipantJoinSourceSchema.parse(body.joinSource),
-        role: body.role == null ? undefined : scenarioParticipantRoleSchema.parse(body.role),
+        role: isGameMaster
+          ? body.role == null ? undefined : scenarioParticipantRoleSchema.parse(body.role)
+          : "player_character",
         roleTag: parseOptionalNullableString(body, "roleTag"),
         scenarioId,
         tacticalGroupId: parseOptionalNullableString(body, "tacticalGroupId")

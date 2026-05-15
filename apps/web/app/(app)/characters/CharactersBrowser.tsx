@@ -175,17 +175,23 @@ export default function CharactersBrowser() {
     }
   }
 
-  async function ensureJoinableScenarios(): Promise<JoinableScenarioOption[]> {
-    if (joinableScenarios) {
-      return joinableScenarios;
-    }
-
-    const options = (await loadJoinableScenarios()).sort((left, right) =>
+  async function loadJoinableScenariosForCharacter(characterId: string): Promise<JoinableScenarioOption[]> {
+    const options = (await loadJoinableScenarios(characterId)).sort((left, right) =>
       left.campaignName.localeCompare(right.campaignName)
     );
 
     setJoinableScenarios(options);
     return options;
+  }
+
+  function openPlayerScenario(scenario: JoinableScenarioOption) {
+    router.push(
+      buildCampaignWorkspaceHref({
+        campaignId: scenario.campaignId,
+        scenarioId: scenario.scenarioId,
+        tab: "scenario",
+      })
+    );
   }
 
   async function handleToggleJoinChooser(characterId: string) {
@@ -219,7 +225,13 @@ export default function CharactersBrowser() {
     setJoinLoading(true);
 
     try {
-      const options = await ensureJoinableScenarios();
+      const options = await loadJoinableScenariosForCharacter(characterId);
+
+      if (options.length === 1) {
+        await handleJoinScenario(characterId, options[0].scenarioId, options[0]);
+        return;
+      }
+
       setJoiningScenarioId(options[0]?.scenarioId);
     } catch (error) {
       setJoinError(error instanceof Error ? error.message : "Unable to load scenarios.");
@@ -228,15 +240,18 @@ export default function CharactersBrowser() {
     }
   }
 
-  async function handleJoinScenario(characterId: string) {
-    if (!joiningScenarioId) {
+  async function handleJoinScenario(
+    characterId: string,
+    scenarioId = joiningScenarioId,
+    scenarioOption?: JoinableScenarioOption
+  ) {
+    if (!scenarioId) {
       setJoinError("Choose a scenario first.");
       return;
     }
 
-    const selectedScenario = joinableScenarios?.find(
-      (scenario) => scenario.scenarioId === joiningScenarioId
-    );
+    const selectedScenario =
+      scenarioOption ?? joinableScenarios?.find((scenario) => scenario.scenarioId === scenarioId);
 
     if (!selectedScenario) {
       setJoinError("Selected scenario could not be found.");
@@ -261,20 +276,24 @@ export default function CharactersBrowser() {
           (currentUser.roles.includes("game_master") || currentUser.roles.includes("admin"))
       );
 
-      router.push(
-        canOpenGameMasterScenarioView
-          ? buildCampaignWorkspaceHref({
-              campaignId: selectedScenario.campaignId,
-              scenarioId: selectedScenario.scenarioId,
-              tab: "scenario",
-            })
-          : buildCampaignWorkspaceHref({
-              campaignId: selectedScenario.campaignId,
-              scenarioId: selectedScenario.scenarioId,
-              tab: "player-encounter",
-            })
-      );
+      if (canOpenGameMasterScenarioView) {
+        router.push(
+          buildCampaignWorkspaceHref({
+            campaignId: selectedScenario.campaignId,
+            scenarioId: selectedScenario.scenarioId,
+            tab: "scenario",
+          })
+        );
+        return;
+      }
+
+      openPlayerScenario(selectedScenario);
     } catch (error) {
+      if (error instanceof Error && error.message.includes("already participating")) {
+        openPlayerScenario(selectedScenario);
+        return;
+      }
+
       setJoinError(error instanceof Error ? error.message : "Unable to join scenario.");
     }
   }
@@ -501,8 +520,7 @@ export default function CharactersBrowser() {
                               >
                                 {joinableScenarios.map((scenario) => (
                                   <option key={scenario.scenarioId} value={scenario.scenarioId}>
-                                    {scenario.campaignName} - {scenario.scenarioName} ({scenario.kind},{" "}
-                                    {scenario.status})
+                                    {scenario.campaignName} - {scenario.scenarioName}
                                   </option>
                                 ))}
                               </select>
@@ -529,7 +547,7 @@ export default function CharactersBrowser() {
                               </div>
                             </>
                           ) : (
-                            <div>No active scenarios are currently available from the campaign list.</div>
+                            <div>No live scenario is currently available for this character.</div>
                           )}
 
                           {joinError ? <div>{joinError}</div> : null}
