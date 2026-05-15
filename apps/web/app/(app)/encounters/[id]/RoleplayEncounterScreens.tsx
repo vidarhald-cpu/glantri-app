@@ -22,6 +22,7 @@ import {
   normalizeRoleplayOtherMod,
   orderRoleplayEncounterParticipants,
   recordRoleplayGmSkillRoll,
+  resetRoleplayRankedRollStack,
   resolveEncounterParticipantByRollParticipantId,
   roleplayDifficultyOptions,
   rollOpenEndedRoleplayD20,
@@ -520,6 +521,10 @@ function dedupeRankedRoleplayEntries(entries: RoleplayActionLogEntry[]): Rolepla
 function findLatestNonOpposedRollStackId(
   roleplayState: ReturnType<typeof normalizeRoleplayState>
 ): string | undefined {
+  if (roleplayState.currentRankedRollStackId) {
+    return roleplayState.currentRankedRollStackId;
+  }
+
   const candidates: Array<{ rollSetId: string; timestamp: string }> = [];
 
   for (const pendingRoll of roleplayState.pendingSkillRolls) {
@@ -743,7 +748,7 @@ export function GmRoleplayingEncounterScreen({
     );
   }
 
-  function resetRollDrafts() {
+  async function resetRollDrafts() {
     const nextRollStackId = makeRoleplayRollSetId();
     setCurrentGmRollStackId(nextRollStackId);
     setRollDrafts([
@@ -754,6 +759,13 @@ export function GmRoleplayingEncounterScreen({
       }),
     ]);
     setCurrentRankedRollResults([]);
+    await persist(
+      resetRoleplayRankedRollStack({
+        rollSetId: nextRollStackId,
+        session: encounter,
+      }),
+      "Cleared roleplaying ranked roll stack."
+    );
   }
 
   function rankVisibleRollResults(entries: RoleplayActionLogEntry[]): RoleplayActionLogEntry[] {
@@ -1446,7 +1458,7 @@ export function GmRoleplayingEncounterScreen({
       <section style={panelStyle}>
         <div style={{ alignItems: "center", display: "flex", justifyContent: "space-between", gap: "0.75rem" }}>
           <h2 style={{ margin: 0 }}>Skill roll assignment</h2>
-          <button onClick={resetRollDrafts} type="button">
+          <button onClick={() => void resetRollDrafts()} type="button">
             Clear
           </button>
         </div>

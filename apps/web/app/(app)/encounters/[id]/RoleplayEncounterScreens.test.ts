@@ -77,6 +77,7 @@ describe("RoleplayEncounterScreens", () => {
     expect(source).toContain("rollOpenEndedRoleplayD20");
     expect(source).toContain("compareRoleplayOpposedRolls");
     expect(source).toContain("buildRoleplayCalculationPreview");
+    expect(source).toContain("resetRoleplayRankedRollStack");
     expect(source).toContain("resolveRoleplaySkillRollModifiers");
     expect(source).toContain("resolveParticipantSkillRollProfile");
     expect(source).toContain("submitPlayerRoleplayRollOnServer");
@@ -154,6 +155,7 @@ describe("RoleplayEncounterScreens", () => {
     expect(source).toContain('pendingRoll.mode !== "opposed"');
     expect(source).toContain("replaceDraftRankedRollResults(draft.id, [])");
     expect(source).toContain("currentGmRollStackId");
+    expect(source).toContain("currentRankedRollStackId");
     expect(source).toContain("serverRankedRollResults");
     expect(source).toContain("dedupeRankedRoleplayEntries");
     expect(rankedSource).toContain("entry.numericSubtotal == null");

@@ -514,7 +514,7 @@ export function buildPlayerGeneralEncounterView(input: {
   const latestVisibleRankedEntry = [...visibleRankedEntries].sort((left, right) =>
     right.createdAt.localeCompare(left.createdAt)
   )[0];
-  const currentRollRoundId = latestVisibleRankedEntry?.rollSetId;
+  const currentRollRoundId = state.currentRankedRollStackId ?? latestVisibleRankedEntry?.rollSetId;
   const currentRollRoundResultId = currentRollRoundId ? undefined : latestVisibleRankedEntry?.id;
   const rankedResults = dedupePlayerRankedEntries(visibleRankedEntries)
     .filter((entry) =>

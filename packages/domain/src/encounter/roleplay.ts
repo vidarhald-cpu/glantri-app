@@ -147,6 +147,21 @@ export function updateRoleplayGmMessage(input: {
   });
 }
 
+export function resetRoleplayRankedRollStack(input: {
+  rollSetId: string;
+  session: EncounterSession;
+}): EncounterSession {
+  const state = normalizeRoleplayState(input.session);
+
+  return withRoleplayState({
+    session: input.session,
+    state: {
+      ...state,
+      currentRankedRollStackId: input.rollSetId,
+    },
+  });
+}
+
 export function updateRoleplayVisibility(input: {
   session: EncounterSession;
   targetParticipantId: string;

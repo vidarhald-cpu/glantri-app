@@ -13,6 +13,7 @@ import {
   orderRoleplayEncounterParticipants,
   rankRoleplayGmRollResults,
   recordRoleplayGmSkillRoll,
+  resetRoleplayRankedRollStack,
   roleplayDifficultyOptions,
   selectAllRoleplayVisibilityForViewer,
   updateRoleplayGmMessage,
@@ -709,6 +710,29 @@ describe("roleplay encounter state", () => {
     expect(rankRoleplayGmRollResults(normalizeRoleplayState(normal)).map((entry) => entry.skillLabel)).toEqual([
       "Bow",
     ]);
+  });
+
+  it("updates the current ranked roll stack id without deleting action log history", () => {
+    const rolled = recordRoleplayGmSkillRoll({
+      calculationText: "Bow 12 + roll 10 = 22",
+      difficulty: "medium",
+      numericSubtotal: 22,
+      participantId: "participant-2",
+      roll: { dieResult: 10, openEndedD10s: [], rollD20: 10 },
+      rollSetId: "old-stack",
+      session: createSession(),
+      silent: false,
+      skillId: "bow",
+      skillLabel: "Bow",
+    });
+    const cleared = resetRoleplayRankedRollStack({
+      rollSetId: "new-stack",
+      session: rolled,
+    });
+    const state = normalizeRoleplayState(cleared);
+
+    expect(state.currentRankedRollStackId).toBe("new-stack");
+    expect(state.actionLog.map((entry) => entry.rollSetId)).toContain("old-stack");
   });
 
   it.each([
