@@ -21,7 +21,6 @@ import {
   parseOptionalString,
   parseRequiredString
 } from "./parsing";
-import { resolveScenarioWorkspaceAccess } from "./access";
 
 const characterService = new CharacterService();
 const campaignService = new CampaignService();
