@@ -114,8 +114,12 @@ export class CampaignService {
     campaignId: string;
     sourceId: string;
     sourceType: CampaignRosterSourceType;
-  }): Promise<void> {
-    await this.repository.deleteCampaignRosterEntryBySource(input);
+  }): Promise<{ removed: boolean }> {
+    const removedCount = await this.repository.deleteCampaignRosterEntryBySource(input);
+
+    return {
+      removed: removedCount > 0,
+    };
   }
 
   async createReusableEntity(input: {

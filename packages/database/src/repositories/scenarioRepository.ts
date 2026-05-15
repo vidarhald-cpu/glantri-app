@@ -379,7 +379,7 @@ export interface ScenarioRepository {
     campaignId: string;
     sourceId: string;
     sourceType: CampaignRosterSourceType;
-  }): Promise<void>;
+  }): Promise<number>;
   getCampaignRosterEntryById(entryId: string): Promise<CampaignRosterEntry | null>;
   listCampaignRosterEntries(campaignId: string): Promise<CampaignRosterEntry[]>;
   createScenarioRelationship(input: {
@@ -747,13 +747,15 @@ export function createPrismaScenarioRepository(client?: PrismaClient): ScenarioR
       });
     },
     async deleteCampaignRosterEntryBySource(input) {
-      await prisma.campaignRosterEntry.deleteMany({
+      const result = await prisma.campaignRosterEntry.deleteMany({
         where: {
           campaignId: input.campaignId,
           sourceId: input.sourceId,
           sourceType: input.sourceType
         }
       });
+
+      return result.count;
     },
     async getCampaignRosterEntryById(entryId) {
       const record = await prisma.campaignRosterEntry.findUnique({

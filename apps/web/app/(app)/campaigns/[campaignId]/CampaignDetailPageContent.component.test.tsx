@@ -140,4 +140,31 @@ describe("CampaignDetailPageContent roster membership interaction", () => {
       }),
     );
   });
+
+  it("prefers the stored roster entry source key when removing an existing membership", async () => {
+    const { getRosterRemovalSource } = await import("./CampaignDetailPageContent");
+
+    expect(
+      getRosterRemovalSource({
+        rosterEntry: {
+          sourceId: "stored-character-id",
+          sourceType: "character",
+        },
+        sourceId: "candidate-character-id",
+        sourceType: "character",
+      }),
+    ).toEqual({
+      sourceId: "stored-character-id",
+      sourceType: "character",
+    });
+    expect(
+      getRosterRemovalSource({
+        sourceId: "candidate-character-id",
+        sourceType: "character",
+      }),
+    ).toEqual({
+      sourceId: "candidate-character-id",
+      sourceType: "character",
+    });
+  });
 });

@@ -96,6 +96,17 @@ function removeRosterSourceFromList(
   });
 }
 
+export function getRosterRemovalSource(input: {
+  rosterEntry?: Pick<CampaignRosterEntry, "sourceId" | "sourceType">;
+  sourceId: string;
+  sourceType: CampaignRosterEntry["sourceType"];
+}): Pick<CampaignRosterEntry, "sourceId" | "sourceType"> {
+  return {
+    sourceId: input.rosterEntry?.sourceId ?? input.sourceId,
+    sourceType: input.rosterEntry?.sourceType ?? input.sourceType
+  };
+}
+
 function formatEntityKind(kind: ReusableEntity["kind"]): string {
   if (kind === "npc") {
     return "NPC";
@@ -481,25 +492,31 @@ export default function CampaignDetailPageContent({
           return;
         }
 
-        await removeCampaignRosterEntryOnServer({
-          campaignId,
+        const removalSource = getRosterRemovalSource({
+          rosterEntry,
           sourceId: candidate.sourceId,
           sourceType: candidate.sourceType
+        });
+
+        await removeCampaignRosterEntryOnServer({
+          campaignId,
+          sourceId: removalSource.sourceId,
+          sourceType: removalSource.sourceType
         });
 
         setFeedback(`Removed ${candidate.name} from the campaign roster.`);
         setRoster((current) =>
           removeRosterSourceFromList(current, {
             campaignId,
-            sourceId: candidate.sourceId,
-            sourceType: candidate.sourceType
+            sourceId: removalSource.sourceId,
+            sourceType: removalSource.sourceType
           })
         );
         setAllRosterEntries((current) =>
           removeRosterSourceFromList(current, {
             campaignId,
-            sourceId: candidate.sourceId,
-            sourceType: candidate.sourceType
+            sourceId: removalSource.sourceId,
+            sourceType: removalSource.sourceType
           })
         );
       }

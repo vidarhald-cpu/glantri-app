@@ -89,7 +89,7 @@ async function removeCampaignRosterMembershipBySource(input: {
   sourceId: string;
   sourceType: unknown;
   userId: string;
-}): Promise<void> {
+}): Promise<{ removed: boolean }> {
   const sourceType = parseCampaignRosterSourceType(input.sourceType);
   const campaign = await campaignService.getCampaignById(input.campaignId);
 
@@ -97,7 +97,7 @@ async function removeCampaignRosterMembershipBySource(input: {
     throw new Error("Campaign not found.");
   }
 
-  await campaignService.removeCampaignRosterEntryBySource({
+  return campaignService.removeCampaignRosterEntryBySource({
     campaignId: input.campaignId,
     sourceId: input.sourceId,
     sourceType
@@ -427,14 +427,14 @@ export const campaignRoutes: FastifyPluginAsync = async (app) => {
           : {};
       const sourceId = parseRequiredString(params, "sourceId");
 
-      await removeCampaignRosterMembershipBySource({
+      const result = await removeCampaignRosterMembershipBySource({
         campaignId,
         sourceId,
         sourceType: params.sourceType,
         userId: user.id
       });
 
-      return { ok: true };
+      return { ok: true, removed: result.removed };
     } catch (error) {
       const { payload, status } = buildRosterRouteErrorPayload(error);
 
@@ -484,14 +484,14 @@ export const campaignRoutes: FastifyPluginAsync = async (app) => {
           : {};
       const sourceId = parseRequiredString(query, "sourceId");
 
-      await removeCampaignRosterMembershipBySource({
+      const result = await removeCampaignRosterMembershipBySource({
         campaignId,
         sourceId,
         sourceType: query.sourceType,
         userId: user.id
       });
 
-      return { ok: true };
+      return { ok: true, removed: result.removed };
     } catch (error) {
       const { payload, status } = buildRosterRouteErrorPayload(error);
 

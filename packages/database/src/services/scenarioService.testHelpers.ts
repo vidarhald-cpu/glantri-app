@@ -265,7 +265,10 @@ export function createScenarioRepositoryStub() {
 
       if (index >= 0) {
         rosterEntries.splice(index, 1);
+        return 1;
       }
+
+      return 0;
     },
     getCampaignRosterEntryById: async (entryId) =>
       rosterEntries.find((entry) => entry.id === entryId) ?? null,

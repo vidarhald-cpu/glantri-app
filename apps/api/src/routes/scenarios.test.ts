@@ -227,7 +227,7 @@ describe("scenarios route contract", () => {
       name: "Border Trouble",
       status: "active",
     });
-    mocks.campaignService.removeCampaignRosterEntryBySource.mockResolvedValue(undefined);
+    mocks.campaignService.removeCampaignRosterEntryBySource.mockResolvedValue({ removed: true });
     const app = await buildScenarioTestApp();
 
     const response = await app.inject({
@@ -238,7 +238,7 @@ describe("scenarios route contract", () => {
     await app.close();
 
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({ ok: true });
+    expect(response.json()).toEqual({ ok: true, removed: true });
     expect(mocks.campaignService.removeCampaignRosterEntryBySource).toHaveBeenCalledWith({
       campaignId: "campaign-1",
       sourceId: "character-1",
@@ -253,7 +253,7 @@ describe("scenarios route contract", () => {
       name: "Border Trouble",
       status: "active",
     });
-    mocks.campaignService.removeCampaignRosterEntryBySource.mockResolvedValue(undefined);
+    mocks.campaignService.removeCampaignRosterEntryBySource.mockResolvedValue({ removed: true });
     const app = await buildScenarioTestApp();
 
     const response = await app.inject({
@@ -264,7 +264,7 @@ describe("scenarios route contract", () => {
     await app.close();
 
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({ ok: true });
+    expect(response.json()).toEqual({ ok: true, removed: true });
     expect(mocks.campaignService.removeCampaignRosterEntryBySource).toHaveBeenCalledWith({
       campaignId: "campaign-1",
       sourceId: "template-1",
@@ -303,7 +303,9 @@ describe("scenarios route contract", () => {
       name: "Border Trouble",
       status: "active",
     });
-    mocks.campaignService.removeCampaignRosterEntryBySource.mockResolvedValue(undefined);
+    mocks.campaignService.removeCampaignRosterEntryBySource
+      .mockResolvedValueOnce({ removed: true })
+      .mockResolvedValueOnce({ removed: false });
     const app = await buildScenarioTestApp();
 
     const firstResponse = await app.inject({
@@ -319,7 +321,35 @@ describe("scenarios route contract", () => {
 
     expect(firstResponse.statusCode).toBe(200);
     expect(secondResponse.statusCode).toBe(200);
+    expect(firstResponse.json()).toEqual({ ok: true, removed: true });
+    expect(secondResponse.json()).toEqual({ ok: true, removed: false });
     expect(mocks.campaignService.removeCampaignRosterEntryBySource).toHaveBeenCalledTimes(2);
+  });
+
+  it("treats missing source-key roster membership removal as successful and idempotent", async () => {
+    mocks.campaignService.getCampaignById.mockResolvedValue({
+      gmUserId: "gm-1",
+      id: "campaign-1",
+      name: "Border Trouble",
+      status: "active",
+    });
+    mocks.campaignService.removeCampaignRosterEntryBySource.mockResolvedValue({ removed: false });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "DELETE",
+      url: "/campaigns/campaign-1/roster-membership/character/missing-character",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ ok: true, removed: false });
+    expect(mocks.campaignService.removeCampaignRosterEntryBySource).toHaveBeenCalledWith({
+      campaignId: "campaign-1",
+      sourceId: "missing-character",
+      sourceType: "character",
+    });
   });
 
   it("returns a useful validation error for invalid roster source types", async () => {

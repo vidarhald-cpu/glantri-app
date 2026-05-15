@@ -278,29 +278,50 @@ describe("CampaignService campaign roster", () => {
       sourceType: "template",
     });
 
-    await service.removeCampaignRosterEntryBySource({
-      campaignId: "campaign-1",
-      sourceId: "character-1",
-      sourceType: "character",
-    });
+    await expect(
+      service.removeCampaignRosterEntryBySource({
+        campaignId: "campaign-1",
+        sourceId: "character-1",
+        sourceType: "character",
+      }),
+    ).resolves.toEqual({ removed: true });
 
     expect(rosterEntries).toHaveLength(1);
     expect(rosterEntries[0]?.sourceType).toBe("template");
 
-    await service.removeCampaignRosterEntryBySource({
-      campaignId: "campaign-1",
-      sourceId: "template-1",
-      sourceType: "template",
-    });
-    await service.removeCampaignRosterEntryBySource({
-      campaignId: "campaign-1",
-      sourceId: "template-1",
-      sourceType: "template",
-    });
+    await expect(
+      service.removeCampaignRosterEntryBySource({
+        campaignId: "campaign-1",
+        sourceId: "template-1",
+        sourceType: "template",
+      }),
+    ).resolves.toEqual({ removed: true });
+    await expect(
+      service.removeCampaignRosterEntryBySource({
+        campaignId: "campaign-1",
+        sourceId: "template-1",
+        sourceType: "template",
+      }),
+    ).resolves.toEqual({ removed: false });
 
     expect(rosterEntries).toHaveLength(0);
     expect(characters.get("character-1")?.name).toBe("Ari");
     expect(reusableEntities.get("template-1")?.name).toBe("Bandit Template");
+  });
+
+  it("returns an idempotent no-op when removing a missing roster source", async () => {
+    const { repository, rosterEntries } = createScenarioRepositoryStub();
+    const service = new CampaignService(repository);
+
+    await expect(
+      service.removeCampaignRosterEntryBySource({
+        campaignId: "campaign-1",
+        sourceId: "missing-character",
+        sourceType: "character",
+      }),
+    ).resolves.toEqual({ removed: false });
+
+    expect(rosterEntries).toHaveLength(0);
   });
 
   it("removes only roster links and leaves source characters and templates available", async () => {
