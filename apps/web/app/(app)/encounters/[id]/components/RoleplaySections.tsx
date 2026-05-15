@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import type {
   Campaign,
@@ -225,18 +225,49 @@ export function ParticipantDescriptionsSection({
 
 function RoleplayDescriptionRow(input: {
   description: RoleplayParticipantDescription;
-  onSave: (description: RoleplayParticipantDescription) => void;
+  onSave: (description: RoleplayParticipantDescription) => Promise<void> | void;
   participant: EncounterParticipant;
 }) {
   const [name, setName] = useState(input.description.name ?? input.participant.label);
   const [shortDescription, setShortDescription] = useState(input.description.shortDescription);
   const [detailedDescription, setDetailedDescription] = useState(input.description.detailedDescription);
+  const dirtyFieldsRef = useRef({
+    detailedDescription: false,
+    name: false,
+    shortDescription: false,
+  });
+  const focusedFieldsRef = useRef({
+    detailedDescription: false,
+    name: false,
+    shortDescription: false,
+  });
 
   useEffect(() => {
-    setName(input.description.name ?? input.participant.label);
-    setShortDescription(input.description.shortDescription);
-    setDetailedDescription(input.description.detailedDescription);
+    if (!dirtyFieldsRef.current.name && !focusedFieldsRef.current.name) {
+      setName(input.description.name ?? input.participant.label);
+    }
+
+    if (!dirtyFieldsRef.current.shortDescription && !focusedFieldsRef.current.shortDescription) {
+      setShortDescription(input.description.shortDescription);
+    }
+
+    if (!dirtyFieldsRef.current.detailedDescription && !focusedFieldsRef.current.detailedDescription) {
+      setDetailedDescription(input.description.detailedDescription);
+    }
   }, [input.description, input.participant.label]);
+
+  async function handleSave() {
+    await input.onSave({
+      detailedDescription,
+      name: name.trim() || input.participant.label,
+      shortDescription,
+    });
+    dirtyFieldsRef.current = {
+      detailedDescription: false,
+      name: false,
+      shortDescription: false,
+    };
+  }
 
   return (
     <details style={{ border: "1px solid #eee8dc", borderRadius: 10, padding: "0.75rem" }}>
@@ -246,31 +277,52 @@ function RoleplayDescriptionRow(input: {
       <div style={{ display: "grid", gap: "0.5rem", marginTop: "0.75rem" }}>
         <input
           aria-label={`${input.participant.label} encounter-facing name`}
-          onChange={(event) => setName(event.target.value)}
+          onBlur={() => {
+            focusedFieldsRef.current.name = false;
+          }}
+          onChange={(event) => {
+            dirtyFieldsRef.current.name = true;
+            setName(event.target.value);
+          }}
+          onFocus={() => {
+            focusedFieldsRef.current.name = true;
+          }}
           placeholder="Encounter-facing name"
           value={name}
         />
         <input
           aria-label={`${input.participant.label} short description`}
-          onChange={(event) => setShortDescription(event.target.value)}
+          onBlur={() => {
+            focusedFieldsRef.current.shortDescription = false;
+          }}
+          onChange={(event) => {
+            dirtyFieldsRef.current.shortDescription = true;
+            setShortDescription(event.target.value);
+          }}
+          onFocus={() => {
+            focusedFieldsRef.current.shortDescription = true;
+          }}
           placeholder="Short description"
           value={shortDescription}
         />
         <textarea
           aria-label={`${input.participant.label} detailed description`}
-          onChange={(event) => setDetailedDescription(event.target.value)}
+          onBlur={() => {
+            focusedFieldsRef.current.detailedDescription = false;
+          }}
+          onChange={(event) => {
+            dirtyFieldsRef.current.detailedDescription = true;
+            setDetailedDescription(event.target.value);
+          }}
+          onFocus={() => {
+            focusedFieldsRef.current.detailedDescription = true;
+          }}
           placeholder="Detailed GM description"
           rows={3}
           value={detailedDescription}
         />
         <button
-          onClick={() =>
-            input.onSave({
-              detailedDescription,
-              name: name.trim() || input.participant.label,
-              shortDescription,
-            })
-          }
+          onClick={() => void handleSave()}
           type="button"
         >
           Save description

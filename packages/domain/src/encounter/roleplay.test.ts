@@ -13,6 +13,7 @@ import {
   orderRoleplayEncounterParticipants,
   rankRoleplayGmRollResults,
   recordRoleplayGmSkillRoll,
+  resetRoleplayRankedRollStack,
   roleplayDifficultyOptions,
   selectAllRoleplayVisibilityForViewer,
   updateRoleplayGmMessage,
@@ -677,6 +678,110 @@ describe("roleplay encounter state", () => {
       "Stealth",
       "Bow",
     ]);
+  });
+
+  it("excludes opposed side results from ranked GM roll results", () => {
+    const opposed = recordRoleplayGmSkillRoll({
+      calculationText: "Stealth 10 + roll 18 = 28",
+      mode: "opposed",
+      numericSubtotal: 28,
+      participantId: "participant-1",
+      roll: { dieResult: 18, openEndedD10s: [], rollD20: 18 },
+      rollSetId: "opposed-set",
+      session: createSession(),
+      side: "actor",
+      silent: false,
+      skillId: "stealth",
+      skillLabel: "Stealth",
+    });
+    const normal = recordRoleplayGmSkillRoll({
+      calculationText: "Bow 12 + roll 10 = 22",
+      difficulty: "medium",
+      numericSubtotal: 22,
+      participantId: "participant-2",
+      roll: { dieResult: 10, openEndedD10s: [], rollD20: 10 },
+      rollSetId: "normal-set",
+      session: opposed,
+      silent: false,
+      skillId: "bow",
+      skillLabel: "Bow",
+    });
+
+    expect(rankRoleplayGmRollResults(normalizeRoleplayState(normal)).map((entry) => entry.skillLabel)).toEqual([
+      "Bow",
+    ]);
+  });
+
+  it("updates the current ranked roll stack id without deleting action log history", () => {
+    const rolled = recordRoleplayGmSkillRoll({
+      calculationText: "Bow 12 + roll 10 = 22",
+      difficulty: "medium",
+      numericSubtotal: 22,
+      participantId: "participant-2",
+      roll: { dieResult: 10, openEndedD10s: [], rollD20: 10 },
+      rollSetId: "old-stack",
+      session: createSession(),
+      silent: false,
+      skillId: "bow",
+      skillLabel: "Bow",
+    });
+    const cleared = resetRoleplayRankedRollStack({
+      rollSetId: "new-stack",
+      session: rolled,
+    });
+    const state = normalizeRoleplayState(cleared);
+
+    expect(state.currentRankedRollStackId).toBe("new-stack");
+    expect(state.actionLog.map((entry) => entry.rollSetId)).toContain("old-stack");
+  });
+
+  it("sets the current ranked roll stack for non-opposed assignments and results", () => {
+    const assigned = assignRoleplaySkillRoll({
+      difficulty: "medium",
+      participantId: "participant-1",
+      participantName: "The Gladiator",
+      rollSetId: "assigned-stack",
+      session: createSession(),
+      silent: false,
+      skillId: "perception",
+      skillLabel: "Perception",
+    });
+    const rolled = recordRoleplayGmSkillRoll({
+      calculationText: "Perception 10 + roll 10 = 20",
+      difficulty: "medium",
+      numericSubtotal: 20,
+      participantId: "participant-1",
+      roll: { dieResult: 10, openEndedD10s: [], rollD20: 10 },
+      rollSetId: "rolled-stack",
+      session: assigned,
+      silent: false,
+      skillId: "perception",
+      skillLabel: "Perception",
+    });
+
+    expect(normalizeRoleplayState(assigned).currentRankedRollStackId).toBe("assigned-stack");
+    expect(normalizeRoleplayState(rolled).currentRankedRollStackId).toBe("rolled-stack");
+  });
+
+  it("does not move the current ranked roll stack for opposed results", () => {
+    const rolled = recordRoleplayGmSkillRoll({
+      calculationText: "Stealth 10 + roll 18 = 28",
+      mode: "opposed",
+      numericSubtotal: 28,
+      participantId: "participant-1",
+      roll: { dieResult: 18, openEndedD10s: [], rollD20: 18 },
+      rollSetId: "opposed-set",
+      session: resetRoleplayRankedRollStack({
+        rollSetId: "current-non-opposed-stack",
+        session: createSession(),
+      }),
+      side: "actor",
+      silent: false,
+      skillId: "stealth",
+      skillLabel: "Stealth",
+    });
+
+    expect(normalizeRoleplayState(rolled).currentRankedRollStackId).toBe("current-non-opposed-stack");
   });
 
   it.each([

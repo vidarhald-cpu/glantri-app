@@ -55,7 +55,11 @@ export interface PlayerGeneralEncounterRollResult {
 
 export interface PlayerGeneralEncounterRankedResult {
   id: string;
+  participantId?: string;
   participantName: string;
+  pendingRollId?: string;
+  rollSetId?: string;
+  skillId?: string;
   skillLabel: string;
   total: number;
 }
@@ -294,6 +298,52 @@ function isPlayerVisibleRankedResult(input: {
   );
 }
 
+function hasSameRankedStackIdentity(left: RoleplayActionLogEntry, right: RoleplayActionLogEntry): boolean {
+  return Boolean(
+    left.rollSetId &&
+      right.rollSetId &&
+      left.rollSetId === right.rollSetId &&
+      left.participantId &&
+      right.participantId &&
+      left.participantId === right.participantId &&
+      left.skillId &&
+      right.skillId &&
+      left.skillId === right.skillId
+  );
+}
+
+function isSamePlayerRankedEntry(left: RoleplayActionLogEntry, right: RoleplayActionLogEntry): boolean {
+  if (left.pendingRollId && right.pendingRollId) {
+    return left.pendingRollId === right.pendingRollId;
+  }
+
+  if (left.pendingRollId || right.pendingRollId) {
+    return hasSameRankedStackIdentity(left, right);
+  }
+
+  if (hasSameRankedStackIdentity(left, right)) {
+    return true;
+  }
+
+  return left.id === right.id;
+}
+
+function dedupePlayerRankedEntries(entries: RoleplayActionLogEntry[]): RoleplayActionLogEntry[] {
+  const deduped: RoleplayActionLogEntry[] = [];
+
+  for (const entry of entries) {
+    const existingIndex = deduped.findIndex((existing) => isSamePlayerRankedEntry(existing, entry));
+
+    if (existingIndex >= 0) {
+      deduped[existingIndex] = entry;
+    } else {
+      deduped.push(entry);
+    }
+  }
+
+  return deduped;
+}
+
 function buildPlayerCharacterLog(input: {
   controlledParticipantIds: Set<string>;
   entries: RoleplayActionLogEntry[];
@@ -461,12 +511,9 @@ export function buildPlayerGeneralEncounterView(input: {
       })
     );
   });
-  const latestVisibleRankedEntry = [...visibleRankedEntries].sort((left, right) =>
-    right.createdAt.localeCompare(left.createdAt)
-  )[0];
-  const currentRollRoundId = latestVisibleRankedEntry?.rollSetId;
-  const currentRollRoundResultId = currentRollRoundId ? undefined : latestVisibleRankedEntry?.id;
-  const rankedResults = visibleRankedEntries
+  const currentRollRoundId = state.currentRankedRollStackId ?? latestPendingRollSetId;
+  const currentRollRoundResultId = undefined;
+  const rankedResults = dedupePlayerRankedEntries(visibleRankedEntries)
     .filter((entry) =>
       currentRollRoundId
         ? entry.rollSetId === currentRollRoundId
@@ -486,6 +533,7 @@ export function buildPlayerGeneralEncounterView(input: {
 
       return {
         id: entry.id,
+        participantId: participant?.id ?? entry.participantId,
         participantName: participant
           ? getPlayerSafeParticipantName({
               fallbackLabel: participant.label,
@@ -493,6 +541,9 @@ export function buildPlayerGeneralEncounterView(input: {
               state,
             })
           : "Participant",
+        pendingRollId: entry.pendingRollId,
+        rollSetId: entry.rollSetId,
+        skillId: entry.skillId,
         skillLabel: entry.skillLabel ?? "Skill",
         total: entry.numericSubtotal ?? entry.finalTotal ?? 0,
       };

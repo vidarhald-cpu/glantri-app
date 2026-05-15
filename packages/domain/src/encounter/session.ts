@@ -268,6 +268,7 @@ export const roleplayActionLogEntrySchema = z.object({
 
 export const roleplayStateSchema = z.object({
   actionLog: z.array(roleplayActionLogEntrySchema).default([]),
+  currentRankedRollStackId: idSchema.optional(),
   gmMessage: z.string().default(""),
   participantDescriptions: z.record(idSchema, roleplayParticipantDescriptionSchema).default({}),
   pendingSkillRolls: z.array(roleplayPendingSkillRollSchema).default([]),

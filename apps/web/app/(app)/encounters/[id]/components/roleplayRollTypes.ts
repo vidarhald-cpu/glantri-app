@@ -58,6 +58,7 @@ export interface RoleplayRollContext {
   actorOtherModInput: string;
   allOpponentSkillOptions: SkillOption[];
   allSkillOptions: SkillOption[];
+  activeRollSetId?: string;
   activeOpposedRollSetId?: string;
   isOpposed: boolean;
   matchingOpponentPendingRoll?: unknown;

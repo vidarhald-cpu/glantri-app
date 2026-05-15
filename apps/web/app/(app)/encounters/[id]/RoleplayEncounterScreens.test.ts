@@ -77,9 +77,24 @@ describe("RoleplayEncounterScreens", () => {
     expect(source).toContain("rollOpenEndedRoleplayD20");
     expect(source).toContain("compareRoleplayOpposedRolls");
     expect(source).toContain("buildRoleplayCalculationPreview");
+    expect(source).toContain("resetRoleplayRankedRollStack");
     expect(source).toContain("resolveRoleplaySkillRollModifiers");
     expect(source).toContain("resolveParticipantSkillRollProfile");
     expect(source).toContain("submitPlayerRoleplayRollOnServer");
+  });
+
+  it("preserves GM roleplay text drafts while background refresh updates encounter props", () => {
+    const source = readSource();
+    const sectionsSource = readComponentSource("RoleplaySections.tsx");
+
+    expect(source).toContain("gmMessageDirty");
+    expect(source).toContain("if (!gmMessageDirty)");
+    expect(source).toContain("setGmMessageDirty(true)");
+    expect(source).toContain("setGmMessageDirty(false)");
+    expect(sectionsSource).toContain("dirtyFieldsRef");
+    expect(sectionsSource).toContain("focusedFieldsRef");
+    expect(sectionsSource).toContain("!dirtyFieldsRef.current.shortDescription");
+    expect(sectionsSource).toContain("!dirtyFieldsRef.current.detailedDescription");
   });
 
   it("keeps the player screen free of GM-only controls and GM-only sections", () => {
@@ -106,6 +121,8 @@ describe("RoleplayEncounterScreens", () => {
     expect(playerSource).toContain("playerView.assignedRolls");
     expect(playerSource).toContain("playerView.rankedResults");
     expect(playerSource).toContain("playerView.characterLog");
+    expect(playerSource).toContain("mergePlayerVisibleResults");
+    expect(source).toContain("isSamePlayerVisibleRankedResult");
     expect(playerSource).toContain("dismissedAssignedRollIds");
     expect(playerSource).toContain("dismissedRankedResultIds");
     expect(source).toContain("getScenarioParticipantFallbackEncounterParticipants");
@@ -137,6 +154,13 @@ describe("RoleplayEncounterScreens", () => {
     expect(source).toContain('entry.mode !== "opposed"');
     expect(source).toContain('pendingRoll.mode !== "opposed"');
     expect(source).toContain("replaceDraftRankedRollResults(draft.id, [])");
+    expect(source).toContain("currentGmRollStackId");
+    expect(source).toContain("currentRankedRollStackId");
+    expect(source).toContain("localVisibleRankedResults");
+    expect(source).toContain("entry.rollSetId === activeRankedStackId");
+    expect(source).toContain("currentResults.filter((entry) => entry.rollSetId === activeStackId)");
+    expect(source).toContain("serverRankedRollResults");
+    expect(source).toContain("dedupeRankedRoleplayEntries");
     expect(rankedSource).toContain("entry.numericSubtotal == null");
     expect(rankedSource).not.toContain("entry.fumble ? \"FUMBLE\"");
     expect(rankedSource).not.toContain("entry.success");

@@ -22,6 +22,7 @@ import {
   normalizeRoleplayOtherMod,
   orderRoleplayEncounterParticipants,
   recordRoleplayGmSkillRoll,
+  resetRoleplayRankedRollStack,
   resolveEncounterParticipantByRollParticipantId,
   roleplayDifficultyOptions,
   rollOpenEndedRoleplayD20,
@@ -228,7 +229,16 @@ function readSystemSkillOptions(input: {
     .sort((left, right) => left.label.localeCompare(right.label));
 }
 
-function makeRollDraft(input: { id?: string; participantId?: string; skillId?: string }): RoleplayRollDraft {
+function makeRoleplayRollSetId(): string {
+  return `roleplay-roll-set-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function makeRollDraft(input: {
+  id?: string;
+  participantId?: string;
+  rollSetId?: string;
+  skillId?: string;
+}): RoleplayRollDraft {
   return {
     difficulty: "medium",
     id: input.id ?? `roll-draft-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -247,7 +257,7 @@ function makeRollDraft(input: { id?: string; participantId?: string; skillId?: s
     opponentUseGenMod: false,
     opponentUseObSkillMod: false,
     participantId: input.participantId ?? "",
-    rollSetId: `roleplay-roll-set-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    rollSetId: input.rollSetId ?? makeRoleplayRollSetId(),
     silent: false,
     skillCategoryId: "all",
     skillId: input.skillId ?? "",
@@ -430,23 +440,106 @@ function findRoleplayResultForSide(input: {
   return fallbackMatches.length === 1 ? fallbackMatches[0] : undefined;
 }
 
-function rankPlayerVisibleResults(
-  entries: Array<{ id: string; participantName: string; skillLabel: string; total: number }>
-) {
+type PlayerVisibleRankedResult = {
+  id: string;
+  participantId?: string;
+  participantName: string;
+  pendingRollId?: string;
+  rollSetId?: string;
+  skillId?: string;
+  skillLabel: string;
+  total: number;
+};
+
+function hasSamePlayerRankedStackIdentity(left: PlayerVisibleRankedResult, right: PlayerVisibleRankedResult): boolean {
+  return Boolean(
+    left.rollSetId &&
+      right.rollSetId &&
+      left.rollSetId === right.rollSetId &&
+      left.participantId &&
+      right.participantId &&
+      left.participantId === right.participantId &&
+      left.skillId &&
+      right.skillId &&
+      left.skillId === right.skillId
+  );
+}
+
+function isSamePlayerVisibleRankedResult(left: PlayerVisibleRankedResult, right: PlayerVisibleRankedResult): boolean {
+  if (left.pendingRollId && right.pendingRollId) {
+    return left.pendingRollId === right.pendingRollId;
+  }
+
+  if (left.pendingRollId || right.pendingRollId) {
+    return hasSamePlayerRankedStackIdentity(left, right);
+  }
+
+  if (hasSamePlayerRankedStackIdentity(left, right)) {
+    return true;
+  }
+
+  return left.id === right.id;
+}
+
+function rankPlayerVisibleResults(entries: PlayerVisibleRankedResult[]) {
   return [...entries].sort((left, right) => right.total - left.total || left.participantName.localeCompare(right.participantName));
 }
 
-function mergePlayerVisibleResults(
-  left: Array<{ id: string; participantName: string; skillLabel: string; total: number }>,
-  right: Array<{ id: string; participantName: string; skillLabel: string; total: number }>
-) {
-  const byId = new Map<string, { id: string; participantName: string; skillLabel: string; total: number }>();
+function mergePlayerVisibleResults(left: PlayerVisibleRankedResult[], right: PlayerVisibleRankedResult[]) {
+  const merged: PlayerVisibleRankedResult[] = [];
 
   for (const entry of [...left, ...right]) {
-    byId.set(entry.id, entry);
+    const existingIndex = merged.findIndex((existing) => isSamePlayerVisibleRankedResult(existing, entry));
+
+    if (existingIndex >= 0) {
+      merged[existingIndex] = entry;
+    } else {
+      merged.push(entry);
+    }
   }
 
-  return rankPlayerVisibleResults([...byId.values()]);
+  return rankPlayerVisibleResults(merged);
+}
+
+function getRankedRoleplayEntryKey(entry: RoleplayActionLogEntry): string {
+  return entry.pendingRollId ??
+    (entry.rollSetId && entry.participantId && entry.skillId
+      ? `${entry.rollSetId}:${entry.participantId}:${entry.skillId}`
+      : entry.id);
+}
+
+function dedupeRankedRoleplayEntries(entries: RoleplayActionLogEntry[]): RoleplayActionLogEntry[] {
+  const byKey = new Map<string, RoleplayActionLogEntry>();
+
+  for (const entry of entries) {
+    byKey.set(getRankedRoleplayEntryKey(entry), entry);
+  }
+
+  return [...byKey.values()];
+}
+
+function findLatestNonOpposedRollStackId(
+  roleplayState: ReturnType<typeof normalizeRoleplayState>
+): string | undefined {
+  if (roleplayState.currentRankedRollStackId) {
+    return roleplayState.currentRankedRollStackId;
+  }
+
+  const candidates: Array<{ rollSetId: string; timestamp: string }> = [];
+
+  for (const pendingRoll of roleplayState.pendingSkillRolls) {
+    if (pendingRoll.mode !== "opposed" && pendingRoll.rollSetId) {
+      candidates.push({ rollSetId: pendingRoll.rollSetId, timestamp: pendingRoll.assignedAt });
+    }
+  }
+
+  for (const entry of roleplayState.actionLog) {
+    if (entry.type === "gm_skill_roll" && entry.mode !== "opposed" && !entry.side && entry.rollSetId) {
+      candidates.push({ rollSetId: entry.rollSetId, timestamp: entry.createdAt });
+    }
+  }
+
+  return candidates.sort((left, right) => right.timestamp.localeCompare(left.timestamp))[0]?.rollSetId;
 }
 
 export function GmRoleplayingEncounterScreen({
@@ -466,6 +559,9 @@ export function GmRoleplayingEncounterScreen({
     [encounter.participants]
   );
   const [gmMessageDraft, setGmMessageDraft] = useState(roleplayState.gmMessage);
+  const [currentGmRollStackId, setCurrentGmRollStackId] = useState(
+    () => findLatestNonOpposedRollStackId(roleplayState) ?? makeRoleplayRollSetId()
+  );
   const initialSkillId = useMemo(
     () =>
       readSystemSkillOptions({
@@ -476,13 +572,16 @@ export function GmRoleplayingEncounterScreen({
     [content, roster, scenarioParticipants]
   );
   const [rollDrafts, setRollDrafts] = useState<RoleplayRollDraft[]>([
-    makeRollDraft({ participantId: roster[0]?.id, skillId: initialSkillId }),
+    makeRollDraft({ participantId: roster[0]?.id, rollSetId: currentGmRollStackId, skillId: initialSkillId }),
   ]);
   const [currentRankedRollResults, setCurrentRankedRollResults] = useState<RoleplayActionLogEntry[]>([]);
+  const [gmMessageDirty, setGmMessageDirty] = useState(false);
 
   useEffect(() => {
-    setGmMessageDraft(roleplayState.gmMessage);
-  }, [roleplayState.gmMessage]);
+    if (!gmMessageDirty) {
+      setGmMessageDraft(roleplayState.gmMessage);
+    }
+  }, [gmMessageDirty, roleplayState.gmMessage]);
 
   useEffect(() => {
     setRollDrafts((currentDrafts) =>
@@ -571,6 +670,7 @@ export function GmRoleplayingEncounterScreen({
       }),
       "Updated roleplaying encounter GM message."
     );
+    setGmMessageDirty(false);
   }
 
   async function handleVisibilityChange(input: {
@@ -648,14 +748,24 @@ export function GmRoleplayingEncounterScreen({
     );
   }
 
-  function resetRollDrafts() {
+  async function resetRollDrafts() {
+    const nextRollStackId = makeRoleplayRollSetId();
+    setCurrentGmRollStackId(nextRollStackId);
     setRollDrafts([
       makeRollDraft({
         participantId: roster[0]?.id,
+        rollSetId: nextRollStackId,
         skillId: initialSkillId,
       }),
     ]);
     setCurrentRankedRollResults([]);
+    await persist(
+      resetRoleplayRankedRollStack({
+        rollSetId: nextRollStackId,
+        session: encounter,
+      }),
+      "Cleared roleplaying ranked roll stack."
+    );
   }
 
   function rankVisibleRollResults(entries: RoleplayActionLogEntry[]): RoleplayActionLogEntry[] {
@@ -682,8 +792,10 @@ export function GmRoleplayingEncounterScreen({
     draftId: string;
     idSuffix: string;
     participantId: string;
+    pendingRollId?: string;
     preview: RoleplayCalculationPreview;
     roll: RoleplayOpenEndedD20Roll;
+    rollSetId: string;
     silent: boolean;
     skillId: string;
     skillLabel: string;
@@ -707,10 +819,12 @@ export function GmRoleplayingEncounterScreen({
       opponentOpenEndedD10s: [],
       opponentSilent: false,
       partial: input.preview.partial,
+      pendingRollId: input.pendingRollId,
       participantId: input.participantId,
       resultModifier: input.preview.achievedSuccessLevel?.resultModifier,
       roll: input.roll.rollD20,
       rollD20: input.roll.rollD20,
+      rollSetId: input.rollSetId,
       silent: input.silent,
       skillId: input.skillId,
       skillLabel: input.skillLabel,
@@ -820,6 +934,7 @@ export function GmRoleplayingEncounterScreen({
         right.assignedAt.localeCompare(left.assignedAt)
     )[0];
     const activeOpposedRollSetId = isOpposed ? draft.rollSetId : matchingPendingRoll?.rollSetId;
+    const activeRollSetId = activeOpposedRollSetId ?? matchingPendingRoll?.rollSetId ?? draft.rollSetId;
     const matchingOpponentPendingRoll =
       activeOpposedRollSetId && opponent && selectedOpponentSkill
         ? roleplayState.pendingSkillRolls.find((roll) => {
@@ -836,12 +951,12 @@ export function GmRoleplayingEncounterScreen({
             );
           })
         : undefined;
-    const matchingResult = selectedSkill && (matchingPendingRoll || activeOpposedRollSetId)
+    const matchingResult = selectedSkill
       ? findRoleplayResultForSide({
           entries: roleplayState.actionLog,
           participantId: participant?.id,
           pendingRollId: matchingPendingRoll?.id,
-          rollSetId: activeOpposedRollSetId,
+          rollSetId: activeRollSetId,
           side: "actor",
           skillId: selectedSkill?.id,
         })
@@ -907,6 +1022,7 @@ export function GmRoleplayingEncounterScreen({
       opponentExternalResult: matchingOpponentResult,
       isOpposed,
       actorOtherModInput,
+      activeRollSetId,
       activeOpposedRollSetId,
       opponent,
       opponentOtherModInput,
@@ -989,7 +1105,7 @@ export function GmRoleplayingEncounterScreen({
         opponentSupportSkillLabel: !assigningOpponent && isOpposed ? selectedOpponentSupportSkill?.label : undefined,
         participantId: assigningOpponent ? opponent.id : participant.id,
         participantName: assigningOpponent ? opponent.label : participant.label,
-        rollSetId: assigningOpponent || isOpposed ? activeOpposedRollSetId : undefined,
+        rollSetId: assigningOpponent || isOpposed ? activeOpposedRollSetId : draft.rollSetId,
         session: encounter,
         side: assigningOpponent ? "opponent" : isOpposed ? "actor" : undefined,
         silent: assigningOpponent ? draft.opponentSilent : draft.silent,
@@ -1010,6 +1126,7 @@ export function GmRoleplayingEncounterScreen({
   async function handleGmRoll(draft: RoleplayRollDraft, side: "actor" | "opponent" | "both" = "actor") {
     const {
       isOpposed,
+      activeRollSetId,
       activeOpposedRollSetId,
       opponent,
       otherMod,
@@ -1238,7 +1355,7 @@ export function GmRoleplayingEncounterScreen({
           participantId: participant.id,
           participantName: participant.label,
           roll,
-          rollSetId: activeOpposedRollSetId,
+          rollSetId: isOpposed && activeOpposedRollSetId ? activeOpposedRollSetId : activeRollSetId,
           session: encounter,
           side: isOpposed && activeOpposedRollSetId ? "actor" : undefined,
           silent: draft.silent,
@@ -1269,8 +1386,10 @@ export function GmRoleplayingEncounterScreen({
           draftId: draft.id,
           idSuffix: "actor",
           participantId: participant.id,
+          pendingRollId: matchingPendingRoll?.id,
           preview,
           roll,
+          rollSetId: activeRollSetId,
           silent: draft.silent,
           skillId: selectedSkill.id,
           skillLabel: selectedSkill.label,
@@ -1279,6 +1398,19 @@ export function GmRoleplayingEncounterScreen({
       ]);
     }
   }
+
+  const serverRankedRollResults = roleplayState.actionLog.filter(
+    (entry) =>
+      entry.type === "gm_skill_roll" &&
+      entry.mode !== "opposed" &&
+      !entry.side &&
+      !entry.silent &&
+      entry.rollSetId === currentGmRollStackId &&
+      entry.numericSubtotal != null
+  );
+  const rankedRollResults = rankVisibleRollResults(
+    dedupeRankedRoleplayEntries([...currentRankedRollResults, ...serverRankedRollResults])
+  );
 
   return (
     <section style={{ display: "grid", gap: "1rem", maxWidth: 1120 }}>
@@ -1303,7 +1435,10 @@ export function GmRoleplayingEncounterScreen({
 
       <GmMessageSection
         gmMessageDraft={gmMessageDraft}
-        onChange={setGmMessageDraft}
+        onChange={(message) => {
+          setGmMessageDirty(true);
+          setGmMessageDraft(message);
+        }}
         onSave={handleSaveGmMessage}
       />
 
@@ -1323,7 +1458,7 @@ export function GmRoleplayingEncounterScreen({
       <section style={panelStyle}>
         <div style={{ alignItems: "center", display: "flex", justifyContent: "space-between", gap: "0.75rem" }}>
           <h2 style={{ margin: 0 }}>Skill roll assignment</h2>
-          <button onClick={resetRollDrafts} type="button">
+          <button onClick={() => void resetRollDrafts()} type="button">
             Clear
           </button>
         </div>
@@ -1360,7 +1495,11 @@ export function GmRoleplayingEncounterScreen({
             onClick={() =>
               setRollDrafts((currentDrafts) => [
                 ...currentDrafts,
-                makeRollDraft({ participantId: roster[0]?.id, skillId: initialSkillId }),
+                makeRollDraft({
+                  participantId: roster[0]?.id,
+                  rollSetId: currentGmRollStackId,
+                  skillId: initialSkillId,
+                }),
               ])
             }
             type="button"
@@ -1374,7 +1513,7 @@ export function GmRoleplayingEncounterScreen({
         </div>
       </section>
 
-      <RankedRollResultsSection entries={currentRankedRollResults} roster={roster} />
+      <RankedRollResultsSection entries={rankedRollResults} roster={roster} />
 
       <RoleplayActionLogSection entries={roleplayState.actionLog} />
     </section>
@@ -1396,7 +1535,7 @@ export function PlayerRoleplayingEncounterScreen({
   const [loading, setLoading] = useState(true);
   const [dismissedAssignedRollIds, setDismissedAssignedRollIds] = useState<Set<string>>(() => new Set());
   const [dismissedRankedResultIds, setDismissedRankedResultIds] = useState<Set<string>>(() => new Set());
-  const [localRankedResults, setLocalRankedResults] = useState<Array<{ id: string; participantName: string; skillLabel: string; total: number }>>([]);
+  const [localRankedResults, setLocalRankedResults] = useState<PlayerVisibleRankedResult[]>([]);
   const [playerLocalRollDraft, setPlayerLocalRollDraft] = useState<PlayerLocalRollDraft>(() =>
     makePlayerLocalRollDraft()
   );
@@ -1492,6 +1631,18 @@ export function PlayerRoleplayingEncounterScreen({
     }
   }, [encounter?.roleplayState?.gmMessage]);
 
+  useEffect(() => {
+    const activeStackId = encounter?.roleplayState?.currentRankedRollStackId;
+
+    if (!activeStackId) {
+      return;
+    }
+
+    setLocalRankedResults((currentResults) =>
+      currentResults.filter((entry) => entry.rollSetId === activeStackId)
+    );
+  }, [encounter?.roleplayState?.currentRankedRollStackId]);
+
   if (loading) {
     return <section>Loading roleplaying encounter...</section>;
   }
@@ -1543,7 +1694,11 @@ export function PlayerRoleplayingEncounterScreen({
   const readModelRankedResults = playerView.rankedResults.filter(
     (entry) => !dismissedRankedResultIds.has(entry.id)
   );
-  const visibleRankedResults = mergePlayerVisibleResults(localRankedResults, readModelRankedResults);
+  const activeRankedStackId = playerView.currentRollRoundId;
+  const localVisibleRankedResults = activeRankedStackId
+    ? localRankedResults.filter((entry) => entry.rollSetId === activeRankedStackId)
+    : localRankedResults;
+  const visibleRankedResults = mergePlayerVisibleResults(localVisibleRankedResults, readModelRankedResults);
   const unresolvedAssignedRolls = visibleAssignedRolls.filter((roll) => !roll.result);
   const controlledParticipant = effectivePlayerEncounterParticipants.find(
     (participant) => participant.id === playerView.controlledParticipantIds[0]
@@ -1670,7 +1825,11 @@ export function PlayerRoleplayingEncounterScreen({
           ...readModelRankedResults,
           {
             id: `player-roll-${pendingRoll.id}-${roll.rollD20}-${roll.dieResult}`,
+            participantId: participant.id,
             participantName: playerView.assignedRolls.find((entry) => entry.id === pendingRoll.id)?.participantName ?? participant.label,
+            pendingRollId: pendingRoll.id,
+            rollSetId: pendingRoll.rollSetId,
+            skillId: pendingRoll.skillId,
             skillLabel: pendingRoll.skillLabel,
             total: preview.numericSubtotal ?? preview.finalTotal ?? 0,
           },
@@ -1707,7 +1866,10 @@ export function PlayerRoleplayingEncounterScreen({
         ...readModelRankedResults,
         {
           id: `player-local-roll-${playerLocalRollRoundId}-${roll.rollD20}-${roll.dieResult}`,
+          participantId: controlledParticipant.id,
           participantName: controlledParticipant.label,
+          rollSetId: playerLocalRollRoundId,
+          skillId: localSelectedSkill.id,
           skillLabel: localSelectedSkill.label,
           total: preview.numericSubtotal ?? preview.finalTotal ?? 0,
         },

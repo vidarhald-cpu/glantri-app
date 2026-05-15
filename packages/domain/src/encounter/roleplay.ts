@@ -147,6 +147,21 @@ export function updateRoleplayGmMessage(input: {
   });
 }
 
+export function resetRoleplayRankedRollStack(input: {
+  rollSetId: string;
+  session: EncounterSession;
+}): EncounterSession {
+  const state = normalizeRoleplayState(input.session);
+
+  return withRoleplayState({
+    session: input.session,
+    state: {
+      ...state,
+      currentRankedRollStackId: input.rollSetId,
+    },
+  });
+}
+
 export function updateRoleplayVisibility(input: {
   session: EncounterSession;
   targetParticipantId: string;
@@ -680,6 +695,7 @@ export function assignRoleplaySkillRoll(input: {
         },
         ...state.actionLog,
       ],
+      currentRankedRollStackId: mode === "opposed" ? state.currentRankedRollStackId : rollSetId,
       pendingSkillRolls: [
         {
           assignedAt,
@@ -840,6 +856,8 @@ export function recordRoleplayGmSkillRoll(input: {
         },
         ...state.actionLog,
       ],
+      currentRankedRollStackId:
+        mode === "opposed" || !input.rollSetId ? state.currentRankedRollStackId : input.rollSetId,
     },
   });
 }
@@ -848,7 +866,13 @@ export function rankRoleplayGmRollResults(
   state: RoleplayState
 ): RoleplayActionLogEntry[] {
   return state.actionLog
-    .filter((entry) => entry.type === "gm_skill_roll" && entry.numericSubtotal != null)
+    .filter(
+      (entry) =>
+        entry.type === "gm_skill_roll" &&
+        entry.mode !== "opposed" &&
+        !entry.side &&
+        entry.numericSubtotal != null
+    )
     .sort(
       (left, right) =>
         Number(Boolean(left.fumble)) - Number(Boolean(right.fumble)) ||
