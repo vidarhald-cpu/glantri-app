@@ -331,6 +331,10 @@ export interface ScenarioRepository {
     tacticalGroupId?: string | null;
     visibilityOverrides?: ScenarioParticipant["visibilityOverrides"];
   }): Promise<ScenarioParticipant>;
+  getScenarioParticipantById(
+    participantId: string,
+    scenarioId: string
+  ): Promise<ScenarioParticipant | null>;
   listScenarioParticipants(scenarioId: string): Promise<ScenarioParticipant[]>;
   updateScenarioLiveState(
     scenarioId: string,
@@ -625,6 +629,13 @@ export function createPrismaScenarioRepository(client?: PrismaClient): ScenarioR
       });
 
       return mapScenarioParticipant(record);
+    },
+    async getScenarioParticipantById(participantId, scenarioId) {
+      const record = await prisma.scenarioParticipant.findFirst({
+        where: { id: participantId, scenarioId }
+      });
+
+      return record ? mapScenarioParticipant(record) : null;
     },
     async listScenarioParticipants(scenarioId) {
       const records = await prisma.scenarioParticipant.findMany({
