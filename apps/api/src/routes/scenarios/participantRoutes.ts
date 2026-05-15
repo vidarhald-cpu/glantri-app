@@ -2,6 +2,7 @@ import type { FastifyPluginAsync } from "fastify";
 
 import { CampaignService, CharacterService, EncounterService, ScenarioService } from "@glantri/database";
 import {
+  buildScenarioPlayerVisibleParticipants,
   reusableEntityKindSchema,
   scenarioParticipantJoinSourceSchema,
   scenarioParticipantRoleSchema,
@@ -20,6 +21,7 @@ import {
   parseOptionalString,
   parseRequiredString
 } from "./parsing";
+import { resolveScenarioWorkspaceAccess } from "./access";
 
 const characterService = new CharacterService();
 const campaignService = new CampaignService();
@@ -42,15 +44,56 @@ export const participantRoutes: FastifyPluginAsync = async (app) => {
       );
 
       if (!access) {
-        return reply.code(404).send({ error: "Scenario not found." });
+        return reply.code(404).send({
+          error: "Scenario not found."
+        });
       }
 
       const participants = await scenarioService.listScenarioParticipants(scenarioId);
+
+      if (access.mode === "player") {
+        return {
+          participants: buildScenarioPlayerVisibleParticipants({ participants })
+        };
+      }
 
       return { participants };
     } catch (error) {
       return reply.code(400).send({
         error: error instanceof Error ? error.message : "Unable to list scenario participants."
+      });
+    }
+  });
+
+  app.get("/scenarios/:scenarioId/my-participant", async (request, reply) => {
+    const user = await requireAuthenticatedUser(request, reply);
+
+    if (!user) {
+      return;
+    }
+
+    try {
+      const scenarioId = parseId(request.params, "scenarioId", "Scenario id");
+      const access = await resolveScenarioWorkspaceAccess(
+        { campaignService, scenarioService },
+        { scenarioId, userId: user.id, userRoles: user.roles }
+      );
+
+      if (!access) {
+        return reply.code(404).send({
+          error: "Scenario not found."
+        });
+      }
+
+      const participants = await scenarioService.listScenarioParticipants(scenarioId);
+      const myParticipant = participants.find(
+        (p) => p.isActive && p.role === "player_character" && p.controlledByUserId === user.id
+      ) ?? null;
+
+      return { participant: myParticipant };
+    } catch (error) {
+      return reply.code(400).send({
+        error: error instanceof Error ? error.message : "Unable to load participant."
       });
     }
   });
@@ -90,12 +133,6 @@ export const participantRoutes: FastifyPluginAsync = async (app) => {
         });
       }
 
-      if (!isGameMaster && !campaign.settings.allowPlayerSelfJoin) {
-        return reply.code(403).send({
-          error: "Player self-join is not enabled for this campaign."
-        });
-      }
-
       if (!canEditCharacterInApi(user)) {
         const character = await characterService.getOwnedCharacter(user.id, characterId);
 
@@ -106,16 +143,39 @@ export const participantRoutes: FastifyPluginAsync = async (app) => {
         }
       }
 
+      if (!isGameMaster) {
+        if (scenario.status !== "live") {
+          return reply.code(403).send({
+            error: "No live scenario is currently available for this character."
+          });
+        }
+
+        const campaignRoster = await campaignService.listCampaignRosterEntries(campaign.id);
+        const characterIsInCampaignRoster = campaignRoster.some(
+          (entry) => entry.sourceType === "character" && entry.sourceId === characterId
+        );
+
+        if (!characterIsInCampaignRoster) {
+          return reply.code(403).send({
+            error: "This character is not currently assigned to a campaign."
+          });
+        }
+      }
+
       const participant = await scenarioService.addCharacterParticipant({
         characterId,
-        controlledByUserId: parseOptionalNullableString(body, "controlledByUserId") ?? user.id,
+        controlledByUserId: isGameMaster
+          ? parseOptionalNullableString(body, "controlledByUserId") ?? user.id
+          : user.id,
         displayOrder: parseOptionalInteger(body, "displayOrder"),
         factionId: parseOptionalNullableString(body, "factionId"),
         joinSource:
           body.joinSource == null
             ? "gm_added"
             : scenarioParticipantJoinSourceSchema.parse(body.joinSource),
-        role: body.role == null ? undefined : scenarioParticipantRoleSchema.parse(body.role),
+        role: isGameMaster
+          ? body.role == null ? undefined : scenarioParticipantRoleSchema.parse(body.role)
+          : "player_character",
         roleTag: parseOptionalNullableString(body, "roleTag"),
         scenarioId,
         tacticalGroupId: parseOptionalNullableString(body, "tacticalGroupId")

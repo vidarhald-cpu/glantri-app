@@ -30,12 +30,17 @@ export const scenarioRoutes: FastifyPluginAsync = async (app) => {
     }
 
     try {
+      const query = request.query && typeof request.query === "object"
+        ? (request.query as Record<string, unknown>)
+        : {};
+      const characterId = parseOptionalString(query, "characterId");
       const isGameMaster = user.roles.includes("game_master") || user.roles.includes("admin");
-      const campaigns = isGameMaster
-        ? user.roles.includes("admin")
-          ? await campaignService.listCampaignsAllowingPlayerSelfJoin()
-          : await campaignService.listCampaignsByGameMaster(user.id)
-        : await campaignService.listCampaignsAllowingPlayerSelfJoin();
+
+      const campaigns = characterId
+        ? await campaignService.listCampaignsByCharacterRosterAccess(characterId)
+        : isGameMaster
+          ? await campaignService.listCampaignsByGameMaster(user.id)
+          : [];
 
       const scenarioGroups = await Promise.all(
         campaigns.map(async (campaign) => ({
@@ -46,7 +51,7 @@ export const scenarioRoutes: FastifyPluginAsync = async (app) => {
 
       const joinableScenarios = scenarioGroups.flatMap(({ campaign, scenarios }) =>
         scenarios
-          .filter((scenario) => scenario.status !== "archived" && scenario.status !== "completed")
+          .filter((scenario) => scenario.status === "live")
           .map((scenario) => ({
             campaignId: campaign.id,
             campaignName: campaign.name,

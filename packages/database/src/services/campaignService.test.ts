@@ -34,6 +34,34 @@ describe("CampaignService access listing", () => {
 
     await expect(service.listCampaignsByPlayerAccess("player-1")).resolves.toEqual(expectedCampaigns);
   });
+
+  it("returns campaigns where a character is in the roster", async () => {
+    const { repository } = createScenarioRepositoryStub();
+    const expectedCampaigns: Campaign[] = [
+      {
+        createdAt: "2026-04-21T00:00:00.000Z",
+        description: "Roster campaign",
+        gmUserId: "gm-1",
+        id: "campaign-1",
+        name: "Campaign One",
+        settings: {
+          allowPlayerSelfJoin: false,
+          defaultVisibility: "hidden",
+        },
+        slug: "campaign-one",
+        status: "active",
+        updatedAt: "2026-04-21T00:00:00.000Z",
+      },
+    ];
+    repository.listCampaignsByCharacterRosterAccess = async (characterId) =>
+      characterId === "character-1" ? expectedCampaigns : [];
+
+    const service = new CampaignService(repository);
+
+    await expect(service.listCampaignsByCharacterRosterAccess("character-1")).resolves.toEqual(
+      expectedCampaigns,
+    );
+  });
 });
 
 describe("CampaignService campaign roster", () => {
@@ -158,6 +186,18 @@ describe("CampaignService campaign roster", () => {
     await expect(service.listCampaignRosterEntries("campaign-1")).resolves.toEqual([]);
   });
 
+  it("treats already-removed roster entry ids as an idempotent no-op", async () => {
+    const { repository, rosterEntries } = createScenarioRepositoryStub();
+    const service = new CampaignService(repository);
+
+    await service.removeCampaignRosterEntry({
+      campaignId: "campaign-1",
+      rosterEntryId: "missing-roster-entry",
+    });
+
+    expect(rosterEntries).toHaveLength(0);
+  });
+
   it("keeps roster membership scoped to each campaign/source pair", async () => {
     const { repository, rosterEntries } = createScenarioRepositoryStub();
     const characters = new Map([
@@ -194,6 +234,94 @@ describe("CampaignService campaign roster", () => {
     expect(rosterEntries).toHaveLength(2);
     await expect(service.listCampaignRosterEntries("campaign-1")).resolves.toEqual([campaignOneEntry]);
     await expect(service.listCampaignRosterEntries("campaign-2")).resolves.toEqual([campaignTwoEntry]);
+  });
+
+  it("removes roster membership by campaign source identity", async () => {
+    const { repository, rosterEntries } = createScenarioRepositoryStub();
+    const characters = new Map([
+      ["character-1", createCharacterRecord({ id: "character-1", name: "Ari", ownerId: "user-1" })],
+    ]);
+    const reusableEntities = new Map<string, ReusableEntity>([
+      [
+        "template-1",
+        {
+          createdAt: "2026-04-21T00:00:00.000Z",
+          gmUserId: "gm-1",
+          id: "template-1",
+          kind: "npc",
+          name: "Bandit Template",
+          snapshot: {
+            actorClass: "template",
+          },
+          updatedAt: "2026-04-21T00:00:00.000Z",
+        },
+      ],
+    ]);
+    repository.getReusableEntityById = async (entityId) => reusableEntities.get(entityId) ?? null;
+    const service = new CampaignService(
+      repository,
+      {
+        getCharacterById: async (characterId: string) => characters.get(characterId) ?? null,
+      } as never,
+    );
+
+    await service.addCampaignRosterEntry({
+      campaignId: "campaign-1",
+      category: "pc",
+      sourceId: "character-1",
+      sourceType: "character",
+    });
+    await service.addCampaignRosterEntry({
+      campaignId: "campaign-1",
+      category: "template",
+      sourceId: "template-1",
+      sourceType: "template",
+    });
+
+    await expect(
+      service.removeCampaignRosterEntryBySource({
+        campaignId: "campaign-1",
+        sourceId: "character-1",
+        sourceType: "character",
+      }),
+    ).resolves.toEqual({ removed: true });
+
+    expect(rosterEntries).toHaveLength(1);
+    expect(rosterEntries[0]?.sourceType).toBe("template");
+
+    await expect(
+      service.removeCampaignRosterEntryBySource({
+        campaignId: "campaign-1",
+        sourceId: "template-1",
+        sourceType: "template",
+      }),
+    ).resolves.toEqual({ removed: true });
+    await expect(
+      service.removeCampaignRosterEntryBySource({
+        campaignId: "campaign-1",
+        sourceId: "template-1",
+        sourceType: "template",
+      }),
+    ).resolves.toEqual({ removed: false });
+
+    expect(rosterEntries).toHaveLength(0);
+    expect(characters.get("character-1")?.name).toBe("Ari");
+    expect(reusableEntities.get("template-1")?.name).toBe("Bandit Template");
+  });
+
+  it("returns an idempotent no-op when removing a missing roster source", async () => {
+    const { repository, rosterEntries } = createScenarioRepositoryStub();
+    const service = new CampaignService(repository);
+
+    await expect(
+      service.removeCampaignRosterEntryBySource({
+        campaignId: "campaign-1",
+        sourceId: "missing-character",
+        sourceType: "character",
+      }),
+    ).resolves.toEqual({ removed: false });
+
+    expect(rosterEntries).toHaveLength(0);
   });
 
   it("removes only roster links and leaves source characters and templates available", async () => {

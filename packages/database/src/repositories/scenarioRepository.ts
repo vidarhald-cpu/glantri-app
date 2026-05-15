@@ -273,6 +273,7 @@ export interface ScenarioRepository {
   getCampaignById(campaignId: string): Promise<Campaign | null>;
   listCampaignsByGameMaster(gmUserId: string): Promise<Campaign[]>;
   listCampaignsAllowingPlayerSelfJoin(): Promise<Campaign[]>;
+  listCampaignsByCharacterRosterAccess(characterId: string): Promise<Campaign[]>;
   listCampaignsByPlayerAccess(userId: string): Promise<Campaign[]>;
   createScenario(input: {
     campaignId: string;
@@ -378,6 +379,11 @@ export interface ScenarioRepository {
     sourceType: CampaignRosterSourceType;
   }): Promise<CampaignRosterEntry>;
   deleteCampaignRosterEntry(entryId: string): Promise<void>;
+  deleteCampaignRosterEntryBySource(input: {
+    campaignId: string;
+    sourceId: string;
+    sourceType: CampaignRosterSourceType;
+  }): Promise<number>;
   getCampaignRosterEntryById(entryId: string): Promise<CampaignRosterEntry | null>;
   listCampaignRosterEntries(campaignId: string): Promise<CampaignRosterEntry[]>;
   createScenarioRelationship(input: {
@@ -442,6 +448,21 @@ export function createPrismaScenarioRepository(client?: PrismaClient): ScenarioR
             equals: true
           }
         }
+      });
+
+      return records.map(mapCampaign);
+    },
+    async listCampaignsByCharacterRosterAccess(characterId) {
+      const records = await prisma.campaign.findMany({
+        orderBy: { updatedAt: "desc" },
+        where: {
+          rosterEntries: {
+            some: {
+              sourceId: characterId,
+              sourceType: "character",
+            },
+          },
+        },
       });
 
       return records.map(mapCampaign);
@@ -735,6 +756,17 @@ export function createPrismaScenarioRepository(client?: PrismaClient): ScenarioR
       await prisma.campaignRosterEntry.delete({
         where: { id: entryId }
       });
+    },
+    async deleteCampaignRosterEntryBySource(input) {
+      const result = await prisma.campaignRosterEntry.deleteMany({
+        where: {
+          campaignId: input.campaignId,
+          sourceId: input.sourceId,
+          sourceType: input.sourceType
+        }
+      });
+
+      return result.count;
     },
     async getCampaignRosterEntryById(entryId) {
       const record = await prisma.campaignRosterEntry.findUnique({

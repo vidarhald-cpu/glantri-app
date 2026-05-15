@@ -1,6 +1,7 @@
 param prefix string
 param location string
 param keyVaultUri string
+param registryServer string
 
 resource plan 'Microsoft.Web/serverfarms@2023-12-01' = {
   name: '${prefix}-plan'
@@ -18,7 +19,7 @@ resource apiApp 'Microsoft.Web/sites@2023-12-01' = {
     serverFarmId: plan.id
     httpsOnly: true
     siteConfig: {
-      linuxFxVersion: 'NODE|22-lts'
+      linuxFxVersion: 'DOCKER|${registryServer}/glantri-api:latest'
       appSettings: [
         {
           name: 'NODE_ENV'
@@ -54,7 +55,7 @@ resource webApp 'Microsoft.Web/sites@2023-12-01' = {
     serverFarmId: plan.id
     httpsOnly: true
     siteConfig: {
-      linuxFxVersion: 'NODE|22-lts'
+      linuxFxVersion: 'DOCKER|${registryServer}/glantri-web:latest'
       appSettings: [
         {
           name: 'NODE_ENV'
