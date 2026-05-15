@@ -90,6 +90,13 @@ export function OtherSkillsStep({
                 className="other-skill-search-input"
                 onChange={(event) => setSkillSearch(event.target.value)}
                 placeholder="Search by skill name"
+                style={{
+                  appearance: "none",
+                  fontFamily: "inherit",
+                  fontSize: "1rem",
+                  lineHeight: 1.4,
+                  padding: "0.5rem"
+                }}
                 type="search"
                 value={skillSearch}
               />
@@ -134,24 +141,7 @@ export function OtherSkillsStep({
           })}
         </div>
       ) : null}
-      <style jsx>{`
-        .other-skill-search-input {
-          appearance: none;
-          -webkit-appearance: none;
-          font-family: inherit;
-          font-size: 1rem;
-          line-height: 1.4;
-          padding: 0.5rem;
-        }
-
-        .other-skill-search-input::placeholder {
-          color: #6b6558;
-          font-family: inherit;
-          font-size: 1rem;
-          line-height: 1.4;
-          opacity: 1;
-        }
-      `}</style>
+      <style>{`.other-skill-search-input::placeholder { color: #6b6558; font-family: inherit; font-size: 1rem; line-height: 1.4; opacity: 1; }`}</style>
     </section>
   );
 }
