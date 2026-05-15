@@ -82,6 +82,24 @@ function buildRosterSourceKey(sourceType: CampaignRosterEntry["sourceType"], sou
   return `${sourceType}:${sourceId}`;
 }
 
+function removeRosterEntryFromList(
+  entries: CampaignRosterEntry[],
+  removedEntry: CampaignRosterEntry
+): CampaignRosterEntry[] {
+  const removedSourceKey = buildRosterSourceKey(removedEntry.sourceType, removedEntry.sourceId);
+
+  return entries.filter((entry) => {
+    if (entry.id === removedEntry.id) {
+      return false;
+    }
+
+    return !(
+      entry.campaignId === removedEntry.campaignId &&
+      buildRosterSourceKey(entry.sourceType, entry.sourceId) === removedSourceKey
+    );
+  });
+}
+
 function formatEntityKind(kind: ReusableEntity["kind"]): string {
   if (kind === "npc") {
     return "NPC";
@@ -454,6 +472,9 @@ export default function CampaignDetailPageContent({
         setRoster((current) =>
           current.some((rosterEntry) => rosterEntry.id === entry.id) ? current : [...current, entry]
         );
+        setAllRosterEntries((current) =>
+          current.some((rosterEntry) => rosterEntry.id === entry.id) ? current : [...current, entry]
+        );
       } else {
         const rosterEntry =
           candidate.rosterEntry ??
@@ -471,7 +492,8 @@ export default function CampaignDetailPageContent({
         });
 
         setFeedback(`Removed ${candidate.name} from the campaign roster.`);
-        setRoster((current) => current.filter((entry) => entry.id !== rosterEntry.id));
+        setRoster((current) => removeRosterEntryFromList(current, rosterEntry));
+        setAllRosterEntries((current) => removeRosterEntryFromList(current, rosterEntry));
       }
       await refreshPage();
     } catch (caughtError) {
@@ -749,7 +771,6 @@ export default function CampaignDetailPageContent({
                   <th style={{ padding: "0.5rem 0.75rem 0.5rem 0" }}>Scenario</th>
                   <th style={{ padding: "0.5rem 0.75rem" }}>Kind</th>
                   <th style={{ padding: "0.5rem 0.75rem" }}>Status</th>
-                  <th style={{ padding: "0.5rem 0.75rem" }}>Combat</th>
                   <th style={{ padding: "0.5rem 0.75rem" }}>Follows</th>
                   <th style={{ padding: "0.5rem 0" }}>Action</th>
                 </tr>
@@ -767,9 +788,6 @@ export default function CampaignDetailPageContent({
                     </td>
                     <td style={{ padding: "0.6rem 0.75rem" }}>{scenario.kind}</td>
                     <td style={{ padding: "0.6rem 0.75rem" }}>{scenario.status}</td>
-                    <td style={{ padding: "0.6rem 0.75rem" }}>
-                      {scenario.liveState?.combatStatus ?? "not_started"}
-                    </td>
                     <td style={{ padding: "0.6rem 0.75rem" }}>
                       {getContinuationLabel(scenario.id)}
                     </td>

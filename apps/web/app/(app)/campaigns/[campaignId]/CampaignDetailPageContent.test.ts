@@ -60,4 +60,27 @@ describe("CampaignDetailPageContent roster UI", () => {
     expect(source).toContain("civilizationNamesBySocietyId");
     expect(source).toContain('return "—";');
   });
+
+  it("removes roster membership locally by entry and source so filters do not stay stale", () => {
+    const source = readCampaignDetailSource();
+
+    expect(source).toContain("function removeRosterEntryFromList");
+    expect(source).toContain("entry.id === removedEntry.id");
+    expect(source).toContain("entry.campaignId === removedEntry.campaignId");
+    expect(source).toContain("setRoster((current) => removeRosterEntryFromList(current, rosterEntry))");
+    expect(source).toContain(
+      "setAllRosterEntries((current) => removeRosterEntryFromList(current, rosterEntry))"
+    );
+  });
+
+  it("does not show combat status on the campaign-level scenario list", () => {
+    const source = readCampaignDetailSource();
+
+    expect(source).not.toContain(">Combat</th>");
+    expect(source).not.toContain("scenario.liveState?.combatStatus");
+    expect(source).toContain(">Scenario</th>");
+    expect(source).toContain(">Status</th>");
+    expect(source).toContain(">Follows</th>");
+    expect(source).toContain(">Action</th>");
+  });
 });

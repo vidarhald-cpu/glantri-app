@@ -19,7 +19,6 @@ export default function CampaignsPageContent() {
   const [loading, setLoading] = useState(true);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [allowPlayerSelfJoin, setAllowPlayerSelfJoin] = useState(false);
   const canManageCampaigns = canManageCampaignWorkspace(currentUser);
 
   async function refreshCampaigns() {
@@ -48,7 +47,7 @@ export default function CampaignsPageContent() {
         description,
         name,
         settings: {
-          allowPlayerSelfJoin,
+          allowPlayerSelfJoin: false,
           defaultVisibility: "hidden"
         },
         status: "draft"
@@ -57,7 +56,6 @@ export default function CampaignsPageContent() {
       setFeedback(`Created campaign ${campaign.name}.`);
       setName("");
       setDescription("");
-      setAllowPlayerSelfJoin(false);
       await refreshCampaigns();
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : "Unable to create campaign.");
@@ -97,14 +95,6 @@ export default function CampaignsPageContent() {
             rows={3}
             value={description}
           />
-          <label style={{ alignItems: "center", display: "flex", gap: "0.5rem" }}>
-            <input
-              checked={allowPlayerSelfJoin}
-              onChange={(event) => setAllowPlayerSelfJoin(event.target.checked)}
-              type="checkbox"
-            />
-            Allow player self-join
-          </label>
           <div>
             <button onClick={() => void handleCreateCampaign()} type="button">
               Create campaign
@@ -136,9 +126,6 @@ export default function CampaignsPageContent() {
               {canManageCampaigns ? (
                 <>
                   <div>Status: {campaign.status}</div>
-                  <div>
-                    Player self-join: {campaign.settings.allowPlayerSelfJoin ? "Enabled" : "Disabled"}
-                  </div>
                 </>
               ) : scenarios.length > 0 ? (
                 <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
