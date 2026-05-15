@@ -95,24 +95,28 @@ export function createPrismaAuthRepository(client?: PrismaClient): AuthRepositor
             return null;
           }
 
+          const targetUser = await tx.user.findUnique({
+            select: { id: true },
+            where: { id: userId }
+          });
+
+          if (!targetUser) {
+            return null;
+          }
+
           const gmRole = await tx.role.upsert({
             create: { name: "game_master" },
             update: {},
             where: { name: "game_master" }
           });
 
-          const user = await tx.user
-            .update({
-              data: {
-                roles: {
-                  create: [{ roleId: gmRole.id }],
-                  deleteMany: {}
-                }
-              },
-              include: { roles: { include: { role: true } } },
-              where: { id: userId }
-            })
-            .catch(() => null);
+          await tx.userRole.deleteMany({ where: { userId } });
+          await tx.userRole.create({ data: { roleId: gmRole.id, userId } });
+
+          const user = await tx.user.findUnique({
+            include: { roles: { include: { role: true } } },
+            where: { id: userId }
+          });
 
           if (!user) {
             return null;
