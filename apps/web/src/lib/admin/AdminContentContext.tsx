@@ -15,12 +15,12 @@ import {
 } from "@glantri/content";
 import type { ContentSnapshotSource, RevisionedContentSnapshot } from "@glantri/shared";
 
+import { ApiRequestError } from "../api/apiClient";
 import {
-  ApiRequestError,
   isAdminContentConflictPayload,
   loadAdminCanonicalContentFromServer,
   saveAdminCanonicalContentToServer
-} from "../api/localServiceClient";
+} from "../api/adminContentClient";
 import { ContentCacheRepository } from "../offline/repositories/contentCacheRepository";
 
 const PUBLISHED_CONTENT_CACHE_KEY = "canonical-content";

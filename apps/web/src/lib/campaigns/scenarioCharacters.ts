@@ -1,6 +1,6 @@
 import type { ScenarioParticipant } from "@glantri/domain";
 
-import type { ServerCharacterRecord } from "../api/localServiceClient";
+import type { ServerCharacterRecord } from "../api/characterClient";
 
 export function getAvailableScenarioCharacters(input: {
   characters: ServerCharacterRecord[];

@@ -4,7 +4,7 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 import type { AuthRole, AuthUser } from "@glantri/auth";
 import { canAccessAdmin, hasAnyRole } from "@glantri/auth";
 
-import { getCurrentSessionUser, logoutLocalUser } from "../api/localServiceClient";
+import { getCurrentSessionUser, logoutLocalUser } from "../api/authClient";
 
 interface SessionUserContextValue {
   currentUser: AuthUser | null;

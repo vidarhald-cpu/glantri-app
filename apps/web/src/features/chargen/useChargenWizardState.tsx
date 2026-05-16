@@ -64,7 +64,7 @@ import {
   loadActiveChargenRuleSet,
   saveCharacterToServer
 } from "@/lib/api/localServiceClient";
-import { API_BASE_URL } from "@/lib/api/apiConfig";
+import { loadCanonicalContentFromServer } from "@/lib/api/contentClient";
 import { ChargenSessionRepository } from "@/lib/offline/repositories/chargenSessionRepository";
 import { ContentCacheRepository } from "@/lib/offline/repositories/contentCacheRepository";
 import { LocalCharacterRepository } from "@/lib/offline/repositories/localCharacterRepository";
@@ -101,10 +101,6 @@ const CONTENT_CACHE_KEY = "canonical-content";
 const chargenSessionRepository = new ChargenSessionRepository();
 const contentCacheRepository = new ContentCacheRepository();
 const localCharacterRepository = new LocalCharacterRepository();
-
-interface ContentResponse {
-  content: CanonicalContent;
-}
 
 export function useChargenWizardState() {
   const router = useRouter();
@@ -652,19 +648,13 @@ export function useChargenWizardState() {
       setHydrated(true);
 
       try {
-        const response = await fetch(`${API_BASE_URL}/content`);
-
-        if (!response.ok) {
-          return;
-        }
-
-        const payload = (await response.json()) as ContentResponse;
+        const freshContent = await loadCanonicalContentFromServer();
 
         if (cancelled) {
           return;
         }
 
-        const normalizedContent = validateCanonicalContent(payload.content);
+        const normalizedContent = validateCanonicalContent(freshContent);
 
         setContent(normalizedContent);
         await contentCacheRepository.save(CONTENT_CACHE_KEY, normalizedContent, "v1");

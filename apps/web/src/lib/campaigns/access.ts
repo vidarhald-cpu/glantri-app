@@ -1,14 +1,14 @@
 import { canAccessAdmin, type AuthUser } from "@glantri/auth";
 import type { Campaign, Scenario } from "@glantri/domain";
 
+import { ApiRequestError } from "../api/apiClient";
 import {
-  ApiRequestError,
   loadAccessibleCampaignById,
   loadAccessibleCampaigns,
   loadCampaignScenarios,
   loadCampaigns,
   type AccessibleCampaignRecord,
-} from "../api/localServiceClient";
+} from "../api/campaignClient";
 import { buildCampaignWorkspaceHref } from "./workspace";
 
 export interface CampaignWorkspaceAccessResult {

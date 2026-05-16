@@ -9,7 +9,7 @@ vi.mock("../content/loadCanonicalContent", () => ({
   loadCanonicalContent: loadCanonicalContentMock
 }));
 
-vi.mock("../api/localServiceClient", () => ({
+vi.mock("../api/characterClient", () => ({
   loadServerCharacterById: loadServerCharacterByIdMock
 }));
 

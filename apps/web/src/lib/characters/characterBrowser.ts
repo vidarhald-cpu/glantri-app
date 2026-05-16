@@ -1,6 +1,6 @@
 import type { AuthUser } from "@glantri/auth";
 
-import type { ServerCharacterRecord } from "../api/localServiceClient";
+import type { ServerCharacterRecord } from "../api/characterClient";
 import type { LocalCharacterRecord } from "../offline/glantriDexie";
 import { UNNAMED_CHARACTER_PLACEHOLDER } from "../offline/repositories/localCharacterRepository";
 
