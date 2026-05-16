@@ -40,6 +40,10 @@ vi.mock("@glantri/database", () => ({
   },
 }));
 
+vi.mock("@glantri/domain", () => ({
+  characterBuildSchema: { parse: (v: unknown) => v },
+}));
+
 vi.mock("../lib/sessionAuth", () => ({
   requireAuthenticatedUser: mocks.requireAuthenticatedUser,
 }));
