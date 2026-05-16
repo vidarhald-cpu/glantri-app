@@ -31,9 +31,10 @@ const mocks = vi.hoisted(() => {
 vi.mock("@glantri/database", () => ({
   CharacterService: vi.fn(() => mocks.characterService),
   CharacterValidationError: class CharacterValidationError extends Error {
-    issues: unknown[];
-    constructor(issues: unknown[]) {
-      super("Validation failed");
+    issues: string[];
+    constructor(issues: string[]) {
+      super("Character build validation failed.");
+      this.name = "CharacterValidationError";
       this.issues = issues;
     }
   },
@@ -143,6 +144,26 @@ describe("characters route contract", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({ character: stubCharacter });
+  });
+
+  it("returns 400 with error and issues when CharacterValidationError is thrown", async () => {
+    const { CharacterValidationError } = await import("@glantri/database");
+    mocks.characterService.saveCharacter.mockRejectedValue(
+      new CharacterValidationError(["Name already taken."])
+    );
+
+    const app = await buildCharactersTestApp();
+    const response = await app.inject({
+      method: "POST",
+      url: "/",
+      payload: { build: stubCharacter.build },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({
+      error: "Character build validation failed.",
+      issues: ["Name already taken."],
+    });
   });
 
   it("returns 400 when character build id does not match path id on update", async () => {

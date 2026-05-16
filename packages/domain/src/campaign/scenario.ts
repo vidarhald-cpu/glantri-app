@@ -387,10 +387,6 @@ export type ScenarioPlayerControlledParticipant = z.infer<
 >;
 export type ScenarioPlayerProjection = z.infer<typeof scenarioPlayerProjectionSchema>;
 
-function nowIsoString(): string {
-  return new Date().toISOString();
-}
-
 function clampHealth(value: number, max: number): number {
   return Math.max(0, Math.min(value, max));
 }
@@ -464,7 +460,7 @@ export function createScenarioLiveState(): ScenarioLiveState {
 
 export function startScenario(
   liveState: ScenarioLiveState | undefined,
-  startedAt = nowIsoString()
+  startedAt: string
 ): ScenarioLiveState {
   return scenarioLiveStateSchema.parse({
     ...(liveState ?? createScenarioLiveState()),

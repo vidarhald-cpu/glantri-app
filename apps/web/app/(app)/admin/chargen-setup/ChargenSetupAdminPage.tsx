@@ -15,6 +15,7 @@ import {
 } from "@/lib/api/chargenClient";
 import { useCanAccessAdmin } from "@/lib/auth/SessionUserContext";
 import {
+  AdminActionRow,
   AdminButton,
   AdminMetric,
   AdminPageIntro,
@@ -255,7 +256,7 @@ export default function ChargenSetupAdminPage() {
             />
           </label>
         </div>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem", marginTop: "1rem" }}>
+        <AdminActionRow marginTop="1rem">
           <AdminButton disabled={!canEdit || saving} onClick={() => void handleCreateRuleSet()}>
             Create Rule Set
           </AdminButton>
@@ -266,7 +267,7 @@ export default function ChargenSetupAdminPage() {
           >
             Copy Active Values
           </AdminButton>
-        </div>
+        </AdminActionRow>
         {!canEdit ? (
           <div style={{ marginTop: "1rem" }}>
             <AdminReadOnlyNotice message="Only Admin and GM roles can create or activate chargen rule sets." />

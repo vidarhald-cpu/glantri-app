@@ -4,6 +4,7 @@ import { chargenRuleSetParametersSchema } from "@glantri/domain";
 import { ChargenRuleSetService } from "@glantri/database";
 
 import { requireAdminUser, requireAuthenticatedUser } from "../lib/sessionAuth";
+import { BadRequestError, NotFoundError, handleRouteError } from "../lib/errors";
 
 const chargenRuleSetService = new ChargenRuleSetService();
 
@@ -52,30 +53,25 @@ export const chargenRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.post("/rule-sets/:id/activate", async (request, reply) => {
-    const user = await requireAdminUser(request, reply);
-
-    if (!user) {
-      return;
-    }
-
-    const id = (request.params as { id?: string }).id;
-
-    if (!id) {
-      return reply.code(400).send({
-        error: "Rule set id is required."
-      });
-    }
-
     try {
+      const user = await requireAdminUser(request, reply);
+
+      if (!user) {
+        return;
+      }
+
+      const id = (request.params as { id?: string }).id;
+
+      if (!id) {
+        throw new BadRequestError("Rule set id is required.");
+      }
+
       return await chargenRuleSetService.activateRuleSet(id);
     } catch (error) {
       if (error instanceof Error && error.message === "Chargen rule set not found.") {
-        return reply.code(404).send({
-          error: error.message
-        });
+        return handleRouteError(new NotFoundError(error.message), reply);
       }
-
-      throw error;
+      return handleRouteError(error, reply);
     }
   });
 };
