@@ -110,6 +110,24 @@ describe("campaignActors", () => {
       snapshot: {
         actorClass: "template",
         equipmentProfile: "Mail shirt and spear",
+        humanoidNpcArchetype: {
+          skills: [{ skillId: "perception", skillName: "Perception", targetLevel: 13 }],
+          stats: {
+            final: {
+              cha: 10,
+              com: 10,
+              con: 10,
+              dex: 10,
+              health: 10,
+              int: 14,
+              lck: 10,
+              pow: 12,
+              siz: 10,
+              str: 10,
+              will: 10
+            }
+          }
+        },
         profession: "guard",
         roleLabel: "Town watch",
         socialClass: "Common",
@@ -143,6 +161,9 @@ describe("campaignActors", () => {
       name: "North Gate Guard",
       snapshot: {
         actorClass: "template",
+        humanoidNpcArchetype: {
+          skills: [{ skillId: "perception", skillName: "Perception", targetLevel: 13 }]
+        },
         profession: "guard",
         templateId: "template-guard"
       }

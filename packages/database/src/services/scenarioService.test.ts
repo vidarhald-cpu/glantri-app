@@ -100,6 +100,62 @@ describe("ScenarioService controller assignment", () => {
     expect(participants).toHaveLength(2);
   });
 
+  it("preserves temporary actor build, sheet, and equipment snapshots from entity input", async () => {
+    const { repository } = createScenarioRepositoryStub();
+    const sourceBuild = createCharacterRecord({
+      id: "template-build-1",
+      name: "City Guard",
+    }).build;
+    const sheetSummary = {
+      draftView: {
+        skills: [{ skillId: "perception", totalSkill: 18 }],
+      },
+    };
+    const equipmentState = {
+      activeLoadoutByCharacterId: {
+        "template-build-1": {
+          activePrimaryWeaponItemId: "spear-1",
+          readyShieldItemId: "shield-1",
+        },
+      },
+      itemsById: {
+        "rope-1": { characterId: "template-build-1" },
+        "shield-1": { characterId: "template-build-1" },
+        "spear-1": { characterId: "template-build-1", isEquipped: true },
+      },
+    };
+    const service = new ScenarioService(repository);
+
+    const participant = await service.addEntityParticipant({
+      entityInput: {
+        gmUserId: "gm-1",
+        kind: "npc",
+        name: "City Guard",
+        snapshot: {
+          actorClass: "template",
+          build: sourceBuild,
+          equipmentState,
+          sheetSummary,
+        },
+      },
+      isTemporary: true,
+      role: "npc",
+      scenarioId: "scenario-1",
+    });
+
+    expect(participant.snapshot).toMatchObject({
+      build: sourceBuild,
+      displayName: "City Guard",
+      equipmentState,
+      sheetSummary,
+    });
+    expect(participant.state.equipment).toMatchObject({
+      carriedItemIds: ["rope-1", "shield-1", "spear-1"],
+      equippedItemIds: ["spear-1"],
+      readyItemIds: ["shield-1", "spear-1"],
+    });
+  });
+
   it("enforces the active-control rule when participant metadata is reassigned", async () => {
     const { repository } = createScenarioRepositoryStub();
     const characters = new Map([

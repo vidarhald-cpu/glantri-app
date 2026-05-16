@@ -112,13 +112,15 @@ export function buildScenarioActorInputFromTemplate(input: {
   snapshot: Record<string, unknown>;
 } {
   const metadata = getCampaignActorMetadata(input.template);
+  const sourceSnapshot = isObject(input.template.snapshot) ? input.template.snapshot : {};
 
   return {
     description: input.template.description,
     kind: input.template.kind,
     name: input.name?.trim() || input.template.name,
     snapshot: {
-      actorClass: "template",
+      ...sourceSnapshot,
+      actorClass: metadata.actorClass === "generated_npc" ? "generated_npc" : "template",
       equipmentProfile: metadata.equipmentProfile,
       profession: metadata.profession,
       roleLabel: metadata.roleLabel,
