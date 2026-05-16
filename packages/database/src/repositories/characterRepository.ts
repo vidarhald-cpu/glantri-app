@@ -1,24 +1,9 @@
-import { characterBuildSchema, type CharacterBuild } from "@glantri/domain";
+import { characterBuildSchema, type CharacterBuild, type CharacterRecord } from "@glantri/domain";
 import type { PrismaClient } from "@prisma/client";
 
 import { prisma as defaultPrisma } from "../client";
 
-export interface CharacterRecord {
-  build: CharacterBuild;
-  createdAt: string;
-  id: string;
-  name: string;
-  level: number;
-  owner?:
-    | {
-        displayName?: string | null;
-        email: string;
-        id: string;
-      }
-    | null;
-  ownerId?: string | null;
-  updatedAt: string;
-}
+export type { CharacterRecord };
 
 export interface CreateCharacterRecordInput {
   build: CharacterBuild;
