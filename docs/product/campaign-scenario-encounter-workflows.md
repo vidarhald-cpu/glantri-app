@@ -122,6 +122,17 @@ Player Encounter pages should not show:
 - Admin-only controls.
 - Raw session JSON, read-model source names, fallback labels, or internal IDs.
 
+## Character Workspace
+
+The Character workspace answers: "What can this character do and control right now?"
+
+Current first-pass rule:
+
+- The Character page intentionally reuses the existing Equip Items interface exactly.
+- Equip Items remains available as its own route.
+- Physical state, damage effects, bleed, fatigue, mental/combat effects, GM-set modifiers, adjusted stats, and combat action modules are future work.
+- Future modules should not appear as visible placeholders until they are actionable.
+
 ## Player-Facing Copy Rules
 
 Player pages should avoid admin/internal mechanics. If a player cannot act, the page should explain the actionable circumstance, not the implementation reason.

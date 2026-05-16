@@ -1,12 +1,12 @@
 import CharacterLoadoutView from "../components/CharacterLoadoutView";
 
-interface CharacterLoadoutPageProps {
+interface CharacterControlPageProps {
   params: Promise<{
     id: string;
   }>;
 }
 
-export default async function CharacterLoadoutPage({ params }: CharacterLoadoutPageProps) {
+export default async function CharacterControlPage({ params }: CharacterControlPageProps) {
   const { id } = await params;
 
   return <CharacterLoadoutView characterId={id} />;
