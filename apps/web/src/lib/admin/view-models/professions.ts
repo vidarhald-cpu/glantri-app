@@ -8,8 +8,7 @@ import {
   summarizeSocietyStages,
   getAuditSeverityRank,
   buildProfessionMatrixRowsInternal,
-  applyProfessionReachBands,
-  resolveProfessionGrantPackage
+  applyProfessionReachBands
 } from "./_helpers";
 
 export interface ProfessionAdminRow {
