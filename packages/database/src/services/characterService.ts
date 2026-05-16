@@ -46,6 +46,10 @@ export class CharacterService {
     return this.repository.findById(characterId);
   }
 
+  async getCharacterByIdInGmCampaigns(gmUserId: string, characterId: string): Promise<CharacterRecord | null> {
+    return this.repository.findInGmCampaigns(gmUserId, characterId);
+  }
+
   async getOwnedCharacter(ownerId: string, characterId: string): Promise<CharacterRecord | null> {
     return this.repository.findOwnedById(ownerId, characterId);
   }

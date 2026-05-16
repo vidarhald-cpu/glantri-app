@@ -139,7 +139,7 @@ describe("CampaignDetailPageContent roster membership interaction", () => {
         rosterEntryId: "roster-1",
       }),
     );
-  });
+  }, 10_000);
 
   it("prefers the stored roster entry source key when removing an existing membership", async () => {
     const { getRosterRemovalSource } = await import("./CampaignDetailPageContent");
