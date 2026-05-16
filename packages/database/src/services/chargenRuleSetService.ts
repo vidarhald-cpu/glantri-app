@@ -2,7 +2,8 @@ import {
   DEFAULT_CHARGEN_RULE_SET,
   chargenRuleSetParametersSchema,
   type ChargenRuleSet,
-  type ChargenRuleSetParameters
+  type ChargenRuleSetParameters,
+  type ChargenRuleSetStoreResponse
 } from "@glantri/domain";
 
 import {
@@ -10,17 +11,14 @@ import {
   type ChargenRuleSetRepository
 } from "../repositories/chargenRuleSetRepository";
 
-export interface ChargenRuleSetStoreView {
-  activeRuleSet: ChargenRuleSet;
-  ruleSets: ChargenRuleSet[];
-}
+export type { ChargenRuleSetStoreResponse };
 
 export class ChargenRuleSetService {
   constructor(
     private readonly repository: ChargenRuleSetRepository = createPrismaChargenRuleSetRepository()
   ) {}
 
-  async activateRuleSet(id: string): Promise<ChargenRuleSetStoreView> {
+  async activateRuleSet(id: string): Promise<ChargenRuleSetStoreResponse> {
     const store = await this.repository.activateRuleSet(id);
     return this.mapStore(store);
   }
@@ -28,7 +26,7 @@ export class ChargenRuleSetService {
   async createRuleSet(input: {
     name: string;
     parameters: ChargenRuleSetParameters;
-  }): Promise<ChargenRuleSetStoreView> {
+  }): Promise<ChargenRuleSetStoreResponse> {
     const name = input.name.trim();
 
     if (!name) {
@@ -44,14 +42,14 @@ export class ChargenRuleSetService {
     return this.mapStore(store);
   }
 
-  async getStore(): Promise<ChargenRuleSetStoreView> {
+  async getStore(): Promise<ChargenRuleSetStoreResponse> {
     return this.mapStore(await this.repository.getStore());
   }
 
   private mapStore(store: {
     activeRuleSetId: string;
     ruleSets: ChargenRuleSet[];
-  }): ChargenRuleSetStoreView {
+  }): ChargenRuleSetStoreResponse {
     const activeRuleSet =
       store.ruleSets.find((ruleSet) => ruleSet.id === store.activeRuleSetId) ??
       DEFAULT_CHARGEN_RULE_SET;
