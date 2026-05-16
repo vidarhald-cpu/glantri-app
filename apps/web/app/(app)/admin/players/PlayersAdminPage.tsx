@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { formatAuthRoleLabel, type AuthRole, type AuthUser } from "@glantri/auth";
 
-import { loadAuthUsers, updateAuthUserRole } from "@/lib/api/localServiceClient";
+import { loadAuthUsers, updateAuthUserRole } from "@/lib/api/authClient";
 import { useCanAccessAdmin } from "@/lib/auth/SessionUserContext";
 import { AdminPageIntro, AdminPanel, AdminReadOnlyNotice } from "../admin-ui";
 

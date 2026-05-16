@@ -3,10 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
-import {
-  createCampaignOnServer,
-  type AccessibleCampaignRecord,
-} from "@/lib/api/localServiceClient";
+import { createCampaignOnServer, type AccessibleCampaignRecord } from "@/lib/api/campaignClient";
 import { useSessionUser } from "@/lib/auth/SessionUserContext";
 import { canManageCampaignWorkspace, loadCampaignBrowserRecordsForUser } from "@/lib/campaigns/access";
 import { buildCampaignWorkspaceHref } from "@/lib/campaigns/workspace";

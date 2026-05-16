@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { ScenarioParticipant } from "@glantri/domain";
 
-import type { ServerCharacterRecord } from "../api/localServiceClient";
+import type { ServerCharacterRecord } from "../api/characterClient";
 import {
   getAvailableScenarioCharacters,
   getScenarioCharacterDefaultControllerId,

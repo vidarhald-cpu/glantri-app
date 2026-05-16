@@ -1,6 +1,6 @@
 import type { CanonicalContent } from "@glantri/content";
 
-import { loadServerCharacterById } from "../api/localServiceClient";
+import { loadServerCharacterById } from "../api/characterClient";
 import { loadCanonicalContent } from "../content/loadCanonicalContent";
 import type { LocalCharacterRecord } from "../offline/glantriDexie";
 import { LocalCharacterRepository } from "../offline/repositories/localCharacterRepository";

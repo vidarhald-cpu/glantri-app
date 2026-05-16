@@ -1,3 +1,6 @@
+/**
+ * @deprecated Import directly from the domain client instead (authClient, campaignClient, etc.).
+ */
 export { API_BASE_URL } from "./apiConfig";
 export { ApiRequestError, type ApiErrorPayload, parseResponse, sendJson } from "./apiClient";
 export {

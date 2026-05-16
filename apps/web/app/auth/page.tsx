@@ -9,7 +9,7 @@ import {
   getCurrentSessionUser,
   loginLocalUser,
   registerLocalUser
-} from "@/lib/api/localServiceClient";
+} from "@/lib/api/authClient";
 import { canShowClaimGameMasterAction } from "@/lib/auth/authBootstrap";
 import { useSessionUser } from "@/lib/auth/SessionUserContext";
 
