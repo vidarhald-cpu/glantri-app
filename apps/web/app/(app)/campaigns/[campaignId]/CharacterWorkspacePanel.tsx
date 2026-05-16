@@ -152,7 +152,7 @@ export default function CharacterWorkspacePanel({
       ) : null}
 
       {selectedCandidate ? (
-        <CharacterLoadoutView characterId={selectedCandidate.characterId} />
+        <CharacterLoadoutView characterId={selectedCandidate.characterId} showPhysicalState />
       ) : null}
     </section>
   );

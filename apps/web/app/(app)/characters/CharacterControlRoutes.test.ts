@@ -15,16 +15,17 @@ describe("character control routes", () => {
 
     expect(source).toContain("CharacterLoadoutView");
     expect(source).toContain("<CharacterLoadoutView characterId={id} />");
+    expect(source).not.toContain("showPhysicalState");
   });
 
-  it("adds a player Character route as an Equip items replica", () => {
+  it("adds a player Character route with the live Physical state section", () => {
     const source = readRoute("[id]/character/page.tsx");
     const sharedViewSource = readRoute("[id]/components/CharacterLoadoutView.tsx");
 
     expect(source).toContain("CharacterLoadoutView");
-    expect(source).toContain("<CharacterLoadoutView characterId={id} />");
+    expect(source).toContain("<CharacterLoadoutView characterId={id} showPhysicalState />");
     expect(sharedViewSource).toContain("Equip items -");
-    expect(sharedViewSource).not.toContain("physical state");
+    expect(sharedViewSource).toContain("PhysicalStateSection");
     expect(sharedViewSource).not.toContain("combat arena");
   });
 
@@ -36,5 +37,6 @@ describe("character control routes", () => {
     expect(source).toContain("Previous");
     expect(source).toContain("Next");
     expect(source).toContain("CharacterLoadoutView");
+    expect(source).toContain("showPhysicalState");
   });
 });

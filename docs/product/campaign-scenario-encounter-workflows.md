@@ -128,12 +128,13 @@ The Character workspace answers: "What can this character do and control right n
 
 Current first-pass rule:
 
-- The Character page intentionally reuses the existing Equip Items interface exactly.
+- The Character page intentionally reuses the existing Equip Items interface as its equipment/loadout core.
 - Equip Items remains available as its own route.
 - The primary live-play workflow is the Campaign workspace Character tab.
 - Player Character tab shows only the player's current controlled scenario or encounter character.
 - GM Character tab lets the GM inspect and shuffle through character-backed scenario or encounter participants.
-- Physical state, damage effects, bleed, fatigue, mental/combat effects, GM-set modifiers, adjusted stats, and combat action modules are future work.
+- Character control now includes a first Physical state scaffold with Hitpoints, Damage by type, and Log of hits.
+- Detailed damage application, bleed, stun, fatigue, duration processing, mental/combat effects, GM-set modifiers, adjusted stats, and combat action modules are future rule work.
 - Future modules should not appear as visible placeholders until they are actionable.
 
 ## Player-Facing Copy Rules

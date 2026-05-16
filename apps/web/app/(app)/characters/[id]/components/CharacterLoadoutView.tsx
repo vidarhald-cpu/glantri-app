@@ -7,6 +7,7 @@ import {
   buildEquipmentLoadoutModuleModel,
   EquipmentLoadoutModule
 } from "@/features/equipment/loadoutModule";
+import { PhysicalStateSection } from "@/features/equipment/components/PhysicalStateSection";
 import { isValidLoadoutThrowingWeaponItem } from "@/features/equipment/loadoutWeaponOptions";
 import type { EquipmentFeatureState } from "@/features/equipment/types";
 import {
@@ -18,9 +19,11 @@ import {
   setCharacterWornArmorOnServer
 } from "@/lib/api/localServiceClient";
 import { loadLocalCharacterContext } from "@/lib/characters/loadLocalCharacterContext";
+import { buildCharacterPhysicalStateView } from "@/lib/characters/physicalState";
 
 interface CharacterLoadoutViewProps {
   characterId: string;
+  showPhysicalState?: boolean;
 }
 
 function getCharacterName(name: string | undefined): string {
@@ -41,7 +44,25 @@ function isBowOrTwoHandedTemplate(templateId: string | null, state: EquipmentFea
   );
 }
 
-export default function CharacterLoadoutView({ characterId }: CharacterLoadoutViewProps) {
+function getOriginalGeneralHitpoints(
+  health: number | null | string | undefined,
+): number | null {
+  if (typeof health === "number" && Number.isFinite(health)) {
+    return health;
+  }
+
+  if (typeof health === "string" && health.trim().length > 0) {
+    const parsed = Number(health);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  return null;
+}
+
+export default function CharacterLoadoutView({
+  characterId,
+  showPhysicalState = false,
+}: CharacterLoadoutViewProps) {
   const [state, setState] = useState<EquipmentFeatureState | null>(null);
   const [characterContext, setCharacterContext] = useState<
     Awaited<ReturnType<typeof loadLocalCharacterContext>> | null
@@ -128,6 +149,17 @@ export default function CharacterLoadoutView({ characterId }: CharacterLoadoutVi
         throwingWeaponItemId
       }),
     [characterContext, errors, characterId, state, throwingWeaponItemId]
+  );
+  const physicalStateModel = useMemo(
+    () =>
+      showPhysicalState
+        ? buildCharacterPhysicalStateView({
+            generalHitpoints: getOriginalGeneralHitpoints(
+              characterContext?.record?.build.profile.rolledStats.health,
+            ),
+          })
+        : null,
+    [characterContext?.record?.build.profile.rolledStats.health, showPhysicalState],
   );
 
   async function applySelection(input: {
@@ -281,6 +313,9 @@ export default function CharacterLoadoutView({ characterId }: CharacterLoadoutVi
 
       {!loading && !pageError ? (
         <EquipmentLoadoutModule
+          afterEquipmentChoices={
+            physicalStateModel ? <PhysicalStateSection model={physicalStateModel} /> : undefined
+          }
           mode="editable"
           model={model}
           onFieldChange={(fieldId, itemId) => {

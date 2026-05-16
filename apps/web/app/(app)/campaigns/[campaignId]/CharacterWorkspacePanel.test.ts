@@ -10,12 +10,13 @@ function readSource(): string {
 }
 
 describe("CharacterWorkspacePanel", () => {
-  it("reuses the loadout view without rendering future combat-state placeholders", () => {
+  it("reuses the loadout view with Physical state and without future combat-state placeholders", () => {
     const source = readSource();
 
     expect(source).toContain("CharacterLoadoutView");
-    expect(source).toContain("<CharacterLoadoutView characterId={selectedCandidate.characterId} />");
-    expect(source).not.toContain("Physical state");
+    expect(source).toContain(
+      "<CharacterLoadoutView characterId={selectedCandidate.characterId} showPhysicalState />",
+    );
     expect(source).not.toContain("Damage");
     expect(source).not.toContain("Combat arena");
   });

@@ -9,5 +9,5 @@ interface CharacterControlPageProps {
 export default async function CharacterControlPage({ params }: CharacterControlPageProps) {
   const { id } = await params;
 
-  return <CharacterLoadoutView characterId={id} />;
+  return <CharacterLoadoutView characterId={id} showPhysicalState />;
 }

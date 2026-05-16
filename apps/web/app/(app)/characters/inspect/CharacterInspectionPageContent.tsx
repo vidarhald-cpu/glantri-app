@@ -131,7 +131,9 @@ export default function CharacterInspectionPageContent() {
       {loading ? <div>Loading characters...</div> : null}
       {error ? <div>{error}</div> : null}
       {!loading && !error && characters.length === 0 ? <div>No characters available.</div> : null}
-      {selectedCharacter ? <CharacterLoadoutView characterId={selectedCharacter.id} /> : null}
+      {selectedCharacter ? (
+        <CharacterLoadoutView characterId={selectedCharacter.id} showPhysicalState />
+      ) : null}
     </section>
   );
 }
