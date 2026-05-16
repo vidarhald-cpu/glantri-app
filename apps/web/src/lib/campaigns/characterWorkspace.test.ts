@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { EncounterSession, ScenarioParticipant } from "@glantri/domain";
+import type { EncounterParticipant, EncounterSession, ScenarioParticipant } from "@glantri/domain";
 
 import {
   buildGmCharacterWorkspaceCandidates,
@@ -34,14 +34,17 @@ function participant(input: {
     sourceType: input.sourceType ?? "character",
     state: {
       combat: {
-        attacksThisRound: 0,
-        declaredAction: undefined,
-        defenseMode: "none",
-        incomingAttack: undefined,
-        parryAvailable: true,
-        parrySource: undefined,
+        combatContext: {
+          modifierBuckets: {
+            general: [],
+            situationDb: [],
+            situationObSkill: [],
+          },
+        },
+        engaged: false,
       },
       conditions: [],
+      equipment: {},
       health: {
         bleeding: 0,
         currentHp: 10,
@@ -55,6 +58,29 @@ function participant(input: {
       snapshotVersion: 1,
     },
     updatedAt: "2026-05-16T00:00:00.000Z",
+  };
+}
+
+function makeEncounterParticipant(
+  overrides: Partial<EncounterParticipant> = {},
+): EncounterParticipant {
+  return {
+    declaration: {
+      actionType: "none",
+      defenseFocus: "none",
+      defensePosture: "none",
+      targetLocation: "any",
+      ...overrides.declaration,
+    },
+    facing: "north",
+    id: "encounter-participant-1",
+    initiative: 0,
+    label: "The Gladiator",
+    order: 0,
+    orientation: "neutral",
+    participantType: "scenario",
+    position: { x: 0, y: 0, zone: "center" },
+    ...overrides,
   };
 }
 
@@ -72,14 +98,14 @@ function encounter(input: {
     id: "encounter-1",
     kind: "roleplay",
     participantMembershipMode: input.participantMembershipMode,
-    participants: (input.participantIds ?? []).map((participantId, index) => ({
-      id: `encounter-participant-${participantId}`,
-      initiative: 0,
-      label: participantId,
-      order: index,
-      participantType: "scenario",
-      scenarioParticipantId: participantId,
-    })),
+    participants: (input.participantIds ?? []).map((participantId, index) =>
+      makeEncounterParticipant({
+        id: `encounter-participant-${participantId}`,
+        label: participantId,
+        order: index,
+        scenarioParticipantId: participantId,
+      }),
+    ),
     scenarioId: "scenario-1",
     status: "active",
     title: "Market shadows",
