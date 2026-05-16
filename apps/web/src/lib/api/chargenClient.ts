@@ -1,11 +1,9 @@
 import type { ChargenRuleSet, ChargenRuleSetParameters } from "@glantri/domain";
+import type { ChargenRuleSetStoreResponse } from "@glantri/shared";
 
 import { sendJson } from "./apiClient";
 
-export interface ChargenRuleSetStoreResponse {
-  activeRuleSet: ChargenRuleSet;
-  ruleSets: ChargenRuleSet[];
-}
+export type { ChargenRuleSetStoreResponse };
 
 export async function loadChargenRuleSets(): Promise<ChargenRuleSetStoreResponse> {
   return sendJson<ChargenRuleSetStoreResponse>("/chargen/rule-sets", {

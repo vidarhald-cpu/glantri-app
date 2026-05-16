@@ -8,13 +8,11 @@ import type {
   Scenario,
   ScenarioRelationship
 } from "@glantri/domain";
+import type { AccessibleCampaignRecord } from "@glantri/shared";
 
 import { sendJson } from "./apiClient";
 
-export interface AccessibleCampaignRecord {
-  campaign: Campaign;
-  scenarios: Scenario[];
-}
+export type { AccessibleCampaignRecord };
 
 export async function loadCampaigns(): Promise<Campaign[]> {
   const payload = await sendJson<{ campaigns: Campaign[] }>("/campaigns", {

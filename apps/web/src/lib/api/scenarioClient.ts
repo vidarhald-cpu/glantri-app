@@ -7,8 +7,11 @@ import type {
   ScenarioPlayerProjection,
   ScenarioPlayerVisibleParticipant
 } from "@glantri/domain";
+import type { JoinableScenarioRecord } from "@glantri/shared";
 
 import { sendJson } from "./apiClient";
+
+export type { JoinableScenarioRecord };
 
 type ScenarioParticipantRole =
   | "player_character"
@@ -18,15 +21,6 @@ type ScenarioParticipantRole =
   | "neutral"
   | "ally"
   | "enemy";
-
-export interface JoinableScenarioRecord {
-  campaignId: string;
-  campaignName: string;
-  kind: Scenario["kind"];
-  scenarioId: string;
-  scenarioName: string;
-  status: Scenario["status"];
-}
 
 export interface ScenarioParticipantFromCharacterInput {
   characterId: string;
