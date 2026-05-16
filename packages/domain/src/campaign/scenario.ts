@@ -511,9 +511,14 @@ export function createParticipantSnapshotFromCharacter(input: {
 } {
   const health = inferHealthFromCharacter(input.build);
 
+  // Strip private fields before storing in snapshot — notes belong to the character owner only
+  const { inventoryNotes: _inv, profile, ...buildRest } = input.build;
+  const { notes: _notes, ...profileRest } = profile;
+  const snapshotBuild = { ...buildRest, profile: profileRest };
+
   return {
     snapshot: scenarioParticipantSnapshotSchema.parse({
-      build: input.build,
+      build: snapshotBuild,
       displayName: input.build.name,
       equipmentState: input.equipmentState,
       sheetSummary: input.sheetSummary,

@@ -30,6 +30,7 @@ export interface CreateCharacterRecordInput {
 
 export interface CharacterRepository {
   findById(id: string): Promise<CharacterRecord | null>;
+  findInGmCampaigns(gmUserId: string, id: string): Promise<CharacterRecord | null>;
   findOwnedById(ownerId: string, id: string): Promise<CharacterRecord | null>;
   listAll(): Promise<CharacterRecord[]>;
   saveOwned(input: CreateCharacterRecordInput): Promise<CharacterRecord>;
@@ -86,6 +87,32 @@ export function createPrismaCharacterRepository(client?: PrismaClient): Characte
         where: {
           id
         }
+      });
+
+      return character ? mapCharacterRecord(character) : null;
+    },
+    async findInGmCampaigns(gmUserId, id) {
+      const entry = await prisma.campaignRosterEntry.findFirst({
+        where: {
+          sourceType: "character",
+          sourceId: id,
+          campaign: { gmUserId }
+        }
+      });
+
+      if (!entry) return null;
+
+      const character = await prisma.character.findUnique({
+        include: {
+          owner: {
+            select: {
+              displayName: true,
+              email: true,
+              id: true
+            }
+          }
+        },
+        where: { id }
       });
 
       return character ? mapCharacterRecord(character) : null;
