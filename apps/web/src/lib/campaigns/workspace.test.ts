@@ -80,11 +80,26 @@ describe("campaign workspace", () => {
   it("keeps the intended left-to-right tab order and hides the GM tab for players", () => {
     expect(
       buildCampaignWorkspaceTabs({ canAccessGmEncounter: true }).map((tab) => tab.id)
-    ).toEqual(["campaign", "scenario", "gm-encounter", "player-encounter"]);
+    ).toEqual(["campaign", "scenario", "gm-encounter", "player-encounter", "character"]);
 
     expect(
       buildCampaignWorkspaceTabs({ canAccessGmEncounter: false }).map((tab) => tab.id)
-    ).toEqual(["campaign", "scenario", "player-encounter"]);
+    ).toEqual(["campaign", "scenario", "player-encounter", "character"]);
+  });
+
+  it("opens the Character tab against the active scenario context", () => {
+    const state = resolveCampaignWorkspaceState({
+      activeCampaignId: "camp-1",
+      canAccessGmEncounter: false,
+      encounters: [],
+      requestedEncounterId: null,
+      requestedScenarioId: null,
+      requestedTab: "character",
+      scenarios: [scenario({ id: "scn-1", name: "Session one" })],
+    });
+
+    expect(state.activeScenarioId).toBe("scn-1");
+    expect(state.activeTab).toBe("character");
   });
 
   it("sanitizes scenario and encounter selection against the current campaign flow", () => {

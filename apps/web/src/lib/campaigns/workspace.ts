@@ -6,7 +6,8 @@ export type CampaignWorkspaceTabId =
   | "campaign"
   | "scenario"
   | "gm-encounter"
-  | "player-encounter";
+  | "player-encounter"
+  | "character";
 
 export interface CampaignWorkspaceTab {
   id: CampaignWorkspaceTabId;
@@ -32,7 +33,8 @@ const orderedTabs: CampaignWorkspaceTab[] = [
   { id: "campaign", label: "Campaign" },
   { id: "scenario", label: "Scenario" },
   { id: "gm-encounter", label: "GM Encounter" },
-  { id: "player-encounter", label: "Player Encounter" }
+  { id: "player-encounter", label: "Player Encounter" },
+  { id: "character", label: "Character" }
 ];
 
 export function buildCampaignWorkspaceHref(input: CampaignWorkspaceHrefInput): string {
@@ -111,6 +113,8 @@ function resolveRequestedCampaignWorkspaceTab(input: {
       }
 
       return input.activeScenarioId && input.activeEncounterId ? "player-encounter" : fallbackTab;
+    case "character":
+      return input.activeScenarioId ? "character" : fallbackTab;
     default:
       return fallbackTab;
   }
@@ -213,7 +217,11 @@ export function resolveCampaignWorkspaceState(input: {
     : undefined;
 
   if (!input.canAccessGmEncounter) {
-    if (!activeScenarioId && requestedTab === "scenario" && input.scenarios.length === 1) {
+    if (
+      !activeScenarioId &&
+      (requestedTab === "scenario" || requestedTab === "character") &&
+      input.scenarios.length === 1
+    ) {
       activeScenarioId = input.scenarios[0]?.id;
     }
 

@@ -33,4 +33,14 @@ describe("CampaignWorkspaceShell roleplay encounter routing", () => {
     expect(source).toContain("visibilitychange");
     expect(source).not.toContain("Accessible scenarios:");
   });
+
+  it("routes the workspace Character tab through the encounter-context panel", () => {
+    const source = readSource();
+
+    expect(source).toContain("CharacterWorkspacePanel");
+    expect(source).toContain('workspaceState.activeTab === "character"');
+    expect(source).toContain('tab: "character"');
+    expect(source).toContain("selectedParticipantId={searchParams.get(\"participantId\")}");
+    expect(source).toContain("isGameMaster={canAccessGmEncounter}");
+  });
 });
