@@ -61,6 +61,11 @@ export interface PlayerEncounterParticipantAccessInput {
   selectedParticipantId?: string;
 }
 
+export interface PlayerEncounterOpponentOption {
+  displayName: string;
+  id: string;
+}
+
 export const PLAYER_ENCOUNTER_ACTION_OPTIONS: PlayerEncounterOption<PlayerEncounterActionId>[] = [
   { label: "Attack - Parry", value: "attack_parry" },
   { label: "Parry - Attack", value: "parry_attack" },
@@ -267,22 +272,33 @@ export function getPlayerEncounterAccessibleParticipants(
 
 export function getPlayerEncounterOpponentParticipants(
   input: PlayerEncounterParticipantAccessInput,
-): ScenarioParticipant[] {
-  const visibleParticipantIds = new Set(
-    input.projectionVisibleParticipants?.map((participant) => participant.id) ?? [],
-  );
+): PlayerEncounterOpponentOption[] {
+  if (!input.isGameMaster) {
+    return (input.projectionVisibleParticipants ?? [])
+      .filter(
+        (participant) =>
+          participant.isActive &&
+          participant.id !== input.selectedParticipantId &&
+          !participant.isControlledByPlayer,
+      )
+      .map((participant) => ({
+        displayName: participant.displayName,
+        id: participant.id,
+      }));
+  }
 
-  return input.participants.filter((participant) => {
-    if (!participant.isActive || participant.id === input.selectedParticipantId) {
-      return false;
-    }
+  return input.participants
+    .filter((participant) => {
+      if (!participant.isActive || participant.id === input.selectedParticipantId) {
+        return false;
+      }
 
-    if (input.isGameMaster) {
       return true;
-    }
-
-    return visibleParticipantIds.has(participant.id);
-  });
+    })
+    .map((participant) => ({
+      displayName: participant.snapshot.displayName,
+      id: participant.id,
+    }));
 }
 
 export function buildPlayerEncounterPhaseSummary(input: {

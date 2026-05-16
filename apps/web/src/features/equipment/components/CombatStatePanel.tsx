@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 
 import type { CombatStateDetailRow, CombatStatePanelModel } from "../combatStatePanel";
+import styles from "./CombatStatePanel.module.css";
 
 function SectionCard(input: {
   title: string;
@@ -8,20 +9,11 @@ function SectionCard(input: {
   children: ReactNode;
 }) {
   return (
-    <section
-      style={{
-        background: "#fbfaf5",
-        border: "1px solid #d9ddd8",
-        borderRadius: 12,
-        display: "grid",
-        gap: "0.75rem",
-        padding: "1rem"
-      }}
-    >
-      <div style={{ display: "grid", gap: "0.2rem" }}>
-        <h2 style={{ margin: 0 }}>{input.title}</h2>
+    <section className={styles.sectionCard}>
+      <div className={styles.sectionCardHeader}>
+        <h2 className={styles.sectionCardHeading}>{input.title}</h2>
         {input.description ? (
-          <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>{input.description}</div>
+          <div className={styles.sectionCardDescription}>{input.description}</div>
         ) : null}
       </div>
       {input.children}
@@ -31,13 +23,7 @@ function SectionCard(input: {
 
 function StatGrid(input: { children: ReactNode }) {
   return (
-    <div
-      style={{
-        display: "grid",
-        gap: "0.75rem",
-        gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))"
-      }}
-    >
+    <div className={styles.statGrid}>
       {input.children}
     </div>
   );
@@ -45,15 +31,8 @@ function StatGrid(input: { children: ReactNode }) {
 
 function DetailRow(input: { label: string; value: ReactNode }) {
   return (
-    <div
-      style={{
-        alignItems: "start",
-        display: "grid",
-        gap: "0.35rem",
-        gridTemplateColumns: "minmax(140px, 180px) 1fr"
-      }}
-    >
-      <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>{input.label}</div>
+    <div className={styles.detailRow}>
+      <div className={styles.detailRowLabel}>{input.label}</div>
       <div>{input.value}</div>
     </div>
   );
@@ -65,23 +44,14 @@ function BattleStatCard(input: {
   rows: CombatStateDetailRow[];
 }) {
   return (
-    <div
-      style={{
-        background: "#f6f5ef",
-        border: "1px solid #d9ddd8",
-        borderRadius: 12,
-        display: "grid",
-        gap: "0.5rem",
-        padding: "1rem"
-      }}
-    >
-      <div style={{ display: "grid", gap: "0.15rem" }}>
+    <div className={styles.battleStatCard}>
+      <div className={styles.battleStatCardHeader}>
         <strong>{input.title}</strong>
         {input.subtitle ? (
-          <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>{input.subtitle}</div>
+          <div className={styles.battleStatCardSubtitle}>{input.subtitle}</div>
         ) : null}
       </div>
-      <div style={{ display: "grid", gap: "0.35rem" }}>
+      <div className={styles.detailRows}>
         {input.rows.map((row) => (
           <DetailRow key={row.label} label={row.label} value={row.value} />
         ))}
@@ -98,39 +68,19 @@ function TableCard(input: {
   rows: Array<Array<ReactNode>>;
 }) {
   return (
-    <div
-      style={{
-        background: "#f6f5ef",
-        border: "1px solid #d9ddd8",
-        borderRadius: 12,
-        display: "grid",
-        gap: "0.75rem",
-        padding: "1rem"
-      }}
-    >
-      <div style={{ display: "grid", gap: "0.15rem" }}>
+    <div className={styles.tableCard}>
+      <div className={styles.tableCardHeader}>
         <strong>{input.title}</strong>
         {input.description ? (
-          <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>{input.description}</div>
+          <div className={styles.tableCardDescription}>{input.description}</div>
         ) : null}
       </div>
-      <div style={{ overflowX: "auto" }}>
-        <table style={{ borderCollapse: "collapse", minWidth: "100%", width: "100%" }}>
+      <div className={styles.tableScroll}>
+        <table className={styles.table}>
           <thead>
             <tr>
               {input.columns.map((column) => (
-                <th
-                  key={column}
-                  style={{
-                    borderBottom: "1px solid #d9ddd8",
-                    color: "#5e5a50",
-                    fontSize: "0.85rem",
-                    fontWeight: 600,
-                    padding: "0.6rem",
-                    textAlign: "left",
-                    whiteSpace: "nowrap"
-                  }}
-                >
+                <th key={column} className={styles.th}>
                   {column}
                 </th>
               ))}
@@ -142,11 +92,9 @@ function TableCard(input: {
                 {row.map((cell, cellIndex) => (
                   <td
                     key={`${rowIndex}-${cellIndex}`}
+                    className={styles.td}
                     style={{
-                    borderBottom: rowIndex === input.rows.length - 1 ? "none" : "1px solid #e6e6df",
-                      fontSize: "0.95rem",
-                      padding: "0.6rem",
-                      verticalAlign: "top",
+                      borderBottom: rowIndex === input.rows.length - 1 ? "none" : "1px solid #e6e6df",
                       whiteSpace: input.nowrapColumnIndexes?.includes(cellIndex) ? "nowrap" : "normal",
                     }}
                   >

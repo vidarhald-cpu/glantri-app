@@ -30,6 +30,7 @@ import {
 import { CombatStatePanel } from "./components/CombatStatePanel";
 import type { EquipmentFeatureState } from "./types";
 import { lookupWorkbookCompositeAdjustment } from "./workbookCompositeTable";
+import styles from "./loadoutModule.module.css";
 
 type EncumbranceDependentSkillType = "combat" | "covert" | "physical";
 type LoadoutFieldId = "armor" | "missile" | "primary" | "secondary" | "shield" | "throwing";
@@ -254,21 +255,15 @@ function ControlSection(input: {
   sticky?: boolean;
   title: string;
 }) {
+  const className = [
+    styles.controlSection,
+    input.compact && styles.controlSectionCompact,
+    input.sticky && styles.controlSectionSticky,
+  ].filter(Boolean).join(" ");
+
   return (
-    <section
-      style={{
-        background: "#fbfaf5",
-        border: "1px solid #d9ddd8",
-        borderRadius: 12,
-        display: "grid",
-        gap: input.compact ? "0.65rem" : "0.9rem",
-        padding: input.compact ? "0.85rem" : "1rem",
-        position: input.sticky ? "sticky" : "static",
-        top: input.sticky ? "1rem" : undefined,
-        zIndex: input.sticky ? 10 : undefined
-      }}
-    >
-      <h2 style={{ margin: 0 }}>{input.title}</h2>
+    <section className={className}>
+      <h2 className={styles.controlSectionHeading}>{input.title}</h2>
       {input.children}
     </section>
   );
@@ -279,16 +274,7 @@ function EditableField(input: {
   onChange: (itemId: string | null) => void;
 }) {
   return (
-    <label
-      style={{
-        background: "#f6f5ef",
-        border: "1px solid #d9ddd8",
-        borderRadius: 12,
-        display: "grid",
-        gap: "0.25rem",
-        padding: "0.75rem 0.85rem"
-      }}
-    >
+    <label className={styles.field}>
       <span>{input.field.label}</span>
       <select
         onChange={(event) =>
@@ -304,7 +290,7 @@ function EditableField(input: {
         ))}
       </select>
       {input.field.error ? (
-        <span style={{ color: "#8b3a1a", fontSize: "0.8rem" }}>{input.field.error}</span>
+        <span className={styles.fieldError}>{input.field.error}</span>
       ) : null}
     </label>
   );
@@ -312,18 +298,9 @@ function EditableField(input: {
 
 function ReadonlyField(input: { field: EquipmentLoadoutFieldModel }) {
   return (
-    <div
-      style={{
-        background: "#f6f5ef",
-        border: "1px solid #d9ddd8",
-        borderRadius: 12,
-        display: "grid",
-        gap: "0.25rem",
-        padding: "0.75rem 0.85rem"
-      }}
-    >
-      <span style={{ color: "#5e5a50", fontSize: "0.9rem" }}>{input.field.label}</span>
-      <strong style={{ fontWeight: 500 }}>{input.field.valueLabel}</strong>
+    <div className={styles.field}>
+      <span className={styles.fieldLabel}>{input.field.label}</span>
+      <strong className={styles.fieldValue}>{input.field.valueLabel}</strong>
     </div>
   );
 }
@@ -331,12 +308,12 @@ function ReadonlyField(input: { field: EquipmentLoadoutFieldModel }) {
 function TableSection(input: { table: CombatStateTableModel }) {
   return (
     <ControlSection title={input.table.title}>
-      <div style={{ overflowX: "auto" }}>
-        <table style={{ borderCollapse: "collapse", minWidth: "100%", width: "100%" }}>
+      <div className={styles.tableScroll}>
+        <table className={styles.table}>
           <thead>
-            <tr style={{ borderBottom: "1px solid #d9ddd8", textAlign: "left" }}>
+            <tr className={styles.tableHeaderRow}>
               {input.table.columns.map((column) => (
-                <th key={column} style={{ padding: "0.5rem 0.75rem 0.5rem 0" }}>
+                <th key={column} className={styles.th}>
                   {column}
                 </th>
               ))}
@@ -351,10 +328,7 @@ function TableSection(input: { table: CombatStateTableModel }) {
                 }}
               >
                 {row.map((cell, cellIndex) => (
-                  <td
-                    key={`${rowIndex}-${cellIndex}`}
-                    style={{ padding: "0.6rem 0.75rem 0.6rem 0", verticalAlign: "top" }}
-                  >
+                  <td key={`${rowIndex}-${cellIndex}`} className={styles.td}>
                     {cell}
                   </td>
                 ))}
@@ -689,13 +663,7 @@ export function EquipmentLoadoutModule(input: {
     <>
       {showControls ? (
         <ControlSection compact sticky={input.stickyControls} title="Equipment choices">
-          <div
-            style={{
-              display: "grid",
-              gap: "0.6rem",
-              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))"
-            }}
-          >
+          <div className={styles.fieldsGrid}>
             {input.model.fields.map((field) =>
               input.mode === "editable" ? (
                 <EditableField

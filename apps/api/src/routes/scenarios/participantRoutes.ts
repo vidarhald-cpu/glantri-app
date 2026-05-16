@@ -48,7 +48,14 @@ export const participantRoutes: FastifyPluginAsync = async (app) => {
         });
       }
 
-      const participants = await scenarioService.listScenarioParticipants(scenarioId);
+      const allParticipants = await scenarioService.listScenarioParticipants(scenarioId);
+      const participants =
+        access.mode === "gm"
+          ? allParticipants
+          : allParticipants.filter(
+              (participant) =>
+                participant.isActive && participant.controlledByUserId === user.id
+            );
 
       if (access.mode === "player") {
         return {

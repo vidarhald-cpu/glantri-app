@@ -34,23 +34,37 @@ function mapEncounter(record: {
 }
 
 export interface EncounterRepository {
-  createEncounter(session: EncounterSession, createdByUserId?: string | null): Promise<EncounterSession>;
+  createEncounter(input: {
+    campaignId?: string | null;
+    createdByUserId?: string | null;
+    scenarioId: string;
+    session: EncounterSession;
+  }): Promise<EncounterSession>;
   getEncounterById(encounterId: string): Promise<EncounterSession | null>;
   listEncountersByScenario(scenarioId: string): Promise<EncounterSession[]>;
-  updateEncounter(session: EncounterSession): Promise<EncounterSession>;
+  updateEncounter(input: {
+    campaignId?: string | null;
+    encounterId: string;
+    scenarioId?: string | null;
+    session: EncounterSession;
+  }): Promise<EncounterSession>;
 }
 
 export function createPrismaEncounterRepository(): EncounterRepository {
   return {
-    async createEncounter(session, createdByUserId) {
-      const normalized = encounterSessionSchema.parse(session);
+    async createEncounter(input) {
+      const normalized = encounterSessionSchema.parse({
+        ...input.session,
+        campaignId: input.campaignId ?? input.session.campaignId,
+        scenarioId: input.scenarioId,
+      });
       const record = await prisma.encounter.create({
         data: {
           campaignId: normalized.campaignId ?? null,
-          createdByUserId: createdByUserId ?? null,
+          createdByUserId: input.createdByUserId ?? null,
           id: normalized.id,
           name: normalized.title,
-          scenarioId: normalized.scenarioId ?? null,
+          scenarioId: input.scenarioId,
           sessionJson: asJson(normalized),
           status: normalized.status,
         },
@@ -73,8 +87,13 @@ export function createPrismaEncounterRepository(): EncounterRepository {
 
       return records.map(mapEncounter);
     },
-    async updateEncounter(session) {
-      const normalized = encounterSessionSchema.parse(session);
+    async updateEncounter(input) {
+      const normalized = encounterSessionSchema.parse({
+        ...input.session,
+        campaignId: input.campaignId ?? input.session.campaignId,
+        id: input.encounterId,
+        scenarioId: input.scenarioId ?? input.session.scenarioId,
+      });
       const record = await prisma.encounter.update({
         data: {
           campaignId: normalized.campaignId ?? null,
@@ -83,7 +102,7 @@ export function createPrismaEncounterRepository(): EncounterRepository {
           sessionJson: asJson(normalized),
           status: normalized.status,
         },
-        where: { id: normalized.id },
+        where: { id: input.encounterId },
       });
 
       return mapEncounter(record);

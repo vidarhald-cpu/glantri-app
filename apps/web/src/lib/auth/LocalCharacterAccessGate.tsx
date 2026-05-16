@@ -5,6 +5,7 @@ import Link from "next/link";
 
 import { LocalCharacterRepository } from "../offline/repositories/localCharacterRepository";
 import { useSessionUser } from "./SessionUserContext";
+import styles from "./accessGate.module.css";
 
 const localCharacterRepository = new LocalCharacterRepository();
 
@@ -61,9 +62,9 @@ export function RequireOwnedLocalCharacter(props: {
 
   if (!isAllowed) {
     return (
-      <section style={{ display: "grid", gap: "0.75rem", maxWidth: 720 }}>
-        <h1 style={{ margin: 0 }}>Character access restricted</h1>
-        <p style={{ margin: 0 }}>
+      <section className={styles.section}>
+        <h1 className={styles.heading}>Character access restricted</h1>
+        <p className={styles.message}>
           This character is not available to the current account.
         </p>
         <div>

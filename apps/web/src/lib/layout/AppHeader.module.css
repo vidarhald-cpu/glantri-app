@@ -1,0 +1,14 @@
+.header {
+  background: #f6f5ef;
+  border-bottom: 1px solid #d9ddd8;
+  padding: 1rem 1.5rem;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.nav {
+  align-items: center;
+  display: flex;
+  gap: 1rem;
+}
