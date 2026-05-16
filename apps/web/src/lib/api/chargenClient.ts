@@ -1,5 +1,4 @@
-import type { ChargenRuleSet, ChargenRuleSetParameters } from "@glantri/domain";
-import type { ChargenRuleSetStoreResponse } from "@glantri/shared";
+import type { ChargenRuleSet, ChargenRuleSetParameters, ChargenRuleSetStoreResponse } from "@glantri/domain";
 
 import { sendJson } from "./apiClient";
 

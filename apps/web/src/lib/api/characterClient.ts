@@ -1,5 +1,4 @@
-import type { CharacterBuild } from "@glantri/domain";
-import type { CharacterRecord } from "@glantri/shared";
+import type { CharacterBuild, CharacterRecord } from "@glantri/domain";
 
 import { sendJson } from "./apiClient";
 

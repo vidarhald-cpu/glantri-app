@@ -1,4 +1,5 @@
 import type {
+  AccessibleCampaignRecord,
   Campaign,
   CampaignAsset,
   CampaignRosterCategory,
@@ -8,7 +9,6 @@ import type {
   Scenario,
   ScenarioRelationship
 } from "@glantri/domain";
-import type { AccessibleCampaignRecord } from "@glantri/shared";
 
 import { sendJson } from "./apiClient";
 

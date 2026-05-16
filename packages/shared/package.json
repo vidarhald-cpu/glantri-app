@@ -10,9 +10,6 @@
       "default": "./dist/index.js"
     }
   },
-  "dependencies": {
-    "@glantri/domain": "workspace:*"
-  },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",

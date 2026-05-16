@@ -1,5 +1,6 @@
 import type {
   CampaignAsset,
+  JoinableScenarioRecord,
   Scenario,
   ScenarioEventLog,
   ScenarioLiveState,
@@ -7,7 +8,6 @@ import type {
   ScenarioPlayerProjection,
   ScenarioPlayerVisibleParticipant
 } from "@glantri/domain";
-import type { JoinableScenarioRecord } from "@glantri/shared";
 
 import { sendJson } from "./apiClient";
 
