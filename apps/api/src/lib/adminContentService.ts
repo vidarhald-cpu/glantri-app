@@ -3,10 +3,7 @@ import {
   type CanonicalContent,
   validateCanonicalContent
 } from "@glantri/content";
-import {
-  createPrismaContentRepository,
-  type ContentRepository
-} from "@glantri/database";
+import { ContentService } from "@glantri/database";
 import type { RevisionedContentSnapshot } from "@glantri/shared";
 
 const CANONICAL_CONTENT_SNAPSHOT_KEY = "canonical-content";
@@ -21,12 +18,12 @@ export class CanonicalContentRevisionConflictError extends Error {
 
 export class CanonicalContentService {
   constructor(
-    private readonly repository: ContentRepository = createPrismaContentRepository(),
+    private readonly contentService: ContentService = new ContentService(),
     private readonly snapshotKey = CANONICAL_CONTENT_SNAPSHOT_KEY
   ) {}
 
   async getCanonicalContent(): Promise<RevisionedContentSnapshot<CanonicalContent>> {
-    const snapshot = await this.repository.findByKey(this.snapshotKey);
+    const snapshot = await this.contentService.findByKey(this.snapshotKey);
 
     if (!snapshot) {
       return {
@@ -58,7 +55,7 @@ export class CanonicalContentService {
       );
     }
 
-    const saveResult = await this.repository.saveWithOptimisticRevision({
+    const saveResult = await this.contentService.saveWithOptimisticRevision({
       content: validatedContent,
       expectedRevision: input.expectedRevision,
       key: this.snapshotKey
