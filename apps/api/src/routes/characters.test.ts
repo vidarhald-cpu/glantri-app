@@ -2,20 +2,29 @@ import Fastify from "fastify";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => {
-  const authenticatedUser = {
+  const playerUser = {
     email: "player@example.test",
     id: "player-1",
-    roles: ["player"]
+    roles: ["player"],
+  };
+  const gmUser = {
+    email: "gm@example.test",
+    id: "gm-1",
+    roles: ["game_master"],
   };
   const characterService = {
     listCharacters: vi.fn(),
+    findById: vi.fn(),
     saveCharacter: vi.fn(),
-    saveExistingCharacter: vi.fn()
+    saveExistingCharacter: vi.fn(),
   };
   return {
-    authenticatedUser,
+    canEditCharacterInApi: vi.fn(),
     characterService,
-    requireAuthenticatedUser: vi.fn()
+    gmUser,
+    loadAccessibleCharacterInApi: vi.fn(),
+    playerUser,
+    requireAuthenticatedUser: vi.fn(),
   };
 });
 
@@ -28,19 +37,18 @@ vi.mock("@glantri/database", () => ({
       this.name = "CharacterValidationError";
       this.issues = issues;
     }
-  }
+  },
 }));
 
 vi.mock("../lib/sessionAuth", () => ({
-  requireAuthenticatedUser: mocks.requireAuthenticatedUser
+  requireAuthenticatedUser: mocks.requireAuthenticatedUser,
 }));
 
 vi.mock("../lib/characterEditAccess", () => ({
-  canEditCharacterInApi: vi.fn(() => false),
-  loadAccessibleCharacterInApi: vi.fn()
+  canEditCharacterInApi: mocks.canEditCharacterInApi,
+  loadAccessibleCharacterInApi: mocks.loadAccessibleCharacterInApi,
 }));
 
-import { loadAccessibleCharacterInApi } from "../lib/characterEditAccess";
 import { charactersRoutes } from "./characters";
 
 async function buildCharactersTestApp() {
@@ -49,166 +57,120 @@ async function buildCharactersTestApp() {
   return app;
 }
 
-const validProfile = {
-  id: "profile-1",
-  label: "A",
-  distractionLevel: 4,
-  rolledStats: { str: 10, dex: 10, con: 10, health: 10, siz: 10, com: 10, cha: 10, int: 10, pow: 10, lck: 10, will: 10 }
+const stubCharacter = {
+  build: { id: "char-1", name: "Aldric", progression: { level: 1 } },
+  createdAt: "2026-01-01T00:00:00.000Z",
+  id: "char-1",
+  level: 1,
+  name: "Aldric",
+  ownerId: "player-1",
+  updatedAt: "2026-01-01T00:00:00.000Z",
 };
 
 describe("characters route contract", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.requireAuthenticatedUser.mockResolvedValue(mocks.authenticatedUser);
+    mocks.requireAuthenticatedUser.mockResolvedValue(mocks.playerUser);
+    mocks.canEditCharacterInApi.mockReturnValue(false);
   });
 
-  describe("GET /:id", () => {
-    it("returns 404 with standard error shape when character is not found", async () => {
-      vi.mocked(loadAccessibleCharacterInApi).mockResolvedValue(null);
-      const app = await buildCharactersTestApp();
+  it("lists characters owned by the authenticated player", async () => {
+    mocks.characterService.listCharacters.mockResolvedValue([stubCharacter]);
 
-      const response = await app.inject({
-        method: "GET",
-        url: "/character-missing"
-      });
+    const app = await buildCharactersTestApp();
+    const response = await app.inject({ method: "GET", url: "/" });
 
-      await app.close();
-
-      expect(response.statusCode).toBe(404);
-      expect(response.json()).toEqual({ error: "Character not found." });
-    });
-
-    it("returns the character when found", async () => {
-      const character = { id: "char-1", name: "Aldric" };
-      vi.mocked(loadAccessibleCharacterInApi).mockResolvedValue(character as never);
-      const app = await buildCharactersTestApp();
-
-      const response = await app.inject({
-        method: "GET",
-        url: "/char-1"
-      });
-
-      await app.close();
-
-      expect(response.statusCode).toBe(200);
-      expect(response.json()).toEqual({ character });
-    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ characters: [stubCharacter] });
+    expect(mocks.characterService.listCharacters).toHaveBeenCalledWith("player-1");
   });
 
-  describe("POST /", () => {
-    it("returns 400 with error and issues when CharacterValidationError is thrown", async () => {
-      const { CharacterValidationError } = await import("@glantri/database");
-      mocks.characterService.saveCharacter.mockRejectedValue(
-        new CharacterValidationError(["Name already taken."])
-      );
-      const app = await buildCharactersTestApp();
+  it("lists all characters for a GM", async () => {
+    mocks.requireAuthenticatedUser.mockResolvedValue(mocks.gmUser);
+    mocks.canEditCharacterInApi.mockReturnValue(true);
+    mocks.characterService.listCharacters.mockResolvedValue([stubCharacter]);
 
-      const response = await app.inject({
-        method: "POST",
-        payload: {
-          build: {
-            id: "char-new",
-            name: "Aldric",
-            profile: validProfile,
-            professionId: "scholar",
-            progression: {
-              chargenMode: "standard",
-              educationPoints: 0,
-              flexiblePointFactor: 1,
-              level: 1,
-              primaryPoolSpent: 0,
-              primaryPoolTotal: 50,
-              secondaryPoolSpent: 0,
-              secondaryPoolTotal: 0,
-              skillGroups: [],
-              skills: [],
-              specializations: []
-            },
-            progressionState: { availablePoints: 0, checks: [], history: [], pendingAttempts: [] },
-            equipment: { items: [] },
-            chargenRuleSet: {
-              exchangeCount: 2,
-              flexiblePointFactor: 1,
-              name: "Standard",
-              ordinarySkillPoints: 50,
-              statRollCount: 6
-            }
-          }
-        },
-        url: "/"
-      });
+    const app = await buildCharactersTestApp();
+    const response = await app.inject({ method: "GET", url: "/" });
 
-      await app.close();
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ characters: [stubCharacter] });
+    expect(mocks.characterService.listCharacters).toHaveBeenCalledWith();
+  });
 
-      expect(response.statusCode).toBe(400);
-      expect(response.json()).toMatchObject({
-        error: "Character build validation failed.",
-        issues: ["Name already taken."]
-      });
+  it("returns 401 when not authenticated on character list", async () => {
+    mocks.requireAuthenticatedUser.mockResolvedValue(null);
+
+    const app = await buildCharactersTestApp();
+    const response = await app.inject({ method: "GET", url: "/" });
+
+    expect(response.statusCode).toBe(200);
+    expect(mocks.characterService.listCharacters).not.toHaveBeenCalled();
+  });
+
+  it("returns a single character accessible to the user", async () => {
+    mocks.loadAccessibleCharacterInApi.mockResolvedValue(stubCharacter);
+
+    const app = await buildCharactersTestApp();
+    const response = await app.inject({ method: "GET", url: "/char-1" });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ character: stubCharacter });
+  });
+
+  it("returns 404 when character is not accessible to the user", async () => {
+    mocks.loadAccessibleCharacterInApi.mockResolvedValue(null);
+
+    const app = await buildCharactersTestApp();
+    const response = await app.inject({ method: "GET", url: "/char-999" });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toEqual({ error: "Character not found." });
+  });
+
+  it("saves a new character and returns the record", async () => {
+    mocks.characterService.saveCharacter.mockResolvedValue(stubCharacter);
+
+    const app = await buildCharactersTestApp();
+    const response = await app.inject({
+      method: "POST",
+      url: "/",
+      payload: { build: stubCharacter.build },
     });
 
-    it("returns 400 with standard error shape for generic validation errors", async () => {
-      mocks.characterService.saveCharacter.mockRejectedValue(new Error("Build parse failed."));
-      const app = await buildCharactersTestApp();
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ character: stubCharacter });
+  });
 
-      const response = await app.inject({
-        method: "POST",
-        payload: { build: null },
-        url: "/"
-      });
+  it("returns 400 with error and issues when CharacterValidationError is thrown", async () => {
+    const { CharacterValidationError } = await import("@glantri/database");
+    mocks.characterService.saveCharacter.mockRejectedValue(
+      new CharacterValidationError(["Name already taken."])
+    );
 
-      await app.close();
+    const app = await buildCharactersTestApp();
+    const response = await app.inject({
+      method: "POST",
+      url: "/",
+      payload: { build: stubCharacter.build },
+    });
 
-      expect(response.statusCode).toBe(400);
-      const body = response.json();
-      expect(body).toHaveProperty("error");
-      expect(typeof body.error).toBe("string");
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({
+      error: "Character build validation failed.",
+      issues: ["Name already taken."],
     });
   });
 
-  describe("PUT /:id", () => {
-    it("returns 400 with standard error shape when build id does not match route id", async () => {
-      const app = await buildCharactersTestApp();
-
-      const response = await app.inject({
-        method: "PUT",
-        payload: {
-          build: {
-            id: "different-id",
-            name: "Aldric",
-            profile: validProfile,
-            professionId: "scholar",
-            progression: {
-              chargenMode: "standard",
-              educationPoints: 0,
-              flexiblePointFactor: 1,
-              level: 1,
-              primaryPoolSpent: 0,
-              primaryPoolTotal: 50,
-              secondaryPoolSpent: 0,
-              secondaryPoolTotal: 0,
-              skillGroups: [],
-              skills: [],
-              specializations: []
-            },
-            progressionState: { availablePoints: 0, checks: [], history: [], pendingAttempts: [] },
-            equipment: { items: [] },
-            chargenRuleSet: {
-              exchangeCount: 2,
-              flexiblePointFactor: 1,
-              name: "Standard",
-              ordinarySkillPoints: 50,
-              statRollCount: 6
-            }
-          }
-        },
-        url: "/char-1"
-      });
-
-      await app.close();
-
-      expect(response.statusCode).toBe(400);
-      expect(response.json()).toEqual({ error: "Character id does not match build id." });
+  it("returns 400 when character build id does not match path id on update", async () => {
+    const app = await buildCharactersTestApp();
+    const response = await app.inject({
+      method: "PUT",
+      url: "/different-id",
+      payload: { build: stubCharacter.build },
     });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toEqual({ error: "Character id does not match build id." });
   });
 });

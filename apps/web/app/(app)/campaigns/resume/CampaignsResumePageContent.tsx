@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
-import type { AccessibleCampaignRecord } from "@/lib/api/localServiceClient";
+import type { AccessibleCampaignRecord } from "@/lib/api/campaignClient";
 import { useSessionUser } from "@/lib/auth/SessionUserContext";
 import {
   REMEMBERED_SELECTION_KEYS,

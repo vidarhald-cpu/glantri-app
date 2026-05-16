@@ -3,11 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
-import {
-  addScenarioParticipantFromCharacterOnServer,
-  loadJoinableScenarios,
-  loadServerCharacters
-} from "@/lib/api/localServiceClient";
+import { addScenarioParticipantFromCharacterOnServer, loadJoinableScenarios } from "@/lib/api/scenarioClient";
+import { loadServerCharacters } from "@/lib/api/characterClient";
 import { useSessionUser } from "@/lib/auth/SessionUserContext";
 import {
   REMEMBERED_SELECTION_KEYS,

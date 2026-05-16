@@ -54,7 +54,9 @@ PLAYWRIGHT_BASE_URL=http://localhost:3000 PLAYWRIGHT_API_URL=http://localhost:40
 
 ### Web (`apps/web`)
 - API-kall går via domeneklienter i `src/lib/api/` — ikke direkte `fetch` i komponenter
-- `localServiceClient.ts` er en barrel-eksport for bakoverkompatibilitet — ny kode importerer fra domeneklientene direkte
+- **Ny kode importerer alltid direkte fra domeneklienten** (`characterClient`, `campaignClient` osv.) — ikke fra `localServiceClient.ts` (bakoverkompatibilitetsbarrel)
+- `apps/web/app/` er **kun** route-lag: routing, layout og adgangskontroll. Ingen state, ingen fetch, ingen forretningslogikk
+- All featurelogikk hører i `apps/web/src/features/<feature>/` — se `features/chargen/` som referanseimplementasjon
 
 ### Ny kode — hvor legger du det?
 
@@ -65,7 +67,7 @@ PLAYWRIGHT_BASE_URL=http://localhost:3000 PLAYWRIGHT_API_URL=http://localhost:40
 | Ny domenetype eller Zod-schema | `packages/domain/src/<domain>/` |
 | Ren spillregelberegning | `packages/rules-engine/src/<domain>/` |
 | Ny databaseoperasjon | `packages/database/src/services/<domain>/` — repositories er interne |
-| API request/response-kontrakt | `packages/domain/src/api/` eller `packages/shared/src/contracts/` |
+| API request/response-kontrakt | `packages/domain/src/api/` |
 | Ny testfixture | `packages/test-scenarios` — kun `*.test.ts`, `*.test.tsx`, `e2e/` |
 
 ### Importregler

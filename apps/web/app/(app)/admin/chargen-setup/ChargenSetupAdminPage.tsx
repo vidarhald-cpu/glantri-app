@@ -12,7 +12,7 @@ import {
   createChargenRuleSet,
   loadChargenRuleSets,
   type ChargenRuleSetStoreResponse
-} from "@/lib/api/localServiceClient";
+} from "@/lib/api/chargenClient";
 import { useCanAccessAdmin } from "@/lib/auth/SessionUserContext";
 import {
   AdminActionRow,

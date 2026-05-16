@@ -1,4 +1,5 @@
 import type {
+  AccessibleCampaignRecord,
   Campaign,
   CampaignAsset,
   CampaignRosterCategory,
@@ -11,10 +12,7 @@ import type {
 
 import { sendJson } from "./apiClient";
 
-export interface AccessibleCampaignRecord {
-  campaign: Campaign;
-  scenarios: Scenario[];
-}
+export type { AccessibleCampaignRecord };
 
 export async function loadCampaigns(): Promise<Campaign[]> {
   const payload = await sendJson<{ campaigns: Campaign[] }>("/campaigns", {

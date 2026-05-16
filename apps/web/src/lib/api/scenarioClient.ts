@@ -1,5 +1,6 @@
 import type {
   CampaignAsset,
+  JoinableScenarioRecord,
   Scenario,
   ScenarioEventLog,
   ScenarioLiveState,
@@ -10,6 +11,8 @@ import type {
 
 import { sendJson } from "./apiClient";
 
+export type { JoinableScenarioRecord };
+
 type ScenarioParticipantRole =
   | "player_character"
   | "npc"
@@ -18,15 +21,6 @@ type ScenarioParticipantRole =
   | "neutral"
   | "ally"
   | "enemy";
-
-export interface JoinableScenarioRecord {
-  campaignId: string;
-  campaignName: string;
-  kind: Scenario["kind"];
-  scenarioId: string;
-  scenarioName: string;
-  status: Scenario["status"];
-}
 
 export interface ScenarioParticipantFromCharacterInput {
   characterId: string;

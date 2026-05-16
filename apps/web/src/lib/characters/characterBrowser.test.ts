@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { AuthUser } from "@glantri/auth";
-import type { ServerCharacterRecord } from "../api/localServiceClient";
+import type { ServerCharacterRecord } from "../api/characterClient";
 import type { LocalCharacterRecord } from "../offline/glantriDexie";
 import {
   canBrowseAllCharacterOwners,
