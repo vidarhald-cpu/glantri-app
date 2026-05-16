@@ -56,6 +56,23 @@ describe("character physical state read model", () => {
     expect(totalLocationHitpoints).toBe(44);
   });
 
+  it("uses corrected calculated general hitpoints as the location base", () => {
+    const view = buildCharacterPhysicalStateView({ generalHitpoints: 17 });
+
+    expect(view.hitpoints.general.original).toBe(17);
+    expect(view.hitpoints.general.original).not.toBe(7);
+    expect(view.hitpoints.locations.find((location) => location.id === "head")).toMatchObject({
+      original: 3,
+      current: 3,
+    });
+    expect(
+      view.hitpoints.locations.find((location) => location.id === "chestBack"),
+    ).toMatchObject({
+      original: 6,
+      current: 6,
+    });
+  });
+
   it("subtracts general and location damage from current hitpoints", () => {
     const view = buildCharacterPhysicalStateView({
       generalDamage: 3,

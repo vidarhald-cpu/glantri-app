@@ -14,9 +14,8 @@ describe("CharacterWorkspacePanel", () => {
     const source = readSource();
 
     expect(source).toContain("CharacterLoadoutView");
-    expect(source).toContain(
-      "<CharacterLoadoutView characterId={selectedCandidate.characterId} showPhysicalState />",
-    );
+    expect(source).toContain("physicalStateGeneralHitpoints");
+    expect(source).toContain("selectedCandidate.scenarioParticipant.state.health.maxHp");
     expect(source).not.toContain("Damage");
     expect(source).not.toContain("Combat arena");
   });

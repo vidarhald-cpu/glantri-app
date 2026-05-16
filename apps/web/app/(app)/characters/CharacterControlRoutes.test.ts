@@ -26,6 +26,8 @@ describe("character control routes", () => {
     expect(source).toContain("<CharacterLoadoutView characterId={id} showPhysicalState />");
     expect(sharedViewSource).toContain("Equip items -");
     expect(sharedViewSource).toContain("PhysicalStateSection");
+    expect(sharedViewSource).toContain("calculateCharacterGeneralHitpoints");
+    expect(sharedViewSource).not.toContain("rolledStats.health");
     expect(sharedViewSource).not.toContain("combat arena");
   });
 

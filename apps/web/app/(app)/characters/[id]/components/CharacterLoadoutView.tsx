@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+import { calculateCharacterGeneralHitpoints } from "@glantri/domain";
+
 import { getEquipmentTemplateById } from "@/features/equipment/equipmentSelectors";
 import {
   buildEquipmentLoadoutModuleModel,
@@ -23,6 +25,7 @@ import { buildCharacterPhysicalStateView } from "@/lib/characters/physicalState"
 
 interface CharacterLoadoutViewProps {
   characterId: string;
+  physicalStateGeneralHitpoints?: number | null;
   showPhysicalState?: boolean;
 }
 
@@ -44,23 +47,9 @@ function isBowOrTwoHandedTemplate(templateId: string | null, state: EquipmentFea
   );
 }
 
-function getOriginalGeneralHitpoints(
-  health: number | null | string | undefined,
-): number | null {
-  if (typeof health === "number" && Number.isFinite(health)) {
-    return health;
-  }
-
-  if (typeof health === "string" && health.trim().length > 0) {
-    const parsed = Number(health);
-    return Number.isFinite(parsed) ? parsed : null;
-  }
-
-  return null;
-}
-
 export default function CharacterLoadoutView({
   characterId,
+  physicalStateGeneralHitpoints,
   showPhysicalState = false,
 }: CharacterLoadoutViewProps) {
   const [state, setState] = useState<EquipmentFeatureState | null>(null);
@@ -154,12 +143,14 @@ export default function CharacterLoadoutView({
     () =>
       showPhysicalState
         ? buildCharacterPhysicalStateView({
-            generalHitpoints: getOriginalGeneralHitpoints(
-              characterContext?.record?.build.profile.rolledStats.health,
-            ),
+            generalHitpoints:
+              physicalStateGeneralHitpoints ??
+              (characterContext?.record?.build
+                ? calculateCharacterGeneralHitpoints(characterContext.record.build)
+                : null),
           })
         : null,
-    [characterContext?.record?.build.profile.rolledStats.health, showPhysicalState],
+    [characterContext?.record?.build, physicalStateGeneralHitpoints, showPhysicalState],
   );
 
   async function applySelection(input: {
