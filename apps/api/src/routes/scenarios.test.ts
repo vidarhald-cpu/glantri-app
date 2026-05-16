@@ -658,7 +658,16 @@ describe("scenarios route contract", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({
-      participants: [controlledParticipant],
+      participants: [
+        {
+          displayName: "Player hero",
+          id: "participant-1",
+          isActive: true,
+          isControlledByPlayer: false,
+          role: "player_character",
+          sourceType: "character",
+        },
+      ],
     });
   });
 
