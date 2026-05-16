@@ -46,6 +46,7 @@ describe("CampaignDetailPageContent roster UI", () => {
     expect(source).toContain("Civilization</th>");
     expect(source).toContain("Profession</th>");
     expect(source).toContain("Owner</th>");
+    expect(source).not.toContain(">Remove<");
     expect(source).not.toContain("Skill groups</th>");
     expect(source).not.toContain("Source</th>");
     expect(source).not.toContain("Character · Owner:");
@@ -59,5 +60,32 @@ describe("CampaignDetailPageContent roster UI", () => {
     expect(source).toContain("civilizationNameById");
     expect(source).toContain("civilizationNamesBySocietyId");
     expect(source).toContain('return "—";');
+  });
+
+  it("removes roster membership locally by source so filters do not stay stale", () => {
+    const source = readCampaignDetailSource();
+
+    expect(source).toContain("function removeRosterSourceFromList");
+    expect(source).toContain("entry.campaignId === removedSource.campaignId");
+    expect(source).toContain("sourceId: candidate.sourceId");
+    expect(source).toContain("sourceType: candidate.sourceType");
+    expect(source).toContain("setRoster((current) =>");
+    expect(source).toContain("setAllRosterEntries((current) =>");
+  });
+
+  it("does not expose scenario kind or combat status on the campaign-level scenario UI", () => {
+    const source = readCampaignDetailSource();
+
+    expect(source).toContain('kind: "mixed"');
+    expect(source).not.toContain("setScenarioKind");
+    expect(source).not.toContain('<option value="combat">Combat</option>');
+    expect(source).not.toContain(">Kind</th>");
+    expect(source).not.toContain("scenario.kind}</td>");
+    expect(source).not.toContain(">Combat</th>");
+    expect(source).not.toContain("scenario.liveState?.combatStatus");
+    expect(source).toContain(">Scenario</th>");
+    expect(source).toContain(">Status</th>");
+    expect(source).toContain(">Follows</th>");
+    expect(source).toContain(">Action</th>");
   });
 });

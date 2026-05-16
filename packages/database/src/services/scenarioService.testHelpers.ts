@@ -99,6 +99,15 @@ export function createScenarioRepositoryStub() {
     getCampaignById: async () => null,
     listCampaignsByGameMaster: async () => [],
     listCampaignsAllowingPlayerSelfJoin: async () => [],
+    listCampaignsByCharacterRosterAccess: async (characterId) => {
+      const campaignIds = new Set(
+        rosterEntries
+          .filter((entry) => entry.sourceType === "character" && entry.sourceId === characterId)
+          .map((entry) => entry.campaignId),
+      );
+
+      return campaigns.filter((campaign) => campaignIds.has(campaign.id));
+    },
     listCampaignsByPlayerAccess: async () => campaigns,
     createScenario: async (input) => {
       const now = "2026-04-21T00:00:00.000Z";
@@ -247,6 +256,21 @@ export function createScenarioRepositoryStub() {
       if (index >= 0) {
         rosterEntries.splice(index, 1);
       }
+    },
+    deleteCampaignRosterEntryBySource: async (input) => {
+      const index = rosterEntries.findIndex(
+        (entry) =>
+          entry.campaignId === input.campaignId &&
+          entry.sourceId === input.sourceId &&
+          entry.sourceType === input.sourceType,
+      );
+
+      if (index >= 0) {
+        rosterEntries.splice(index, 1);
+        return 1;
+      }
+
+      return 0;
     },
     getCampaignRosterEntryById: async (entryId) =>
       rosterEntries.find((entry) => entry.id === entryId) ?? null,

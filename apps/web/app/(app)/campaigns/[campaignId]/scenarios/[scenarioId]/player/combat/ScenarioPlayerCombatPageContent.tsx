@@ -28,7 +28,6 @@ import {
   getPlayerEncounterAccessibleParticipants,
   getPlayerEncounterCombatModifierTotals,
   getPlayerEncounterMovementLabel,
-  getPlayerEncounterOpponentParticipants,
   getPlayerEncounterParrySourceLabel,
   isPlayerEncounterActionId,
   PLAYER_ENCOUNTER_INCOMING_ATTACK_SIDE_OPTIONS,
@@ -41,6 +40,7 @@ import {
 import { loadCanonicalContent } from "@/lib/content/loadCanonicalContent";
 import {
   loadCharacterEquipmentState,
+  loadScenarioMyParticipant,
   loadScenarioParticipants,
   loadScenarioPlayerProjection,
   loadServerCharacterById,
@@ -249,7 +249,9 @@ export default function ScenarioPlayerCombatPageContent({
         const [nextProjection, nextContent, nextParticipants] = await Promise.all([
           loadScenarioPlayerProjection(scenarioId),
           loadCanonicalContent(),
-          loadScenarioParticipants(scenarioId),
+          isGameMaster
+            ? loadScenarioParticipants(scenarioId)
+            : loadScenarioMyParticipant(scenarioId).then((p) => (p ? [p] : [])),
         ]);
 
         if (cancelled) {
@@ -363,14 +365,15 @@ export default function ScenarioPlayerCombatPageContent({
     [accessibleParticipants, selectedParticipantId]
   );
 
-  const visibleOpponentOptions = useMemo(() => {
-    return getPlayerEncounterOpponentParticipants({
-      currentUserId: currentUser?.id,
-      isGameMaster,
-      participants: selectableParticipants,
-      projectionVisibleParticipants: projection?.visibleParticipants,
-      selectedParticipantId,
-    });
+  const visibleOpponentOptions: { displayName: string; id: string }[] = useMemo(() => {
+    if (isGameMaster) {
+      return selectableParticipants
+        .filter((p) => p.isActive && p.id !== selectedParticipantId)
+        .map((p) => ({ displayName: p.snapshot.displayName, id: p.id }));
+    }
+    return (projection?.visibleParticipants ?? [])
+      .filter((p) => p.isActive && !p.isControlledByPlayer && p.id !== selectedParticipantId)
+      .map((p) => ({ displayName: p.displayName, id: p.id }));
   }, [isGameMaster, projection?.visibleParticipants, selectableParticipants, selectedParticipantId]);
 
   useEffect(() => {

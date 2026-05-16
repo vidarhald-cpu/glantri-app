@@ -56,6 +56,10 @@ export class CampaignService {
     return this.repository.listCampaignsAllowingPlayerSelfJoin();
   }
 
+  async listCampaignsByCharacterRosterAccess(characterId: string): Promise<Campaign[]> {
+    return this.repository.listCampaignsByCharacterRosterAccess(characterId);
+  }
+
   async listCampaignsByPlayerAccess(userId: string): Promise<Campaign[]> {
     return this.repository.listCampaignsByPlayerAccess(userId);
   }
@@ -95,11 +99,27 @@ export class CampaignService {
   }): Promise<void> {
     const entry = await this.repository.getCampaignRosterEntryById(input.rosterEntryId);
 
-    if (!entry || entry.campaignId !== input.campaignId) {
+    if (!entry) {
+      return;
+    }
+
+    if (entry.campaignId !== input.campaignId) {
       throw new Error("Campaign roster entry not found.");
     }
 
     await this.repository.deleteCampaignRosterEntry(input.rosterEntryId);
+  }
+
+  async removeCampaignRosterEntryBySource(input: {
+    campaignId: string;
+    sourceId: string;
+    sourceType: CampaignRosterSourceType;
+  }): Promise<{ removed: boolean }> {
+    const removedCount = await this.repository.deleteCampaignRosterEntryBySource(input);
+
+    return {
+      removed: removedCount > 0,
+    };
   }
 
   async createReusableEntity(input: {

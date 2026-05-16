@@ -30,6 +30,7 @@ function expectFetchCall(
   fetchMock: FetchMock,
   expected: {
     body?: unknown;
+    headers?: Record<string, string>;
     method?: string;
     url: string;
   },
@@ -44,10 +45,20 @@ function expectFetchCall(
   }
 
   if (expected.body !== undefined) {
-    expect(init?.headers).toMatchObject({
-      "content-type": "application/json",
-    });
+    expect(init?.headers).toBeInstanceOf(Headers);
+    expect((init?.headers as Headers).get("content-type")).toBe("application/json");
     expect(init?.body).toBe(JSON.stringify(expected.body));
+  } else {
+    expect(init?.body).toBeUndefined();
+    expect((init?.headers as Headers | undefined)?.has("content-type") ?? false).toBe(false);
+  }
+
+  if (expected.headers) {
+    expect(init?.headers).toBeInstanceOf(Headers);
+
+    for (const [name, value] of Object.entries(expected.headers)) {
+      expect((init?.headers as Headers).get(name)).toBe(value);
+    }
   }
 }
 
@@ -106,6 +117,31 @@ describe("localServiceClient wire contract", () => {
     });
   });
 
+  it("preserves caller-provided headers while posting JSON bodies", async () => {
+    const fetchMock = stubFetch({ ok: true });
+    vi.stubEnv("NEXT_PUBLIC_API_BASE_URL", "https://api.example.test");
+    const { sendJson } = await import("./apiClient");
+
+    await expect(
+      sendJson("/custom", {
+        body: JSON.stringify({ ok: true }),
+        headers: {
+          "x-request-id": "request-1",
+        },
+        method: "POST",
+      }),
+    ).resolves.toEqual({ ok: true });
+
+    expectFetchCall(fetchMock, {
+      body: { ok: true },
+      headers: {
+        "x-request-id": "request-1",
+      },
+      method: "POST",
+      url: "https://api.example.test/custom",
+    });
+  });
+
   it("posts character builds under the characters domain", async () => {
     const character = {
       build: {
@@ -159,6 +195,44 @@ describe("localServiceClient wire contract", () => {
       },
       method: "POST",
       url: "https://api.example.test/campaigns",
+    });
+  });
+
+  it("deletes campaign roster membership by stable source identity", async () => {
+    const fetchMock = stubFetch({ ok: true });
+    const client = await loadClient();
+
+    await expect(
+      client.removeCampaignRosterEntryOnServer({
+        campaignId: "campaign-1",
+        sourceId: "character-1",
+        sourceType: "character",
+      }),
+    ).resolves.toBeUndefined();
+
+    expectFetchCall(fetchMock, {
+      method: "DELETE",
+      url: "https://api.example.test/campaigns/campaign-1/roster-membership/character/character-1",
+    });
+    expect(fetchMock.mock.calls[0][1]?.headers).toBeInstanceOf(Headers);
+    expect((fetchMock.mock.calls[0][1]?.headers as Headers).has("content-type")).toBe(false);
+  });
+
+  it("preserves template source type when deleting campaign roster membership", async () => {
+    const fetchMock = stubFetch({ ok: true });
+    const client = await loadClient();
+
+    await expect(
+      client.removeCampaignRosterEntryOnServer({
+        campaignId: "campaign-1",
+        sourceId: "template-1",
+        sourceType: "template",
+      }),
+    ).resolves.toBeUndefined();
+
+    expectFetchCall(fetchMock, {
+      method: "DELETE",
+      url: "https://api.example.test/campaigns/campaign-1/roster-membership/template/template-1",
     });
   });
 

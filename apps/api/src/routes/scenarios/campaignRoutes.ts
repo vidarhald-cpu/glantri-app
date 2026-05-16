@@ -25,6 +25,110 @@ import {
 const campaignService = new CampaignService();
 const scenarioService = new ScenarioService();
 
+interface RouteError extends Error {
+  code?: string;
+  details?: unknown;
+}
+
+function createRosterRouteError(message: string, code: string, details?: unknown): RouteError {
+  const error = new Error(message) as RouteError;
+  error.code = code;
+  error.details = details;
+  return error;
+}
+
+function parseCampaignRosterSourceType(value: unknown) {
+  const parsed = campaignRosterSourceTypeSchema.safeParse(value);
+
+  if (!parsed.success) {
+    throw createRosterRouteError(
+      "Invalid roster source type. Expected character, reusableEntity, or template.",
+      "INVALID_ROSTER_SOURCE_TYPE",
+      parsed.error.issues
+    );
+  }
+
+  return parsed.data;
+}
+
+function buildRosterRouteErrorPayload(
+  error: unknown,
+  context?: {
+    campaignId?: unknown;
+    route?: string;
+    sourceId?: unknown;
+    sourceType?: unknown;
+  }
+) {
+  const diagnosticDetails = {
+    campaignId: context?.campaignId,
+    causeMessage: error instanceof Error ? error.message : String(error),
+    causeName: error instanceof Error ? error.name : typeof error,
+    route: context?.route,
+    sourceId: context?.sourceId,
+    sourceType: context?.sourceType,
+  };
+
+  if (error instanceof Error && error.message === "Campaign not found.") {
+    return {
+      payload: {
+        code: "CAMPAIGN_NOT_FOUND",
+        details: diagnosticDetails,
+        error: "Campaign not found.",
+        route: context?.route,
+      },
+      status: 404
+    };
+  }
+
+  if (error instanceof Error) {
+    const routeError = error as RouteError;
+
+    return {
+      payload: {
+        code: routeError.code ?? "CAMPAIGN_ROSTER_REMOVE_FAILED",
+        details: {
+          ...diagnosticDetails,
+          validation: routeError.details,
+        },
+        error: routeError.message,
+        route: context?.route,
+      },
+      status: 400
+    };
+  }
+
+  return {
+    payload: {
+      code: "CAMPAIGN_ROSTER_REMOVE_FAILED",
+      details: diagnosticDetails,
+      error: "Unable to remove campaign roster membership.",
+      route: context?.route,
+    },
+    status: 400
+  };
+}
+
+async function removeCampaignRosterMembershipBySource(input: {
+  campaignId: string;
+  sourceId: string;
+  sourceType: unknown;
+  userId: string;
+}): Promise<{ removed: boolean }> {
+  const sourceType = parseCampaignRosterSourceType(input.sourceType);
+  const campaign = await campaignService.getCampaignById(input.campaignId);
+
+  if (!campaign || campaign.gmUserId !== input.userId) {
+    throw new Error("Campaign not found.");
+  }
+
+  return campaignService.removeCampaignRosterEntryBySource({
+    campaignId: input.campaignId,
+    sourceId: input.sourceId,
+    sourceType
+  });
+}
+
 export const campaignRoutes: FastifyPluginAsync = async (app) => {
   app.get("/campaigns", async (request, reply) => {
     const user = await requireAdminUser(request, reply);
@@ -333,6 +437,53 @@ export const campaignRoutes: FastifyPluginAsync = async (app) => {
     }
   });
 
+  app.delete("/campaigns/:campaignId/roster-membership/:sourceType/:sourceId", async (request, reply) => {
+    const user = await requireAdminUser(request, reply);
+
+    if (!user) {
+      return;
+    }
+
+    const params =
+      request.params && typeof request.params === "object"
+        ? (request.params as Record<string, unknown>)
+        : {};
+    const context = {
+      campaignId: params.campaignId,
+      route: "source-key",
+      sourceId: params.sourceId,
+      sourceType: params.sourceType,
+    };
+
+    try {
+      const campaignId = parseId(request.params, "campaignId", "Campaign id");
+      const sourceId = parseRequiredString(params, "sourceId");
+
+      const result = await removeCampaignRosterMembershipBySource({
+        campaignId,
+        sourceId,
+        sourceType: params.sourceType,
+        userId: user.id
+      });
+
+      return { ok: true, removed: result.removed, route: "source-key" };
+    } catch (error) {
+      request.log.error(
+        {
+          campaignId: context.campaignId,
+          err: error,
+          route: context.route,
+          sourceId: context.sourceId,
+          sourceType: context.sourceType,
+        },
+        "remove roster membership failed"
+      );
+      const { payload, status } = buildRosterRouteErrorPayload(error, context);
+
+      return reply.code(status).send(payload);
+    }
+  });
+
   app.get("/campaigns/:campaignId/entities", async (request, reply) => {
     const user = await requireAdminUser(request, reply);
 
@@ -357,6 +508,48 @@ export const campaignRoutes: FastifyPluginAsync = async (app) => {
       return reply.code(400).send({
         error: error instanceof Error ? error.message : "Unable to list reusable entities."
       });
+    }
+  });
+
+  app.delete("/campaigns/:campaignId/roster-membership", async (request, reply) => {
+    const user = await requireAdminUser(request, reply);
+
+    if (!user) {
+      return;
+    }
+
+    try {
+      const campaignId = parseId(request.params, "campaignId", "Campaign id");
+      const query =
+        request.query && typeof request.query === "object"
+          ? (request.query as Record<string, unknown>)
+          : {};
+      const sourceId = parseRequiredString(query, "sourceId");
+
+      const result = await removeCampaignRosterMembershipBySource({
+        campaignId,
+        sourceId,
+        sourceType: query.sourceType,
+        userId: user.id
+      });
+
+      return { ok: true, removed: result.removed, route: "source-query" };
+    } catch (error) {
+      const query =
+        request.query && typeof request.query === "object"
+          ? (request.query as Record<string, unknown>)
+          : {};
+      const { payload, status } = buildRosterRouteErrorPayload(error, {
+        campaignId:
+          request.params && typeof request.params === "object"
+            ? (request.params as Record<string, unknown>).campaignId
+            : undefined,
+        route: "source-query",
+        sourceId: query.sourceId,
+        sourceType: query.sourceType,
+      });
+
+      return reply.code(status).send(payload);
     }
   });
 

@@ -593,7 +593,7 @@ function isPlayerControlledScenarioParticipant(input: {
   );
 }
 
-function buildScenarioPlayerVisibleParticipants(input: {
+export function buildScenarioPlayerVisibleParticipants(input: {
   controlledParticipantId?: string;
   participants: ScenarioParticipant[];
 }): ScenarioPlayerVisibleParticipant[] {

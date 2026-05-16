@@ -17,7 +17,9 @@ describe("CampaignsPageContent player campaign listing", () => {
     expect(source).toContain("Choose an available campaign to continue your story.");
     expect(source).toContain("No active scenario is currently available.");
     expect(source).toContain("canManageCampaigns ? (");
-    expect(source).toContain("Player self-join:");
+    expect(source).not.toContain("Allow player self-join");
+    expect(source).not.toContain("Player self-join:");
+    expect(source).not.toContain("setAllowPlayerSelfJoin");
     expect(source).not.toContain("Accessible scenarios:");
   });
 });
