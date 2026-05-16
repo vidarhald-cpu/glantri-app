@@ -72,7 +72,7 @@ export class EncounterService {
 
   async startScenario(scenarioId: string): Promise<Scenario> {
     const existingScenario = await this.assertScenarioExists(scenarioId);
-    const liveState = startScenario(existingScenario.liveState ?? createScenarioLiveState());
+    const liveState = startScenario(existingScenario.liveState ?? createScenarioLiveState(), new Date().toISOString());
     const scenario = await this.scenarioRepository.updateScenarioLiveState(scenarioId, liveState);
 
     await this.scenarioRepository.createScenarioEventLog({

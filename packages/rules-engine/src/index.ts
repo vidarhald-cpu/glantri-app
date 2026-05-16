@@ -28,6 +28,7 @@ export * from "./encounters/resolveRoleplaySkillRollModifiers";
 export * from "./encounters/resolveEncounterAttack";
 export * from "./encounters/resolveEncounterCritical";
 export * from "./encounters/resolveEncounterDamage";
+export * from "./encounters/roleplayTransitions";
 export * from "./equipment/manageCharacterEquipment";
 export * from "./professions/resolveEffectiveProfessionPackage";
 export * from "./sheets/buildCharacterSheetSummary";

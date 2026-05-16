@@ -7,11 +7,10 @@ import {
   encounterSessionSchema,
   isUserAssignedToEncounterMembership,
   normalizeRoleplayState,
-  recordRoleplayGmSkillRoll,
   resolveEncounterParticipantByRollParticipantId,
   resolveEncounterParticipantMembership,
 } from "@glantri/domain";
-import { resolveRoleplaySkillRollModifiers } from "@glantri/rules-engine";
+import { recordRoleplayGmSkillRoll, resolveRoleplaySkillRollModifiers } from "@glantri/rules-engine";
 
 import { requireAdminUser, requireAuthenticatedUser } from "../../lib/sessionAuth";
 import { parseBodyObject, parseId } from "./parsing";

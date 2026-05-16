@@ -15,24 +15,24 @@ import type {
   ScenarioParticipant,
 } from "@glantri/domain";
 import {
-  assignRoleplaySkillRoll,
   buildRoleplayCalculationPreview as buildDomainRoleplayCalculationPreview,
   compareRoleplayOpposedRolls,
   normalizeRoleplayState,
   normalizeRoleplayOtherMod,
   orderRoleplayEncounterParticipants,
-  recordRoleplayGmSkillRoll,
-  resetRoleplayRankedRollStack,
   resolveEncounterParticipantByRollParticipantId,
   roleplayDifficultyOptions,
+} from "@glantri/domain";
+
+import {
+  assignRoleplaySkillRoll,
+  recordRoleplayGmSkillRoll,
+  resetRoleplayRankedRollStack,
   rollOpenEndedRoleplayD20,
   selectAllRoleplayVisibilityForViewer,
   updateRoleplayGmMessage,
   updateRoleplayParticipantDescription,
   updateRoleplayVisibility,
-} from "@glantri/domain";
-
-import {
   resolveParticipantSkillRollProfile,
   resolveRoleplaySkillRollModifiers,
   type ParticipantSkillRollProfile,
