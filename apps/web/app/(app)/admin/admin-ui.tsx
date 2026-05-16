@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import type {
   CSSProperties,
   InputHTMLAttributes,
@@ -661,5 +663,76 @@ export function AdminCheckboxList(props: {
         </label>
       ))}
     </div>
+  );
+}
+
+export function AdminWorkspaceTabs(props: {
+  tabs: Array<{ href: string; label: string }>;
+}) {
+  const pathname = usePathname();
+
+  return (
+    <nav style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
+      {props.tabs.map((tab) => {
+        const active = pathname === tab.href;
+
+        return (
+          <Link
+            href={tab.href}
+            key={tab.href}
+            style={{
+              background: active ? "#7e5d2a" : "rgba(126, 93, 42, 0.08)",
+              border: active ? "1px solid transparent" : "1px solid rgba(126, 93, 42, 0.14)",
+              borderRadius: 999,
+              color: active ? "#fffaf0" : "#594320",
+              fontWeight: 700,
+              padding: "0.65rem 0.95rem",
+              textDecoration: "none"
+            }}
+          >
+            {tab.label}
+          </Link>
+        );
+      })}
+    </nav>
+  );
+}
+
+export function AdminActionRow(props: { children: ReactNode; marginTop?: string }) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexWrap: "wrap",
+        gap: "0.75rem",
+        marginTop: props.marginTop ?? "0"
+      }}
+    >
+      {props.children}
+    </div>
+  );
+}
+
+export function AdminMatrixGroup<TRow extends { id: string }>(props: {
+  columns: AdminTableColumn<TRow>[];
+  emptyState: string;
+  label: string;
+  rowCount: number;
+  rows: TRow[];
+  singularUnit?: string;
+}) {
+  const unit = props.singularUnit ?? "row";
+
+  return (
+    <AdminPanel
+      subtitle={`${props.rowCount} ${unit}${props.rowCount === 1 ? "" : "s"} in this slice.`}
+      title={props.label}
+    >
+      <AdminDataTable
+        columns={props.columns}
+        emptyState={props.emptyState}
+        rows={props.rows}
+      />
+    </AdminPanel>
   );
 }
