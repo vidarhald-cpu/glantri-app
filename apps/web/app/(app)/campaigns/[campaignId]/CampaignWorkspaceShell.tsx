@@ -26,6 +26,7 @@ import {
 } from "@/lib/campaigns/workspace";
 import EncounterDetail from "../../encounters/[id]/EncounterDetail";
 import CampaignDetailPageContent from "./CampaignDetailPageContent";
+import CharacterWorkspacePanel from "./CharacterWorkspacePanel";
 import ScenarioDetailPageContent from "./scenarios/[scenarioId]/ScenarioDetailPageContent";
 import ScenarioPlayerPageContent from "./scenarios/[scenarioId]/player/ScenarioPlayerPageContent";
 import ScenarioPlayerCombatPageContent from "./scenarios/[scenarioId]/player/combat/ScenarioPlayerCombatPageContent";
@@ -286,7 +287,10 @@ export default function CampaignWorkspaceShell({
       encounterId:
         searchParams.get("encounterId") ?? workspaceState.activeEncounterId ?? null,
       participantId:
-        requestedTabFromUrl === "player-encounter" || workspaceState.activeTab === "player-encounter"
+        requestedTabFromUrl === "player-encounter" ||
+        requestedTabFromUrl === "character" ||
+        workspaceState.activeTab === "player-encounter" ||
+        workspaceState.activeTab === "character"
           ? searchParams.get("participantId")
           : null,
       scenarioId:
@@ -530,6 +534,25 @@ export default function CampaignWorkspaceShell({
             </section>
           )}
         </section>
+      ) : null}
+
+      {accessMode !== "none" && workspaceState.activeTab === "character" ? (
+        <CharacterWorkspacePanel
+          activeEncounter={activeEncounter}
+          currentUserId={currentUser?.id}
+          isGameMaster={canAccessGmEncounter}
+          onSelectParticipantId={(participantId) => {
+            router.replace(
+              buildWorkspaceHref({
+                participantId,
+                tab: "character",
+              }),
+            );
+          }}
+          scenarioId={workspaceState.activeScenarioId}
+          scenarioParticipants={scenarioParticipants}
+          selectedParticipantId={searchParams.get("participantId")}
+        />
       ) : null}
     </section>
   );

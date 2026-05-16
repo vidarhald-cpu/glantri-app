@@ -42,11 +42,53 @@ describe("CharactersSubmenu", () => {
     expect(items.map((item) => item.href)).toEqual([
       "/characters",
       "/characters/character-1",
+      "/characters/character-1/character",
       "/characters/character-1/equipment",
       "/characters/character-1/weapons-shields-armor",
       "/characters/character-1/loadout",
       "/characters/character-1/advance",
     ]);
     expect(items.map((item) => item.label)).toContain("Progression");
+  });
+
+  it("adds a character control tab without replacing Equip items", () => {
+    const items = buildCharactersSubmenuItems({
+      currentCharacterId: "character-1",
+      isGameMaster: false,
+      pathname: "/characters/character-1/character",
+    });
+
+    expect(items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          href: "/characters/character-1/character",
+          isActive: true,
+          label: "Character",
+        }),
+        expect.objectContaining({
+          href: "/characters/character-1/loadout",
+          label: "Equip items",
+        }),
+      ]),
+    );
+  });
+
+  it("adds a GM character inspection route without treating inspect as a character id", () => {
+    const items = buildCharactersSubmenuItems({
+      currentCharacterId: null,
+      isGameMaster: true,
+      pathname: "/characters/inspect",
+    });
+
+    expect(items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          href: "/characters/inspect",
+          isActive: true,
+          label: "Inspect characters",
+        }),
+      ]),
+    );
+    expect(items.map((item) => item.href)).not.toContain("/characters/inspect/loadout");
   });
 });

@@ -652,6 +652,7 @@ export function buildEquipmentLoadoutModuleModel(input: {
 }
 
 export function EquipmentLoadoutModule(input: {
+  afterEquipmentChoices?: ReactNode;
   mode: EquipmentLoadoutModuleMode;
   model: EquipmentLoadoutModuleModel;
   onFieldChange?: (fieldId: LoadoutFieldId, itemId: string | null) => void;
@@ -678,6 +679,8 @@ export function EquipmentLoadoutModule(input: {
           </div>
         </ControlSection>
       ) : null}
+
+      {input.afterEquipmentChoices ?? null}
 
       {input.model.combatStatePanelModel ? (
         <CombatStatePanel model={input.model.combatStatePanelModel} />

@@ -22,6 +22,10 @@ function getCurrentCharacterId(pathname: string): string | null {
     return null;
   }
 
+  if (segments[1] === "inspect") {
+    return null;
+  }
+
   return segments[1] ?? null;
 }
 
@@ -43,11 +47,25 @@ export function buildCharactersSubmenuItems(options: {
       isActive: pathname === "/characters",
       label: "Characters"
     },
+    isGameMaster
+      ? {
+          href: "/characters/inspect",
+          isActive: pathname === "/characters/inspect",
+          label: "Inspect characters"
+        }
+      : null,
     effectiveCharacterId
       ? {
           href: `/characters/${effectiveCharacterId}`,
           isActive: isCharacterSheetPath(pathname, effectiveCharacterId),
           label: "Character sheet"
+        }
+      : null,
+    effectiveCharacterId
+      ? {
+          href: `/characters/${effectiveCharacterId}/character`,
+          isActive: pathname === `/characters/${effectiveCharacterId}/character`,
+          label: "Character"
         }
       : null,
     effectiveCharacterId
