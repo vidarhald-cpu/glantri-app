@@ -22,10 +22,12 @@ export class EncounterService {
   ) {}
 
   async createEncounter(input: {
+    campaignId?: string | null;
     createdByUserId?: string | null;
+    scenarioId: string;
     session: EncounterSession;
   }): Promise<EncounterSession> {
-    return this.encounterRepository.createEncounter(input.session, input.createdByUserId);
+    return this.encounterRepository.createEncounter(input);
   }
 
   async getEncounterById(encounterId: string): Promise<EncounterSession | null> {
@@ -36,8 +38,13 @@ export class EncounterService {
     return this.encounterRepository.listEncountersByScenario(scenarioId);
   }
 
-  async updateEncounter(session: EncounterSession): Promise<EncounterSession> {
-    return this.encounterRepository.updateEncounter(session);
+  async updateEncounter(input: {
+    campaignId?: string | null;
+    encounterId: string;
+    scenarioId?: string | null;
+    session: EncounterSession;
+  }): Promise<EncounterSession> {
+    return this.encounterRepository.updateEncounter(input);
   }
 
   async updateScenarioLiveState(input: {

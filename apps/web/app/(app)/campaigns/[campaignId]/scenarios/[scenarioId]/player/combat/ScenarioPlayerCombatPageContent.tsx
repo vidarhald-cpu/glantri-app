@@ -1296,7 +1296,7 @@ export default function ScenarioPlayerCombatPageContent({
                       <option value="">Choose opponent</option>
                       {visibleOpponentOptions.map((participant) => (
                         <option key={participant.id} value={participant.id}>
-                          {participant.snapshot.displayName}
+                          {participant.displayName}
                         </option>
                       ))}
                     </select>

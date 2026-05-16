@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => {
   };
   const characterService = {};
   const encounterService = {
+    createEncounter: vi.fn(),
     getEncounterById: vi.fn(),
     listEncountersByScenario: vi.fn(),
     updateEncounter: vi.fn(),
@@ -28,6 +29,7 @@ const mocks = vi.hoisted(() => {
     getScenarioById: vi.fn(),
     listScenariosByCampaign: vi.fn(),
     listScenarioParticipants: vi.fn(),
+    recordScenarioEvent: vi.fn(),
     updateScenario: vi.fn(),
     userHasPlayerScenarioAccess: vi.fn(),
   };
@@ -206,6 +208,198 @@ describe("scenarios route contract", () => {
     expect(mocks.encounterService.listEncountersByScenario).toHaveBeenCalledWith("scenario-1");
   });
 
+  it("filters scenario participants for player workspace access", async () => {
+    const scenario = {
+      campaignId: "campaign-1",
+      id: "scenario-1",
+      kind: "combat",
+      name: "Bridge Ambush",
+      status: "live",
+    };
+    const campaign = {
+      gmUserId: "gm-1",
+      id: "campaign-1",
+      name: "Border Trouble",
+      status: "active",
+    };
+    const controlledParticipant = {
+      controlledByUserId: "player-1",
+      id: "participant-1",
+      isActive: true,
+      role: "player_character",
+      scenarioId: "scenario-1",
+      snapshot: {
+        displayName: "Player hero",
+      },
+      sourceType: "character",
+    };
+    const otherParticipant = {
+      controlledByUserId: "other-player",
+      id: "participant-2",
+      isActive: true,
+      role: "player_character",
+      scenarioId: "scenario-1",
+      snapshot: {
+        displayName: "Other hero",
+      },
+      sourceType: "character",
+    };
+    const inactiveControlledParticipant = {
+      controlledByUserId: "player-1",
+      id: "participant-3",
+      isActive: false,
+      role: "player_character",
+      scenarioId: "scenario-1",
+      snapshot: {
+        displayName: "Inactive hero",
+      },
+      sourceType: "character",
+    };
+    mocks.scenarioService.getScenarioById.mockResolvedValue(scenario);
+    mocks.campaignService.getCampaignById.mockResolvedValue(campaign);
+    mocks.scenarioService.userHasPlayerScenarioAccess.mockResolvedValue(true);
+    mocks.scenarioService.listScenarioParticipants.mockResolvedValue([
+      controlledParticipant,
+      otherParticipant,
+      inactiveControlledParticipant,
+    ]);
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/scenarios/scenario-1/participants",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      participants: [controlledParticipant],
+    });
+  });
+
+  it("creates an encounter under the path-authorized scenario and campaign", async () => {
+    const scenario = {
+      campaignId: "campaign-1",
+      id: "scenario-1",
+      kind: "combat",
+      name: "Bridge Ambush",
+      status: "live",
+    };
+    const campaign = {
+      gmUserId: "gm-1",
+      id: "campaign-1",
+      name: "Border Trouble",
+      status: "active",
+    };
+    const bodySession = {
+      campaignId: "campaign-evil",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      id: "encounter-1",
+      scenarioId: "scenario-evil",
+      title: "Courtyard",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    };
+    const encounter = {
+      ...bodySession,
+      campaignId: "campaign-1",
+      scenarioId: "scenario-1",
+    };
+    mocks.scenarioService.getScenarioById.mockResolvedValue(scenario);
+    mocks.campaignService.getCampaignById.mockResolvedValue(campaign);
+    mocks.encounterService.createEncounter.mockResolvedValue(encounter);
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        session: bodySession,
+      },
+      url: "/scenarios/scenario-1/encounters",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(mocks.encounterService.createEncounter).toHaveBeenCalledWith({
+      campaignId: "campaign-1",
+      createdByUserId: "gm-1",
+      scenarioId: "scenario-1",
+      session: expect.objectContaining({
+        campaignId: "campaign-evil",
+        id: "encounter-1",
+        scenarioId: "scenario-evil",
+      }),
+    });
+  });
+
+  it("updates the path-authorized encounter instead of trusting body ids", async () => {
+    const existingEncounter = {
+      campaignId: "campaign-1",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      id: "encounter-1",
+      scenarioId: "scenario-1",
+      status: "active",
+      title: "Courtyard",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    };
+    const scenario = {
+      campaignId: "campaign-1",
+      id: "scenario-1",
+      kind: "combat",
+      name: "Bridge Ambush",
+      status: "live",
+    };
+    const campaign = {
+      gmUserId: "gm-1",
+      id: "campaign-1",
+      name: "Border Trouble",
+      status: "active",
+    };
+    const bodySession = {
+      campaignId: "campaign-evil",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      id: "encounter-evil",
+      scenarioId: "scenario-evil",
+      title: "Renamed courtyard",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    };
+    mocks.encounterService.getEncounterById.mockResolvedValue(existingEncounter);
+    mocks.scenarioService.getScenarioById.mockResolvedValue(scenario);
+    mocks.campaignService.getCampaignById.mockResolvedValue(campaign);
+    mocks.encounterService.updateEncounter.mockResolvedValue({
+      ...bodySession,
+      campaignId: "campaign-1",
+      id: "encounter-1",
+      participants: [],
+      scenarioId: "scenario-1",
+      status: "active",
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "PUT",
+      payload: {
+        session: bodySession,
+      },
+      url: "/encounters/encounter-1",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(mocks.encounterService.updateEncounter).toHaveBeenCalledWith({
+      campaignId: "campaign-1",
+      encounterId: "encounter-1",
+      scenarioId: "scenario-1",
+      session: expect.objectContaining({
+        campaignId: "campaign-evil",
+        id: "encounter-evil",
+        scenarioId: "scenario-evil",
+      }),
+    });
+  });
+
   it("allows a player to submit their own non-silent assigned roleplay roll", async () => {
     const encounter = {
       actionLog: [],
@@ -264,7 +458,7 @@ describe("scenarios route contract", () => {
       status: "active",
     };
     mocks.encounterService.getEncounterById.mockResolvedValue(encounter);
-    mocks.encounterService.updateEncounter.mockImplementation(async (nextEncounter: unknown) => nextEncounter);
+    mocks.encounterService.updateEncounter.mockImplementation(async (input: { session: unknown }) => input.session);
     mocks.scenarioService.getScenarioById.mockResolvedValue(scenario);
     mocks.campaignService.getCampaignById.mockResolvedValue(campaign);
     mocks.scenarioService.userHasPlayerScenarioAccess.mockResolvedValue(true);
@@ -299,7 +493,7 @@ describe("scenarios route contract", () => {
     await app.close();
 
     expect(response.statusCode).toBe(200);
-    const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0];
+    const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
     expect(updatedEncounter.roleplayState.actionLog[0]).toMatchObject({
       pendingRollId: "roll-1",
       participantId: "scenario-participant-1",
@@ -358,7 +552,7 @@ describe("scenarios route contract", () => {
       updatedAt: "2026-01-01T00:00:00.000Z",
     };
     mocks.encounterService.getEncounterById.mockResolvedValue(encounter);
-    mocks.encounterService.updateEncounter.mockImplementation(async (nextEncounter: unknown) => nextEncounter);
+    mocks.encounterService.updateEncounter.mockImplementation(async (input: { session: unknown }) => input.session);
     mocks.scenarioService.getScenarioById.mockResolvedValue({
       campaignId: "campaign-1",
       id: "scenario-1",
@@ -404,7 +598,7 @@ describe("scenarios route contract", () => {
     await app.close();
 
     expect(response.statusCode).toBe(200);
-    const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0];
+    const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
     expect(updatedEncounter.roleplayState.actionLog[0]).toMatchObject({
       mode: "opposed",
       pendingRollId: "roll-1",

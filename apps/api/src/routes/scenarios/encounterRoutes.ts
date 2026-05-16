@@ -163,9 +163,12 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       }
 
       const body = parseBodyObject(request.body, "Encounter payload");
+      const encounterSession = encounterSessionSchema.parse(body.session);
       const encounter = await encounterService.createEncounter({
+        campaignId: access.campaignId,
         createdByUserId: user.id,
-        session: encounterSessionSchema.parse(body.session)
+        scenarioId,
+        session: encounterSession
       });
 
       await scenarioService.recordScenarioEvent({
@@ -268,7 +271,12 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
 
       const body = parseBodyObject(request.body, "Encounter payload");
       const encounterSession = encounterSessionSchema.parse(body.session);
-      const encounter = await encounterService.updateEncounter(encounterSession);
+      const encounter = await encounterService.updateEncounter({
+        campaignId: access.campaignId,
+        encounterId,
+        scenarioId: existingEncounter.scenarioId,
+        session: encounterSession
+      });
 
       await scenarioService.recordScenarioEvent({
         actorUserId: user.id,
@@ -460,8 +468,13 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         useObSkillMod: pendingRoll.useObSkillMod,
       });
       const savedEncounter = await encounterService.updateEncounter({
-        ...nextEncounter,
-        updatedAt: new Date().toISOString(),
+        campaignId: encounter.campaignId,
+        encounterId,
+        scenarioId: encounter.scenarioId,
+        session: {
+          ...nextEncounter,
+          updatedAt: new Date().toISOString(),
+        },
       });
 
       return { encounter: savedEncounter };

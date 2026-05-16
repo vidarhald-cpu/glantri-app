@@ -296,16 +296,6 @@ describe("playerEncounter", () => {
         role: "player_character",
         sourceType: "character",
       }),
-      createScenarioParticipant({
-        id: "npc-1",
-        role: "npc",
-        sourceType: "entity",
-      }),
-      createScenarioParticipant({
-        id: "npc-2",
-        role: "npc",
-        sourceType: "entity",
-      }),
     ];
 
     expect(

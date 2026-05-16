@@ -45,7 +45,14 @@ export const participantRoutes: FastifyPluginAsync = async (app) => {
         return reply.code(404).send({ error: "Scenario not found." });
       }
 
-      const participants = await scenarioService.listScenarioParticipants(scenarioId);
+      const allParticipants = await scenarioService.listScenarioParticipants(scenarioId);
+      const participants =
+        access.mode === "gm"
+          ? allParticipants
+          : allParticipants.filter(
+              (participant) =>
+                participant.isActive && participant.controlledByUserId === user.id
+            );
 
       return { participants };
     } catch (error) {
