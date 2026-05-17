@@ -1,4 +1,4 @@
-import EncounterDetail from "./EncounterDetail";
+import EncounterDetail from "@/features/encounters/EncounterDetail";
 
 interface EncounterDetailPageProps {
   params: Promise<{

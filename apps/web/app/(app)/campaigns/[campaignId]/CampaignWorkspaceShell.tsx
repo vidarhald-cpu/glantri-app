@@ -24,7 +24,7 @@ import {
   resolveCampaignWorkspaceState,
   type CampaignWorkspaceTabId
 } from "@/lib/campaigns/workspace";
-import EncounterDetail from "../../encounters/[id]/EncounterDetail";
+import EncounterDetail from "@/features/encounters/EncounterDetail";
 import CampaignDetailPageContent from "./CampaignDetailPageContent";
 import CharacterWorkspacePanel from "./CharacterWorkspacePanel";
 import ScenarioDetailPageContent from "./scenarios/[scenarioId]/ScenarioDetailPageContent";
