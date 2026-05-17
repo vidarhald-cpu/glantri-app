@@ -2,8 +2,14 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-import { calculateCharacterGeneralHitpoints } from "@glantri/domain";
+import {
+  calculateCharacterGeneralHitpoints,
+  type CombatEffect,
+  type CombatEffectEvent,
+  type CombatEffectsState,
+} from "@glantri/domain";
 
+import type { CombatEffectEventDraft } from "@/features/equipment/components/PhysicalStateSection";
 import { getEquipmentTemplateById } from "@/features/equipment/equipmentSelectors";
 import {
   buildEquipmentLoadoutModuleModel,
@@ -24,8 +30,14 @@ import { loadLocalCharacterContext } from "@/lib/characters/loadLocalCharacterCo
 import { buildCharacterPhysicalStateView } from "@/lib/characters/physicalState";
 
 interface CharacterLoadoutViewProps {
+  canEditCombatEffects?: boolean;
   characterId: string;
+  onCombatEffectsChange?: (nextState: CombatEffectsState) => Promise<void> | void;
+  physicalStateCombatEffects?: CombatEffectsState;
+  physicalStateEncounterId?: string;
   physicalStateGeneralHitpoints?: number | null;
+  physicalStateScenarioId?: string;
+  physicalStateTargetParticipantId?: string;
   showPhysicalState?: boolean;
 }
 
@@ -48,8 +60,14 @@ function isBowOrTwoHandedTemplate(templateId: string | null, state: EquipmentFea
 }
 
 export default function CharacterLoadoutView({
+  canEditCombatEffects = false,
   characterId,
+  onCombatEffectsChange,
+  physicalStateCombatEffects,
+  physicalStateEncounterId,
   physicalStateGeneralHitpoints,
+  physicalStateScenarioId,
+  physicalStateTargetParticipantId,
   showPhysicalState = false,
 }: CharacterLoadoutViewProps) {
   const [state, setState] = useState<EquipmentFeatureState | null>(null);
@@ -143,6 +161,7 @@ export default function CharacterLoadoutView({
     () =>
       showPhysicalState
         ? buildCharacterPhysicalStateView({
+            combatEffects: physicalStateCombatEffects,
             generalHitpoints:
               physicalStateGeneralHitpoints ??
               (characterContext?.record?.build
@@ -150,8 +169,76 @@ export default function CharacterLoadoutView({
                 : null),
           })
         : null,
-    [characterContext?.record?.build, physicalStateGeneralHitpoints, showPhysicalState],
+    [
+      characterContext?.record?.build,
+      physicalStateCombatEffects,
+      physicalStateGeneralHitpoints,
+      showPhysicalState,
+    ],
   );
+
+  function createCombatEffectId(prefix: string): string {
+    return `${prefix}-${globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`}`;
+  }
+
+  async function addCombatEffectEvent(draft: CombatEffectEventDraft) {
+    if (!physicalStateTargetParticipantId || !onCombatEffectsChange) {
+      return;
+    }
+
+    const now = new Date().toISOString();
+    const eventId = createCombatEffectId("combat-event");
+    const event: CombatEffectEvent = {
+      createdAt: now,
+      description: draft.description ?? "",
+      encounterId: physicalStateEncounterId || undefined,
+      id: eventId,
+      roundNumber: draft.roundNumber,
+      scenarioId: physicalStateScenarioId || undefined,
+      sourceLabel: draft.sourceLabel,
+      sourceType: "manual",
+      targetParticipantId: physicalStateTargetParticipantId,
+    };
+    const effects: CombatEffect[] = draft.effects.map((effectDraft) => ({
+      checkRequired: undefined,
+      checkSkillOrStat: undefined,
+      createdAt: now,
+      damage: effectDraft.damage,
+      description: effectDraft.description,
+      duration: effectDraft.duration,
+      effectGroup: effectDraft.effectGroup,
+      expiresAtRound: undefined,
+      generalDamage: effectDraft.generalDamage,
+      id: createCombatEffectId("combat-effect"),
+      location: effectDraft.location,
+      modifierValue: effectDraft.modifierValue,
+      roundNumber: draft.roundNumber,
+      sourceEventId: eventId,
+      status: "active",
+      targetParticipantId: physicalStateTargetParticipantId,
+      type: effectDraft.type,
+      updatedAt: now,
+    }));
+    const currentCombatEffects = physicalStateCombatEffects ?? { effects: [], events: [] };
+
+    await onCombatEffectsChange({
+      effects: [...currentCombatEffects.effects, ...effects],
+      events: [...currentCombatEffects.events, event],
+    });
+  }
+
+  async function deleteCombatEffect(effectId: string) {
+    if (!onCombatEffectsChange) {
+      return;
+    }
+
+    const currentCombatEffects = physicalStateCombatEffects ?? { effects: [], events: [] };
+
+    await onCombatEffectsChange({
+      ...currentCombatEffects,
+      effects: currentCombatEffects.effects.filter((effect) => effect.id !== effectId),
+    });
+  }
 
   async function applySelection(input: {
     itemId: string | null;
@@ -305,7 +392,14 @@ export default function CharacterLoadoutView({
       {!loading && !pageError ? (
         <EquipmentLoadoutModule
           afterEquipmentChoices={
-            physicalStateModel ? <PhysicalStateSection model={physicalStateModel} /> : undefined
+            physicalStateModel ? (
+              <PhysicalStateSection
+                canEditCombatEffects={canEditCombatEffects}
+                model={physicalStateModel}
+                onAddCombatEffectEvent={addCombatEffectEvent}
+                onDeleteCombatEffect={deleteCombatEffect}
+              />
+            ) : undefined
           }
           mode="editable"
           model={model}

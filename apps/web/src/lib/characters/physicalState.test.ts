@@ -127,4 +127,114 @@ describe("character physical state read model", () => {
     ]);
     expect(view.hitLog).toEqual([]);
   });
+
+  it("sums active combat effects into hitpoints and effect buckets", () => {
+    const view = buildCharacterPhysicalStateView({
+      combatEffects: {
+        events: [
+          {
+            createdAt: "2026-05-17T10:00:00.000Z",
+            description: "Orc hits The Gladiator with axe",
+            id: "event-1",
+            roundNumber: 4,
+            sourceLabel: "Axe hit",
+            sourceType: "manual",
+            targetParticipantId: "participant-1",
+          },
+        ],
+        effects: [
+          {
+            createdAt: "2026-05-17T10:00:00.000Z",
+            damage: 5,
+            effectGroup: "other",
+            generalDamage: 0,
+            id: "effect-arm",
+            location: "rightArm",
+            sourceEventId: "event-1",
+            status: "active",
+            targetParticipantId: "participant-1",
+            type: "physical_damage",
+            updatedAt: "2026-05-17T10:00:00.000Z",
+          },
+          {
+            createdAt: "2026-05-17T10:00:00.000Z",
+            damage: 0,
+            effectGroup: "general",
+            generalDamage: 3,
+            id: "effect-general",
+            sourceEventId: "event-1",
+            status: "active",
+            targetParticipantId: "participant-1",
+            type: "general_damage",
+            updatedAt: "2026-05-17T10:00:00.000Z",
+          },
+          {
+            createdAt: "2026-05-17T10:00:00.000Z",
+            damage: 0,
+            description: "Bleed 1",
+            effectGroup: "bleed",
+            generalDamage: 0,
+            id: "effect-bleed",
+            modifierValue: 1,
+            sourceEventId: "event-1",
+            status: "active",
+            targetParticipantId: "participant-1",
+            type: "bleed",
+            updatedAt: "2026-05-17T10:00:00.000Z",
+          },
+          {
+            createdAt: "2026-05-17T10:00:00.000Z",
+            damage: 0,
+            description: "Stunned",
+            duration: "2 rounds, then CON check",
+            effectGroup: "general",
+            generalDamage: 0,
+            id: "effect-stun",
+            modifierValue: -4,
+            sourceEventId: "event-1",
+            status: "active",
+            targetParticipantId: "participant-1",
+            type: "general_modifier",
+            updatedAt: "2026-05-17T10:00:00.000Z",
+          },
+          {
+            createdAt: "2026-05-17T10:00:00.000Z",
+            damage: 99,
+            effectGroup: "other",
+            generalDamage: 99,
+            id: "effect-resolved",
+            sourceEventId: "event-1",
+            status: "resolved",
+            targetParticipantId: "participant-1",
+            type: "physical_damage",
+            updatedAt: "2026-05-17T10:00:00.000Z",
+          },
+        ],
+      },
+      generalHitpoints: 22,
+    });
+
+    expect(view.hitpoints.general.damage).toBe(3);
+    expect(view.hitpoints.general.current).toBe(19);
+    expect(view.hitpoints.locations.find((location) => location.id === "rightArm")).toMatchObject({
+      damage: 5,
+      current: 3,
+      original: 8,
+    });
+    expect(view.damageByType.map((row) => [row.id, row.currentEffect])).toEqual([
+      ["general", -1],
+      ["obSkill", 0],
+      ["db", 0],
+      ["other", 5],
+      ["bleed", 1],
+      ["special", "—"],
+    ]);
+    expect(view.hitLog).toHaveLength(5);
+    expect(view.hitLog[0]).toMatchObject({
+      damage: 5,
+      roundNumber: 4,
+      source: "Axe hit",
+      type: "physical_damage",
+    });
+  });
 });

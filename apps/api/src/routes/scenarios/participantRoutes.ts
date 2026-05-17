@@ -266,6 +266,8 @@ export const participantRoutes: FastifyPluginAsync = async (app) => {
     try {
       const scenarioId = parseId(request.params, "scenarioId", "Scenario id");
       const participantId = parseId(request.params, "participantId", "Participant id");
+      const body = parseBodyObject(request.body, "Participant state payload");
+      const nextState = scenarioParticipantStateSchema.parse(body.state);
       const access = await resolveScenarioWorkspaceAccess(
         { campaignService, scenarioService },
         { scenarioId, userId: user.id, userRoles: user.roles }
@@ -284,13 +286,21 @@ export const participantRoutes: FastifyPluginAsync = async (app) => {
         if (!participant || participant.controlledByUserId !== user.id) {
           return reply.code(403).send({ error: "Access denied." });
         }
+
+        const currentState = scenarioParticipantStateSchema.parse(participant.state);
+
+        if (
+          JSON.stringify(currentState.combatEffects ?? { effects: [], events: [] }) !==
+          JSON.stringify(nextState.combatEffects ?? { effects: [], events: [] })
+        ) {
+          return reply.code(403).send({ error: "Only GM users can edit combat effects." });
+        }
       }
 
-      const body = parseBodyObject(request.body, "Participant state payload");
       const participant = await encounterService.updateScenarioParticipantState({
         participantId,
         scenarioId,
-        state: scenarioParticipantStateSchema.parse(body.state)
+        state: nextState
       });
 
       return { participant };

@@ -551,6 +551,11 @@ export default function CampaignWorkspaceShell({
               }),
             );
           }}
+          onScenarioParticipantUpdated={(participant) => {
+            setScenarioParticipants((current) =>
+              current.map((entry) => (entry.id === participant.id ? participant : entry)),
+            );
+          }}
           scenarioId={workspaceState.activeScenarioId}
           scenarioParticipants={scenarioParticipants}
           selectedParticipantId={searchParams.get("participantId")}

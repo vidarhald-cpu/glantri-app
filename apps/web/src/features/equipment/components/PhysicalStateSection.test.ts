@@ -43,4 +43,16 @@ describe("PhysicalStateSection", () => {
     expect(source).toContain("Save");
     expect(source).toContain("Delete");
   });
+
+  it("exposes the GM manual combat effect event editor without player-only placeholders", () => {
+    const source = readSource();
+
+    expect(source).toContain("Add combat effect event");
+    expect(source).toContain("Add effect row");
+    expect(source).toContain("Save event");
+    expect(source).toContain("Source label");
+    expect(source).toContain("Modifier value");
+    expect(source).toContain("onAddCombatEffectEvent");
+    expect(source).not.toContain("Future phases will");
+  });
 });
