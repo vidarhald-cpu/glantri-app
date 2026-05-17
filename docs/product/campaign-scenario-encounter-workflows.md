@@ -102,6 +102,8 @@ Player responsibilities:
 - Review player-safe ranked results and character log entries.
 - Receive clear empty states when not assigned or when no encounter is available.
 
+Combat Panel is part of the Encounter workflow. It is separate from Character control for now: Character control tracks the current character/loadout/physical state, while the Combat Panel is the scenario or encounter workspace for combat action context. Future damage tracking, round recording, and combat-effect automation should build on these workflows without rendering inactive placeholders.
+
 Current design rules:
 
 - Encounter participants are actors in a specific encounter.

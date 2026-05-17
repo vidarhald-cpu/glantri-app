@@ -80,11 +80,18 @@ describe("campaign workspace", () => {
   it("keeps the intended left-to-right tab order and hides the GM tab for players", () => {
     expect(
       buildCampaignWorkspaceTabs({ canAccessGmEncounter: true }).map((tab) => tab.id)
-    ).toEqual(["campaign", "scenario", "gm-encounter", "player-encounter", "character"]);
+    ).toEqual([
+      "campaign",
+      "scenario",
+      "gm-encounter",
+      "player-encounter",
+      "character",
+      "combat",
+    ]);
 
     expect(
       buildCampaignWorkspaceTabs({ canAccessGmEncounter: false }).map((tab) => tab.id)
-    ).toEqual(["campaign", "scenario", "player-encounter", "character"]);
+    ).toEqual(["campaign", "scenario", "player-encounter", "character", "combat"]);
   });
 
   it("opens the Character tab against the active scenario context", () => {
@@ -100,6 +107,36 @@ describe("campaign workspace", () => {
 
     expect(state.activeScenarioId).toBe("scn-1");
     expect(state.activeTab).toBe("character");
+  });
+
+  it("opens the Combat tab against the active scenario context", () => {
+    const state = resolveCampaignWorkspaceState({
+      activeCampaignId: "camp-1",
+      canAccessGmEncounter: false,
+      encounters: [],
+      requestedEncounterId: null,
+      requestedScenarioId: null,
+      requestedTab: "combat",
+      scenarios: [scenario({ id: "scn-1", name: "Session one" })],
+    });
+
+    expect(state.activeScenarioId).toBe("scn-1");
+    expect(state.activeTab).toBe("combat");
+  });
+
+  it("keeps the Combat tab open with a missing-context state when no scenario is selected", () => {
+    const state = resolveCampaignWorkspaceState({
+      activeCampaignId: "camp-1",
+      canAccessGmEncounter: true,
+      encounters: [],
+      requestedEncounterId: null,
+      requestedScenarioId: null,
+      requestedTab: "combat",
+      scenarios: [],
+    });
+
+    expect(state.activeScenarioId).toBeUndefined();
+    expect(state.activeTab).toBe("combat");
   });
 
   it("sanitizes scenario and encounter selection against the current campaign flow", () => {

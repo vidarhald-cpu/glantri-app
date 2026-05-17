@@ -18,7 +18,7 @@ export default async function ScenarioPlayerCombatPage({
     buildCampaignWorkspaceHref({
       campaignId,
       scenarioId,
-      tab: "player-encounter",
+      tab: "combat",
     }),
   );
 }

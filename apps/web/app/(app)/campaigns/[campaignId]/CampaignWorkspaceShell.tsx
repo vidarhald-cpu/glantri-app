@@ -289,8 +289,10 @@ export default function CampaignWorkspaceShell({
       participantId:
         requestedTabFromUrl === "player-encounter" ||
         requestedTabFromUrl === "character" ||
+        requestedTabFromUrl === "combat" ||
         workspaceState.activeTab === "player-encounter" ||
-        workspaceState.activeTab === "character"
+        workspaceState.activeTab === "character" ||
+        workspaceState.activeTab === "combat"
           ? searchParams.get("participantId")
           : null,
       scenarioId:
@@ -553,6 +555,43 @@ export default function CampaignWorkspaceShell({
           scenarioParticipants={scenarioParticipants}
           selectedParticipantId={searchParams.get("participantId")}
         />
+      ) : null}
+
+      {accessMode !== "none" && workspaceState.activeTab === "combat" ? (
+        <section style={{ display: "grid", gap: "1rem" }}>
+          {workspaceState.activeScenarioId ? (
+            <ScenarioPlayerCombatPageContent
+              campaignId={campaignId}
+              encounterId={workspaceState.activeEncounterId}
+              embedded
+              encounterTitle={activeEncounter?.title}
+              participantId={searchParams.get("participantId") ?? undefined}
+              scenarioId={workspaceState.activeScenarioId}
+              workspaceTab="combat"
+            />
+          ) : (
+            <section style={panelStyle}>
+              <strong>Select a scenario to open the combat panel.</strong>
+              {scenarios.length > 0 ? (
+                <div style={{ display: "grid", gap: "0.5rem" }}>
+                  {scenarios.map((scenario) => (
+                    <Link
+                      key={scenario.id}
+                      href={buildWorkspaceHref({
+                        scenarioId: scenario.id,
+                        tab: "combat",
+                      })}
+                    >
+                      {scenario.name}
+                    </Link>
+                  ))}
+                </div>
+              ) : (
+                <div>No combat encounter is currently available.</div>
+              )}
+            </section>
+          )}
+        </section>
       ) : null}
     </section>
   );
