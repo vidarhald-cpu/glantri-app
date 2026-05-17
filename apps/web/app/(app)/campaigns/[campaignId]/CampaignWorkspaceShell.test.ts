@@ -42,6 +42,7 @@ describe("CampaignWorkspaceShell roleplay encounter routing", () => {
     expect(source).toContain('tab: "character"');
     expect(source).toContain("selectedParticipantId={searchParams.get(\"participantId\")}");
     expect(source).toContain("isGameMaster={canAccessGmEncounter}");
+    expect(source).toContain("currentRoundNumber={activeScenario?.liveState?.roundNumber}");
   });
 
   it("routes the workspace Combat tab through the recovered combat panel", () => {

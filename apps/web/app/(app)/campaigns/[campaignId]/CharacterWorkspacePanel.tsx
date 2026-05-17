@@ -13,6 +13,7 @@ import CharacterLoadoutView from "../../characters/[id]/components/CharacterLoad
 
 interface CharacterWorkspacePanelProps {
   activeEncounter?: EncounterSession;
+  currentRoundNumber?: number;
   currentUserId?: string | null;
   isGameMaster: boolean;
   onScenarioParticipantUpdated?: (participant: ScenarioParticipant) => void;
@@ -32,6 +33,7 @@ const panelStyle = {
 
 export default function CharacterWorkspacePanel({
   activeEncounter,
+  currentRoundNumber,
   currentUserId,
   isGameMaster,
   onScenarioParticipantUpdated,
@@ -202,6 +204,7 @@ export default function CharacterWorkspacePanel({
             characterId={selectedCandidate.characterId}
             onCombatEffectsChange={isGameMaster ? updateSelectedCombatEffects : undefined}
             physicalStateCombatEffects={selectedCandidate.scenarioParticipant.state.combatEffects}
+            physicalStateCurrentRoundNumber={currentRoundNumber}
             physicalStateEncounterId={activeEncounter?.id}
             physicalStateGeneralHitpoints={selectedCandidate.scenarioParticipant.state.health.maxHp}
             physicalStateScenarioId={scenarioId}

@@ -15,6 +15,7 @@ describe("CharacterWorkspacePanel", () => {
 
     expect(source).toContain("CharacterLoadoutView");
     expect(source).toContain("physicalStateGeneralHitpoints");
+    expect(source).toContain("physicalStateCurrentRoundNumber={currentRoundNumber}");
     expect(source).toContain("selectedCandidate.scenarioParticipant.state.health.maxHp");
     expect(source).not.toContain("Combat arena");
   });

@@ -18,18 +18,18 @@ export interface CombatEffectEditorDraft {
   effectGroup: CombatEffectGroup;
   effectId?: string;
   eventDescription?: string;
-  generalDamage: number;
-  location?: string;
+  locationIds: string[];
   modifierValue?: number;
   roundNumber?: number;
   sourceEventId?: string;
-  sourceLabel: string;
+  sourceLabel?: string;
   status: CombatEffectStatus;
   type: CombatEffectType;
 }
 
 interface PhysicalStateSectionProps {
   canEditCombatEffects?: boolean;
+  currentRoundNumber?: number;
   model: CharacterPhysicalStateView;
   onDeleteCombatEffect?: (effectId: string) => Promise<void> | void;
   onSaveCombatEffect?: (draft: CombatEffectEditorDraft) => Promise<void> | void;
@@ -60,18 +60,24 @@ const compactCellStyle = {
   padding: "0.35rem 0.45rem",
 } as const;
 
-const combatEffectTypes: Array<{ label: string; value: CombatEffectType }> = [
-  { label: "Physical damage", value: "physical_damage" },
-  { label: "General damage", value: "general_damage" },
+const compactInputStyle = {
+  minWidth: 0,
+  width: "100%",
+} as const;
+
+const numericInputStyle = {
+  ...compactInputStyle,
+  maxWidth: "4.5rem",
+} as const;
+
+const visibleCombatEffectTypes: Array<{ label: string; value: CombatEffectType }> = [
+  { label: "Physical", value: "physical_damage" },
+  { label: "General dmg", value: "general_damage" },
   { label: "Bleed", value: "bleed" },
   { label: "Fatigue", value: "fatigue" },
   { label: "Stun", value: "stun" },
   { label: "Fear", value: "fear" },
   { label: "Morale", value: "morale" },
-  { label: "General modifier", value: "general_modifier" },
-  { label: "OB/Skill modifier", value: "ob_skill_modifier" },
-  { label: "DB modifier", value: "db_modifier" },
-  { label: "Other modifier", value: "other_modifier" },
   { label: "Special", value: "special" },
   { label: "Healing", value: "healing" },
 ];
@@ -93,17 +99,18 @@ const combatEffectStatuses: Array<{ label: string; value: CombatEffectStatus }> 
   { label: "Superseded", value: "superseded" },
 ];
 
-const hitLocationOptions = [
-  { label: "None", value: "" },
-  { label: "Head", value: "head" },
-  { label: "Left arm", value: "leftArm" },
-  { label: "Right arm", value: "rightArm" },
-  { label: "Chest/back", value: "chestBack" },
-  { label: "Abdomen/lower back", value: "abdomenLowerBack" },
-  { label: "Upper left leg", value: "upperLeftLeg" },
-  { label: "Lower left leg", value: "lowerLeftLeg" },
-  { label: "Upper right leg", value: "upperRightLeg" },
-  { label: "Lower right leg", value: "lowerRightLeg" },
+const locationOptions = [
+  { fullLabel: "No location", label: "None", value: "" },
+  { fullLabel: "Head", label: "H", value: "head" },
+  { fullLabel: "Left arm", label: "LA", value: "leftArm" },
+  { fullLabel: "Right arm", label: "RA", value: "rightArm" },
+  { fullLabel: "Chest/back", label: "CB", value: "chestBack" },
+  { fullLabel: "Abdomen/lower back", label: "AB", value: "abdomenLowerBack" },
+  { fullLabel: "Upper left leg", label: "ULL", value: "upperLeftLeg" },
+  { fullLabel: "Lower left leg", label: "LLL", value: "lowerLeftLeg" },
+  { fullLabel: "Upper right leg", label: "URL", value: "upperRightLeg" },
+  { fullLabel: "Lower right leg", label: "LRL", value: "lowerRightLeg" },
+  { fullLabel: "General", label: "Gen", value: "general" },
 ];
 
 function createLocalId(prefix: string): string {
@@ -111,11 +118,14 @@ function createLocalId(prefix: string): string {
 }
 
 function formatEffectType(type: CombatEffectType): string {
-  return combatEffectTypes.find((option) => option.value === type)?.label ?? type;
+  return (
+    visibleCombatEffectTypes.find((option) => option.value === type)?.label ??
+    type.replaceAll("_", " ")
+  );
 }
 
 function formatLocation(location: string): string {
-  return hitLocationOptions.find((option) => option.value === location)?.label ?? location;
+  return locationOptions.find((option) => option.value === location)?.label ?? (location || "—");
 }
 
 function formatMainValue(entry: HitLogEntryView): string {
@@ -143,12 +153,19 @@ function parseInteger(value: string): number {
   return parseOptionalInteger(value) ?? 0;
 }
 
-function createBlankDraft(seed: Partial<CombatEffectEditorDraft> = {}): CombatEffectEditorDraft {
+function getDefaultRoundNumber(roundNumber?: number): number | undefined {
+  return roundNumber && roundNumber > 0 ? roundNumber : undefined;
+}
+
+function createBlankDraft(
+  seed: Partial<CombatEffectEditorDraft> = {},
+  currentRoundNumber?: number,
+): CombatEffectEditorDraft {
   return {
     damage: 0,
     effectGroup: "none",
-    generalDamage: 0,
-    sourceLabel: "",
+    locationIds: [],
+    roundNumber: getDefaultRoundNumber(currentRoundNumber),
     status: "active",
     type: "physical_damage",
     ...seed,
@@ -156,15 +173,19 @@ function createBlankDraft(seed: Partial<CombatEffectEditorDraft> = {}): CombatEf
 }
 
 function draftFromEntry(entry: HitLogEntryView): CombatEffectEditorDraft {
+  const locationIds = [
+    entry.location || undefined,
+    entry.generalDamage !== 0 ? "general" : undefined,
+  ].filter((value): value is string => Boolean(value));
+
   return createBlankDraft({
-    damage: entry.damage,
+    damage: entry.location ? entry.damage : entry.generalDamage,
     description: entry.specialEffects || undefined,
     duration: entry.duration || undefined,
     effectGroup: entry.effectGroup,
     effectId: entry.id,
     eventDescription: entry.eventDescription || undefined,
-    generalDamage: entry.generalDamage,
-    location: entry.location || undefined,
+    locationIds,
     modifierValue: entry.modifierValue,
     roundNumber: typeof entry.roundNumber === "number" ? entry.roundNumber : undefined,
     sourceEventId: entry.sourceEventId,
@@ -172,6 +193,14 @@ function draftFromEntry(entry: HitLogEntryView): CombatEffectEditorDraft {
     status: entry.status,
     type: entry.type,
   });
+}
+
+function buildGeneratedSourceLabel(draft: CombatEffectEditorDraft): string {
+  const typeLabel = formatEffectType(draft.type);
+  const round = draft.roundNumber ? `R${draft.roundNumber}` : "Manual";
+  const detail = draft.eventDescription?.trim();
+
+  return detail ? `${round} · ${typeLabel} · ${detail}` : `${round} · ${typeLabel}`;
 }
 
 function HitpointsPanel({ model }: PhysicalStateSectionProps) {
@@ -238,14 +267,17 @@ function DamageByTypePanel({ model }: PhysicalStateSectionProps) {
 
 function CombatEffectsPanel({
   canEditCombatEffects,
+  currentRoundNumber,
   model,
   onDeleteCombatEffect,
   onSaveCombatEffect,
 }: PhysicalStateSectionProps) {
-  const [draft, setDraft] = useState<CombatEffectEditorDraft>(createBlankDraft());
+  const [draft, setDraft] = useState<CombatEffectEditorDraft>(
+    createBlankDraft({}, currentRoundNumber),
+  );
   const [saving, setSaving] = useState(false);
   const selectedEffectId = draft.effectId;
-  const canSave = Boolean(draft.sourceLabel.trim()) && Boolean(onSaveCombatEffect);
+  const canSave = Boolean(onSaveCombatEffect);
 
   function selectEntry(entry: HitLogEntryView) {
     if (!canEditCombatEffects) {
@@ -257,17 +289,45 @@ function CombatEffectsPanel({
 
   function startLinkedEffect() {
     setDraft(
-      createBlankDraft({
-        eventDescription: draft.eventDescription,
-        roundNumber: draft.roundNumber,
-        sourceEventId: draft.sourceEventId,
-        sourceLabel: draft.sourceLabel,
-      }),
+      createBlankDraft(
+        {
+          eventDescription: draft.eventDescription,
+          roundNumber: draft.roundNumber,
+          sourceEventId: draft.sourceEventId,
+          sourceLabel: draft.sourceLabel,
+        },
+        currentRoundNumber,
+      ),
     );
   }
 
   function startNewEvent() {
-    setDraft(createBlankDraft());
+    setDraft(createBlankDraft({}, currentRoundNumber));
+  }
+
+  function toggleLocation(value: string) {
+    setDraft((current) => {
+      if (value === "") {
+        return {
+          ...current,
+          locationIds: [],
+        };
+      }
+
+      if (current.effectId) {
+        return {
+          ...current,
+          locationIds: current.locationIds.includes(value) ? [] : [value],
+        };
+      }
+
+      return {
+        ...current,
+        locationIds: current.locationIds.includes(value)
+          ? current.locationIds.filter((locationId) => locationId !== value)
+          : [...current.locationIds, value],
+      };
+    });
   }
 
   async function submitForm(event: FormEvent<HTMLFormElement>) {
@@ -280,6 +340,7 @@ function CombatEffectsPanel({
     const draftToSave = {
       ...draft,
       sourceEventId: draft.sourceEventId ?? createLocalId("combat-event"),
+      sourceLabel: draft.sourceLabel ?? buildGeneratedSourceLabel(draft),
     };
 
     setSaving(true);
@@ -287,12 +348,15 @@ function CombatEffectsPanel({
     try {
       await onSaveCombatEffect(draftToSave);
       setDraft(
-        createBlankDraft({
-          eventDescription: draftToSave.eventDescription,
-          roundNumber: draftToSave.roundNumber,
-          sourceEventId: draftToSave.sourceEventId,
-          sourceLabel: draftToSave.sourceLabel,
-        }),
+        createBlankDraft(
+          {
+            eventDescription: draftToSave.eventDescription,
+            roundNumber: draftToSave.roundNumber,
+            sourceEventId: draftToSave.sourceEventId,
+            sourceLabel: draftToSave.sourceLabel,
+          },
+          currentRoundNumber,
+        ),
       );
     } finally {
       setSaving(false);
@@ -317,16 +381,16 @@ function CombatEffectsPanel({
   return (
     <section style={panelStyle}>
       <h3 style={{ margin: 0 }}>Combat effects</h3>
-      <div style={{ overflowX: "auto" }}>
+      <div style={{ maxHeight: "18rem", overflow: "auto" }}>
         <table style={tableStyle}>
           <thead>
             <tr>
-              <th style={compactCellStyle}>Round #</th>
-              <th style={compactCellStyle}>Source</th>
+              <th style={compactCellStyle}>Round</th>
+              <th style={compactCellStyle}>Event</th>
               <th style={compactCellStyle}>Type</th>
-              <th style={compactCellStyle}>Location</th>
+              <th style={compactCellStyle}>Loc</th>
               <th style={compactCellStyle}>Value</th>
-              <th style={compactCellStyle}>Duration/status</th>
+              <th style={compactCellStyle}>Dur/Sta</th>
               <th style={compactCellStyle}>Details</th>
             </tr>
           </thead>
@@ -364,18 +428,32 @@ function CombatEffectsPanel({
       </div>
 
       {canEditCombatEffects ? (
-        <form onSubmit={submitForm} style={{ display: "grid", gap: "0.65rem" }}>
-          <strong>{selectedEffectId ? "Edit selected effect" : "New combat effect"}</strong>
+        <form
+          onSubmit={submitForm}
+          style={{
+            background: "#fbfaf6",
+            borderTop: "1px solid #e6e8e3",
+            bottom: 0,
+            display: "grid",
+            gap: "0.45rem",
+            paddingTop: "0.65rem",
+            position: "sticky",
+          }}
+        >
+          <strong>{selectedEffectId ? "Edit selected effect" : "New effect"}</strong>
           <div
             style={{
+              alignItems: "end",
               display: "grid",
-              gap: "0.5rem",
-              gridTemplateColumns: "minmax(5rem, 0.5fr) minmax(9rem, 1fr) minmax(12rem, 1.2fr)",
+              gap: "0.45rem",
+              gridTemplateColumns:
+                "4rem 8rem 7rem minmax(12rem, 1.2fr) 4rem 4rem 5rem 5rem minmax(10rem, 1fr) auto",
             }}
           >
             <label style={{ display: "grid", gap: "0.2rem" }}>
-              <span>Round #</span>
+              <span>Round</span>
               <input
+                max={999}
                 min={1}
                 onChange={(event) =>
                   setDraft((current) => ({
@@ -383,40 +461,11 @@ function CombatEffectsPanel({
                     roundNumber: parseOptionalInteger(event.target.value),
                   }))
                 }
+                style={numericInputStyle}
                 type="number"
                 value={draft.roundNumber ?? ""}
               />
             </label>
-            <label style={{ display: "grid", gap: "0.2rem" }}>
-              <span>Source/Event label</span>
-              <input
-                onChange={(event) =>
-                  setDraft((current) => ({ ...current, sourceLabel: event.target.value }))
-                }
-                required
-                value={draft.sourceLabel}
-              />
-            </label>
-            <label style={{ display: "grid", gap: "0.2rem" }}>
-              <span>Description</span>
-              <input
-                onChange={(event) =>
-                  setDraft((current) => ({
-                    ...current,
-                    eventDescription: event.target.value,
-                  }))
-                }
-                value={draft.eventDescription ?? ""}
-              />
-            </label>
-          </div>
-          <div
-            style={{
-              display: "grid",
-              gap: "0.5rem",
-              gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 7.5rem), 1fr))",
-            }}
-          >
             <label style={{ display: "grid", gap: "0.2rem" }}>
               <span>Type</span>
               <select
@@ -426,9 +475,10 @@ function CombatEffectsPanel({
                     type: event.target.value as CombatEffectType,
                   }))
                 }
+                style={compactInputStyle}
                 value={draft.type}
               >
-                {combatEffectTypes.map((option) => (
+                {visibleCombatEffectTypes.map((option) => (
                   <option key={option.value} value={option.value}>
                     {option.label}
                   </option>
@@ -436,7 +486,7 @@ function CombatEffectsPanel({
               </select>
             </label>
             <label style={{ display: "grid", gap: "0.2rem" }}>
-              <span>Effect group</span>
+              <span>Group</span>
               <select
                 onChange={(event) =>
                   setDraft((current) => ({
@@ -444,6 +494,7 @@ function CombatEffectsPanel({
                     effectGroup: event.target.value as CombatEffectGroup,
                   }))
                 }
+                style={compactInputStyle}
                 value={draft.effectGroup}
               >
                 {combatEffectGroups.map((option) => (
@@ -453,26 +504,40 @@ function CombatEffectsPanel({
                 ))}
               </select>
             </label>
+            <fieldset
+              style={{
+                border: "0",
+                display: "flex",
+                flexWrap: "wrap",
+                gap: "0.25rem",
+                margin: 0,
+                minWidth: 0,
+                padding: 0,
+              }}
+            >
+              <legend style={{ fontSize: "0.9rem", fontWeight: 700, padding: 0 }}>Loc</legend>
+              {locationOptions.map((option) => (
+                <label
+                  key={option.value}
+                  title={option.fullLabel}
+                  style={{
+                    alignItems: "center",
+                    display: "inline-flex",
+                    gap: "0.15rem",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  <input
+                    checked={draft.locationIds.includes(option.value)}
+                    onChange={() => toggleLocation(option.value)}
+                    type="checkbox"
+                  />
+                  {option.label}
+                </label>
+              ))}
+            </fieldset>
             <label style={{ display: "grid", gap: "0.2rem" }}>
-              <span>Location</span>
-              <select
-                onChange={(event) =>
-                  setDraft((current) => ({
-                    ...current,
-                    location: event.target.value || undefined,
-                  }))
-                }
-                value={draft.location ?? ""}
-              >
-                {hitLocationOptions.map((option) => (
-                  <option key={option.value || "none"} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label style={{ display: "grid", gap: "0.2rem" }}>
-              <span>Damage</span>
+              <span>Dam</span>
               <input
                 onChange={(event) =>
                   setDraft((current) => ({
@@ -480,25 +545,13 @@ function CombatEffectsPanel({
                     damage: parseInteger(event.target.value),
                   }))
                 }
+                style={numericInputStyle}
                 type="number"
                 value={draft.damage}
               />
             </label>
             <label style={{ display: "grid", gap: "0.2rem" }}>
-              <span>General damage</span>
-              <input
-                onChange={(event) =>
-                  setDraft((current) => ({
-                    ...current,
-                    generalDamage: parseInteger(event.target.value),
-                  }))
-                }
-                type="number"
-                value={draft.generalDamage}
-              />
-            </label>
-            <label style={{ display: "grid", gap: "0.2rem" }}>
-              <span>Modifier</span>
+              <span>Mod</span>
               <input
                 onChange={(event) =>
                   setDraft((current) => ({
@@ -506,21 +559,23 @@ function CombatEffectsPanel({
                     modifierValue: parseOptionalInteger(event.target.value),
                   }))
                 }
+                style={numericInputStyle}
                 type="number"
                 value={draft.modifierValue ?? ""}
               />
             </label>
             <label style={{ display: "grid", gap: "0.2rem" }}>
-              <span>Duration</span>
+              <span>Dur</span>
               <input
                 onChange={(event) =>
                   setDraft((current) => ({ ...current, duration: event.target.value }))
                 }
+                style={compactInputStyle}
                 value={draft.duration ?? ""}
               />
             </label>
             <label style={{ display: "grid", gap: "0.2rem" }}>
-              <span>Status</span>
+              <span>Sta</span>
               <select
                 onChange={(event) =>
                   setDraft((current) => ({
@@ -528,6 +583,7 @@ function CombatEffectsPanel({
                     status: event.target.value as CombatEffectStatus,
                   }))
                 }
+                style={compactInputStyle}
                 value={draft.status}
               >
                 {combatEffectStatuses.map((option) => (
@@ -537,33 +593,38 @@ function CombatEffectsPanel({
                 ))}
               </select>
             </label>
-          </div>
-          <label style={{ display: "grid", gap: "0.2rem" }}>
-            <span>Special effects</span>
-            <input
-              onChange={(event) =>
-                setDraft((current) => ({ ...current, description: event.target.value }))
-              }
-              value={draft.description ?? ""}
-            />
-          </label>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
-            <button disabled={!canSave || saving} type="submit">
-              Save
-            </button>
-            <button disabled={saving} onClick={startLinkedEffect} type="button">
-              Same event as selected
-            </button>
-            <button disabled={saving} onClick={startNewEvent} type="button">
-              Cancel
-            </button>
-            <button
-              disabled={!selectedEffectId || !onDeleteCombatEffect || saving}
-              onClick={deleteSelectedEffect}
-              type="button"
-            >
-              Delete
-            </button>
+            <label style={{ display: "grid", gap: "0.2rem" }}>
+              <span>Details</span>
+              <input
+                onChange={(event) =>
+                  setDraft((current) => ({
+                    ...current,
+                    description: event.target.value,
+                    eventDescription: event.target.value,
+                  }))
+                }
+                style={compactInputStyle}
+                value={draft.description ?? draft.eventDescription ?? ""}
+              />
+            </label>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "0.35rem" }}>
+              <button disabled={!canSave || saving} type="submit">
+                Save
+              </button>
+              <button disabled={saving} onClick={startLinkedEffect} type="button">
+                Same event
+              </button>
+              <button disabled={saving} onClick={startNewEvent} type="button">
+                Cancel
+              </button>
+              <button
+                disabled={!selectedEffectId || !onDeleteCombatEffect || saving}
+                onClick={deleteSelectedEffect}
+                type="button"
+              >
+                Delete
+              </button>
+            </div>
           </div>
         </form>
       ) : null}
@@ -573,6 +634,7 @@ function CombatEffectsPanel({
 
 export function PhysicalStateSection({
   canEditCombatEffects,
+  currentRoundNumber,
   model,
   onDeleteCombatEffect,
   onSaveCombatEffect,
@@ -593,6 +655,7 @@ export function PhysicalStateSection({
       </div>
       <CombatEffectsPanel
         canEditCombatEffects={canEditCombatEffects}
+        currentRoundNumber={currentRoundNumber}
         model={model}
         onDeleteCombatEffect={onDeleteCombatEffect}
         onSaveCombatEffect={onSaveCombatEffect}

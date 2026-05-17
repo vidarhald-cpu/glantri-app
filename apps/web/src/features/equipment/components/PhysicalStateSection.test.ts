@@ -35,11 +35,11 @@ describe("PhysicalStateSection", () => {
     expect(source).toContain("Location");
     expect(source).toContain("Original");
     expect(source).toContain("Current");
-    expect(source).toContain("Round #");
-    expect(source).toContain("Source");
+    expect(source).toContain("Round");
+    expect(source).toContain("Event");
     expect(source).toContain("Value");
-    expect(source).toContain("Duration/status");
-    expect(source).toContain("Special effects");
+    expect(source).toContain("Dur/Sta");
+    expect(source).toContain("Details");
     expect(source).toContain("Current effect");
     expect(source).toContain("Save");
     expect(source).toContain("Delete");
@@ -48,17 +48,24 @@ describe("PhysicalStateSection", () => {
   it("keeps the manual combat effect editor compact and tied to selected rows", () => {
     const source = readSource();
 
-    expect(source).toContain("New combat effect");
+    expect(source).toContain("New effect");
     expect(source).toContain("Edit selected effect");
-    expect(source).toContain("Same event as selected");
-    expect(source).toContain("Source/Event label");
-    expect(source).toContain("Modifier");
+    expect(source).toContain("Same event");
+    expect(source).toContain("Round");
+    expect(source).toContain("Loc");
+    expect(source).toContain("Dam");
+    expect(source).toContain("Mod");
+    expect(source).toContain("Dur");
+    expect(source).toContain("Sta");
     expect(source).toContain("onSaveCombatEffect");
     expect(source).toContain('type: "physical_damage"');
     expect(source).toContain('effectGroup: "none"');
     expect(source).toContain("sourceEventId: draft.sourceEventId ?? createLocalId");
+    expect(source).toContain("position: \"sticky\"");
     expect(source).not.toContain("Add combat effect event");
     expect(source).not.toContain("Add effect row");
+    expect(source).not.toContain("Source/Event label");
+    expect(source).not.toContain("General damage");
     expect(source).not.toContain("Future phases will");
   });
 
@@ -66,6 +73,24 @@ describe("PhysicalStateSection", () => {
     const source = readSource();
 
     expect(source).toContain('{ label: "None", value: "none" }');
-    expect(source).toContain('{ label: "None", value: "" }');
+    expect(source).toContain('{ fullLabel: "No location", label: "None", value: "" }');
+  });
+
+  it("keeps type and modifier group choices separate in the compact editor", () => {
+    const source = readSource();
+
+    expect(source).toContain('{ label: "Physical", value: "physical_damage" }');
+    expect(source).toContain('{ label: "Stun", value: "stun" }');
+    expect(source).toContain('{ label: "OB/Skill", value: "obSkill" }');
+    expect(source).not.toContain('{ label: "General modifier", value: "general_modifier" }');
+    expect(source).not.toContain('{ label: "OB/Skill modifier", value: "ob_skill_modifier" }');
+  });
+
+  it("uses compact hit location selectors including general damage", () => {
+    const source = readSource();
+
+    for (const label of ["H", "LA", "RA", "CB", "AB", "ULL", "LLL", "URL", "LRL", "Gen"]) {
+      expect(source).toContain(`label: "${label}"`);
+    }
   });
 });

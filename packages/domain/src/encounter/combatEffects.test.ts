@@ -118,4 +118,34 @@ describe("combat effect state", () => {
 
     expect(parsed.effects[0]?.effectGroup).toBe("none");
   });
+
+  it("keeps legacy modifier-style effect types parseable for saved combat effects", () => {
+    const parsed = combatEffectsStateSchema.parse({
+      effects: [
+        {
+          createdAt: "2026-05-17T10:00:00.000Z",
+          damage: 0,
+          effectGroup: "obSkill",
+          generalDamage: 0,
+          id: "effect-legacy-ob",
+          modifierValue: -4,
+          sourceEventId: "event-legacy",
+          status: "active",
+          targetParticipantId: "participant-1",
+          type: "ob_skill_modifier",
+          updatedAt: "2026-05-17T10:00:00.000Z",
+        },
+      ],
+      events: [
+        {
+          createdAt: "2026-05-17T10:00:00.000Z",
+          id: "event-legacy",
+          sourceLabel: "Older saved effect",
+          targetParticipantId: "participant-1",
+        },
+      ],
+    });
+
+    expect(parsed.effects[0]?.type).toBe("ob_skill_modifier");
+  });
 });

@@ -198,6 +198,9 @@ export default function CampaignWorkspaceShell({
     encounters,
     scenarioId: workspaceState.activeScenarioId,
   });
+  const activeScenario = scenarios.find(
+    (scenario) => scenario.id === workspaceState.activeScenarioId
+  );
   const activeEncounter = activeScenarioEncounters.find(
     (encounter) => encounter.id === workspaceState.activeEncounterId
   );
@@ -541,6 +544,7 @@ export default function CampaignWorkspaceShell({
       {accessMode !== "none" && workspaceState.activeTab === "character" ? (
         <CharacterWorkspacePanel
           activeEncounter={activeEncounter}
+          currentRoundNumber={activeScenario?.liveState?.roundNumber}
           currentUserId={currentUser?.id}
           isGameMaster={canAccessGmEncounter}
           onSelectParticipantId={(participantId) => {

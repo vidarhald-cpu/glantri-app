@@ -36,6 +36,7 @@ interface CharacterLoadoutViewProps {
   physicalStateCombatEffects?: CombatEffectsState;
   physicalStateEncounterId?: string;
   physicalStateGeneralHitpoints?: number | null;
+  physicalStateCurrentRoundNumber?: number;
   physicalStateScenarioId?: string;
   physicalStateTargetParticipantId?: string;
   showPhysicalState?: boolean;
@@ -64,6 +65,7 @@ export default function CharacterLoadoutView({
   characterId,
   onCombatEffectsChange,
   physicalStateCombatEffects,
+  physicalStateCurrentRoundNumber,
   physicalStateEncounterId,
   physicalStateGeneralHitpoints,
   physicalStateScenarioId,
@@ -181,6 +183,59 @@ export default function CharacterLoadoutView({
     return `${prefix}-${globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`}`;
   }
 
+  function buildCombatEffectSourceLabel(draft: CombatEffectEditorDraft): string {
+    if (draft.sourceLabel?.trim()) {
+      return draft.sourceLabel.trim();
+    }
+
+    const roundLabel = draft.roundNumber ? `R${draft.roundNumber}` : "Manual";
+    const detail =
+      draft.eventDescription?.trim() ||
+      draft.description?.trim() ||
+      draft.type.replaceAll("_", " ");
+
+    return `${roundLabel} · ${detail}`;
+  }
+
+  function buildCombatEffectsFromDraft(input: {
+    draft: CombatEffectEditorDraft;
+    eventId: string;
+    existingEffect?: CombatEffect;
+    now: string;
+  }): CombatEffect[] {
+    const { draft, eventId, existingEffect, now } = input;
+    const selectedLocations = draft.locationIds.length > 0 ? draft.locationIds : [""];
+
+    return selectedLocations.map((selectedLocation, index) => {
+      const isGeneralDamage = selectedLocation === "general";
+      const isBodyLocation = Boolean(selectedLocation && selectedLocation !== "general");
+      const effectType =
+        isGeneralDamage && draft.type === "physical_damage" ? "general_damage" : draft.type;
+      const reusableExistingEffect = index === 0 ? existingEffect : undefined;
+
+      return {
+        checkRequired: reusableExistingEffect?.checkRequired,
+        checkSkillOrStat: reusableExistingEffect?.checkSkillOrStat,
+        createdAt: reusableExistingEffect?.createdAt ?? now,
+        damage: isBodyLocation ? draft.damage : 0,
+        description: draft.description,
+        duration: draft.duration,
+        effectGroup: draft.effectGroup,
+        expiresAtRound: reusableExistingEffect?.expiresAtRound,
+        generalDamage: isGeneralDamage ? draft.damage : 0,
+        id: reusableExistingEffect?.id ?? createCombatEffectId("combat-effect"),
+        location: isBodyLocation ? selectedLocation : undefined,
+        modifierValue: draft.modifierValue,
+        roundNumber: draft.roundNumber,
+        sourceEventId: eventId,
+        status: draft.status,
+        targetParticipantId: physicalStateTargetParticipantId ?? "",
+        type: effectType,
+        updatedAt: now,
+      };
+    });
+  }
+
   async function saveCombatEffect(draft: CombatEffectEditorDraft) {
     if (!physicalStateTargetParticipantId || !onCombatEffectsChange) {
       return;
@@ -200,7 +255,7 @@ export default function CharacterLoadoutView({
       roundNumber: draft.roundNumber,
       scenarioId: physicalStateScenarioId || undefined,
       sourceActorId: existingEvent?.sourceActorId,
-      sourceLabel: draft.sourceLabel,
+      sourceLabel: buildCombatEffectSourceLabel(draft),
       sourceType: existingEvent?.sourceType ?? "manual",
       targetParticipantId: physicalStateTargetParticipantId,
     };
@@ -208,33 +263,19 @@ export default function CharacterLoadoutView({
     const existingEffect = draft.effectId
       ? currentCombatEffects.effects.find((effect) => effect.id === draft.effectId)
       : undefined;
-    const nextEffect: CombatEffect = {
-      checkRequired: existingEffect?.checkRequired,
-      checkSkillOrStat: existingEffect?.checkSkillOrStat,
-      createdAt: existingEffect?.createdAt ?? now,
-      damage: draft.damage,
-      description: draft.description,
-      duration: draft.duration,
-      effectGroup: draft.effectGroup,
-      expiresAtRound: existingEffect?.expiresAtRound,
-      generalDamage: draft.generalDamage,
-      id: existingEffect?.id ?? createCombatEffectId("combat-effect"),
-      location: draft.location,
-      modifierValue: draft.modifierValue,
-      roundNumber: draft.roundNumber,
-      sourceEventId: eventId,
-      status: draft.status,
-      targetParticipantId: physicalStateTargetParticipantId,
-      type: draft.type,
-      updatedAt: now,
-    };
+    const nextEffectsFromDraft = buildCombatEffectsFromDraft({
+      draft,
+      eventId,
+      existingEffect,
+      now,
+    });
 
     await onCombatEffectsChange({
       effects: existingEffect
-        ? currentCombatEffects.effects.map((effect) =>
-            effect.id === existingEffect.id ? nextEffect : effect
+        ? currentCombatEffects.effects.flatMap((effect) =>
+            effect.id === existingEffect.id ? nextEffectsFromDraft : [effect],
           )
-        : [...currentCombatEffects.effects, nextEffect],
+        : [...currentCombatEffects.effects, ...nextEffectsFromDraft],
       events: existingEvent
         ? currentCombatEffects.events.map((event) =>
             event.id === existingEvent.id ? nextEvent : event
@@ -411,6 +452,7 @@ export default function CharacterLoadoutView({
             physicalStateModel ? (
               <PhysicalStateSection
                 canEditCombatEffects={canEditCombatEffects}
+                currentRoundNumber={physicalStateCurrentRoundNumber}
                 model={physicalStateModel}
                 onDeleteCombatEffect={deleteCombatEffect}
                 onSaveCombatEffect={saveCombatEffect}
