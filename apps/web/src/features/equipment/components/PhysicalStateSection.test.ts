@@ -22,6 +22,13 @@ describe("PhysicalStateSection", () => {
     expect(source).not.toContain("weight");
   });
 
+  it("keeps the summary panels in a responsive two-column row", () => {
+    const source = readSource();
+
+    expect(source).toContain('gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 20rem), 1fr))"');
+    expect(source).toContain('alignItems: "start"');
+  });
+
   it("renders the combat effects and hitpoint table columns", () => {
     const source = readSource();
 

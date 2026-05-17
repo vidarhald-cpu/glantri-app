@@ -150,9 +150,10 @@ export function PhysicalStateSection({ model }: PhysicalStateSectionProps) {
       <h2 style={{ margin: 0 }}>Physical state</h2>
       <div
         style={{
+          alignItems: "start",
           display: "grid",
           gap: "0.75rem",
-          gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 28rem), 1fr))",
+          gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 20rem), 1fr))",
         }}
       >
         <HitpointsPanel model={model} />
