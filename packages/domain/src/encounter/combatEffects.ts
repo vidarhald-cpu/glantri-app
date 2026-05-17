@@ -30,6 +30,7 @@ export const combatEffectTypeSchema = z.enum([
 ]);
 
 export const combatEffectGroupSchema = z.enum([
+  "none",
   "general",
   "obSkill",
   "db",

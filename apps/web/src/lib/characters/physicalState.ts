@@ -1,4 +1,4 @@
-import type { CombatEffect, CombatEffectsState } from "@glantri/domain";
+import type { CombatEffect, CombatEffectGroup, CombatEffectStatus, CombatEffectType, CombatEffectsState } from "@glantri/domain";
 
 export interface HitLocationDefinition {
   id: string;
@@ -24,14 +24,18 @@ export interface DamageByTypeView {
 export interface HitLogEntryView {
   damage: number;
   duration: string;
+  effectGroup: CombatEffectGroup;
+  eventDescription: string;
   generalDamage: number;
   id: string;
   location: string;
+  modifierValue?: number;
   roundNumber: number | string;
   source: string;
+  sourceEventId: string;
   specialEffects: string;
-  status?: string;
-  type: string;
+  status: CombatEffectStatus;
+  type: CombatEffectType;
 }
 
 export interface CharacterPhysicalStateView {
@@ -156,6 +160,7 @@ function buildHitLog(combatEffects: CombatEffectsState): HitLogEntryView[] {
     combatEffects.events.map((event) => [
       event.id,
       {
+        description: event.description,
         roundNumber: event.roundNumber,
         source: event.sourceLabel || event.description || "Combat effect",
       },
@@ -165,11 +170,15 @@ function buildHitLog(combatEffects: CombatEffectsState): HitLogEntryView[] {
   return combatEffects.effects.map((effect) => ({
     damage: effect.damage,
     duration: effect.duration ?? "",
+    effectGroup: effect.effectGroup,
+    eventDescription: eventsById.get(effect.sourceEventId)?.description ?? "",
     generalDamage: effect.generalDamage,
     id: effect.id,
     location: effect.location ?? "",
+    modifierValue: effect.modifierValue,
     roundNumber: effect.roundNumber ?? eventsById.get(effect.sourceEventId)?.roundNumber ?? "",
     source: eventsById.get(effect.sourceEventId)?.source ?? "Combat effect",
+    sourceEventId: effect.sourceEventId,
     specialEffects: effect.description ?? "",
     status: effect.status,
     type: effect.type,

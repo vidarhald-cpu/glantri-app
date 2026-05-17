@@ -1,31 +1,38 @@
 import { useState, type FormEvent } from "react";
 
-import type { CharacterPhysicalStateView } from "@/lib/characters/physicalState";
-import type { CombatEffectGroup, CombatEffectType } from "@glantri/domain";
+import type {
+  CombatEffectGroup,
+  CombatEffectStatus,
+  CombatEffectType,
+} from "@glantri/domain";
 
-export interface CombatEffectDraftRow {
+import type {
+  CharacterPhysicalStateView,
+  HitLogEntryView,
+} from "@/lib/characters/physicalState";
+
+export interface CombatEffectEditorDraft {
   damage: number;
   description?: string;
   duration?: string;
   effectGroup: CombatEffectGroup;
+  effectId?: string;
+  eventDescription?: string;
   generalDamage: number;
   location?: string;
   modifierValue?: number;
-  type: CombatEffectType;
-}
-
-export interface CombatEffectEventDraft {
-  description?: string;
-  effects: CombatEffectDraftRow[];
   roundNumber?: number;
+  sourceEventId?: string;
   sourceLabel: string;
+  status: CombatEffectStatus;
+  type: CombatEffectType;
 }
 
 interface PhysicalStateSectionProps {
   canEditCombatEffects?: boolean;
   model: CharacterPhysicalStateView;
-  onAddCombatEffectEvent?: (draft: CombatEffectEventDraft) => Promise<void> | void;
   onDeleteCombatEffect?: (effectId: string) => Promise<void> | void;
+  onSaveCombatEffect?: (draft: CombatEffectEditorDraft) => Promise<void> | void;
 }
 
 const panelStyle = {
@@ -48,6 +55,11 @@ const cellStyle = {
   textAlign: "left",
 } as const;
 
+const compactCellStyle = {
+  ...cellStyle,
+  padding: "0.35rem 0.45rem",
+} as const;
+
 const combatEffectTypes: Array<{ label: string; value: CombatEffectType }> = [
   { label: "Physical damage", value: "physical_damage" },
   { label: "General damage", value: "general_damage" },
@@ -65,6 +77,7 @@ const combatEffectTypes: Array<{ label: string; value: CombatEffectType }> = [
 ];
 
 const combatEffectGroups: Array<{ label: string; value: CombatEffectGroup }> = [
+  { label: "None", value: "none" },
   { label: "General", value: "general" },
   { label: "OB/Skill", value: "obSkill" },
   { label: "DB", value: "db" },
@@ -73,8 +86,15 @@ const combatEffectGroups: Array<{ label: string; value: CombatEffectGroup }> = [
   { label: "Special", value: "special" },
 ];
 
+const combatEffectStatuses: Array<{ label: string; value: CombatEffectStatus }> = [
+  { label: "Active", value: "active" },
+  { label: "Resolved", value: "resolved" },
+  { label: "Expired", value: "expired" },
+  { label: "Superseded", value: "superseded" },
+];
+
 const hitLocationOptions = [
-  { label: "General", value: "" },
+  { label: "None", value: "" },
   { label: "Head", value: "head" },
   { label: "Left arm", value: "leftArm" },
   { label: "Right arm", value: "rightArm" },
@@ -86,8 +106,26 @@ const hitLocationOptions = [
   { label: "Lower right leg", value: "lowerRightLeg" },
 ];
 
-function formatEffectType(type: string): string {
+function createLocalId(prefix: string): string {
+  return `${prefix}-${globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`}`;
+}
+
+function formatEffectType(type: CombatEffectType): string {
   return combatEffectTypes.find((option) => option.value === type)?.label ?? type;
+}
+
+function formatLocation(location: string): string {
+  return hitLocationOptions.find((option) => option.value === location)?.label ?? location;
+}
+
+function formatMainValue(entry: HitLogEntryView): string {
+  const parts = [
+    entry.damage !== 0 ? `damage ${entry.damage}` : undefined,
+    entry.generalDamage !== 0 ? `general ${entry.generalDamage}` : undefined,
+    entry.modifierValue != null ? `mod ${entry.modifierValue}` : undefined,
+  ].filter((value): value is string => Boolean(value));
+
+  return parts.length > 0 ? parts.join(" · ") : "—";
 }
 
 function parseOptionalInteger(value: string): number | undefined {
@@ -105,28 +143,35 @@ function parseInteger(value: string): number {
   return parseOptionalInteger(value) ?? 0;
 }
 
-interface CombatEffectFormRow {
-  damage: string;
-  duration: string;
-  effectGroup: CombatEffectGroup;
-  generalDamage: string;
-  location: string;
-  modifierValue: string;
-  specialEffects: string;
-  type: CombatEffectType;
+function createBlankDraft(seed: Partial<CombatEffectEditorDraft> = {}): CombatEffectEditorDraft {
+  return {
+    damage: 0,
+    effectGroup: "none",
+    generalDamage: 0,
+    sourceLabel: "",
+    status: "active",
+    type: "physical_damage",
+    ...seed,
+  };
 }
 
-function createBlankEffectFormRow(): CombatEffectFormRow {
-  return {
-    damage: "0",
-    duration: "",
-    effectGroup: "other",
-    generalDamage: "0",
-    location: "",
-    modifierValue: "",
-    specialEffects: "",
-    type: "physical_damage",
-  };
+function draftFromEntry(entry: HitLogEntryView): CombatEffectEditorDraft {
+  return createBlankDraft({
+    damage: entry.damage,
+    description: entry.specialEffects || undefined,
+    duration: entry.duration || undefined,
+    effectGroup: entry.effectGroup,
+    effectId: entry.id,
+    eventDescription: entry.eventDescription || undefined,
+    generalDamage: entry.generalDamage,
+    location: entry.location || undefined,
+    modifierValue: entry.modifierValue,
+    roundNumber: typeof entry.roundNumber === "number" ? entry.roundNumber : undefined,
+    sourceEventId: entry.sourceEventId,
+    sourceLabel: entry.source,
+    status: entry.status,
+    type: entry.type,
+  });
 }
 
 function HitpointsPanel({ model }: PhysicalStateSectionProps) {
@@ -191,11 +236,84 @@ function DamageByTypePanel({ model }: PhysicalStateSectionProps) {
   );
 }
 
-function HitLogPanel({
+function CombatEffectsPanel({
   canEditCombatEffects,
   model,
   onDeleteCombatEffect,
+  onSaveCombatEffect,
 }: PhysicalStateSectionProps) {
+  const [draft, setDraft] = useState<CombatEffectEditorDraft>(createBlankDraft());
+  const [saving, setSaving] = useState(false);
+  const selectedEffectId = draft.effectId;
+  const canSave = Boolean(draft.sourceLabel.trim()) && Boolean(onSaveCombatEffect);
+
+  function selectEntry(entry: HitLogEntryView) {
+    if (!canEditCombatEffects) {
+      return;
+    }
+
+    setDraft(draftFromEntry(entry));
+  }
+
+  function startLinkedEffect() {
+    setDraft(
+      createBlankDraft({
+        eventDescription: draft.eventDescription,
+        roundNumber: draft.roundNumber,
+        sourceEventId: draft.sourceEventId,
+        sourceLabel: draft.sourceLabel,
+      }),
+    );
+  }
+
+  function startNewEvent() {
+    setDraft(createBlankDraft());
+  }
+
+  async function submitForm(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!canSave || !onSaveCombatEffect) {
+      return;
+    }
+
+    const draftToSave = {
+      ...draft,
+      sourceEventId: draft.sourceEventId ?? createLocalId("combat-event"),
+    };
+
+    setSaving(true);
+
+    try {
+      await onSaveCombatEffect(draftToSave);
+      setDraft(
+        createBlankDraft({
+          eventDescription: draftToSave.eventDescription,
+          roundNumber: draftToSave.roundNumber,
+          sourceEventId: draftToSave.sourceEventId,
+          sourceLabel: draftToSave.sourceLabel,
+        }),
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function deleteSelectedEffect() {
+    if (!selectedEffectId || !onDeleteCombatEffect) {
+      return;
+    }
+
+    setSaving(true);
+
+    try {
+      await onDeleteCombatEffect(selectedEffectId);
+      startLinkedEffect();
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <section style={panelStyle}>
       <h3 style={{ margin: 0 }}>Combat effects</h3>
@@ -203,51 +321,40 @@ function HitLogPanel({
         <table style={tableStyle}>
           <thead>
             <tr>
-              <th style={cellStyle}>Round #</th>
-              <th style={cellStyle}>Source</th>
-              <th style={cellStyle}>Type</th>
-              <th style={cellStyle}>Location</th>
-              <th style={cellStyle}>Damage</th>
-              <th style={cellStyle}>General damage</th>
-              <th style={cellStyle}>Duration</th>
-              <th style={cellStyle}>Special effects</th>
-              <th style={cellStyle}>Save</th>
-              <th style={cellStyle}>Delete</th>
+              <th style={compactCellStyle}>Round #</th>
+              <th style={compactCellStyle}>Source</th>
+              <th style={compactCellStyle}>Type</th>
+              <th style={compactCellStyle}>Location</th>
+              <th style={compactCellStyle}>Value</th>
+              <th style={compactCellStyle}>Duration/status</th>
+              <th style={compactCellStyle}>Details</th>
             </tr>
           </thead>
           <tbody>
             {model.hitLog.length > 0 ? (
               model.hitLog.map((entry) => (
-                <tr key={entry.id}>
-                  <td style={cellStyle}>{entry.roundNumber}</td>
-                  <td style={cellStyle}>{entry.source}</td>
-                  <td style={cellStyle}>{formatEffectType(entry.type)}</td>
-                  <td style={cellStyle}>{entry.location}</td>
-                  <td style={cellStyle}>{entry.damage}</td>
-                  <td style={cellStyle}>{entry.generalDamage}</td>
-                  <td style={cellStyle}>{entry.duration}</td>
-                  <td style={cellStyle}>{entry.specialEffects}</td>
-                  <td style={cellStyle}>
-                    <button disabled type="button">
-                      Save
-                    </button>
+                <tr
+                  key={entry.id}
+                  onClick={() => selectEntry(entry)}
+                  style={{
+                    cursor: canEditCombatEffects ? "pointer" : "default",
+                    outline: selectedEffectId === entry.id ? "2px solid #68715f" : undefined,
+                  }}
+                >
+                  <td style={compactCellStyle}>{entry.roundNumber}</td>
+                  <td style={compactCellStyle}>{entry.source}</td>
+                  <td style={compactCellStyle}>{formatEffectType(entry.type)}</td>
+                  <td style={compactCellStyle}>{formatLocation(entry.location)}</td>
+                  <td style={compactCellStyle}>{formatMainValue(entry)}</td>
+                  <td style={compactCellStyle}>
+                    {[entry.duration, entry.status].filter(Boolean).join(" · ")}
                   </td>
-                  <td style={cellStyle}>
-                    <button
-                      disabled={!canEditCombatEffects || !onDeleteCombatEffect}
-                      onClick={() => {
-                        void onDeleteCombatEffect?.(entry.id);
-                      }}
-                      type="button"
-                    >
-                      Delete
-                    </button>
-                  </td>
+                  <td style={compactCellStyle}>{entry.specialEffects}</td>
                 </tr>
               ))
             ) : (
               <tr>
-                <td colSpan={10} style={cellStyle}>
+                <td colSpan={7} style={compactCellStyle}>
                   No combat effects recorded.
                 </td>
               </tr>
@@ -255,115 +362,71 @@ function HitLogPanel({
           </tbody>
         </table>
       </div>
-    </section>
-  );
-}
 
-function AddCombatEffectEventForm({
-  onAddCombatEffectEvent,
-}: Pick<PhysicalStateSectionProps, "onAddCombatEffectEvent">) {
-  const [description, setDescription] = useState("");
-  const [effectRows, setEffectRows] = useState<CombatEffectFormRow[]>([
-    createBlankEffectFormRow(),
-  ]);
-  const [roundNumber, setRoundNumber] = useState("");
-  const [sourceLabel, setSourceLabel] = useState("");
-  const [saving, setSaving] = useState(false);
-  const canSave = Boolean(sourceLabel.trim()) && Boolean(onAddCombatEffectEvent);
-
-  function updateEffectRow(index: number, patch: Partial<CombatEffectFormRow>) {
-    setEffectRows((current) =>
-      current.map((row, rowIndex) => (rowIndex === index ? { ...row, ...patch } : row)),
-    );
-  }
-
-  function resetForm() {
-    setDescription("");
-    setEffectRows([createBlankEffectFormRow()]);
-    setRoundNumber("");
-    setSourceLabel("");
-  }
-
-  async function submitForm(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    if (!canSave || !onAddCombatEffectEvent) {
-      return;
-    }
-
-    setSaving(true);
-
-    try {
-      await onAddCombatEffectEvent({
-        description: description.trim(),
-        effects: effectRows.map((row) => ({
-          damage: parseInteger(row.damage),
-          description: row.specialEffects.trim() || undefined,
-          duration: row.duration.trim() || undefined,
-          effectGroup: row.effectGroup,
-          generalDamage: parseInteger(row.generalDamage),
-          location: row.location || undefined,
-          modifierValue: parseOptionalInteger(row.modifierValue),
-          type: row.type,
-        })),
-        roundNumber: parseOptionalInteger(roundNumber),
-        sourceLabel: sourceLabel.trim(),
-      });
-      resetForm();
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <form onSubmit={submitForm} style={panelStyle}>
-      <h3 style={{ margin: 0 }}>Add combat effect event</h3>
-      <div
-        style={{
-          display: "grid",
-          gap: "0.75rem",
-          gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 12rem), 1fr))",
-        }}
-      >
-        <label style={{ display: "grid", gap: "0.25rem" }}>
-          <span>Round #</span>
-          <input
-            min={1}
-            onChange={(event) => setRoundNumber(event.target.value)}
-            type="number"
-            value={roundNumber}
-          />
-        </label>
-        <label style={{ display: "grid", gap: "0.25rem" }}>
-          <span>Source label</span>
-          <input
-            onChange={(event) => setSourceLabel(event.target.value)}
-            required
-            value={sourceLabel}
-          />
-        </label>
-        <label style={{ display: "grid", gap: "0.25rem" }}>
-          <span>Description</span>
-          <input onChange={(event) => setDescription(event.target.value)} value={description} />
-        </label>
-      </div>
-      {effectRows.map((row, index) => (
-        <section key={index} style={{ display: "grid", gap: "0.5rem" }}>
-          <strong>Effect row {index + 1}</strong>
+      {canEditCombatEffects ? (
+        <form onSubmit={submitForm} style={{ display: "grid", gap: "0.65rem" }}>
+          <strong>{selectedEffectId ? "Edit selected effect" : "New combat effect"}</strong>
           <div
             style={{
               display: "grid",
-              gap: "0.75rem",
-              gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 10rem), 1fr))",
+              gap: "0.5rem",
+              gridTemplateColumns: "minmax(5rem, 0.5fr) minmax(9rem, 1fr) minmax(12rem, 1.2fr)",
             }}
           >
-            <label style={{ display: "grid", gap: "0.25rem" }}>
+            <label style={{ display: "grid", gap: "0.2rem" }}>
+              <span>Round #</span>
+              <input
+                min={1}
+                onChange={(event) =>
+                  setDraft((current) => ({
+                    ...current,
+                    roundNumber: parseOptionalInteger(event.target.value),
+                  }))
+                }
+                type="number"
+                value={draft.roundNumber ?? ""}
+              />
+            </label>
+            <label style={{ display: "grid", gap: "0.2rem" }}>
+              <span>Source/Event label</span>
+              <input
+                onChange={(event) =>
+                  setDraft((current) => ({ ...current, sourceLabel: event.target.value }))
+                }
+                required
+                value={draft.sourceLabel}
+              />
+            </label>
+            <label style={{ display: "grid", gap: "0.2rem" }}>
+              <span>Description</span>
+              <input
+                onChange={(event) =>
+                  setDraft((current) => ({
+                    ...current,
+                    eventDescription: event.target.value,
+                  }))
+                }
+                value={draft.eventDescription ?? ""}
+              />
+            </label>
+          </div>
+          <div
+            style={{
+              display: "grid",
+              gap: "0.5rem",
+              gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 7.5rem), 1fr))",
+            }}
+          >
+            <label style={{ display: "grid", gap: "0.2rem" }}>
               <span>Type</span>
               <select
                 onChange={(event) =>
-                  updateEffectRow(index, { type: event.target.value as CombatEffectType })
+                  setDraft((current) => ({
+                    ...current,
+                    type: event.target.value as CombatEffectType,
+                  }))
                 }
-                value={row.type}
+                value={draft.type}
               >
                 {combatEffectTypes.map((option) => (
                   <option key={option.value} value={option.value}>
@@ -372,15 +435,16 @@ function AddCombatEffectEventForm({
                 ))}
               </select>
             </label>
-            <label style={{ display: "grid", gap: "0.25rem" }}>
+            <label style={{ display: "grid", gap: "0.2rem" }}>
               <span>Effect group</span>
               <select
                 onChange={(event) =>
-                  updateEffectRow(index, {
+                  setDraft((current) => ({
+                    ...current,
                     effectGroup: event.target.value as CombatEffectGroup,
-                  })
+                  }))
                 }
-                value={row.effectGroup}
+                value={draft.effectGroup}
               >
                 {combatEffectGroups.map((option) => (
                   <option key={option.value} value={option.value}>
@@ -389,111 +453,133 @@ function AddCombatEffectEventForm({
                 ))}
               </select>
             </label>
-            <label style={{ display: "grid", gap: "0.25rem" }}>
+            <label style={{ display: "grid", gap: "0.2rem" }}>
               <span>Location</span>
               <select
-                onChange={(event) => updateEffectRow(index, { location: event.target.value })}
-                value={row.location}
+                onChange={(event) =>
+                  setDraft((current) => ({
+                    ...current,
+                    location: event.target.value || undefined,
+                  }))
+                }
+                value={draft.location ?? ""}
               >
                 {hitLocationOptions.map((option) => (
-                  <option key={option.value || "general"} value={option.value}>
+                  <option key={option.value || "none"} value={option.value}>
                     {option.label}
                   </option>
                 ))}
               </select>
             </label>
-            <label style={{ display: "grid", gap: "0.25rem" }}>
+            <label style={{ display: "grid", gap: "0.2rem" }}>
               <span>Damage</span>
               <input
-                onChange={(event) => updateEffectRow(index, { damage: event.target.value })}
+                onChange={(event) =>
+                  setDraft((current) => ({
+                    ...current,
+                    damage: parseInteger(event.target.value),
+                  }))
+                }
                 type="number"
-                value={row.damage}
+                value={draft.damage}
               />
             </label>
-            <label style={{ display: "grid", gap: "0.25rem" }}>
+            <label style={{ display: "grid", gap: "0.2rem" }}>
               <span>General damage</span>
               <input
                 onChange={(event) =>
-                  updateEffectRow(index, { generalDamage: event.target.value })
+                  setDraft((current) => ({
+                    ...current,
+                    generalDamage: parseInteger(event.target.value),
+                  }))
                 }
                 type="number"
-                value={row.generalDamage}
+                value={draft.generalDamage}
               />
             </label>
-            <label style={{ display: "grid", gap: "0.25rem" }}>
-              <span>Modifier value</span>
+            <label style={{ display: "grid", gap: "0.2rem" }}>
+              <span>Modifier</span>
               <input
                 onChange={(event) =>
-                  updateEffectRow(index, { modifierValue: event.target.value })
+                  setDraft((current) => ({
+                    ...current,
+                    modifierValue: parseOptionalInteger(event.target.value),
+                  }))
                 }
                 type="number"
-                value={row.modifierValue}
+                value={draft.modifierValue ?? ""}
               />
             </label>
-            <label style={{ display: "grid", gap: "0.25rem" }}>
+            <label style={{ display: "grid", gap: "0.2rem" }}>
               <span>Duration</span>
               <input
-                onChange={(event) => updateEffectRow(index, { duration: event.target.value })}
-                value={row.duration}
+                onChange={(event) =>
+                  setDraft((current) => ({ ...current, duration: event.target.value }))
+                }
+                value={draft.duration ?? ""}
               />
             </label>
-            <label style={{ display: "grid", gap: "0.25rem" }}>
-              <span>Special effects</span>
-              <input
+            <label style={{ display: "grid", gap: "0.2rem" }}>
+              <span>Status</span>
+              <select
                 onChange={(event) =>
-                  updateEffectRow(index, { specialEffects: event.target.value })
+                  setDraft((current) => ({
+                    ...current,
+                    status: event.target.value as CombatEffectStatus,
+                  }))
                 }
-                value={row.specialEffects}
-              />
+                value={draft.status}
+              >
+                {combatEffectStatuses.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
             </label>
           </div>
-          {effectRows.length > 1 ? (
-            <button
-              onClick={() =>
-                setEffectRows((current) => current.filter((_, rowIndex) => rowIndex !== index))
+          <label style={{ display: "grid", gap: "0.2rem" }}>
+            <span>Special effects</span>
+            <input
+              onChange={(event) =>
+                setDraft((current) => ({ ...current, description: event.target.value }))
               }
+              value={draft.description ?? ""}
+            />
+          </label>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+            <button disabled={!canSave || saving} type="submit">
+              Save
+            </button>
+            <button disabled={saving} onClick={startLinkedEffect} type="button">
+              Same event as selected
+            </button>
+            <button disabled={saving} onClick={startNewEvent} type="button">
+              Cancel
+            </button>
+            <button
+              disabled={!selectedEffectId || !onDeleteCombatEffect || saving}
+              onClick={deleteSelectedEffect}
               type="button"
             >
-              Remove effect row
+              Delete
             </button>
-          ) : null}
-        </section>
-      ))}
-      <div style={{ display: "flex", gap: "0.5rem" }}>
-        <button
-          disabled={saving}
-          onClick={() => setEffectRows((current) => [...current, createBlankEffectFormRow()])}
-          type="button"
-        >
-          Add effect row
-        </button>
-        <button disabled={!canSave || saving} type="submit">
-          Save event
-        </button>
-        <button
-          disabled={saving}
-          onClick={resetForm}
-          type="button"
-        >
-          Cancel
-        </button>
-      </div>
-    </form>
+          </div>
+        </form>
+      ) : null}
+    </section>
   );
 }
 
 export function PhysicalStateSection({
   canEditCombatEffects,
   model,
-  onAddCombatEffectEvent,
   onDeleteCombatEffect,
+  onSaveCombatEffect,
 }: PhysicalStateSectionProps) {
   return (
     <section style={{ display: "grid", gap: "0.75rem" }}>
       <h2 style={{ margin: 0 }}>Physical state</h2>
-      {canEditCombatEffects ? (
-        <AddCombatEffectEventForm onAddCombatEffectEvent={onAddCombatEffectEvent} />
-      ) : null}
       <div
         style={{
           alignItems: "start",
@@ -505,10 +591,11 @@ export function PhysicalStateSection({
         <HitpointsPanel model={model} />
         <DamageByTypePanel model={model} />
       </div>
-      <HitLogPanel
+      <CombatEffectsPanel
         canEditCombatEffects={canEditCombatEffects}
         model={model}
         onDeleteCombatEffect={onDeleteCombatEffect}
+        onSaveCombatEffect={onSaveCombatEffect}
       />
     </section>
   );

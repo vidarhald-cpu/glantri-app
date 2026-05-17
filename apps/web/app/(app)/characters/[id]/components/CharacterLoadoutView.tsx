@@ -9,7 +9,7 @@ import {
   type CombatEffectsState,
 } from "@glantri/domain";
 
-import type { CombatEffectEventDraft } from "@/features/equipment/components/PhysicalStateSection";
+import type { CombatEffectEditorDraft } from "@/features/equipment/components/PhysicalStateSection";
 import { getEquipmentTemplateById } from "@/features/equipment/equipmentSelectors";
 import {
   buildEquipmentLoadoutModuleModel,
@@ -181,49 +181,65 @@ export default function CharacterLoadoutView({
     return `${prefix}-${globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`}`;
   }
 
-  async function addCombatEffectEvent(draft: CombatEffectEventDraft) {
+  async function saveCombatEffect(draft: CombatEffectEditorDraft) {
     if (!physicalStateTargetParticipantId || !onCombatEffectsChange) {
       return;
     }
 
     const now = new Date().toISOString();
-    const eventId = createCombatEffectId("combat-event");
-    const event: CombatEffectEvent = {
-      createdAt: now,
-      description: draft.description ?? "",
+    const currentCombatEffects = physicalStateCombatEffects ?? { effects: [], events: [] };
+    const eventId = draft.sourceEventId ?? createCombatEffectId("combat-event");
+    const existingEvent = currentCombatEffects.events.find((event) => event.id === eventId);
+    const nextEvent: CombatEffectEvent = {
+      createdAt: existingEvent?.createdAt ?? now,
+      createdByUserId: existingEvent?.createdByUserId,
+      description: draft.eventDescription ?? existingEvent?.description ?? "",
       encounterId: physicalStateEncounterId || undefined,
       id: eventId,
+      phase: existingEvent?.phase,
       roundNumber: draft.roundNumber,
       scenarioId: physicalStateScenarioId || undefined,
+      sourceActorId: existingEvent?.sourceActorId,
       sourceLabel: draft.sourceLabel,
-      sourceType: "manual",
+      sourceType: existingEvent?.sourceType ?? "manual",
       targetParticipantId: physicalStateTargetParticipantId,
     };
-    const effects: CombatEffect[] = draft.effects.map((effectDraft) => ({
-      checkRequired: undefined,
-      checkSkillOrStat: undefined,
-      createdAt: now,
-      damage: effectDraft.damage,
-      description: effectDraft.description,
-      duration: effectDraft.duration,
-      effectGroup: effectDraft.effectGroup,
-      expiresAtRound: undefined,
-      generalDamage: effectDraft.generalDamage,
-      id: createCombatEffectId("combat-effect"),
-      location: effectDraft.location,
-      modifierValue: effectDraft.modifierValue,
+
+    const existingEffect = draft.effectId
+      ? currentCombatEffects.effects.find((effect) => effect.id === draft.effectId)
+      : undefined;
+    const nextEffect: CombatEffect = {
+      checkRequired: existingEffect?.checkRequired,
+      checkSkillOrStat: existingEffect?.checkSkillOrStat,
+      createdAt: existingEffect?.createdAt ?? now,
+      damage: draft.damage,
+      description: draft.description,
+      duration: draft.duration,
+      effectGroup: draft.effectGroup,
+      expiresAtRound: existingEffect?.expiresAtRound,
+      generalDamage: draft.generalDamage,
+      id: existingEffect?.id ?? createCombatEffectId("combat-effect"),
+      location: draft.location,
+      modifierValue: draft.modifierValue,
       roundNumber: draft.roundNumber,
       sourceEventId: eventId,
-      status: "active",
+      status: draft.status,
       targetParticipantId: physicalStateTargetParticipantId,
-      type: effectDraft.type,
+      type: draft.type,
       updatedAt: now,
-    }));
-    const currentCombatEffects = physicalStateCombatEffects ?? { effects: [], events: [] };
+    };
 
     await onCombatEffectsChange({
-      effects: [...currentCombatEffects.effects, ...effects],
-      events: [...currentCombatEffects.events, event],
+      effects: existingEffect
+        ? currentCombatEffects.effects.map((effect) =>
+            effect.id === existingEffect.id ? nextEffect : effect
+          )
+        : [...currentCombatEffects.effects, nextEffect],
+      events: existingEvent
+        ? currentCombatEffects.events.map((event) =>
+            event.id === existingEvent.id ? nextEvent : event
+          )
+        : [...currentCombatEffects.events, nextEvent],
     });
   }
 
@@ -396,8 +412,8 @@ export default function CharacterLoadoutView({
               <PhysicalStateSection
                 canEditCombatEffects={canEditCombatEffects}
                 model={physicalStateModel}
-                onAddCombatEffectEvent={addCombatEffectEvent}
                 onDeleteCombatEffect={deleteCombatEffect}
+                onSaveCombatEffect={saveCombatEffect}
               />
             ) : undefined
           }

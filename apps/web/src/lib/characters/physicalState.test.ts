@@ -233,8 +233,54 @@ describe("character physical state read model", () => {
     expect(view.hitLog[0]).toMatchObject({
       damage: 5,
       roundNumber: 4,
+      sourceEventId: "event-1",
       source: "Axe hit",
       type: "physical_damage",
     });
+  });
+
+  it("keeps none-group physical damage out of modifier summaries", () => {
+    const view = buildCharacterPhysicalStateView({
+      combatEffects: {
+        effects: [
+          {
+            createdAt: "2026-05-17T10:00:00.000Z",
+            damage: 4,
+            effectGroup: "none",
+            generalDamage: 0,
+            id: "effect-1",
+            location: "head",
+            sourceEventId: "event-1",
+            status: "active",
+            targetParticipantId: "participant-1",
+            type: "physical_damage",
+            updatedAt: "2026-05-17T10:00:00.000Z",
+          },
+        ],
+        events: [
+          {
+            createdAt: "2026-05-17T10:00:00.000Z",
+            description: "",
+            id: "event-1",
+            sourceLabel: "Axe hit",
+            sourceType: "manual",
+            targetParticipantId: "participant-1",
+          },
+        ],
+      },
+      generalHitpoints: 22,
+    });
+
+    expect(view.hitpoints.locations.find((location) => location.id === "head")).toMatchObject({
+      damage: 4,
+    });
+    expect(view.damageByType.map((row) => [row.id, row.currentEffect])).toEqual([
+      ["general", 0],
+      ["obSkill", 0],
+      ["db", 0],
+      ["other", 0],
+      ["bleed", 0],
+      ["special", "—"],
+    ]);
   });
 });

@@ -138,6 +138,8 @@ Current first-pass rule:
 - Character control now includes a first Physical state scaffold with Hitpoints and damage, Combat effects by sum, and Combat effects.
 - Combat events describe what happened. Combat effects are the canonical tracked state rows caused by those events.
 - One combat event may create multiple combat effect rows, and each effect keeps its origin through `sourceEventId`.
+- Combat effects should be displayed as a compact list during play. Detailed fields belong in the selected effect editor/tool row, not as a permanently wide table.
+- Multiple effect rows may share one event/source. Multi-location damage should later be represented as multiple effect rows under the same event instead of one oversized row.
 - Later healing, first aid, duration, or recovery changes should modify or supersede the existing combat effect row rather than creating an unrelated effect.
 - Narrative and combat event history continues to belong in the encounter/action log, not a separate Character page event log.
 - GM users can manually add combat effect events from the Character workspace as the first authoring workflow; player views remain read-only.

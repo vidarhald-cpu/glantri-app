@@ -88,4 +88,34 @@ describe("combat effect state", () => {
       new Set(["event-1"]),
     );
   });
+
+  it("allows effect rows with no modifier/effect group", () => {
+    const parsed = combatEffectsStateSchema.parse({
+      effects: [
+        {
+          createdAt: "2026-05-17T10:00:00.000Z",
+          damage: 5,
+          effectGroup: "none",
+          generalDamage: 0,
+          id: "effect-damage",
+          location: "rightArm",
+          sourceEventId: "event-1",
+          status: "active",
+          targetParticipantId: "participant-1",
+          type: "physical_damage",
+          updatedAt: "2026-05-17T10:00:00.000Z",
+        },
+      ],
+      events: [
+        {
+          createdAt: "2026-05-17T10:00:00.000Z",
+          id: "event-1",
+          sourceLabel: "Axe hit",
+          targetParticipantId: "participant-1",
+        },
+      ],
+    });
+
+    expect(parsed.effects[0]?.effectGroup).toBe("none");
+  });
 });

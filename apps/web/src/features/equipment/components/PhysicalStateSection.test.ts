@@ -37,22 +37,35 @@ describe("PhysicalStateSection", () => {
     expect(source).toContain("Current");
     expect(source).toContain("Round #");
     expect(source).toContain("Source");
-    expect(source).toContain("General damage");
+    expect(source).toContain("Value");
+    expect(source).toContain("Duration/status");
     expect(source).toContain("Special effects");
     expect(source).toContain("Current effect");
     expect(source).toContain("Save");
     expect(source).toContain("Delete");
   });
 
-  it("exposes the GM manual combat effect event editor without player-only placeholders", () => {
+  it("keeps the manual combat effect editor compact and tied to selected rows", () => {
     const source = readSource();
 
-    expect(source).toContain("Add combat effect event");
-    expect(source).toContain("Add effect row");
-    expect(source).toContain("Save event");
-    expect(source).toContain("Source label");
-    expect(source).toContain("Modifier value");
-    expect(source).toContain("onAddCombatEffectEvent");
+    expect(source).toContain("New combat effect");
+    expect(source).toContain("Edit selected effect");
+    expect(source).toContain("Same event as selected");
+    expect(source).toContain("Source/Event label");
+    expect(source).toContain("Modifier");
+    expect(source).toContain("onSaveCombatEffect");
+    expect(source).toContain('type: "physical_damage"');
+    expect(source).toContain('effectGroup: "none"');
+    expect(source).toContain("sourceEventId: draft.sourceEventId ?? createLocalId");
+    expect(source).not.toContain("Add combat effect event");
+    expect(source).not.toContain("Add effect row");
     expect(source).not.toContain("Future phases will");
+  });
+
+  it("offers None options for event-neutral fields", () => {
+    const source = readSource();
+
+    expect(source).toContain('{ label: "None", value: "none" }');
+    expect(source).toContain('{ label: "None", value: "" }');
   });
 });
