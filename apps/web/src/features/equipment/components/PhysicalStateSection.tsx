@@ -27,7 +27,7 @@ const cellStyle = {
 function HitpointsPanel({ model }: PhysicalStateSectionProps) {
   return (
     <section style={panelStyle}>
-      <h3 style={{ margin: 0 }}>Hitpoints</h3>
+      <h3 style={{ margin: 0 }}>Hitpoints and damage</h3>
       <div style={{ overflowX: "auto" }}>
         <table style={tableStyle}>
           <thead>
@@ -47,10 +47,7 @@ function HitpointsPanel({ model }: PhysicalStateSectionProps) {
             </tr>
             {model.hitpoints.locations.map((location) => (
               <tr key={location.id}>
-                <td style={cellStyle}>
-                  {location.label} — weight {location.weightNumerator}/
-                  {location.weightDenominator}
-                </td>
+                <td style={cellStyle}>{location.label}</td>
                 <td style={cellStyle}>{location.original}</td>
                 <td style={cellStyle}>{location.damage}</td>
                 <td style={cellStyle}>{location.current}</td>
@@ -66,7 +63,7 @@ function HitpointsPanel({ model }: PhysicalStateSectionProps) {
 function DamageByTypePanel({ model }: PhysicalStateSectionProps) {
   return (
     <section style={panelStyle}>
-      <h3 style={{ margin: 0 }}>Damage by type</h3>
+      <h3 style={{ margin: 0 }}>Combat effects by sum</h3>
       <div style={{ overflowX: "auto" }}>
         <table style={tableStyle}>
           <thead>
@@ -91,12 +88,13 @@ function DamageByTypePanel({ model }: PhysicalStateSectionProps) {
 
 function HitLogPanel({ model }: PhysicalStateSectionProps) {
   return (
-    <section style={{ ...panelStyle, gridColumn: "1 / -1" }}>
-      <h3 style={{ margin: 0 }}>Log of hits</h3>
+    <section style={panelStyle}>
+      <h3 style={{ margin: 0 }}>Combat effects</h3>
       <div style={{ overflowX: "auto" }}>
         <table style={tableStyle}>
           <thead>
             <tr>
+              <th style={cellStyle}>Round #</th>
               <th style={cellStyle}>Source</th>
               <th style={cellStyle}>Type</th>
               <th style={cellStyle}>Location</th>
@@ -104,12 +102,15 @@ function HitLogPanel({ model }: PhysicalStateSectionProps) {
               <th style={cellStyle}>General damage</th>
               <th style={cellStyle}>Duration</th>
               <th style={cellStyle}>Special effects</th>
+              <th style={cellStyle}>Save</th>
+              <th style={cellStyle}>Delete</th>
             </tr>
           </thead>
           <tbody>
             {model.hitLog.length > 0 ? (
               model.hitLog.map((entry) => (
                 <tr key={entry.id}>
+                  <td style={cellStyle}>{entry.roundNumber}</td>
                   <td style={cellStyle}>{entry.source}</td>
                   <td style={cellStyle}>{entry.type}</td>
                   <td style={cellStyle}>{entry.location}</td>
@@ -117,12 +118,22 @@ function HitLogPanel({ model }: PhysicalStateSectionProps) {
                   <td style={cellStyle}>{entry.generalDamage}</td>
                   <td style={cellStyle}>{entry.duration}</td>
                   <td style={cellStyle}>{entry.specialEffects}</td>
+                  <td style={cellStyle}>
+                    <button disabled type="button">
+                      Save
+                    </button>
+                  </td>
+                  <td style={cellStyle}>
+                    <button disabled type="button">
+                      Delete
+                    </button>
+                  </td>
                 </tr>
               ))
             ) : (
               <tr>
-                <td colSpan={7} style={cellStyle}>
-                  No hits recorded.
+                <td colSpan={10} style={cellStyle}>
+                  No combat effects recorded.
                 </td>
               </tr>
             )}
@@ -141,13 +152,13 @@ export function PhysicalStateSection({ model }: PhysicalStateSectionProps) {
         style={{
           display: "grid",
           gap: "0.75rem",
-          gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+          gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 28rem), 1fr))",
         }}
       >
         <HitpointsPanel model={model} />
         <DamageByTypePanel model={model} />
-        <HitLogPanel model={model} />
       </div>
+      <HitLogPanel model={model} />
     </section>
   );
 }

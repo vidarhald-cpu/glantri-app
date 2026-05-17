@@ -7,7 +7,7 @@ import {
 } from "./physicalState";
 
 describe("character physical state read model", () => {
-  it("defines all hit locations and weights total 22/11", () => {
+  it("defines all hit locations and weights total 40/11", () => {
     expect(HIT_LOCATION_DEFINITIONS.map((location) => location.label)).toEqual([
       "Head",
       "Left arm",
@@ -25,7 +25,27 @@ describe("character physical state read model", () => {
       0,
     );
 
-    expect(totalNumerator).toBe(22);
+    expect(totalNumerator).toBe(40);
+    expect(HIT_LOCATION_DEFINITIONS.map((location) => location.weightNumerator)).toEqual([
+      4,
+      4,
+      4,
+      6,
+      6,
+      4,
+      4,
+      4,
+      4,
+    ]);
+  });
+
+  it("keeps location display labels free of weight text", () => {
+    expect(HIT_LOCATION_DEFINITIONS.map((location) => location.label)).not.toEqual(
+      expect.arrayContaining([
+        expect.stringContaining("/11"),
+        expect.stringContaining("weight"),
+      ]),
+    );
   });
 
   it("rounds location hitpoints with Math.round and keeps positive locations at least 1", () => {
@@ -33,19 +53,19 @@ describe("character physical state read model", () => {
       calculateLocationHitpoints({
         generalHitpoints: 22,
         weightDenominator: 11,
-        weightNumerator: 2,
+        weightNumerator: 4,
       }),
-    ).toBe(4);
+    ).toBe(8);
     expect(
       calculateLocationHitpoints({
         generalHitpoints: 1,
         weightDenominator: 11,
-        weightNumerator: 2,
+        weightNumerator: 4,
       }),
     ).toBe(1);
   });
 
-  it("builds location hitpoints that total double general hitpoints for exact weights", () => {
+  it("builds location hitpoints from the expanded combat-effect location weights", () => {
     const view = buildCharacterPhysicalStateView({ generalHitpoints: 22 });
     const totalLocationHitpoints = view.hitpoints.locations.reduce(
       (total, location) => total + location.original,
@@ -53,7 +73,7 @@ describe("character physical state read model", () => {
     );
 
     expect(view.hitpoints.general.original).toBe(22);
-    expect(totalLocationHitpoints).toBe(44);
+    expect(totalLocationHitpoints).toBe(80);
   });
 
   it("uses corrected calculated general hitpoints as the location base", () => {
@@ -62,14 +82,14 @@ describe("character physical state read model", () => {
     expect(view.hitpoints.general.original).toBe(17);
     expect(view.hitpoints.general.original).not.toBe(7);
     expect(view.hitpoints.locations.find((location) => location.id === "head")).toMatchObject({
-      original: 3,
-      current: 3,
+      original: 6,
+      current: 6,
     });
     expect(
       view.hitpoints.locations.find((location) => location.id === "chestBack"),
     ).toMatchObject({
-      original: 6,
-      current: 6,
+      original: 9,
+      current: 9,
     });
   });
 
@@ -88,9 +108,9 @@ describe("character physical state read model", () => {
       original: 22,
     });
     expect(view.hitpoints.locations.find((location) => location.id === "head")).toMatchObject({
-      current: 2,
+      current: 6,
       damage: 2,
-      original: 4,
+      original: 8,
     });
   });
 

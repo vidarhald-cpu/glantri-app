@@ -133,7 +133,10 @@ Current first-pass rule:
 - Character control belongs in the Campaign/Scenario/Encounter workspace, not the general Characters section.
 - Player Character tab shows only the player's current controlled scenario or encounter character.
 - GM Character tab lets the GM inspect and shuffle through character-backed scenario or encounter participants.
-- Character control now includes a first Physical state scaffold with Hitpoints, Damage by type, and Log of hits.
+- Character control now includes a first Physical state scaffold with Hitpoints and damage, Combat effects by sum, and Combat effects.
+- Combat effects are the canonical tracked rows for damage and effect state on the Character control page.
+- Later healing, first aid, duration, or recovery changes should modify the existing combat effect row rather than creating an unrelated event record.
+- Narrative and combat event history continues to belong in the encounter/action log, not a separate Character page event log.
 - Detailed damage application, bleed, stun, fatigue, duration processing, mental/combat effects, GM-set modifiers, adjusted stats, and combat action modules are future rule work.
 - Future modules should not appear as visible placeholders until they are actionable.
 

@@ -10,26 +10,30 @@ function readSource(): string {
 }
 
 describe("PhysicalStateSection", () => {
-  it("renders hitpoints, damage by type, and hit log scaffolds", () => {
+  it("renders physical state combat-effect panels", () => {
     const source = readSource();
 
     expect(source).toContain("Physical state");
-    expect(source).toContain("Hitpoints");
-    expect(source).toContain("Damage by type");
-    expect(source).toContain("Log of hits");
+    expect(source).toContain("Hitpoints and damage");
+    expect(source).toContain("Combat effects by sum");
+    expect(source).toContain("Combat effects");
     expect(source).toContain("General hitpoints");
-    expect(source).toContain("No hits recorded.");
+    expect(source).toContain("No combat effects recorded.");
+    expect(source).not.toContain("weight");
   });
 
-  it("renders the hit log and damage table columns", () => {
+  it("renders the combat effects and hitpoint table columns", () => {
     const source = readSource();
 
     expect(source).toContain("Location");
     expect(source).toContain("Original");
     expect(source).toContain("Current");
+    expect(source).toContain("Round #");
     expect(source).toContain("Source");
     expect(source).toContain("General damage");
     expect(source).toContain("Special effects");
     expect(source).toContain("Current effect");
+    expect(source).toContain("Save");
+    expect(source).toContain("Delete");
   });
 });

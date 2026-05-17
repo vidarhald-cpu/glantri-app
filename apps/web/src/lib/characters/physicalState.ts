@@ -2,7 +2,7 @@ export interface HitLocationDefinition {
   id: string;
   label: string;
   weightDenominator: 11;
-  weightNumerator: 2 | 4;
+  weightNumerator: 4 | 6;
 }
 
 export interface HitpointRowView {
@@ -25,6 +25,7 @@ export interface HitLogEntryView {
   generalDamage: number;
   id: string;
   location: string;
+  roundNumber: number | string;
   source: string;
   specialEffects: string;
   type: string;
@@ -40,39 +41,39 @@ export interface CharacterPhysicalStateView {
 }
 
 export const HIT_LOCATION_DEFINITIONS: HitLocationDefinition[] = [
-  { id: "head", label: "Head", weightDenominator: 11, weightNumerator: 2 },
-  { id: "leftArm", label: "Left arm", weightDenominator: 11, weightNumerator: 2 },
-  { id: "rightArm", label: "Right arm", weightDenominator: 11, weightNumerator: 2 },
-  { id: "chestBack", label: "Chest/back", weightDenominator: 11, weightNumerator: 4 },
+  { id: "head", label: "Head", weightDenominator: 11, weightNumerator: 4 },
+  { id: "leftArm", label: "Left arm", weightDenominator: 11, weightNumerator: 4 },
+  { id: "rightArm", label: "Right arm", weightDenominator: 11, weightNumerator: 4 },
+  { id: "chestBack", label: "Chest/back", weightDenominator: 11, weightNumerator: 6 },
   {
     id: "abdomenLowerBack",
     label: "Abdomen/lower back",
     weightDenominator: 11,
-    weightNumerator: 4,
+    weightNumerator: 6,
   },
   {
     id: "upperLeftLeg",
     label: "Upper left leg",
     weightDenominator: 11,
-    weightNumerator: 2,
+    weightNumerator: 4,
   },
   {
     id: "lowerLeftLeg",
     label: "Lower left leg",
     weightDenominator: 11,
-    weightNumerator: 2,
+    weightNumerator: 4,
   },
   {
     id: "upperRightLeg",
     label: "Upper right leg",
     weightDenominator: 11,
-    weightNumerator: 2,
+    weightNumerator: 4,
   },
   {
     id: "lowerRightLeg",
     label: "Lower right leg",
     weightDenominator: 11,
-    weightNumerator: 2,
+    weightNumerator: 4,
   },
 ];
 
