@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { loadServerCharacters } from "@/lib/api/localServiceClient";
+import { loadServerCharacters } from "@/lib/api/characterClient";
 import { useSessionUser } from "@/lib/auth/SessionUserContext";
 import {
   REMEMBERED_SELECTION_KEYS,

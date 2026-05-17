@@ -2,15 +2,15 @@ import type { FastifyPluginAsync } from "fastify";
 
 import { CampaignService, EncounterService, ScenarioService } from "@glantri/database";
 import {
+  buildPlayerSafeRoleplayState,
   buildRoleplayCalculationPreview,
   encounterSessionSchema,
   isUserAssignedToEncounterMembership,
   normalizeRoleplayState,
-  recordRoleplayGmSkillRoll,
   resolveEncounterParticipantByRollParticipantId,
   resolveEncounterParticipantMembership,
 } from "@glantri/domain";
-import { resolveRoleplaySkillRollModifiers } from "@glantri/rules-engine";
+import { recordRoleplayGmSkillRoll, resolveRoleplaySkillRollModifiers } from "@glantri/rules-engine";
 
 import { requireAdminUser, requireAuthenticatedUser } from "../../lib/sessionAuth";
 import { parseBodyObject, parseId } from "./parsing";
@@ -38,6 +38,26 @@ function parseIntegerInRange(value: unknown, label: string, min: number, max: nu
   return parsed;
 }
 
+function computeDieResult(rollD20: number, openEndedD10s: number[]): number {
+  if (openEndedD10s.length === 0) return rollD20;
+  const direction = rollD20 === 20 ? 1 : rollD20 === 1 ? -1 : 0;
+  return rollD20 + direction * openEndedD10s.reduce((sum, d10) => sum + d10, 0);
+}
+
+function parseRollFields(
+  roll: Record<string, unknown>,
+  prefix: string
+): { dieResult: number; openEndedD10s: number[]; rollD20: number } {
+  const rollD20 = parseIntegerInRange(roll.rollD20, `${prefix}.rollD20`, 1, 20);
+  const openEndedD10sValue = roll.openEndedD10s;
+  const openEndedD10s = Array.isArray(openEndedD10sValue)
+    ? openEndedD10sValue.map((entry, index) =>
+        parseIntegerInRange(entry, `${prefix}.openEndedD10s[${index}]`, 1, 10)
+      )
+    : [];
+  return { dieResult: computeDieResult(rollD20, openEndedD10s), openEndedD10s, rollD20 };
+}
+
 function parsePlayerRollBody(body: unknown): {
   pendingRollId: string;
   roll: {
@@ -63,37 +83,16 @@ function parsePlayerRollBody(body: unknown): {
     throw new Error("roll is required.");
   }
 
-  const roll = rollValue as Record<string, unknown>;
-  const openEndedD10sValue = roll.openEndedD10s;
   const supportRollValue = value.supportRoll;
   const supportRoll =
     supportRollValue && typeof supportRollValue === "object"
-      ? supportRollValue as Record<string, unknown>
+      ? (supportRollValue as Record<string, unknown>)
       : undefined;
-  const supportOpenEndedD10sValue = supportRoll?.openEndedD10s;
 
   return {
     pendingRollId,
-    roll: {
-      dieResult: parseInteger(roll.dieResult, "roll.dieResult"),
-      openEndedD10s: Array.isArray(openEndedD10sValue)
-        ? openEndedD10sValue.map((entry, index) =>
-            parseIntegerInRange(entry, `roll.openEndedD10s[${index}]`, 1, 10)
-          )
-        : [],
-      rollD20: parseIntegerInRange(roll.rollD20, "roll.rollD20", 1, 20),
-    },
-    supportRoll: supportRoll
-      ? {
-          dieResult: parseInteger(supportRoll.dieResult, "supportRoll.dieResult"),
-          openEndedD10s: Array.isArray(supportOpenEndedD10sValue)
-            ? supportOpenEndedD10sValue.map((entry, index) =>
-                parseIntegerInRange(entry, `supportRoll.openEndedD10s[${index}]`, 1, 10)
-              )
-            : [],
-          rollD20: parseIntegerInRange(supportRoll.rollD20, "supportRoll.rollD20", 1, 20),
-        }
-      : undefined,
+    roll: parseRollFields(rollValue as Record<string, unknown>, "roll"),
+    supportRoll: supportRoll ? parseRollFields(supportRoll, "supportRoll") : undefined,
   };
 }
 
@@ -126,6 +125,17 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       }
 
       const encounters = await encounterService.listEncountersByScenario(scenarioId);
+
+      if (access.mode === "player") {
+        return {
+          encounters: encounters.map((enc) => ({
+            ...enc,
+            roleplayState: enc.roleplayState
+              ? buildPlayerSafeRoleplayState(enc.roleplayState)
+              : undefined
+          }))
+        };
+      }
 
       return { encounters };
     } catch (error) {
@@ -163,9 +173,12 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       }
 
       const body = parseBodyObject(request.body, "Encounter payload");
+      const encounterSession = encounterSessionSchema.parse(body.session);
       const encounter = await encounterService.createEncounter({
+        campaignId: access.campaignId,
         createdByUserId: user.id,
-        session: encounterSessionSchema.parse(body.session)
+        scenarioId,
+        session: encounterSession
       });
 
       await scenarioService.recordScenarioEvent({
@@ -223,6 +236,17 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         });
       }
 
+      if (access.mode === "player") {
+        return {
+          encounter: {
+            ...encounter,
+            roleplayState: encounter.roleplayState
+              ? buildPlayerSafeRoleplayState(encounter.roleplayState)
+              : undefined
+          }
+        };
+      }
+
       return { encounter };
     } catch (error) {
       return reply.code(400).send({
@@ -268,7 +292,12 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
 
       const body = parseBodyObject(request.body, "Encounter payload");
       const encounterSession = encounterSessionSchema.parse(body.session);
-      const encounter = await encounterService.updateEncounter(encounterSession);
+      const encounter = await encounterService.updateEncounter({
+        campaignId: access.campaignId,
+        encounterId,
+        scenarioId: existingEncounter.scenarioId,
+        session: encounterSession
+      });
 
       await scenarioService.recordScenarioEvent({
         actorUserId: user.id,
@@ -460,8 +489,13 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         useObSkillMod: pendingRoll.useObSkillMod,
       });
       const savedEncounter = await encounterService.updateEncounter({
-        ...nextEncounter,
-        updatedAt: new Date().toISOString(),
+        campaignId: encounter.campaignId,
+        encounterId,
+        scenarioId: encounter.scenarioId,
+        session: {
+          ...nextEncounter,
+          updatedAt: new Date().toISOString(),
+        },
       });
 
       return { encounter: savedEncounter };

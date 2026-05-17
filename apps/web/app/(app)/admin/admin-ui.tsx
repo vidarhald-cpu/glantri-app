@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import type {
   CSSProperties,
   InputHTMLAttributes,
@@ -541,6 +543,94 @@ export function AdminTextarea(props: TextareaHTMLAttributes<HTMLTextAreaElement>
   return <textarea {...props} style={{ ...inputStyle, minHeight: 132, ...(props.style ?? {}) }} />;
 }
 
+export function formatAdminEnumLabel(value: string): string {
+  return value
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+export function AdminCatalogTable(props: {
+  columns: string[];
+  emptyLabel: string;
+  rows: string[][];
+  stickyHeader?: boolean;
+}) {
+  return props.rows.length > 0 ? (
+    <div style={{ maxHeight: props.stickyHeader ? "70vh" : undefined, overflow: "auto" }}>
+      <table style={{ borderCollapse: "collapse", minWidth: "100%", width: "100%" }}>
+        <thead>
+          <tr style={{ borderBottom: "1px solid rgba(85, 73, 48, 0.14)", textAlign: "left" }}>
+            {props.columns.map((column) => (
+              <th
+                key={column}
+                style={{
+                  background: "rgba(250, 245, 234, 0.98)",
+                  padding: "0.55rem 0.75rem 0.55rem 0",
+                  position: props.stickyHeader ? "sticky" : undefined,
+                  top: props.stickyHeader ? 0 : undefined,
+                  verticalAlign: "bottom",
+                  zIndex: props.stickyHeader ? 1 : undefined
+                }}
+              >
+                {column}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {props.rows.map((row, rowIndex) => (
+            <tr key={`catalog-row-${rowIndex}`} style={{ borderBottom: "1px solid rgba(85, 73, 48, 0.08)" }}>
+              {row.map((value, cellIndex) => (
+                <td
+                  key={`catalog-row-${rowIndex}-${cellIndex}`}
+                  style={{ padding: "0.65rem 0.75rem 0.65rem 0", verticalAlign: "top" }}
+                >
+                  {value}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  ) : (
+    <div>{props.emptyLabel}</div>
+  );
+}
+
+export function AdminFilterBar(props: { children: ReactNode }) {
+  return (
+    <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
+      {props.children}
+    </div>
+  );
+}
+
+export function AdminFilterSelect<T extends string>(props: {
+  label: string;
+  onChange: (value: T) => void;
+  options: T[];
+  formatOption?: (value: T) => string;
+  value: T;
+}) {
+  return (
+    <label style={{ display: "grid", gap: "0.25rem", minWidth: 160 }}>
+      <span style={{ color: "#5f543a", fontSize: "0.9rem", fontWeight: 600 }}>{props.label}</span>
+      <AdminSelect
+        onChange={(event) => props.onChange(event.target.value as T)}
+        value={props.value}
+      >
+        {props.options.map((option) => (
+          <option key={option} value={option}>
+            {props.formatOption ? props.formatOption(option) : option}
+          </option>
+        ))}
+      </AdminSelect>
+    </label>
+  );
+}
+
 export function AdminCheckboxList(props: {
   options: Array<{ label: string; selected: boolean; value: string }>;
   onToggle: (value: string) => void;
@@ -573,5 +663,76 @@ export function AdminCheckboxList(props: {
         </label>
       ))}
     </div>
+  );
+}
+
+export function AdminWorkspaceTabs(props: {
+  tabs: Array<{ href: string; label: string }>;
+}) {
+  const pathname = usePathname();
+
+  return (
+    <nav style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
+      {props.tabs.map((tab) => {
+        const active = pathname === tab.href;
+
+        return (
+          <Link
+            href={tab.href}
+            key={tab.href}
+            style={{
+              background: active ? "#7e5d2a" : "rgba(126, 93, 42, 0.08)",
+              border: active ? "1px solid transparent" : "1px solid rgba(126, 93, 42, 0.14)",
+              borderRadius: 999,
+              color: active ? "#fffaf0" : "#594320",
+              fontWeight: 700,
+              padding: "0.65rem 0.95rem",
+              textDecoration: "none"
+            }}
+          >
+            {tab.label}
+          </Link>
+        );
+      })}
+    </nav>
+  );
+}
+
+export function AdminActionRow(props: { children: ReactNode; marginTop?: string }) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexWrap: "wrap",
+        gap: "0.75rem",
+        marginTop: props.marginTop ?? "0"
+      }}
+    >
+      {props.children}
+    </div>
+  );
+}
+
+export function AdminMatrixGroup<TRow extends { id: string }>(props: {
+  columns: AdminTableColumn<TRow>[];
+  emptyState: string;
+  label: string;
+  rowCount: number;
+  rows: TRow[];
+  singularUnit?: string;
+}) {
+  const unit = props.singularUnit ?? "row";
+
+  return (
+    <AdminPanel
+      subtitle={`${props.rowCount} ${unit}${props.rowCount === 1 ? "" : "s"} in this slice.`}
+      title={props.label}
+    >
+      <AdminDataTable
+        columns={props.columns}
+        emptyState={props.emptyState}
+        rows={props.rows}
+      />
+    </AdminPanel>
   );
 }

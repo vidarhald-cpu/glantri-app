@@ -1,3 +1,5 @@
+import styles from "./FeedbackPanel.module.css";
+
 interface FeedbackPanelProps {
   messages: string[];
 }
@@ -8,14 +10,7 @@ export function FeedbackPanel({ messages }: FeedbackPanelProps) {
   }
 
   return (
-    <div
-      style={{
-        background: "#fff8e1",
-        border: "1px solid #e6d38c",
-        borderRadius: 12,
-        padding: "1rem",
-      }}
-    >
+    <div className={styles.panel}>
       {messages.map((message) => (
         <div key={message}>{message}</div>
       ))}

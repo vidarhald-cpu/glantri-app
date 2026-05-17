@@ -2,6 +2,7 @@ import type { FastifyPluginAsync } from "fastify";
 
 import { CampaignService, CharacterService, EncounterService, ScenarioService } from "@glantri/database";
 import {
+  buildScenarioPlayerVisibleParticipants,
   reusableEntityKindSchema,
   scenarioParticipantJoinSourceSchema,
   scenarioParticipantRoleSchema,
@@ -9,6 +10,7 @@ import {
 } from "@glantri/domain";
 
 import { requireAdminUser, requireAuthenticatedUser } from "../../lib/sessionAuth";
+import { resolveScenarioWorkspaceAccess } from "./access";
 import { canEditCharacterInApi } from "../../lib/characterEditAccess";
 import {
   parseBodyObject,
@@ -35,20 +37,69 @@ export const participantRoutes: FastifyPluginAsync = async (app) => {
 
     try {
       const scenarioId = parseId(request.params, "scenarioId", "Scenario id");
-      const scenario = await scenarioService.getScenarioById(scenarioId);
+      const access = await resolveScenarioWorkspaceAccess(
+        { campaignService, scenarioService },
+        { scenarioId, userId: user.id, userRoles: user.roles }
+      );
 
-      if (!scenario) {
+      if (!access) {
+        return reply.code(404).send({
+          error: "Scenario not found."
+        });
+      }
+
+      const allParticipants = await scenarioService.listScenarioParticipants(scenarioId);
+      const participants =
+        access.mode === "gm"
+          ? allParticipants
+          : allParticipants.filter(
+              (participant) =>
+                participant.isActive && participant.controlledByUserId === user.id
+            );
+
+      if (access.mode === "player") {
+        return {
+          participants: buildScenarioPlayerVisibleParticipants({ participants })
+        };
+      }
+
+      return { participants };
+    } catch (error) {
+      return reply.code(400).send({
+        error: error instanceof Error ? error.message : "Unable to list scenario participants."
+      });
+    }
+  });
+
+  app.get("/scenarios/:scenarioId/my-participant", async (request, reply) => {
+    const user = await requireAuthenticatedUser(request, reply);
+
+    if (!user) {
+      return;
+    }
+
+    try {
+      const scenarioId = parseId(request.params, "scenarioId", "Scenario id");
+      const access = await resolveScenarioWorkspaceAccess(
+        { campaignService, scenarioService },
+        { scenarioId, userId: user.id, userRoles: user.roles }
+      );
+
+      if (!access) {
         return reply.code(404).send({
           error: "Scenario not found."
         });
       }
 
       const participants = await scenarioService.listScenarioParticipants(scenarioId);
+      const myParticipant = participants.find(
+        (p) => p.isActive && p.role === "player_character" && p.controlledByUserId === user.id
+      ) ?? null;
 
-      return { participants };
+      return { participant: myParticipant };
     } catch (error) {
       return reply.code(400).send({
-        error: error instanceof Error ? error.message : "Unable to list scenario participants."
+        error: error instanceof Error ? error.message : "Unable to load participant."
       });
     }
   });
@@ -153,12 +204,13 @@ export const participantRoutes: FastifyPluginAsync = async (app) => {
 
     try {
       const scenarioId = parseId(request.params, "scenarioId", "Scenario id");
-      const scenario = await scenarioService.getScenarioById(scenarioId);
+      const access = await resolveScenarioWorkspaceAccess(
+        { campaignService, scenarioService },
+        { scenarioId, userId: user.id, userRoles: user.roles }
+      );
 
-      if (!scenario) {
-        return reply.code(404).send({
-          error: "Scenario not found."
-        });
+      if (!access || access.mode !== "gm") {
+        return reply.code(404).send({ error: "Scenario not found." });
       }
 
       const body = parseBodyObject(request.body, "Entity participant payload");
@@ -214,6 +266,26 @@ export const participantRoutes: FastifyPluginAsync = async (app) => {
     try {
       const scenarioId = parseId(request.params, "scenarioId", "Scenario id");
       const participantId = parseId(request.params, "participantId", "Participant id");
+      const access = await resolveScenarioWorkspaceAccess(
+        { campaignService, scenarioService },
+        { scenarioId, userId: user.id, userRoles: user.roles }
+      );
+
+      if (!access) {
+        return reply.code(404).send({ error: "Scenario not found." });
+      }
+
+      if (access.mode === "player") {
+        const participant = await scenarioService.getScenarioParticipantById(
+          participantId,
+          scenarioId
+        );
+
+        if (!participant || participant.controlledByUserId !== user.id) {
+          return reply.code(403).send({ error: "Access denied." });
+        }
+      }
+
       const body = parseBodyObject(request.body, "Participant state payload");
       const participant = await encounterService.updateScenarioParticipantState({
         participantId,
@@ -241,12 +313,13 @@ export const participantRoutes: FastifyPluginAsync = async (app) => {
       try {
         const scenarioId = parseId(request.params, "scenarioId", "Scenario id");
         const participantId = parseId(request.params, "participantId", "Participant id");
-        const scenario = await scenarioService.getScenarioById(scenarioId);
+        const access = await resolveScenarioWorkspaceAccess(
+          { campaignService, scenarioService },
+          { scenarioId, userId: user.id, userRoles: user.roles }
+        );
 
-        if (!scenario) {
-          return reply.code(404).send({
-            error: "Scenario not found."
-          });
+        if (!access || access.mode !== "gm") {
+          return reply.code(404).send({ error: "Scenario not found." });
         }
 
         const body = parseBodyObject(request.body, "Participant metadata payload");

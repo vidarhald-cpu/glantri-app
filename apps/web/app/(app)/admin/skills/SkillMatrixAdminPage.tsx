@@ -13,6 +13,7 @@ import {
   AdminAuditLegend,
   AdminDataTable,
   AdminField,
+  AdminMatrixGroup,
   AdminMetric,
   AdminPageIntro,
   AdminPanel,
@@ -359,67 +360,65 @@ export default function SkillMatrixAdminPage() {
       </AdminPanel>
 
       {groupedRows.map((group) => (
-        <AdminPanel
+        <AdminMatrixGroup
           key={group.label}
-          subtitle={`${group.rows.length} skill${group.rows.length === 1 ? "" : "s"} in this slice.`}
-          title={group.label}
-        >
-          <AdminDataTable
-            columns={[
-              {
-                header: "Skill Name",
-                render: (row) => <strong>{row.name}</strong>,
-                width: "12rem"
-              },
-              {
-                header: "Type",
-                render: (row) => row.skillType
-              },
-              {
-                header: "Parent Skill Group(s)",
-                render: (row) => <AdminTagList values={row.groupNames} />,
-                width: "14rem"
-              },
-              {
-                header: "Society Level",
-                render: (row) => row.societyLevel
-              },
-              {
-                header: "Dependencies",
-                render: (row) => <AdminTagList values={row.dependencies} />,
-                width: "15rem"
-              },
-              {
-                header: "Depended On By",
-                render: (row) => <AdminTagList values={row.dependedOnBy} />,
-                width: "15rem"
-              },
-              {
-                header: "Secondary Of",
-                render: (row) => row.secondaryOf || <span style={{ color: "#8a7e63" }}>None</span>
-              },
-              {
-                header: "Specialization Of",
-                render: (row) =>
-                  row.specializationOf || <span style={{ color: "#8a7e63" }}>None</span>
-              },
-              {
-                header: "Has Specializations",
-                render: (row) => (row.hasSpecializations ? "Yes" : "No")
-              },
-              {
-                header: "Literacy Requirement",
-                render: (row) => row.literacyRequirement
-              },
-              {
-                header: "Allows Specializations",
-                render: (row) => (row.allowsSpecializations ? "Yes" : "No")
-              }
-            ]}
-            emptyState="No skills match this grouping."
-            rows={group.rows}
-          />
-        </AdminPanel>
+          columns={[
+            {
+              header: "Skill Name",
+              render: (row) => <strong>{row.name}</strong>,
+              width: "12rem"
+            },
+            {
+              header: "Type",
+              render: (row) => row.skillType
+            },
+            {
+              header: "Parent Skill Group(s)",
+              render: (row) => <AdminTagList values={row.groupNames} />,
+              width: "14rem"
+            },
+            {
+              header: "Society Level",
+              render: (row) => row.societyLevel
+            },
+            {
+              header: "Dependencies",
+              render: (row) => <AdminTagList values={row.dependencies} />,
+              width: "15rem"
+            },
+            {
+              header: "Depended On By",
+              render: (row) => <AdminTagList values={row.dependedOnBy} />,
+              width: "15rem"
+            },
+            {
+              header: "Secondary Of",
+              render: (row) => row.secondaryOf || <span style={{ color: "#8a7e63" }}>None</span>
+            },
+            {
+              header: "Specialization Of",
+              render: (row) =>
+                row.specializationOf || <span style={{ color: "#8a7e63" }}>None</span>
+            },
+            {
+              header: "Has Specializations",
+              render: (row) => (row.hasSpecializations ? "Yes" : "No")
+            },
+            {
+              header: "Literacy Requirement",
+              render: (row) => row.literacyRequirement
+            },
+            {
+              header: "Allows Specializations",
+              render: (row) => (row.allowsSpecializations ? "Yes" : "No")
+            }
+          ]}
+          emptyState="No skills match this grouping."
+          label={group.label}
+          rowCount={group.rows.length}
+          rows={group.rows}
+          singularUnit="skill"
+        />
       ))}
     </section>
   );

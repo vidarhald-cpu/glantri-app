@@ -5,6 +5,7 @@ import { characterBuildSchema } from "@glantri/domain";
 
 import { requireAuthenticatedUser } from "../lib/sessionAuth";
 import { canEditCharacterInApi, loadAccessibleCharacterInApi } from "../lib/characterEditAccess";
+import { BadRequestError, NotFoundError, handleRouteError } from "../lib/errors";
 
 const characterService = new CharacterService();
 
@@ -26,48 +27,47 @@ export const charactersRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.get("/:id", async (request, reply) => {
-    const user = await requireAuthenticatedUser(request, reply);
+    try {
+      const user = await requireAuthenticatedUser(request, reply);
 
-    if (!user) {
-      return;
-    }
+      if (!user) {
+        return;
+      }
 
-    const characterId = (request.params as { id?: string }).id;
+      const characterId = (request.params as { id?: string }).id;
 
-    if (!characterId) {
-      return reply.code(400).send({
-        error: "Character id is required."
+      if (!characterId) {
+        throw new BadRequestError("Character id is required.");
+      }
+
+      const character = await loadAccessibleCharacterInApi({
+        characterId,
+        characterService,
+        user
       });
+
+      if (!character) {
+        throw new NotFoundError("Character not found.");
+      }
+
+      return {
+        character
+      };
+    } catch (error) {
+      return handleRouteError(error, reply);
     }
-
-    const character = await loadAccessibleCharacterInApi({
-      characterId,
-      characterService,
-      user
-    });
-
-    if (!character) {
-      return reply.code(404).send({
-        error: "Character not found."
-      });
-    }
-
-    return {
-      character
-    };
   });
 
   app.post("/", async (request, reply) => {
-    const user = await requireAuthenticatedUser(request, reply);
-
-    if (!user) {
-      return;
-    }
-
-    const payload = request.body as { build?: unknown };
-    const build = characterBuildSchema.parse(payload.build);
-
     try {
+      const user = await requireAuthenticatedUser(request, reply);
+
+      if (!user) {
+        return;
+      }
+
+      const payload = request.body as { build?: unknown };
+      const build = characterBuildSchema.parse(payload.build);
       const character = await characterService.saveCharacter({
         build,
         id: build.id,
@@ -81,41 +81,36 @@ export const charactersRoutes: FastifyPluginAsync = async (app) => {
       };
     } catch (error) {
       if (error instanceof CharacterValidationError) {
-        return reply.code(400).send({
-          error: "Character build validation failed.",
-          issues: error.issues
-        });
+        return handleRouteError(
+          new BadRequestError("Character build validation failed.", { issues: error.issues }),
+          reply
+        );
       }
-
-      throw error;
+      return handleRouteError(error, reply);
     }
   });
 
   app.put("/:id", async (request, reply) => {
-    const user = await requireAuthenticatedUser(request, reply);
-
-    if (!user) {
-      return;
-    }
-
-    const characterId = (request.params as { id?: string }).id;
-
-    if (!characterId) {
-      return reply.code(400).send({
-        error: "Character id is required."
-      });
-    }
-
-    const payload = request.body as { build?: unknown };
-    const build = characterBuildSchema.parse(payload.build);
-
-    if (build.id !== characterId) {
-      return reply.code(400).send({
-        error: "Character id does not match build id."
-      });
-    }
-
     try {
+      const user = await requireAuthenticatedUser(request, reply);
+
+      if (!user) {
+        return;
+      }
+
+      const characterId = (request.params as { id?: string }).id;
+
+      if (!characterId) {
+        throw new BadRequestError("Character id is required.");
+      }
+
+      const payload = request.body as { build?: unknown };
+      const build = characterBuildSchema.parse(payload.build);
+
+      if (build.id !== characterId) {
+        throw new BadRequestError("Character id does not match build id.");
+      }
+
       const accessibleCharacter = await loadAccessibleCharacterInApi({
         characterId,
         characterService,
@@ -123,9 +118,7 @@ export const charactersRoutes: FastifyPluginAsync = async (app) => {
       });
 
       if (!accessibleCharacter) {
-        return reply.code(404).send({
-          error: "Character not found."
-        });
+        throw new NotFoundError("Character not found.");
       }
 
       const character = await characterService.saveExistingCharacter({
@@ -134,9 +127,7 @@ export const charactersRoutes: FastifyPluginAsync = async (app) => {
       });
 
       if (!character) {
-        return reply.code(404).send({
-          error: "Character not found."
-        });
+        throw new NotFoundError("Character not found.");
       }
 
       return {
@@ -144,13 +135,12 @@ export const charactersRoutes: FastifyPluginAsync = async (app) => {
       };
     } catch (error) {
       if (error instanceof CharacterValidationError) {
-        return reply.code(400).send({
-          error: "Character build validation failed.",
-          issues: error.issues
-        });
+        return handleRouteError(
+          new BadRequestError("Character build validation failed.", { issues: error.issues }),
+          reply
+        );
       }
-
-      throw error;
+      return handleRouteError(error, reply);
     }
   });
 };

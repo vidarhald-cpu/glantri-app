@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import type { AuthRole } from "@glantri/auth";
 import { formatAuthRoleLabel, hasAnyRole } from "@glantri/auth";
 
+import styles from "./accessGate.module.css";
 import { useSessionUser } from "./SessionUserContext";
 
 export function RequireAuthenticatedUser(props: {
@@ -20,9 +21,9 @@ export function RequireAuthenticatedUser(props: {
 
   if (!currentUser) {
     return (
-      <section style={{ display: "grid", gap: "0.75rem", maxWidth: 720 }}>
-        <h1 style={{ margin: 0 }}>{props.title ?? "Login required"}</h1>
-        <p style={{ margin: 0 }}>
+      <section className={styles.section}>
+        <h1 className={styles.heading}>{props.title ?? "Login required"}</h1>
+        <p className={styles.message}>
           {props.message ?? "You need to sign in before you can use this part of the app."}
         </p>
         <div>
@@ -49,9 +50,9 @@ export function RequireRole(props: {
 
   if (!currentUser) {
     return (
-      <section style={{ display: "grid", gap: "0.75rem", maxWidth: 720 }}>
-        <h1 style={{ margin: 0 }}>Login required</h1>
-        <p style={{ margin: 0 }}>You need to sign in before you can use this part of the app.</p>
+      <section className={styles.section}>
+        <h1 className={styles.heading}>Login required</h1>
+        <p className={styles.message}>You need to sign in before you can use this part of the app.</p>
         <div>
           <Link href="/auth">Go to login</Link>
         </div>
@@ -61,9 +62,9 @@ export function RequireRole(props: {
 
   if (!hasAnyRole(currentUser.roles, props.allowedRoles)) {
     return (
-      <section style={{ display: "grid", gap: "0.75rem", maxWidth: 720 }}>
-        <h1 style={{ margin: 0 }}>{props.title ?? "Access restricted"}</h1>
-        <p style={{ margin: 0 }}>
+      <section className={styles.section}>
+        <h1 className={styles.heading}>{props.title ?? "Access restricted"}</h1>
+        <p className={styles.message}>
           {props.message ??
             `This area is limited to ${props.allowedRoles.map(formatAuthRoleLabel).join(" / ")} accounts.`}
         </p>

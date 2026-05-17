@@ -4,7 +4,7 @@ import { useMemo } from "react";
 import { equipmentTemplates } from "@glantri/content/equipment";
 import type { ShieldTemplate } from "@glantri/domain";
 
-import { AdminPageIntro, AdminPanel } from "../admin-ui";
+import { AdminCatalogTable, AdminPageIntro, AdminPanel } from "../admin-ui";
 import { formatWeaponModeDmb } from "@/features/equipment/meleeWeaponDisplay";
 
 function formatOptionalDisplayValue(value: number | string | null | undefined): string {
@@ -28,51 +28,6 @@ function formatRangeLabel(value: number | string | null | undefined): string {
 
   const text = typeof value === "number" ? String(value) : value.trim();
   return text.length > 0 ? text : "—";
-}
-
-function TableShell(input: {
-  columns: string[];
-  emptyLabel: string;
-  rows: string[][];
-}) {
-  return input.rows.length > 0 ? (
-    <div style={{ overflow: "auto" }}>
-      <table style={{ borderCollapse: "collapse", minWidth: "100%", width: "100%" }}>
-        <thead>
-          <tr style={{ borderBottom: "1px solid rgba(85, 73, 48, 0.14)", textAlign: "left" }}>
-            {input.columns.map((column) => (
-              <th
-                key={column}
-                style={{
-                  background: "rgba(250, 245, 234, 0.98)",
-                  padding: "0.55rem 0.75rem 0.55rem 0",
-                  verticalAlign: "bottom"
-                }}
-              >
-                {column}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {input.rows.map((row, rowIndex) => (
-            <tr key={`shields-row-${rowIndex}`} style={{ borderBottom: "1px solid rgba(85, 73, 48, 0.08)" }}>
-              {row.map((value, cellIndex) => (
-                <td
-                  key={`shields-row-${rowIndex}-${cellIndex}`}
-                  style={{ padding: "0.65rem 0.75rem 0.65rem 0", verticalAlign: "top" }}
-                >
-                  {value}
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  ) : (
-    <div>{input.emptyLabel}</div>
-  );
 }
 
 export default function ShieldsAdminPage() {
@@ -131,7 +86,7 @@ export default function ShieldsAdminPage() {
         title="System Shield Catalog"
         subtitle="Workbook-backed shield templates merge offensive values from Weapon1 with defensive values from Shields, preserving import warnings where the sources diverge."
       >
-        <TableShell
+        <AdminCatalogTable
           emptyLabel="No shield templates found."
           columns={[
             "Name",

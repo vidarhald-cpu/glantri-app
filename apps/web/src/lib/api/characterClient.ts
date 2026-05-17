@@ -1,26 +1,12 @@
-import type { CharacterBuild } from "@glantri/domain";
+import type { CharacterBuild, CharacterRecord } from "@glantri/domain";
 
 import { sendJson } from "./apiClient";
 
-export interface ServerCharacterRecord {
-  build: CharacterBuild;
-  createdAt: string;
-  id: string;
-  level: number;
-  name: string;
-  owner?:
-    | {
-        displayName?: string | null;
-        email: string;
-        id: string;
-      }
-    | null;
-  ownerId?: string | null;
-  updatedAt: string;
-}
+export type { CharacterRecord };
+export type ServerCharacterRecord = CharacterRecord;
 
-export async function saveCharacterToServer(build: CharacterBuild): Promise<ServerCharacterRecord> {
-  const payload = await sendJson<{ character: ServerCharacterRecord }>("/characters", {
+export async function saveCharacterToServer(build: CharacterBuild): Promise<CharacterRecord> {
+  const payload = await sendJson<{ character: CharacterRecord }>("/characters", {
     body: JSON.stringify({ build }),
     method: "POST"
   });
@@ -28,20 +14,20 @@ export async function saveCharacterToServer(build: CharacterBuild): Promise<Serv
   return payload.character;
 }
 
-export async function loadServerCharacters(): Promise<ServerCharacterRecord[]> {
-  const payload = await sendJson<{ characters: ServerCharacterRecord[] }>("/characters", {
+export async function loadServerCharacters(): Promise<CharacterRecord[]> {
+  const payload = await sendJson<{ characters: CharacterRecord[] }>("/characters", {
     method: "GET"
   });
 
   return payload.characters;
 }
 
-export async function loadMyServerCharacters(): Promise<ServerCharacterRecord[]> {
+export async function loadMyServerCharacters(): Promise<CharacterRecord[]> {
   return loadServerCharacters();
 }
 
-export async function loadServerCharacterById(characterId: string): Promise<ServerCharacterRecord> {
-  const payload = await sendJson<{ character: ServerCharacterRecord }>(`/characters/${characterId}`, {
+export async function loadServerCharacterById(characterId: string): Promise<CharacterRecord> {
+  const payload = await sendJson<{ character: CharacterRecord }>(`/characters/${characterId}`, {
     method: "GET"
   });
 
@@ -51,8 +37,8 @@ export async function loadServerCharacterById(characterId: string): Promise<Serv
 export async function updateServerCharacter(input: {
   build: CharacterBuild;
   characterId: string;
-}): Promise<ServerCharacterRecord> {
-  const payload = await sendJson<{ character: ServerCharacterRecord }>(`/characters/${input.characterId}`, {
+}): Promise<CharacterRecord> {
+  const payload = await sendJson<{ character: CharacterRecord }>(`/characters/${input.characterId}`, {
     body: JSON.stringify({
       build: input.build
     }),

@@ -12,6 +12,10 @@ export function canAccessAdmin(userRoles: AuthRole[]): boolean {
   return hasAnyRole(userRoles, ["admin", "game_master"]);
 }
 
+export function isAdmin(userRoles: AuthRole[]): boolean {
+  return hasRole(userRoles, "admin");
+}
+
 export function getPrimaryRole(userRoles: AuthRole[]): AuthRole {
   if (hasRole(userRoles, "admin")) {
     return "admin";

@@ -1,24 +1,9 @@
-import { characterBuildSchema, type CharacterBuild } from "@glantri/domain";
+import { characterBuildSchema, type CharacterBuild, type CharacterRecord } from "@glantri/domain";
 import type { PrismaClient } from "@prisma/client";
 
 import { prisma as defaultPrisma } from "../client";
 
-export interface CharacterRecord {
-  build: CharacterBuild;
-  createdAt: string;
-  id: string;
-  name: string;
-  level: number;
-  owner?:
-    | {
-        displayName?: string | null;
-        email: string;
-        id: string;
-      }
-    | null;
-  ownerId?: string | null;
-  updatedAt: string;
-}
+export type { CharacterRecord };
 
 export interface CreateCharacterRecordInput {
   build: CharacterBuild;
@@ -30,6 +15,7 @@ export interface CreateCharacterRecordInput {
 
 export interface CharacterRepository {
   findById(id: string): Promise<CharacterRecord | null>;
+  findInGmCampaigns(gmUserId: string, id: string): Promise<CharacterRecord | null>;
   findOwnedById(ownerId: string, id: string): Promise<CharacterRecord | null>;
   listAll(): Promise<CharacterRecord[]>;
   saveOwned(input: CreateCharacterRecordInput): Promise<CharacterRecord>;
@@ -86,6 +72,32 @@ export function createPrismaCharacterRepository(client?: PrismaClient): Characte
         where: {
           id
         }
+      });
+
+      return character ? mapCharacterRecord(character) : null;
+    },
+    async findInGmCampaigns(gmUserId, id) {
+      const entry = await prisma.campaignRosterEntry.findFirst({
+        where: {
+          sourceType: "character",
+          sourceId: id,
+          campaign: { gmUserId }
+        }
+      });
+
+      if (!entry) return null;
+
+      const character = await prisma.character.findUnique({
+        include: {
+          owner: {
+            select: {
+              displayName: true,
+              email: true,
+              id: true
+            }
+          }
+        },
+        where: { id }
       });
 
       return character ? mapCharacterRecord(character) : null;

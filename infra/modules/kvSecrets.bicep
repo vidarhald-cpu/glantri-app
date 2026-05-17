@@ -1,6 +1,11 @@
 param kvName string
+
+@secure()
 param databaseUrl string
+
 param webOrigin string
+
+@secure()
 param appInsightsConnectionString string
 
 resource kv 'Microsoft.KeyVault/vaults@2023-07-01' existing = {

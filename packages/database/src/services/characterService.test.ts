@@ -66,6 +66,7 @@ function createRepositoryStub(existingCharacter?: CharacterRecord | null) {
 
   const repository: CharacterRepository = {
     findById: async (id) => (existingCharacter && existingCharacter.id === id ? existingCharacter : null),
+    findInGmCampaigns: async () => null,
     findOwnedById: async () => null,
     listAll: async () => (existingCharacter ? [existingCharacter] : []),
     listByOwner: async () => [],

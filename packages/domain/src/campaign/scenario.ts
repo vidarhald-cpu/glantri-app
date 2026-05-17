@@ -387,10 +387,6 @@ export type ScenarioPlayerControlledParticipant = z.infer<
 >;
 export type ScenarioPlayerProjection = z.infer<typeof scenarioPlayerProjectionSchema>;
 
-function nowIsoString(): string {
-  return new Date().toISOString();
-}
-
 function clampHealth(value: number, max: number): number {
   return Math.max(0, Math.min(value, max));
 }
@@ -468,7 +464,7 @@ export function createScenarioLiveState(): ScenarioLiveState {
 
 export function startScenario(
   liveState: ScenarioLiveState | undefined,
-  startedAt = nowIsoString()
+  startedAt: string
 ): ScenarioLiveState {
   return scenarioLiveStateSchema.parse({
     ...(liveState ?? createScenarioLiveState()),
@@ -515,9 +511,14 @@ export function createParticipantSnapshotFromCharacter(input: {
 } {
   const health = inferHealthFromCharacter(input.build);
 
+  // Strip private fields before storing in snapshot — notes belong to the character owner only
+  const { inventoryNotes: _inv, profile, ...buildRest } = input.build;
+  const { notes: _notes, ...profileRest } = profile;
+  const snapshotBuild = { ...buildRest, profile: profileRest };
+
   return {
     snapshot: scenarioParticipantSnapshotSchema.parse({
-      build: input.build,
+      build: snapshotBuild,
       displayName: input.build.name,
       equipmentState: input.equipmentState,
       sheetSummary: input.sheetSummary,
@@ -634,7 +635,7 @@ function isPlayerControlledScenarioParticipant(input: {
   );
 }
 
-function buildScenarioPlayerVisibleParticipants(input: {
+export function buildScenarioPlayerVisibleParticipants(input: {
   controlledParticipantId?: string;
   participants: ScenarioParticipant[];
 }): ScenarioPlayerVisibleParticipant[] {

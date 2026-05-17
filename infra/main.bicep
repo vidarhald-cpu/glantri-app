@@ -62,6 +62,7 @@ module appService 'modules/appservice.bicep' = {
     prefix: prefix
     location: location
     keyVaultUri: keyVault.outputs.uri
+    registryServer: acr.outputs.loginServer
   }
 }
 

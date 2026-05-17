@@ -3,17 +3,17 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import type { AuthUser } from "@glantri/auth";
 import type { Campaign, Scenario } from "@glantri/domain";
 
-import * as api from "../api/localServiceClient";
-import { ApiRequestError } from "../api/localServiceClient";
+import * as api from "../api/campaignClient";
+import { ApiRequestError } from "../api/apiClient";
 import {
   loadCampaignBrowserRecordsForUser,
   loadCampaignWorkspaceAccessForUser,
   resolveCampaignResumeDestination,
 } from "./access";
 
-vi.mock("../api/localServiceClient", async () => {
-  const actual = await vi.importActual<typeof import("../api/localServiceClient")>(
-    "../api/localServiceClient",
+vi.mock("../api/campaignClient", async () => {
+  const actual = await vi.importActual<typeof import("../api/campaignClient")>(
+    "../api/campaignClient",
   );
 
   return {

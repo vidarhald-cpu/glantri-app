@@ -469,3 +469,13 @@ export function isUserAssignedToEncounterMembership(input: {
   );
 }
 export type EncounterSession = z.infer<typeof encounterSessionSchema>;
+
+export function buildPlayerSafeRoleplayState(state: RoleplayState): RoleplayState {
+  return {
+    actionLog: state.actionLog.filter((entry) => !entry.silent),
+    gmMessage: state.gmMessage,
+    participantDescriptions: {},
+    pendingSkillRolls: state.pendingSkillRolls.filter((roll) => !roll.silent),
+    visibility: {}
+  };
+}
