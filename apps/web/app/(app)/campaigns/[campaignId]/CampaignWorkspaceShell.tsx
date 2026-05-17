@@ -24,13 +24,13 @@ import {
   resolveCampaignWorkspaceState,
   type CampaignWorkspaceTabId
 } from "@/lib/campaigns/workspace";
-import EncounterDetail from "../../encounters/[id]/EncounterDetail";
+import EncounterDetail from "@/features/encounters/EncounterDetail";
 import CampaignDetailPageContent from "./CampaignDetailPageContent";
 import CharacterWorkspacePanel from "./CharacterWorkspacePanel";
 import ScenarioDetailPageContent from "./scenarios/[scenarioId]/ScenarioDetailPageContent";
 import ScenarioPlayerPageContent from "./scenarios/[scenarioId]/player/ScenarioPlayerPageContent";
 import ScenarioPlayerCombatPageContent from "./scenarios/[scenarioId]/player/combat/ScenarioPlayerCombatPageContent";
-import { PlayerRoleplayingEncounterScreen } from "../../encounters/[id]/RoleplayEncounterScreens";
+import { PlayerRoleplayingEncounterScreen } from "@/features/roleplay/RoleplayEncounterScreens";
 
 interface CampaignWorkspaceShellProps {
   campaignId: string;
