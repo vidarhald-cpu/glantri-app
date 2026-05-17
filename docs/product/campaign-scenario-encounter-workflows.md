@@ -130,7 +130,7 @@ Current first-pass rule:
 
 - The Character page intentionally reuses the existing Equip Items interface as its equipment/loadout core.
 - Equip Items remains available as its own route.
-- The primary live-play workflow is the Campaign workspace Character tab.
+- Character control belongs in the Campaign/Scenario/Encounter workspace, not the general Characters section.
 - Player Character tab shows only the player's current controlled scenario or encounter character.
 - GM Character tab lets the GM inspect and shuffle through character-backed scenario or encounter participants.
 - Character control now includes a first Physical state scaffold with Hitpoints, Damage by type, and Log of hits.

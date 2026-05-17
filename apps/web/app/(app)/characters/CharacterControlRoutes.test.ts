@@ -18,25 +18,13 @@ describe("character control routes", () => {
     expect(source).not.toContain("showPhysicalState");
   });
 
-  it("adds a player Character route with the live Physical state section", () => {
-    const source = readRoute("[id]/character/page.tsx");
+  it("keeps the shared loadout view ready for workspace Character control without changing Equip items", () => {
     const sharedViewSource = readRoute("[id]/components/CharacterLoadoutView.tsx");
 
-    expect(source).toContain("CharacterLoadoutView");
-    expect(source).toContain("<CharacterLoadoutView characterId={id} showPhysicalState />");
     expect(sharedViewSource).toContain("Equip items -");
     expect(sharedViewSource).toContain("PhysicalStateSection");
+    expect(sharedViewSource).toContain("calculateCharacterGeneralHitpoints");
+    expect(sharedViewSource).not.toContain("rolledStats.health");
     expect(sharedViewSource).not.toContain("combat arena");
-  });
-
-  it("adds a GM inspection page with a character selector and the same loadout view", () => {
-    const source = readRoute("inspect/CharacterInspectionPageContent.tsx");
-
-    expect(source).toContain("<h1 style={{ margin: 0 }}>Character</h1>");
-    expect(source).toContain("Select character to inspect");
-    expect(source).toContain("Previous");
-    expect(source).toContain("Next");
-    expect(source).toContain("CharacterLoadoutView");
-    expect(source).toContain("showPhysicalState");
   });
 });

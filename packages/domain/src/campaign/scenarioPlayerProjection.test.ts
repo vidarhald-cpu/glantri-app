@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { CharacterBuild } from "../character/build";
 import type { Scenario, ScenarioParticipant } from "./scenario";
-import { buildScenarioPlayerProjection } from "./scenario";
+import { buildScenarioPlayerProjection, calculateCharacterGeneralHitpoints } from "./scenario";
 
 const scenario: Scenario = {
   campaignId: "campaign-1",
@@ -78,6 +78,20 @@ function createParticipant(input: {
 }
 
 describe("buildScenarioPlayerProjection", () => {
+  it("uses calculated CON/SIZ general hitpoints instead of the raw Health roll", () => {
+    const build = {
+      profile: {
+        rolledStats: {
+          con: 18,
+          health: 7,
+          siz: 16
+        }
+      }
+    } as CharacterBuild;
+
+    expect(calculateCharacterGeneralHitpoints(build)).toBe(17);
+  });
+
   it("resolves the active controlled player character and builds a visible participant list", () => {
     const build: CharacterBuild = {
       equipment: { items: [] },

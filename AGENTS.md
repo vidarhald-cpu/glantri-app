@@ -20,10 +20,10 @@ Likely important areas
 Architecture and import rules
 
 Package dependency direction is strictly top-down:
-• apps/* may import from packages/* — never the reverse
-• packages/rules-engine imports only from packages/domain — not from apps/* or packages/database
+• apps/_ may import from packages/_ — never the reverse
+• packages/rules-engine imports only from packages/domain — not from apps/_ or packages/database
 • packages/domain has no imports from other repo packages (it is the bottom layer)
-• @glantri/test-scenarios is forbidden outside *.test.ts, *.test.tsx, and e2e/
+• @glantri/test-scenarios is forbidden outside _.test.ts, \*.test.tsx, and e2e/
 • apps/web/app/ uses @/ alias to apps/web/src/ — do not write long relative ../../src/ paths
 • packages/database repositories are internal — external callers use services only
 • All game rule calculations go in packages/rules-engine, not in web features
@@ -41,13 +41,13 @@ Where to place new code
 Feature folder structure for apps/web/src/features/<feature>/
 
 Large features must follow this layout:
-  README.md         — responsibility, entrypoints, state location, API calls, test commands
-  index.ts
-  components/       — pure presentational components, no side effects
-  hooks/            — data loading and side effects (useXData.ts)
-  state/            — reducer/state machine using useReducer, not many useState
-  view-models/      — pure functions for filtering, sorting, display models
-  tests/
+README.md — responsibility, entrypoints, state location, API calls, test commands
+index.ts
+components/ — pure presentational components, no side effects
+hooks/ — data loading and side effects (useXData.ts)
+state/ — reducer/state machine using useReducer, not many useState
+view-models/ — pure functions for filtering, sorting, display models
+tests/
 
 page.tsx files in app/ are thin wrappers — no state, no fetch, layout only.
 State machines and view models must be testable without React.
@@ -151,3 +151,36 @@ Do not use partial skill values such as:
 • only group contribution
 
 The split between direct allocation and group contribution exists for character building and later progression workflows, not for combat math.
+
+## Agent pre-flight rule
+
+Before implementing any non-trivial change, the agent must first sync with the current project architecture.
+
+Read, when present:
+
+- `AGENTS.md`
+- `docs/architecture/current-refactor-priorities.md`
+- `docs/architecture/recent-architecture-changes.md`
+- `docs/product/campaign-scenario-encounter-workflows.md`
+- `docs/testing-regression-matrix.md`
+
+Then inspect the current source files relevant to the task. Do not rely on assumptions from older branches or earlier conversations.
+
+Before changing files, identify:
+
+1. Which current files/helpers/components are canonical for this task.
+2. Whether the target area was recently refactored.
+3. Where the new code should live.
+4. Which existing tests protect the area.
+5. Which verification commands must be run.
+
+Rules:
+
+- Preserve the current architecture from `main`.
+- Use existing extracted components, helpers, and services.
+- Do not re-inline logic that has been extracted.
+- Do not create duplicate calculation paths.
+- Put business/game rules in `domain` or `rules-engine` where practical.
+- Keep UI pages mostly as orchestration/composition where practical.
+- Add or update tests for behavior changes.
+- Do not add visual placeholders for unimplemented features.

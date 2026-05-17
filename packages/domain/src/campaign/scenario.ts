@@ -391,10 +391,14 @@ function clampHealth(value: number, max: number): number {
   return Math.max(0, Math.min(value, max));
 }
 
-function inferHealthFromCharacter(build: CharacterBuild): ScenarioParticipantState["health"] {
+export function calculateCharacterGeneralHitpoints(build: CharacterBuild): number {
   const con = build.profile.rolledStats.con ?? 0;
   const siz = build.profile.rolledStats.siz ?? 0;
-  const maxHp = Math.max(1, Math.round((con + siz) / 2));
+  return Math.max(1, Math.round((con + siz) / 2));
+}
+
+function inferHealthFromCharacter(build: CharacterBuild): ScenarioParticipantState["health"] {
+  const maxHp = calculateCharacterGeneralHitpoints(build);
 
   return {
     bleeding: 0,

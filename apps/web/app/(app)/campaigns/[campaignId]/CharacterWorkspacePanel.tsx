@@ -152,7 +152,11 @@ export default function CharacterWorkspacePanel({
       ) : null}
 
       {selectedCandidate ? (
-        <CharacterLoadoutView characterId={selectedCandidate.characterId} showPhysicalState />
+        <CharacterLoadoutView
+          characterId={selectedCandidate.characterId}
+          physicalStateGeneralHitpoints={selectedCandidate.scenarioParticipant.state.health.maxHp}
+          showPhysicalState
+        />
       ) : null}
     </section>
   );
