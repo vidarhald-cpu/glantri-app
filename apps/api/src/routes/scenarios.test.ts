@@ -637,6 +637,133 @@ describe("scenarios route contract", () => {
     expect(mocks.encounterService.listEncountersByScenario).toHaveBeenCalledWith("scenario-1");
   });
 
+  it("returns player-safe roleplay visibility for a player's encounter", async () => {
+    const scenario = {
+      campaignId: "campaign-1",
+      id: "scenario-1",
+      kind: "mixed",
+      name: "A slightly less new hope",
+      status: "live",
+    };
+    const campaign = {
+      gmUserId: "gm-1",
+      id: "campaign-1",
+      name: "Border Trouble",
+      status: "active",
+    };
+    const encounter = {
+      createdAt: "2026-01-01T00:00:00.000Z",
+      currentRound: 1,
+      currentTurnIndex: 0,
+      declarationsLocked: false,
+      id: "encounter-1",
+      kind: "roleplay",
+      participants: [
+        {
+          id: "scenario-participant-1",
+          label: "The Gladiator",
+          participantType: "scenario",
+          scenarioParticipantId: "participant-1",
+        },
+        {
+          id: "scenario-participant-2",
+          label: "City guard",
+          participantType: "scenario",
+          scenarioParticipantId: "participant-2",
+        },
+        {
+          id: "scenario-participant-3",
+          label: "Hidden spy",
+          participantType: "scenario",
+          scenarioParticipantId: "participant-3",
+        },
+      ],
+      roleplayState: {
+        actionLog: [],
+        gmMessage: "The courtyard is tense.",
+        participantDescriptions: {
+          "scenario-participant-2": {
+            detailedDescription: "Visible guard detail.",
+            name: "City guard",
+            shortDescription: "Armored guard",
+          },
+          "scenario-participant-3": {
+            detailedDescription: "Hidden spy detail.",
+            name: "Hidden spy",
+            shortDescription: "Quiet figure",
+          },
+        },
+        pendingSkillRolls: [],
+        visibility: {
+          "scenario-participant-1": {
+            "scenario-participant-2": true,
+          },
+        },
+      },
+      scenarioId: "scenario-1",
+      status: "active",
+      title: "A doubtful success",
+      turnOrderMode: "manual",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    };
+    mocks.encounterService.getEncounterById.mockResolvedValue(encounter);
+    mocks.scenarioService.getScenarioById.mockResolvedValue(scenario);
+    mocks.campaignService.getCampaignById.mockResolvedValue(campaign);
+    mocks.scenarioService.userHasPlayerScenarioAccess.mockResolvedValue(true);
+    mocks.scenarioService.listScenarioParticipants.mockResolvedValue([
+      {
+        controlledByUserId: "player-1",
+        id: "participant-1",
+        isActive: true,
+        role: "player_character",
+        scenarioId: "scenario-1",
+        snapshot: { displayName: "The Gladiator" },
+        sourceType: "character",
+      },
+      {
+        id: "participant-2",
+        isActive: true,
+        role: "npc",
+        scenarioId: "scenario-1",
+        snapshot: { displayName: "City guard" },
+        sourceType: "entity",
+      },
+      {
+        id: "participant-3",
+        isActive: true,
+        role: "npc",
+        scenarioId: "scenario-1",
+        snapshot: { displayName: "Hidden spy" },
+        sourceType: "entity",
+      },
+    ]);
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/encounters/encounter-1",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().encounter.roleplayState).toMatchObject({
+      participantDescriptions: {
+        "scenario-participant-2": {
+          detailedDescription: "Visible guard detail.",
+          name: "City guard",
+          shortDescription: "Armored guard",
+        },
+      },
+      visibility: {
+        "scenario-participant-1": {
+          "scenario-participant-2": true,
+        },
+      },
+    });
+    expect(JSON.stringify(response.json())).not.toContain("Hidden spy detail");
+  });
+
   it("filters scenario participants for player workspace access", async () => {
     const scenario = {
       campaignId: "campaign-1",

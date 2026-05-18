@@ -4,6 +4,7 @@ import type { ScenarioParticipant } from "../campaign/scenario";
 
 import {
   encounterSessionSchema,
+  buildPlayerSafeRoleplayStateForUser,
   formatEncounterParticipantMembershipLabel,
   isUserAssignedToEncounterMembership,
   resolveEncounterParticipantMembership,
@@ -287,5 +288,83 @@ describe("encounter session normalization invariants", () => {
       scenarioParticipants: [playerParticipant],
       userId: "player-1",
     })).toBe(true);
+  });
+
+  it("keeps player-safe visibility and descriptions for visible encounter participants only", () => {
+    const playerParticipant = scenarioParticipant({
+      controlledByUserId: "player-1",
+      id: "scenario-participant-gladiator",
+      name: "The Gladiator",
+    });
+    const visibleParticipant = scenarioParticipant({
+      id: "scenario-participant-guard",
+      name: "City guard",
+    });
+    const hiddenParticipant = scenarioParticipant({
+      id: "scenario-participant-spy",
+      name: "Hidden spy",
+    });
+    const session = encounter({
+      participantMembershipMode: "explicit",
+      participants: [
+        encounterParticipant({
+          id: "scenario-scenario-participant-gladiator",
+          label: "The Gladiator",
+          scenarioParticipantId: "scenario-participant-gladiator",
+        }),
+        encounterParticipant({
+          id: "scenario-scenario-participant-guard",
+          label: "City guard",
+          scenarioParticipantId: "scenario-participant-guard",
+        }),
+        encounterParticipant({
+          id: "scenario-scenario-participant-spy",
+          label: "Hidden spy",
+          scenarioParticipantId: "scenario-participant-spy",
+        }),
+      ],
+      roleplayState: {
+        actionLog: [],
+        gmMessage: "The courtyard is tense.",
+        participantDescriptions: {
+          "scenario-scenario-participant-guard": {
+            detailedDescription: "A wary guard watches the street.",
+            name: "Known guard",
+            shortDescription: "Armored guard",
+          },
+          "scenario-scenario-participant-spy": {
+            detailedDescription: "GM-only hidden identity.",
+            name: "Hidden spy",
+            shortDescription: "Quiet figure",
+          },
+        },
+        pendingSkillRolls: [],
+        visibility: {
+          "scenario-scenario-participant-gladiator": {
+            "scenario-scenario-participant-guard": true,
+          },
+        },
+      },
+    });
+
+    const safeState = buildPlayerSafeRoleplayStateForUser({
+      encounter: session,
+      scenarioParticipants: [playerParticipant, visibleParticipant, hiddenParticipant],
+      userId: "player-1",
+    });
+
+    expect(safeState.visibility).toEqual({
+      "scenario-scenario-participant-gladiator": {
+        "scenario-scenario-participant-guard": true,
+      },
+    });
+    expect(safeState.participantDescriptions).toEqual({
+      "scenario-scenario-participant-guard": {
+        detailedDescription: "A wary guard watches the street.",
+        name: "Known guard",
+        shortDescription: "Armored guard",
+      },
+    });
+    expect(JSON.stringify(safeState)).not.toContain("GM-only hidden identity");
   });
 });

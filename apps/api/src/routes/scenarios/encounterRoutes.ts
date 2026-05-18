@@ -2,7 +2,7 @@ import type { FastifyPluginAsync } from "fastify";
 
 import { CampaignService, EncounterService, ScenarioService } from "@glantri/database";
 import {
-  buildPlayerSafeRoleplayState,
+  buildPlayerSafeRoleplayStateForUser,
   buildRoleplayCalculationPreview,
   encounterSessionSchema,
   isUserAssignedToEncounterMembership,
@@ -127,11 +127,17 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       const encounters = await encounterService.listEncountersByScenario(scenarioId);
 
       if (access.mode === "player") {
+        const scenarioParticipants = await scenarioService.listScenarioParticipants(scenarioId);
+
         return {
           encounters: encounters.map((enc) => ({
             ...enc,
             roleplayState: enc.roleplayState
-              ? buildPlayerSafeRoleplayState(enc.roleplayState)
+              ? buildPlayerSafeRoleplayStateForUser({
+                  encounter: enc,
+                  scenarioParticipants,
+                  userId: user.id,
+                })
               : undefined
           }))
         };
@@ -237,11 +243,17 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       }
 
       if (access.mode === "player") {
+        const scenarioParticipants = await scenarioService.listScenarioParticipants(encounter.scenarioId);
+
         return {
           encounter: {
             ...encounter,
             roleplayState: encounter.roleplayState
-              ? buildPlayerSafeRoleplayState(encounter.roleplayState)
+              ? buildPlayerSafeRoleplayStateForUser({
+                  encounter,
+                  scenarioParticipants,
+                  userId: user.id,
+                })
               : undefined
           }
         };

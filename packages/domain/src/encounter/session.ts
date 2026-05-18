@@ -479,3 +479,109 @@ export function buildPlayerSafeRoleplayState(state: RoleplayState): RoleplayStat
     visibility: {}
   };
 }
+
+function getEncounterParticipantIdentityKeys(participant: EncounterParticipant): string[] {
+  return [
+    participant.id,
+    participant.scenarioParticipantId,
+    participant.scenarioParticipantId ? `scenario-${participant.scenarioParticipantId}` : undefined,
+    participant.characterId,
+  ].filter((key, index, keys): key is string => Boolean(key) && keys.indexOf(key) === index);
+}
+
+function isEncounterParticipantControlledByUser(input: {
+  participant: EncounterParticipant;
+  scenarioParticipants: ScenarioParticipant[];
+  userId: string;
+}): boolean {
+  return input.scenarioParticipants.some(
+    (scenarioParticipant) =>
+      scenarioParticipant.isActive &&
+      scenarioParticipant.role === "player_character" &&
+      scenarioParticipant.controlledByUserId === input.userId &&
+      (
+        scenarioParticipant.id === input.participant.scenarioParticipantId ||
+        scenarioParticipant.id === input.participant.id ||
+        (input.participant.characterId && scenarioParticipant.characterId === input.participant.characterId)
+      )
+  );
+}
+
+function canViewerSeeTarget(input: {
+  state: RoleplayState;
+  target: EncounterParticipant;
+  viewer: EncounterParticipant;
+}): boolean {
+  const targetKeys = getEncounterParticipantIdentityKeys(input.target);
+
+  return getEncounterParticipantIdentityKeys(input.viewer).some((viewerKey) => {
+    const row = input.state.visibility[viewerKey];
+
+    return targetKeys.some((targetKey) => Boolean(row?.[targetKey]));
+  });
+}
+
+export function buildPlayerSafeRoleplayStateForUser(input: {
+  encounter: EncounterSession;
+  scenarioParticipants: ScenarioParticipant[];
+  userId: string;
+}): RoleplayState {
+  const state = roleplayStateSchema.parse(input.encounter.roleplayState ?? {});
+  const membership = resolveEncounterParticipantMembership({
+    encounter: input.encounter,
+    scenarioParticipants: input.scenarioParticipants,
+  });
+  const controlledParticipants = membership.participants.filter((participant) =>
+    isEncounterParticipantControlledByUser({
+      participant,
+      scenarioParticipants: input.scenarioParticipants,
+      userId: input.userId,
+    })
+  );
+  const visibleParticipants = membership.participants.filter(
+    (participant) =>
+      controlledParticipants.some((controlled) => controlled.id === participant.id) ||
+      controlledParticipants.some((viewer) =>
+        canViewerSeeTarget({
+          state,
+          target: participant,
+          viewer,
+        })
+      )
+  );
+  const visibleIdentityKeys = new Set(visibleParticipants.flatMap(getEncounterParticipantIdentityKeys));
+  const controlledIdentityKeys = new Set(controlledParticipants.flatMap(getEncounterParticipantIdentityKeys));
+  const visibility = Object.fromEntries(
+    [...controlledIdentityKeys]
+      .map((viewerKey) => {
+        const row = state.visibility[viewerKey];
+
+        if (!row) {
+          return undefined;
+        }
+
+        const safeRow = Object.fromEntries(
+          Object.entries(row).filter(
+            ([targetKey, visible]) => Boolean(visible) && visibleIdentityKeys.has(targetKey)
+          )
+        );
+
+        return [viewerKey, safeRow] as const;
+      })
+      .filter((entry): entry is readonly [string, Record<string, boolean>] => Boolean(entry))
+  );
+  const participantDescriptions = Object.fromEntries(
+    Object.entries(state.participantDescriptions).filter(([participantId]) =>
+      visibleIdentityKeys.has(participantId)
+    )
+  );
+
+  return {
+    actionLog: state.actionLog.filter((entry) => !entry.silent),
+    currentRankedRollStackId: state.currentRankedRollStackId,
+    gmMessage: state.gmMessage,
+    participantDescriptions,
+    pendingSkillRolls: state.pendingSkillRolls.filter((roll) => !roll.silent),
+    visibility,
+  };
+}
