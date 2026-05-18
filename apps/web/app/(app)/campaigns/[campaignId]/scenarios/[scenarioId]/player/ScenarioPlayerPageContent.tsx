@@ -10,7 +10,7 @@ import type {
 } from "@glantri/domain";
 
 import {
-  loadScenarioParticipants,
+  loadScenarioMyParticipant,
   loadScenarioPlayerProjection,
 } from "@/lib/api/localServiceClient";
 import { useSessionUser } from "@/lib/auth/SessionUserContext";
@@ -60,9 +60,9 @@ export default function ScenarioPlayerPageContent({
       setLoading(true);
 
       try {
-        const [nextProjection, nextScenarioParticipants] = await Promise.all([
+        const [nextProjection, nextScenarioParticipant] = await Promise.all([
           loadScenarioPlayerProjection(scenarioId),
-          loadScenarioParticipants(scenarioId),
+          loadScenarioMyParticipant(scenarioId),
         ]);
 
         if (cancelled) {
@@ -70,7 +70,7 @@ export default function ScenarioPlayerPageContent({
         }
 
         setProjection(nextProjection);
-        setScenarioParticipants(nextScenarioParticipants);
+        setScenarioParticipants(nextScenarioParticipant ? [nextScenarioParticipant] : []);
         setError(undefined);
       } catch (caughtError) {
         if (cancelled) {

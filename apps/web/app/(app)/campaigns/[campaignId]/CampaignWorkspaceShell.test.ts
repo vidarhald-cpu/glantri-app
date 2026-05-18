@@ -17,6 +17,8 @@ describe("CampaignWorkspaceShell roleplay encounter routing", () => {
     expect(source).toContain('activeEncounter?.kind === "roleplay"');
     expect(source).toContain("ScenarioPlayerCombatPageContent");
     expect(source).toContain("loadScenarioParticipants");
+    expect(source).toContain("loadScenarioMyParticipant");
+    expect(source).toContain('workspaceAccess.accessMode === "player"');
     expect(source).toContain("currentUserId: currentUser?.id");
   });
 

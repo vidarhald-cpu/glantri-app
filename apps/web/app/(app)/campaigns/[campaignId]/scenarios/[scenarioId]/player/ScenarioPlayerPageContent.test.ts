@@ -17,6 +17,9 @@ describe("ScenarioPlayerPageContent player-facing cleanup", () => {
     expect(source).toContain("You are not assigned to this encounter.");
     expect(source).toContain("No active encounter is currently available.");
     expect(source).toContain("isUserAssignedToEffectiveEncounter");
+    expect(source).toContain("loadScenarioMyParticipant");
+    expect(source).toContain("nextScenarioParticipant ? [nextScenarioParticipant] : []");
+    expect(source).not.toContain("loadScenarioParticipants");
     expect(source).not.toContain("Combat status:");
     expect(source).not.toContain("Round:");
     expect(source).not.toContain("Phase:");

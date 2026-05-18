@@ -6,7 +6,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import type { Campaign, EncounterSession, Scenario, ScenarioParticipant } from "@glantri/domain";
 
-import { loadScenarioEncounters, loadScenarioParticipants } from "@/lib/api/localServiceClient";
+import {
+  loadScenarioEncounters,
+  loadScenarioMyParticipant,
+  loadScenarioParticipants,
+} from "@/lib/api/localServiceClient";
 import {
   REMEMBERED_SELECTION_KEYS,
   useRememberedSelection,
@@ -86,7 +90,13 @@ export default function CampaignWorkspaceShell({
       workspaceAccess.scenarios.map((scenario) => loadScenarioEncounters(scenario.id)),
     );
     const participantGroups = await Promise.all(
-      workspaceAccess.scenarios.map((scenario) => loadScenarioParticipants(scenario.id)),
+      workspaceAccess.scenarios.map((scenario) =>
+        workspaceAccess.accessMode === "player"
+          ? loadScenarioMyParticipant(scenario.id).then((participant) =>
+              participant ? [participant] : [],
+            )
+          : loadScenarioParticipants(scenario.id),
+      ),
     );
     const nextEncounters = encounterGroups.flat();
     const nextScenarioParticipants = participantGroups.flat();
