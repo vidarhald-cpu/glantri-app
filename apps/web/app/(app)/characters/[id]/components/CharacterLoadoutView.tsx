@@ -414,7 +414,7 @@ export default function CharacterLoadoutView({
   const characterName = getCharacterName(characterContext?.record?.build.name);
 
   return (
-    <section style={{ display: "grid", gap: "1rem", maxWidth: 900 }}>
+    <section style={{ display: "grid", gap: "1rem", maxWidth: showPhysicalState ? 1240 : 900 }}>
       <div style={{ display: "grid", gap: "0.35rem" }}>
         <h1 style={{ margin: 0 }}>Equip items - {characterName}</h1>
       </div>
@@ -448,7 +448,7 @@ export default function CharacterLoadoutView({
 
       {!loading && !pageError ? (
         <EquipmentLoadoutModule
-          afterEquipmentChoices={
+          beforeEquipmentChoices={
             physicalStateModel ? (
               <PhysicalStateSection
                 canEditCombatEffects={canEditCombatEffects}

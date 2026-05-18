@@ -653,6 +653,7 @@ export function buildEquipmentLoadoutModuleModel(input: {
 
 export function EquipmentLoadoutModule(input: {
   afterEquipmentChoices?: ReactNode;
+  beforeEquipmentChoices?: ReactNode;
   mode: EquipmentLoadoutModuleMode;
   model: EquipmentLoadoutModuleModel;
   onFieldChange?: (fieldId: LoadoutFieldId, itemId: string | null) => void;
@@ -662,6 +663,8 @@ export function EquipmentLoadoutModule(input: {
 
   return (
     <>
+      {input.beforeEquipmentChoices ?? null}
+
       {showControls ? (
         <ControlSection compact sticky={input.stickyControls} title="Equipment choices">
           <div className={styles.fieldsGrid}>

@@ -31,7 +31,10 @@ describe("character control routes", () => {
     expect(sharedViewSource).toContain("draft.locationIds.length > 0");
     expect(sharedViewSource).toContain("generalDamage: isGeneralDamage ? draft.damage : 0");
     expect(sharedViewSource).toContain("physicalStateCurrentRoundNumber");
+    expect(sharedViewSource).toContain("beforeEquipmentChoices=");
+    expect(sharedViewSource).toContain("showPhysicalState ? 1240 : 900");
     expect(sharedViewSource).toContain("onSaveCombatEffect={saveCombatEffect}");
+    expect(sharedViewSource).not.toContain("afterEquipmentChoices=");
     expect(sharedViewSource).not.toContain("rolledStats.health");
     expect(sharedViewSource).not.toContain("combat arena");
   });

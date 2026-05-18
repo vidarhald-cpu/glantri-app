@@ -26,6 +26,7 @@ export interface HitLogEntryView {
   duration: string;
   effectGroup: CombatEffectGroup;
   eventDescription: string;
+  eventNumber: string;
   generalDamage: number;
   id: string;
   location: string;
@@ -166,12 +167,23 @@ function buildHitLog(combatEffects: CombatEffectsState): HitLogEntryView[] {
       },
     ]),
   );
+  const eventNumberBySourceEventId = new Map<string, string>();
+
+  for (const effect of combatEffects.effects) {
+    if (!eventNumberBySourceEventId.has(effect.sourceEventId)) {
+      eventNumberBySourceEventId.set(
+        effect.sourceEventId,
+        `E${eventNumberBySourceEventId.size + 1}`,
+      );
+    }
+  }
 
   return combatEffects.effects.map((effect) => ({
     damage: effect.damage,
     duration: effect.duration ?? "",
     effectGroup: effect.effectGroup,
     eventDescription: eventsById.get(effect.sourceEventId)?.description ?? "",
+    eventNumber: eventNumberBySourceEventId.get(effect.sourceEventId) ?? "",
     generalDamage: effect.generalDamage,
     id: effect.id,
     location: effect.location ?? "",

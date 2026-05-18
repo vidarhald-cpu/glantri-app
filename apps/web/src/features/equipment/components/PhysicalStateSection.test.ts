@@ -52,6 +52,7 @@ describe("PhysicalStateSection", () => {
     expect(source).toContain("Edit selected effect");
     expect(source).toContain("Same event");
     expect(source).toContain("Round");
+    expect(source).toContain("Description");
     expect(source).toContain("Loc");
     expect(source).toContain("Dam");
     expect(source).toContain("Mod");
@@ -61,6 +62,9 @@ describe("PhysicalStateSection", () => {
     expect(source).toContain('type: "physical_damage"');
     expect(source).toContain('effectGroup: "none"');
     expect(source).toContain("sourceEventId: draft.sourceEventId ?? createLocalId");
+    expect(source).toContain("entry.eventNumber");
+    expect(source).toContain('gridTemplateColumns: "4rem minmax(14rem, 1fr) auto"');
+    expect(source).toContain('gridTemplateColumns:');
     expect(source).toContain("position: \"sticky\"");
     expect(source).not.toContain("Add combat effect event");
     expect(source).not.toContain("Add effect row");
@@ -73,7 +77,7 @@ describe("PhysicalStateSection", () => {
     const source = readSource();
 
     expect(source).toContain('{ label: "None", value: "none" }');
-    expect(source).toContain('{ fullLabel: "No location", label: "None", value: "" }');
+    expect(source).not.toContain('{ fullLabel: "No location", label: "None", value: "" }');
   });
 
   it("keeps type and modifier group choices separate in the compact editor", () => {
@@ -92,5 +96,9 @@ describe("PhysicalStateSection", () => {
     for (const label of ["H", "LA", "RA", "CB", "AB", "ULL", "LLL", "URL", "LRL", "Gen"]) {
       expect(source).toContain(`label: "${label}"`);
     }
+    expect(source).toContain("locationGridStyle");
+    expect(source).toContain("locationHeaderCellStyle");
+    expect(source).toContain("locationCheckboxCellStyle");
+    expect(source).not.toContain('label: "None", value: ""');
   });
 });

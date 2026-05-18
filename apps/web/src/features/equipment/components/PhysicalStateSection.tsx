@@ -67,7 +67,7 @@ const compactInputStyle = {
 
 const numericInputStyle = {
   ...compactInputStyle,
-  maxWidth: "4.5rem",
+  maxWidth: "3.75rem",
 } as const;
 
 const visibleCombatEffectTypes: Array<{ label: string; value: CombatEffectType }> = [
@@ -100,7 +100,6 @@ const combatEffectStatuses: Array<{ label: string; value: CombatEffectStatus }> 
 ];
 
 const locationOptions = [
-  { fullLabel: "No location", label: "None", value: "" },
   { fullLabel: "Head", label: "H", value: "head" },
   { fullLabel: "Left arm", label: "LA", value: "leftArm" },
   { fullLabel: "Right arm", label: "RA", value: "rightArm" },
@@ -112,6 +111,31 @@ const locationOptions = [
   { fullLabel: "Lower right leg", label: "LRL", value: "lowerRightLeg" },
   { fullLabel: "General", label: "Gen", value: "general" },
 ];
+
+const locationGridStyle = {
+  border: "1px solid #d9ddd8",
+  borderRadius: 8,
+  display: "grid",
+  gridTemplateColumns: "repeat(10, minmax(2.25rem, 1fr))",
+  overflow: "hidden",
+} as const;
+
+const locationHeaderCellStyle = {
+  background: "#f0efe7",
+  borderBottom: "1px solid #d9ddd8",
+  borderRight: "1px solid #d9ddd8",
+  fontSize: "0.78rem",
+  fontWeight: 700,
+  padding: "0.2rem",
+  textAlign: "center",
+} as const;
+
+const locationCheckboxCellStyle = {
+  borderRight: "1px solid #d9ddd8",
+  display: "grid",
+  justifyItems: "center",
+  padding: "0.2rem",
+} as const;
 
 function createLocalId(prefix: string): string {
   return `${prefix}-${globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`}`;
@@ -406,7 +430,7 @@ function CombatEffectsPanel({
                   }}
                 >
                   <td style={compactCellStyle}>{entry.roundNumber}</td>
-                  <td style={compactCellStyle}>{entry.source}</td>
+                  <td style={compactCellStyle}>{entry.eventNumber}</td>
                   <td style={compactCellStyle}>{formatEffectType(entry.type)}</td>
                   <td style={compactCellStyle}>{formatLocation(entry.location)}</td>
                   <td style={compactCellStyle}>{formatMainValue(entry)}</td>
@@ -446,8 +470,7 @@ function CombatEffectsPanel({
               alignItems: "end",
               display: "grid",
               gap: "0.45rem",
-              gridTemplateColumns:
-                "4rem 8rem 7rem minmax(12rem, 1.2fr) 4rem 4rem 5rem 5rem minmax(10rem, 1fr) auto",
+              gridTemplateColumns: "4rem minmax(14rem, 1fr) auto",
             }}
           >
             <label style={{ display: "grid", gap: "0.2rem" }}>
@@ -466,6 +489,54 @@ function CombatEffectsPanel({
                 value={draft.roundNumber ?? ""}
               />
             </label>
+            <label style={{ display: "grid", gap: "0.2rem" }}>
+              <span>Description</span>
+              <input
+                onChange={(event) =>
+                  setDraft((current) => ({
+                    ...current,
+                    eventDescription: event.target.value,
+                  }))
+                }
+                style={compactInputStyle}
+                value={draft.eventDescription ?? ""}
+              />
+            </label>
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: "0.35rem",
+                justifyContent: "flex-end",
+              }}
+            >
+              <button disabled={!canSave || saving} type="submit">
+                Save
+              </button>
+              <button disabled={saving} onClick={startLinkedEffect} type="button">
+                Same event
+              </button>
+              <button disabled={saving} onClick={startNewEvent} type="button">
+                Cancel
+              </button>
+              <button
+                disabled={!selectedEffectId || !onDeleteCombatEffect || saving}
+                onClick={deleteSelectedEffect}
+                type="button"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+          <div
+            style={{
+              alignItems: "end",
+              display: "grid",
+              gap: "0.45rem",
+              gridTemplateColumns:
+                "7rem 6.5rem minmax(22rem, 1.6fr) 3.75rem 3.75rem 5rem 5rem minmax(10rem, 1fr)",
+            }}
+          >
             <label style={{ display: "grid", gap: "0.2rem" }}>
               <span>Type</span>
               <select
@@ -504,37 +575,41 @@ function CombatEffectsPanel({
                 ))}
               </select>
             </label>
-            <fieldset
-              style={{
-                border: "0",
-                display: "flex",
-                flexWrap: "wrap",
-                gap: "0.25rem",
-                margin: 0,
-                minWidth: 0,
-                padding: 0,
-              }}
-            >
+            <fieldset style={{ border: 0, display: "grid", gap: "0.2rem", margin: 0, padding: 0 }}>
               <legend style={{ fontSize: "0.9rem", fontWeight: 700, padding: 0 }}>Loc</legend>
-              {locationOptions.map((option) => (
-                <label
-                  key={option.value}
-                  title={option.fullLabel}
-                  style={{
-                    alignItems: "center",
-                    display: "inline-flex",
-                    gap: "0.15rem",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  <input
-                    checked={draft.locationIds.includes(option.value)}
-                    onChange={() => toggleLocation(option.value)}
-                    type="checkbox"
-                  />
-                  {option.label}
-                </label>
-              ))}
+              <div style={locationGridStyle}>
+                {locationOptions.map((option, index) => (
+                  <div
+                    key={`heading-${option.value}`}
+                    style={{
+                      ...locationHeaderCellStyle,
+                      borderRight:
+                        index === locationOptions.length - 1 ? undefined : "1px solid #d9ddd8",
+                    }}
+                    title={option.fullLabel}
+                  >
+                    {option.label}
+                  </div>
+                ))}
+                {locationOptions.map((option, index) => (
+                  <label
+                    key={option.value}
+                    style={{
+                      ...locationCheckboxCellStyle,
+                      borderRight:
+                        index === locationOptions.length - 1 ? undefined : "1px solid #d9ddd8",
+                    }}
+                    title={option.fullLabel}
+                  >
+                    <input
+                      aria-label={option.fullLabel}
+                      checked={draft.locationIds.includes(option.value)}
+                      onChange={() => toggleLocation(option.value)}
+                      type="checkbox"
+                    />
+                  </label>
+                ))}
+              </div>
             </fieldset>
             <label style={{ display: "grid", gap: "0.2rem" }}>
               <span>Dam</span>
@@ -600,31 +675,12 @@ function CombatEffectsPanel({
                   setDraft((current) => ({
                     ...current,
                     description: event.target.value,
-                    eventDescription: event.target.value,
                   }))
                 }
                 style={compactInputStyle}
-                value={draft.description ?? draft.eventDescription ?? ""}
+                value={draft.description ?? ""}
               />
             </label>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: "0.35rem" }}>
-              <button disabled={!canSave || saving} type="submit">
-                Save
-              </button>
-              <button disabled={saving} onClick={startLinkedEffect} type="button">
-                Same event
-              </button>
-              <button disabled={saving} onClick={startNewEvent} type="button">
-                Cancel
-              </button>
-              <button
-                disabled={!selectedEffectId || !onDeleteCombatEffect || saving}
-                onClick={deleteSelectedEffect}
-                type="button"
-              >
-                Delete
-              </button>
-            </div>
           </div>
         </form>
       ) : null}

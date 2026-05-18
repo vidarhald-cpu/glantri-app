@@ -232,11 +232,85 @@ describe("character physical state read model", () => {
     expect(view.hitLog).toHaveLength(5);
     expect(view.hitLog[0]).toMatchObject({
       damage: 5,
+      eventNumber: "E1",
       roundNumber: 4,
       sourceEventId: "event-1",
       source: "Axe hit",
       type: "physical_damage",
     });
+  });
+
+  it("assigns stable compact event numbers by source event id", () => {
+    const view = buildCharacterPhysicalStateView({
+      combatEffects: {
+        events: [
+          {
+            createdAt: "2026-05-17T10:00:00.000Z",
+            description: "",
+            id: "event-a",
+            sourceLabel: "Hidden source label A",
+            sourceType: "manual",
+            targetParticipantId: "participant-1",
+          },
+          {
+            createdAt: "2026-05-17T10:00:00.000Z",
+            description: "",
+            id: "event-b",
+            sourceLabel: "Hidden source label B",
+            sourceType: "manual",
+            targetParticipantId: "participant-1",
+          },
+        ],
+        effects: [
+          {
+            createdAt: "2026-05-17T10:00:00.000Z",
+            damage: 2,
+            effectGroup: "none",
+            generalDamage: 0,
+            id: "effect-a-1",
+            location: "head",
+            sourceEventId: "event-a",
+            status: "active",
+            targetParticipantId: "participant-1",
+            type: "physical_damage",
+            updatedAt: "2026-05-17T10:00:00.000Z",
+          },
+          {
+            createdAt: "2026-05-17T10:00:00.000Z",
+            damage: 4,
+            effectGroup: "none",
+            generalDamage: 0,
+            id: "effect-b-1",
+            location: "rightArm",
+            sourceEventId: "event-b",
+            status: "active",
+            targetParticipantId: "participant-1",
+            type: "physical_damage",
+            updatedAt: "2026-05-17T10:00:00.000Z",
+          },
+          {
+            createdAt: "2026-05-17T10:00:00.000Z",
+            damage: 1,
+            effectGroup: "none",
+            generalDamage: 0,
+            id: "effect-a-2",
+            location: "leftArm",
+            sourceEventId: "event-a",
+            status: "active",
+            targetParticipantId: "participant-1",
+            type: "physical_damage",
+            updatedAt: "2026-05-17T10:00:00.000Z",
+          },
+        ],
+      },
+      generalHitpoints: 22,
+    });
+
+    expect(view.hitLog.map((entry) => [entry.id, entry.eventNumber])).toEqual([
+      ["effect-a-1", "E1"],
+      ["effect-b-1", "E2"],
+      ["effect-a-2", "E1"],
+    ]);
   });
 
   it("keeps none-group physical damage out of modifier summaries", () => {
