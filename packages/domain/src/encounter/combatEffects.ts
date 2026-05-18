@@ -17,6 +17,7 @@ export const combatEffectTypeSchema = z.enum([
   "physical_damage",
   "general_damage",
   "bleed",
+  "internal_bleed",
   "fatigue",
   "stun",
   "fear",

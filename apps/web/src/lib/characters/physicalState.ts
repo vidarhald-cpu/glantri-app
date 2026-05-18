@@ -17,7 +17,7 @@ export interface HitLocationView extends HitLocationDefinition, HitpointRowView 
 
 export interface DamageByTypeView {
   currentEffect: number | string;
-  id: "general" | "obSkill" | "db" | "other" | "bleed" | "special";
+  id: "general" | "obSkill" | "db" | "bleed" | "internalBleed" | "fatigue" | "special";
   label: string;
 }
 
@@ -89,8 +89,9 @@ const DEFAULT_DAMAGE_BY_TYPE: DamageByTypeView[] = [
   { currentEffect: 0, id: "general", label: "General" },
   { currentEffect: 0, id: "obSkill", label: "OB/Skill" },
   { currentEffect: 0, id: "db", label: "DB" },
-  { currentEffect: 0, id: "other", label: "Other" },
   { currentEffect: 0, id: "bleed", label: "Bleed" },
+  { currentEffect: 0, id: "internalBleed", label: "Internal bleed" },
+  { currentEffect: 0, id: "fatigue", label: "Fatigue" },
   { currentEffect: "—", id: "special", label: "Special" },
 ];
 
@@ -135,22 +136,31 @@ function buildDamageByType(
 ): Partial<Record<DamageByTypeView["id"], number | string>> {
   const activeEffects = combatEffects.effects.filter(isActiveEffect);
   const specialCount = activeEffects.filter((effect) => effect.effectGroup === "special").length;
+  const isTypedSummaryEffect = (effect: CombatEffect) =>
+    effect.type === "bleed" || effect.type === "internal_bleed" || effect.type === "fatigue";
 
   return {
     bleed: activeEffects
-      .filter((effect) => effect.effectGroup === "bleed")
+      .filter(
+        (effect) =>
+          effect.type === "bleed" ||
+          (effect.effectGroup === "bleed" && effect.type !== "internal_bleed"),
+      )
       .reduce((total, effect) => total + getEffectMagnitude(effect), 0),
     db: activeEffects
-      .filter((effect) => effect.effectGroup === "db")
+      .filter((effect) => effect.effectGroup === "db" && !isTypedSummaryEffect(effect))
+      .reduce((total, effect) => total + getEffectMagnitude(effect), 0),
+    fatigue: activeEffects
+      .filter((effect) => effect.type === "fatigue")
       .reduce((total, effect) => total + getEffectMagnitude(effect), 0),
     general: activeEffects
-      .filter((effect) => effect.effectGroup === "general")
+      .filter((effect) => effect.effectGroup === "general" && !isTypedSummaryEffect(effect))
+      .reduce((total, effect) => total + getEffectMagnitude(effect), 0),
+    internalBleed: activeEffects
+      .filter((effect) => effect.type === "internal_bleed")
       .reduce((total, effect) => total + getEffectMagnitude(effect), 0),
     obSkill: activeEffects
-      .filter((effect) => effect.effectGroup === "obSkill")
-      .reduce((total, effect) => total + getEffectMagnitude(effect), 0),
-    other: activeEffects
-      .filter((effect) => effect.effectGroup === "other")
+      .filter((effect) => effect.effectGroup === "obSkill" && !isTypedSummaryEffect(effect))
       .reduce((total, effect) => total + getEffectMagnitude(effect), 0),
     special: specialCount > 0 ? specialCount : "—",
   };

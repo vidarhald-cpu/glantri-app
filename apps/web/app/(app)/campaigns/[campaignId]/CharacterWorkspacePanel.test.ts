@@ -24,6 +24,7 @@ describe("CharacterWorkspacePanel", () => {
     const source = readSource();
 
     expect(source).toContain("You are not currently assigned to a character in this scenario.");
+    expect(source).toContain("Character{selectedCandidate?.label ? ` — ${selectedCandidate.label}` : \"\"}");
     expect(source).toContain("Select character to inspect");
     expect(source).toContain("Previous");
     expect(source).toContain("Next");

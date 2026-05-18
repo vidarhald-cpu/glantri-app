@@ -72,14 +72,13 @@ const numericInputStyle = {
 
 const visibleCombatEffectTypes: Array<{ label: string; value: CombatEffectType }> = [
   { label: "Physical", value: "physical_damage" },
-  { label: "General dmg", value: "general_damage" },
   { label: "Bleed", value: "bleed" },
+  { label: "Internal bleed", value: "internal_bleed" },
   { label: "Fatigue", value: "fatigue" },
   { label: "Stun", value: "stun" },
   { label: "Fear", value: "fear" },
   { label: "Morale", value: "morale" },
   { label: "Special", value: "special" },
-  { label: "Healing", value: "healing" },
 ];
 
 const combatEffectGroups: Array<{ label: string; value: CombatEffectGroup }> = [
@@ -87,7 +86,6 @@ const combatEffectGroups: Array<{ label: string; value: CombatEffectGroup }> = [
   { label: "General", value: "general" },
   { label: "OB/Skill", value: "obSkill" },
   { label: "DB", value: "db" },
-  { label: "Other", value: "other" },
   { label: "Bleed", value: "bleed" },
   { label: "Special", value: "special" },
 ];
@@ -135,6 +133,15 @@ const locationCheckboxCellStyle = {
   display: "grid",
   justifyItems: "center",
   padding: "0.2rem",
+} as const;
+
+const physicalStatePanelStyle = {
+  background: "#fbfaf5",
+  border: "1px solid #d9ddd8",
+  borderRadius: 12,
+  display: "grid",
+  gap: "0.75rem",
+  padding: "1rem",
 } as const;
 
 function createLocalId(prefix: string): string {
@@ -696,8 +703,8 @@ export function PhysicalStateSection({
   onSaveCombatEffect,
 }: PhysicalStateSectionProps) {
   return (
-    <section style={{ display: "grid", gap: "0.75rem" }}>
-      <h2 style={{ margin: 0 }}>Physical state</h2>
+    <section style={physicalStatePanelStyle}>
+      <h2 style={{ margin: 0 }}>Physical state panel</h2>
       <div
         style={{
           alignItems: "start",

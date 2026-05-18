@@ -136,18 +136,20 @@ export default function CharacterWorkspacePanel({
 
   return (
     <section style={{ display: "grid", gap: "1rem" }}>
-      {isGameMaster ? (
-        <section style={panelStyle}>
-          <div
-            style={{
-              alignItems: "center",
-              display: "flex",
-              flexWrap: "wrap",
-              gap: "0.75rem",
-              justifyContent: "space-between",
-            }}
-          >
-            <h2 style={{ margin: 0 }}>Character</h2>
+      <section style={panelStyle}>
+        <div
+          style={{
+            alignItems: "center",
+            display: "flex",
+            flexWrap: "wrap",
+            gap: "0.75rem",
+            justifyContent: "space-between",
+          }}
+        >
+          <h2 style={{ margin: 0 }}>
+            Character{selectedCandidate?.label ? ` — ${selectedCandidate.label}` : ""}
+          </h2>
+          {isGameMaster ? (
             <div
               style={{
                 alignItems: "center",
@@ -180,9 +182,9 @@ export default function CharacterWorkspacePanel({
                 </button>
               ) : null}
             </div>
-          </div>
-        </section>
-      ) : null}
+          ) : null}
+        </div>
+      </section>
 
       {selectedCandidate ? (
         <>

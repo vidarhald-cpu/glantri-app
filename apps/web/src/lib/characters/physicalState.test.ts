@@ -121,8 +121,9 @@ describe("character physical state read model", () => {
       ["General", 0],
       ["OB/Skill", 0],
       ["DB", 0],
-      ["Other", 0],
       ["Bleed", 0],
+      ["Internal bleed", 0],
+      ["Fatigue", 0],
       ["Special", "—"],
     ]);
     expect(view.hitLog).toEqual([]);
@@ -185,6 +186,34 @@ describe("character physical state read model", () => {
           {
             createdAt: "2026-05-17T10:00:00.000Z",
             damage: 0,
+            description: "Internal bleed 2",
+            effectGroup: "bleed",
+            generalDamage: 0,
+            id: "effect-internal-bleed",
+            modifierValue: 2,
+            sourceEventId: "event-1",
+            status: "active",
+            targetParticipantId: "participant-1",
+            type: "internal_bleed",
+            updatedAt: "2026-05-17T10:00:00.000Z",
+          },
+          {
+            createdAt: "2026-05-17T10:00:00.000Z",
+            damage: 0,
+            description: "Fatigue 3",
+            effectGroup: "general",
+            generalDamage: 0,
+            id: "effect-fatigue",
+            modifierValue: 3,
+            sourceEventId: "event-1",
+            status: "active",
+            targetParticipantId: "participant-1",
+            type: "fatigue",
+            updatedAt: "2026-05-17T10:00:00.000Z",
+          },
+          {
+            createdAt: "2026-05-17T10:00:00.000Z",
+            damage: 0,
             description: "Stunned",
             duration: "2 rounds, then CON check",
             effectGroup: "general",
@@ -225,11 +254,12 @@ describe("character physical state read model", () => {
       ["general", -1],
       ["obSkill", 0],
       ["db", 0],
-      ["other", 5],
       ["bleed", 1],
+      ["internalBleed", 2],
+      ["fatigue", 3],
       ["special", "—"],
     ]);
-    expect(view.hitLog).toHaveLength(5);
+    expect(view.hitLog).toHaveLength(7);
     expect(view.hitLog[0]).toMatchObject({
       damage: 5,
       eventNumber: "E1",
@@ -352,8 +382,9 @@ describe("character physical state read model", () => {
       ["general", 0],
       ["obSkill", 0],
       ["db", 0],
-      ["other", 0],
       ["bleed", 0],
+      ["internalBleed", 0],
+      ["fatigue", 0],
       ["special", "—"],
     ]);
   });

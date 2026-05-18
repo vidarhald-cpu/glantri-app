@@ -13,7 +13,7 @@ describe("PhysicalStateSection", () => {
   it("renders physical state combat-effect panels", () => {
     const source = readSource();
 
-    expect(source).toContain("Physical state");
+    expect(source).toContain("Physical state panel");
     expect(source).toContain("Hitpoints and damage");
     expect(source).toContain("Combat effects by sum");
     expect(source).toContain("Combat effects");
@@ -25,6 +25,8 @@ describe("PhysicalStateSection", () => {
   it("keeps the summary panels in a responsive two-column row", () => {
     const source = readSource();
 
+    expect(source).toContain("physicalStatePanelStyle");
+    expect(source).toContain('background: "#fbfaf5"');
     expect(source).toContain('gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 20rem), 1fr))"');
     expect(source).toContain('alignItems: "start"');
   });
@@ -84,8 +86,13 @@ describe("PhysicalStateSection", () => {
     const source = readSource();
 
     expect(source).toContain('{ label: "Physical", value: "physical_damage" }');
+    expect(source).toContain('{ label: "Internal bleed", value: "internal_bleed" }');
+    expect(source).toContain('{ label: "Fatigue", value: "fatigue" }');
     expect(source).toContain('{ label: "Stun", value: "stun" }');
     expect(source).toContain('{ label: "OB/Skill", value: "obSkill" }');
+    expect(source).not.toContain('{ label: "General dmg", value: "general_damage" }');
+    expect(source).not.toContain('{ label: "Healing", value: "healing" }');
+    expect(source).not.toContain('{ label: "Other", value: "other" }');
     expect(source).not.toContain('{ label: "General modifier", value: "general_modifier" }');
     expect(source).not.toContain('{ label: "OB/Skill modifier", value: "ob_skill_modifier" }');
   });

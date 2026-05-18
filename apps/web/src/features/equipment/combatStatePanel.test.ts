@@ -1,3 +1,7 @@
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
 import { describe, expect, it } from "vitest";
 
 import type {
@@ -13,6 +17,7 @@ import { getInventoryRows, getPersonalEncumbranceSummary } from "./equipmentSele
 import type { EquipmentFeatureState } from "./types";
 
 const characterId = "char-throwing-panel";
+const featurePath = dirname(fileURLToPath(import.meta.url));
 
 function indexById<T extends { id: string }>(items: T[]): Record<string, T> {
   return Object.fromEntries(items.map((item) => [item.id, item]));
@@ -217,6 +222,15 @@ function getThrowingRow(model: ReturnType<typeof buildCombatStatePanelModel>) {
 }
 
 describe("combatStatePanel throwing row reliability", () => {
+  it("labels hitpoints as max HP and includes distraction level in the loadout combat panel", () => {
+    const source = readFileSync(join(featurePath, "loadoutModule.tsx"), "utf8");
+
+    expect(source).toContain('label: "Max HP"');
+    expect(source).toContain("calculateCharacterGeneralHitpoints(input.characterContext.record.build)");
+    expect(source).toContain('label: "Distraction lvl"');
+    expect(source).toContain("input.characterContext.record.build.profile.distractionLevel");
+  });
+
   it("includes the throwing row whenever the same valid throwing selection is recomputed", () => {
     const state = createState();
 

@@ -415,9 +415,11 @@ export default function CharacterLoadoutView({
 
   return (
     <section style={{ display: "grid", gap: "1rem", maxWidth: showPhysicalState ? 1240 : 900 }}>
-      <div style={{ display: "grid", gap: "0.35rem" }}>
-        <h1 style={{ margin: 0 }}>Equip items - {characterName}</h1>
-      </div>
+      {!showPhysicalState ? (
+        <div style={{ display: "grid", gap: "0.35rem" }}>
+          <h1 style={{ margin: 0 }}>Equip items - {characterName}</h1>
+        </div>
+      ) : null}
 
       {loading ? (
         <div
