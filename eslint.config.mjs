@@ -76,6 +76,63 @@ export default tseslint.config(
     }
   },
   {
+    // packages/rules-engine may only depend on @glantri/domain — not database or content
+    files: ["packages/rules-engine/**/*.{ts,tsx}"],
+    ignores: ["**/*.test.ts", "**/*.test.tsx"],
+    rules: {
+      "no-restricted-imports": ["error", {
+        patterns: [
+          {
+            group: ["@glantri/database", "@glantri/database/*"],
+            message: "packages/rules-engine must not import from @glantri/database. Depend only on @glantri/domain."
+          },
+          {
+            group: ["@glantri/content", "@glantri/content/*"],
+            message: "packages/rules-engine must not import from @glantri/content. Depend only on @glantri/domain."
+          }
+        ]
+      }]
+    }
+  },
+  {
+    // packages/domain is the bottom layer — no imports from database, rules-engine or content
+    files: ["packages/domain/**/*.{ts,tsx}"],
+    ignores: ["**/*.test.ts", "**/*.test.tsx"],
+    rules: {
+      "no-restricted-imports": ["error", {
+        patterns: [
+          {
+            group: ["@glantri/database", "@glantri/database/*"],
+            message: "packages/domain must not import from @glantri/database."
+          },
+          {
+            group: ["@glantri/rules-engine", "@glantri/rules-engine/*"],
+            message: "packages/domain must not import from @glantri/rules-engine."
+          },
+          {
+            group: ["@glantri/content", "@glantri/content/*"],
+            message: "packages/domain must not import from @glantri/content."
+          }
+        ]
+      }]
+    }
+  },
+  {
+    // packages/* must not import from apps/*
+    files: ["packages/**/*.{ts,tsx}"],
+    ignores: ["**/*.test.ts", "**/*.test.tsx"],
+    rules: {
+      "no-restricted-imports": ["error", {
+        patterns: [
+          {
+            group: ["@glantri/web", "@glantri/web/*", "@glantri/api", "@glantri/api/*"],
+            message: "packages/* must not import from apps/*."
+          }
+        ]
+      }]
+    }
+  },
+  {
     files: ["**/*.cjs"],
     languageOptions: {
       sourceType: "commonjs"

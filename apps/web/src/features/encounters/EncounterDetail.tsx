@@ -42,7 +42,7 @@ import RememberedCampaignWorkspaceEffect from "@/lib/campaigns/RememberedCampaig
 import { buildCampaignWorkspaceHref } from "@/lib/campaigns/workspace";
 import { LocalEncounterRepository } from "@/lib/offline/repositories/localEncounterRepository";
 import { LocalCharacterRepository, UNNAMED_CHARACTER_PLACEHOLDER } from "@/lib/offline/repositories/localCharacterRepository";
-import { GmRoleplayingEncounterScreen } from "./RoleplayEncounterScreens";
+import { GmRoleplayingEncounterScreen } from "@/features/roleplay/RoleplayEncounterScreens";
 
 interface EncounterDetailProps {
   campaignId?: string;

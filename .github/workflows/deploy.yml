@@ -7,6 +7,7 @@ on:
 permissions:
   id-token: write
   contents: read
+  pull-requests: read
 
 env:
   REGISTRY: ${{ secrets.REGISTRY_LOGIN_SERVER }}
@@ -14,9 +15,37 @@ env:
   WEB_IMAGE: ${{ secrets.REGISTRY_LOGIN_SERVER }}/glantri-web
 
 jobs:
-  ci:
+  detect-changes:
     runs-on: ubuntu-latest
     if: "!contains(github.event.head_commit.message, '[skip cd]')"
+    outputs:
+      api: ${{ steps.filter.outputs.api }}
+      web: ${{ steps.filter.outputs.web }}
+      db: ${{ steps.filter.outputs.db }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            api:
+              - 'apps/api/**'
+              - 'packages/**'
+              - 'pnpm-lock.yaml'
+              - 'package.json'
+              - 'tsconfig*.json'
+            web:
+              - 'apps/web/**'
+              - 'packages/**'
+              - 'pnpm-lock.yaml'
+              - 'package.json'
+              - 'tsconfig*.json'
+            db:
+              - 'packages/database/prisma/**'
+
+  ci:
+    runs-on: ubuntu-latest
+    needs: detect-changes
     steps:
       - uses: actions/checkout@v4
 
@@ -43,7 +72,8 @@ jobs:
 
   deploy:
     runs-on: ubuntu-latest
-    needs: ci
+    needs: [ci, detect-changes]
+    if: needs.detect-changes.outputs.api == 'true' || needs.detect-changes.outputs.web == 'true'
     environment: production
     steps:
       - uses: actions/checkout@v4
@@ -58,26 +88,32 @@ jobs:
       - name: Log in to Container Registry
         run: az acr login --name ${{ secrets.REGISTRY_NAME }}
 
-      - name: Sync app settings
+      - name: Sync API app settings
+        if: needs.detect-changes.outputs.api == 'true'
         run: |
           az webapp config appsettings set \
             --resource-group rg_glantri \
             --name ${{ secrets.AZURE_API_APP_NAME }} \
             --settings WEBSITES_PORT=4000
+          az webapp config set \
+            --resource-group rg_glantri \
+            --name ${{ secrets.AZURE_API_APP_NAME }} \
+            --startup-file ""
+
+      - name: Sync Web app settings
+        if: needs.detect-changes.outputs.web == 'true'
+        run: |
           az webapp config appsettings set \
             --resource-group rg_glantri \
             --name ${{ secrets.AZURE_WEB_APP_NAME }} \
             --settings WEBSITES_PORT=3000
           az webapp config set \
             --resource-group rg_glantri \
-            --name ${{ secrets.AZURE_API_APP_NAME }} \
-            --startup-file ""
-          az webapp config set \
-            --resource-group rg_glantri \
             --name ${{ secrets.AZURE_WEB_APP_NAME }} \
             --startup-file ""
 
       - name: Build and push API image
+        if: needs.detect-changes.outputs.api == 'true'
         run: |
           docker build -t ${{ env.API_IMAGE }}:${{ github.sha }} -t ${{ env.API_IMAGE }}:latest \
             -f apps/api/Dockerfile .
@@ -85,6 +121,7 @@ jobs:
           docker push ${{ env.API_IMAGE }}:latest
 
       - name: Build and push Web image
+        if: needs.detect-changes.outputs.web == 'true'
         run: |
           docker build \
             --build-arg NEXT_PUBLIC_API_BASE_URL=https://${{ secrets.AZURE_API_APP_NAME }}.azurewebsites.net \
@@ -94,35 +131,42 @@ jobs:
           docker push ${{ env.WEB_IMAGE }}:latest
 
       - uses: pnpm/action-setup@v4
+        if: needs.detect-changes.outputs.db == 'true'
         with:
           version: 10.6.0
 
       - uses: actions/setup-node@v4
+        if: needs.detect-changes.outputs.db == 'true'
         with:
           node-version: 22
           cache: pnpm
 
       - name: Install dependencies
+        if: needs.detect-changes.outputs.db == 'true'
         run: pnpm install --frozen-lockfile
 
       - name: Run database migrations
+        if: needs.detect-changes.outputs.db == 'true'
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: pnpm --filter @glantri/database exec prisma migrate deploy
 
       - name: Deploy API to App Service
+        if: needs.detect-changes.outputs.api == 'true'
         uses: azure/webapps-deploy@v3
         with:
           app-name: ${{ secrets.AZURE_API_APP_NAME }}
           images: ${{ env.API_IMAGE }}:${{ github.sha }}
 
       - name: Deploy Web to App Service
+        if: needs.detect-changes.outputs.web == 'true'
         uses: azure/webapps-deploy@v3
         with:
           app-name: ${{ secrets.AZURE_WEB_APP_NAME }}
           images: ${{ env.WEB_IMAGE }}:${{ github.sha }}
 
       - name: Smoke test API readiness
+        if: needs.detect-changes.outputs.api == 'true'
         run: |
           for i in $(seq 1 12); do
             if curl -fsS https://${{ secrets.AZURE_API_APP_NAME }}.azurewebsites.net/ready; then
@@ -133,4 +177,18 @@ jobs:
             sleep 15
           done
           echo "Readiness check failed after 3 minutes"
+          exit 1
+
+      - name: Smoke test Web reachability
+        if: needs.detect-changes.outputs.web == 'true' && needs.detect-changes.outputs.api != 'true'
+        run: |
+          for i in $(seq 1 12); do
+            if curl -fsS -o /dev/null https://${{ secrets.AZURE_WEB_APP_NAME }}.azurewebsites.net; then
+              echo "Web reachability check passed"
+              exit 0
+            fi
+            echo "Attempt $i/12 failed, retrying in 15s..."
+            sleep 15
+          done
+          echo "Web reachability check failed after 3 minutes"
           exit 1

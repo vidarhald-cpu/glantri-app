@@ -8,6 +8,18 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./chargen": {
+      "types": "./dist/chargen/index.d.ts",
+      "default": "./dist/chargen/index.js"
+    },
+    "./combat": {
+      "types": "./dist/combat/index.d.ts",
+      "default": "./dist/combat/index.js"
+    },
+    "./encounters": {
+      "types": "./dist/encounters/index.d.ts",
+      "default": "./dist/encounters/index.js"
     }
   },
   "scripts": {
