@@ -15,8 +15,8 @@ describe("CharacterWorkspacePanel", () => {
 
     expect(source).toContain("CharacterLoadoutView");
     expect(source).toContain("physicalStateGeneralHitpoints");
+    expect(source).toContain("physicalStateCurrentRoundNumber={currentRoundNumber}");
     expect(source).toContain("selectedCandidate.scenarioParticipant.state.health.maxHp");
-    expect(source).not.toContain("Damage");
     expect(source).not.toContain("Combat arena");
   });
 
@@ -24,8 +24,18 @@ describe("CharacterWorkspacePanel", () => {
     const source = readSource();
 
     expect(source).toContain("You are not currently assigned to a character in this scenario.");
+    expect(source).toContain("Character{selectedCandidate?.label ? ` — ${selectedCandidate.label}` : \"\"}");
     expect(source).toContain("Select character to inspect");
     expect(source).toContain("Previous");
     expect(source).toContain("Next");
+  });
+
+  it("enables manual combat effect editing only for the GM character workspace", () => {
+    const source = readSource();
+
+    expect(source).toContain("updateScenarioParticipantStateOnServer");
+    expect(source).toContain("combatEffects: nextCombatEffects");
+    expect(source).toContain("canEditCombatEffects={isGameMaster}");
+    expect(source).toContain("onCombatEffectsChange={isGameMaster ? updateSelectedCombatEffects : undefined}");
   });
 });

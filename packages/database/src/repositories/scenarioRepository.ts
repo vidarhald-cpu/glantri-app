@@ -473,6 +473,7 @@ export function createPrismaScenarioRepository(client?: PrismaClient): ScenarioR
         where: {
           scenarios: {
             some: {
+              status: "live",
               participants: {
                 some: {
                   isActive: true,
@@ -528,6 +529,7 @@ export function createPrismaScenarioRepository(client?: PrismaClient): ScenarioR
         orderBy: { createdAt: "desc" },
         where: {
           campaignId,
+          status: "live",
           participants: {
             some: {
               isActive: true,

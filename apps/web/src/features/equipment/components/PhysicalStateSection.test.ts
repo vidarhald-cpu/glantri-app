@@ -10,26 +10,132 @@ function readSource(): string {
 }
 
 describe("PhysicalStateSection", () => {
-  it("renders hitpoints, damage by type, and hit log scaffolds", () => {
+  it("renders physical state combat-effect panels", () => {
     const source = readSource();
 
-    expect(source).toContain("Physical state");
-    expect(source).toContain("Hitpoints");
-    expect(source).toContain("Damage by type");
-    expect(source).toContain("Log of hits");
+    expect(source).toContain("Physical state panel");
+    expect(source).toContain("Hitpoints and damage");
+    expect(source).toContain("Combat effects by sum");
+    expect(source).toContain("Combat effects");
     expect(source).toContain("General hitpoints");
-    expect(source).toContain("No hits recorded.");
+    expect(source).toContain("No combat effects recorded.");
+    expect(source).not.toContain("weight");
   });
 
-  it("renders the hit log and damage table columns", () => {
+  it("keeps the summary panels in a responsive two-column row", () => {
+    const source = readSource();
+
+    expect(source).toContain("physicalStatePanelStyle");
+    expect(source).toContain('background: "#fbfaf5"');
+    expect(source).toContain('gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 20rem), 1fr))"');
+    expect(source).toContain('alignItems: "start"');
+  });
+
+  it("renders the combat effects and hitpoint table columns", () => {
     const source = readSource();
 
     expect(source).toContain("Location");
     expect(source).toContain("Original");
     expect(source).toContain("Current");
-    expect(source).toContain("Source");
-    expect(source).toContain("General damage");
-    expect(source).toContain("Special effects");
+    expect(source).toContain("Round");
+    expect(source).toContain("Event");
+    expect(source).toContain("Value");
+    expect(source).toContain("Dur/Sta");
+    expect(source).toContain("Details");
     expect(source).toContain("Current effect");
+    expect(source).toContain("Save");
+    expect(source).toContain("Delete");
+  });
+
+  it("keeps the manual combat effect editor compact and tied to selected rows", () => {
+    const source = readSource();
+
+    expect(source).toContain("New effect");
+    expect(source).toContain("Edit selected effect");
+    expect(source).toContain("Same event");
+    expect(source).toContain("Round");
+    expect(source).toContain("Description");
+    expect(source).toContain("Loc");
+    expect(source).toContain("Dam");
+    expect(source).toContain("Group");
+    expect(source).toContain("Mod");
+    expect(source).toContain("Dur");
+    expect(source).toContain("Sta");
+    expect(source).toContain("onSaveCombatEffect");
+    expect(source).toContain('type: "physical_damage"');
+    expect(source).toContain('effectGroup: "none"');
+    expect(source).toContain("sourceEventId: draft.sourceEventId ?? createLocalId");
+    expect(source).toContain("entry.eventNumber");
+    expect(source).toContain('gridTemplateColumns: "4rem minmax(14rem, 1fr) auto"');
+    expect(source).toContain('gridTemplateColumns:');
+    expect(source).toContain("position: \"sticky\"");
+    expect(source).not.toContain("Add combat effect event");
+    expect(source).not.toContain("Add effect row");
+    expect(source).not.toContain("Source/Event label");
+    expect(source).not.toContain("General damage");
+    expect(source).not.toContain("Future phases will");
+  });
+
+  it("offers None options for event-neutral fields", () => {
+    const source = readSource();
+
+    expect(source).toContain('{ label: "None", value: "none" }');
+    expect(source).not.toContain('{ fullLabel: "No location", label: "None", value: "" }');
+  });
+
+  it("keeps type and modifier group choices separate in the compact editor", () => {
+    const source = readSource();
+
+    expect(source).toContain('{ label: "Physical", value: "physical_damage" }');
+    expect(source).toContain('{ label: "Internal bleed", value: "internal_bleed" }');
+    expect(source).toContain('{ label: "Fatigue", value: "fatigue" }');
+    expect(source).toContain('{ label: "Stun", value: "stun" }');
+    expect(source).toContain('{ label: "OB/Skill", value: "obSkill" }');
+    expect(source).toContain('{ label: "Fatigue", value: "fatigue" }');
+    expect(source).toContain("getDefaultGroupForType");
+    expect(source).toContain('type === "stun"');
+    expect(source).toContain('return "general"');
+    expect(source).toContain('type === "fatigue"');
+    expect(source).toContain('return "fatigue"');
+    expect(source).not.toContain('{ label: "General dmg", value: "general_damage" }');
+    expect(source).not.toContain('{ label: "Healing", value: "healing" }');
+    expect(source).not.toContain('{ label: "Other", value: "other" }');
+    expect(source).not.toContain('{ label: "General modifier", value: "general_modifier" }');
+    expect(source).not.toContain('{ label: "OB/Skill modifier", value: "ob_skill_modifier" }');
+  });
+
+  it("orders the compact effect editor as Type, Loc, Dam, Group, Mod, Dur, Sta, Details", () => {
+    const source = readSource();
+    const effectLine = source.slice(
+      source.indexOf('"7rem minmax(22rem, 1.6fr) 3.75rem 6.5rem'),
+      source.indexOf("</form>"),
+    );
+
+    const patterns = [
+      "<span>Type</span>",
+      ">Loc</legend>",
+      "<span>Dam</span>",
+      "<span>Group</span>",
+      "<span>Mod</span>",
+      "<span>Dur</span>",
+      "<span>Sta</span>",
+      "<span>Details</span>",
+    ];
+    const positions = patterns.map((pattern) => effectLine.indexOf(pattern));
+
+    expect(positions.every((position) => position >= 0)).toBe(true);
+    expect(positions).toEqual([...positions].sort((left, right) => left - right));
+  });
+
+  it("uses compact hit location selectors including general damage", () => {
+    const source = readSource();
+
+    for (const label of ["H", "LA", "RA", "CB", "AB", "ULL", "LLL", "URL", "LRL", "Gen"]) {
+      expect(source).toContain(`label: "${label}"`);
+    }
+    expect(source).toContain("locationGridStyle");
+    expect(source).toContain("locationHeaderCellStyle");
+    expect(source).toContain("locationCheckboxCellStyle");
+    expect(source).not.toContain('label: "None", value: ""');
   });
 });

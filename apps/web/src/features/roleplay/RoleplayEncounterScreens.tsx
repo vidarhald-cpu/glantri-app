@@ -43,7 +43,7 @@ import {
   loadCampaignById,
   loadEncounterById,
   loadScenarioById,
-  loadScenarioParticipants,
+  loadScenarioMyParticipant,
   submitPlayerRoleplayRollOnServer,
 } from "@/lib/api/localServiceClient";
 import { useSessionUser } from "@/lib/auth/SessionUserContext";
@@ -1556,7 +1556,9 @@ export function PlayerRoleplayingEncounterScreen({
         loadEncounterById(encounterId),
         loadScenarioById(scenarioId),
         loadCampaignById(campaignId).catch(() => null),
-        loadScenarioParticipants(scenarioId),
+        currentUser
+          ? loadScenarioMyParticipant(scenarioId).then((participant) => (participant ? [participant] : []))
+          : Promise.resolve([]),
         loadCanonicalContent(),
       ]);
 
@@ -1568,7 +1570,7 @@ export function PlayerRoleplayingEncounterScreen({
         nextScenario,
       };
     },
-    [campaignId, encounterId, scenarioId]
+    [campaignId, currentUser, encounterId, scenarioId]
   );
 
   useEffect(() => {

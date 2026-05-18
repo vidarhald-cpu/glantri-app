@@ -53,7 +53,7 @@ import {
   useRememberedSelection,
 } from "@/lib/browser/rememberedSelection";
 import RememberedCampaignWorkspaceEffect from "@/lib/campaigns/RememberedCampaignWorkspaceEffect";
-import { buildCampaignWorkspaceHref } from "@/lib/campaigns/workspace";
+import { buildCampaignWorkspaceHref, type CampaignWorkspaceTabId } from "@/lib/campaigns/workspace";
 
 interface ScenarioPlayerCombatPageContentProps {
   campaignId: string;
@@ -62,6 +62,7 @@ interface ScenarioPlayerCombatPageContentProps {
   encounterTitle?: string;
   participantId?: string;
   scenarioId: string;
+  workspaceTab?: Extract<CampaignWorkspaceTabId, "combat" | "player-encounter">;
 }
 
 const panelStyle = {
@@ -162,18 +163,6 @@ function rollDie(sides: number): number {
   return Math.floor(Math.random() * sides) + 1;
 }
 
-function PlaceholderSection(input: {
-  description: string;
-  title: string;
-}) {
-  return (
-    <section style={panelStyle}>
-      <h2 style={{ margin: 0 }}>{input.title}</h2>
-      <div style={{ color: "#5e5a50" }}>{input.description}</div>
-    </section>
-  );
-}
-
 export default function ScenarioPlayerCombatPageContent({
   campaignId,
   encounterId,
@@ -181,6 +170,7 @@ export default function ScenarioPlayerCombatPageContent({
   encounterTitle,
   participantId,
   scenarioId,
+  workspaceTab = "player-encounter",
 }: ScenarioPlayerCombatPageContentProps) {
   const pathname = usePathname();
   const router = useRouter();
@@ -952,7 +942,7 @@ export default function ScenarioPlayerCombatPageContent({
         campaignId={campaignId}
         encounterId={encounterId}
         scenarioId={scenarioId}
-        tab="player-encounter"
+        tab={workspaceTab}
       />
       <div style={{ display: "grid", gap: "0.5rem" }}>
         {!embedded ? (
@@ -1248,8 +1238,7 @@ export default function ScenarioPlayerCombatPageContent({
 
               <div style={{ display: "flex", gap: "0.5rem", justifyContent: "space-between" }}>
                 <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
-                  Temporary editor: persisted to participant combat state for later GM-owned combat
-                  context.
+                  Saved on the selected participant combat state.
                 </div>
                 <button disabled={savingCombatContext} onClick={() => void saveCombatContext()} type="button">
                   {savingCombatContext ? "Saving..." : "Save combat context"}
@@ -1425,31 +1414,9 @@ export default function ScenarioPlayerCombatPageContent({
           )
         ) : (
           <div style={panelStyle}>
-            The readonly combat/loadout panel will appear here once an accessible participant is
-            available.
+            No accessible participant is available.
           </div>
         )}
-      </section>
-
-      <section
-        style={{
-          display: "grid",
-          gap: "1rem",
-          gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
-        }}
-      >
-        <PlaceholderSection
-          title="Situation"
-          description="Current scene context, threats, range, and immediate tactical summary will appear here in the next phase."
-        />
-        <PlaceholderSection
-          title="Targets"
-          description="Target selection, target visibility, and action-specific combat detail will expand into this area in the next phase."
-        />
-        <PlaceholderSection
-          title="Details"
-          description="Targeting, situational modifiers, and fine-grained reference details will expand into this area later."
-        />
       </section>
     </section>
   );

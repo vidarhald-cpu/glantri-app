@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import type { CanonicalContent } from "@glantri/content";
-import type { CharacterBuild } from "@glantri/domain";
+import { calculateCharacterGeneralHitpoints, type CharacterBuild } from "@glantri/domain";
 import { getAccessTier, isWithYouLocation, type CarryMode } from "@glantri/domain/equipment";
 import {
   buildCharacterSheetSummary,
@@ -439,8 +439,8 @@ export function buildEquipmentLoadoutModuleModel(input: {
   );
   const statsRows: CombatStateDetailRow[] = [
     {
-      label: "Hitpoints",
-      value: input.characterContext.record.build.profile.rolledStats.health ?? "—"
+      label: "Max HP",
+      value: calculateCharacterGeneralHitpoints(input.characterContext.record.build)
     },
     {
       label: "GMR",
@@ -448,6 +448,10 @@ export function buildEquipmentLoadoutModuleModel(input: {
         sheetSummary.adjustedStats.pow != null && sheetSummary.adjustedStats.lck != null
           ? sheetSummary.adjustedStats.pow + sheetSummary.adjustedStats.lck - 3
           : "—"
+    },
+    {
+      label: "Distraction lvl",
+      value: input.characterContext.record.build.profile.distractionLevel ?? "—"
     }
   ];
   const statsTable = buildLoadoutCombatStatsTable({
@@ -653,6 +657,7 @@ export function buildEquipmentLoadoutModuleModel(input: {
 
 export function EquipmentLoadoutModule(input: {
   afterEquipmentChoices?: ReactNode;
+  beforeEquipmentChoices?: ReactNode;
   mode: EquipmentLoadoutModuleMode;
   model: EquipmentLoadoutModuleModel;
   onFieldChange?: (fieldId: LoadoutFieldId, itemId: string | null) => void;
@@ -662,6 +667,8 @@ export function EquipmentLoadoutModule(input: {
 
   return (
     <>
+      {input.beforeEquipmentChoices ?? null}
+
       {showControls ? (
         <ControlSection compact sticky={input.stickyControls} title="Equipment choices">
           <div className={styles.fieldsGrid}>

@@ -121,6 +121,7 @@ describe("RoleplayEncounterScreens", () => {
     expect(playerSource).toContain("playerView.assignedRolls");
     expect(playerSource).toContain("playerView.rankedResults");
     expect(playerSource).toContain("playerView.characterLog");
+    expect(playerSource).toContain("loadScenarioMyParticipant");
     expect(playerSource).toContain("mergePlayerVisibleResults");
     expect(source).toContain("isSamePlayerVisibleRankedResult");
     expect(playerSource).toContain("dismissedAssignedRollIds");

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 
 import type { EncounterSession, ScenarioParticipant } from "@glantri/domain";
 
@@ -8,12 +8,15 @@ import {
   buildGmCharacterWorkspaceCandidates,
   resolvePlayerCharacterWorkspaceCandidate,
 } from "@/lib/campaigns/characterWorkspace";
+import { updateScenarioParticipantStateOnServer } from "@/lib/api/scenarioClient";
 import CharacterLoadoutView from "../../characters/[id]/components/CharacterLoadoutView";
 
 interface CharacterWorkspacePanelProps {
   activeEncounter?: EncounterSession;
+  currentRoundNumber?: number;
   currentUserId?: string | null;
   isGameMaster: boolean;
+  onScenarioParticipantUpdated?: (participant: ScenarioParticipant) => void;
   onSelectParticipantId?: (participantId: string) => void;
   scenarioId?: string;
   scenarioParticipants: ScenarioParticipant[];
@@ -30,8 +33,10 @@ const panelStyle = {
 
 export default function CharacterWorkspacePanel({
   activeEncounter,
+  currentRoundNumber,
   currentUserId,
   isGameMaster,
+  onScenarioParticipantUpdated,
   onSelectParticipantId,
   scenarioId,
   scenarioParticipants,
@@ -63,6 +68,7 @@ export default function CharacterWorkspacePanel({
     ? gmCandidates.findIndex((candidate) => candidate.id === selectedGmCandidate.id)
     : -1;
   const hasMultipleGmCandidates = gmCandidates.length > 1;
+  const [saveError, setSaveError] = useState<string>();
 
   function selectGmCandidate(offset: number) {
     if (!selectedGmCandidate || gmCandidates.length === 0) {
@@ -74,6 +80,33 @@ export default function CharacterWorkspacePanel({
 
     if (nextCandidate) {
       onSelectParticipantId?.(nextCandidate.id);
+    }
+  }
+
+  async function updateSelectedCombatEffects(
+    nextCombatEffects: NonNullable<ScenarioParticipant["state"]["combatEffects"]>,
+  ) {
+    if (!isGameMaster || !scenarioId || !selectedCandidate) {
+      return;
+    }
+
+    try {
+      const participant = await updateScenarioParticipantStateOnServer({
+        participantId: selectedCandidate.scenarioParticipant.id,
+        scenarioId,
+        state: {
+          ...selectedCandidate.scenarioParticipant.state,
+          combatEffects: nextCombatEffects,
+        },
+      });
+
+      onScenarioParticipantUpdated?.(participant);
+      setSaveError(undefined);
+    } catch (caughtError) {
+      setSaveError(
+        caughtError instanceof Error ? caughtError.message : "Unable to save combat effects.",
+      );
+      throw caughtError;
     }
   }
 
@@ -103,18 +136,20 @@ export default function CharacterWorkspacePanel({
 
   return (
     <section style={{ display: "grid", gap: "1rem" }}>
-      {isGameMaster ? (
-        <section style={panelStyle}>
-          <div
-            style={{
-              alignItems: "center",
-              display: "flex",
-              flexWrap: "wrap",
-              gap: "0.75rem",
-              justifyContent: "space-between",
-            }}
-          >
-            <h2 style={{ margin: 0 }}>Character</h2>
+      <section style={panelStyle}>
+        <div
+          style={{
+            alignItems: "center",
+            display: "flex",
+            flexWrap: "wrap",
+            gap: "0.75rem",
+            justifyContent: "space-between",
+          }}
+        >
+          <h2 style={{ margin: 0 }}>
+            Character{selectedCandidate?.label ? ` — ${selectedCandidate.label}` : ""}
+          </h2>
+          {isGameMaster ? (
             <div
               style={{
                 alignItems: "center",
@@ -147,16 +182,38 @@ export default function CharacterWorkspacePanel({
                 </button>
               ) : null}
             </div>
-          </div>
-        </section>
-      ) : null}
+          ) : null}
+        </div>
+      </section>
 
       {selectedCandidate ? (
-        <CharacterLoadoutView
-          characterId={selectedCandidate.characterId}
-          physicalStateGeneralHitpoints={selectedCandidate.scenarioParticipant.state.health.maxHp}
-          showPhysicalState
-        />
+        <>
+          {saveError ? (
+            <section
+              style={{
+                background: "#fdf0ea",
+                border: "1px solid #e4b9a7",
+                borderRadius: 12,
+                color: "#8b3a1a",
+                padding: "1rem",
+              }}
+            >
+              {saveError}
+            </section>
+          ) : null}
+          <CharacterLoadoutView
+            canEditCombatEffects={isGameMaster}
+            characterId={selectedCandidate.characterId}
+            onCombatEffectsChange={isGameMaster ? updateSelectedCombatEffects : undefined}
+            physicalStateCombatEffects={selectedCandidate.scenarioParticipant.state.combatEffects}
+            physicalStateCurrentRoundNumber={currentRoundNumber}
+            physicalStateEncounterId={activeEncounter?.id}
+            physicalStateGeneralHitpoints={selectedCandidate.scenarioParticipant.state.health.maxHp}
+            physicalStateScenarioId={scenarioId}
+            physicalStateTargetParticipantId={selectedCandidate.scenarioParticipant.id}
+            showPhysicalState
+          />
+        </>
       ) : null}
     </section>
   );

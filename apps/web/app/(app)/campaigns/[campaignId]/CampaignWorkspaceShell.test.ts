@@ -17,6 +17,8 @@ describe("CampaignWorkspaceShell roleplay encounter routing", () => {
     expect(source).toContain('activeEncounter?.kind === "roleplay"');
     expect(source).toContain("ScenarioPlayerCombatPageContent");
     expect(source).toContain("loadScenarioParticipants");
+    expect(source).toContain("loadScenarioMyParticipant");
+    expect(source).toContain('workspaceAccess.accessMode === "player"');
     expect(source).toContain("currentUserId: currentUser?.id");
   });
 
@@ -42,5 +44,16 @@ describe("CampaignWorkspaceShell roleplay encounter routing", () => {
     expect(source).toContain('tab: "character"');
     expect(source).toContain("selectedParticipantId={searchParams.get(\"participantId\")}");
     expect(source).toContain("isGameMaster={canAccessGmEncounter}");
+    expect(source).toContain("currentRoundNumber={activeScenario?.liveState?.roundNumber}");
+  });
+
+  it("routes the workspace Combat tab through the recovered combat panel", () => {
+    const source = readSource();
+
+    expect(source).toContain('workspaceState.activeTab === "combat"');
+    expect(source).toContain("ScenarioPlayerCombatPageContent");
+    expect(source).toContain('workspaceTab="combat"');
+    expect(source).toContain("Select a scenario to open the combat panel.");
+    expect(source).toContain("No combat encounter is currently available.");
   });
 });

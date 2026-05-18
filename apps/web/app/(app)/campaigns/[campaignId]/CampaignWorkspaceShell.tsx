@@ -6,7 +6,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import type { Campaign, EncounterSession, Scenario, ScenarioParticipant } from "@glantri/domain";
 
-import { loadScenarioEncounters, loadScenarioParticipants } from "@/lib/api/localServiceClient";
+import {
+  loadScenarioEncounters,
+  loadScenarioMyParticipant,
+  loadScenarioParticipants,
+} from "@/lib/api/localServiceClient";
 import {
   REMEMBERED_SELECTION_KEYS,
   useRememberedSelection,
@@ -86,7 +90,13 @@ export default function CampaignWorkspaceShell({
       workspaceAccess.scenarios.map((scenario) => loadScenarioEncounters(scenario.id)),
     );
     const participantGroups = await Promise.all(
-      workspaceAccess.scenarios.map((scenario) => loadScenarioParticipants(scenario.id)),
+      workspaceAccess.scenarios.map((scenario) =>
+        workspaceAccess.accessMode === "player"
+          ? loadScenarioMyParticipant(scenario.id).then((participant) =>
+              participant ? [participant] : [],
+            )
+          : loadScenarioParticipants(scenario.id),
+      ),
     );
     const nextEncounters = encounterGroups.flat();
     const nextScenarioParticipants = participantGroups.flat();
@@ -198,6 +208,9 @@ export default function CampaignWorkspaceShell({
     encounters,
     scenarioId: workspaceState.activeScenarioId,
   });
+  const activeScenario = scenarios.find(
+    (scenario) => scenario.id === workspaceState.activeScenarioId
+  );
   const activeEncounter = activeScenarioEncounters.find(
     (encounter) => encounter.id === workspaceState.activeEncounterId
   );
@@ -289,8 +302,10 @@ export default function CampaignWorkspaceShell({
       participantId:
         requestedTabFromUrl === "player-encounter" ||
         requestedTabFromUrl === "character" ||
+        requestedTabFromUrl === "combat" ||
         workspaceState.activeTab === "player-encounter" ||
-        workspaceState.activeTab === "character"
+        workspaceState.activeTab === "character" ||
+        workspaceState.activeTab === "combat"
           ? searchParams.get("participantId")
           : null,
       scenarioId:
@@ -539,6 +554,7 @@ export default function CampaignWorkspaceShell({
       {accessMode !== "none" && workspaceState.activeTab === "character" ? (
         <CharacterWorkspacePanel
           activeEncounter={activeEncounter}
+          currentRoundNumber={activeScenario?.liveState?.roundNumber}
           currentUserId={currentUser?.id}
           isGameMaster={canAccessGmEncounter}
           onSelectParticipantId={(participantId) => {
@@ -549,10 +565,52 @@ export default function CampaignWorkspaceShell({
               }),
             );
           }}
+          onScenarioParticipantUpdated={(participant) => {
+            setScenarioParticipants((current) =>
+              current.map((entry) => (entry.id === participant.id ? participant : entry)),
+            );
+          }}
           scenarioId={workspaceState.activeScenarioId}
           scenarioParticipants={scenarioParticipants}
           selectedParticipantId={searchParams.get("participantId")}
         />
+      ) : null}
+
+      {accessMode !== "none" && workspaceState.activeTab === "combat" ? (
+        <section style={{ display: "grid", gap: "1rem" }}>
+          {workspaceState.activeScenarioId ? (
+            <ScenarioPlayerCombatPageContent
+              campaignId={campaignId}
+              encounterId={workspaceState.activeEncounterId}
+              embedded
+              encounterTitle={activeEncounter?.title}
+              participantId={searchParams.get("participantId") ?? undefined}
+              scenarioId={workspaceState.activeScenarioId}
+              workspaceTab="combat"
+            />
+          ) : (
+            <section style={panelStyle}>
+              <strong>Select a scenario to open the combat panel.</strong>
+              {scenarios.length > 0 ? (
+                <div style={{ display: "grid", gap: "0.5rem" }}>
+                  {scenarios.map((scenario) => (
+                    <Link
+                      key={scenario.id}
+                      href={buildWorkspaceHref({
+                        scenarioId: scenario.id,
+                        tab: "combat",
+                      })}
+                    >
+                      {scenario.name}
+                    </Link>
+                  ))}
+                </div>
+              ) : (
+                <div>No combat encounter is currently available.</div>
+              )}
+            </section>
+          )}
+        </section>
       ) : null}
     </section>
   );

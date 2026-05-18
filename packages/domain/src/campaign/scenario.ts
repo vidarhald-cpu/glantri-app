@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { characterBuildSchema, type CharacterBuild } from "../character/build";
+import { combatEffectsStateSchema } from "../encounter/combatEffects";
 
 const idSchema = z.string().min(1);
 const timestampSchema = z.string().min(1);
@@ -162,6 +163,7 @@ export const scenarioParticipantStateSchema = z.object({
     lastDeclaredActionId: idSchema.optional(),
     stance: z.string().min(1).optional()
   }),
+  combatEffects: combatEffectsStateSchema.optional(),
   conditions: z.array(scenarioParticipantConditionSchema).default([]),
   equipment: z.object({
     carriedItemIds: z.array(idSchema).optional(),
