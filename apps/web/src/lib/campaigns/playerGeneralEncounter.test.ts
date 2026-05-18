@@ -187,7 +187,7 @@ function makeEncounter(): EncounterSession {
           shortDescription: "A quiet figure",
         },
         "scenario-npc-visible": {
-          detailedDescription: "GM-only motive.",
+          detailedDescription: "A player-safe clue.",
           name: "Street merchant",
           shortDescription: "A nervous seller",
         },
@@ -281,6 +281,52 @@ describe("playerGeneralEncounter", () => {
       "A nervous seller"
     );
     expect(JSON.stringify(view.visibleParticipants)).not.toContain("GM-only");
+    expect(view.visibleParticipants.map((participant) => participant.description)).toContain(
+      "A player-safe clue."
+    );
+  });
+
+  it("matches GM visibility rows stored by scenario participant id aliases", () => {
+    const baseEncounter = makeEncounter();
+    const encounter = {
+      ...baseEncounter,
+      roleplayState: {
+        ...baseEncounter.roleplayState,
+        participantDescriptions: {
+          "npc-visible": {
+            detailedDescription: "Player-safe scene detail.",
+            name: "Known city guard",
+            shortDescription: "Armored guard",
+          },
+        },
+        visibility: {
+          "pc-1": {
+            "npc-hidden": false,
+            "npc-visible": true,
+          },
+        },
+      },
+    } as EncounterSession;
+
+    const view = buildPlayerGeneralEncounterView({
+      currentUserId: "player-1",
+      encounter,
+      scenarioParticipants: [
+        makeScenarioParticipant({ controlledByUserId: "player-1", id: "pc-1", name: "Player hero" }),
+        makeScenarioParticipant({ id: "npc-visible", name: "Visible NPC" }),
+        makeScenarioParticipant({ id: "npc-hidden", name: "Hidden spy" }),
+      ],
+    });
+
+    expect(view.visibleParticipantIds).toEqual(["scenario-pc-1", "scenario-npc-visible"]);
+    expect(view.visibleParticipants).toEqual([
+      {
+        description: "Player-safe scene detail.",
+        id: "scenario-npc-visible",
+        name: "Known city guard",
+        shortDescription: "Armored guard",
+      },
+    ]);
   });
 
   it("shows assigned non-silent rolls and hides silent roll requests", () => {

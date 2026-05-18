@@ -116,27 +116,74 @@ function getPlayerSafeParticipantName(input: {
   return input.state.participantDescriptions[input.participantId]?.name ?? input.fallbackLabel;
 }
 
+function getVisibilityIdentityKeys(participant: EncounterParticipant): string[] {
+  return [
+    participant.id,
+    participant.scenarioParticipantId,
+    participant.scenarioParticipantId ? `scenario-${participant.scenarioParticipantId}` : undefined,
+    participant.characterId,
+  ].filter((key, index, keys): key is string => Boolean(key) && keys.indexOf(key) === index);
+}
+
+function getParticipantDescription(input: {
+  fallbackName: string;
+  participant: EncounterParticipant;
+  state: ReturnType<typeof normalizeRoleplayState>;
+}) {
+  for (const key of getVisibilityIdentityKeys(input.participant)) {
+    const description = input.state.participantDescriptions[key];
+
+    if (description) {
+      return description;
+    }
+  }
+
+  return {
+    detailedDescription: "",
+    name: input.fallbackName,
+    shortDescription: "",
+  };
+}
+
+function isVisibilityEnabled(input: {
+  state: ReturnType<typeof normalizeRoleplayState>;
+  target: EncounterParticipant;
+  viewer: EncounterParticipant;
+}): boolean {
+  const targetKeys = getVisibilityIdentityKeys(input.target);
+
+  return getVisibilityIdentityKeys(input.viewer).some((viewerKey) => {
+    const viewerVisibility = input.state.visibility[viewerKey];
+
+    return targetKeys.some((targetKey) => Boolean(viewerVisibility?.[targetKey]));
+  });
+}
+
 function isParticipantVisibleToPlayer(input: {
-  controlledParticipantIds: Set<string>;
+  controlledParticipants: EncounterParticipant[];
   defaultVisibleWhenNoMatrix?: boolean;
-  participantId: string;
+  participant: EncounterParticipant;
   state: ReturnType<typeof normalizeRoleplayState>;
 }): boolean {
-  if (input.controlledParticipantIds.has(input.participantId)) {
+  if (input.controlledParticipants.some((participant) => participant.id === input.participant.id)) {
     return true;
   }
 
-  for (const viewerId of input.controlledParticipantIds) {
-    const viewerVisibility = input.state.visibility[viewerId];
-
-    if (viewerVisibility?.[input.participantId]) {
+  for (const viewer of input.controlledParticipants) {
+    if (isVisibilityEnabled({
+      state: input.state,
+      target: input.participant,
+      viewer,
+    })) {
       return true;
     }
 
-    if (
-      input.defaultVisibleWhenNoMatrix &&
-      (!viewerVisibility || Object.keys(viewerVisibility).length === 0)
-    ) {
+    const viewerVisibilityRows = getVisibilityIdentityKeys(viewer)
+      .map((viewerKey) => input.state.visibility[viewerKey])
+      .filter((row): row is Record<string, boolean> => Boolean(row));
+    const hasAnyViewerVisibility = viewerVisibilityRows.some((row) => Object.keys(row).length > 0);
+
+    if (input.defaultVisibleWhenNoMatrix && !hasAnyViewerVisibility) {
       return true;
     }
   }
@@ -433,13 +480,16 @@ export function buildPlayerGeneralEncounterView(input: {
       )
       .map((participant) => participant.id)
   );
+  const controlledParticipants = orderedParticipants.filter((participant) =>
+    controlledParticipantIds.has(participant.id)
+  );
   const visibleParticipantIds = new Set(
     orderedParticipants
       .filter((participant) =>
         isParticipantVisibleToPlayer({
-          controlledParticipantIds,
+          controlledParticipants,
           defaultVisibleWhenNoMatrix: usesFallbackParticipants,
-          participantId: participant.id,
+          participant,
           state,
         })
       )
@@ -451,13 +501,17 @@ export function buildPlayerGeneralEncounterView(input: {
         visibleParticipantIds.has(participant.id) && !controlledParticipantIds.has(participant.id)
     )
     .map((participant) => {
-      const description = state.participantDescriptions[participant.id];
+      const description = getParticipantDescription({
+        fallbackName: participant.label,
+        participant,
+        state,
+      });
 
       return {
-        description: "",
+        description: description.detailedDescription ?? "",
         id: participant.id,
-        name: description?.name ?? participant.label,
-        shortDescription: description?.shortDescription ?? "",
+        name: description.name ?? participant.label,
+        shortDescription: description.shortDescription ?? "",
       };
     });
   const visiblePendingRolls = state.pendingSkillRolls.filter(
