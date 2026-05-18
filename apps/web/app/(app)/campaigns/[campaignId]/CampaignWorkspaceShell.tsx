@@ -35,6 +35,7 @@ import ScenarioDetailPageContent from "./scenarios/[scenarioId]/ScenarioDetailPa
 import ScenarioPlayerPageContent from "./scenarios/[scenarioId]/player/ScenarioPlayerPageContent";
 import ScenarioPlayerCombatPageContent from "./scenarios/[scenarioId]/player/combat/ScenarioPlayerCombatPageContent";
 import { PlayerRoleplayingEncounterScreen } from "@/features/roleplay/RoleplayEncounterScreens";
+import CombatRoundManagerPanel from "@/features/combat-round-manager/CombatRoundManagerPanel";
 
 interface CampaignWorkspaceShellProps {
   campaignId: string;
@@ -208,6 +209,9 @@ export default function CampaignWorkspaceShell({
     encounters,
     scenarioId: workspaceState.activeScenarioId,
   });
+  const activeScenarioCombatEncounters = activeScenarioEncounters.filter(
+    (encounter) => encounter.kind === "combat",
+  );
   const activeScenario = scenarios.find(
     (scenario) => scenario.id === workspaceState.activeScenarioId
   );
@@ -578,7 +582,40 @@ export default function CampaignWorkspaceShell({
 
       {accessMode !== "none" && workspaceState.activeTab === "combat" ? (
         <section style={{ display: "grid", gap: "1rem" }}>
-          {workspaceState.activeScenarioId ? (
+          {canAccessGmEncounter && activeEncounter?.kind === "combat" ? (
+            <CombatRoundManagerPanel
+              encounter={activeEncounter}
+              onEncounterUpdated={(nextEncounter) => {
+                setEncounters((current) =>
+                  current.map((encounter) =>
+                    encounter.id === nextEncounter.id ? nextEncounter : encounter,
+                  ),
+                );
+              }}
+            />
+          ) : canAccessGmEncounter ? (
+            <section style={panelStyle}>
+              <strong>Select an encounter to open the Combat Round Manager.</strong>
+              {activeScenarioCombatEncounters.length > 0 ? (
+                <div style={{ display: "grid", gap: "0.5rem" }}>
+                  {activeScenarioCombatEncounters.map((encounter) => (
+                    <Link
+                      key={encounter.id}
+                      href={buildWorkspaceHref({
+                        encounterId: encounter.id,
+                        scenarioId: encounter.scenarioId,
+                        tab: "combat",
+                      })}
+                    >
+                      {encounter.title}
+                    </Link>
+                  ))}
+                </div>
+              ) : (
+                <div>No combat encounter is currently available.</div>
+              )}
+            </section>
+          ) : workspaceState.activeScenarioId ? (
             <ScenarioPlayerCombatPageContent
               campaignId={campaignId}
               encounterId={workspaceState.activeEncounterId}

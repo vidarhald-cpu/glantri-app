@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import type { ScenarioParticipant } from "../campaign/scenario";
+import { combatRoundStateSchema } from "./combatRoundManager";
 
 const idSchema = z.string().min(1);
 
@@ -302,6 +303,7 @@ export const encounterParticipantSchema = z.object({
 export const encounterSessionSchema = z.object({
   actionLog: z.array(encounterAttackResolutionSchema).default([]),
   campaignId: idSchema.optional(),
+  combatRoundState: combatRoundStateSchema.optional(),
   createdAt: z.string().min(1),
   currentRound: z.number().int().positive().default(1),
   currentTurnIndex: z.number().int().nonnegative().default(0),
