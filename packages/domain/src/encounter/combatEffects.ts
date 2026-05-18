@@ -37,6 +37,7 @@ export const combatEffectGroupSchema = z.enum([
   "db",
   "other",
   "bleed",
+  "fatigue",
   "special",
 ]);
 

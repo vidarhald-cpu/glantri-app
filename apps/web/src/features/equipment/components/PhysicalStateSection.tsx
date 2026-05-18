@@ -87,6 +87,7 @@ const combatEffectGroups: Array<{ label: string; value: CombatEffectGroup }> = [
   { label: "OB/Skill", value: "obSkill" },
   { label: "DB", value: "db" },
   { label: "Bleed", value: "bleed" },
+  { label: "Fatigue", value: "fatigue" },
   { label: "Special", value: "special" },
 ];
 
@@ -201,6 +202,18 @@ function createBlankDraft(
     type: "physical_damage",
     ...seed,
   };
+}
+
+function getDefaultGroupForType(type: CombatEffectType): CombatEffectGroup | undefined {
+  if (type === "stun") {
+    return "general";
+  }
+
+  if (type === "fatigue") {
+    return "fatigue";
+  }
+
+  return undefined;
 }
 
 function draftFromEntry(entry: HitLogEntryView): CombatEffectEditorDraft {
@@ -541,41 +554,28 @@ function CombatEffectsPanel({
               display: "grid",
               gap: "0.45rem",
               gridTemplateColumns:
-                "7rem 6.5rem minmax(22rem, 1.6fr) 3.75rem 3.75rem 5rem 5rem minmax(10rem, 1fr)",
+                "7rem minmax(22rem, 1.6fr) 3.75rem 6.5rem 3.75rem 5rem 5rem minmax(10rem, 1fr)",
             }}
           >
             <label style={{ display: "grid", gap: "0.2rem" }}>
               <span>Type</span>
               <select
                 onChange={(event) =>
-                  setDraft((current) => ({
-                    ...current,
-                    type: event.target.value as CombatEffectType,
-                  }))
+                  setDraft((current) => {
+                    const nextType = event.target.value as CombatEffectType;
+                    const defaultGroup = getDefaultGroupForType(nextType);
+
+                    return {
+                      ...current,
+                      effectGroup: defaultGroup ?? current.effectGroup,
+                      type: nextType,
+                    };
+                  })
                 }
                 style={compactInputStyle}
                 value={draft.type}
               >
                 {visibleCombatEffectTypes.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label style={{ display: "grid", gap: "0.2rem" }}>
-              <span>Group</span>
-              <select
-                onChange={(event) =>
-                  setDraft((current) => ({
-                    ...current,
-                    effectGroup: event.target.value as CombatEffectGroup,
-                  }))
-                }
-                style={compactInputStyle}
-                value={draft.effectGroup}
-              >
-                {combatEffectGroups.map((option) => (
                   <option key={option.value} value={option.value}>
                     {option.label}
                   </option>
@@ -631,6 +631,25 @@ function CombatEffectsPanel({
                 type="number"
                 value={draft.damage}
               />
+            </label>
+            <label style={{ display: "grid", gap: "0.2rem" }}>
+              <span>Group</span>
+              <select
+                onChange={(event) =>
+                  setDraft((current) => ({
+                    ...current,
+                    effectGroup: event.target.value as CombatEffectGroup,
+                  }))
+                }
+                style={compactInputStyle}
+                value={draft.effectGroup}
+              >
+                {combatEffectGroups.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
             </label>
             <label style={{ display: "grid", gap: "0.2rem" }}>
               <span>Mod</span>

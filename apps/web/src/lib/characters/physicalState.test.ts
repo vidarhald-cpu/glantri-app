@@ -201,7 +201,7 @@ describe("character physical state read model", () => {
             createdAt: "2026-05-17T10:00:00.000Z",
             damage: 0,
             description: "Fatigue 3",
-            effectGroup: "general",
+            effectGroup: "fatigue",
             generalDamage: 0,
             id: "effect-fatigue",
             modifierValue: 3,
@@ -337,9 +337,97 @@ describe("character physical state read model", () => {
     });
 
     expect(view.hitLog.map((entry) => [entry.id, entry.eventNumber])).toEqual([
-      ["effect-a-1", "E1"],
       ["effect-b-1", "E2"],
+      ["effect-a-1", "E1"],
       ["effect-a-2", "E1"],
+    ]);
+  });
+
+  it("sorts newer event groups first and keeps physical damage before modifiers and special rows", () => {
+    const view = buildCharacterPhysicalStateView({
+      combatEffects: {
+        events: [
+          {
+            createdAt: "2026-05-17T10:00:00.000Z",
+            description: "Older event",
+            id: "event-old",
+            sourceLabel: "Older event",
+            sourceType: "manual",
+            targetParticipantId: "participant-1",
+          },
+          {
+            createdAt: "2026-05-17T11:00:00.000Z",
+            description: "Newer event",
+            id: "event-new",
+            sourceLabel: "Newer event",
+            sourceType: "manual",
+            targetParticipantId: "participant-1",
+          },
+        ],
+        effects: [
+          {
+            createdAt: "2026-05-17T11:00:02.000Z",
+            damage: 0,
+            description: "Dropped weapon",
+            effectGroup: "special",
+            generalDamage: 0,
+            id: "new-special",
+            sourceEventId: "event-new",
+            status: "active",
+            targetParticipantId: "participant-1",
+            type: "special",
+            updatedAt: "2026-05-17T11:00:02.000Z",
+          },
+          {
+            createdAt: "2026-05-17T10:00:00.000Z",
+            damage: 3,
+            effectGroup: "none",
+            generalDamage: 0,
+            id: "old-damage",
+            location: "head",
+            sourceEventId: "event-old",
+            status: "active",
+            targetParticipantId: "participant-1",
+            type: "physical_damage",
+            updatedAt: "2026-05-17T10:00:00.000Z",
+          },
+          {
+            createdAt: "2026-05-17T11:00:00.000Z",
+            damage: 4,
+            effectGroup: "none",
+            generalDamage: 0,
+            id: "new-damage",
+            location: "rightArm",
+            sourceEventId: "event-new",
+            status: "active",
+            targetParticipantId: "participant-1",
+            type: "physical_damage",
+            updatedAt: "2026-05-17T11:00:00.000Z",
+          },
+          {
+            createdAt: "2026-05-17T11:00:01.000Z",
+            damage: 0,
+            description: "Stunned",
+            effectGroup: "general",
+            generalDamage: 0,
+            id: "new-modifier",
+            modifierValue: -4,
+            sourceEventId: "event-new",
+            status: "active",
+            targetParticipantId: "participant-1",
+            type: "stun",
+            updatedAt: "2026-05-17T11:00:01.000Z",
+          },
+        ],
+      },
+      generalHitpoints: 22,
+    });
+
+    expect(view.hitLog.map((entry) => [entry.id, entry.eventNumber])).toEqual([
+      ["new-damage", "E2"],
+      ["new-modifier", "E2"],
+      ["new-special", "E2"],
+      ["old-damage", "E1"],
     ]);
   });
 

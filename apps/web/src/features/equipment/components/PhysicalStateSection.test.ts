@@ -57,6 +57,7 @@ describe("PhysicalStateSection", () => {
     expect(source).toContain("Description");
     expect(source).toContain("Loc");
     expect(source).toContain("Dam");
+    expect(source).toContain("Group");
     expect(source).toContain("Mod");
     expect(source).toContain("Dur");
     expect(source).toContain("Sta");
@@ -90,11 +91,40 @@ describe("PhysicalStateSection", () => {
     expect(source).toContain('{ label: "Fatigue", value: "fatigue" }');
     expect(source).toContain('{ label: "Stun", value: "stun" }');
     expect(source).toContain('{ label: "OB/Skill", value: "obSkill" }');
+    expect(source).toContain('{ label: "Fatigue", value: "fatigue" }');
+    expect(source).toContain("getDefaultGroupForType");
+    expect(source).toContain('type === "stun"');
+    expect(source).toContain('return "general"');
+    expect(source).toContain('type === "fatigue"');
+    expect(source).toContain('return "fatigue"');
     expect(source).not.toContain('{ label: "General dmg", value: "general_damage" }');
     expect(source).not.toContain('{ label: "Healing", value: "healing" }');
     expect(source).not.toContain('{ label: "Other", value: "other" }');
     expect(source).not.toContain('{ label: "General modifier", value: "general_modifier" }');
     expect(source).not.toContain('{ label: "OB/Skill modifier", value: "ob_skill_modifier" }');
+  });
+
+  it("orders the compact effect editor as Type, Loc, Dam, Group, Mod, Dur, Sta, Details", () => {
+    const source = readSource();
+    const effectLine = source.slice(
+      source.indexOf('"7rem minmax(22rem, 1.6fr) 3.75rem 6.5rem'),
+      source.indexOf("</form>"),
+    );
+
+    const patterns = [
+      "<span>Type</span>",
+      ">Loc</legend>",
+      "<span>Dam</span>",
+      "<span>Group</span>",
+      "<span>Mod</span>",
+      "<span>Dur</span>",
+      "<span>Sta</span>",
+      "<span>Details</span>",
+    ];
+    const positions = patterns.map((pattern) => effectLine.indexOf(pattern));
+
+    expect(positions.every((position) => position >= 0)).toBe(true);
+    expect(positions).toEqual([...positions].sort((left, right) => left - right));
   });
 
   it("uses compact hit location selectors including general damage", () => {

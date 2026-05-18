@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => {
     listCampaignRosterEntries: vi.fn(),
     listCampaignsByCharacterRosterAccess: vi.fn(),
     listCampaignsByGameMaster: vi.fn(),
+    listCampaignsByPlayerAccess: vi.fn(),
     removeCampaignRosterEntryBySource: vi.fn(),
   };
   const characterService = {
@@ -33,6 +34,7 @@ const mocks = vi.hoisted(() => {
     createScenario: vi.fn(),
     addCharacterParticipant: vi.fn(),
     getScenarioById: vi.fn(),
+    listScenariosByCampaignPlayerAccess: vi.fn(),
     listScenariosByCampaign: vi.fn(),
     listScenarioParticipants: vi.fn(),
     recordScenarioEvent: vi.fn(),
@@ -104,6 +106,49 @@ describe("scenarios route contract", () => {
       campaigns: [campaign],
     });
     expect(mocks.campaignService.listCampaignsByGameMaster).toHaveBeenCalledWith("gm-1");
+  });
+
+  it("lists player-accessible campaigns through live scenario access only", async () => {
+    const campaign = {
+      createdAt: "2026-05-09T12:00:00.000Z",
+      gmUserId: "gm-1",
+      id: "campaign-1",
+      name: "Border Trouble",
+      status: "active",
+      updatedAt: "2026-05-09T12:00:00.000Z",
+    };
+    const scenario = {
+      campaignId: "campaign-1",
+      id: "scenario-live",
+      kind: "mixed",
+      name: "Live Scene",
+      status: "live",
+    };
+    mocks.campaignService.listCampaignsByPlayerAccess.mockResolvedValue([campaign]);
+    mocks.scenarioService.listScenariosByCampaignPlayerAccess.mockResolvedValue([scenario]);
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/campaigns/accessible",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      accessibleCampaigns: [
+        {
+          campaign,
+          scenarios: [scenario],
+        },
+      ],
+    });
+    expect(mocks.campaignService.listCampaignsByPlayerAccess).toHaveBeenCalledWith("player-1");
+    expect(mocks.scenarioService.listScenariosByCampaignPlayerAccess).toHaveBeenCalledWith(
+      "campaign-1",
+      "player-1",
+    );
   });
 
   it("returns a validation error instead of calling the service for invalid campaign creation", async () => {

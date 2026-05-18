@@ -151,7 +151,7 @@ function buildDamageByType(
       .filter((effect) => effect.effectGroup === "db" && !isTypedSummaryEffect(effect))
       .reduce((total, effect) => total + getEffectMagnitude(effect), 0),
     fatigue: activeEffects
-      .filter((effect) => effect.type === "fatigue")
+      .filter((effect) => effect.type === "fatigue" || effect.effectGroup === "fatigue")
       .reduce((total, effect) => total + getEffectMagnitude(effect), 0),
     general: activeEffects
       .filter((effect) => effect.effectGroup === "general" && !isTypedSummaryEffect(effect))
@@ -166,11 +166,44 @@ function buildDamageByType(
   };
 }
 
+function getEventSortTime(value?: string): number {
+  if (!value) {
+    return 0;
+  }
+
+  const parsed = Date.parse(value);
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
+
+function getEffectDisplayPriority(entry: Pick<HitLogEntryView, "effectGroup" | "modifierValue" | "type">): number {
+  if (entry.type === "physical_damage" || entry.type === "general_damage") {
+    return 0;
+  }
+
+  if (entry.type === "special" || entry.effectGroup === "special") {
+    return 2;
+  }
+
+  if (
+    entry.modifierValue != null ||
+    entry.effectGroup === "general" ||
+    entry.effectGroup === "obSkill" ||
+    entry.effectGroup === "db" ||
+    entry.effectGroup === "bleed" ||
+    entry.effectGroup === "fatigue"
+  ) {
+    return 1;
+  }
+
+  return 1;
+}
+
 function buildHitLog(combatEffects: CombatEffectsState): HitLogEntryView[] {
   const eventsById = new Map(
     combatEffects.events.map((event) => [
       event.id,
       {
+        createdAt: event.createdAt,
         description: event.description,
         roundNumber: event.roundNumber,
         source: event.sourceLabel || event.description || "Combat effect",
@@ -178,33 +211,57 @@ function buildHitLog(combatEffects: CombatEffectsState): HitLogEntryView[] {
     ]),
   );
   const eventNumberBySourceEventId = new Map<string, string>();
+  const allSourceEventIds = new Set([
+    ...combatEffects.events.map((event) => event.id),
+    ...combatEffects.effects.map((effect) => effect.sourceEventId),
+  ]);
 
-  for (const effect of combatEffects.effects) {
-    if (!eventNumberBySourceEventId.has(effect.sourceEventId)) {
-      eventNumberBySourceEventId.set(
-        effect.sourceEventId,
-        `E${eventNumberBySourceEventId.size + 1}`,
-      );
-    }
+  const orderedSourceEventIds = [...allSourceEventIds].sort((left, right) => {
+    const leftEvent = eventsById.get(left);
+    const rightEvent = eventsById.get(right);
+    const leftFirstEffect = combatEffects.effects.find((effect) => effect.sourceEventId === left);
+    const rightFirstEffect = combatEffects.effects.find((effect) => effect.sourceEventId === right);
+
+    return (
+      getEventSortTime(leftEvent?.createdAt ?? leftFirstEffect?.createdAt) -
+        getEventSortTime(rightEvent?.createdAt ?? rightFirstEffect?.createdAt) ||
+      left.localeCompare(right)
+    );
+  });
+
+  for (const [index, sourceEventId] of orderedSourceEventIds.entries()) {
+    eventNumberBySourceEventId.set(sourceEventId, `E${index + 1}`);
   }
 
-  return combatEffects.effects.map((effect) => ({
-    damage: effect.damage,
-    duration: effect.duration ?? "",
-    effectGroup: effect.effectGroup,
-    eventDescription: eventsById.get(effect.sourceEventId)?.description ?? "",
-    eventNumber: eventNumberBySourceEventId.get(effect.sourceEventId) ?? "",
-    generalDamage: effect.generalDamage,
-    id: effect.id,
-    location: effect.location ?? "",
-    modifierValue: effect.modifierValue,
-    roundNumber: effect.roundNumber ?? eventsById.get(effect.sourceEventId)?.roundNumber ?? "",
-    source: eventsById.get(effect.sourceEventId)?.source ?? "Combat effect",
-    sourceEventId: effect.sourceEventId,
-    specialEffects: effect.description ?? "",
-    status: effect.status,
-    type: effect.type,
-  }));
+  return combatEffects.effects
+    .map((effect) => ({
+      damage: effect.damage,
+      duration: effect.duration ?? "",
+      effectGroup: effect.effectGroup,
+      eventDescription: eventsById.get(effect.sourceEventId)?.description ?? "",
+      eventNumber: eventNumberBySourceEventId.get(effect.sourceEventId) ?? "",
+      generalDamage: effect.generalDamage,
+      id: effect.id,
+      location: effect.location ?? "",
+      modifierValue: effect.modifierValue,
+      roundNumber: effect.roundNumber ?? eventsById.get(effect.sourceEventId)?.roundNumber ?? "",
+      source: eventsById.get(effect.sourceEventId)?.source ?? "Combat effect",
+      sourceEventId: effect.sourceEventId,
+      specialEffects: effect.description ?? "",
+      status: effect.status,
+      type: effect.type,
+    }))
+    .sort((left, right) => {
+      const leftEventNumber = Number.parseInt(left.eventNumber.replace(/^E/, ""), 10) || 0;
+      const rightEventNumber = Number.parseInt(right.eventNumber.replace(/^E/, ""), 10) || 0;
+
+      return (
+        rightEventNumber - leftEventNumber ||
+        getEffectDisplayPriority(left) - getEffectDisplayPriority(right) ||
+        getEventSortTime(left.sourceEventId) - getEventSortTime(right.sourceEventId) ||
+        left.id.localeCompare(right.id)
+      );
+    });
 }
 
 export function calculateLocationHitpoints(input: {
