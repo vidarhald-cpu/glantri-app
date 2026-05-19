@@ -30,7 +30,6 @@
     "@glantri/content": "workspace:*",
     "@glantri/domain": "workspace:*",
     "@glantri/rules-engine": "workspace:*",
-    "@glantri/shared": "workspace:*",
     "@prisma/client": "^6.6.0"
   },
   "devDependencies": {
