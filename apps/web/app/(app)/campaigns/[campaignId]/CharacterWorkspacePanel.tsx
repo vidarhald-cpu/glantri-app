@@ -10,6 +10,7 @@ import {
 } from "@/lib/campaigns/characterWorkspace";
 import { updateScenarioParticipantStateOnServer } from "@/lib/api/scenarioClient";
 import CharacterLoadoutView from "../../characters/[id]/components/CharacterLoadoutView";
+import WorkspaceParticipantInspectionHeader from "./WorkspaceParticipantInspectionHeader";
 
 interface CharacterWorkspacePanelProps {
   activeEncounter?: EncounterSession;
@@ -64,24 +65,7 @@ export default function CharacterWorkspacePanel({
   const selectedGmCandidate =
     gmCandidates.find((candidate) => candidate.id === selectedParticipantId) ?? gmCandidates[0];
   const selectedCandidate = isGameMaster ? selectedGmCandidate : playerCandidate;
-  const selectedIndex = selectedGmCandidate
-    ? gmCandidates.findIndex((candidate) => candidate.id === selectedGmCandidate.id)
-    : -1;
-  const hasMultipleGmCandidates = gmCandidates.length > 1;
   const [saveError, setSaveError] = useState<string>();
-
-  function selectGmCandidate(offset: number) {
-    if (!selectedGmCandidate || gmCandidates.length === 0) {
-      return;
-    }
-
-    const nextIndex = (selectedIndex + offset + gmCandidates.length) % gmCandidates.length;
-    const nextCandidate = gmCandidates[nextIndex];
-
-    if (nextCandidate) {
-      onSelectParticipantId?.(nextCandidate.id);
-    }
-  }
 
   async function updateSelectedCombatEffects(
     nextCombatEffects: NonNullable<ScenarioParticipant["state"]["combatEffects"]>,
@@ -136,55 +120,13 @@ export default function CharacterWorkspacePanel({
 
   return (
     <section style={{ display: "grid", gap: "1rem" }}>
-      <section style={panelStyle}>
-        <div
-          style={{
-            alignItems: "center",
-            display: "flex",
-            flexWrap: "wrap",
-            gap: "0.75rem",
-            justifyContent: "space-between",
-          }}
-        >
-          <h2 style={{ margin: 0 }}>
-            Character{selectedCandidate?.label ? ` — ${selectedCandidate.label}` : ""}
-          </h2>
-          {isGameMaster ? (
-            <div
-              style={{
-                alignItems: "center",
-                display: "flex",
-                flexWrap: "wrap",
-                gap: "0.5rem",
-              }}
-            >
-              {hasMultipleGmCandidates ? (
-                <button type="button" onClick={() => selectGmCandidate(-1)}>
-                  Previous
-                </button>
-              ) : null}
-              <label style={{ display: "grid", gap: "0.25rem" }}>
-                <span style={{ fontWeight: 700 }}>Select character to inspect</span>
-                <select
-                  onChange={(event) => onSelectParticipantId?.(event.target.value)}
-                  value={selectedGmCandidate?.id ?? ""}
-                >
-                  {gmCandidates.map((candidate) => (
-                    <option key={candidate.id} value={candidate.id}>
-                      {candidate.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              {hasMultipleGmCandidates ? (
-                <button type="button" onClick={() => selectGmCandidate(1)}>
-                  Next
-                </button>
-              ) : null}
-            </div>
-          ) : null}
-        </div>
-      </section>
+      <WorkspaceParticipantInspectionHeader
+        candidates={gmCandidates}
+        isGameMaster={isGameMaster}
+        onSelectParticipantId={onSelectParticipantId}
+        screenName="Character"
+        selectedCandidate={selectedCandidate}
+      />
 
       {selectedCandidate ? (
         <>

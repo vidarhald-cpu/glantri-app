@@ -880,19 +880,19 @@ export default function ScenarioDetailPageContent({
               href={buildCampaignWorkspaceHref({
                 campaignId,
                 scenarioId,
-                tab: "gm-encounter",
+                tab: "encounter",
               })}
             >
-              Open GM encounter workspace
+              Open encounter workspace
             </Link>
             <Link
               href={buildCampaignWorkspaceHref({
                 campaignId,
                 scenarioId,
-                tab: "player-encounter",
+                tab: "skill-rolls",
               })}
             >
-              Open player encounter workspace
+              Open skill rolls
             </Link>
           </div>
         ) : null}

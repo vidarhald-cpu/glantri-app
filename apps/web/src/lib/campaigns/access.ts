@@ -97,11 +97,17 @@ export function resolveCampaignResumeDestination(input: {
         campaignId: rememberedCampaignId,
         encounterId: input.rememberedEncounterId,
         participantId:
-          input.rememberedTab === "player-encounter" ? input.rememberedParticipantId : undefined,
+          input.rememberedTab === "player-encounter" ||
+          input.rememberedTab === "encounter" ||
+          input.rememberedTab === "skill-rolls"
+            ? input.rememberedParticipantId
+            : undefined,
         scenarioId: input.rememberedScenarioId,
         tab:
           input.rememberedTab === "campaign" ||
           input.rememberedTab === "scenario" ||
+          input.rememberedTab === "encounter" ||
+          input.rememberedTab === "skill-rolls" ||
           input.rememberedTab === "gm-encounter" ||
           input.rememberedTab === "player-encounter"
             ? input.rememberedTab
@@ -115,4 +121,3 @@ export function resolveCampaignResumeDestination(input: {
     href: "/campaigns",
   };
 }
-

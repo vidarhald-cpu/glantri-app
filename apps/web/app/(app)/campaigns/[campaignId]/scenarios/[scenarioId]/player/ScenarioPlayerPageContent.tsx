@@ -168,7 +168,7 @@ export default function ScenarioPlayerPageContent({
                       campaignId,
                       encounterId: encounter.id,
                       scenarioId,
-                      tab: "player-encounter",
+                      tab: "encounter",
                     })}
                   >
                     Open encounter

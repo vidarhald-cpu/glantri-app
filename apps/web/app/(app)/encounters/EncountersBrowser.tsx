@@ -65,7 +65,7 @@ export default function EncountersBrowser({
         campaignId: campaignId as string,
         encounterId: encounter.id,
         scenarioId: scenarioId as string,
-        tab: "gm-encounter",
+        tab: "encounter",
       });
     }
 

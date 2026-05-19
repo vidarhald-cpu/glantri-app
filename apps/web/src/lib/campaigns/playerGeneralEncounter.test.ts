@@ -31,7 +31,7 @@ function makeScenarioParticipant(input: {
 }
 
 function makeRoleplayActionLogEntry(
-  input: Partial<RoleplayActionLogEntry> & Pick<RoleplayActionLogEntry, "id" | "summary">
+  input: Partial<RoleplayActionLogEntry> & Pick<RoleplayActionLogEntry, "id" | "summary">,
 ): RoleplayActionLogEntry {
   const { id, summary, ...rest } = input;
   return {
@@ -55,7 +55,7 @@ function makeRoleplayActionLogEntry(
 
 function makePendingSkillRoll(
   input: Partial<RoleplayPendingSkillRoll> &
-    Pick<RoleplayPendingSkillRoll, "id" | "participantId" | "skillId" | "skillLabel">
+    Pick<RoleplayPendingSkillRoll, "id" | "participantId" | "skillId" | "skillLabel">,
 ): RoleplayPendingSkillRoll {
   const { id, participantId, skillId, skillLabel, ...rest } = input;
   return {
@@ -265,7 +265,11 @@ describe("playerGeneralEncounter", () => {
       currentUserId: "player-1",
       encounter: makeEncounter(),
       scenarioParticipants: [
-        makeScenarioParticipant({ controlledByUserId: "player-1", id: "pc-1", name: "Player hero" }),
+        makeScenarioParticipant({
+          controlledByUserId: "player-1",
+          id: "pc-1",
+          name: "Player hero",
+        }),
         makeScenarioParticipant({ id: "npc-visible", name: "Visible NPC" }),
         makeScenarioParticipant({ id: "npc-hidden", name: "Hidden spy" }),
       ],
@@ -274,15 +278,21 @@ describe("playerGeneralEncounter", () => {
     expect(view.gmMessage).toBe("The market is loud and tense.");
     expect(view.controlledParticipantIds).toEqual(["scenario-pc-1"]);
     expect(view.visibleParticipantIds).toEqual(["scenario-pc-1", "scenario-npc-visible"]);
-    expect(view.visibleParticipants.map((participant) => participant.name)).toEqual(["Street merchant"]);
-    expect(view.visibleParticipants.map((participant) => participant.name)).not.toContain("Disguised spy");
-    expect(view.visibleParticipants.map((participant) => participant.name)).not.toContain("Player hero");
+    expect(view.visibleParticipants.map((participant) => participant.name)).toEqual([
+      "Street merchant",
+    ]);
+    expect(view.visibleParticipants.map((participant) => participant.name)).not.toContain(
+      "Disguised spy",
+    );
+    expect(view.visibleParticipants.map((participant) => participant.name)).not.toContain(
+      "Player hero",
+    );
     expect(view.visibleParticipants.map((participant) => participant.shortDescription)).toContain(
-      "A nervous seller"
+      "A nervous seller",
     );
     expect(JSON.stringify(view.visibleParticipants)).not.toContain("GM-only");
     expect(view.visibleParticipants.map((participant) => participant.description)).toContain(
-      "A player-safe clue."
+      "A player-safe clue.",
     );
   });
 
@@ -312,7 +322,11 @@ describe("playerGeneralEncounter", () => {
       currentUserId: "player-1",
       encounter,
       scenarioParticipants: [
-        makeScenarioParticipant({ controlledByUserId: "player-1", id: "pc-1", name: "Player hero" }),
+        makeScenarioParticipant({
+          controlledByUserId: "player-1",
+          id: "pc-1",
+          name: "Player hero",
+        }),
         makeScenarioParticipant({ id: "npc-visible", name: "Visible NPC" }),
         makeScenarioParticipant({ id: "npc-hidden", name: "Hidden spy" }),
       ],
@@ -334,7 +348,11 @@ describe("playerGeneralEncounter", () => {
       currentUserId: "player-1",
       encounter: makeEncounter(),
       scenarioParticipants: [
-        makeScenarioParticipant({ controlledByUserId: "player-1", id: "pc-1", name: "Player hero" }),
+        makeScenarioParticipant({
+          controlledByUserId: "player-1",
+          id: "pc-1",
+          name: "Player hero",
+        }),
       ],
     });
 
@@ -352,6 +370,29 @@ describe("playerGeneralEncounter", () => {
       skillValue: 16,
     });
     expect(JSON.stringify(view.assignedRolls)).not.toContain("silent-roll");
+  });
+
+  it("can build the same player-safe view for a GM-selected scenario participant", () => {
+    const view = buildPlayerGeneralEncounterView({
+      controlledScenarioParticipantId: "pc-1",
+      encounter: makeEncounter(),
+      scenarioParticipants: [
+        makeScenarioParticipant({
+          controlledByUserId: "player-1",
+          id: "pc-1",
+          name: "Player hero",
+        }),
+        makeScenarioParticipant({ id: "npc-visible", name: "Visible NPC" }),
+        makeScenarioParticipant({ id: "npc-hidden", name: "Hidden spy" }),
+      ],
+    });
+
+    expect(view.controlledParticipantIds).toEqual(["scenario-pc-1"]);
+    expect(view.visibleParticipants.map((participant) => participant.name)).toEqual([
+      "Street merchant",
+    ]);
+    expect(view.assignedRolls.map((roll) => roll.id)).toEqual(["visible-roll"]);
+    expect(JSON.stringify(view)).not.toContain("Disguised spy");
   });
 
   it("matches assigned rolls by scenario participant id when needed", () => {
@@ -380,7 +421,11 @@ describe("playerGeneralEncounter", () => {
       currentUserId: "player-1",
       encounter,
       scenarioParticipants: [
-        makeScenarioParticipant({ controlledByUserId: "player-1", id: "pc-1", name: "Player hero" }),
+        makeScenarioParticipant({
+          controlledByUserId: "player-1",
+          id: "pc-1",
+          name: "Player hero",
+        }),
       ],
     });
 
@@ -462,7 +507,11 @@ describe("playerGeneralEncounter", () => {
       currentUserId: "player-1",
       encounter,
       scenarioParticipants: [
-        makeScenarioParticipant({ controlledByUserId: "player-1", id: "pc-1", name: "Player hero" }),
+        makeScenarioParticipant({
+          controlledByUserId: "player-1",
+          id: "pc-1",
+          name: "Player hero",
+        }),
         makeScenarioParticipant({ id: "npc-visible", name: "Visible NPC" }),
       ],
     });
@@ -550,7 +599,11 @@ describe("playerGeneralEncounter", () => {
       currentUserId: "player-1",
       encounter,
       scenarioParticipants: [
-        makeScenarioParticipant({ controlledByUserId: "player-1", id: "pc-1", name: "Player hero" }),
+        makeScenarioParticipant({
+          controlledByUserId: "player-1",
+          id: "pc-1",
+          name: "Player hero",
+        }),
         makeScenarioParticipant({ id: "npc-hidden", name: "Hidden spy" }),
       ],
     });
@@ -564,7 +617,11 @@ describe("playerGeneralEncounter", () => {
       currentUserId: "player-1",
       encounter: makeEncounter(),
       scenarioParticipants: [
-        makeScenarioParticipant({ controlledByUserId: "player-1", id: "pc-1", name: "Player hero" }),
+        makeScenarioParticipant({
+          controlledByUserId: "player-1",
+          id: "pc-1",
+          name: "Player hero",
+        }),
         makeScenarioParticipant({ id: "npc-visible", name: "Visible NPC" }),
         makeScenarioParticipant({ id: "npc-hidden", name: "Hidden spy" }),
       ],
@@ -678,7 +735,11 @@ describe("playerGeneralEncounter", () => {
       currentUserId: "player-1",
       encounter,
       scenarioParticipants: [
-        makeScenarioParticipant({ controlledByUserId: "player-1", id: "pc-1", name: "Player hero" }),
+        makeScenarioParticipant({
+          controlledByUserId: "player-1",
+          id: "pc-1",
+          name: "Player hero",
+        }),
         makeScenarioParticipant({ id: "npc-visible", name: "Visible NPC" }),
         makeScenarioParticipant({ id: "npc-visible-2", name: "Second visible NPC" }),
         makeScenarioParticipant({ id: "npc-hidden", name: "Hidden spy" }),
@@ -690,7 +751,9 @@ describe("playerGeneralEncounter", () => {
       "Player hero:25",
       "Street merchant:12",
     ]);
-    expect(view.rankedResults.filter((entry) => entry.participantName === "Player hero")).toHaveLength(1);
+    expect(
+      view.rankedResults.filter((entry) => entry.participantName === "Player hero"),
+    ).toHaveLength(1);
     expect(JSON.stringify(view.rankedResults)).not.toContain("Hidden spy");
   });
 
@@ -724,7 +787,11 @@ describe("playerGeneralEncounter", () => {
       currentUserId: "player-1",
       encounter,
       scenarioParticipants: [
-        makeScenarioParticipant({ controlledByUserId: "player-1", id: "pc-1", name: "Player hero" }),
+        makeScenarioParticipant({
+          controlledByUserId: "player-1",
+          id: "pc-1",
+          name: "Player hero",
+        }),
       ],
     });
 
@@ -760,7 +827,11 @@ describe("playerGeneralEncounter", () => {
       currentUserId: "player-1",
       encounter,
       scenarioParticipants: [
-        makeScenarioParticipant({ controlledByUserId: "player-1", id: "pc-1", name: "Player hero" }),
+        makeScenarioParticipant({
+          controlledByUserId: "player-1",
+          id: "pc-1",
+          name: "Player hero",
+        }),
       ],
     });
 
@@ -811,12 +882,19 @@ describe("playerGeneralEncounter", () => {
       currentUserId: "player-1",
       encounter,
       scenarioParticipants: [
-        makeScenarioParticipant({ controlledByUserId: "player-1", id: "pc-1", name: "Player hero" }),
+        makeScenarioParticipant({
+          controlledByUserId: "player-1",
+          id: "pc-1",
+          name: "Player hero",
+        }),
       ],
     });
 
     expect(view.rankedResults.map((entry) => entry.id)).toEqual(["new-stack-result"]);
-    expect(view.characterLog.map((entry) => entry.id)).toEqual(["new-stack-result", "old-stack-result"]);
+    expect(view.characterLog.map((entry) => entry.id)).toEqual([
+      "new-stack-result",
+      "old-stack-result",
+    ]);
   });
 
   it("keeps distinct ranked rolls when assigned roll identities differ", () => {
@@ -864,7 +942,11 @@ describe("playerGeneralEncounter", () => {
       currentUserId: "player-1",
       encounter,
       scenarioParticipants: [
-        makeScenarioParticipant({ controlledByUserId: "player-1", id: "pc-1", name: "Player hero" }),
+        makeScenarioParticipant({
+          controlledByUserId: "player-1",
+          id: "pc-1",
+          name: "Player hero",
+        }),
       ],
     });
 
@@ -915,7 +997,11 @@ describe("playerGeneralEncounter", () => {
       currentUserId: "player-1",
       encounter,
       scenarioParticipants: [
-        makeScenarioParticipant({ controlledByUserId: "player-1", id: "pc-1", name: "Player hero" }),
+        makeScenarioParticipant({
+          controlledByUserId: "player-1",
+          id: "pc-1",
+          name: "Player hero",
+        }),
         makeScenarioParticipant({ id: "npc-visible", name: "Visible NPC" }),
       ],
     });
@@ -928,7 +1014,11 @@ describe("playerGeneralEncounter", () => {
       currentUserId: "player-1",
       encounter: makeEncounter(),
       scenarioParticipants: [
-        makeScenarioParticipant({ controlledByUserId: "player-1", id: "pc-1", name: "Player hero" }),
+        makeScenarioParticipant({
+          controlledByUserId: "player-1",
+          id: "pc-1",
+          name: "Player hero",
+        }),
         makeScenarioParticipant({ id: "npc-visible", name: "Visible NPC" }),
       ],
     });
@@ -965,14 +1055,23 @@ describe("playerGeneralEncounter", () => {
       currentUserId: "player-1",
       encounter: makeEmptyParticipantEncounter(),
       scenarioParticipants: [
-        makeScenarioParticipant({ controlledByUserId: "player-1", id: "pc-1", name: "Player hero" }),
+        makeScenarioParticipant({
+          controlledByUserId: "player-1",
+          id: "pc-1",
+          name: "Player hero",
+        }),
         makeScenarioParticipant({ id: "npc-visible", name: "Visible NPC" }),
       ],
     });
 
     expect(view.controlledParticipantIds).toEqual(["scenario-fallback-pc-1"]);
-    expect(view.visibleParticipantIds).toEqual(["scenario-fallback-pc-1", "scenario-fallback-npc-visible"]);
-    expect(view.visibleParticipants.map((participant) => participant.name)).toEqual(["Visible NPC"]);
+    expect(view.visibleParticipantIds).toEqual([
+      "scenario-fallback-pc-1",
+      "scenario-fallback-npc-visible",
+    ]);
+    expect(view.visibleParticipants.map((participant) => participant.name)).toEqual([
+      "Visible NPC",
+    ]);
   });
 
   it("does not fall back to scenario participants after explicit encounter membership exists", () => {
@@ -980,7 +1079,11 @@ describe("playerGeneralEncounter", () => {
       currentUserId: "player-1",
       encounter: makeEncounter(),
       scenarioParticipants: [
-        makeScenarioParticipant({ controlledByUserId: "player-1", id: "not-in-encounter", name: "Player hero" }),
+        makeScenarioParticipant({
+          controlledByUserId: "player-1",
+          id: "not-in-encounter",
+          name: "Player hero",
+        }),
         makeScenarioParticipant({ id: "npc-visible", name: "Visible NPC" }),
       ],
     });
@@ -998,7 +1101,11 @@ describe("playerGeneralEncounter", () => {
         participantMembershipMode: "explicit",
       },
       scenarioParticipants: [
-        makeScenarioParticipant({ controlledByUserId: "player-1", id: "pc-1", name: "Player hero" }),
+        makeScenarioParticipant({
+          controlledByUserId: "player-1",
+          id: "pc-1",
+          name: "Player hero",
+        }),
         makeScenarioParticipant({ id: "npc-visible", name: "Visible NPC" }),
       ],
     });

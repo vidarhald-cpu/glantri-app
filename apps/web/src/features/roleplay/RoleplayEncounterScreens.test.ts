@@ -122,12 +122,26 @@ describe("RoleplayEncounterScreens", () => {
     expect(playerSource).toContain("playerView.rankedResults");
     expect(playerSource).toContain("playerView.characterLog");
     expect(playerSource).toContain("loadScenarioMyParticipant");
+    expect(playerSource).toContain("loadScenarioParticipants");
     expect(playerSource).toContain("mergePlayerVisibleResults");
     expect(source).toContain("isSamePlayerVisibleRankedResult");
     expect(playerSource).toContain("dismissedAssignedRollIds");
     expect(playerSource).toContain("dismissedRankedResultIds");
     expect(source).toContain("getScenarioParticipantFallbackEncounterParticipants");
     expect(source).toContain("resolveEncounterParticipantByRollParticipantId");
+  });
+
+  it("supports read-only GM inspection of the player-facing Skill rolls screen", () => {
+    const playerSource = readPlayerScreenSource();
+
+    expect(playerSource).toContain("inspectionParticipantId");
+    expect(playerSource).toContain("readOnlyInspection");
+    expect(playerSource).toContain("controlledScenarioParticipantId: inspectedParticipantId");
+    expect(playerSource).toContain("GM player-view inspection is read-only.");
+    expect(playerSource).toContain("disabled={!canUsePlayerActions || Boolean(roll.result)}");
+    expect(playerSource).toContain("showWorkspaceHeader");
+    expect(playerSource).toContain('workspaceScreenName = "Skill rolls"');
+    expect(playerSource).toContain("{workspaceScreenName}");
   });
 
   it("preserves opposed result matching and player submitted roll identity", () => {
@@ -149,7 +163,7 @@ describe("RoleplayEncounterScreens", () => {
     const rankedSource = readFunctionSource(
       sectionsSource,
       "RankedRollResultsSection",
-      "function formatDifficulty"
+      "function formatDifficulty",
     );
 
     expect(source).toContain('entry.mode !== "opposed"');
@@ -163,7 +177,7 @@ describe("RoleplayEncounterScreens", () => {
     expect(source).toContain("serverRankedRollResults");
     expect(source).toContain("dedupeRankedRoleplayEntries");
     expect(rankedSource).toContain("entry.numericSubtotal == null");
-    expect(rankedSource).not.toContain("entry.fumble ? \"FUMBLE\"");
+    expect(rankedSource).not.toContain('entry.fumble ? "FUMBLE"');
     expect(rankedSource).not.toContain("entry.success");
   });
 

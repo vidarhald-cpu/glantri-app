@@ -20,7 +20,7 @@ export default async function ScenarioEncounterDetailPage({
       campaignId,
       encounterId,
       scenarioId,
-      tab: "gm-encounter",
+      tab: "encounter",
     }),
   );
 }

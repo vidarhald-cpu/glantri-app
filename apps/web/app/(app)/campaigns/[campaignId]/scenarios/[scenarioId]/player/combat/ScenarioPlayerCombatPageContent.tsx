@@ -61,8 +61,11 @@ interface ScenarioPlayerCombatPageContentProps {
   embedded?: boolean;
   encounterTitle?: string;
   participantId?: string;
+  readOnlyInspection?: boolean;
   scenarioId: string;
-  workspaceTab?: Extract<CampaignWorkspaceTabId, "combat" | "player-encounter">;
+  showParticipantSelector?: boolean;
+  showWorkspaceHeader?: boolean;
+  workspaceTab?: Extract<CampaignWorkspaceTabId, "combat" | "player-combat" | "player-encounter">;
 }
 
 const panelStyle = {
@@ -93,10 +96,7 @@ function isEquipmentFeatureState(value: unknown): value is EquipmentFeatureState
   );
 }
 
-function getCombatTableColumnIndex(input: {
-  columns: string[];
-  label: string;
-}): number {
+function getCombatTableColumnIndex(input: { columns: string[]; label: string }): number {
   return input.columns.indexOf(input.label);
 }
 
@@ -120,12 +120,7 @@ function getCombatTableCell(input: {
 
 function getRelevantLoadoutFieldId(
   actionId: PlayerEncounterActionId | "",
-):
-  | "missile"
-  | "primary"
-  | "secondary"
-  | "throwing"
-  | null {
+): "missile" | "primary" | "secondary" | "throwing" | null {
   switch (actionId) {
     case "attack_parry":
     case "parry_attack":
@@ -169,7 +164,10 @@ export default function ScenarioPlayerCombatPageContent({
   embedded = false,
   encounterTitle,
   participantId,
+  readOnlyInspection = false,
   scenarioId,
+  showParticipantSelector = true,
+  showWorkspaceHeader = true,
   workspaceTab = "player-encounter",
 }: ScenarioPlayerCombatPageContentProps) {
   const pathname = usePathname();
@@ -200,8 +198,9 @@ export default function ScenarioPlayerCombatPageContent({
     "hold",
   );
   const [additionalActionNotes, setAdditionalActionNotes] = useState("");
-  const [combatContextDraft, setCombatContextDraft] =
-    useState<ScenarioParticipantCombatContext>(createEmptyPlayerEncounterCombatContext());
+  const [combatContextDraft, setCombatContextDraft] = useState<ScenarioParticipantCombatContext>(
+    createEmptyPlayerEncounterCombatContext(),
+  );
   const [savingCombatContext, setSavingCombatContext] = useState(false);
   const [actionRollResult, setActionRollResult] = useState<{
     interpretedResult: string;
@@ -209,8 +208,9 @@ export default function ScenarioPlayerCombatPageContent({
     value: number;
   } | null>(null);
   const isGameMaster = Boolean(
-    currentUser?.roles.includes("game_master") || currentUser?.roles.includes("admin")
+    currentUser?.roles.includes("game_master") || currentUser?.roles.includes("admin"),
   );
+  const controlsDisabled = readOnlyInspection;
   const rememberedParticipantSelection = useRememberedSelection(
     buildRememberedScopedSelectionKey({
       baseKey: REMEMBERED_SELECTION_KEYS.playerEncounterParticipantId,
@@ -260,7 +260,7 @@ export default function ScenarioPlayerCombatPageContent({
         setError(
           caughtError instanceof Error
             ? caughtError.message
-            : "Unable to load the player combat screen."
+            : "Unable to load the player combat screen.",
         );
       } finally {
         if (!cancelled) {
@@ -300,14 +300,15 @@ export default function ScenarioPlayerCombatPageContent({
     const rememberedParticipantId = rememberedParticipantSelection.value;
     const preferredId =
       accessibleParticipants.find((participant) => participant.id === explicitParticipantId)?.id ??
-      accessibleParticipants.find((participant) => participant.id === rememberedParticipantId)?.id ??
+      accessibleParticipants.find((participant) => participant.id === rememberedParticipantId)
+        ?.id ??
       accessibleParticipants.find((participant) => participant.id === projectionControlledId)?.id ??
       accessibleParticipants[0]?.id;
 
     setSelectedParticipantId((current) =>
       accessibleParticipants.some((participant) => participant.id === current)
         ? current
-        : (preferredId ?? "")
+        : (preferredId ?? ""),
     );
   }, [
     accessibleParticipants,
@@ -335,7 +336,9 @@ export default function ScenarioPlayerCombatPageContent({
       nextParams.delete("participantId");
     }
 
-    const currentHref = searchParams.toString() ? `${pathname}?${searchParams.toString()}` : pathname;
+    const currentHref = searchParams.toString()
+      ? `${pathname}?${searchParams.toString()}`
+      : pathname;
     const nextQuery = nextParams.toString();
     const nextHref = nextQuery ? `${pathname}?${nextQuery}` : pathname;
 
@@ -352,7 +355,7 @@ export default function ScenarioPlayerCombatPageContent({
     () =>
       accessibleParticipants.find((participant) => participant.id === selectedParticipantId) ??
       null,
-    [accessibleParticipants, selectedParticipantId]
+    [accessibleParticipants, selectedParticipantId],
   );
 
   const visibleOpponentOptions: { displayName: string; id: string }[] = useMemo(() => {
@@ -364,7 +367,12 @@ export default function ScenarioPlayerCombatPageContent({
     return (projection?.visibleParticipants ?? [])
       .filter((p) => p.isActive && !p.isControlledByPlayer && p.id !== selectedParticipantId)
       .map((p) => ({ displayName: p.displayName, id: p.id }));
-  }, [isGameMaster, projection?.visibleParticipants, selectableParticipants, selectedParticipantId]);
+  }, [
+    isGameMaster,
+    projection?.visibleParticipants,
+    selectableParticipants,
+    selectedParticipantId,
+  ]);
 
   useEffect(() => {
     setSelectedActionId(
@@ -598,6 +606,10 @@ export default function ScenarioPlayerCombatPageContent({
   }
 
   async function saveCombatContext() {
+    if (readOnlyInspection) {
+      return;
+    }
+
     if (!selectedParticipant) {
       return;
     }
@@ -653,15 +665,16 @@ export default function ScenarioPlayerCombatPageContent({
 
     const referenceRow =
       preferredWeaponLabels
-        .map((weaponLabel) =>
-          combatPanelModel.weaponModeTable.rows.find(
-            (row) =>
-              getCombatTableCell({
-                columns: combatPanelModel.weaponModeTable.columns,
-                label: "Weapon",
-                row,
-              }) === weaponLabel,
-          ) ?? null,
+        .map(
+          (weaponLabel) =>
+            combatPanelModel.weaponModeTable.rows.find(
+              (row) =>
+                getCombatTableCell({
+                  columns: combatPanelModel.weaponModeTable.columns,
+                  label: "Weapon",
+                  row,
+                }) === weaponLabel,
+            ) ?? null,
         )
         .find((row) => row !== null) ??
       combatPanelModel.weaponModeTable.rows[0] ??
@@ -774,12 +787,7 @@ export default function ScenarioPlayerCombatPageContent({
         row: referenceRow,
       }),
     };
-  }, [
-    combatPanelModel,
-    loadoutFieldDisplayMap,
-    selectedActionId,
-    selectedSecondaryActionId,
-  ]);
+  }, [combatPanelModel, loadoutFieldDisplayMap, selectedActionId, selectedSecondaryActionId]);
 
   const currentPhaseNumber = projection?.scenario.phase === 2 ? 2 : 1;
   const phaseCards = useMemo(() => {
@@ -857,10 +865,9 @@ export default function ScenarioPlayerCombatPageContent({
         title: phaseSummary.phaseOne,
       },
       {
-        description:
-          selectedSecondaryActionId
-            ? `${phaseSummary.phaseTwo} · ${getPlayerEncounterMovementLabel(selectedMovementId)}`
-            : "Open",
+        description: selectedSecondaryActionId
+          ? `${phaseSummary.phaseTwo} · ${getPlayerEncounterMovementLabel(selectedMovementId)}`
+          : "Open",
         phaseLabel: "Phase 2",
         stats:
           selectedSecondaryActionId && selectedCombatReference
@@ -958,24 +965,32 @@ export default function ScenarioPlayerCombatPageContent({
             </Link>
           </div>
         ) : null}
-        <h1 style={{ margin: 0 }}>{projection.scenario.name} combat</h1>
+        {showWorkspaceHeader ? (
+          <h1 style={{ margin: 0 }}>
+            Combat
+            {displayedParticipant?.displayName ? ` — ${displayedParticipant.displayName}` : ""}
+          </h1>
+        ) : null}
         {encounterTitle ? <div>Encounter: {encounterTitle}</div> : null}
-        <label style={{ display: "grid", gap: "0.25rem", maxWidth: 360 }}>
-          <span>Character</span>
-          <select
-            onChange={(event) => setSelectedParticipantId(event.target.value)}
-            value={selectedParticipantId}
-          >
-            {accessibleParticipants.length === 0 ? (
-              <option value="">No accessible participant</option>
-            ) : null}
-            {accessibleParticipants.map((participant) => (
-              <option key={participant.id} value={participant.id}>
-                {participant.snapshot.displayName} ({participant.role})
-              </option>
-            ))}
-          </select>
-        </label>
+        {readOnlyInspection ? <div>GM player-view inspection is read-only.</div> : null}
+        {showParticipantSelector ? (
+          <label style={{ display: "grid", gap: "0.25rem", maxWidth: 360 }}>
+            <span>Character</span>
+            <select
+              onChange={(event) => setSelectedParticipantId(event.target.value)}
+              value={selectedParticipantId}
+            >
+              {accessibleParticipants.length === 0 ? (
+                <option value="">No accessible participant</option>
+              ) : null}
+              {accessibleParticipants.map((participant) => (
+                <option key={participant.id} value={participant.id}>
+                  {participant.snapshot.displayName} ({participant.role})
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
       </div>
 
       <section
@@ -992,6 +1007,7 @@ export default function ScenarioPlayerCombatPageContent({
               <label style={{ display: "grid", gap: "0.25rem" }}>
                 <span>Action</span>
                 <select
+                  disabled={controlsDisabled}
                   onChange={(event) =>
                     setSelectedActionId(event.target.value as PlayerEncounterActionId | "")
                   }
@@ -1009,10 +1025,9 @@ export default function ScenarioPlayerCombatPageContent({
               <label style={{ display: "grid", gap: "0.25rem" }}>
                 <span>Secondary action</span>
                 <select
+                  disabled={controlsDisabled}
                   onChange={(event) =>
-                    setSelectedSecondaryActionId(
-                      event.target.value as PlayerEncounterActionId | "",
-                    )
+                    setSelectedSecondaryActionId(event.target.value as PlayerEncounterActionId | "")
                   }
                   value={selectedSecondaryActionId}
                 >
@@ -1028,6 +1043,7 @@ export default function ScenarioPlayerCombatPageContent({
               <label style={{ display: "grid", gap: "0.25rem" }}>
                 <span>Movement</span>
                 <select
+                  disabled={controlsDisabled}
                   onChange={(event) =>
                     setSelectedMovementId(event.target.value as PlayerEncounterMovementId | "")
                   }
@@ -1044,6 +1060,7 @@ export default function ScenarioPlayerCombatPageContent({
               <label style={{ display: "grid", gap: "0.25rem" }}>
                 <span>Additional</span>
                 <input
+                  disabled={controlsDisabled}
                   onChange={(event) => setAdditionalActionNotes(event.target.value)}
                   placeholder="Free text for intent, target, or table notes"
                   type="text"
@@ -1070,7 +1087,11 @@ export default function ScenarioPlayerCombatPageContent({
                       "Situation OB/Skill",
                       combatContextDraft.modifierBuckets.situationObSkill,
                     ],
-                    ["situation_db", "Situation DB", combatContextDraft.modifierBuckets.situationDb],
+                    [
+                      "situation_db",
+                      "Situation DB",
+                      combatContextDraft.modifierBuckets.situationDb,
+                    ],
                   ] as const
                 ).map(([bucketKey, label, entries]) => (
                   <div key={bucketKey} style={{ display: "grid", gap: "0.35rem" }}>
@@ -1085,6 +1106,7 @@ export default function ScenarioPlayerCombatPageContent({
                         }}
                       >
                         <input
+                          disabled={controlsDisabled}
                           onChange={(event) =>
                             updateModifierBucket(bucketKey, (current) =>
                               current.map((currentEntry) =>
@@ -1104,6 +1126,7 @@ export default function ScenarioPlayerCombatPageContent({
                           value={entry.value}
                         />
                         <select
+                          disabled={controlsDisabled}
                           onChange={(event) =>
                             updateModifierBucket(bucketKey, (current) =>
                               current.map((currentEntry) =>
@@ -1122,6 +1145,7 @@ export default function ScenarioPlayerCombatPageContent({
                           <option value="save">Save</option>
                         </select>
                         <input
+                          disabled={controlsDisabled}
                           onChange={(event) =>
                             updateModifierBucket(bucketKey, (current) =>
                               current.map((currentEntry) =>
@@ -1139,6 +1163,7 @@ export default function ScenarioPlayerCombatPageContent({
                           value={entry.notes ?? ""}
                         />
                         <button
+                          disabled={controlsDisabled}
                           onClick={() =>
                             updateModifierBucket(bucketKey, (current) =>
                               current.filter((currentEntry) => currentEntry.id !== entry.id),
@@ -1151,6 +1176,7 @@ export default function ScenarioPlayerCombatPageContent({
                       </div>
                     ))}
                     <button
+                      disabled={controlsDisabled}
                       onClick={() =>
                         updateModifierBucket(bucketKey, (current) => [
                           ...current,
@@ -1185,6 +1211,7 @@ export default function ScenarioPlayerCombatPageContent({
                   <label style={{ display: "grid", gap: "0.25rem" }}>
                     <span>Incoming attack side</span>
                     <select
+                      disabled={controlsDisabled}
                       onChange={(event) =>
                         setCombatContextDraft((current) => ({
                           ...current,
@@ -1206,6 +1233,7 @@ export default function ScenarioPlayerCombatPageContent({
                   <label style={{ display: "grid", gap: "0.25rem" }}>
                     <span>Parry source</span>
                     <select
+                      disabled={controlsDisabled}
                       onChange={(event) =>
                         setCombatContextDraft((current) => ({
                           ...current,
@@ -1240,7 +1268,11 @@ export default function ScenarioPlayerCombatPageContent({
                 <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
                   Saved on the selected participant combat state.
                 </div>
-                <button disabled={savingCombatContext} onClick={() => void saveCombatContext()} type="button">
+                <button
+                  disabled={controlsDisabled || savingCombatContext}
+                  onClick={() => void saveCombatContext()}
+                  type="button"
+                >
                   {savingCombatContext ? "Saving..." : "Save combat context"}
                 </button>
               </div>
@@ -1277,6 +1309,7 @@ export default function ScenarioPlayerCombatPageContent({
                   <label style={{ display: "grid", gap: "0.25rem" }}>
                     <span>Opponent</span>
                     <select
+                      disabled={controlsDisabled}
                       onChange={(event) =>
                         setCombatContextDraft((current) => ({
                           ...current,
@@ -1318,7 +1351,7 @@ export default function ScenarioPlayerCombatPageContent({
           >
             <div>
               <button
-                disabled={!activeActionButton.enabled}
+                disabled={controlsDisabled || !activeActionButton.enabled}
                 onClick={() =>
                   setActionRollResult({
                     interpretedResult: selectedCombatReference
@@ -1413,9 +1446,7 @@ export default function ScenarioPlayerCombatPageContent({
             </div>
           )
         ) : (
-          <div style={panelStyle}>
-            No accessible participant is available.
-          </div>
+          <div style={panelStyle}>No accessible participant is available.</div>
         )}
       </section>
     </section>
