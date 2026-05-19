@@ -16,7 +16,10 @@ import {
   useRememberedSelection,
 } from "@/lib/browser/rememberedSelection";
 import { useSessionUser } from "@/lib/auth/SessionUserContext";
-import { canManageCampaignWorkspace, loadCampaignWorkspaceAccessForUser } from "@/lib/campaigns/access";
+import {
+  canManageCampaignWorkspace,
+  loadCampaignWorkspaceAccessForUser,
+} from "@/lib/campaigns/access";
 import {
   getCampaignWorkspaceVisibleEncounters,
   getScenarioVisibleEncounters,
@@ -26,11 +29,13 @@ import {
   buildCampaignWorkspaceHref,
   buildCampaignWorkspaceTabs,
   resolveCampaignWorkspaceState,
-  type CampaignWorkspaceTabId
+  type CampaignWorkspaceTabId,
 } from "@/lib/campaigns/workspace";
+import { buildGmCharacterWorkspaceCandidates } from "@/lib/campaigns/characterWorkspace";
 import EncounterDetail from "@/features/encounters/EncounterDetail";
 import CampaignDetailPageContent from "./CampaignDetailPageContent";
 import CharacterWorkspacePanel from "./CharacterWorkspacePanel";
+import WorkspaceParticipantInspectionHeader from "./WorkspaceParticipantInspectionHeader";
 import ScenarioDetailPageContent from "./scenarios/[scenarioId]/ScenarioDetailPageContent";
 import ScenarioPlayerPageContent from "./scenarios/[scenarioId]/player/ScenarioPlayerPageContent";
 import ScenarioPlayerCombatPageContent from "./scenarios/[scenarioId]/player/combat/ScenarioPlayerCombatPageContent";
@@ -46,7 +51,7 @@ const panelStyle = {
   borderRadius: 12,
   display: "grid",
   gap: "0.75rem",
-  padding: "1rem"
+  padding: "1rem",
 } as const;
 
 function getEncounterStatusRank(status: EncounterSession["status"]): number {
@@ -68,9 +73,7 @@ function getEncounterStatusRank(status: EncounterSession["status"]): number {
   }
 }
 
-export default function CampaignWorkspaceShell({
-  campaignId
-}: CampaignWorkspaceShellProps) {
+export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspaceShellProps) {
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -83,22 +86,14 @@ export default function CampaignWorkspaceShell({
   const [scenarioParticipants, setScenarioParticipants] = useState<ScenarioParticipant[]>([]);
   const [scenarios, setScenarios] = useState<Scenario[]>([]);
   const canAccessGmEncounter = canManageCampaignWorkspace(currentUser);
-  const rememberedCampaignSelection = useRememberedSelection(
-    REMEMBERED_SELECTION_KEYS.campaignId,
-  );
+  const rememberedCampaignSelection = useRememberedSelection(REMEMBERED_SELECTION_KEYS.campaignId);
   const workspaceSelectionKeys = useMemo(
     () => getCampaignWorkspaceSelectionKeys(campaignId),
     [campaignId],
   );
-  const rememberedScenarioSelection = useRememberedSelection(
-    workspaceSelectionKeys.scenarioId,
-  );
-  const rememberedEncounterSelection = useRememberedSelection(
-    workspaceSelectionKeys.encounterId,
-  );
-  const rememberedWorkspaceTab = useRememberedSelection(
-    workspaceSelectionKeys.workspaceTab,
-  );
+  const rememberedScenarioSelection = useRememberedSelection(workspaceSelectionKeys.scenarioId);
+  const rememberedEncounterSelection = useRememberedSelection(workspaceSelectionKeys.encounterId);
+  const rememberedWorkspaceTab = useRememberedSelection(workspaceSelectionKeys.workspaceTab);
 
   const refreshWorkspaceContext = useCallback(async () => {
     const workspaceAccess = await loadCampaignWorkspaceAccessForUser({
@@ -156,8 +151,7 @@ export default function CampaignWorkspaceShell({
     }
 
     setLoading(true);
-    refreshWorkspaceContextWithErrorHandling()
-      .finally(() => setLoading(false));
+    refreshWorkspaceContextWithErrorHandling().finally(() => setLoading(false));
   }, [refreshWorkspaceContextWithErrorHandling, sessionLoading]);
 
   useEffect(() => {
@@ -204,7 +198,7 @@ export default function CampaignWorkspaceShell({
         requestedScenarioId: searchParams.get("scenarioId"),
         requestedTab: searchParams.get("tab"),
         scenarioParticipants,
-        scenarios
+        scenarios,
       }),
     [
       campaignId,
@@ -217,12 +211,12 @@ export default function CampaignWorkspaceShell({
       scenarioParticipants,
       scenarios,
       searchParams,
-    ]
+    ],
   );
 
   const tabs = useMemo(
     () => buildCampaignWorkspaceTabs({ canAccessGmEncounter }),
-    [canAccessGmEncounter]
+    [canAccessGmEncounter],
   );
   const activeScenarioEncounters = getScenarioVisibleEncounters({
     encounters,
@@ -236,18 +230,31 @@ export default function CampaignWorkspaceShell({
         left.title.localeCompare(right.title),
     );
   const activeScenario = scenarios.find(
-    (scenario) => scenario.id === workspaceState.activeScenarioId
+    (scenario) => scenario.id === workspaceState.activeScenarioId,
   );
   const activeEncounter = activeScenarioEncounters.find(
-    (encounter) => encounter.id === workspaceState.activeEncounterId
+    (encounter) => encounter.id === workspaceState.activeEncounterId,
   );
+  const gmInspectableCandidates = useMemo(
+    () =>
+      buildGmCharacterWorkspaceCandidates({
+        activeEncounter,
+        scenarioId: workspaceState.activeScenarioId,
+        scenarioParticipants,
+      }),
+    [activeEncounter, scenarioParticipants, workspaceState.activeScenarioId],
+  );
+  const selectedGmInspectableCandidate =
+    gmInspectableCandidates.find(
+      (candidate) => candidate.id === searchParams.get("participantId"),
+    ) ?? gmInspectableCandidates[0];
   const currentUserActiveScenarioParticipant = scenarioParticipants.find(
     (participant) =>
       Boolean(currentUser?.id) &&
       participant.scenarioId === workspaceState.activeScenarioId &&
       participant.isActive &&
       participant.role === "player_character" &&
-      participant.controlledByUserId === currentUser?.id
+      participant.controlledByUserId === currentUser?.id,
   );
   const playerEncounterEmptyDetail =
     workspaceState.activeScenarioId &&
@@ -297,6 +304,18 @@ export default function CampaignWorkspaceShell({
     });
   }
 
+  function selectInspectableParticipant(input: {
+    participantId: string;
+    tab: Extract<CampaignWorkspaceTabId, "character" | "combat" | "skill-rolls">;
+  }) {
+    router.replace(
+      buildWorkspaceHref({
+        participantId: input.participantId,
+        tab: input.tab,
+      }),
+    );
+  }
+
   useEffect(() => {
     if (accessMode === "none") {
       return;
@@ -314,18 +333,25 @@ export default function CampaignWorkspaceShell({
       return;
     }
 
-    if (!searchParams.get("scenarioId") && rememberedScenarioSelection.value && !workspaceState.activeScenarioId) {
+    if (
+      !searchParams.get("scenarioId") &&
+      rememberedScenarioSelection.value &&
+      !workspaceState.activeScenarioId
+    ) {
       rememberedScenarioSelection.setValue(undefined);
     }
 
-    if (!searchParams.get("encounterId") && rememberedEncounterSelection.value && !workspaceState.activeEncounterId) {
+    if (
+      !searchParams.get("encounterId") &&
+      rememberedEncounterSelection.value &&
+      !workspaceState.activeEncounterId
+    ) {
       rememberedEncounterSelection.setValue(undefined);
     }
 
     const requestedTabFromUrl = tabs.find((tab) => tab.id === searchParams.get("tab"))?.id;
     const nextHref = buildWorkspaceHref({
-      encounterId:
-        searchParams.get("encounterId") ?? workspaceState.activeEncounterId ?? null,
+      encounterId: searchParams.get("encounterId") ?? workspaceState.activeEncounterId ?? null,
       participantId:
         requestedTabFromUrl === "player-encounter" ||
         requestedTabFromUrl === "encounter" ||
@@ -339,11 +365,12 @@ export default function CampaignWorkspaceShell({
         workspaceState.activeTab === "combat"
           ? searchParams.get("participantId")
           : null,
-      scenarioId:
-        searchParams.get("scenarioId") ?? workspaceState.activeScenarioId ?? null,
+      scenarioId: searchParams.get("scenarioId") ?? workspaceState.activeScenarioId ?? null,
       tab: requestedTabFromUrl ?? workspaceState.activeTab,
     });
-    const currentHref = searchParams.toString() ? `${pathname}?${searchParams.toString()}` : pathname;
+    const currentHref = searchParams.toString()
+      ? `${pathname}?${searchParams.toString()}`
+      : pathname;
 
     if (nextHref !== currentHref) {
       router.replace(nextHref);
@@ -383,7 +410,7 @@ export default function CampaignWorkspaceShell({
           display: "flex",
           flexWrap: "wrap",
           gap: "1rem",
-          paddingBottom: "0.5rem"
+          paddingBottom: "0.5rem",
         }}
       >
         <Link
@@ -393,7 +420,7 @@ export default function CampaignWorkspaceShell({
             color: "#2f5d62",
             fontWeight: 700,
             paddingBottom: "0.35rem",
-            textDecoration: "none"
+            textDecoration: "none",
           }}
         >
           Campaigns
@@ -413,7 +440,7 @@ export default function CampaignWorkspaceShell({
                 color: "#2f5d62",
                 fontWeight: 700,
                 paddingBottom: "0.35rem",
-                textDecoration: "none"
+                textDecoration: "none",
               }}
             >
               {tab.label}
@@ -514,7 +541,9 @@ export default function CampaignWorkspaceShell({
 
       {accessMode !== "none" && workspaceState.activeTab === "encounter" ? (
         <section style={{ display: "grid", gap: "1rem" }}>
-          {workspaceState.activeScenarioId && workspaceState.activeEncounterId && canAccessGmEncounter ? (
+          {workspaceState.activeScenarioId &&
+          workspaceState.activeEncounterId &&
+          canAccessGmEncounter ? (
             <EncounterDetail
               campaignId={campaignId}
               embedded
@@ -541,14 +570,44 @@ export default function CampaignWorkspaceShell({
 
       {accessMode !== "none" && workspaceState.activeTab === "skill-rolls" ? (
         <section style={{ display: "grid", gap: "1rem" }}>
-          {workspaceState.activeScenarioId && workspaceState.activeEncounterId && canAccessGmEncounter ? (
-            <EncounterDetail
-              campaignId={campaignId}
-              embedded
-              id={workspaceState.activeEncounterId}
-              surface="skill-rolls"
-              scenarioId={workspaceState.activeScenarioId}
-            />
+          {workspaceState.activeScenarioId &&
+          workspaceState.activeEncounterId &&
+          canAccessGmEncounter ? (
+            <>
+              <WorkspaceParticipantInspectionHeader
+                candidates={gmInspectableCandidates}
+                isGameMaster={canAccessGmEncounter}
+                onSelectParticipantId={(participantId) =>
+                  selectInspectableParticipant({ participantId, tab: "skill-rolls" })
+                }
+                screenName="Skill rolls"
+                selectedCandidate={selectedGmInspectableCandidate}
+              />
+              <EncounterDetail
+                campaignId={campaignId}
+                embedded
+                id={workspaceState.activeEncounterId}
+                surface="skill-rolls"
+                scenarioId={workspaceState.activeScenarioId}
+              />
+              <section style={panelStyle}>
+                <h2 style={{ margin: 0 }}>Player view</h2>
+                {selectedGmInspectableCandidate ? (
+                  <PlayerRoleplayingEncounterScreen
+                    campaignId={campaignId}
+                    embedded
+                    encounterId={workspaceState.activeEncounterId}
+                    inspectionParticipantId={selectedGmInspectableCandidate.id}
+                    readOnlyInspection
+                    scenarioId={workspaceState.activeScenarioId}
+                    showWorkspaceHeader={false}
+                    surface="skill-rolls"
+                  />
+                ) : (
+                  <div>No participant is available for player-view inspection.</div>
+                )}
+              </section>
+            </>
           ) : workspaceState.activeScenarioId && workspaceState.activeEncounterId ? (
             <PlayerRoleplayingEncounterScreen
               campaignId={campaignId}
@@ -598,12 +657,7 @@ export default function CampaignWorkspaceShell({
           currentUserId={currentUser?.id}
           isGameMaster={canAccessGmEncounter}
           onSelectParticipantId={(participantId) => {
-            router.replace(
-              buildWorkspaceHref({
-                participantId,
-                tab: "character",
-              }),
-            );
+            selectInspectableParticipant({ participantId, tab: "character" });
           }}
           onScenarioParticipantUpdated={(participant) => {
             setScenarioParticipants((current) =>
@@ -620,6 +674,15 @@ export default function CampaignWorkspaceShell({
         <section style={{ display: "grid", gap: "1rem" }}>
           {canAccessGmEncounter && activeEncounter ? (
             <>
+              <WorkspaceParticipantInspectionHeader
+                candidates={gmInspectableCandidates}
+                isGameMaster={canAccessGmEncounter}
+                onSelectParticipantId={(participantId) =>
+                  selectInspectableParticipant({ participantId, tab: "combat" })
+                }
+                screenName="Combat"
+                selectedCandidate={selectedGmInspectableCandidate}
+              />
               {sortedActiveScenarioEncounters.length > 1 ? (
                 <section style={panelStyle}>
                   <strong>Encounters</strong>
@@ -649,6 +712,25 @@ export default function CampaignWorkspaceShell({
                   );
                 }}
               />
+              <section style={panelStyle}>
+                <h2 style={{ margin: 0 }}>Player combat inspection</h2>
+                {workspaceState.activeScenarioId && selectedGmInspectableCandidate ? (
+                  <ScenarioPlayerCombatPageContent
+                    campaignId={campaignId}
+                    encounterId={workspaceState.activeEncounterId}
+                    embedded
+                    encounterTitle={activeEncounter.title}
+                    participantId={selectedGmInspectableCandidate.id}
+                    readOnlyInspection
+                    scenarioId={workspaceState.activeScenarioId}
+                    showParticipantSelector={false}
+                    showWorkspaceHeader={false}
+                    workspaceTab="combat"
+                  />
+                ) : (
+                  <div>No participant is available for player combat inspection.</div>
+                )}
+              </section>
             </>
           ) : canAccessGmEncounter ? (
             <section style={panelStyle}>
@@ -692,6 +774,7 @@ export default function CampaignWorkspaceShell({
               encounterTitle={activeEncounter?.title}
               participantId={searchParams.get("participantId") ?? undefined}
               scenarioId={workspaceState.activeScenarioId}
+              showParticipantSelector={false}
               workspaceTab="combat"
             />
           ) : (

@@ -115,6 +115,8 @@ Combat is the encounter round/action manager tool. It should be reachable for th
 
 Combat Panel is part of the Encounter workflow. It is separate from Character control for now: Character control tracks the current character/loadout/physical state, while the Combat Panel is the scenario or encounter workspace for combat action context. Future damage tracking, round recording, and combat-effect automation should build on these workflows without rendering inactive placeholders.
 
+GM users may inspect player-facing Skill rolls and Combat views for a selected encounter participant. This inspection uses the same participant picker/shuffler pattern as Character control and does not require logging in as that player. Inspection is a role-safe aid for reviewing what the selected participant can see; player-facing behavior remains controlled by normal access and visibility rules.
+
 Current design rules:
 
 - Encounter participants are actors in a specific encounter.

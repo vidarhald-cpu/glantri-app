@@ -24,10 +24,9 @@ describe("CharacterWorkspacePanel", () => {
     const source = readSource();
 
     expect(source).toContain("You are not currently assigned to a character in this scenario.");
-    expect(source).toContain("Character{selectedCandidate?.label ? ` — ${selectedCandidate.label}` : \"\"}");
-    expect(source).toContain("Select character to inspect");
-    expect(source).toContain("Previous");
-    expect(source).toContain("Next");
+    expect(source).toContain("WorkspaceParticipantInspectionHeader");
+    expect(source).toContain('screenName="Character"');
+    expect(source).toContain("onSelectParticipantId={onSelectParticipantId}");
   });
 
   it("enables manual combat effect editing only for the GM character workspace", () => {
@@ -36,6 +35,8 @@ describe("CharacterWorkspacePanel", () => {
     expect(source).toContain("updateScenarioParticipantStateOnServer");
     expect(source).toContain("combatEffects: nextCombatEffects");
     expect(source).toContain("canEditCombatEffects={isGameMaster}");
-    expect(source).toContain("onCombatEffectsChange={isGameMaster ? updateSelectedCombatEffects : undefined}");
+    expect(source).toContain(
+      "onCombatEffectsChange={isGameMaster ? updateSelectedCombatEffects : undefined}",
+    );
   });
 });

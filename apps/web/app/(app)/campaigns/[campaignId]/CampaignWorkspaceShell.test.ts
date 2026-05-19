@@ -24,6 +24,8 @@ describe("CampaignWorkspaceShell roleplay encounter routing", () => {
     expect(source).toContain("loadScenarioMyParticipant");
     expect(source).toContain('workspaceAccess.accessMode === "player"');
     expect(source).toContain("currentUserId: currentUser?.id");
+    expect(source).toContain("WorkspaceParticipantInspectionHeader");
+    expect(source).toContain("buildGmCharacterWorkspaceCandidates");
   });
 
   it("renders player scenario links and useful empty states", () => {
@@ -47,9 +49,20 @@ describe("CampaignWorkspaceShell roleplay encounter routing", () => {
     expect(source).toContain("CharacterWorkspacePanel");
     expect(source).toContain('workspaceState.activeTab === "character"');
     expect(source).toContain('tab: "character"');
-    expect(source).toContain("selectedParticipantId={searchParams.get(\"participantId\")}");
+    expect(source).toContain('selectedParticipantId={searchParams.get("participantId")}');
     expect(source).toContain("isGameMaster={canAccessGmEncounter}");
     expect(source).toContain("currentRoundNumber={activeScenario?.liveState?.roundNumber}");
+  });
+
+  it("lets the GM inspect player-facing Skill rolls for a selected participant", () => {
+    const source = readSource();
+
+    expect(source).toContain('screenName="Skill rolls"');
+    expect(source).toContain("Player view");
+    expect(source).toContain("inspectionParticipantId={selectedGmInspectableCandidate.id}");
+    expect(source).toContain("readOnlyInspection");
+    expect(source).toContain("showWorkspaceHeader={false}");
+    expect(source).toContain('selectInspectableParticipant({ participantId, tab: "skill-rolls" })');
   });
 
   it("routes the workspace Combat tab through the recovered combat panel", () => {
@@ -64,6 +77,10 @@ describe("CampaignWorkspaceShell roleplay encounter routing", () => {
     expect(source).toContain("onEncounterUpdated");
     expect(source).toContain("ScenarioPlayerCombatPageContent");
     expect(source).toContain('workspaceTab="combat"');
+    expect(source).toContain('screenName="Combat"');
+    expect(source).toContain("Player combat inspection");
+    expect(source).toContain("showParticipantSelector={false}");
+    expect(source).toContain("readOnlyInspection");
     expect(source).toContain("Select a scenario to open the combat panel.");
     expect(source).toContain("No encounter is currently available for combat tools.");
   });

@@ -99,13 +99,14 @@ const difficultyLabels: Record<string, string> = {
 
 function getScenarioParticipantControllerId(
   encounterParticipant: EncounterParticipant,
-  scenarioParticipantsById: Map<string, ScenarioParticipant>
+  scenarioParticipantsById: Map<string, ScenarioParticipant>,
 ): string | undefined {
   if (!encounterParticipant.scenarioParticipantId) {
     return undefined;
   }
 
-  return scenarioParticipantsById.get(encounterParticipant.scenarioParticipantId)?.controlledByUserId;
+  return scenarioParticipantsById.get(encounterParticipant.scenarioParticipantId)
+    ?.controlledByUserId;
 }
 
 function getPlayerSafeParticipantName(input: {
@@ -170,11 +171,13 @@ function isParticipantVisibleToPlayer(input: {
   }
 
   for (const viewer of input.controlledParticipants) {
-    if (isVisibilityEnabled({
-      state: input.state,
-      target: input.participant,
-      viewer,
-    })) {
+    if (
+      isVisibilityEnabled({
+        state: input.state,
+        target: input.participant,
+        viewer,
+      })
+    ) {
       return true;
     }
 
@@ -229,25 +232,19 @@ function buildAssignedRoll(input: {
             entry.type === "gm_skill_roll" &&
             !entry.silent &&
             entry.rollSetId === input.pendingRoll.rollSetId &&
-            (
-              (
-                entry.side === "opponent" &&
-                entry.participantId === opponentParticipant.id &&
-                entry.numericSubtotal != null
-              ) ||
-              (
-                !entry.side &&
+            ((entry.side === "opponent" &&
+              entry.participantId === opponentParticipant.id &&
+              entry.numericSubtotal != null) ||
+              (!entry.side &&
                 !entry.opponentSilent &&
                 entry.opponentParticipantId === opponentParticipant.id &&
-                entry.opponentNumericSubtotal != null
-              )
-            )
+                entry.opponentNumericSubtotal != null)),
         )
       : undefined;
   const ownTotal = input.result?.numericSubtotal ?? input.result?.finalTotal;
   const opponentTotal =
     opponentResult?.side === "opponent"
-      ? opponentResult.numericSubtotal ?? opponentResult.finalTotal
+      ? (opponentResult.numericSubtotal ?? opponentResult.finalTotal)
       : opponentResult?.opponentNumericSubtotal;
   const comparison =
     ownTotal != null && opponentTotal != null && opponentName
@@ -262,7 +259,7 @@ function buildAssignedRoll(input: {
     comparison,
     difficulty: input.pendingRoll.difficulty,
     difficultyLabel: input.pendingRoll.difficulty
-      ? difficultyLabels[input.pendingRoll.difficulty] ?? input.pendingRoll.difficulty
+      ? (difficultyLabels[input.pendingRoll.difficulty] ?? input.pendingRoll.difficulty)
       : "No level",
     id: input.pendingRoll.id,
     mode: input.pendingRoll.mode,
@@ -285,7 +282,7 @@ function buildAssignedRoll(input: {
           openEndedD10s: input.result.openEndedD10s,
           rollD20: input.result.rollD20,
           total: input.result.numericSubtotal ?? input.result.finalTotal,
-      }
+        }
       : undefined,
     rollSetId: input.pendingRoll.rollSetId,
     skillId: input.pendingRoll.skillId,
@@ -294,16 +291,17 @@ function buildAssignedRoll(input: {
     supportSkillId: input.pendingRoll.supportSkillId,
     supportSkillLabel: input.pendingRoll.supportSkillLabel,
     supportSkillValue: input.pendingRoll.supportSkillValue,
-    supportResult: input.result?.supportDieResult != null && input.result.supportRollD20 != null
-      ? {
-          dieResult: input.result.supportDieResult,
-          fumble: false,
-          id: `${input.result.id}-support`,
-          openEndedD10s: input.result.supportOpenEndedD10s,
-          rollD20: input.result.supportRollD20,
-          total: input.result.supportNumericSubtotal,
-        }
-      : undefined,
+    supportResult:
+      input.result?.supportDieResult != null && input.result.supportRollD20 != null
+        ? {
+            dieResult: input.result.supportDieResult,
+            fumble: false,
+            id: `${input.result.id}-support`,
+            openEndedD10s: input.result.supportOpenEndedD10s,
+            rollD20: input.result.supportRollD20,
+            total: input.result.supportNumericSubtotal,
+          }
+        : undefined,
     useDbMod: input.pendingRoll.useDbMod,
     useGenMod: input.pendingRoll.useGenMod,
     useObSkillMod: input.pendingRoll.useObSkillMod,
@@ -322,7 +320,7 @@ function findVisibleResultForPendingRoll(input: {
         (entry.participantId === input.pendingRoll.participantId &&
           entry.skillId === input.pendingRoll.skillId &&
           (input.pendingRoll.rollSetId ? entry.rollSetId === input.pendingRoll.rollSetId : true) &&
-          (input.pendingRoll.side ? entry.side === input.pendingRoll.side : true)))
+          (input.pendingRoll.side ? entry.side === input.pendingRoll.side : true))),
   );
 
   return matchingEntries.sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0];
@@ -345,21 +343,27 @@ function isPlayerVisibleRankedResult(input: {
   );
 }
 
-function hasSameRankedStackIdentity(left: RoleplayActionLogEntry, right: RoleplayActionLogEntry): boolean {
+function hasSameRankedStackIdentity(
+  left: RoleplayActionLogEntry,
+  right: RoleplayActionLogEntry,
+): boolean {
   return Boolean(
     left.rollSetId &&
-      right.rollSetId &&
-      left.rollSetId === right.rollSetId &&
-      left.participantId &&
-      right.participantId &&
-      left.participantId === right.participantId &&
-      left.skillId &&
-      right.skillId &&
-      left.skillId === right.skillId
+    right.rollSetId &&
+    left.rollSetId === right.rollSetId &&
+    left.participantId &&
+    right.participantId &&
+    left.participantId === right.participantId &&
+    left.skillId &&
+    right.skillId &&
+    left.skillId === right.skillId,
   );
 }
 
-function isSamePlayerRankedEntry(left: RoleplayActionLogEntry, right: RoleplayActionLogEntry): boolean {
+function isSamePlayerRankedEntry(
+  left: RoleplayActionLogEntry,
+  right: RoleplayActionLogEntry,
+): boolean {
   if (left.pendingRollId && right.pendingRollId) {
     return left.pendingRollId === right.pendingRollId;
   }
@@ -397,18 +401,16 @@ function buildPlayerCharacterLog(input: {
   resolveParticipant: (participantId?: string | null) => EncounterParticipant | undefined;
 }): PlayerGeneralEncounterLogEntry[] {
   return input.entries
-    .filter(
-      (entry) => {
-        const participant = input.resolveParticipant(entry.participantId);
+    .filter((entry) => {
+      const participant = input.resolveParticipant(entry.participantId);
 
-        return (
-          entry.type === "gm_skill_roll" &&
-          !entry.silent &&
-          participant != null &&
-          input.controlledParticipantIds.has(participant.id)
-        );
-      }
-    )
+      return (
+        entry.type === "gm_skill_roll" &&
+        !entry.silent &&
+        participant != null &&
+        input.controlledParticipantIds.has(participant.id)
+      );
+    })
     .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
     .map((entry) => {
       const total = entry.numericSubtotal ?? entry.finalTotal;
@@ -439,6 +441,7 @@ function buildPlayerCharacterLog(input: {
 }
 
 export function buildPlayerGeneralEncounterView(input: {
+  controlledScenarioParticipantId?: string;
   currentUserId?: string;
   encounter: EncounterSession;
   scenarioParticipants: ScenarioParticipant[];
@@ -452,7 +455,7 @@ export function buildPlayerGeneralEncounterView(input: {
       ...state.actionLog
         .filter((entry) => (entry.mode === "opposed" || Boolean(entry.side)) && entry.rollSetId)
         .map((entry) => entry.rollSetId),
-    ].filter((rollSetId): rollSetId is string => Boolean(rollSetId))
+    ].filter((rollSetId): rollSetId is string => Boolean(rollSetId)),
   );
   const membership = resolveEncounterParticipantMembership({
     encounter: input.encounter,
@@ -461,9 +464,11 @@ export function buildPlayerGeneralEncounterView(input: {
   const effectiveEncounterParticipants = membership.participants;
   const usesFallbackParticipants = membership.source === "defaultFallback";
   const orderedParticipants = orderRoleplayEncounterParticipants(effectiveEncounterParticipants);
-  const encounterParticipantsById = new Map(orderedParticipants.map((participant) => [participant.id, participant]));
+  const encounterParticipantsById = new Map(
+    orderedParticipants.map((participant) => [participant.id, participant]),
+  );
   const scenarioParticipantsById = new Map(
-    input.scenarioParticipants.map((participant) => [participant.id, participant])
+    input.scenarioParticipants.map((participant) => [participant.id, participant]),
   );
   const resolveParticipant = (participantId?: string | null): EncounterParticipant | undefined => {
     return resolveEncounterParticipantByRollParticipantId({
@@ -471,17 +476,29 @@ export function buildPlayerGeneralEncounterView(input: {
       participants: orderedParticipants,
     });
   };
+  const inspectedScenarioParticipantIds = new Set(
+    input.controlledScenarioParticipantId ? [input.controlledScenarioParticipantId] : [],
+  );
   const controlledParticipantIds = new Set(
     orderedParticipants
-      .filter(
-        (participant) =>
+      .filter((participant) => {
+        if (
+          participant.scenarioParticipantId &&
+          inspectedScenarioParticipantIds.has(participant.scenarioParticipantId)
+        ) {
+          return true;
+        }
+
+        return (
           input.currentUserId &&
-          getScenarioParticipantControllerId(participant, scenarioParticipantsById) === input.currentUserId
-      )
-      .map((participant) => participant.id)
+          getScenarioParticipantControllerId(participant, scenarioParticipantsById) ===
+            input.currentUserId
+        );
+      })
+      .map((participant) => participant.id),
   );
   const controlledParticipants = orderedParticipants.filter((participant) =>
-    controlledParticipantIds.has(participant.id)
+    controlledParticipantIds.has(participant.id),
   );
   const visibleParticipantIds = new Set(
     orderedParticipants
@@ -491,14 +508,14 @@ export function buildPlayerGeneralEncounterView(input: {
           defaultVisibleWhenNoMatrix: usesFallbackParticipants,
           participant,
           state,
-        })
+        }),
       )
-      .map((participant) => participant.id)
+      .map((participant) => participant.id),
   );
   const visibleParticipants = orderedParticipants
     .filter(
       (participant) =>
-        visibleParticipantIds.has(participant.id) && !controlledParticipantIds.has(participant.id)
+        visibleParticipantIds.has(participant.id) && !controlledParticipantIds.has(participant.id),
     )
     .map((participant) => {
       const description = getParticipantDescription({
@@ -514,20 +531,18 @@ export function buildPlayerGeneralEncounterView(input: {
         shortDescription: description.shortDescription ?? "",
       };
     });
-  const visiblePendingRolls = state.pendingSkillRolls.filter(
-    (roll) => {
-      const participant = resolveParticipant(roll.participantId);
+  const visiblePendingRolls = state.pendingSkillRolls.filter((roll) => {
+    const participant = resolveParticipant(roll.participantId);
 
-      return (
-        !roll.silent &&
-        participant != null &&
-        controlledParticipantIds.has(participant.id) &&
-        visibleParticipantIds.has(participant.id)
-      );
-    }
-  );
+    return (
+      !roll.silent &&
+      participant != null &&
+      controlledParticipantIds.has(participant.id) &&
+      visibleParticipantIds.has(participant.id)
+    );
+  });
   const latestPendingRoll = [...visiblePendingRolls].sort((left, right) =>
-    right.assignedAt.localeCompare(left.assignedAt)
+    right.assignedAt.localeCompare(left.assignedAt),
   )[0];
   const latestPendingRollSetId = latestPendingRoll?.rollSetId;
   const assignedRolls = visiblePendingRolls
@@ -536,7 +551,7 @@ export function buildPlayerGeneralEncounterView(input: {
         ? roll.rollSetId === latestPendingRollSetId
         : latestPendingRoll
           ? roll.id === latestPendingRoll.id
-          : false
+          : false,
     )
     .map((pendingRoll) =>
       buildAssignedRoll({
@@ -549,7 +564,7 @@ export function buildPlayerGeneralEncounterView(input: {
         }),
         state,
         visibleParticipantIds,
-      })
+      }),
     );
   const visibleRankedEntries = state.actionLog.filter((entry) => {
     const participant = resolveParticipant(entry.participantId);
@@ -560,7 +575,7 @@ export function buildPlayerGeneralEncounterView(input: {
         entry,
         opposedRollSetIds,
         visibleParticipantIds: new Set(
-          visibleParticipantIds.has(participant.id) ? [entry.participantId ?? participant.id] : []
+          visibleParticipantIds.has(participant.id) ? [entry.participantId ?? participant.id] : [],
         ),
       })
     );
@@ -573,14 +588,14 @@ export function buildPlayerGeneralEncounterView(input: {
         ? entry.rollSetId === currentRollRoundId
         : currentRollRoundResultId
           ? entry.id === currentRollRoundResultId
-          : false
+          : false,
     )
     .sort(
       (left, right) =>
         Number(Boolean(left.fumble)) - Number(Boolean(right.fumble)) ||
         (right.numericSubtotal ?? Number.NEGATIVE_INFINITY) -
           (left.numericSubtotal ?? Number.NEGATIVE_INFINITY) ||
-        right.createdAt.localeCompare(left.createdAt)
+        right.createdAt.localeCompare(left.createdAt),
     )
     .map((entry) => {
       const participant = resolveParticipant(entry.participantId);

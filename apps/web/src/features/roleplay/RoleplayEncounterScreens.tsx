@@ -44,6 +44,7 @@ import {
   loadEncounterById,
   loadScenarioById,
   loadScenarioMyParticipant,
+  loadScenarioParticipants,
   submitPlayerRoleplayRollOnServer,
 } from "@/lib/api/localServiceClient";
 import { useSessionUser } from "@/lib/auth/SessionUserContext";
@@ -106,7 +107,10 @@ interface PlayerRoleplayingEncounterScreenProps {
   campaignId: string;
   embedded?: boolean;
   encounterId: string;
+  inspectionParticipantId?: string | null;
+  readOnlyInspection?: boolean;
   scenarioId: string;
+  showWorkspaceHeader?: boolean;
   surface?: "encounter" | "full" | "skill-rolls";
 }
 
@@ -124,7 +128,7 @@ function getScenarioParticipantForEncounterParticipant(input: {
 }): ScenarioParticipant | undefined {
   return input.encounterParticipant?.scenarioParticipantId
     ? input.scenarioParticipants.find(
-        (participant) => participant.id === input.encounterParticipant?.scenarioParticipantId
+        (participant) => participant.id === input.encounterParticipant?.scenarioParticipantId,
       )
     : undefined;
 }
@@ -157,13 +161,12 @@ function readSkillOptions(input: {
 }): SkillOption[] {
   const scenarioParticipant = input.encounterParticipant?.scenarioParticipantId
     ? input.scenarioParticipants.find(
-        (participant) => participant.id === input.encounterParticipant?.scenarioParticipantId
+        (participant) => participant.id === input.encounterParticipant?.scenarioParticipantId,
       )
     : undefined;
   const sheetSummary = scenarioParticipant?.snapshot.sheetSummary;
-  const draftView = isRecord(sheetSummary) && isRecord(sheetSummary.draftView)
-    ? sheetSummary.draftView
-    : undefined;
+  const draftView =
+    isRecord(sheetSummary) && isRecord(sheetSummary.draftView) ? sheetSummary.draftView : undefined;
   const draftSkills = Array.isArray(draftView?.skills) ? draftView.skills : [];
   const skillsById = new Map(input.content?.skills.map((skill) => [skill.id, skill.name]) ?? []);
 
@@ -194,7 +197,9 @@ function readSystemSkillOptions(input: {
   scenarioParticipants: ScenarioParticipant[];
 }): SkillOption[] {
   const categoryDefinitions = getPlayerFacingSkillBucketDefinitions();
-  const categoryLabelById = new Map(categoryDefinitions.map((category) => [category.id, category.label]));
+  const categoryLabelById = new Map(
+    categoryDefinitions.map((category) => [category.id, category.label]),
+  );
 
   if (!input.content?.skills.length) {
     return readSkillOptions(input).map((skill) => ({
@@ -207,7 +212,7 @@ function readSystemSkillOptions(input: {
     .filter(
       (skill) =>
         (skill.category === "ordinary" || skill.category === "secondary") &&
-        !skill.specializationOfSkillId
+        !skill.specializationOfSkillId,
     )
     .map((skill) => {
       const categoryId = getPlayerFacingSkillBucket(skill);
@@ -227,7 +232,7 @@ function readSystemSkillOptions(input: {
         value: profile.rollBaseValue,
         warning: profile.warning
           ? profile.warning ===
-              "Skill not known: using linked stat average with -3 default modifier. GM may adjust or forbid."
+            "Skill not known: using linked stat average with -3 default modifier. GM may adjust or forbid."
             ? "Skill not known (-3 default). GM may adjust or forbid."
             : profile.warning
           : undefined,
@@ -305,13 +310,11 @@ function applyUnknownSkillDefaultOtherMod(input: {
     return String(input.selectedSkill.profile.unknownSkillPenalty);
   }
 
-  return input.currentValue === "-3"
-    ? "0"
-    : input.currentValue;
+  return input.currentValue === "-3" ? "0" : input.currentValue;
 }
 
 function buildRoleplayCalculationPreview(
-  input: Parameters<typeof buildDomainRoleplayCalculationPreview>[0]
+  input: Parameters<typeof buildDomainRoleplayCalculationPreview>[0],
 ): ReturnType<typeof buildDomainRoleplayCalculationPreview> {
   const otherMod = normalizeRoleplayOtherMod(input.otherMod);
   const modifierPipeline =
@@ -349,7 +352,7 @@ function buildPlayerRollResult(input?: {
 
 function buildActionLogRollResult(
   input?: RoleplayActionLogEntry,
-  side: "actor" | "opponent" = "actor"
+  side: "actor" | "opponent" = "actor",
 ): RoleplayOpenEndedD20Roll | undefined {
   if (!input) {
     return undefined;
@@ -366,7 +369,9 @@ function buildActionLogRollResult(
   return buildPlayerRollResult(input);
 }
 
-function buildActionLogSupportRollResult(input?: RoleplayActionLogEntry): RoleplayOpenEndedD20Roll | undefined {
+function buildActionLogSupportRollResult(
+  input?: RoleplayActionLogEntry,
+): RoleplayOpenEndedD20Roll | undefined {
   return buildPlayerRollResult({
     dieResult: input?.supportDieResult,
     openEndedD10s: input?.supportOpenEndedD10s ?? [],
@@ -406,7 +411,8 @@ function findRoleplayResultForSide(input: {
 
       if (input.side === "opponent" && !entry.side) {
         return (
-          (entry.opponentParticipantId === input.participantId && entry.opponentSkillId === input.skillId) ||
+          (entry.opponentParticipantId === input.participantId &&
+            entry.opponentSkillId === input.skillId) ||
           (entry.participantId === input.participantId && entry.skillId === input.skillId)
         );
       }
@@ -458,21 +464,27 @@ type PlayerVisibleRankedResult = {
   total: number;
 };
 
-function hasSamePlayerRankedStackIdentity(left: PlayerVisibleRankedResult, right: PlayerVisibleRankedResult): boolean {
+function hasSamePlayerRankedStackIdentity(
+  left: PlayerVisibleRankedResult,
+  right: PlayerVisibleRankedResult,
+): boolean {
   return Boolean(
     left.rollSetId &&
-      right.rollSetId &&
-      left.rollSetId === right.rollSetId &&
-      left.participantId &&
-      right.participantId &&
-      left.participantId === right.participantId &&
-      left.skillId &&
-      right.skillId &&
-      left.skillId === right.skillId
+    right.rollSetId &&
+    left.rollSetId === right.rollSetId &&
+    left.participantId &&
+    right.participantId &&
+    left.participantId === right.participantId &&
+    left.skillId &&
+    right.skillId &&
+    left.skillId === right.skillId,
   );
 }
 
-function isSamePlayerVisibleRankedResult(left: PlayerVisibleRankedResult, right: PlayerVisibleRankedResult): boolean {
+function isSamePlayerVisibleRankedResult(
+  left: PlayerVisibleRankedResult,
+  right: PlayerVisibleRankedResult,
+): boolean {
   if (left.pendingRollId && right.pendingRollId) {
     return left.pendingRollId === right.pendingRollId;
   }
@@ -489,14 +501,22 @@ function isSamePlayerVisibleRankedResult(left: PlayerVisibleRankedResult, right:
 }
 
 function rankPlayerVisibleResults(entries: PlayerVisibleRankedResult[]) {
-  return [...entries].sort((left, right) => right.total - left.total || left.participantName.localeCompare(right.participantName));
+  return [...entries].sort(
+    (left, right) =>
+      right.total - left.total || left.participantName.localeCompare(right.participantName),
+  );
 }
 
-function mergePlayerVisibleResults(left: PlayerVisibleRankedResult[], right: PlayerVisibleRankedResult[]) {
+function mergePlayerVisibleResults(
+  left: PlayerVisibleRankedResult[],
+  right: PlayerVisibleRankedResult[],
+) {
   const merged: PlayerVisibleRankedResult[] = [];
 
   for (const entry of [...left, ...right]) {
-    const existingIndex = merged.findIndex((existing) => isSamePlayerVisibleRankedResult(existing, entry));
+    const existingIndex = merged.findIndex((existing) =>
+      isSamePlayerVisibleRankedResult(existing, entry),
+    );
 
     if (existingIndex >= 0) {
       merged[existingIndex] = entry;
@@ -509,10 +529,12 @@ function mergePlayerVisibleResults(left: PlayerVisibleRankedResult[], right: Pla
 }
 
 function getRankedRoleplayEntryKey(entry: RoleplayActionLogEntry): string {
-  return entry.pendingRollId ??
+  return (
+    entry.pendingRollId ??
     (entry.rollSetId && entry.participantId && entry.skillId
       ? `${entry.rollSetId}:${entry.participantId}:${entry.skillId}`
-      : entry.id);
+      : entry.id)
+  );
 }
 
 function dedupeRankedRoleplayEntries(entries: RoleplayActionLogEntry[]): RoleplayActionLogEntry[] {
@@ -526,7 +548,7 @@ function dedupeRankedRoleplayEntries(entries: RoleplayActionLogEntry[]): Rolepla
 }
 
 function findLatestNonOpposedRollStackId(
-  roleplayState: ReturnType<typeof normalizeRoleplayState>
+  roleplayState: ReturnType<typeof normalizeRoleplayState>,
 ): string | undefined {
   if (roleplayState.currentRankedRollStackId) {
     return roleplayState.currentRankedRollStackId;
@@ -541,12 +563,18 @@ function findLatestNonOpposedRollStackId(
   }
 
   for (const entry of roleplayState.actionLog) {
-    if (entry.type === "gm_skill_roll" && entry.mode !== "opposed" && !entry.side && entry.rollSetId) {
+    if (
+      entry.type === "gm_skill_roll" &&
+      entry.mode !== "opposed" &&
+      !entry.side &&
+      entry.rollSetId
+    ) {
       candidates.push({ rollSetId: entry.rollSetId, timestamp: entry.createdAt });
     }
   }
 
-  return candidates.sort((left, right) => right.timestamp.localeCompare(left.timestamp))[0]?.rollSetId;
+  return candidates.sort((left, right) => right.timestamp.localeCompare(left.timestamp))[0]
+    ?.rollSetId;
 }
 
 export function GmRoleplayingEncounterScreen({
@@ -564,11 +592,11 @@ export function GmRoleplayingEncounterScreen({
   const roleplayState = normalizeRoleplayState(encounter);
   const roster = useMemo(
     () => orderRoleplayEncounterParticipants(encounter.participants),
-    [encounter.participants]
+    [encounter.participants],
   );
   const [gmMessageDraft, setGmMessageDraft] = useState(roleplayState.gmMessage);
   const [currentGmRollStackId, setCurrentGmRollStackId] = useState(
-    () => findLatestNonOpposedRollStackId(roleplayState) ?? makeRoleplayRollSetId()
+    () => findLatestNonOpposedRollStackId(roleplayState) ?? makeRoleplayRollSetId(),
   );
   const initialSkillId = useMemo(
     () =>
@@ -577,12 +605,18 @@ export function GmRoleplayingEncounterScreen({
         encounterParticipant: roster[0],
         scenarioParticipants,
       })[0]?.id ?? "",
-    [content, roster, scenarioParticipants]
+    [content, roster, scenarioParticipants],
   );
   const [rollDrafts, setRollDrafts] = useState<RoleplayRollDraft[]>([
-    makeRollDraft({ participantId: roster[0]?.id, rollSetId: currentGmRollStackId, skillId: initialSkillId }),
+    makeRollDraft({
+      participantId: roster[0]?.id,
+      rollSetId: currentGmRollStackId,
+      skillId: initialSkillId,
+    }),
   ]);
-  const [currentRankedRollResults, setCurrentRankedRollResults] = useState<RoleplayActionLogEntry[]>([]);
+  const [currentRankedRollResults, setCurrentRankedRollResults] = useState<
+    RoleplayActionLogEntry[]
+  >([]);
   const [gmMessageDirty, setGmMessageDirty] = useState(false);
 
   useEffect(() => {
@@ -594,8 +628,7 @@ export function GmRoleplayingEncounterScreen({
   useEffect(() => {
     setRollDrafts((currentDrafts) =>
       currentDrafts.map((draft) => {
-        const participant =
-          roster.find((row) => row.id === draft.participantId) ?? roster[0];
+        const participant = roster.find((row) => row.id === draft.participantId) ?? roster[0];
         const skillOptions = readSystemSkillOptions({
           content,
           encounterParticipant: participant,
@@ -609,8 +642,7 @@ export function GmRoleplayingEncounterScreen({
           draft.supportSkillCategoryId === "all"
             ? skillOptions
             : skillOptions.filter((skill) => skill.categoryId === draft.supportSkillCategoryId);
-        const opponent =
-          roster.find((row) => row.id === draft.opponentParticipantId) ?? undefined;
+        const opponent = roster.find((row) => row.id === draft.opponentParticipantId) ?? undefined;
         const opponentSkillOptions = readSystemSkillOptions({
           content,
           encounterParticipant: opponent,
@@ -619,15 +651,18 @@ export function GmRoleplayingEncounterScreen({
         const filteredOpponentSkillOptions =
           draft.opponentSkillCategoryId === "all"
             ? opponentSkillOptions
-            : opponentSkillOptions.filter((skill) => skill.categoryId === draft.opponentSkillCategoryId);
+            : opponentSkillOptions.filter(
+                (skill) => skill.categoryId === draft.opponentSkillCategoryId,
+              );
         const opponentSupportSkillOptions =
           draft.opponentSupportSkillCategoryId === "all"
             ? opponentSkillOptions
-            : opponentSkillOptions.filter((skill) => skill.categoryId === draft.opponentSupportSkillCategoryId);
-        const nextSkillId =
-          filteredSkillOptions.some((skill) => skill.id === draft.skillId)
-            ? draft.skillId
-            : filteredSkillOptions[0]?.id ?? skillOptions[0]?.id ?? "";
+            : opponentSkillOptions.filter(
+                (skill) => skill.categoryId === draft.opponentSupportSkillCategoryId,
+              );
+        const nextSkillId = filteredSkillOptions.some((skill) => skill.id === draft.skillId)
+          ? draft.skillId
+          : (filteredSkillOptions[0]?.id ?? skillOptions[0]?.id ?? "");
         const nextSelectedSkill = skillOptions.find((skill) => skill.id === nextSkillId);
         const nextOpponentSkillId =
           !draft.opponentBlockOpen || draft.opponentSkillId === ""
@@ -635,7 +670,9 @@ export function GmRoleplayingEncounterScreen({
             : filteredOpponentSkillOptions.some((skill) => skill.id === draft.opponentSkillId)
               ? draft.opponentSkillId
               : "";
-        const nextSelectedOpponentSkill = opponentSkillOptions.find((skill) => skill.id === nextOpponentSkillId);
+        const nextSelectedOpponentSkill = opponentSkillOptions.find(
+          (skill) => skill.id === nextOpponentSkillId,
+        );
 
         return {
           ...draft,
@@ -658,11 +695,12 @@ export function GmRoleplayingEncounterScreen({
           participantId: participant?.id ?? "",
           skillId: nextSkillId,
           supportSkillId:
-            draft.supportSkillId === "" || supportSkillOptions.some((skill) => skill.id === draft.supportSkillId)
+            draft.supportSkillId === "" ||
+            supportSkillOptions.some((skill) => skill.id === draft.supportSkillId)
               ? draft.supportSkillId
               : "",
         };
-      })
+      }),
     );
   }, [content, roster, scenarioParticipants]);
 
@@ -676,7 +714,7 @@ export function GmRoleplayingEncounterScreen({
         message: gmMessageDraft,
         session: encounter,
       }),
-      "Updated roleplaying encounter GM message."
+      "Updated roleplaying encounter GM message.",
     );
     setGmMessageDirty(false);
   }
@@ -691,7 +729,7 @@ export function GmRoleplayingEncounterScreen({
         session: encounter,
         ...input,
       }),
-      "Updated roleplaying visibility."
+      "Updated roleplaying visibility.",
     );
   }
 
@@ -702,7 +740,7 @@ export function GmRoleplayingEncounterScreen({
         session: encounter,
         viewerParticipantId,
       }),
-      "Updated roleplaying visibility row."
+      "Updated roleplaying visibility row.",
     );
   }
 
@@ -716,13 +754,13 @@ export function GmRoleplayingEncounterScreen({
         participantId: input.participantId,
         session: encounter,
       }),
-      "Updated roleplaying participant description."
+      "Updated roleplaying participant description.",
     );
   }
 
   function updateRollDraft(draftId: string, patch: Partial<RoleplayRollDraft>) {
     setRollDrafts((currentDrafts) =>
-      currentDrafts.map((draft) => (draft.id === draftId ? { ...draft, ...patch } : draft))
+      currentDrafts.map((draft) => (draft.id === draftId ? { ...draft, ...patch } : draft)),
     );
   }
 
@@ -752,7 +790,7 @@ export function GmRoleplayingEncounterScreen({
           skillCategoryId: "all",
           skillId: nextSkillId,
         };
-      })
+      }),
     );
   }
 
@@ -772,18 +810,20 @@ export function GmRoleplayingEncounterScreen({
         rollSetId: nextRollStackId,
         session: encounter,
       }),
-      "Cleared roleplaying ranked roll stack."
+      "Cleared roleplaying ranked roll stack.",
     );
   }
 
   function rankVisibleRollResults(entries: RoleplayActionLogEntry[]): RoleplayActionLogEntry[] {
-    return entries.filter((entry) => entry.mode !== "opposed").sort(
-      (left, right) =>
-        Number(Boolean(left.fumble)) - Number(Boolean(right.fumble)) ||
-        (right.numericSubtotal ?? Number.NEGATIVE_INFINITY) -
-          (left.numericSubtotal ?? Number.NEGATIVE_INFINITY) ||
-        right.createdAt.localeCompare(left.createdAt)
-    );
+    return entries
+      .filter((entry) => entry.mode !== "opposed")
+      .sort(
+        (left, right) =>
+          Number(Boolean(left.fumble)) - Number(Boolean(right.fumble)) ||
+          (right.numericSubtotal ?? Number.NEGATIVE_INFINITY) -
+            (left.numericSubtotal ?? Number.NEGATIVE_INFINITY) ||
+          right.createdAt.localeCompare(left.createdAt),
+      );
   }
 
   function replaceDraftRankedRollResults(draftId: string, entries: RoleplayActionLogEntry[]) {
@@ -792,7 +832,7 @@ export function GmRoleplayingEncounterScreen({
       rankVisibleRollResults([
         ...entries,
         ...currentEntries.filter((entry) => !entry.id.startsWith(draftPrefix)),
-      ])
+      ]),
     );
   }
 
@@ -855,7 +895,8 @@ export function GmRoleplayingEncounterScreen({
       draft.skillCategoryId === "all"
         ? allSkillOptions
         : allSkillOptions.filter((skill) => skill.categoryId === draft.skillCategoryId);
-    const selectedSkill = skillOptions.find((skill) => skill.id === draft.skillId) ?? skillOptions[0];
+    const selectedSkill =
+      skillOptions.find((skill) => skill.id === draft.skillId) ?? skillOptions[0];
     const supportSkillOptions =
       draft.supportSkillCategoryId === "all"
         ? allSkillOptions
@@ -864,8 +905,7 @@ export function GmRoleplayingEncounterScreen({
       draft.supportSkillId === ""
         ? undefined
         : supportSkillOptions.find((skill) => skill.id === draft.supportSkillId);
-    const opponent =
-      roster.find((row) => row.id === draft.opponentParticipantId) ?? undefined;
+    const opponent = roster.find((row) => row.id === draft.opponentParticipantId) ?? undefined;
     const allOpponentSkillOptions = readSystemSkillOptions({
       content,
       encounterParticipant: opponent,
@@ -874,15 +914,18 @@ export function GmRoleplayingEncounterScreen({
     const opponentSkillOptions =
       draft.opponentSkillCategoryId === "all"
         ? allOpponentSkillOptions
-        : allOpponentSkillOptions.filter((skill) => skill.categoryId === draft.opponentSkillCategoryId);
-    const selectedOpponentSkill =
-      draft.opponentBlockOpen
-        ? opponentSkillOptions.find((skill) => skill.id === draft.opponentSkillId)
-        : undefined;
+        : allOpponentSkillOptions.filter(
+            (skill) => skill.categoryId === draft.opponentSkillCategoryId,
+          );
+    const selectedOpponentSkill = draft.opponentBlockOpen
+      ? opponentSkillOptions.find((skill) => skill.id === draft.opponentSkillId)
+      : undefined;
     const opponentSupportSkillOptions =
       draft.opponentSupportSkillCategoryId === "all"
         ? allOpponentSkillOptions
-        : allOpponentSkillOptions.filter((skill) => skill.categoryId === draft.opponentSupportSkillCategoryId);
+        : allOpponentSkillOptions.filter(
+            (skill) => skill.categoryId === draft.opponentSupportSkillCategoryId,
+          );
     const selectedOpponentSupportSkill =
       draft.opponentSupportSkillId === ""
         ? undefined
@@ -939,10 +982,11 @@ export function GmRoleplayingEncounterScreen({
     const matchingPendingRoll = matchingPendingRollCandidates.sort(
       (left, right) =>
         scorePendingRoll(right) - scorePendingRoll(left) ||
-        right.assignedAt.localeCompare(left.assignedAt)
+        right.assignedAt.localeCompare(left.assignedAt),
     )[0];
     const activeOpposedRollSetId = isOpposed ? draft.rollSetId : matchingPendingRoll?.rollSetId;
-    const activeRollSetId = activeOpposedRollSetId ?? matchingPendingRoll?.rollSetId ?? draft.rollSetId;
+    const activeRollSetId =
+      activeOpposedRollSetId ?? matchingPendingRoll?.rollSetId ?? draft.rollSetId;
     const matchingOpponentPendingRoll =
       activeOpposedRollSetId && opponent && selectedOpponentSkill
         ? roleplayState.pendingSkillRolls.find((roll) => {
@@ -1054,7 +1098,10 @@ export function GmRoleplayingEncounterScreen({
     };
   }
 
-  async function handleAssignSkillRoll(draft: RoleplayRollDraft, side: "actor" | "opponent" = "actor") {
+  async function handleAssignSkillRoll(
+    draft: RoleplayRollDraft,
+    side: "actor" | "opponent" = "actor",
+  ) {
     const {
       isOpposed,
       activeOpposedRollSetId,
@@ -1069,7 +1116,11 @@ export function GmRoleplayingEncounterScreen({
       selectedSupportSkill,
     } = getRollDraftContext(draft);
 
-    if (!participant || !selectedSkill || (side === "opponent" && (!opponent || !selectedOpponentSkill))) {
+    if (
+      !participant ||
+      !selectedSkill ||
+      (side === "opponent" && (!opponent || !selectedOpponentSkill))
+    ) {
       return;
     }
 
@@ -1090,9 +1141,7 @@ export function GmRoleplayingEncounterScreen({
           roll.skillId === selectedSkill.id
         );
       });
-    const duplicateOpponentAssignment =
-      assigningOpponent &&
-      Boolean(matchingOpponentPendingRoll);
+    const duplicateOpponentAssignment = assigningOpponent && Boolean(matchingOpponentPendingRoll);
 
     if (duplicateActorAssignment || duplicateOpponentAssignment) {
       return;
@@ -1100,17 +1149,24 @@ export function GmRoleplayingEncounterScreen({
 
     await persist(
       assignRoleplaySkillRoll({
-        difficulty: assigningOpponent || isOpposed || draft.difficulty === "none" ? undefined : draft.difficulty,
+        difficulty:
+          assigningOpponent || isOpposed || draft.difficulty === "none"
+            ? undefined
+            : draft.difficulty,
         mode: assigningOpponent || isOpposed ? "opposed" : "difficulty",
         otherMod: assigningOpponent ? opponentOtherMod : otherMod,
         opponentParticipantId: !assigningOpponent && isOpposed ? opponent?.id : undefined,
         opponentParticipantName: !assigningOpponent && isOpposed ? opponent?.label : undefined,
         opponentSilent: !assigningOpponent && isOpposed ? draft.opponentSilent : undefined,
         opponentSkillId: !assigningOpponent && isOpposed ? selectedOpponentSkill?.id : undefined,
-        opponentSkillLabel: !assigningOpponent && isOpposed ? selectedOpponentSkill?.label : undefined,
-        opponentSkillValue: !assigningOpponent && isOpposed ? selectedOpponentSkill?.value : undefined,
-        opponentSupportSkillId: !assigningOpponent && isOpposed ? selectedOpponentSupportSkill?.id : undefined,
-        opponentSupportSkillLabel: !assigningOpponent && isOpposed ? selectedOpponentSupportSkill?.label : undefined,
+        opponentSkillLabel:
+          !assigningOpponent && isOpposed ? selectedOpponentSkill?.label : undefined,
+        opponentSkillValue:
+          !assigningOpponent && isOpposed ? selectedOpponentSkill?.value : undefined,
+        opponentSupportSkillId:
+          !assigningOpponent && isOpposed ? selectedOpponentSupportSkill?.id : undefined,
+        opponentSupportSkillLabel:
+          !assigningOpponent && isOpposed ? selectedOpponentSupportSkill?.label : undefined,
         participantId: assigningOpponent ? opponent.id : participant.id,
         participantName: assigningOpponent ? opponent.label : participant.label,
         rollSetId: assigningOpponent || isOpposed ? activeOpposedRollSetId : draft.rollSetId,
@@ -1120,18 +1176,27 @@ export function GmRoleplayingEncounterScreen({
         skillId: assigningOpponent ? selectedOpponentSkill.id : selectedSkill.id,
         skillLabel: assigningOpponent ? selectedOpponentSkill.label : selectedSkill.label,
         skillValue: assigningOpponent ? selectedOpponentSkill.value : selectedSkill.value,
-        supportSkillId: assigningOpponent ? selectedOpponentSupportSkill?.id : selectedSupportSkill?.id,
-        supportSkillLabel: assigningOpponent ? selectedOpponentSupportSkill?.label : selectedSupportSkill?.label,
-        supportSkillValue: assigningOpponent ? selectedOpponentSupportSkill?.value : selectedSupportSkill?.value,
+        supportSkillId: assigningOpponent
+          ? selectedOpponentSupportSkill?.id
+          : selectedSupportSkill?.id,
+        supportSkillLabel: assigningOpponent
+          ? selectedOpponentSupportSkill?.label
+          : selectedSupportSkill?.label,
+        supportSkillValue: assigningOpponent
+          ? selectedOpponentSupportSkill?.value
+          : selectedSupportSkill?.value,
         useDbMod: assigningOpponent ? draft.opponentUseDbMod : draft.useDbMod,
         useGenMod: assigningOpponent ? draft.opponentUseGenMod : draft.useGenMod,
         useObSkillMod: assigningOpponent ? draft.opponentUseObSkillMod : draft.useObSkillMod,
       }),
-      "Assigned roleplaying skill roll."
+      "Assigned roleplaying skill roll.",
     );
   }
 
-  async function handleGmRoll(draft: RoleplayRollDraft, side: "actor" | "opponent" | "both" = "actor") {
+  async function handleGmRoll(
+    draft: RoleplayRollDraft,
+    side: "actor" | "opponent" | "both" = "actor",
+  ) {
     const {
       isOpposed,
       activeRollSetId,
@@ -1161,9 +1226,7 @@ export function GmRoleplayingEncounterScreen({
     const roll = shouldRollActor ? rollOpenEndedRoleplayD20() : draft.actorRoll;
     const opponentRoll = shouldRollOpponent ? rollOpenEndedRoleplayD20() : draft.opponentRoll;
     const actorSupportRoll =
-      shouldRollActor && selectedSupportSkill
-        ? rollOpenEndedRoleplayD20()
-        : draft.actorSupportRoll;
+      shouldRollActor && selectedSupportSkill ? rollOpenEndedRoleplayD20() : draft.actorSupportRoll;
     const opponentSupportRoll =
       shouldRollOpponent && selectedOpponentSupportSkill
         ? rollOpenEndedRoleplayD20()
@@ -1183,19 +1246,18 @@ export function GmRoleplayingEncounterScreen({
       opponentRoll,
       opponentSupportRoll,
     });
-    const preview =
-      roll
-        ? buildRoleplayCalculationPreview({
-            difficulty: isOpposed || draft.difficulty === "none" ? undefined : draft.difficulty,
-            otherMod,
-            roll,
-            skillLabel: selectedSkill.label,
-            skillValue: selectedSkill.value,
-            useDbMod: draft.useDbMod,
-            useGenMod: draft.useGenMod,
-            useObSkillMod: draft.useObSkillMod,
-          })
-        : undefined;
+    const preview = roll
+      ? buildRoleplayCalculationPreview({
+          difficulty: isOpposed || draft.difficulty === "none" ? undefined : draft.difficulty,
+          otherMod,
+          roll,
+          skillLabel: selectedSkill.label,
+          skillValue: selectedSkill.value,
+          useDbMod: draft.useDbMod,
+          useGenMod: draft.useGenMod,
+          useObSkillMod: draft.useObSkillMod,
+        })
+      : undefined;
     const opponentPreview =
       opponentRoll && selectedOpponentSkill
         ? buildRoleplayCalculationPreview({
@@ -1234,12 +1296,22 @@ export function GmRoleplayingEncounterScreen({
           })
         : undefined;
 
-    if (side === "opponent" && opponent && selectedOpponentSkill && opponentRoll && opponentPreview) {
+    if (
+      side === "opponent" &&
+      opponent &&
+      selectedOpponentSkill &&
+      opponentRoll &&
+      opponentPreview
+    ) {
       await persist(
         recordRoleplayGmSkillRoll({
           calculationText: [
-            opponentSupportPreview ? `support ${opponentSupportPreview.calculationText}` : undefined,
-            selectedOpponentSupportSkill && !opponentSupportPreview ? `Support: ${selectedOpponentSupportSkill.label}` : undefined,
+            opponentSupportPreview
+              ? `support ${opponentSupportPreview.calculationText}`
+              : undefined,
+            selectedOpponentSupportSkill && !opponentSupportPreview
+              ? `Support: ${selectedOpponentSupportSkill.label}`
+              : undefined,
             opponentPreview.calculationText,
           ]
             .filter(Boolean)
@@ -1276,12 +1348,22 @@ export function GmRoleplayingEncounterScreen({
           useGenMod: draft.opponentUseGenMod,
           useObSkillMod: draft.opponentUseObSkillMod,
         }),
-        "Recorded GM roleplaying skill roll."
+        "Recorded GM roleplaying skill roll.",
       );
-    } else if (side === "both" && opponent && selectedOpponentSkill && roll && opponentRoll && preview && opponentPreview) {
+    } else if (
+      side === "both" &&
+      opponent &&
+      selectedOpponentSkill &&
+      roll &&
+      opponentRoll &&
+      preview &&
+      opponentPreview
+    ) {
       const calculationText = [
         supportPreview ? `actor support ${supportPreview.calculationText}` : undefined,
-        opponentSupportPreview ? `opponent support ${opponentSupportPreview.calculationText}` : undefined,
+        opponentSupportPreview
+          ? `opponent support ${opponentSupportPreview.calculationText}`
+          : undefined,
         `Actor: ${preview.calculationText} · VERSUS · Opponent: ${opponentPreview.calculationText} · ${opposedResult?.summary ?? "Opposed result pending."}`,
       ]
         .filter(Boolean)
@@ -1336,14 +1418,16 @@ export function GmRoleplayingEncounterScreen({
           useGenMod: draft.useGenMod,
           useObSkillMod: draft.useObSkillMod,
         }),
-        "Recorded GM roleplaying skill roll."
+        "Recorded GM roleplaying skill roll.",
       );
     } else if (roll && preview) {
       await persist(
         recordRoleplayGmSkillRoll({
           calculationText: [
             supportPreview ? `support ${supportPreview.calculationText}` : undefined,
-            selectedSupportSkill && !supportPreview ? `Support: ${selectedSupportSkill.label}` : undefined,
+            selectedSupportSkill && !supportPreview
+              ? `Support: ${selectedSupportSkill.label}`
+              : undefined,
             preview.calculationText,
           ]
             .filter(Boolean)
@@ -1382,7 +1466,7 @@ export function GmRoleplayingEncounterScreen({
           useGenMod: draft.useGenMod,
           useObSkillMod: draft.useObSkillMod,
         }),
-        "Recorded GM roleplaying skill roll."
+        "Recorded GM roleplaying skill roll.",
       );
     }
 
@@ -1414,10 +1498,10 @@ export function GmRoleplayingEncounterScreen({
       !entry.side &&
       !entry.silent &&
       entry.rollSetId === currentGmRollStackId &&
-      entry.numericSubtotal != null
+      entry.numericSubtotal != null,
   );
   const rankedRollResults = rankVisibleRollResults(
-    dedupeRankedRoleplayEntries([...currentRankedRollResults, ...serverRankedRollResults])
+    dedupeRankedRoleplayEntries([...currentRankedRollResults, ...serverRankedRollResults]),
   );
   const showEncounterContext = surface !== "skill-rolls";
   const showSkillRollTools = surface !== "encounter";
@@ -1473,7 +1557,14 @@ export function GmRoleplayingEncounterScreen({
       {showSkillRollTools ? (
         <>
           <section style={panelStyle}>
-            <div style={{ alignItems: "center", display: "flex", justifyContent: "space-between", gap: "0.75rem" }}>
+            <div
+              style={{
+                alignItems: "center",
+                display: "flex",
+                justifyContent: "space-between",
+                gap: "0.75rem",
+              }}
+            >
               <h2 style={{ margin: 0 }}>Skill roll assignment</h2>
               <button onClick={() => void resetRollDrafts()} type="button">
                 Clear
@@ -1525,8 +1616,9 @@ export function GmRoleplayingEncounterScreen({
               </button>
             </div>
             <div style={{ color: "#5e5a50" }}>
-              GM Roll uses the roleplay open-ended d20 table for non-opposed skill rolls.
-              Gen, OB/Skill, and DB flags remain visible placeholder modifiers until numeric sources are defined.
+              GM Roll uses the roleplay open-ended d20 table for non-opposed skill rolls. Gen,
+              OB/Skill, and DB flags remain visible placeholder modifiers until numeric sources are
+              defined.
             </div>
           </section>
 
@@ -1543,7 +1635,10 @@ export function PlayerRoleplayingEncounterScreen({
   campaignId,
   embedded = false,
   encounterId,
+  inspectionParticipantId,
+  readOnlyInspection = false,
   scenarioId,
+  showWorkspaceHeader = true,
   surface = "full",
 }: PlayerRoleplayingEncounterScreenProps) {
   const [campaign, setCampaign] = useState<Campaign | null>(null);
@@ -1553,40 +1648,51 @@ export function PlayerRoleplayingEncounterScreen({
   const [scenario, setScenario] = useState<Scenario | null>(null);
   const [scenarioParticipants, setScenarioParticipants] = useState<ScenarioParticipant[]>([]);
   const [loading, setLoading] = useState(true);
-  const [dismissedAssignedRollIds, setDismissedAssignedRollIds] = useState<Set<string>>(() => new Set());
-  const [dismissedRankedResultIds, setDismissedRankedResultIds] = useState<Set<string>>(() => new Set());
+  const [dismissedAssignedRollIds, setDismissedAssignedRollIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [dismissedRankedResultIds, setDismissedRankedResultIds] = useState<Set<string>>(
+    () => new Set(),
+  );
   const [localRankedResults, setLocalRankedResults] = useState<PlayerVisibleRankedResult[]>([]);
   const [playerLocalRollDraft, setPlayerLocalRollDraft] = useState<PlayerLocalRollDraft>(() =>
-    makePlayerLocalRollDraft()
+    makePlayerLocalRollDraft(),
   );
   const [playerLocalRollRoundId, setPlayerLocalRollRoundId] = useState(
-    () => `player-local-roll-set-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    () => `player-local-roll-set-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
   );
   const { currentUser } = useSessionUser();
+  const isGameMaster = Boolean(
+    currentUser?.roles.includes("game_master") || currentUser?.roles.includes("admin"),
+  );
+  const inspectedParticipantId =
+    readOnlyInspection && isGameMaster ? inspectionParticipantId : undefined;
   const situationRef = useRef<HTMLDivElement>(null);
 
-  const fetchRoleplayEncounter = useCallback(
-    async () => {
-      const [nextEncounter, nextScenario, nextCampaign, nextParticipants, nextContent] = await Promise.all([
+  const fetchRoleplayEncounter = useCallback(async () => {
+    const [nextEncounter, nextScenario, nextCampaign, nextParticipants, nextContent] =
+      await Promise.all([
         loadEncounterById(encounterId),
         loadScenarioById(scenarioId),
         loadCampaignById(campaignId).catch(() => null),
         currentUser
-          ? loadScenarioMyParticipant(scenarioId).then((participant) => (participant ? [participant] : []))
+          ? inspectedParticipantId
+            ? loadScenarioParticipants(scenarioId)
+            : loadScenarioMyParticipant(scenarioId).then((participant) =>
+                participant ? [participant] : [],
+              )
           : Promise.resolve([]),
         loadCanonicalContent(),
       ]);
 
-      return {
-        nextCampaign,
-        nextContent,
-        nextEncounter,
-        nextParticipants,
-        nextScenario,
-      };
-    },
-    [campaignId, currentUser, encounterId, scenarioId]
-  );
+    return {
+      nextCampaign,
+      nextContent,
+      nextEncounter,
+      nextParticipants,
+      nextScenario,
+    };
+  }, [campaignId, currentUser, encounterId, inspectedParticipantId, scenarioId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1661,7 +1767,7 @@ export function PlayerRoleplayingEncounterScreen({
     }
 
     setLocalRankedResults((currentResults) =>
-      currentResults.filter((entry) => entry.rollSetId === activeStackId)
+      currentResults.filter((entry) => entry.rollSetId === activeStackId),
     );
   }, [encounter?.roleplayState?.currentRankedRollStackId]);
 
@@ -1674,6 +1780,7 @@ export function PlayerRoleplayingEncounterScreen({
   }
 
   const playerView = buildPlayerGeneralEncounterView({
+    controlledScenarioParticipantId: inspectedParticipantId ?? undefined,
     currentUserId: currentUser?.id,
     encounter,
     scenarioParticipants,
@@ -1714,20 +1821,30 @@ export function PlayerRoleplayingEncounterScreen({
   }
 
   const visibleAssignedRolls = playerView.assignedRolls.filter(
-    (roll) => !dismissedAssignedRollIds.has(roll.id)
+    (roll) => !dismissedAssignedRollIds.has(roll.id),
   );
   const readModelRankedResults = playerView.rankedResults.filter(
-    (entry) => !dismissedRankedResultIds.has(entry.id)
+    (entry) => !dismissedRankedResultIds.has(entry.id),
   );
   const activeRankedStackId = playerView.currentRollRoundId;
   const localVisibleRankedResults = activeRankedStackId
     ? localRankedResults.filter((entry) => entry.rollSetId === activeRankedStackId)
     : localRankedResults;
-  const visibleRankedResults = mergePlayerVisibleResults(localVisibleRankedResults, readModelRankedResults);
+  const visibleRankedResults = mergePlayerVisibleResults(
+    localVisibleRankedResults,
+    readModelRankedResults,
+  );
   const unresolvedAssignedRolls = visibleAssignedRolls.filter((roll) => !roll.result);
   const controlledParticipant = effectivePlayerEncounterParticipants.find(
-    (participant) => participant.id === playerView.controlledParticipantIds[0]
+    (participant) => participant.id === playerView.controlledParticipantIds[0],
   );
+  const selectedPlayerFacingName =
+    controlledParticipant?.label ??
+    (inspectedParticipantId
+      ? scenarioParticipants.find((participant) => participant.id === inspectedParticipantId)
+          ?.snapshot.displayName
+      : undefined);
+  const canUsePlayerActions = !readOnlyInspection;
   const localAllSkillOptions = readSystemSkillOptions({
     content,
     encounterParticipant: controlledParticipant,
@@ -1736,13 +1853,18 @@ export function PlayerRoleplayingEncounterScreen({
   const localSkillOptions =
     playerLocalRollDraft.skillCategoryId === "all"
       ? localAllSkillOptions
-      : localAllSkillOptions.filter((skill) => skill.categoryId === playerLocalRollDraft.skillCategoryId);
+      : localAllSkillOptions.filter(
+          (skill) => skill.categoryId === playerLocalRollDraft.skillCategoryId,
+        );
   const localSelectedSkill =
-    localSkillOptions.find((skill) => skill.id === playerLocalRollDraft.skillId) ?? localSkillOptions[0];
+    localSkillOptions.find((skill) => skill.id === playerLocalRollDraft.skillId) ??
+    localSkillOptions[0];
   const localSupportSkillOptions =
     playerLocalRollDraft.supportSkillCategoryId === "all"
       ? localAllSkillOptions
-      : localAllSkillOptions.filter((skill) => skill.categoryId === playerLocalRollDraft.supportSkillCategoryId);
+      : localAllSkillOptions.filter(
+          (skill) => skill.categoryId === playerLocalRollDraft.supportSkillCategoryId,
+        );
   const localSelectedSupportSkill =
     playerLocalRollDraft.supportSkillId === ""
       ? undefined
@@ -1780,6 +1902,10 @@ export function PlayerRoleplayingEncounterScreen({
     : undefined;
 
   function handleClearAssignedRolls() {
+    if (readOnlyInspection) {
+      return;
+    }
+
     if (unresolvedAssignedRolls.length > 0) {
       return;
     }
@@ -1804,10 +1930,16 @@ export function PlayerRoleplayingEncounterScreen({
     });
     setLocalRankedResults([]);
     setPlayerLocalRollDraft(makePlayerLocalRollDraft({ skillId: localAllSkillOptions[0]?.id }));
-    setPlayerLocalRollRoundId(`player-local-roll-set-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
+    setPlayerLocalRollRoundId(
+      `player-local-roll-set-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    );
   }
 
   async function handlePlayerRoll(rollId: string) {
+    if (readOnlyInspection) {
+      return;
+    }
+
     const roleplayState = normalizeRoleplayState(encounter as EncounterSession);
     const pendingRoll = roleplayState.pendingSkillRolls.find((roll) => roll.id === rollId);
 
@@ -1851,28 +1983,42 @@ export function PlayerRoleplayingEncounterScreen({
           {
             id: `player-roll-${pendingRoll.id}-${roll.rollD20}-${roll.dieResult}`,
             participantId: participant.id,
-            participantName: playerView.assignedRolls.find((entry) => entry.id === pendingRoll.id)?.participantName ?? participant.label,
+            participantName:
+              playerView.assignedRolls.find((entry) => entry.id === pendingRoll.id)
+                ?.participantName ?? participant.label,
             pendingRollId: pendingRoll.id,
             rollSetId: pendingRoll.rollSetId,
             skillId: pendingRoll.skillId,
             skillLabel: pendingRoll.skillLabel,
             total: preview.numericSubtotal ?? preview.finalTotal ?? 0,
           },
-        ])
+        ]),
       );
     }
-    setFeedback(`Rolled ${pendingRoll.skillLabel}: total ${preview.numericSubtotal ?? "unresolved"}.`);
+    setFeedback(
+      `Rolled ${pendingRoll.skillLabel}: total ${preview.numericSubtotal ?? "unresolved"}.`,
+    );
   }
 
   async function handleLocalPlayerRoll() {
-    if (!encounter || !controlledParticipant || !localSelectedSkill || playerLocalRollDraft.opponentParticipantId) {
+    if (readOnlyInspection) {
+      return;
+    }
+
+    if (
+      !encounter ||
+      !controlledParticipant ||
+      !localSelectedSkill ||
+      playerLocalRollDraft.opponentParticipantId
+    ) {
       return;
     }
 
     const roll = rollOpenEndedRoleplayD20();
     const supportRoll = localSelectedSupportSkill ? rollOpenEndedRoleplayD20() : undefined;
     const preview = buildRoleplayCalculationPreview({
-      difficulty: playerLocalRollDraft.difficulty === "none" ? undefined : playerLocalRollDraft.difficulty,
+      difficulty:
+        playerLocalRollDraft.difficulty === "none" ? undefined : playerLocalRollDraft.difficulty,
       otherMod: localOtherMod,
       roll,
       skillLabel: localSelectedSkill.label,
@@ -1898,9 +2044,11 @@ export function PlayerRoleplayingEncounterScreen({
           skillLabel: localSelectedSkill.label,
           total: preview.numericSubtotal ?? preview.finalTotal ?? 0,
         },
-      ])
+      ]),
     );
-    setFeedback(`Rolled ${localSelectedSkill.label}: total ${preview.numericSubtotal ?? "unresolved"}.`);
+    setFeedback(
+      `Rolled ${localSelectedSkill.label}: total ${preview.numericSubtotal ?? "unresolved"}.`,
+    );
   }
   return (
     <section style={{ display: "grid", gap: "1rem", maxWidth: 980 }}>
@@ -1914,6 +2062,14 @@ export function PlayerRoleplayingEncounterScreen({
         <Link href={buildCampaignWorkspaceHref({ campaignId, scenarioId, tab: "scenario" })}>
           Back to scenario
         </Link>
+      ) : null}
+      {showWorkspaceHeader && showSkillRollTools ? (
+        <section style={panelStyle}>
+          <h2 style={{ margin: 0 }}>
+            Skill rolls{selectedPlayerFacingName ? ` — ${selectedPlayerFacingName}` : ""}
+          </h2>
+          {readOnlyInspection ? <div>GM player-view inspection is read-only.</div> : null}
+        </section>
       ) : null}
       {feedback ? <section style={panelStyle}>{feedback}</section> : null}
       {showEncounterContext ? (
@@ -1987,88 +2143,282 @@ export function PlayerRoleplayingEncounterScreen({
 
       {showSkillRollTools ? (
         <>
-      <section style={panelStyle}>
-        <div style={{ alignItems: "center", display: "flex", justifyContent: "space-between", gap: "0.75rem" }}>
-          <h2 style={{ margin: 0 }}>Skill roll grid</h2>
-          <button disabled={unresolvedAssignedRolls.length > 0} onClick={handleClearAssignedRolls} type="button">
-            Clear
-          </button>
-        </div>
-        {visibleAssignedRolls.length > 0 ? (
-          <div style={{ display: "grid", gap: "0.75rem" }}>
-            {visibleAssignedRolls.map((roll, index) => {
-              const contentSkill = content?.skills.find((skill) => skill.id === roll.skillId);
-              const assignedParticipant = resolveEncounterParticipantByRollParticipantId({
-                participantId: roll.participantId,
-                participants: effectivePlayerEncounterParticipants,
-              });
-              const assignedSkillProfile =
-                contentSkill && assignedParticipant
-                  ? getSkillRollProfile({
-                      content,
-                      encounterParticipant: assignedParticipant,
-                      scenarioParticipants,
-                      skill: contentSkill,
-                    })
-                  : undefined;
-              const assignedSupportSkill = content?.skills.find((skill) => skill.id === roll.supportSkillId);
-              const assignedSupportSkillProfile =
-                assignedSupportSkill && assignedParticipant
-                  ? getSkillRollProfile({
-                      content,
-                      encounterParticipant: assignedParticipant,
-                      scenarioParticipants,
-                      skill: assignedSupportSkill,
-                    })
-                  : undefined;
-              const categoryLabel = contentSkill
-                ? getPlayerFacingSkillBucketDefinitions().find(
-                    (category) => category.id === getPlayerFacingSkillBucket(contentSkill)
-                  )?.label ?? "Assigned"
-                : "Assigned";
-              const resultRoll = buildPlayerRollResult(roll.result);
-              const supportResultRoll = buildPlayerRollResult(roll.supportResult);
-              const mainPreview = buildRoleplayCalculationPreview({
-                difficulty: roll.mode === "difficulty" ? roll.difficulty : undefined,
-                otherMod: roll.otherMod,
-                roll: resultRoll,
-                skillLabel: roll.skillLabel,
-                skillValue: roll.skillValue,
-                useDbMod: roll.useDbMod,
-                useGenMod: roll.useGenMod,
-                useObSkillMod: roll.useObSkillMod,
-              });
-              const supportPreview = roll.supportSkillLabel
-                ? buildRoleplayCalculationPreview({
-                    roll: supportResultRoll,
-                    skillLabel: roll.supportSkillLabel,
-                    skillValue: assignedSupportSkillProfile?.rollBaseValue ?? roll.supportSkillValue,
-                  })
-                : undefined;
+          <section style={panelStyle}>
+            <div
+              style={{
+                alignItems: "center",
+                display: "flex",
+                justifyContent: "space-between",
+                gap: "0.75rem",
+              }}
+            >
+              <h2 style={{ margin: 0 }}>Skill roll grid</h2>
+              <button
+                disabled={readOnlyInspection || unresolvedAssignedRolls.length > 0}
+                onClick={handleClearAssignedRolls}
+                type="button"
+              >
+                Clear
+              </button>
+            </div>
+            {visibleAssignedRolls.length > 0 ? (
+              <div style={{ display: "grid", gap: "0.75rem" }}>
+                {visibleAssignedRolls.map((roll, index) => {
+                  const contentSkill = content?.skills.find((skill) => skill.id === roll.skillId);
+                  const assignedParticipant = resolveEncounterParticipantByRollParticipantId({
+                    participantId: roll.participantId,
+                    participants: effectivePlayerEncounterParticipants,
+                  });
+                  const assignedSkillProfile =
+                    contentSkill && assignedParticipant
+                      ? getSkillRollProfile({
+                          content,
+                          encounterParticipant: assignedParticipant,
+                          scenarioParticipants,
+                          skill: contentSkill,
+                        })
+                      : undefined;
+                  const assignedSupportSkill = content?.skills.find(
+                    (skill) => skill.id === roll.supportSkillId,
+                  );
+                  const assignedSupportSkillProfile =
+                    assignedSupportSkill && assignedParticipant
+                      ? getSkillRollProfile({
+                          content,
+                          encounterParticipant: assignedParticipant,
+                          scenarioParticipants,
+                          skill: assignedSupportSkill,
+                        })
+                      : undefined;
+                  const categoryLabel = contentSkill
+                    ? (getPlayerFacingSkillBucketDefinitions().find(
+                        (category) => category.id === getPlayerFacingSkillBucket(contentSkill),
+                      )?.label ?? "Assigned")
+                    : "Assigned";
+                  const resultRoll = buildPlayerRollResult(roll.result);
+                  const supportResultRoll = buildPlayerRollResult(roll.supportResult);
+                  const mainPreview = buildRoleplayCalculationPreview({
+                    difficulty: roll.mode === "difficulty" ? roll.difficulty : undefined,
+                    otherMod: roll.otherMod,
+                    roll: resultRoll,
+                    skillLabel: roll.skillLabel,
+                    skillValue: roll.skillValue,
+                    useDbMod: roll.useDbMod,
+                    useGenMod: roll.useGenMod,
+                    useObSkillMod: roll.useObSkillMod,
+                  });
+                  const supportPreview = roll.supportSkillLabel
+                    ? buildRoleplayCalculationPreview({
+                        roll: supportResultRoll,
+                        skillLabel: roll.supportSkillLabel,
+                        skillValue:
+                          assignedSupportSkillProfile?.rollBaseValue ?? roll.supportSkillValue,
+                      })
+                    : undefined;
 
-              return (
-                <div key={roll.id} style={rollBlockShellStyle}>
-                  <strong>Assigned roll {index + 1} · {roll.participantName}</strong>
+                  return (
+                    <div key={roll.id} style={rollBlockShellStyle}>
+                      <strong>
+                        Assigned roll {index + 1} · {roll.participantName}
+                      </strong>
+                      <section style={rollEditorStyle}>
+                        <div style={rollControlsStackStyle}>
+                          <section style={rollControlsStyle}>
+                            <div style={rollControlRowStyle}>
+                              <span>Use:</span>
+                              <label>
+                                <input checked={roll.useGenMod} disabled readOnly type="checkbox" />{" "}
+                                Gen
+                              </label>
+                              <label>
+                                <input
+                                  checked={roll.useObSkillMod}
+                                  disabled
+                                  readOnly
+                                  type="checkbox"
+                                />{" "}
+                                OB/Skill
+                              </label>
+                              <label>
+                                <input checked={roll.useDbMod} disabled readOnly type="checkbox" />{" "}
+                                DB
+                              </label>
+                              <label style={compactControlStyle}>
+                                <span>Other mod</span>
+                                <input
+                                  readOnly
+                                  style={{ ...compactInputStyle, width: "4.5rem" }}
+                                  value={roll.otherMod}
+                                />
+                              </label>
+                            </div>
+                            <div style={rollFieldRowStyle}>
+                              <div style={playerRollSkillColumnsStyle}>
+                                <label style={compactControlStyle}>
+                                  <span>Category</span>
+                                  <select disabled style={compactInputStyle} value={categoryLabel}>
+                                    <option value={categoryLabel}>{categoryLabel}</option>
+                                  </select>
+                                </label>
+                                <label style={compactControlStyle}>
+                                  <span>Skill</span>
+                                  <select
+                                    disabled
+                                    style={compactSkillInputStyle}
+                                    value={roll.skillId}
+                                  >
+                                    <option value={roll.skillId}>
+                                      {roll.skillLabel} ({roll.skillValue ?? 0})
+                                    </option>
+                                  </select>
+                                </label>
+                                <label style={compactControlStyle}>
+                                  <span>Support category</span>
+                                  <select disabled style={compactInputStyle} value="assigned">
+                                    <option value="assigned">
+                                      {roll.supportSkillLabel ? "Assigned" : "None"}
+                                    </option>
+                                  </select>
+                                </label>
+                                <label style={compactControlStyle}>
+                                  <span>Support</span>
+                                  <select
+                                    disabled
+                                    style={compactSkillInputStyle}
+                                    value={roll.supportSkillLabel ?? ""}
+                                  >
+                                    <option value={roll.supportSkillLabel ?? ""}>
+                                      {roll.supportSkillLabel ?? "No support skill"}
+                                    </option>
+                                  </select>
+                                </label>
+                              </div>
+                            </div>
+                            <div style={rollFieldRowStyle}>
+                              <label style={compactControlStyle}>
+                                <span>Level</span>
+                                <select
+                                  disabled
+                                  style={compactInputStyle}
+                                  value={roll.difficultyLabel}
+                                >
+                                  <option value={roll.difficultyLabel}>
+                                    {roll.difficultyLabel}
+                                  </option>
+                                </select>
+                              </label>
+                              <label style={compactControlStyle}>
+                                <span>Opponent</span>
+                                <input
+                                  readOnly
+                                  style={compactInputStyle}
+                                  value={
+                                    roll.mode === "opposed"
+                                      ? (roll.opponentLabel ?? "Opposed")
+                                      : "No opponent"
+                                  }
+                                />
+                              </label>
+                              <button
+                                disabled={!canUsePlayerActions || Boolean(roll.result)}
+                                onClick={() => void handlePlayerRoll(roll.id)}
+                                type="button"
+                              >
+                                {roll.supportSkillLabel ? "Roll both 1d20s" : "Roll 1d20"}
+                              </button>
+                            </div>
+                            {assignedSkillProfile && !assignedSkillProfile.known ? (
+                              <div style={{ color: "#8a5a00", fontSize: "0.85rem" }}>
+                                Skill not known (-3 default).
+                              </div>
+                            ) : null}
+                            {assignedSupportSkillProfile && !assignedSupportSkillProfile.known ? (
+                              <div style={{ color: "#8a5a00", fontSize: "0.85rem" }}>
+                                {assignedSupportSkillProfile.skillName}: Skill not known (-3
+                                default).
+                              </div>
+                            ) : null}
+                          </section>
+                        </div>
+                        <RoleplayRollCalculationPanel
+                          actorDifficulty={roll.mode === "difficulty" ? roll.difficulty : undefined}
+                          actorLabel={`Actor — ${roll.participantName}`}
+                          actorMainPreview={mainPreview}
+                          actorPendingLabels={mainPreview.pendingModifierLabels}
+                          actorSupportPreview={supportPreview}
+                          cleanPendingText
+                          comparison={roll.comparison}
+                          opponentOpen={false}
+                          showPendingLabels={false}
+                        />
+                      </section>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div style={{ display: "grid", gap: "0.75rem" }}>
+                <div>No skill rolls assigned.</div>
+                <div style={rollBlockShellStyle}>
+                  <strong>Local roll 1</strong>
                   <section style={rollEditorStyle}>
                     <div style={rollControlsStackStyle}>
                       <section style={rollControlsStyle}>
                         <div style={rollControlRowStyle}>
                           <span>Use:</span>
                           <label>
-                            <input checked={roll.useGenMod} disabled readOnly type="checkbox" /> Gen
+                            <input
+                              checked={playerLocalRollDraft.useGenMod}
+                              onChange={(event) =>
+                                setPlayerLocalRollDraft((currentDraft) => ({
+                                  ...currentDraft,
+                                  useGenMod: event.target.checked,
+                                }))
+                              }
+                              type="checkbox"
+                            />{" "}
+                            Gen
                           </label>
                           <label>
-                            <input checked={roll.useObSkillMod} disabled readOnly type="checkbox" /> OB/Skill
+                            <input
+                              checked={playerLocalRollDraft.useObSkillMod}
+                              onChange={(event) =>
+                                setPlayerLocalRollDraft((currentDraft) => ({
+                                  ...currentDraft,
+                                  useObSkillMod: event.target.checked,
+                                }))
+                              }
+                              type="checkbox"
+                            />{" "}
+                            OB/Skill
                           </label>
                           <label>
-                            <input checked={roll.useDbMod} disabled readOnly type="checkbox" /> DB
+                            <input
+                              checked={playerLocalRollDraft.useDbMod}
+                              onChange={(event) =>
+                                setPlayerLocalRollDraft((currentDraft) => ({
+                                  ...currentDraft,
+                                  useDbMod: event.target.checked,
+                                }))
+                              }
+                              type="checkbox"
+                            />{" "}
+                            DB
                           </label>
                           <label style={compactControlStyle}>
                             <span>Other mod</span>
                             <input
-                              readOnly
+                              onChange={(event) =>
+                                setPlayerLocalRollDraft((currentDraft) => ({
+                                  ...currentDraft,
+                                  otherModInput: event.target.value,
+                                  otherModTouched: true,
+                                  roll: undefined,
+                                }))
+                              }
                               style={{ ...compactInputStyle, width: "4.5rem" }}
-                              value={roll.otherMod}
+                              type="number"
+                              value={localOtherModInput}
                             />
                           </label>
                         </div>
@@ -2076,30 +2426,126 @@ export function PlayerRoleplayingEncounterScreen({
                           <div style={playerRollSkillColumnsStyle}>
                             <label style={compactControlStyle}>
                               <span>Category</span>
-                              <select disabled style={compactInputStyle} value={categoryLabel}>
-                                <option value={categoryLabel}>{categoryLabel}</option>
+                              <select
+                                onChange={(event) => {
+                                  const nextCategoryId = event.target
+                                    .value as PlayerLocalRollDraft["skillCategoryId"];
+                                  const nextSkillOptions =
+                                    nextCategoryId === "all"
+                                      ? localAllSkillOptions
+                                      : localAllSkillOptions.filter(
+                                          (skill) => skill.categoryId === nextCategoryId,
+                                        );
+
+                                  setPlayerLocalRollDraft((currentDraft) => ({
+                                    ...currentDraft,
+                                    otherModInput: applyUnknownSkillDefaultOtherMod({
+                                      currentValue: currentDraft.otherModInput,
+                                      selectedSkill: nextSkillOptions[0],
+                                      touched: currentDraft.otherModTouched,
+                                    }),
+                                    roll: undefined,
+                                    skillCategoryId: nextCategoryId,
+                                    skillId: nextSkillOptions[0]?.id ?? "",
+                                  }));
+                                }}
+                                style={compactInputStyle}
+                                value={playerLocalRollDraft.skillCategoryId}
+                              >
+                                <option value="all">All categories</option>
+                                {getPlayerFacingSkillBucketDefinitions()
+                                  .filter((category) =>
+                                    localAllSkillOptions.some(
+                                      (skill) => skill.categoryId === category.id,
+                                    ),
+                                  )
+                                  .map((category) => (
+                                    <option key={category.id} value={category.id}>
+                                      {category.label}
+                                    </option>
+                                  ))}
                               </select>
                             </label>
                             <label style={compactControlStyle}>
                               <span>Skill</span>
-                              <select disabled style={compactSkillInputStyle} value={roll.skillId}>
-                                <option value={roll.skillId}>
-                                  {roll.skillLabel} ({roll.skillValue ?? 0})
-                                </option>
+                              <select
+                                disabled={localSkillOptions.length === 0}
+                                onChange={(event) =>
+                                  setPlayerLocalRollDraft((currentDraft) => ({
+                                    ...currentDraft,
+                                    otherModInput: applyUnknownSkillDefaultOtherMod({
+                                      currentValue: currentDraft.otherModInput,
+                                      selectedSkill: localSkillOptions.find(
+                                        (skill) => skill.id === event.target.value,
+                                      ),
+                                      touched: currentDraft.otherModTouched,
+                                    }),
+                                    roll: undefined,
+                                    skillId: event.target.value,
+                                  }))
+                                }
+                                style={compactSkillInputStyle}
+                                value={localSelectedSkill?.id ?? ""}
+                              >
+                                {localSkillOptions.length > 0 ? (
+                                  localSkillOptions.map((skill) => (
+                                    <option key={skill.id} value={skill.id}>
+                                      {skill.label} ({skill.value ?? 0})
+                                    </option>
+                                  ))
+                                ) : (
+                                  <option value="">No skills available</option>
+                                )}
                               </select>
                             </label>
                             <label style={compactControlStyle}>
                               <span>Support category</span>
-                              <select disabled style={compactInputStyle} value="assigned">
-                                <option value="assigned">{roll.supportSkillLabel ? "Assigned" : "None"}</option>
+                              <select
+                                onChange={(event) =>
+                                  setPlayerLocalRollDraft((currentDraft) => ({
+                                    ...currentDraft,
+                                    roll: undefined,
+                                    supportSkillCategoryId: event.target
+                                      .value as PlayerLocalRollDraft["supportSkillCategoryId"],
+                                    supportSkillId: "",
+                                  }))
+                                }
+                                style={compactInputStyle}
+                                value={playerLocalRollDraft.supportSkillCategoryId}
+                              >
+                                <option value="all">All categories</option>
+                                {getPlayerFacingSkillBucketDefinitions()
+                                  .filter((category) =>
+                                    localAllSkillOptions.some(
+                                      (skill) => skill.categoryId === category.id,
+                                    ),
+                                  )
+                                  .map((category) => (
+                                    <option key={category.id} value={category.id}>
+                                      {category.label}
+                                    </option>
+                                  ))}
                               </select>
                             </label>
                             <label style={compactControlStyle}>
                               <span>Support</span>
-                              <select disabled style={compactSkillInputStyle} value={roll.supportSkillLabel ?? ""}>
-                                <option value={roll.supportSkillLabel ?? ""}>
-                                  {roll.supportSkillLabel ?? "No support skill"}
-                                </option>
+                              <select
+                                onChange={(event) =>
+                                  setPlayerLocalRollDraft((currentDraft) => ({
+                                    ...currentDraft,
+                                    roll: undefined,
+                                    supportSkillId: event.target.value,
+                                  }))
+                                }
+                                style={compactSkillInputStyle}
+                                value={localSelectedSupportSkill?.id ?? ""}
+                              >
+                                <option value="">No support skill</option>
+                                {localSupportSkillOptions.map((skill) => (
+                                  <option key={skill.id} value={skill.id}>
+                                    {skill.label} ({skill.value ?? 0})
+                                  </option>
+                                ))}
                               </select>
                             </label>
                           </div>
@@ -2107,336 +2553,124 @@ export function PlayerRoleplayingEncounterScreen({
                         <div style={rollFieldRowStyle}>
                           <label style={compactControlStyle}>
                             <span>Level</span>
-                            <select disabled style={compactInputStyle} value={roll.difficultyLabel}>
-                              <option value={roll.difficultyLabel}>{roll.difficultyLabel}</option>
+                            <select
+                              onChange={(event) =>
+                                setPlayerLocalRollDraft((currentDraft) => ({
+                                  ...currentDraft,
+                                  difficulty: event.target
+                                    .value as PlayerLocalRollDraft["difficulty"],
+                                  opponentParticipantId:
+                                    event.target.value === "none"
+                                      ? currentDraft.opponentParticipantId
+                                      : "",
+                                  roll: undefined,
+                                }))
+                              }
+                              style={compactInputStyle}
+                              value={playerLocalRollDraft.difficulty}
+                            >
+                              <option value="none">No level</option>
+                              {roleplayDifficultyOptions.map((option) => (
+                                <option key={option.id} value={option.id}>
+                                  {option.label}
+                                </option>
+                              ))}
                             </select>
                           </label>
                           <label style={compactControlStyle}>
                             <span>Opponent</span>
-                            <input
-                              readOnly
+                            <select
+                              onChange={(event) =>
+                                setPlayerLocalRollDraft((currentDraft) => ({
+                                  ...currentDraft,
+                                  difficulty: event.target.value ? "none" : currentDraft.difficulty,
+                                  opponentParticipantId: event.target.value,
+                                  roll: undefined,
+                                }))
+                              }
                               style={compactInputStyle}
-                              value={roll.mode === "opposed" ? roll.opponentLabel ?? "Opposed" : "No opponent"}
-                            />
+                              value={playerLocalRollDraft.opponentParticipantId}
+                            >
+                              <option value="">No opponent</option>
+                              {playerView.visibleParticipants.map((participant) => (
+                                <option key={participant.id} value={participant.id}>
+                                  {participant.name}
+                                </option>
+                              ))}
+                            </select>
                           </label>
-                          <button disabled={Boolean(roll.result)} onClick={() => void handlePlayerRoll(roll.id)} type="button">
-                            {roll.supportSkillLabel ? "Roll both 1d20s" : "Roll 1d20"}
+                          <button
+                            disabled={
+                              !canUsePlayerActions ||
+                              !controlledParticipant ||
+                              !localSelectedSkill ||
+                              Boolean(playerLocalRollDraft.opponentParticipantId)
+                            }
+                            onClick={() => void handleLocalPlayerRoll()}
+                            type="button"
+                          >
+                            {localSelectedSupportSkill ? "Roll both 1d20s" : "Roll 1d20"}
                           </button>
                         </div>
-                        {assignedSkillProfile && !assignedSkillProfile.known ? (
-                          <div style={{ color: "#8a5a00", fontSize: "0.85rem" }}>
-                            Skill not known (-3 default).
-                          </div>
-                        ) : null}
-                        {assignedSupportSkillProfile && !assignedSupportSkillProfile.known ? (
-                          <div style={{ color: "#8a5a00", fontSize: "0.85rem" }}>
-                            {assignedSupportSkillProfile.skillName}: Skill not known (-3 default).
-                          </div>
-                        ) : null}
+                        {[localSelectedSkill, localSelectedSupportSkill]
+                          .filter((skill): skill is SkillOption =>
+                            Boolean(skill?.profile && !skill.profile.known),
+                          )
+                          .map((skill) => (
+                            <div key={skill.id} style={{ color: "#8a5a00", fontSize: "0.85rem" }}>
+                              {skill.label}: Skill not known (-3 default).
+                            </div>
+                          ))}
                       </section>
                     </div>
                     <RoleplayRollCalculationPanel
-                      actorDifficulty={roll.mode === "difficulty" ? roll.difficulty : undefined}
-                      actorLabel={`Actor — ${roll.participantName}`}
-                      actorMainPreview={mainPreview}
-                      actorPendingLabels={mainPreview.pendingModifierLabels}
-                      actorSupportPreview={supportPreview}
+                      actorDifficulty={
+                        playerLocalRollDraft.difficulty === "none" ||
+                        playerLocalRollDraft.opponentParticipantId
+                          ? undefined
+                          : playerLocalRollDraft.difficulty
+                      }
+                      actorMainPreview={localPreview}
+                      actorSupportPreview={localSupportPreview}
                       cleanPendingText
-                      comparison={roll.comparison}
                       opponentOpen={false}
                       showPendingLabels={false}
                     />
                   </section>
                 </div>
-              );
-            })}
-          </div>
-        ) : (
-          <div style={{ display: "grid", gap: "0.75rem" }}>
-            <div>No skill rolls assigned.</div>
-            <div style={rollBlockShellStyle}>
-              <strong>Local roll 1</strong>
-              <section style={rollEditorStyle}>
-                <div style={rollControlsStackStyle}>
-                  <section style={rollControlsStyle}>
-                    <div style={rollControlRowStyle}>
-                      <span>Use:</span>
-                      <label>
-                        <input
-                          checked={playerLocalRollDraft.useGenMod}
-                          onChange={(event) =>
-                            setPlayerLocalRollDraft((currentDraft) => ({
-                              ...currentDraft,
-                              useGenMod: event.target.checked,
-                            }))
-                          }
-                          type="checkbox"
-                        /> Gen
-                      </label>
-                      <label>
-                        <input
-                          checked={playerLocalRollDraft.useObSkillMod}
-                          onChange={(event) =>
-                            setPlayerLocalRollDraft((currentDraft) => ({
-                              ...currentDraft,
-                              useObSkillMod: event.target.checked,
-                            }))
-                          }
-                          type="checkbox"
-                        /> OB/Skill
-                      </label>
-                      <label>
-                        <input
-                          checked={playerLocalRollDraft.useDbMod}
-                          onChange={(event) =>
-                            setPlayerLocalRollDraft((currentDraft) => ({
-                              ...currentDraft,
-                              useDbMod: event.target.checked,
-                            }))
-                          }
-                          type="checkbox"
-                        /> DB
-                      </label>
-                      <label style={compactControlStyle}>
-                        <span>Other mod</span>
-                        <input
-                          onChange={(event) =>
-                            setPlayerLocalRollDraft((currentDraft) => ({
-                              ...currentDraft,
-                              otherModInput: event.target.value,
-                              otherModTouched: true,
-                              roll: undefined,
-                            }))
-                          }
-                          style={{ ...compactInputStyle, width: "4.5rem" }}
-                          type="number"
-                          value={localOtherModInput}
-                        />
-                      </label>
-                    </div>
-                    <div style={rollFieldRowStyle}>
-                      <div style={playerRollSkillColumnsStyle}>
-                        <label style={compactControlStyle}>
-                          <span>Category</span>
-                          <select
-                            onChange={(event) => {
-                              const nextCategoryId = event.target.value as PlayerLocalRollDraft["skillCategoryId"];
-                              const nextSkillOptions =
-                                nextCategoryId === "all"
-                                  ? localAllSkillOptions
-                                  : localAllSkillOptions.filter((skill) => skill.categoryId === nextCategoryId);
+              </div>
+            )}
+          </section>
 
-                              setPlayerLocalRollDraft((currentDraft) => ({
-                                ...currentDraft,
-                                otherModInput: applyUnknownSkillDefaultOtherMod({
-                                  currentValue: currentDraft.otherModInput,
-                                  selectedSkill: nextSkillOptions[0],
-                                  touched: currentDraft.otherModTouched,
-                                }),
-                                roll: undefined,
-                                skillCategoryId: nextCategoryId,
-                                skillId: nextSkillOptions[0]?.id ?? "",
-                              }));
-                            }}
-                            style={compactInputStyle}
-                            value={playerLocalRollDraft.skillCategoryId}
-                          >
-                            <option value="all">All categories</option>
-                            {getPlayerFacingSkillBucketDefinitions()
-                              .filter((category) => localAllSkillOptions.some((skill) => skill.categoryId === category.id))
-                              .map((category) => (
-                                <option key={category.id} value={category.id}>
-                                  {category.label}
-                                </option>
-                              ))}
-                          </select>
-                        </label>
-                        <label style={compactControlStyle}>
-                          <span>Skill</span>
-                          <select
-                            disabled={localSkillOptions.length === 0}
-                            onChange={(event) =>
-                              setPlayerLocalRollDraft((currentDraft) => ({
-                                ...currentDraft,
-                                otherModInput: applyUnknownSkillDefaultOtherMod({
-                                  currentValue: currentDraft.otherModInput,
-                                  selectedSkill: localSkillOptions.find((skill) => skill.id === event.target.value),
-                                  touched: currentDraft.otherModTouched,
-                                }),
-                                roll: undefined,
-                                skillId: event.target.value,
-                              }))
-                            }
-                            style={compactSkillInputStyle}
-                            value={localSelectedSkill?.id ?? ""}
-                          >
-                            {localSkillOptions.length > 0 ? (
-                              localSkillOptions.map((skill) => (
-                                <option key={skill.id} value={skill.id}>
-                                  {skill.label} ({skill.value ?? 0})
-                                </option>
-                              ))
-                            ) : (
-                              <option value="">No skills available</option>
-                            )}
-                          </select>
-                        </label>
-                        <label style={compactControlStyle}>
-                          <span>Support category</span>
-                          <select
-                            onChange={(event) =>
-                              setPlayerLocalRollDraft((currentDraft) => ({
-                                ...currentDraft,
-                                roll: undefined,
-                                supportSkillCategoryId: event.target.value as PlayerLocalRollDraft["supportSkillCategoryId"],
-                                supportSkillId: "",
-                              }))
-                            }
-                            style={compactInputStyle}
-                            value={playerLocalRollDraft.supportSkillCategoryId}
-                          >
-                            <option value="all">All categories</option>
-                            {getPlayerFacingSkillBucketDefinitions()
-                              .filter((category) => localAllSkillOptions.some((skill) => skill.categoryId === category.id))
-                              .map((category) => (
-                                <option key={category.id} value={category.id}>
-                                  {category.label}
-                                </option>
-                              ))}
-                          </select>
-                        </label>
-                        <label style={compactControlStyle}>
-                          <span>Support</span>
-                          <select
-                            onChange={(event) =>
-                              setPlayerLocalRollDraft((currentDraft) => ({
-                                ...currentDraft,
-                                roll: undefined,
-                                supportSkillId: event.target.value,
-                              }))
-                            }
-                            style={compactSkillInputStyle}
-                            value={localSelectedSupportSkill?.id ?? ""}
-                          >
-                            <option value="">No support skill</option>
-                            {localSupportSkillOptions.map((skill) => (
-                              <option key={skill.id} value={skill.id}>
-                                {skill.label} ({skill.value ?? 0})
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                      </div>
-                    </div>
-                    <div style={rollFieldRowStyle}>
-                      <label style={compactControlStyle}>
-                        <span>Level</span>
-                        <select
-                          onChange={(event) =>
-                            setPlayerLocalRollDraft((currentDraft) => ({
-                              ...currentDraft,
-                              difficulty: event.target.value as PlayerLocalRollDraft["difficulty"],
-                              opponentParticipantId: event.target.value === "none" ? currentDraft.opponentParticipantId : "",
-                              roll: undefined,
-                            }))
-                          }
-                          style={compactInputStyle}
-                          value={playerLocalRollDraft.difficulty}
-                        >
-                          <option value="none">No level</option>
-                          {roleplayDifficultyOptions.map((option) => (
-                            <option key={option.id} value={option.id}>
-                              {option.label}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <label style={compactControlStyle}>
-                        <span>Opponent</span>
-                        <select
-                          onChange={(event) =>
-                            setPlayerLocalRollDraft((currentDraft) => ({
-                              ...currentDraft,
-                              difficulty: event.target.value ? "none" : currentDraft.difficulty,
-                              opponentParticipantId: event.target.value,
-                              roll: undefined,
-                            }))
-                          }
-                          style={compactInputStyle}
-                          value={playerLocalRollDraft.opponentParticipantId}
-                        >
-                          <option value="">No opponent</option>
-                          {playerView.visibleParticipants.map((participant) => (
-                            <option key={participant.id} value={participant.id}>
-                              {participant.name}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <button
-                        disabled={!controlledParticipant || !localSelectedSkill || Boolean(playerLocalRollDraft.opponentParticipantId)}
-                        onClick={() => void handleLocalPlayerRoll()}
-                        type="button"
-                      >
-                        {localSelectedSupportSkill ? "Roll both 1d20s" : "Roll 1d20"}
-                      </button>
-                    </div>
-                    {[localSelectedSkill, localSelectedSupportSkill]
-                      .filter((skill): skill is SkillOption => Boolean(skill?.profile && !skill.profile.known))
-                      .map((skill) => (
-                        <div key={skill.id} style={{ color: "#8a5a00", fontSize: "0.85rem" }}>
-                          {skill.label}: Skill not known (-3 default).
-                        </div>
-                      ))}
-                  </section>
-                </div>
-                <RoleplayRollCalculationPanel
-                  actorDifficulty={
-                    playerLocalRollDraft.difficulty === "none" || playerLocalRollDraft.opponentParticipantId
-                      ? undefined
-                      : playerLocalRollDraft.difficulty
-                  }
-                  actorMainPreview={localPreview}
-                  actorSupportPreview={localSupportPreview}
-                  cleanPendingText
-                  opponentOpen={false}
-                  showPendingLabels={false}
-                />
-              </section>
-            </div>
-          </div>
-        )}
-      </section>
+          <section style={panelStyle}>
+            <h2 style={{ margin: 0 }}>Ranked roll results</h2>
+            {visibleRankedResults.length > 0 ? (
+              <ol style={{ margin: 0, paddingLeft: "1.5rem" }}>
+                {visibleRankedResults.map((entry) => (
+                  <li key={entry.id}>
+                    {entry.participantName} · {entry.skillLabel} · total {entry.total}
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <div>No player-visible ranked results yet.</div>
+            )}
+          </section>
 
-      <section style={panelStyle}>
-        <h2 style={{ margin: 0 }}>Ranked roll results</h2>
-        {visibleRankedResults.length > 0 ? (
-          <ol style={{ margin: 0, paddingLeft: "1.5rem" }}>
-            {visibleRankedResults.map((entry) => (
-              <li key={entry.id}>
-                {entry.participantName} · {entry.skillLabel} · total {entry.total}
-              </li>
-            ))}
-          </ol>
-        ) : (
-          <div>No player-visible ranked results yet.</div>
-        )}
-      </section>
-
-      <section style={panelStyle}>
-        <h2 style={{ margin: 0 }}>Character log</h2>
-        {playerView.characterLog.length > 0 ? (
-          <ul style={{ display: "grid", gap: "0.35rem", margin: 0, paddingLeft: "1.25rem" }}>
-            {playerView.characterLog.map((entry) => (
-              <li key={entry.id}>
-                {formatShortDateTime(entry.timestamp)} · {entry.detail}
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <div>No character log entries yet.</div>
-        )}
-      </section>
+          <section style={panelStyle}>
+            <h2 style={{ margin: 0 }}>Character log</h2>
+            {playerView.characterLog.length > 0 ? (
+              <ul style={{ display: "grid", gap: "0.35rem", margin: 0, paddingLeft: "1.25rem" }}>
+                {playerView.characterLog.map((entry) => (
+                  <li key={entry.id}>
+                    {formatShortDateTime(entry.timestamp)} · {entry.detail}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <div>No character log entries yet.</div>
+            )}
+          </section>
         </>
       ) : null}
     </section>
