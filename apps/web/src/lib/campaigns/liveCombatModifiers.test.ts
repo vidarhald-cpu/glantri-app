@@ -72,6 +72,32 @@ describe("live combat modifiers", () => {
     ).toBe(20 - expectedAdjustment!);
   });
 
+  it("documents workbook live modifier results for zero, shield, and combined defense bases", () => {
+    expect(lookupWorkbookPercentageAdjustment(0, 1)).toBe(0);
+    expect(
+      applyLiveRawModifierToCombatValue({
+        baseValue: 0,
+        rawModifier: -1,
+      }),
+    ).toBe(0);
+
+    expect(lookupWorkbookPercentageAdjustment(14, 1)).toBe(1);
+    expect(
+      applyLiveRawModifierToCombatValue({
+        baseValue: 14,
+        rawModifier: -1,
+      }),
+    ).toBe(13);
+
+    expect(lookupWorkbookPercentageAdjustment(15, 1)).toBe(2);
+    expect(
+      applyLiveRawModifierToCombatValue({
+        baseValue: 15,
+        rawModifier: -1,
+      }),
+    ).toBe(13);
+  });
+
   it("adds manual OB/Skill and DB context totals while keeping General/Fatigue effect-owned", () => {
     const summary = buildEncounterLiveCombatModifierSummary({
       combatContext: {
