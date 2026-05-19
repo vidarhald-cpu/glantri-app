@@ -10,11 +10,15 @@ function readSource(): string {
 }
 
 describe("CampaignWorkspaceShell roleplay encounter routing", () => {
-  it("routes player roleplay encounters to the player roleplaying screen", () => {
+  it("routes shared Encounter and Skill rolls tabs through player-safe roleplay surfaces", () => {
     const source = readSource();
 
     expect(source).toContain("PlayerRoleplayingEncounterScreen");
-    expect(source).toContain('activeEncounter?.kind === "roleplay"');
+    expect(source).toContain('workspaceState.activeTab === "encounter"');
+    expect(source).toContain('workspaceState.activeTab === "skill-rolls"');
+    expect(source).toContain('surface="encounter"');
+    expect(source).toContain('surface="skill-rolls"');
+    expect(source).toContain("EncounterDetail");
     expect(source).toContain("ScenarioPlayerCombatPageContent");
     expect(source).toContain("loadScenarioParticipants");
     expect(source).toContain("loadScenarioMyParticipant");
@@ -28,7 +32,8 @@ describe("CampaignWorkspaceShell roleplay encounter routing", () => {
     expect(source).toContain("Available scenarios");
     expect(source).toContain('tab: "scenario"');
     expect(source).toContain("No active scenario is currently available.");
-    expect(source).toContain("No player encounter is currently available.");
+    expect(source).toContain("No encounter is currently available.");
+    expect(source).toContain("No skill rolls are currently available.");
     expect(source).toContain("Waiting for GM to add you to an encounter.");
     expect(source).toContain("You are in this scenario, but not assigned to this encounter.");
     expect(source).toContain("refreshWorkspaceContextWithErrorHandling");
@@ -52,17 +57,14 @@ describe("CampaignWorkspaceShell roleplay encounter routing", () => {
 
     expect(source).toContain('workspaceState.activeTab === "combat"');
     expect(source).toContain("CombatRoundManagerPanel");
-    expect(source).toContain('activeEncounter?.kind === "combat"');
-    expect(source).toContain("activeScenarioCombatEncounters");
-    expect(source).toContain("sortedActiveScenarioCombatEncounters");
+    expect(source).toContain("canAccessGmEncounter && activeEncounter");
+    expect(source).toContain("sortedActiveScenarioEncounters");
     expect(source).toContain("Select an encounter to open the Combat Round Manager.");
-    expect(source).toContain("The selected encounter is roleplaying.");
-    expect(source).toContain("Select or create a combat encounter to use the Combat Round Manager.");
-    expect(source).toContain("Create combat encounter on Scenario tab");
+    expect(source).toContain("Create or open an encounter on Scenario tab");
     expect(source).toContain("onEncounterUpdated");
     expect(source).toContain("ScenarioPlayerCombatPageContent");
     expect(source).toContain('workspaceTab="combat"');
     expect(source).toContain("Select a scenario to open the combat panel.");
-    expect(source).toContain("No combat encounter is currently available.");
+    expect(source).toContain("No encounter is currently available for combat tools.");
   });
 });

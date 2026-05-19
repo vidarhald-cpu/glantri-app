@@ -78,21 +78,21 @@ function scenarioParticipant(input: {
 }
 
 describe("campaign workspace", () => {
-  it("keeps the intended left-to-right tab order and hides the GM tab for players", () => {
+  it("keeps the intended left-to-right shared workspace tab order", () => {
     expect(
       buildCampaignWorkspaceTabs({ canAccessGmEncounter: true }).map((tab) => tab.id)
     ).toEqual([
       "campaign",
       "scenario",
-      "gm-encounter",
-      "player-encounter",
+      "encounter",
+      "skill-rolls",
       "character",
       "combat",
     ]);
 
     expect(
       buildCampaignWorkspaceTabs({ canAccessGmEncounter: false }).map((tab) => tab.id)
-    ).toEqual(["campaign", "scenario", "player-encounter", "character", "combat"]);
+    ).toEqual(["campaign", "scenario", "encounter", "skill-rolls", "character", "combat"]);
   });
 
   it("opens the Character tab against the active scenario context", () => {
@@ -108,6 +108,28 @@ describe("campaign workspace", () => {
 
     expect(state.activeScenarioId).toBe("scn-1");
     expect(state.activeTab).toBe("character");
+  });
+
+  it("opens the Skill rolls tab against the selected encounter context", () => {
+    const state = resolveCampaignWorkspaceState({
+      activeCampaignId: "camp-1",
+      canAccessGmEncounter: true,
+      encounters: [
+        encounter({
+          id: "enc-1",
+          scenarioId: "scn-1",
+          status: "active",
+        }),
+      ],
+      requestedEncounterId: "enc-1",
+      requestedScenarioId: "scn-1",
+      requestedTab: "skill-rolls",
+      scenarios: [scenario({ id: "scn-1", name: "Session one" })],
+    });
+
+    expect(state.activeScenarioId).toBe("scn-1");
+    expect(state.activeEncounterId).toBe("enc-1");
+    expect(state.activeTab).toBe("skill-rolls");
   });
 
   it("opens the Combat tab against the active scenario context", () => {
@@ -140,7 +162,7 @@ describe("campaign workspace", () => {
     expect(state.activeTab).toBe("combat");
   });
 
-  it("auto-selects the only combat encounter when a GM opens the Combat tab", () => {
+  it("keeps the GM Combat tab in selection mode when multiple encounters are available", () => {
     const state = resolveCampaignWorkspaceState({
       activeCampaignId: "camp-1",
       canAccessGmEncounter: true,
@@ -165,7 +187,7 @@ describe("campaign workspace", () => {
     });
 
     expect(state.activeScenarioId).toBe("scn-1");
-    expect(state.activeEncounterId).toBe("combat-encounter");
+    expect(state.activeEncounterId).toBeUndefined();
     expect(state.activeTab).toBe("combat");
   });
 
@@ -363,7 +385,7 @@ describe("campaign workspace", () => {
 
     expect(state.activeScenarioId).toBe("scn-1");
     expect(state.activeEncounterId).toBe("enc-1");
-    expect(state.activeTab).toBe("player-encounter");
+    expect(state.activeTab).toBe("encounter");
   });
 
   it("restores a remembered player encounter when the encounter remains visible to the player", () => {
@@ -398,7 +420,7 @@ describe("campaign workspace", () => {
 
     expect(state.activeScenarioId).toBe("scn-1");
     expect(state.activeEncounterId).toBe("enc-1");
-    expect(state.activeTab).toBe("player-encounter");
+    expect(state.activeTab).toBe("encounter");
   });
 
   it("falls back to the scenario tab when the encounter is missing but the scenario is still valid", () => {
@@ -482,7 +504,7 @@ describe("campaign workspace", () => {
 
     expect(state.activeScenarioId).toBe("scn-1");
     expect(state.activeEncounterId).toBe("enc-active");
-    expect(state.activeTab).toBe("player-encounter");
+    expect(state.activeTab).toBe("encounter");
   });
 
   it("uses active scenario participants as the default player access list for empty encounters", () => {
@@ -513,7 +535,7 @@ describe("campaign workspace", () => {
 
     expect(state.activeScenarioId).toBe("scn-1");
     expect(state.activeEncounterId).toBe("enc-empty");
-    expect(state.activeTab).toBe("player-encounter");
+    expect(state.activeTab).toBe("encounter");
   });
 
   it("does not use inactive scenario participants for empty encounter player access", () => {
@@ -545,7 +567,7 @@ describe("campaign workspace", () => {
 
     expect(state.activeScenarioId).toBe("scn-1");
     expect(state.activeEncounterId).toBeUndefined();
-    expect(state.activeTab).toBe("player-encounter");
+    expect(state.activeTab).toBe("encounter");
   });
 
   it("does not fall back when explicit membership mode has an empty list", () => {
@@ -576,7 +598,7 @@ describe("campaign workspace", () => {
 
     expect(state.activeScenarioId).toBe("scn-1");
     expect(state.activeEncounterId).toBeUndefined();
-    expect(state.activeTab).toBe("player-encounter");
+    expect(state.activeTab).toBe("encounter");
   });
 
   it("keeps explicit encounter membership strict once participants are assigned", () => {
@@ -612,7 +634,7 @@ describe("campaign workspace", () => {
 
     expect(state.activeScenarioId).toBe("scn-1");
     expect(state.activeEncounterId).toBeUndefined();
-    expect(state.activeTab).toBe("player-encounter");
+    expect(state.activeTab).toBe("encounter");
   });
 
   it("invalidates remembered fallback access when explicit membership later excludes the player", () => {
@@ -666,7 +688,7 @@ describe("campaign workspace", () => {
 
     expect(fallbackState.activeEncounterId).toBe("enc-changing");
     expect(explicitState.activeEncounterId).toBeUndefined();
-    expect(explicitState.activeTab).toBe("player-encounter");
+    expect(explicitState.activeTab).toBe("encounter");
   });
 
   it("keeps the player encounter tab for a waiting state when no assigned encounter exists", () => {
@@ -697,6 +719,6 @@ describe("campaign workspace", () => {
 
     expect(state.activeScenarioId).toBe("scn-1");
     expect(state.activeEncounterId).toBeUndefined();
-    expect(state.activeTab).toBe("player-encounter");
+    expect(state.activeTab).toBe("encounter");
   });
 });

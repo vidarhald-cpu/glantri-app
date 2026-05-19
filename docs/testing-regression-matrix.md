@@ -88,7 +88,7 @@ invariants there, but avoid brittle tests that freeze current layout, section
 order, table order, or exact button placement:
 
 - GM Scenario screen
-- GM/Player Encounter screens
+- Encounter and Skill rolls workspace screens
 - Roleplay encounter roll UI
 - Combat encounter UI
 

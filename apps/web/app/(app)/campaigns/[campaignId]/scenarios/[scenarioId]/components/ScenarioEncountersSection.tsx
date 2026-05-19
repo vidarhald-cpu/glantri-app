@@ -130,20 +130,20 @@ export function ScenarioEncountersSection({
                           campaignId,
                           encounterId: encounter.id,
                           scenarioId,
-                          tab: "gm-encounter",
+                          tab: "encounter",
                         })}
                       >
-                        GM
+                        Encounter
                       </Link>
                       <Link
                         href={buildCampaignWorkspaceHref({
                           campaignId,
                           encounterId: encounter.id,
                           scenarioId,
-                          tab: "player-encounter",
+                          tab: "skill-rolls",
                         })}
                       >
-                        Player
+                        Skill rolls
                       </Link>
                     </div>
                   </td>

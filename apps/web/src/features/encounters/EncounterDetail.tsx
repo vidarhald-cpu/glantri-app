@@ -48,6 +48,7 @@ interface EncounterDetailProps {
   campaignId?: string;
   embedded?: boolean;
   id: string;
+  surface?: "encounter" | "full" | "skill-rolls";
   scenarioId?: string;
 }
 
@@ -96,6 +97,7 @@ export default function EncounterDetail({
   campaignId,
   embedded = false,
   id,
+  surface = "full",
   scenarioId
 }: EncounterDetailProps) {
   const [adHocName, setAdHocName] = useState("");
@@ -295,7 +297,7 @@ export default function EncounterDetail({
         campaignId: campaignId as string,
         encounterId: id,
         scenarioId: scenarioId as string,
-        tab: "player-encounter",
+        tab: "encounter",
       })
     : undefined;
 
@@ -522,7 +524,7 @@ export default function EncounterDetail({
     );
   }
 
-  if (encounter.kind === "roleplay") {
+  if (encounter.kind === "roleplay" || surface === "encounter" || surface === "skill-rolls") {
     return (
       <GmRoleplayingEncounterScreen
         campaignId={campaignId}
@@ -533,6 +535,7 @@ export default function EncounterDetail({
         scenario={scenarioRecord}
         scenarioId={scenarioId}
         scenarioParticipants={scenarioParticipants}
+        surface={surface === "full" ? undefined : surface}
       />
     );
   }
@@ -546,7 +549,7 @@ export default function EncounterDetail({
           campaignId={campaignId as string}
           encounterId={id}
           scenarioId={scenarioId as string}
-          tab="gm-encounter"
+          tab="encounter"
         />
       ) : null}
       {!embedded ? (
@@ -573,7 +576,7 @@ export default function EncounterDetail({
         <h1 style={{ marginBottom: "0.5rem" }}>{encounter.title}</h1>
         <p style={{ margin: 0 }}>
           {isNestedScenarioFlow
-            ? "GM encounter management for this scenario, with round scaffolding, declarations, turn order, and the handoff point to the player combat screen."
+            ? "Encounter management for this scenario, with round scaffolding, declarations, turn order, and the handoff point to the player combat screen."
             : "Legacy local encounter shell with participant summaries, round declarations, manual turn ordering, and position/orientation placeholders for future combat resolution work."}
         </p>
       </div>
@@ -614,7 +617,7 @@ export default function EncounterDetail({
             <div style={{ display: "grid", gap: "0.25rem" }}>
               <h2 style={{ margin: 0 }}>GM combat test view</h2>
               <div style={{ color: "#5e5a50" }}>
-                Shared scenario participant declarations for the canonical GM encounter workspace.
+                Shared scenario participant declarations for the canonical encounter workspace.
               </div>
             </div>
             <button

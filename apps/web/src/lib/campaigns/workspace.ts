@@ -5,8 +5,10 @@ import { isUserAssignedToEffectiveEncounter } from "./encounterParticipantFallba
 export type CampaignWorkspaceTabId =
   | "campaign"
   | "scenario"
+  | "encounter"
   | "gm-encounter"
   | "player-encounter"
+  | "skill-rolls"
   | "character"
   | "combat";
 
@@ -33,8 +35,8 @@ export interface CampaignWorkspaceHrefInput {
 const orderedTabs: CampaignWorkspaceTab[] = [
   { id: "campaign", label: "Campaign" },
   { id: "scenario", label: "Scenario" },
-  { id: "gm-encounter", label: "GM Encounter" },
-  { id: "player-encounter", label: "Player Encounter" },
+  { id: "encounter", label: "Encounter" },
+  { id: "skill-rolls", label: "Skill rolls" },
   { id: "character", label: "Character" },
   { id: "combat", label: "Combat" }
 ];
@@ -65,18 +67,16 @@ export function buildCampaignWorkspaceHref(input: CampaignWorkspaceHrefInput): s
 export function buildCampaignWorkspaceTabs(input: {
   canAccessGmEncounter: boolean;
 }): CampaignWorkspaceTab[] {
-  return orderedTabs.filter(
-    (tab) => input.canAccessGmEncounter || tab.id !== "gm-encounter"
-  );
+  void input;
+  return orderedTabs;
 }
 
 function resolveFallbackCampaignWorkspaceTab(input: {
   activeEncounterId?: string;
   activeScenarioId?: string;
-  canAccessGmEncounter: boolean;
 }): CampaignWorkspaceTabId {
   if (input.activeEncounterId && input.activeScenarioId) {
-    return input.canAccessGmEncounter ? "gm-encounter" : "player-encounter";
+    return "encounter";
   }
 
   if (input.activeScenarioId) {
@@ -95,7 +95,6 @@ function resolveRequestedCampaignWorkspaceTab(input: {
   const fallbackTab = resolveFallbackCampaignWorkspaceTab({
     activeEncounterId: input.activeEncounterId,
     activeScenarioId: input.activeScenarioId,
-    canAccessGmEncounter: input.canAccessGmEncounter,
   });
 
   switch (input.requestedTab) {
@@ -103,18 +102,25 @@ function resolveRequestedCampaignWorkspaceTab(input: {
       return "campaign";
     case "scenario":
       return input.activeScenarioId || !input.canAccessGmEncounter ? "scenario" : "campaign";
-    case "gm-encounter":
+    case "encounter":
+    case "player-encounter":
       if (!input.activeScenarioId || !input.activeEncounterId) {
+        return input.canAccessGmEncounter ? fallbackTab : "encounter";
+      }
+
+      return "encounter";
+    case "gm-encounter":
+      if (!input.canAccessGmEncounter) {
         return fallbackTab;
       }
 
-      return input.canAccessGmEncounter ? "gm-encounter" : "player-encounter";
-    case "player-encounter":
-      if (!input.canAccessGmEncounter) {
-        return "player-encounter";
-      }
-
-      return input.activeScenarioId && input.activeEncounterId ? "player-encounter" : fallbackTab;
+      return input.activeScenarioId && input.activeEncounterId ? "encounter" : fallbackTab;
+    case "skill-rolls":
+      return input.activeScenarioId && input.activeEncounterId
+        ? "skill-rolls"
+        : input.canAccessGmEncounter
+          ? fallbackTab
+          : "skill-rolls";
     case "character":
       return input.activeScenarioId ? "character" : fallbackTab;
     case "combat":
@@ -194,17 +200,16 @@ function resolveGmCombatEncounterSelection(input: {
   encounters: EncounterSession[];
   requestedEncounterId?: string | null;
 }): EncounterSession | undefined {
-  const combatEncounters = input.encounters
+  const candidateEncounters = input.encounters
     .filter((encounter) => !input.activeScenarioId || encounter.scenarioId === input.activeScenarioId)
-    .filter((encounter) => encounter.kind === "combat")
     .filter((encounter) => encounter.status !== "archived");
 
   if (input.requestedEncounterId) {
-    return combatEncounters.find((encounter) => encounter.id === input.requestedEncounterId);
+    return candidateEncounters.find((encounter) => encounter.id === input.requestedEncounterId);
   }
 
-  if (combatEncounters.length === 1) {
-    return combatEncounters[0];
+  if (candidateEncounters.length === 1) {
+    return candidateEncounters[0];
   }
 
   return undefined;
@@ -244,17 +249,27 @@ export function resolveCampaignWorkspaceState(input: {
   if (!input.canAccessGmEncounter) {
     if (
       !activeScenarioId &&
-      (requestedTab === "scenario" || requestedTab === "character" || requestedTab === "combat") &&
+      (
+        requestedTab === "scenario" ||
+        requestedTab === "character" ||
+        requestedTab === "combat" ||
+        requestedTab === "encounter" ||
+        requestedTab === "skill-rolls"
+      ) &&
       input.scenarios.length === 1
     ) {
       activeScenarioId = input.scenarios[0]?.id;
     }
 
-    if (!activeScenarioId && requestedTab === "player-encounter" && input.scenarios.length === 1) {
+    if (
+      !activeScenarioId &&
+      (requestedTab === "player-encounter" || requestedTab === "encounter" || requestedTab === "skill-rolls") &&
+      input.scenarios.length === 1
+    ) {
       activeScenarioId = input.scenarios[0]?.id;
     }
 
-    if (requestedTab === "player-encounter") {
+    if (requestedTab === "player-encounter" || requestedTab === "encounter" || requestedTab === "skill-rolls") {
       const playerEncounter = resolvePlayerEncounterSelection({
         activeScenarioId,
         encounters: input.encounters,
@@ -283,14 +298,11 @@ export function resolveCampaignWorkspaceState(input: {
         )
       : undefined;
 
-    if (!explicitlyRequestedEncounter || explicitlyRequestedEncounter.kind === "combat") {
+    if (!explicitlyRequestedEncounter) {
       const combatEncounter = resolveGmCombatEncounterSelection({
         activeScenarioId,
         encounters: input.encounters,
-        requestedEncounterId:
-          explicitlyRequestedEncounter?.kind === "combat"
-            ? explicitlyRequestedEncounter.id
-            : undefined,
+        requestedEncounterId: undefined,
       });
 
       activeEncounterId = combatEncounter?.id;

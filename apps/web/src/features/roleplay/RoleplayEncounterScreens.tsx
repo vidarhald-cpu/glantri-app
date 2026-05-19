@@ -99,6 +99,7 @@ interface GmRoleplayingEncounterScreenProps {
   scenario?: Scenario | null;
   scenarioId?: string;
   scenarioParticipants: ScenarioParticipant[];
+  surface?: "encounter" | "full" | "skill-rolls";
 }
 
 interface PlayerRoleplayingEncounterScreenProps {
@@ -106,6 +107,7 @@ interface PlayerRoleplayingEncounterScreenProps {
   embedded?: boolean;
   encounterId: string;
   scenarioId: string;
+  surface?: "encounter" | "full" | "skill-rolls";
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -557,6 +559,7 @@ export function GmRoleplayingEncounterScreen({
   scenario,
   scenarioId,
   scenarioParticipants,
+  surface = "full",
 }: GmRoleplayingEncounterScreenProps) {
   const roleplayState = normalizeRoleplayState(encounter);
   const roster = useMemo(
@@ -1416,6 +1419,9 @@ export function GmRoleplayingEncounterScreen({
   const rankedRollResults = rankVisibleRollResults(
     dedupeRankedRoleplayEntries([...currentRankedRollResults, ...serverRankedRollResults])
   );
+  const showEncounterContext = surface !== "skill-rolls";
+  const showSkillRollTools = surface !== "encounter";
+  const rememberedTab = surface === "skill-rolls" ? "skill-rolls" : "encounter";
 
   return (
     <section style={{ display: "grid", gap: "1rem", maxWidth: 1120 }}>
@@ -1424,7 +1430,7 @@ export function GmRoleplayingEncounterScreen({
           campaignId={campaignId}
           encounterId={encounter.id}
           scenarioId={scenarioId}
-          tab="gm-encounter"
+          tab={rememberedTab}
         />
       ) : null}
       {!embedded && campaignId && scenarioId ? (
@@ -1432,95 +1438,103 @@ export function GmRoleplayingEncounterScreen({
           Back to scenario
         </Link>
       ) : null}
-      <RoleplayTopInfo
-        campaignName={campaignName}
-        encounter={encounter}
-        scenarioName={scenario?.name}
-      />
+      {showEncounterContext ? (
+        <>
+          <RoleplayTopInfo
+            campaignName={campaignName}
+            encounter={encounter}
+            scenarioName={scenario?.name}
+          />
 
-      <GmMessageSection
-        gmMessageDraft={gmMessageDraft}
-        onChange={(message) => {
-          setGmMessageDirty(true);
-          setGmMessageDraft(message);
-        }}
-        onSave={handleSaveGmMessage}
-      />
+          <GmMessageSection
+            gmMessageDraft={gmMessageDraft}
+            onChange={(message) => {
+              setGmMessageDirty(true);
+              setGmMessageDraft(message);
+            }}
+            onSave={handleSaveGmMessage}
+          />
 
-      <VisibilityGridSection
-        onSelectAllVisibility={handleSelectAllVisibility}
-        onVisibilityChange={handleVisibilityChange}
-        roster={roster}
-        state={roleplayState}
-      />
+          <VisibilityGridSection
+            onSelectAllVisibility={handleSelectAllVisibility}
+            onVisibilityChange={handleVisibilityChange}
+            roster={roster}
+            state={roleplayState}
+          />
 
-      <ParticipantDescriptionsSection
-        onSave={handleDescriptionSave}
-        roster={roster}
-        state={roleplayState}
-      />
+          <ParticipantDescriptionsSection
+            onSave={handleDescriptionSave}
+            roster={roster}
+            state={roleplayState}
+          />
+        </>
+      ) : null}
 
-      <section style={panelStyle}>
-        <div style={{ alignItems: "center", display: "flex", justifyContent: "space-between", gap: "0.75rem" }}>
-          <h2 style={{ margin: 0 }}>Skill roll assignment</h2>
-          <button onClick={() => void resetRollDrafts()} type="button">
-            Clear
-          </button>
-        </div>
-        <div style={{ display: "grid", gap: "0.75rem" }}>
-          {rollDrafts.map((draft, index) => {
-            const context = getRollDraftContext(draft);
-            const comparison =
-              context.preview && context.opponentPreview
-                ? compareRoleplayOpposedRolls({
-                    actorLabel: context.participant?.label ?? "Actor",
-                    actorPreview: context.preview,
-                    opponentLabel: context.opponent?.label ?? "Opponent",
-                    opponentPreview: context.opponentPreview,
-                  }).summary
-                : undefined;
+      {showSkillRollTools ? (
+        <>
+          <section style={panelStyle}>
+            <div style={{ alignItems: "center", display: "flex", justifyContent: "space-between", gap: "0.75rem" }}>
+              <h2 style={{ margin: 0 }}>Skill roll assignment</h2>
+              <button onClick={() => void resetRollDrafts()} type="button">
+                Clear
+              </button>
+            </div>
+            <div style={{ display: "grid", gap: "0.75rem" }}>
+              {rollDrafts.map((draft, index) => {
+                const context = getRollDraftContext(draft);
+                const comparison =
+                  context.preview && context.opponentPreview
+                    ? compareRoleplayOpposedRolls({
+                        actorLabel: context.participant?.label ?? "Actor",
+                        actorPreview: context.preview,
+                        opponentLabel: context.opponent?.label ?? "Opponent",
+                        opponentPreview: context.opponentPreview,
+                      }).summary
+                    : undefined;
 
-            return (
-              <RoleplayRollBlock
-                applyUnknownSkillDefaultOtherMod={applyUnknownSkillDefaultOtherMod}
-                comparison={comparison}
-                context={context}
-                draft={draft}
-                index={index}
-                key={draft.id}
-                onActorParticipantChange={handleActorParticipantChange}
-                onAssignSkillRoll={handleAssignSkillRoll}
-                onGmRoll={handleGmRoll}
-                onUpdateRollDraft={updateRollDraft}
-                roster={roster}
-              />
-            );
-          })}
-          <button
-            onClick={() =>
-              setRollDrafts((currentDrafts) => [
-                ...currentDrafts,
-                makeRollDraft({
-                  participantId: roster[0]?.id,
-                  rollSetId: currentGmRollStackId,
-                  skillId: initialSkillId,
-                }),
-              ])
-            }
-            type="button"
-          >
-            Add roll
-          </button>
-        </div>
-        <div style={{ color: "#5e5a50" }}>
-          GM Roll uses the roleplay open-ended d20 table for non-opposed skill rolls.
-          Gen, OB/Skill, and DB flags remain visible placeholder modifiers until numeric sources are defined.
-        </div>
-      </section>
+                return (
+                  <RoleplayRollBlock
+                    applyUnknownSkillDefaultOtherMod={applyUnknownSkillDefaultOtherMod}
+                    comparison={comparison}
+                    context={context}
+                    draft={draft}
+                    index={index}
+                    key={draft.id}
+                    onActorParticipantChange={handleActorParticipantChange}
+                    onAssignSkillRoll={handleAssignSkillRoll}
+                    onGmRoll={handleGmRoll}
+                    onUpdateRollDraft={updateRollDraft}
+                    roster={roster}
+                  />
+                );
+              })}
+              <button
+                onClick={() =>
+                  setRollDrafts((currentDrafts) => [
+                    ...currentDrafts,
+                    makeRollDraft({
+                      participantId: roster[0]?.id,
+                      rollSetId: currentGmRollStackId,
+                      skillId: initialSkillId,
+                    }),
+                  ])
+                }
+                type="button"
+              >
+                Add roll
+              </button>
+            </div>
+            <div style={{ color: "#5e5a50" }}>
+              GM Roll uses the roleplay open-ended d20 table for non-opposed skill rolls.
+              Gen, OB/Skill, and DB flags remain visible placeholder modifiers until numeric sources are defined.
+            </div>
+          </section>
 
-      <RankedRollResultsSection entries={rankedRollResults} roster={roster} />
+          <RankedRollResultsSection entries={rankedRollResults} roster={roster} />
 
-      <RoleplayActionLogSection entries={roleplayState.actionLog} />
+          <RoleplayActionLogSection entries={roleplayState.actionLog} />
+        </>
+      ) : null}
     </section>
   );
 }
@@ -1530,6 +1544,7 @@ export function PlayerRoleplayingEncounterScreen({
   embedded = false,
   encounterId,
   scenarioId,
+  surface = "full",
 }: PlayerRoleplayingEncounterScreenProps) {
   const [campaign, setCampaign] = useState<Campaign | null>(null);
   const [content, setContent] = useState<Awaited<ReturnType<typeof loadCanonicalContent>>>();
@@ -1667,6 +1682,9 @@ export function PlayerRoleplayingEncounterScreen({
     encounter,
     scenarioParticipants,
   });
+  const showEncounterContext = surface !== "skill-rolls";
+  const showSkillRollTools = surface !== "encounter";
+  const rememberedTab = surface === "skill-rolls" ? "skill-rolls" : "encounter";
 
   if (currentUser && playerView.controlledParticipantIds.length === 0) {
     return (
@@ -1675,7 +1693,7 @@ export function PlayerRoleplayingEncounterScreen({
           campaignId={campaignId}
           encounterId={encounterId}
           scenarioId={scenarioId}
-          tab="player-encounter"
+          tab={rememberedTab}
         />
         {!embedded ? (
           <Link href={buildCampaignWorkspaceHref({ campaignId, scenarioId, tab: "scenario" })}>
@@ -1884,86 +1902,91 @@ export function PlayerRoleplayingEncounterScreen({
     );
     setFeedback(`Rolled ${localSelectedSkill.label}: total ${preview.numericSubtotal ?? "unresolved"}.`);
   }
-
   return (
     <section style={{ display: "grid", gap: "1rem", maxWidth: 980 }}>
       <RememberedCampaignWorkspaceEffect
         campaignId={campaignId}
         encounterId={encounterId}
         scenarioId={scenarioId}
-        tab="player-encounter"
+        tab={rememberedTab}
       />
       {!embedded ? (
         <Link href={buildCampaignWorkspaceHref({ campaignId, scenarioId, tab: "scenario" })}>
           Back to scenario
         </Link>
       ) : null}
-      <PlayerEncounterTopInfo
-        campaignName={campaign?.name}
-        encounter={encounter}
-        scenarioName={scenario?.name}
-      />
       {feedback ? <section style={panelStyle}>{feedback}</section> : null}
-      {playerView.gmMessage ? (
-        <section style={panelStyle}>
-          <h2 style={{ margin: 0 }}>Situation</h2>
-          <div
-            aria-readonly="true"
-            ref={situationRef}
-            role="textbox"
-            style={{
-              ...playerReadOnlyPanelStyle,
-              maxHeight: "16rem",
-              minHeight: "8rem",
-              overflowY: "auto",
-            }}
-          >
-            {playerView.gmMessage}
-          </div>
-        </section>
+      {showEncounterContext ? (
+        <>
+          <PlayerEncounterTopInfo
+            campaignName={campaign?.name}
+            encounter={encounter}
+            scenarioName={scenario?.name}
+          />
+          {playerView.gmMessage ? (
+            <section style={panelStyle}>
+              <h2 style={{ margin: 0 }}>Situation</h2>
+              <div
+                aria-readonly="true"
+                ref={situationRef}
+                role="textbox"
+                style={{
+                  ...playerReadOnlyPanelStyle,
+                  maxHeight: "16rem",
+                  minHeight: "8rem",
+                  overflowY: "auto",
+                }}
+              >
+                {playerView.gmMessage}
+              </div>
+            </section>
+          ) : null}
+
+          <section style={panelStyle}>
+            <h2 style={{ margin: 0 }}>PCs and NPCs</h2>
+            {currentUser ? (
+              playerView.visibleParticipants.length > 0 ? (
+                <div style={{ maxHeight: "30rem", overflow: "auto" }}>
+                  <table style={{ borderCollapse: "collapse", minWidth: 720, width: "100%" }}>
+                    <colgroup>
+                      <col style={{ width: "22%" }} />
+                      <col style={{ width: "22%" }} />
+                      <col style={{ width: "56%" }} />
+                    </colgroup>
+                    <thead>
+                      <tr style={{ borderBottom: "1px solid #d9ddd8", textAlign: "left" }}>
+                        <th style={{ padding: "0.5rem 0.75rem 0.5rem 0" }}>Short description</th>
+                        <th style={{ padding: "0.5rem 0.75rem" }}>Name</th>
+                        <th style={{ padding: "0.5rem 0.75rem" }}>Description</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {playerView.visibleParticipants.map((participant) => (
+                        <tr key={participant.id} style={{ borderBottom: "1px solid #eee8dc" }}>
+                          <td style={{ padding: "0.6rem 0.75rem 0.6rem 0" }}>
+                            {participant.shortDescription || "—"}
+                          </td>
+                          <td style={{ padding: "0.6rem 0.75rem" }}>{participant.name}</td>
+                          <td style={{ padding: "0.6rem 0.75rem" }}>
+                            {participant.description || "—"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div>No other visible participants.</div>
+              )
+            ) : (
+              <div>Sign in to view player-visible encounter participants.</div>
+            )}
+          </section>
+        </>
       ) : null}
 
-      <section style={panelStyle}>
-        <h2 style={{ margin: 0 }}>PCs and NPCs</h2>
-        {currentUser ? (
-          playerView.visibleParticipants.length > 0 ? (
-            <div style={{ maxHeight: "30rem", overflow: "auto" }}>
-              <table style={{ borderCollapse: "collapse", minWidth: 720, width: "100%" }}>
-                <colgroup>
-                  <col style={{ width: "22%" }} />
-                  <col style={{ width: "22%" }} />
-                  <col style={{ width: "56%" }} />
-                </colgroup>
-                <thead>
-                  <tr style={{ borderBottom: "1px solid #d9ddd8", textAlign: "left" }}>
-                    <th style={{ padding: "0.5rem 0.75rem 0.5rem 0" }}>Short description</th>
-                    <th style={{ padding: "0.5rem 0.75rem" }}>Name</th>
-                    <th style={{ padding: "0.5rem 0.75rem" }}>Description</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {playerView.visibleParticipants.map((participant) => (
-                    <tr key={participant.id} style={{ borderBottom: "1px solid #eee8dc" }}>
-                      <td style={{ padding: "0.6rem 0.75rem 0.6rem 0" }}>
-                        {participant.shortDescription || "—"}
-                      </td>
-                      <td style={{ padding: "0.6rem 0.75rem" }}>{participant.name}</td>
-                      <td style={{ padding: "0.6rem 0.75rem" }}>
-                        {participant.description || "—"}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <div>No other visible participants.</div>
-          )
-        ) : (
-          <div>Sign in to view player-visible encounter participants.</div>
-        )}
-      </section>
-
+      {showSkillRollTools ? (
+        <>
       <section style={panelStyle}>
         <div style={{ alignItems: "center", display: "flex", justifyContent: "space-between", gap: "0.75rem" }}>
           <h2 style={{ margin: 0 }}>Skill roll grid</h2>
@@ -2414,6 +2437,8 @@ export function PlayerRoleplayingEncounterScreen({
           <div>No character log entries yet.</div>
         )}
       </section>
+        </>
+      ) : null}
     </section>
   );
 }

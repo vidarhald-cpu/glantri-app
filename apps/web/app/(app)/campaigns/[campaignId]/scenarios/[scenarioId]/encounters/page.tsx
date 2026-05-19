@@ -18,7 +18,7 @@ export default async function ScenarioEncountersPage({
     buildCampaignWorkspaceHref({
       campaignId,
       scenarioId,
-      tab: "gm-encounter",
+      tab: "encounter",
     }),
   );
 }

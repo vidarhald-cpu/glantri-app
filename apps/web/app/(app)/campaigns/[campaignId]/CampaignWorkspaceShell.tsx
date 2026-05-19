@@ -228,14 +228,13 @@ export default function CampaignWorkspaceShell({
     encounters,
     scenarioId: workspaceState.activeScenarioId,
   });
-  const activeScenarioCombatEncounters = activeScenarioEncounters.filter(
-    (encounter) => encounter.kind === "combat" && encounter.status !== "archived",
-  );
-  const sortedActiveScenarioCombatEncounters = [...activeScenarioCombatEncounters].sort(
-    (left, right) =>
-      getEncounterStatusRank(left.status) - getEncounterStatusRank(right.status) ||
-      left.title.localeCompare(right.title),
-  );
+  const sortedActiveScenarioEncounters = [...activeScenarioEncounters]
+    .filter((encounter) => encounter.status !== "archived")
+    .sort(
+      (left, right) =>
+        getEncounterStatusRank(left.status) - getEncounterStatusRank(right.status) ||
+        left.title.localeCompare(right.title),
+    );
   const activeScenario = scenarios.find(
     (scenario) => scenario.id === workspaceState.activeScenarioId
   );
@@ -329,9 +328,13 @@ export default function CampaignWorkspaceShell({
         searchParams.get("encounterId") ?? workspaceState.activeEncounterId ?? null,
       participantId:
         requestedTabFromUrl === "player-encounter" ||
+        requestedTabFromUrl === "encounter" ||
+        requestedTabFromUrl === "skill-rolls" ||
         requestedTabFromUrl === "character" ||
         requestedTabFromUrl === "combat" ||
         workspaceState.activeTab === "player-encounter" ||
+        workspaceState.activeTab === "encounter" ||
+        workspaceState.activeTab === "skill-rolls" ||
         workspaceState.activeTab === "character" ||
         workspaceState.activeTab === "combat"
           ? searchParams.get("participantId")
@@ -509,45 +512,54 @@ export default function CampaignWorkspaceShell({
         </section>
       ) : null}
 
-      {accessMode !== "none" && workspaceState.activeTab === "gm-encounter" ? (
+      {accessMode !== "none" && workspaceState.activeTab === "encounter" ? (
         <section style={{ display: "grid", gap: "1rem" }}>
-          {workspaceState.activeScenarioId && workspaceState.activeEncounterId ? (
+          {workspaceState.activeScenarioId && workspaceState.activeEncounterId && canAccessGmEncounter ? (
             <EncounterDetail
               campaignId={campaignId}
               embedded
               id={workspaceState.activeEncounterId}
+              surface="encounter"
               scenarioId={workspaceState.activeScenarioId}
             />
-          ) : (
-            <section style={panelStyle}>
-              Select a scenario and encounter from the workspace picker to open the GM encounter
-              tab.
-            </section>
-          )}
-        </section>
-      ) : null}
-
-      {accessMode !== "none" && workspaceState.activeTab === "player-encounter" ? (
-        <section style={{ display: "grid", gap: "1rem" }}>
-          {workspaceState.activeScenarioId && workspaceState.activeEncounterId && activeEncounter?.kind === "roleplay" ? (
+          ) : workspaceState.activeScenarioId && workspaceState.activeEncounterId ? (
             <PlayerRoleplayingEncounterScreen
               campaignId={campaignId}
               embedded
               encounterId={workspaceState.activeEncounterId}
               scenarioId={workspaceState.activeScenarioId}
-            />
-          ) : workspaceState.activeScenarioId && workspaceState.activeEncounterId ? (
-            <ScenarioPlayerCombatPageContent
-              campaignId={campaignId}
-              encounterId={workspaceState.activeEncounterId}
-              embedded
-              encounterTitle={activeEncounter?.title}
-              participantId={searchParams.get("participantId") ?? undefined}
-              scenarioId={workspaceState.activeScenarioId}
+              surface="encounter"
             />
           ) : (
             <section style={panelStyle}>
-              <strong>No player encounter is currently available.</strong>
+              <strong>No encounter is currently available.</strong>
+              <div>{playerEncounterEmptyDetail}</div>
+            </section>
+          )}
+        </section>
+      ) : null}
+
+      {accessMode !== "none" && workspaceState.activeTab === "skill-rolls" ? (
+        <section style={{ display: "grid", gap: "1rem" }}>
+          {workspaceState.activeScenarioId && workspaceState.activeEncounterId && canAccessGmEncounter ? (
+            <EncounterDetail
+              campaignId={campaignId}
+              embedded
+              id={workspaceState.activeEncounterId}
+              surface="skill-rolls"
+              scenarioId={workspaceState.activeScenarioId}
+            />
+          ) : workspaceState.activeScenarioId && workspaceState.activeEncounterId ? (
+            <PlayerRoleplayingEncounterScreen
+              campaignId={campaignId}
+              embedded
+              encounterId={workspaceState.activeEncounterId}
+              scenarioId={workspaceState.activeScenarioId}
+              surface="skill-rolls"
+            />
+          ) : (
+            <section style={panelStyle}>
+              <strong>No skill rolls are currently available.</strong>
               <div>{playerEncounterEmptyDetail}</div>
               {workspaceState.activeScenarioId ? (
                 <Link
@@ -566,7 +578,7 @@ export default function CampaignWorkspaceShell({
                       key={scenario.id}
                       href={buildWorkspaceHref({
                         scenarioId: scenario.id,
-                        tab: "player-encounter",
+                        tab: "skill-rolls",
                       })}
                     >
                       {scenario.name}
@@ -606,13 +618,13 @@ export default function CampaignWorkspaceShell({
 
       {accessMode !== "none" && workspaceState.activeTab === "combat" ? (
         <section style={{ display: "grid", gap: "1rem" }}>
-          {canAccessGmEncounter && activeEncounter?.kind === "combat" ? (
+          {canAccessGmEncounter && activeEncounter ? (
             <>
-              {sortedActiveScenarioCombatEncounters.length > 1 ? (
+              {sortedActiveScenarioEncounters.length > 1 ? (
                 <section style={panelStyle}>
-                  <strong>Combat encounters</strong>
+                  <strong>Encounters</strong>
                   <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
-                    {sortedActiveScenarioCombatEncounters.map((encounter) => (
+                    {sortedActiveScenarioEncounters.map((encounter) => (
                       <Link
                         key={encounter.id}
                         href={buildWorkspaceHref({
@@ -640,19 +652,10 @@ export default function CampaignWorkspaceShell({
             </>
           ) : canAccessGmEncounter ? (
             <section style={panelStyle}>
-              {activeEncounter?.kind === "roleplay" ? (
-                <>
-                  <strong>The selected encounter is roleplaying.</strong>
-                  <div>
-                    Select or create a combat encounter to use the Combat Round Manager.
-                  </div>
-                </>
-              ) : (
-                <strong>Select an encounter to open the Combat Round Manager.</strong>
-              )}
-              {sortedActiveScenarioCombatEncounters.length > 0 ? (
+              <strong>Select an encounter to open the Combat Round Manager.</strong>
+              {sortedActiveScenarioEncounters.length > 0 ? (
                 <div style={{ display: "grid", gap: "0.5rem" }}>
-                  {sortedActiveScenarioCombatEncounters.map((encounter) => (
+                  {sortedActiveScenarioEncounters.map((encounter) => (
                     <Link
                       key={encounter.id}
                       href={buildWorkspaceHref({
@@ -667,7 +670,7 @@ export default function CampaignWorkspaceShell({
                 </div>
               ) : (
                 <>
-                  <div>No combat encounter is currently available.</div>
+                  <div>No encounter is currently available for combat tools.</div>
                   {workspaceState.activeScenarioId ? (
                     <Link
                       href={buildWorkspaceHref({
@@ -675,7 +678,7 @@ export default function CampaignWorkspaceShell({
                         tab: "scenario",
                       })}
                     >
-                      Create combat encounter on Scenario tab
+                      Create or open an encounter on Scenario tab
                     </Link>
                   ) : null}
                 </>

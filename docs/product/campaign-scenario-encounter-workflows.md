@@ -12,7 +12,7 @@ Campaign is the broad container for play. It manages the campaign roster, campai
 
 Scenario is a concrete story situation inside a campaign. It manages the actors who are currently part of that scenario and the scenario-level setup used by encounters.
 
-Encounter is a specific moment of play inside a scenario. It manages the actors who are present in that encounter, the current player-facing situation, and encounter-specific resolution such as roleplay rolls or combat.
+Encounter is a specific moment of play inside a scenario. It manages the actors who are present in that encounter, the current player-facing situation, access, membership, visibility, and participant descriptions. Skill rolls, Character, and Combat are tools used inside that shared encounter context rather than separate encounter universes.
 
 ## Campaign Workspace
 
@@ -61,7 +61,7 @@ Player responsibilities:
 - Review player-safe scenario information.
 - See active scenario participants that are safe for the player to know about.
 - See accessible encounters when the player has an assigned or default-eligible participant.
-- Open the Player Encounter when available.
+- Open the Encounter when available.
 
 Current design rules:
 
@@ -90,17 +90,28 @@ GM responsibilities:
 - Set the player-facing situation message.
 - Control encounter participant membership when needed.
 - Manage visibility between participants.
-- Assign and resolve roleplay rolls.
-- Run combat encounter tools when applicable.
-- Review action logs, hidden data, and GM-only roll information.
+- Maintain participant names, short descriptions, and detailed encounter descriptions.
 
 Player responsibilities:
 
 - Read the player-facing encounter title, context, and situation.
 - See only visible PCs/NPCs.
-- Resolve assigned non-silent rolls for the player's controlled participant.
-- Review player-safe ranked results and character log entries.
 - Receive clear empty states when not assigned or when no encounter is available.
+
+The current workspace tabs should read:
+
+- Campaign
+- Scenario
+- Encounter
+- Skill rolls
+- Character
+- Combat
+
+Skill rolls are the encounter roll tool. They own GM skill roll assignment, calculations, ranked roll results, the GM action log, player assigned roll cards, player-safe ranked results, and the character roll log.
+
+Character is the encounter participant state/control tool. It owns the current character loadout and Physical state panel for the selected/controlled participant.
+
+Combat is the encounter round/action manager tool. It should be reachable for the selected encounter when the GM wants to use combat flow; roleplay and combat are not separate encounter universes.
 
 Combat Panel is part of the Encounter workflow. It is separate from Character control for now: Character control tracks the current character/loadout/physical state, while the Combat Panel is the scenario or encounter workspace for combat action context. Future damage tracking, round recording, and combat-effect automation should build on these workflows without rendering inactive placeholders.
 
@@ -113,7 +124,7 @@ Current design rules:
 - If an encounter has never had explicit participant membership, the app may internally treat active concrete scenario participants as eligible for access.
 - Once explicit encounter membership is controlled, player access should follow explicit encounter membership only.
 
-Player Encounter pages should not show:
+Player-facing Encounter pages should not show:
 
 - GM-only notes.
 - GM action log.
@@ -178,6 +189,8 @@ Campaign pages should focus on campaign availability and navigation.
 
 Scenario pages should focus on concrete scenario actors, accessible encounters, and player-safe scenario context.
 
-Encounter pages should focus on the current moment of play, player-safe visibility, assigned rolls, current results, and concise logs.
+Encounter pages should focus on the current moment of play, player-safe visibility, situation, and visible participants.
+
+Skill rolls pages should focus on assigned rolls, current ranked results, and concise roll logs.
 
 Player pages should always prefer safety over completeness. If the system cannot confidently show something without revealing GM-only information, it should show less.

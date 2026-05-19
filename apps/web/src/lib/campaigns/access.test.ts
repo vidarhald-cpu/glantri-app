@@ -163,13 +163,13 @@ describe("campaign access", () => {
       rememberedEncounterId: "encounter-1",
       rememberedParticipantId: "participant-1",
       rememberedScenarioId: "scenario-1",
-      rememberedTab: "player-encounter",
+      rememberedTab: "encounter",
     });
 
     expect(destination).toEqual({
       clearRememberedCampaign: false,
       href:
-        "/campaigns/campaign-1?tab=player-encounter&scenarioId=scenario-1&encounterId=encounter-1&participantId=participant-1",
+        "/campaigns/campaign-1?tab=encounter&scenarioId=scenario-1&encounterId=encounter-1&participantId=participant-1",
     });
   });
 });
