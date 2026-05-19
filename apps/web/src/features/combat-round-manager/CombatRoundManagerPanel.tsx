@@ -51,6 +51,10 @@ function getNextStepLabel(step: CombatRoundStep): string {
   return stepLabels[nextStep];
 }
 
+function getAdvanceButtonLabel(step: CombatRoundStep): string {
+  return `Commit ${stepLabels[step]} and advance to ${getNextStepLabel(step)}`;
+}
+
 function formatInitiative(value: number | undefined): string {
   return value === undefined ? "init --" : `init ${value}`;
 }
@@ -127,6 +131,9 @@ export default function CombatRoundManagerPanel({
           <div>
             Round {roundState.roundNumber} · Current step: {stepLabels[roundState.currentStep]}
           </div>
+          <div style={{ color: "#5e5a50" }}>
+            Rows are participants. Columns are the round timeline. Select a cell to inspect it.
+          </div>
         </div>
         <section
           aria-label="Step controller"
@@ -142,7 +149,7 @@ export default function CombatRoundManagerPanel({
             onClick={() => void persistRoundState(advanceCombatRoundStep(roundState))}
             type="button"
           >
-            {saving ? "Saving..." : `Advance to ${getNextStepLabel(roundState.currentStep)}`}
+            {saving ? "Saving..." : getAdvanceButtonLabel(roundState.currentStep)}
           </button>
         </section>
       </div>
@@ -166,7 +173,6 @@ export default function CombatRoundManagerPanel({
           <thead>
             <tr>
               <th style={{ padding: "0.45rem", textAlign: "left" }}>Participant</th>
-              <th style={{ padding: "0.45rem", textAlign: "left" }}>Active</th>
               {COMBAT_ROUND_STEPS.map((step) => (
                 <th key={step} style={{ padding: "0.45rem", textAlign: "left" }}>
                   {stepLabels[step]}
@@ -178,29 +184,30 @@ export default function CombatRoundManagerPanel({
             {roundState.participants.map((participant) => (
               <tr key={participant.participantId}>
                 <td style={{ borderTop: "1px solid #e3e1dc", padding: "0.45rem" }}>
-                  {participant.label}
-                </td>
-                <td style={{ borderTop: "1px solid #e3e1dc", padding: "0.45rem" }}>
-                  {roundState.activeParticipantId === participant.participantId ? (
-                    <strong>Active</strong>
-                  ) : (
-                    <button
-                      disabled={saving}
-                      onClick={() =>
-                        void persistRoundState(
-                          setCombatRoundActiveParticipant(roundState, participant.participantId),
-                        )
-                      }
-                      type="button"
-                    >
-                      Set active
-                    </button>
-                  )}
+                  <div style={{ display: "grid", gap: "0.25rem" }}>
+                    <strong>{participant.label}</strong>
+                    {roundState.activeParticipantId === participant.participantId ? (
+                      <span>Active participant</span>
+                    ) : (
+                      <button
+                        disabled={saving}
+                        onClick={() =>
+                          void persistRoundState(
+                            setCombatRoundActiveParticipant(roundState, participant.participantId),
+                          )
+                        }
+                        type="button"
+                      >
+                        Set active
+                      </button>
+                    )}
+                  </div>
                 </td>
                 {COMBAT_ROUND_STEPS.map((step) => {
                   const selected =
                     roundState.selectedParticipantId === participant.participantId &&
                     roundState.selectedStep === step;
+                  const currentStepCell = step === roundState.currentStep;
                   const initiative =
                     step === "initiative_phase_1"
                       ? formatInitiative(participant.initiatives.phase1)
@@ -212,7 +219,7 @@ export default function CombatRoundManagerPanel({
                     <td
                       key={step}
                       style={{
-                        background: selected ? "#efe7d3" : undefined,
+                        background: selected ? "#efe7d3" : currentStepCell ? "#f6f0dd" : undefined,
                         borderTop: "1px solid #e3e1dc",
                         padding: "0.45rem",
                       }}
@@ -224,6 +231,7 @@ export default function CombatRoundManagerPanel({
                           border: "none",
                           color: "#2f5d62",
                           cursor: "pointer",
+                          fontWeight: currentStepCell ? 700 : 400,
                           padding: 0,
                           textAlign: "left",
                         }}
@@ -255,9 +263,14 @@ export default function CombatRoundManagerPanel({
         {inspector.participant ? (
           <>
             <div>
-              <strong>{inspector.participant.label}</strong> · {stepLabels[inspector.step]}
+              Selected cell: <strong>{inspector.participant.label}</strong> · {stepLabels[inspector.step]}
             </div>
             <div>Status: {inspector.status ?? "pending"}</div>
+            <div>
+              {inspector.step === roundState.currentStep
+                ? "This is in the current step. Advance commits this step for the round timeline."
+                : "This is a timeline cell for review or preparation."}
+            </div>
             <div>
               Phase 1 initiative: {formatInitiative(inspector.participant.initiatives.phase1)}
             </div>

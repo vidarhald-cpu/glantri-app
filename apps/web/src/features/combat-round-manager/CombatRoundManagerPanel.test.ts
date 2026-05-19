@@ -16,18 +16,21 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("Combat Round Manager");
     expect(source).toContain("Round {roundState.roundNumber}");
     expect(source).toContain("Current step:");
-    expect(source).toContain("Advance to");
+    expect(source).toContain("Rows are participants. Columns are the round timeline.");
+    expect(source).toContain("Commit");
+    expect(source).toContain("and advance to");
     expect(source).toContain("Step controller");
   });
 
-  it("renders participant step status table and active marker controls", () => {
+  it("renders participants as rows and round steps as timeline columns", () => {
     const source = readSource();
 
     expect(source).toContain("COMBAT_ROUND_STEPS.map");
     expect(source).toContain("Participant");
-    expect(source).toContain("Active");
+    expect(source).toContain("Active participant");
     expect(source).toContain("Set active");
     expect(source).toContain("participant.stepStatuses[step]");
+    expect(source).toContain("step === roundState.currentStep");
   });
 
   it("renders inspector details for the selected participant and step", () => {
@@ -35,6 +38,8 @@ describe("CombatRoundManagerPanel", () => {
 
     expect(source).toContain("Combat round inspector");
     expect(source).toContain("Inspector");
+    expect(source).toContain("Selected cell:");
+    expect(source).toContain("Advance commits this step");
     expect(source).toContain("buildCombatRoundInspector");
     expect(source).toContain("Phase 1 initiative:");
     expect(source).toContain("Phase 2 initiative:");
