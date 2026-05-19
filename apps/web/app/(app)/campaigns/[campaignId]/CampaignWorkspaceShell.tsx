@@ -650,14 +650,14 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
                   embedded
                   encounterId={workspaceState.activeEncounterId}
                   inspectionParticipantId={selectedGmInspectableCandidate.id}
-                  readOnlyInspection
                   scenarioId={workspaceState.activeScenarioId}
                   showWorkspaceHeader={false}
                   surface="skill-rolls"
+                  workspaceTab="player-skill-rolls"
                 />
               ) : (
                 <section style={panelStyle}>
-                  <div>No participant is available for player skill roll inspection.</div>
+                  <div>No participant is available for player skill rolls.</div>
                 </section>
               )}
             </>
@@ -668,6 +668,7 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
               encounterId={workspaceState.activeEncounterId}
               scenarioId={workspaceState.activeScenarioId}
               surface="skill-rolls"
+              workspaceTab="player-skill-rolls"
               workspaceScreenName="Player skill rolls"
             />
           ) : (
@@ -848,7 +849,6 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
                   embedded
                   encounterTitle={activeEncounter.title}
                   participantId={selectedGmInspectableCandidate.id}
-                  readOnlyInspection
                   scenarioId={workspaceState.activeScenarioId}
                   showParticipantSelector={false}
                   showWorkspaceHeader={false}
@@ -856,13 +856,13 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
                 />
               ) : (
                 <section style={panelStyle}>
-                  <div>No participant is available for player combat inspection.</div>
+                  <div>No participant is available for player combat.</div>
                 </section>
               )}
             </>
           ) : canAccessGmEncounter ? (
             <section style={panelStyle}>
-              <strong>Select an encounter to inspect player combat.</strong>
+              <strong>Select an encounter to open player combat.</strong>
               {sortedActiveScenarioEncounters.length > 0 ? (
                 <div style={{ display: "grid", gap: "0.5rem" }}>
                   {sortedActiveScenarioEncounters.map((encounter) => (

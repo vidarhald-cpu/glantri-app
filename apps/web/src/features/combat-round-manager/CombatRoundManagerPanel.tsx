@@ -10,7 +10,6 @@ import {
   advanceCombatRoundStep,
   buildCombatRoundInspector,
   initializeCombatRoundState,
-  setCombatRoundActiveParticipant,
   setCombatRoundSelection,
   sortCombatRoundParticipantsByInitiative,
 } from "@glantri/domain";
@@ -343,24 +342,6 @@ export default function CombatRoundManagerPanel({
                   >
                     <div style={{ display: "grid", gap: "0.25rem" }}>
                       <strong>{participant.label}</strong>
-                      {roundState.activeParticipantId === participant.participantId ? (
-                        <span aria-label={`${participant.label} is active`}>▶ Active</span>
-                      ) : (
-                        <button
-                          disabled={saving}
-                          onClick={() =>
-                            void persistRoundState(
-                              setCombatRoundActiveParticipant(
-                                roundState,
-                                participant.participantId,
-                              ),
-                            )
-                          }
-                          type="button"
-                        >
-                          Set active
-                        </button>
-                      )}
                     </div>
                   </td>
                   {timelineRoundNumbers.flatMap((roundNumber) =>

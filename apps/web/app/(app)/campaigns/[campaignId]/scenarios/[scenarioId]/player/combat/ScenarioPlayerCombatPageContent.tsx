@@ -972,7 +972,6 @@ export default function ScenarioPlayerCombatPageContent({
           </h1>
         ) : null}
         {encounterTitle ? <div>Encounter: {encounterTitle}</div> : null}
-        {readOnlyInspection ? <div>GM player-view inspection is read-only.</div> : null}
         {showParticipantSelector ? (
           <label style={{ display: "grid", gap: "0.25rem", maxWidth: 360 }}>
             <span>Character</span>

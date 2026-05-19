@@ -32,8 +32,8 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("COMBAT_ROUND_STEP_ABBREVIATIONS[step]");
     expect(source).toContain("COMBAT_ROUND_STEP_LABELS[step]");
     expect(source).toContain("Participant");
-    expect(source).toContain("activeParticipantId");
-    expect(source).toContain("Set active");
+    expect(source).not.toContain("Set active");
+    expect(source).not.toContain("▶ Active");
     expect(source).toContain("getStatusMarker");
     expect(source).toContain("participant.stepStatuses[step]");
     expect(source).toContain("step === roundState.currentStep");

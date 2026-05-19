@@ -131,17 +131,19 @@ describe("RoleplayEncounterScreens", () => {
     expect(source).toContain("resolveEncounterParticipantByRollParticipantId");
   });
 
-  it("supports read-only GM inspection of the player-facing Skill rolls screen", () => {
+  it("supports GM operation of the player-facing Skill rolls screen for selected participants", () => {
     const playerSource = readPlayerScreenSource();
 
     expect(playerSource).toContain("inspectionParticipantId");
     expect(playerSource).toContain("readOnlyInspection");
     expect(playerSource).toContain("controlledScenarioParticipantId: inspectedParticipantId");
-    expect(playerSource).toContain("GM player-view inspection is read-only.");
+    expect(playerSource).toContain("const inspectedParticipantId = isGameMaster");
     expect(playerSource).toContain("disabled={!canUsePlayerActions || Boolean(roll.result)}");
     expect(playerSource).toContain("showWorkspaceHeader");
+    expect(playerSource).toContain("workspaceTab");
     expect(playerSource).toContain('workspaceScreenName = "Skill rolls"');
     expect(playerSource).toContain("{workspaceScreenName}");
+    expect(playerSource).not.toContain("GM player-view inspection is read-only.");
   });
 
   it("preserves opposed result matching and player submitted roll identity", () => {

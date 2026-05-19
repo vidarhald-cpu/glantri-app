@@ -23,7 +23,7 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("displayedParticipant?.displayName ? ` — ${displayedParticipant.displayName}`");
     expect(source).toContain("showParticipantSelector = true");
     expect(source).toContain("readOnlyInspection = false");
-    expect(source).toContain("GM player-view inspection is read-only.");
+    expect(source).not.toContain("GM player-view inspection is read-only.");
     expect(source).toContain("controlsDisabled || savingCombatContext");
     expect(source).not.toContain("will appear here in the next phase");
     expect(source).not.toContain("will expand into this area");
