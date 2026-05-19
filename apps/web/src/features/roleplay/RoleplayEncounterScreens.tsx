@@ -112,6 +112,7 @@ interface PlayerRoleplayingEncounterScreenProps {
   scenarioId: string;
   showWorkspaceHeader?: boolean;
   surface?: "encounter" | "full" | "skill-rolls";
+  workspaceScreenName?: string;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -1640,6 +1641,7 @@ export function PlayerRoleplayingEncounterScreen({
   scenarioId,
   showWorkspaceHeader = true,
   surface = "full",
+  workspaceScreenName = "Skill rolls",
 }: PlayerRoleplayingEncounterScreenProps) {
   const [campaign, setCampaign] = useState<Campaign | null>(null);
   const [content, setContent] = useState<Awaited<ReturnType<typeof loadCanonicalContent>>>();
@@ -2066,7 +2068,8 @@ export function PlayerRoleplayingEncounterScreen({
       {showWorkspaceHeader && showSkillRollTools ? (
         <section style={panelStyle}>
           <h2 style={{ margin: 0 }}>
-            Skill rolls{selectedPlayerFacingName ? ` — ${selectedPlayerFacingName}` : ""}
+            {workspaceScreenName}
+            {selectedPlayerFacingName ? ` — ${selectedPlayerFacingName}` : ""}
           </h2>
           {readOnlyInspection ? <div>GM player-view inspection is read-only.</div> : null}
         </section>

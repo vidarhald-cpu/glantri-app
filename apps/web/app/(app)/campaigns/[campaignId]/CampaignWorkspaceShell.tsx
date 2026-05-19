@@ -306,7 +306,10 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
 
   function selectInspectableParticipant(input: {
     participantId: string;
-    tab: Extract<CampaignWorkspaceTabId, "character" | "combat" | "skill-rolls">;
+    tab: Extract<
+      CampaignWorkspaceTabId,
+      "character" | "player-combat" | "player-skill-rolls"
+    >;
   }) {
     router.replace(
       buildWorkspaceHref({
@@ -356,13 +359,17 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
         requestedTabFromUrl === "player-encounter" ||
         requestedTabFromUrl === "encounter" ||
         requestedTabFromUrl === "skill-rolls" ||
+        requestedTabFromUrl === "player-skill-rolls" ||
         requestedTabFromUrl === "character" ||
         requestedTabFromUrl === "combat" ||
+        requestedTabFromUrl === "player-combat" ||
         workspaceState.activeTab === "player-encounter" ||
         workspaceState.activeTab === "encounter" ||
         workspaceState.activeTab === "skill-rolls" ||
+        workspaceState.activeTab === "player-skill-rolls" ||
         workspaceState.activeTab === "character" ||
-        workspaceState.activeTab === "combat"
+        workspaceState.activeTab === "combat" ||
+        workspaceState.activeTab === "player-combat"
           ? searchParams.get("participantId")
           : null,
       scenarioId: searchParams.get("scenarioId") ?? workspaceState.activeScenarioId ?? null,
@@ -573,41 +580,13 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
           {workspaceState.activeScenarioId &&
           workspaceState.activeEncounterId &&
           canAccessGmEncounter ? (
-            <>
-              <WorkspaceParticipantInspectionHeader
-                candidates={gmInspectableCandidates}
-                isGameMaster={canAccessGmEncounter}
-                onSelectParticipantId={(participantId) =>
-                  selectInspectableParticipant({ participantId, tab: "skill-rolls" })
-                }
-                screenName="Skill rolls"
-                selectedCandidate={selectedGmInspectableCandidate}
-              />
-              <EncounterDetail
-                campaignId={campaignId}
-                embedded
-                id={workspaceState.activeEncounterId}
-                surface="skill-rolls"
-                scenarioId={workspaceState.activeScenarioId}
-              />
-              <section style={panelStyle}>
-                <h2 style={{ margin: 0 }}>Player view</h2>
-                {selectedGmInspectableCandidate ? (
-                  <PlayerRoleplayingEncounterScreen
-                    campaignId={campaignId}
-                    embedded
-                    encounterId={workspaceState.activeEncounterId}
-                    inspectionParticipantId={selectedGmInspectableCandidate.id}
-                    readOnlyInspection
-                    scenarioId={workspaceState.activeScenarioId}
-                    showWorkspaceHeader={false}
-                    surface="skill-rolls"
-                  />
-                ) : (
-                  <div>No participant is available for player-view inspection.</div>
-                )}
-              </section>
-            </>
+            <EncounterDetail
+              campaignId={campaignId}
+              embedded
+              id={workspaceState.activeEncounterId}
+              surface="skill-rolls"
+              scenarioId={workspaceState.activeScenarioId}
+            />
           ) : workspaceState.activeScenarioId && workspaceState.activeEncounterId ? (
             <PlayerRoleplayingEncounterScreen
               campaignId={campaignId}
@@ -650,6 +629,81 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
         </section>
       ) : null}
 
+      {accessMode !== "none" && workspaceState.activeTab === "player-skill-rolls" ? (
+        <section style={{ display: "grid", gap: "1rem" }}>
+          {workspaceState.activeScenarioId &&
+          workspaceState.activeEncounterId &&
+          canAccessGmEncounter ? (
+            <>
+              <WorkspaceParticipantInspectionHeader
+                candidates={gmInspectableCandidates}
+                isGameMaster={canAccessGmEncounter}
+                onSelectParticipantId={(participantId) =>
+                  selectInspectableParticipant({ participantId, tab: "player-skill-rolls" })
+                }
+                screenName="Player skill rolls"
+                selectedCandidate={selectedGmInspectableCandidate}
+              />
+              {selectedGmInspectableCandidate ? (
+                <PlayerRoleplayingEncounterScreen
+                  campaignId={campaignId}
+                  embedded
+                  encounterId={workspaceState.activeEncounterId}
+                  inspectionParticipantId={selectedGmInspectableCandidate.id}
+                  readOnlyInspection
+                  scenarioId={workspaceState.activeScenarioId}
+                  showWorkspaceHeader={false}
+                  surface="skill-rolls"
+                />
+              ) : (
+                <section style={panelStyle}>
+                  <div>No participant is available for player skill roll inspection.</div>
+                </section>
+              )}
+            </>
+          ) : workspaceState.activeScenarioId && workspaceState.activeEncounterId ? (
+            <PlayerRoleplayingEncounterScreen
+              campaignId={campaignId}
+              embedded
+              encounterId={workspaceState.activeEncounterId}
+              scenarioId={workspaceState.activeScenarioId}
+              surface="skill-rolls"
+              workspaceScreenName="Player skill rolls"
+            />
+          ) : (
+            <section style={panelStyle}>
+              <strong>No player skill rolls are currently available.</strong>
+              <div>{playerEncounterEmptyDetail}</div>
+              {workspaceState.activeScenarioId ? (
+                <Link
+                  href={buildWorkspaceHref({
+                    scenarioId: workspaceState.activeScenarioId,
+                    tab: "scenario",
+                  })}
+                >
+                  Back to scenario
+                </Link>
+              ) : scenarios.length > 0 ? (
+                <div style={{ display: "grid", gap: "0.5rem" }}>
+                  <div>Choose a scenario to check for player skill rolls.</div>
+                  {scenarios.map((scenario) => (
+                    <Link
+                      key={scenario.id}
+                      href={buildWorkspaceHref({
+                        scenarioId: scenario.id,
+                        tab: "player-skill-rolls",
+                      })}
+                    >
+                      {scenario.name}
+                    </Link>
+                  ))}
+                </div>
+              ) : null}
+            </section>
+          )}
+        </section>
+      ) : null}
+
       {accessMode !== "none" && workspaceState.activeTab === "character" ? (
         <CharacterWorkspacePanel
           activeEncounter={activeEncounter}
@@ -674,15 +728,6 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
         <section style={{ display: "grid", gap: "1rem" }}>
           {canAccessGmEncounter && activeEncounter ? (
             <>
-              <WorkspaceParticipantInspectionHeader
-                candidates={gmInspectableCandidates}
-                isGameMaster={canAccessGmEncounter}
-                onSelectParticipantId={(participantId) =>
-                  selectInspectableParticipant({ participantId, tab: "combat" })
-                }
-                screenName="Combat"
-                selectedCandidate={selectedGmInspectableCandidate}
-              />
               {sortedActiveScenarioEncounters.length > 1 ? (
                 <section style={panelStyle}>
                   <strong>Encounters</strong>
@@ -712,25 +757,6 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
                   );
                 }}
               />
-              <section style={panelStyle}>
-                <h2 style={{ margin: 0 }}>Player combat inspection</h2>
-                {workspaceState.activeScenarioId && selectedGmInspectableCandidate ? (
-                  <ScenarioPlayerCombatPageContent
-                    campaignId={campaignId}
-                    encounterId={workspaceState.activeEncounterId}
-                    embedded
-                    encounterTitle={activeEncounter.title}
-                    participantId={selectedGmInspectableCandidate.id}
-                    readOnlyInspection
-                    scenarioId={workspaceState.activeScenarioId}
-                    showParticipantSelector={false}
-                    showWorkspaceHeader={false}
-                    workspaceTab="combat"
-                  />
-                ) : (
-                  <div>No participant is available for player combat inspection.</div>
-                )}
-              </section>
             </>
           ) : canAccessGmEncounter ? (
             <section style={panelStyle}>
@@ -796,6 +822,96 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
                 </div>
               ) : (
                 <div>No combat encounter is currently available.</div>
+              )}
+            </section>
+          )}
+        </section>
+      ) : null}
+
+      {accessMode !== "none" && workspaceState.activeTab === "player-combat" ? (
+        <section style={{ display: "grid", gap: "1rem" }}>
+          {canAccessGmEncounter && workspaceState.activeScenarioId && activeEncounter ? (
+            <>
+              <WorkspaceParticipantInspectionHeader
+                candidates={gmInspectableCandidates}
+                isGameMaster={canAccessGmEncounter}
+                onSelectParticipantId={(participantId) =>
+                  selectInspectableParticipant({ participantId, tab: "player-combat" })
+                }
+                screenName="Player combat"
+                selectedCandidate={selectedGmInspectableCandidate}
+              />
+              {selectedGmInspectableCandidate ? (
+                <ScenarioPlayerCombatPageContent
+                  campaignId={campaignId}
+                  encounterId={workspaceState.activeEncounterId}
+                  embedded
+                  encounterTitle={activeEncounter.title}
+                  participantId={selectedGmInspectableCandidate.id}
+                  readOnlyInspection
+                  scenarioId={workspaceState.activeScenarioId}
+                  showParticipantSelector={false}
+                  showWorkspaceHeader={false}
+                  workspaceTab="player-combat"
+                />
+              ) : (
+                <section style={panelStyle}>
+                  <div>No participant is available for player combat inspection.</div>
+                </section>
+              )}
+            </>
+          ) : canAccessGmEncounter ? (
+            <section style={panelStyle}>
+              <strong>Select an encounter to inspect player combat.</strong>
+              {sortedActiveScenarioEncounters.length > 0 ? (
+                <div style={{ display: "grid", gap: "0.5rem" }}>
+                  {sortedActiveScenarioEncounters.map((encounter) => (
+                    <Link
+                      key={encounter.id}
+                      href={buildWorkspaceHref({
+                        encounterId: encounter.id,
+                        scenarioId: encounter.scenarioId,
+                        tab: "player-combat",
+                      })}
+                    >
+                      {encounter.title}
+                    </Link>
+                  ))}
+                </div>
+              ) : (
+                <div>No player combat view is currently available.</div>
+              )}
+            </section>
+          ) : workspaceState.activeScenarioId ? (
+            <ScenarioPlayerCombatPageContent
+              campaignId={campaignId}
+              encounterId={workspaceState.activeEncounterId}
+              embedded
+              encounterTitle={activeEncounter?.title}
+              participantId={searchParams.get("participantId") ?? undefined}
+              scenarioId={workspaceState.activeScenarioId}
+              showParticipantSelector={false}
+              workspaceTab="player-combat"
+            />
+          ) : (
+            <section style={panelStyle}>
+              <strong>Select a scenario to open player combat.</strong>
+              {scenarios.length > 0 ? (
+                <div style={{ display: "grid", gap: "0.5rem" }}>
+                  {scenarios.map((scenario) => (
+                    <Link
+                      key={scenario.id}
+                      href={buildWorkspaceHref({
+                        scenarioId: scenario.id,
+                        tab: "player-combat",
+                      })}
+                    >
+                      {scenario.name}
+                    </Link>
+                  ))}
+                </div>
+              ) : (
+                <div>No player combat view is currently available.</div>
               )}
             </section>
           )}

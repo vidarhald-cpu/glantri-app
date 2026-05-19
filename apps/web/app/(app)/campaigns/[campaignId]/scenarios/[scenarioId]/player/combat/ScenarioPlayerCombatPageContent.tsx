@@ -65,7 +65,7 @@ interface ScenarioPlayerCombatPageContentProps {
   scenarioId: string;
   showParticipantSelector?: boolean;
   showWorkspaceHeader?: boolean;
-  workspaceTab?: Extract<CampaignWorkspaceTabId, "combat" | "player-encounter">;
+  workspaceTab?: Extract<CampaignWorkspaceTabId, "combat" | "player-combat" | "player-encounter">;
 }
 
 const panelStyle = {

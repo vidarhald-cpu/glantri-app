@@ -140,7 +140,8 @@ describe("RoleplayEncounterScreens", () => {
     expect(playerSource).toContain("GM player-view inspection is read-only.");
     expect(playerSource).toContain("disabled={!canUsePlayerActions || Boolean(roll.result)}");
     expect(playerSource).toContain("showWorkspaceHeader");
-    expect(playerSource).toContain("Skill rolls{selectedPlayerFacingName");
+    expect(playerSource).toContain('workspaceScreenName = "Skill rolls"');
+    expect(playerSource).toContain("{workspaceScreenName}");
   });
 
   it("preserves opposed result matching and player submitted roll identity", () => {

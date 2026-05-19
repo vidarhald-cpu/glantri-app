@@ -54,15 +54,20 @@ describe("CampaignWorkspaceShell roleplay encounter routing", () => {
     expect(source).toContain("currentRoundNumber={activeScenario?.liveState?.roundNumber}");
   });
 
-  it("lets the GM inspect player-facing Skill rolls for a selected participant", () => {
+  it("keeps GM Skill rolls focused on GM tools and routes player inspection separately", () => {
     const source = readSource();
 
-    expect(source).toContain('screenName="Skill rolls"');
-    expect(source).toContain("Player view");
+    expect(source).toContain('workspaceState.activeTab === "skill-rolls"');
+    expect(source).toContain('workspaceState.activeTab === "player-skill-rolls"');
+    expect(source).toContain('screenName="Player skill rolls"');
     expect(source).toContain("inspectionParticipantId={selectedGmInspectableCandidate.id}");
     expect(source).toContain("readOnlyInspection");
     expect(source).toContain("showWorkspaceHeader={false}");
-    expect(source).toContain('selectInspectableParticipant({ participantId, tab: "skill-rolls" })');
+    expect(source).toContain(
+      'selectInspectableParticipant({ participantId, tab: "player-skill-rolls" })',
+    );
+    expect(source).toContain('workspaceScreenName="Player skill rolls"');
+    expect(source).not.toContain("Player view");
   });
 
   it("routes the workspace Combat tab through the recovered combat panel", () => {
@@ -77,11 +82,24 @@ describe("CampaignWorkspaceShell roleplay encounter routing", () => {
     expect(source).toContain("onEncounterUpdated");
     expect(source).toContain("ScenarioPlayerCombatPageContent");
     expect(source).toContain('workspaceTab="combat"');
-    expect(source).toContain('screenName="Combat"');
-    expect(source).toContain("Player combat inspection");
-    expect(source).toContain("showParticipantSelector={false}");
-    expect(source).toContain("readOnlyInspection");
     expect(source).toContain("Select a scenario to open the combat panel.");
     expect(source).toContain("No encounter is currently available for combat tools.");
+    expect(source).not.toContain("Player combat inspection");
+    expect(source).not.toContain('screenName="Combat"');
+  });
+
+  it("routes Player combat through its own GM inspection tab", () => {
+    const source = readSource();
+
+    expect(source).toContain('workspaceState.activeTab === "player-combat"');
+    expect(source).toContain('screenName="Player combat"');
+    expect(source).toContain("ScenarioPlayerCombatPageContent");
+    expect(source).toContain('workspaceTab="player-combat"');
+    expect(source).toContain("showParticipantSelector={false}");
+    expect(source).toContain("readOnlyInspection");
+    expect(source).toContain(
+      'selectInspectableParticipant({ participantId, tab: "player-combat" })',
+    );
+    expect(source).toContain("No participant is available for player combat inspection.");
   });
 });

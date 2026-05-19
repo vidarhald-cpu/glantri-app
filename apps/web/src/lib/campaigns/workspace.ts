@@ -9,8 +9,10 @@ export type CampaignWorkspaceTabId =
   | "gm-encounter"
   | "player-encounter"
   | "skill-rolls"
+  | "player-skill-rolls"
   | "character"
-  | "combat";
+  | "combat"
+  | "player-combat";
 
 export interface CampaignWorkspaceTab {
   id: CampaignWorkspaceTabId;
@@ -37,8 +39,10 @@ const orderedTabs: CampaignWorkspaceTab[] = [
   { id: "scenario", label: "Scenario" },
   { id: "encounter", label: "Encounter" },
   { id: "skill-rolls", label: "Skill rolls" },
+  { id: "player-skill-rolls", label: "Player skill rolls" },
   { id: "character", label: "Character" },
-  { id: "combat", label: "Combat" }
+  { id: "combat", label: "Combat" },
+  { id: "player-combat", label: "Player combat" }
 ];
 
 export function buildCampaignWorkspaceHref(input: CampaignWorkspaceHrefInput): string {
@@ -121,10 +125,18 @@ function resolveRequestedCampaignWorkspaceTab(input: {
         : input.canAccessGmEncounter
           ? fallbackTab
           : "skill-rolls";
+    case "player-skill-rolls":
+      return input.activeScenarioId && input.activeEncounterId
+        ? "player-skill-rolls"
+        : input.canAccessGmEncounter
+          ? fallbackTab
+          : "player-skill-rolls";
     case "character":
       return input.activeScenarioId ? "character" : fallbackTab;
     case "combat":
       return "combat";
+    case "player-combat":
+      return input.activeScenarioId ? "player-combat" : fallbackTab;
     default:
       return fallbackTab;
   }
@@ -253,8 +265,10 @@ export function resolveCampaignWorkspaceState(input: {
         requestedTab === "scenario" ||
         requestedTab === "character" ||
         requestedTab === "combat" ||
+        requestedTab === "player-combat" ||
         requestedTab === "encounter" ||
-        requestedTab === "skill-rolls"
+        requestedTab === "skill-rolls" ||
+        requestedTab === "player-skill-rolls"
       ) &&
       input.scenarios.length === 1
     ) {
@@ -263,13 +277,25 @@ export function resolveCampaignWorkspaceState(input: {
 
     if (
       !activeScenarioId &&
-      (requestedTab === "player-encounter" || requestedTab === "encounter" || requestedTab === "skill-rolls") &&
+      (
+        requestedTab === "player-encounter" ||
+        requestedTab === "encounter" ||
+        requestedTab === "skill-rolls" ||
+        requestedTab === "player-skill-rolls" ||
+        requestedTab === "player-combat"
+      ) &&
       input.scenarios.length === 1
     ) {
       activeScenarioId = input.scenarios[0]?.id;
     }
 
-    if (requestedTab === "player-encounter" || requestedTab === "encounter" || requestedTab === "skill-rolls") {
+    if (
+      requestedTab === "player-encounter" ||
+      requestedTab === "encounter" ||
+      requestedTab === "skill-rolls" ||
+      requestedTab === "player-skill-rolls" ||
+      requestedTab === "player-combat"
+    ) {
       const playerEncounter = resolvePlayerEncounterSelection({
         activeScenarioId,
         encounters: input.encounters,
@@ -285,7 +311,7 @@ export function resolveCampaignWorkspaceState(input: {
         activeEncounterId = undefined;
       }
     }
-  } else if (requestedTab === "combat") {
+  } else if (requestedTab === "combat" || requestedTab === "player-combat") {
     if (!activeScenarioId && input.scenarios.length === 1) {
       activeScenarioId = input.scenarios[0]?.id;
     }

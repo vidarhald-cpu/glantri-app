@@ -86,13 +86,24 @@ describe("campaign workspace", () => {
       "scenario",
       "encounter",
       "skill-rolls",
+      "player-skill-rolls",
       "character",
       "combat",
+      "player-combat",
     ]);
 
     expect(
       buildCampaignWorkspaceTabs({ canAccessGmEncounter: false }).map((tab) => tab.id)
-    ).toEqual(["campaign", "scenario", "encounter", "skill-rolls", "character", "combat"]);
+    ).toEqual([
+      "campaign",
+      "scenario",
+      "encounter",
+      "skill-rolls",
+      "player-skill-rolls",
+      "character",
+      "combat",
+      "player-combat",
+    ]);
   });
 
   it("opens the Character tab against the active scenario context", () => {
@@ -132,6 +143,28 @@ describe("campaign workspace", () => {
     expect(state.activeTab).toBe("skill-rolls");
   });
 
+  it("opens the Player skill rolls tab against the selected encounter context", () => {
+    const state = resolveCampaignWorkspaceState({
+      activeCampaignId: "camp-1",
+      canAccessGmEncounter: true,
+      encounters: [
+        encounter({
+          id: "enc-1",
+          scenarioId: "scn-1",
+          status: "active",
+        }),
+      ],
+      requestedEncounterId: "enc-1",
+      requestedScenarioId: "scn-1",
+      requestedTab: "player-skill-rolls",
+      scenarios: [scenario({ id: "scn-1", name: "Session one" })],
+    });
+
+    expect(state.activeScenarioId).toBe("scn-1");
+    expect(state.activeEncounterId).toBe("enc-1");
+    expect(state.activeTab).toBe("player-skill-rolls");
+  });
+
   it("opens the Combat tab against the active scenario context", () => {
     const state = resolveCampaignWorkspaceState({
       activeCampaignId: "camp-1",
@@ -145,6 +178,21 @@ describe("campaign workspace", () => {
 
     expect(state.activeScenarioId).toBe("scn-1");
     expect(state.activeTab).toBe("combat");
+  });
+
+  it("opens the Player combat tab against the active scenario context", () => {
+    const state = resolveCampaignWorkspaceState({
+      activeCampaignId: "camp-1",
+      canAccessGmEncounter: false,
+      encounters: [],
+      requestedEncounterId: null,
+      requestedScenarioId: null,
+      requestedTab: "player-combat",
+      scenarios: [scenario({ id: "scn-1", name: "Session one" })],
+    });
+
+    expect(state.activeScenarioId).toBe("scn-1");
+    expect(state.activeTab).toBe("player-combat");
   });
 
   it("keeps the Combat tab open with a missing-context state when no scenario is selected", () => {

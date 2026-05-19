@@ -104,18 +104,24 @@ The current workspace tabs should read:
 - Scenario
 - Encounter
 - Skill rolls
+- Player skill rolls
 - Character
 - Combat
+- Player combat
 
-Skill rolls are the encounter roll tool. They own GM skill roll assignment, calculations, ranked roll results, the GM action log, player assigned roll cards, player-safe ranked results, and the character roll log.
+Skill rolls is the GM encounter roll manager. It owns GM skill roll assignment, calculations, ranked roll results, and the GM action log.
+
+Player skill rolls is the player-facing roll view. Players see their own assigned rolls, ranked results, and character roll log. GMs can open the same player-facing screen for a selected participant through the participant picker/shuffler; this inspection is read-only and is not player impersonation.
 
 Character is the encounter participant state/control tool. It owns the current character loadout and Physical state panel for the selected/controlled participant.
 
-Combat is the encounter round/action manager tool. It should be reachable for the selected encounter when the GM wants to use combat flow; roleplay and combat are not separate encounter universes.
+Combat is the GM encounter round/action manager tool. It should be reachable for the selected encounter when the GM wants to use combat flow; roleplay and combat are not separate encounter universes.
+
+Player combat is the player-facing combat/action view. Players see their own combat controls and context. GMs can inspect that same player-facing screen for a selected participant through the participant picker/shuffler; this is read-only unless a future GM-safe edit path is added.
 
 Combat Panel is part of the Encounter workflow. It is separate from Character control for now: Character control tracks the current character/loadout/physical state, while the Combat Panel is the scenario or encounter workspace for combat action context. Future damage tracking, round recording, and combat-effect automation should build on these workflows without rendering inactive placeholders.
 
-GM users may inspect player-facing Skill rolls and Combat views for a selected encounter participant. This inspection uses the same participant picker/shuffler pattern as Character control and does not require logging in as that player. Inspection is a role-safe aid for reviewing what the selected participant can see; player-facing behavior remains controlled by normal access and visibility rules.
+GM player-facing inspection is separate from GM tooling. Player skill rolls is not embedded inside the GM Skill rolls manager, and Player combat is not embedded inside the GM Combat Round Manager. Inspection uses the same participant picker/shuffler pattern as Character control and does not require logging in as that player. Inspection is a role-safe aid for reviewing what the selected participant can see; player-facing behavior remains controlled by normal access and visibility rules.
 
 Current design rules:
 
@@ -193,6 +199,8 @@ Scenario pages should focus on concrete scenario actors, accessible encounters, 
 
 Encounter pages should focus on the current moment of play, player-safe visibility, situation, and visible participants.
 
-Skill rolls pages should focus on assigned rolls, current ranked results, and concise roll logs.
+Skill rolls pages should focus on GM roll assignment and GM roll management.
+
+Player skill rolls pages should focus on assigned rolls, current ranked results, and concise player-safe roll logs.
 
 Player pages should always prefer safety over completeness. If the system cannot confidently show something without revealing GM-only information, it should show less.
