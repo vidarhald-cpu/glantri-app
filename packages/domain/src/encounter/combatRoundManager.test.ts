@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import type { EncounterParticipant, EncounterSession } from "./session";
 
 import {
+  COMBAT_ROUND_STEP_ABBREVIATIONS,
+  COMBAT_ROUND_STEPS,
   advanceCombatRoundStep,
   buildCombatRoundInspector,
   initializeCombatRoundState,
@@ -12,7 +14,11 @@ import {
 } from "./combatRoundManager";
 import { encounterSessionSchema } from "./session";
 
-function participant(input: { id: string; initiative?: number; label: string }): EncounterParticipant {
+function participant(input: {
+  id: string;
+  initiative?: number;
+  label: string;
+}): EncounterParticipant {
   return {
     declaration: {
       actionType: "none",
@@ -55,16 +61,28 @@ function encounter(input: Partial<EncounterSession> = {}): EncounterSession {
 }
 
 describe("combat round manager", () => {
+  it("defines the compact round timeline steps in order", () => {
+    expect(COMBAT_ROUND_STEPS.map((step) => COMBAT_ROUND_STEP_ABBREVIATIONS[step])).toEqual([
+      "DE",
+      "M1",
+      "i1",
+      "P1",
+      "D1",
+      "M2",
+      "i2",
+      "P2",
+      "D2",
+      "SU",
+    ]);
+  });
+
   it("initializes round state from encounter participants", () => {
     const state = initializeCombatRoundState({ encounter: encounter() });
 
     expect(state.roundNumber).toBe(3);
     expect(state.currentStep).toBe("select_actions");
     expect(state.selectedParticipantId).toBe("gladiator");
-    expect(state.participants.map((entry) => entry.participantId)).toEqual([
-      "gladiator",
-      "guard",
-    ]);
+    expect(state.participants.map((entry) => entry.participantId)).toEqual(["gladiator", "guard"]);
     expect(state.participants[0]?.stepStatuses.select_actions).toBe("pending");
     expect(state.participants[0]?.stepStatuses.round_summary).toBe("pending");
   });
@@ -85,6 +103,7 @@ describe("combat round manager", () => {
       "review_phase_2_modifiers",
       "initiative_phase_2",
       "phase_2_actions",
+      "review_phase_2_damage",
     ].reduce((current) => advanceCombatRoundStep(current), reviewState);
     const nextRoundState = advanceCombatRoundStep(roundSummaryState);
 

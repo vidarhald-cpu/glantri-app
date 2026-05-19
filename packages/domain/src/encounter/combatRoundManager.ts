@@ -13,27 +13,47 @@ export const combatRoundStepSchema = z.enum([
   "review_phase_2_modifiers",
   "initiative_phase_2",
   "phase_2_actions",
+  "review_phase_2_damage",
   "round_summary",
 ]);
 
 export const COMBAT_ROUND_STEPS = combatRoundStepSchema.options;
+export type CombatRoundStep = z.infer<typeof combatRoundStepSchema>;
 
-export const combatRoundStepStatusSchema = z.enum([
-  "pending",
-  "ready",
-  "complete",
-  "skipped",
-]);
+export const COMBAT_ROUND_STEP_ABBREVIATIONS = {
+  initiative_phase_1: "i1",
+  initiative_phase_2: "i2",
+  phase_1_actions: "P1",
+  phase_2_actions: "P2",
+  review_action_modifiers: "M1",
+  review_phase_2_actions: "D1",
+  review_phase_2_damage: "D2",
+  review_phase_2_modifiers: "M2",
+  round_summary: "SU",
+  select_actions: "DE",
+} satisfies Record<CombatRoundStep, string>;
+
+export const COMBAT_ROUND_STEP_LABELS = {
+  initiative_phase_1: "Initiative phase 1",
+  initiative_phase_2: "Initiative phase 2",
+  phase_1_actions: "Phase 1 actions",
+  phase_2_actions: "Phase 2 actions",
+  review_action_modifiers: "Review phase 1 modifiers",
+  review_phase_2_actions: "Phase 1 damage/effects review",
+  review_phase_2_damage: "Phase 2 damage/effects review",
+  review_phase_2_modifiers: "Review/modify phase 2 actions/modifiers",
+  round_summary: "Summary/update",
+  select_actions: "Declaration",
+} satisfies Record<CombatRoundStep, string>;
+
+export const combatRoundStepStatusSchema = z.enum(["pending", "ready", "complete", "skipped"]);
 
 export const combatRoundInitiativesSchema = z.object({
   phase1: z.number().int().optional(),
   phase2: z.number().int().optional(),
 });
 
-const combatRoundStepStatusesSchema = z.record(
-  combatRoundStepSchema,
-  combatRoundStepStatusSchema,
-);
+const combatRoundStepStatusesSchema = z.record(combatRoundStepSchema, combatRoundStepStatusSchema);
 
 export const combatRoundParticipantStateSchema = z.object({
   initiatives: combatRoundInitiativesSchema.default({}),
@@ -53,7 +73,6 @@ export const combatRoundStateSchema = z.object({
   selectedStep: combatRoundStepSchema.optional(),
 });
 
-export type CombatRoundStep = z.infer<typeof combatRoundStepSchema>;
 export type CombatRoundStepStatus = z.infer<typeof combatRoundStepStatusSchema>;
 export type CombatRoundInitiatives = z.infer<typeof combatRoundInitiativesSchema>;
 export type CombatRoundParticipantState = z.infer<typeof combatRoundParticipantStateSchema>;
@@ -219,7 +238,9 @@ export function sortCombatRoundParticipantsByInitiative(input: {
     const rightInitiative = right.initiatives[input.phase];
 
     if (leftInitiative !== undefined || rightInitiative !== undefined) {
-      return (rightInitiative ?? Number.NEGATIVE_INFINITY) - (leftInitiative ?? Number.NEGATIVE_INFINITY);
+      return (
+        (rightInitiative ?? Number.NEGATIVE_INFINITY) - (leftInitiative ?? Number.NEGATIVE_INFINITY)
+      );
     }
 
     return left.label.localeCompare(right.label);
@@ -239,7 +260,9 @@ export function buildCombatRoundInspector(input: {
   const step = input.step ?? normalized.selectedStep ?? normalized.currentStep;
   const participant =
     normalized.participants.find((entry) => entry.participantId === input.participantId) ??
-    normalized.participants.find((entry) => entry.participantId === normalized.selectedParticipantId) ??
+    normalized.participants.find(
+      (entry) => entry.participantId === normalized.selectedParticipantId,
+    ) ??
     normalized.participants[0];
 
   return {
