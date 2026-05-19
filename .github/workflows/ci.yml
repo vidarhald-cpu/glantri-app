@@ -38,6 +38,9 @@ jobs:
       - name: Build
         run: pnpm build
 
+      - name: File-size report
+        run: node scripts/checkFileSize.mjs
+
   docker-test:
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
