@@ -54,7 +54,11 @@ describe("CampaignWorkspaceShell roleplay encounter routing", () => {
     expect(source).toContain("CombatRoundManagerPanel");
     expect(source).toContain('activeEncounter?.kind === "combat"');
     expect(source).toContain("activeScenarioCombatEncounters");
+    expect(source).toContain("sortedActiveScenarioCombatEncounters");
     expect(source).toContain("Select an encounter to open the Combat Round Manager.");
+    expect(source).toContain("The selected encounter is roleplaying.");
+    expect(source).toContain("Select or create a combat encounter to use the Combat Round Manager.");
+    expect(source).toContain("Create combat encounter on Scenario tab");
     expect(source).toContain("onEncounterUpdated");
     expect(source).toContain("ScenarioPlayerCombatPageContent");
     expect(source).toContain('workspaceTab="combat"');

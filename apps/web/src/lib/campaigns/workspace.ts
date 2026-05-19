@@ -189,6 +189,27 @@ function resolvePlayerEncounterSelection(input: {
   )[0];
 }
 
+function resolveGmCombatEncounterSelection(input: {
+  activeScenarioId?: string;
+  encounters: EncounterSession[];
+  requestedEncounterId?: string | null;
+}): EncounterSession | undefined {
+  const combatEncounters = input.encounters
+    .filter((encounter) => !input.activeScenarioId || encounter.scenarioId === input.activeScenarioId)
+    .filter((encounter) => encounter.kind === "combat")
+    .filter((encounter) => encounter.status !== "archived");
+
+  if (input.requestedEncounterId) {
+    return combatEncounters.find((encounter) => encounter.id === input.requestedEncounterId);
+  }
+
+  if (combatEncounters.length === 1) {
+    return combatEncounters[0];
+  }
+
+  return undefined;
+}
+
 export function resolveCampaignWorkspaceState(input: {
   activeCampaignId: string;
   canAccessGmEncounter: boolean;
@@ -248,6 +269,32 @@ export function resolveCampaignWorkspaceState(input: {
       } else {
         activeEncounterId = undefined;
       }
+    }
+  } else if (requestedTab === "combat") {
+    if (!activeScenarioId && input.scenarios.length === 1) {
+      activeScenarioId = input.scenarios[0]?.id;
+    }
+
+    const explicitlyRequestedEncounter = input.requestedEncounterId
+      ? input.encounters.find(
+          (encounter) =>
+            encounter.id === input.requestedEncounterId &&
+            (!activeScenarioId || encounter.scenarioId === activeScenarioId)
+        )
+      : undefined;
+
+    if (!explicitlyRequestedEncounter || explicitlyRequestedEncounter.kind === "combat") {
+      const combatEncounter = resolveGmCombatEncounterSelection({
+        activeScenarioId,
+        encounters: input.encounters,
+        requestedEncounterId:
+          explicitlyRequestedEncounter?.kind === "combat"
+            ? explicitlyRequestedEncounter.id
+            : undefined,
+      });
+
+      activeEncounterId = combatEncounter?.id;
+      activeScenarioId = combatEncounter?.scenarioId ?? activeScenarioId;
     }
   }
 

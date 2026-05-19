@@ -19,6 +19,7 @@ function scenario(input: Pick<Scenario, "id" | "name">): Scenario {
 
 function encounter(input: {
   id: string;
+  kind?: EncounterSession["kind"];
   participantMembershipMode?: EncounterSession["participantMembershipMode"];
   scenarioId: string;
   status?: EncounterSession["status"];
@@ -33,7 +34,7 @@ function encounter(input: {
     currentTurnIndex: 0,
     declarationsLocked: false,
     id: input.id,
-    kind: "roleplay",
+    kind: input.kind ?? "roleplay",
     participantMembershipMode: input.participantMembershipMode,
     participants: input.scenarioParticipantId
       ? [
@@ -136,6 +137,116 @@ describe("campaign workspace", () => {
     });
 
     expect(state.activeScenarioId).toBeUndefined();
+    expect(state.activeTab).toBe("combat");
+  });
+
+  it("auto-selects the only combat encounter when a GM opens the Combat tab", () => {
+    const state = resolveCampaignWorkspaceState({
+      activeCampaignId: "camp-1",
+      canAccessGmEncounter: true,
+      encounters: [
+        encounter({
+          id: "roleplay-encounter",
+          kind: "roleplay",
+          scenarioId: "scn-1",
+          status: "active",
+        }),
+        encounter({
+          id: "combat-encounter",
+          kind: "combat",
+          scenarioId: "scn-1",
+          status: "planned",
+        }),
+      ],
+      requestedEncounterId: null,
+      requestedScenarioId: "scn-1",
+      requestedTab: "combat",
+      scenarios: [scenario({ id: "scn-1", name: "Session one" })],
+    });
+
+    expect(state.activeScenarioId).toBe("scn-1");
+    expect(state.activeEncounterId).toBe("combat-encounter");
+    expect(state.activeTab).toBe("combat");
+  });
+
+  it("keeps the GM Combat tab in selection mode when multiple combat encounters are available", () => {
+    const state = resolveCampaignWorkspaceState({
+      activeCampaignId: "camp-1",
+      canAccessGmEncounter: true,
+      encounters: [
+        encounter({
+          id: "combat-one",
+          kind: "combat",
+          scenarioId: "scn-1",
+          status: "active",
+        }),
+        encounter({
+          id: "combat-two",
+          kind: "combat",
+          scenarioId: "scn-1",
+          status: "planned",
+        }),
+      ],
+      requestedEncounterId: null,
+      requestedScenarioId: "scn-1",
+      requestedTab: "combat",
+      scenarios: [scenario({ id: "scn-1", name: "Session one" })],
+    });
+
+    expect(state.activeScenarioId).toBe("scn-1");
+    expect(state.activeEncounterId).toBeUndefined();
+    expect(state.activeTab).toBe("combat");
+  });
+
+  it("keeps an explicitly selected roleplaying encounter visible for GM Combat tab messaging", () => {
+    const state = resolveCampaignWorkspaceState({
+      activeCampaignId: "camp-1",
+      canAccessGmEncounter: true,
+      encounters: [
+        encounter({
+          id: "roleplay-encounter",
+          kind: "roleplay",
+          scenarioId: "scn-1",
+          status: "active",
+        }),
+        encounter({
+          id: "combat-encounter",
+          kind: "combat",
+          scenarioId: "scn-1",
+          status: "planned",
+        }),
+      ],
+      requestedEncounterId: "roleplay-encounter",
+      requestedScenarioId: "scn-1",
+      requestedTab: "combat",
+      scenarios: [scenario({ id: "scn-1", name: "Session one" })],
+    });
+
+    expect(state.activeScenarioId).toBe("scn-1");
+    expect(state.activeEncounterId).toBe("roleplay-encounter");
+    expect(state.activeTab).toBe("combat");
+  });
+
+  it("auto-selects the only scenario for a GM opening Combat tab without ids", () => {
+    const state = resolveCampaignWorkspaceState({
+      activeCampaignId: "camp-1",
+      canAccessGmEncounter: true,
+      encounters: [
+        encounter({
+          id: "combat-encounter",
+          kind: "combat",
+          scenarioId: "scn-1",
+          status: "active",
+        }),
+      ],
+      requestedEncounterId: null,
+      requestedScenarioId: null,
+      requestedTab: "combat",
+      scenarios: [scenario({ id: "scn-1", name: "Session one" })],
+    });
+
+    expect(state.activeScenarioId).toBe("scn-1");
+    expect(state.activeEncounterId).toBe("combat-encounter");
     expect(state.activeTab).toBe("combat");
   });
 
