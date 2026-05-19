@@ -19,6 +19,9 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("export default function ScenarioPlayerCombatPageContent");
     expect(source).toContain("Action selector");
     expect(source).toContain("EquipmentLoadoutModule");
+    expect(source).toContain("PlayerCombatModifierPanel");
+    expect(source).toContain("PlayerCombatPhasePanel");
+    expect(source).toContain("buildPlayerCombatModifierRows");
     expect(source).toContain('workspaceTab = "player-encounter"');
     expect(source).toContain("displayedParticipant?.displayName ? ` — ${displayedParticipant.displayName}`");
     expect(source).toContain("showParticipantSelector = true");

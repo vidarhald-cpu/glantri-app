@@ -15,6 +15,13 @@ import {
 } from "@glantri/domain";
 
 import { updateEncounterOnServer } from "@/lib/api/encounterClient";
+import {
+  buildPlayerCombatModifierRows,
+  PlayerCombatModifierPanel,
+  PlayerCombatPhasePanel,
+  playerCombatPanelsGridStyle,
+  type PlayerCombatPhaseCardView,
+} from "@/features/player-combat/PlayerCombatPanels";
 
 interface CombatRoundManagerPanelProps {
   encounter: EncounterSession;
@@ -73,6 +80,20 @@ function getAdvanceButtonLabel(step: CombatRoundStep): string {
 
 function formatInitiative(value: number | undefined): string {
   return value === undefined ? "init --" : `init ${value}`;
+}
+
+function formatStepStatus(status: string | undefined): string {
+  switch (status) {
+    case "complete":
+      return "Complete";
+    case "ready":
+      return "Ready";
+    case "skipped":
+      return "Skipped";
+    case "pending":
+    default:
+      return "Pending";
+  }
 }
 
 function getStatusMarker(input: { current: boolean; status: string | undefined }): string {
@@ -140,6 +161,39 @@ export default function CombatRoundManagerPanel({
     state: roundState,
     step: roundState.selectedStep,
   });
+  const inspectorModifierRows = useMemo(() => buildPlayerCombatModifierRows({}), []);
+  const inspectorPhaseCards = useMemo<readonly PlayerCombatPhaseCardView[]>(() => {
+    if (!inspector.participant) {
+      return [];
+    }
+
+    return [
+      {
+        description: "Current phase 1 action context for the selected participant.",
+        phaseLabel: "Phase 1",
+        stats: [
+          `Initiative: ${formatInitiative(inspector.participant.initiatives.phase1)}`,
+          `Action status: ${formatStepStatus(inspector.participant.stepStatuses.phase_1_actions)}`,
+          `Damage review: ${formatStepStatus(
+            inspector.participant.stepStatuses.review_phase_2_actions,
+          )}`,
+        ],
+        title: "Phase 1 action",
+      },
+      {
+        description: "Current phase 2 action context for the selected participant.",
+        phaseLabel: "Phase 2",
+        stats: [
+          `Initiative: ${formatInitiative(inspector.participant.initiatives.phase2)}`,
+          `Action status: ${formatStepStatus(inspector.participant.stepStatuses.phase_2_actions)}`,
+          `Damage review: ${formatStepStatus(
+            inspector.participant.stepStatuses.review_phase_2_damage,
+          )}`,
+        ],
+        title: "Phase 2 action",
+      },
+    ];
+  }, [inspector.participant]);
 
   useEffect(() => {
     setRoundState(initialRoundState);
@@ -420,48 +474,56 @@ export default function CombatRoundManagerPanel({
           border: "1px solid #e3e1dc",
           borderRadius: 10,
           display: "grid",
-          gap: "0.5rem",
+          gap: "0.75rem",
           padding: "0.75rem",
         }}
       >
-        <h3 style={{ margin: 0 }}>Combat inspector</h3>
         {inspector.participant ? (
           <>
-            <div>
-              Selected cell: <strong>{inspector.participant.label}</strong> · Round{" "}
-              {selectedRoundNumber} · {COMBAT_ROUND_STEP_ABBREVIATIONS[inspector.step]} (
-              {COMBAT_ROUND_STEP_LABELS[inspector.step]})
+            <div
+              style={{
+                alignItems: "center",
+                display: "flex",
+                flexWrap: "wrap",
+                gap: "0.75rem",
+                justifyContent: "space-between",
+              }}
+            >
+              <div>
+                <h3 style={{ margin: 0 }}>
+                  Combat inspector — {inspector.participant.label} · Round {selectedRoundNumber} ·{" "}
+                  {COMBAT_ROUND_STEP_ABBREVIATIONS[inspector.step]}
+                </h3>
+                <div style={{ color: "#5e5a50", fontSize: "0.92rem" }}>
+                  {COMBAT_ROUND_STEP_LABELS[inspector.step]} ·{" "}
+                  {formatStepStatus(inspector.status)}
+                </div>
+              </div>
+              <div style={inspectorNavStyle}>
+                <button onClick={() => moveSelection({ participantOffset: -1 })} type="button">
+                  Previous participant
+                </button>
+                <button onClick={() => moveSelection({ participantOffset: 1 })} type="button">
+                  Next participant
+                </button>
+                <button onClick={() => moveSelection({ stepOffset: -1 })} type="button">
+                  Previous step
+                </button>
+                <button onClick={() => moveSelection({ stepOffset: 1 })} type="button">
+                  Next step
+                </button>
+              </div>
             </div>
-            <div>Status: {inspector.status ?? "pending"}</div>
-            <div>
-              {inspector.step === roundState.currentStep
-                ? "This is the current step. Advance commits this step and moves the process forward."
-                : "This is a timeline cell for review or preparation."}
-            </div>
-            <div>
-              Phase 1 initiative: {formatInitiative(inspector.participant.initiatives.phase1)}
-            </div>
-            <div>
-              Phase 2 initiative: {formatInitiative(inspector.participant.initiatives.phase2)}
-            </div>
-            <div>No data recorded for this step.</div>
-            <div style={inspectorNavStyle}>
-              <button onClick={() => moveSelection({ participantOffset: -1 })} type="button">
-                Previous participant
-              </button>
-              <button onClick={() => moveSelection({ participantOffset: 1 })} type="button">
-                Next participant
-              </button>
-              <button onClick={() => moveSelection({ stepOffset: -1 })} type="button">
-                Previous step
-              </button>
-              <button onClick={() => moveSelection({ stepOffset: 1 })} type="button">
-                Next step
-              </button>
+
+            <div style={playerCombatPanelsGridStyle}>
+              <PlayerCombatModifierPanel readOnly rows={inspectorModifierRows} />
+              {inspectorPhaseCards.map((phaseCard) => (
+                <PlayerCombatPhasePanel key={phaseCard.phaseLabel} phaseCard={phaseCard} />
+              ))}
             </div>
           </>
         ) : (
-          <div>No participant selected.</div>
+          <div>Select a participant step to inspect combat details.</div>
         )}
       </section>
     </section>

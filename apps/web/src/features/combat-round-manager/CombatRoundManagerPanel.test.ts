@@ -44,13 +44,16 @@ describe("CombatRoundManagerPanel", () => {
     const source = readSource();
 
     expect(source).toContain("Combat round inspector");
-    expect(source).toContain("Combat inspector");
-    expect(source).toContain("Selected cell:");
-    expect(source).toContain("This is the current step. Advance commits this step");
+    expect(source).toContain("Combat inspector —");
+    expect(source).toContain("COMBAT_ROUND_STEP_ABBREVIATIONS[inspector.step]");
+    expect(source).toContain("COMBAT_ROUND_STEP_LABELS[inspector.step]");
     expect(source).toContain("buildCombatRoundInspector");
-    expect(source).toContain("Phase 1 initiative:");
-    expect(source).toContain("Phase 2 initiative:");
-    expect(source).toContain("No data recorded for this step.");
+    expect(source).toContain("PlayerCombatModifierPanel");
+    expect(source).toContain("PlayerCombatPhasePanel");
+    expect(source).toContain("readOnly");
+    expect(source).toContain("Phase 1 action");
+    expect(source).toContain("Phase 2 action");
+    expect(source).toContain("Select a participant step to inspect combat details.");
     expect(source).toContain("Previous participant");
     expect(source).toContain("Next participant");
     expect(source).toContain("Previous step");
