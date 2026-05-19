@@ -15,6 +15,7 @@ import {
   calculateWorkbookMovement,
   calculateWorkbookMovementModifier,
   getWorkbookStatGm,
+  lookupWorkbookPercentageAdjustment,
   lookupWorkbookToHitModifier,
   lookupWorkbookMovementAdjustment,
   lookupWorkbookSkillInitiativeModifier,
@@ -276,6 +277,15 @@ describe("workbookCombatMath", () => {
     expect(getWorkbookStatGm(17)).toBe(3);
     expect(getWorkbookStatGm(11)).toBe(0);
     expect(getWorkbookStatGm(null)).toBeNull();
+  });
+
+  it("applies the low-base minimum percentage adjustment to zero-base combat values", () => {
+    expect(lookupWorkbookPercentageAdjustment(0, 1)).toBe(1);
+    expect(lookupWorkbookPercentageAdjustment(0, 3)).toBe(3);
+    expect(lookupWorkbookPercentageAdjustment(0, 10)).toBe(10);
+    expect(lookupWorkbookPercentageAdjustment(0, 100)).toBe(100);
+    expect(lookupWorkbookPercentageAdjustment(1, 1)).toBe(1);
+    expect(lookupWorkbookPercentageAdjustment(2, 1)).toBe(1);
   });
 
   it("matches the workbook's melee initiative formula for weapon and brawling rows", () => {

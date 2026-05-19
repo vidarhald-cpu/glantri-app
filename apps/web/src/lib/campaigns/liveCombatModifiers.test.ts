@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import type { CombatEffectsState } from "@glantri/domain";
-import { lookupWorkbookPercentageAdjustment } from "@glantri/rules-engine";
+import {
+  calculateWorkbookDefensePair,
+  lookupWorkbookPercentageAdjustment,
+} from "@glantri/rules-engine";
 
 import {
   applyLiveRawModifierToCombatValue,
@@ -73,13 +76,31 @@ describe("live combat modifiers", () => {
   });
 
   it("documents workbook live modifier results for zero, shield, and combined defense bases", () => {
-    expect(lookupWorkbookPercentageAdjustment(0, 1)).toBe(0);
+    expect(lookupWorkbookPercentageAdjustment(0, 1)).toBe(1);
     expect(
       applyLiveRawModifierToCombatValue({
         baseValue: 0,
         rawModifier: -1,
       }),
-    ).toBe(0);
+    ).toBe(-1);
+    expect(
+      applyLiveRawModifierToCombatValue({
+        baseValue: 0,
+        rawModifier: 1,
+      }),
+    ).toBe(1);
+    expect(
+      applyLiveRawModifierToCombatValue({
+        baseValue: 0,
+        rawModifier: 3,
+      }),
+    ).toBe(3);
+    expect(
+      applyLiveRawModifierToCombatValue({
+        baseValue: 0,
+        rawModifier: 100,
+      }),
+    ).toBe(100);
 
     expect(lookupWorkbookPercentageAdjustment(14, 1)).toBe(1);
     expect(
@@ -96,6 +117,33 @@ describe("live combat modifiers", () => {
         rawModifier: -1,
       }),
     ).toBe(13);
+  });
+
+  it("documents current defense overlay versus summed raw modifier strategy", () => {
+    const baseDb = 10;
+    const equipmentModifier = 5;
+    const liveDbModifier = -1;
+    const theoreticalDefense = calculateWorkbookDefensePair({
+      baseDb,
+      equipmentModifier,
+      toHitModifier: 0,
+    });
+    const currentLiveOverlay =
+      theoreticalDefense == null
+        ? null
+        : applyLiveRawModifierToCombatValue({
+            baseValue: theoreticalDefense.db,
+            rawModifier: liveDbModifier,
+          });
+    const summedRawModifier = calculateWorkbookDefensePair({
+      baseDb,
+      equipmentModifier: equipmentModifier + liveDbModifier,
+      toHitModifier: 0,
+    });
+
+    expect(theoreticalDefense?.db).toBe(15);
+    expect(currentLiveOverlay).toBe(13);
+    expect(summedRawModifier?.db).toBe(14);
   });
 
   it("adds manual OB/Skill and DB context totals while keeping General/Fatigue effect-owned", () => {
