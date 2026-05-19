@@ -12,12 +12,14 @@ import {
   createEmptyPlayerEncounterCombatContext,
   getPlayerEncounterCombatModifierTotals,
 } from "@/lib/campaigns/playerEncounter";
+import type { EncounterLiveCombatModifierSummary } from "@/lib/campaigns/liveCombatModifiers";
 
 export interface PlayerCombatModifierBucketView {
   bucketKey: ScenarioCombatModifierBucket;
   entries: ScenarioCombatModifierEntry[];
   fatigueTotal?: number;
   label: string;
+  locked?: boolean;
   total: number;
 }
 
@@ -67,7 +69,7 @@ function getDisplayTotal(row: PlayerCombatModifierBucketView | undefined): numbe
 
 export function buildPlayerCombatModifierRows(input: {
   combatContext?: ScenarioParticipantCombatContext;
-  fatigueTotal?: number;
+  liveModifiers?: EncounterLiveCombatModifierSummary;
 }): PlayerCombatModifierBucketView[] {
   const combatContext = input.combatContext ?? createEmptyPlayerEncounterCombatContext();
   const totals = getPlayerEncounterCombatModifierTotals(combatContext);
@@ -75,22 +77,22 @@ export function buildPlayerCombatModifierRows(input: {
   return [
     {
       bucketKey: "general",
-      entries: combatContext.modifierBuckets.general,
-      fatigueTotal: input.fatigueTotal ?? 0,
+      entries: [],
       label: "General/Fatigue",
-      total: totals.generalTotal,
+      locked: true,
+      total: input.liveModifiers?.generalFatigueRaw ?? 0,
     },
     {
       bucketKey: "situation_ob_skill",
       entries: combatContext.modifierBuckets.situationObSkill,
       label: "Skill/OB",
-      total: totals.situationObSkillTotal,
+      total: input.liveModifiers?.obSkillRaw ?? totals.situationObSkillTotal,
     },
     {
       bucketKey: "situation_db",
       entries: combatContext.modifierBuckets.situationDb,
       label: "DB",
-      total: totals.situationDbTotal,
+      total: input.liveModifiers?.dbRaw ?? totals.situationDbTotal,
     },
   ];
 }
@@ -123,7 +125,7 @@ export function PlayerCombatModifierPanel({
             </span>
           </div>
 
-          {editable
+          {editable && !row.locked
             ? row.entries.map((entry) => (
                 <div
                   key={entry.id}
@@ -183,7 +185,7 @@ export function PlayerCombatModifierPanel({
                 </div>
               ))}
 
-          {editable ? (
+          {editable && !row.locked ? (
             <button
               disabled={controlsDisabled}
               onClick={() => onAddEntry(row.bucketKey)}

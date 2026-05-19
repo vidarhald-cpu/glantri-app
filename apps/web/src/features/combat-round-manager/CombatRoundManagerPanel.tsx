@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-import type { CombatRoundStep, EncounterSession } from "@glantri/domain";
+import type { CombatRoundStep, EncounterSession, ScenarioParticipant } from "@glantri/domain";
 import {
   COMBAT_ROUND_STEP_ABBREVIATIONS,
   COMBAT_ROUND_STEP_LABELS,
@@ -22,10 +22,12 @@ import {
   playerCombatPanelsGridStyle,
   type PlayerCombatPhaseCardView,
 } from "@/features/player-combat/PlayerCombatPanels";
+import { buildEncounterLiveCombatModifierSummary } from "@/lib/campaigns/liveCombatModifiers";
 
 interface CombatRoundManagerPanelProps {
   encounter: EncounterSession;
   onEncounterUpdated?: (encounter: EncounterSession) => void;
+  scenarioParticipants?: ScenarioParticipant[];
 }
 
 const panelStyle = {
@@ -129,6 +131,7 @@ function shouldSortByInitiative(step: CombatRoundStep): "phase1" | "phase2" | un
 export default function CombatRoundManagerPanel({
   encounter,
   onEncounterUpdated,
+  scenarioParticipants = [],
 }: CombatRoundManagerPanelProps) {
   const initialRoundState = useMemo(() => initializeCombatRoundState({ encounter }), [encounter]);
   const [roundState, setRoundState] = useState(initialRoundState);
@@ -161,7 +164,34 @@ export default function CombatRoundManagerPanel({
     state: roundState,
     step: roundState.selectedStep,
   });
-  const inspectorModifierRows = useMemo(() => buildPlayerCombatModifierRows({}), []);
+  const selectedEncounterParticipant = encounter.participants.find(
+    (participant) => participant.id === inspector.participant?.participantId,
+  );
+  const selectedScenarioParticipant = selectedEncounterParticipant
+    ? scenarioParticipants.find(
+        (participant) =>
+          participant.id === selectedEncounterParticipant.scenarioParticipantId ||
+          participant.id === selectedEncounterParticipant.id ||
+          (participant.characterId &&
+            participant.characterId === selectedEncounterParticipant.characterId),
+      )
+    : undefined;
+  const inspectorLiveModifiers = useMemo(
+    () =>
+      buildEncounterLiveCombatModifierSummary({
+        combatContext: selectedScenarioParticipant?.state.combat.combatContext,
+        combatEffects: selectedScenarioParticipant?.state.combatEffects,
+      }),
+    [selectedScenarioParticipant],
+  );
+  const inspectorModifierRows = useMemo(
+    () =>
+      buildPlayerCombatModifierRows({
+        combatContext: selectedScenarioParticipant?.state.combat.combatContext,
+        liveModifiers: inspectorLiveModifiers,
+      }),
+    [inspectorLiveModifiers, selectedScenarioParticipant],
+  );
   const inspectorPhaseCards = useMemo<readonly PlayerCombatPhaseCardView[]>(() => {
     if (!inspector.participant) {
       return [];

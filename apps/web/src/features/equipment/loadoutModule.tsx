@@ -30,6 +30,10 @@ import {
 import { CombatStatePanel } from "./components/CombatStatePanel";
 import type { EquipmentFeatureState } from "./types";
 import { lookupWorkbookCompositeAdjustment } from "./workbookCompositeTable";
+import {
+  applyLiveRawModifierToCombatValue,
+  type EncounterLiveCombatModifierSummary,
+} from "@/lib/campaigns/liveCombatModifiers";
 import styles from "./loadoutModule.module.css";
 
 type EncumbranceDependentSkillType = "combat" | "covert" | "physical";
@@ -61,6 +65,58 @@ export interface EquipmentLoadoutModuleModel {
   combatStatePanelModel: ReturnType<typeof buildCombatStatePanelModel> | null;
   encumbranceSkillsTable: CombatStateTableModel | null;
   fields: EquipmentLoadoutFieldModel[];
+}
+
+function getIntegerCombatPanelValue(value: string | number): number | null {
+  if (typeof value === "number") {
+    return Number.isInteger(value) ? value : null;
+  }
+
+  if (!/^-?\d+$/.test(value)) {
+    return null;
+  }
+
+  return Number(value);
+}
+
+function applyLiveModifierToPanelValue(
+  value: string | number,
+  rawModifier: number,
+): string | number {
+  const numericValue = getIntegerCombatPanelValue(value);
+  if (numericValue == null) {
+    return value;
+  }
+
+  return applyLiveRawModifierToCombatValue({
+    baseValue: numericValue,
+    rawModifier,
+  });
+}
+
+function applyLiveModifierToTableColumns(input: {
+  columnLabels: string[];
+  rawModifier: number;
+  table: CombatStateTableModel;
+}): CombatStateTableModel {
+  const columnIndexes = input.columnLabels
+    .map((label) => input.table.columns.indexOf(label))
+    .filter((index) => index >= 0);
+
+  if (columnIndexes.length === 0 || input.rawModifier === 0) {
+    return input.table;
+  }
+
+  return {
+    ...input.table,
+    rows: input.table.rows.map((row) =>
+      row.map((cell, index) =>
+        columnIndexes.includes(index)
+          ? applyLiveModifierToPanelValue(cell, input.rawModifier)
+          : cell,
+      ),
+    ),
+  };
 }
 
 function getItemName(input: {
@@ -351,6 +407,7 @@ export function buildEquipmentLoadoutModuleModel(input: {
   characterId: string;
   combatAllocationInputs?: typeof defaultCombatAllocationState;
   errors?: Partial<Record<Exclude<LoadoutFieldId, "throwing">, string | undefined>>;
+  liveCombatModifiers?: EncounterLiveCombatModifierSummary;
   state: EquipmentFeatureState | null;
   throwingWeaponItemId?: string | null;
 }): EquipmentLoadoutModuleModel {
@@ -363,6 +420,17 @@ export function buildEquipmentLoadoutModuleModel(input: {
   }
 
   const combatAllocationInputs = input.combatAllocationInputs ?? defaultCombatAllocationState;
+  const effectiveCombatAllocationInputs = input.liveCombatModifiers
+    ? {
+        ...combatAllocationInputs,
+        situationalModifiers: {
+          ...combatAllocationInputs.situationalModifiers,
+          attack: 0,
+          defense: 0,
+          perception: 0,
+        },
+      }
+    : combatAllocationInputs;
   const sheetSummary = buildCharacterSheetSummary({
     build: input.characterContext.record.build,
     content: input.characterContext.content
@@ -395,7 +463,7 @@ export function buildEquipmentLoadoutModuleModel(input: {
     input.state,
     input.characterId,
     characterCombatInputs,
-    combatAllocationInputs
+    effectiveCombatAllocationInputs
   );
   const throwingWeaponOptions = buildLoadoutThrowingWeaponOptions({
     characterId: input.characterId,
@@ -434,7 +502,7 @@ export function buildEquipmentLoadoutModuleModel(input: {
     input.state,
     input.characterId,
     characterCombatInputs,
-    combatAllocationInputs,
+    effectiveCombatAllocationInputs,
     input.throwingWeaponItemId || null
   );
   const statsRows: CombatStateDetailRow[] = [
@@ -460,10 +528,36 @@ export function buildEquipmentLoadoutModuleModel(input: {
     skills: input.characterContext.content.skills,
     workbookPerceptionValue
   });
+  const liveObSkillRaw =
+    (input.liveCombatModifiers?.generalFatigueRaw ?? 0) +
+    (input.liveCombatModifiers?.obSkillRaw ?? 0);
+  const liveDbRaw =
+    (input.liveCombatModifiers?.generalFatigueRaw ?? 0) +
+    (input.liveCombatModifiers?.dbRaw ?? 0);
   const combatStatePanelModel = {
     ...baseModel,
+    modifierSourceNote: input.liveCombatModifiers
+      ? `Modified by: ${input.liveCombatModifiers.modifierNoteLabels.join(", ")}`
+      : undefined,
     statsRows,
-    statsTable
+    statsTable: input.liveCombatModifiers
+      ? applyLiveModifierToTableColumns({
+          columnLabels: ["Skill level", "Encumbered"],
+          rawModifier: liveObSkillRaw,
+          table: statsTable,
+        })
+      : statsTable,
+    weaponModeTable: input.liveCombatModifiers
+      ? applyLiveModifierToTableColumns({
+          columnLabels: ["OB", "OB2", "OB3", "Parry"],
+          rawModifier: liveObSkillRaw,
+          table: applyLiveModifierToTableColumns({
+            columnLabels: ["DB"],
+            rawModifier: liveDbRaw,
+            table: baseModel.weaponModeTable,
+          }),
+        })
+      : baseModel.weaponModeTable,
   };
 
   const movementModifier =

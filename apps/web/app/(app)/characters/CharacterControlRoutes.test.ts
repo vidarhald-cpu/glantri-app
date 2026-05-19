@@ -23,6 +23,9 @@ describe("character control routes", () => {
 
     expect(sharedViewSource).toContain("Equip items -");
     expect(sharedViewSource).toContain("PhysicalStateSection");
+    expect(sharedViewSource).toContain("buildEncounterLiveCombatModifierSummary");
+    expect(sharedViewSource).toContain("showPhysicalState");
+    expect(sharedViewSource).toContain("liveCombatModifiers");
     expect(sharedViewSource).toContain("calculateCharacterGeneralHitpoints");
     expect(sharedViewSource).toContain("saveCombatEffect");
     expect(sharedViewSource).toContain("draft.sourceEventId");

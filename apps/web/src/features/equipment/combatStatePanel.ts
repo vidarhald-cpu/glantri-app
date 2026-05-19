@@ -26,6 +26,7 @@ export interface CombatStateTableModel {
 export interface CombatStatePanelModel {
   title: string;
   description: string;
+  modifierSourceNote?: string;
   statsRows: CombatStateDetailRow[];
   statsTable?: CombatStateTableModel;
   armorRows?: CombatStateDetailRow[];

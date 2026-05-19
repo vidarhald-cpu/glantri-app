@@ -231,6 +231,18 @@ describe("combatStatePanel throwing row reliability", () => {
     expect(source).toContain("input.characterContext.record.build.profile.distractionLevel");
   });
 
+  it("keeps live encounter combat modifiers behind an explicit loadout model option", () => {
+    const source = readFileSync(join(featurePath, "loadoutModule.tsx"), "utf8");
+
+    expect(source).toContain("liveCombatModifiers?: EncounterLiveCombatModifierSummary");
+    expect(source).toContain("applyLiveRawModifierToCombatValue");
+    expect(source).toContain("input.liveCombatModifiers");
+    expect(source).toContain('Modified by: ${input.liveCombatModifiers.modifierNoteLabels.join(", ")}');
+    expect(source).toContain('columnLabels: ["OB", "OB2", "OB3", "Parry"]');
+    expect(source).toContain('columnLabels: ["DB"]');
+    expect(source).toContain('columnLabels: ["Skill level", "Encumbered"]');
+  });
+
   it("includes the throwing row whenever the same valid throwing selection is recomputed", () => {
     const state = createState();
 

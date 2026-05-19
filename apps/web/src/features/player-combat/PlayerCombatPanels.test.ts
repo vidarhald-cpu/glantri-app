@@ -16,6 +16,7 @@ describe("PlayerCombatPanels", () => {
     expect(source).toContain("buildPlayerCombatModifierRows");
     expect(source).toContain("getPlayerEncounterCombatModifierTotals");
     expect(source).toContain("General/Fatigue");
+    expect(source).toContain("liveModifiers?.generalFatigueRaw");
     expect(source).toContain("Skill/OB");
     expect(source).toContain("DB");
   });
@@ -29,6 +30,7 @@ describe("PlayerCombatPanels", () => {
     expect(source).toContain("onRemoveEntry");
     expect(source).toContain("onUpdateEntry");
     expect(source).toContain("disabled={controlsDisabled}");
+    expect(source).toContain("row.locked");
   });
 
   it("renders reusable phase panels for Phase 1 and Phase 2 combat summaries", () => {

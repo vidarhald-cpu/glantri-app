@@ -757,6 +757,7 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
                     ),
                   );
                 }}
+                scenarioParticipants={scenarioParticipants}
               />
             </>
           ) : canAccessGmEncounter ? (

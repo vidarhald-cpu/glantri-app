@@ -32,7 +32,6 @@ import {
   createEmptyPlayerEncounterCombatContext,
   evaluatePlayerEncounterParryLegality,
   getPlayerEncounterAccessibleParticipants,
-  getPlayerEncounterCombatModifierTotals,
   getPlayerEncounterMovementLabel,
   getPlayerEncounterParrySourceLabel,
   isPlayerEncounterActionId,
@@ -60,6 +59,7 @@ import {
 } from "@/lib/browser/rememberedSelection";
 import RememberedCampaignWorkspaceEffect from "@/lib/campaigns/RememberedCampaignWorkspaceEffect";
 import { buildCampaignWorkspaceHref, type CampaignWorkspaceTabId } from "@/lib/campaigns/workspace";
+import { buildEncounterLiveCombatModifierSummary } from "@/lib/campaigns/liveCombatModifiers";
 
 interface ScenarioPlayerCombatPageContentProps {
   campaignId: string;
@@ -482,13 +482,21 @@ export default function ScenarioPlayerCombatPageContent({
     return isEquipmentFeatureState(candidate) ? candidate : null;
   }, [displayedParticipant]);
 
-  const modifierTotals = useMemo(
-    () => getPlayerEncounterCombatModifierTotals(combatContextDraft),
-    [combatContextDraft],
+  const liveCombatModifiers = useMemo(
+    () =>
+      buildEncounterLiveCombatModifierSummary({
+        combatContext: combatContextDraft,
+        combatEffects: selectedParticipant?.state.combatEffects,
+      }),
+    [combatContextDraft, selectedParticipant?.state.combatEffects],
   );
   const modifierRows = useMemo(
-    () => buildPlayerCombatModifierRows({ combatContext: combatContextDraft }),
-    [combatContextDraft],
+    () =>
+      buildPlayerCombatModifierRows({
+        combatContext: combatContextDraft,
+        liveModifiers: liveCombatModifiers,
+      }),
+    [combatContextDraft, liveCombatModifiers],
   );
 
   const loadoutFieldValueMap = useMemo(
@@ -548,13 +556,13 @@ export default function ScenarioPlayerCombatPageContent({
                 : "none",
       },
       situationalModifiers: {
-        attack: modifierTotals.attackTotal,
-        defense: modifierTotals.defenseTotal,
+        attack: 0,
+        defense: 0,
         movement: 0,
         perception: 0,
       },
     }),
-    [modifierTotals.attackTotal, modifierTotals.defenseTotal, parryLegality, selectedActionId],
+    [parryLegality, selectedActionId],
   );
 
   const loadoutModel = useMemo(
@@ -571,6 +579,7 @@ export default function ScenarioPlayerCombatPageContent({
             : null,
         characterId: displayedParticipant?.characterId ?? "",
         combatAllocationInputs,
+        liveCombatModifiers,
         state: controlledEquipmentState,
         throwingWeaponItemId: null,
       }),
@@ -580,6 +589,7 @@ export default function ScenarioPlayerCombatPageContent({
       controlledBuild,
       controlledEquipmentState,
       displayedParticipant,
+      liveCombatModifiers,
     ],
   );
 

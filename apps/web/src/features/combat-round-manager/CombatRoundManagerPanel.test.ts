@@ -50,6 +50,8 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("buildCombatRoundInspector");
     expect(source).toContain("PlayerCombatModifierPanel");
     expect(source).toContain("PlayerCombatPhasePanel");
+    expect(source).toContain("buildEncounterLiveCombatModifierSummary");
+    expect(source).toContain("selectedScenarioParticipant?.state.combatEffects");
     expect(source).toContain("readOnly");
     expect(source).toContain("Phase 1 action");
     expect(source).toContain("Phase 2 action");
@@ -66,7 +68,6 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("updateEncounterOnServer");
     expect(source).toContain("combatRoundState: nextRoundState");
     expect(source).toContain("currentRound: nextRoundState.roundNumber");
-    expect(source).not.toContain("combatEffects");
     expect(source).not.toContain("actionLog:");
   });
 });
