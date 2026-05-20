@@ -1,5 +1,13 @@
 # Glantri Skill System AI Export Notes
 
+## Regenerating the export
+
+`glantri-skill-system-export.json` is gitignored (~190k lines). Regenerate locally with:
+
+```bash
+pnpm --filter @glantri/content export:skill-system-ai
+```
+
 ## Purpose
 This export is for AI review/modeling and possible later import proposals. It is not canonical content by itself, and generated suggestions must not be reimported without validation.
 
