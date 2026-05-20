@@ -54,14 +54,13 @@ describe("CampaignWorkspaceShell roleplay encounter routing", () => {
     expect(source).toContain("currentRoundNumber={activeScenario?.liveState?.roundNumber}");
   });
 
-  it("keeps GM Skill rolls focused on GM tools and routes player inspection separately", () => {
+  it("keeps GM Skill rolls focused on GM tools and routes player operation separately", () => {
     const source = readSource();
 
     expect(source).toContain('workspaceState.activeTab === "skill-rolls"');
     expect(source).toContain('workspaceState.activeTab === "player-skill-rolls"');
     expect(source).toContain('screenName="Player skill rolls"');
     expect(source).toContain("inspectionParticipantId={selectedGmInspectableCandidate.id}");
-    expect(source).toContain("readOnlyInspection");
     expect(source).toContain("showWorkspaceHeader={false}");
     expect(source).toContain(
       'selectInspectableParticipant({ participantId, tab: "player-skill-rolls" })',
@@ -80,6 +79,7 @@ describe("CampaignWorkspaceShell roleplay encounter routing", () => {
     expect(source).toContain("Select an encounter to open the Combat Round Manager.");
     expect(source).toContain("Create or open an encounter on Scenario tab");
     expect(source).toContain("onEncounterUpdated");
+    expect(source).toContain("scenarioParticipants={scenarioParticipants}");
     expect(source).toContain("ScenarioPlayerCombatPageContent");
     expect(source).toContain('workspaceTab="combat"');
     expect(source).toContain("Select a scenario to open the combat panel.");
@@ -96,10 +96,9 @@ describe("CampaignWorkspaceShell roleplay encounter routing", () => {
     expect(source).toContain("ScenarioPlayerCombatPageContent");
     expect(source).toContain('workspaceTab="player-combat"');
     expect(source).toContain("showParticipantSelector={false}");
-    expect(source).toContain("readOnlyInspection");
     expect(source).toContain(
       'selectInspectableParticipant({ participantId, tab: "player-combat" })',
     );
-    expect(source).toContain("No participant is available for player combat inspection.");
+    expect(source).toContain("No participant is available for player combat.");
   });
 });

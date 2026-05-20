@@ -273,6 +273,18 @@ export function lookupWorkbookPercentageAdjustment(
     return null;
   }
 
+  if (rawOb < 0 || absoluteModifier < 0) {
+    return null;
+  }
+
+  if (rawOb === 0) {
+    // The hardcoded workbook table row for 0 imported as all zeroes, but the
+    // surrounding low-base rows encode a minimum one-point effect per raw step.
+    // Treat base 0 as the same low-base minimum rule so combat values can move
+    // away from zero under live modifiers.
+    return absoluteModifier;
+  }
+
   return WORKBOOK_PERCENTAGE_ADJUSTMENT_TABLE[rawOb]?.[absoluteModifier] ?? null;
 }
 

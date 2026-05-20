@@ -147,6 +147,7 @@ export default function CharacterWorkspacePanel({
             canEditCombatEffects={isGameMaster}
             characterId={selectedCandidate.characterId}
             onCombatEffectsChange={isGameMaster ? updateSelectedCombatEffects : undefined}
+            physicalStateCombatContext={selectedCandidate.scenarioParticipant.state.combat.combatContext}
             physicalStateCombatEffects={selectedCandidate.scenarioParticipant.state.combatEffects}
             physicalStateCurrentRoundNumber={currentRoundNumber}
             physicalStateEncounterId={activeEncounter?.id}

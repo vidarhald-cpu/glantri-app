@@ -17,6 +17,7 @@ describe("CharacterWorkspacePanel", () => {
     expect(source).toContain("physicalStateGeneralHitpoints");
     expect(source).toContain("physicalStateCurrentRoundNumber={currentRoundNumber}");
     expect(source).toContain("selectedCandidate.scenarioParticipant.state.health.maxHp");
+    expect(source).toContain("physicalStateCombatContext={selectedCandidate.scenarioParticipant.state.combat.combatContext}");
     expect(source).not.toContain("Combat arena");
   });
 

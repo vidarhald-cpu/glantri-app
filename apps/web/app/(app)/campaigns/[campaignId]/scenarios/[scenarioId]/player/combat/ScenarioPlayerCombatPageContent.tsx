@@ -18,6 +18,12 @@ import {
   buildEquipmentLoadoutModuleModel,
   EquipmentLoadoutModule,
 } from "@/features/equipment/loadoutModule";
+import {
+  buildPlayerCombatModifierRows,
+  PlayerCombatModifierPanel,
+  PlayerCombatPhasePanel,
+  playerCombatPanelsGridStyle,
+} from "@/features/player-combat/PlayerCombatPanels";
 import type { EquipmentFeatureState } from "@/features/equipment/types";
 import { useSessionUser } from "@/lib/auth/SessionUserContext";
 import type { CombatAllocationState } from "@glantri/rules-engine";
@@ -26,7 +32,6 @@ import {
   createEmptyPlayerEncounterCombatContext,
   evaluatePlayerEncounterParryLegality,
   getPlayerEncounterAccessibleParticipants,
-  getPlayerEncounterCombatModifierTotals,
   getPlayerEncounterMovementLabel,
   getPlayerEncounterParrySourceLabel,
   isPlayerEncounterActionId,
@@ -54,6 +59,7 @@ import {
 } from "@/lib/browser/rememberedSelection";
 import RememberedCampaignWorkspaceEffect from "@/lib/campaigns/RememberedCampaignWorkspaceEffect";
 import { buildCampaignWorkspaceHref, type CampaignWorkspaceTabId } from "@/lib/campaigns/workspace";
+import { buildEncounterLiveCombatModifierSummary } from "@/lib/campaigns/liveCombatModifiers";
 
 interface ScenarioPlayerCombatPageContentProps {
   campaignId: string;
@@ -476,9 +482,21 @@ export default function ScenarioPlayerCombatPageContent({
     return isEquipmentFeatureState(candidate) ? candidate : null;
   }, [displayedParticipant]);
 
-  const modifierTotals = useMemo(
-    () => getPlayerEncounterCombatModifierTotals(combatContextDraft),
-    [combatContextDraft],
+  const liveCombatModifiers = useMemo(
+    () =>
+      buildEncounterLiveCombatModifierSummary({
+        combatContext: combatContextDraft,
+        combatEffects: selectedParticipant?.state.combatEffects,
+      }),
+    [combatContextDraft, selectedParticipant?.state.combatEffects],
+  );
+  const modifierRows = useMemo(
+    () =>
+      buildPlayerCombatModifierRows({
+        combatContext: combatContextDraft,
+        liveModifiers: liveCombatModifiers,
+      }),
+    [combatContextDraft, liveCombatModifiers],
   );
 
   const loadoutFieldValueMap = useMemo(
@@ -538,13 +556,13 @@ export default function ScenarioPlayerCombatPageContent({
                 : "none",
       },
       situationalModifiers: {
-        attack: modifierTotals.attackTotal,
-        defense: modifierTotals.defenseTotal,
+        attack: 0,
+        defense: 0,
         movement: 0,
         perception: 0,
       },
     }),
-    [modifierTotals.attackTotal, modifierTotals.defenseTotal, parryLegality, selectedActionId],
+    [parryLegality, selectedActionId],
   );
 
   const loadoutModel = useMemo(
@@ -561,6 +579,7 @@ export default function ScenarioPlayerCombatPageContent({
             : null,
         characterId: displayedParticipant?.characterId ?? "",
         combatAllocationInputs,
+        liveCombatModifiers,
         state: controlledEquipmentState,
         throwingWeaponItemId: null,
       }),
@@ -570,6 +589,7 @@ export default function ScenarioPlayerCombatPageContent({
       controlledBuild,
       controlledEquipmentState,
       displayedParticipant,
+      liveCombatModifiers,
     ],
   );
 
@@ -972,7 +992,6 @@ export default function ScenarioPlayerCombatPageContent({
           </h1>
         ) : null}
         {encounterTitle ? <div>Encounter: {encounterTitle}</div> : null}
-        {readOnlyInspection ? <div>GM player-view inspection is read-only.</div> : null}
         {showParticipantSelector ? (
           <label style={{ display: "grid", gap: "0.25rem", maxWidth: 360 }}>
             <span>Character</span>
@@ -1068,133 +1087,33 @@ export default function ScenarioPlayerCombatPageContent({
                 />
               </label>
 
-              <section
-                style={{
-                  background: "#fffdf8",
-                  border: "1px solid #d9ddd8",
-                  borderRadius: 10,
-                  display: "grid",
-                  gap: "0.6rem",
-                  padding: "0.75rem",
-                }}
-              >
-                <strong>Combat modifiers</strong>
-                {(
-                  [
-                    ["general", "General", combatContextDraft.modifierBuckets.general],
-                    [
-                      "situation_ob_skill",
-                      "Situation OB/Skill",
-                      combatContextDraft.modifierBuckets.situationObSkill,
-                    ],
-                    [
-                      "situation_db",
-                      "Situation DB",
-                      combatContextDraft.modifierBuckets.situationDb,
-                    ],
-                  ] as const
-                ).map(([bucketKey, label, entries]) => (
-                  <div key={bucketKey} style={{ display: "grid", gap: "0.35rem" }}>
-                    <div style={{ fontSize: "0.9rem", fontWeight: 600 }}>{label}</div>
-                    {entries.map((entry) => (
-                      <div
-                        key={entry.id}
-                        style={{
-                          display: "grid",
-                          gap: "0.35rem",
-                          gridTemplateColumns: "70px 88px minmax(0, 1fr) auto",
-                        }}
-                      >
-                        <input
-                          disabled={controlsDisabled}
-                          onChange={(event) =>
-                            updateModifierBucket(bucketKey, (current) =>
-                              current.map((currentEntry) =>
-                                currentEntry.id === entry.id
-                                  ? {
-                                      ...currentEntry,
-                                      value:
-                                        event.target.value.length > 0
-                                          ? Number(event.target.value)
-                                          : 0,
-                                    }
-                                  : currentEntry,
-                              ),
-                            )
+              <PlayerCombatModifierPanel
+                controlsDisabled={controlsDisabled}
+                onAddEntry={(bucketKey) =>
+                  updateModifierBucket(bucketKey, (current) => [
+                    ...current,
+                    createModifierEntryDraft(),
+                  ])
+                }
+                onRemoveEntry={(bucketKey, entryId) =>
+                  updateModifierBucket(bucketKey, (current) =>
+                    current.filter((currentEntry) => currentEntry.id !== entryId),
+                  )
+                }
+                onUpdateEntry={(bucketKey, entryId, patch) =>
+                  updateModifierBucket(bucketKey, (current) =>
+                    current.map((currentEntry) =>
+                      currentEntry.id === entryId
+                        ? {
+                            ...currentEntry,
+                            ...patch,
                           }
-                          type="number"
-                          value={entry.value}
-                        />
-                        <select
-                          disabled={controlsDisabled}
-                          onChange={(event) =>
-                            updateModifierBucket(bucketKey, (current) =>
-                              current.map((currentEntry) =>
-                                currentEntry.id === entry.id
-                                  ? {
-                                      ...currentEntry,
-                                      scope: event.target.value as "until" | "save",
-                                    }
-                                  : currentEntry,
-                              ),
-                            )
-                          }
-                          value={entry.scope}
-                        >
-                          <option value="until">Until</option>
-                          <option value="save">Save</option>
-                        </select>
-                        <input
-                          disabled={controlsDisabled}
-                          onChange={(event) =>
-                            updateModifierBucket(bucketKey, (current) =>
-                              current.map((currentEntry) =>
-                                currentEntry.id === entry.id
-                                  ? {
-                                      ...currentEntry,
-                                      notes: event.target.value,
-                                    }
-                                  : currentEntry,
-                              ),
-                            )
-                          }
-                          placeholder="Notes"
-                          type="text"
-                          value={entry.notes ?? ""}
-                        />
-                        <button
-                          disabled={controlsDisabled}
-                          onClick={() =>
-                            updateModifierBucket(bucketKey, (current) =>
-                              current.filter((currentEntry) => currentEntry.id !== entry.id),
-                            )
-                          }
-                          type="button"
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    ))}
-                    <button
-                      disabled={controlsDisabled}
-                      onClick={() =>
-                        updateModifierBucket(bucketKey, (current) => [
-                          ...current,
-                          createModifierEntryDraft(),
-                        ])
-                      }
-                      style={{ justifySelf: "start" }}
-                      type="button"
-                    >
-                      Add {label}
-                    </button>
-                  </div>
-                ))}
-                <div style={{ color: "#5e5a50", fontSize: "0.92rem" }}>
-                  General {modifierTotals.generalTotal} · Attack {modifierTotals.attackTotal} ·
-                  Defense {modifierTotals.defenseTotal}
-                </div>
-              </section>
+                        : currentEntry,
+                    ),
+                  )
+                }
+                rows={modifierRows}
+              />
 
               {selectedActionId === "attack_parry" ? (
                 <section
@@ -1286,23 +1205,9 @@ export default function ScenarioPlayerCombatPageContent({
         </div>
 
         <div style={{ display: "grid", gap: "0.9rem" }}>
-          <div style={{ display: "grid", gap: "0.75rem", gridTemplateColumns: "1fr 1fr" }}>
+          <div style={playerCombatPanelsGridStyle}>
             {phaseCards.map((phaseCard) => (
-              <section
-                key={phaseCard.phaseLabel}
-                style={{
-                  background: "#fffdf8",
-                  border: "1px solid #d9ddd8",
-                  borderRadius: 10,
-                  display: "grid",
-                  gap: "0.5rem",
-                  minHeight: 210,
-                  padding: "0.85rem",
-                }}
-              >
-                <strong>{phaseCard.phaseLabel}</strong>
-                <div style={{ fontSize: "1.05rem", fontWeight: 600 }}>{phaseCard.title}</div>
-                <div style={{ color: "#5e5a50" }}>{phaseCard.description}</div>
+              <PlayerCombatPhasePanel key={phaseCard.phaseLabel} phaseCard={phaseCard}>
                 {selectedActionId === "attack_parry" &&
                 phaseCard.phaseLabel === "Phase 1" &&
                 selectedCombatReference ? (
@@ -1327,14 +1232,7 @@ export default function ScenarioPlayerCombatPageContent({
                     </select>
                   </label>
                 ) : null}
-                {phaseCard.stats.length > 0 ? (
-                  <div style={{ display: "grid", gap: "0.25rem", fontSize: "0.95rem" }}>
-                    {phaseCard.stats.map((stat) => (
-                      <div key={stat}>{stat}</div>
-                    ))}
-                  </div>
-                ) : null}
-              </section>
+              </PlayerCombatPhasePanel>
             ))}
           </div>
 

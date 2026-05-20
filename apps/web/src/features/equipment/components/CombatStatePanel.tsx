@@ -113,6 +113,12 @@ function TableCard(input: {
 export function CombatStatePanel(input: { model: CombatStatePanelModel }) {
   return (
     <SectionCard title={input.model.title} description={input.model.description}>
+      {input.model.modifierSourceNote ? (
+        <div style={{ color: "#5e5a50", fontSize: "0.92rem" }}>
+          {input.model.modifierSourceNote}
+        </div>
+      ) : null}
+
       <StatGrid>
         <BattleStatCard
           title="Combat stats and skills"

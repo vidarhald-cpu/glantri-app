@@ -7,6 +7,7 @@ import {
   type CombatEffect,
   type CombatEffectEvent,
   type CombatEffectsState,
+  type ScenarioParticipantCombatContext,
 } from "@glantri/domain";
 
 import type { CombatEffectEditorDraft } from "@/features/equipment/components/PhysicalStateSection";
@@ -28,11 +29,13 @@ import {
 } from "@/lib/api/localServiceClient";
 import { loadLocalCharacterContext } from "@/lib/characters/loadLocalCharacterContext";
 import { buildCharacterPhysicalStateView } from "@/lib/characters/physicalState";
+import { buildEncounterLiveCombatModifierSummary } from "@/lib/campaigns/liveCombatModifiers";
 
 interface CharacterLoadoutViewProps {
   canEditCombatEffects?: boolean;
   characterId: string;
   onCombatEffectsChange?: (nextState: CombatEffectsState) => Promise<void> | void;
+  physicalStateCombatContext?: ScenarioParticipantCombatContext;
   physicalStateCombatEffects?: CombatEffectsState;
   physicalStateEncounterId?: string;
   physicalStateGeneralHitpoints?: number | null;
@@ -64,6 +67,7 @@ export default function CharacterLoadoutView({
   canEditCombatEffects = false,
   characterId,
   onCombatEffectsChange,
+  physicalStateCombatContext,
   physicalStateCombatEffects,
   physicalStateCurrentRoundNumber,
   physicalStateEncounterId,
@@ -143,8 +147,15 @@ export default function CharacterLoadoutView({
   }, [state, throwingWeaponItemId]);
 
   const model = useMemo(
-    () =>
-      buildEquipmentLoadoutModuleModel({
+    () => {
+      const liveCombatModifiers = showPhysicalState
+        ? buildEncounterLiveCombatModifierSummary({
+            combatContext: physicalStateCombatContext,
+            combatEffects: physicalStateCombatEffects,
+          })
+        : undefined;
+
+      return buildEquipmentLoadoutModuleModel({
         characterContext:
           characterContext?.record && characterContext.content
             ? {
@@ -154,10 +165,21 @@ export default function CharacterLoadoutView({
             : null,
         characterId,
         errors,
+        liveCombatModifiers,
         state,
         throwingWeaponItemId
-      }),
-    [characterContext, errors, characterId, state, throwingWeaponItemId]
+      });
+    },
+    [
+      characterContext,
+      errors,
+      characterId,
+      physicalStateCombatContext,
+      physicalStateCombatEffects,
+      showPhysicalState,
+      state,
+      throwingWeaponItemId,
+    ]
   );
   const physicalStateModel = useMemo(
     () =>

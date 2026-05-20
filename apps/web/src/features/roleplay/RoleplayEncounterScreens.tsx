@@ -112,6 +112,7 @@ interface PlayerRoleplayingEncounterScreenProps {
   scenarioId: string;
   showWorkspaceHeader?: boolean;
   surface?: "encounter" | "full" | "skill-rolls";
+  workspaceTab?: "encounter" | "player-skill-rolls" | "skill-rolls";
   workspaceScreenName?: string;
 }
 
@@ -1641,6 +1642,7 @@ export function PlayerRoleplayingEncounterScreen({
   scenarioId,
   showWorkspaceHeader = true,
   surface = "full",
+  workspaceTab,
   workspaceScreenName = "Skill rolls",
 }: PlayerRoleplayingEncounterScreenProps) {
   const [campaign, setCampaign] = useState<Campaign | null>(null);
@@ -1667,8 +1669,7 @@ export function PlayerRoleplayingEncounterScreen({
   const isGameMaster = Boolean(
     currentUser?.roles.includes("game_master") || currentUser?.roles.includes("admin"),
   );
-  const inspectedParticipantId =
-    readOnlyInspection && isGameMaster ? inspectionParticipantId : undefined;
+  const inspectedParticipantId = isGameMaster ? inspectionParticipantId : undefined;
   const situationRef = useRef<HTMLDivElement>(null);
 
   const fetchRoleplayEncounter = useCallback(async () => {
@@ -1793,7 +1794,7 @@ export function PlayerRoleplayingEncounterScreen({
   });
   const showEncounterContext = surface !== "skill-rolls";
   const showSkillRollTools = surface !== "encounter";
-  const rememberedTab = surface === "skill-rolls" ? "skill-rolls" : "encounter";
+  const rememberedTab = workspaceTab ?? (surface === "skill-rolls" ? "skill-rolls" : "encounter");
 
   if (currentUser && playerView.controlledParticipantIds.length === 0) {
     return (
@@ -2071,7 +2072,6 @@ export function PlayerRoleplayingEncounterScreen({
             {workspaceScreenName}
             {selectedPlayerFacingName ? ` — ${selectedPlayerFacingName}` : ""}
           </h2>
-          {readOnlyInspection ? <div>GM player-view inspection is read-only.</div> : null}
         </section>
       ) : null}
       {feedback ? <section style={panelStyle}>{feedback}</section> : null}

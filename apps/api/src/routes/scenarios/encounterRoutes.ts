@@ -400,7 +400,10 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         });
       }
 
+      const gmAuthorizedOperation = access.mode === "gm";
+
       if (
+        !gmAuthorizedOperation &&
         !isUserAssignedToEncounterMembership({
           encounter,
           scenarioParticipants,
@@ -423,7 +426,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       if (
         !participant ||
         !scenarioParticipant ||
-        scenarioParticipant.controlledByUserId !== user.id ||
+        (!gmAuthorizedOperation && scenarioParticipant.controlledByUserId !== user.id) ||
         !scenarioParticipant.isActive
       ) {
         return reply.code(403).send({

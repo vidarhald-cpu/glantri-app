@@ -19,11 +19,17 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("export default function ScenarioPlayerCombatPageContent");
     expect(source).toContain("Action selector");
     expect(source).toContain("EquipmentLoadoutModule");
+    expect(source).toContain("PlayerCombatModifierPanel");
+    expect(source).toContain("PlayerCombatPhasePanel");
+    expect(source).toContain("buildPlayerCombatModifierRows");
+    expect(source).toContain("buildEncounterLiveCombatModifierSummary");
+    expect(source).toContain("combatEffects: selectedParticipant?.state.combatEffects");
+    expect(source).toContain("liveCombatModifiers");
     expect(source).toContain('workspaceTab = "player-encounter"');
     expect(source).toContain("displayedParticipant?.displayName ? ` — ${displayedParticipant.displayName}`");
     expect(source).toContain("showParticipantSelector = true");
     expect(source).toContain("readOnlyInspection = false");
-    expect(source).toContain("GM player-view inspection is read-only.");
+    expect(source).not.toContain("GM player-view inspection is read-only.");
     expect(source).toContain("controlsDisabled || savingCombatContext");
     expect(source).not.toContain("will appear here in the next phase");
     expect(source).not.toContain("will expand into this area");
