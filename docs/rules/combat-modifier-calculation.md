@@ -61,10 +61,10 @@ These are not raw percentage modifiers by themselves:
 - Already-final derived display values
 - Text labels, warnings, and narrative descriptions
 
-## Current refactor boundary
+## Current implementation boundary
 
-This refactor starts with DB and combined defense. Those calculations have a clear existing
-workbook-backed path:
+DB and combined defense are implemented with the summed-raw path. Those calculations have a clear
+existing workbook-backed path:
 
 ```text
 Base DB = round(Dodge XP / 2) + 4 + DEX GM
@@ -72,6 +72,19 @@ Raw modifiers = equipment defensive value + DB/live modifier + encumbrance to-hi
 Final DB = apply workbook percentage adjustment once
 ```
 
-OB, parry, and encumbrance-dependent skill rows already have workbook helpers, but not every live
-modifier source has been threaded into those helpers yet. Until that is done, they may still use the
-existing live overlay path.
+OB, parry, and encounter-context combat/encumbrance-dependent skill rows now use the same rule for
+the live modifier sources currently wired through the app:
+
+- OB uses the workbook raw OB as the base value and sums armor activity, weapon OB, General/Fatigue,
+  and OB/Skill before one percentage lookup.
+- Parry uses the workbook raw parry as the base value and sums armor activity, weapon/shield parry,
+  General/Fatigue, and OB/Skill before one percentage lookup. Combined parry also keeps the workbook
+  minimum-1 primary/off-hand contribution rule before summing the live raw modifiers.
+- Encounter-context combat skill rows use the unencumbered skill total as the base value. Their
+  live skill value sums General/Fatigue and OB/Skill before one percentage lookup. Their encumbered
+  live value adds the existing encumbrance movement modifier as an `Enc` raw modifier into the same
+  lookup.
+
+The out-of-play Equip Items view remains theoretical unless an explicit encounter live-modifier
+context is passed. Action-specific combat phase modifiers beyond the current allocation inputs are
+future work and should be added as named raw modifier sources rather than as final-value overlays.

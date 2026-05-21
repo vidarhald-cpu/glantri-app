@@ -262,7 +262,33 @@ describe("getDerivedObValue · workbook golden values", () => {
       mode: { ob: 3 } as never,
       template: { handlingClass: "one_handed", weaponSkill: "Scimitar" } as never,
     });
-    expect(result).toBe(21);
+    expect(result).toBe(26);
+  });
+
+  it("uses the zero-base percentage adjustment path for fallback OB rows", () => {
+    expect(
+      getDerivedObValue({
+        allocationInputs: {
+          ...alloc,
+          situationalModifiers: { ...alloc.situationalModifiers, attack: 1 },
+        },
+        armorTemplate: null,
+        mode: { ob: 0 } as never,
+        template: { handlingClass: "one_handed", weaponSkill: "Kick" } as never,
+      }),
+    ).toBe(1);
+
+    expect(
+      getDerivedObValue({
+        allocationInputs: {
+          ...alloc,
+          situationalModifiers: { ...alloc.situationalModifiers, attack: -1 },
+        },
+        armorTemplate: null,
+        mode: { ob: 0 } as never,
+        template: { handlingClass: "one_handed", weaponSkill: "Kick" } as never,
+      }),
+    ).toBe(-1);
   });
 });
 

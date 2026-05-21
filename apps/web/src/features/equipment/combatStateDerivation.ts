@@ -219,6 +219,16 @@ function getDefenseRawModifiers(
     : [{ label: "DB", value: defenseModifier }];
 }
 
+function getObSkillRawModifiers(
+  allocationInputs: CombatStateAllocationInputs,
+): WorkbookRawModifier[] {
+  const attackModifier = allocationInputs.situationalModifiers.attack;
+
+  return attackModifier === 0
+    ? []
+    : [{ label: "OB/Skill", value: attackModifier }];
+}
+
 function getAttackLabel(mode: WeaponAttackMode | null): DerivedCombatValue {
   if (!mode) {
     return "—";
@@ -488,6 +498,7 @@ function buildWeaponRow(input: {
     parry: getWorkbookWeaponRowParry({
       armorTemplate: input.armorTemplate,
       characterInputs: input.characterInputs,
+      rawModifiers: getObSkillRawModifiers(input.allocationInputs),
       template: input.template,
     }),
     ob2: getDerivedObValue({
@@ -579,6 +590,7 @@ function buildBrawlingSummaryRow(input: {
     parry: getWorkbookWeaponRowParry({
       armorTemplate: input.armorTemplate,
       characterInputs: input.characterInputs,
+      rawModifiers: getObSkillRawModifiers(input.allocationInputs),
       template: input.template,
     }),
     attack2: "—",
@@ -628,6 +640,7 @@ function buildShieldRow(input: {
     parry: getWorkbookShieldRowParry({
       armorTemplate: input.armorTemplate,
       characterInputs: input.characterInputs,
+      rawModifiers: getObSkillRawModifiers(input.allocationInputs),
       shieldTemplate: input.shieldTemplate,
     }),
     attack2: "—",
@@ -646,6 +659,7 @@ function buildShieldRow(input: {
 }
 
 function buildCombinedDefenseRow(input: {
+  allocationInputs: CombatStateAllocationInputs;
   armorTemplate: ArmorTemplate | null;
   characterInputs?: CombatStateCharacterInputs;
   offHandLabel: string;
@@ -673,6 +687,7 @@ function buildCombinedDefenseRow(input: {
       characterInputs: input.characterInputs,
       offHandShieldTemplate: input.offHandShieldTemplate,
       primaryWeaponTemplate: input.primaryWeaponTemplate,
+      rawModifiers: getObSkillRawModifiers(input.allocationInputs),
       secondaryWeaponTemplate: input.secondaryWeaponTemplate,
     }),
     attack2: "—",
@@ -1049,6 +1064,7 @@ export function deriveCombatStateSnapshot(
     if (offHandLabel) {
       weaponRows.push(
         buildCombinedDefenseRow({
+          allocationInputs: resolvedAllocationInputs,
           armorTemplate,
           characterInputs,
           offHandLabel,

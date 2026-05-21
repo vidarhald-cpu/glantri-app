@@ -446,13 +446,13 @@ describe("combatStateDerivation", () => {
 
     const primaryRow = getRowBySlotLabel(snapshot, "Primary weapon");
 
-    expect(primaryRow?.ob1).toBe(16);
+    expect(primaryRow?.ob1).toBe(19);
     expect(primaryRow?.db).toBe(14);
-    expect(primaryRow?.parry).toBe(8);
+    expect(primaryRow?.parry).toBe(10);
     expect(snapshot.readinessSummary).toContain("Posture Parry");
     expect(snapshot.defenseSummary).toContain("Posture Parry");
     expect(snapshot.defenseSummary).toContain("DB 14");
-    expect(snapshot.defenseSummary).toContain("Parry 8");
+    expect(snapshot.defenseSummary).toContain("Parry 10");
     expect(snapshot.encumbranceLevel).toBe(4);
     expect(snapshot.shieldMovementModifierSummary).toBe(2);
     expect(snapshot.movementModifierSummary).toBe(4);
@@ -487,10 +487,51 @@ describe("combatStateDerivation", () => {
     });
 
     expect(snapshot).not.toBeNull();
-    expect(getRowBySlotLabel(snapshot!, "Primary weapon")?.ob1).toBe(16);
+    expect(getRowBySlotLabel(snapshot!, "Primary weapon")?.ob1).toBe(19);
     expect(getRowBySlotLabel(snapshot!, "Primary weapon")?.db).toBe(14);
-    expect(getRowBySlotLabel(snapshot!, "Primary weapon")?.parry).toBe(8);
+    expect(getRowBySlotLabel(snapshot!, "Primary weapon")?.parry).toBe(10);
     expect(snapshot?.readinessSummary).toContain("Posture Parry");
+  });
+
+  it("sums attack raw modifiers once for encounter-context OB and parry rows", () => {
+    const theoretical = deriveCombatStateSnapshot(
+      cloneState(),
+      sampleCharacterId,
+      sampleCharacterInputs,
+    );
+    const live = deriveCombatStateSnapshot(
+      cloneState(),
+      sampleCharacterId,
+      sampleCharacterInputs,
+      createAllocationInputs({
+        situationalModifiers: {
+          attack: -1,
+          defense: 0,
+          movement: 0,
+          perception: 0,
+        },
+      }),
+    );
+
+    const theoreticalPrimaryRow = getRowBySlotLabel(theoretical, "Primary weapon");
+    const livePrimaryRow = getRowBySlotLabel(live, "Primary weapon");
+    const theoreticalShieldRow = getRowBySlotLabel(theoretical, "Shield");
+    const liveShieldRow = getRowBySlotLabel(live, "Shield");
+    const theoreticalCombinedRow = getRowBySlotLabel(theoretical, "Combined");
+    const liveCombinedRow = getRowBySlotLabel(live, "Combined");
+    const theoreticalKickRow = getRowBySlotLabel(theoretical, "Kick");
+    const liveKickRow = getRowBySlotLabel(live, "Kick");
+
+    expect(theoreticalPrimaryRow?.ob1).toBe(14);
+    expect(livePrimaryRow?.ob1).toBe(12);
+    expect(theoreticalPrimaryRow?.parry).toBe(8);
+    expect(livePrimaryRow?.parry).toBe(7);
+    expect(theoreticalShieldRow?.parry).toBe(13);
+    expect(liveShieldRow?.parry).toBe(12);
+    expect(theoreticalCombinedRow?.parry).toBe(14);
+    expect(liveCombinedRow?.parry).toBe(13);
+    expect(theoreticalKickRow?.ob1).toBe(9);
+    expect(liveKickRow?.ob1).toBe(7);
   });
 
   it("sums live defense raw modifiers before applying DB percentage adjustments", () => {

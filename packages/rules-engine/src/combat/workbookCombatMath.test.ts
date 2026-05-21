@@ -310,6 +310,87 @@ describe("workbookCombatMath", () => {
     });
   });
 
+  it("sums live raw modifiers into melee OB before one percentage lookup", () => {
+    const ob = calculateWorkbookMeleeOb({
+      dexterityGm: 3,
+      rawModifiers: [
+        { label: "Gen/Fatigue", value: -1 },
+        { label: "OB/Skill", value: 2 },
+      ],
+      skillXp: 15,
+      strengthGm: 3,
+      weaponOb: 3,
+    });
+
+    expect(ob).toMatchObject({
+      adjustment: 5,
+      combinedModifier: 4,
+      finalOb: 17,
+      rawOb: 12,
+      trace: {
+        baseValue: 12,
+        finalValue: 17,
+        percentageAdjustment: 5,
+        rawModifierTotal: 4,
+      },
+    });
+    expect(ob?.trace.rawModifiers).toEqual([
+      { label: "armor activity", value: 0 },
+      { label: "weapon OB", value: 3 },
+      { label: "Gen/Fatigue", value: -1 },
+      { label: "OB/Skill", value: 2 },
+    ]);
+  });
+
+  it("sums live raw modifiers into parry before one percentage lookup", () => {
+    const parry = calculateWorkbookWeaponParry({
+      armorActivityModifier: 0,
+      dexterityGm: 3,
+      parrySkillXp: 13,
+      rawModifiers: [{ label: "Gen/Fatigue", value: -1 }],
+      weaponParryModifier: -1,
+    });
+
+    expect(parry).toMatchObject({
+      adjustment: 2,
+      combinedModifier: -2,
+      finalParry: 9,
+      rawParry: 11,
+      trace: {
+        baseValue: 11,
+        finalValue: 9,
+        percentageAdjustment: 2,
+        rawModifierTotal: -2,
+      },
+    });
+    expect(parry?.trace.rawModifiers).toEqual([
+      { label: "armor activity", value: 0 },
+      { label: "weapon parry", value: -1 },
+      { label: "Gen/Fatigue", value: -1 },
+    ]);
+  });
+
+  it("traces summed raw modifiers for live combat skill rows", () => {
+    expect(
+      calculateWorkbookPercentageAdjustmentTrace({
+        baseValue: 20,
+        rawModifiers: [
+          { label: "Gen/Fatigue + OB/Skill", value: -1 },
+          { label: "Enc", value: -4 },
+        ],
+      }),
+    ).toEqual({
+      baseValue: 20,
+      finalValue: 10,
+      percentageAdjustment: 10,
+      rawModifierTotal: -5,
+      rawModifiers: [
+        { label: "Gen/Fatigue + OB/Skill", value: -1 },
+        { label: "Enc", value: -4 },
+      ],
+    });
+  });
+
   it("documents the percentage adjustment comparison matrix for representative bases", () => {
     const cases = [
       { baseValue: 0, rawModifier: -1, expectedFinal: -1 },
