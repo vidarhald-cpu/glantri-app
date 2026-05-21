@@ -446,7 +446,7 @@ describe("combatStateDerivation", () => {
 
     const primaryRow = getRowBySlotLabel(snapshot, "Primary weapon");
 
-    expect(primaryRow?.ob1).toBe(19);
+    expect(primaryRow?.ob1).toBe(17);
     expect(primaryRow?.db).toBe(14);
     expect(primaryRow?.parry).toBe(10);
     expect(snapshot.readinessSummary).toContain("Posture Parry");
@@ -487,7 +487,7 @@ describe("combatStateDerivation", () => {
     });
 
     expect(snapshot).not.toBeNull();
-    expect(getRowBySlotLabel(snapshot!, "Primary weapon")?.ob1).toBe(19);
+    expect(getRowBySlotLabel(snapshot!, "Primary weapon")?.ob1).toBe(17);
     expect(getRowBySlotLabel(snapshot!, "Primary weapon")?.db).toBe(14);
     expect(getRowBySlotLabel(snapshot!, "Primary weapon")?.parry).toBe(10);
     expect(snapshot?.readinessSummary).toContain("Posture Parry");
@@ -523,7 +523,7 @@ describe("combatStateDerivation", () => {
     const liveKickRow = getRowBySlotLabel(live, "Kick");
 
     expect(theoreticalPrimaryRow?.ob1).toBe(14);
-    expect(livePrimaryRow?.ob1).toBe(12);
+    expect(livePrimaryRow?.ob1).toBe(13);
     expect(theoreticalPrimaryRow?.parry).toBe(8);
     expect(livePrimaryRow?.parry).toBe(7);
     expect(theoreticalShieldRow?.parry).toBe(13);
@@ -531,7 +531,48 @@ describe("combatStateDerivation", () => {
     expect(theoreticalCombinedRow?.parry).toBe(14);
     expect(liveCombinedRow?.parry).toBe(13);
     expect(theoreticalKickRow?.ob1).toBe(9);
-    expect(liveKickRow?.ob1).toBe(7);
+    expect(liveKickRow?.ob1).toBe(8);
+  });
+
+  it("traces broad-sword-style theoretical OB 12 to encounter-context OB 11", () => {
+    const state = cloneState();
+    state.itemsById["weapon-item-longsword-1"].templateId = "weapon-template-broad-sword";
+    const broadSwordInputs = {
+      ...sampleCharacterInputs,
+      combatSkillXpByName: {
+        ...sampleCharacterInputs.combatSkillXpByName,
+        "1-h edged": 9,
+      },
+      dexterityGm: 2,
+      strengthGm: 4,
+    };
+    const theoretical = deriveCombatStateSnapshot(
+      state,
+      sampleCharacterId,
+      broadSwordInputs,
+    );
+    const live = deriveCombatStateSnapshot(
+      state,
+      sampleCharacterId,
+      broadSwordInputs,
+      createAllocationInputs({
+        situationalModifiers: {
+          attack: -1,
+          defense: 0,
+          movement: 0,
+          perception: 0,
+        },
+      }),
+    );
+
+    expect(getRowBySlotLabel(theoretical, "Primary weapon")).toMatchObject({
+      currentItemLabel: "Broad sword",
+      ob1: 12,
+    });
+    expect(getRowBySlotLabel(live, "Primary weapon")).toMatchObject({
+      currentItemLabel: "Broad sword",
+      ob1: 11,
+    });
   });
 
   it("sums live defense raw modifiers before applying DB percentage adjustments", () => {

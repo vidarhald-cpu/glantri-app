@@ -266,7 +266,7 @@ export function getDerivedObValue(input: {
     });
 
     if (workbookOb) {
-      return workbookOb.finalOb + input.allocationInputs.situationalModifiers.attack;
+      return workbookOb.finalOb;
     }
   }
 
@@ -283,7 +283,7 @@ export function getDerivedObValue(input: {
     });
 
     if (projectileOb) {
-      return projectileOb.finalOb + input.allocationInputs.situationalModifiers.attack;
+      return projectileOb.finalOb;
     }
   }
 

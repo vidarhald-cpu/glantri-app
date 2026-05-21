@@ -342,6 +342,76 @@ describe("workbookCombatMath", () => {
     ]);
   });
 
+  it("traces the broad-sword-style OB 12 to live OB 11 calculation", () => {
+    const theoretical = calculateWorkbookMeleeOb({
+      dexterityGm: 2,
+      skillXp: 9,
+      strengthGm: 4,
+      weaponOb: 2,
+    });
+    const live = calculateWorkbookMeleeOb({
+      dexterityGm: 2,
+      rawModifiers: [{ label: "Gen/Fatigue", value: -1 }],
+      skillXp: 9,
+      strengthGm: 4,
+      weaponOb: 2,
+    });
+
+    expect(theoretical).toMatchObject({
+      adjustment: 2,
+      combinedModifier: 2,
+      finalOb: 12,
+      rawOb: 10,
+      trace: {
+        baseValue: 10,
+        finalValue: 12,
+        percentageAdjustment: 2,
+        rawModifierTotal: 2,
+      },
+    });
+    expect(live).toMatchObject({
+      adjustment: 1,
+      combinedModifier: 1,
+      finalOb: 11,
+      rawOb: 10,
+      trace: {
+        baseValue: 10,
+        finalValue: 11,
+        percentageAdjustment: 1,
+        rawModifierTotal: 1,
+      },
+    });
+    expect(live?.trace.rawModifiers).toEqual([
+      { label: "armor activity", value: 0 },
+      { label: "weapon OB", value: 2 },
+      { label: "Gen/Fatigue", value: -1 },
+    ]);
+  });
+
+  it("documents percentage helper behavior around bases 10, 11, and 12", () => {
+    expect(lookupWorkbookPercentageAdjustment(12, 1)).toBe(1);
+    expect(lookupWorkbookPercentageAdjustment(11, 1)).toBe(1);
+    expect(lookupWorkbookPercentageAdjustment(10, 1)).toBe(1);
+    expect(
+      calculateWorkbookPercentageAdjustmentTrace({
+        baseValue: 12,
+        rawModifiers: [{ label: "signed raw", value: -1 }],
+      })?.finalValue,
+    ).toBe(11);
+    expect(
+      calculateWorkbookPercentageAdjustmentTrace({
+        baseValue: 11,
+        rawModifiers: [{ label: "signed raw", value: -1 }],
+      })?.finalValue,
+    ).toBe(10);
+    expect(
+      calculateWorkbookPercentageAdjustmentTrace({
+        baseValue: 10,
+        rawModifiers: [{ label: "signed raw", value: -1 }],
+      })?.finalValue,
+    ).toBe(9);
+  });
+
   it("sums live raw modifiers into parry before one percentage lookup", () => {
     const parry = calculateWorkbookWeaponParry({
       armorActivityModifier: 0,

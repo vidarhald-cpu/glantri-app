@@ -88,3 +88,25 @@ the live modifier sources currently wired through the app:
 The out-of-play Equip Items view remains theoretical unless an explicit encounter live-modifier
 context is passed. Action-specific combat phase modifiers beyond the current allocation inputs are
 future work and should be added as named raw modifier sources rather than as final-value overlays.
+
+## Broad sword OB example
+
+The Scyrian-cavalry-style Broad sword case is a useful guardrail because the displayed theoretical
+OB is not the raw workbook base:
+
+```text
+Raw OB = round(1-h edged XP 9 / 2) + 1 + max(STR GM 4, DEX GM 2) = 10
+Theoretical raw modifiers = Broad sword OB +2
+Theoretical percentage adjustment = lookupWorkbookPercentageAdjustment(10, 2) = 2
+Theoretical final OB = 12
+
+Encounter raw modifiers = Broad sword OB +2 + General/Fatigue -1 = +1
+Encounter percentage adjustment = lookupWorkbookPercentageAdjustment(10, 1) = 1
+Encounter final OB = 11
+```
+
+So theoretical OB `12` with live General/Fatigue `-1` should display as `11`, not `10`. A result of
+`10` means the live modifier was both included in the raw modifier sum and then applied again as a
+flat post-adjustment subtraction. Applying the percentage table directly to the displayed `12` is
+also not the canonical path, because `12` is already a final workbook value rather than the raw OB
+base.
