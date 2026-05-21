@@ -18,6 +18,7 @@ import {
   calculateWorkbookWeaponParry,
   lookupWorkbookToHitModifier,
 } from "./workbookCombatMath";
+import type { WorkbookRawModifier } from "./workbookCombatMath";
 import type { CombatAllocationState } from "./combatAllocationState";
 import type { CombatStateCharacterInputs } from "./characterInputs";
 
@@ -327,6 +328,7 @@ export function getWorkbookOneItemDefensePair(input: {
   characterInputs?: CombatStateCharacterInputs;
   encumbranceLevel: number | null;
   equipmentModifier: number;
+  rawModifiers?: WorkbookRawModifier[];
 }): { db: DerivedCombatValue; dm: DerivedCombatValue } {
   const dexterityGm = input.characterInputs?.dexterityGm ?? null;
   const dodgeSkillXp = input.characterInputs?.dodgeCombatSkillXp ?? null;
@@ -344,6 +346,7 @@ export function getWorkbookOneItemDefensePair(input: {
   const pair = calculateWorkbookDefensePair({
     baseDb,
     equipmentModifier: input.equipmentModifier,
+    rawModifiers: input.rawModifiers,
     toHitModifier,
   });
 

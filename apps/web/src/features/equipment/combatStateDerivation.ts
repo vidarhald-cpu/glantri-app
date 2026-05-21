@@ -29,6 +29,7 @@ import {
   getWorkbookWeaponRowParry,
   lookupWorkbookToHitModifier,
   normalizeCombatAllocationState,
+  type WorkbookRawModifier,
 } from "@glantri/rules-engine";
 import { kickTemplate, punchTemplate } from "@glantri/content/equipment";
 
@@ -208,6 +209,16 @@ function formatSignedModifier(value: number): string {
   return value > 0 ? `+${value}` : `${value}`;
 }
 
+function getDefenseRawModifiers(
+  allocationInputs: CombatStateAllocationInputs,
+): WorkbookRawModifier[] {
+  const defenseModifier = allocationInputs.situationalModifiers.defense;
+
+  return defenseModifier === 0
+    ? []
+    : [{ label: "DB", value: defenseModifier }];
+}
+
 function getAttackLabel(mode: WeaponAttackMode | null): DerivedCombatValue {
   if (!mode) {
     return "—";
@@ -371,6 +382,7 @@ function buildThrowingWeaponRow(input: {
     characterInputs: input.characterInputs,
     encumbranceLevel: null,
     equipmentModifier: input.template.defensiveValue ?? 0,
+    rawModifiers: getDefenseRawModifiers(input.allocationInputs),
   });
 
   return {
@@ -436,6 +448,7 @@ function buildWeaponRow(input: {
     characterInputs: input.characterInputs,
     encumbranceLevel: input.encumbranceLevel,
     equipmentModifier: input.template?.defensiveValue ?? 0,
+    rawModifiers: getDefenseRawModifiers(input.allocationInputs),
   });
   const notes = input.template ? formatWeaponNotes(input.template) : "Not equipped";
   const mode3 = getAttackMode(input.template, "mode-3");
@@ -541,6 +554,7 @@ function buildBrawlingSummaryRow(input: {
     characterInputs: input.characterInputs,
     encumbranceLevel: input.encumbranceLevel,
     equipmentModifier: 0,
+    rawModifiers: getDefenseRawModifiers(input.allocationInputs),
   });
 
   return {
@@ -582,6 +596,7 @@ function buildBrawlingSummaryRow(input: {
 }
 
 function buildShieldRow(input: {
+  allocationInputs: CombatStateAllocationInputs;
   armorTemplate: ArmorTemplate | null;
   characterInputs?: CombatStateCharacterInputs;
   encumbranceLevel: number | null;
@@ -594,6 +609,7 @@ function buildShieldRow(input: {
     characterInputs: input.characterInputs,
     encumbranceLevel: input.encumbranceLevel,
     equipmentModifier: input.shieldTemplate.defensiveValue ?? 0,
+    rawModifiers: getDefenseRawModifiers(input.allocationInputs),
   });
 
   return {
@@ -716,10 +732,12 @@ function getWorkbookDefenseCases(input: {
     dexterityGm,
     dodgeSkillXp,
   });
+  const defenseRawModifiers = getDefenseRawModifiers(input.allocationInputs);
 
   const unarmedPair = calculateWorkbookDefensePair({
     baseDb,
     equipmentModifier: 0,
+    rawModifiers: defenseRawModifiers,
     toHitModifier,
   });
 
@@ -733,6 +751,7 @@ function getWorkbookDefenseCases(input: {
   const singleItemPair = calculateWorkbookDefensePair({
     baseDb,
     equipmentModifier: singleItemModifier,
+    rawModifiers: defenseRawModifiers,
     toHitModifier,
   });
 
@@ -772,6 +791,7 @@ function getWorkbookDefenseCases(input: {
           baseDb,
           equipmentModifier:
             (combinedWeaponTemplate.defensiveValue ?? 0) + offHandCandidate.value,
+          rawModifiers: defenseRawModifiers,
           toHitModifier,
         })
       : null;
@@ -948,6 +968,7 @@ export function deriveCombatStateSnapshot(
   if (shieldItem && shieldTemplate) {
     weaponRows.push(
       buildShieldRow({
+        allocationInputs: resolvedAllocationInputs,
         armorTemplate,
         characterInputs,
         encumbranceLevel: workbookMovement.encumbranceLevel,

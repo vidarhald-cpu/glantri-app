@@ -164,6 +164,7 @@ export interface WorkbookMovementInput {
 export interface WorkbookDefensePairInput {
   baseDb: number;
   equipmentModifier?: number | null;
+  rawModifiers?: WorkbookRawModifier[];
   toHitModifier?: number | null;
 }
 
@@ -175,6 +176,21 @@ export interface WorkbookDefensePairResult {
   noToHitAdjustment: number;
   noToHitDb: number;
   noToHitModifier: number;
+  noToHitTrace: WorkbookPercentageAdjustmentTrace;
+  fullTrace: WorkbookPercentageAdjustmentTrace;
+}
+
+export interface WorkbookRawModifier {
+  label: string;
+  value: number;
+}
+
+export interface WorkbookPercentageAdjustmentTrace {
+  baseValue: number;
+  finalValue: number;
+  percentageAdjustment: number;
+  rawModifierTotal: number;
+  rawModifiers: WorkbookRawModifier[];
 }
 
 export const WORKBOOK_MOVEMENT_PERCENT_TABLE: Record<number, Record<number, number>> = {
@@ -304,6 +320,32 @@ function applyWorkbookSignedAdjustment(
   };
 }
 
+export function calculateWorkbookPercentageAdjustmentTrace(input: {
+  baseValue: number;
+  rawModifiers: WorkbookRawModifier[];
+}): WorkbookPercentageAdjustmentTrace | null {
+  const rawModifierTotal = input.rawModifiers.reduce((sum, modifier) => sum + modifier.value, 0);
+  const percentageAdjustment = lookupWorkbookPercentageAdjustment(
+    input.baseValue,
+    Math.abs(rawModifierTotal),
+  );
+
+  if (percentageAdjustment == null) {
+    return null;
+  }
+
+  return {
+    baseValue: input.baseValue,
+    finalValue:
+      rawModifierTotal >= 0
+        ? input.baseValue + percentageAdjustment
+        : input.baseValue - percentageAdjustment,
+    percentageAdjustment,
+    rawModifierTotal,
+    rawModifiers: input.rawModifiers,
+  };
+}
+
 export function lookupWorkbookToHitModifier(encumbranceLevel: number): number | null {
   if (!Number.isInteger(encumbranceLevel)) {
     return null;
@@ -322,24 +364,37 @@ export function calculateWorkbookBaseDb(input: {
 export function calculateWorkbookDefensePair(
   input: WorkbookDefensePairInput,
 ): WorkbookDefensePairResult | null {
-  const noToHitModifier = input.equipmentModifier ?? 0;
-  const fullModifier = noToHitModifier + (input.toHitModifier ?? 0);
+  const sharedRawModifiers = [
+    { label: "equipment", value: input.equipmentModifier ?? 0 },
+    ...(input.rawModifiers ?? []),
+  ];
+  const fullRawModifiers = [
+    ...sharedRawModifiers,
+    { label: "to-hit", value: input.toHitModifier ?? 0 },
+  ];
+  const noToHitTrace = calculateWorkbookPercentageAdjustmentTrace({
+    baseValue: input.baseDb,
+    rawModifiers: sharedRawModifiers,
+  });
+  const fullTrace = calculateWorkbookPercentageAdjustmentTrace({
+    baseValue: input.baseDb,
+    rawModifiers: fullRawModifiers,
+  });
 
-  const full = applyWorkbookSignedAdjustment(input.baseDb, fullModifier);
-  const noToHit = applyWorkbookSignedAdjustment(input.baseDb, noToHitModifier);
-
-  if (full == null || noToHit == null) {
+  if (fullTrace == null || noToHitTrace == null) {
     return null;
   }
 
   return {
-    db: full.value,
-    dm: full.value - noToHit.value,
-    fullAdjustment: full.adjustment,
-    fullModifier,
-    noToHitAdjustment: noToHit.adjustment,
-    noToHitDb: noToHit.value,
-    noToHitModifier,
+    db: fullTrace.finalValue,
+    dm: fullTrace.finalValue - noToHitTrace.finalValue,
+    fullAdjustment: fullTrace.percentageAdjustment,
+    fullModifier: fullTrace.rawModifierTotal,
+    fullTrace,
+    noToHitAdjustment: noToHitTrace.percentageAdjustment,
+    noToHitDb: noToHitTrace.finalValue,
+    noToHitModifier: noToHitTrace.rawModifierTotal,
+    noToHitTrace,
   };
 }
 

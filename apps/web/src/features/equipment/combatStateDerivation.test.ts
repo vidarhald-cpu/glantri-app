@@ -447,11 +447,11 @@ describe("combatStateDerivation", () => {
     const primaryRow = getRowBySlotLabel(snapshot, "Primary weapon");
 
     expect(primaryRow?.ob1).toBe(16);
-    expect(primaryRow?.db).toBe(13);
+    expect(primaryRow?.db).toBe(14);
     expect(primaryRow?.parry).toBe(8);
     expect(snapshot.readinessSummary).toContain("Posture Parry");
     expect(snapshot.defenseSummary).toContain("Posture Parry");
-    expect(snapshot.defenseSummary).toContain("DB 13");
+    expect(snapshot.defenseSummary).toContain("DB 14");
     expect(snapshot.defenseSummary).toContain("Parry 8");
     expect(snapshot.encumbranceLevel).toBe(4);
     expect(snapshot.shieldMovementModifierSummary).toBe(2);
@@ -488,9 +488,42 @@ describe("combatStateDerivation", () => {
 
     expect(snapshot).not.toBeNull();
     expect(getRowBySlotLabel(snapshot!, "Primary weapon")?.ob1).toBe(16);
-    expect(getRowBySlotLabel(snapshot!, "Primary weapon")?.db).toBe(13);
+    expect(getRowBySlotLabel(snapshot!, "Primary weapon")?.db).toBe(14);
     expect(getRowBySlotLabel(snapshot!, "Primary weapon")?.parry).toBe(8);
     expect(snapshot?.readinessSummary).toContain("Posture Parry");
+  });
+
+  it("sums live defense raw modifiers before applying DB percentage adjustments", () => {
+    const theoretical = deriveCombatStateSnapshot(
+      cloneState(),
+      sampleCharacterId,
+      sampleCharacterInputs,
+    );
+    const live = deriveCombatStateSnapshot(
+      cloneState(),
+      sampleCharacterId,
+      sampleCharacterInputs,
+      createAllocationInputs({
+        situationalModifiers: {
+          attack: 0,
+          defense: -1,
+          movement: 0,
+          perception: 0,
+        },
+      }),
+    );
+
+    const theoreticalShieldRow = getRowBySlotLabel(theoretical, "Shield");
+    const theoreticalCombinedRow = getRowBySlotLabel(theoretical, "Combined");
+    const liveShieldRow = getRowBySlotLabel(live, "Shield");
+    const liveCombinedRow = getRowBySlotLabel(live, "Combined");
+
+    expect(theoreticalShieldRow?.db).toBe(18);
+    expect(theoreticalCombinedRow?.db).toBe(19);
+    expect(liveShieldRow?.db).toBe(17);
+    expect(liveCombinedRow?.db).toBe(18);
+    expect(liveCombinedRow?.db).toBeGreaterThan(liveShieldRow?.db as number);
+    expect(live.twoItemDbSummary).toBe(18);
   });
 
   it("shows a fully derived secondary weapon row only when a secondary weapon is equipped", () => {

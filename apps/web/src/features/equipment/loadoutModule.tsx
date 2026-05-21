@@ -420,13 +420,19 @@ export function buildEquipmentLoadoutModuleModel(input: {
   }
 
   const combatAllocationInputs = input.combatAllocationInputs ?? defaultCombatAllocationState;
+  const liveObSkillRaw =
+    (input.liveCombatModifiers?.generalFatigueRaw ?? 0) +
+    (input.liveCombatModifiers?.obSkillRaw ?? 0);
+  const liveDbRaw =
+    (input.liveCombatModifiers?.generalFatigueRaw ?? 0) +
+    (input.liveCombatModifiers?.dbRaw ?? 0);
   const effectiveCombatAllocationInputs = input.liveCombatModifiers
     ? {
         ...combatAllocationInputs,
         situationalModifiers: {
           ...combatAllocationInputs.situationalModifiers,
           attack: 0,
-          defense: 0,
+          defense: liveDbRaw,
           perception: 0,
         },
       }
@@ -528,12 +534,6 @@ export function buildEquipmentLoadoutModuleModel(input: {
     skills: input.characterContext.content.skills,
     workbookPerceptionValue
   });
-  const liveObSkillRaw =
-    (input.liveCombatModifiers?.generalFatigueRaw ?? 0) +
-    (input.liveCombatModifiers?.obSkillRaw ?? 0);
-  const liveDbRaw =
-    (input.liveCombatModifiers?.generalFatigueRaw ?? 0) +
-    (input.liveCombatModifiers?.dbRaw ?? 0);
   const combatStatePanelModel = {
     ...baseModel,
     modifierSourceNote: input.liveCombatModifiers
@@ -551,11 +551,7 @@ export function buildEquipmentLoadoutModuleModel(input: {
       ? applyLiveModifierToTableColumns({
           columnLabels: ["OB", "OB2", "OB3", "Parry"],
           rawModifier: liveObSkillRaw,
-          table: applyLiveModifierToTableColumns({
-            columnLabels: ["DB"],
-            rawModifier: liveDbRaw,
-            table: baseModel.weaponModeTable,
-          }),
+          table: baseModel.weaponModeTable,
         })
       : baseModel.weaponModeTable,
   };

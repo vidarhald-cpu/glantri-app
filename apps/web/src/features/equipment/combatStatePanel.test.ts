@@ -238,8 +238,9 @@ describe("combatStatePanel throwing row reliability", () => {
     expect(source).toContain("applyLiveRawModifierToCombatValue");
     expect(source).toContain("input.liveCombatModifiers");
     expect(source).toContain('Modified by: ${input.liveCombatModifiers.modifierNoteLabels.join(", ")}');
+    expect(source).toContain("defense: liveDbRaw");
     expect(source).toContain('columnLabels: ["OB", "OB2", "OB3", "Parry"]');
-    expect(source).toContain('columnLabels: ["DB"]');
+    expect(source).not.toContain('columnLabels: ["DB"]');
     expect(source).toContain('columnLabels: ["Skill level", "Encumbered"]');
   });
 
