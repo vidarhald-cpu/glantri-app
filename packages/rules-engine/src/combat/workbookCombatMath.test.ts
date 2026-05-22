@@ -12,6 +12,7 @@ import {
   calculateWorkbookMeleeOb,
   calculateWorkbookProjectileOb,
   calculateWorkbookWeaponParry,
+  calculateWorkbookPercentageAdjustmentTrace,
   calculateWorkbookMovement,
   calculateWorkbookMovementModifier,
   getWorkbookStatGm,
@@ -286,6 +287,203 @@ describe("workbookCombatMath", () => {
     expect(lookupWorkbookPercentageAdjustment(0, 100)).toBe(100);
     expect(lookupWorkbookPercentageAdjustment(1, 1)).toBe(1);
     expect(lookupWorkbookPercentageAdjustment(2, 1)).toBe(1);
+  });
+
+  it("returns a trace for summed raw percentage modifiers", () => {
+    expect(
+      calculateWorkbookPercentageAdjustmentTrace({
+        baseValue: 10,
+        rawModifiers: [
+          { label: "equipment", value: 5 },
+          { label: "live DB", value: -1 },
+        ],
+      }),
+    ).toEqual({
+      baseValue: 10,
+      finalValue: 14,
+      percentageAdjustment: 4,
+      rawModifierTotal: 4,
+      rawModifiers: [
+        { label: "equipment", value: 5 },
+        { label: "live DB", value: -1 },
+      ],
+    });
+  });
+
+  it("sums live raw modifiers into melee OB before one percentage lookup", () => {
+    const ob = calculateWorkbookMeleeOb({
+      dexterityGm: 3,
+      rawModifiers: [
+        { label: "Gen/Fatigue", value: -1 },
+        { label: "OB/Skill", value: 2 },
+      ],
+      skillXp: 15,
+      strengthGm: 3,
+      weaponOb: 3,
+    });
+
+    expect(ob).toMatchObject({
+      adjustment: 5,
+      combinedModifier: 4,
+      finalOb: 17,
+      rawOb: 12,
+      trace: {
+        baseValue: 12,
+        finalValue: 17,
+        percentageAdjustment: 5,
+        rawModifierTotal: 4,
+      },
+    });
+    expect(ob?.trace.rawModifiers).toEqual([
+      { label: "armor activity", value: 0 },
+      { label: "weapon OB", value: 3 },
+      { label: "Gen/Fatigue", value: -1 },
+      { label: "OB/Skill", value: 2 },
+    ]);
+  });
+
+  it("traces the broad-sword-style OB 12 to live OB 11 calculation", () => {
+    const theoretical = calculateWorkbookMeleeOb({
+      dexterityGm: 2,
+      skillXp: 9,
+      strengthGm: 4,
+      weaponOb: 2,
+    });
+    const live = calculateWorkbookMeleeOb({
+      dexterityGm: 2,
+      rawModifiers: [{ label: "Gen/Fatigue", value: -1 }],
+      skillXp: 9,
+      strengthGm: 4,
+      weaponOb: 2,
+    });
+
+    expect(theoretical).toMatchObject({
+      adjustment: 2,
+      combinedModifier: 2,
+      finalOb: 12,
+      rawOb: 10,
+      trace: {
+        baseValue: 10,
+        finalValue: 12,
+        percentageAdjustment: 2,
+        rawModifierTotal: 2,
+      },
+    });
+    expect(live).toMatchObject({
+      adjustment: 1,
+      combinedModifier: 1,
+      finalOb: 11,
+      rawOb: 10,
+      trace: {
+        baseValue: 10,
+        finalValue: 11,
+        percentageAdjustment: 1,
+        rawModifierTotal: 1,
+      },
+    });
+    expect(live?.trace.rawModifiers).toEqual([
+      { label: "armor activity", value: 0 },
+      { label: "weapon OB", value: 2 },
+      { label: "Gen/Fatigue", value: -1 },
+    ]);
+  });
+
+  it("documents percentage helper behavior around bases 10, 11, and 12", () => {
+    expect(lookupWorkbookPercentageAdjustment(12, 1)).toBe(1);
+    expect(lookupWorkbookPercentageAdjustment(11, 1)).toBe(1);
+    expect(lookupWorkbookPercentageAdjustment(10, 1)).toBe(1);
+    expect(
+      calculateWorkbookPercentageAdjustmentTrace({
+        baseValue: 12,
+        rawModifiers: [{ label: "signed raw", value: -1 }],
+      })?.finalValue,
+    ).toBe(11);
+    expect(
+      calculateWorkbookPercentageAdjustmentTrace({
+        baseValue: 11,
+        rawModifiers: [{ label: "signed raw", value: -1 }],
+      })?.finalValue,
+    ).toBe(10);
+    expect(
+      calculateWorkbookPercentageAdjustmentTrace({
+        baseValue: 10,
+        rawModifiers: [{ label: "signed raw", value: -1 }],
+      })?.finalValue,
+    ).toBe(9);
+  });
+
+  it("sums live raw modifiers into parry before one percentage lookup", () => {
+    const parry = calculateWorkbookWeaponParry({
+      armorActivityModifier: 0,
+      dexterityGm: 3,
+      parrySkillXp: 13,
+      rawModifiers: [{ label: "Gen/Fatigue", value: -1 }],
+      weaponParryModifier: -1,
+    });
+
+    expect(parry).toMatchObject({
+      adjustment: 2,
+      combinedModifier: -2,
+      finalParry: 9,
+      rawParry: 11,
+      trace: {
+        baseValue: 11,
+        finalValue: 9,
+        percentageAdjustment: 2,
+        rawModifierTotal: -2,
+      },
+    });
+    expect(parry?.trace.rawModifiers).toEqual([
+      { label: "armor activity", value: 0 },
+      { label: "weapon parry", value: -1 },
+      { label: "Gen/Fatigue", value: -1 },
+    ]);
+  });
+
+  it("traces summed raw modifiers for live combat skill rows", () => {
+    expect(
+      calculateWorkbookPercentageAdjustmentTrace({
+        baseValue: 20,
+        rawModifiers: [
+          { label: "Gen/Fatigue + OB/Skill", value: -1 },
+          { label: "Enc", value: -4 },
+        ],
+      }),
+    ).toEqual({
+      baseValue: 20,
+      finalValue: 10,
+      percentageAdjustment: 10,
+      rawModifierTotal: -5,
+      rawModifiers: [
+        { label: "Gen/Fatigue + OB/Skill", value: -1 },
+        { label: "Enc", value: -4 },
+      ],
+    });
+  });
+
+  it("documents the percentage adjustment comparison matrix for representative bases", () => {
+    const cases = [
+      { baseValue: 0, rawModifier: -1, expectedFinal: -1 },
+      { baseValue: 5, rawModifier: -1, expectedFinal: 4 },
+      { baseValue: 14, rawModifier: -1, expectedFinal: 13 },
+      { baseValue: 15, rawModifier: -1, expectedFinal: 13 },
+      { baseValue: 25, rawModifier: -1, expectedFinal: 22 },
+      { baseValue: 0, rawModifier: 1, expectedFinal: 1 },
+      { baseValue: 5, rawModifier: 1, expectedFinal: 6 },
+      { baseValue: 14, rawModifier: 1, expectedFinal: 15 },
+      { baseValue: 15, rawModifier: 1, expectedFinal: 17 },
+      { baseValue: 25, rawModifier: 1, expectedFinal: 28 },
+    ];
+
+    for (const testCase of cases) {
+      expect.soft(
+        calculateWorkbookPercentageAdjustmentTrace({
+          baseValue: testCase.baseValue,
+          rawModifiers: [{ label: "test modifier", value: testCase.rawModifier }],
+        })?.finalValue,
+        `base ${testCase.baseValue}, raw ${testCase.rawModifier}`,
+      ).toBe(testCase.expectedFinal);
+    }
   });
 
   it("matches the workbook's melee initiative formula for weapon and brawling rows", () => {
@@ -569,5 +767,34 @@ describe("workbookCombatMath", () => {
       db: 11,
       dm: 0,
     });
+  });
+
+  it("sums extra defense raw modifiers before applying the workbook percentage table", () => {
+    const baseDb = calculateWorkbookBaseDb({
+      dexterityGm: 1,
+      dodgeSkillXp: 10,
+    });
+    const shield = calculateWorkbookDefensePair({
+      baseDb,
+      equipmentModifier: 5,
+      rawModifiers: [{ label: "live DB", value: -1 }],
+      toHitModifier: 0,
+    });
+    const combined = calculateWorkbookDefensePair({
+      baseDb,
+      equipmentModifier: 6,
+      rawModifiers: [{ label: "live DB", value: -1 }],
+      toHitModifier: 0,
+    });
+
+    expect(baseDb).toBe(10);
+    expect(shield?.db).toBe(14);
+    expect(combined?.db).toBe(15);
+    expect(combined?.db).toBeGreaterThan(shield?.db ?? 0);
+    expect(combined?.fullTrace.rawModifiers).toEqual([
+      { label: "equipment", value: 6 },
+      { label: "live DB", value: -1 },
+      { label: "to-hit", value: 0 },
+    ]);
   });
 });

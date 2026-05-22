@@ -119,31 +119,53 @@ describe("live combat modifiers", () => {
     ).toBe(13);
   });
 
-  it("documents current defense overlay versus summed raw modifier strategy", () => {
+  it("documents previous defense overlay versus summed raw modifier strategy", () => {
     const baseDb = 10;
-    const equipmentModifier = 5;
     const liveDbModifier = -1;
-    const theoreticalDefense = calculateWorkbookDefensePair({
-      baseDb,
-      equipmentModifier,
-      toHitModifier: 0,
-    });
-    const currentLiveOverlay =
-      theoreticalDefense == null
-        ? null
-        : applyLiveRawModifierToCombatValue({
-            baseValue: theoreticalDefense.db,
-            rawModifier: liveDbModifier,
-          });
-    const summedRawModifier = calculateWorkbookDefensePair({
-      baseDb,
-      equipmentModifier: equipmentModifier + liveDbModifier,
-      toHitModifier: 0,
-    });
+    const defenseCases = [
+      {
+        label: "shield-only DB",
+        equipmentModifier: 5,
+        expectedOverlay: 13,
+        expectedSummedRaw: 14,
+        expectedTheoretical: 15,
+      },
+      {
+        label: "combined sword/shield DB",
+        equipmentModifier: 6,
+        expectedOverlay: 14,
+        expectedSummedRaw: 15,
+        expectedTheoretical: 16,
+      },
+    ];
 
-    expect(theoreticalDefense?.db).toBe(15);
-    expect(currentLiveOverlay).toBe(13);
-    expect(summedRawModifier?.db).toBe(14);
+    for (const testCase of defenseCases) {
+      const theoreticalDefense = calculateWorkbookDefensePair({
+        baseDb,
+        equipmentModifier: testCase.equipmentModifier,
+        toHitModifier: 0,
+      });
+      const previousLiveOverlay =
+        theoreticalDefense == null
+          ? null
+          : applyLiveRawModifierToCombatValue({
+              baseValue: theoreticalDefense.db,
+              rawModifier: liveDbModifier,
+            });
+      const summedRawModifier = calculateWorkbookDefensePair({
+        baseDb,
+        equipmentModifier: testCase.equipmentModifier,
+        rawModifiers: [{ label: "live DB", value: liveDbModifier }],
+        toHitModifier: 0,
+      });
+
+      expect.soft(theoreticalDefense?.db, testCase.label).toBe(testCase.expectedTheoretical);
+      expect.soft(previousLiveOverlay, testCase.label).toBe(testCase.expectedOverlay);
+      expect.soft(summedRawModifier?.db, testCase.label).toBe(testCase.expectedSummedRaw);
+      expect.soft(summedRawModifier?.fullTrace.rawModifierTotal, testCase.label).toBe(
+        testCase.equipmentModifier + liveDbModifier,
+      );
+    }
   });
 
   it("adds manual OB/Skill and DB context totals while keeping General/Fatigue effect-owned", () => {

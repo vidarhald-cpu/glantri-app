@@ -7,9 +7,11 @@ import { getAccessTier, isWithYouLocation, type CarryMode } from "@glantri/domai
 import {
   buildCharacterSheetSummary,
   buildCombatStateCharacterInputs,
+  calculateWorkbookPercentageAdjustmentTrace,
   defaultCombatAllocationState,
   lookupWorkbookPercentageAdjustment,
-  lookupWorkbookSkillInitiativeModifier
+  lookupWorkbookSkillInitiativeModifier,
+  type WorkbookRawModifier
 } from "@glantri/rules-engine";
 
 import { buildCharacterArmorSummary, getWorkbookCharacterSize } from "./armorSummary";
@@ -30,10 +32,7 @@ import {
 import { CombatStatePanel } from "./components/CombatStatePanel";
 import type { EquipmentFeatureState } from "./types";
 import { lookupWorkbookCompositeAdjustment } from "./workbookCompositeTable";
-import {
-  applyLiveRawModifierToCombatValue,
-  type EncounterLiveCombatModifierSummary,
-} from "@/lib/campaigns/liveCombatModifiers";
+import type { EncounterLiveCombatModifierSummary } from "@/lib/campaigns/liveCombatModifiers";
 import styles from "./loadoutModule.module.css";
 
 type EncumbranceDependentSkillType = "combat" | "covert" | "physical";
@@ -65,58 +64,6 @@ export interface EquipmentLoadoutModuleModel {
   combatStatePanelModel: ReturnType<typeof buildCombatStatePanelModel> | null;
   encumbranceSkillsTable: CombatStateTableModel | null;
   fields: EquipmentLoadoutFieldModel[];
-}
-
-function getIntegerCombatPanelValue(value: string | number): number | null {
-  if (typeof value === "number") {
-    return Number.isInteger(value) ? value : null;
-  }
-
-  if (!/^-?\d+$/.test(value)) {
-    return null;
-  }
-
-  return Number(value);
-}
-
-function applyLiveModifierToPanelValue(
-  value: string | number,
-  rawModifier: number,
-): string | number {
-  const numericValue = getIntegerCombatPanelValue(value);
-  if (numericValue == null) {
-    return value;
-  }
-
-  return applyLiveRawModifierToCombatValue({
-    baseValue: numericValue,
-    rawModifier,
-  });
-}
-
-function applyLiveModifierToTableColumns(input: {
-  columnLabels: string[];
-  rawModifier: number;
-  table: CombatStateTableModel;
-}): CombatStateTableModel {
-  const columnIndexes = input.columnLabels
-    .map((label) => input.table.columns.indexOf(label))
-    .filter((index) => index >= 0);
-
-  if (columnIndexes.length === 0 || input.rawModifier === 0) {
-    return input.table;
-  }
-
-  return {
-    ...input.table,
-    rows: input.table.rows.map((row) =>
-      row.map((cell, index) =>
-        columnIndexes.includes(index)
-          ? applyLiveModifierToPanelValue(cell, input.rawModifier)
-          : cell,
-      ),
-    ),
-  };
 }
 
 function getItemName(input: {
@@ -246,6 +193,58 @@ function getWorkbookSkillEncumberedTotal(input: {
   }
 
   return input.baseTotal - adjustment;
+}
+
+function applyWorkbookRawModifiersToSkillValue(input: {
+  baseTotal: number;
+  rawModifiers: WorkbookRawModifier[];
+}): number | null {
+  return calculateWorkbookPercentageAdjustmentTrace({
+    baseValue: input.baseTotal,
+    rawModifiers: input.rawModifiers,
+  })?.finalValue ?? null;
+}
+
+function getLiveSkillRawModifiers(liveObSkillRaw: number): WorkbookRawModifier[] {
+  return liveObSkillRaw === 0
+    ? []
+    : [{ label: "Gen/Fatigue + OB/Skill", value: liveObSkillRaw }];
+}
+
+function getWorkbookLiveSkillTotal(input: {
+  baseTotal: number;
+  liveRawModifiers: WorkbookRawModifier[];
+}): number | null {
+  if (input.liveRawModifiers.length === 0) {
+    return input.baseTotal;
+  }
+
+  return applyWorkbookRawModifiersToSkillValue({
+    baseTotal: input.baseTotal,
+    rawModifiers: input.liveRawModifiers,
+  });
+}
+
+function getWorkbookLiveSkillEncumberedTotal(input: {
+  baseTotal: number;
+  liveRawModifiers: WorkbookRawModifier[];
+  movementModifier: number | null;
+}): number | null {
+  const rawModifiers = [
+    ...input.liveRawModifiers,
+    ...(input.movementModifier == null || input.movementModifier === 0
+      ? []
+      : [{ label: "Enc", value: -input.movementModifier }]),
+  ];
+
+  if (rawModifiers.length === 0) {
+    return input.baseTotal;
+  }
+
+  return applyWorkbookRawModifiersToSkillValue({
+    baseTotal: input.baseTotal,
+    rawModifiers,
+  });
 }
 
 function getWorkbookSkillInitiative(input: {
@@ -420,13 +419,19 @@ export function buildEquipmentLoadoutModuleModel(input: {
   }
 
   const combatAllocationInputs = input.combatAllocationInputs ?? defaultCombatAllocationState;
+  const liveObSkillRaw =
+    (input.liveCombatModifiers?.generalFatigueRaw ?? 0) +
+    (input.liveCombatModifiers?.obSkillRaw ?? 0);
+  const liveDbRaw =
+    (input.liveCombatModifiers?.generalFatigueRaw ?? 0) +
+    (input.liveCombatModifiers?.dbRaw ?? 0);
   const effectiveCombatAllocationInputs = input.liveCombatModifiers
     ? {
         ...combatAllocationInputs,
         situationalModifiers: {
           ...combatAllocationInputs.situationalModifiers,
-          attack: 0,
-          defense: 0,
+          attack: liveObSkillRaw,
+          defense: liveDbRaw,
           perception: 0,
         },
       }
@@ -528,42 +533,23 @@ export function buildEquipmentLoadoutModuleModel(input: {
     skills: input.characterContext.content.skills,
     workbookPerceptionValue
   });
-  const liveObSkillRaw =
-    (input.liveCombatModifiers?.generalFatigueRaw ?? 0) +
-    (input.liveCombatModifiers?.obSkillRaw ?? 0);
-  const liveDbRaw =
-    (input.liveCombatModifiers?.generalFatigueRaw ?? 0) +
-    (input.liveCombatModifiers?.dbRaw ?? 0);
   const combatStatePanelModel = {
     ...baseModel,
     modifierSourceNote: input.liveCombatModifiers
       ? `Modified by: ${input.liveCombatModifiers.modifierNoteLabels.join(", ")}`
       : undefined,
     statsRows,
-    statsTable: input.liveCombatModifiers
-      ? applyLiveModifierToTableColumns({
-          columnLabels: ["Skill level", "Encumbered"],
-          rawModifier: liveObSkillRaw,
-          table: statsTable,
-        })
-      : statsTable,
-    weaponModeTable: input.liveCombatModifiers
-      ? applyLiveModifierToTableColumns({
-          columnLabels: ["OB", "OB2", "OB3", "Parry"],
-          rawModifier: liveObSkillRaw,
-          table: applyLiveModifierToTableColumns({
-            columnLabels: ["DB"],
-            rawModifier: liveDbRaw,
-            table: baseModel.weaponModeTable,
-          }),
-        })
-      : baseModel.weaponModeTable,
+    statsTable,
+    weaponModeTable: baseModel.weaponModeTable,
   };
 
   const movementModifier =
     typeof combatSnapshot.movementModifierSummary === "number"
       ? combatSnapshot.movementModifierSummary
       : null;
+  const liveSkillRawModifiers = input.liveCombatModifiers
+    ? getLiveSkillRawModifiers(liveObSkillRaw)
+    : [];
   const encumbranceRows = input.characterContext.content.skills
     .map((skillDefinition) => {
       const skillType = getEncumbranceDependentSkillType({
@@ -593,13 +579,28 @@ export function buildEquipmentLoadoutModuleModel(input: {
               adjustedXp: skillView.effectiveSkillNumber,
               linkedStats: skillDefinition.linkedStats
             });
+      const skillLevel =
+        baseTotal == null
+          ? null
+          : input.liveCombatModifiers
+            ? getWorkbookLiveSkillTotal({
+                baseTotal,
+                liveRawModifiers: liveSkillRawModifiers,
+              })
+            : baseTotal;
       const encumbered =
         baseTotal == null
           ? null
-          : getWorkbookSkillEncumberedTotal({
-              baseTotal,
-              movementModifier
-            });
+          : input.liveCombatModifiers
+            ? getWorkbookLiveSkillEncumberedTotal({
+                baseTotal,
+                liveRawModifiers: liveSkillRawModifiers,
+                movementModifier,
+              })
+            : getWorkbookSkillEncumberedTotal({
+                baseTotal,
+                movementModifier
+              });
       const initiative = getWorkbookSkillInitiative({
         adjustedXp: skillView.effectiveSkillNumber,
         dexterityGm: characterCombatInputs.dexterityGm
@@ -612,7 +613,7 @@ export function buildEquipmentLoadoutModuleModel(input: {
           initiative ?? "—",
           statAverage ?? "—",
           skillView.effectiveSkillNumber,
-          baseTotal ?? "—",
+          skillLevel ?? "—",
           encumbered ?? "—"
         ],
         skillType,

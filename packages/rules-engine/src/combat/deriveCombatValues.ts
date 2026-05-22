@@ -11,6 +11,7 @@ import {
   calculateWorkbookBaseDb,
   calculateWorkbookCombinedParry,
   calculateWorkbookDefensePair,
+  calculateWorkbookPercentageAdjustmentTrace,
   calculateWorkbookMeleeDmb,
   calculateWorkbookMeleeInitiative,
   calculateWorkbookMeleeOb,
@@ -18,10 +19,33 @@ import {
   calculateWorkbookWeaponParry,
   lookupWorkbookToHitModifier,
 } from "./workbookCombatMath";
+import type { WorkbookRawModifier } from "./workbookCombatMath";
 import type { CombatAllocationState } from "./combatAllocationState";
 import type { CombatStateCharacterInputs } from "./characterInputs";
 
 export type DerivedCombatValue = string | number;
+
+function getAttackRawModifiers(allocationInputs: CombatAllocationState): WorkbookRawModifier[] {
+  const attackModifier = allocationInputs.situationalModifiers.attack;
+
+  return attackModifier === 0
+    ? []
+    : [{ label: "OB/Skill", value: attackModifier }];
+}
+
+function applyRawModifiersToDerivedValue(
+  baseValue: number,
+  rawModifiers: WorkbookRawModifier[],
+): number {
+  if (rawModifiers.length === 0) {
+    return baseValue;
+  }
+
+  return calculateWorkbookPercentageAdjustmentTrace({
+    baseValue,
+    rawModifiers,
+  })?.finalValue ?? baseValue;
+}
 
 function formatFormulaModifier(value: number | null | undefined): string {
   if (value == null || value === 0) {
@@ -217,6 +241,7 @@ export function getDerivedObValue(input: {
     return "—";
   }
 
+  const attackRawModifiers = getAttackRawModifiers(input.allocationInputs);
   const skillXp = getWeaponSkillXp(input.template, input.characterInputs);
   const missileOrThrownSkillXp = input.treatAsThrownUse
     ? getSkillXpByName("Throwing", input.characterInputs)
@@ -234,13 +259,14 @@ export function getDerivedObValue(input: {
     const workbookOb = calculateWorkbookMeleeOb({
       armorActivityModifier: input.armorTemplate?.armorActivityModifier ?? 0,
       dexterityGm,
+      rawModifiers: attackRawModifiers,
       skillXp,
       strengthGm,
       weaponOb: input.mode.ob,
     });
 
     if (workbookOb) {
-      return workbookOb.finalOb + input.allocationInputs.situationalModifiers.attack;
+      return workbookOb.finalOb;
     }
   }
 
@@ -251,12 +277,13 @@ export function getDerivedObValue(input: {
     const projectileOb = calculateWorkbookProjectileOb({
       armorActivityModifier: input.armorTemplate?.armorActivityModifier ?? 0,
       dexterityGm: dexterityGm ?? 0,
+      rawModifiers: attackRawModifiers,
       skillXp: missileOrThrownSkillXp,
       weaponOb: input.mode.ob ?? 0,
     });
 
     if (projectileOb) {
-      return projectileOb.finalOb + input.allocationInputs.situationalModifiers.attack;
+      return projectileOb.finalOb;
     }
   }
 
@@ -265,14 +292,18 @@ export function getDerivedObValue(input: {
   }
 
   if (skillXp == null) {
-    return input.mode.ob ?? "—";
+    return input.mode.ob == null
+      ? "—"
+      : applyRawModifiersToDerivedValue(input.mode.ob, attackRawModifiers);
   }
 
-  return calculateBaseOB({
+  const baseOb = calculateBaseOB({
     skill: skillXp,
     weaponBonus: input.mode.ob ?? 0,
-    situationalModifier: input.allocationInputs.situationalModifiers.attack,
+    situationalModifier: 0,
   });
+
+  return applyRawModifiersToDerivedValue(baseOb, attackRawModifiers);
 }
 
 export function getDerivedDmbValue(input: {
@@ -327,6 +358,7 @@ export function getWorkbookOneItemDefensePair(input: {
   characterInputs?: CombatStateCharacterInputs;
   encumbranceLevel: number | null;
   equipmentModifier: number;
+  rawModifiers?: WorkbookRawModifier[];
 }): { db: DerivedCombatValue; dm: DerivedCombatValue } {
   const dexterityGm = input.characterInputs?.dexterityGm ?? null;
   const dodgeSkillXp = input.characterInputs?.dodgeCombatSkillXp ?? null;
@@ -344,6 +376,7 @@ export function getWorkbookOneItemDefensePair(input: {
   const pair = calculateWorkbookDefensePair({
     baseDb,
     equipmentModifier: input.equipmentModifier,
+    rawModifiers: input.rawModifiers,
     toHitModifier,
   });
 
@@ -356,6 +389,7 @@ export function getWorkbookOneItemDefensePair(input: {
 export function getWorkbookWeaponRowParry(input: {
   armorTemplate: ArmorTemplate | null;
   characterInputs?: CombatStateCharacterInputs;
+  rawModifiers?: WorkbookRawModifier[];
   template: WeaponTemplate | null;
 }): DerivedCombatValue {
   const dexterityGm = input.characterInputs?.dexterityGm ?? null;
@@ -370,6 +404,7 @@ export function getWorkbookWeaponRowParry(input: {
     armorActivityModifier: input.armorTemplate?.armorActivityModifier ?? 0,
     dexterityGm,
     parrySkillXp,
+    rawModifiers: input.rawModifiers,
     weaponParryModifier,
   });
 
@@ -379,6 +414,7 @@ export function getWorkbookWeaponRowParry(input: {
 export function getWorkbookShieldRowParry(input: {
   armorTemplate: ArmorTemplate | null;
   characterInputs?: CombatStateCharacterInputs;
+  rawModifiers?: WorkbookRawModifier[];
   shieldTemplate: ShieldTemplate;
 }): DerivedCombatValue {
   const dexterityGm = input.characterInputs?.dexterityGm ?? null;
@@ -393,6 +429,7 @@ export function getWorkbookShieldRowParry(input: {
     armorActivityModifier: input.armorTemplate?.armorActivityModifier ?? 0,
     dexterityGm,
     parrySkillXp,
+    rawModifiers: input.rawModifiers,
     weaponParryModifier: shieldParryModifier,
   });
 
@@ -404,6 +441,7 @@ export function getWorkbookCombinedRowParry(input: {
   characterInputs?: CombatStateCharacterInputs;
   offHandShieldTemplate: ShieldTemplate | null;
   primaryWeaponTemplate: WeaponTemplate | null;
+  rawModifiers?: WorkbookRawModifier[];
   secondaryWeaponTemplate: WeaponTemplate | null;
 }): DerivedCombatValue {
   const dexterityGm = input.characterInputs?.dexterityGm ?? null;
@@ -427,6 +465,7 @@ export function getWorkbookCombinedRowParry(input: {
     offHandParryModifier,
     parrySkillXp,
     primaryParryModifier,
+    rawModifiers: input.rawModifiers,
   });
 
   return workbookParry?.finalParry ?? "—";

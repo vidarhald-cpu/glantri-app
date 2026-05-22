@@ -57,6 +57,7 @@ const WORKBOOK_REFERENCE_WEAPON_OB = 3;
 export interface WorkbookMeleeObInput {
   armorActivityModifier?: number | null;
   dexterityGm: number;
+  rawModifiers?: WorkbookRawModifier[];
   skillXp: number;
   strengthGm: number;
   weaponOb: number;
@@ -67,11 +68,13 @@ export interface WorkbookMeleeObResult {
   combinedModifier: number;
   finalOb: number;
   rawOb: number;
+  trace: WorkbookPercentageAdjustmentTrace;
 }
 
 export interface WorkbookProjectileObInput {
   armorActivityModifier?: number | null;
   dexterityGm: number;
+  rawModifiers?: WorkbookRawModifier[];
   skillXp: number;
   weaponOb: number;
 }
@@ -81,6 +84,7 @@ export interface WorkbookProjectileObResult {
   combinedModifier: number;
   finalOb: number;
   rawOb: number;
+  trace: WorkbookPercentageAdjustmentTrace;
 }
 
 export interface WorkbookMeleeDmbInput extends WorkbookMeleeObInput {
@@ -112,6 +116,7 @@ export interface WorkbookWeaponParryInput {
   armorActivityModifier?: number | null;
   dexterityGm: number;
   parrySkillXp: number;
+  rawModifiers?: WorkbookRawModifier[];
   weaponParryModifier: number;
 }
 
@@ -120,6 +125,7 @@ export interface WorkbookWeaponParryResult {
   combinedModifier: number;
   finalParry: number;
   rawParry: number;
+  trace: WorkbookPercentageAdjustmentTrace;
 }
 
 export interface WorkbookCombinedParryInput {
@@ -128,6 +134,7 @@ export interface WorkbookCombinedParryInput {
   offHandParryModifier: number;
   parrySkillXp: number;
   primaryParryModifier: number;
+  rawModifiers?: WorkbookRawModifier[];
 }
 
 export interface WorkbookCombinedParryResult {
@@ -137,6 +144,7 @@ export interface WorkbookCombinedParryResult {
   offHandContribution: number;
   primaryContribution: number;
   rawParry: number;
+  trace: WorkbookPercentageAdjustmentTrace;
 }
 
 export interface WorkbookEncumbranceLevelInput {
@@ -164,6 +172,7 @@ export interface WorkbookMovementInput {
 export interface WorkbookDefensePairInput {
   baseDb: number;
   equipmentModifier?: number | null;
+  rawModifiers?: WorkbookRawModifier[];
   toHitModifier?: number | null;
 }
 
@@ -175,6 +184,21 @@ export interface WorkbookDefensePairResult {
   noToHitAdjustment: number;
   noToHitDb: number;
   noToHitModifier: number;
+  noToHitTrace: WorkbookPercentageAdjustmentTrace;
+  fullTrace: WorkbookPercentageAdjustmentTrace;
+}
+
+export interface WorkbookRawModifier {
+  label: string;
+  value: number;
+}
+
+export interface WorkbookPercentageAdjustmentTrace {
+  baseValue: number;
+  finalValue: number;
+  percentageAdjustment: number;
+  rawModifierTotal: number;
+  rawModifiers: WorkbookRawModifier[];
 }
 
 export const WORKBOOK_MOVEMENT_PERCENT_TABLE: Record<number, Record<number, number>> = {
@@ -288,19 +312,29 @@ export function lookupWorkbookPercentageAdjustment(
   return WORKBOOK_PERCENTAGE_ADJUSTMENT_TABLE[rawOb]?.[absoluteModifier] ?? null;
 }
 
-function applyWorkbookSignedAdjustment(
-  baseValue: number,
-  modifier: number,
-): { adjustment: number; value: number } | null {
-  const adjustment = lookupWorkbookPercentageAdjustment(baseValue, Math.abs(modifier));
+export function calculateWorkbookPercentageAdjustmentTrace(input: {
+  baseValue: number;
+  rawModifiers: WorkbookRawModifier[];
+}): WorkbookPercentageAdjustmentTrace | null {
+  const rawModifierTotal = input.rawModifiers.reduce((sum, modifier) => sum + modifier.value, 0);
+  const percentageAdjustment = lookupWorkbookPercentageAdjustment(
+    input.baseValue,
+    Math.abs(rawModifierTotal),
+  );
 
-  if (adjustment == null) {
+  if (percentageAdjustment == null) {
     return null;
   }
 
   return {
-    adjustment,
-    value: modifier >= 0 ? baseValue + adjustment : baseValue - adjustment,
+    baseValue: input.baseValue,
+    finalValue:
+      rawModifierTotal >= 0
+        ? input.baseValue + percentageAdjustment
+        : input.baseValue - percentageAdjustment,
+    percentageAdjustment,
+    rawModifierTotal,
+    rawModifiers: input.rawModifiers,
   };
 }
 
@@ -322,24 +356,37 @@ export function calculateWorkbookBaseDb(input: {
 export function calculateWorkbookDefensePair(
   input: WorkbookDefensePairInput,
 ): WorkbookDefensePairResult | null {
-  const noToHitModifier = input.equipmentModifier ?? 0;
-  const fullModifier = noToHitModifier + (input.toHitModifier ?? 0);
+  const sharedRawModifiers = [
+    { label: "equipment", value: input.equipmentModifier ?? 0 },
+    ...(input.rawModifiers ?? []),
+  ];
+  const fullRawModifiers = [
+    ...sharedRawModifiers,
+    { label: "to-hit", value: input.toHitModifier ?? 0 },
+  ];
+  const noToHitTrace = calculateWorkbookPercentageAdjustmentTrace({
+    baseValue: input.baseDb,
+    rawModifiers: sharedRawModifiers,
+  });
+  const fullTrace = calculateWorkbookPercentageAdjustmentTrace({
+    baseValue: input.baseDb,
+    rawModifiers: fullRawModifiers,
+  });
 
-  const full = applyWorkbookSignedAdjustment(input.baseDb, fullModifier);
-  const noToHit = applyWorkbookSignedAdjustment(input.baseDb, noToHitModifier);
-
-  if (full == null || noToHit == null) {
+  if (fullTrace == null || noToHitTrace == null) {
     return null;
   }
 
   return {
-    db: full.value,
-    dm: full.value - noToHit.value,
-    fullAdjustment: full.adjustment,
-    fullModifier,
-    noToHitAdjustment: noToHit.adjustment,
-    noToHitDb: noToHit.value,
-    noToHitModifier,
+    db: fullTrace.finalValue,
+    dm: fullTrace.finalValue - noToHitTrace.finalValue,
+    fullAdjustment: fullTrace.percentageAdjustment,
+    fullModifier: fullTrace.rawModifierTotal,
+    fullTrace,
+    noToHitAdjustment: noToHitTrace.percentageAdjustment,
+    noToHitDb: noToHitTrace.finalValue,
+    noToHitModifier: noToHitTrace.rawModifierTotal,
+    noToHitTrace,
   };
 }
 
@@ -350,18 +397,25 @@ export function calculateWorkbookMeleeOb(
     Math.round(input.skillXp / 2) +
     1 +
     Math.max(getWorkbookCappedStrengthObModifier(input.strengthGm), input.dexterityGm);
-  const combinedModifier = (input.armorActivityModifier ?? 0) + input.weaponOb;
-  const adjustment = lookupWorkbookPercentageAdjustment(rawOb, Math.abs(combinedModifier));
+  const trace = calculateWorkbookPercentageAdjustmentTrace({
+    baseValue: rawOb,
+    rawModifiers: [
+      { label: "armor activity", value: input.armorActivityModifier ?? 0 },
+      { label: "weapon OB", value: input.weaponOb },
+      ...(input.rawModifiers ?? []),
+    ],
+  });
 
-  if (adjustment == null) {
+  if (trace == null) {
     return null;
   }
 
   return {
-    adjustment,
-    combinedModifier,
-    finalOb: combinedModifier >= 0 ? rawOb + adjustment : rawOb - adjustment,
+    adjustment: trace.percentageAdjustment,
+    combinedModifier: trace.rawModifierTotal,
+    finalOb: trace.finalValue,
     rawOb,
+    trace,
   };
 }
 
@@ -369,18 +423,25 @@ export function calculateWorkbookProjectileOb(
   input: WorkbookProjectileObInput,
 ): WorkbookProjectileObResult | null {
   const rawOb = Math.round(input.skillXp / 2) + 1 + input.dexterityGm;
-  const combinedModifier = (input.armorActivityModifier ?? 0) + input.weaponOb;
-  const adjustment = lookupWorkbookPercentageAdjustment(rawOb, Math.abs(combinedModifier));
+  const trace = calculateWorkbookPercentageAdjustmentTrace({
+    baseValue: rawOb,
+    rawModifiers: [
+      { label: "armor activity", value: input.armorActivityModifier ?? 0 },
+      { label: "weapon OB", value: input.weaponOb },
+      ...(input.rawModifiers ?? []),
+    ],
+  });
 
-  if (adjustment == null) {
+  if (trace == null) {
     return null;
   }
 
   return {
-    adjustment,
-    combinedModifier,
-    finalOb: combinedModifier >= 0 ? rawOb + adjustment : rawOb - adjustment,
+    adjustment: trace.percentageAdjustment,
+    combinedModifier: trace.rawModifierTotal,
+    finalOb: trace.finalValue,
     rawOb,
+    trace,
   };
 }
 
@@ -461,18 +522,25 @@ export function calculateWorkbookWeaponParry(
   input: WorkbookWeaponParryInput,
 ): WorkbookWeaponParryResult | null {
   const rawParry = Math.round(input.parrySkillXp / 2) + 1 + input.dexterityGm;
-  const combinedModifier = (input.armorActivityModifier ?? 0) + input.weaponParryModifier;
-  const adjustment = lookupWorkbookPercentageAdjustment(rawParry, Math.abs(combinedModifier));
+  const trace = calculateWorkbookPercentageAdjustmentTrace({
+    baseValue: rawParry,
+    rawModifiers: [
+      { label: "armor activity", value: input.armorActivityModifier ?? 0 },
+      { label: "weapon parry", value: input.weaponParryModifier },
+      ...(input.rawModifiers ?? []),
+    ],
+  });
 
-  if (adjustment == null) {
+  if (trace == null) {
     return null;
   }
 
   return {
-    adjustment,
-    combinedModifier,
-    finalParry: combinedModifier > 0 ? rawParry + adjustment : rawParry - adjustment,
+    adjustment: trace.percentageAdjustment,
+    combinedModifier: trace.rawModifierTotal,
+    finalParry: trace.finalValue,
     rawParry,
+    trace,
   };
 }
 
@@ -482,21 +550,28 @@ export function calculateWorkbookCombinedParry(
   const rawParry = Math.round(input.parrySkillXp / 2) + 1 + input.dexterityGm;
   const primaryContribution = Math.max(1, input.primaryParryModifier);
   const offHandContribution = Math.max(1, input.offHandParryModifier);
-  const combinedModifier =
-    (input.armorActivityModifier ?? 0) + primaryContribution + offHandContribution;
-  const adjusted = applyWorkbookSignedAdjustment(rawParry, combinedModifier);
+  const trace = calculateWorkbookPercentageAdjustmentTrace({
+    baseValue: rawParry,
+    rawModifiers: [
+      { label: "armor activity", value: input.armorActivityModifier ?? 0 },
+      { label: "primary parry", value: primaryContribution },
+      { label: "off-hand parry", value: offHandContribution },
+      ...(input.rawModifiers ?? []),
+    ],
+  });
 
-  if (adjusted == null) {
+  if (trace == null) {
     return null;
   }
 
   return {
-    adjustment: adjusted.adjustment,
-    combinedModifier,
-    finalParry: adjusted.value,
+    adjustment: trace.percentageAdjustment,
+    combinedModifier: trace.rawModifierTotal,
+    finalParry: trace.finalValue,
     offHandContribution,
     primaryContribution,
     rawParry,
+    trace,
   };
 }
 

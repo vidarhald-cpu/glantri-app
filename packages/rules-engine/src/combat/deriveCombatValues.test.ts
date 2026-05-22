@@ -264,6 +264,67 @@ describe("getDerivedObValue · workbook golden values", () => {
     });
     expect(result).toBe(21);
   });
+
+  it("applies live attack modifiers once for a broad-sword-style OB 12 row", () => {
+    const broadSword = {
+      handlingClass: "one_handed",
+      weaponSkill: "1-h edged",
+    } as never;
+    const slashMode = { ob: 2 } as never;
+    const characterInputs = makeCharacterInputs({
+      combatSkillXpByName: { "1-h edged": 9 },
+      dexterityGm: 2,
+      strengthGm: 4,
+    });
+
+    expect(
+      getDerivedObValue({
+        allocationInputs: alloc,
+        armorTemplate: null,
+        characterInputs,
+        mode: slashMode,
+        template: broadSword,
+      }),
+    ).toBe(12);
+    expect(
+      getDerivedObValue({
+        allocationInputs: {
+          ...alloc,
+          situationalModifiers: { ...alloc.situationalModifiers, attack: -1 },
+        },
+        armorTemplate: null,
+        characterInputs,
+        mode: slashMode,
+        template: broadSword,
+      }),
+    ).toBe(11);
+  });
+
+  it("uses the zero-base percentage adjustment path for fallback OB rows", () => {
+    expect(
+      getDerivedObValue({
+        allocationInputs: {
+          ...alloc,
+          situationalModifiers: { ...alloc.situationalModifiers, attack: 1 },
+        },
+        armorTemplate: null,
+        mode: { ob: 0 } as never,
+        template: { handlingClass: "one_handed", weaponSkill: "Kick" } as never,
+      }),
+    ).toBe(1);
+
+    expect(
+      getDerivedObValue({
+        allocationInputs: {
+          ...alloc,
+          situationalModifiers: { ...alloc.situationalModifiers, attack: -1 },
+        },
+        armorTemplate: null,
+        mode: { ob: 0 } as never,
+        template: { handlingClass: "one_handed", weaponSkill: "Kick" } as never,
+      }),
+    ).toBe(-1);
+  });
 });
 
 describe("getDerivedDmbValue · workbook golden values", () => {
