@@ -17,6 +17,8 @@ import {
   COMBAT_ROUND_STEPS,
   advanceCombatRoundStep,
   buildCombatRoundInspector,
+  clearCurrentCombatRoundStepAndRewind,
+  getPreviousCombatRoundStep,
   initializeCombatRoundState,
   setCombatRoundSelection,
   sortCombatRoundParticipantsByInitiative,
@@ -28,6 +30,7 @@ import {
 } from "@/lib/api/encounterClient";
 import {
   buildPlayerCombatModifierRows,
+  getGmCombatStepActionLabel,
   PlayerCombatActionButtonPanel,
   PlayerCombatActionResultPanel,
   PlayerCombatActionSelectorPanel,
@@ -362,6 +365,14 @@ export default function CombatRoundManagerPanel({
     }
   }
 
+  async function clearCurrentStep() {
+    if (!getPreviousCombatRoundStep(roundState.currentStep)) {
+      return;
+    }
+
+    await persistRoundState(clearCurrentCombatRoundStepAndRewind(roundState));
+  }
+
   function selectInspector(participantId: string, step: CombatRoundStep) {
     setRoundState((current) =>
       setCombatRoundSelection({
@@ -542,6 +553,13 @@ export default function CombatRoundManagerPanel({
             type="button"
           >
             {saving ? "Saving..." : getAdvanceButtonLabel(roundState.currentStep)}
+          </button>
+          <button
+            disabled={saving || !getPreviousCombatRoundStep(roundState.currentStep)}
+            onClick={() => void clearCurrentStep()}
+            type="button"
+          >
+            Clear current step
           </button>
         </section>
       </div>
@@ -817,10 +835,13 @@ export default function CombatRoundManagerPanel({
                     rows={inspectorModifierRows}
                   />
                   <PlayerCombatActionButtonPanel
-                    disabled={!inspectorDraft.actionId}
+                    buttonLabel={getGmCombatStepActionLabel(roundState.currentStep)}
+                    disabled={saving}
                     onDeclareAction={() => void saveInspectorDeclaration()}
                     saving={saving}
-                    statusText="GM can save or revise this declaration at any round step."
+                    statusText={`Current step: ${
+                      COMBAT_ROUND_STEP_ABBREVIATIONS[roundState.currentStep]
+                    }. GM can save or revise this declaration at any round step.`}
                   />
                   <PlayerCombatActionResultPanel
                     additionalActionNotes={inspectorDraft.additionalActionNotes}

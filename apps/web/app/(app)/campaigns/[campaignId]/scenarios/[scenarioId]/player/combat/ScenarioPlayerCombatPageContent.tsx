@@ -21,6 +21,7 @@ import {
 } from "@/features/equipment/loadoutModule";
 import {
   buildPlayerCombatModifierRows,
+  getPlayerCombatActionButtonLabel,
   PlayerCombatActionButtonPanel,
   PlayerCombatActionResultPanel,
   PlayerCombatActionSelectorPanel,
@@ -369,6 +370,27 @@ export default function ScenarioPlayerCombatPageContent({
   );
   const declarationRoundNumber =
     combatRoundState?.roundNumber ?? encounterSession?.currentRound ?? undefined;
+  const selectedEncounterParticipant = useMemo(
+    () =>
+      encounterSession?.participants.find(
+        (participant) =>
+          participant.scenarioParticipantId === selectedParticipant?.id ||
+          participant.id === selectedParticipant?.id ||
+          (participant.characterId && participant.characterId === selectedParticipant?.characterId),
+      ),
+    [encounterSession?.participants, selectedParticipant],
+  );
+  const selectedRoundParticipant = useMemo(
+    () =>
+      selectedEncounterParticipant && combatRoundState
+        ? combatRoundState.participants.find(
+            (participant) => participant.participantId === selectedEncounterParticipant.id,
+          )
+        : undefined,
+    [combatRoundState, selectedEncounterParticipant],
+  );
+  const selectedDeclarationStepStatus =
+    selectedRoundParticipant?.stepStatuses.select_actions ?? "pending";
   const selectedParticipantDeclaredThisRound = Boolean(
     declarationRoundNumber &&
       selectedParticipant?.state.combat.lastDeclaredActionId &&
@@ -936,22 +958,33 @@ export default function ScenarioPlayerCombatPageContent({
     Boolean(selectedActionId) ||
     Boolean(selectedSecondaryActionId) ||
     additionalActionNotes.trim().length > 0;
+  const currentCombatStep = combatRoundState?.currentStep ?? "select_actions";
+  const currentCombatStepAbbreviation = COMBAT_ROUND_STEP_ABBREVIATIONS[currentCombatStep];
   const playerDeclarationLocked =
-    !isGameMaster && (!declarationStepOpen || selectedParticipantDeclaredThisRound);
+    !isGameMaster &&
+    (!declarationStepOpen ||
+      selectedParticipantDeclaredThisRound ||
+      selectedDeclarationStepStatus !== "pending");
   const declarationControlsDisabled = controlsDisabled || playerDeclarationLocked;
   const declareActionDisabled =
-    declarationControlsDisabled || savingCombatContext || !displayedParticipant || !hasMeaningfulDeclaration;
+    controlsDisabled ||
+    savingCombatContext ||
+    !displayedParticipant ||
+    (!isGameMaster && (playerDeclarationLocked || !hasMeaningfulDeclaration));
+  const declarationButtonLabel = getPlayerCombatActionButtonLabel({
+    currentStep: currentCombatStep,
+    disabled: declareActionDisabled,
+    isGameMaster,
+  });
   const declarationStatusText = isGameMaster
-    ? "GM can save or revise this participant declaration at any round step."
-    : selectedParticipantDeclaredThisRound
-      ? "Declaration submitted for this round."
-      : declarationStepOpen
-        ? "Declare during DE before the GM advances the round."
-        : `Declaration is locked after ${COMBAT_ROUND_STEP_ABBREVIATIONS.select_actions}. Current step: ${
-            combatRoundState
-              ? COMBAT_ROUND_STEP_ABBREVIATIONS[combatRoundState.currentStep]
-              : "unknown"
-          }.`;
+    ? `Current step: ${currentCombatStepAbbreviation}. GM can save or revise this participant declaration.`
+    : selectedParticipantDeclaredThisRound ||
+        selectedDeclarationStepStatus === "submitted" ||
+        selectedDeclarationStepStatus === "gmEdited"
+      ? `Current step: ${currentCombatStepAbbreviation}. Declared.`
+      : declarationStepOpen && selectedDeclarationStepStatus === "pending"
+        ? `Current step: ${currentCombatStepAbbreviation}.`
+        : `Current step: ${currentCombatStepAbbreviation}. Declaration closed.`;
 
   if (sessionLoading || loading) {
     return <section>Loading player combat screen...</section>;
@@ -1090,6 +1123,7 @@ export default function ScenarioPlayerCombatPageContent({
               rows={modifierRows}
             />
             <PlayerCombatActionButtonPanel
+              buttonLabel={declarationButtonLabel}
               disabled={declareActionDisabled}
               onDeclareAction={() => void saveCombatContext()}
               saving={savingCombatContext}

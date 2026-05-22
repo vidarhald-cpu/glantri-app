@@ -8,6 +8,9 @@ import {
   advanceCombatRoundStep,
   buildCombatRoundInspector,
   canPlayerSubmitCombatDeclaration,
+  clearCombatRoundStep,
+  clearCurrentCombatRoundStepAndRewind,
+  getPreviousCombatRoundStep,
   initializeCombatRoundState,
   recordCombatRoundDeclaration,
   setCombatRoundActiveParticipant,
@@ -114,6 +117,79 @@ describe("combat round manager", () => {
     expect(nextRoundState.currentStep).toBe("select_actions");
     expect(nextRoundState.roundNumber).toBe(4);
     expect(nextRoundState.participants[0]?.stepStatuses.select_actions).toBe("pending");
+  });
+
+  it("finds the previous combat round step", () => {
+    expect(getPreviousCombatRoundStep("select_actions")).toBeUndefined();
+    expect(getPreviousCombatRoundStep("review_action_modifiers")).toBe("select_actions");
+    expect(getPreviousCombatRoundStep("initiative_phase_1")).toBe("review_action_modifiers");
+  });
+
+  it("clears a single combat round step without mutating other step statuses", () => {
+    const state = setCombatRoundParticipantStepStatus({
+      participantId: "gladiator",
+      state: setCombatRoundParticipantStepStatus({
+        participantId: "gladiator",
+        state: advanceCombatRoundStep(initializeCombatRoundState({ encounter: encounter() })),
+        status: "complete",
+        step: "review_action_modifiers",
+      }),
+      status: "submitted",
+      step: "select_actions",
+    });
+    const cleared = clearCombatRoundStep({
+      state,
+      step: "review_action_modifiers",
+    });
+
+    expect(cleared.participants[0]?.stepStatuses.review_action_modifiers).toBe("pending");
+    expect(cleared.participants[0]?.stepStatuses.select_actions).toBe("submitted");
+    expect(state.participants[0]?.stepStatuses.review_action_modifiers).toBe("complete");
+  });
+
+  it("clears initiative values when clearing initiative steps", () => {
+    const state = setCombatRoundParticipantInitiative({
+      initiative: 14,
+      participantId: "gladiator",
+      phase: "phase1",
+      state: initializeCombatRoundState({ encounter: encounter() }),
+    });
+    const cleared = clearCombatRoundStep({
+      state,
+      step: "initiative_phase_1",
+    });
+
+    expect(state.participants[0]?.initiatives.phase1).toBe(14);
+    expect(cleared.participants[0]?.initiatives.phase1).toBeUndefined();
+  });
+
+  it("clears the current step and rewinds to the previous step", () => {
+    const state = advanceCombatRoundStep(initializeCombatRoundState({ encounter: encounter() }));
+    const withCompleteReview = setCombatRoundParticipantStepStatus({
+      participantId: "gladiator",
+      state,
+      status: "complete",
+      step: "review_action_modifiers",
+    });
+    const rewound = clearCurrentCombatRoundStepAndRewind(withCompleteReview);
+
+    expect(withCompleteReview.currentStep).toBe("review_action_modifiers");
+    expect(rewound.currentStep).toBe("select_actions");
+    expect(rewound.selectedStep).toBe("select_actions");
+    expect(rewound.participants[0]?.stepStatuses.review_action_modifiers).toBe("pending");
+    expect(rewound.participants[0]?.stepStatuses.select_actions).toBe("locked");
+  });
+
+  it("clears DE in place when called directly on the first step", () => {
+    const state = recordCombatRoundDeclaration({
+      participantId: "gladiator",
+      state: initializeCombatRoundState({ encounter: encounter() }),
+      submittedBy: "player",
+    });
+    const cleared = clearCurrentCombatRoundStepAndRewind(state);
+
+    expect(cleared.currentStep).toBe("select_actions");
+    expect(cleared.participants[0]?.stepStatuses.select_actions).toBe("pending");
   });
 
   it("sets the active participant marker", () => {

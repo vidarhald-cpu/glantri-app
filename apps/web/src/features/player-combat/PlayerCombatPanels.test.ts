@@ -42,4 +42,24 @@ describe("PlayerCombatPanels", () => {
     expect(source).toContain("phaseCard.description");
     expect(source).toContain("phaseCard.stats");
   });
+
+  it("exposes the canonical combat action selector and declaration panels", () => {
+    const source = readSource();
+
+    expect(source).toContain("PlayerCombatActionSelectorPanel");
+    expect(source).toContain("Action selector");
+    expect(source).toContain("Secondary action");
+    expect(source).toContain("Movement");
+    expect(source).toContain("Additional");
+    expect(source).toContain("Parry context");
+    expect(source).toContain("PlayerCombatActionButtonPanel");
+    expect(source).toContain("getPlayerCombatActionButtonLabel");
+    expect(source).toContain("getGmCombatStepActionLabel");
+    expect(source).toContain("Declare action");
+    expect(source).toContain("Declare action — DE");
+    expect(source).toContain("Waiting for GM");
+    expect(source).toContain("Declare modifiers");
+    expect(source).toContain("Set phase 1 initiative");
+    expect(source).toContain("PlayerCombatActionResultPanel");
+  });
 });

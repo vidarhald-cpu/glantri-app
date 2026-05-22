@@ -19,6 +19,9 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("Rows are participants. Columns are round timeline cells.");
     expect(source).toContain("Commit");
     expect(source).toContain("and advance to");
+    expect(source).toContain("Clear current step");
+    expect(source).toContain("clearCurrentCombatRoundStepAndRewind");
+    expect(source).toContain("getPreviousCombatRoundStep");
     expect(source).toContain("Step controller");
   });
 
@@ -59,6 +62,8 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("buildEncounterLiveCombatModifierSummary");
     expect(source).toContain("selectedScenarioParticipant?.state.combatEffects");
     expect(source).toContain("saveInspectorDeclaration");
+    expect(source).toContain("getGmCombatStepActionLabel");
+    expect(source).toContain("buttonLabel={getGmCombatStepActionLabel(roundState.currentStep)}");
     expect(source).toContain("GM can save or revise this declaration at any round step.");
     expect(source).toContain("Phase 1 action");
     expect(source).toContain("Phase 2 action");

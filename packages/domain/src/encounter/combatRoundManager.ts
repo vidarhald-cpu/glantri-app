@@ -155,6 +155,12 @@ export function getNextCombatRoundStep(step: CombatRoundStep): CombatRoundStep {
   return COMBAT_ROUND_STEPS[currentIndex + 1] ?? "select_actions";
 }
 
+export function getPreviousCombatRoundStep(step: CombatRoundStep): CombatRoundStep | undefined {
+  const currentIndex = COMBAT_ROUND_STEPS.indexOf(step);
+
+  return currentIndex > 0 ? COMBAT_ROUND_STEPS[currentIndex - 1] : undefined;
+}
+
 export function advanceCombatRoundStep(state: CombatRoundState): CombatRoundState {
   const normalized = combatRoundStateSchema.parse(state);
   const nextStep = getNextCombatRoundStep(normalized.currentStep);
@@ -195,6 +201,53 @@ export function recordCombatRoundDeclaration(input: {
     status: input.submittedBy === "gm" ? "gmEdited" : "submitted",
     step: "select_actions",
   });
+}
+
+export function clearCombatRoundStep(input: {
+  state: CombatRoundState;
+  step: CombatRoundStep;
+}): CombatRoundState {
+  const normalized = combatRoundStateSchema.parse(input.state);
+
+  return {
+    ...normalized,
+    participants: normalized.participants.map((participant) => {
+      const nextInitiatives = { ...participant.initiatives };
+
+      if (input.step === "initiative_phase_1") {
+        delete nextInitiatives.phase1;
+      }
+
+      if (input.step === "initiative_phase_2") {
+        delete nextInitiatives.phase2;
+      }
+
+      return {
+        ...participant,
+        initiatives: nextInitiatives,
+        stepStatuses: {
+          ...participant.stepStatuses,
+          [input.step]: "pending",
+        },
+      };
+    }),
+  };
+}
+
+export function clearCurrentCombatRoundStepAndRewind(state: CombatRoundState): CombatRoundState {
+  const normalized = combatRoundStateSchema.parse(state);
+  const clearedState = clearCombatRoundStep({
+    state: normalized,
+    step: normalized.currentStep,
+  });
+  const previousStep = getPreviousCombatRoundStep(normalized.currentStep);
+  const nextStep = previousStep ?? normalized.currentStep;
+
+  return {
+    ...clearedState,
+    currentStep: nextStep,
+    selectedStep: nextStep,
+  };
 }
 
 export function canPlayerSubmitCombatDeclaration(input: {

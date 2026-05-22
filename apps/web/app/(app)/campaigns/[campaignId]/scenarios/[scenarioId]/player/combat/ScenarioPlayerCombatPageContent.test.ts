@@ -17,11 +17,15 @@ describe("ScenarioPlayerCombatPageContent", () => {
     const source = readSource();
 
     expect(source).toContain("export default function ScenarioPlayerCombatPageContent");
-    expect(source).toContain("Action selector");
+    expect(source).toContain("PlayerCombatActionSelectorPanel");
+    expect(source).toContain("PlayerCombatActionButtonPanel");
+    expect(source).toContain("PlayerCombatActionResultPanel");
+    expect(source).toContain("playerCombatPanelRowStyle");
     expect(source).toContain("EquipmentLoadoutModule");
     expect(source).toContain("PlayerCombatModifierPanel");
     expect(source).toContain("PlayerCombatPhasePanel");
     expect(source).toContain("buildPlayerCombatModifierRows");
+    expect(source).toContain("getPlayerCombatActionButtonLabel");
     expect(source).toContain("buildEncounterLiveCombatModifierSummary");
     expect(source).toContain("combatEffects: selectedParticipant?.state.combatEffects");
     expect(source).toContain("liveCombatModifiers");
@@ -30,7 +34,14 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("showParticipantSelector = true");
     expect(source).toContain("readOnlyInspection = false");
     expect(source).not.toContain("GM player-view inspection is read-only.");
-    expect(source).toContain("controlsDisabled || savingCombatContext");
+    expect(source).toContain("declarationStepOpen");
+    expect(source).toContain("selectedDeclarationStepStatus");
+    expect(source).toContain("selectedParticipantDeclaredThisRound");
+    expect(source).toContain("Current step: ${currentCombatStepAbbreviation}");
+    expect(source).toContain("Declared.");
+    expect(source).toContain("Declaration closed.");
+    expect(source).toContain("declarationButtonLabel");
+    expect(source).toContain("buttonLabel={declarationButtonLabel}");
     expect(source).not.toContain("will appear here in the next phase");
     expect(source).not.toContain("will expand into this area");
   });
