@@ -36,6 +36,9 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).not.toContain("▶ Active");
     expect(source).toContain("getStatusMarker");
     expect(source).toContain("participant.stepStatuses[step]");
+    expect(source).toContain("getParticipantDeclarationStatus");
+    expect(source).toContain('case "submitted":');
+    expect(source).toContain('case "gmEdited":');
     expect(source).toContain("step === roundState.currentStep");
     expect(source).toContain('overflowX: "auto"');
   });
@@ -49,10 +52,14 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("COMBAT_ROUND_STEP_LABELS[inspector.step]");
     expect(source).toContain("buildCombatRoundInspector");
     expect(source).toContain("PlayerCombatModifierPanel");
+    expect(source).toContain("PlayerCombatActionSelectorPanel");
+    expect(source).toContain("PlayerCombatActionButtonPanel");
+    expect(source).toContain("PlayerCombatActionResultPanel");
     expect(source).toContain("PlayerCombatPhasePanel");
     expect(source).toContain("buildEncounterLiveCombatModifierSummary");
     expect(source).toContain("selectedScenarioParticipant?.state.combatEffects");
-    expect(source).toContain("readOnly");
+    expect(source).toContain("saveInspectorDeclaration");
+    expect(source).toContain("GM can save or revise this declaration at any round step.");
     expect(source).toContain("Phase 1 action");
     expect(source).toContain("Phase 2 action");
     expect(source).toContain("Select a participant step to inspect combat details.");
@@ -68,6 +75,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("updateEncounterOnServer");
     expect(source).toContain("combatRoundState: nextRoundState");
     expect(source).toContain("currentRound: nextRoundState.roundNumber");
+    expect(source).toContain("submitCombatDeclarationOnServer");
     expect(source).not.toContain("actionLog:");
   });
 });

@@ -7,9 +7,12 @@ import {
   COMBAT_ROUND_STEPS,
   advanceCombatRoundStep,
   buildCombatRoundInspector,
+  canPlayerSubmitCombatDeclaration,
   initializeCombatRoundState,
+  recordCombatRoundDeclaration,
   setCombatRoundActiveParticipant,
   setCombatRoundParticipantInitiative,
+  setCombatRoundParticipantStepStatus,
   sortCombatRoundParticipantsByInitiative,
 } from "./combatRoundManager";
 import { encounterSessionSchema } from "./session";
@@ -93,7 +96,7 @@ describe("combat round manager", () => {
 
     expect(reviewState.currentStep).toBe("review_action_modifiers");
     expect(reviewState.selectedStep).toBe("review_action_modifiers");
-    expect(reviewState.participants[0]?.stepStatuses.select_actions).toBe("complete");
+    expect(reviewState.participants[0]?.stepStatuses.select_actions).toBe("locked");
 
     const roundSummaryState = [
       "review_action_modifiers",
@@ -119,6 +122,56 @@ describe("combat round manager", () => {
 
     expect(nextState.activeParticipantId).toBe("guard");
     expect(nextState.selectedParticipantId).toBe("guard");
+  });
+
+  it("marks participant declaration status without advancing the whole round", () => {
+    const state = initializeCombatRoundState({ encounter: encounter() });
+    const nextState = setCombatRoundParticipantStepStatus({
+      participantId: "gladiator",
+      state,
+      status: "submitted",
+      step: "select_actions",
+    });
+
+    expect(nextState.currentStep).toBe("select_actions");
+    expect(nextState.participants[0]?.stepStatuses.select_actions).toBe("submitted");
+    expect(nextState.participants[1]?.stepStatuses.select_actions).toBe("pending");
+  });
+
+  it("records player and GM declaration statuses for DE cells", () => {
+    const state = initializeCombatRoundState({ encounter: encounter() });
+    const playerDeclared = recordCombatRoundDeclaration({
+      participantId: "gladiator",
+      state,
+      submittedBy: "player",
+    });
+    const gmDeclared = recordCombatRoundDeclaration({
+      participantId: "guard",
+      state: playerDeclared,
+      submittedBy: "gm",
+    });
+
+    expect(gmDeclared.participants[0]?.stepStatuses.select_actions).toBe("submitted");
+    expect(gmDeclared.participants[1]?.stepStatuses.select_actions).toBe("gmEdited");
+    expect(canPlayerSubmitCombatDeclaration({ participantId: "gladiator", state: gmDeclared })).toBe(
+      false,
+    );
+  });
+
+  it("locks pending declarations when advancing past DE while preserving submitted markers", () => {
+    const state = recordCombatRoundDeclaration({
+      participantId: "gladiator",
+      state: initializeCombatRoundState({ encounter: encounter() }),
+      submittedBy: "player",
+    });
+    const nextState = advanceCombatRoundStep(state);
+
+    expect(nextState.currentStep).toBe("review_action_modifiers");
+    expect(nextState.participants[0]?.stepStatuses.select_actions).toBe("submitted");
+    expect(nextState.participants[1]?.stepStatuses.select_actions).toBe("locked");
+    expect(canPlayerSubmitCombatDeclaration({ participantId: "guard", state: nextState })).toBe(
+      false,
+    );
   });
 
   it("sorts participants by phase initiative values when available", () => {
@@ -155,7 +208,7 @@ describe("combat round manager", () => {
 
     expect(inspector.participant?.label).toBe("The Gladiator");
     expect(inspector.step).toBe("select_actions");
-    expect(inspector.status).toBe("complete");
+    expect(inspector.status).toBe("locked");
   });
 
   it("does not alter combat effects or action log when advancing round steps", () => {

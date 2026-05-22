@@ -2,7 +2,15 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-import type { CombatRoundStep, EncounterSession, ScenarioParticipant } from "@glantri/domain";
+import type {
+  CombatRoundStep,
+  CombatRoundStepStatus,
+  EncounterSession,
+  ScenarioCombatModifierBucket,
+  ScenarioCombatModifierEntry,
+  ScenarioParticipant,
+  ScenarioParticipantCombatContext,
+} from "@glantri/domain";
 import {
   COMBAT_ROUND_STEP_ABBREVIATIONS,
   COMBAT_ROUND_STEP_LABELS,
@@ -14,15 +22,29 @@ import {
   sortCombatRoundParticipantsByInitiative,
 } from "@glantri/domain";
 
-import { updateEncounterOnServer } from "@/lib/api/encounterClient";
+import {
+  submitCombatDeclarationOnServer,
+  updateEncounterOnServer,
+} from "@/lib/api/encounterClient";
 import {
   buildPlayerCombatModifierRows,
+  PlayerCombatActionButtonPanel,
+  PlayerCombatActionResultPanel,
+  PlayerCombatActionSelectorPanel,
   PlayerCombatModifierPanel,
   PlayerCombatPhasePanel,
-  playerCombatPanelsGridStyle,
+  playerCombatPanelRowStyle,
   type PlayerCombatPhaseCardView,
 } from "@/features/player-combat/PlayerCombatPanels";
 import { buildEncounterLiveCombatModifierSummary } from "@/lib/campaigns/liveCombatModifiers";
+import {
+  createEmptyPlayerEncounterCombatContext,
+  evaluatePlayerEncounterParryLegality,
+  getPlayerEncounterMovementLabel,
+  isPlayerEncounterActionId,
+  type PlayerEncounterActionId,
+  type PlayerEncounterMovementId,
+} from "@/lib/campaigns/playerEncounter";
 
 interface CombatRoundManagerPanelProps {
   encounter: EncounterSession;
@@ -69,6 +91,14 @@ const inspectorNavStyle = {
 
 const timelineRounds = 1;
 
+interface CombatInspectorDeclarationDraft {
+  actionId: PlayerEncounterActionId | "";
+  additionalActionNotes: string;
+  combatContext: ScenarioParticipantCombatContext;
+  movementId: PlayerEncounterMovementId | "";
+  secondaryActionId: PlayerEncounterActionId | "";
+}
+
 function getNextStepLabel(step: CombatRoundStep): string {
   const currentIndex = COMBAT_ROUND_STEPS.indexOf(step);
   const nextStep = COMBAT_ROUND_STEPS[currentIndex + 1] ?? "select_actions";
@@ -80,6 +110,34 @@ function getAdvanceButtonLabel(step: CombatRoundStep): string {
   return `Commit ${COMBAT_ROUND_STEP_ABBREVIATIONS[step]} and advance to ${getNextStepLabel(step)}`;
 }
 
+function createModifierEntryDraft(): ScenarioCombatModifierEntry {
+  return {
+    id: `modifier-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    notes: "",
+    scope: "until",
+    value: 0,
+  };
+}
+
+function buildDeclarationDraft(
+  participant?: ScenarioParticipant,
+): CombatInspectorDeclarationDraft {
+  return {
+    actionId: isPlayerEncounterActionId(participant?.state.combat.lastDeclaredActionId)
+      ? participant.state.combat.lastDeclaredActionId
+      : "",
+    additionalActionNotes: participant?.state.combat.lastDeclarationNotes ?? "",
+    combatContext:
+      participant?.state.combat.combatContext ?? createEmptyPlayerEncounterCombatContext(),
+    movementId: (participant?.state.combat.lastDeclaredMovementId as PlayerEncounterMovementId) ?? "hold",
+    secondaryActionId: isPlayerEncounterActionId(
+      participant?.state.combat.lastDeclaredSecondaryActionId,
+    )
+      ? participant.state.combat.lastDeclaredSecondaryActionId
+      : "",
+  };
+}
+
 function formatInitiative(value: number | undefined): string {
   return value === undefined ? "init --" : `init ${value}`;
 }
@@ -88,6 +146,12 @@ function formatStepStatus(status: string | undefined): string {
   switch (status) {
     case "complete":
       return "Complete";
+    case "submitted":
+      return "Submitted";
+    case "gmEdited":
+      return "GM edited";
+    case "locked":
+      return "Locked";
     case "ready":
       return "Ready";
     case "skipped":
@@ -99,20 +163,21 @@ function formatStepStatus(status: string | undefined): string {
 }
 
 function getStatusMarker(input: { current: boolean; status: string | undefined }): string {
-  if (input.current) {
-    return "▶";
-  }
-
   switch (input.status) {
+    case "submitted":
+    case "gmEdited":
+      return "▶";
     case "complete":
       return "✓";
+    case "locked":
+      return "L";
     case "ready":
       return "R";
     case "skipped":
       return "–";
     case "pending":
     default:
-      return "·";
+      return input.current ? "O" : "·";
   }
 }
 
@@ -137,7 +202,20 @@ export default function CombatRoundManagerPanel({
   const [roundState, setRoundState] = useState(initialRoundState);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string>();
+  const [scenarioParticipantOverrides, setScenarioParticipantOverrides] = useState<
+    Record<string, ScenarioParticipant>
+  >({});
+  const [inspectorDrafts, setInspectorDrafts] = useState<
+    Record<string, CombatInspectorDeclarationDraft>
+  >({});
   const selectedRoundNumber = roundState.roundNumber;
+  const effectiveScenarioParticipants = useMemo(
+    () =>
+      scenarioParticipants.map(
+        (participant) => scenarioParticipantOverrides[participant.id] ?? participant,
+      ),
+    [scenarioParticipantOverrides, scenarioParticipants],
+  );
   const initiativeSortPhase = shouldSortByInitiative(roundState.currentStep);
   const displayParticipants = useMemo(() => {
     if (!initiativeSortPhase) {
@@ -168,7 +246,7 @@ export default function CombatRoundManagerPanel({
     (participant) => participant.id === inspector.participant?.participantId,
   );
   const selectedScenarioParticipant = selectedEncounterParticipant
-    ? scenarioParticipants.find(
+    ? effectiveScenarioParticipants.find(
         (participant) =>
           participant.id === selectedEncounterParticipant.scenarioParticipantId ||
           participant.id === selectedEncounterParticipant.id ||
@@ -176,21 +254,25 @@ export default function CombatRoundManagerPanel({
             participant.characterId === selectedEncounterParticipant.characterId),
       )
     : undefined;
+  const inspectorDraft =
+    selectedScenarioParticipant && inspectorDrafts[selectedScenarioParticipant.id]
+      ? inspectorDrafts[selectedScenarioParticipant.id]
+      : buildDeclarationDraft(selectedScenarioParticipant);
   const inspectorLiveModifiers = useMemo(
     () =>
       buildEncounterLiveCombatModifierSummary({
-        combatContext: selectedScenarioParticipant?.state.combat.combatContext,
+        combatContext: inspectorDraft.combatContext,
         combatEffects: selectedScenarioParticipant?.state.combatEffects,
       }),
-    [selectedScenarioParticipant],
+    [inspectorDraft.combatContext, selectedScenarioParticipant],
   );
   const inspectorModifierRows = useMemo(
     () =>
       buildPlayerCombatModifierRows({
-        combatContext: selectedScenarioParticipant?.state.combat.combatContext,
+        combatContext: inspectorDraft.combatContext,
         liveModifiers: inspectorLiveModifiers,
       }),
-    [inspectorLiveModifiers, selectedScenarioParticipant],
+    [inspectorDraft.combatContext, inspectorLiveModifiers],
   );
   const inspectorPhaseCards = useMemo<readonly PlayerCombatPhaseCardView[]>(() => {
     if (!inspector.participant) {
@@ -224,6 +306,32 @@ export default function CombatRoundManagerPanel({
       },
     ];
   }, [inspector.participant]);
+  const inspectorOpponentOptions = useMemo(
+    () =>
+      effectiveScenarioParticipants
+        .filter(
+          (participant) =>
+            participant.isActive && participant.id !== selectedScenarioParticipant?.id,
+        )
+        .map((participant) => ({
+          displayName: participant.snapshot.displayName,
+          id: participant.id,
+        })),
+    [effectiveScenarioParticipants, selectedScenarioParticipant?.id],
+  );
+  const inspectorParryLegality = useMemo(
+    () =>
+      evaluatePlayerEncounterParryLegality({
+        actionId: inspectorDraft.actionId,
+        attackSource: inspectorDraft.actionId === "attack_parry" ? "mainHand" : undefined,
+        hasOffHandWeapon: true,
+        hasShield: true,
+        hasSelectedOpponent: Boolean(inspectorDraft.combatContext.selectedOpponentId),
+        incomingAttackSide: inspectorDraft.combatContext.incomingAttackSide,
+        parrySource: inspectorDraft.combatContext.parrySource,
+      }),
+    [inspectorDraft],
+  );
 
   useEffect(() => {
     setRoundState(initialRoundState);
@@ -294,6 +402,108 @@ export default function CombatRoundManagerPanel({
         step: nextStep,
       });
     });
+  }
+
+  function updateInspectorDraft(patch: Partial<CombatInspectorDeclarationDraft>) {
+    if (!selectedScenarioParticipant) {
+      return;
+    }
+
+    setInspectorDrafts((current) => ({
+      ...current,
+      [selectedScenarioParticipant.id]: {
+        ...inspectorDraft,
+        ...patch,
+      },
+    }));
+  }
+
+  function updateInspectorModifierBucket(
+    bucket: ScenarioCombatModifierBucket,
+    updater: (entries: ScenarioCombatModifierEntry[]) => ScenarioCombatModifierEntry[],
+  ) {
+    updateInspectorDraft({
+      combatContext: {
+        ...inspectorDraft.combatContext,
+        modifierBuckets: {
+          ...inspectorDraft.combatContext.modifierBuckets,
+          [bucket === "general"
+            ? "general"
+            : bucket === "situation_ob_skill"
+              ? "situationObSkill"
+              : "situationDb"]: updater(
+            bucket === "general"
+              ? inspectorDraft.combatContext.modifierBuckets.general
+              : bucket === "situation_ob_skill"
+                ? inspectorDraft.combatContext.modifierBuckets.situationObSkill
+                : inspectorDraft.combatContext.modifierBuckets.situationDb,
+          ),
+        },
+      },
+    });
+  }
+
+  function getParticipantDeclarationStatus(input: {
+    participantId: string;
+    step: CombatRoundStep;
+    status: CombatRoundStepStatus;
+  }): CombatRoundStepStatus {
+    if (input.step !== "select_actions") {
+      return input.status;
+    }
+
+    const encounterParticipant = encounter.participants.find(
+      (participant) => participant.id === input.participantId,
+    );
+    const scenarioParticipant = encounterParticipant
+      ? effectiveScenarioParticipants.find(
+          (participant) =>
+            participant.id === encounterParticipant.scenarioParticipantId ||
+            participant.id === encounterParticipant.id ||
+            (participant.characterId && participant.characterId === encounterParticipant.characterId),
+        )
+      : undefined;
+    const declaredThisRound = Boolean(
+      scenarioParticipant?.state.combat.lastDeclaredActionId &&
+        scenarioParticipant.state.combat.lastDeclaredRoundNumber === roundState.roundNumber,
+    );
+
+    return declaredThisRound && input.status === "pending" ? "submitted" : input.status;
+  }
+
+  async function saveInspectorDeclaration() {
+    if (!encounter.scenarioId || !selectedScenarioParticipant || !selectedEncounterParticipant) {
+      return;
+    }
+
+    setSaving(true);
+
+    try {
+      const { encounter: nextEncounter, participant } = await submitCombatDeclarationOnServer({
+        actionId: inspectorDraft.actionId || undefined,
+        additionalActionNotes: inspectorDraft.additionalActionNotes,
+        combatContext: inspectorDraft.combatContext,
+        encounterId: encounter.id,
+        movementId: inspectorDraft.movementId || undefined,
+        scenarioParticipantId: selectedScenarioParticipant.id,
+        secondaryActionId: inspectorDraft.secondaryActionId || undefined,
+      });
+      const nextRoundState = initializeCombatRoundState({ encounter: nextEncounter });
+
+      setScenarioParticipantOverrides((current) => ({
+        ...current,
+        [participant.id]: participant,
+      }));
+      setRoundState(nextRoundState);
+      onEncounterUpdated?.(nextEncounter);
+      setSaveError(undefined);
+    } catch (caughtError) {
+      setSaveError(
+        caughtError instanceof Error ? caughtError.message : "Unable to save combat declaration.",
+      );
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -436,9 +646,14 @@ export default function CombatRoundManagerPanel({
                         roundState.selectedStep === step;
                       const currentStepCell =
                         roundNumber === roundState.roundNumber && step === roundState.currentStep;
+                      const stepStatus = getParticipantDeclarationStatus({
+                        participantId: participant.participantId,
+                        status: participant.stepStatuses[step] ?? "pending",
+                        step,
+                      });
                       const marker = getStatusMarker({
                         current: currentStepCell,
-                        status: participant.stepStatuses[step],
+                        status: stepStatus,
                       });
                       const initiative =
                         step === "initiative_phase_1"
@@ -446,7 +661,7 @@ export default function CombatRoundManagerPanel({
                           : step === "initiative_phase_2"
                             ? formatInitiative(participant.initiatives.phase2)
                             : undefined;
-                      const title = `${participant.label}, round ${roundNumber}, ${COMBAT_ROUND_STEP_LABELS[step]}, status ${participant.stepStatuses[step]}`;
+                      const title = `${participant.label}, round ${roundNumber}, ${COMBAT_ROUND_STEP_LABELS[step]}, status ${stepStatus}`;
 
                       return (
                         <td
@@ -545,12 +760,78 @@ export default function CombatRoundManagerPanel({
               </div>
             </div>
 
-            <div style={playerCombatPanelsGridStyle}>
-              <PlayerCombatModifierPanel readOnly rows={inspectorModifierRows} />
-              {inspectorPhaseCards.map((phaseCard) => (
-                <PlayerCombatPhasePanel key={phaseCard.phaseLabel} phaseCard={phaseCard} />
-              ))}
-            </div>
+            {selectedScenarioParticipant ? (
+              <>
+                <div style={playerCombatPanelRowStyle}>
+                  <PlayerCombatActionSelectorPanel
+                    actionId={inspectorDraft.actionId}
+                    additionalActionNotes={inspectorDraft.additionalActionNotes}
+                    combatContext={inspectorDraft.combatContext}
+                    movementId={inspectorDraft.movementId}
+                    onActionChange={(actionId) => updateInspectorDraft({ actionId })}
+                    onAdditionalActionNotesChange={(additionalActionNotes) =>
+                      updateInspectorDraft({ additionalActionNotes })
+                    }
+                    onCombatContextChange={(combatContext) =>
+                      updateInspectorDraft({ combatContext })
+                    }
+                    onMovementChange={(movementId) => updateInspectorDraft({ movementId })}
+                    onSecondaryActionChange={(secondaryActionId) =>
+                      updateInspectorDraft({ secondaryActionId })
+                    }
+                    parryLegality={inspectorParryLegality}
+                    secondaryActionId={inspectorDraft.secondaryActionId}
+                    visibleOpponentOptions={inspectorOpponentOptions}
+                  />
+                  {inspectorPhaseCards.map((phaseCard) => (
+                    <PlayerCombatPhasePanel key={phaseCard.phaseLabel} phaseCard={phaseCard} />
+                  ))}
+                </div>
+
+                <div style={playerCombatPanelRowStyle}>
+                  <PlayerCombatModifierPanel
+                    controlsDisabled={saving}
+                    onAddEntry={(bucketKey) =>
+                      updateInspectorModifierBucket(bucketKey, (current) => [
+                        ...current,
+                        createModifierEntryDraft(),
+                      ])
+                    }
+                    onRemoveEntry={(bucketKey, entryId) =>
+                      updateInspectorModifierBucket(bucketKey, (current) =>
+                        current.filter((entry) => entry.id !== entryId),
+                      )
+                    }
+                    onUpdateEntry={(bucketKey, entryId, patch) =>
+                      updateInspectorModifierBucket(bucketKey, (current) =>
+                        current.map((entry) =>
+                          entry.id === entryId
+                            ? {
+                                ...entry,
+                                ...patch,
+                              }
+                            : entry,
+                        ),
+                      )
+                    }
+                    rows={inspectorModifierRows}
+                  />
+                  <PlayerCombatActionButtonPanel
+                    disabled={!inspectorDraft.actionId}
+                    onDeclareAction={() => void saveInspectorDeclaration()}
+                    saving={saving}
+                    statusText="GM can save or revise this declaration at any round step."
+                  />
+                  <PlayerCombatActionResultPanel
+                    additionalActionNotes={inspectorDraft.additionalActionNotes}
+                    movementLabel={getPlayerEncounterMovementLabel(inspectorDraft.movementId)}
+                    result={null}
+                  />
+                </div>
+              </>
+            ) : (
+              <div>No scenario participant state is available for this inspector row.</div>
+            )}
           </>
         ) : (
           <div>Select a participant step to inspect combat details.</div>

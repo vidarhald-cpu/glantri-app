@@ -46,7 +46,15 @@ export const COMBAT_ROUND_STEP_LABELS = {
   select_actions: "Declaration",
 } satisfies Record<CombatRoundStep, string>;
 
-export const combatRoundStepStatusSchema = z.enum(["pending", "ready", "complete", "skipped"]);
+export const combatRoundStepStatusSchema = z.enum([
+  "pending",
+  "ready",
+  "submitted",
+  "gmEdited",
+  "locked",
+  "complete",
+  "skipped",
+]);
 
 export const combatRoundInitiativesSchema = z.object({
   phase1: z.number().int().optional(),
@@ -151,6 +159,7 @@ export function advanceCombatRoundStep(state: CombatRoundState): CombatRoundStat
   const normalized = combatRoundStateSchema.parse(state);
   const nextStep = getNextCombatRoundStep(normalized.currentStep);
   const startsNextRound = normalized.currentStep === "round_summary";
+  const advancesDeclarationStep = normalized.currentStep === "select_actions";
 
   return {
     ...normalized,
@@ -162,12 +171,43 @@ export function advanceCombatRoundStep(state: CombatRoundState): CombatRoundStat
         ? buildDefaultStepStatuses()
         : {
             ...participant.stepStatuses,
-            [normalized.currentStep]: "complete",
+            [normalized.currentStep]: advancesDeclarationStep
+              ? participant.stepStatuses.select_actions === "submitted" ||
+                participant.stepStatuses.select_actions === "gmEdited"
+                ? participant.stepStatuses.select_actions
+                : "locked"
+              : "complete",
           },
     })),
     roundNumber: startsNextRound ? normalized.roundNumber + 1 : normalized.roundNumber,
     selectedStep: nextStep,
   };
+}
+
+export function recordCombatRoundDeclaration(input: {
+  participantId: string;
+  state: CombatRoundState;
+  submittedBy: "gm" | "player";
+}): CombatRoundState {
+  return setCombatRoundParticipantStepStatus({
+    participantId: input.participantId,
+    state: input.state,
+    status: input.submittedBy === "gm" ? "gmEdited" : "submitted",
+    step: "select_actions",
+  });
+}
+
+export function canPlayerSubmitCombatDeclaration(input: {
+  participantId: string;
+  state: CombatRoundState;
+}): boolean {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const participant = normalized.participants.find(
+    (entry) => entry.participantId === input.participantId,
+  );
+  const declarationStatus = participant?.stepStatuses.select_actions ?? "pending";
+
+  return normalized.currentStep === "select_actions" && declarationStatus === "pending";
 }
 
 export function setCombatRoundActiveParticipant(
@@ -220,6 +260,30 @@ export function setCombatRoundParticipantInitiative(input: {
             initiatives: {
               ...participant.initiatives,
               [input.phase]: input.initiative,
+            },
+          }
+        : participant,
+    ),
+  };
+}
+
+export function setCombatRoundParticipantStepStatus(input: {
+  participantId: string;
+  state: CombatRoundState;
+  status: CombatRoundStepStatus;
+  step: CombatRoundStep;
+}): CombatRoundState {
+  const normalized = combatRoundStateSchema.parse(input.state);
+
+  return {
+    ...normalized,
+    participants: normalized.participants.map((participant) =>
+      participant.participantId === input.participantId
+        ? {
+            ...participant,
+            stepStatuses: {
+              ...participant.stepStatuses,
+              [input.step]: input.status,
             },
           }
         : participant,

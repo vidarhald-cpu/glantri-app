@@ -29,6 +29,7 @@ const mocks = vi.hoisted(() => {
     getEncounterById: vi.fn(),
     listEncountersByScenario: vi.fn(),
     updateEncounter: vi.fn(),
+    updateScenarioParticipantState: vi.fn(),
   };
   const scenarioService = {
     createScenario: vi.fn(),
@@ -73,6 +74,116 @@ async function buildScenarioTestApp() {
   });
   await app.register(scenariosRoutes);
   return app;
+}
+
+function makeCombatScenarioParticipant(overrides: Record<string, unknown> = {}) {
+  return {
+    controlledByUserId: "player-1",
+    id: "participant-1",
+    isActive: true,
+    role: "player_character",
+    scenarioId: "scenario-1",
+    snapshot: {
+      displayName: "The Gladiator",
+    },
+    sourceType: "character",
+    state: {
+      combat: {
+        combatContext: {
+          modifierBuckets: {
+            general: [],
+            situationDb: [],
+            situationObSkill: [],
+          },
+        },
+      },
+      conditions: [],
+      equipment: {},
+      health: {},
+      modifiers: [],
+      resources: {},
+    },
+    ...overrides,
+  };
+}
+
+function makeCombatEncounter(overrides: Record<string, unknown> = {}) {
+  return {
+    actionLog: [],
+    campaignId: "campaign-1",
+    createdAt: "2026-01-01T00:00:00.000Z",
+    currentRound: 1,
+    currentTurnIndex: 0,
+    declarationsLocked: false,
+    id: "encounter-1",
+    kind: "combat",
+    participants: [
+      {
+        declaration: {
+          actionType: "none",
+          defenseFocus: "none",
+          defensePosture: "none",
+          targetLocation: "any",
+        },
+        facing: "north",
+        id: "encounter-participant-1",
+        initiative: 0,
+        label: "The Gladiator",
+        order: 0,
+        orientation: "neutral",
+        participantType: "scenario",
+        position: { x: 0, y: 0, zone: "center" },
+        scenarioParticipantId: "participant-1",
+      },
+    ],
+    scenarioId: "scenario-1",
+    status: "active",
+    title: "A doubtful success",
+    turnOrderMode: "manual",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+    ...overrides,
+  };
+}
+
+function setupCombatDeclarationRoute(input: {
+  encounter?: Record<string, unknown>;
+  participant?: Record<string, unknown>;
+  user?: typeof mocks.playerUser | typeof mocks.adminUser;
+} = {}) {
+  const encounter = makeCombatEncounter(input.encounter);
+  const participant = makeCombatScenarioParticipant(input.participant);
+
+  if (input.user) {
+    mocks.requireAuthenticatedUser.mockResolvedValue(input.user);
+  }
+
+  mocks.encounterService.getEncounterById.mockResolvedValue(encounter);
+  mocks.encounterService.updateScenarioParticipantState.mockImplementation(
+    async (update: { state: unknown }) => ({
+      ...participant,
+      state: update.state,
+    }),
+  );
+  mocks.encounterService.updateEncounter.mockImplementation(
+    async (update: { session: unknown }) => update.session,
+  );
+  mocks.scenarioService.getScenarioById.mockResolvedValue({
+    campaignId: "campaign-1",
+    id: "scenario-1",
+    kind: "combat",
+    name: "Bridge Ambush",
+    status: "live",
+  });
+  mocks.campaignService.getCampaignById.mockResolvedValue({
+    gmUserId: "gm-1",
+    id: "campaign-1",
+    name: "Border Trouble",
+    status: "active",
+  });
+  mocks.scenarioService.userHasPlayerScenarioAccess.mockResolvedValue(true);
+  mocks.scenarioService.listScenarioParticipants.mockResolvedValue([participant]);
+
+  return { encounter, participant };
 }
 
 describe("scenarios route contract", () => {
@@ -1378,6 +1489,159 @@ describe("scenarios route contract", () => {
     await app.close();
 
     expect(response.statusCode).toBe(403);
+    expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
+  });
+
+  it("allows a player to declare combat action for their assigned participant during DE", async () => {
+    setupCombatDeclarationRoute();
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        actionId: "attack_parry",
+        combatContext: {
+          modifierBuckets: {
+            general: [],
+            situationDb: [],
+            situationObSkill: [],
+          },
+        },
+        movementId: "hold",
+        scenarioParticipantId: "participant-1",
+      },
+      url: "/encounters/encounter-1/combat-declaration",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(mocks.encounterService.updateScenarioParticipantState).toHaveBeenCalledWith(
+      expect.objectContaining({
+        participantId: "participant-1",
+        scenarioId: "scenario-1",
+        state: expect.objectContaining({
+          combat: expect.objectContaining({
+            lastDeclaredActionId: "attack_parry",
+            lastDeclaredMovementId: "hold",
+            lastDeclaredRoundNumber: 1,
+          }),
+        }),
+      }),
+    );
+    const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
+    expect(updatedEncounter.combatRoundState.participants[0].stepStatuses.select_actions).toBe(
+      "submitted",
+    );
+  });
+
+  it("allows a GM to declare combat action for another player's participant after DE", async () => {
+    setupCombatDeclarationRoute({
+      encounter: {
+        combatRoundState: {
+          currentStep: "review_action_modifiers",
+          participants: [
+            {
+              initiatives: {},
+              label: "The Gladiator",
+              participantId: "encounter-participant-1",
+              stepStatuses: {
+                initiative_phase_1: "pending",
+                initiative_phase_2: "pending",
+                phase_1_actions: "pending",
+                phase_2_actions: "pending",
+                review_action_modifiers: "pending",
+                review_phase_2_actions: "pending",
+                review_phase_2_damage: "pending",
+                review_phase_2_modifiers: "pending",
+                round_summary: "pending",
+                select_actions: "locked",
+              },
+            },
+          ],
+          roundNumber: 1,
+        },
+      },
+      user: mocks.adminUser,
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        actionId: "attack_parry",
+        combatContext: {
+          modifierBuckets: {
+            general: [],
+            situationDb: [],
+            situationObSkill: [],
+          },
+        },
+        scenarioParticipantId: "participant-1",
+      },
+      url: "/encounters/encounter-1/combat-declaration",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
+    expect(updatedEncounter.combatRoundState.currentStep).toBe("review_action_modifiers");
+    expect(updatedEncounter.combatRoundState.participants[0].stepStatuses.select_actions).toBe(
+      "gmEdited",
+    );
+  });
+
+  it("rejects a player combat declaration after DE has advanced", async () => {
+    setupCombatDeclarationRoute({
+      encounter: {
+        combatRoundState: {
+          currentStep: "review_action_modifiers",
+          participants: [
+            {
+              initiatives: {},
+              label: "The Gladiator",
+              participantId: "encounter-participant-1",
+              stepStatuses: {
+                initiative_phase_1: "pending",
+                initiative_phase_2: "pending",
+                phase_1_actions: "pending",
+                phase_2_actions: "pending",
+                review_action_modifiers: "pending",
+                review_phase_2_actions: "pending",
+                review_phase_2_damage: "pending",
+                review_phase_2_modifiers: "pending",
+                round_summary: "pending",
+                select_actions: "locked",
+              },
+            },
+          ],
+          roundNumber: 1,
+        },
+      },
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        actionId: "attack_parry",
+        combatContext: {
+          modifierBuckets: {
+            general: [],
+            situationDb: [],
+            situationObSkill: [],
+          },
+        },
+        scenarioParticipantId: "participant-1",
+      },
+      url: "/encounters/encounter-1/combat-declaration",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(409);
+    expect(mocks.encounterService.updateScenarioParticipantState).not.toHaveBeenCalled();
     expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
   });
 

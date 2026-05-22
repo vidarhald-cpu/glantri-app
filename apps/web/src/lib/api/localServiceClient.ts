@@ -72,6 +72,7 @@ export {
   createEncounterOnServer,
   loadEncounterById,
   loadScenarioEncounters,
+  submitCombatDeclarationOnServer,
   submitPlayerRoleplayRollOnServer,
   updateEncounterOnServer
 } from "./encounterClient";

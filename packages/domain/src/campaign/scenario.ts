@@ -158,9 +158,15 @@ export const scenarioParticipantStateSchema = z.object({
       }
     }),
     currentDistanceBand: z.string().min(1).optional(),
+    declarationSubmittedAt: z.string().datetime().optional(),
+    declarationSubmittedByUserId: idSchema.optional(),
     engaged: z.boolean().default(false),
     initiativeRoll: z.number().int().optional(),
     lastDeclaredActionId: idSchema.optional(),
+    lastDeclaredMovementId: z.string().min(1).optional(),
+    lastDeclaredRoundNumber: z.number().int().positive().optional(),
+    lastDeclaredSecondaryActionId: idSchema.optional(),
+    lastDeclarationNotes: z.string().optional(),
     stance: z.string().min(1).optional()
   }),
   combatEffects: combatEffectsStateSchema.optional(),

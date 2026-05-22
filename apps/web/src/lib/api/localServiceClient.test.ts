@@ -287,6 +287,53 @@ describe("localServiceClient wire contract", () => {
     });
   });
 
+  it("submits combat declarations through the encounter domain", async () => {
+    const encounter = {
+      id: "encounter-1",
+      scenarioId: "scenario-1",
+    };
+    const participant = {
+      id: "participant-1",
+    };
+    const fetchMock = stubFetch({ encounter, participant });
+    const client = await loadClient();
+
+    await expect(
+      client.submitCombatDeclarationOnServer({
+        actionId: "attack_parry",
+        combatContext: {
+          modifierBuckets: {
+            general: [],
+            situationDb: [],
+            situationObSkill: [],
+          },
+        },
+        encounterId: "encounter-1",
+        movementId: "hold",
+        scenarioParticipantId: "participant-1",
+      }),
+    ).resolves.toEqual({ encounter, participant });
+
+    expectFetchCall(fetchMock, {
+      body: {
+        actionId: "attack_parry",
+        additionalActionNotes: undefined,
+        combatContext: {
+          modifierBuckets: {
+            general: [],
+            situationDb: [],
+            situationObSkill: [],
+          },
+        },
+        movementId: "hold",
+        scenarioParticipantId: "participant-1",
+        secondaryActionId: undefined,
+      },
+      method: "POST",
+      url: "https://api.example.test/encounters/encounter-1/combat-declaration",
+    });
+  });
+
   it("posts equipment moves under the character equipment domain", async () => {
     const state = {
       inventory: [],
