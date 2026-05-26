@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import type {
+  CombatRoundDeclaration,
   CombatRoundStep,
   CombatRoundStepStatus,
   EncounterSession,
@@ -126,21 +127,54 @@ function createModifierEntryDraft(): ScenarioCombatModifierEntry {
 
 function buildDeclarationDraft(
   participant?: ScenarioParticipant,
+  declaration?: CombatRoundDeclaration,
 ): CombatInspectorDeclarationDraft {
   return {
-    actionId: isPlayerEncounterActionId(participant?.state.combat.lastDeclaredActionId)
-      ? participant.state.combat.lastDeclaredActionId
-      : "",
-    additionalActionNotes: participant?.state.combat.lastDeclarationNotes ?? "",
+    actionId: isPlayerEncounterActionId(declaration?.actionId)
+      ? declaration.actionId
+      : isPlayerEncounterActionId(participant?.state.combat.lastDeclaredActionId)
+        ? participant.state.combat.lastDeclaredActionId
+        : "",
+    additionalActionNotes:
+      declaration?.additionalActionNotes ?? participant?.state.combat.lastDeclarationNotes ?? "",
     combatContext:
-      participant?.state.combat.combatContext ?? createEmptyPlayerEncounterCombatContext(),
-    movementId: (participant?.state.combat.lastDeclaredMovementId as PlayerEncounterMovementId) ?? "hold",
-    secondaryActionId: isPlayerEncounterActionId(
-      participant?.state.combat.lastDeclaredSecondaryActionId,
-    )
-      ? participant.state.combat.lastDeclaredSecondaryActionId
-      : "",
+      declaration?.combatContext ??
+      participant?.state.combat.combatContext ??
+      createEmptyPlayerEncounterCombatContext(),
+    movementId: (declaration?.movementId ??
+      participant?.state.combat.lastDeclaredMovementId ??
+      "hold") as PlayerEncounterMovementId,
+    secondaryActionId: isPlayerEncounterActionId(declaration?.secondaryActionId)
+      ? declaration.secondaryActionId
+      : isPlayerEncounterActionId(participant?.state.combat.lastDeclaredSecondaryActionId)
+        ? participant.state.combat.lastDeclaredSecondaryActionId
+        : "",
   };
+}
+
+function buildInspectorDraftKey(input: {
+  declaration?: CombatRoundDeclaration;
+  participantId?: string;
+}): string | undefined {
+  if (!input.participantId) {
+    return undefined;
+  }
+
+  return [
+    input.participantId,
+    input.declaration?.roundNumber ?? "no-round-declaration",
+    input.declaration?.submittedAt ?? "no-submission-time",
+  ].join(":");
+}
+
+function hasCombatRoundDeclarationAction(declaration?: CombatRoundDeclaration): boolean {
+  return Boolean(
+    declaration?.actionId ||
+      declaration?.secondaryActionId ||
+      declaration?.movementId ||
+      declaration?.additionalActionNotes ||
+      declaration?.combatContext,
+  );
 }
 
 function formatInitiativePosition(input: {
@@ -278,10 +312,17 @@ export default function CombatRoundManagerPanel({
             participant.characterId === selectedEncounterParticipant.characterId),
       )
     : undefined;
+  const selectedRoundDeclaration = hasCombatRoundDeclarationAction(inspector.participant?.declaration)
+    ? inspector.participant?.declaration
+    : undefined;
+  const inspectorDraftKey = buildInspectorDraftKey({
+    declaration: selectedRoundDeclaration,
+    participantId: selectedScenarioParticipant?.id,
+  });
   const inspectorDraft =
-    selectedScenarioParticipant && inspectorDrafts[selectedScenarioParticipant.id]
-      ? inspectorDrafts[selectedScenarioParticipant.id]
-      : buildDeclarationDraft(selectedScenarioParticipant);
+    inspectorDraftKey && inspectorDrafts[inspectorDraftKey]
+      ? inspectorDrafts[inspectorDraftKey]
+      : buildDeclarationDraft(selectedScenarioParticipant, selectedRoundDeclaration);
   const inspectorLiveModifiers = useMemo(
     () =>
       buildEncounterLiveCombatModifierSummary({
@@ -478,13 +519,13 @@ export default function CombatRoundManagerPanel({
   }
 
   function updateInspectorDraft(patch: Partial<CombatInspectorDeclarationDraft>) {
-    if (!selectedScenarioParticipant) {
+    if (!inspectorDraftKey) {
       return;
     }
 
     setInspectorDrafts((current) => ({
       ...current,
-      [selectedScenarioParticipant.id]: {
+      [inspectorDraftKey]: {
         ...inspectorDraft,
         ...patch,
       },

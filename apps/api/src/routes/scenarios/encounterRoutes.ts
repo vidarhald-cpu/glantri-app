@@ -537,6 +537,16 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         },
       });
       const declaredRoundState = recordCombatRoundDeclaration({
+        declaration: {
+          actionId: body.actionId,
+          additionalActionNotes: body.additionalActionNotes,
+          combatContext: submittedCombatContext,
+          movementId: body.movementId,
+          roundNumber: roundState.roundNumber,
+          secondaryActionId: body.secondaryActionId,
+          submittedAt,
+          submittedByUserId: user.id,
+        },
         participantId: encounterParticipant.id,
         state: roundState,
         submittedBy: gmAuthorizedOperation ? "gm" : "player",

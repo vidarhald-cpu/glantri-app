@@ -1533,6 +1533,13 @@ describe("scenarios route contract", () => {
     expect(updatedEncounter.combatRoundState.participants[0].stepStatuses.select_actions).toBe(
       "submitted",
     );
+    expect(updatedEncounter.combatRoundState.participants[0].declaration).toMatchObject({
+      actionId: "attack_parry",
+      movementId: "hold",
+      roundNumber: 1,
+      submittedBy: "player",
+      submittedByUserId: "player-1",
+    });
   });
 
   it("preserves existing combat modifier buckets when a player declares", async () => {
@@ -1672,6 +1679,12 @@ describe("scenarios route contract", () => {
     expect(updatedEncounter.combatRoundState.participants[0].stepStatuses.select_actions).toBe(
       "gmEdited",
     );
+    expect(updatedEncounter.combatRoundState.participants[0].declaration).toMatchObject({
+      actionId: "attack_parry",
+      roundNumber: 1,
+      submittedBy: "gm",
+      submittedByUserId: "gm-1",
+    });
     expect(
       updatedEncounter.combatRoundState.participants[0].stepStatuses.review_action_modifiers,
     ).toBe("gmEdited");

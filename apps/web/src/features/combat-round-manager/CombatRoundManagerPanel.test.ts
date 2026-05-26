@@ -60,6 +60,9 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("COMBAT_ROUND_STEP_ABBREVIATIONS[inspector.step]");
     expect(source).toContain("COMBAT_ROUND_STEP_LABELS[inspector.step]");
     expect(source).toContain("buildCombatRoundInspector");
+    expect(source).toContain("selectedRoundDeclaration");
+    expect(source).toContain("buildInspectorDraftKey");
+    expect(source).toContain("buildDeclarationDraft(selectedScenarioParticipant, selectedRoundDeclaration)");
     expect(source).toContain("PlayerCombatModifierPanel");
     expect(source).toContain("PlayerCombatActionSelectorPanel");
     expect(source).toContain("PlayerCombatActionButtonPanel");

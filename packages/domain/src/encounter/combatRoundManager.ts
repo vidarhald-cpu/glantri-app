@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { scenarioParticipantCombatContextSchema } from "../campaign/scenario";
 import type { EncounterParticipant, EncounterSession } from "./session";
 
 const idSchema = z.string().min(1);
@@ -61,9 +62,22 @@ export const combatRoundInitiativesSchema = z.object({
   phase2: z.number().int().optional(),
 });
 
+export const combatRoundDeclarationSchema = z.object({
+  actionId: idSchema.optional(),
+  additionalActionNotes: z.string().optional(),
+  combatContext: scenarioParticipantCombatContextSchema.optional(),
+  movementId: z.string().min(1).optional(),
+  roundNumber: z.number().int().positive(),
+  secondaryActionId: idSchema.optional(),
+  submittedAt: z.string().datetime().optional(),
+  submittedBy: z.enum(["gm", "player"]),
+  submittedByUserId: idSchema.optional(),
+});
+
 const combatRoundStepStatusesSchema = z.record(combatRoundStepSchema, combatRoundStepStatusSchema);
 
 export const combatRoundParticipantStateSchema = z.object({
+  declaration: combatRoundDeclarationSchema.optional(),
   initiatives: combatRoundInitiativesSchema.default({}),
   label: z.string().min(1),
   participantId: idSchema,
@@ -82,6 +96,7 @@ export const combatRoundStateSchema = z.object({
 });
 
 export type CombatRoundStepStatus = z.infer<typeof combatRoundStepStatusSchema>;
+export type CombatRoundDeclaration = z.infer<typeof combatRoundDeclarationSchema>;
 export type CombatRoundInitiatives = z.infer<typeof combatRoundInitiativesSchema>;
 export type CombatRoundParticipantState = z.infer<typeof combatRoundParticipantStateSchema>;
 export type CombatRoundState = z.infer<typeof combatRoundStateSchema>;
@@ -107,6 +122,7 @@ function participantStateFromEncounterParticipant(input: {
   participant: EncounterParticipant;
 }): CombatRoundParticipantState {
   return {
+    declaration: input.existing?.declaration,
     initiatives: input.existing?.initiatives ?? {},
     label: input.participant.label,
     participantId: input.participant.id,
@@ -191,16 +207,39 @@ export function advanceCombatRoundStep(state: CombatRoundState): CombatRoundStat
 }
 
 export function recordCombatRoundDeclaration(input: {
+  declaration?: Omit<CombatRoundDeclaration, "submittedBy">;
   participantId: string;
   state: CombatRoundState;
   submittedBy: "gm" | "player";
 }): CombatRoundState {
-  return setCombatRoundParticipantStepStatus({
+  const withStatus = setCombatRoundParticipantStepStatus({
     participantId: input.participantId,
     state: input.state,
     status: input.submittedBy === "gm" ? "gmEdited" : "submitted",
     step: "select_actions",
   });
+
+  if (!input.declaration) {
+    return withStatus;
+  }
+
+  const normalized = combatRoundStateSchema.parse(withStatus);
+  const declaration = combatRoundDeclarationSchema.parse({
+    ...input.declaration,
+    submittedBy: input.submittedBy,
+  });
+
+  return {
+    ...normalized,
+    participants: normalized.participants.map((participant) =>
+      participant.participantId === input.participantId
+        ? {
+            ...participant,
+            declaration,
+          }
+        : participant,
+    ),
+  };
 }
 
 export function getCombatRoundInitiativePhaseForStep(
@@ -283,6 +322,7 @@ export function clearCombatRoundStep(input: {
 
       return {
         ...participant,
+        declaration: input.step === "select_actions" ? undefined : participant.declaration,
         initiatives: nextInitiatives,
         stepStatuses: {
           ...participant.stepStatuses,

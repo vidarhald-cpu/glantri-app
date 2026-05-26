@@ -187,6 +187,11 @@ describe("combat round manager", () => {
 
   it("clears DE in place when called directly on the first step", () => {
     const state = recordCombatRoundDeclaration({
+      declaration: {
+        actionId: "attack_parry",
+        movementId: "hold",
+        roundNumber: 3,
+      },
       participantId: "gladiator",
       state: initializeCombatRoundState({ encounter: encounter() }),
       submittedBy: "player",
@@ -195,6 +200,7 @@ describe("combat round manager", () => {
 
     expect(cleared.currentStep).toBe("select_actions");
     expect(cleared.participants[0]?.stepStatuses.select_actions).toBe("pending");
+    expect(cleared.participants[0]?.declaration).toBeUndefined();
   });
 
   it("sets the active participant marker", () => {
@@ -222,6 +228,15 @@ describe("combat round manager", () => {
   it("records player and GM declaration statuses for DE cells", () => {
     const state = initializeCombatRoundState({ encounter: encounter() });
     const playerDeclared = recordCombatRoundDeclaration({
+      declaration: {
+        actionId: "attack_parry",
+        additionalActionNotes: "Hold the bridge.",
+        movementId: "hold",
+        roundNumber: state.roundNumber,
+        secondaryActionId: "observe_opponent",
+        submittedAt: "2026-01-01T00:01:00.000Z",
+        submittedByUserId: "player-1",
+      },
       participantId: "gladiator",
       state,
       submittedBy: "player",
@@ -233,6 +248,15 @@ describe("combat round manager", () => {
     });
 
     expect(gmDeclared.participants[0]?.stepStatuses.select_actions).toBe("submitted");
+    expect(gmDeclared.participants[0]?.declaration).toMatchObject({
+      actionId: "attack_parry",
+      additionalActionNotes: "Hold the bridge.",
+      movementId: "hold",
+      roundNumber: 3,
+      secondaryActionId: "observe_opponent",
+      submittedBy: "player",
+      submittedByUserId: "player-1",
+    });
     expect(gmDeclared.participants[1]?.stepStatuses.select_actions).toBe("gmEdited");
     expect(canPlayerSubmitCombatDeclaration({ participantId: "gladiator", state: gmDeclared })).toBe(
       false,
