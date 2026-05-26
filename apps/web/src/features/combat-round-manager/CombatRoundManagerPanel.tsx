@@ -179,21 +179,20 @@ function formatStepStatus(status: string | undefined): string {
 }
 
 function getStatusMarker(input: { current: boolean; status: string | undefined }): string {
+  void input.current;
+
   switch (input.status) {
     case "submitted":
     case "gmEdited":
-      return "▶";
     case "complete":
+    case "ready":
       return "✓";
     case "locked":
-      return "L";
-    case "ready":
-      return "R";
     case "skipped":
       return "–";
     case "pending":
     default:
-      return input.current ? "O" : "·";
+      return "·";
   }
 }
 

@@ -1535,6 +1535,88 @@ describe("scenarios route contract", () => {
     );
   });
 
+  it("preserves existing combat modifier buckets when a player declares", async () => {
+    setupCombatDeclarationRoute({
+      participant: {
+        state: {
+          combat: {
+            combatContext: {
+              modifierBuckets: {
+                general: [],
+                situationDb: [
+                  {
+                    id: "gm-db-mod",
+                    notes: "GM cover",
+                    scope: "until",
+                    value: 2,
+                  },
+                ],
+                situationObSkill: [],
+              },
+            },
+          },
+          conditions: [],
+          equipment: {},
+          health: {},
+          modifiers: [],
+          resources: {},
+        },
+      },
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        actionId: "attack_parry",
+        combatContext: {
+          modifierBuckets: {
+            general: [],
+            situationDb: [
+              {
+                id: "player-db-mod",
+                notes: "Player should not write this",
+                scope: "until",
+                value: 99,
+              },
+            ],
+            situationObSkill: [],
+          },
+          selectedOpponentId: "guard",
+        },
+        scenarioParticipantId: "participant-1",
+      },
+      url: "/encounters/encounter-1/combat-declaration",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(mocks.encounterService.updateScenarioParticipantState).toHaveBeenCalledWith(
+      expect.objectContaining({
+        state: expect.objectContaining({
+          combat: expect.objectContaining({
+            combatContext: expect.objectContaining({
+              modifierBuckets: {
+                general: [],
+                situationDb: [
+                  {
+                    id: "gm-db-mod",
+                    notes: "GM cover",
+                    scope: "until",
+                    value: 2,
+                  },
+                ],
+                situationObSkill: [],
+              },
+              selectedOpponentId: "guard",
+            }),
+          }),
+        }),
+      }),
+    );
+  });
+
   it("allows a GM to declare combat action for another player's participant after DE", async () => {
     setupCombatDeclarationRoute({
       encounter: {
@@ -1590,6 +1672,64 @@ describe("scenarios route contract", () => {
     expect(updatedEncounter.combatRoundState.participants[0].stepStatuses.select_actions).toBe(
       "gmEdited",
     );
+    expect(
+      updatedEncounter.combatRoundState.participants[0].stepStatuses.review_action_modifiers,
+    ).toBe("gmEdited");
+  });
+
+  it("allows a GM to review phase 2 modifiers without entering modifier values", async () => {
+    setupCombatDeclarationRoute({
+      encounter: {
+        combatRoundState: {
+          currentStep: "review_phase_2_modifiers",
+          participants: [
+            {
+              initiatives: {},
+              label: "The Gladiator",
+              participantId: "encounter-participant-1",
+              stepStatuses: {
+                initiative_phase_1: "submitted",
+                initiative_phase_2: "pending",
+                phase_1_actions: "complete",
+                phase_2_actions: "pending",
+                review_action_modifiers: "complete",
+                review_phase_2_actions: "complete",
+                review_phase_2_damage: "pending",
+                review_phase_2_modifiers: "pending",
+                round_summary: "pending",
+                select_actions: "submitted",
+              },
+            },
+          ],
+          roundNumber: 1,
+        },
+      },
+      user: mocks.adminUser,
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        combatContext: {
+          modifierBuckets: {
+            general: [],
+            situationDb: [],
+            situationObSkill: [],
+          },
+        },
+        scenarioParticipantId: "participant-1",
+      },
+      url: "/encounters/encounter-1/combat-declaration",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
+    expect(
+      updatedEncounter.combatRoundState.participants[0].stepStatuses.review_phase_2_modifiers,
+    ).toBe("gmEdited");
   });
 
   it("rejects a player combat declaration after DE has advanced", async () => {

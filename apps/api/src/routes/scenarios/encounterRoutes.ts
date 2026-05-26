@@ -14,6 +14,7 @@ import {
   normalizeRoleplayState,
   recordCombatRoundDeclaration,
   recordCombatRoundInitiative,
+  recordCombatRoundParticipantStepReview,
   resolveEncounterParticipantByRollParticipantId,
   resolveEncounterParticipantMembership,
   scenarioParticipantCombatContextSchema,
@@ -168,6 +169,16 @@ function clearScenarioParticipantCombatDeclaration(
       lastDeclaredSecondaryActionId: undefined,
       lastDeclarationNotes: undefined,
     },
+  };
+}
+
+function preservePlayerCombatModifierBuckets(input: {
+  existingContext: ReturnType<typeof scenarioParticipantCombatContextSchema.parse>;
+  requestedContext: ReturnType<typeof scenarioParticipantCombatContextSchema.parse>;
+}): ReturnType<typeof scenarioParticipantCombatContextSchema.parse> {
+  return {
+    ...input.requestedContext,
+    modifierBuckets: input.existingContext.modifierBuckets,
   };
 }
 
@@ -470,6 +481,15 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
 
       const gmAuthorizedOperation = access.mode === "gm";
       const roundState = initializeCombatRoundState({ encounter });
+      const existingCombatContext = scenarioParticipantCombatContextSchema.parse(
+        scenarioParticipant.state.combat.combatContext ?? {},
+      );
+      const submittedCombatContext = gmAuthorizedOperation
+        ? body.combatContext
+        : preservePlayerCombatModifierBuckets({
+            existingContext: existingCombatContext,
+            requestedContext: body.combatContext,
+          });
 
       if (!gmAuthorizedOperation) {
         if (
@@ -505,7 +525,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           ...scenarioParticipant.state,
           combat: {
             ...scenarioParticipant.state.combat,
-            combatContext: body.combatContext,
+            combatContext: submittedCombatContext,
             declarationSubmittedAt: submittedAt,
             declarationSubmittedByUserId: user.id,
             lastDeclaredActionId: body.actionId,
@@ -516,11 +536,21 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           },
         },
       });
-      const nextRoundState = recordCombatRoundDeclaration({
+      const declaredRoundState = recordCombatRoundDeclaration({
         participantId: encounterParticipant.id,
         state: roundState,
         submittedBy: gmAuthorizedOperation ? "gm" : "player",
       });
+      const nextRoundState =
+        gmAuthorizedOperation && roundState.currentStep !== "initiative_phase_1" &&
+        roundState.currentStep !== "initiative_phase_2"
+          ? recordCombatRoundParticipantStepReview({
+              participantId: encounterParticipant.id,
+              state: declaredRoundState,
+              step: roundState.currentStep,
+              submittedBy: "gm",
+            })
+          : declaredRoundState;
       const savedEncounter = await encounterService.updateEncounter({
         campaignId: access.campaignId,
         encounterId,

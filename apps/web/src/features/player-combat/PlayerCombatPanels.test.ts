@@ -54,9 +54,12 @@ describe("PlayerCombatPanels", () => {
     expect(source).toContain("Parry context");
     expect(source).toContain("PlayerCombatActionButtonPanel");
     expect(source).toContain("getPlayerCombatActionButtonLabel");
+    expect(source).toContain("getPlayerCombatStepLabel");
     expect(source).toContain("getGmCombatStepActionLabel");
     expect(source).toContain("Declare action");
-    expect(source).toContain("Declare action — DE");
+    expect(source).toContain("Review modifiers");
+    expect(source).toContain("Phase 1 initiative");
+    expect(source).not.toContain("Declare action — DE");
     expect(source).toContain("Waiting for GM");
     expect(source).toContain("Declare modifiers");
     expect(source).toContain("Roll phase 1 initiative");

@@ -248,6 +248,20 @@ export function recordCombatRoundInitiative(input: {
   });
 }
 
+export function recordCombatRoundParticipantStepReview(input: {
+  participantId: string;
+  state: CombatRoundState;
+  step: CombatRoundStep;
+  submittedBy: "gm" | "player";
+}): CombatRoundState {
+  return setCombatRoundParticipantStepStatus({
+    participantId: input.participantId,
+    state: input.state,
+    status: input.submittedBy === "gm" ? "gmEdited" : "submitted",
+    step: input.step,
+  });
+}
+
 export function clearCombatRoundStep(input: {
   state: CombatRoundState;
   step: CombatRoundStep;

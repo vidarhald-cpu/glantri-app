@@ -17,6 +17,7 @@ import {
   initializeCombatRoundState,
   recordCombatRoundDeclaration,
   recordCombatRoundInitiative,
+  recordCombatRoundParticipantStepReview,
   setCombatRoundActiveParticipant,
   setCombatRoundParticipantInitiative,
   setCombatRoundParticipantStepStatus,
@@ -262,6 +263,20 @@ describe("combat round manager", () => {
     expect(nextState.participants[0]?.initiatives.phase1).toBe(18);
     expect(nextState.participants[0]?.stepStatuses.initiative_phase_1).toBe("submitted");
     expect(canPlayerRollCombatInitiative({ participantId: "gladiator", phase: "phase1", state: nextState })).toBe(false);
+  });
+
+  it("records participant step reviews without creating modifier data", () => {
+    const state = advanceCombatRoundStep(initializeCombatRoundState({ encounter: encounter() }));
+    const reviewed = recordCombatRoundParticipantStepReview({
+      participantId: "gladiator",
+      state,
+      step: "review_action_modifiers",
+      submittedBy: "gm",
+    });
+
+    expect(state.participants[0]?.stepStatuses.review_action_modifiers).toBe("pending");
+    expect(reviewed.participants[0]?.stepStatuses.review_action_modifiers).toBe("gmEdited");
+    expect(reviewed.participants[1]?.stepStatuses.review_action_modifiers).toBe("pending");
   });
 
   it("allows player initiative only on the matching open initiative step", () => {

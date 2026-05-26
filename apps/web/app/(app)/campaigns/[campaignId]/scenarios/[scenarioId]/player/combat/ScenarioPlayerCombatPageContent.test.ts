@@ -37,7 +37,9 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("declarationStepOpen");
     expect(source).toContain("selectedDeclarationStepStatus");
     expect(source).toContain("selectedParticipantDeclaredThisRound");
-    expect(source).toContain("Current step: ${currentCombatStepAbbreviation}");
+    expect(source).toContain("getPlayerCombatStepLabel");
+    expect(source).toContain("Current step: ${currentCombatStepLabel}");
+    expect(source).not.toContain("Current step: ${currentCombatStepAbbreviation}");
     expect(source).toContain("Declared.");
     expect(source).toContain("Declaration closed.");
     expect(source).toContain("rollCombatInitiativeOnServer");
@@ -46,6 +48,10 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("Initiative rolled.");
     expect(source).toContain("declarationButtonLabel");
     expect(source).toContain("buttonLabel={declarationButtonLabel}");
+    expect(source).toContain("window.setInterval");
+    expect(source).toContain("visibilitychange");
+    expect(source).toContain("readOnly={!isGameMaster}");
+    expect(source).toContain("isGameMaster");
     expect(source).not.toContain("will appear here in the next phase");
     expect(source).not.toContain("will expand into this area");
   });

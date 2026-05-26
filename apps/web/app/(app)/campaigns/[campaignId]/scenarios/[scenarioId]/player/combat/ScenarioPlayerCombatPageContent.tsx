@@ -4,7 +4,6 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import {
-  COMBAT_ROUND_STEP_ABBREVIATIONS,
   characterBuildSchema,
   initializeCombatRoundState,
   type EncounterSession,
@@ -22,6 +21,7 @@ import {
 import {
   buildPlayerCombatModifierRows,
   getPlayerCombatActionButtonLabel,
+  getPlayerCombatStepLabel,
   PlayerCombatActionButtonPanel,
   PlayerCombatActionResultPanel,
   PlayerCombatActionSelectorPanel,
@@ -238,8 +238,10 @@ export default function ScenarioPlayerCombatPageContent({
 
     let cancelled = false;
 
-    async function refreshCombatView() {
-      setLoading(true);
+    async function refreshCombatView(input: { showLoading?: boolean } = {}) {
+      if (input.showLoading ?? false) {
+        setLoading(true);
+      }
 
       try {
         const [nextProjection, nextContent, nextParticipants, nextEncounter] = await Promise.all([
@@ -277,10 +279,32 @@ export default function ScenarioPlayerCombatPageContent({
       }
     }
 
-    void refreshCombatView();
+    void refreshCombatView({ showLoading: true });
+
+    const intervalId = window.setInterval(() => {
+      if (cancelled) {
+        return;
+      }
+
+      void refreshCombatView();
+    }, 5000);
+
+    function refreshOnFocus() {
+      if (cancelled || document.visibilityState === "hidden") {
+        return;
+      }
+
+      void refreshCombatView();
+    }
+
+    window.addEventListener("focus", refreshOnFocus);
+    document.addEventListener("visibilitychange", refreshOnFocus);
 
     return () => {
       cancelled = true;
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", refreshOnFocus);
+      document.removeEventListener("visibilitychange", refreshOnFocus);
     };
   }, [currentUser, encounterId, isGameMaster, scenarioId, sessionLoading]);
 
@@ -994,7 +1018,7 @@ export default function ScenarioPlayerCombatPageContent({
     Boolean(selectedSecondaryActionId) ||
     additionalActionNotes.trim().length > 0;
   const currentCombatStep = combatRoundState?.currentStep ?? "select_actions";
-  const currentCombatStepAbbreviation = COMBAT_ROUND_STEP_ABBREVIATIONS[currentCombatStep];
+  const currentCombatStepLabel = getPlayerCombatStepLabel(currentCombatStep);
   const currentInitiativePhase =
     currentCombatStep === "initiative_phase_1"
       ? "phase1"
@@ -1036,20 +1060,20 @@ export default function ScenarioPlayerCombatPageContent({
     isGameMaster,
   });
   const declarationStatusText = isGameMaster
-    ? `Current step: ${currentCombatStepAbbreviation}. GM can save or revise this participant declaration.`
+    ? `Current step: ${currentCombatStepLabel}. GM can save or revise this participant declaration.`
     : currentInitiativePhase
       ? selectedParticipantRolledCurrentInitiative
-        ? `Current step: ${currentCombatStepAbbreviation}. Initiative rolled.`
+        ? `Current step: ${currentCombatStepLabel}. Initiative rolled.`
         : initiativeStepStatus === "pending"
-          ? `Current step: ${currentCombatStepAbbreviation}.`
-          : `Current step: ${currentCombatStepAbbreviation}. Waiting for GM.`
+          ? `Current step: ${currentCombatStepLabel}.`
+          : `Current step: ${currentCombatStepLabel}. Waiting for GM.`
       : selectedParticipantDeclaredThisRound ||
         selectedDeclarationStepStatus === "submitted" ||
         selectedDeclarationStepStatus === "gmEdited"
-        ? `Current step: ${currentCombatStepAbbreviation}. Declared.`
+        ? `Current step: ${currentCombatStepLabel}. Declared.`
         : declarationStepOpen && selectedDeclarationStepStatus === "pending"
-          ? `Current step: ${currentCombatStepAbbreviation}.`
-          : `Current step: ${currentCombatStepAbbreviation}. Declaration closed.`;
+          ? `Current step: ${currentCombatStepLabel}.`
+          : `Current step: ${currentCombatStepLabel}. Declaration closed.`;
 
   if (sessionLoading || loading) {
     return <section>Loading player combat screen...</section>;
@@ -1162,29 +1186,39 @@ export default function ScenarioPlayerCombatPageContent({
           <div style={playerCombatPanelRowStyle}>
             <PlayerCombatModifierPanel
               controlsDisabled={declarationControlsDisabled}
-              onAddEntry={(bucketKey) =>
-                updateModifierBucket(bucketKey, (current) => [
-                  ...current,
-                  createModifierEntryDraft(),
-                ])
+              onAddEntry={
+                isGameMaster
+                  ? (bucketKey) =>
+                      updateModifierBucket(bucketKey, (current) => [
+                        ...current,
+                        createModifierEntryDraft(),
+                      ])
+                  : undefined
               }
-              onRemoveEntry={(bucketKey, entryId) =>
-                updateModifierBucket(bucketKey, (current) =>
-                  current.filter((currentEntry) => currentEntry.id !== entryId),
-                )
+              onRemoveEntry={
+                isGameMaster
+                  ? (bucketKey, entryId) =>
+                      updateModifierBucket(bucketKey, (current) =>
+                        current.filter((currentEntry) => currentEntry.id !== entryId),
+                      )
+                  : undefined
               }
-              onUpdateEntry={(bucketKey, entryId, patch) =>
-                updateModifierBucket(bucketKey, (current) =>
-                  current.map((currentEntry) =>
-                    currentEntry.id === entryId
-                      ? {
-                          ...currentEntry,
-                          ...patch,
-                        }
-                      : currentEntry,
-                  ),
-                )
+              onUpdateEntry={
+                isGameMaster
+                  ? (bucketKey, entryId, patch) =>
+                      updateModifierBucket(bucketKey, (current) =>
+                        current.map((currentEntry) =>
+                          currentEntry.id === entryId
+                            ? {
+                                ...currentEntry,
+                                ...patch,
+                              }
+                            : currentEntry,
+                        ),
+                      )
+                  : undefined
               }
+              readOnly={!isGameMaster}
               rows={modifierRows}
             />
             <PlayerCombatActionButtonPanel

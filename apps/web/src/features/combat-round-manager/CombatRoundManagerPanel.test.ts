@@ -44,6 +44,10 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain('color: initiative !== undefined ? "#1f7a4d" : undefined');
     expect(source).toContain('case "submitted":');
     expect(source).toContain('case "gmEdited":');
+    expect(source).toContain('return "✓";');
+    expect(source).toContain('return "·";');
+    expect(source).not.toContain('return "▶";');
+    expect(source).not.toContain('return input.current ? "O" : "·";');
     expect(source).toContain("step === roundState.currentStep");
     expect(source).toContain('overflowX: "auto"');
   });
