@@ -1645,6 +1645,321 @@ describe("scenarios route contract", () => {
     expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
   });
 
+  it("allows a player to roll phase 1 initiative for their assigned participant", async () => {
+    setupCombatDeclarationRoute({
+      encounter: {
+        combatRoundState: {
+          currentStep: "initiative_phase_1",
+          participants: [
+            {
+              initiatives: {},
+              label: "The Gladiator",
+              participantId: "encounter-participant-1",
+              stepStatuses: {
+                initiative_phase_1: "pending",
+                initiative_phase_2: "pending",
+                phase_1_actions: "pending",
+                phase_2_actions: "pending",
+                review_action_modifiers: "complete",
+                review_phase_2_actions: "pending",
+                review_phase_2_damage: "pending",
+                review_phase_2_modifiers: "pending",
+                round_summary: "pending",
+                select_actions: "submitted",
+              },
+            },
+          ],
+          roundNumber: 1,
+        },
+      },
+      participant: {
+        state: {
+          combat: {
+            lastDeclaredActionId: "attack_parry",
+            lastDeclaredRoundNumber: 1,
+          },
+          conditions: [],
+          equipment: {},
+          health: {},
+          modifiers: [],
+          resources: {},
+        },
+      },
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        scenarioParticipantId: "participant-1",
+      },
+      url: "/encounters/encounter-1/combat-initiative",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().initiative).toBeGreaterThanOrEqual(1);
+    expect(response.json().initiative).toBeLessThanOrEqual(20);
+    const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
+    expect(updatedEncounter.combatRoundState.participants[0].initiatives.phase1).toBe(
+      response.json().initiative,
+    );
+    expect(
+      updatedEncounter.combatRoundState.participants[0].stepStatuses.initiative_phase_1,
+    ).toBe("submitted");
+  });
+
+  it("allows a GM to roll initiative for another player's participant", async () => {
+    setupCombatDeclarationRoute({
+      encounter: {
+        combatRoundState: {
+          currentStep: "initiative_phase_2",
+          participants: [
+            {
+              initiatives: { phase1: 12 },
+              label: "The Gladiator",
+              participantId: "encounter-participant-1",
+              stepStatuses: {
+                initiative_phase_1: "submitted",
+                initiative_phase_2: "pending",
+                phase_1_actions: "complete",
+                phase_2_actions: "pending",
+                review_action_modifiers: "complete",
+                review_phase_2_actions: "complete",
+                review_phase_2_damage: "pending",
+                review_phase_2_modifiers: "complete",
+                round_summary: "pending",
+                select_actions: "submitted",
+              },
+            },
+          ],
+          roundNumber: 1,
+        },
+      },
+      user: mocks.adminUser,
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        scenarioParticipantId: "participant-1",
+      },
+      url: "/encounters/encounter-1/combat-initiative",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
+    expect(updatedEncounter.combatRoundState.participants[0].initiatives.phase2).toBe(
+      response.json().initiative,
+    );
+    expect(
+      updatedEncounter.combatRoundState.participants[0].stepStatuses.initiative_phase_2,
+    ).toBe("gmEdited");
+  });
+
+  it("rejects player initiative rolls for another participant", async () => {
+    setupCombatDeclarationRoute({
+      encounter: {
+        combatRoundState: {
+          currentStep: "initiative_phase_1",
+          participants: [
+            {
+              initiatives: {},
+              label: "Other hero",
+              participantId: "encounter-participant-1",
+              stepStatuses: {
+                initiative_phase_1: "pending",
+                initiative_phase_2: "pending",
+                phase_1_actions: "pending",
+                phase_2_actions: "pending",
+                review_action_modifiers: "complete",
+                review_phase_2_actions: "pending",
+                review_phase_2_damage: "pending",
+                review_phase_2_modifiers: "pending",
+                round_summary: "pending",
+                select_actions: "submitted",
+              },
+            },
+          ],
+          roundNumber: 1,
+        },
+      },
+      participant: {
+        controlledByUserId: "other-player",
+      },
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        scenarioParticipantId: "participant-1",
+      },
+      url: "/encounters/encounter-1/combat-initiative",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(403);
+    expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
+  });
+
+  it("clears DE declarations and participant action selections for GM correction", async () => {
+    setupCombatDeclarationRoute({
+      encounter: {
+        combatRoundState: {
+          currentStep: "select_actions",
+          participants: [
+            {
+              initiatives: {},
+              label: "The Gladiator",
+              participantId: "encounter-participant-1",
+              stepStatuses: {
+                initiative_phase_1: "pending",
+                initiative_phase_2: "pending",
+                phase_1_actions: "pending",
+                phase_2_actions: "pending",
+                review_action_modifiers: "pending",
+                review_phase_2_actions: "pending",
+                review_phase_2_damage: "pending",
+                review_phase_2_modifiers: "pending",
+                round_summary: "pending",
+                select_actions: "submitted",
+              },
+            },
+          ],
+          roundNumber: 1,
+        },
+      },
+      participant: {
+        state: {
+          combat: {
+            combatContext: {
+              selectedOpponentId: "guard",
+              modifierBuckets: {
+                general: [],
+                situationDb: [],
+                situationObSkill: [],
+              },
+            },
+            lastDeclaredActionId: "attack_parry",
+            lastDeclaredMovementId: "hold",
+            lastDeclaredRoundNumber: 1,
+          },
+          conditions: [],
+          equipment: {},
+          health: {},
+          modifiers: [],
+          resources: {},
+        },
+      },
+      user: mocks.adminUser,
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/encounters/encounter-1/combat-round/clear-current-step",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
+    expect(updatedEncounter.combatRoundState.currentStep).toBe("select_actions");
+    expect(updatedEncounter.combatRoundState.participants[0].stepStatuses.select_actions).toBe(
+      "pending",
+    );
+    expect(mocks.encounterService.updateScenarioParticipantState).toHaveBeenCalledWith(
+      expect.objectContaining({
+        participantId: "participant-1",
+        state: expect.objectContaining({
+          combat: expect.objectContaining({
+            combatContext: {
+              modifierBuckets: {
+                general: [],
+                situationDb: [],
+                situationObSkill: [],
+              },
+            },
+            lastDeclaredActionId: undefined,
+            lastDeclaredMovementId: undefined,
+            lastDeclaredRoundNumber: undefined,
+          }),
+        }),
+      }),
+    );
+  });
+
+  it("clears M1 and rewinds without erasing submitted DE declarations", async () => {
+    setupCombatDeclarationRoute({
+      encounter: {
+        combatRoundState: {
+          currentStep: "review_action_modifiers",
+          participants: [
+            {
+              initiatives: {},
+              label: "The Gladiator",
+              participantId: "encounter-participant-1",
+              stepStatuses: {
+                initiative_phase_1: "pending",
+                initiative_phase_2: "pending",
+                phase_1_actions: "pending",
+                phase_2_actions: "pending",
+                review_action_modifiers: "complete",
+                review_phase_2_actions: "pending",
+                review_phase_2_damage: "pending",
+                review_phase_2_modifiers: "pending",
+                round_summary: "pending",
+                select_actions: "submitted",
+              },
+            },
+          ],
+          roundNumber: 1,
+        },
+      },
+      user: mocks.adminUser,
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/encounters/encounter-1/combat-round/clear-current-step",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
+    expect(updatedEncounter.combatRoundState.currentStep).toBe("select_actions");
+    expect(
+      updatedEncounter.combatRoundState.participants[0].stepStatuses.review_action_modifiers,
+    ).toBe("pending");
+    expect(updatedEncounter.combatRoundState.participants[0].stepStatuses.select_actions).toBe(
+      "submitted",
+    );
+    expect(mocks.encounterService.updateScenarioParticipantState).not.toHaveBeenCalled();
+  });
+
+  it("does not allow players to clear combat round steps", async () => {
+    setupCombatDeclarationRoute();
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/encounters/encounter-1/combat-round/clear-current-step",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(403);
+    expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
+  });
+
   it("rejects duplicate player submissions for the same assigned roll side", async () => {
     const encounter = {
       actionLog: [],

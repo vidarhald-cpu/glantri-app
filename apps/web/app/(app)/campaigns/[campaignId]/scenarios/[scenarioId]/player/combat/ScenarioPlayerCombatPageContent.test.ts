@@ -40,6 +40,10 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("Current step: ${currentCombatStepAbbreviation}");
     expect(source).toContain("Declared.");
     expect(source).toContain("Declaration closed.");
+    expect(source).toContain("rollCombatInitiativeOnServer");
+    expect(source).toContain("rollInitiative");
+    expect(source).toContain("currentInitiativePhase");
+    expect(source).toContain("Initiative rolled.");
     expect(source).toContain("declarationButtonLabel");
     expect(source).toContain("buttonLabel={declarationButtonLabel}");
     expect(source).not.toContain("will appear here in the next phase");

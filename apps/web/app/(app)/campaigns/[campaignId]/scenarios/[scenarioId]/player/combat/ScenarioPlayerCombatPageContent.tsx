@@ -51,6 +51,7 @@ import {
   loadScenarioParticipants,
   loadScenarioPlayerProjection,
   loadServerCharacterById,
+  rollCombatInitiativeOnServer,
   submitCombatDeclarationOnServer,
   type ServerCharacterRecord,
 } from "@/lib/api/localServiceClient";
@@ -305,15 +306,20 @@ export default function ScenarioPlayerCombatPageContent({
     const projectionControlledId = projection?.controlledParticipantId;
     const explicitParticipantId = participantId;
     const rememberedParticipantId = rememberedParticipantSelection.value;
+    const explicitAccessibleParticipant = accessibleParticipants.find(
+      (participant) => participant.id === explicitParticipantId,
+    );
     const preferredId =
-      accessibleParticipants.find((participant) => participant.id === explicitParticipantId)?.id ??
+      explicitAccessibleParticipant?.id ??
       accessibleParticipants.find((participant) => participant.id === rememberedParticipantId)
         ?.id ??
       accessibleParticipants.find((participant) => participant.id === projectionControlledId)?.id ??
       accessibleParticipants[0]?.id;
 
     setSelectedParticipantId((current) =>
-      accessibleParticipants.some((participant) => participant.id === current)
+      explicitAccessibleParticipant
+        ? explicitAccessibleParticipant.id
+        : accessibleParticipants.some((participant) => participant.id === current)
         ? current
         : (preferredId ?? ""),
     );
@@ -707,6 +713,35 @@ export default function ScenarioPlayerCombatPageContent({
     }
   }
 
+  async function rollInitiative() {
+    if (readOnlyInspection) {
+      return;
+    }
+
+    if (!selectedParticipant || !encounterId) {
+      return;
+    }
+
+    setSavingCombatContext(true);
+
+    try {
+      const { encounter } = await rollCombatInitiativeOnServer({
+        encounterId,
+        scenarioParticipantId: selectedParticipant.id,
+      });
+
+      setEncounterSession(encounter);
+      setError(undefined);
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error ? caughtError.message : "Unable to roll combat initiative.",
+      );
+    } finally {
+      setSavingCombatContext(false);
+    }
+  }
+
+
   const combatPanelModel = loadoutModel.combatStatePanelModel;
   const loadoutFieldDisplayMap = useMemo(
     () => new Map(loadoutModel.fields.map((field) => [field.id, field])),
@@ -960,17 +995,41 @@ export default function ScenarioPlayerCombatPageContent({
     additionalActionNotes.trim().length > 0;
   const currentCombatStep = combatRoundState?.currentStep ?? "select_actions";
   const currentCombatStepAbbreviation = COMBAT_ROUND_STEP_ABBREVIATIONS[currentCombatStep];
+  const currentInitiativePhase =
+    currentCombatStep === "initiative_phase_1"
+      ? "phase1"
+      : currentCombatStep === "initiative_phase_2"
+        ? "phase2"
+        : undefined;
   const playerDeclarationLocked =
     !isGameMaster &&
     (!declarationStepOpen ||
       selectedParticipantDeclaredThisRound ||
       selectedDeclarationStepStatus !== "pending");
   const declarationControlsDisabled = controlsDisabled || playerDeclarationLocked;
+  const initiativeStepStatus =
+    currentCombatStep === "initiative_phase_1"
+      ? selectedRoundParticipant?.stepStatuses.initiative_phase_1 ?? "pending"
+      : currentCombatStep === "initiative_phase_2"
+        ? selectedRoundParticipant?.stepStatuses.initiative_phase_2 ?? "pending"
+        : undefined;
+  const selectedParticipantRolledCurrentInitiative = Boolean(
+    currentInitiativePhase &&
+      selectedRoundParticipant?.initiatives[currentInitiativePhase] !== undefined,
+  );
+  const canUseInitiativeButton =
+    Boolean(currentInitiativePhase) &&
+    Boolean(displayedParticipant) &&
+    Boolean(selectedRoundParticipant) &&
+    (isGameMaster ||
+      (initiativeStepStatus === "pending" && !selectedParticipantRolledCurrentInitiative));
   const declareActionDisabled =
     controlsDisabled ||
     savingCombatContext ||
     !displayedParticipant ||
-    (!isGameMaster && (playerDeclarationLocked || !hasMeaningfulDeclaration));
+    (currentInitiativePhase
+      ? !canUseInitiativeButton
+      : !isGameMaster && (playerDeclarationLocked || !hasMeaningfulDeclaration));
   const declarationButtonLabel = getPlayerCombatActionButtonLabel({
     currentStep: currentCombatStep,
     disabled: declareActionDisabled,
@@ -978,13 +1037,19 @@ export default function ScenarioPlayerCombatPageContent({
   });
   const declarationStatusText = isGameMaster
     ? `Current step: ${currentCombatStepAbbreviation}. GM can save or revise this participant declaration.`
-    : selectedParticipantDeclaredThisRound ||
+    : currentInitiativePhase
+      ? selectedParticipantRolledCurrentInitiative
+        ? `Current step: ${currentCombatStepAbbreviation}. Initiative rolled.`
+        : initiativeStepStatus === "pending"
+          ? `Current step: ${currentCombatStepAbbreviation}.`
+          : `Current step: ${currentCombatStepAbbreviation}. Waiting for GM.`
+      : selectedParticipantDeclaredThisRound ||
         selectedDeclarationStepStatus === "submitted" ||
         selectedDeclarationStepStatus === "gmEdited"
-      ? `Current step: ${currentCombatStepAbbreviation}. Declared.`
-      : declarationStepOpen && selectedDeclarationStepStatus === "pending"
-        ? `Current step: ${currentCombatStepAbbreviation}.`
-        : `Current step: ${currentCombatStepAbbreviation}. Declaration closed.`;
+        ? `Current step: ${currentCombatStepAbbreviation}. Declared.`
+        : declarationStepOpen && selectedDeclarationStepStatus === "pending"
+          ? `Current step: ${currentCombatStepAbbreviation}.`
+          : `Current step: ${currentCombatStepAbbreviation}. Declaration closed.`;
 
   if (sessionLoading || loading) {
     return <section>Loading player combat screen...</section>;
@@ -1125,7 +1190,9 @@ export default function ScenarioPlayerCombatPageContent({
             <PlayerCombatActionButtonPanel
               buttonLabel={declarationButtonLabel}
               disabled={declareActionDisabled}
-              onDeclareAction={() => void saveCombatContext()}
+              onDeclareAction={() =>
+                void (currentInitiativePhase ? rollInitiative() : saveCombatContext())
+              }
               saving={savingCombatContext}
               statusText={declarationStatusText}
             />

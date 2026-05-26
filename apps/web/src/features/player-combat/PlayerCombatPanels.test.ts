@@ -59,7 +59,8 @@ describe("PlayerCombatPanels", () => {
     expect(source).toContain("Declare action — DE");
     expect(source).toContain("Waiting for GM");
     expect(source).toContain("Declare modifiers");
-    expect(source).toContain("Set phase 1 initiative");
+    expect(source).toContain("Roll phase 1 initiative");
+    expect(source).toContain("Roll phase 2 initiative");
     expect(source).toContain("PlayerCombatActionResultPanel");
   });
 });

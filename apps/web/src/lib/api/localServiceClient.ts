@@ -69,9 +69,11 @@ export {
   type ScenarioParticipantFromEntityInput
 } from "./scenarioClient";
 export {
+  clearCurrentCombatRoundStepOnServer,
   createEncounterOnServer,
   loadEncounterById,
   loadScenarioEncounters,
+  rollCombatInitiativeOnServer,
   submitCombatDeclarationOnServer,
   submitPlayerRoleplayRollOnServer,
   updateEncounterOnServer

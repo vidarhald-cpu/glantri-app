@@ -203,6 +203,51 @@ export function recordCombatRoundDeclaration(input: {
   });
 }
 
+export function getCombatRoundInitiativePhaseForStep(
+  step: CombatRoundStep,
+): "phase1" | "phase2" | undefined {
+  if (
+    step === "initiative_phase_1" ||
+    step === "phase_1_actions" ||
+    step === "review_phase_2_actions"
+  ) {
+    return "phase1";
+  }
+
+  if (
+    step === "initiative_phase_2" ||
+    step === "phase_2_actions" ||
+    step === "review_phase_2_damage"
+  ) {
+    return "phase2";
+  }
+
+  return undefined;
+}
+
+export function recordCombatRoundInitiative(input: {
+  initiative: number;
+  participantId: string;
+  phase: "phase1" | "phase2";
+  state: CombatRoundState;
+  submittedBy: "gm" | "player";
+}): CombatRoundState {
+  const initiativeStep = input.phase === "phase1" ? "initiative_phase_1" : "initiative_phase_2";
+  const withInitiative = setCombatRoundParticipantInitiative({
+    initiative: input.initiative,
+    participantId: input.participantId,
+    phase: input.phase,
+    state: input.state,
+  });
+
+  return setCombatRoundParticipantStepStatus({
+    participantId: input.participantId,
+    state: withInitiative,
+    status: input.submittedBy === "gm" ? "gmEdited" : "submitted",
+    step: initiativeStep,
+  });
+}
+
 export function clearCombatRoundStep(input: {
   state: CombatRoundState;
   step: CombatRoundStep;
@@ -261,6 +306,26 @@ export function canPlayerSubmitCombatDeclaration(input: {
   const declarationStatus = participant?.stepStatuses.select_actions ?? "pending";
 
   return normalized.currentStep === "select_actions" && declarationStatus === "pending";
+}
+
+export function canPlayerRollCombatInitiative(input: {
+  participantId: string;
+  phase: "phase1" | "phase2";
+  state: CombatRoundState;
+}): boolean {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const requiredStep = input.phase === "phase1" ? "initiative_phase_1" : "initiative_phase_2";
+  const participant = normalized.participants.find(
+    (entry) => entry.participantId === input.participantId,
+  );
+  const initiativeValue = participant?.initiatives[input.phase];
+  const stepStatus = participant?.stepStatuses[requiredStep] ?? "pending";
+
+  return (
+    normalized.currentStep === requiredStep &&
+    initiativeValue === undefined &&
+    stepStatus === "pending"
+  );
 }
 
 export function setCombatRoundActiveParticipant(
@@ -349,19 +414,55 @@ export function sortCombatRoundParticipantsByInitiative(input: {
   state: CombatRoundState;
 }): CombatRoundParticipantState[] {
   const normalized = combatRoundStateSchema.parse(input.state);
+  const originalIndexByParticipantId = new Map(
+    normalized.participants.map((participant, index) => [participant.participantId, index]),
+  );
 
   return [...normalized.participants].sort((left, right) => {
     const leftInitiative = left.initiatives[input.phase];
     const rightInitiative = right.initiatives[input.phase];
 
-    if (leftInitiative !== undefined || rightInitiative !== undefined) {
+    if (leftInitiative !== undefined && rightInitiative !== undefined) {
       return (
-        (rightInitiative ?? Number.NEGATIVE_INFINITY) - (leftInitiative ?? Number.NEGATIVE_INFINITY)
+        rightInitiative - leftInitiative ||
+        (originalIndexByParticipantId.get(left.participantId) ?? 0) -
+          (originalIndexByParticipantId.get(right.participantId) ?? 0)
       );
     }
 
-    return left.label.localeCompare(right.label);
+    if (leftInitiative !== undefined) {
+      return -1;
+    }
+
+    if (rightInitiative !== undefined) {
+      return 1;
+    }
+
+    return (
+      (originalIndexByParticipantId.get(left.participantId) ?? 0) -
+      (originalIndexByParticipantId.get(right.participantId) ?? 0)
+    );
   });
+}
+
+export function getCombatRoundInitiativePositions(input: {
+  phase: "phase1" | "phase2";
+  state: CombatRoundState;
+}): Record<string, number> {
+  const sortedParticipants = sortCombatRoundParticipantsByInitiative(input);
+  const positions: Record<string, number> = {};
+  let nextPosition = 1;
+
+  for (const participant of sortedParticipants) {
+    if (participant.initiatives[input.phase] === undefined) {
+      continue;
+    }
+
+    positions[participant.participantId] = nextPosition;
+    nextPosition += 1;
+  }
+
+  return positions;
 }
 
 export function buildCombatRoundInspector(input: {

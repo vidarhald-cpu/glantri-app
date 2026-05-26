@@ -17,14 +17,15 @@ import {
   COMBAT_ROUND_STEPS,
   advanceCombatRoundStep,
   buildCombatRoundInspector,
-  clearCurrentCombatRoundStepAndRewind,
-  getPreviousCombatRoundStep,
+  getCombatRoundInitiativePositions,
   initializeCombatRoundState,
   setCombatRoundSelection,
   sortCombatRoundParticipantsByInitiative,
 } from "@glantri/domain";
 
 import {
+  clearCurrentCombatRoundStepOnServer,
+  rollCombatInitiativeOnServer,
   submitCombatDeclarationOnServer,
   updateEncounterOnServer,
 } from "@/lib/api/encounterClient";
@@ -52,6 +53,7 @@ import {
 interface CombatRoundManagerPanelProps {
   encounter: EncounterSession;
   onEncounterUpdated?: (encounter: EncounterSession) => void;
+  onScenarioParticipantsUpdated?: (participants: ScenarioParticipant[]) => void;
   scenarioParticipants?: ScenarioParticipant[];
 }
 
@@ -141,8 +143,19 @@ function buildDeclarationDraft(
   };
 }
 
-function formatInitiative(value: number | undefined): string {
-  return value === undefined ? "init --" : `init ${value}`;
+function formatInitiativePosition(input: {
+  participantId?: string;
+  phase: "phase1" | "phase2";
+  positions: Record<string, number>;
+  value: number | undefined;
+}): string {
+  const phaseLabel = input.phase === "phase1" ? "Phase 1" : "Phase 2";
+  const position =
+    input.participantId && input.value !== undefined ? input.positions[input.participantId] : undefined;
+
+  return `${phaseLabel} initiative: ${input.value ?? "—"} · ${
+    position ? `position ${position}` : "no position"
+  }`;
 }
 
 function formatStepStatus(status: string | undefined): string {
@@ -199,6 +212,7 @@ function shouldSortByInitiative(step: CombatRoundStep): "phase1" | "phase2" | un
 export default function CombatRoundManagerPanel({
   encounter,
   onEncounterUpdated,
+  onScenarioParticipantsUpdated,
   scenarioParticipants = [],
 }: CombatRoundManagerPanelProps) {
   const initialRoundState = useMemo(() => initializeCombatRoundState({ encounter }), [encounter]);
@@ -220,6 +234,14 @@ export default function CombatRoundManagerPanel({
     [scenarioParticipantOverrides, scenarioParticipants],
   );
   const initiativeSortPhase = shouldSortByInitiative(roundState.currentStep);
+  const phase1Positions = useMemo(
+    () => getCombatRoundInitiativePositions({ phase: "phase1", state: roundState }),
+    [roundState],
+  );
+  const phase2Positions = useMemo(
+    () => getCombatRoundInitiativePositions({ phase: "phase2", state: roundState }),
+    [roundState],
+  );
   const displayParticipants = useMemo(() => {
     if (!initiativeSortPhase) {
       return roundState.participants;
@@ -287,7 +309,12 @@ export default function CombatRoundManagerPanel({
         description: "Current phase 1 action context for the selected participant.",
         phaseLabel: "Phase 1",
         stats: [
-          `Initiative: ${formatInitiative(inspector.participant.initiatives.phase1)}`,
+          formatInitiativePosition({
+            participantId: inspector.participant.participantId,
+            phase: "phase1",
+            positions: phase1Positions,
+            value: inspector.participant.initiatives.phase1,
+          }),
           `Action status: ${formatStepStatus(inspector.participant.stepStatuses.phase_1_actions)}`,
           `Damage review: ${formatStepStatus(
             inspector.participant.stepStatuses.review_phase_2_actions,
@@ -299,7 +326,12 @@ export default function CombatRoundManagerPanel({
         description: "Current phase 2 action context for the selected participant.",
         phaseLabel: "Phase 2",
         stats: [
-          `Initiative: ${formatInitiative(inspector.participant.initiatives.phase2)}`,
+          formatInitiativePosition({
+            participantId: inspector.participant.participantId,
+            phase: "phase2",
+            positions: phase2Positions,
+            value: inspector.participant.initiatives.phase2,
+          }),
           `Action status: ${formatStepStatus(inspector.participant.stepStatuses.phase_2_actions)}`,
           `Damage review: ${formatStepStatus(
             inspector.participant.stepStatuses.review_phase_2_damage,
@@ -308,7 +340,7 @@ export default function CombatRoundManagerPanel({
         title: "Phase 2 action",
       },
     ];
-  }, [inspector.participant]);
+  }, [inspector.participant, phase1Positions, phase2Positions]);
   const inspectorOpponentOptions = useMemo(
     () =>
       effectiveScenarioParticipants
@@ -366,11 +398,42 @@ export default function CombatRoundManagerPanel({
   }
 
   async function clearCurrentStep() {
-    if (!getPreviousCombatRoundStep(roundState.currentStep)) {
-      return;
-    }
+    setSaving(true);
 
-    await persistRoundState(clearCurrentCombatRoundStepAndRewind(roundState));
+    try {
+      const { encounter: nextEncounter, participants } =
+        await clearCurrentCombatRoundStepOnServer({
+          encounterId: encounter.id,
+        });
+      const nextRoundState = initializeCombatRoundState({ encounter: nextEncounter });
+
+      setRoundState(nextRoundState);
+      setSaveError(undefined);
+      onEncounterUpdated?.(nextEncounter);
+
+      if (participants.length > 0) {
+        setScenarioParticipantOverrides((current) => ({
+          ...current,
+          ...Object.fromEntries(participants.map((participant) => [participant.id, participant])),
+        }));
+        setInspectorDrafts((current) => {
+          const nextDrafts = { ...current };
+
+          for (const participant of participants) {
+            delete nextDrafts[participant.id];
+          }
+
+          return nextDrafts;
+        });
+        onScenarioParticipantsUpdated?.(participants);
+      }
+    } catch (caughtError) {
+      setSaveError(
+        caughtError instanceof Error ? caughtError.message : "Unable to clear combat round step.",
+      );
+    } finally {
+      setSaving(false);
+    }
   }
 
   function selectInspector(participantId: string, step: CombatRoundStep) {
@@ -507,10 +570,37 @@ export default function CombatRoundManagerPanel({
       }));
       setRoundState(nextRoundState);
       onEncounterUpdated?.(nextEncounter);
+      onScenarioParticipantsUpdated?.([participant]);
       setSaveError(undefined);
     } catch (caughtError) {
       setSaveError(
         caughtError instanceof Error ? caughtError.message : "Unable to save combat declaration.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function rollInspectorInitiative() {
+    if (!selectedScenarioParticipant || !selectedEncounterParticipant) {
+      return;
+    }
+
+    setSaving(true);
+
+    try {
+      const { encounter: nextEncounter } = await rollCombatInitiativeOnServer({
+        encounterId: encounter.id,
+        scenarioParticipantId: selectedScenarioParticipant.id,
+      });
+      const nextRoundState = initializeCombatRoundState({ encounter: nextEncounter });
+
+      setRoundState(nextRoundState);
+      onEncounterUpdated?.(nextEncounter);
+      setSaveError(undefined);
+    } catch (caughtError) {
+      setSaveError(
+        caughtError instanceof Error ? caughtError.message : "Unable to roll combat initiative.",
       );
     } finally {
       setSaving(false);
@@ -555,7 +645,7 @@ export default function CombatRoundManagerPanel({
             {saving ? "Saving..." : getAdvanceButtonLabel(roundState.currentStep)}
           </button>
           <button
-            disabled={saving || !getPreviousCombatRoundStep(roundState.currentStep)}
+            disabled={saving}
             onClick={() => void clearCurrentStep()}
             type="button"
           >
@@ -675,9 +765,9 @@ export default function CombatRoundManagerPanel({
                       });
                       const initiative =
                         step === "initiative_phase_1"
-                          ? formatInitiative(participant.initiatives.phase1)
+                          ? participant.initiatives.phase1
                           : step === "initiative_phase_2"
-                            ? formatInitiative(participant.initiatives.phase2)
+                            ? participant.initiatives.phase2
                             : undefined;
                       const title = `${participant.label}, round ${roundNumber}, ${COMBAT_ROUND_STEP_LABELS[step]}, status ${stepStatus}`;
 
@@ -715,10 +805,22 @@ export default function CombatRoundManagerPanel({
                               padding: 0,
                               width: "100%",
                             }}
-                            title={initiative ? `${title}, ${initiative}` : title}
+                            title={
+                              initiative !== undefined
+                                ? `${title}, initiative ${initiative}`
+                                : title
+                            }
                             type="button"
                           >
-                            <span aria-hidden="true">{marker}</span>
+                            <span
+                              aria-hidden="true"
+                              style={{
+                                color: initiative !== undefined ? "#1f7a4d" : undefined,
+                                fontWeight: initiative !== undefined ? 800 : undefined,
+                              }}
+                            >
+                              {initiative ?? marker}
+                            </span>
                           </button>
                         </td>
                       );
@@ -837,7 +939,12 @@ export default function CombatRoundManagerPanel({
                   <PlayerCombatActionButtonPanel
                     buttonLabel={getGmCombatStepActionLabel(roundState.currentStep)}
                     disabled={saving}
-                    onDeclareAction={() => void saveInspectorDeclaration()}
+                    onDeclareAction={() =>
+                      void (roundState.currentStep === "initiative_phase_1" ||
+                      roundState.currentStep === "initiative_phase_2"
+                        ? rollInspectorInitiative()
+                        : saveInspectorDeclaration())
+                    }
                     saving={saving}
                     statusText={`Current step: ${
                       COMBAT_ROUND_STEP_ABBREVIATIONS[roundState.currentStep]

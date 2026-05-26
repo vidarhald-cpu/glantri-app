@@ -8,11 +8,15 @@ import {
   advanceCombatRoundStep,
   buildCombatRoundInspector,
   canPlayerSubmitCombatDeclaration,
+  canPlayerRollCombatInitiative,
   clearCombatRoundStep,
   clearCurrentCombatRoundStepAndRewind,
+  getCombatRoundInitiativePhaseForStep,
+  getCombatRoundInitiativePositions,
   getPreviousCombatRoundStep,
   initializeCombatRoundState,
   recordCombatRoundDeclaration,
+  recordCombatRoundInitiative,
   setCombatRoundActiveParticipant,
   setCombatRoundParticipantInitiative,
   setCombatRoundParticipantStepStatus,
@@ -234,6 +238,42 @@ describe("combat round manager", () => {
     );
   });
 
+  it("maps initiative and action review steps to their initiative phase", () => {
+    expect(getCombatRoundInitiativePhaseForStep("initiative_phase_1")).toBe("phase1");
+    expect(getCombatRoundInitiativePhaseForStep("phase_1_actions")).toBe("phase1");
+    expect(getCombatRoundInitiativePhaseForStep("review_phase_2_actions")).toBe("phase1");
+    expect(getCombatRoundInitiativePhaseForStep("initiative_phase_2")).toBe("phase2");
+    expect(getCombatRoundInitiativePhaseForStep("select_actions")).toBeUndefined();
+  });
+
+  it("records initiative and marks the initiative step submitted", () => {
+    const state = advanceCombatRoundStep(
+      advanceCombatRoundStep(initializeCombatRoundState({ encounter: encounter() })),
+    );
+    const nextState = recordCombatRoundInitiative({
+      initiative: 18,
+      participantId: "gladiator",
+      phase: "phase1",
+      state,
+      submittedBy: "player",
+    });
+
+    expect(state.currentStep).toBe("initiative_phase_1");
+    expect(nextState.participants[0]?.initiatives.phase1).toBe(18);
+    expect(nextState.participants[0]?.stepStatuses.initiative_phase_1).toBe("submitted");
+    expect(canPlayerRollCombatInitiative({ participantId: "gladiator", phase: "phase1", state: nextState })).toBe(false);
+  });
+
+  it("allows player initiative only on the matching open initiative step", () => {
+    const state = advanceCombatRoundStep(
+      advanceCombatRoundStep(initializeCombatRoundState({ encounter: encounter() })),
+    );
+
+    expect(state.currentStep).toBe("initiative_phase_1");
+    expect(canPlayerRollCombatInitiative({ participantId: "gladiator", phase: "phase1", state })).toBe(true);
+    expect(canPlayerRollCombatInitiative({ participantId: "gladiator", phase: "phase2", state })).toBe(false);
+  });
+
   it("locks pending declarations when advancing past DE while preserving submitted markers", () => {
     const state = recordCombatRoundDeclaration({
       participantId: "gladiator",
@@ -271,6 +311,33 @@ describe("combat round manager", () => {
         state: withGladiatorInitiative,
       }).map((entry) => entry.participantId),
     ).toEqual(["gladiator", "guard"]);
+  });
+
+  it("sorts unrolled participants below rolled initiatives and assigns positions only to rolled participants", () => {
+    const state = setCombatRoundParticipantInitiative({
+      initiative: 12,
+      participantId: "guard",
+      phase: "phase1",
+      state: initializeCombatRoundState({
+        encounter: encounter({
+          participants: [
+            participant({ id: "gladiator", label: "The Gladiator" }),
+            participant({ id: "guard", label: "City guard" }),
+            participant({ id: "scyrian", label: "Scyrian cavalry guy" }),
+          ],
+        }),
+      }),
+    });
+
+    expect(
+      sortCombatRoundParticipantsByInitiative({
+        phase: "phase1",
+        state,
+      }).map((entry) => entry.participantId),
+    ).toEqual(["guard", "gladiator", "scyrian"]);
+    expect(getCombatRoundInitiativePositions({ phase: "phase1", state })).toEqual({
+      guard: 1,
+    });
   });
 
   it("builds inspector data for the selected participant and step", () => {

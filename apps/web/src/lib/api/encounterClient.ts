@@ -79,6 +79,36 @@ export async function submitCombatDeclarationOnServer(input: {
   return payload;
 }
 
+export async function rollCombatInitiativeOnServer(input: {
+  encounterId: string;
+  scenarioParticipantId: string;
+}): Promise<{ encounter: EncounterSession; initiative: number }> {
+  const payload = await sendJson<{ encounter: EncounterSession; initiative: number }>(
+    `/encounters/${input.encounterId}/combat-initiative`,
+    {
+      body: JSON.stringify({
+        scenarioParticipantId: input.scenarioParticipantId,
+      }),
+      method: "POST",
+    },
+  );
+
+  return payload;
+}
+
+export async function clearCurrentCombatRoundStepOnServer(input: {
+  encounterId: string;
+}): Promise<{ encounter: EncounterSession; participants: ScenarioParticipant[] }> {
+  const payload = await sendJson<{ encounter: EncounterSession; participants: ScenarioParticipant[] }>(
+    `/encounters/${input.encounterId}/combat-round/clear-current-step`,
+    {
+      method: "POST",
+    },
+  );
+
+  return payload;
+}
+
 export async function submitPlayerRoleplayRollOnServer(input: {
   encounterId: string;
   pendingRollId: string;

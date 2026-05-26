@@ -20,8 +20,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("Commit");
     expect(source).toContain("and advance to");
     expect(source).toContain("Clear current step");
-    expect(source).toContain("clearCurrentCombatRoundStepAndRewind");
-    expect(source).toContain("getPreviousCombatRoundStep");
+    expect(source).toContain("clearCurrentCombatRoundStepOnServer");
     expect(source).toContain("Step controller");
   });
 
@@ -40,6 +39,9 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("getStatusMarker");
     expect(source).toContain("participant.stepStatuses[step]");
     expect(source).toContain("getParticipantDeclarationStatus");
+    expect(source).toContain("participant.initiatives.phase1");
+    expect(source).toContain("participant.initiatives.phase2");
+    expect(source).toContain('color: initiative !== undefined ? "#1f7a4d" : undefined');
     expect(source).toContain('case "submitted":');
     expect(source).toContain('case "gmEdited":');
     expect(source).toContain("step === roundState.currentStep");
@@ -65,6 +67,10 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("getGmCombatStepActionLabel");
     expect(source).toContain("buttonLabel={getGmCombatStepActionLabel(roundState.currentStep)}");
     expect(source).toContain("GM can save or revise this declaration at any round step.");
+    expect(source).toContain("rollInspectorInitiative");
+    expect(source).toContain("rollCombatInitiativeOnServer");
+    expect(source).toContain("getCombatRoundInitiativePositions");
+    expect(source).toContain("no position");
     expect(source).toContain("Phase 1 action");
     expect(source).toContain("Phase 2 action");
     expect(source).toContain("Select a participant step to inspect combat details.");
@@ -74,13 +80,14 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("Next step");
   });
 
-  it("persists only combat round state through the existing encounter update path", () => {
+  it("persists combat round updates through narrow encounter commands", () => {
     const source = readSource();
 
     expect(source).toContain("updateEncounterOnServer");
     expect(source).toContain("combatRoundState: nextRoundState");
     expect(source).toContain("currentRound: nextRoundState.roundNumber");
     expect(source).toContain("submitCombatDeclarationOnServer");
+    expect(source).toContain("clearCurrentCombatRoundStepOnServer");
     expect(source).not.toContain("actionLog:");
   });
 });

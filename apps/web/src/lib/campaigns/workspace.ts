@@ -71,8 +71,9 @@ export function buildCampaignWorkspaceHref(input: CampaignWorkspaceHrefInput): s
 export function buildCampaignWorkspaceTabs(input: {
   canAccessGmEncounter: boolean;
 }): CampaignWorkspaceTab[] {
-  void input;
-  return orderedTabs;
+  return input.canAccessGmEncounter
+    ? orderedTabs
+    : orderedTabs.filter((tab) => tab.id !== "combat");
 }
 
 function resolveFallbackCampaignWorkspaceTab(input: {
@@ -134,7 +135,11 @@ function resolveRequestedCampaignWorkspaceTab(input: {
     case "character":
       return input.activeScenarioId ? "character" : fallbackTab;
     case "combat":
-      return "combat";
+      return input.canAccessGmEncounter
+        ? "combat"
+        : input.activeScenarioId
+          ? "player-combat"
+          : fallbackTab;
     case "player-combat":
       return input.activeScenarioId ? "player-combat" : fallbackTab;
     default:
@@ -294,6 +299,7 @@ export function resolveCampaignWorkspaceState(input: {
       requestedTab === "encounter" ||
       requestedTab === "skill-rolls" ||
       requestedTab === "player-skill-rolls" ||
+      requestedTab === "combat" ||
       requestedTab === "player-combat"
     ) {
       const playerEncounter = resolvePlayerEncounterSelection({

@@ -126,7 +126,7 @@ export function getGmCombatStepActionLabel(step: CombatRoundStep): string {
     case "review_action_modifiers":
       return "Declare modifiers";
     case "initiative_phase_1":
-      return "Set phase 1 initiative";
+      return "Roll phase 1 initiative";
     case "phase_1_actions":
       return "Record phase 1 action";
     case "review_phase_2_actions":
@@ -134,7 +134,7 @@ export function getGmCombatStepActionLabel(step: CombatRoundStep): string {
     case "review_phase_2_modifiers":
       return "Review phase 2";
     case "initiative_phase_2":
-      return "Set phase 2 initiative";
+      return "Roll phase 2 initiative";
     case "phase_2_actions":
       return "Record phase 2 action";
     case "review_phase_2_damage":
@@ -159,7 +159,11 @@ export function getPlayerCombatActionButtonLabel(input: {
 
   return input.currentStep === "select_actions" || !input.currentStep
     ? "Declare action — DE"
-    : "Waiting for GM";
+    : input.currentStep === "initiative_phase_1"
+      ? "Roll phase 1 initiative"
+      : input.currentStep === "initiative_phase_2"
+        ? "Roll phase 2 initiative"
+        : "Waiting for GM";
 }
 
 export function buildPlayerCombatModifierRows(input: {

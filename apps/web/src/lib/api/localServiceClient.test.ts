@@ -334,6 +334,51 @@ describe("localServiceClient wire contract", () => {
     });
   });
 
+  it("rolls combat initiative through the encounter domain", async () => {
+    const encounter = {
+      id: "encounter-1",
+      scenarioId: "scenario-1",
+    };
+    const fetchMock = stubFetch({ encounter, initiative: 17 });
+    const client = await loadClient();
+
+    await expect(
+      client.rollCombatInitiativeOnServer({
+        encounterId: "encounter-1",
+        scenarioParticipantId: "participant-1",
+      }),
+    ).resolves.toEqual({ encounter, initiative: 17 });
+
+    expectFetchCall(fetchMock, {
+      body: {
+        scenarioParticipantId: "participant-1",
+      },
+      method: "POST",
+      url: "https://api.example.test/encounters/encounter-1/combat-initiative",
+    });
+  });
+
+  it("clears the current combat round step through the encounter domain", async () => {
+    const encounter = {
+      id: "encounter-1",
+      scenarioId: "scenario-1",
+    };
+    const participants = [{ id: "participant-1" }];
+    const fetchMock = stubFetch({ encounter, participants });
+    const client = await loadClient();
+
+    await expect(
+      client.clearCurrentCombatRoundStepOnServer({
+        encounterId: "encounter-1",
+      }),
+    ).resolves.toEqual({ encounter, participants });
+
+    expectFetchCall(fetchMock, {
+      method: "POST",
+      url: "https://api.example.test/encounters/encounter-1/combat-round/clear-current-step",
+    });
+  });
+
   it("posts equipment moves under the character equipment domain", async () => {
     const state = {
       inventory: [],
