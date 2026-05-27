@@ -1,5 +1,6 @@
 import type {
   CombatRoundInitiativeResult,
+  CombatRoundPhaseContexts,
   EncounterSession,
   ScenarioParticipant,
   ScenarioParticipantCombatContext,
@@ -63,6 +64,7 @@ export async function submitCombatDeclarationOnServer(input: {
   combatContext: ScenarioParticipantCombatContext;
   encounterId: string;
   movementId?: string;
+  phaseContexts?: CombatRoundPhaseContexts;
   scenarioParticipantId: string;
   secondaryActionId?: string;
 }): Promise<{ encounter: EncounterSession; participant: ScenarioParticipant }> {
@@ -74,6 +76,7 @@ export async function submitCombatDeclarationOnServer(input: {
         additionalActionNotes: input.additionalActionNotes,
         combatContext: input.combatContext,
         movementId: input.movementId,
+        phaseContexts: input.phaseContexts,
         scenarioParticipantId: input.scenarioParticipantId,
         secondaryActionId: input.secondaryActionId,
       }),

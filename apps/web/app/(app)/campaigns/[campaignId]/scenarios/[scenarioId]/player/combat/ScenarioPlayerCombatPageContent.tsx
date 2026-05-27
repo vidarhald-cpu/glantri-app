@@ -6,6 +6,8 @@ import { useEffect, useMemo, useState } from "react";
 import {
   type CombatRoundDeclaration,
   characterBuildSchema,
+  getCombatRoundInitiativePositions,
+  getCombatRoundInitiativeTotal,
   initializeCombatRoundState,
   type EncounterSession,
   type ScenarioCombatModifierBucket,
@@ -176,7 +178,28 @@ interface PlayerCombatDeclarationDraft {
   additionalActionNotes: string;
   combatContext: ScenarioParticipantCombatContext;
   movementId: PlayerEncounterMovementId | "";
+  phaseContexts: PlayerCombatPhaseContextDrafts;
   secondaryActionId: PlayerEncounterActionId | "";
+}
+
+interface PlayerCombatPhaseContextDrafts {
+  phase1: ScenarioParticipantCombatContext;
+  phase2: ScenarioParticipantCombatContext;
+}
+
+function buildPlayerCombatPhaseContexts(input: {
+  declaration?: CombatRoundDeclaration;
+  participant?: ScenarioParticipant | null;
+}): PlayerCombatPhaseContextDrafts {
+  const fallbackContext =
+    input.declaration?.combatContext ??
+    input.participant?.state.combat.combatContext ??
+    createEmptyPlayerEncounterCombatContext();
+
+  return {
+    phase1: input.declaration?.phaseContexts?.phase1 ?? fallbackContext,
+    phase2: input.declaration?.phaseContexts?.phase2 ?? fallbackContext,
+  };
 }
 
 function hasCombatRoundDeclarationAction(
@@ -187,7 +210,8 @@ function hasCombatRoundDeclarationAction(
       declaration?.secondaryActionId ||
       declaration?.movementId ||
       declaration?.additionalActionNotes ||
-      declaration?.combatContext,
+      declaration?.combatContext ||
+      declaration?.phaseContexts,
   );
 }
 
@@ -212,6 +236,7 @@ function buildPlayerCombatDeclarationDraft(input: {
     movementId: (declaration?.movementId ??
       participant?.state.combat.lastDeclaredMovementId ??
       "hold") as PlayerEncounterMovementId,
+    phaseContexts: buildPlayerCombatPhaseContexts(input),
     secondaryActionId: isPlayerEncounterActionId(declaration?.secondaryActionId)
       ? declaration.secondaryActionId
       : isPlayerEncounterActionId(participant?.state.combat.lastDeclaredSecondaryActionId)
@@ -236,6 +261,21 @@ function buildPlayerCombatDeclarationDraftKey(input: {
     input.stepStatus ?? "no-status",
     input.declaration?.submittedAt ?? "no-submission-time",
   ].join(":");
+}
+
+function formatPlayerCombatInitiativeRank(input: {
+  participantId?: string;
+  positions: Record<string, number>;
+  value: number | undefined;
+}): string | undefined {
+  if (!input.participantId || input.value === undefined) {
+    return undefined;
+  }
+
+  const position = input.positions[input.participantId];
+  const rankedCount = Object.keys(input.positions).length;
+
+  return position && rankedCount > 0 ? `Rank: ${position} of ${rankedCount}` : undefined;
 }
 
 export default function ScenarioPlayerCombatPageContent({
@@ -282,6 +322,12 @@ export default function ScenarioPlayerCombatPageContent({
   const [combatContextDraft, setCombatContextDraft] = useState<ScenarioParticipantCombatContext>(
     createEmptyPlayerEncounterCombatContext(),
   );
+  const [phaseCombatContextDrafts, setPhaseCombatContextDrafts] = useState<
+    PlayerCombatPhaseContextDrafts
+  >({
+    phase1: createEmptyPlayerEncounterCombatContext(),
+    phase2: createEmptyPlayerEncounterCombatContext(),
+  });
   const [combatDeclarationDraftDirty, setCombatDeclarationDraftDirty] = useState(false);
   const [combatDeclarationDraftKey, setCombatDeclarationDraftKey] = useState("");
   const [savingCombatContext, setSavingCombatContext] = useState(false);
@@ -525,6 +571,10 @@ export default function ScenarioPlayerCombatPageContent({
       setSelectedMovementId("hold");
       setAdditionalActionNotes("");
       setCombatContextDraft(createEmptyPlayerEncounterCombatContext());
+      setPhaseCombatContextDrafts({
+        phase1: createEmptyPlayerEncounterCombatContext(),
+        phase2: createEmptyPlayerEncounterCombatContext(),
+      });
       setCombatDeclarationDraftDirty(false);
       setCombatDeclarationDraftKey(selectedCombatDeclarationDraftKey);
       return;
@@ -548,6 +598,7 @@ export default function ScenarioPlayerCombatPageContent({
     setSelectedMovementId(nextDraft.movementId);
     setAdditionalActionNotes(nextDraft.additionalActionNotes);
     setCombatContextDraft(nextDraft.combatContext);
+    setPhaseCombatContextDrafts(nextDraft.phaseContexts);
     setCombatDeclarationDraftDirty(false);
     setCombatDeclarationDraftKey(selectedCombatDeclarationDraftKey);
   }, [
@@ -694,13 +745,13 @@ export default function ScenarioPlayerCombatPageContent({
         hasOffHandWeapon: Boolean(loadoutFieldValueMap.get("secondary")),
         hasShield: Boolean(loadoutFieldValueMap.get("shield")),
         hasSelectedOpponent: true,
-        incomingAttackSide: combatContextDraft.incomingAttackSide,
-        parrySource: combatContextDraft.parrySource,
+        incomingAttackSide: phaseCombatContextDrafts.phase1.incomingAttackSide,
+        parrySource: phaseCombatContextDrafts.phase1.parrySource,
       }),
     [
-      combatContextDraft.incomingAttackSide,
-      combatContextDraft.parrySource,
       loadoutFieldValueMap,
+      phaseCombatContextDrafts.phase1.incomingAttackSide,
+      phaseCombatContextDrafts.phase1.parrySource,
       selectedActionId,
     ],
   );
@@ -809,6 +860,7 @@ export default function ScenarioPlayerCombatPageContent({
         combatContext: combatContextDraft,
         encounterId,
         movementId: selectedMovementId || undefined,
+        phaseContexts: phaseCombatContextDrafts,
         scenarioParticipantId: selectedParticipant.id,
         secondaryActionId: selectedSecondaryActionId || undefined,
       });
@@ -1022,9 +1074,6 @@ export default function ScenarioPlayerCombatPageContent({
       weaponName: selectedCombatReference.selectedWeapon,
     };
   }, [selectedCombatReference]);
-  const hasParryDirection = Boolean(
-    combatContextDraft.mainHandParryDirection || combatContextDraft.offHandParryDirection,
-  );
   const primaryLoadoutLabel = loadoutFieldDisplayMap.get("primary")?.valueLabel;
   const shieldLoadoutLabel = loadoutFieldDisplayMap.get("shield")?.valueLabel;
   const secondaryLoadoutLabel = loadoutFieldDisplayMap.get("secondary")?.valueLabel;
@@ -1036,10 +1085,15 @@ export default function ScenarioPlayerCombatPageContent({
       : secondaryLoadoutLabel && secondaryLoadoutLabel !== "None"
         ? secondaryLoadoutLabel
         : "Unarmed";
-  const selectedDefenseStats = useMemo<PlayerCombatDefenseStatsView | null>(() => {
+  const buildSelectedDefenseStats = (
+    phaseContext: ScenarioParticipantCombatContext,
+  ): PlayerCombatDefenseStatsView | null => {
     if (!selectedCombatReference) {
       return null;
     }
+    const hasPhaseParryDirection = Boolean(
+      phaseContext.mainHandParryDirection || phaseContext.offHandParryDirection,
+    );
 
     return {
       db: hasDisplayValue(selectedCombatReference.combinedDb)
@@ -1048,16 +1102,11 @@ export default function ScenarioPlayerCombatPageContent({
       dm: hasDisplayValue(selectedCombatReference.combinedDm)
         ? selectedCombatReference.combinedDm
         : selectedCombatReference.dm,
-      parry: hasParryDirection ? selectedCombatReference.parry : "incomplete",
+      parry: hasPhaseParryDirection ? selectedCombatReference.parry : "incomplete",
       sourceName:
         offHandParryItemLabel !== "Unarmed" ? offHandParryItemLabel : mainHandParryItemLabel,
     };
-  }, [
-    hasParryDirection,
-    mainHandParryItemLabel,
-    offHandParryItemLabel,
-    selectedCombatReference,
-  ]);
+  };
   const initiativeBase = useMemo(() => {
     const passiveInitiative = Number(selectedCombatReference?.initiative);
     const safePassiveInitiative = Number.isFinite(passiveInitiative) ? passiveInitiative : 0;
@@ -1079,27 +1128,17 @@ export default function ScenarioPlayerCombatPageContent({
       {
         description: selectedActionId ? "" : "No action selected yet.",
         phaseLabel: "Phase 1",
-        stats: selectedRoundParticipant?.initiatives.phase1
-          ? [
-              formatCombatInitiativeRoll(selectedRoundParticipant.initiatives.phase1),
-              formatCombatInitiativeFormula(selectedRoundParticipant.initiatives.phase1),
-            ]
-          : [],
+        stats: [],
         title: "",
       },
       {
         description: "",
         phaseLabel: "Phase 2",
-        stats: selectedRoundParticipant?.initiatives.phase2
-          ? [
-              formatCombatInitiativeRoll(selectedRoundParticipant.initiatives.phase2),
-              formatCombatInitiativeFormula(selectedRoundParticipant.initiatives.phase2),
-            ]
-          : [],
+        stats: [],
         title: "",
       },
     ] as const;
-  }, [selectedActionId, selectedRoundParticipant, selectedSecondaryActionId]);
+  }, [selectedActionId]);
 
   const hasMeaningfulDeclaration =
     Boolean(selectedActionId) ||
@@ -1115,6 +1154,28 @@ export default function ScenarioPlayerCombatPageContent({
         : undefined;
   const selectedCurrentInitiative = currentInitiativePhase
     ? selectedRoundParticipant?.initiatives[currentInitiativePhase]
+    : undefined;
+  const phase1InitiativePositions = useMemo(
+    () =>
+      combatRoundState
+        ? getCombatRoundInitiativePositions({ phase: "phase1", state: combatRoundState })
+        : {},
+    [combatRoundState],
+  );
+  const phase2InitiativePositions = useMemo(
+    () =>
+      combatRoundState
+        ? getCombatRoundInitiativePositions({ phase: "phase2", state: combatRoundState })
+        : {},
+    [combatRoundState],
+  );
+  const selectedCurrentInitiativeRankLabel = currentInitiativePhase
+    ? formatPlayerCombatInitiativeRank({
+        participantId: selectedRoundParticipant?.participantId,
+        positions:
+          currentInitiativePhase === "phase2" ? phase2InitiativePositions : phase1InitiativePositions,
+        value: getCombatRoundInitiativeTotal(selectedCurrentInitiative),
+      })
     : undefined;
   const playerDeclarationLocked =
     !isGameMaster &&
@@ -1281,10 +1342,13 @@ export default function ScenarioPlayerCombatPageContent({
             {phaseCards.map((phaseCard, index) => {
               const isPhaseOne = index === 0;
               const phaseActionId = isPhaseOne ? selectedActionId : selectedSecondaryActionId;
+              const phaseKey = isPhaseOne ? "phase1" : "phase2";
+              const phaseCombatContext = phaseCombatContextDrafts[phaseKey];
+              const phaseDefenseStats = buildSelectedDefenseStats(phaseCombatContext);
               const showsAttackStats =
                 selectedAttackStats && isPlayerEncounterAttackAction(phaseActionId);
               const showsDefenseContext =
-                selectedDefenseStats && isPlayerEncounterDefenseAction(phaseActionId);
+                phaseDefenseStats && isPlayerEncounterDefenseAction(phaseActionId);
 
               return (
                 <PlayerCombatPhasePanel key={phaseCard.phaseLabel} phaseCard={phaseCard}>
@@ -1293,15 +1357,18 @@ export default function ScenarioPlayerCombatPageContent({
                   ) : null}
                   {showsDefenseContext ? (
                     <>
-                      <PlayerCombatDefenseStatsTable stats={selectedDefenseStats} />
+                      <PlayerCombatDefenseStatsTable stats={phaseDefenseStats} />
                       <PlayerCombatParryContextPanel
-                        combatContext={combatContextDraft}
+                        combatContext={phaseCombatContext}
                         controlsDisabled={declarationControlsDisabled}
                         mainHandItemLabel={mainHandParryItemLabel}
                         offHandItemLabel={offHandParryItemLabel}
                         onCombatContextChange={(combatContext) => {
                           markCombatDeclarationDraftDirty();
-                          setCombatContextDraft(combatContext);
+                          setPhaseCombatContextDrafts((current) => ({
+                            ...current,
+                            [phaseKey]: combatContext,
+                          }));
                         }}
                       />
                     </>
@@ -1365,6 +1432,7 @@ export default function ScenarioPlayerCombatPageContent({
                   ? {
                       interpretedResult: formatCombatInitiativeFormula(selectedCurrentInitiative),
                       phaseLabel: formatCombatInitiativeRoll(selectedCurrentInitiative),
+                      rankLabel: selectedCurrentInitiativeRankLabel,
                       value: selectedCurrentInitiative.total,
                     }
                   : actionRollResult

@@ -239,6 +239,24 @@ describe("combat round manager", () => {
         actionId: "attack_parry",
         additionalActionNotes: "Hold the bridge.",
         movementId: "hold",
+        phaseContexts: {
+          phase1: {
+            mainHandParryDirection: "left",
+            modifierBuckets: {
+              general: [],
+              situationDb: [],
+              situationObSkill: [],
+            },
+          },
+          phase2: {
+            offHandParryDirection: "right_forward",
+            modifierBuckets: {
+              general: [],
+              situationDb: [],
+              situationObSkill: [],
+            },
+          },
+        },
         roundNumber: state.roundNumber,
         secondaryActionId: "observe_opponent",
         submittedAt: "2026-01-01T00:01:00.000Z",
@@ -259,6 +277,14 @@ describe("combat round manager", () => {
       actionId: "attack_parry",
       additionalActionNotes: "Hold the bridge.",
       movementId: "hold",
+      phaseContexts: {
+        phase1: expect.objectContaining({
+          mainHandParryDirection: "left",
+        }),
+        phase2: expect.objectContaining({
+          offHandParryDirection: "right_forward",
+        }),
+      },
       roundNumber: 3,
       secondaryActionId: "observe_opponent",
       submittedBy: "player",

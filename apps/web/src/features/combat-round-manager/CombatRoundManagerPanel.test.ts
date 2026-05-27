@@ -67,6 +67,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("buildCombatRoundInspector");
     expect(source).toContain("selectedRoundDeclaration");
     expect(source).toContain("buildInspectorDraftKey");
+    expect(source).toContain("buildInspectorPhaseContexts");
     expect(source).toContain("buildDeclarationDraft(selectedScenarioParticipant, selectedRoundDeclaration)");
     expect(source).toContain("draftKey.startsWith(`${participant.id}:`)");
     expect(source).toContain("PlayerCombatModifierPanel");
@@ -90,6 +91,10 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("formatInitiativeRankLabel");
     expect(source).toContain("rankLabel");
     expect(source).toContain("inspectorInitiativeBase");
+    expect(source).toContain("phaseContexts: inspectorDraft.phaseContexts");
+    expect(source).toContain('const phaseKey = index === 0 ? "phase1" : "phase2"');
+    expect(source).toContain("const phaseCombatContext = inspectorDraft.phaseContexts[phaseKey]");
+    expect(source).not.toContain("formatCombatInitiativeRoll(inspector.participant.initiatives.phase1)");
     expect(source).not.toContain("Action status:");
     expect(source).not.toContain("Damage review:");
     expect(source).toContain("PlayerCombatParryContextPanel");

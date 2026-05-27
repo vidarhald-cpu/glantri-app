@@ -19,6 +19,7 @@ import {
   resolveEncounterParticipantByRollParticipantId,
   resolveEncounterParticipantMembership,
   rollOpenEndedD6,
+  combatRoundPhaseContextsSchema,
   scenarioParticipantCombatContextSchema,
 } from "@glantri/domain";
 import type { ScenarioParticipant } from "@glantri/domain";
@@ -117,6 +118,7 @@ function parseCombatDeclarationBody(body: unknown): {
   additionalActionNotes?: string;
   combatContext: ReturnType<typeof scenarioParticipantCombatContextSchema.parse>;
   movementId?: string;
+  phaseContexts?: ReturnType<typeof combatRoundPhaseContextsSchema.parse>;
   scenarioParticipantId: string;
   secondaryActionId?: string;
 } {
@@ -133,6 +135,10 @@ function parseCombatDeclarationBody(body: unknown): {
       typeof value.additionalActionNotes === "string" ? value.additionalActionNotes : undefined,
     combatContext: scenarioParticipantCombatContextSchema.parse(value.combatContext ?? {}),
     movementId: parseOptionalDeclarationString(value.movementId),
+    phaseContexts:
+      value.phaseContexts === undefined
+        ? undefined
+        : combatRoundPhaseContextsSchema.parse(value.phaseContexts),
     scenarioParticipantId,
     secondaryActionId: parseOptionalDeclarationString(value.secondaryActionId),
   };
@@ -506,6 +512,26 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             existingContext: existingCombatContext,
             requestedContext: body.combatContext,
           });
+      const submittedPhaseContexts = body.phaseContexts
+        ? {
+            phase1: body.phaseContexts.phase1
+              ? gmAuthorizedOperation
+                ? body.phaseContexts.phase1
+                : preservePlayerCombatModifierBuckets({
+                    existingContext: existingCombatContext,
+                    requestedContext: body.phaseContexts.phase1,
+                  })
+              : undefined,
+            phase2: body.phaseContexts.phase2
+              ? gmAuthorizedOperation
+                ? body.phaseContexts.phase2
+                : preservePlayerCombatModifierBuckets({
+                    existingContext: existingCombatContext,
+                    requestedContext: body.phaseContexts.phase2,
+                  })
+              : undefined,
+          }
+        : undefined;
 
       if (!gmAuthorizedOperation) {
         if (
@@ -558,6 +584,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           additionalActionNotes: body.additionalActionNotes,
           combatContext: submittedCombatContext,
           movementId: body.movementId,
+          phaseContexts: submittedPhaseContexts,
           roundNumber: roundState.roundNumber,
           secondaryActionId: body.secondaryActionId,
           submittedAt,

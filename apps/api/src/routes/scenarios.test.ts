@@ -1508,6 +1508,24 @@ describe("scenarios route contract", () => {
           },
         },
         movementId: "hold",
+        phaseContexts: {
+          phase1: {
+            mainHandParryDirection: "left",
+            modifierBuckets: {
+              general: [],
+              situationDb: [],
+              situationObSkill: [],
+            },
+          },
+          phase2: {
+            offHandParryDirection: "right_forward",
+            modifierBuckets: {
+              general: [],
+              situationDb: [],
+              situationObSkill: [],
+            },
+          },
+        },
         scenarioParticipantId: "participant-1",
       },
       url: "/encounters/encounter-1/combat-declaration",
@@ -1536,6 +1554,14 @@ describe("scenarios route contract", () => {
     expect(updatedEncounter.combatRoundState.participants[0].declaration).toMatchObject({
       actionId: "attack_parry",
       movementId: "hold",
+      phaseContexts: {
+        phase1: expect.objectContaining({
+          mainHandParryDirection: "left",
+        }),
+        phase2: expect.objectContaining({
+          offHandParryDirection: "right_forward",
+        }),
+      },
       roundNumber: 1,
       submittedBy: "player",
       submittedByUserId: "player-1",

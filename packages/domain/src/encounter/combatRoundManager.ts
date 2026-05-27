@@ -77,11 +77,17 @@ export const combatRoundInitiativesSchema = z.object({
     .optional(),
 });
 
+export const combatRoundPhaseContextsSchema = z.object({
+  phase1: scenarioParticipantCombatContextSchema.optional(),
+  phase2: scenarioParticipantCombatContextSchema.optional(),
+});
+
 export const combatRoundDeclarationSchema = z.object({
   actionId: idSchema.optional(),
   additionalActionNotes: z.string().optional(),
   combatContext: scenarioParticipantCombatContextSchema.optional(),
   movementId: z.string().min(1).optional(),
+  phaseContexts: combatRoundPhaseContextsSchema.optional(),
   roundNumber: z.number().int().positive(),
   secondaryActionId: idSchema.optional(),
   submittedAt: z.string().datetime().optional(),
@@ -112,6 +118,7 @@ export const combatRoundStateSchema = z.object({
 
 export type CombatRoundStepStatus = z.infer<typeof combatRoundStepStatusSchema>;
 export type CombatRoundDeclaration = z.infer<typeof combatRoundDeclarationSchema>;
+export type CombatRoundPhaseContexts = z.infer<typeof combatRoundPhaseContextsSchema>;
 export type CombatRoundInitiativeResult = z.infer<typeof combatRoundInitiativeResultSchema>;
 export type CombatRoundInitiatives = z.infer<typeof combatRoundInitiativesSchema>;
 export type CombatRoundParticipantState = z.infer<typeof combatRoundParticipantStateSchema>;

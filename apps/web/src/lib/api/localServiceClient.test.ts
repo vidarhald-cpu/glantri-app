@@ -310,6 +310,24 @@ describe("localServiceClient wire contract", () => {
         },
         encounterId: "encounter-1",
         movementId: "hold",
+        phaseContexts: {
+          phase1: {
+            mainHandParryDirection: "left",
+            modifierBuckets: {
+              general: [],
+              situationDb: [],
+              situationObSkill: [],
+            },
+          },
+          phase2: {
+            offHandParryDirection: "right_forward",
+            modifierBuckets: {
+              general: [],
+              situationDb: [],
+              situationObSkill: [],
+            },
+          },
+        },
         scenarioParticipantId: "participant-1",
       }),
     ).resolves.toEqual({ encounter, participant });
@@ -326,6 +344,24 @@ describe("localServiceClient wire contract", () => {
           },
         },
         movementId: "hold",
+        phaseContexts: {
+          phase1: {
+            mainHandParryDirection: "left",
+            modifierBuckets: {
+              general: [],
+              situationDb: [],
+              situationObSkill: [],
+            },
+          },
+          phase2: {
+            offHandParryDirection: "right_forward",
+            modifierBuckets: {
+              general: [],
+              situationDb: [],
+              situationObSkill: [],
+            },
+          },
+        },
         scenarioParticipantId: "participant-1",
         secondaryActionId: undefined,
       },

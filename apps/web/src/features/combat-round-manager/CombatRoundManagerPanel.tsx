@@ -106,7 +106,28 @@ interface CombatInspectorDeclarationDraft {
   additionalActionNotes: string;
   combatContext: ScenarioParticipantCombatContext;
   movementId: PlayerEncounterMovementId | "";
+  phaseContexts: CombatInspectorPhaseContextDrafts;
   secondaryActionId: PlayerEncounterActionId | "";
+}
+
+interface CombatInspectorPhaseContextDrafts {
+  phase1: ScenarioParticipantCombatContext;
+  phase2: ScenarioParticipantCombatContext;
+}
+
+function buildInspectorPhaseContexts(
+  participant?: ScenarioParticipant,
+  declaration?: CombatRoundDeclaration,
+): CombatInspectorPhaseContextDrafts {
+  const fallbackContext =
+    declaration?.combatContext ??
+    participant?.state.combat.combatContext ??
+    createEmptyPlayerEncounterCombatContext();
+
+  return {
+    phase1: declaration?.phaseContexts?.phase1 ?? fallbackContext,
+    phase2: declaration?.phaseContexts?.phase2 ?? fallbackContext,
+  };
 }
 
 function getNextStepLabel(step: CombatRoundStep): string {
@@ -148,6 +169,7 @@ function buildDeclarationDraft(
     movementId: (declaration?.movementId ??
       participant?.state.combat.lastDeclaredMovementId ??
       "hold") as PlayerEncounterMovementId,
+    phaseContexts: buildInspectorPhaseContexts(participant, declaration),
     secondaryActionId: isPlayerEncounterActionId(declaration?.secondaryActionId)
       ? declaration.secondaryActionId
       : isPlayerEncounterActionId(participant?.state.combat.lastDeclaredSecondaryActionId)
@@ -177,7 +199,8 @@ function hasCombatRoundDeclarationAction(declaration?: CombatRoundDeclaration): 
       declaration?.secondaryActionId ||
       declaration?.movementId ||
       declaration?.additionalActionNotes ||
-      declaration?.combatContext,
+      declaration?.combatContext ||
+      declaration?.phaseContexts,
   );
 }
 
@@ -370,27 +393,17 @@ export default function CombatRoundManagerPanel({
       {
         description: "",
         phaseLabel: "Phase 1",
-        stats: inspector.participant.initiatives.phase1
-          ? [
-              formatCombatInitiativeRoll(inspector.participant.initiatives.phase1),
-              formatCombatInitiativeFormula(inspector.participant.initiatives.phase1),
-            ]
-          : [],
+        stats: [],
         title: "",
       },
       {
         description: "",
         phaseLabel: "Phase 2",
-        stats: inspector.participant.initiatives.phase2
-          ? [
-              formatCombatInitiativeRoll(inspector.participant.initiatives.phase2),
-              formatCombatInitiativeFormula(inspector.participant.initiatives.phase2),
-            ]
-          : [],
+        stats: [],
         title: "",
       },
     ];
-  }, [inspector.participant, phase1Positions, phase2Positions]);
+  }, [inspector.participant]);
   const inspectorInitiativeBase =
     (inspectorLiveModifiers.generalFatigueRaw ?? 0) + (inspectorLiveModifiers.obSkillRaw ?? 0);
   useEffect(() => {
@@ -634,6 +647,7 @@ export default function CombatRoundManagerPanel({
         combatContext: inspectorDraft.combatContext,
         encounterId: encounter.id,
         movementId: inspectorDraft.movementId || undefined,
+        phaseContexts: inspectorDraft.phaseContexts,
         scenarioParticipantId: selectedScenarioParticipant.id,
         secondaryActionId: inspectorDraft.secondaryActionId || undefined,
       });
@@ -986,18 +1000,25 @@ export default function CombatRoundManagerPanel({
                   {inspectorPhaseCards.map((phaseCard, index) => {
                     const phaseActionId =
                       index === 0 ? inspectorDraft.actionId : inspectorDraft.secondaryActionId;
+                    const phaseKey = index === 0 ? "phase1" : "phase2";
+                    const phaseCombatContext = inspectorDraft.phaseContexts[phaseKey];
                     const showsParryContext = isPlayerEncounterDefenseAction(phaseActionId);
 
                     return (
                       <PlayerCombatPhasePanel key={phaseCard.phaseLabel} phaseCard={phaseCard}>
                         {showsParryContext ? (
                           <PlayerCombatParryContextPanel
-                            combatContext={inspectorDraft.combatContext}
+                            combatContext={phaseCombatContext}
                             controlsDisabled={saving}
                             mainHandItemLabel="Main hand"
                             offHandItemLabel="Off hand/shield"
                             onCombatContextChange={(combatContext) =>
-                              updateInspectorDraft({ combatContext })
+                              updateInspectorDraft({
+                                phaseContexts: {
+                                  ...inspectorDraft.phaseContexts,
+                                  [phaseKey]: combatContext,
+                                },
+                              })
                             }
                           />
                         ) : null}

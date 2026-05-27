@@ -53,7 +53,9 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("formatCombatInitiativeRoll");
     expect(source).toContain("formatCombatInitiativeFormula");
     expect(source).toContain("initiativeBase");
+    expect(source).toContain("formatPlayerCombatInitiativeRank");
     expect(source).toContain("selectedCurrentInitiative");
+    expect(source).toContain("rankLabel: selectedCurrentInitiativeRankLabel");
     expect(source).toContain("declarationButtonLabel");
     expect(source).toContain("buttonLabel={declarationButtonLabel}");
     expect(source).toContain("window.setInterval");
@@ -61,6 +63,11 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("combatDeclarationDraftDirty");
     expect(source).toContain("buildPlayerCombatDeclarationDraftKey");
     expect(source).toContain("buildPlayerCombatDeclarationDraft");
+    expect(source).toContain("buildPlayerCombatPhaseContexts");
+    expect(source).toContain("phaseCombatContextDrafts");
+    expect(source).toContain("phaseContexts: phaseCombatContextDrafts");
+    expect(source).toContain('const phaseKey = isPhaseOne ? "phase1" : "phase2"');
+    expect(source).toContain("setPhaseCombatContextDrafts((current) => ({");
     expect(source).toContain("selectedRoundDeclaration");
     expect(source).toContain("markCombatDeclarationDraftDirty");
     expect(source).toContain("combatDeclarationDraftKey === selectedCombatDeclarationDraftKey");
@@ -74,6 +81,7 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("isPlayerEncounterDefenseAction");
     expect(source).not.toContain("movementLabel=");
     expect(source).not.toContain('description: selectedSecondaryActionId ? "" : "Open"');
+    expect(source).not.toContain("formatCombatInitiativeRoll(selectedRoundParticipant.initiatives.phase1)");
     expect(source).not.toContain("Attack - Parry ·");
     expect(source).not.toContain("visibleOpponentOptions");
     expect(source).toContain("isGameMaster");

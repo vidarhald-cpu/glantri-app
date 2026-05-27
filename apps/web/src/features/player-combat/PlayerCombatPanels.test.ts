@@ -89,6 +89,7 @@ describe("PlayerCombatPanels", () => {
     expect(source).toContain("formatCombatInitiativeRoll");
     expect(source).toContain("formatCombatInitiativeFormula");
     expect(source).toContain("Main: I ${baseInitiative} + [ ] 0 + roll ${rollTotal} = ${initiative.total}");
+    expect(source).toContain("rankLabel");
     expect(source).not.toContain("Movement:");
     expect(source).toContain("Mod");
     expect(source).toContain("Dur");
