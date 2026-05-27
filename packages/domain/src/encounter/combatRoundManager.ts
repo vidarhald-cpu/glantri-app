@@ -57,9 +57,22 @@ export const combatRoundStepStatusSchema = z.enum([
   "skipped",
 ]);
 
+export const combatRoundInitiativeResultSchema = z.object({
+  rolls: z.array(z.number().int().min(1).max(6)).default([]),
+  total: z.number().int(),
+});
+const legacyCombatRoundInitiativeResultSchema = z
+  .number()
+  .int()
+  .transform((total) => ({ rolls: [], total }));
+
 export const combatRoundInitiativesSchema = z.object({
-  phase1: z.number().int().optional(),
-  phase2: z.number().int().optional(),
+  phase1: z
+    .union([combatRoundInitiativeResultSchema, legacyCombatRoundInitiativeResultSchema])
+    .optional(),
+  phase2: z
+    .union([combatRoundInitiativeResultSchema, legacyCombatRoundInitiativeResultSchema])
+    .optional(),
 });
 
 export const combatRoundDeclarationSchema = z.object({
@@ -97,9 +110,52 @@ export const combatRoundStateSchema = z.object({
 
 export type CombatRoundStepStatus = z.infer<typeof combatRoundStepStatusSchema>;
 export type CombatRoundDeclaration = z.infer<typeof combatRoundDeclarationSchema>;
+export type CombatRoundInitiativeResult = z.infer<typeof combatRoundInitiativeResultSchema>;
 export type CombatRoundInitiatives = z.infer<typeof combatRoundInitiativesSchema>;
 export type CombatRoundParticipantState = z.infer<typeof combatRoundParticipantStateSchema>;
 export type CombatRoundState = z.infer<typeof combatRoundStateSchema>;
+
+export function rollOpenEndedD6(input: {
+  maxRolls?: number;
+  randomFn?: () => number;
+} = {}): CombatRoundInitiativeResult & { isOpenEnded: boolean } {
+  const randomFn = input.randomFn ?? Math.random;
+  const maxRolls = input.maxRolls ?? 100;
+  const rolls: number[] = [];
+
+  for (let index = 0; index < maxRolls; index += 1) {
+    const roll = Math.min(6, Math.max(1, Math.floor(randomFn() * 6) + 1));
+    rolls.push(roll);
+
+    if (roll !== 6) {
+      break;
+    }
+  }
+
+  return {
+    isOpenEnded: rolls.length > 1,
+    rolls,
+    total: rolls.reduce((sum, roll) => sum + roll, 0),
+  };
+}
+
+function normalizeCombatRoundInitiativeResult(
+  initiative: CombatRoundInitiativeResult | number | undefined,
+): CombatRoundInitiativeResult | undefined {
+  if (initiative === undefined) {
+    return undefined;
+  }
+
+  return combatRoundInitiativeResultSchema.parse(
+    typeof initiative === "number" ? { rolls: [], total: initiative } : initiative,
+  );
+}
+
+export function getCombatRoundInitiativeTotal(
+  initiative?: CombatRoundInitiativeResult,
+): number | undefined {
+  return initiative?.total;
+}
 
 function buildDefaultStepStatuses(): Record<CombatRoundStep, CombatRoundStepStatus> {
   return Object.fromEntries(COMBAT_ROUND_STEPS.map((step) => [step, "pending"])) as Record<
@@ -265,7 +321,7 @@ export function getCombatRoundInitiativePhaseForStep(
 }
 
 export function recordCombatRoundInitiative(input: {
-  initiative: number;
+  initiative: CombatRoundInitiativeResult | number;
   participantId: string;
   phase: "phase1" | "phase2";
   state: CombatRoundState;
@@ -416,12 +472,13 @@ export function setCombatRoundSelection(input: {
 }
 
 export function setCombatRoundParticipantInitiative(input: {
-  initiative?: number;
+  initiative?: CombatRoundInitiativeResult | number;
   participantId: string;
   phase: "phase1" | "phase2";
   state: CombatRoundState;
 }): CombatRoundState {
   const normalized = combatRoundStateSchema.parse(input.state);
+  const initiative = normalizeCombatRoundInitiativeResult(input.initiative);
 
   return {
     ...normalized,
@@ -431,7 +488,7 @@ export function setCombatRoundParticipantInitiative(input: {
             ...participant,
             initiatives: {
               ...participant.initiatives,
-              [input.phase]: input.initiative,
+              [input.phase]: initiative,
             },
           }
         : participant,
@@ -473,8 +530,8 @@ export function sortCombatRoundParticipantsByInitiative(input: {
   );
 
   return [...normalized.participants].sort((left, right) => {
-    const leftInitiative = left.initiatives[input.phase];
-    const rightInitiative = right.initiatives[input.phase];
+    const leftInitiative = getCombatRoundInitiativeTotal(left.initiatives[input.phase]);
+    const rightInitiative = getCombatRoundInitiativeTotal(right.initiatives[input.phase]);
 
     if (leftInitiative !== undefined && rightInitiative !== undefined) {
       return (
@@ -508,7 +565,7 @@ export function getCombatRoundInitiativePositions(input: {
   let nextPosition = 1;
 
   for (const participant of sortedParticipants) {
-    if (participant.initiatives[input.phase] === undefined) {
+    if (getCombatRoundInitiativeTotal(participant.initiatives[input.phase]) === undefined) {
       continue;
     }
 

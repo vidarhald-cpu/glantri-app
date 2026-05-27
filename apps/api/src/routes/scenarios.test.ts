@@ -1852,12 +1852,13 @@ describe("scenarios route contract", () => {
     await app.close();
 
     expect(response.statusCode).toBe(200);
-    expect(response.json().initiative).toBeGreaterThanOrEqual(1);
-    expect(response.json().initiative).toBeLessThanOrEqual(20);
+    expect(response.json().initiative.total).toBeGreaterThanOrEqual(1);
+    expect(response.json().initiative.rolls.length).toBeGreaterThanOrEqual(1);
     const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
-    expect(updatedEncounter.combatRoundState.participants[0].initiatives.phase1).toBe(
-      response.json().initiative,
-    );
+    expect(updatedEncounter.combatRoundState.participants[0].initiatives.phase1).toMatchObject({
+      rolls: response.json().initiative.rolls,
+      total: response.json().initiative.total,
+    });
     expect(
       updatedEncounter.combatRoundState.participants[0].stepStatuses.initiative_phase_1,
     ).toBe("submitted");
@@ -1870,7 +1871,7 @@ describe("scenarios route contract", () => {
           currentStep: "initiative_phase_2",
           participants: [
             {
-              initiatives: { phase1: 12 },
+              initiatives: { phase1: { rolls: [6, 6], total: 12 } },
               label: "The Gladiator",
               participantId: "encounter-participant-1",
               stepStatuses: {
@@ -1906,9 +1907,10 @@ describe("scenarios route contract", () => {
 
     expect(response.statusCode).toBe(200);
     const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
-    expect(updatedEncounter.combatRoundState.participants[0].initiatives.phase2).toBe(
-      response.json().initiative,
-    );
+    expect(updatedEncounter.combatRoundState.participants[0].initiatives.phase2).toMatchObject({
+      rolls: response.json().initiative.rolls,
+      total: response.json().initiative.total,
+    });
     expect(
       updatedEncounter.combatRoundState.participants[0].stepStatuses.initiative_phase_2,
     ).toBe("gmEdited");

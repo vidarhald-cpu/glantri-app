@@ -10,6 +10,8 @@ import {
   getPlayerEncounterCombatModifierTotals,
   getPlayerEncounterMovementLabel,
   getPlayerEncounterOpponentParticipants,
+  getPlayerEncounterParryCoverageDirection,
+  getPlayerEncounterParryDirectionLabel,
 } from "./playerEncounter";
 
 function createScenarioParticipant(
@@ -211,6 +213,13 @@ describe("playerEncounter", () => {
       resolvedParrySource: "shield",
       status: "legal",
     });
+  });
+
+  it("maps parry direction coverage two steps to the right with edge clamping", () => {
+    expect(getPlayerEncounterParryCoverageDirection("left")).toBe("forward");
+    expect(getPlayerEncounterParryCoverageDirection("left_forward")).toBe("right_forward");
+    expect(getPlayerEncounterParryCoverageDirection("right")).toBe("right_backward");
+    expect(getPlayerEncounterParryDirectionLabel("left_backward")).toBe("Left/backward");
   });
 
   it("provides an empty persisted combat context shape", () => {

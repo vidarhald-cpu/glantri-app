@@ -123,6 +123,15 @@ export const scenarioParticipantParrySourceSchema = z.enum([
   "offHand",
   "shield"
 ]);
+export const scenarioParticipantParryDirectionSchema = z.enum([
+  "left_backward",
+  "left",
+  "left_forward",
+  "forward",
+  "right_forward",
+  "right",
+  "right_backward"
+]);
 
 export const scenarioCombatModifierEntrySchema = z.object({
   id: idSchema,
@@ -133,6 +142,7 @@ export const scenarioCombatModifierEntrySchema = z.object({
 
 export const scenarioParticipantCombatContextSchema = z.object({
   incomingAttackSide: scenarioParticipantIncomingAttackSideSchema.optional(),
+  mainHandParryDirection: scenarioParticipantParryDirectionSchema.optional(),
   modifierBuckets: z
     .object({
       general: z.array(scenarioCombatModifierEntrySchema).default([]),
@@ -144,6 +154,7 @@ export const scenarioParticipantCombatContextSchema = z.object({
       situationDb: [],
       situationObSkill: []
     }),
+  offHandParryDirection: scenarioParticipantParryDirectionSchema.optional(),
   parrySource: scenarioParticipantParrySourceSchema.optional(),
   selectedOpponentId: idSchema.optional()
 });
@@ -373,6 +384,9 @@ export type ScenarioCombatModifierScope = z.infer<typeof scenarioCombatModifierS
 export type ScenarioCombatModifierBucket = z.infer<typeof scenarioCombatModifierBucketSchema>;
 export type ScenarioParticipantIncomingAttackSide = z.infer<
   typeof scenarioParticipantIncomingAttackSideSchema
+>;
+export type ScenarioParticipantParryDirection = z.infer<
+  typeof scenarioParticipantParryDirectionSchema
 >;
 export type ScenarioParticipantParrySource = z.infer<typeof scenarioParticipantParrySourceSchema>;
 export type ScenarioCombatModifierEntry = z.infer<typeof scenarioCombatModifierEntrySchema>;

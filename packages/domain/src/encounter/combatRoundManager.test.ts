@@ -18,6 +18,7 @@ import {
   recordCombatRoundDeclaration,
   recordCombatRoundInitiative,
   recordCombatRoundParticipantStepReview,
+  rollOpenEndedD6,
   setCombatRoundActiveParticipant,
   setCombatRoundParticipantInitiative,
   setCombatRoundParticipantStepStatus,
@@ -164,7 +165,7 @@ describe("combat round manager", () => {
       step: "initiative_phase_1",
     });
 
-    expect(state.participants[0]?.initiatives.phase1).toBe(14);
+    expect(state.participants[0]?.initiatives.phase1).toEqual({ rolls: [], total: 14 });
     expect(cleared.participants[0]?.initiatives.phase1).toBeUndefined();
   });
 
@@ -284,9 +285,32 @@ describe("combat round manager", () => {
     });
 
     expect(state.currentStep).toBe("initiative_phase_1");
-    expect(nextState.participants[0]?.initiatives.phase1).toBe(18);
+    expect(nextState.participants[0]?.initiatives.phase1).toEqual({ rolls: [], total: 18 });
     expect(nextState.participants[0]?.stepStatuses.initiative_phase_1).toBe("submitted");
     expect(canPlayerRollCombatInitiative({ participantId: "gladiator", phase: "phase1", state: nextState })).toBe(false);
+  });
+
+  it("rolls open-ended d6 initiative", () => {
+    const openedOnceValues = [5 / 6, 1 / 6];
+    const openedTwiceValues = [5 / 6, 5 / 6, 3 / 6];
+    const singleRoll = rollOpenEndedD6({ randomFn: () => 2 / 6 });
+    const openedOnce = rollOpenEndedD6({
+      randomFn: () => openedOnceValues.shift() ?? 0,
+    });
+    const openedTwice = rollOpenEndedD6({
+      randomFn: () => openedTwiceValues.shift() ?? 0,
+    });
+
+    expect(singleRoll).toMatchObject({ isOpenEnded: false, rolls: [3], total: 3 });
+    expect(openedOnce).toMatchObject({ isOpenEnded: true, rolls: [6, 2], total: 8 });
+    expect(openedTwice).toMatchObject({ isOpenEnded: true, rolls: [6, 6, 4], total: 16 });
+  });
+
+  it("guards open-ended initiative against endless sixes", () => {
+    const result = rollOpenEndedD6({ maxRolls: 3, randomFn: () => 0.999 });
+
+    expect(result.rolls).toEqual([6, 6, 6]);
+    expect(result.total).toBe(18);
   });
 
   it("records participant step reviews without creating modifier data", () => {

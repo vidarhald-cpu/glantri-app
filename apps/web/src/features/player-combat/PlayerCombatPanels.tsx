@@ -3,19 +3,21 @@
 import type { ReactNode } from "react";
 
 import type {
+  CombatRoundInitiativeResult,
   CombatRoundStep,
   ScenarioCombatModifierBucket,
   ScenarioCombatModifierEntry,
   ScenarioParticipantCombatContext,
+  ScenarioParticipantParryDirection,
 } from "@glantri/domain";
 
 import {
   createEmptyPlayerEncounterCombatContext,
-  getPlayerEncounterParrySourceLabel,
   PLAYER_ENCOUNTER_ACTION_OPTIONS,
-  PLAYER_ENCOUNTER_INCOMING_ATTACK_SIDE_OPTIONS,
+  PLAYER_ENCOUNTER_PARRY_DIRECTION_OPTIONS,
   PLAYER_ENCOUNTER_MOVEMENT_OPTIONS,
-  PLAYER_ENCOUNTER_PARRY_SOURCE_OPTIONS,
+  getPlayerEncounterParryCoverageDirection,
+  getPlayerEncounterParryDirectionLabel,
   getPlayerEncounterCombatModifierTotals,
   type PlayerEncounterActionId,
   type PlayerEncounterMovementId,
@@ -36,6 +38,15 @@ export interface PlayerCombatPhaseCardView {
   phaseLabel: string;
   stats: readonly string[];
   title: string;
+}
+
+export interface PlayerCombatAttackStatsView {
+  attackMode: string;
+  dmb: string;
+  initiative: string;
+  maxCrits: string;
+  ob: string;
+  weaponName: string;
 }
 
 interface PlayerCombatModifierPanelProps {
@@ -59,20 +70,26 @@ interface PlayerCombatPhasePanelProps {
 interface PlayerCombatActionSelectorPanelProps {
   actionId: PlayerEncounterActionId | "";
   additionalActionNotes: string;
-  combatContext: ScenarioParticipantCombatContext;
   controlsDisabled?: boolean;
   movementId: PlayerEncounterMovementId | "";
   onActionChange: (actionId: PlayerEncounterActionId | "") => void;
   onAdditionalActionNotesChange: (notes: string) => void;
-  onCombatContextChange: (combatContext: ScenarioParticipantCombatContext) => void;
   onMovementChange: (movementId: PlayerEncounterMovementId | "") => void;
   onSecondaryActionChange: (actionId: PlayerEncounterActionId | "") => void;
-  parryLegality?: {
-    reason?: string;
-    resolvedParrySource?: "auto" | "mainHand" | "offHand" | "shield";
-    status: "incomplete" | "legal" | "not_legal";
-  };
+  roundNumber?: number;
   secondaryActionId: PlayerEncounterActionId | "";
+}
+
+interface PlayerCombatAttackStatsTableProps {
+  stats: PlayerCombatAttackStatsView;
+}
+
+interface PlayerCombatParryContextPanelProps {
+  combatContext: ScenarioParticipantCombatContext;
+  controlsDisabled?: boolean;
+  mainHandItemLabel?: string;
+  offHandItemLabel?: string;
+  onCombatContextChange: (combatContext: ScenarioParticipantCombatContext) => void;
   visibleOpponentOptions?: readonly { displayName: string; id: string }[];
 }
 
@@ -126,7 +143,7 @@ export function getGmCombatStepActionLabel(step: CombatRoundStep): string {
     case "review_action_modifiers":
       return "Declare modifiers";
     case "initiative_phase_1":
-      return "Roll phase 1 initiative";
+      return "Set/Roll phase 1 initiative";
     case "phase_1_actions":
       return "Record phase 1 action";
     case "review_phase_2_actions":
@@ -134,7 +151,7 @@ export function getGmCombatStepActionLabel(step: CombatRoundStep): string {
     case "review_phase_2_modifiers":
       return "Review phase 2";
     case "initiative_phase_2":
-      return "Roll phase 2 initiative";
+      return "Set/Roll phase 2 initiative";
     case "phase_2_actions":
       return "Record phase 2 action";
     case "review_phase_2_damage":
@@ -333,21 +350,18 @@ export function PlayerCombatModifierPanel({
 export function PlayerCombatActionSelectorPanel({
   actionId,
   additionalActionNotes,
-  combatContext,
   controlsDisabled = false,
   movementId,
   onActionChange,
   onAdditionalActionNotesChange,
-  onCombatContextChange,
   onMovementChange,
   onSecondaryActionChange,
-  parryLegality,
+  roundNumber,
   secondaryActionId,
-  visibleOpponentOptions = [],
 }: PlayerCombatActionSelectorPanelProps) {
   return (
     <section style={playerCombatPanelCardStyle}>
-      <strong>Action selector</strong>
+      <strong>Action selector{roundNumber ? ` · Round ${roundNumber}` : ""}</strong>
       <label style={{ display: "grid", gap: "0.25rem" }}>
         <span>Action</span>
         <select
@@ -409,95 +423,6 @@ export function PlayerCombatActionSelectorPanel({
           value={additionalActionNotes}
         />
       </label>
-
-      {actionId === "attack_parry" ? (
-        <div
-          style={{
-            borderTop: "1px solid #e3e1dc",
-            display: "grid",
-            gap: "0.5rem",
-            paddingTop: "0.6rem",
-          }}
-        >
-          <strong>Parry context</strong>
-          <label style={{ display: "grid", gap: "0.25rem" }}>
-            <span>Opponent</span>
-            <select
-              disabled={controlsDisabled}
-              onChange={(event) =>
-                onCombatContextChange({
-                  ...combatContext,
-                  selectedOpponentId: event.target.value || undefined,
-                })
-              }
-              value={combatContext.selectedOpponentId ?? ""}
-            >
-              <option value="">Choose opponent</option>
-              {visibleOpponentOptions.map((participant) => (
-                <option key={participant.id} value={participant.id}>
-                  {participant.displayName}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label style={{ display: "grid", gap: "0.25rem" }}>
-            <span>Incoming attack side</span>
-            <select
-              disabled={controlsDisabled}
-              onChange={(event) =>
-                onCombatContextChange({
-                  ...combatContext,
-                  incomingAttackSide: event.target.value
-                    ? (event.target.value as ScenarioParticipantCombatContext["incomingAttackSide"])
-                    : undefined,
-                })
-              }
-              value={combatContext.incomingAttackSide ?? ""}
-            >
-              <option value="">Choose side</option>
-              {PLAYER_ENCOUNTER_INCOMING_ATTACK_SIDE_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label style={{ display: "grid", gap: "0.25rem" }}>
-            <span>Parry source</span>
-            <select
-              disabled={controlsDisabled}
-              onChange={(event) =>
-                onCombatContextChange({
-                  ...combatContext,
-                  parrySource: event.target.value
-                    ? (event.target.value as ScenarioParticipantCombatContext["parrySource"])
-                    : undefined,
-                })
-              }
-              value={combatContext.parrySource ?? ""}
-            >
-              <option value="">Choose source</option>
-              {PLAYER_ENCOUNTER_PARRY_SOURCE_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          {parryLegality ? (
-            <div style={{ color: "#5e5a50", fontSize: "0.92rem" }}>
-              Parry status:{" "}
-              {parryLegality.status === "legal"
-                ? `Legal (${getPlayerEncounterParrySourceLabel(
-                    parryLegality.resolvedParrySource ?? "auto",
-                  )})`
-                : parryLegality.status === "not_legal"
-                  ? `Not legal — ${parryLegality.reason}`
-                  : `Incomplete context (${parryLegality.reason})`}
-            </div>
-          ) : null}
-        </div>
-      ) : null}
     </section>
   );
 }
@@ -568,6 +493,185 @@ export function PlayerCombatActionResultPanel({
   );
 }
 
+export function formatCombatInitiativeRoll(initiative?: CombatRoundInitiativeResult): string {
+  if (!initiative) {
+    return "No initiative rolled.";
+  }
+
+  const rollText =
+    initiative.rolls.length > 0 ? initiative.rolls.join(" + ") : String(initiative.total);
+
+  return `Roll: ${rollText} = ${initiative.total}`;
+}
+
+export function PlayerCombatAttackStatsTable({ stats }: PlayerCombatAttackStatsTableProps) {
+  return (
+    <div style={{ display: "grid", gap: "0.35rem" }}>
+      <strong style={{ fontSize: "0.95rem" }}>{stats.weaponName}</strong>
+      <table
+        style={{
+          borderCollapse: "collapse",
+          fontSize: "0.9rem",
+          width: "100%",
+        }}
+      >
+        <thead>
+          <tr>
+            {["I", "OB", "DMB", "AM", "MC"].map((heading) => (
+              <th
+                key={heading}
+                style={{
+                  borderBottom: "1px solid #d9ddd8",
+                  padding: "0.2rem",
+                  textAlign: "left",
+                }}
+              >
+                {heading}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            {[stats.initiative, stats.ob, stats.dmb, stats.attackMode, stats.maxCrits].map(
+              (value, index) => (
+                <td
+                  key={`${value}-${index}`}
+                  style={{
+                    borderBottom: "1px solid #ece8dc",
+                    padding: "0.2rem",
+                  }}
+                >
+                  {value}
+                </td>
+              ),
+            )}
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function ParryDirectionSelector({
+  controlsDisabled,
+  direction,
+  itemLabel,
+  onChange,
+}: {
+  controlsDisabled?: boolean;
+  direction?: ScenarioParticipantParryDirection;
+  itemLabel: string;
+  onChange: (direction: ScenarioParticipantParryDirection | undefined) => void;
+}) {
+  const coverageDirection = direction
+    ? getPlayerEncounterParryCoverageDirection(direction)
+    : undefined;
+
+  return (
+    <label style={{ display: "grid", gap: "0.25rem" }}>
+      <span>{itemLabel}</span>
+      <select
+        disabled={controlsDisabled}
+        onChange={(event) =>
+          onChange(
+            event.target.value
+              ? (event.target.value as ScenarioParticipantParryDirection)
+              : undefined,
+          )
+        }
+        value={direction ?? ""}
+      >
+        <option value="">Choose direction</option>
+        {PLAYER_ENCOUNTER_PARRY_DIRECTION_OPTIONS.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+      <span style={{ color: "#5e5a50", fontSize: "0.86rem" }}>
+        {direction && coverageDirection
+          ? `${itemLabel}: ${getPlayerEncounterParryDirectionLabel(
+              direction,
+            )} to ${getPlayerEncounterParryDirectionLabel(coverageDirection)}`
+          : `${itemLabel}: no coverage direction selected`}
+      </span>
+    </label>
+  );
+}
+
+export function PlayerCombatParryContextPanel({
+  combatContext,
+  controlsDisabled = false,
+  mainHandItemLabel = "Unarmed",
+  offHandItemLabel = "Unarmed",
+  onCombatContextChange,
+  visibleOpponentOptions = [],
+}: PlayerCombatParryContextPanelProps) {
+  return (
+    <div
+      style={{
+        borderTop: "1px solid #e3e1dc",
+        display: "grid",
+        gap: "0.55rem",
+        paddingTop: "0.55rem",
+      }}
+    >
+      <strong style={{ fontSize: "0.95rem" }}>Parry context</strong>
+      <label style={{ display: "grid", gap: "0.25rem" }}>
+        <span>Opponent</span>
+        <select
+          disabled={controlsDisabled}
+          onChange={(event) =>
+            onCombatContextChange({
+              ...combatContext,
+              selectedOpponentId: event.target.value || undefined,
+            })
+          }
+          value={combatContext.selectedOpponentId ?? ""}
+        >
+          <option value="">Choose opponent</option>
+          {visibleOpponentOptions.map((participant) => (
+            <option key={participant.id} value={participant.id}>
+              {participant.displayName}
+            </option>
+          ))}
+        </select>
+      </label>
+      <div
+        style={{
+          display: "grid",
+          gap: "0.5rem",
+          gridTemplateColumns: "repeat(auto-fit, minmax(10rem, 1fr))",
+        }}
+      >
+        <ParryDirectionSelector
+          controlsDisabled={controlsDisabled}
+          direction={combatContext.mainHandParryDirection}
+          itemLabel={mainHandItemLabel || "Unarmed"}
+          onChange={(mainHandParryDirection) =>
+            onCombatContextChange({
+              ...combatContext,
+              mainHandParryDirection,
+            })
+          }
+        />
+        <ParryDirectionSelector
+          controlsDisabled={controlsDisabled}
+          direction={combatContext.offHandParryDirection}
+          itemLabel={offHandItemLabel || "Unarmed"}
+          onChange={(offHandParryDirection) =>
+            onCombatContextChange({
+              ...combatContext,
+              offHandParryDirection,
+            })
+          }
+        />
+      </div>
+    </div>
+  );
+}
+
 export function PlayerCombatPhasePanel({ children, phaseCard }: PlayerCombatPhasePanelProps) {
   return (
     <section
@@ -578,7 +682,9 @@ export function PlayerCombatPhasePanel({ children, phaseCard }: PlayerCombatPhas
       }}
     >
       <strong>{phaseCard.phaseLabel}</strong>
-      <div style={{ fontSize: "1.05rem", fontWeight: 600 }}>{phaseCard.title}</div>
+      {phaseCard.title ? (
+        <div style={{ color: "#5e5a50", fontSize: "0.95rem" }}>{phaseCard.title}</div>
+      ) : null}
       <div style={{ color: "#5e5a50" }}>{phaseCard.description}</div>
       {children}
       {phaseCard.stats.length > 0 ? (

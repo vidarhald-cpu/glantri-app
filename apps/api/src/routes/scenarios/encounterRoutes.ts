@@ -17,6 +17,7 @@ import {
   recordCombatRoundParticipantStepReview,
   resolveEncounterParticipantByRollParticipantId,
   resolveEncounterParticipantMembership,
+  rollOpenEndedD6,
   scenarioParticipantCombatContextSchema,
 } from "@glantri/domain";
 import type { ScenarioParticipant } from "@glantri/domain";
@@ -147,10 +148,6 @@ function parseParticipantCommandBody(body: unknown, label: string): {
   }
 
   return { scenarioParticipantId };
-}
-
-function rollCombatInitiative(): number {
-  return Math.floor(Math.random() * 20) + 1;
 }
 
 function clearScenarioParticipantCombatDeclaration(
@@ -679,7 +676,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         }
       }
 
-      const rolledInitiative = rollCombatInitiative();
+      const rolledInitiative = rollOpenEndedD6();
       const submittedAt = new Date().toISOString();
       const nextRoundState = recordCombatRoundInitiative({
         initiative: rolledInitiative,

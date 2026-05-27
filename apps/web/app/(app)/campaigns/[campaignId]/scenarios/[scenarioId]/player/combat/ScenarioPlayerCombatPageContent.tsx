@@ -23,12 +23,16 @@ import {
   buildPlayerCombatModifierRows,
   getPlayerCombatActionButtonLabel,
   getPlayerCombatStepLabel,
+  formatCombatInitiativeRoll,
+  PlayerCombatAttackStatsTable,
   PlayerCombatActionButtonPanel,
   PlayerCombatActionResultPanel,
   PlayerCombatActionSelectorPanel,
   PlayerCombatModifierPanel,
+  PlayerCombatParryContextPanel,
   PlayerCombatPhasePanel,
   playerCombatPanelRowStyle,
+  type PlayerCombatAttackStatsView,
 } from "@/features/player-combat/PlayerCombatPanels";
 import type { EquipmentFeatureState } from "@/features/equipment/types";
 import { useSessionUser } from "@/lib/auth/SessionUserContext";
@@ -39,7 +43,6 @@ import {
   evaluatePlayerEncounterParryLegality,
   getPlayerEncounterAccessibleParticipants,
   getPlayerEncounterMovementLabel,
-  getPlayerEncounterParrySourceLabel,
   isPlayerEncounterActionId,
   type PlayerEncounterActionId,
   type PlayerEncounterMovementId,
@@ -1022,6 +1025,38 @@ export default function ScenarioPlayerCombatPageContent({
     };
   }, [combatPanelModel, loadoutFieldDisplayMap, selectedActionId, selectedSecondaryActionId]);
 
+  const selectedAttackStats = useMemo<PlayerCombatAttackStatsView | null>(() => {
+    if (!selectedCombatReference) {
+      return null;
+    }
+
+    return {
+      attackMode: selectedCombatReference.am,
+      dmb: selectedCombatReference.dmb,
+      initiative: selectedCombatReference.initiative,
+      maxCrits: `${selectedCombatReference.crit}${
+        hasDisplayValue(selectedCombatReference.secondCrit)
+          ? ` / ${selectedCombatReference.secondCrit}`
+          : ""
+      }`,
+      ob: selectedCombatReference.ob,
+      weaponName: selectedCombatReference.selectedWeapon,
+    };
+  }, [selectedCombatReference]);
+  const mainHandParryItemLabel =
+    loadoutFieldDisplayMap.get("primary")?.valueLabel &&
+    loadoutFieldDisplayMap.get("primary")?.valueLabel !== "None"
+      ? loadoutFieldDisplayMap.get("primary")?.valueLabel
+      : "Unarmed";
+  const offHandParryItemLabel =
+    loadoutFieldDisplayMap.get("shield")?.valueLabel &&
+    loadoutFieldDisplayMap.get("shield")?.valueLabel !== "None"
+      ? loadoutFieldDisplayMap.get("shield")?.valueLabel
+      : loadoutFieldDisplayMap.get("secondary")?.valueLabel &&
+          loadoutFieldDisplayMap.get("secondary")?.valueLabel !== "None"
+        ? loadoutFieldDisplayMap.get("secondary")?.valueLabel
+        : "Unarmed";
+
   const phaseCards = useMemo(() => {
     if (selectedActionId === "attack_parry" && selectedCombatReference) {
       const phaseTwoDb = hasDisplayValue(selectedCombatReference.combinedDb)
@@ -1038,27 +1073,17 @@ export default function ScenarioPlayerCombatPageContent({
 
       return [
         {
-          description: selectedCombatReference.selectedWeapon,
+          description: `${phaseSummary.phaseOne} · ${getPlayerEncounterMovementLabel(
+            selectedMovementId,
+          )}`,
           phaseLabel: "Phase 1",
-          stats: [
-            `I: ${selectedCombatReference.initiative}`,
-            `OB: ${selectedCombatReference.ob}`,
-            `DMB: ${selectedCombatReference.dmb}`,
-            `AM: ${selectedCombatReference.am}`,
-            `Max Crits: ${selectedCombatReference.crit}${
-              hasDisplayValue(selectedCombatReference.secondCrit)
-                ? ` / ${selectedCombatReference.secondCrit}`
-                : ""
-            }`,
-          ],
-          title: "Attack",
+          stats: [],
+          title: "",
         },
         {
           description:
             parryLegality.status === "legal"
-              ? `${selectedCombatReference.selectedWeapon} defence via ${getPlayerEncounterParrySourceLabel(
-                  parryLegality.resolvedParrySource ?? "auto",
-                )}`
+              ? `${phaseSummary.phaseTwo} · ${getPlayerEncounterMovementLabel(selectedMovementId)}`
               : `Parry status: ${parryLegality.reason}`,
           phaseLabel: "Phase 2",
           stats: [
@@ -1073,7 +1098,7 @@ export default function ScenarioPlayerCombatPageContent({
             }`,
             ...(combinedDefenseNote ? [combinedDefenseNote] : []),
           ],
-          title: "Parry",
+          title: "",
         },
       ] as const;
     }
@@ -1094,7 +1119,7 @@ export default function ScenarioPlayerCombatPageContent({
                 `DB: ${selectedCombatReference.db}`,
               ]
             : [],
-        title: phaseSummary.phaseOne,
+        title: "",
       },
       {
         description: selectedSecondaryActionId
@@ -1110,7 +1135,7 @@ export default function ScenarioPlayerCombatPageContent({
                 `Enc: ${selectedCombatReference.encumbrance}`,
               ]
             : [],
-        title: phaseSummary.phaseTwo,
+        title: "",
       },
     ] as const;
   }, [
@@ -1135,6 +1160,9 @@ export default function ScenarioPlayerCombatPageContent({
       : currentCombatStep === "initiative_phase_2"
         ? "phase2"
         : undefined;
+  const selectedCurrentInitiative = currentInitiativePhase
+    ? selectedRoundParticipant?.initiatives[currentInitiativePhase]
+    : undefined;
   const playerDeclarationLocked =
     !isGameMaster &&
     (!declarationStepOpen ||
@@ -1149,7 +1177,7 @@ export default function ScenarioPlayerCombatPageContent({
         : undefined;
   const selectedParticipantRolledCurrentInitiative = Boolean(
     currentInitiativePhase &&
-      selectedRoundParticipant?.initiatives[currentInitiativePhase] !== undefined,
+      selectedCurrentInitiative !== undefined,
   );
   const canUseInitiativeButton =
     Boolean(currentInitiativePhase) &&
@@ -1276,7 +1304,6 @@ export default function ScenarioPlayerCombatPageContent({
             <PlayerCombatActionSelectorPanel
               actionId={selectedActionId}
               additionalActionNotes={additionalActionNotes}
-              combatContext={combatContextDraft}
               controlsDisabled={declarationControlsDisabled}
               movementId={selectedMovementId}
               onActionChange={(actionId) => {
@@ -1287,10 +1314,6 @@ export default function ScenarioPlayerCombatPageContent({
                 markCombatDeclarationDraftDirty();
                 setAdditionalActionNotes(notes);
               }}
-              onCombatContextChange={(combatContext) => {
-                markCombatDeclarationDraftDirty();
-                setCombatContextDraft(combatContext);
-              }}
               onMovementChange={(movementId) => {
                 markCombatDeclarationDraftDirty();
                 setSelectedMovementId(movementId);
@@ -1299,13 +1322,40 @@ export default function ScenarioPlayerCombatPageContent({
                 markCombatDeclarationDraftDirty();
                 setSelectedSecondaryActionId(actionId);
               }}
-              parryLegality={parryLegality}
+              roundNumber={combatRoundState?.roundNumber}
               secondaryActionId={selectedSecondaryActionId}
-              visibleOpponentOptions={visibleOpponentOptions}
             />
-            {phaseCards.map((phaseCard) => (
-              <PlayerCombatPhasePanel key={phaseCard.phaseLabel} phaseCard={phaseCard} />
-            ))}
+            {phaseCards.map((phaseCard, index) => {
+              const isPhaseOne = index === 0;
+              const showsAttackStats =
+                selectedAttackStats &&
+                ((isPhaseOne && selectedActionId !== "parry_attack") ||
+                  (!isPhaseOne && selectedActionId === "parry_attack"));
+              const showsParryContext =
+                (isPhaseOne && selectedActionId === "parry_attack") ||
+                (!isPhaseOne && selectedActionId === "attack_parry");
+
+              return (
+                <PlayerCombatPhasePanel key={phaseCard.phaseLabel} phaseCard={phaseCard}>
+                  {showsAttackStats ? (
+                    <PlayerCombatAttackStatsTable stats={selectedAttackStats} />
+                  ) : null}
+                  {showsParryContext ? (
+                    <PlayerCombatParryContextPanel
+                      combatContext={combatContextDraft}
+                      controlsDisabled={declarationControlsDisabled}
+                      mainHandItemLabel={mainHandParryItemLabel}
+                      offHandItemLabel={offHandParryItemLabel}
+                      onCombatContextChange={(combatContext) => {
+                        markCombatDeclarationDraftDirty();
+                        setCombatContextDraft(combatContext);
+                      }}
+                      visibleOpponentOptions={visibleOpponentOptions}
+                    />
+                  ) : null}
+                </PlayerCombatPhasePanel>
+              );
+            })}
           </div>
 
           <div style={playerCombatPanelRowStyle}>
@@ -1358,7 +1408,15 @@ export default function ScenarioPlayerCombatPageContent({
             <PlayerCombatActionResultPanel
               additionalActionNotes={additionalActionNotes}
               movementLabel={getPlayerEncounterMovementLabel(selectedMovementId)}
-              result={actionRollResult}
+              result={
+                selectedCurrentInitiative
+                  ? {
+                      interpretedResult: "Initiative recorded.",
+                      phaseLabel: formatCombatInitiativeRoll(selectedCurrentInitiative),
+                      value: selectedCurrentInitiative.total,
+                    }
+                  : actionRollResult
+              }
             />
           </div>
         </section>

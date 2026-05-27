@@ -1,4 +1,9 @@
-import type { EncounterSession, ScenarioParticipant, ScenarioParticipantCombatContext } from "@glantri/domain";
+import type {
+  CombatRoundInitiativeResult,
+  EncounterSession,
+  ScenarioParticipant,
+  ScenarioParticipantCombatContext,
+} from "@glantri/domain";
 
 import { sendJson } from "./apiClient";
 
@@ -82,8 +87,11 @@ export async function submitCombatDeclarationOnServer(input: {
 export async function rollCombatInitiativeOnServer(input: {
   encounterId: string;
   scenarioParticipantId: string;
-}): Promise<{ encounter: EncounterSession; initiative: number }> {
-  const payload = await sendJson<{ encounter: EncounterSession; initiative: number }>(
+}): Promise<{ encounter: EncounterSession; initiative: CombatRoundInitiativeResult }> {
+  const payload = await sendJson<{
+    encounter: EncounterSession;
+    initiative: CombatRoundInitiativeResult;
+  }>(
     `/encounters/${input.encounterId}/combat-initiative`,
     {
       body: JSON.stringify({

@@ -2,6 +2,7 @@ import type {
   ScenarioCombatModifierEntry,
   ScenarioParticipantCombatContext,
   ScenarioParticipantIncomingAttackSide,
+  ScenarioParticipantParryDirection,
   ScenarioParticipantParrySource,
   ScenarioParticipant,
   ScenarioPlayerVisibleParticipant,
@@ -114,6 +115,39 @@ export const PLAYER_ENCOUNTER_PARRY_SOURCE_OPTIONS: PlayerEncounterOption<Scenar
     { label: "Off hand", value: "offHand" },
     { label: "Shield", value: "shield" },
   ];
+
+export const PLAYER_ENCOUNTER_PARRY_DIRECTION_OPTIONS: PlayerEncounterOption<ScenarioParticipantParryDirection>[] =
+  [
+    { label: "Left/backward", value: "left_backward" },
+    { label: "Left", value: "left" },
+    { label: "Left/forward", value: "left_forward" },
+    { label: "Forward", value: "forward" },
+    { label: "Right/forward", value: "right_forward" },
+    { label: "Right", value: "right" },
+    { label: "Right/backward", value: "right_backward" },
+  ];
+
+export function getPlayerEncounterParryDirectionLabel(
+  direction: ScenarioParticipantParryDirection,
+): string {
+  return (
+    PLAYER_ENCOUNTER_PARRY_DIRECTION_OPTIONS.find((option) => option.value === direction)?.label ??
+    direction
+  );
+}
+
+export function getPlayerEncounterParryCoverageDirection(
+  direction: ScenarioParticipantParryDirection,
+): ScenarioParticipantParryDirection {
+  const directionIndex = PLAYER_ENCOUNTER_PARRY_DIRECTION_OPTIONS.findIndex(
+    (option) => option.value === direction,
+  );
+  const nextIndex = Math.min(directionIndex + 2, PLAYER_ENCOUNTER_PARRY_DIRECTION_OPTIONS.length - 1);
+
+  // The workbook notes provided for this pass do not approve wrapping past right/backward.
+  // Clamp at the edge so the recorded coverage stays inside the explicit direction wheel.
+  return PLAYER_ENCOUNTER_PARRY_DIRECTION_OPTIONS[Math.max(nextIndex, 0)]?.value ?? direction;
+}
 
 function sumModifierEntries(entries: ScenarioCombatModifierEntry[]): number {
   return entries.reduce((sum, entry) => sum + entry.value, 0);

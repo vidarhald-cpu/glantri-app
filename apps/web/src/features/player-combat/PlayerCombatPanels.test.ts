@@ -41,6 +41,12 @@ describe("PlayerCombatPanels", () => {
     expect(source).toContain("phaseCard.title");
     expect(source).toContain("phaseCard.description");
     expect(source).toContain("phaseCard.stats");
+    expect(source).toContain("PlayerCombatAttackStatsTable");
+    expect(source).toContain("I");
+    expect(source).toContain("OB");
+    expect(source).toContain("DMB");
+    expect(source).toContain("AM");
+    expect(source).toContain("MC");
   });
 
   it("exposes the canonical combat action selector and declaration panels", () => {
@@ -51,7 +57,11 @@ describe("PlayerCombatPanels", () => {
     expect(source).toContain("Secondary action");
     expect(source).toContain("Movement");
     expect(source).toContain("Additional");
+    expect(source).toContain("roundNumber");
+    expect(source).toContain("PlayerCombatParryContextPanel");
     expect(source).toContain("Parry context");
+    expect(source).toContain("PLAYER_ENCOUNTER_PARRY_DIRECTION_OPTIONS");
+    expect(source).not.toContain("PLAYER_ENCOUNTER_INCOMING_ATTACK_SIDE_OPTIONS");
     expect(source).toContain("PlayerCombatActionButtonPanel");
     expect(source).toContain("getPlayerCombatActionButtonLabel");
     expect(source).toContain("getPlayerCombatStepLabel");
@@ -62,8 +72,9 @@ describe("PlayerCombatPanels", () => {
     expect(source).not.toContain("Declare action — DE");
     expect(source).toContain("Waiting for GM");
     expect(source).toContain("Declare modifiers");
-    expect(source).toContain("Roll phase 1 initiative");
-    expect(source).toContain("Roll phase 2 initiative");
+    expect(source).toContain("Set/Roll phase 1 initiative");
+    expect(source).toContain("Set/Roll phase 2 initiative");
     expect(source).toContain("PlayerCombatActionResultPanel");
+    expect(source).toContain("formatCombatInitiativeRoll");
   });
 });

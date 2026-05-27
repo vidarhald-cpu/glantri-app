@@ -339,7 +339,7 @@ describe("localServiceClient wire contract", () => {
       id: "encounter-1",
       scenarioId: "scenario-1",
     };
-    const fetchMock = stubFetch({ encounter, initiative: 17 });
+    const fetchMock = stubFetch({ encounter, initiative: { rolls: [6, 2], total: 8 } });
     const client = await loadClient();
 
     await expect(
@@ -347,7 +347,7 @@ describe("localServiceClient wire contract", () => {
         encounterId: "encounter-1",
         scenarioParticipantId: "participant-1",
       }),
-    ).resolves.toEqual({ encounter, initiative: 17 });
+    ).resolves.toEqual({ encounter, initiative: { rolls: [6, 2], total: 8 } });
 
     expectFetchCall(fetchMock, {
       body: {

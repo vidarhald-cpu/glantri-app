@@ -41,7 +41,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("getParticipantDeclarationStatus");
     expect(source).toContain("participant.initiatives.phase1");
     expect(source).toContain("participant.initiatives.phase2");
-    expect(source).toContain('color: initiative !== undefined ? "#1f7a4d" : undefined');
+    expect(source).toContain('color: initiativeTotal !== undefined ? "#1f7a4d" : undefined');
     expect(source).toContain('case "submitted":');
     expect(source).toContain('case "gmEdited":');
     expect(source).toContain('return "✓";');
@@ -50,6 +50,11 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).not.toContain('return input.current ? "O" : "·";');
     expect(source).toContain("step === roundState.currentStep");
     expect(source).toContain('overflowX: "auto"');
+    expect(source).toContain("tableContainerRef");
+    expect(source).toContain("handleTimelineKeyDown");
+    expect(source).toContain("ArrowRight");
+    expect(source).toContain("ArrowDown");
+    expect(source).toContain("focusRoundTable");
   });
 
   it("renders inspector details for the selected participant and step", () => {
@@ -57,7 +62,7 @@ describe("CombatRoundManagerPanel", () => {
 
     expect(source).toContain("Combat round inspector");
     expect(source).toContain("Combat inspector —");
-    expect(source).toContain("COMBAT_ROUND_STEP_ABBREVIATIONS[inspector.step]");
+    expect(source).toContain("COMBAT_ROUND_STEP_LABELS[inspector.step]");
     expect(source).toContain("COMBAT_ROUND_STEP_LABELS[inspector.step]");
     expect(source).toContain("buildCombatRoundInspector");
     expect(source).toContain("selectedRoundDeclaration");
@@ -78,9 +83,11 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("rollInspectorInitiative");
     expect(source).toContain("rollCombatInitiativeOnServer");
     expect(source).toContain("getCombatRoundInitiativePositions");
+    expect(source).toContain("getCombatRoundInitiativeTotal");
+    expect(source).toContain("formatCombatInitiativeRoll");
     expect(source).toContain("no position");
-    expect(source).toContain("Phase 1 action");
-    expect(source).toContain("Phase 2 action");
+    expect(source).toContain("PlayerCombatParryContextPanel");
+    expect(source).toContain("moveSelectedParticipantDown");
     expect(source).toContain("Select a participant step to inspect combat details.");
     expect(source).toContain("Previous participant");
     expect(source).toContain("Next participant");
