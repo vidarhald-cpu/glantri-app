@@ -12,6 +12,8 @@ import {
   getPlayerEncounterOpponentParticipants,
   getPlayerEncounterParryCoverageDirection,
   getPlayerEncounterParryDirectionLabel,
+  isPlayerEncounterAttackAction,
+  isPlayerEncounterDefenseAction,
 } from "./playerEncounter";
 
 function createScenarioParticipant(
@@ -92,6 +94,15 @@ describe("playerEncounter", () => {
       phaseOne: "Disarm",
       phaseTwo: "Open",
     });
+  });
+
+  it("classifies attack and defense combat actions for compact phase panels", () => {
+    expect(isPlayerEncounterAttackAction("attack_parry")).toBe(true);
+    expect(isPlayerEncounterAttackAction("parry_attack")).toBe(true);
+    expect(isPlayerEncounterAttackAction("observe_opponent")).toBe(false);
+    expect(isPlayerEncounterDefenseAction("attack_parry")).toBe(true);
+    expect(isPlayerEncounterDefenseAction("parry_attack")).toBe(true);
+    expect(isPlayerEncounterDefenseAction("double_attack")).toBe(false);
   });
 
   it("returns a stable movement label fallback", () => {

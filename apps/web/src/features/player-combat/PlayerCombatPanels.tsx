@@ -49,6 +49,13 @@ export interface PlayerCombatAttackStatsView {
   weaponName: string;
 }
 
+export interface PlayerCombatDefenseStatsView {
+  db: string;
+  dm: string;
+  parry: string;
+  sourceName: string;
+}
+
 interface PlayerCombatModifierPanelProps {
   controlsDisabled?: boolean;
   onAddEntry?: (bucketKey: ScenarioCombatModifierBucket) => void;
@@ -84,13 +91,16 @@ interface PlayerCombatAttackStatsTableProps {
   stats: PlayerCombatAttackStatsView;
 }
 
+interface PlayerCombatDefenseStatsTableProps {
+  stats: PlayerCombatDefenseStatsView;
+}
+
 interface PlayerCombatParryContextPanelProps {
   combatContext: ScenarioParticipantCombatContext;
   controlsDisabled?: boolean;
   mainHandItemLabel?: string;
   offHandItemLabel?: string;
   onCombatContextChange: (combatContext: ScenarioParticipantCombatContext) => void;
-  visibleOpponentOptions?: readonly { displayName: string; id: string }[];
 }
 
 interface PlayerCombatActionButtonPanelProps {
@@ -130,6 +140,12 @@ export const playerCombatPanelRowStyle = {
   display: "grid",
   gap: "0.75rem",
   gridTemplateColumns: "repeat(auto-fit, minmax(15rem, 1fr))",
+} as const;
+
+export const playerCombatTopPanelRowStyle = {
+  display: "grid",
+  gap: "0.75rem",
+  gridTemplateColumns: "minmax(14rem, 0.8fr) minmax(14rem, 1fr) minmax(14rem, 1fr)",
 } as const;
 
 function getDisplayTotal(row: PlayerCombatModifierBucketView | undefined): number {
@@ -500,8 +516,20 @@ export function formatCombatInitiativeRoll(initiative?: CombatRoundInitiativeRes
 
   const rollText =
     initiative.rolls.length > 0 ? initiative.rolls.join(" + ") : String(initiative.total);
+  const rollTotal = initiative.rollTotal ?? initiative.total - (initiative.baseInitiative ?? 0);
 
-  return `Roll: ${rollText} = ${initiative.total}`;
+  return `Roll: ${rollText} = ${rollTotal}`;
+}
+
+export function formatCombatInitiativeFormula(initiative?: CombatRoundInitiativeResult): string {
+  if (!initiative) {
+    return "Initiative not rolled.";
+  }
+
+  const baseInitiative = initiative.baseInitiative ?? 0;
+  const rollTotal = initiative.rollTotal ?? initiative.total - baseInitiative;
+
+  return `I ${baseInitiative} + roll ${rollTotal} = ${initiative.total}`;
 }
 
 export function PlayerCombatAttackStatsTable({ stats }: PlayerCombatAttackStatsTableProps) {
@@ -553,6 +581,53 @@ export function PlayerCombatAttackStatsTable({ stats }: PlayerCombatAttackStatsT
   );
 }
 
+export function PlayerCombatDefenseStatsTable({ stats }: PlayerCombatDefenseStatsTableProps) {
+  return (
+    <div style={{ display: "grid", gap: "0.25rem" }}>
+      <strong style={{ fontSize: "0.9rem" }}>{stats.sourceName}</strong>
+      <table
+        style={{
+          borderCollapse: "collapse",
+          fontSize: "0.88rem",
+          width: "100%",
+        }}
+      >
+        <thead>
+          <tr>
+            {["DB", "DM", "P"].map((heading) => (
+              <th
+                key={heading}
+                style={{
+                  borderBottom: "1px solid #d9ddd8",
+                  padding: "0.15rem 0.2rem",
+                  textAlign: "left",
+                }}
+              >
+                {heading}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            {[stats.db, stats.dm, stats.parry].map((value, index) => (
+              <td
+                key={`${value}-${index}`}
+                style={{
+                  borderBottom: "1px solid #ece8dc",
+                  padding: "0.15rem 0.2rem",
+                }}
+              >
+                {value}
+              </td>
+            ))}
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function ParryDirectionSelector({
   controlsDisabled,
   direction,
@@ -569,7 +644,14 @@ function ParryDirectionSelector({
     : undefined;
 
   return (
-    <label style={{ display: "grid", gap: "0.25rem" }}>
+    <label
+      style={{
+        alignItems: "center",
+        display: "grid",
+        gap: "0.25rem",
+        gridTemplateColumns: "minmax(5rem, auto) minmax(8rem, 1fr) auto",
+      }}
+    >
       <span>{itemLabel}</span>
       <select
         disabled={controlsDisabled}
@@ -589,12 +671,19 @@ function ParryDirectionSelector({
           </option>
         ))}
       </select>
-      <span style={{ color: "#5e5a50", fontSize: "0.86rem" }}>
+      <span
+        style={{ color: "#5e5a50", fontSize: "0.82rem", whiteSpace: "nowrap" }}
+        title={
+          direction && coverageDirection
+            ? `${itemLabel}: ${getPlayerEncounterParryDirectionLabel(
+                direction,
+              )} to ${getPlayerEncounterParryDirectionLabel(coverageDirection)}`
+            : `${itemLabel}: no coverage direction selected`
+        }
+      >
         {direction && coverageDirection
-          ? `${itemLabel}: ${getPlayerEncounterParryDirectionLabel(
-              direction,
-            )} to ${getPlayerEncounterParryDirectionLabel(coverageDirection)}`
-          : `${itemLabel}: no coverage direction selected`}
+          ? `to ${getPlayerEncounterParryDirectionLabel(coverageDirection)}`
+          : ""}
       </span>
     </label>
   );
@@ -606,7 +695,6 @@ export function PlayerCombatParryContextPanel({
   mainHandItemLabel = "Unarmed",
   offHandItemLabel = "Unarmed",
   onCombatContextChange,
-  visibleOpponentOptions = [],
 }: PlayerCombatParryContextPanelProps) {
   return (
     <div
@@ -618,31 +706,11 @@ export function PlayerCombatParryContextPanel({
       }}
     >
       <strong style={{ fontSize: "0.95rem" }}>Parry context</strong>
-      <label style={{ display: "grid", gap: "0.25rem" }}>
-        <span>Opponent</span>
-        <select
-          disabled={controlsDisabled}
-          onChange={(event) =>
-            onCombatContextChange({
-              ...combatContext,
-              selectedOpponentId: event.target.value || undefined,
-            })
-          }
-          value={combatContext.selectedOpponentId ?? ""}
-        >
-          <option value="">Choose opponent</option>
-          {visibleOpponentOptions.map((participant) => (
-            <option key={participant.id} value={participant.id}>
-              {participant.displayName}
-            </option>
-          ))}
-        </select>
-      </label>
       <div
         style={{
           display: "grid",
           gap: "0.5rem",
-          gridTemplateColumns: "repeat(auto-fit, minmax(10rem, 1fr))",
+          gridTemplateColumns: "repeat(auto-fit, minmax(13rem, 1fr))",
         }}
       >
         <ParryDirectionSelector

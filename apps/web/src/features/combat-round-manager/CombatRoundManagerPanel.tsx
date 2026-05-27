@@ -33,6 +33,7 @@ import {
 } from "@/lib/api/encounterClient";
 import {
   buildPlayerCombatModifierRows,
+  formatCombatInitiativeFormula,
   formatCombatInitiativeRoll,
   getGmCombatStepActionLabel,
   PlayerCombatActionButtonPanel,
@@ -42,12 +43,14 @@ import {
   PlayerCombatParryContextPanel,
   PlayerCombatPhasePanel,
   playerCombatPanelRowStyle,
+  playerCombatTopPanelRowStyle,
   type PlayerCombatPhaseCardView,
 } from "@/features/player-combat/PlayerCombatPanels";
 import { buildEncounterLiveCombatModifierSummary } from "@/lib/campaigns/liveCombatModifiers";
 import {
   createEmptyPlayerEncounterCombatContext,
   getPlayerEncounterMovementLabel,
+  isPlayerEncounterDefenseAction,
   isPlayerEncounterActionId,
   type PlayerEncounterActionId,
   type PlayerEncounterMovementId,
@@ -370,6 +373,7 @@ export default function CombatRoundManagerPanel({
         phaseLabel: "Phase 1",
         stats: [
           formatCombatInitiativeRoll(inspector.participant.initiatives.phase1),
+          formatCombatInitiativeFormula(inspector.participant.initiatives.phase1),
           formatInitiativePosition({
             participantId: inspector.participant.participantId,
             phase: "phase1",
@@ -388,6 +392,7 @@ export default function CombatRoundManagerPanel({
         phaseLabel: "Phase 2",
         stats: [
           formatCombatInitiativeRoll(inspector.participant.initiatives.phase2),
+          formatCombatInitiativeFormula(inspector.participant.initiatives.phase2),
           formatInitiativePosition({
             participantId: inspector.participant.participantId,
             phase: "phase2",
@@ -403,19 +408,8 @@ export default function CombatRoundManagerPanel({
       },
     ];
   }, [inspector.participant, phase1Positions, phase2Positions]);
-  const inspectorOpponentOptions = useMemo(
-    () =>
-      effectiveScenarioParticipants
-        .filter(
-          (participant) =>
-            participant.isActive && participant.id !== selectedScenarioParticipant?.id,
-        )
-        .map((participant) => ({
-          displayName: participant.snapshot.displayName,
-          id: participant.id,
-        })),
-    [effectiveScenarioParticipants, selectedScenarioParticipant?.id],
-  );
+  const inspectorInitiativeBase =
+    (inspectorLiveModifiers.generalFatigueRaw ?? 0) + (inspectorLiveModifiers.obSkillRaw ?? 0);
   useEffect(() => {
     setRoundState(initialRoundState);
   }, [initialRoundState]);
@@ -690,6 +684,7 @@ export default function CombatRoundManagerPanel({
     try {
       const { encounter: nextEncounter } = await rollCombatInitiativeOnServer({
         encounterId: encounter.id,
+        initiativeBase: inspectorInitiativeBase,
         scenarioParticipantId: selectedScenarioParticipant.id,
       });
       const nextRoundState = initializeCombatRoundState({ encounter: nextEncounter });
@@ -989,7 +984,7 @@ export default function CombatRoundManagerPanel({
 
             {selectedScenarioParticipant ? (
               <>
-                <div style={playerCombatPanelRowStyle}>
+                <div style={playerCombatTopPanelRowStyle}>
                   <PlayerCombatActionSelectorPanel
                     actionId={inspectorDraft.actionId}
                     additionalActionNotes={inspectorDraft.additionalActionNotes}
@@ -1006,9 +1001,9 @@ export default function CombatRoundManagerPanel({
                     secondaryActionId={inspectorDraft.secondaryActionId}
                   />
                   {inspectorPhaseCards.map((phaseCard, index) => {
-                    const showsParryContext =
-                      (index === 0 && inspectorDraft.actionId === "parry_attack") ||
-                      (index === 1 && inspectorDraft.actionId === "attack_parry");
+                    const phaseActionId =
+                      index === 0 ? inspectorDraft.actionId : inspectorDraft.secondaryActionId;
+                    const showsParryContext = isPlayerEncounterDefenseAction(phaseActionId);
 
                     return (
                       <PlayerCombatPhasePanel key={phaseCard.phaseLabel} phaseCard={phaseCard}>
@@ -1021,7 +1016,6 @@ export default function CombatRoundManagerPanel({
                             onCombatContextChange={(combatContext) =>
                               updateInspectorDraft({ combatContext })
                             }
-                            visibleOpponentOptions={inspectorOpponentOptions}
                           />
                         ) : null}
                       </PlayerCombatPhasePanel>
@@ -1077,7 +1071,9 @@ export default function CombatRoundManagerPanel({
                     result={
                       inspectorCurrentInitiative
                         ? {
-                            interpretedResult: "Initiative recorded for this participant.",
+                            interpretedResult: formatCombatInitiativeFormula(
+                              inspectorCurrentInitiative,
+                            ),
                             phaseLabel: formatCombatInitiativeRoll(inspectorCurrentInitiative),
                             value: inspectorCurrentInitiative.total,
                           }

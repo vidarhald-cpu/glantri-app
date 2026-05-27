@@ -25,7 +25,9 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("PlayerCombatModifierPanel");
     expect(source).toContain("PlayerCombatPhasePanel");
     expect(source).toContain("PlayerCombatAttackStatsTable");
+    expect(source).toContain("PlayerCombatDefenseStatsTable");
     expect(source).toContain("PlayerCombatParryContextPanel");
+    expect(source).toContain("playerCombatTopPanelRowStyle");
     expect(source).toContain("buildPlayerCombatModifierRows");
     expect(source).toContain("getPlayerCombatActionButtonLabel");
     expect(source).toContain("buildEncounterLiveCombatModifierSummary");
@@ -49,6 +51,8 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("currentInitiativePhase");
     expect(source).toContain("Initiative rolled.");
     expect(source).toContain("formatCombatInitiativeRoll");
+    expect(source).toContain("formatCombatInitiativeFormula");
+    expect(source).toContain("initiativeBase");
     expect(source).toContain("selectedCurrentInitiative");
     expect(source).toContain("declarationButtonLabel");
     expect(source).toContain("buttonLabel={declarationButtonLabel}");
@@ -66,6 +70,10 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("roundNumber={combatRoundState?.roundNumber}");
     expect(source).toContain("mainHandParryItemLabel");
     expect(source).toContain("offHandParryItemLabel");
+    expect(source).toContain("isPlayerEncounterAttackAction");
+    expect(source).toContain("isPlayerEncounterDefenseAction");
+    expect(source).not.toContain("Attack - Parry ·");
+    expect(source).not.toContain("visibleOpponentOptions");
     expect(source).toContain("isGameMaster");
     expect(source).not.toContain("will appear here in the next phase");
     expect(source).not.toContain("will expand into this area");

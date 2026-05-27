@@ -7,6 +7,7 @@ import {
   COMBAT_ROUND_STEPS,
   advanceCombatRoundStep,
   buildCombatRoundInspector,
+  buildCombatRoundInitiativeResult,
   canPlayerSubmitCombatDeclaration,
   canPlayerRollCombatInitiative,
   clearCombatRoundStep,
@@ -165,7 +166,12 @@ describe("combat round manager", () => {
       step: "initiative_phase_1",
     });
 
-    expect(state.participants[0]?.initiatives.phase1).toEqual({ rolls: [], total: 14 });
+    expect(state.participants[0]?.initiatives.phase1).toEqual({
+      baseInitiative: 0,
+      rolls: [],
+      rollTotal: 14,
+      total: 14,
+    });
     expect(cleared.participants[0]?.initiatives.phase1).toBeUndefined();
   });
 
@@ -285,7 +291,12 @@ describe("combat round manager", () => {
     });
 
     expect(state.currentStep).toBe("initiative_phase_1");
-    expect(nextState.participants[0]?.initiatives.phase1).toEqual({ rolls: [], total: 18 });
+    expect(nextState.participants[0]?.initiatives.phase1).toEqual({
+      baseInitiative: 0,
+      rolls: [],
+      rollTotal: 18,
+      total: 18,
+    });
     expect(nextState.participants[0]?.stepStatuses.initiative_phase_1).toBe("submitted");
     expect(canPlayerRollCombatInitiative({ participantId: "gladiator", phase: "phase1", state: nextState })).toBe(false);
   });
@@ -304,6 +315,25 @@ describe("combat round manager", () => {
     expect(singleRoll).toMatchObject({ isOpenEnded: false, rolls: [3], total: 3 });
     expect(openedOnce).toMatchObject({ isOpenEnded: true, rolls: [6, 2], total: 8 });
     expect(openedTwice).toMatchObject({ isOpenEnded: true, rolls: [6, 6, 4], total: 16 });
+  });
+
+  it("combines initiative base with open-ended die roll total", () => {
+    expect(
+      buildCombatRoundInitiativeResult({
+        baseInitiative: 3,
+        roll: {
+          baseInitiative: 0,
+          rolls: [6, 4],
+          rollTotal: 10,
+          total: 10,
+        },
+      }),
+    ).toEqual({
+      baseInitiative: 3,
+      rolls: [6, 4],
+      rollTotal: 10,
+      total: 13,
+    });
   });
 
   it("guards open-ended initiative against endless sixes", () => {

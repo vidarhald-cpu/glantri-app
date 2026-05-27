@@ -86,6 +86,7 @@ export async function submitCombatDeclarationOnServer(input: {
 
 export async function rollCombatInitiativeOnServer(input: {
   encounterId: string;
+  initiativeBase?: number;
   scenarioParticipantId: string;
 }): Promise<{ encounter: EncounterSession; initiative: CombatRoundInitiativeResult }> {
   const payload = await sendJson<{
@@ -95,6 +96,7 @@ export async function rollCombatInitiativeOnServer(input: {
     `/encounters/${input.encounterId}/combat-initiative`,
     {
       body: JSON.stringify({
+        initiativeBase: input.initiativeBase,
         scenarioParticipantId: input.scenarioParticipantId,
       }),
       method: "POST",

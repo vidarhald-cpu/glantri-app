@@ -74,6 +74,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("PlayerCombatActionButtonPanel");
     expect(source).toContain("PlayerCombatActionResultPanel");
     expect(source).toContain("PlayerCombatPhasePanel");
+    expect(source).toContain("playerCombatTopPanelRowStyle");
     expect(source).toContain("buildEncounterLiveCombatModifierSummary");
     expect(source).toContain("selectedScenarioParticipant?.state.combatEffects");
     expect(source).toContain("saveInspectorDeclaration");
@@ -85,8 +86,12 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("getCombatRoundInitiativePositions");
     expect(source).toContain("getCombatRoundInitiativeTotal");
     expect(source).toContain("formatCombatInitiativeRoll");
+    expect(source).toContain("formatCombatInitiativeFormula");
+    expect(source).toContain("inspectorInitiativeBase");
     expect(source).toContain("no position");
     expect(source).toContain("PlayerCombatParryContextPanel");
+    expect(source).toContain("isPlayerEncounterDefenseAction");
+    expect(source).not.toContain("inspectorOpponentOptions");
     expect(source).toContain("moveSelectedParticipantDown");
     expect(source).toContain("Select a participant step to inspect combat details.");
     expect(source).toContain("Previous participant");

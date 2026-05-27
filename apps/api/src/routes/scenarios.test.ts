@@ -1844,6 +1844,7 @@ describe("scenarios route contract", () => {
     const response = await app.inject({
       method: "POST",
       payload: {
+        initiativeBase: 3,
         scenarioParticipantId: "participant-1",
       },
       url: "/encounters/encounter-1/combat-initiative",
@@ -1854,6 +1855,10 @@ describe("scenarios route contract", () => {
     expect(response.statusCode).toBe(200);
     expect(response.json().initiative.total).toBeGreaterThanOrEqual(1);
     expect(response.json().initiative.rolls.length).toBeGreaterThanOrEqual(1);
+    expect(response.json().initiative.baseInitiative).toBe(3);
+    expect(response.json().initiative.total).toBe(
+      response.json().initiative.baseInitiative + response.json().initiative.rollTotal,
+    );
     const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
     expect(updatedEncounter.combatRoundState.participants[0].initiatives.phase1).toMatchObject({
       rolls: response.json().initiative.rolls,

@@ -3,6 +3,7 @@ import type { FastifyPluginAsync } from "fastify";
 import { CampaignService, EncounterService, ScenarioService } from "@glantri/database";
 import {
   buildPlayerSafeRoleplayStateForUser,
+  buildCombatRoundInitiativeResult,
   canPlayerRollCombatInitiative,
   buildRoleplayCalculationPreview,
   canPlayerSubmitCombatDeclaration,
@@ -148,6 +149,24 @@ function parseParticipantCommandBody(body: unknown, label: string): {
   }
 
   return { scenarioParticipantId };
+}
+
+function parseCombatInitiativeBody(body: unknown): {
+  initiativeBase?: number;
+  scenarioParticipantId: string;
+} {
+  const value = parseBodyObject(body, "Combat initiative payload");
+  const parsed = parseParticipantCommandBody(value, "Combat initiative payload");
+  const initiativeBase = value.initiativeBase;
+
+  if (initiativeBase !== undefined && !Number.isInteger(initiativeBase)) {
+    throw new Error("initiativeBase must be an integer.");
+  }
+
+  return {
+    ...parsed,
+    initiativeBase: typeof initiativeBase === "number" ? initiativeBase : undefined,
+  };
 }
 
 function clearScenarioParticipantCombatDeclaration(
@@ -614,7 +633,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         });
       }
 
-      const body = parseParticipantCommandBody(request.body, "Combat initiative payload");
+      const body = parseCombatInitiativeBody(request.body);
       const scenarioParticipants = await scenarioService.listScenarioParticipants(scenarioId);
       const scenarioParticipant = scenarioParticipants.find(
         (participant) => participant.id === body.scenarioParticipantId
@@ -676,7 +695,11 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         }
       }
 
-      const rolledInitiative = rollOpenEndedD6();
+      const initiativeRoll = rollOpenEndedD6();
+      const rolledInitiative = buildCombatRoundInitiativeResult({
+        baseInitiative: body.initiativeBase,
+        roll: initiativeRoll,
+      });
       const submittedAt = new Date().toISOString();
       const nextRoundState = recordCombatRoundInitiative({
         initiative: rolledInitiative,

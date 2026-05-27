@@ -23,27 +23,32 @@ import {
   buildPlayerCombatModifierRows,
   getPlayerCombatActionButtonLabel,
   getPlayerCombatStepLabel,
+  formatCombatInitiativeFormula,
   formatCombatInitiativeRoll,
   PlayerCombatAttackStatsTable,
   PlayerCombatActionButtonPanel,
   PlayerCombatActionResultPanel,
   PlayerCombatActionSelectorPanel,
+  PlayerCombatDefenseStatsTable,
   PlayerCombatModifierPanel,
   PlayerCombatParryContextPanel,
   PlayerCombatPhasePanel,
   playerCombatPanelRowStyle,
+  playerCombatTopPanelRowStyle,
   type PlayerCombatAttackStatsView,
+  type PlayerCombatDefenseStatsView,
 } from "@/features/player-combat/PlayerCombatPanels";
 import type { EquipmentFeatureState } from "@/features/equipment/types";
 import { useSessionUser } from "@/lib/auth/SessionUserContext";
 import type { CombatAllocationState } from "@glantri/rules-engine";
 import {
-  buildPlayerEncounterPhaseSummary,
   createEmptyPlayerEncounterCombatContext,
   evaluatePlayerEncounterParryLegality,
   getPlayerEncounterAccessibleParticipants,
   getPlayerEncounterMovementLabel,
+  isPlayerEncounterAttackAction,
   isPlayerEncounterActionId,
+  isPlayerEncounterDefenseAction,
   type PlayerEncounterActionId,
   type PlayerEncounterMovementId,
 } from "@/lib/campaigns/playerEncounter";
@@ -514,22 +519,6 @@ export default function ScenarioPlayerCombatPageContent({
   const declarationStepOpen =
     !combatRoundState || combatRoundState.currentStep === "select_actions";
 
-  const visibleOpponentOptions: { displayName: string; id: string }[] = useMemo(() => {
-    if (isGameMaster) {
-      return selectableParticipants
-        .filter((p) => p.isActive && p.id !== selectedParticipantId)
-        .map((p) => ({ displayName: p.snapshot.displayName, id: p.id }));
-    }
-    return (projection?.visibleParticipants ?? [])
-      .filter((p) => p.isActive && !p.isControlledByPlayer && p.id !== selectedParticipantId)
-      .map((p) => ({ displayName: p.displayName, id: p.id }));
-  }, [
-    isGameMaster,
-    projection?.visibleParticipants,
-    selectableParticipants,
-    selectedParticipantId,
-  ]);
-
   useEffect(() => {
     if (!selectedParticipant) {
       setSelectedActionId("");
@@ -705,13 +694,12 @@ export default function ScenarioPlayerCombatPageContent({
         attackSource: selectedActionId === "attack_parry" ? "mainHand" : undefined,
         hasOffHandWeapon: Boolean(loadoutFieldValueMap.get("secondary")),
         hasShield: Boolean(loadoutFieldValueMap.get("shield")),
-        hasSelectedOpponent: Boolean(combatContextDraft.selectedOpponentId),
+        hasSelectedOpponent: true,
         incomingAttackSide: combatContextDraft.incomingAttackSide,
         parrySource: combatContextDraft.parrySource,
       }),
     [
       combatContextDraft.incomingAttackSide,
-      combatContextDraft.selectedOpponentId,
       combatContextDraft.parrySource,
       loadoutFieldValueMap,
       selectedActionId,
@@ -769,15 +757,6 @@ export default function ScenarioPlayerCombatPageContent({
       displayedParticipant,
       liveCombatModifiers,
     ],
-  );
-
-  const phaseSummary = useMemo(
-    () =>
-      buildPlayerEncounterPhaseSummary({
-        actionId: selectedActionId,
-        secondaryActionId: selectedSecondaryActionId,
-      }),
-    [selectedActionId, selectedSecondaryActionId],
   );
 
   function markCombatDeclarationDraftDirty() {
@@ -864,6 +843,7 @@ export default function ScenarioPlayerCombatPageContent({
     try {
       const { encounter } = await rollCombatInitiativeOnServer({
         encounterId,
+        initiativeBase,
         scenarioParticipantId: selectedParticipant.id,
       });
 
@@ -1043,110 +1023,84 @@ export default function ScenarioPlayerCombatPageContent({
       weaponName: selectedCombatReference.selectedWeapon,
     };
   }, [selectedCombatReference]);
+  const hasParryDirection = Boolean(
+    combatContextDraft.mainHandParryDirection || combatContextDraft.offHandParryDirection,
+  );
+  const primaryLoadoutLabel = loadoutFieldDisplayMap.get("primary")?.valueLabel;
+  const shieldLoadoutLabel = loadoutFieldDisplayMap.get("shield")?.valueLabel;
+  const secondaryLoadoutLabel = loadoutFieldDisplayMap.get("secondary")?.valueLabel;
   const mainHandParryItemLabel =
-    loadoutFieldDisplayMap.get("primary")?.valueLabel &&
-    loadoutFieldDisplayMap.get("primary")?.valueLabel !== "None"
-      ? loadoutFieldDisplayMap.get("primary")?.valueLabel
-      : "Unarmed";
+    primaryLoadoutLabel && primaryLoadoutLabel !== "None" ? primaryLoadoutLabel : "Unarmed";
   const offHandParryItemLabel =
-    loadoutFieldDisplayMap.get("shield")?.valueLabel &&
-    loadoutFieldDisplayMap.get("shield")?.valueLabel !== "None"
-      ? loadoutFieldDisplayMap.get("shield")?.valueLabel
-      : loadoutFieldDisplayMap.get("secondary")?.valueLabel &&
-          loadoutFieldDisplayMap.get("secondary")?.valueLabel !== "None"
-        ? loadoutFieldDisplayMap.get("secondary")?.valueLabel
+    shieldLoadoutLabel && shieldLoadoutLabel !== "None"
+      ? shieldLoadoutLabel
+      : secondaryLoadoutLabel && secondaryLoadoutLabel !== "None"
+        ? secondaryLoadoutLabel
         : "Unarmed";
-
-  const phaseCards = useMemo(() => {
-    if (selectedActionId === "attack_parry" && selectedCombatReference) {
-      const phaseTwoDb = hasDisplayValue(selectedCombatReference.combinedDb)
-        ? selectedCombatReference.combinedDb
-        : selectedCombatReference.db;
-      const phaseTwoDm = hasDisplayValue(selectedCombatReference.combinedDm)
-        ? selectedCombatReference.combinedDm
-        : selectedCombatReference.dm;
-      const combinedDefenseNote =
-        hasDisplayValue(selectedCombatReference.combinedDb) &&
-        selectedCombatReference.combinedDb !== selectedCombatReference.db
-          ? `Base DB ${selectedCombatReference.db}, Combined DB ${selectedCombatReference.combinedDb}`
-          : null;
-
-      return [
-        {
-          description: `${phaseSummary.phaseOne} · ${getPlayerEncounterMovementLabel(
-            selectedMovementId,
-          )}`,
-          phaseLabel: "Phase 1",
-          stats: [],
-          title: "",
-        },
-        {
-          description:
-            parryLegality.status === "legal"
-              ? `${phaseSummary.phaseTwo} · ${getPlayerEncounterMovementLabel(selectedMovementId)}`
-              : `Parry status: ${parryLegality.reason}`,
-          phaseLabel: "Phase 2",
-          stats: [
-            `DB: ${phaseTwoDb}`,
-            `DM: ${phaseTwoDm}`,
-            `P: ${
-              parryLegality.status === "legal"
-                ? selectedCombatReference.parry
-                : parryLegality.status === "incomplete"
-                  ? "Incomplete context"
-                  : "Not legal"
-            }`,
-            ...(combinedDefenseNote ? [combinedDefenseNote] : []),
-          ],
-          title: "",
-        },
-      ] as const;
+  const selectedDefenseStats = useMemo<PlayerCombatDefenseStatsView | null>(() => {
+    if (!selectedCombatReference) {
+      return null;
     }
 
+    return {
+      db: hasDisplayValue(selectedCombatReference.combinedDb)
+        ? selectedCombatReference.combinedDb
+        : selectedCombatReference.db,
+      dm: hasDisplayValue(selectedCombatReference.combinedDm)
+        ? selectedCombatReference.combinedDm
+        : selectedCombatReference.dm,
+      parry: hasParryDirection ? selectedCombatReference.parry : "incomplete",
+      sourceName:
+        offHandParryItemLabel !== "Unarmed" ? offHandParryItemLabel : mainHandParryItemLabel,
+    };
+  }, [
+    hasParryDirection,
+    mainHandParryItemLabel,
+    offHandParryItemLabel,
+    selectedCombatReference,
+  ]);
+  const initiativeBase = useMemo(() => {
+    const passiveInitiative = Number(selectedCombatReference?.initiative);
+    const safePassiveInitiative = Number.isFinite(passiveInitiative) ? passiveInitiative : 0;
+
+    // Initiative uses direct raw additions for this workflow pass; no percentage table is applied.
+    return (
+      safePassiveInitiative +
+      (liveCombatModifiers?.generalFatigueRaw ?? 0) +
+      (liveCombatModifiers?.obSkillRaw ?? 0)
+    );
+  }, [
+    liveCombatModifiers?.generalFatigueRaw,
+    liveCombatModifiers?.obSkillRaw,
+    selectedCombatReference?.initiative,
+  ]);
+
+  const phaseCards = useMemo(() => {
     return [
       {
-        description:
-          selectedActionId || selectedSecondaryActionId
-            ? `${phaseSummary.phaseOne} · ${getPlayerEncounterMovementLabel(selectedMovementId)}`
-            : "No action selected yet.",
+        description: selectedActionId ? "" : "No action selected yet.",
         phaseLabel: "Phase 1",
-        stats:
-          selectedActionId && selectedCombatReference
-            ? [
-                `Weapon: ${selectedCombatReference.selectedWeapon}`,
-                `Attack: ${selectedCombatReference.attackMode}`,
-                `OB: ${selectedCombatReference.ob}`,
-                `DB: ${selectedCombatReference.db}`,
-              ]
-            : [],
+        stats: selectedRoundParticipant?.initiatives.phase1
+          ? [
+              formatCombatInitiativeRoll(selectedRoundParticipant.initiatives.phase1),
+              formatCombatInitiativeFormula(selectedRoundParticipant.initiatives.phase1),
+            ]
+          : [],
         title: "",
       },
       {
-        description: selectedSecondaryActionId
-          ? `${phaseSummary.phaseTwo} · ${getPlayerEncounterMovementLabel(selectedMovementId)}`
-          : "Open",
+        description: selectedSecondaryActionId ? "" : "Open",
         phaseLabel: "Phase 2",
-        stats:
-          selectedSecondaryActionId && selectedCombatReference
-            ? [
-                `Weapon: ${selectedCombatReference.selectedWeapon}`,
-                `Parry: ${selectedCombatReference.parry}`,
-                `Movement: ${selectedCombatReference.movement}`,
-                `Enc: ${selectedCombatReference.encumbrance}`,
-              ]
-            : [],
+        stats: selectedRoundParticipant?.initiatives.phase2
+          ? [
+              formatCombatInitiativeRoll(selectedRoundParticipant.initiatives.phase2),
+              formatCombatInitiativeFormula(selectedRoundParticipant.initiatives.phase2),
+            ]
+          : [],
         title: "",
       },
     ] as const;
-  }, [
-    phaseSummary.phaseOne,
-    phaseSummary.phaseTwo,
-    parryLegality,
-    selectedActionId,
-    selectedCombatReference,
-    selectedMovementId,
-    selectedSecondaryActionId,
-  ]);
+  }, [selectedActionId, selectedRoundParticipant, selectedSecondaryActionId]);
 
   const hasMeaningfulDeclaration =
     Boolean(selectedActionId) ||
@@ -1300,7 +1254,7 @@ export default function ScenarioPlayerCombatPageContent({
 
       {displayedParticipant ? (
         <section style={panelStyle}>
-          <div style={playerCombatPanelRowStyle}>
+          <div style={playerCombatTopPanelRowStyle}>
             <PlayerCombatActionSelectorPanel
               actionId={selectedActionId}
               additionalActionNotes={additionalActionNotes}
@@ -1327,31 +1281,31 @@ export default function ScenarioPlayerCombatPageContent({
             />
             {phaseCards.map((phaseCard, index) => {
               const isPhaseOne = index === 0;
+              const phaseActionId = isPhaseOne ? selectedActionId : selectedSecondaryActionId;
               const showsAttackStats =
-                selectedAttackStats &&
-                ((isPhaseOne && selectedActionId !== "parry_attack") ||
-                  (!isPhaseOne && selectedActionId === "parry_attack"));
-              const showsParryContext =
-                (isPhaseOne && selectedActionId === "parry_attack") ||
-                (!isPhaseOne && selectedActionId === "attack_parry");
+                selectedAttackStats && isPlayerEncounterAttackAction(phaseActionId);
+              const showsDefenseContext =
+                selectedDefenseStats && isPlayerEncounterDefenseAction(phaseActionId);
 
               return (
                 <PlayerCombatPhasePanel key={phaseCard.phaseLabel} phaseCard={phaseCard}>
                   {showsAttackStats ? (
                     <PlayerCombatAttackStatsTable stats={selectedAttackStats} />
                   ) : null}
-                  {showsParryContext ? (
-                    <PlayerCombatParryContextPanel
-                      combatContext={combatContextDraft}
-                      controlsDisabled={declarationControlsDisabled}
-                      mainHandItemLabel={mainHandParryItemLabel}
-                      offHandItemLabel={offHandParryItemLabel}
-                      onCombatContextChange={(combatContext) => {
-                        markCombatDeclarationDraftDirty();
-                        setCombatContextDraft(combatContext);
-                      }}
-                      visibleOpponentOptions={visibleOpponentOptions}
-                    />
+                  {showsDefenseContext ? (
+                    <>
+                      <PlayerCombatDefenseStatsTable stats={selectedDefenseStats} />
+                      <PlayerCombatParryContextPanel
+                        combatContext={combatContextDraft}
+                        controlsDisabled={declarationControlsDisabled}
+                        mainHandItemLabel={mainHandParryItemLabel}
+                        offHandItemLabel={offHandParryItemLabel}
+                        onCombatContextChange={(combatContext) => {
+                          markCombatDeclarationDraftDirty();
+                          setCombatContextDraft(combatContext);
+                        }}
+                      />
+                    </>
                   ) : null}
                 </PlayerCombatPhasePanel>
               );
@@ -1411,7 +1365,7 @@ export default function ScenarioPlayerCombatPageContent({
               result={
                 selectedCurrentInitiative
                   ? {
-                      interpretedResult: "Initiative recorded.",
+                      interpretedResult: formatCombatInitiativeFormula(selectedCurrentInitiative),
                       phaseLabel: formatCombatInitiativeRoll(selectedCurrentInitiative),
                       value: selectedCurrentInitiative.total,
                     }

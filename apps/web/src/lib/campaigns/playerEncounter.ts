@@ -279,6 +279,27 @@ export function getPlayerEncounterMovementLabel(
   );
 }
 
+export function isPlayerEncounterAttackAction(actionId: PlayerEncounterActionId | ""): boolean {
+  return (
+    actionId === "attack_parry" ||
+    actionId === "parry_attack" ||
+    actionId === "double_attack" ||
+    actionId === "feint_attack" ||
+    actionId === "adjust_range_attack" ||
+    actionId === "counterattack" ||
+    actionId === "disarm"
+  );
+}
+
+export function isPlayerEncounterDefenseAction(actionId: PlayerEncounterActionId | ""): boolean {
+  return (
+    actionId === "attack_parry" ||
+    actionId === "parry_attack" ||
+    actionId === "offensive_parry" ||
+    actionId === "parry_disarm"
+  );
+}
+
 export function getPlayerEncounterParrySourceLabel(
   parrySource: ScenarioParticipantParrySource | Exclude<ScenarioParticipantParrySource, "auto">,
 ): string {

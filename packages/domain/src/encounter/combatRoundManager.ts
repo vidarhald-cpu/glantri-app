@@ -58,13 +58,15 @@ export const combatRoundStepStatusSchema = z.enum([
 ]);
 
 export const combatRoundInitiativeResultSchema = z.object({
+  baseInitiative: z.number().int().default(0),
   rolls: z.array(z.number().int().min(1).max(6)).default([]),
+  rollTotal: z.number().int().optional(),
   total: z.number().int(),
 });
 const legacyCombatRoundInitiativeResultSchema = z
   .number()
   .int()
-  .transform((total) => ({ rolls: [], total }));
+  .transform((total) => ({ baseInitiative: 0, rolls: [], rollTotal: total, total }));
 
 export const combatRoundInitiativesSchema = z.object({
   phase1: z
@@ -133,10 +135,27 @@ export function rollOpenEndedD6(input: {
   }
 
   return {
+    baseInitiative: 0,
     isOpenEnded: rolls.length > 1,
     rolls,
+    rollTotal: rolls.reduce((sum, roll) => sum + roll, 0),
     total: rolls.reduce((sum, roll) => sum + roll, 0),
   };
+}
+
+export function buildCombatRoundInitiativeResult(input: {
+  baseInitiative?: number;
+  roll: CombatRoundInitiativeResult;
+}): CombatRoundInitiativeResult {
+  const rollTotal = input.roll.rollTotal ?? input.roll.total;
+  const baseInitiative = input.baseInitiative ?? 0;
+
+  return combatRoundInitiativeResultSchema.parse({
+    baseInitiative,
+    rolls: input.roll.rolls,
+    rollTotal,
+    total: baseInitiative + rollTotal,
+  });
 }
 
 function normalizeCombatRoundInitiativeResult(
@@ -147,7 +166,12 @@ function normalizeCombatRoundInitiativeResult(
   }
 
   return combatRoundInitiativeResultSchema.parse(
-    typeof initiative === "number" ? { rolls: [], total: initiative } : initiative,
+    typeof initiative === "number"
+      ? { baseInitiative: 0, rolls: [], rollTotal: initiative, total: initiative }
+      : {
+          ...initiative,
+          rollTotal: initiative.rollTotal ?? initiative.total - (initiative.baseInitiative ?? 0),
+        },
   );
 }
 

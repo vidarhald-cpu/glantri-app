@@ -345,12 +345,14 @@ describe("localServiceClient wire contract", () => {
     await expect(
       client.rollCombatInitiativeOnServer({
         encounterId: "encounter-1",
+        initiativeBase: 3,
         scenarioParticipantId: "participant-1",
       }),
     ).resolves.toEqual({ encounter, initiative: { rolls: [6, 2], total: 8 } });
 
     expectFetchCall(fetchMock, {
       body: {
+        initiativeBase: 3,
         scenarioParticipantId: "participant-1",
       },
       method: "POST",
