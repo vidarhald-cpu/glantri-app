@@ -72,6 +72,8 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("offHandParryItemLabel");
     expect(source).toContain("isPlayerEncounterAttackAction");
     expect(source).toContain("isPlayerEncounterDefenseAction");
+    expect(source).not.toContain("movementLabel=");
+    expect(source).not.toContain('description: selectedSecondaryActionId ? "" : "Open"');
     expect(source).not.toContain("Attack - Parry ·");
     expect(source).not.toContain("visibleOpponentOptions");
     expect(source).toContain("isGameMaster");

@@ -45,7 +45,6 @@ import {
   createEmptyPlayerEncounterCombatContext,
   evaluatePlayerEncounterParryLegality,
   getPlayerEncounterAccessibleParticipants,
-  getPlayerEncounterMovementLabel,
   isPlayerEncounterAttackAction,
   isPlayerEncounterActionId,
   isPlayerEncounterDefenseAction,
@@ -1089,7 +1088,7 @@ export default function ScenarioPlayerCombatPageContent({
         title: "",
       },
       {
-        description: selectedSecondaryActionId ? "" : "Open",
+        description: "",
         phaseLabel: "Phase 2",
         stats: selectedRoundParticipant?.initiatives.phase2
           ? [
@@ -1361,7 +1360,6 @@ export default function ScenarioPlayerCombatPageContent({
             />
             <PlayerCombatActionResultPanel
               additionalActionNotes={additionalActionNotes}
-              movementLabel={getPlayerEncounterMovementLabel(selectedMovementId)}
               result={
                 selectedCurrentInitiative
                   ? {

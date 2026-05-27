@@ -49,7 +49,6 @@ import {
 import { buildEncounterLiveCombatModifierSummary } from "@/lib/campaigns/liveCombatModifiers";
 import {
   createEmptyPlayerEncounterCombatContext,
-  getPlayerEncounterMovementLabel,
   isPlayerEncounterDefenseAction,
   isPlayerEncounterActionId,
   type PlayerEncounterActionId,
@@ -182,19 +181,19 @@ function hasCombatRoundDeclarationAction(declaration?: CombatRoundDeclaration): 
   );
 }
 
-function formatInitiativePosition(input: {
+function formatInitiativeRankLabel(input: {
   participantId?: string;
-  phase: "phase1" | "phase2";
   positions: Record<string, number>;
   value: number | undefined;
-}): string {
-  const phaseLabel = input.phase === "phase1" ? "Phase 1" : "Phase 2";
-  const position =
-    input.participantId && input.value !== undefined ? input.positions[input.participantId] : undefined;
+}): string | undefined {
+  if (!input.participantId || input.value === undefined) {
+    return undefined;
+  }
 
-  return `${phaseLabel} initiative: ${input.value ?? "—"} · ${
-    position ? `position ${position}` : "no position"
-  }`;
+  const position = input.positions[input.participantId];
+  const rankedCount = Object.keys(input.positions).length;
+
+  return position && rankedCount > 0 ? `Rank: ${position} of ${rankedCount}` : undefined;
 }
 
 function isGridArrowTarget(target: EventTarget | null): boolean {
@@ -369,41 +368,25 @@ export default function CombatRoundManagerPanel({
 
     return [
       {
-        description: "Current phase 1 action context for the selected participant.",
+        description: "",
         phaseLabel: "Phase 1",
-        stats: [
-          formatCombatInitiativeRoll(inspector.participant.initiatives.phase1),
-          formatCombatInitiativeFormula(inspector.participant.initiatives.phase1),
-          formatInitiativePosition({
-            participantId: inspector.participant.participantId,
-            phase: "phase1",
-            positions: phase1Positions,
-            value: getCombatRoundInitiativeTotal(inspector.participant.initiatives.phase1),
-          }),
-          `Action status: ${formatStepStatus(inspector.participant.stepStatuses.phase_1_actions)}`,
-          `Damage review: ${formatStepStatus(
-            inspector.participant.stepStatuses.review_phase_2_actions,
-          )}`,
-        ],
+        stats: inspector.participant.initiatives.phase1
+          ? [
+              formatCombatInitiativeRoll(inspector.participant.initiatives.phase1),
+              formatCombatInitiativeFormula(inspector.participant.initiatives.phase1),
+            ]
+          : [],
         title: "",
       },
       {
-        description: "Current phase 2 action context for the selected participant.",
+        description: "",
         phaseLabel: "Phase 2",
-        stats: [
-          formatCombatInitiativeRoll(inspector.participant.initiatives.phase2),
-          formatCombatInitiativeFormula(inspector.participant.initiatives.phase2),
-          formatInitiativePosition({
-            participantId: inspector.participant.participantId,
-            phase: "phase2",
-            positions: phase2Positions,
-            value: getCombatRoundInitiativeTotal(inspector.participant.initiatives.phase2),
-          }),
-          `Action status: ${formatStepStatus(inspector.participant.stepStatuses.phase_2_actions)}`,
-          `Damage review: ${formatStepStatus(
-            inspector.participant.stepStatuses.review_phase_2_damage,
-          )}`,
-        ],
+        stats: inspector.participant.initiatives.phase2
+          ? [
+              formatCombatInitiativeRoll(inspector.participant.initiatives.phase2),
+              formatCombatInitiativeFormula(inspector.participant.initiatives.phase2),
+            ]
+          : [],
         title: "",
       },
     ];
@@ -1067,7 +1050,6 @@ export default function CombatRoundManagerPanel({
                   />
                   <PlayerCombatActionResultPanel
                     additionalActionNotes={inspectorDraft.additionalActionNotes}
-                    movementLabel={getPlayerEncounterMovementLabel(inspectorDraft.movementId)}
                     result={
                       inspectorCurrentInitiative
                         ? {
@@ -1075,6 +1057,14 @@ export default function CombatRoundManagerPanel({
                               inspectorCurrentInitiative,
                             ),
                             phaseLabel: formatCombatInitiativeRoll(inspectorCurrentInitiative),
+                            rankLabel: formatInitiativeRankLabel({
+                              participantId: inspector.participant?.participantId,
+                              positions:
+                                inspectorCurrentInitiativePhase === "phase2"
+                                  ? phase2Positions
+                                  : phase1Positions,
+                              value: getCombatRoundInitiativeTotal(inspectorCurrentInitiative),
+                            }),
                             value: inspectorCurrentInitiative.total,
                           }
                         : null

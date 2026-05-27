@@ -113,10 +113,10 @@ interface PlayerCombatActionButtonPanelProps {
 
 interface PlayerCombatActionResultPanelProps {
   additionalActionNotes: string;
-  movementLabel: string;
   result?: {
     interpretedResult: string;
     phaseLabel?: string;
+    rankLabel?: string;
     value: number;
   } | null;
 }
@@ -126,8 +126,8 @@ export const playerCombatPanelCardStyle = {
   border: "1px solid #d9ddd8",
   borderRadius: 10,
   display: "grid",
-  gap: "0.6rem",
-  padding: "0.75rem",
+  gap: "0.45rem",
+  padding: "0.65rem",
 } as const;
 
 export const playerCombatPanelsGridStyle = {
@@ -139,13 +139,25 @@ export const playerCombatPanelsGridStyle = {
 export const playerCombatPanelRowStyle = {
   display: "grid",
   gap: "0.75rem",
-  gridTemplateColumns: "repeat(auto-fit, minmax(15rem, 1fr))",
+  gridTemplateColumns: "minmax(12rem, 0.7fr) minmax(14rem, 1fr) minmax(14rem, 1fr)",
 } as const;
 
 export const playerCombatTopPanelRowStyle = {
   display: "grid",
   gap: "0.75rem",
-  gridTemplateColumns: "minmax(14rem, 0.8fr) minmax(14rem, 1fr) minmax(14rem, 1fr)",
+  gridTemplateColumns: playerCombatPanelRowStyle.gridTemplateColumns,
+} as const;
+
+const compactFieldLabelStyle = {
+  display: "grid",
+  gap: "0.18rem",
+  maxWidth: "13rem",
+} as const;
+
+const compactWideFieldLabelStyle = {
+  display: "grid",
+  gap: "0.18rem",
+  maxWidth: "100%",
 } as const;
 
 function getDisplayTotal(row: PlayerCombatModifierBucketView | undefined): number {
@@ -263,11 +275,6 @@ export function PlayerCombatModifierPanel({
   rows,
 }: PlayerCombatModifierPanelProps) {
   const editable = !readOnly && onAddEntry && onRemoveEntry && onUpdateEntry;
-  const generalTotal = getDisplayTotal(rows.find((row) => row.bucketKey === "general") ?? rows[0]);
-  const skillObTotal = getDisplayTotal(
-    rows.find((row) => row.bucketKey === "situation_ob_skill") ?? rows[1],
-  );
-  const dbTotal = getDisplayTotal(rows.find((row) => row.bucketKey === "situation_db") ?? rows[2]);
 
   return (
     <section style={playerCombatPanelCardStyle}>
@@ -288,50 +295,67 @@ export function PlayerCombatModifierPanel({
                   key={entry.id}
                   style={{
                     display: "grid",
-                    gap: "0.35rem",
-                    gridTemplateColumns: "70px 88px minmax(0, 1fr) auto",
+                    gap: "0.25rem",
                   }}
                 >
-                  <input
-                    disabled={controlsDisabled}
-                    onChange={(event) =>
-                      onUpdateEntry(row.bucketKey, entry.id, {
-                        value: event.target.value.length > 0 ? Number(event.target.value) : 0,
-                      })
-                    }
-                    type="number"
-                    value={entry.value}
-                  />
-                  <select
-                    disabled={controlsDisabled}
-                    onChange={(event) =>
-                      onUpdateEntry(row.bucketKey, entry.id, {
-                        scope: event.target.value as "until" | "save",
-                      })
-                    }
-                    value={entry.scope}
+                  <div
+                    style={{
+                      alignItems: "end",
+                      display: "grid",
+                      gap: "0.35rem",
+                      gridTemplateColumns: "4.5rem 5.5rem auto",
+                    }}
                   >
-                    <option value="until">Until</option>
-                    <option value="save">Save</option>
-                  </select>
-                  <input
-                    disabled={controlsDisabled}
-                    onChange={(event) =>
-                      onUpdateEntry(row.bucketKey, entry.id, {
-                        notes: event.target.value,
-                      })
-                    }
-                    placeholder="Notes"
-                    type="text"
-                    value={entry.notes ?? ""}
-                  />
-                  <button
-                    disabled={controlsDisabled}
-                    onClick={() => onRemoveEntry(row.bucketKey, entry.id)}
-                    type="button"
-                  >
-                    Remove
-                  </button>
+                    <label style={compactWideFieldLabelStyle}>
+                      <span style={{ fontSize: "0.82rem", fontWeight: 600 }}>Mod</span>
+                      <input
+                        disabled={controlsDisabled}
+                        onChange={(event) =>
+                          onUpdateEntry(row.bucketKey, entry.id, {
+                            value: event.target.value.length > 0 ? Number(event.target.value) : 0,
+                          })
+                        }
+                        type="number"
+                        value={entry.value}
+                      />
+                    </label>
+                    <label style={compactWideFieldLabelStyle}>
+                      <span style={{ fontSize: "0.82rem", fontWeight: 600 }}>Dur</span>
+                      <select
+                        disabled={controlsDisabled}
+                        onChange={(event) =>
+                          onUpdateEntry(row.bucketKey, entry.id, {
+                            scope: event.target.value as "until" | "save",
+                          })
+                        }
+                        value={entry.scope}
+                      >
+                        <option value="until">Until</option>
+                        <option value="save">Save</option>
+                      </select>
+                    </label>
+                    <button
+                      disabled={controlsDisabled}
+                      onClick={() => onRemoveEntry(row.bucketKey, entry.id)}
+                      type="button"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                  <label style={compactWideFieldLabelStyle}>
+                    <span style={{ fontSize: "0.82rem", fontWeight: 600 }}>Details</span>
+                    <input
+                      disabled={controlsDisabled}
+                      onChange={(event) =>
+                        onUpdateEntry(row.bucketKey, entry.id, {
+                          notes: event.target.value,
+                        })
+                      }
+                      placeholder="Details"
+                      type="text"
+                      value={entry.notes ?? ""}
+                    />
+                  </label>
                 </div>
               ))
             : row.entries.map((entry) => (
@@ -354,11 +378,6 @@ export function PlayerCombatModifierPanel({
           ) : null}
         </div>
       ))}
-
-      <div style={{ color: "#5e5a50", fontSize: "0.92rem" }}>
-        General/Fatigue {generalTotal} · Attack {generalTotal + skillObTotal} · Defense{" "}
-        {generalTotal + dbTotal}
-      </div>
     </section>
   );
 }
@@ -378,8 +397,8 @@ export function PlayerCombatActionSelectorPanel({
   return (
     <section style={playerCombatPanelCardStyle}>
       <strong>Action selector{roundNumber ? ` · Round ${roundNumber}` : ""}</strong>
-      <label style={{ display: "grid", gap: "0.25rem" }}>
-        <span>Action</span>
+      <label style={compactFieldLabelStyle}>
+        <span style={{ fontSize: "0.88rem", fontWeight: 600 }}>Action</span>
         <select
           disabled={controlsDisabled}
           onChange={(event) => onActionChange(event.target.value as PlayerEncounterActionId | "")}
@@ -394,8 +413,8 @@ export function PlayerCombatActionSelectorPanel({
         </select>
       </label>
 
-      <label style={{ display: "grid", gap: "0.25rem" }}>
-        <span>Secondary action</span>
+      <label style={compactFieldLabelStyle}>
+        <span style={{ fontSize: "0.88rem", fontWeight: 600 }}>Secondary action</span>
         <select
           disabled={controlsDisabled}
           onChange={(event) =>
@@ -412,8 +431,8 @@ export function PlayerCombatActionSelectorPanel({
         </select>
       </label>
 
-      <label style={{ display: "grid", gap: "0.25rem" }}>
-        <span>Movement</span>
+      <label style={compactFieldLabelStyle}>
+        <span style={{ fontSize: "0.88rem", fontWeight: 600 }}>Movement</span>
         <select
           disabled={controlsDisabled}
           onChange={(event) =>
@@ -429,8 +448,8 @@ export function PlayerCombatActionSelectorPanel({
         </select>
       </label>
 
-      <label style={{ display: "grid", gap: "0.25rem" }}>
-        <span>Additional</span>
+      <label style={compactWideFieldLabelStyle}>
+        <span style={{ fontSize: "0.88rem", fontWeight: 600 }}>Description</span>
         <input
           disabled={controlsDisabled}
           onChange={(event) => onAdditionalActionNotesChange(event.target.value)}
@@ -478,11 +497,18 @@ export function PlayerCombatActionButtonPanel({
 
 export function PlayerCombatActionResultPanel({
   additionalActionNotes,
-  movementLabel,
   result,
 }: PlayerCombatActionResultPanelProps) {
+  const detailText = additionalActionNotes.trim();
+
   return (
-    <section style={playerCombatPanelCardStyle}>
+    <section
+      style={{
+        ...playerCombatPanelCardStyle,
+        alignContent: "start",
+        minHeight: 136,
+      }}
+    >
       <strong>Action result</strong>
       <div
         style={{
@@ -494,17 +520,23 @@ export function PlayerCombatActionResultPanel({
           fontSize: "1.3rem",
           fontWeight: 700,
           justifyContent: "center",
-          minHeight: 58,
+          minHeight: 44,
         }}
       >
         {result?.value ?? "—"}
       </div>
-      <div>{result?.phaseLabel ?? "No combat action result yet."}</div>
-      <div style={{ color: "#5e5a50" }}>{result?.interpretedResult ?? "No result recorded."}</div>
-      <div style={{ color: "#5e5a50", fontSize: "0.95rem" }}>
-        Movement: {movementLabel}
-        {additionalActionNotes.trim().length > 0 ? ` · ${additionalActionNotes.trim()}` : ""}
+      <div style={{ fontSize: "0.95rem", fontWeight: 600 }}>
+        {result?.interpretedResult ?? "No result recorded."}
       </div>
+      {result?.phaseLabel ? (
+        <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>{result.phaseLabel}</div>
+      ) : null}
+      {result?.rankLabel ? (
+        <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>{result.rankLabel}</div>
+      ) : null}
+      {detailText ? (
+        <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>Description: {detailText}</div>
+      ) : null}
     </section>
   );
 }
@@ -523,13 +555,13 @@ export function formatCombatInitiativeRoll(initiative?: CombatRoundInitiativeRes
 
 export function formatCombatInitiativeFormula(initiative?: CombatRoundInitiativeResult): string {
   if (!initiative) {
-    return "Initiative not rolled.";
+    return "Main: no initiative result.";
   }
 
   const baseInitiative = initiative.baseInitiative ?? 0;
   const rollTotal = initiative.rollTotal ?? initiative.total - baseInitiative;
 
-  return `I ${baseInitiative} + roll ${rollTotal} = ${initiative.total}`;
+  return `Main: I ${baseInitiative} + [ ] 0 + roll ${rollTotal} = ${initiative.total}`;
 }
 
 export function PlayerCombatAttackStatsTable({ stats }: PlayerCombatAttackStatsTableProps) {
@@ -648,11 +680,11 @@ function ParryDirectionSelector({
       style={{
         alignItems: "center",
         display: "grid",
-        gap: "0.25rem",
-        gridTemplateColumns: "minmax(5rem, auto) minmax(8rem, 1fr) auto",
+        gap: "0.2rem",
+        gridTemplateColumns: "minmax(5rem, 0.8fr) minmax(7rem, 1fr) auto",
       }}
     >
-      <span>{itemLabel}</span>
+      <span style={{ fontSize: "0.86rem", fontWeight: 600 }}>{itemLabel}</span>
       <select
         disabled={controlsDisabled}
         onChange={(event) =>
@@ -701,16 +733,15 @@ export function PlayerCombatParryContextPanel({
       style={{
         borderTop: "1px solid #e3e1dc",
         display: "grid",
-        gap: "0.55rem",
-        paddingTop: "0.55rem",
+        gap: "0.35rem",
+        paddingTop: "0.45rem",
       }}
     >
-      <strong style={{ fontSize: "0.95rem" }}>Parry context</strong>
+      <strong style={{ fontSize: "0.9rem" }}>Parry context</strong>
       <div
         style={{
           display: "grid",
-          gap: "0.5rem",
-          gridTemplateColumns: "repeat(auto-fit, minmax(13rem, 1fr))",
+          gap: "0.3rem",
         }}
       >
         <ParryDirectionSelector
@@ -745,15 +776,16 @@ export function PlayerCombatPhasePanel({ children, phaseCard }: PlayerCombatPhas
     <section
       style={{
         ...playerCombatPanelCardStyle,
-        minHeight: 210,
-        padding: "0.85rem",
+        minHeight: 178,
       }}
     >
       <strong>{phaseCard.phaseLabel}</strong>
       {phaseCard.title ? (
         <div style={{ color: "#5e5a50", fontSize: "0.95rem" }}>{phaseCard.title}</div>
       ) : null}
-      <div style={{ color: "#5e5a50" }}>{phaseCard.description}</div>
+      {phaseCard.description ? (
+        <div style={{ color: "#5e5a50" }}>{phaseCard.description}</div>
+      ) : null}
       {children}
       {phaseCard.stats.length > 0 ? (
         <div style={{ display: "grid", gap: "0.25rem", fontSize: "0.95rem" }}>

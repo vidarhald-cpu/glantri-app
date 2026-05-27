@@ -87,8 +87,11 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("getCombatRoundInitiativeTotal");
     expect(source).toContain("formatCombatInitiativeRoll");
     expect(source).toContain("formatCombatInitiativeFormula");
+    expect(source).toContain("formatInitiativeRankLabel");
+    expect(source).toContain("rankLabel");
     expect(source).toContain("inspectorInitiativeBase");
-    expect(source).toContain("no position");
+    expect(source).not.toContain("Action status:");
+    expect(source).not.toContain("Damage review:");
     expect(source).toContain("PlayerCombatParryContextPanel");
     expect(source).toContain("isPlayerEncounterDefenseAction");
     expect(source).not.toContain("inspectorOpponentOptions");

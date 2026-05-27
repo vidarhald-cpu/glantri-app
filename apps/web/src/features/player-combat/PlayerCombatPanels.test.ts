@@ -42,7 +42,8 @@ describe("PlayerCombatPanels", () => {
     expect(source).toContain("phaseCard.description");
     expect(source).toContain("phaseCard.stats");
     expect(source).toContain("playerCombatTopPanelRowStyle");
-    expect(source).toContain('gridTemplateColumns: "minmax(14rem, 0.8fr) minmax(14rem, 1fr) minmax(14rem, 1fr)"');
+    expect(source).toContain('gridTemplateColumns: "minmax(12rem, 0.7fr) minmax(14rem, 1fr) minmax(14rem, 1fr)"');
+    expect(source).toContain("gridTemplateColumns: playerCombatPanelRowStyle.gridTemplateColumns");
     expect(source).toContain("PlayerCombatAttackStatsTable");
     expect(source).toContain("PlayerCombatDefenseStatsTable");
     expect(source).toContain("I");
@@ -62,7 +63,8 @@ describe("PlayerCombatPanels", () => {
     expect(source).toContain("Action selector");
     expect(source).toContain("Secondary action");
     expect(source).toContain("Movement");
-    expect(source).toContain("Additional");
+    expect(source).toContain("Description");
+    expect(source).not.toContain("<span>Additional</span>");
     expect(source).toContain("roundNumber");
     expect(source).toContain("PlayerCombatParryContextPanel");
     expect(source).toContain("Parry context");
@@ -86,5 +88,11 @@ describe("PlayerCombatPanels", () => {
     expect(source).toContain("PlayerCombatActionResultPanel");
     expect(source).toContain("formatCombatInitiativeRoll");
     expect(source).toContain("formatCombatInitiativeFormula");
+    expect(source).toContain("Main: I ${baseInitiative} + [ ] 0 + roll ${rollTotal} = ${initiative.total}");
+    expect(source).not.toContain("Movement:");
+    expect(source).toContain("Mod");
+    expect(source).toContain("Dur");
+    expect(source).toContain("Details");
+    expect(source).not.toContain("General/Fatigue {generalTotal}");
   });
 });
