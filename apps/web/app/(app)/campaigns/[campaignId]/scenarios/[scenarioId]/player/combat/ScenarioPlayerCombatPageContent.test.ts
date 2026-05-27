@@ -50,6 +50,14 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("buttonLabel={declarationButtonLabel}");
     expect(source).toContain("window.setInterval");
     expect(source).toContain("visibilitychange");
+    expect(source).toContain("combatDeclarationDraftDirty");
+    expect(source).toContain("buildPlayerCombatDeclarationDraftKey");
+    expect(source).toContain("buildPlayerCombatDeclarationDraft");
+    expect(source).toContain("selectedRoundDeclaration");
+    expect(source).toContain("markCombatDeclarationDraftDirty");
+    expect(source).toContain("combatDeclarationDraftKey === selectedCombatDeclarationDraftKey");
+    expect(source).toContain("(isGameMaster || declarationStepOpen)");
+    expect(source).toContain("setCombatDeclarationDraftDirty(false)");
     expect(source).toContain("readOnly={!isGameMaster}");
     expect(source).toContain("isGameMaster");
     expect(source).not.toContain("will appear here in the next phase");

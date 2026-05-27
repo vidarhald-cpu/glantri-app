@@ -63,6 +63,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("selectedRoundDeclaration");
     expect(source).toContain("buildInspectorDraftKey");
     expect(source).toContain("buildDeclarationDraft(selectedScenarioParticipant, selectedRoundDeclaration)");
+    expect(source).toContain("draftKey.startsWith(`${participant.id}:`)");
     expect(source).toContain("PlayerCombatModifierPanel");
     expect(source).toContain("PlayerCombatActionSelectorPanel");
     expect(source).toContain("PlayerCombatActionButtonPanel");

@@ -460,7 +460,11 @@ export default function CombatRoundManagerPanel({
           const nextDrafts = { ...current };
 
           for (const participant of participants) {
-            delete nextDrafts[participant.id];
+            for (const draftKey of Object.keys(nextDrafts)) {
+              if (draftKey.startsWith(`${participant.id}:`)) {
+                delete nextDrafts[draftKey];
+              }
+            }
           }
 
           return nextDrafts;

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import {
+  type CombatRoundDeclaration,
   characterBuildSchema,
   initializeCombatRoundState,
   type EncounterSession,
@@ -163,6 +164,73 @@ function createModifierEntryDraft(): ScenarioCombatModifierEntry {
   };
 }
 
+interface PlayerCombatDeclarationDraft {
+  actionId: PlayerEncounterActionId | "";
+  additionalActionNotes: string;
+  combatContext: ScenarioParticipantCombatContext;
+  movementId: PlayerEncounterMovementId | "";
+  secondaryActionId: PlayerEncounterActionId | "";
+}
+
+function hasCombatRoundDeclarationAction(
+  declaration?: CombatRoundDeclaration,
+): declaration is CombatRoundDeclaration {
+  return Boolean(
+    declaration?.actionId ||
+      declaration?.secondaryActionId ||
+      declaration?.movementId ||
+      declaration?.additionalActionNotes ||
+      declaration?.combatContext,
+  );
+}
+
+function buildPlayerCombatDeclarationDraft(input: {
+  declaration?: CombatRoundDeclaration;
+  participant?: ScenarioParticipant | null;
+}): PlayerCombatDeclarationDraft {
+  const { declaration, participant } = input;
+
+  return {
+    actionId: isPlayerEncounterActionId(declaration?.actionId)
+      ? declaration.actionId
+      : isPlayerEncounterActionId(participant?.state.combat.lastDeclaredActionId)
+        ? participant.state.combat.lastDeclaredActionId
+        : "",
+    additionalActionNotes:
+      declaration?.additionalActionNotes ?? participant?.state.combat.lastDeclarationNotes ?? "",
+    combatContext:
+      declaration?.combatContext ??
+      participant?.state.combat.combatContext ??
+      createEmptyPlayerEncounterCombatContext(),
+    movementId: (declaration?.movementId ??
+      participant?.state.combat.lastDeclaredMovementId ??
+      "hold") as PlayerEncounterMovementId,
+    secondaryActionId: isPlayerEncounterActionId(declaration?.secondaryActionId)
+      ? declaration.secondaryActionId
+      : isPlayerEncounterActionId(participant?.state.combat.lastDeclaredSecondaryActionId)
+        ? participant.state.combat.lastDeclaredSecondaryActionId
+        : "",
+  };
+}
+
+function buildPlayerCombatDeclarationDraftKey(input: {
+  currentStep?: string;
+  declaration?: CombatRoundDeclaration;
+  encounterId?: string;
+  participantId?: string;
+  roundNumber?: number;
+  stepStatus?: string;
+}): string {
+  return [
+    input.encounterId ?? "no-encounter",
+    input.participantId ?? "no-participant",
+    input.roundNumber ?? "no-round",
+    input.currentStep ?? "no-step",
+    input.stepStatus ?? "no-status",
+    input.declaration?.submittedAt ?? "no-submission-time",
+  ].join(":");
+}
+
 export default function ScenarioPlayerCombatPageContent({
   campaignId,
   encounterId,
@@ -207,6 +275,8 @@ export default function ScenarioPlayerCombatPageContent({
   const [combatContextDraft, setCombatContextDraft] = useState<ScenarioParticipantCombatContext>(
     createEmptyPlayerEncounterCombatContext(),
   );
+  const [combatDeclarationDraftDirty, setCombatDeclarationDraftDirty] = useState(false);
+  const [combatDeclarationDraftKey, setCombatDeclarationDraftKey] = useState("");
   const [savingCombatContext, setSavingCombatContext] = useState(false);
   const [actionRollResult, setActionRollResult] = useState<{
     interpretedResult: string;
@@ -421,10 +491,22 @@ export default function ScenarioPlayerCombatPageContent({
   );
   const selectedDeclarationStepStatus =
     selectedRoundParticipant?.stepStatuses.select_actions ?? "pending";
+  const selectedRoundDeclaration = hasCombatRoundDeclarationAction(selectedRoundParticipant?.declaration)
+    ? selectedRoundParticipant.declaration
+    : undefined;
+  const selectedCombatDeclarationDraftKey = buildPlayerCombatDeclarationDraftKey({
+    currentStep: combatRoundState?.currentStep,
+    declaration: selectedRoundDeclaration,
+    encounterId,
+    participantId: selectedParticipant?.id,
+    roundNumber: declarationRoundNumber,
+    stepStatus: selectedDeclarationStepStatus,
+  });
   const selectedParticipantDeclaredThisRound = Boolean(
-    declarationRoundNumber &&
-      selectedParticipant?.state.combat.lastDeclaredActionId &&
-      selectedParticipant.state.combat.lastDeclaredRoundNumber === declarationRoundNumber,
+    selectedRoundDeclaration ??
+      (declarationRoundNumber &&
+        selectedParticipant?.state.combat.lastDeclaredActionId &&
+        selectedParticipant.state.combat.lastDeclaredRoundNumber === declarationRoundNumber),
   );
   const declarationStepOpen =
     !combatRoundState || combatRoundState.currentStep === "select_actions";
@@ -446,25 +528,46 @@ export default function ScenarioPlayerCombatPageContent({
   ]);
 
   useEffect(() => {
-    setSelectedActionId(
-      isPlayerEncounterActionId(selectedParticipant?.state.combat.lastDeclaredActionId)
-        ? selectedParticipant.state.combat.lastDeclaredActionId
-        : "",
-    );
-    setSelectedSecondaryActionId(
-      isPlayerEncounterActionId(selectedParticipant?.state.combat.lastDeclaredSecondaryActionId)
-        ? selectedParticipant.state.combat.lastDeclaredSecondaryActionId
-        : "",
-    );
-    setSelectedMovementId(
-      (selectedParticipant?.state.combat.lastDeclaredMovementId as PlayerEncounterMovementId) ??
-        "hold",
-    );
-    setAdditionalActionNotes(selectedParticipant?.state.combat.lastDeclarationNotes ?? "");
-    setCombatContextDraft(
-      selectedParticipant?.state.combat.combatContext ?? createEmptyPlayerEncounterCombatContext(),
-    );
-  }, [selectedParticipant]);
+    if (!selectedParticipant) {
+      setSelectedActionId("");
+      setSelectedSecondaryActionId("");
+      setSelectedMovementId("hold");
+      setAdditionalActionNotes("");
+      setCombatContextDraft(createEmptyPlayerEncounterCombatContext());
+      setCombatDeclarationDraftDirty(false);
+      setCombatDeclarationDraftKey(selectedCombatDeclarationDraftKey);
+      return;
+    }
+
+    if (
+      combatDeclarationDraftDirty &&
+      combatDeclarationDraftKey === selectedCombatDeclarationDraftKey &&
+      (isGameMaster || declarationStepOpen)
+    ) {
+      return;
+    }
+
+    const nextDraft = buildPlayerCombatDeclarationDraft({
+      declaration: selectedRoundDeclaration,
+      participant: selectedParticipant,
+    });
+
+    setSelectedActionId(nextDraft.actionId);
+    setSelectedSecondaryActionId(nextDraft.secondaryActionId);
+    setSelectedMovementId(nextDraft.movementId);
+    setAdditionalActionNotes(nextDraft.additionalActionNotes);
+    setCombatContextDraft(nextDraft.combatContext);
+    setCombatDeclarationDraftDirty(false);
+    setCombatDeclarationDraftKey(selectedCombatDeclarationDraftKey);
+  }, [
+    combatDeclarationDraftDirty,
+    combatDeclarationDraftKey,
+    declarationStepOpen,
+    isGameMaster,
+    selectedCombatDeclarationDraftKey,
+    selectedParticipant,
+    selectedRoundDeclaration,
+  ]);
 
   useEffect(() => {
     const participantId = selectedParticipant?.id;
@@ -674,10 +777,16 @@ export default function ScenarioPlayerCombatPageContent({
     [selectedActionId, selectedSecondaryActionId],
   );
 
+  function markCombatDeclarationDraftDirty() {
+    setCombatDeclarationDraftDirty(true);
+    setCombatDeclarationDraftKey(selectedCombatDeclarationDraftKey);
+  }
+
   function updateModifierBucket(
     bucket: ScenarioCombatModifierBucket,
     updater: (entries: ScenarioCombatModifierEntry[]) => ScenarioCombatModifierEntry[],
   ) {
+    markCombatDeclarationDraftDirty();
     setCombatContextDraft((current) => ({
       ...current,
       modifierBuckets: {
@@ -727,6 +836,7 @@ export default function ScenarioPlayerCombatPageContent({
         current.map((entry) => (entry.id === participant.id ? participant : entry)),
       );
       setEncounterSession(encounter);
+      setCombatDeclarationDraftDirty(false);
       setError(undefined);
     } catch (caughtError) {
       setError(
@@ -1169,11 +1279,26 @@ export default function ScenarioPlayerCombatPageContent({
               combatContext={combatContextDraft}
               controlsDisabled={declarationControlsDisabled}
               movementId={selectedMovementId}
-              onActionChange={setSelectedActionId}
-              onAdditionalActionNotesChange={setAdditionalActionNotes}
-              onCombatContextChange={setCombatContextDraft}
-              onMovementChange={setSelectedMovementId}
-              onSecondaryActionChange={setSelectedSecondaryActionId}
+              onActionChange={(actionId) => {
+                markCombatDeclarationDraftDirty();
+                setSelectedActionId(actionId);
+              }}
+              onAdditionalActionNotesChange={(notes) => {
+                markCombatDeclarationDraftDirty();
+                setAdditionalActionNotes(notes);
+              }}
+              onCombatContextChange={(combatContext) => {
+                markCombatDeclarationDraftDirty();
+                setCombatContextDraft(combatContext);
+              }}
+              onMovementChange={(movementId) => {
+                markCombatDeclarationDraftDirty();
+                setSelectedMovementId(movementId);
+              }}
+              onSecondaryActionChange={(actionId) => {
+                markCombatDeclarationDraftDirty();
+                setSelectedSecondaryActionId(actionId);
+              }}
               parryLegality={parryLegality}
               secondaryActionId={selectedSecondaryActionId}
               visibleOpponentOptions={visibleOpponentOptions}
