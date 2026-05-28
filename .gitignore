@@ -41,3 +41,6 @@ apps/web/e2e/.auth/
 apps/web/e2e/test-state.json
 apps/web/playwright-report/
 apps/web/test-results/
+
+# Large generated export artifacts (regenerate with `pnpm --filter @glantri/content export:skill-system-ai`)
+exports/skill-system-ai/*.json
