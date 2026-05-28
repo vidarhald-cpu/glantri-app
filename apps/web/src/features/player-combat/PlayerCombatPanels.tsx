@@ -171,20 +171,40 @@ const compactWideFieldLabelStyle = {
   maxWidth: "100%",
 } as const;
 
-const compactModifierEntryRowStyle = {
-  alignItems: "end",
+const compactModifierGroupHeaderStyle = {
+  alignItems: "center",
+  display: "flex",
+  gap: "0.5rem",
+  justifyContent: "space-between",
+} as const;
+
+const compactModifierMiniTableStyle = {
   display: "grid",
-  gap: "0.35rem",
-  gridTemplateColumns: "5.25rem 5.25rem minmax(10rem, 1fr) 4.75rem",
+  gap: "0.2rem",
   minWidth: 0,
 } as const;
 
-const compactModifierFieldLabelStyle = {
+const compactModifierMiniTableHeaderStyle = {
   alignItems: "center",
   display: "grid",
-  gap: "0.25rem",
-  gridTemplateColumns: "auto minmax(0, 1fr)",
+  gap: "0.35rem",
+  gridTemplateColumns: "3.25rem 3.25rem minmax(0, 1fr) 4.75rem",
   minWidth: 0,
+} as const;
+
+const compactModifierMiniTableRowStyle = {
+  ...compactModifierMiniTableHeaderStyle,
+  alignItems: "center",
+} as const;
+
+const compactModifierNumberInputStyle = {
+  minWidth: 0,
+  width: "3rem",
+} as const;
+
+const compactModifierDetailsInputStyle = {
+  minWidth: 0,
+  width: "100%",
 } as const;
 
 const compactStatsRowStyle = {
@@ -367,62 +387,76 @@ export function PlayerCombatModifierPanel({
       <strong>Combat modifiers</strong>
       {rows.map((row) => (
         <div key={row.bucketKey} style={{ display: "grid", gap: "0.35rem" }}>
-          <div style={{ alignItems: "center", display: "flex", gap: "0.5rem" }}>
-            <span style={{ fontSize: "0.9rem", fontWeight: 600 }}>{row.label}</span>
-            <span style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
-              {getDisplayTotal(row) >= 0 ? "+" : ""}
-              {getDisplayTotal(row)}
-            </span>
+          <div style={compactModifierGroupHeaderStyle}>
+            <div style={{ alignItems: "center", display: "flex", gap: "0.5rem" }}>
+              <span style={{ fontSize: "0.9rem", fontWeight: 600 }}>{row.label}</span>
+              <span style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
+                {getDisplayTotal(row) >= 0 ? "+" : ""}
+                {getDisplayTotal(row)}
+              </span>
+            </div>
+            {editable && !row.locked ? (
+              <button
+                disabled={controlsDisabled}
+                onClick={() => addEntryFromDraft(row.bucketKey)}
+                style={{ justifySelf: "end" }}
+                type="button"
+              >
+                Add
+              </button>
+            ) : null}
           </div>
 
-          {editable && !row.locked
-            ? row.entries.map((entry) => (
-                <div key={entry.id} style={compactModifierEntryRowStyle}>
-                  <label style={compactModifierFieldLabelStyle}>
-                    <span style={{ fontSize: "0.82rem", fontWeight: 600 }}>Mod</span>
-                    <input
-                      disabled={controlsDisabled}
-                      onChange={(event) =>
-                        onUpdateEntry(row.bucketKey, entry.id, {
-                          value: event.target.value.length > 0 ? Number(event.target.value) : 0,
-                        })
-                      }
-                      style={{ minWidth: 0, width: "3rem" }}
-                      type="number"
-                      value={entry.value}
-                    />
-                  </label>
-                  <label style={compactModifierFieldLabelStyle}>
-                    <span style={{ fontSize: "0.82rem", fontWeight: 600 }}>Dur</span>
-                    <input
-                      disabled={controlsDisabled}
-                      min={1}
-                      onChange={(event) =>
-                        onUpdateEntry(row.bucketKey, entry.id, {
-                          durationRounds:
-                            event.target.value.length > 0 ? Number(event.target.value) : undefined,
-                        })
-                      }
-                      style={{ minWidth: 0, width: "3rem" }}
-                      type="number"
-                      value={entry.durationRounds ?? ""}
-                    />
-                  </label>
-                  <label style={compactModifierFieldLabelStyle}>
-                    <span style={{ fontSize: "0.82rem", fontWeight: 600 }}>Details</span>
-                    <input
-                      disabled={controlsDisabled}
-                      onChange={(event) =>
-                        onUpdateEntry(row.bucketKey, entry.id, {
-                          notes: event.target.value,
-                        })
-                      }
-                      placeholder="Details"
-                      style={{ minWidth: 0, width: "100%" }}
-                      type="text"
-                      value={entry.notes ?? ""}
-                    />
-                  </label>
+          {editable && !row.locked ? (
+            <div style={compactModifierMiniTableStyle}>
+              <div style={compactModifierMiniTableHeaderStyle}>
+                {["Mod", "Dur", "Details", "Remove"].map((heading) => (
+                  <span key={heading} style={{ fontSize: "0.78rem", fontWeight: 700 }}>
+                    {heading}
+                  </span>
+                ))}
+              </div>
+              {row.entries.map((entry) => (
+                <div key={entry.id} style={compactModifierMiniTableRowStyle}>
+                  <input
+                    aria-label={`${row.label} modifier value`}
+                    disabled={controlsDisabled}
+                    onChange={(event) =>
+                      onUpdateEntry(row.bucketKey, entry.id, {
+                        value: event.target.value.length > 0 ? Number(event.target.value) : 0,
+                      })
+                    }
+                    style={compactModifierNumberInputStyle}
+                    type="number"
+                    value={entry.value}
+                  />
+                  <input
+                    aria-label={`${row.label} modifier duration`}
+                    disabled={controlsDisabled}
+                    min={1}
+                    onChange={(event) =>
+                      onUpdateEntry(row.bucketKey, entry.id, {
+                        durationRounds:
+                          event.target.value.length > 0 ? Number(event.target.value) : undefined,
+                      })
+                    }
+                    style={compactModifierNumberInputStyle}
+                    type="number"
+                    value={entry.durationRounds ?? ""}
+                  />
+                  <input
+                    aria-label={`${row.label} modifier details`}
+                    disabled={controlsDisabled}
+                    onChange={(event) =>
+                      onUpdateEntry(row.bucketKey, entry.id, {
+                        notes: event.target.value,
+                      })
+                    }
+                    placeholder="Details"
+                    style={compactModifierDetailsInputStyle}
+                    type="text"
+                    value={entry.notes ?? ""}
+                  />
                   <button
                     disabled={controlsDisabled}
                     onClick={() => onRemoveEntry(row.bucketKey, entry.id)}
@@ -431,34 +465,22 @@ export function PlayerCombatModifierPanel({
                     Remove
                   </button>
                 </div>
-              ))
-            : row.entries.map((entry) => (
-                <div key={entry.id} style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
-                  {entry.value >= 0 ? "+" : ""}
-                  {entry.value} · {formatModifierDuration(entry)}
-                  {entry.notes ? ` · ${entry.notes}` : ""}
-                </div>
               ))}
-
-          {editable && !row.locked ? (
-            <div style={compactModifierEntryRowStyle}>
-              <label style={compactModifierFieldLabelStyle}>
-                <span style={{ fontSize: "0.82rem", fontWeight: 600 }}>Mod</span>
+              <div style={compactModifierMiniTableRowStyle}>
                 <input
+                  aria-label={`${row.label} new modifier value`}
                   disabled={controlsDisabled}
                   onChange={(event) =>
                     updateEntryDraft(row.bucketKey, {
                       value: event.target.value.length > 0 ? Number(event.target.value) : 0,
                     })
                   }
-                  style={{ minWidth: 0, width: "3rem" }}
+                  style={compactModifierNumberInputStyle}
                   type="number"
                   value={getEntryDraft(row.bucketKey).value}
                 />
-              </label>
-              <label style={compactModifierFieldLabelStyle}>
-                <span style={{ fontSize: "0.82rem", fontWeight: 600 }}>Dur</span>
                 <input
+                  aria-label={`${row.label} new modifier duration`}
                   disabled={controlsDisabled}
                   min={1}
                   onChange={(event) =>
@@ -467,14 +489,12 @@ export function PlayerCombatModifierPanel({
                         event.target.value.length > 0 ? Number(event.target.value) : undefined,
                     })
                   }
-                  style={{ minWidth: 0, width: "3rem" }}
+                  style={compactModifierNumberInputStyle}
                   type="number"
                   value={getEntryDraft(row.bucketKey).durationRounds ?? ""}
                 />
-              </label>
-              <label style={compactModifierFieldLabelStyle}>
-                <span style={{ fontSize: "0.82rem", fontWeight: 600 }}>Details</span>
                 <input
+                  aria-label={`${row.label} new modifier details`}
                   disabled={controlsDisabled}
                   onChange={(event) =>
                     updateEntryDraft(row.bucketKey, {
@@ -482,20 +502,22 @@ export function PlayerCombatModifierPanel({
                     })
                   }
                   placeholder="Details"
-                  style={{ minWidth: 0, width: "100%" }}
+                  style={compactModifierDetailsInputStyle}
                   type="text"
                   value={getEntryDraft(row.bucketKey).notes}
                 />
-              </label>
-              <button
-                disabled={controlsDisabled}
-                onClick={() => addEntryFromDraft(row.bucketKey)}
-                type="button"
-              >
-                Add
-              </button>
+                <span aria-hidden="true" />
+              </div>
             </div>
-          ) : null}
+          ) : (
+            row.entries.map((entry) => (
+              <div key={entry.id} style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
+                {entry.value >= 0 ? "+" : ""}
+                {entry.value} · {formatModifierDuration(entry)}
+                {entry.notes ? ` · ${entry.notes}` : ""}
+              </div>
+            ))
+          )}
         </div>
       ))}
     </section>
