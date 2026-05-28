@@ -60,7 +60,6 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("rollInitiative");
     expect(source).toContain("currentInitiativePhase");
     expect(source).toContain("Initiative rolled.");
-    expect(source).toContain("formatCombatInitiativeRoll");
     expect(source).toContain("formatCombatInitiativeFormula");
     expect(source).toContain("initiativeBase");
     expect(source).toContain("formatPlayerCombatInitiativeRank");
@@ -98,9 +97,7 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("phaseModel.showDefenseContext");
     expect(source).not.toContain("movementLabel=");
     expect(source).not.toContain('description: selectedSecondaryActionId ? "" : "Open"');
-    expect(source).not.toContain(
-      "formatCombatInitiativeRoll(selectedRoundParticipant.initiatives.phase1)",
-    );
+    expect(source).not.toContain("formatCombatInitiativeRoll(selectedRoundParticipant");
     expect(source).not.toContain("Attack - Parry ·");
     expect(source).not.toContain("visibleOpponentOptions");
     expect(source).toContain("isGameMaster");

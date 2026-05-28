@@ -149,6 +149,16 @@ describe("PlayerCombatPanels", () => {
       "Main: I ${baseInitiative} + [ ] 0 + roll ${rollTotal} = ${initiative.total}",
     );
     expect(source).toContain("rankLabel");
+    expect(source.indexOf("result.rankLabel")).toBeLessThan(
+      source.indexOf("result.interpretedResult"),
+    );
+    expect(source).toContain('background: "#f6f5ef"');
+    expect(source).toContain('display: "grid"');
+    expect(source).toContain("minHeight: 104");
+    expect(source).not.toContain("{result?.value ??");
+    expect(source).not.toContain("result?.phaseLabel");
+    expect(source).not.toContain("No result recorded.");
+    expect(source).not.toContain("Description: {detailText}");
     expect(source).not.toContain("Movement:");
     expect(source).toContain("Mod");
     expect(source).toContain("Dur");

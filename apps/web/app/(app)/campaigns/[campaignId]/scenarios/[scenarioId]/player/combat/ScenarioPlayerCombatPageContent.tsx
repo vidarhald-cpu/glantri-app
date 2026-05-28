@@ -26,7 +26,6 @@ import {
   getPlayerCombatActionButtonLabel,
   getPlayerCombatStepLabel,
   formatCombatInitiativeFormula,
-  formatCombatInitiativeRoll,
   PlayerCombatAttackStatsTable,
   PlayerCombatActionButtonPanel,
   PlayerCombatActionResultPanel,
@@ -1199,14 +1198,11 @@ export default function ScenarioPlayerCombatPageContent({
               statusText={declarationStatusText}
             />
             <PlayerCombatActionResultPanel
-              additionalActionNotes={additionalActionNotes}
               result={
                 selectedCurrentInitiative
                   ? {
                       interpretedResult: formatCombatInitiativeFormula(selectedCurrentInitiative),
-                      phaseLabel: formatCombatInitiativeRoll(selectedCurrentInitiative),
                       rankLabel: selectedCurrentInitiativeRankLabel,
-                      value: selectedCurrentInitiative.total,
                     }
                   : actionRollResult
               }

@@ -42,7 +42,6 @@ import {
 import {
   buildPlayerCombatModifierRows,
   formatCombatInitiativeFormula,
-  formatCombatInitiativeRoll,
   getGmCombatStepActionLabel,
   getPlayerCombatStepLabel,
   PlayerCombatActionButtonPanel,
@@ -897,13 +896,6 @@ export default function CombatRoundManagerPanel({
       >
         <div>
           <h2 style={{ margin: 0 }}>Combat Round Manager</h2>
-          <div>
-            Round {roundState.roundNumber} · Current step:{" "}
-            {COMBAT_ROUND_STEP_ABBREVIATIONS[roundState.currentStep]}
-          </div>
-          <div style={{ color: "#5e5a50" }}>
-            Rows are participants. Columns are round timeline cells. Select a cell to inspect it.
-          </div>
         </div>
         <section
           aria-label="Step controller"
@@ -1270,14 +1262,12 @@ export default function CombatRoundManagerPanel({
                     )}.${inspectorStatusSuffix}`}
                   />
                   <PlayerCombatActionResultPanel
-                    additionalActionNotes={inspectorDraft.additionalActionNotes}
                     result={
                       inspectorCurrentInitiative
                         ? {
                             interpretedResult: formatCombatInitiativeFormula(
                               inspectorCurrentInitiative,
                             ),
-                            phaseLabel: formatCombatInitiativeRoll(inspectorCurrentInitiative),
                             rankLabel: formatInitiativeRankLabel({
                               participantId: inspector.participant?.participantId,
                               positions:
@@ -1286,7 +1276,6 @@ export default function CombatRoundManagerPanel({
                                   : phase1Positions,
                               value: getCombatRoundInitiativeTotal(inspectorCurrentInitiative),
                             }),
-                            value: inspectorCurrentInitiative.total,
                           }
                         : null
                     }

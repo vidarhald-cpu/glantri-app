@@ -14,9 +14,8 @@ describe("CombatRoundManagerPanel", () => {
     const source = readSource();
 
     expect(source).toContain("Combat Round Manager");
-    expect(source).toContain("Round {roundState.roundNumber}");
-    expect(source).toContain("Current step:");
-    expect(source).toContain("Rows are participants. Columns are round timeline cells.");
+    expect(source).not.toContain("Round {roundState.roundNumber} · Current step:");
+    expect(source).not.toContain("Rows are participants. Columns are round timeline cells.");
     expect(source).toContain("Commit");
     expect(source).toContain("and advance to");
     expect(source).toContain("Clear current step");
@@ -107,8 +106,8 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("rollCombatInitiativeOnServer");
     expect(source).toContain("getCombatRoundInitiativePositions");
     expect(source).toContain("getCombatRoundInitiativeTotal");
-    expect(source).toContain("formatCombatInitiativeRoll");
     expect(source).toContain("formatCombatInitiativeFormula");
+    expect(source).not.toContain("phaseLabel: formatCombatInitiativeRoll");
     expect(source).toContain("formatInitiativeRankLabel");
     expect(source).toContain("rankLabel");
     expect(source).toContain("inspectorInitiativeBase");
@@ -117,9 +116,7 @@ describe("CombatRoundManagerPanel", () => {
       'const phaseKey: PlayerCombatPhaseKey = index === 0 ? "phase1" : "phase2"',
     );
     expect(source).toContain("const phaseCombatContext = inspectorDraft.phaseContexts[phaseKey]");
-    expect(source).not.toContain(
-      "formatCombatInitiativeRoll(inspector.participant.initiatives.phase1)",
-    );
+    expect(source).not.toContain("formatCombatInitiativeRoll(inspector");
     expect(source).not.toContain("Action status:");
     expect(source).not.toContain("Damage review:");
     expect(source).toContain("PlayerCombatParryContextPanel");

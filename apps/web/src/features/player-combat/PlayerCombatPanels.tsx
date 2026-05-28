@@ -117,12 +117,9 @@ interface PlayerCombatActionButtonPanelProps {
 }
 
 interface PlayerCombatActionResultPanelProps {
-  additionalActionNotes: string;
   result?: {
     interpretedResult: string;
-    phaseLabel?: string;
     rankLabel?: string;
-    value: number;
   } | null;
 }
 
@@ -573,12 +570,7 @@ export function PlayerCombatActionButtonPanel({
   );
 }
 
-export function PlayerCombatActionResultPanel({
-  additionalActionNotes,
-  result,
-}: PlayerCombatActionResultPanelProps) {
-  const detailText = additionalActionNotes.trim();
-
+export function PlayerCombatActionResultPanel({ result }: PlayerCombatActionResultPanelProps) {
   return (
     <section
       style={{
@@ -594,27 +586,27 @@ export function PlayerCombatActionResultPanel({
           background: "#f6f5ef",
           border: "1px solid #d9ddd8",
           borderRadius: 8,
-          display: "flex",
-          fontSize: "1.3rem",
+          display: "grid",
+          fontSize: "0.98rem",
           fontWeight: 700,
+          gap: "0.35rem",
+          height: "100%",
           justifyContent: "center",
-          minHeight: 44,
+          justifyItems: "center",
+          minHeight: 104,
+          padding: "0.75rem",
+          textAlign: "center",
         }}
       >
-        {result?.value ?? "—"}
+        {result ? (
+          <>
+            {result.rankLabel ? <div>{result.rankLabel}</div> : null}
+            <div>{result.interpretedResult}</div>
+          </>
+        ) : (
+          "—"
+        )}
       </div>
-      <div style={{ fontSize: "0.95rem", fontWeight: 600 }}>
-        {result?.interpretedResult ?? "No result recorded."}
-      </div>
-      {result?.phaseLabel ? (
-        <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>{result.phaseLabel}</div>
-      ) : null}
-      {result?.rankLabel ? (
-        <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>{result.rankLabel}</div>
-      ) : null}
-      {detailText ? (
-        <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>Description: {detailText}</div>
-      ) : null}
     </section>
   );
 }
