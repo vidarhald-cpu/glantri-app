@@ -35,8 +35,10 @@ describe("PlayerCombatPanels", () => {
     expect(source).toContain("compactModifierGroupHeaderStyle");
     expect(source).toContain("compactModifierMiniTableStyle");
     expect(source).toContain("compactModifierMiniTableHeaderStyle");
-    expect(source).toContain("compactModifierMiniTableRowStyle");
-    expect(source).toContain('gridTemplateColumns: "2.75rem 2.75rem minmax(0, 1fr) 2rem"');
+    expect(source).toContain("compactModifierMiniTableEntryRowStyle");
+    expect(source).toContain("compactModifierMiniTableDraftRowStyle");
+    expect(source).toContain('gridTemplateColumns: "2.5rem 2.5rem minmax(0, 1fr)"');
+    expect(source).toContain('gridTemplateColumns: "2.5rem 2.5rem minmax(0, 1fr) 1.5rem"');
     expect(source).toContain('["Mod", "Dur", "Details"].map');
     expect(source).not.toContain('["Mod", "Dur", "Details", "Remove"].map');
     expect(source).toContain("createModifierEntryFromDraft");
@@ -46,7 +48,8 @@ describe("PlayerCombatPanels", () => {
     expect(source).toContain("compactModifierNumberInputStyle");
     expect(source).toContain("compactModifierDetailsInputStyle");
     expect(source).toContain("compactModifierRemoveButtonStyle");
-    expect(source).toContain('width: "4ch"');
+    expect(source).toContain('width: "3.5ch"');
+    expect(source).toContain('boxSizing: "border-box"');
     expect(source).toContain("aria-label={`${row.label} modifier value`}");
     expect(source).toContain("aria-label={`${row.label} new modifier value`}");
     expect(source).toContain("aria-label={`${row.label} modifier details`}");
@@ -61,6 +64,7 @@ describe("PlayerCombatPanels", () => {
     expect(source).toContain('title="Remove modifier"');
     expect(source).toMatch(/>\s*-\s*<\/button>/);
     expect(source).not.toContain(">Remove</button>");
+    expect(source).not.toContain('<span aria-hidden="true" />');
     expect(source).toContain("formatModifierDuration");
     expect(source).not.toContain('<option value="until">Until</option>');
     expect(source).not.toContain('<option value="save">Save</option>');

@@ -188,28 +188,40 @@ const compactModifierMiniTableHeaderStyle = {
   alignItems: "center",
   display: "grid",
   gap: "0.35rem",
-  gridTemplateColumns: "2.75rem 2.75rem minmax(0, 1fr) 2rem",
+  gridTemplateColumns: "2.5rem 2.5rem minmax(0, 1fr)",
   minWidth: 0,
 } as const;
 
-const compactModifierMiniTableRowStyle = {
+const compactModifierMiniTableEntryRowStyle = {
+  alignItems: "center",
+  display: "grid",
+  gap: "0.35rem",
+  gridTemplateColumns: "2.5rem 2.5rem minmax(0, 1fr) 1.5rem",
+  minWidth: 0,
+} as const;
+
+const compactModifierMiniTableDraftRowStyle = {
   ...compactModifierMiniTableHeaderStyle,
   alignItems: "center",
 } as const;
 
 const compactModifierNumberInputStyle = {
+  boxSizing: "border-box",
   minWidth: 0,
-  width: "4ch",
+  width: "3.5ch",
 } as const;
 
 const compactModifierDetailsInputStyle = {
+  boxSizing: "border-box",
   minWidth: 0,
   width: "100%",
 } as const;
 
 const compactModifierRemoveButtonStyle = {
-  minWidth: "1.75rem",
-  padding: "0.1rem 0.35rem",
+  justifySelf: "end",
+  lineHeight: 1,
+  minWidth: "1.35rem",
+  padding: "0.08rem 0.25rem",
 } as const;
 
 const compactStatsRowStyle = {
@@ -420,10 +432,9 @@ export function PlayerCombatModifierPanel({
                     {heading}
                   </span>
                 ))}
-                <span aria-hidden="true" />
               </div>
               {row.entries.map((entry) => (
-                <div key={entry.id} style={compactModifierMiniTableRowStyle}>
+                <div key={entry.id} style={compactModifierMiniTableEntryRowStyle}>
                   <input
                     aria-label={`${row.label} modifier value`}
                     disabled={controlsDisabled}
@@ -475,7 +486,7 @@ export function PlayerCombatModifierPanel({
                   </button>
                 </div>
               ))}
-              <div style={compactModifierMiniTableRowStyle}>
+              <div style={compactModifierMiniTableDraftRowStyle}>
                 <input
                   aria-label={`${row.label} new modifier value`}
                   disabled={controlsDisabled}
@@ -515,7 +526,6 @@ export function PlayerCombatModifierPanel({
                   type="text"
                   value={getEntryDraft(row.bucketKey).notes}
                 />
-                <span aria-hidden="true" />
               </div>
             </div>
           ) : (
