@@ -757,6 +757,15 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
                     ),
                   );
                 }}
+                onScenarioParticipantsUpdated={(nextParticipants) => {
+                  setScenarioParticipants((current) =>
+                    current.map(
+                      (participant) =>
+                        nextParticipants.find((entry) => entry.id === participant.id) ??
+                        participant,
+                    ),
+                  );
+                }}
                 scenarioParticipants={scenarioParticipants}
               />
             </>
@@ -794,33 +803,14 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
                 </>
               )}
             </section>
-          ) : workspaceState.activeScenarioId ? (
-            <ScenarioPlayerCombatPageContent
-              campaignId={campaignId}
-              encounterId={workspaceState.activeEncounterId}
-              embedded
-              encounterTitle={activeEncounter?.title}
-              participantId={searchParams.get("participantId") ?? undefined}
-              scenarioId={workspaceState.activeScenarioId}
-              showParticipantSelector={false}
-              workspaceTab="combat"
-            />
           ) : (
             <section style={panelStyle}>
-              <strong>Select a scenario to open the combat panel.</strong>
+              <strong>Combat Round Manager is a GM tool.</strong>
               {scenarios.length > 0 ? (
                 <div style={{ display: "grid", gap: "0.5rem" }}>
-                  {scenarios.map((scenario) => (
-                    <Link
-                      key={scenario.id}
-                      href={buildWorkspaceHref({
-                        scenarioId: scenario.id,
-                        tab: "combat",
-                      })}
-                    >
-                      {scenario.name}
-                    </Link>
-                  ))}
+                  <Link href={buildWorkspaceHref({ tab: "player-combat" })}>
+                    Open Player combat
+                  </Link>
                 </div>
               ) : (
                 <div>No combat encounter is currently available.</div>

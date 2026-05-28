@@ -3,13 +3,26 @@ import type { FastifyPluginAsync } from "fastify";
 import { CampaignService, EncounterService, ScenarioService } from "@glantri/database";
 import {
   buildPlayerSafeRoleplayStateForUser,
+  buildCombatRoundInitiativeResult,
+  canPlayerRollCombatInitiative,
   buildRoleplayCalculationPreview,
+  canPlayerSubmitCombatDeclaration,
+  clearCurrentCombatRoundStepAndRewind,
   encounterSessionSchema,
+  getCombatRoundInitiativePhaseForStep,
+  initializeCombatRoundState,
   isUserAssignedToEncounterMembership,
   normalizeRoleplayState,
+  recordCombatRoundDeclaration,
+  recordCombatRoundInitiative,
+  recordCombatRoundParticipantStepReview,
   resolveEncounterParticipantByRollParticipantId,
   resolveEncounterParticipantMembership,
+  rollOpenEndedD6,
+  combatRoundPhaseContextsSchema,
+  scenarioParticipantCombatContextSchema,
 } from "@glantri/domain";
+import type { ScenarioParticipant } from "@glantri/domain";
 import { recordRoleplayGmSkillRoll, resolveRoleplaySkillRollModifiers } from "@glantri/rules-engine";
 
 import { requireAdminUser, requireAuthenticatedUser } from "../../lib/sessionAuth";
@@ -93,6 +106,101 @@ function parsePlayerRollBody(body: unknown): {
     pendingRollId,
     roll: parseRollFields(rollValue as Record<string, unknown>, "roll"),
     supportRoll: supportRoll ? parseRollFields(supportRoll, "supportRoll") : undefined,
+  };
+}
+
+function parseOptionalDeclarationString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim().length > 0 ? value : undefined;
+}
+
+function parseCombatDeclarationBody(body: unknown): {
+  actionId?: string;
+  additionalActionNotes?: string;
+  combatContext: ReturnType<typeof scenarioParticipantCombatContextSchema.parse>;
+  movementId?: string;
+  phaseContexts?: ReturnType<typeof combatRoundPhaseContextsSchema.parse>;
+  scenarioParticipantId: string;
+  secondaryActionId?: string;
+} {
+  const value = parseBodyObject(body, "Combat declaration payload");
+  const scenarioParticipantId = value.scenarioParticipantId;
+
+  if (typeof scenarioParticipantId !== "string" || scenarioParticipantId.trim().length === 0) {
+    throw new Error("scenarioParticipantId is required.");
+  }
+
+  return {
+    actionId: parseOptionalDeclarationString(value.actionId),
+    additionalActionNotes:
+      typeof value.additionalActionNotes === "string" ? value.additionalActionNotes : undefined,
+    combatContext: scenarioParticipantCombatContextSchema.parse(value.combatContext ?? {}),
+    movementId: parseOptionalDeclarationString(value.movementId),
+    phaseContexts:
+      value.phaseContexts === undefined
+        ? undefined
+        : combatRoundPhaseContextsSchema.parse(value.phaseContexts),
+    scenarioParticipantId,
+    secondaryActionId: parseOptionalDeclarationString(value.secondaryActionId),
+  };
+}
+
+function parseParticipantCommandBody(body: unknown, label: string): {
+  scenarioParticipantId: string;
+} {
+  const value = parseBodyObject(body, label);
+  const scenarioParticipantId = value.scenarioParticipantId;
+
+  if (typeof scenarioParticipantId !== "string" || scenarioParticipantId.trim().length === 0) {
+    throw new Error("scenarioParticipantId is required.");
+  }
+
+  return { scenarioParticipantId };
+}
+
+function parseCombatInitiativeBody(body: unknown): {
+  initiativeBase?: number;
+  scenarioParticipantId: string;
+} {
+  const value = parseBodyObject(body, "Combat initiative payload");
+  const parsed = parseParticipantCommandBody(value, "Combat initiative payload");
+  const initiativeBase = value.initiativeBase;
+
+  if (initiativeBase !== undefined && !Number.isInteger(initiativeBase)) {
+    throw new Error("initiativeBase must be an integer.");
+  }
+
+  return {
+    ...parsed,
+    initiativeBase: typeof initiativeBase === "number" ? initiativeBase : undefined,
+  };
+}
+
+function clearScenarioParticipantCombatDeclaration(
+  participant: ScenarioParticipant,
+): ScenarioParticipant["state"] {
+  return {
+    ...participant.state,
+    combat: {
+      ...participant.state.combat,
+      combatContext: scenarioParticipantCombatContextSchema.parse({}),
+      declarationSubmittedAt: undefined,
+      declarationSubmittedByUserId: undefined,
+      lastDeclaredActionId: undefined,
+      lastDeclaredMovementId: undefined,
+      lastDeclaredRoundNumber: undefined,
+      lastDeclaredSecondaryActionId: undefined,
+      lastDeclarationNotes: undefined,
+    },
+  };
+}
+
+function preservePlayerCombatModifierBuckets(input: {
+  existingContext: ReturnType<typeof scenarioParticipantCombatContextSchema.parse>;
+  requestedContext: ReturnType<typeof scenarioParticipantCombatContextSchema.parse>;
+}): ReturnType<typeof scenarioParticipantCombatContextSchema.parse> {
+  return {
+    ...input.requestedContext,
+    modifierBuckets: input.existingContext.modifierBuckets,
   };
 }
 
@@ -224,13 +332,14 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         });
       }
 
+      const scenarioId = encounter.scenarioId;
       const access = await resolveScenarioWorkspaceAccess(
         {
           campaignService,
           scenarioService,
         },
         {
-          scenarioId: encounter.scenarioId,
+          scenarioId,
           userId: user.id,
           userRoles: user.roles
         }
@@ -327,6 +436,404 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
     } catch (error) {
       return reply.code(400).send({
         error: error instanceof Error ? error.message : "Unable to update encounter."
+      });
+    }
+  });
+
+  app.post("/encounters/:encounterId/combat-declaration", async (request, reply) => {
+    const user = await requireAuthenticatedUser(request, reply);
+
+    if (!user) {
+      return;
+    }
+
+    try {
+      const encounterId = parseId(request.params, "encounterId", "Encounter id");
+      const encounter = await encounterService.getEncounterById(encounterId);
+
+      if (!encounter?.scenarioId) {
+        return reply.code(404).send({
+          error: "Encounter not found."
+        });
+      }
+
+      const scenarioId = encounter.scenarioId;
+      const access = await resolveScenarioWorkspaceAccess(
+        {
+          campaignService,
+          scenarioService,
+        },
+        {
+          scenarioId,
+          userId: user.id,
+          userRoles: user.roles
+        }
+      );
+
+      if (!access) {
+        return reply.code(404).send({
+          error: "Encounter not found."
+        });
+      }
+
+      const body = parseCombatDeclarationBody(request.body);
+      const scenarioParticipants = await scenarioService.listScenarioParticipants(scenarioId);
+      const scenarioParticipant = scenarioParticipants.find(
+        (participant) => participant.id === body.scenarioParticipantId
+      );
+      const membership = resolveEncounterParticipantMembership({
+        encounter,
+        scenarioParticipants,
+      });
+      const encounterParticipant = scenarioParticipant
+        ? membership.participants.find(
+            (participant) =>
+              participant.scenarioParticipantId === scenarioParticipant.id ||
+              participant.id === scenarioParticipant.id ||
+              (scenarioParticipant.characterId &&
+                participant.characterId === scenarioParticipant.characterId)
+          )
+        : undefined;
+
+      if (!scenarioParticipant || !scenarioParticipant.isActive || !encounterParticipant) {
+        return reply.code(403).send({
+          error: "Participant is not assigned to this encounter."
+        });
+      }
+
+      const gmAuthorizedOperation = access.mode === "gm";
+      const roundState = initializeCombatRoundState({ encounter });
+      const existingCombatContext = scenarioParticipantCombatContextSchema.parse(
+        scenarioParticipant.state.combat.combatContext ?? {},
+      );
+      const submittedCombatContext = gmAuthorizedOperation
+        ? body.combatContext
+        : preservePlayerCombatModifierBuckets({
+            existingContext: existingCombatContext,
+            requestedContext: body.combatContext,
+          });
+      const submittedPhaseContexts = body.phaseContexts
+        ? {
+            phase1: body.phaseContexts.phase1
+              ? gmAuthorizedOperation
+                ? body.phaseContexts.phase1
+                : preservePlayerCombatModifierBuckets({
+                    existingContext: existingCombatContext,
+                    requestedContext: body.phaseContexts.phase1,
+                  })
+              : undefined,
+            phase2: body.phaseContexts.phase2
+              ? gmAuthorizedOperation
+                ? body.phaseContexts.phase2
+                : preservePlayerCombatModifierBuckets({
+                    existingContext: existingCombatContext,
+                    requestedContext: body.phaseContexts.phase2,
+                  })
+              : undefined,
+          }
+        : undefined;
+
+      if (!gmAuthorizedOperation) {
+        if (
+          scenarioParticipant.controlledByUserId !== user.id ||
+          !isUserAssignedToEncounterMembership({
+            encounter,
+            scenarioParticipants,
+            userId: user.id,
+          })
+        ) {
+          return reply.code(403).send({
+            error: "Player is not assigned to this encounter participant."
+          });
+        }
+
+        if (
+          !canPlayerSubmitCombatDeclaration({
+            participantId: encounterParticipant.id,
+            state: roundState,
+          })
+        ) {
+          return reply.code(409).send({
+            error: "Declaration is closed for this round."
+          });
+        }
+      }
+
+      const submittedAt = new Date().toISOString();
+      const participant = await encounterService.updateScenarioParticipantState({
+        participantId: scenarioParticipant.id,
+        scenarioId: encounter.scenarioId,
+        state: {
+          ...scenarioParticipant.state,
+          combat: {
+            ...scenarioParticipant.state.combat,
+            combatContext: submittedCombatContext,
+            declarationSubmittedAt: submittedAt,
+            declarationSubmittedByUserId: user.id,
+            lastDeclaredActionId: body.actionId,
+            lastDeclaredMovementId: body.movementId,
+            lastDeclaredRoundNumber: roundState.roundNumber,
+            lastDeclaredSecondaryActionId: body.secondaryActionId,
+            lastDeclarationNotes: body.additionalActionNotes,
+          },
+        },
+      });
+      const declaredRoundState = recordCombatRoundDeclaration({
+        declaration: {
+          actionId: body.actionId,
+          additionalActionNotes: body.additionalActionNotes,
+          combatContext: submittedCombatContext,
+          movementId: body.movementId,
+          phaseContexts: submittedPhaseContexts,
+          roundNumber: roundState.roundNumber,
+          secondaryActionId: body.secondaryActionId,
+          submittedAt,
+          submittedByUserId: user.id,
+        },
+        participantId: encounterParticipant.id,
+        state: roundState,
+        submittedBy: gmAuthorizedOperation ? "gm" : "player",
+      });
+      const nextRoundState =
+        gmAuthorizedOperation && roundState.currentStep !== "initiative_phase_1" &&
+        roundState.currentStep !== "initiative_phase_2"
+          ? recordCombatRoundParticipantStepReview({
+              participantId: encounterParticipant.id,
+              state: declaredRoundState,
+              step: roundState.currentStep,
+              submittedBy: "gm",
+            })
+          : declaredRoundState;
+      const savedEncounter = await encounterService.updateEncounter({
+        campaignId: access.campaignId,
+        encounterId,
+        scenarioId,
+        session: {
+          ...encounter,
+          combatRoundState: nextRoundState,
+          currentRound: nextRoundState.roundNumber,
+          updatedAt: submittedAt,
+        },
+      });
+
+      return { encounter: savedEncounter, participant };
+    } catch (error) {
+      return reply.code(400).send({
+        error: error instanceof Error ? error.message : "Unable to save combat declaration."
+      });
+    }
+  });
+
+  app.post("/encounters/:encounterId/combat-initiative", async (request, reply) => {
+    const user = await requireAuthenticatedUser(request, reply);
+
+    if (!user) {
+      return;
+    }
+
+    try {
+      const encounterId = parseId(request.params, "encounterId", "Encounter id");
+      const encounter = await encounterService.getEncounterById(encounterId);
+
+      if (!encounter?.scenarioId) {
+        return reply.code(404).send({
+          error: "Encounter not found."
+        });
+      }
+
+      const scenarioId = encounter.scenarioId;
+      const access = await resolveScenarioWorkspaceAccess(
+        {
+          campaignService,
+          scenarioService,
+        },
+        {
+          scenarioId,
+          userId: user.id,
+          userRoles: user.roles
+        }
+      );
+
+      if (!access) {
+        return reply.code(404).send({
+          error: "Encounter not found."
+        });
+      }
+
+      const body = parseCombatInitiativeBody(request.body);
+      const scenarioParticipants = await scenarioService.listScenarioParticipants(scenarioId);
+      const scenarioParticipant = scenarioParticipants.find(
+        (participant) => participant.id === body.scenarioParticipantId
+      );
+      const membership = resolveEncounterParticipantMembership({
+        encounter,
+        scenarioParticipants,
+      });
+      const encounterParticipant = scenarioParticipant
+        ? membership.participants.find(
+            (participant) =>
+              participant.scenarioParticipantId === scenarioParticipant.id ||
+              participant.id === scenarioParticipant.id ||
+              (scenarioParticipant.characterId &&
+                participant.characterId === scenarioParticipant.characterId)
+          )
+        : undefined;
+
+      if (!scenarioParticipant || !scenarioParticipant.isActive || !encounterParticipant) {
+        return reply.code(403).send({
+          error: "Participant is not assigned to this encounter."
+        });
+      }
+
+      const gmAuthorizedOperation = access.mode === "gm";
+      const roundState = initializeCombatRoundState({ encounter });
+      const phase = getCombatRoundInitiativePhaseForStep(roundState.currentStep);
+
+      if (!phase || (roundState.currentStep !== "initiative_phase_1" && roundState.currentStep !== "initiative_phase_2")) {
+        return reply.code(409).send({
+          error: "Initiative is not open for this step."
+        });
+      }
+
+      if (!gmAuthorizedOperation) {
+        if (
+          scenarioParticipant.controlledByUserId !== user.id ||
+          !isUserAssignedToEncounterMembership({
+            encounter,
+            scenarioParticipants,
+            userId: user.id,
+          })
+        ) {
+          return reply.code(403).send({
+            error: "Player is not assigned to this encounter participant."
+          });
+        }
+
+        if (
+          !canPlayerRollCombatInitiative({
+            participantId: encounterParticipant.id,
+            phase,
+            state: roundState,
+          })
+        ) {
+          return reply.code(409).send({
+            error: "Initiative is closed for this step."
+          });
+        }
+      }
+
+      const initiativeRoll = rollOpenEndedD6();
+      const rolledInitiative = buildCombatRoundInitiativeResult({
+        baseInitiative: body.initiativeBase,
+        roll: initiativeRoll,
+      });
+      const submittedAt = new Date().toISOString();
+      const nextRoundState = recordCombatRoundInitiative({
+        initiative: rolledInitiative,
+        participantId: encounterParticipant.id,
+        phase,
+        state: roundState,
+        submittedBy: gmAuthorizedOperation ? "gm" : "player",
+      });
+      const savedEncounter = await encounterService.updateEncounter({
+        campaignId: access.campaignId,
+        encounterId,
+        scenarioId,
+        session: {
+          ...encounter,
+          combatRoundState: nextRoundState,
+          currentRound: nextRoundState.roundNumber,
+          updatedAt: submittedAt,
+        },
+      });
+
+      return { encounter: savedEncounter, initiative: rolledInitiative };
+    } catch (error) {
+      return reply.code(400).send({
+        error: error instanceof Error ? error.message : "Unable to roll combat initiative."
+      });
+    }
+  });
+
+  app.post("/encounters/:encounterId/combat-round/clear-current-step", async (request, reply) => {
+    const user = await requireAuthenticatedUser(request, reply);
+
+    if (!user) {
+      return;
+    }
+
+    try {
+      const encounterId = parseId(request.params, "encounterId", "Encounter id");
+      const encounter = await encounterService.getEncounterById(encounterId);
+
+      if (!encounter?.scenarioId) {
+        return reply.code(404).send({
+          error: "Encounter not found."
+        });
+      }
+
+      const scenarioId = encounter.scenarioId;
+      const access = await resolveScenarioWorkspaceAccess(
+        {
+          campaignService,
+          scenarioService,
+        },
+        {
+          scenarioId,
+          userId: user.id,
+          userRoles: user.roles
+        }
+      );
+
+      if (!access || access.mode !== "gm") {
+        return reply.code(403).send({
+          error: "Only GM users can clear combat round steps."
+        });
+      }
+
+      const scenarioParticipants = await scenarioService.listScenarioParticipants(scenarioId);
+      const membership = resolveEncounterParticipantMembership({
+        encounter,
+        scenarioParticipants,
+      });
+      const encounterScenarioParticipantIds = new Set(
+        membership.participants
+          .map((participant) => participant.scenarioParticipantId)
+          .filter((id): id is string => Boolean(id)),
+      );
+      const roundState = initializeCombatRoundState({ encounter });
+      const clearsDeclarationStep = roundState.currentStep === "select_actions";
+      const nextRoundState = clearCurrentCombatRoundStepAndRewind(roundState);
+      const submittedAt = new Date().toISOString();
+      const savedEncounter = await encounterService.updateEncounter({
+        campaignId: access.campaignId,
+        encounterId,
+        scenarioId,
+        session: {
+          ...encounter,
+          combatRoundState: nextRoundState,
+          currentRound: nextRoundState.roundNumber,
+          updatedAt: submittedAt,
+        },
+      });
+      const updatedParticipants = clearsDeclarationStep
+        ? await Promise.all(
+            scenarioParticipants
+              .filter((participant) => encounterScenarioParticipantIds.has(participant.id))
+              .map((participant) =>
+                encounterService.updateScenarioParticipantState({
+                  participantId: participant.id,
+                  scenarioId,
+                  state: clearScenarioParticipantCombatDeclaration(participant),
+                })
+              )
+          )
+        : [];
+
+      return { encounter: savedEncounter, participants: updatedParticipants };
+    } catch (error) {
+      return reply.code(400).send({
+        error: error instanceof Error ? error.message : "Unable to clear combat round step."
       });
     }
   });

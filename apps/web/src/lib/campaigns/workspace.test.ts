@@ -101,7 +101,6 @@ describe("campaign workspace", () => {
       "skill-rolls",
       "player-skill-rolls",
       "character",
-      "combat",
       "player-combat",
     ]);
   });
@@ -165,7 +164,7 @@ describe("campaign workspace", () => {
     expect(state.activeTab).toBe("player-skill-rolls");
   });
 
-  it("opens the Combat tab against the active scenario context", () => {
+  it("aliases the GM Combat tab to Player combat for player users", () => {
     const state = resolveCampaignWorkspaceState({
       activeCampaignId: "camp-1",
       canAccessGmEncounter: false,
@@ -177,7 +176,7 @@ describe("campaign workspace", () => {
     });
 
     expect(state.activeScenarioId).toBe("scn-1");
-    expect(state.activeTab).toBe("combat");
+    expect(state.activeTab).toBe("player-combat");
   });
 
   it("opens the Player combat tab against the active scenario context", () => {

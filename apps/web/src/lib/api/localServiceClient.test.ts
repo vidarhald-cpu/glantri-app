@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 type LocalServiceClientModule = typeof import("./localServiceClient");
-type FetchMock = ReturnType<typeof vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>>;
+type FetchMock = ReturnType<
+  typeof vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>
+>;
 
 function jsonResponse(payload: unknown, status = 200): Response {
   return new Response(JSON.stringify(payload), {
@@ -284,6 +286,152 @@ describe("localServiceClient wire contract", () => {
     expectFetchCall(fetchMock, {
       method: "GET",
       url: "https://api.example.test/encounters/encounter-1",
+    });
+  });
+
+  it("submits combat declarations through the encounter domain", async () => {
+    const encounter = {
+      id: "encounter-1",
+      scenarioId: "scenario-1",
+    };
+    const participant = {
+      id: "participant-1",
+    };
+    const fetchMock = stubFetch({ encounter, participant });
+    const client = await loadClient();
+
+    await expect(
+      client.submitCombatDeclarationOnServer({
+        actionId: "attack_parry",
+        combatContext: {
+          modifierBuckets: {
+            general: [],
+            situationDb: [],
+            situationObSkill: [
+              {
+                durationRounds: 2,
+                id: "modifier-1",
+                notes: "High ground",
+                scope: "until",
+                value: 1,
+              },
+            ],
+          },
+        },
+        encounterId: "encounter-1",
+        movementId: "hold",
+        phaseContexts: {
+          phase1: {
+            mainHandParryDirection: "left",
+            modifierBuckets: {
+              general: [],
+              situationDb: [],
+              situationObSkill: [],
+            },
+          },
+          phase2: {
+            offHandParryDirection: "right_forward",
+            modifierBuckets: {
+              general: [],
+              situationDb: [],
+              situationObSkill: [],
+            },
+          },
+        },
+        scenarioParticipantId: "participant-1",
+      }),
+    ).resolves.toEqual({ encounter, participant });
+
+    expectFetchCall(fetchMock, {
+      body: {
+        actionId: "attack_parry",
+        additionalActionNotes: undefined,
+        combatContext: {
+          modifierBuckets: {
+            general: [],
+            situationDb: [],
+            situationObSkill: [
+              {
+                durationRounds: 2,
+                id: "modifier-1",
+                notes: "High ground",
+                scope: "until",
+                value: 1,
+              },
+            ],
+          },
+        },
+        movementId: "hold",
+        phaseContexts: {
+          phase1: {
+            mainHandParryDirection: "left",
+            modifierBuckets: {
+              general: [],
+              situationDb: [],
+              situationObSkill: [],
+            },
+          },
+          phase2: {
+            offHandParryDirection: "right_forward",
+            modifierBuckets: {
+              general: [],
+              situationDb: [],
+              situationObSkill: [],
+            },
+          },
+        },
+        scenarioParticipantId: "participant-1",
+        secondaryActionId: undefined,
+      },
+      method: "POST",
+      url: "https://api.example.test/encounters/encounter-1/combat-declaration",
+    });
+  });
+
+  it("rolls combat initiative through the encounter domain", async () => {
+    const encounter = {
+      id: "encounter-1",
+      scenarioId: "scenario-1",
+    };
+    const fetchMock = stubFetch({ encounter, initiative: { rolls: [6, 2], total: 8 } });
+    const client = await loadClient();
+
+    await expect(
+      client.rollCombatInitiativeOnServer({
+        encounterId: "encounter-1",
+        initiativeBase: 3,
+        scenarioParticipantId: "participant-1",
+      }),
+    ).resolves.toEqual({ encounter, initiative: { rolls: [6, 2], total: 8 } });
+
+    expectFetchCall(fetchMock, {
+      body: {
+        initiativeBase: 3,
+        scenarioParticipantId: "participant-1",
+      },
+      method: "POST",
+      url: "https://api.example.test/encounters/encounter-1/combat-initiative",
+    });
+  });
+
+  it("clears the current combat round step through the encounter domain", async () => {
+    const encounter = {
+      id: "encounter-1",
+      scenarioId: "scenario-1",
+    };
+    const participants = [{ id: "participant-1" }];
+    const fetchMock = stubFetch({ encounter, participants });
+    const client = await loadClient();
+
+    await expect(
+      client.clearCurrentCombatRoundStepOnServer({
+        encounterId: "encounter-1",
+      }),
+    ).resolves.toEqual({ encounter, participants });
+
+    expectFetchCall(fetchMock, {
+      method: "POST",
+      url: "https://api.example.test/encounters/encounter-1/combat-round/clear-current-step",
     });
   });
 

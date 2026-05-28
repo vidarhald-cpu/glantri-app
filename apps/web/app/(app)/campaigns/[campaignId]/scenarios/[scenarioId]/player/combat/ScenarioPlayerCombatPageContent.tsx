@@ -4,12 +4,15 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import {
+  type CombatRoundDeclaration,
   characterBuildSchema,
+  getCombatRoundInitiativePositions,
+  getCombatRoundInitiativeTotal,
+  initializeCombatRoundState,
+  type EncounterSession,
   type ScenarioCombatModifierBucket,
   type ScenarioCombatModifierEntry,
   type ScenarioParticipantCombatContext,
-  type ScenarioParticipantIncomingAttackSide,
-  type ScenarioParticipantParrySource,
   type ScenarioParticipant,
   type ScenarioPlayerProjection,
 } from "@glantri/domain";
@@ -20,36 +23,50 @@ import {
 } from "@/features/equipment/loadoutModule";
 import {
   buildPlayerCombatModifierRows,
+  getPlayerCombatActionButtonLabel,
+  getPlayerCombatStepLabel,
+  formatCombatInitiativeFormula,
+  formatCombatInitiativeRoll,
+  PlayerCombatAttackStatsTable,
+  PlayerCombatActionButtonPanel,
+  PlayerCombatActionResultPanel,
+  PlayerCombatActionSelectorPanel,
+  PlayerCombatDefenseStatsTable,
   PlayerCombatModifierPanel,
+  PlayerCombatParryContextPanel,
   PlayerCombatPhasePanel,
-  playerCombatPanelsGridStyle,
+  playerCombatPanelRowStyle,
+  playerCombatTopPanelRowStyle,
 } from "@/features/player-combat/PlayerCombatPanels";
+import {
+  applyDefaultPlayerCombatPhaseContext,
+  buildPlayerCombatDefenseStats,
+  buildPlayerCombatLoadoutSummary,
+  buildPlayerCombatPhasePanelModel,
+  isEquipmentFeatureState,
+  type PlayerCombatPhaseKey,
+} from "@/features/player-combat/playerCombatPhaseModel";
 import type { EquipmentFeatureState } from "@/features/equipment/types";
 import { useSessionUser } from "@/lib/auth/SessionUserContext";
 import type { CombatAllocationState } from "@glantri/rules-engine";
 import {
-  buildPlayerEncounterPhaseSummary,
   createEmptyPlayerEncounterCombatContext,
   evaluatePlayerEncounterParryLegality,
   getPlayerEncounterAccessibleParticipants,
-  getPlayerEncounterMovementLabel,
-  getPlayerEncounterParrySourceLabel,
   isPlayerEncounterActionId,
-  PLAYER_ENCOUNTER_INCOMING_ATTACK_SIDE_OPTIONS,
-  PLAYER_ENCOUNTER_ACTION_OPTIONS,
-  PLAYER_ENCOUNTER_MOVEMENT_OPTIONS,
-  PLAYER_ENCOUNTER_PARRY_SOURCE_OPTIONS,
   type PlayerEncounterActionId,
   type PlayerEncounterMovementId,
 } from "@/lib/campaigns/playerEncounter";
 import { loadCanonicalContent } from "@/lib/content/loadCanonicalContent";
 import {
   loadCharacterEquipmentState,
+  loadEncounterById,
   loadScenarioMyParticipant,
   loadScenarioParticipants,
   loadScenarioPlayerProjection,
   loadServerCharacterById,
-  updateScenarioParticipantStateOnServer,
+  rollCombatInitiativeOnServer,
+  submitCombatDeclarationOnServer,
   type ServerCharacterRecord,
 } from "@/lib/api/localServiceClient";
 import {
@@ -83,74 +100,6 @@ const panelStyle = {
   padding: "1rem",
 } as const;
 
-function isEquipmentFeatureState(value: unknown): value is EquipmentFeatureState {
-  if (!value || typeof value !== "object") {
-    return false;
-  }
-
-  const candidate = value as Record<string, unknown>;
-  return (
-    typeof candidate.itemsById === "object" &&
-    candidate.itemsById !== null &&
-    typeof candidate.locationsById === "object" &&
-    candidate.locationsById !== null &&
-    typeof candidate.activeLoadoutByCharacterId === "object" &&
-    candidate.activeLoadoutByCharacterId !== null &&
-    typeof candidate.templates === "object" &&
-    candidate.templates !== null &&
-    "templatesById" in (candidate.templates as Record<string, unknown>)
-  );
-}
-
-function getCombatTableColumnIndex(input: { columns: string[]; label: string }): number {
-  return input.columns.indexOf(input.label);
-}
-
-function getCombatTableCell(input: {
-  columns: string[];
-  label: string;
-  row: Array<string | number>;
-}): string {
-  const index = getCombatTableColumnIndex({
-    columns: input.columns,
-    label: input.label,
-  });
-
-  if (index < 0) {
-    return "—";
-  }
-
-  const value = input.row[index];
-  return value == null ? "—" : String(value);
-}
-
-function getRelevantLoadoutFieldId(
-  actionId: PlayerEncounterActionId | "",
-): "missile" | "primary" | "secondary" | "throwing" | null {
-  switch (actionId) {
-    case "attack_parry":
-    case "parry_attack":
-    case "double_attack":
-    case "feint_attack":
-    case "adjust_range_attack":
-    case "counterattack":
-    case "offensive_parry":
-    case "parry_disarm":
-    case "disarm":
-      return "primary";
-    case "observe_opponent":
-    case "break_off_engagement":
-    case "other":
-      return "primary";
-    default:
-      return null;
-  }
-}
-
-function hasDisplayValue(value: string): boolean {
-  return value.length > 0 && value !== "—";
-}
-
 function createModifierEntryDraft(): ScenarioCombatModifierEntry {
   return {
     id: `modifier-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -160,8 +109,113 @@ function createModifierEntryDraft(): ScenarioCombatModifierEntry {
   };
 }
 
-function rollDie(sides: number): number {
-  return Math.floor(Math.random() * sides) + 1;
+interface PlayerCombatDeclarationDraft {
+  actionId: PlayerEncounterActionId | "";
+  additionalActionNotes: string;
+  combatContext: ScenarioParticipantCombatContext;
+  movementId: PlayerEncounterMovementId | "";
+  phaseContexts: PlayerCombatPhaseContextDrafts;
+  secondaryActionId: PlayerEncounterActionId | "";
+}
+
+interface PlayerCombatPhaseContextDrafts {
+  phase1: ScenarioParticipantCombatContext;
+  phase2: ScenarioParticipantCombatContext;
+}
+
+function buildPlayerCombatPhaseContexts(input: {
+  declaration?: CombatRoundDeclaration;
+  participant?: ScenarioParticipant | null;
+}): PlayerCombatPhaseContextDrafts {
+  const fallbackContext =
+    input.declaration?.combatContext ??
+    input.participant?.state.combat.combatContext ??
+    createEmptyPlayerEncounterCombatContext();
+
+  return {
+    phase1: applyDefaultPlayerCombatPhaseContext(
+      input.declaration?.phaseContexts?.phase1 ?? fallbackContext,
+    ),
+    phase2: applyDefaultPlayerCombatPhaseContext(
+      input.declaration?.phaseContexts?.phase2 ?? fallbackContext,
+    ),
+  };
+}
+
+function hasCombatRoundDeclarationAction(
+  declaration?: CombatRoundDeclaration,
+): declaration is CombatRoundDeclaration {
+  return Boolean(
+    declaration?.actionId ||
+    declaration?.secondaryActionId ||
+    declaration?.movementId ||
+    declaration?.additionalActionNotes ||
+    declaration?.combatContext ||
+    declaration?.phaseContexts,
+  );
+}
+
+function buildPlayerCombatDeclarationDraft(input: {
+  declaration?: CombatRoundDeclaration;
+  participant?: ScenarioParticipant | null;
+}): PlayerCombatDeclarationDraft {
+  const { declaration, participant } = input;
+
+  return {
+    actionId: isPlayerEncounterActionId(declaration?.actionId)
+      ? declaration.actionId
+      : isPlayerEncounterActionId(participant?.state.combat.lastDeclaredActionId)
+        ? participant.state.combat.lastDeclaredActionId
+        : "",
+    additionalActionNotes:
+      declaration?.additionalActionNotes ?? participant?.state.combat.lastDeclarationNotes ?? "",
+    combatContext:
+      declaration?.combatContext ??
+      participant?.state.combat.combatContext ??
+      createEmptyPlayerEncounterCombatContext(),
+    movementId: (declaration?.movementId ??
+      participant?.state.combat.lastDeclaredMovementId ??
+      "hold") as PlayerEncounterMovementId,
+    phaseContexts: buildPlayerCombatPhaseContexts(input),
+    secondaryActionId: isPlayerEncounterActionId(declaration?.secondaryActionId)
+      ? declaration.secondaryActionId
+      : isPlayerEncounterActionId(participant?.state.combat.lastDeclaredSecondaryActionId)
+        ? participant.state.combat.lastDeclaredSecondaryActionId
+        : "",
+  };
+}
+
+function buildPlayerCombatDeclarationDraftKey(input: {
+  currentStep?: string;
+  declaration?: CombatRoundDeclaration;
+  encounterId?: string;
+  participantId?: string;
+  roundNumber?: number;
+  stepStatus?: string;
+}): string {
+  return [
+    input.encounterId ?? "no-encounter",
+    input.participantId ?? "no-participant",
+    input.roundNumber ?? "no-round",
+    input.currentStep ?? "no-step",
+    input.stepStatus ?? "no-status",
+    input.declaration?.submittedAt ?? "no-submission-time",
+  ].join(":");
+}
+
+function formatPlayerCombatInitiativeRank(input: {
+  participantId?: string;
+  positions: Record<string, number>;
+  value: number | undefined;
+}): string | undefined {
+  if (!input.participantId || input.value === undefined) {
+    return undefined;
+  }
+
+  const position = input.positions[input.participantId];
+  const rankedCount = Object.keys(input.positions).length;
+
+  return position && rankedCount > 0 ? `Rank: ${position} of ${rankedCount}` : undefined;
 }
 
 export default function ScenarioPlayerCombatPageContent({
@@ -184,6 +238,7 @@ export default function ScenarioPlayerCombatPageContent({
   const [error, setError] = useState<string>();
   const [loading, setLoading] = useState(true);
   const [projection, setProjection] = useState<ScenarioPlayerProjection>();
+  const [encounterSession, setEncounterSession] = useState<EncounterSession>();
   const [resolvedCharacterStateByParticipantId, setResolvedCharacterStateByParticipantId] =
     useState<
       Record<
@@ -207,6 +262,13 @@ export default function ScenarioPlayerCombatPageContent({
   const [combatContextDraft, setCombatContextDraft] = useState<ScenarioParticipantCombatContext>(
     createEmptyPlayerEncounterCombatContext(),
   );
+  const [phaseCombatContextDrafts, setPhaseCombatContextDrafts] =
+    useState<PlayerCombatPhaseContextDrafts>({
+      phase1: createEmptyPlayerEncounterCombatContext(),
+      phase2: createEmptyPlayerEncounterCombatContext(),
+    });
+  const [combatDeclarationDraftDirty, setCombatDeclarationDraftDirty] = useState(false);
+  const [combatDeclarationDraftKey, setCombatDeclarationDraftKey] = useState("");
   const [savingCombatContext, setSavingCombatContext] = useState(false);
   const [actionRollResult, setActionRollResult] = useState<{
     interpretedResult: string;
@@ -238,16 +300,19 @@ export default function ScenarioPlayerCombatPageContent({
 
     let cancelled = false;
 
-    async function refreshCombatView() {
-      setLoading(true);
+    async function refreshCombatView(input: { showLoading?: boolean } = {}) {
+      if (input.showLoading ?? false) {
+        setLoading(true);
+      }
 
       try {
-        const [nextProjection, nextContent, nextParticipants] = await Promise.all([
+        const [nextProjection, nextContent, nextParticipants, nextEncounter] = await Promise.all([
           loadScenarioPlayerProjection(scenarioId),
           loadCanonicalContent(),
           isGameMaster
             ? loadScenarioParticipants(scenarioId)
             : loadScenarioMyParticipant(scenarioId).then((p) => (p ? [p] : [])),
+          encounterId ? loadEncounterById(encounterId) : Promise.resolve(undefined),
         ]);
 
         if (cancelled) {
@@ -257,6 +322,7 @@ export default function ScenarioPlayerCombatPageContent({
         setProjection(nextProjection);
         setContent(nextContent);
         setSelectableParticipants(nextParticipants);
+        setEncounterSession(nextEncounter);
         setError(undefined);
       } catch (caughtError) {
         if (cancelled) {
@@ -275,12 +341,34 @@ export default function ScenarioPlayerCombatPageContent({
       }
     }
 
-    void refreshCombatView();
+    void refreshCombatView({ showLoading: true });
+
+    const intervalId = window.setInterval(() => {
+      if (cancelled) {
+        return;
+      }
+
+      void refreshCombatView();
+    }, 5000);
+
+    function refreshOnFocus() {
+      if (cancelled || document.visibilityState === "hidden") {
+        return;
+      }
+
+      void refreshCombatView();
+    }
+
+    window.addEventListener("focus", refreshOnFocus);
+    document.addEventListener("visibilitychange", refreshOnFocus);
 
     return () => {
       cancelled = true;
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", refreshOnFocus);
+      document.removeEventListener("visibilitychange", refreshOnFocus);
     };
-  }, [currentUser, isGameMaster, scenarioId, sessionLoading]);
+  }, [currentUser, encounterId, isGameMaster, scenarioId, sessionLoading]);
 
   const accessibleParticipants = useMemo(() => {
     if (!projection) {
@@ -304,17 +392,22 @@ export default function ScenarioPlayerCombatPageContent({
     const projectionControlledId = projection?.controlledParticipantId;
     const explicitParticipantId = participantId;
     const rememberedParticipantId = rememberedParticipantSelection.value;
+    const explicitAccessibleParticipant = accessibleParticipants.find(
+      (participant) => participant.id === explicitParticipantId,
+    );
     const preferredId =
-      accessibleParticipants.find((participant) => participant.id === explicitParticipantId)?.id ??
+      explicitAccessibleParticipant?.id ??
       accessibleParticipants.find((participant) => participant.id === rememberedParticipantId)
         ?.id ??
       accessibleParticipants.find((participant) => participant.id === projectionControlledId)?.id ??
       accessibleParticipants[0]?.id;
 
     setSelectedParticipantId((current) =>
-      accessibleParticipants.some((participant) => participant.id === current)
-        ? current
-        : (preferredId ?? ""),
+      explicitAccessibleParticipant
+        ? explicitAccessibleParticipant.id
+        : accessibleParticipants.some((participant) => participant.id === current)
+          ? current
+          : (preferredId ?? ""),
     );
   }, [
     accessibleParticipants,
@@ -363,36 +456,101 @@ export default function ScenarioPlayerCombatPageContent({
       null,
     [accessibleParticipants, selectedParticipantId],
   );
-
-  const visibleOpponentOptions: { displayName: string; id: string }[] = useMemo(() => {
-    if (isGameMaster) {
-      return selectableParticipants
-        .filter((p) => p.isActive && p.id !== selectedParticipantId)
-        .map((p) => ({ displayName: p.snapshot.displayName, id: p.id }));
-    }
-    return (projection?.visibleParticipants ?? [])
-      .filter((p) => p.isActive && !p.isControlledByPlayer && p.id !== selectedParticipantId)
-      .map((p) => ({ displayName: p.displayName, id: p.id }));
-  }, [
-    isGameMaster,
-    projection?.visibleParticipants,
-    selectableParticipants,
-    selectedParticipantId,
-  ]);
+  const combatRoundState = useMemo(
+    () => (encounterSession ? initializeCombatRoundState({ encounter: encounterSession }) : null),
+    [encounterSession],
+  );
+  const declarationRoundNumber =
+    combatRoundState?.roundNumber ?? encounterSession?.currentRound ?? undefined;
+  const selectedEncounterParticipant = useMemo(
+    () =>
+      encounterSession?.participants.find(
+        (participant) =>
+          participant.scenarioParticipantId === selectedParticipant?.id ||
+          participant.id === selectedParticipant?.id ||
+          (participant.characterId && participant.characterId === selectedParticipant?.characterId),
+      ),
+    [encounterSession?.participants, selectedParticipant],
+  );
+  const selectedRoundParticipant = useMemo(
+    () =>
+      selectedEncounterParticipant && combatRoundState
+        ? combatRoundState.participants.find(
+            (participant) => participant.participantId === selectedEncounterParticipant.id,
+          )
+        : undefined,
+    [combatRoundState, selectedEncounterParticipant],
+  );
+  const selectedDeclarationStepStatus =
+    selectedRoundParticipant?.stepStatuses.select_actions ?? "pending";
+  const selectedRoundDeclaration = hasCombatRoundDeclarationAction(
+    selectedRoundParticipant?.declaration,
+  )
+    ? selectedRoundParticipant.declaration
+    : undefined;
+  const selectedCombatDeclarationDraftKey = buildPlayerCombatDeclarationDraftKey({
+    currentStep: combatRoundState?.currentStep,
+    declaration: selectedRoundDeclaration,
+    encounterId,
+    participantId: selectedParticipant?.id,
+    roundNumber: declarationRoundNumber,
+    stepStatus: selectedDeclarationStepStatus,
+  });
+  const selectedParticipantDeclaredThisRound = Boolean(
+    selectedRoundDeclaration ??
+    (declarationRoundNumber &&
+      selectedParticipant?.state.combat.lastDeclaredActionId &&
+      selectedParticipant.state.combat.lastDeclaredRoundNumber === declarationRoundNumber),
+  );
+  const declarationStepOpen =
+    !combatRoundState || combatRoundState.currentStep === "select_actions";
 
   useEffect(() => {
-    setSelectedActionId(
-      isPlayerEncounterActionId(selectedParticipant?.state.combat.lastDeclaredActionId)
-        ? selectedParticipant.state.combat.lastDeclaredActionId
-        : "",
-    );
-    setSelectedSecondaryActionId("");
-    setSelectedMovementId("hold");
-    setAdditionalActionNotes("");
-    setCombatContextDraft(
-      selectedParticipant?.state.combat.combatContext ?? createEmptyPlayerEncounterCombatContext(),
-    );
-  }, [selectedParticipant]);
+    if (!selectedParticipant) {
+      setSelectedActionId("");
+      setSelectedSecondaryActionId("");
+      setSelectedMovementId("hold");
+      setAdditionalActionNotes("");
+      setCombatContextDraft(createEmptyPlayerEncounterCombatContext());
+      setPhaseCombatContextDrafts({
+        phase1: createEmptyPlayerEncounterCombatContext(),
+        phase2: createEmptyPlayerEncounterCombatContext(),
+      });
+      setCombatDeclarationDraftDirty(false);
+      setCombatDeclarationDraftKey(selectedCombatDeclarationDraftKey);
+      return;
+    }
+
+    if (
+      combatDeclarationDraftDirty &&
+      combatDeclarationDraftKey === selectedCombatDeclarationDraftKey &&
+      (isGameMaster || declarationStepOpen)
+    ) {
+      return;
+    }
+
+    const nextDraft = buildPlayerCombatDeclarationDraft({
+      declaration: selectedRoundDeclaration,
+      participant: selectedParticipant,
+    });
+
+    setSelectedActionId(nextDraft.actionId);
+    setSelectedSecondaryActionId(nextDraft.secondaryActionId);
+    setSelectedMovementId(nextDraft.movementId);
+    setAdditionalActionNotes(nextDraft.additionalActionNotes);
+    setCombatContextDraft(nextDraft.combatContext);
+    setPhaseCombatContextDrafts(nextDraft.phaseContexts);
+    setCombatDeclarationDraftDirty(false);
+    setCombatDeclarationDraftKey(selectedCombatDeclarationDraftKey);
+  }, [
+    combatDeclarationDraftDirty,
+    combatDeclarationDraftKey,
+    declarationStepOpen,
+    isGameMaster,
+    selectedCombatDeclarationDraftKey,
+    selectedParticipant,
+    selectedRoundDeclaration,
+  ]);
 
   useEffect(() => {
     const participantId = selectedParticipant?.id;
@@ -527,15 +685,14 @@ export default function ScenarioPlayerCombatPageContent({
         attackSource: selectedActionId === "attack_parry" ? "mainHand" : undefined,
         hasOffHandWeapon: Boolean(loadoutFieldValueMap.get("secondary")),
         hasShield: Boolean(loadoutFieldValueMap.get("shield")),
-        hasSelectedOpponent: Boolean(combatContextDraft.selectedOpponentId),
-        incomingAttackSide: combatContextDraft.incomingAttackSide,
-        parrySource: combatContextDraft.parrySource,
+        hasSelectedOpponent: true,
+        incomingAttackSide: phaseCombatContextDrafts.phase1.incomingAttackSide,
+        parrySource: phaseCombatContextDrafts.phase1.parrySource,
       }),
     [
-      combatContextDraft.incomingAttackSide,
-      combatContextDraft.selectedOpponentId,
-      combatContextDraft.parrySource,
       loadoutFieldValueMap,
+      phaseCombatContextDrafts.phase1.incomingAttackSide,
+      phaseCombatContextDrafts.phase1.parrySource,
       selectedActionId,
     ],
   );
@@ -593,19 +750,16 @@ export default function ScenarioPlayerCombatPageContent({
     ],
   );
 
-  const phaseSummary = useMemo(
-    () =>
-      buildPlayerEncounterPhaseSummary({
-        actionId: selectedActionId,
-        secondaryActionId: selectedSecondaryActionId,
-      }),
-    [selectedActionId, selectedSecondaryActionId],
-  );
+  function markCombatDeclarationDraftDirty() {
+    setCombatDeclarationDraftDirty(true);
+    setCombatDeclarationDraftKey(selectedCombatDeclarationDraftKey);
+  }
 
   function updateModifierBucket(
     bucket: ScenarioCombatModifierBucket,
     updater: (entries: ScenarioCombatModifierEntry[]) => ScenarioCombatModifierEntry[],
   ) {
+    markCombatDeclarationDraftDirty();
     setCombatContextDraft((current) => ({
       ...current,
       modifierBuckets: {
@@ -637,22 +791,26 @@ export default function ScenarioPlayerCombatPageContent({
     setSavingCombatContext(true);
 
     try {
-      const participant = await updateScenarioParticipantStateOnServer({
-        participantId: selectedParticipant.id,
-        scenarioId,
-        state: {
-          ...selectedParticipant.state,
-          combat: {
-            ...selectedParticipant.state.combat,
-            combatContext: combatContextDraft,
-            lastDeclaredActionId: selectedActionId || undefined,
-          },
-        },
+      if (!encounterId) {
+        throw new Error("Select an encounter before declaring a combat action.");
+      }
+
+      const { encounter, participant } = await submitCombatDeclarationOnServer({
+        actionId: selectedActionId || undefined,
+        additionalActionNotes,
+        combatContext: combatContextDraft,
+        encounterId,
+        movementId: selectedMovementId || undefined,
+        phaseContexts: phaseCombatContextDrafts,
+        scenarioParticipantId: selectedParticipant.id,
+        secondaryActionId: selectedSecondaryActionId || undefined,
       });
 
       setSelectableParticipants((current) =>
         current.map((entry) => (entry.id === participant.id ? participant : entry)),
       );
+      setEncounterSession(encounter);
+      setCombatDeclarationDraftDirty(false);
       setError(undefined);
     } catch (caughtError) {
       setError(
@@ -663,269 +821,161 @@ export default function ScenarioPlayerCombatPageContent({
     }
   }
 
-  const combatPanelModel = loadoutModel.combatStatePanelModel;
-  const loadoutFieldDisplayMap = useMemo(
-    () => new Map(loadoutModel.fields.map((field) => [field.id, field])),
-    [loadoutModel.fields],
+  async function rollInitiative() {
+    if (readOnlyInspection) {
+      return;
+    }
+
+    if (!selectedParticipant || !encounterId) {
+      return;
+    }
+
+    setSavingCombatContext(true);
+
+    try {
+      const { encounter } = await rollCombatInitiativeOnServer({
+        encounterId,
+        initiativeBase,
+        scenarioParticipantId: selectedParticipant.id,
+      });
+
+      setEncounterSession(encounter);
+      setError(undefined);
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error ? caughtError.message : "Unable to roll combat initiative.",
+      );
+    } finally {
+      setSavingCombatContext(false);
+    }
+  }
+
+  const combatLoadoutSummary = useMemo(
+    () =>
+      buildPlayerCombatLoadoutSummary({
+        actionId: selectedActionId,
+        loadoutModel,
+        secondaryActionId: selectedSecondaryActionId,
+      }),
+    [loadoutModel, selectedActionId, selectedSecondaryActionId],
   );
-
-  const selectedCombatReference = useMemo(() => {
-    if (!combatPanelModel) {
-      return null;
-    }
-
-    const preferredFieldIds = [
-      getRelevantLoadoutFieldId(selectedActionId),
-      getRelevantLoadoutFieldId(selectedSecondaryActionId),
-    ].filter((value): value is "missile" | "primary" | "secondary" | "throwing" => value !== null);
-
-    const preferredWeaponLabels = preferredFieldIds
-      .map((fieldId) => loadoutFieldDisplayMap.get(fieldId)?.valueLabel)
-      .filter((value): value is string => Boolean(value) && value !== "None");
-
-    const referenceRow =
-      preferredWeaponLabels
-        .map(
-          (weaponLabel) =>
-            combatPanelModel.weaponModeTable.rows.find(
-              (row) =>
-                getCombatTableCell({
-                  columns: combatPanelModel.weaponModeTable.columns,
-                  label: "Weapon",
-                  row,
-                }) === weaponLabel,
-            ) ?? null,
-        )
-        .find((row) => row !== null) ??
-      combatPanelModel.weaponModeTable.rows[0] ??
-      null;
-
-    const movementSummary =
-      combatPanelModel.capabilityRows.find((row) => row.label === "Mov/mod")?.value ?? "—";
-    const encumbranceSummary =
-      combatPanelModel.capabilityRows.find((row) => row.label === "Enc/count/lvl")?.value ?? "—";
-    const combinedRow =
-      combatPanelModel.weaponModeTable.rows.find(
-        (row) =>
-          getCombatTableCell({
-            columns: combatPanelModel.weaponModeTable.columns,
-            label: "Mode",
-            row,
-          }) === "Combined",
-      ) ?? null;
-
-    if (!referenceRow) {
-      return {
-        am: "—",
-        attackMode: "—",
-        db: "—",
-        combinedDb: "—",
-        combinedDm: "—",
-        crit: "—",
-        dmb: "—",
-        dm: "—",
-        encumbrance: String(encumbranceSummary),
-        initiative: "—",
-        movement: String(movementSummary),
-        ob: "—",
-        parry: "—",
-        secondCrit: "—",
-        selectedWeapon: "No ready weapon",
-      };
-    }
-
-    return {
-      am: getCombatTableCell({
-        columns: combatPanelModel.weaponModeTable.columns,
-        label: "AM",
-        row: referenceRow,
-      }),
-      attackMode: getCombatTableCell({
-        columns: combatPanelModel.weaponModeTable.columns,
-        label: "Attack 1",
-        row: referenceRow,
-      }),
-      db: getCombatTableCell({
-        columns: combatPanelModel.weaponModeTable.columns,
-        label: "DB",
-        row: referenceRow,
-      }),
-      combinedDb: combinedRow
-        ? getCombatTableCell({
-            columns: combatPanelModel.weaponModeTable.columns,
-            label: "DB",
-            row: combinedRow,
-          })
-        : "—",
-      combinedDm: combinedRow
-        ? getCombatTableCell({
-            columns: combatPanelModel.weaponModeTable.columns,
-            label: "DM",
-            row: combinedRow,
-          })
-        : "—",
-      crit: getCombatTableCell({
-        columns: combatPanelModel.weaponModeTable.columns,
-        label: "Crit 1",
-        row: referenceRow,
-      }),
-      dmb: getCombatTableCell({
-        columns: combatPanelModel.weaponModeTable.columns,
-        label: "DMB",
-        row: referenceRow,
-      }),
-      dm: getCombatTableCell({
-        columns: combatPanelModel.weaponModeTable.columns,
-        label: "DM",
-        row: referenceRow,
-      }),
-      encumbrance: String(encumbranceSummary),
-      initiative: getCombatTableCell({
-        columns: combatPanelModel.weaponModeTable.columns,
-        label: "I",
-        row: referenceRow,
-      }),
-      movement: String(movementSummary),
-      ob: getCombatTableCell({
-        columns: combatPanelModel.weaponModeTable.columns,
-        label: "OB",
-        row: referenceRow,
-      }),
-      parry: getCombatTableCell({
-        columns: combatPanelModel.weaponModeTable.columns,
-        label: "Parry",
-        row: referenceRow,
-      }),
-      secondCrit: getCombatTableCell({
-        columns: combatPanelModel.weaponModeTable.columns,
-        label: "Sec",
-        row: referenceRow,
-      }),
-      selectedWeapon: getCombatTableCell({
-        columns: combatPanelModel.weaponModeTable.columns,
-        label: "Weapon",
-        row: referenceRow,
-      }),
-    };
-  }, [combatPanelModel, loadoutFieldDisplayMap, selectedActionId, selectedSecondaryActionId]);
-
-  const currentPhaseNumber = projection?.scenario.phase === 2 ? 2 : 1;
-  const phaseCards = useMemo(() => {
-    if (selectedActionId === "attack_parry" && selectedCombatReference) {
-      const phaseTwoDb = hasDisplayValue(selectedCombatReference.combinedDb)
-        ? selectedCombatReference.combinedDb
-        : selectedCombatReference.db;
-      const phaseTwoDm = hasDisplayValue(selectedCombatReference.combinedDm)
-        ? selectedCombatReference.combinedDm
-        : selectedCombatReference.dm;
-      const combinedDefenseNote =
-        hasDisplayValue(selectedCombatReference.combinedDb) &&
-        selectedCombatReference.combinedDb !== selectedCombatReference.db
-          ? `Base DB ${selectedCombatReference.db}, Combined DB ${selectedCombatReference.combinedDb}`
-          : null;
-
-      return [
-        {
-          description: selectedCombatReference.selectedWeapon,
-          phaseLabel: "Phase 1",
-          stats: [
-            `I: ${selectedCombatReference.initiative}`,
-            `OB: ${selectedCombatReference.ob}`,
-            `DMB: ${selectedCombatReference.dmb}`,
-            `AM: ${selectedCombatReference.am}`,
-            `Max Crits: ${selectedCombatReference.crit}${
-              hasDisplayValue(selectedCombatReference.secondCrit)
-                ? ` / ${selectedCombatReference.secondCrit}`
-                : ""
-            }`,
-          ],
-          title: "Attack",
-        },
-        {
-          description:
-            parryLegality.status === "legal"
-              ? `${selectedCombatReference.selectedWeapon} defence via ${getPlayerEncounterParrySourceLabel(
-                  parryLegality.resolvedParrySource ?? "auto",
-                )}`
-              : `Parry status: ${parryLegality.reason}`,
-          phaseLabel: "Phase 2",
-          stats: [
-            `DB: ${phaseTwoDb}`,
-            `DM: ${phaseTwoDm}`,
-            `P: ${
-              parryLegality.status === "legal"
-                ? selectedCombatReference.parry
-                : parryLegality.status === "incomplete"
-                  ? "Incomplete context"
-                  : "Not legal"
-            }`,
-            ...(combinedDefenseNote ? [combinedDefenseNote] : []),
-          ],
-          title: "Parry",
-        },
-      ] as const;
-    }
-
-    return [
-      {
-        description:
-          selectedActionId || selectedSecondaryActionId
-            ? `${phaseSummary.phaseOne} · ${getPlayerEncounterMovementLabel(selectedMovementId)}`
-            : "No action selected yet.",
-        phaseLabel: "Phase 1",
-        stats:
-          selectedActionId && selectedCombatReference
-            ? [
-                `Weapon: ${selectedCombatReference.selectedWeapon}`,
-                `Attack: ${selectedCombatReference.attackMode}`,
-                `OB: ${selectedCombatReference.ob}`,
-                `DB: ${selectedCombatReference.db}`,
-              ]
-            : [],
-        title: phaseSummary.phaseOne,
-      },
-      {
-        description: selectedSecondaryActionId
-          ? `${phaseSummary.phaseTwo} · ${getPlayerEncounterMovementLabel(selectedMovementId)}`
-          : "Open",
-        phaseLabel: "Phase 2",
-        stats:
-          selectedSecondaryActionId && selectedCombatReference
-            ? [
-                `Weapon: ${selectedCombatReference.selectedWeapon}`,
-                `Parry: ${selectedCombatReference.parry}`,
-                `Movement: ${selectedCombatReference.movement}`,
-                `Enc: ${selectedCombatReference.encumbrance}`,
-              ]
-            : [],
-        title: phaseSummary.phaseTwo,
-      },
-    ] as const;
+  const initiativeBase = useMemo(() => {
+    // Initiative uses direct raw additions for this workflow pass; no percentage table is applied.
+    return (
+      combatLoadoutSummary.passiveInitiative +
+      (liveCombatModifiers?.generalFatigueRaw ?? 0) +
+      (liveCombatModifiers?.obSkillRaw ?? 0)
+    );
   }, [
-    phaseSummary.phaseOne,
-    phaseSummary.phaseTwo,
-    parryLegality,
-    selectedActionId,
-    selectedCombatReference,
-    selectedMovementId,
-    selectedSecondaryActionId,
+    combatLoadoutSummary.passiveInitiative,
+    liveCombatModifiers?.generalFatigueRaw,
+    liveCombatModifiers?.obSkillRaw,
   ]);
 
-  const activeActionButton = useMemo(() => {
-    if (!displayedParticipant || !selectedActionId) {
-      return {
-        enabled: false,
-        label: "Action",
-        phaseLabel: undefined,
-      };
-    }
+  const phaseCards = useMemo(() => {
+    return [
+      {
+        description: selectedActionId ? "" : "No action selected yet.",
+        phaseLabel: "Phase 1",
+        stats: [],
+        title: "",
+      },
+      {
+        description: "",
+        phaseLabel: "Phase 2",
+        stats: [],
+        title: "",
+      },
+    ] as const;
+  }, [selectedActionId]);
 
-    return {
-      enabled: true,
-      label: "Initiative",
-      phaseLabel: `Phase ${currentPhaseNumber}`,
-    };
-  }, [currentPhaseNumber, displayedParticipant, selectedActionId]);
+  const hasMeaningfulDeclaration =
+    Boolean(selectedActionId) ||
+    Boolean(selectedSecondaryActionId) ||
+    additionalActionNotes.trim().length > 0;
+  const currentCombatStep = combatRoundState?.currentStep ?? "select_actions";
+  const currentCombatStepLabel = getPlayerCombatStepLabel(currentCombatStep);
+  const currentInitiativePhase =
+    currentCombatStep === "initiative_phase_1"
+      ? "phase1"
+      : currentCombatStep === "initiative_phase_2"
+        ? "phase2"
+        : undefined;
+  const selectedCurrentInitiative = currentInitiativePhase
+    ? selectedRoundParticipant?.initiatives[currentInitiativePhase]
+    : undefined;
+  const phase1InitiativePositions = useMemo(
+    () =>
+      combatRoundState
+        ? getCombatRoundInitiativePositions({ phase: "phase1", state: combatRoundState })
+        : {},
+    [combatRoundState],
+  );
+  const phase2InitiativePositions = useMemo(
+    () =>
+      combatRoundState
+        ? getCombatRoundInitiativePositions({ phase: "phase2", state: combatRoundState })
+        : {},
+    [combatRoundState],
+  );
+  const selectedCurrentInitiativeRankLabel = currentInitiativePhase
+    ? formatPlayerCombatInitiativeRank({
+        participantId: selectedRoundParticipant?.participantId,
+        positions:
+          currentInitiativePhase === "phase2"
+            ? phase2InitiativePositions
+            : phase1InitiativePositions,
+        value: getCombatRoundInitiativeTotal(selectedCurrentInitiative),
+      })
+    : undefined;
+  const playerDeclarationLocked =
+    !isGameMaster &&
+    (!declarationStepOpen ||
+      selectedParticipantDeclaredThisRound ||
+      selectedDeclarationStepStatus !== "pending");
+  const declarationControlsDisabled = controlsDisabled || playerDeclarationLocked;
+  const initiativeStepStatus =
+    currentCombatStep === "initiative_phase_1"
+      ? (selectedRoundParticipant?.stepStatuses.initiative_phase_1 ?? "pending")
+      : currentCombatStep === "initiative_phase_2"
+        ? (selectedRoundParticipant?.stepStatuses.initiative_phase_2 ?? "pending")
+        : undefined;
+  const selectedParticipantRolledCurrentInitiative = Boolean(
+    currentInitiativePhase && selectedCurrentInitiative !== undefined,
+  );
+  const canUseInitiativeButton =
+    Boolean(currentInitiativePhase) &&
+    Boolean(displayedParticipant) &&
+    Boolean(selectedRoundParticipant) &&
+    (isGameMaster ||
+      (initiativeStepStatus === "pending" && !selectedParticipantRolledCurrentInitiative));
+  const declareActionDisabled =
+    controlsDisabled ||
+    savingCombatContext ||
+    !displayedParticipant ||
+    (currentInitiativePhase
+      ? !canUseInitiativeButton
+      : !isGameMaster && (playerDeclarationLocked || !hasMeaningfulDeclaration));
+  const declarationButtonLabel = getPlayerCombatActionButtonLabel({
+    currentStep: currentCombatStep,
+    disabled: declareActionDisabled,
+    isGameMaster,
+  });
+  const declarationStatusText = isGameMaster
+    ? `Current step: ${currentCombatStepLabel}. GM can save or revise this participant declaration.`
+    : currentInitiativePhase
+      ? selectedParticipantRolledCurrentInitiative
+        ? `Current step: ${currentCombatStepLabel}. Initiative rolled.`
+        : initiativeStepStatus === "pending"
+          ? `Current step: ${currentCombatStepLabel}.`
+          : `Current step: ${currentCombatStepLabel}. Waiting for GM.`
+      : selectedParticipantDeclaredThisRound ||
+          selectedDeclarationStepStatus === "submitted" ||
+          selectedDeclarationStepStatus === "gmEdited"
+        ? `Current step: ${currentCombatStepLabel}. Declared.`
+        : declarationStepOpen && selectedDeclarationStepStatus === "pending"
+          ? `Current step: ${currentCombatStepLabel}.`
+          : `Current step: ${currentCombatStepLabel}. Declaration closed.`;
 
   if (sessionLoading || loading) {
     return <section>Loading player combat screen...</section>;
@@ -1012,327 +1062,147 @@ export default function ScenarioPlayerCombatPageContent({
         ) : null}
       </div>
 
-      <section
-        style={{
-          ...panelStyle,
-          alignItems: "start",
-          gridTemplateColumns: "minmax(240px, 0.7fr) minmax(420px, 1.3fr)",
-        }}
-      >
-        <div style={{ display: "grid", gap: "0.9rem" }}>
-          <h2 style={{ margin: 0 }}>Action selector</h2>
-          {displayedParticipant ? (
-            <>
-              <label style={{ display: "grid", gap: "0.25rem" }}>
-                <span>Action</span>
-                <select
-                  disabled={controlsDisabled}
-                  onChange={(event) =>
-                    setSelectedActionId(event.target.value as PlayerEncounterActionId | "")
-                  }
-                  value={selectedActionId}
-                >
-                  <option value="">Choose action</option>
-                  {PLAYER_ENCOUNTER_ACTION_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
+      {displayedParticipant ? (
+        <section style={panelStyle}>
+          <div style={playerCombatTopPanelRowStyle}>
+            <PlayerCombatActionSelectorPanel
+              actionId={selectedActionId}
+              additionalActionNotes={additionalActionNotes}
+              controlsDisabled={declarationControlsDisabled}
+              movementId={selectedMovementId}
+              onActionChange={(actionId) => {
+                markCombatDeclarationDraftDirty();
+                setSelectedActionId(actionId);
+              }}
+              onAdditionalActionNotesChange={(notes) => {
+                markCombatDeclarationDraftDirty();
+                setAdditionalActionNotes(notes);
+              }}
+              onMovementChange={(movementId) => {
+                markCombatDeclarationDraftDirty();
+                setSelectedMovementId(movementId);
+              }}
+              onSecondaryActionChange={(actionId) => {
+                markCombatDeclarationDraftDirty();
+                setSelectedSecondaryActionId(actionId);
+              }}
+              roundNumber={combatRoundState?.roundNumber}
+              secondaryActionId={selectedSecondaryActionId}
+            />
+            {phaseCards.map((phaseCard, index) => {
+              const phaseKey: PlayerCombatPhaseKey = index === 0 ? "phase1" : "phase2";
+              const phaseCombatContext = phaseCombatContextDrafts[phaseKey];
+              const phaseModel = buildPlayerCombatPhasePanelModel({
+                actionId: selectedActionId,
+                attackStats: combatLoadoutSummary.attackStats,
+                defenseStats: buildPlayerCombatDefenseStats({
+                  mainHandParryItemLabel: combatLoadoutSummary.mainHandParryItemLabel,
+                  offHandParryItemLabel: combatLoadoutSummary.offHandParryItemLabel,
+                  phaseContext: phaseCombatContext,
+                  reference: combatLoadoutSummary.reference,
+                }),
+                phaseCard,
+                phaseContext: phaseCombatContext,
+                phaseKey,
+                secondaryActionId: selectedSecondaryActionId,
+              });
 
-              <label style={{ display: "grid", gap: "0.25rem" }}>
-                <span>Secondary action</span>
-                <select
-                  disabled={controlsDisabled}
-                  onChange={(event) =>
-                    setSelectedSecondaryActionId(event.target.value as PlayerEncounterActionId | "")
-                  }
-                  value={selectedSecondaryActionId}
-                >
-                  <option value="">Open</option>
-                  {PLAYER_ENCOUNTER_ACTION_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label style={{ display: "grid", gap: "0.25rem" }}>
-                <span>Movement</span>
-                <select
-                  disabled={controlsDisabled}
-                  onChange={(event) =>
-                    setSelectedMovementId(event.target.value as PlayerEncounterMovementId | "")
-                  }
-                  value={selectedMovementId}
-                >
-                  {PLAYER_ENCOUNTER_MOVEMENT_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label style={{ display: "grid", gap: "0.25rem" }}>
-                <span>Additional</span>
-                <input
-                  disabled={controlsDisabled}
-                  onChange={(event) => setAdditionalActionNotes(event.target.value)}
-                  placeholder="Free text for intent, target, or table notes"
-                  type="text"
-                  value={additionalActionNotes}
-                />
-              </label>
-
-              <PlayerCombatModifierPanel
-                controlsDisabled={controlsDisabled}
-                onAddEntry={(bucketKey) =>
-                  updateModifierBucket(bucketKey, (current) => [
-                    ...current,
-                    createModifierEntryDraft(),
-                  ])
-                }
-                onRemoveEntry={(bucketKey, entryId) =>
-                  updateModifierBucket(bucketKey, (current) =>
-                    current.filter((currentEntry) => currentEntry.id !== entryId),
-                  )
-                }
-                onUpdateEntry={(bucketKey, entryId, patch) =>
-                  updateModifierBucket(bucketKey, (current) =>
-                    current.map((currentEntry) =>
-                      currentEntry.id === entryId
-                        ? {
-                            ...currentEntry,
-                            ...patch,
-                          }
-                        : currentEntry,
-                    ),
-                  )
-                }
-                rows={modifierRows}
-              />
-
-              {selectedActionId === "attack_parry" ? (
-                <section
-                  style={{
-                    background: "#fffdf8",
-                    border: "1px solid #d9ddd8",
-                    borderRadius: 10,
-                    display: "grid",
-                    gap: "0.6rem",
-                    padding: "0.75rem",
-                  }}
-                >
-                  <strong>Parry context</strong>
-                  <label style={{ display: "grid", gap: "0.25rem" }}>
-                    <span>Incoming attack side</span>
-                    <select
-                      disabled={controlsDisabled}
-                      onChange={(event) =>
-                        setCombatContextDraft((current) => ({
-                          ...current,
-                          incomingAttackSide:
-                            (event.target.value as ScenarioParticipantIncomingAttackSide) ||
-                            undefined,
-                        }))
-                      }
-                      value={combatContextDraft.incomingAttackSide ?? ""}
-                    >
-                      <option value="">Choose side</option>
-                      {PLAYER_ENCOUNTER_INCOMING_ATTACK_SIDE_OPTIONS.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label style={{ display: "grid", gap: "0.25rem" }}>
-                    <span>Parry source</span>
-                    <select
-                      disabled={controlsDisabled}
-                      onChange={(event) =>
-                        setCombatContextDraft((current) => ({
-                          ...current,
-                          parrySource:
-                            (event.target.value as ScenarioParticipantParrySource) || undefined,
-                        }))
-                      }
-                      value={combatContextDraft.parrySource ?? ""}
-                    >
-                      <option value="">Choose source</option>
-                      {PLAYER_ENCOUNTER_PARRY_SOURCE_OPTIONS.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <div style={{ color: "#5e5a50", fontSize: "0.92rem" }}>
-                    Parry status:{" "}
-                    {parryLegality.status === "legal"
-                      ? `Legal (${getPlayerEncounterParrySourceLabel(
-                          parryLegality.resolvedParrySource ?? "auto",
-                        )})`
-                      : parryLegality.status === "not_legal"
-                        ? `Not legal — ${parryLegality.reason}`
-                        : `Incomplete context (${parryLegality.reason})`}
-                  </div>
-                </section>
-              ) : null}
-
-              <div style={{ display: "flex", gap: "0.5rem", justifyContent: "space-between" }}>
-                <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
-                  Saved on the selected participant combat state.
-                </div>
-                <button
-                  disabled={controlsDisabled || savingCombatContext}
-                  onClick={() => void saveCombatContext()}
-                  type="button"
-                >
-                  {savingCombatContext ? "Saving..." : "Save combat context"}
-                </button>
-              </div>
-            </>
-          ) : (
-            <div style={{ color: "#5e5a50" }}>
-              This account does not currently have an accessible participant to act for in this
-              scenario.
-            </div>
-          )}
-        </div>
-
-        <div style={{ display: "grid", gap: "0.9rem" }}>
-          <div style={playerCombatPanelsGridStyle}>
-            {phaseCards.map((phaseCard) => (
-              <PlayerCombatPhasePanel key={phaseCard.phaseLabel} phaseCard={phaseCard}>
-                {selectedActionId === "attack_parry" &&
-                phaseCard.phaseLabel === "Phase 1" &&
-                selectedCombatReference ? (
-                  <label style={{ display: "grid", gap: "0.25rem" }}>
-                    <span>Opponent</span>
-                    <select
-                      disabled={controlsDisabled}
-                      onChange={(event) =>
-                        setCombatContextDraft((current) => ({
-                          ...current,
-                          selectedOpponentId: event.target.value || undefined,
-                        }))
-                      }
-                      value={combatContextDraft.selectedOpponentId ?? ""}
-                    >
-                      <option value="">Choose opponent</option>
-                      {visibleOpponentOptions.map((participant) => (
-                        <option key={participant.id} value={participant.id}>
-                          {participant.displayName}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                ) : null}
-              </PlayerCombatPhasePanel>
-            ))}
+              return (
+                <PlayerCombatPhasePanel key={phaseModel.phaseCard.phaseLabel} phaseCard={phaseCard}>
+                  {phaseModel.showAttackStats && phaseModel.attackStats ? (
+                    <PlayerCombatAttackStatsTable stats={phaseModel.attackStats} />
+                  ) : null}
+                  {phaseModel.showDefenseContext && phaseModel.defenseStats ? (
+                    <>
+                      <PlayerCombatDefenseStatsTable stats={phaseModel.defenseStats} />
+                      <PlayerCombatParryContextPanel
+                        combatContext={phaseModel.phaseContext}
+                        controlsDisabled={declarationControlsDisabled}
+                        mainHandItemLabel={combatLoadoutSummary.mainHandParryItemLabel}
+                        offHandItemLabel={combatLoadoutSummary.offHandParryItemLabel}
+                        onCombatContextChange={(combatContext) => {
+                          markCombatDeclarationDraftDirty();
+                          setPhaseCombatContextDrafts((current) => ({
+                            ...current,
+                            [phaseKey]: combatContext,
+                          }));
+                        }}
+                      />
+                    </>
+                  ) : null}
+                </PlayerCombatPhasePanel>
+              );
+            })}
           </div>
 
-          <section
-            style={{
-              background: "#fffdf8",
-              border: "1px solid #d9ddd8",
-              borderRadius: 10,
-              display: "grid",
-              gap: "0.75rem",
-              gridTemplateColumns: "minmax(180px, 0.65fr) minmax(260px, 1.35fr)",
-              padding: "0.85rem",
-            }}
-          >
-            <div>
-              <button
-                disabled={controlsDisabled || !activeActionButton.enabled}
-                onClick={() =>
-                  setActionRollResult({
-                    interpretedResult: selectedCombatReference
-                      ? `${phaseSummary.phaseOne} with ${selectedCombatReference.selectedWeapon}`
-                      : phaseSummary.phaseOne,
-                    phaseLabel: activeActionButton.phaseLabel,
-                    value: rollDie(10),
-                  })
-                }
-                style={{
-                  background: activeActionButton.enabled ? "#ded4b1" : "#e4e0d6",
-                  border: "1px solid #bdb39a",
-                  borderRadius: 10,
-                  color: activeActionButton.enabled ? "#2f2415" : "#8a8477",
-                  cursor: activeActionButton.enabled ? "pointer" : "not-allowed",
-                  display: "grid",
-                  gap: "0.15rem",
-                  minHeight: 88,
-                  padding: "0.75rem 0.9rem",
-                  textAlign: "left",
-                  width: "100%",
-                }}
-                type="button"
-              >
-                <strong>{activeActionButton.label}</strong>
-                {activeActionButton.phaseLabel ? (
-                  <span style={{ fontSize: "0.9rem" }}>{activeActionButton.phaseLabel}</span>
-                ) : null}
-              </button>
-            </div>
-
-            <div style={{ display: "grid", gap: "0.45rem" }}>
-              <strong>Roll result</strong>
-              <div
-                style={{
-                  display: "grid",
-                  gap: "0.35rem",
-                  gridTemplateColumns: "minmax(100px, 0.35fr) minmax(180px, 1fr)",
-                }}
-              >
-                <div
-                  style={{
-                    alignItems: "center",
-                    background: "#f6f5ef",
-                    border: "1px solid #d9ddd8",
-                    borderRadius: 8,
-                    display: "flex",
-                    fontSize: "1.3rem",
-                    fontWeight: 700,
-                    justifyContent: "center",
-                    minHeight: 72,
-                  }}
-                >
-                  {actionRollResult?.value ?? "—"}
-                </div>
-                <div
-                  style={{
-                    background: "#f6f5ef",
-                    border: "1px solid #d9ddd8",
-                    borderRadius: 8,
-                    display: "grid",
-                    gap: "0.25rem",
-                    minHeight: 72,
-                    padding: "0.65rem 0.75rem",
-                  }}
-                >
-                  <div>{actionRollResult?.phaseLabel ?? "No active phase yet."}</div>
-                  <div style={{ color: "#5e5a50" }}>
-                    {actionRollResult?.interpretedResult ??
-                      "Select an action to activate the button and roll a result."}
-                  </div>
-                </div>
-              </div>
-              <div style={{ color: "#5e5a50", fontSize: "0.95rem" }}>
-                Movement: {getPlayerEncounterMovementLabel(selectedMovementId)}
-                {additionalActionNotes.trim().length > 0
-                  ? ` · ${additionalActionNotes.trim()}`
-                  : ""}
-              </div>
-            </div>
-          </section>
+          <div style={playerCombatPanelRowStyle}>
+            <PlayerCombatModifierPanel
+              controlsDisabled={declarationControlsDisabled}
+              onAddEntry={
+                isGameMaster
+                  ? (bucketKey, entry) =>
+                      updateModifierBucket(bucketKey, (current) => [
+                        ...current,
+                        entry ?? createModifierEntryDraft(),
+                      ])
+                  : undefined
+              }
+              onRemoveEntry={
+                isGameMaster
+                  ? (bucketKey, entryId) =>
+                      updateModifierBucket(bucketKey, (current) =>
+                        current.filter((currentEntry) => currentEntry.id !== entryId),
+                      )
+                  : undefined
+              }
+              onUpdateEntry={
+                isGameMaster
+                  ? (bucketKey, entryId, patch) =>
+                      updateModifierBucket(bucketKey, (current) =>
+                        current.map((currentEntry) =>
+                          currentEntry.id === entryId
+                            ? {
+                                ...currentEntry,
+                                ...patch,
+                              }
+                            : currentEntry,
+                        ),
+                      )
+                  : undefined
+              }
+              readOnly={!isGameMaster}
+              rows={modifierRows}
+            />
+            <PlayerCombatActionButtonPanel
+              buttonLabel={declarationButtonLabel}
+              disabled={declareActionDisabled}
+              onDeclareAction={() =>
+                void (currentInitiativePhase ? rollInitiative() : saveCombatContext())
+              }
+              saving={savingCombatContext}
+              statusText={declarationStatusText}
+            />
+            <PlayerCombatActionResultPanel
+              additionalActionNotes={additionalActionNotes}
+              result={
+                selectedCurrentInitiative
+                  ? {
+                      interpretedResult: formatCombatInitiativeFormula(selectedCurrentInitiative),
+                      phaseLabel: formatCombatInitiativeRoll(selectedCurrentInitiative),
+                      rankLabel: selectedCurrentInitiativeRankLabel,
+                      value: selectedCurrentInitiative.total,
+                    }
+                  : actionRollResult
+              }
+            />
+          </div>
+        </section>
+      ) : (
+        <div style={panelStyle}>
+          This account does not currently have an accessible participant to act for in this
+          scenario.
         </div>
-      </section>
+      )}
 
       <section style={{ display: "grid", gap: "1rem" }}>
         {displayedParticipant ? (

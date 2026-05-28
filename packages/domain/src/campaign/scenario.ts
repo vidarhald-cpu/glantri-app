@@ -123,8 +123,18 @@ export const scenarioParticipantParrySourceSchema = z.enum([
   "offHand",
   "shield"
 ]);
+export const scenarioParticipantParryDirectionSchema = z.enum([
+  "left_backward",
+  "left",
+  "left_forward",
+  "forward",
+  "right_forward",
+  "right",
+  "right_backward"
+]);
 
 export const scenarioCombatModifierEntrySchema = z.object({
+  durationRounds: z.number().int().positive().optional(),
   id: idSchema,
   notes: z.string().optional(),
   scope: scenarioCombatModifierScopeSchema.default("until"),
@@ -133,6 +143,7 @@ export const scenarioCombatModifierEntrySchema = z.object({
 
 export const scenarioParticipantCombatContextSchema = z.object({
   incomingAttackSide: scenarioParticipantIncomingAttackSideSchema.optional(),
+  mainHandParryDirection: scenarioParticipantParryDirectionSchema.optional(),
   modifierBuckets: z
     .object({
       general: z.array(scenarioCombatModifierEntrySchema).default([]),
@@ -144,6 +155,7 @@ export const scenarioParticipantCombatContextSchema = z.object({
       situationDb: [],
       situationObSkill: []
     }),
+  offHandParryDirection: scenarioParticipantParryDirectionSchema.optional(),
   parrySource: scenarioParticipantParrySourceSchema.optional(),
   selectedOpponentId: idSchema.optional()
 });
@@ -158,9 +170,15 @@ export const scenarioParticipantStateSchema = z.object({
       }
     }),
     currentDistanceBand: z.string().min(1).optional(),
+    declarationSubmittedAt: z.string().datetime().optional(),
+    declarationSubmittedByUserId: idSchema.optional(),
     engaged: z.boolean().default(false),
     initiativeRoll: z.number().int().optional(),
     lastDeclaredActionId: idSchema.optional(),
+    lastDeclaredMovementId: z.string().min(1).optional(),
+    lastDeclaredRoundNumber: z.number().int().positive().optional(),
+    lastDeclaredSecondaryActionId: idSchema.optional(),
+    lastDeclarationNotes: z.string().optional(),
     stance: z.string().min(1).optional()
   }),
   combatEffects: combatEffectsStateSchema.optional(),
@@ -367,6 +385,9 @@ export type ScenarioCombatModifierScope = z.infer<typeof scenarioCombatModifierS
 export type ScenarioCombatModifierBucket = z.infer<typeof scenarioCombatModifierBucketSchema>;
 export type ScenarioParticipantIncomingAttackSide = z.infer<
   typeof scenarioParticipantIncomingAttackSideSchema
+>;
+export type ScenarioParticipantParryDirection = z.infer<
+  typeof scenarioParticipantParryDirectionSchema
 >;
 export type ScenarioParticipantParrySource = z.infer<typeof scenarioParticipantParrySourceSchema>;
 export type ScenarioCombatModifierEntry = z.infer<typeof scenarioCombatModifierEntrySchema>;

@@ -10,6 +10,10 @@ import {
   getPlayerEncounterCombatModifierTotals,
   getPlayerEncounterMovementLabel,
   getPlayerEncounterOpponentParticipants,
+  getPlayerEncounterParryCoverageDirection,
+  getPlayerEncounterParryDirectionLabel,
+  isPlayerEncounterAttackAction,
+  isPlayerEncounterDefenseAction,
 } from "./playerEncounter";
 
 function createScenarioParticipant(
@@ -90,6 +94,15 @@ describe("playerEncounter", () => {
       phaseOne: "Disarm",
       phaseTwo: "Open",
     });
+  });
+
+  it("classifies attack and defense combat actions for compact phase panels", () => {
+    expect(isPlayerEncounterAttackAction("attack_parry")).toBe(true);
+    expect(isPlayerEncounterAttackAction("parry_attack")).toBe(true);
+    expect(isPlayerEncounterAttackAction("observe_opponent")).toBe(false);
+    expect(isPlayerEncounterDefenseAction("attack_parry")).toBe(true);
+    expect(isPlayerEncounterDefenseAction("parry_attack")).toBe(true);
+    expect(isPlayerEncounterDefenseAction("double_attack")).toBe(false);
   });
 
   it("returns a stable movement label fallback", () => {
@@ -211,6 +224,13 @@ describe("playerEncounter", () => {
       resolvedParrySource: "shield",
       status: "legal",
     });
+  });
+
+  it("maps parry direction coverage two steps to the right with edge clamping", () => {
+    expect(getPlayerEncounterParryCoverageDirection("left")).toBe("forward");
+    expect(getPlayerEncounterParryCoverageDirection("left_forward")).toBe("right_forward");
+    expect(getPlayerEncounterParryCoverageDirection("right")).toBe("right_backward");
+    expect(getPlayerEncounterParryDirectionLabel("left_backward")).toBe("Left/backward");
   });
 
   it("provides an empty persisted combat context shape", () => {

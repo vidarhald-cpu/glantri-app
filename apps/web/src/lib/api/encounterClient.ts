@@ -1,4 +1,10 @@
-import type { EncounterSession } from "@glantri/domain";
+import type {
+  CombatRoundInitiativeResult,
+  CombatRoundPhaseContexts,
+  EncounterSession,
+  ScenarioParticipant,
+  ScenarioParticipantCombatContext,
+} from "@glantri/domain";
 
 import { sendJson } from "./apiClient";
 
@@ -50,6 +56,70 @@ export async function updateEncounterOnServer(input: {
   });
 
   return payload.encounter;
+}
+
+export async function submitCombatDeclarationOnServer(input: {
+  actionId?: string;
+  additionalActionNotes?: string;
+  combatContext: ScenarioParticipantCombatContext;
+  encounterId: string;
+  movementId?: string;
+  phaseContexts?: CombatRoundPhaseContexts;
+  scenarioParticipantId: string;
+  secondaryActionId?: string;
+}): Promise<{ encounter: EncounterSession; participant: ScenarioParticipant }> {
+  const payload = await sendJson<{ encounter: EncounterSession; participant: ScenarioParticipant }>(
+    `/encounters/${input.encounterId}/combat-declaration`,
+    {
+      body: JSON.stringify({
+        actionId: input.actionId,
+        additionalActionNotes: input.additionalActionNotes,
+        combatContext: input.combatContext,
+        movementId: input.movementId,
+        phaseContexts: input.phaseContexts,
+        scenarioParticipantId: input.scenarioParticipantId,
+        secondaryActionId: input.secondaryActionId,
+      }),
+      method: "POST",
+    },
+  );
+
+  return payload;
+}
+
+export async function rollCombatInitiativeOnServer(input: {
+  encounterId: string;
+  initiativeBase?: number;
+  scenarioParticipantId: string;
+}): Promise<{ encounter: EncounterSession; initiative: CombatRoundInitiativeResult }> {
+  const payload = await sendJson<{
+    encounter: EncounterSession;
+    initiative: CombatRoundInitiativeResult;
+  }>(
+    `/encounters/${input.encounterId}/combat-initiative`,
+    {
+      body: JSON.stringify({
+        initiativeBase: input.initiativeBase,
+        scenarioParticipantId: input.scenarioParticipantId,
+      }),
+      method: "POST",
+    },
+  );
+
+  return payload;
+}
+
+export async function clearCurrentCombatRoundStepOnServer(input: {
+  encounterId: string;
+}): Promise<{ encounter: EncounterSession; participants: ScenarioParticipant[] }> {
+  const payload = await sendJson<{ encounter: EncounterSession; participants: ScenarioParticipant[] }>(
+    `/encounters/${input.encounterId}/combat-round/clear-current-step`,
+    {
+      method: "POST",
+    },
+  );
+
+  return payload;
 }
 
 export async function submitPlayerRoleplayRollOnServer(input: {
