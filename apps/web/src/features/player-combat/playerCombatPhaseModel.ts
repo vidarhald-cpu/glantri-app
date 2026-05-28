@@ -1,4 +1,7 @@
-import type { ScenarioParticipantCombatContext } from "@glantri/domain";
+import type {
+  ScenarioParticipantCombatContext,
+  ScenarioParticipantParryDirection,
+} from "@glantri/domain";
 
 import type { EquipmentLoadoutModuleModel } from "@/features/equipment/loadoutModule";
 import type { EquipmentFeatureState } from "@/features/equipment/types";
@@ -49,6 +52,9 @@ export interface PlayerCombatPhasePanelModel {
   showAttackStats: boolean;
   showDefenseContext: boolean;
 }
+
+export const DEFAULT_MAIN_HAND_PARRY_DIRECTION: ScenarioParticipantParryDirection = "left_forward";
+export const DEFAULT_OFF_HAND_PARRY_DIRECTION: ScenarioParticipantParryDirection = "left";
 
 function getCombatTableColumnIndex(input: { columns: string[]; label: string }): number {
   return input.columns.indexOf(input.label);
@@ -310,6 +316,17 @@ export function buildPlayerCombatAttackStats(
   };
 }
 
+export function applyDefaultPlayerCombatPhaseContext(
+  combatContext: ScenarioParticipantCombatContext,
+): ScenarioParticipantCombatContext {
+  return {
+    ...combatContext,
+    mainHandParryDirection:
+      combatContext.mainHandParryDirection ?? DEFAULT_MAIN_HAND_PARRY_DIRECTION,
+    offHandParryDirection: combatContext.offHandParryDirection ?? DEFAULT_OFF_HAND_PARRY_DIRECTION,
+  };
+}
+
 export function buildPlayerCombatDefenseStats(input: {
   mainHandParryItemLabel: string;
   offHandParryItemLabel: string;
@@ -320,8 +337,9 @@ export function buildPlayerCombatDefenseStats(input: {
     return null;
   }
 
+  const phaseContext = applyDefaultPlayerCombatPhaseContext(input.phaseContext);
   const hasPhaseParryDirection = Boolean(
-    input.phaseContext.mainHandParryDirection || input.phaseContext.offHandParryDirection,
+    phaseContext.mainHandParryDirection || phaseContext.offHandParryDirection,
   );
 
   return {

@@ -160,6 +160,19 @@ const compactWideFieldLabelStyle = {
   maxWidth: "100%",
 } as const;
 
+const compactStatsRowStyle = {
+  alignItems: "center",
+  display: "grid",
+  gap: "0.45rem",
+  gridTemplateColumns: "minmax(6rem, 0.8fr) 1fr",
+} as const;
+
+const compactStatsTableStyle = {
+  borderCollapse: "collapse",
+  fontSize: "0.88rem",
+  width: "100%",
+} as const;
+
 function getDisplayTotal(row: PlayerCombatModifierBucketView | undefined): number {
   return row ? row.total + (row.fatigueTotal ?? 0) : 0;
 }
@@ -566,15 +579,9 @@ export function formatCombatInitiativeFormula(initiative?: CombatRoundInitiative
 
 export function PlayerCombatAttackStatsTable({ stats }: PlayerCombatAttackStatsTableProps) {
   return (
-    <div style={{ display: "grid", gap: "0.35rem" }}>
+    <div style={compactStatsRowStyle}>
       <strong style={{ fontSize: "0.95rem" }}>{stats.weaponName}</strong>
-      <table
-        style={{
-          borderCollapse: "collapse",
-          fontSize: "0.9rem",
-          width: "100%",
-        }}
-      >
+      <table style={compactStatsTableStyle}>
         <thead>
           <tr>
             {["I", "OB", "DMB", "AM", "MC"].map((heading) => (
@@ -615,15 +622,9 @@ export function PlayerCombatAttackStatsTable({ stats }: PlayerCombatAttackStatsT
 
 export function PlayerCombatDefenseStatsTable({ stats }: PlayerCombatDefenseStatsTableProps) {
   return (
-    <div style={{ display: "grid", gap: "0.25rem" }}>
+    <div style={compactStatsRowStyle}>
       <strong style={{ fontSize: "0.9rem" }}>{stats.sourceName}</strong>
-      <table
-        style={{
-          borderCollapse: "collapse",
-          fontSize: "0.88rem",
-          width: "100%",
-        }}
-      >
+      <table style={compactStatsTableStyle}>
         <thead>
           <tr>
             {["DB", "DM", "P"].map((heading) => (
@@ -681,7 +682,7 @@ function ParryDirectionSelector({
         alignItems: "center",
         display: "grid",
         gap: "0.2rem",
-        gridTemplateColumns: "minmax(5rem, 0.8fr) minmax(7rem, 1fr) auto",
+        gridTemplateColumns: "4.75rem 7rem auto",
       }}
     >
       <span style={{ fontSize: "0.86rem", fontWeight: 600 }}>{itemLabel}</span>
@@ -694,6 +695,7 @@ function ParryDirectionSelector({
               : undefined,
           )
         }
+        style={{ width: "7rem" }}
         value={direction ?? ""}
       >
         <option value="">Choose direction</option>
@@ -724,8 +726,6 @@ function ParryDirectionSelector({
 export function PlayerCombatParryContextPanel({
   combatContext,
   controlsDisabled = false,
-  mainHandItemLabel = "Unarmed",
-  offHandItemLabel = "Unarmed",
   onCombatContextChange,
 }: PlayerCombatParryContextPanelProps) {
   return (
@@ -747,7 +747,7 @@ export function PlayerCombatParryContextPanel({
         <ParryDirectionSelector
           controlsDisabled={controlsDisabled}
           direction={combatContext.mainHandParryDirection}
-          itemLabel={mainHandItemLabel || "Unarmed"}
+          itemLabel="Main hand"
           onChange={(mainHandParryDirection) =>
             onCombatContextChange({
               ...combatContext,
@@ -758,7 +758,7 @@ export function PlayerCombatParryContextPanel({
         <ParryDirectionSelector
           controlsDisabled={controlsDisabled}
           direction={combatContext.offHandParryDirection}
-          itemLabel={offHandItemLabel || "Unarmed"}
+          itemLabel="Off hand"
           onChange={(offHandParryDirection) =>
             onCombatContextChange({
               ...combatContext,

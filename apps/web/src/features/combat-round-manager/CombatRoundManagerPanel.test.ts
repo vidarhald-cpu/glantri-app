@@ -68,6 +68,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("selectedRoundDeclaration");
     expect(source).toContain("buildInspectorDraftKey");
     expect(source).toContain("buildInspectorPhaseContexts");
+    expect(source).toContain("applyDefaultPlayerCombatPhaseContext");
     expect(source).toContain(
       "buildDeclarationDraft(selectedScenarioParticipant, selectedRoundDeclaration)",
     );

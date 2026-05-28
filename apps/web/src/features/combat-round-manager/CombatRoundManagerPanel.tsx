@@ -57,6 +57,7 @@ import {
   type PlayerCombatPhaseCardView,
 } from "@/features/player-combat/PlayerCombatPanels";
 import {
+  applyDefaultPlayerCombatPhaseContext,
   buildPlayerCombatDefenseStats,
   buildPlayerCombatLoadoutSummary,
   buildPlayerCombatPhasePanelModel,
@@ -142,8 +143,12 @@ function buildInspectorPhaseContexts(
     createEmptyPlayerEncounterCombatContext();
 
   return {
-    phase1: declaration?.phaseContexts?.phase1 ?? fallbackContext,
-    phase2: declaration?.phaseContexts?.phase2 ?? fallbackContext,
+    phase1: applyDefaultPlayerCombatPhaseContext(
+      declaration?.phaseContexts?.phase1 ?? fallbackContext,
+    ),
+    phase2: applyDefaultPlayerCombatPhaseContext(
+      declaration?.phaseContexts?.phase2 ?? fallbackContext,
+    ),
   };
 }
 

@@ -39,6 +39,7 @@ import {
   playerCombatTopPanelRowStyle,
 } from "@/features/player-combat/PlayerCombatPanels";
 import {
+  applyDefaultPlayerCombatPhaseContext,
   buildPlayerCombatDefenseStats,
   buildPlayerCombatLoadoutSummary,
   buildPlayerCombatPhasePanelModel,
@@ -132,8 +133,12 @@ function buildPlayerCombatPhaseContexts(input: {
     createEmptyPlayerEncounterCombatContext();
 
   return {
-    phase1: input.declaration?.phaseContexts?.phase1 ?? fallbackContext,
-    phase2: input.declaration?.phaseContexts?.phase2 ?? fallbackContext,
+    phase1: applyDefaultPlayerCombatPhaseContext(
+      input.declaration?.phaseContexts?.phase1 ?? fallbackContext,
+    ),
+    phase2: applyDefaultPlayerCombatPhaseContext(
+      input.declaration?.phaseContexts?.phase2 ?? fallbackContext,
+    ),
   };
 }
 

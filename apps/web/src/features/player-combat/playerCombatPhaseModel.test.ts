@@ -3,8 +3,11 @@ import { describe, expect, it } from "vitest";
 import { createEmptyPlayerEncounterCombatContext } from "@/lib/campaigns/playerEncounter";
 
 import {
+  applyDefaultPlayerCombatPhaseContext,
   buildPlayerCombatDefenseStats,
   buildPlayerCombatPhasePanelModel,
+  DEFAULT_MAIN_HAND_PARRY_DIRECTION,
+  DEFAULT_OFF_HAND_PARRY_DIRECTION,
   type PlayerCombatLoadoutReference,
 } from "./playerCombatPhaseModel";
 
@@ -136,5 +139,22 @@ describe("player combat phase model", () => {
     expect(phase2Context.mainHandParryDirection).toBe("right");
     expect(phase1Defense?.sourceName).toBe("Medium shield");
     expect(phase2Defense?.sourceName).toBe("Medium shield");
+  });
+
+  it("defaults blank phase parry directions without overwriting saved values", () => {
+    const emptyContext = createEmptyPlayerEncounterCombatContext();
+    const defaultedContext = applyDefaultPlayerCombatPhaseContext(emptyContext);
+    const savedContext = applyDefaultPlayerCombatPhaseContext({
+      ...createEmptyPlayerEncounterCombatContext(),
+      mainHandParryDirection: "right" as const,
+      offHandParryDirection: "right_forward" as const,
+    });
+
+    expect(defaultedContext.mainHandParryDirection).toBe(DEFAULT_MAIN_HAND_PARRY_DIRECTION);
+    expect(defaultedContext.offHandParryDirection).toBe(DEFAULT_OFF_HAND_PARRY_DIRECTION);
+    expect(emptyContext.mainHandParryDirection).toBeUndefined();
+    expect(emptyContext.offHandParryDirection).toBeUndefined();
+    expect(savedContext.mainHandParryDirection).toBe("right");
+    expect(savedContext.offHandParryDirection).toBe("right_forward");
   });
 });

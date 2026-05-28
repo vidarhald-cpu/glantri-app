@@ -42,10 +42,15 @@ describe("PlayerCombatPanels", () => {
     expect(source).toContain("phaseCard.description");
     expect(source).toContain("phaseCard.stats");
     expect(source).toContain("playerCombatTopPanelRowStyle");
-    expect(source).toContain('gridTemplateColumns: "minmax(12rem, 0.7fr) minmax(14rem, 1fr) minmax(14rem, 1fr)"');
+    expect(source).toContain(
+      'gridTemplateColumns: "minmax(12rem, 0.7fr) minmax(14rem, 1fr) minmax(14rem, 1fr)"',
+    );
     expect(source).toContain("gridTemplateColumns: playerCombatPanelRowStyle.gridTemplateColumns");
     expect(source).toContain("PlayerCombatAttackStatsTable");
     expect(source).toContain("PlayerCombatDefenseStatsTable");
+    expect(source).toContain("compactStatsRowStyle");
+    expect(source).toContain('gridTemplateColumns: "minmax(6rem, 0.8fr) 1fr"');
+    expect(source).toContain("compactStatsTableStyle");
     expect(source).toContain("I");
     expect(source).toContain("OB");
     expect(source).toContain("DMB");
@@ -69,7 +74,13 @@ describe("PlayerCombatPanels", () => {
     expect(source).toContain("PlayerCombatParryContextPanel");
     expect(source).toContain("Parry context");
     expect(source).toContain("PLAYER_ENCOUNTER_PARRY_DIRECTION_OPTIONS");
+    expect(source).toContain('itemLabel="Main hand"');
+    expect(source).toContain('itemLabel="Off hand"');
+    expect(source).toContain('gridTemplateColumns: "4.75rem 7rem auto"');
+    expect(source).toContain('style={{ width: "7rem" }}');
     expect(source).toContain("to ${getPlayerEncounterParryDirectionLabel(coverageDirection)}");
+    expect(source).not.toContain('itemLabel={mainHandItemLabel || "Unarmed"}');
+    expect(source).not.toContain('itemLabel={offHandItemLabel || "Unarmed"}');
     expect(source).not.toContain("PLAYER_ENCOUNTER_INCOMING_ATTACK_SIDE_OPTIONS");
     expect(source).not.toContain("Choose opponent");
     expect(source).not.toContain("selectedOpponentId");
@@ -88,7 +99,9 @@ describe("PlayerCombatPanels", () => {
     expect(source).toContain("PlayerCombatActionResultPanel");
     expect(source).toContain("formatCombatInitiativeRoll");
     expect(source).toContain("formatCombatInitiativeFormula");
-    expect(source).toContain("Main: I ${baseInitiative} + [ ] 0 + roll ${rollTotal} = ${initiative.total}");
+    expect(source).toContain(
+      "Main: I ${baseInitiative} + [ ] 0 + roll ${rollTotal} = ${initiative.total}",
+    );
     expect(source).toContain("rankLabel");
     expect(source).not.toContain("Movement:");
     expect(source).toContain("Mod");

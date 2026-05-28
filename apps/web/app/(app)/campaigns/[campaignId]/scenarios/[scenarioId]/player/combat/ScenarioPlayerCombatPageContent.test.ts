@@ -69,6 +69,7 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("buildPlayerCombatDeclarationDraftKey");
     expect(source).toContain("buildPlayerCombatDeclarationDraft");
     expect(source).toContain("buildPlayerCombatPhaseContexts");
+    expect(source).toContain("applyDefaultPlayerCombatPhaseContext");
     expect(source).toContain("phaseCombatContextDrafts");
     expect(source).toContain("phaseContexts: phaseCombatContextDrafts");
     expect(source).toContain(
