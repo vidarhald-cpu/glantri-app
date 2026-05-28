@@ -188,7 +188,7 @@ const compactModifierMiniTableHeaderStyle = {
   alignItems: "center",
   display: "grid",
   gap: "0.35rem",
-  gridTemplateColumns: "3.25rem 3.25rem minmax(0, 1fr) 4.75rem",
+  gridTemplateColumns: "2.75rem 2.75rem minmax(0, 1fr) 2rem",
   minWidth: 0,
 } as const;
 
@@ -199,12 +199,17 @@ const compactModifierMiniTableRowStyle = {
 
 const compactModifierNumberInputStyle = {
   minWidth: 0,
-  width: "3rem",
+  width: "4ch",
 } as const;
 
 const compactModifierDetailsInputStyle = {
   minWidth: 0,
   width: "100%",
+} as const;
+
+const compactModifierRemoveButtonStyle = {
+  minWidth: "1.75rem",
+  padding: "0.1rem 0.35rem",
 } as const;
 
 const compactStatsRowStyle = {
@@ -410,11 +415,12 @@ export function PlayerCombatModifierPanel({
           {editable && !row.locked ? (
             <div style={compactModifierMiniTableStyle}>
               <div style={compactModifierMiniTableHeaderStyle}>
-                {["Mod", "Dur", "Details", "Remove"].map((heading) => (
+                {["Mod", "Dur", "Details"].map((heading) => (
                   <span key={heading} style={{ fontSize: "0.78rem", fontWeight: 700 }}>
                     {heading}
                   </span>
                 ))}
+                <span aria-hidden="true" />
               </div>
               {row.entries.map((entry) => (
                 <div key={entry.id} style={compactModifierMiniTableRowStyle}>
@@ -458,11 +464,14 @@ export function PlayerCombatModifierPanel({
                     value={entry.notes ?? ""}
                   />
                   <button
+                    aria-label="Remove modifier"
                     disabled={controlsDisabled}
                     onClick={() => onRemoveEntry(row.bucketKey, entry.id)}
+                    style={compactModifierRemoveButtonStyle}
+                    title="Remove modifier"
                     type="button"
                   >
-                    Remove
+                    -
                   </button>
                 </div>
               ))}
