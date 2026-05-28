@@ -27,12 +27,18 @@ import {
 } from "@glantri/domain";
 
 import { buildEquipmentLoadoutModuleModel } from "@/features/equipment/loadoutModule";
+import type { EquipmentFeatureState } from "@/features/equipment/types";
 import {
   clearCurrentCombatRoundStepOnServer,
   rollCombatInitiativeOnServer,
   submitCombatDeclarationOnServer,
   updateEncounterOnServer,
 } from "@/lib/api/encounterClient";
+import {
+  loadCharacterEquipmentState,
+  loadServerCharacterById,
+  type ServerCharacterRecord,
+} from "@/lib/api/localServiceClient";
 import {
   buildPlayerCombatModifierRows,
   formatCombatInitiativeFormula,
@@ -305,6 +311,16 @@ export default function CombatRoundManagerPanel({
     Record<string, CombatInspectorDeclarationDraft>
   >({});
   const [content, setContent] = useState<Awaited<ReturnType<typeof loadCanonicalContent>>>();
+  const [resolvedCharacterStateByParticipantId, setResolvedCharacterStateByParticipantId] =
+    useState<
+      Record<
+        string,
+        {
+          equipmentState: EquipmentFeatureState;
+          serverRecord: ServerCharacterRecord;
+        }
+      >
+    >({});
   const tableContainerRef = useRef<HTMLDivElement>(null);
   const selectedRoundNumber = roundState.roundNumber;
   const effectiveScenarioParticipants = useMemo(
@@ -389,14 +405,28 @@ export default function CombatRoundManagerPanel({
       }),
     [inspectorDraft.combatContext, inspectorLiveModifiers],
   );
+  const resolvedInspectorCharacterState = selectedScenarioParticipant
+    ? resolvedCharacterStateByParticipantId[selectedScenarioParticipant.id]
+    : undefined;
   const inspectorBuild = useMemo(() => {
-    const result = characterBuildSchema.safeParse(selectedScenarioParticipant?.snapshot.build);
+    const result = characterBuildSchema.safeParse(
+      resolvedInspectorCharacterState?.serverRecord.build ??
+        selectedScenarioParticipant?.snapshot.build,
+    );
     return result.success ? result.data : null;
-  }, [selectedScenarioParticipant?.snapshot.build]);
+  }, [
+    resolvedInspectorCharacterState?.serverRecord.build,
+    selectedScenarioParticipant?.snapshot.build,
+  ]);
   const inspectorEquipmentState = useMemo(() => {
-    const candidate = selectedScenarioParticipant?.snapshot.equipmentState;
+    const candidate =
+      resolvedInspectorCharacterState?.equipmentState ??
+      selectedScenarioParticipant?.snapshot.equipmentState;
     return isEquipmentFeatureState(candidate) ? candidate : null;
-  }, [selectedScenarioParticipant?.snapshot.equipmentState]);
+  }, [
+    resolvedInspectorCharacterState?.equipmentState,
+    selectedScenarioParticipant?.snapshot.equipmentState,
+  ]);
   const inspectorLoadoutModel = useMemo(
     () =>
       buildEquipmentLoadoutModuleModel({
@@ -493,6 +523,58 @@ export default function CombatRoundManagerPanel({
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    const participantId = selectedScenarioParticipant?.id;
+    const characterId = selectedScenarioParticipant?.characterId;
+
+    if (!participantId || !characterId || resolvedCharacterStateByParticipantId[participantId]) {
+      return;
+    }
+
+    const stableParticipantId = participantId;
+    const stableCharacterId = characterId;
+    let cancelled = false;
+
+    async function hydrateInspectorCharacterState() {
+      try {
+        const [serverRecord, equipmentState] = await Promise.all([
+          loadServerCharacterById(stableCharacterId),
+          loadCharacterEquipmentState(stableCharacterId),
+        ]);
+
+        if (cancelled) {
+          return;
+        }
+
+        setResolvedCharacterStateByParticipantId((current) => ({
+          ...current,
+          [stableParticipantId]: {
+            equipmentState,
+            serverRecord,
+          },
+        }));
+      } catch (caughtError) {
+        if (!cancelled) {
+          setSaveError(
+            caughtError instanceof Error
+              ? caughtError.message
+              : "Unable to load inspector combat loadout.",
+          );
+        }
+      }
+    }
+
+    void hydrateInspectorCharacterState();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    resolvedCharacterStateByParticipantId,
+    selectedScenarioParticipant?.characterId,
+    selectedScenarioParticipant?.id,
+  ]);
 
   function focusRoundTable() {
     tableContainerRef.current?.scrollIntoView({ block: "start", behavior: "smooth" });

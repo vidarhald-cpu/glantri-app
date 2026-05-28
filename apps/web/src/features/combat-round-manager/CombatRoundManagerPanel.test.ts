@@ -85,6 +85,10 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("buildPlayerCombatDefenseStats");
     expect(source).toContain("loadCanonicalContent");
     expect(source).toContain("buildEquipmentLoadoutModuleModel");
+    expect(source).toContain("loadServerCharacterById");
+    expect(source).toContain("loadCharacterEquipmentState");
+    expect(source).toContain("resolvedCharacterStateByParticipantId");
+    expect(source).toContain("hydrateInspectorCharacterState");
     expect(source).toContain("buildEncounterLiveCombatModifierSummary");
     expect(source).toContain("selectedScenarioParticipant?.state.combatEffects");
     expect(source).toContain("saveInspectorDeclaration");
@@ -113,6 +117,8 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("PlayerCombatParryContextPanel");
     expect(source).toContain("phaseModel.showAttackStats");
     expect(source).toContain("phaseModel.showDefenseContext");
+    expect(source).toContain("actionId: inspectorDraft.actionId");
+    expect(source).toContain("secondaryActionId: inspectorDraft.secondaryActionId");
     expect(source).not.toContain("inspectorOpponentOptions");
     expect(source).toContain("moveSelectedParticipantDown");
     expect(source).toContain("Select a participant step to inspect combat details.");
