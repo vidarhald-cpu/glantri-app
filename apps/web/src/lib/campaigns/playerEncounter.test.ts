@@ -14,6 +14,7 @@ import {
   getPlayerEncounterParryDirectionLabel,
   isPlayerEncounterAttackAction,
   isPlayerEncounterDefenseAction,
+  mergeCombatContextWithCurrentModifierBuckets,
 } from "./playerEncounter";
 
 function createScenarioParticipant(
@@ -131,6 +132,37 @@ describe("playerEncounter", () => {
       situationDbTotal: 4,
       situationInitiativeTotal: 5,
       situationObSkillTotal: 3,
+    });
+  });
+
+  it("keeps current GM modifier buckets when a saved declaration has older combat context", () => {
+    const mergedContext = mergeCombatContextWithCurrentModifierBuckets({
+      baseContext: {
+        selectedOpponentId: "guard-1",
+        modifierBuckets: {
+          general: [],
+          situationDb: [],
+          situationInitiative: [],
+          situationObSkill: [],
+        },
+      },
+      currentContext: {
+        selectedOpponentId: "guard-2",
+        modifierBuckets: {
+          general: [],
+          situationDb: [{ id: "db-1", scope: "until", value: 2 }],
+          situationInitiative: [{ id: "initiative-1", scope: "until", value: 3 }],
+          situationObSkill: [{ id: "ob-1", scope: "until", value: -1 }],
+        },
+      },
+    });
+
+    expect(mergedContext.selectedOpponentId).toBe("guard-1");
+    expect(mergedContext.modifierBuckets).toEqual({
+      general: [],
+      situationDb: [{ id: "db-1", scope: "until", value: 2 }],
+      situationInitiative: [{ id: "initiative-1", scope: "until", value: 3 }],
+      situationObSkill: [{ id: "ob-1", scope: "until", value: -1 }],
     });
   });
 

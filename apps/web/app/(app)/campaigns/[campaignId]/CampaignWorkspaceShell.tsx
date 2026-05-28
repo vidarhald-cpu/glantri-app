@@ -77,6 +77,7 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const searchParamString = searchParams.toString();
   const { currentUser, loading: sessionLoading } = useSessionUser();
   const [accessibleCampaign, setAccessibleCampaign] = useState<Campaign | null>(null);
   const [accessMode, setAccessMode] = useState<"gm" | "player" | "none">("gm");
@@ -263,13 +264,13 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
       ? "You are in this scenario, but not assigned to this encounter."
       : "Waiting for GM to add you to an encounter.";
 
-  function buildWorkspaceHref(partial: {
+  const buildWorkspaceHref = useCallback((partial: {
     encounterId?: string | null;
     participantId?: string | null;
     scenarioId?: string | null;
     tab?: CampaignWorkspaceTabId | null;
-  }): string {
-    const nextParams = new URLSearchParams(searchParams.toString());
+  }): string => {
+    const nextParams = new URLSearchParams(searchParamString);
 
     if (partial.scenarioId === null) {
       nextParams.delete("scenarioId");
@@ -302,7 +303,7 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
       scenarioId: nextParams.get("scenarioId"),
       tab: (nextParams.get("tab") as CampaignWorkspaceTabId | null) ?? undefined,
     });
-  }
+  }, [campaignId, searchParamString]);
 
   function selectInspectableParticipant(input: {
     participantId: string;
@@ -311,12 +312,15 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
       "character" | "player-combat" | "player-skill-rolls"
     >;
   }) {
-    router.replace(
-      buildWorkspaceHref({
-        participantId: input.participantId,
-        tab: input.tab,
-      }),
-    );
+    const nextHref = buildWorkspaceHref({
+      participantId: input.participantId,
+      tab: input.tab,
+    });
+    const currentHref = searchParamString ? `${pathname}?${searchParamString}` : pathname;
+
+    if (nextHref !== currentHref) {
+      router.replace(nextHref);
+    }
   }
 
   useEffect(() => {
@@ -375,9 +379,7 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
       scenarioId: searchParams.get("scenarioId") ?? workspaceState.activeScenarioId ?? null,
       tab: requestedTabFromUrl ?? workspaceState.activeTab,
     });
-    const currentHref = searchParams.toString()
-      ? `${pathname}?${searchParams.toString()}`
-      : pathname;
+    const currentHref = searchParamString ? `${pathname}?${searchParamString}` : pathname;
 
     if (nextHref !== currentHref) {
       router.replace(nextHref);
@@ -390,6 +392,7 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
     rememberedWorkspaceTab.hydrated,
     router,
     searchParams,
+    searchParamString,
     tabs,
     workspaceState.activeEncounterId,
     workspaceState.activeScenarioId,

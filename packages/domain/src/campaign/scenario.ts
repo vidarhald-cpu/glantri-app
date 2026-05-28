@@ -317,6 +317,7 @@ export const scenarioPlayerVisibleParticipantSchema = z.object({
 export const scenarioPlayerControlledParticipantSchema = z.object({
   build: characterBuildSchema.optional(),
   characterId: idSchema.optional(),
+  combatContext: z.lazy(() => scenarioParticipantCombatContextSchema).optional(),
   conditionCount: z.number().int().nonnegative(),
   currentHp: z.number().int(),
   displayName: z.string().min(1),
@@ -699,6 +700,7 @@ export function buildScenarioPlayerProjection(input: {
       ? {
           build: controlledParticipant.snapshot.build as CharacterBuild | undefined,
           characterId: controlledParticipant.characterId,
+          combatContext: controlledParticipant.state.combat.combatContext,
           conditionCount: controlledParticipant.state.conditions.length,
           currentHp: controlledParticipant.state.health.currentHp,
           displayName: controlledParticipant.snapshot.displayName,

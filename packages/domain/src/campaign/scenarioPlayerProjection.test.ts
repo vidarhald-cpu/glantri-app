@@ -31,6 +31,7 @@ function createParticipant(input: {
   role: ScenarioParticipant["role"];
   snapshotBuild?: CharacterBuild;
   sourceType?: ScenarioParticipant["sourceType"];
+  state?: ScenarioParticipant["state"];
 }): ScenarioParticipant {
   return {
     characterId: input.characterId,
@@ -48,7 +49,7 @@ function createParticipant(input: {
       equipmentState: input.equipmentState,
     },
     sourceType: input.sourceType ?? "character",
-    state: {
+    state: input.state ?? {
       combat: {
         combatContext: {
           modifierBuckets: {
@@ -190,6 +191,61 @@ describe("buildScenarioPlayerProjection", () => {
       projection.visibleParticipants.find((participant) => participant.id === "participant-1")
         ?.isControlledByPlayer,
     ).toBe(true);
+  });
+
+  it("preserves controlled participant combat modifier buckets in the player-safe projection", () => {
+    const projection = buildScenarioPlayerProjection({
+      participants: [
+        createParticipant({
+          controlledByUserId: "player-1",
+          displayName: "Ser Caldus",
+          id: "participant-1",
+          role: "player_character",
+          state: {
+            combat: {
+              combatContext: {
+                modifierBuckets: {
+                  general: [],
+                  situationDb: [{ id: "db-1", scope: "until", value: 2 }],
+                  situationInitiative: [
+                    {
+                      durationRounds: 2,
+                      id: "initiative-1",
+                      notes: "Ready",
+                      scope: "until",
+                      value: 3,
+                    },
+                  ],
+                  situationObSkill: [{ id: "ob-1", scope: "until", value: -1 }],
+                },
+              },
+              engaged: false,
+            },
+            conditions: [],
+            equipment: {},
+            health: {
+              bleeding: 0,
+              currentHp: 8,
+              dead: false,
+              maxHp: 10,
+              unconscious: false,
+              wounds: 0,
+            },
+            modifiers: [],
+            resources: {},
+            snapshotVersion: 1,
+          } as ScenarioParticipant["state"],
+        }),
+      ],
+      scenario,
+      userId: "player-1",
+    });
+
+    expect(projection.controlledParticipant?.combatContext?.modifierBuckets).toMatchObject({
+      situationDb: [{ id: "db-1", value: 2 }],
+      situationInitiative: [{ id: "initiative-1", durationRounds: 2, value: 3 }],
+      situationObSkill: [{ id: "ob-1", value: -1 }],
+    });
   });
 
   it("returns a safe no-assignment projection when the user controls no active scenario participant", () => {

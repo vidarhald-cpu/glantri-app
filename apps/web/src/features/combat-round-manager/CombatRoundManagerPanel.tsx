@@ -72,6 +72,7 @@ import {
 import {
   createEmptyPlayerEncounterCombatContext,
   isPlayerEncounterActionId,
+  mergeCombatContextWithCurrentModifierBuckets,
   type PlayerEncounterActionId,
   type PlayerEncounterMovementId,
 } from "@/lib/campaigns/playerEncounter";
@@ -141,10 +142,13 @@ function buildInspectorPhaseContexts(
   participant?: ScenarioParticipant,
   declaration?: CombatRoundDeclaration,
 ): CombatInspectorPhaseContextDrafts {
-  const fallbackContext =
-    declaration?.combatContext ??
-    participant?.state.combat.combatContext ??
-    createEmptyPlayerEncounterCombatContext();
+  const fallbackContext = mergeCombatContextWithCurrentModifierBuckets({
+    baseContext:
+      declaration?.combatContext ??
+      participant?.state.combat.combatContext ??
+      createEmptyPlayerEncounterCombatContext(),
+    currentContext: participant?.state.combat.combatContext,
+  });
 
   return {
     phase1: applyDefaultPlayerCombatPhaseContext(
@@ -188,10 +192,13 @@ function buildDeclarationDraft(
         : "",
     additionalActionNotes:
       declaration?.additionalActionNotes ?? participant?.state.combat.lastDeclarationNotes ?? "",
-    combatContext:
-      declaration?.combatContext ??
-      participant?.state.combat.combatContext ??
-      createEmptyPlayerEncounterCombatContext(),
+    combatContext: mergeCombatContextWithCurrentModifierBuckets({
+      baseContext:
+        declaration?.combatContext ??
+        participant?.state.combat.combatContext ??
+        createEmptyPlayerEncounterCombatContext(),
+      currentContext: participant?.state.combat.combatContext,
+    }),
     movementId: (declaration?.movementId ??
       participant?.state.combat.lastDeclaredMovementId ??
       "hold") as PlayerEncounterMovementId,

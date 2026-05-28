@@ -168,6 +168,23 @@ export function createEmptyPlayerEncounterCombatContext(): ScenarioParticipantCo
   };
 }
 
+export function mergeCombatContextWithCurrentModifierBuckets(input: {
+  baseContext?: ScenarioParticipantCombatContext;
+  currentContext?: ScenarioParticipantCombatContext;
+}): ScenarioParticipantCombatContext {
+  const baseContext = input.baseContext ?? createEmptyPlayerEncounterCombatContext();
+  const currentContext = input.currentContext;
+
+  if (!currentContext) {
+    return baseContext;
+  }
+
+  return {
+    ...baseContext,
+    modifierBuckets: currentContext.modifierBuckets,
+  };
+}
+
 export function getPlayerEncounterCombatModifierTotals(
   combatContext?: ScenarioParticipantCombatContext,
 ): PlayerEncounterCombatModifierTotals {

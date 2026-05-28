@@ -54,6 +54,7 @@ import {
   evaluatePlayerEncounterParryLegality,
   getPlayerEncounterAccessibleParticipants,
   isPlayerEncounterActionId,
+  mergeCombatContextWithCurrentModifierBuckets,
   type PlayerEncounterActionId,
   type PlayerEncounterMovementId,
 } from "@/lib/campaigns/playerEncounter";
@@ -130,10 +131,13 @@ function buildPlayerCombatPhaseContexts(input: {
   declaration?: CombatRoundDeclaration;
   participant?: ScenarioParticipant | null;
 }): PlayerCombatPhaseContextDrafts {
-  const fallbackContext =
-    input.declaration?.combatContext ??
-    input.participant?.state.combat.combatContext ??
-    createEmptyPlayerEncounterCombatContext();
+  const fallbackContext = mergeCombatContextWithCurrentModifierBuckets({
+    baseContext:
+      input.declaration?.combatContext ??
+      input.participant?.state.combat.combatContext ??
+      createEmptyPlayerEncounterCombatContext(),
+    currentContext: input.participant?.state.combat.combatContext,
+  });
 
   return {
     phase1: applyDefaultPlayerCombatPhaseContext(
@@ -172,10 +176,13 @@ function buildPlayerCombatDeclarationDraft(input: {
         : "",
     additionalActionNotes:
       declaration?.additionalActionNotes ?? participant?.state.combat.lastDeclarationNotes ?? "",
-    combatContext:
-      declaration?.combatContext ??
-      participant?.state.combat.combatContext ??
-      createEmptyPlayerEncounterCombatContext(),
+    combatContext: mergeCombatContextWithCurrentModifierBuckets({
+      baseContext:
+        declaration?.combatContext ??
+        participant?.state.combat.combatContext ??
+        createEmptyPlayerEncounterCombatContext(),
+      currentContext: participant?.state.combat.combatContext,
+    }),
     movementId: (declaration?.movementId ??
       participant?.state.combat.lastDeclaredMovementId ??
       "hold") as PlayerEncounterMovementId,
@@ -256,6 +263,7 @@ export default function ScenarioPlayerCombatPageContent({
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const searchParamString = searchParams.toString();
   const { currentUser, loading: sessionLoading } = useSessionUser();
   const [content, setContent] = useState<Awaited<ReturnType<typeof loadCanonicalContent>>>();
   const [error, setError] = useState<string>();
@@ -449,8 +457,12 @@ export default function ScenarioPlayerCombatPageContent({
   }, [rememberedParticipantSelection, selectedParticipantId]);
 
   useEffect(() => {
+    if (!showParticipantSelector) {
+      return;
+    }
+
     const currentParticipantId = searchParams.get("participantId");
-    const nextParams = new URLSearchParams(searchParams.toString());
+    const nextParams = new URLSearchParams(searchParamString);
 
     if (selectedParticipantId) {
       nextParams.set("participantId", selectedParticipantId);
@@ -458,16 +470,21 @@ export default function ScenarioPlayerCombatPageContent({
       nextParams.delete("participantId");
     }
 
-    const currentHref = searchParams.toString()
-      ? `${pathname}?${searchParams.toString()}`
-      : pathname;
+    const currentHref = searchParamString ? `${pathname}?${searchParamString}` : pathname;
     const nextQuery = nextParams.toString();
     const nextHref = nextQuery ? `${pathname}?${nextQuery}` : pathname;
 
     if (currentParticipantId !== selectedParticipantId && currentHref !== nextHref) {
       router.replace(nextHref);
     }
-  }, [pathname, router, searchParams, selectedParticipantId]);
+  }, [
+    pathname,
+    router,
+    searchParams,
+    searchParamString,
+    selectedParticipantId,
+    showParticipantSelector,
+  ]);
 
   useEffect(() => {
     setActionRollResult(null);

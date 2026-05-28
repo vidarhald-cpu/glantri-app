@@ -34,6 +34,7 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("buildPlayerCombatDefenseStats");
     expect(source).toContain("getPlayerCombatActionButtonLabel");
     expect(source).toContain("buildEncounterLiveCombatModifierSummary");
+    expect(source).toContain("mergeCombatContextWithCurrentModifierBuckets");
     expect(source).toContain("combatEffects: selectedParticipant?.state.combatEffects");
     expect(source).toContain("liveCombatModifiers");
     expect(source).toContain('workspaceTab = "player-encounter"');
@@ -41,6 +42,7 @@ describe("ScenarioPlayerCombatPageContent", () => {
       "displayedParticipant?.displayName ? ` — ${displayedParticipant.displayName}`",
     );
     expect(source).toContain("showParticipantSelector = true");
+    expect(source).toContain("if (!showParticipantSelector) {");
     expect(source).toContain("readOnlyInspection = false");
     expect(source).not.toContain("GM player-view inspection is read-only.");
     expect(source).toContain("declarationStepOpen");

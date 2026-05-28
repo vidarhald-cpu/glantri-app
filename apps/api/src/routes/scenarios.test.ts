@@ -1609,7 +1609,14 @@ describe("scenarios route contract", () => {
                     value: 1,
                   },
                 ],
-                situationObSkill: [],
+                situationObSkill: [
+                  {
+                    id: "gm-ob-mod",
+                    notes: "GM footing",
+                    scope: "until",
+                    value: -1,
+                  },
+                ],
               },
             },
           },
@@ -1646,7 +1653,14 @@ describe("scenarios route contract", () => {
                 value: 99,
               },
             ],
-            situationObSkill: [],
+            situationObSkill: [
+              {
+                id: "player-ob-mod",
+                notes: "Player should not write this",
+                scope: "until",
+                value: 99,
+              },
+            ],
           },
           selectedOpponentId: "guard",
         },
@@ -1682,7 +1696,14 @@ describe("scenarios route contract", () => {
                     value: 1,
                   },
                 ],
-                situationObSkill: [],
+                situationObSkill: [
+                  {
+                    id: "gm-ob-mod",
+                    notes: "GM footing",
+                    scope: "until",
+                    value: -1,
+                  },
+                ],
               },
               selectedOpponentId: "guard",
             }),
