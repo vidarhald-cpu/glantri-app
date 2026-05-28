@@ -44,6 +44,7 @@ import {
   formatCombatInitiativeFormula,
   formatCombatInitiativeRoll,
   getGmCombatStepActionLabel,
+  getPlayerCombatStepLabel,
   PlayerCombatActionButtonPanel,
   PlayerCombatActionResultPanel,
   PlayerCombatActionSelectorPanel,
@@ -475,6 +476,19 @@ export default function CombatRoundManagerPanel({
   const inspectorCurrentInitiative = inspectorCurrentInitiativePhase
     ? inspector.participant?.initiatives[inspectorCurrentInitiativePhase]
     : undefined;
+  const inspectorCurrentStepStatus = inspector.participant?.stepStatuses[roundState.currentStep];
+  const inspectorParticipantHasDeclared = Boolean(selectedRoundDeclaration);
+  const inspectorStatusSuffix = inspectorCurrentInitiative
+    ? " Initiative rolled."
+    : roundState.currentStep === "review_action_modifiers" &&
+        (inspectorCurrentStepStatus === "complete" || inspectorCurrentStepStatus === "gmEdited")
+      ? " Modifiers declared."
+      : roundState.currentStep === "review_phase_2_modifiers" &&
+          (inspectorCurrentStepStatus === "complete" || inspectorCurrentStepStatus === "gmEdited")
+        ? " Phase 2 modifiers declared."
+        : inspectorParticipantHasDeclared
+          ? " Declared."
+          : "";
   const inspectorPhaseCards = useMemo<readonly PlayerCombatPhaseCardView[]>(() => {
     if (!inspector.participant) {
       return [];
@@ -1251,9 +1265,9 @@ export default function CombatRoundManagerPanel({
                         : saveInspectorDeclaration())
                     }
                     saving={saving}
-                    statusText={`Current step: ${
-                      COMBAT_ROUND_STEP_LABELS[roundState.currentStep]
-                    }. GM can save or revise this declaration at any round step.`}
+                    statusText={`Current step: ${getPlayerCombatStepLabel(
+                      roundState.currentStep,
+                    )}.${inspectorStatusSuffix}`}
                   />
                   <PlayerCombatActionResultPanel
                     additionalActionNotes={inspectorDraft.additionalActionNotes}

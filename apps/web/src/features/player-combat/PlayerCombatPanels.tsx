@@ -250,17 +250,17 @@ export function getGmCombatStepActionLabel(step: CombatRoundStep): string {
     case "review_action_modifiers":
       return "Declare modifiers";
     case "initiative_phase_1":
-      return "Set/Roll phase 1 initiative";
+      return "Roll phase 1 initiative";
     case "phase_1_actions":
-      return "Record phase 1 action";
+      return "Declare phase 1 action";
     case "review_phase_2_actions":
       return "Review phase 1 effects";
     case "review_phase_2_modifiers":
-      return "Review phase 2";
+      return "Declare phase 2 modifiers";
     case "initiative_phase_2":
-      return "Set/Roll phase 2 initiative";
+      return "Roll phase 2 initiative";
     case "phase_2_actions":
-      return "Record phase 2 action";
+      return "Declare phase 2 action";
     case "review_phase_2_damage":
       return "Review phase 2 effects";
     case "round_summary":
@@ -558,10 +558,11 @@ export function PlayerCombatActionButtonPanel({
           borderRadius: 10,
           color: disabled ? "#8a8477" : "#2f2415",
           cursor: disabled ? "not-allowed" : "pointer",
+          justifySelf: "center",
           minHeight: 70,
           padding: "0.75rem 0.9rem",
-          textAlign: "left",
-          width: "100%",
+          textAlign: "center",
+          width: "80%",
         }}
         type="button"
       >

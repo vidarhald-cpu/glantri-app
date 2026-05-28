@@ -50,6 +50,11 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("Current step: ${currentCombatStepLabel}");
     expect(source).not.toContain("Current step: ${currentCombatStepAbbreviation}");
     expect(source).toContain("Declared.");
+    expect(source).toContain("selectedParticipantHasDeclared");
+    expect(source).toContain("gmStatusSuffix");
+    expect(source).toContain('" Initiative rolled."');
+    expect(source).toContain('" Modifiers declared."');
+    expect(source).not.toContain("GM can save or revise this participant declaration.");
     expect(source).toContain("Declaration closed.");
     expect(source).toContain("rollCombatInitiativeOnServer");
     expect(source).toContain("rollInitiative");

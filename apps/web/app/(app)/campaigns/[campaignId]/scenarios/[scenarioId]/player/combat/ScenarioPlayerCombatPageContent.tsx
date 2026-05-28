@@ -961,8 +961,24 @@ export default function ScenarioPlayerCombatPageContent({
     disabled: declareActionDisabled,
     isGameMaster,
   });
+  const selectedParticipantHasDeclared =
+    selectedParticipantDeclaredThisRound ||
+    selectedDeclarationStepStatus === "submitted" ||
+    selectedDeclarationStepStatus === "gmEdited";
+  const selectedCurrentStepStatus = selectedRoundParticipant?.stepStatuses[currentCombatStep];
+  const gmStatusSuffix = selectedParticipantRolledCurrentInitiative
+    ? " Initiative rolled."
+    : currentCombatStep === "review_action_modifiers" &&
+        (selectedCurrentStepStatus === "complete" || selectedCurrentStepStatus === "gmEdited")
+      ? " Modifiers declared."
+      : currentCombatStep === "review_phase_2_modifiers" &&
+          (selectedCurrentStepStatus === "complete" || selectedCurrentStepStatus === "gmEdited")
+        ? " Phase 2 modifiers declared."
+        : selectedParticipantHasDeclared
+          ? " Declared."
+          : "";
   const declarationStatusText = isGameMaster
-    ? `Current step: ${currentCombatStepLabel}. GM can save or revise this participant declaration.`
+    ? `Current step: ${currentCombatStepLabel}.${gmStatusSuffix}`
     : currentInitiativePhase
       ? selectedParticipantRolledCurrentInitiative
         ? `Current step: ${currentCombatStepLabel}. Initiative rolled.`

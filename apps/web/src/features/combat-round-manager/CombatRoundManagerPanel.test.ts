@@ -96,8 +96,13 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("onAddEntry={(bucketKey, entry) =>");
     expect(source).toContain("entry ?? createModifierEntryDraft()");
     expect(source).toContain("getGmCombatStepActionLabel");
+    expect(source).toContain("getPlayerCombatStepLabel");
     expect(source).toContain("buttonLabel={getGmCombatStepActionLabel(roundState.currentStep)}");
-    expect(source).toContain("GM can save or revise this declaration at any round step.");
+    expect(source).not.toContain("GM can save or revise this declaration at any round step.");
+    expect(source).toContain("inspectorStatusSuffix");
+    expect(source).toContain('" Declared."');
+    expect(source).toContain('" Initiative rolled."');
+    expect(source).toContain("statusText={`Current step: ${getPlayerCombatStepLabel(");
     expect(source).toContain("rollInspectorInitiative");
     expect(source).toContain("rollCombatInitiativeOnServer");
     expect(source).toContain("getCombatRoundInitiativePositions");
