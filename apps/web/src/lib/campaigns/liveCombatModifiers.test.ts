@@ -9,6 +9,7 @@ import {
 import {
   applyLiveRawModifierToCombatValue,
   buildEncounterLiveCombatModifierSummary,
+  buildEncounterInitiativeModifierCalculation,
   sumEncounterCombatEffectModifiers,
 } from "./liveCombatModifiers";
 
@@ -52,7 +53,12 @@ describe("live combat modifiers", () => {
         effects: [
           effect({ effectGroup: "obSkill", modifierValue: 3, status: "resolved" }),
           effect({ effectGroup: "db", modifierValue: 4, status: "expired" }),
-          effect({ effectGroup: "fatigue", modifierValue: -5, status: "superseded", type: "fatigue" }),
+          effect({
+            effectGroup: "fatigue",
+            modifierValue: -5,
+            status: "superseded",
+            type: "fatigue",
+          }),
         ],
         events: [],
       },
@@ -162,9 +168,9 @@ describe("live combat modifiers", () => {
       expect.soft(theoreticalDefense?.db, testCase.label).toBe(testCase.expectedTheoretical);
       expect.soft(previousLiveOverlay, testCase.label).toBe(testCase.expectedOverlay);
       expect.soft(summedRawModifier?.db, testCase.label).toBe(testCase.expectedSummedRaw);
-      expect.soft(summedRawModifier?.fullTrace.rawModifierTotal, testCase.label).toBe(
-        testCase.equipmentModifier + liveDbModifier,
-      );
+      expect
+        .soft(summedRawModifier?.fullTrace.rawModifierTotal, testCase.label)
+        .toBe(testCase.equipmentModifier + liveDbModifier);
     }
   });
 
@@ -174,6 +180,7 @@ describe("live combat modifiers", () => {
         modifierBuckets: {
           general: [{ id: "old-general", scope: "until", value: -99 }],
           situationDb: [{ id: "manual-db", scope: "until", value: 2 }],
+          situationInitiative: [{ id: "manual-initiative", scope: "until", value: 5 }],
           situationObSkill: [{ id: "manual-ob", scope: "until", value: 3 }],
         },
       },
@@ -189,8 +196,70 @@ describe("live combat modifiers", () => {
     });
 
     expect(summary.generalFatigueRaw).toBe(-6);
+    expect(summary.initiativeRaw).toBe(5);
     expect(summary.obSkillRaw).toBe(4);
     expect(summary.dbRaw).toBe(1);
-    expect(summary.modifierNoteLabels).toEqual(["Gen/Fatigue", "OB/Skill", "DB", "Enc", "Equipment"]);
+    expect(summary.modifierNoteLabels).toEqual([
+      "Gen/Fatigue",
+      "Initiative",
+      "OB/Skill",
+      "DB",
+      "Enc",
+      "Equipment",
+    ]);
+  });
+
+  it("applies General/Fatigue and Initiative raw modifiers to initiative through the workbook table", () => {
+    const calculation = buildEncounterInitiativeModifierCalculation({
+      baseInitiative: 12,
+      liveModifiers: {
+        dbRaw: 99,
+        generalFatigueRaw: -1,
+        initiativeRaw: 3,
+        modifierNoteLabels: [],
+        obSkillRaw: 99,
+      },
+    });
+    const expectedAdjustment = lookupWorkbookPercentageAdjustment(12, 2);
+
+    expect(calculation.rawModifierTotal).toBe(2);
+    expect(calculation.modifierAdjustment).toBe(expectedAdjustment);
+    expect(calculation.modifiedInitiative).toBe(12 + expectedAdjustment!);
+  });
+
+  it("does not apply Skill/OB to initiative", () => {
+    expect(
+      buildEncounterInitiativeModifierCalculation({
+        baseInitiative: 0,
+        liveModifiers: {
+          dbRaw: 0,
+          generalFatigueRaw: 0,
+          initiativeRaw: 0,
+          modifierNoteLabels: [],
+          obSkillRaw: 100,
+        },
+      }),
+    ).toMatchObject({
+      modifiedInitiative: 0,
+      modifierAdjustment: 0,
+      rawModifierTotal: 0,
+    });
+
+    expect(
+      buildEncounterInitiativeModifierCalculation({
+        baseInitiative: 0,
+        liveModifiers: {
+          dbRaw: 0,
+          generalFatigueRaw: -1,
+          initiativeRaw: 0,
+          modifierNoteLabels: [],
+          obSkillRaw: 100,
+        },
+      }),
+    ).toMatchObject({
+      modifiedInitiative: -1,
+      modifierAdjustment: -1,
+      rawModifierTotal: -1,
+    });
   });
 });

@@ -93,6 +93,7 @@ function makeCombatScenarioParticipant(overrides: Record<string, unknown> = {}) 
           modifierBuckets: {
             general: [],
             situationDb: [],
+            situationInitiative: [],
             situationObSkill: [],
           },
         },
@@ -145,11 +146,13 @@ function makeCombatEncounter(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function setupCombatDeclarationRoute(input: {
-  encounter?: Record<string, unknown>;
-  participant?: Record<string, unknown>;
-  user?: typeof mocks.playerUser | typeof mocks.adminUser;
-} = {}) {
+function setupCombatDeclarationRoute(
+  input: {
+    encounter?: Record<string, unknown>;
+    participant?: Record<string, unknown>;
+    user?: typeof mocks.playerUser | typeof mocks.adminUser;
+  } = {},
+) {
   const encounter = makeCombatEncounter(input.encounter);
   const participant = makeCombatScenarioParticipant(input.participant);
 
@@ -1134,7 +1137,9 @@ describe("scenarios route contract", () => {
       status: "active",
     };
     mocks.encounterService.getEncounterById.mockResolvedValue(encounter);
-    mocks.encounterService.updateEncounter.mockImplementation(async (input: { session: unknown }) => input.session);
+    mocks.encounterService.updateEncounter.mockImplementation(
+      async (input: { session: unknown }) => input.session,
+    );
     mocks.scenarioService.getScenarioById.mockResolvedValue(scenario);
     mocks.campaignService.getCampaignById.mockResolvedValue(campaign);
     mocks.scenarioService.userHasPlayerScenarioAccess.mockResolvedValue(true);
@@ -1333,7 +1338,9 @@ describe("scenarios route contract", () => {
       updatedAt: "2026-01-01T00:00:00.000Z",
     };
     mocks.encounterService.getEncounterById.mockResolvedValue(encounter);
-    mocks.encounterService.updateEncounter.mockImplementation(async (input: { session: unknown }) => input.session);
+    mocks.encounterService.updateEncounter.mockImplementation(
+      async (input: { session: unknown }) => input.session,
+    );
     mocks.scenarioService.getScenarioById.mockResolvedValue({
       campaignId: "campaign-1",
       id: "scenario-1",
@@ -1504,6 +1511,15 @@ describe("scenarios route contract", () => {
           modifierBuckets: {
             general: [],
             situationDb: [],
+            situationInitiative: [
+              {
+                durationRounds: 2,
+                id: "gm-initiative-mod",
+                notes: "Quick start",
+                scope: "until",
+                value: 1,
+              },
+            ],
             situationObSkill: [],
           },
         },
@@ -1584,6 +1600,15 @@ describe("scenarios route contract", () => {
                     value: 2,
                   },
                 ],
+                situationInitiative: [
+                  {
+                    durationRounds: 2,
+                    id: "gm-initiative-mod",
+                    notes: "Ready",
+                    scope: "until",
+                    value: 1,
+                  },
+                ],
                 situationObSkill: [],
               },
             },
@@ -1608,6 +1633,14 @@ describe("scenarios route contract", () => {
             situationDb: [
               {
                 id: "player-db-mod",
+                notes: "Player should not write this",
+                scope: "until",
+                value: 99,
+              },
+            ],
+            situationInitiative: [
+              {
+                id: "player-initiative-mod",
                 notes: "Player should not write this",
                 scope: "until",
                 value: 99,
@@ -1638,6 +1671,15 @@ describe("scenarios route contract", () => {
                     notes: "GM cover",
                     scope: "until",
                     value: 2,
+                  },
+                ],
+                situationInitiative: [
+                  {
+                    durationRounds: 2,
+                    id: "gm-initiative-mod",
+                    notes: "Ready",
+                    scope: "until",
+                    value: 1,
                   },
                 ],
                 situationObSkill: [],
@@ -1689,6 +1731,15 @@ describe("scenarios route contract", () => {
           modifierBuckets: {
             general: [],
             situationDb: [],
+            situationInitiative: [
+              {
+                durationRounds: 2,
+                id: "gm-initiative-mod",
+                notes: "Quick start",
+                scope: "until",
+                value: 1,
+              },
+            ],
             situationObSkill: [],
           },
         },
@@ -1707,6 +1758,19 @@ describe("scenarios route contract", () => {
     );
     expect(updatedEncounter.combatRoundState.participants[0].declaration).toMatchObject({
       actionId: "attack_parry",
+      combatContext: expect.objectContaining({
+        modifierBuckets: expect.objectContaining({
+          situationInitiative: [
+            {
+              durationRounds: 2,
+              id: "gm-initiative-mod",
+              notes: "Quick start",
+              scope: "until",
+              value: 1,
+            },
+          ],
+        }),
+      }),
       roundNumber: 1,
       submittedBy: "gm",
       submittedByUserId: "gm-1",
@@ -1871,6 +1935,7 @@ describe("scenarios route contract", () => {
       method: "POST",
       payload: {
         initiativeBase: 3,
+        initiativeModifierAdjustment: -1,
         scenarioParticipantId: "participant-1",
       },
       url: "/encounters/encounter-1/combat-initiative",
@@ -1882,17 +1947,20 @@ describe("scenarios route contract", () => {
     expect(response.json().initiative.total).toBeGreaterThanOrEqual(1);
     expect(response.json().initiative.rolls.length).toBeGreaterThanOrEqual(1);
     expect(response.json().initiative.baseInitiative).toBe(3);
+    expect(response.json().initiative.modifierAdjustment).toBe(-1);
     expect(response.json().initiative.total).toBe(
-      response.json().initiative.baseInitiative + response.json().initiative.rollTotal,
+      response.json().initiative.baseInitiative +
+        response.json().initiative.modifierAdjustment +
+        response.json().initiative.rollTotal,
     );
     const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
     expect(updatedEncounter.combatRoundState.participants[0].initiatives.phase1).toMatchObject({
       rolls: response.json().initiative.rolls,
       total: response.json().initiative.total,
     });
-    expect(
-      updatedEncounter.combatRoundState.participants[0].stepStatuses.initiative_phase_1,
-    ).toBe("submitted");
+    expect(updatedEncounter.combatRoundState.participants[0].stepStatuses.initiative_phase_1).toBe(
+      "submitted",
+    );
   });
 
   it("allows a GM to roll initiative for another player's participant", async () => {
@@ -1942,9 +2010,9 @@ describe("scenarios route contract", () => {
       rolls: response.json().initiative.rolls,
       total: response.json().initiative.total,
     });
-    expect(
-      updatedEncounter.combatRoundState.participants[0].stepStatuses.initiative_phase_2,
-    ).toBe("gmEdited");
+    expect(updatedEncounter.combatRoundState.participants[0].stepStatuses.initiative_phase_2).toBe(
+      "gmEdited",
+    );
   });
 
   it("rejects player initiative rolls for another participant", async () => {
@@ -2029,6 +2097,7 @@ describe("scenarios route contract", () => {
               modifierBuckets: {
                 general: [],
                 situationDb: [],
+                situationInitiative: [],
                 situationObSkill: [],
               },
             },
@@ -2069,6 +2138,7 @@ describe("scenarios route contract", () => {
               modifierBuckets: {
                 general: [],
                 situationDb: [],
+                situationInitiative: [],
                 situationObSkill: [],
               },
             },

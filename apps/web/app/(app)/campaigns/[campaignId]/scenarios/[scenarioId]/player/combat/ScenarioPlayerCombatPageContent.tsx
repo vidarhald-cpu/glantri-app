@@ -76,7 +76,10 @@ import {
 } from "@/lib/browser/rememberedSelection";
 import RememberedCampaignWorkspaceEffect from "@/lib/campaigns/RememberedCampaignWorkspaceEffect";
 import { buildCampaignWorkspaceHref, type CampaignWorkspaceTabId } from "@/lib/campaigns/workspace";
-import { buildEncounterLiveCombatModifierSummary } from "@/lib/campaigns/liveCombatModifiers";
+import {
+  buildEncounterInitiativeModifierCalculation,
+  buildEncounterLiveCombatModifierSummary,
+} from "@/lib/campaigns/liveCombatModifiers";
 
 interface ScenarioPlayerCombatPageContentProps {
   campaignId: string;
@@ -201,6 +204,21 @@ function buildPlayerCombatDeclarationDraftKey(input: {
     input.stepStatus ?? "no-status",
     input.declaration?.submittedAt ?? "no-submission-time",
   ].join(":");
+}
+
+function getModifierBucketContextKey(
+  bucket: ScenarioCombatModifierBucket,
+): keyof ScenarioParticipantCombatContext["modifierBuckets"] {
+  switch (bucket) {
+    case "general":
+      return "general";
+    case "situation_db":
+      return "situationDb";
+    case "situation_initiative":
+      return "situationInitiative";
+    case "situation_ob_skill":
+      return "situationObSkill";
+  }
 }
 
 function formatPlayerCombatInitiativeRank(input: {
@@ -764,22 +782,14 @@ export default function ScenarioPlayerCombatPageContent({
     bucket: ScenarioCombatModifierBucket,
     updater: (entries: ScenarioCombatModifierEntry[]) => ScenarioCombatModifierEntry[],
   ) {
+    const bucketKey = getModifierBucketContextKey(bucket);
+
     markCombatDeclarationDraftDirty();
     setCombatContextDraft((current) => ({
       ...current,
       modifierBuckets: {
         ...current.modifierBuckets,
-        [bucket === "general"
-          ? "general"
-          : bucket === "situation_ob_skill"
-            ? "situationObSkill"
-            : "situationDb"]: updater(
-          bucket === "general"
-            ? current.modifierBuckets.general
-            : bucket === "situation_ob_skill"
-              ? current.modifierBuckets.situationObSkill
-              : current.modifierBuckets.situationDb,
-        ),
+        [bucketKey]: updater(current.modifierBuckets[bucketKey]),
       },
     }));
   }
@@ -840,7 +850,8 @@ export default function ScenarioPlayerCombatPageContent({
     try {
       const { encounter } = await rollCombatInitiativeOnServer({
         encounterId,
-        initiativeBase,
+        initiativeBase: initiativeCalculation.baseInitiative,
+        initiativeModifierAdjustment: initiativeCalculation.modifierAdjustment,
         scenarioParticipantId: selectedParticipant.id,
       });
 
@@ -864,18 +875,14 @@ export default function ScenarioPlayerCombatPageContent({
       }),
     [loadoutModel, selectedActionId, selectedSecondaryActionId],
   );
-  const initiativeBase = useMemo(() => {
-    // Initiative uses direct raw additions for this workflow pass; no percentage table is applied.
-    return (
-      combatLoadoutSummary.passiveInitiative +
-      (liveCombatModifiers?.generalFatigueRaw ?? 0) +
-      (liveCombatModifiers?.obSkillRaw ?? 0)
-    );
-  }, [
-    combatLoadoutSummary.passiveInitiative,
-    liveCombatModifiers?.generalFatigueRaw,
-    liveCombatModifiers?.obSkillRaw,
-  ]);
+  const initiativeCalculation = useMemo(
+    () =>
+      buildEncounterInitiativeModifierCalculation({
+        baseInitiative: combatLoadoutSummary.passiveInitiative,
+        liveModifiers: liveCombatModifiers,
+      }),
+    [combatLoadoutSummary.passiveInitiative, liveCombatModifiers],
+  );
 
   const phaseCards = useMemo(() => {
     return [

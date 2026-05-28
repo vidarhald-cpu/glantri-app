@@ -13,11 +13,11 @@ const scenario: Scenario = {
   liveState: {
     combatStatus: "not_started",
     phase: 1,
-    roundNumber: 1
+    roundNumber: 1,
   },
   name: "Night at the Keep",
   status: "prepared",
-  updatedAt: "2026-04-21T00:00:00.000Z"
+  updatedAt: "2026-04-21T00:00:00.000Z",
 };
 
 function createParticipant(input: {
@@ -45,7 +45,7 @@ function createParticipant(input: {
     snapshot: {
       build: input.snapshotBuild,
       displayName: input.displayName,
-      equipmentState: input.equipmentState
+      equipmentState: input.equipmentState,
     },
     sourceType: input.sourceType ?? "character",
     state: {
@@ -54,10 +54,11 @@ function createParticipant(input: {
           modifierBuckets: {
             general: [],
             situationDb: [],
-            situationObSkill: []
-          }
+            situationInitiative: [],
+            situationObSkill: [],
+          },
         },
-        engaged: false
+        engaged: false,
       },
       conditions: [],
       equipment: {},
@@ -67,13 +68,13 @@ function createParticipant(input: {
         dead: false,
         maxHp: 10,
         unconscious: false,
-        wounds: 0
+        wounds: 0,
       },
       modifiers: [],
       resources: {},
-      snapshotVersion: 1
+      snapshotVersion: 1,
     },
-    updatedAt: "2026-04-21T00:00:00.000Z"
+    updatedAt: "2026-04-21T00:00:00.000Z",
   };
 }
 
@@ -84,9 +85,9 @@ describe("buildScenarioPlayerProjection", () => {
         rolledStats: {
           con: 18,
           health: 7,
-          siz: 16
-        }
-      }
+          siz: 16,
+        },
+      },
     } as CharacterBuild;
 
     expect(calculateCharacterGeneralHitpoints(build)).toBe(17);
@@ -113,9 +114,9 @@ describe("buildScenarioPlayerProjection", () => {
           pow: 10,
           siz: 10,
           str: 10,
-          will: 10
+          will: 10,
         },
-        societyLevel: 0
+        societyLevel: 0,
       },
       progression: {
         chargenMode: "standard",
@@ -128,14 +129,14 @@ describe("buildScenarioPlayerProjection", () => {
         secondaryPoolTotal: 0,
         skillGroups: [],
         skills: [],
-        specializations: []
+        specializations: [],
       },
       progressionState: {
         availablePoints: 0,
         checks: [],
         history: [],
-        pendingAttempts: []
-      }
+        pendingAttempts: [],
+      },
     };
     const projection = buildScenarioPlayerProjection({
       participants: [
@@ -147,29 +148,29 @@ describe("buildScenarioPlayerProjection", () => {
             activeLoadoutByCharacterId: {},
             itemsById: {},
             locationsById: {},
-            templates: { templatesById: {} }
+            templates: { templatesById: {} },
           },
           factionId: "party",
           id: "participant-1",
           role: "player_character",
-          snapshotBuild: build
+          snapshotBuild: build,
         }),
         createParticipant({
           displayName: "Goblin Scout",
           factionId: "raiders",
           id: "participant-2",
           role: "monster",
-          sourceType: "entity"
+          sourceType: "entity",
         }),
         createParticipant({
           displayName: "Hidden Reserve",
           id: "participant-3",
           isActive: false,
-          role: "ally"
-        })
+          role: "ally",
+        }),
       ],
       scenario,
-      userId: "player-1"
+      userId: "player-1",
     });
 
     expect(projection.hasControlledParticipant).toBe(true);
@@ -183,11 +184,11 @@ describe("buildScenarioPlayerProjection", () => {
     expect(projection.visibleParticipants).toHaveLength(2);
     expect(projection.visibleParticipants.map((participant) => participant.displayName)).toEqual([
       "Ser Caldus",
-      "Goblin Scout"
+      "Goblin Scout",
     ]);
     expect(
       projection.visibleParticipants.find((participant) => participant.id === "participant-1")
-        ?.isControlledByPlayer
+        ?.isControlledByPlayer,
     ).toBe(true);
   });
 
@@ -198,11 +199,11 @@ describe("buildScenarioPlayerProjection", () => {
           controlledByUserId: "someone-else",
           displayName: "Ser Caldus",
           id: "participant-1",
-          role: "player_character"
-        })
+          role: "player_character",
+        }),
       ],
       scenario,
-      userId: "player-1"
+      userId: "player-1",
     });
 
     expect(projection.hasControlledParticipant).toBe(false);

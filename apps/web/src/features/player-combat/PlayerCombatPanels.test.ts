@@ -17,8 +17,14 @@ describe("PlayerCombatPanels", () => {
     expect(source).toContain("getPlayerEncounterCombatModifierTotals");
     expect(source).toContain("General/Fatigue");
     expect(source).toContain("liveModifiers?.generalFatigueRaw");
+    expect(source).toContain("Initiative");
+    expect(source).toContain("liveModifiers?.initiativeRaw");
     expect(source).toContain("Skill/OB");
     expect(source).toContain("DB");
+    expect(source.indexOf('label: "General/Fatigue"')).toBeLessThan(
+      source.indexOf('label: "Initiative"'),
+    );
+    expect(source.indexOf('label: "Initiative"')).toBeLessThan(source.indexOf('label: "Skill/OB"'));
   });
 
   it("keeps player combat modifiers editable while allowing read-only inspector use", () => {
@@ -146,7 +152,7 @@ describe("PlayerCombatPanels", () => {
     expect(source).toContain("formatCombatInitiativeRoll");
     expect(source).toContain("formatCombatInitiativeFormula");
     expect(source).toContain(
-      "Main: I ${baseInitiative} + [ ] 0 + roll ${rollTotal} = ${initiative.total}",
+      "Main: I ${baseInitiative} + [Gen/Fatigue + Initiative] ${modifierAdjustment} + roll ${rollTotal} = ${initiative.total}",
     );
     expect(source).toContain("rankLabel");
     expect(source.indexOf("result.rankLabel")).toBeLessThan(

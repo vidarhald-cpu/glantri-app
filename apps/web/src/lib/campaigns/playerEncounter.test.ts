@@ -38,6 +38,7 @@ function createScenarioParticipant(
             modifierBuckets: {
               general: [],
               situationDb: [],
+              situationInitiative: [],
               situationObSkill: [],
             },
           },
@@ -110,7 +111,7 @@ describe("playerEncounter", () => {
     expect(getPlayerEncounterMovementLabel("")).toBe("Hold position");
   });
 
-  it("derives combat modifier totals from the three modifier buckets", () => {
+  it("derives combat modifier totals from the combat modifier buckets", () => {
     expect(
       getPlayerEncounterCombatModifierTotals({
         modifierBuckets: {
@@ -119,6 +120,7 @@ describe("playerEncounter", () => {
             { id: "g-2", scope: "save", value: -1 },
           ],
           situationDb: [{ id: "db-1", scope: "until", value: 4 }],
+          situationInitiative: [{ id: "initiative-1", scope: "until", value: 5 }],
           situationObSkill: [{ id: "ob-1", scope: "until", value: 3 }],
         },
       }),
@@ -127,6 +129,7 @@ describe("playerEncounter", () => {
       defenseTotal: 5,
       generalTotal: 1,
       situationDbTotal: 4,
+      situationInitiativeTotal: 5,
       situationObSkillTotal: 3,
     });
   });
@@ -238,6 +241,7 @@ describe("playerEncounter", () => {
       modifierBuckets: {
         general: [],
         situationDb: [],
+        situationInitiative: [],
         situationObSkill: [],
       },
     });

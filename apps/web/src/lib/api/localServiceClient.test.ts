@@ -307,6 +307,7 @@ describe("localServiceClient wire contract", () => {
           modifierBuckets: {
             general: [],
             situationDb: [],
+            situationInitiative: [],
             situationObSkill: [
               {
                 durationRounds: 2,
@@ -326,6 +327,7 @@ describe("localServiceClient wire contract", () => {
             modifierBuckets: {
               general: [],
               situationDb: [],
+              situationInitiative: [],
               situationObSkill: [],
             },
           },
@@ -334,6 +336,7 @@ describe("localServiceClient wire contract", () => {
             modifierBuckets: {
               general: [],
               situationDb: [],
+              situationInitiative: [],
               situationObSkill: [],
             },
           },
@@ -350,6 +353,7 @@ describe("localServiceClient wire contract", () => {
           modifierBuckets: {
             general: [],
             situationDb: [],
+            situationInitiative: [],
             situationObSkill: [
               {
                 durationRounds: 2,
@@ -368,6 +372,7 @@ describe("localServiceClient wire contract", () => {
             modifierBuckets: {
               general: [],
               situationDb: [],
+              situationInitiative: [],
               situationObSkill: [],
             },
           },
@@ -376,6 +381,7 @@ describe("localServiceClient wire contract", () => {
             modifierBuckets: {
               general: [],
               situationDb: [],
+              situationInitiative: [],
               situationObSkill: [],
             },
           },
@@ -400,6 +406,7 @@ describe("localServiceClient wire contract", () => {
       client.rollCombatInitiativeOnServer({
         encounterId: "encounter-1",
         initiativeBase: 3,
+        initiativeModifierAdjustment: -1,
         scenarioParticipantId: "participant-1",
       }),
     ).resolves.toEqual({ encounter, initiative: { rolls: [6, 2], total: 8 } });
@@ -407,6 +414,7 @@ describe("localServiceClient wire contract", () => {
     expectFetchCall(fetchMock, {
       body: {
         initiativeBase: 3,
+        initiativeModifierAdjustment: -1,
         scenarioParticipantId: "participant-1",
       },
       method: "POST",

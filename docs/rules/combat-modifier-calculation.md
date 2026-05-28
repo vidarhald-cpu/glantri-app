@@ -17,12 +17,12 @@ modifiers passed through the same workbook percentage adjustment table.
 
 ## Terms
 
-| Term | Meaning |
-| --- | --- |
-| Base value | The unmodified workbook starting value, such as raw OB, raw parry, or base DB. |
-| Raw modifier | A signed modifier step before percentage lookup. |
-| Percentage adjustment | The workbook table result for `base value` and `abs(raw modifier total)`. |
-| Final value | `base value + adjustment` for positive totals, or `base value - adjustment` for negative totals. |
+| Term                  | Meaning                                                                                          |
+| --------------------- | ------------------------------------------------------------------------------------------------ |
+| Base value            | The unmodified workbook starting value, such as raw OB, raw parry, or base DB.                   |
+| Raw modifier          | A signed modifier step before percentage lookup.                                                 |
+| Percentage adjustment | The workbook table result for `base value` and `abs(raw modifier total)`.                        |
+| Final value           | `base value + adjustment` for positive totals, or `base value - adjustment` for negative totals. |
 
 ## Rule
 
@@ -45,6 +45,7 @@ keeps the one-point advantage and displays `14` in the documented shield/combine
 These are raw modifier sources when they apply to a given combat value:
 
 - General/Fatigue from active combat effects
+- Initiative manual or situational modifiers, for initiative only
 - OB/Skill manual or situational modifiers
 - DB manual or situational modifiers
 - Encumbrance, including the workbook to-hit modifier
@@ -84,6 +85,10 @@ the live modifier sources currently wired through the app:
   live skill value sums General/Fatigue and OB/Skill before one percentage lookup. Their encumbered
   live value adds the existing encumbrance movement modifier as an `Enc` raw modifier into the same
   lookup.
+- Initiative uses the panel/passive initiative as the base value. Its live initiative value sums
+  General/Fatigue and Initiative raw modifiers before one percentage lookup, then adds the
+  open-ended d6 roll. OB/Skill and DB are intentionally not part of initiative unless a later
+  spreadsheet-backed rule adds them.
 
 The out-of-play Equip Items view remains theoretical unless an explicit encounter live-modifier
 context is passed. Action-specific combat phase modifiers beyond the current allocation inputs are

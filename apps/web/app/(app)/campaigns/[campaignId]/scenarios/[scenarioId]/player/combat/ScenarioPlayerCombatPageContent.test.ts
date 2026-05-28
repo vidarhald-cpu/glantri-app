@@ -61,7 +61,11 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("currentInitiativePhase");
     expect(source).toContain("Initiative rolled.");
     expect(source).toContain("formatCombatInitiativeFormula");
-    expect(source).toContain("initiativeBase");
+    expect(source).toContain("buildEncounterInitiativeModifierCalculation");
+    expect(source).toContain("initiativeCalculation");
+    expect(source).toContain(
+      "initiativeModifierAdjustment: initiativeCalculation.modifierAdjustment",
+    );
     expect(source).toContain("formatPlayerCombatInitiativeRank");
     expect(source).toContain("getCombatRoundInitiativeRanks");
     expect(source).toContain("rank.tiedCount > 1");

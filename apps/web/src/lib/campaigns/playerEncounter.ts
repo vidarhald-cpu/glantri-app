@@ -44,6 +44,7 @@ export interface PlayerEncounterCombatModifierTotals {
   attackTotal: number;
   defenseTotal: number;
   generalTotal: number;
+  situationInitiativeTotal: number;
   situationDbTotal: number;
   situationObSkillTotal: number;
 }
@@ -142,7 +143,10 @@ export function getPlayerEncounterParryCoverageDirection(
   const directionIndex = PLAYER_ENCOUNTER_PARRY_DIRECTION_OPTIONS.findIndex(
     (option) => option.value === direction,
   );
-  const nextIndex = Math.min(directionIndex + 2, PLAYER_ENCOUNTER_PARRY_DIRECTION_OPTIONS.length - 1);
+  const nextIndex = Math.min(
+    directionIndex + 2,
+    PLAYER_ENCOUNTER_PARRY_DIRECTION_OPTIONS.length - 1,
+  );
 
   // The workbook notes provided for this pass do not approve wrapping past right/backward.
   // Clamp at the edge so the recorded coverage stays inside the explicit direction wheel.
@@ -158,6 +162,7 @@ export function createEmptyPlayerEncounterCombatContext(): ScenarioParticipantCo
     modifierBuckets: {
       general: [],
       situationDb: [],
+      situationInitiative: [],
       situationObSkill: [],
     },
   };
@@ -171,12 +176,16 @@ export function getPlayerEncounterCombatModifierTotals(
     combatContext?.modifierBuckets.situationObSkill ?? [],
   );
   const situationDbTotal = sumModifierEntries(combatContext?.modifierBuckets.situationDb ?? []);
+  const situationInitiativeTotal = sumModifierEntries(
+    combatContext?.modifierBuckets.situationInitiative ?? [],
+  );
 
   return {
     attackTotal: generalTotal + situationObSkillTotal,
     defenseTotal: generalTotal + situationDbTotal,
     generalTotal,
     situationDbTotal,
+    situationInitiativeTotal,
     situationObSkillTotal,
   };
 }
@@ -254,9 +263,7 @@ export function evaluatePlayerEncounterParryLegality(input: {
   };
 }
 
-export function getPlayerEncounterActionLabel(
-  actionId: PlayerEncounterActionId | "",
-): string {
+export function getPlayerEncounterActionLabel(actionId: PlayerEncounterActionId | ""): string {
   if (!actionId) {
     return "Open";
   }

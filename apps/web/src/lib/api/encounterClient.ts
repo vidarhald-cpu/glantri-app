@@ -48,12 +48,15 @@ export async function updateEncounterOnServer(input: {
   encounterId: string;
   session: EncounterSession;
 }): Promise<EncounterSession> {
-  const payload = await sendJson<{ encounter: EncounterSession }>(`/encounters/${input.encounterId}`, {
-    body: JSON.stringify({
-      session: input.session,
-    }),
-    method: "PUT",
-  });
+  const payload = await sendJson<{ encounter: EncounterSession }>(
+    `/encounters/${input.encounterId}`,
+    {
+      body: JSON.stringify({
+        session: input.session,
+      }),
+      method: "PUT",
+    },
+  );
 
   return payload.encounter;
 }
@@ -90,21 +93,20 @@ export async function submitCombatDeclarationOnServer(input: {
 export async function rollCombatInitiativeOnServer(input: {
   encounterId: string;
   initiativeBase?: number;
+  initiativeModifierAdjustment?: number;
   scenarioParticipantId: string;
 }): Promise<{ encounter: EncounterSession; initiative: CombatRoundInitiativeResult }> {
   const payload = await sendJson<{
     encounter: EncounterSession;
     initiative: CombatRoundInitiativeResult;
-  }>(
-    `/encounters/${input.encounterId}/combat-initiative`,
-    {
-      body: JSON.stringify({
-        initiativeBase: input.initiativeBase,
-        scenarioParticipantId: input.scenarioParticipantId,
-      }),
-      method: "POST",
-    },
-  );
+  }>(`/encounters/${input.encounterId}/combat-initiative`, {
+    body: JSON.stringify({
+      initiativeBase: input.initiativeBase,
+      initiativeModifierAdjustment: input.initiativeModifierAdjustment,
+      scenarioParticipantId: input.scenarioParticipantId,
+    }),
+    method: "POST",
+  });
 
   return payload;
 }
@@ -112,12 +114,12 @@ export async function rollCombatInitiativeOnServer(input: {
 export async function clearCurrentCombatRoundStepOnServer(input: {
   encounterId: string;
 }): Promise<{ encounter: EncounterSession; participants: ScenarioParticipant[] }> {
-  const payload = await sendJson<{ encounter: EncounterSession; participants: ScenarioParticipant[] }>(
-    `/encounters/${input.encounterId}/combat-round/clear-current-step`,
-    {
-      method: "POST",
-    },
-  );
+  const payload = await sendJson<{
+    encounter: EncounterSession;
+    participants: ScenarioParticipant[];
+  }>(`/encounters/${input.encounterId}/combat-round/clear-current-step`, {
+    method: "POST",
+  });
 
   return payload;
 }

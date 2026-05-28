@@ -328,6 +328,12 @@ export function buildPlayerCombatModifierRows(input: {
       total: input.liveModifiers?.generalFatigueRaw ?? 0,
     },
     {
+      bucketKey: "situation_initiative",
+      entries: combatContext.modifierBuckets.situationInitiative,
+      label: "Initiative",
+      total: input.liveModifiers?.initiativeRaw ?? totals.situationInitiativeTotal,
+    },
+    {
       bucketKey: "situation_ob_skill",
       entries: combatContext.modifierBuckets.situationObSkill,
       label: "Skill/OB",
@@ -618,7 +624,9 @@ export function formatCombatInitiativeRoll(initiative?: CombatRoundInitiativeRes
 
   const rollText =
     initiative.rolls.length > 0 ? initiative.rolls.join(" + ") : String(initiative.total);
-  const rollTotal = initiative.rollTotal ?? initiative.total - (initiative.baseInitiative ?? 0);
+  const baseInitiative = initiative.baseInitiative ?? 0;
+  const modifierAdjustment = initiative.modifierAdjustment ?? 0;
+  const rollTotal = initiative.rollTotal ?? initiative.total - baseInitiative - modifierAdjustment;
 
   return `Roll: ${rollText} = ${rollTotal}`;
 }
@@ -630,8 +638,10 @@ export function formatCombatInitiativeFormula(initiative?: CombatRoundInitiative
 
   const baseInitiative = initiative.baseInitiative ?? 0;
   const rollTotal = initiative.rollTotal ?? initiative.total - baseInitiative;
+  const modifierAdjustment =
+    initiative.modifierAdjustment ?? initiative.total - baseInitiative - rollTotal;
 
-  return `Main: I ${baseInitiative} + [ ] 0 + roll ${rollTotal} = ${initiative.total}`;
+  return `Main: I ${baseInitiative} + [Gen/Fatigue + Initiative] ${modifierAdjustment} + roll ${rollTotal} = ${initiative.total}`;
 }
 
 export function PlayerCombatAttackStatsTable({ stats }: PlayerCombatAttackStatsTableProps) {

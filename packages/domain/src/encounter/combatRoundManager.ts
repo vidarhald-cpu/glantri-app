@@ -59,6 +59,7 @@ export const combatRoundStepStatusSchema = z.enum([
 
 export const combatRoundInitiativeResultSchema = z.object({
   baseInitiative: z.number().int().default(0),
+  modifierAdjustment: z.number().int().default(0),
   rolls: z.array(z.number().int().min(1).max(6)).default([]),
   rollTotal: z.number().int().optional(),
   total: z.number().int(),
@@ -66,7 +67,13 @@ export const combatRoundInitiativeResultSchema = z.object({
 const legacyCombatRoundInitiativeResultSchema = z
   .number()
   .int()
-  .transform((total) => ({ baseInitiative: 0, rolls: [], rollTotal: total, total }));
+  .transform((total) => ({
+    baseInitiative: 0,
+    modifierAdjustment: 0,
+    rolls: [],
+    rollTotal: total,
+    total,
+  }));
 
 export const combatRoundInitiativesSchema = z.object({
   phase1: z
@@ -151,6 +158,7 @@ export function rollOpenEndedD6(
   return {
     baseInitiative: 0,
     isOpenEnded: rolls.length > 1,
+    modifierAdjustment: 0,
     rolls,
     rollTotal: rolls.reduce((sum, roll) => sum + roll, 0),
     total: rolls.reduce((sum, roll) => sum + roll, 0),
@@ -159,16 +167,19 @@ export function rollOpenEndedD6(
 
 export function buildCombatRoundInitiativeResult(input: {
   baseInitiative?: number;
+  modifierAdjustment?: number;
   roll: CombatRoundInitiativeResult;
 }): CombatRoundInitiativeResult {
   const rollTotal = input.roll.rollTotal ?? input.roll.total;
   const baseInitiative = input.baseInitiative ?? 0;
+  const modifierAdjustment = input.modifierAdjustment ?? 0;
 
   return combatRoundInitiativeResultSchema.parse({
     baseInitiative,
+    modifierAdjustment,
     rolls: input.roll.rolls,
     rollTotal,
-    total: baseInitiative + rollTotal,
+    total: baseInitiative + modifierAdjustment + rollTotal,
   });
 }
 
@@ -184,6 +195,11 @@ function normalizeCombatRoundInitiativeResult(
       ? { baseInitiative: 0, rolls: [], rollTotal: initiative, total: initiative }
       : {
           ...initiative,
+          modifierAdjustment:
+            initiative.modifierAdjustment ??
+            initiative.total -
+              (initiative.baseInitiative ?? 0) -
+              (initiative.rollTotal ?? initiative.total - (initiative.baseInitiative ?? 0)),
           rollTotal: initiative.rollTotal ?? initiative.total - (initiative.baseInitiative ?? 0),
         },
   );

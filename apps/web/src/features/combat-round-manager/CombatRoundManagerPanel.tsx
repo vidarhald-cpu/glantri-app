@@ -65,7 +65,10 @@ import {
   isEquipmentFeatureState,
   type PlayerCombatPhaseKey,
 } from "@/features/player-combat/playerCombatPhaseModel";
-import { buildEncounterLiveCombatModifierSummary } from "@/lib/campaigns/liveCombatModifiers";
+import {
+  buildEncounterInitiativeModifierCalculation,
+  buildEncounterLiveCombatModifierSummary,
+} from "@/lib/campaigns/liveCombatModifiers";
 import {
   createEmptyPlayerEncounterCombatContext,
   isPlayerEncounterActionId,
@@ -214,6 +217,21 @@ function buildInspectorDraftKey(input: {
     input.declaration?.roundNumber ?? "no-round-declaration",
     input.declaration?.submittedAt ?? "no-submission-time",
   ].join(":");
+}
+
+function getModifierBucketContextKey(
+  bucket: ScenarioCombatModifierBucket,
+): keyof ScenarioParticipantCombatContext["modifierBuckets"] {
+  switch (bucket) {
+    case "general":
+      return "general";
+    case "situation_db":
+      return "situationDb";
+    case "situation_initiative":
+      return "situationInitiative";
+    case "situation_ob_skill":
+      return "situationObSkill";
+  }
 }
 
 function hasCombatRoundDeclarationAction(declaration?: CombatRoundDeclaration): boolean {
@@ -514,10 +532,10 @@ export default function CombatRoundManagerPanel({
       },
     ];
   }, [inspector.participant]);
-  const inspectorInitiativeBase =
-    inspectorLoadoutSummary.passiveInitiative +
-    (inspectorLiveModifiers.generalFatigueRaw ?? 0) +
-    (inspectorLiveModifiers.obSkillRaw ?? 0);
+  const inspectorInitiativeCalculation = buildEncounterInitiativeModifierCalculation({
+    baseInitiative: inspectorLoadoutSummary.passiveInitiative,
+    liveModifiers: inspectorLiveModifiers,
+  });
   useEffect(() => {
     setRoundState(initialRoundState);
   }, [initialRoundState]);
@@ -773,22 +791,14 @@ export default function CombatRoundManagerPanel({
     bucket: ScenarioCombatModifierBucket,
     updater: (entries: ScenarioCombatModifierEntry[]) => ScenarioCombatModifierEntry[],
   ) {
+    const bucketKey = getModifierBucketContextKey(bucket);
+
     updateInspectorDraft({
       combatContext: {
         ...inspectorDraft.combatContext,
         modifierBuckets: {
           ...inspectorDraft.combatContext.modifierBuckets,
-          [bucket === "general"
-            ? "general"
-            : bucket === "situation_ob_skill"
-              ? "situationObSkill"
-              : "situationDb"]: updater(
-            bucket === "general"
-              ? inspectorDraft.combatContext.modifierBuckets.general
-              : bucket === "situation_ob_skill"
-                ? inspectorDraft.combatContext.modifierBuckets.situationObSkill
-                : inspectorDraft.combatContext.modifierBuckets.situationDb,
-          ),
+          [bucketKey]: updater(inspectorDraft.combatContext.modifierBuckets[bucketKey]),
         },
       },
     });
@@ -871,7 +881,8 @@ export default function CombatRoundManagerPanel({
     try {
       const { encounter: nextEncounter } = await rollCombatInitiativeOnServer({
         encounterId: encounter.id,
-        initiativeBase: inspectorInitiativeBase,
+        initiativeBase: inspectorInitiativeCalculation.baseInitiative,
+        initiativeModifierAdjustment: inspectorInitiativeCalculation.modifierAdjustment,
         scenarioParticipantId: selectedScenarioParticipant.id,
       });
       const nextRoundState = initializeCombatRoundState({ encounter: nextEncounter });

@@ -112,7 +112,11 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("rankLabel");
     expect(source).toContain("rank.tiedCount > 1");
     expect(source).toContain("tied with ${rank.tiedCount}");
-    expect(source).toContain("inspectorInitiativeBase");
+    expect(source).toContain("buildEncounterInitiativeModifierCalculation");
+    expect(source).toContain("inspectorInitiativeCalculation");
+    expect(source).toContain(
+      "initiativeModifierAdjustment: inspectorInitiativeCalculation.modifierAdjustment",
+    );
     expect(source).toContain("phaseContexts: inspectorDraft.phaseContexts");
     expect(source).toContain(
       'const phaseKey: PlayerCombatPhaseKey = index === 0 ? "phase1" : "phase2"',

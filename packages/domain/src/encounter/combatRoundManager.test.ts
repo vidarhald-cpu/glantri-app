@@ -169,6 +169,7 @@ describe("combat round manager", () => {
 
     expect(state.participants[0]?.initiatives.phase1).toEqual({
       baseInitiative: 0,
+      modifierAdjustment: 0,
       rolls: [],
       rollTotal: 14,
       total: 14,
@@ -246,6 +247,7 @@ describe("combat round manager", () => {
             modifierBuckets: {
               general: [],
               situationDb: [],
+              situationInitiative: [],
               situationObSkill: [],
             },
           },
@@ -254,6 +256,7 @@ describe("combat round manager", () => {
             modifierBuckets: {
               general: [],
               situationDb: [],
+              situationInitiative: [],
               situationObSkill: [],
             },
           },
@@ -320,6 +323,7 @@ describe("combat round manager", () => {
     expect(state.currentStep).toBe("initiative_phase_1");
     expect(nextState.participants[0]?.initiatives.phase1).toEqual({
       baseInitiative: 0,
+      modifierAdjustment: 0,
       rolls: [],
       rollTotal: 18,
       total: 18,
@@ -356,6 +360,7 @@ describe("combat round manager", () => {
         baseInitiative: 3,
         roll: {
           baseInitiative: 0,
+          modifierAdjustment: 0,
           rolls: [6, 4],
           rollTotal: 10,
           total: 10,
@@ -363,9 +368,30 @@ describe("combat round manager", () => {
       }),
     ).toEqual({
       baseInitiative: 3,
+      modifierAdjustment: 0,
       rolls: [6, 4],
       rollTotal: 10,
       total: 13,
+    });
+
+    expect(
+      buildCombatRoundInitiativeResult({
+        baseInitiative: 3,
+        modifierAdjustment: -1,
+        roll: {
+          baseInitiative: 0,
+          modifierAdjustment: 0,
+          rolls: [6, 4],
+          rollTotal: 10,
+          total: 10,
+        },
+      }),
+    ).toEqual({
+      baseInitiative: 3,
+      modifierAdjustment: -1,
+      rolls: [6, 4],
+      rollTotal: 10,
+      total: 12,
     });
   });
 

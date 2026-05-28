@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { scenarioCombatModifierEntrySchema } from "./scenario";
+import {
+  scenarioCombatModifierEntrySchema,
+  scenarioParticipantCombatContextSchema,
+} from "./scenario";
 
 describe("scenario combat modifier entries", () => {
   it("accepts numeric duration rounds while keeping old entries compatible", () => {
@@ -30,5 +33,50 @@ describe("scenario combat modifier entries", () => {
       scope: "save",
       value: 1,
     });
+  });
+
+  it("keeps old combat contexts compatible while supporting Initiative modifiers", () => {
+    expect(
+      scenarioParticipantCombatContextSchema.parse({
+        modifierBuckets: {
+          general: [],
+          situationDb: [],
+          situationObSkill: [],
+        },
+      }),
+    ).toEqual({
+      modifierBuckets: {
+        general: [],
+        situationDb: [],
+        situationInitiative: [],
+        situationObSkill: [],
+      },
+    });
+
+    expect(
+      scenarioParticipantCombatContextSchema.parse({
+        modifierBuckets: {
+          general: [],
+          situationDb: [],
+          situationInitiative: [
+            {
+              durationRounds: 2,
+              id: "initiative-1",
+              notes: "Ready stance",
+              value: 1,
+            },
+          ],
+          situationObSkill: [],
+        },
+      }).modifierBuckets.situationInitiative,
+    ).toEqual([
+      {
+        durationRounds: 2,
+        id: "initiative-1",
+        notes: "Ready stance",
+        scope: "until",
+        value: 1,
+      },
+    ]);
   });
 });
