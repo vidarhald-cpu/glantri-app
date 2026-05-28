@@ -32,7 +32,11 @@ describe("PlayerCombatPanels", () => {
     expect(source).toContain("disabled={controlsDisabled}");
     expect(source).toContain("row.locked");
     expect(source).toContain("compactModifierEntryRowStyle");
-    expect(source).toContain('gridTemplateColumns: "4rem 4rem minmax(7rem, 1fr) 4.75rem"');
+    expect(source).toContain('gridTemplateColumns: "5.25rem 5.25rem minmax(10rem, 1fr) 4.75rem"');
+    expect(source).toContain("compactModifierFieldLabelStyle");
+    expect(source).toContain('gridTemplateColumns: "auto minmax(0, 1fr)"');
+    expect(source).toContain('style={{ minWidth: 0, width: "3rem" }}');
+    expect(source).toContain('style={{ minWidth: 0, width: "100%" }}');
     expect(source).toContain('"durationRounds"');
     expect(source).toContain('value={entry.durationRounds ?? ""}');
     expect(source).toContain("formatModifierDuration");

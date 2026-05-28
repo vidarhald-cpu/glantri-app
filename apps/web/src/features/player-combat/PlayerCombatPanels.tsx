@@ -166,7 +166,16 @@ const compactModifierEntryRowStyle = {
   alignItems: "end",
   display: "grid",
   gap: "0.35rem",
-  gridTemplateColumns: "4rem 4rem minmax(7rem, 1fr) 4.75rem",
+  gridTemplateColumns: "5.25rem 5.25rem minmax(10rem, 1fr) 4.75rem",
+  minWidth: 0,
+} as const;
+
+const compactModifierFieldLabelStyle = {
+  alignItems: "center",
+  display: "grid",
+  gap: "0.25rem",
+  gridTemplateColumns: "auto minmax(0, 1fr)",
+  minWidth: 0,
 } as const;
 
 const compactStatsRowStyle = {
@@ -318,7 +327,7 @@ export function PlayerCombatModifierPanel({
           {editable && !row.locked
             ? row.entries.map((entry) => (
                 <div key={entry.id} style={compactModifierEntryRowStyle}>
-                  <label style={compactWideFieldLabelStyle}>
+                  <label style={compactModifierFieldLabelStyle}>
                     <span style={{ fontSize: "0.82rem", fontWeight: 600 }}>Mod</span>
                     <input
                       disabled={controlsDisabled}
@@ -327,11 +336,12 @@ export function PlayerCombatModifierPanel({
                           value: event.target.value.length > 0 ? Number(event.target.value) : 0,
                         })
                       }
+                      style={{ minWidth: 0, width: "3rem" }}
                       type="number"
                       value={entry.value}
                     />
                   </label>
-                  <label style={compactWideFieldLabelStyle}>
+                  <label style={compactModifierFieldLabelStyle}>
                     <span style={{ fontSize: "0.82rem", fontWeight: 600 }}>Dur</span>
                     <input
                       disabled={controlsDisabled}
@@ -342,11 +352,12 @@ export function PlayerCombatModifierPanel({
                             event.target.value.length > 0 ? Number(event.target.value) : undefined,
                         })
                       }
+                      style={{ minWidth: 0, width: "3rem" }}
                       type="number"
                       value={entry.durationRounds ?? ""}
                     />
                   </label>
-                  <label style={compactWideFieldLabelStyle}>
+                  <label style={compactModifierFieldLabelStyle}>
                     <span style={{ fontSize: "0.82rem", fontWeight: 600 }}>Details</span>
                     <input
                       disabled={controlsDisabled}
@@ -356,6 +367,7 @@ export function PlayerCombatModifierPanel({
                         })
                       }
                       placeholder="Details"
+                      style={{ minWidth: 0, width: "100%" }}
                       type="text"
                       value={entry.notes ?? ""}
                     />
