@@ -14,6 +14,7 @@ import {
   clearCurrentCombatRoundStepAndRewind,
   getCombatRoundInitiativePhaseForStep,
   getCombatRoundInitiativePositions,
+  getCombatRoundInitiativeRanks,
   getPreviousCombatRoundStep,
   initializeCombatRoundState,
   recordCombatRoundDeclaration,
@@ -291,9 +292,9 @@ describe("combat round manager", () => {
       submittedByUserId: "player-1",
     });
     expect(gmDeclared.participants[1]?.stepStatuses.select_actions).toBe("gmEdited");
-    expect(canPlayerSubmitCombatDeclaration({ participantId: "gladiator", state: gmDeclared })).toBe(
-      false,
-    );
+    expect(
+      canPlayerSubmitCombatDeclaration({ participantId: "gladiator", state: gmDeclared }),
+    ).toBe(false);
   });
 
   it("maps initiative and action review steps to their initiative phase", () => {
@@ -324,7 +325,13 @@ describe("combat round manager", () => {
       total: 18,
     });
     expect(nextState.participants[0]?.stepStatuses.initiative_phase_1).toBe("submitted");
-    expect(canPlayerRollCombatInitiative({ participantId: "gladiator", phase: "phase1", state: nextState })).toBe(false);
+    expect(
+      canPlayerRollCombatInitiative({
+        participantId: "gladiator",
+        phase: "phase1",
+        state: nextState,
+      }),
+    ).toBe(false);
   });
 
   it("rolls open-ended d6 initiative", () => {
@@ -389,8 +396,12 @@ describe("combat round manager", () => {
     );
 
     expect(state.currentStep).toBe("initiative_phase_1");
-    expect(canPlayerRollCombatInitiative({ participantId: "gladiator", phase: "phase1", state })).toBe(true);
-    expect(canPlayerRollCombatInitiative({ participantId: "gladiator", phase: "phase2", state })).toBe(false);
+    expect(
+      canPlayerRollCombatInitiative({ participantId: "gladiator", phase: "phase1", state }),
+    ).toBe(true);
+    expect(
+      canPlayerRollCombatInitiative({ participantId: "gladiator", phase: "phase2", state }),
+    ).toBe(false);
   });
 
   it("locks pending declarations when advancing past DE while preserving submitted markers", () => {
@@ -456,6 +467,135 @@ describe("combat round manager", () => {
     ).toEqual(["guard", "gladiator", "scyrian"]);
     expect(getCombatRoundInitiativePositions({ phase: "phase1", state })).toEqual({
       guard: 1,
+    });
+    expect(getCombatRoundInitiativeRanks({ phase: "phase1", state })).toEqual({
+      guard: {
+        rank: 1,
+        rankTotal: 1,
+        tiedCount: 1,
+      },
+    });
+  });
+
+  it("assigns shared initiative ranks to tied participants", () => {
+    const state = [
+      ["gladiator", 4],
+      ["guard", 4],
+    ].reduce(
+      (nextState, [participantId, initiative]) =>
+        setCombatRoundParticipantInitiative({
+          initiative: initiative as number,
+          participantId: participantId as string,
+          phase: "phase1",
+          state: nextState,
+        }),
+      initializeCombatRoundState({ encounter: encounter() }),
+    );
+
+    expect(getCombatRoundInitiativeRanks({ phase: "phase1", state })).toEqual({
+      gladiator: {
+        rank: 1,
+        rankTotal: 2,
+        tiedCount: 2,
+      },
+      guard: {
+        rank: 1,
+        rankTotal: 2,
+        tiedCount: 2,
+      },
+    });
+  });
+
+  it("uses competition ranking after initiative ties", () => {
+    const state = [
+      ["gladiator", 4],
+      ["guard", 4],
+      ["scyrian", 2],
+    ].reduce(
+      (nextState, [participantId, initiative]) =>
+        setCombatRoundParticipantInitiative({
+          initiative: initiative as number,
+          participantId: participantId as string,
+          phase: "phase1",
+          state: nextState,
+        }),
+      initializeCombatRoundState({
+        encounter: encounter({
+          participants: [
+            participant({ id: "gladiator", label: "The Gladiator" }),
+            participant({ id: "guard", label: "City guard" }),
+            participant({ id: "scyrian", label: "Scyrian cavalry guy" }),
+          ],
+        }),
+      }),
+    );
+
+    expect(getCombatRoundInitiativeRanks({ phase: "phase1", state })).toEqual({
+      gladiator: {
+        rank: 1,
+        rankTotal: 3,
+        tiedCount: 2,
+      },
+      guard: {
+        rank: 1,
+        rankTotal: 3,
+        tiedCount: 2,
+      },
+      scyrian: {
+        rank: 3,
+        rankTotal: 3,
+        tiedCount: 1,
+      },
+    });
+  });
+
+  it("skips ranks after lower-position initiative ties", () => {
+    const state = [
+      ["gladiator", 6],
+      ["guard", 4],
+      ["scyrian", 4],
+      ["archer", 2],
+    ].reduce(
+      (nextState, [participantId, initiative]) =>
+        setCombatRoundParticipantInitiative({
+          initiative: initiative as number,
+          participantId: participantId as string,
+          phase: "phase1",
+          state: nextState,
+        }),
+      initializeCombatRoundState({
+        encounter: encounter({
+          participants: [
+            participant({ id: "gladiator", label: "The Gladiator" }),
+            participant({ id: "guard", label: "City guard" }),
+            participant({ id: "scyrian", label: "Scyrian cavalry guy" }),
+            participant({ id: "archer", label: "Another guard" }),
+          ],
+        }),
+      }),
+    );
+
+    expect(getCombatRoundInitiativeRanks({ phase: "phase1", state })).toMatchObject({
+      gladiator: {
+        rank: 1,
+        rankTotal: 4,
+        tiedCount: 1,
+      },
+      guard: {
+        rank: 2,
+        rankTotal: 4,
+        tiedCount: 2,
+      },
+      scyrian: {
+        rank: 2,
+        rankTotal: 4,
+        tiedCount: 2,
+      },
+      archer: {
+        rank: 4,
+        rankTotal: 4,
+        tiedCount: 1,
+      },
     });
   });
 

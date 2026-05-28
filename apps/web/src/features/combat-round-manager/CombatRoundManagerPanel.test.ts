@@ -104,12 +104,14 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("statusText={`Current step: ${getPlayerCombatStepLabel(");
     expect(source).toContain("rollInspectorInitiative");
     expect(source).toContain("rollCombatInitiativeOnServer");
-    expect(source).toContain("getCombatRoundInitiativePositions");
+    expect(source).toContain("getCombatRoundInitiativeRanks");
     expect(source).toContain("getCombatRoundInitiativeTotal");
     expect(source).toContain("formatCombatInitiativeFormula");
     expect(source).not.toContain("phaseLabel: formatCombatInitiativeRoll");
     expect(source).toContain("formatInitiativeRankLabel");
     expect(source).toContain("rankLabel");
+    expect(source).toContain("rank.tiedCount > 1");
+    expect(source).toContain("tied with ${rank.tiedCount}");
     expect(source).toContain("inspectorInitiativeBase");
     expect(source).toContain("phaseContexts: inspectorDraft.phaseContexts");
     expect(source).toContain(

@@ -153,8 +153,12 @@ describe("PlayerCombatPanels", () => {
       source.indexOf("result.interpretedResult"),
     );
     expect(source).toContain('background: "#f6f5ef"');
+    expect(source).toContain('boxSizing: "border-box"');
     expect(source).toContain('display: "grid"');
-    expect(source).toContain("minHeight: 104");
+    expect(source).toContain("minHeight: 58");
+    expect(source).toContain('width: "100%"');
+    expect(source).not.toContain('height: "100%"');
+    expect(source).not.toContain("minHeight: 104");
     expect(source).not.toContain("{result?.value ??");
     expect(source).not.toContain("result?.phaseLabel");
     expect(source).not.toContain("No result recorded.");

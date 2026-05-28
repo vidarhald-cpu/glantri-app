@@ -6,6 +6,7 @@ import type {
   CombatRoundDeclaration,
   CombatRoundStep,
   CombatRoundStepStatus,
+  CombatRoundInitiativeRank,
   EncounterSession,
   ScenarioCombatModifierBucket,
   ScenarioCombatModifierEntry,
@@ -19,8 +20,8 @@ import {
   advanceCombatRoundStep,
   buildCombatRoundInspector,
   characterBuildSchema,
+  getCombatRoundInitiativeRanks,
   getCombatRoundInitiativeTotal,
-  getCombatRoundInitiativePositions,
   initializeCombatRoundState,
   setCombatRoundSelection,
   sortCombatRoundParticipantsByInitiative,
@@ -228,17 +229,22 @@ function hasCombatRoundDeclarationAction(declaration?: CombatRoundDeclaration): 
 
 function formatInitiativeRankLabel(input: {
   participantId?: string;
-  positions: Record<string, number>;
+  ranks: Record<string, CombatRoundInitiativeRank>;
   value: number | undefined;
 }): string | undefined {
   if (!input.participantId || input.value === undefined) {
     return undefined;
   }
 
-  const position = input.positions[input.participantId];
-  const rankedCount = Object.keys(input.positions).length;
+  const rank = input.ranks[input.participantId];
 
-  return position && rankedCount > 0 ? `Rank: ${position} of ${rankedCount}` : undefined;
+  if (!rank) {
+    return undefined;
+  }
+
+  const tieLabel = rank.tiedCount > 1 ? ` (tied with ${rank.tiedCount})` : "";
+
+  return `Rank: ${rank.rank} of ${rank.rankTotal}${tieLabel}`;
 }
 
 function isGridArrowTarget(target: EventTarget | null): boolean {
@@ -336,12 +342,12 @@ export default function CombatRoundManagerPanel({
     [scenarioParticipantOverrides, scenarioParticipants],
   );
   const initiativeSortPhase = shouldSortByInitiative(roundState.currentStep);
-  const phase1Positions = useMemo(
-    () => getCombatRoundInitiativePositions({ phase: "phase1", state: roundState }),
+  const phase1Ranks = useMemo(
+    () => getCombatRoundInitiativeRanks({ phase: "phase1", state: roundState }),
     [roundState],
   );
-  const phase2Positions = useMemo(
-    () => getCombatRoundInitiativePositions({ phase: "phase2", state: roundState }),
+  const phase2Ranks = useMemo(
+    () => getCombatRoundInitiativeRanks({ phase: "phase2", state: roundState }),
     [roundState],
   );
   const displayParticipants = useMemo(() => {
@@ -1270,10 +1276,10 @@ export default function CombatRoundManagerPanel({
                             ),
                             rankLabel: formatInitiativeRankLabel({
                               participantId: inspector.participant?.participantId,
-                              positions:
+                              ranks:
                                 inspectorCurrentInitiativePhase === "phase2"
-                                  ? phase2Positions
-                                  : phase1Positions,
+                                  ? phase2Ranks
+                                  : phase1Ranks,
                               value: getCombatRoundInitiativeTotal(inspectorCurrentInitiative),
                             }),
                           }

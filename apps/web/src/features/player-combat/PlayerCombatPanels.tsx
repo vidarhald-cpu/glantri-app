@@ -576,7 +576,6 @@ export function PlayerCombatActionResultPanel({ result }: PlayerCombatActionResu
       style={{
         ...playerCombatPanelCardStyle,
         alignContent: "start",
-        minHeight: 136,
       }}
     >
       <strong>Action result</strong>
@@ -586,16 +585,17 @@ export function PlayerCombatActionResultPanel({ result }: PlayerCombatActionResu
           background: "#f6f5ef",
           border: "1px solid #d9ddd8",
           borderRadius: 8,
+          boxSizing: "border-box",
           display: "grid",
           fontSize: "0.98rem",
           fontWeight: 700,
           gap: "0.35rem",
-          height: "100%",
           justifyContent: "center",
           justifyItems: "center",
-          minHeight: 104,
-          padding: "0.75rem",
+          minHeight: 58,
+          padding: "0.45rem 0.6rem",
           textAlign: "center",
+          width: "100%",
         }}
       >
         {result ? (

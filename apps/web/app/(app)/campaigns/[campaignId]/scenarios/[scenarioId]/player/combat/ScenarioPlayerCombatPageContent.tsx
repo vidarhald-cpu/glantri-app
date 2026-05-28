@@ -5,8 +5,9 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import {
   type CombatRoundDeclaration,
+  type CombatRoundInitiativeRank,
   characterBuildSchema,
-  getCombatRoundInitiativePositions,
+  getCombatRoundInitiativeRanks,
   getCombatRoundInitiativeTotal,
   initializeCombatRoundState,
   type EncounterSession,
@@ -204,17 +205,22 @@ function buildPlayerCombatDeclarationDraftKey(input: {
 
 function formatPlayerCombatInitiativeRank(input: {
   participantId?: string;
-  positions: Record<string, number>;
+  ranks: Record<string, CombatRoundInitiativeRank>;
   value: number | undefined;
 }): string | undefined {
   if (!input.participantId || input.value === undefined) {
     return undefined;
   }
 
-  const position = input.positions[input.participantId];
-  const rankedCount = Object.keys(input.positions).length;
+  const rank = input.ranks[input.participantId];
 
-  return position && rankedCount > 0 ? `Rank: ${position} of ${rankedCount}` : undefined;
+  if (!rank) {
+    return undefined;
+  }
+
+  const tieLabel = rank.tiedCount > 1 ? ` (tied with ${rank.tiedCount})` : "";
+
+  return `Rank: ${rank.rank} of ${rank.rankTotal}${tieLabel}`;
 }
 
 export default function ScenarioPlayerCombatPageContent({
@@ -903,27 +909,24 @@ export default function ScenarioPlayerCombatPageContent({
   const selectedCurrentInitiative = currentInitiativePhase
     ? selectedRoundParticipant?.initiatives[currentInitiativePhase]
     : undefined;
-  const phase1InitiativePositions = useMemo(
+  const phase1InitiativeRanks = useMemo(
     () =>
       combatRoundState
-        ? getCombatRoundInitiativePositions({ phase: "phase1", state: combatRoundState })
+        ? getCombatRoundInitiativeRanks({ phase: "phase1", state: combatRoundState })
         : {},
     [combatRoundState],
   );
-  const phase2InitiativePositions = useMemo(
+  const phase2InitiativeRanks = useMemo(
     () =>
       combatRoundState
-        ? getCombatRoundInitiativePositions({ phase: "phase2", state: combatRoundState })
+        ? getCombatRoundInitiativeRanks({ phase: "phase2", state: combatRoundState })
         : {},
     [combatRoundState],
   );
   const selectedCurrentInitiativeRankLabel = currentInitiativePhase
     ? formatPlayerCombatInitiativeRank({
         participantId: selectedRoundParticipant?.participantId,
-        positions:
-          currentInitiativePhase === "phase2"
-            ? phase2InitiativePositions
-            : phase1InitiativePositions,
+        ranks: currentInitiativePhase === "phase2" ? phase2InitiativeRanks : phase1InitiativeRanks,
         value: getCombatRoundInitiativeTotal(selectedCurrentInitiative),
       })
     : undefined;

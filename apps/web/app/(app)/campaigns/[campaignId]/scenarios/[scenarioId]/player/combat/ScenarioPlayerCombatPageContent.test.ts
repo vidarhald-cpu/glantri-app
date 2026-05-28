@@ -63,6 +63,9 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("formatCombatInitiativeFormula");
     expect(source).toContain("initiativeBase");
     expect(source).toContain("formatPlayerCombatInitiativeRank");
+    expect(source).toContain("getCombatRoundInitiativeRanks");
+    expect(source).toContain("rank.tiedCount > 1");
+    expect(source).toContain("tied with ${rank.tiedCount}");
     expect(source).toContain("selectedCurrentInitiative");
     expect(source).toContain("rankLabel: selectedCurrentInitiativeRankLabel");
     expect(source).toContain("declarationButtonLabel");

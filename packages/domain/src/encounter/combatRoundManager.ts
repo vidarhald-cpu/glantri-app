@@ -123,11 +123,18 @@ export type CombatRoundInitiativeResult = z.infer<typeof combatRoundInitiativeRe
 export type CombatRoundInitiatives = z.infer<typeof combatRoundInitiativesSchema>;
 export type CombatRoundParticipantState = z.infer<typeof combatRoundParticipantStateSchema>;
 export type CombatRoundState = z.infer<typeof combatRoundStateSchema>;
+export interface CombatRoundInitiativeRank {
+  rank: number;
+  rankTotal: number;
+  tiedCount: number;
+}
 
-export function rollOpenEndedD6(input: {
-  maxRolls?: number;
-  randomFn?: () => number;
-} = {}): CombatRoundInitiativeResult & { isOpenEnded: boolean } {
+export function rollOpenEndedD6(
+  input: {
+    maxRolls?: number;
+    randomFn?: () => number;
+  } = {},
+): CombatRoundInitiativeResult & { isOpenEnded: boolean } {
   const randomFn = input.randomFn ?? Math.random;
   const maxRolls = input.maxRolls ?? 100;
   const rolls: number[] = [];
@@ -591,20 +598,50 @@ export function getCombatRoundInitiativePositions(input: {
   phase: "phase1" | "phase2";
   state: CombatRoundState;
 }): Record<string, number> {
-  const sortedParticipants = sortCombatRoundParticipantsByInitiative(input);
-  const positions: Record<string, number> = {};
-  let nextPosition = 1;
+  const ranks = getCombatRoundInitiativeRanks(input);
 
-  for (const participant of sortedParticipants) {
-    if (getCombatRoundInitiativeTotal(participant.initiatives[input.phase]) === undefined) {
-      continue;
+  return Object.fromEntries(
+    Object.entries(ranks).map(([participantId, rank]) => [participantId, rank.rank]),
+  );
+}
+
+export function getCombatRoundInitiativeRanks(input: {
+  phase: "phase1" | "phase2";
+  state: CombatRoundState;
+}): Record<string, CombatRoundInitiativeRank> {
+  const sortedParticipants = sortCombatRoundParticipantsByInitiative(input);
+  const rolledParticipants = sortedParticipants
+    .map((participant) => ({
+      participant,
+      total: getCombatRoundInitiativeTotal(participant.initiatives[input.phase]),
+    }))
+    .filter(
+      (entry): entry is { participant: CombatRoundParticipantState; total: number } =>
+        entry.total !== undefined,
+    );
+  const tiedCountsByTotal = rolledParticipants.reduce((counts, entry) => {
+    counts.set(entry.total, (counts.get(entry.total) ?? 0) + 1);
+
+    return counts;
+  }, new Map<number, number>());
+  const ranks: Record<string, CombatRoundInitiativeRank> = {};
+  let currentRank = 0;
+  let previousTotal: number | undefined;
+
+  rolledParticipants.forEach((entry, index) => {
+    if (entry.total !== previousTotal) {
+      currentRank = index + 1;
+      previousTotal = entry.total;
     }
 
-    positions[participant.participantId] = nextPosition;
-    nextPosition += 1;
-  }
+    ranks[entry.participant.participantId] = {
+      rank: currentRank,
+      rankTotal: rolledParticipants.length,
+      tiedCount: tiedCountsByTotal.get(entry.total) ?? 1,
+    };
+  });
 
-  return positions;
+  return ranks;
 }
 
 export function buildCombatRoundInspector(input: {
