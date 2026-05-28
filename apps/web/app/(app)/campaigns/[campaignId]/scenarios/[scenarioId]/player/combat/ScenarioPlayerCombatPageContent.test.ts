@@ -81,6 +81,10 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("combatDeclarationDraftKey === selectedCombatDeclarationDraftKey");
     expect(source).toContain("(isGameMaster || declarationStepOpen)");
     expect(source).toContain("setCombatDeclarationDraftDirty(false)");
+    expect(source).toContain("onAddEntry={");
+    expect(source).toContain("isGameMaster");
+    expect(source).toContain("(bucketKey, entry) =>");
+    expect(source).toContain("entry ?? createModifierEntryDraft()");
     expect(source).toContain("readOnly={!isGameMaster}");
     expect(source).toContain("roundNumber={combatRoundState?.roundNumber}");
     expect(source).toContain("mainHandParryItemLabel");

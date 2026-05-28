@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 
 import type {
   CombatRoundInitiativeResult,
@@ -58,7 +58,10 @@ export interface PlayerCombatDefenseStatsView {
 
 interface PlayerCombatModifierPanelProps {
   controlsDisabled?: boolean;
-  onAddEntry?: (bucketKey: ScenarioCombatModifierBucket) => void;
+  onAddEntry?: (
+    bucketKey: ScenarioCombatModifierBucket,
+    entry: ScenarioCombatModifierEntry,
+  ) => void;
   onRemoveEntry?: (bucketKey: ScenarioCombatModifierBucket, entryId: string) => void;
   onUpdateEntry?: (
     bucketKey: ScenarioCombatModifierBucket,
@@ -69,6 +72,12 @@ interface PlayerCombatModifierPanelProps {
   ) => void;
   readOnly?: boolean;
   rows: readonly PlayerCombatModifierBucketView[];
+}
+
+interface ModifierEntryDraft {
+  durationRounds?: number;
+  notes: string;
+  value: number;
 }
 
 interface PlayerCombatPhasePanelProps {
@@ -199,6 +208,16 @@ function formatModifierDuration(entry: ScenarioCombatModifierEntry): string {
   return entry.durationRounds ? `${entry.durationRounds} rnd` : entry.scope;
 }
 
+function createModifierEntryFromDraft(draft: ModifierEntryDraft): ScenarioCombatModifierEntry {
+  return {
+    durationRounds: draft.durationRounds,
+    id: `modifier-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    notes: draft.notes,
+    scope: "until",
+    value: draft.value,
+  };
+}
+
 export function getGmCombatStepActionLabel(step: CombatRoundStep): string {
   switch (step) {
     case "select_actions":
@@ -310,6 +329,38 @@ export function PlayerCombatModifierPanel({
   rows,
 }: PlayerCombatModifierPanelProps) {
   const editable = !readOnly && onAddEntry && onRemoveEntry && onUpdateEntry;
+  const [entryDrafts, setEntryDrafts] = useState<
+    Partial<Record<ScenarioCombatModifierBucket, ModifierEntryDraft>>
+  >({});
+
+  function getEntryDraft(bucketKey: ScenarioCombatModifierBucket): ModifierEntryDraft {
+    return entryDrafts[bucketKey] ?? { notes: "", value: 0 };
+  }
+
+  function updateEntryDraft(
+    bucketKey: ScenarioCombatModifierBucket,
+    patch: Partial<ModifierEntryDraft>,
+  ) {
+    setEntryDrafts((current) => ({
+      ...current,
+      [bucketKey]: {
+        ...getEntryDraft(bucketKey),
+        ...patch,
+      },
+    }));
+  }
+
+  function addEntryFromDraft(bucketKey: ScenarioCombatModifierBucket) {
+    if (!onAddEntry) {
+      return;
+    }
+
+    onAddEntry(bucketKey, createModifierEntryFromDraft(getEntryDraft(bucketKey)));
+    setEntryDrafts((current) => ({
+      ...current,
+      [bucketKey]: { notes: "", value: 0 },
+    }));
+  }
 
   return (
     <section style={playerCombatPanelCardStyle}>
@@ -391,12 +442,54 @@ export function PlayerCombatModifierPanel({
 
           {editable && !row.locked ? (
             <div style={compactModifierEntryRowStyle}>
-              <span aria-hidden="true" />
-              <span aria-hidden="true" />
-              <span aria-hidden="true" />
+              <label style={compactModifierFieldLabelStyle}>
+                <span style={{ fontSize: "0.82rem", fontWeight: 600 }}>Mod</span>
+                <input
+                  disabled={controlsDisabled}
+                  onChange={(event) =>
+                    updateEntryDraft(row.bucketKey, {
+                      value: event.target.value.length > 0 ? Number(event.target.value) : 0,
+                    })
+                  }
+                  style={{ minWidth: 0, width: "3rem" }}
+                  type="number"
+                  value={getEntryDraft(row.bucketKey).value}
+                />
+              </label>
+              <label style={compactModifierFieldLabelStyle}>
+                <span style={{ fontSize: "0.82rem", fontWeight: 600 }}>Dur</span>
+                <input
+                  disabled={controlsDisabled}
+                  min={1}
+                  onChange={(event) =>
+                    updateEntryDraft(row.bucketKey, {
+                      durationRounds:
+                        event.target.value.length > 0 ? Number(event.target.value) : undefined,
+                    })
+                  }
+                  style={{ minWidth: 0, width: "3rem" }}
+                  type="number"
+                  value={getEntryDraft(row.bucketKey).durationRounds ?? ""}
+                />
+              </label>
+              <label style={compactModifierFieldLabelStyle}>
+                <span style={{ fontSize: "0.82rem", fontWeight: 600 }}>Details</span>
+                <input
+                  disabled={controlsDisabled}
+                  onChange={(event) =>
+                    updateEntryDraft(row.bucketKey, {
+                      notes: event.target.value,
+                    })
+                  }
+                  placeholder="Details"
+                  style={{ minWidth: 0, width: "100%" }}
+                  type="text"
+                  value={getEntryDraft(row.bucketKey).notes}
+                />
+              </label>
               <button
                 disabled={controlsDisabled}
-                onClick={() => onAddEntry(row.bucketKey)}
+                onClick={() => addEntryFromDraft(row.bucketKey)}
                 type="button"
               >
                 Add

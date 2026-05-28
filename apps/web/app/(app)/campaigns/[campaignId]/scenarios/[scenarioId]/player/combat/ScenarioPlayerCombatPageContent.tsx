@@ -1140,10 +1140,10 @@ export default function ScenarioPlayerCombatPageContent({
               controlsDisabled={declarationControlsDisabled}
               onAddEntry={
                 isGameMaster
-                  ? (bucketKey) =>
+                  ? (bucketKey, entry) =>
                       updateModifierBucket(bucketKey, (current) => [
                         ...current,
-                        createModifierEntryDraft(),
+                        entry ?? createModifierEntryDraft(),
                       ])
                   : undefined
               }

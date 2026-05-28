@@ -1216,10 +1216,10 @@ export default function CombatRoundManagerPanel({
                 <div style={playerCombatPanelRowStyle}>
                   <PlayerCombatModifierPanel
                     controlsDisabled={saving}
-                    onAddEntry={(bucketKey) =>
+                    onAddEntry={(bucketKey, entry) =>
                       updateInspectorModifierBucket(bucketKey, (current) => [
                         ...current,
-                        createModifierEntryDraft(),
+                        entry ?? createModifierEntryDraft(),
                       ])
                     }
                     onRemoveEntry={(bucketKey, entryId) =>

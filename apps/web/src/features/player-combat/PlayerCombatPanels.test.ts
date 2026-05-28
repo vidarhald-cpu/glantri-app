@@ -25,6 +25,7 @@ describe("PlayerCombatPanels", () => {
     const source = readSource();
 
     expect(source).toContain("PlayerCombatModifierPanel");
+    expect(source).toContain("useState");
     expect(source).toContain("readOnly");
     expect(source).toContain("onAddEntry");
     expect(source).toContain("onRemoveEntry");
@@ -35,11 +36,18 @@ describe("PlayerCombatPanels", () => {
     expect(source).toContain('gridTemplateColumns: "5.25rem 5.25rem minmax(10rem, 1fr) 4.75rem"');
     expect(source).toContain("compactModifierFieldLabelStyle");
     expect(source).toContain('gridTemplateColumns: "auto minmax(0, 1fr)"');
+    expect(source).toContain("createModifierEntryFromDraft");
+    expect(source).toContain("updateEntryDraft");
+    expect(source).toContain("addEntryFromDraft");
+    expect(source).toContain("onAddEntry(bucketKey, createModifierEntryFromDraft");
     expect(source).toContain('style={{ minWidth: 0, width: "3rem" }}');
     expect(source).toContain('style={{ minWidth: 0, width: "100%" }}');
     expect(source).toContain('"durationRounds"');
     expect(source).toContain('value={entry.durationRounds ?? ""}');
+    expect(source).toContain('value={getEntryDraft(row.bucketKey).durationRounds ?? ""}');
+    expect(source).toContain("value={getEntryDraft(row.bucketKey).notes}");
     expect(source).toContain("formatModifierDuration");
+    expect(source).not.toContain('<span aria-hidden="true" />');
     expect(source).not.toContain('<option value="until">Until</option>');
     expect(source).not.toContain('<option value="save">Save</option>');
   });

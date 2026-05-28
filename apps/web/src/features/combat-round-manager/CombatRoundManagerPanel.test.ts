@@ -93,6 +93,8 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("buildEncounterLiveCombatModifierSummary");
     expect(source).toContain("selectedScenarioParticipant?.state.combatEffects");
     expect(source).toContain("saveInspectorDeclaration");
+    expect(source).toContain("onAddEntry={(bucketKey, entry) =>");
+    expect(source).toContain("entry ?? createModifierEntryDraft()");
     expect(source).toContain("getGmCombatStepActionLabel");
     expect(source).toContain("buttonLabel={getGmCombatStepActionLabel(roundState.currentStep)}");
     expect(source).toContain("GM can save or revise this declaration at any round step.");
