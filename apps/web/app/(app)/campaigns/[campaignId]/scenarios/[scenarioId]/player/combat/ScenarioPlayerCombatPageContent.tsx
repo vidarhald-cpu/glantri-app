@@ -37,9 +37,14 @@ import {
   PlayerCombatPhasePanel,
   playerCombatPanelRowStyle,
   playerCombatTopPanelRowStyle,
-  type PlayerCombatAttackStatsView,
-  type PlayerCombatDefenseStatsView,
 } from "@/features/player-combat/PlayerCombatPanels";
+import {
+  buildPlayerCombatDefenseStats,
+  buildPlayerCombatLoadoutSummary,
+  buildPlayerCombatPhasePanelModel,
+  isEquipmentFeatureState,
+  type PlayerCombatPhaseKey,
+} from "@/features/player-combat/playerCombatPhaseModel";
 import type { EquipmentFeatureState } from "@/features/equipment/types";
 import { useSessionUser } from "@/lib/auth/SessionUserContext";
 import type { CombatAllocationState } from "@glantri/rules-engine";
@@ -47,9 +52,7 @@ import {
   createEmptyPlayerEncounterCombatContext,
   evaluatePlayerEncounterParryLegality,
   getPlayerEncounterAccessibleParticipants,
-  isPlayerEncounterAttackAction,
   isPlayerEncounterActionId,
-  isPlayerEncounterDefenseAction,
   type PlayerEncounterActionId,
   type PlayerEncounterMovementId,
 } from "@/lib/campaigns/playerEncounter";
@@ -96,74 +99,6 @@ const panelStyle = {
   padding: "1rem",
 } as const;
 
-function isEquipmentFeatureState(value: unknown): value is EquipmentFeatureState {
-  if (!value || typeof value !== "object") {
-    return false;
-  }
-
-  const candidate = value as Record<string, unknown>;
-  return (
-    typeof candidate.itemsById === "object" &&
-    candidate.itemsById !== null &&
-    typeof candidate.locationsById === "object" &&
-    candidate.locationsById !== null &&
-    typeof candidate.activeLoadoutByCharacterId === "object" &&
-    candidate.activeLoadoutByCharacterId !== null &&
-    typeof candidate.templates === "object" &&
-    candidate.templates !== null &&
-    "templatesById" in (candidate.templates as Record<string, unknown>)
-  );
-}
-
-function getCombatTableColumnIndex(input: { columns: string[]; label: string }): number {
-  return input.columns.indexOf(input.label);
-}
-
-function getCombatTableCell(input: {
-  columns: string[];
-  label: string;
-  row: Array<string | number>;
-}): string {
-  const index = getCombatTableColumnIndex({
-    columns: input.columns,
-    label: input.label,
-  });
-
-  if (index < 0) {
-    return "—";
-  }
-
-  const value = input.row[index];
-  return value == null ? "—" : String(value);
-}
-
-function getRelevantLoadoutFieldId(
-  actionId: PlayerEncounterActionId | "",
-): "missile" | "primary" | "secondary" | "throwing" | null {
-  switch (actionId) {
-    case "attack_parry":
-    case "parry_attack":
-    case "double_attack":
-    case "feint_attack":
-    case "adjust_range_attack":
-    case "counterattack":
-    case "offensive_parry":
-    case "parry_disarm":
-    case "disarm":
-      return "primary";
-    case "observe_opponent":
-    case "break_off_engagement":
-    case "other":
-      return "primary";
-    default:
-      return null;
-  }
-}
-
-function hasDisplayValue(value: string): boolean {
-  return value.length > 0 && value !== "—";
-}
-
 function createModifierEntryDraft(): ScenarioCombatModifierEntry {
   return {
     id: `modifier-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -207,11 +142,11 @@ function hasCombatRoundDeclarationAction(
 ): declaration is CombatRoundDeclaration {
   return Boolean(
     declaration?.actionId ||
-      declaration?.secondaryActionId ||
-      declaration?.movementId ||
-      declaration?.additionalActionNotes ||
-      declaration?.combatContext ||
-      declaration?.phaseContexts,
+    declaration?.secondaryActionId ||
+    declaration?.movementId ||
+    declaration?.additionalActionNotes ||
+    declaration?.combatContext ||
+    declaration?.phaseContexts,
   );
 }
 
@@ -322,12 +257,11 @@ export default function ScenarioPlayerCombatPageContent({
   const [combatContextDraft, setCombatContextDraft] = useState<ScenarioParticipantCombatContext>(
     createEmptyPlayerEncounterCombatContext(),
   );
-  const [phaseCombatContextDrafts, setPhaseCombatContextDrafts] = useState<
-    PlayerCombatPhaseContextDrafts
-  >({
-    phase1: createEmptyPlayerEncounterCombatContext(),
-    phase2: createEmptyPlayerEncounterCombatContext(),
-  });
+  const [phaseCombatContextDrafts, setPhaseCombatContextDrafts] =
+    useState<PlayerCombatPhaseContextDrafts>({
+      phase1: createEmptyPlayerEncounterCombatContext(),
+      phase2: createEmptyPlayerEncounterCombatContext(),
+    });
   const [combatDeclarationDraftDirty, setCombatDeclarationDraftDirty] = useState(false);
   const [combatDeclarationDraftKey, setCombatDeclarationDraftKey] = useState("");
   const [savingCombatContext, setSavingCombatContext] = useState(false);
@@ -467,8 +401,8 @@ export default function ScenarioPlayerCombatPageContent({
       explicitAccessibleParticipant
         ? explicitAccessibleParticipant.id
         : accessibleParticipants.some((participant) => participant.id === current)
-        ? current
-        : (preferredId ?? ""),
+          ? current
+          : (preferredId ?? ""),
     );
   }, [
     accessibleParticipants,
@@ -544,7 +478,9 @@ export default function ScenarioPlayerCombatPageContent({
   );
   const selectedDeclarationStepStatus =
     selectedRoundParticipant?.stepStatuses.select_actions ?? "pending";
-  const selectedRoundDeclaration = hasCombatRoundDeclarationAction(selectedRoundParticipant?.declaration)
+  const selectedRoundDeclaration = hasCombatRoundDeclarationAction(
+    selectedRoundParticipant?.declaration,
+  )
     ? selectedRoundParticipant.declaration
     : undefined;
   const selectedCombatDeclarationDraftKey = buildPlayerCombatDeclarationDraftKey({
@@ -557,9 +493,9 @@ export default function ScenarioPlayerCombatPageContent({
   });
   const selectedParticipantDeclaredThisRound = Boolean(
     selectedRoundDeclaration ??
-      (declarationRoundNumber &&
-        selectedParticipant?.state.combat.lastDeclaredActionId &&
-        selectedParticipant.state.combat.lastDeclaredRoundNumber === declarationRoundNumber),
+    (declarationRoundNumber &&
+      selectedParticipant?.state.combat.lastDeclaredActionId &&
+      selectedParticipant.state.combat.lastDeclaredRoundNumber === declarationRoundNumber),
   );
   const declarationStepOpen =
     !combatRoundState || combatRoundState.currentStep === "select_actions";
@@ -909,218 +845,26 @@ export default function ScenarioPlayerCombatPageContent({
     }
   }
 
-
-  const combatPanelModel = loadoutModel.combatStatePanelModel;
-  const loadoutFieldDisplayMap = useMemo(
-    () => new Map(loadoutModel.fields.map((field) => [field.id, field])),
-    [loadoutModel.fields],
+  const combatLoadoutSummary = useMemo(
+    () =>
+      buildPlayerCombatLoadoutSummary({
+        actionId: selectedActionId,
+        loadoutModel,
+        secondaryActionId: selectedSecondaryActionId,
+      }),
+    [loadoutModel, selectedActionId, selectedSecondaryActionId],
   );
-
-  const selectedCombatReference = useMemo(() => {
-    if (!combatPanelModel) {
-      return null;
-    }
-
-    const preferredFieldIds = [
-      getRelevantLoadoutFieldId(selectedActionId),
-      getRelevantLoadoutFieldId(selectedSecondaryActionId),
-    ].filter((value): value is "missile" | "primary" | "secondary" | "throwing" => value !== null);
-
-    const preferredWeaponLabels = preferredFieldIds
-      .map((fieldId) => loadoutFieldDisplayMap.get(fieldId)?.valueLabel)
-      .filter((value): value is string => Boolean(value) && value !== "None");
-
-    const referenceRow =
-      preferredWeaponLabels
-        .map(
-          (weaponLabel) =>
-            combatPanelModel.weaponModeTable.rows.find(
-              (row) =>
-                getCombatTableCell({
-                  columns: combatPanelModel.weaponModeTable.columns,
-                  label: "Weapon",
-                  row,
-                }) === weaponLabel,
-            ) ?? null,
-        )
-        .find((row) => row !== null) ??
-      combatPanelModel.weaponModeTable.rows[0] ??
-      null;
-
-    const movementSummary =
-      combatPanelModel.capabilityRows.find((row) => row.label === "Mov/mod")?.value ?? "—";
-    const encumbranceSummary =
-      combatPanelModel.capabilityRows.find((row) => row.label === "Enc/count/lvl")?.value ?? "—";
-    const combinedRow =
-      combatPanelModel.weaponModeTable.rows.find(
-        (row) =>
-          getCombatTableCell({
-            columns: combatPanelModel.weaponModeTable.columns,
-            label: "Mode",
-            row,
-          }) === "Combined",
-      ) ?? null;
-
-    if (!referenceRow) {
-      return {
-        am: "—",
-        attackMode: "—",
-        db: "—",
-        combinedDb: "—",
-        combinedDm: "—",
-        crit: "—",
-        dmb: "—",
-        dm: "—",
-        encumbrance: String(encumbranceSummary),
-        initiative: "—",
-        movement: String(movementSummary),
-        ob: "—",
-        parry: "—",
-        secondCrit: "—",
-        selectedWeapon: "No ready weapon",
-      };
-    }
-
-    return {
-      am: getCombatTableCell({
-        columns: combatPanelModel.weaponModeTable.columns,
-        label: "AM",
-        row: referenceRow,
-      }),
-      attackMode: getCombatTableCell({
-        columns: combatPanelModel.weaponModeTable.columns,
-        label: "Attack 1",
-        row: referenceRow,
-      }),
-      db: getCombatTableCell({
-        columns: combatPanelModel.weaponModeTable.columns,
-        label: "DB",
-        row: referenceRow,
-      }),
-      combinedDb: combinedRow
-        ? getCombatTableCell({
-            columns: combatPanelModel.weaponModeTable.columns,
-            label: "DB",
-            row: combinedRow,
-          })
-        : "—",
-      combinedDm: combinedRow
-        ? getCombatTableCell({
-            columns: combatPanelModel.weaponModeTable.columns,
-            label: "DM",
-            row: combinedRow,
-          })
-        : "—",
-      crit: getCombatTableCell({
-        columns: combatPanelModel.weaponModeTable.columns,
-        label: "Crit 1",
-        row: referenceRow,
-      }),
-      dmb: getCombatTableCell({
-        columns: combatPanelModel.weaponModeTable.columns,
-        label: "DMB",
-        row: referenceRow,
-      }),
-      dm: getCombatTableCell({
-        columns: combatPanelModel.weaponModeTable.columns,
-        label: "DM",
-        row: referenceRow,
-      }),
-      encumbrance: String(encumbranceSummary),
-      initiative: getCombatTableCell({
-        columns: combatPanelModel.weaponModeTable.columns,
-        label: "I",
-        row: referenceRow,
-      }),
-      movement: String(movementSummary),
-      ob: getCombatTableCell({
-        columns: combatPanelModel.weaponModeTable.columns,
-        label: "OB",
-        row: referenceRow,
-      }),
-      parry: getCombatTableCell({
-        columns: combatPanelModel.weaponModeTable.columns,
-        label: "Parry",
-        row: referenceRow,
-      }),
-      secondCrit: getCombatTableCell({
-        columns: combatPanelModel.weaponModeTable.columns,
-        label: "Sec",
-        row: referenceRow,
-      }),
-      selectedWeapon: getCombatTableCell({
-        columns: combatPanelModel.weaponModeTable.columns,
-        label: "Weapon",
-        row: referenceRow,
-      }),
-    };
-  }, [combatPanelModel, loadoutFieldDisplayMap, selectedActionId, selectedSecondaryActionId]);
-
-  const selectedAttackStats = useMemo<PlayerCombatAttackStatsView | null>(() => {
-    if (!selectedCombatReference) {
-      return null;
-    }
-
-    return {
-      attackMode: selectedCombatReference.am,
-      dmb: selectedCombatReference.dmb,
-      initiative: selectedCombatReference.initiative,
-      maxCrits: `${selectedCombatReference.crit}${
-        hasDisplayValue(selectedCombatReference.secondCrit)
-          ? ` / ${selectedCombatReference.secondCrit}`
-          : ""
-      }`,
-      ob: selectedCombatReference.ob,
-      weaponName: selectedCombatReference.selectedWeapon,
-    };
-  }, [selectedCombatReference]);
-  const primaryLoadoutLabel = loadoutFieldDisplayMap.get("primary")?.valueLabel;
-  const shieldLoadoutLabel = loadoutFieldDisplayMap.get("shield")?.valueLabel;
-  const secondaryLoadoutLabel = loadoutFieldDisplayMap.get("secondary")?.valueLabel;
-  const mainHandParryItemLabel =
-    primaryLoadoutLabel && primaryLoadoutLabel !== "None" ? primaryLoadoutLabel : "Unarmed";
-  const offHandParryItemLabel =
-    shieldLoadoutLabel && shieldLoadoutLabel !== "None"
-      ? shieldLoadoutLabel
-      : secondaryLoadoutLabel && secondaryLoadoutLabel !== "None"
-        ? secondaryLoadoutLabel
-        : "Unarmed";
-  const buildSelectedDefenseStats = (
-    phaseContext: ScenarioParticipantCombatContext,
-  ): PlayerCombatDefenseStatsView | null => {
-    if (!selectedCombatReference) {
-      return null;
-    }
-    const hasPhaseParryDirection = Boolean(
-      phaseContext.mainHandParryDirection || phaseContext.offHandParryDirection,
-    );
-
-    return {
-      db: hasDisplayValue(selectedCombatReference.combinedDb)
-        ? selectedCombatReference.combinedDb
-        : selectedCombatReference.db,
-      dm: hasDisplayValue(selectedCombatReference.combinedDm)
-        ? selectedCombatReference.combinedDm
-        : selectedCombatReference.dm,
-      parry: hasPhaseParryDirection ? selectedCombatReference.parry : "incomplete",
-      sourceName:
-        offHandParryItemLabel !== "Unarmed" ? offHandParryItemLabel : mainHandParryItemLabel,
-    };
-  };
   const initiativeBase = useMemo(() => {
-    const passiveInitiative = Number(selectedCombatReference?.initiative);
-    const safePassiveInitiative = Number.isFinite(passiveInitiative) ? passiveInitiative : 0;
-
     // Initiative uses direct raw additions for this workflow pass; no percentage table is applied.
     return (
-      safePassiveInitiative +
+      combatLoadoutSummary.passiveInitiative +
       (liveCombatModifiers?.generalFatigueRaw ?? 0) +
       (liveCombatModifiers?.obSkillRaw ?? 0)
     );
   }, [
+    combatLoadoutSummary.passiveInitiative,
     liveCombatModifiers?.generalFatigueRaw,
     liveCombatModifiers?.obSkillRaw,
-    selectedCombatReference?.initiative,
   ]);
 
   const phaseCards = useMemo(() => {
@@ -1173,7 +917,9 @@ export default function ScenarioPlayerCombatPageContent({
     ? formatPlayerCombatInitiativeRank({
         participantId: selectedRoundParticipant?.participantId,
         positions:
-          currentInitiativePhase === "phase2" ? phase2InitiativePositions : phase1InitiativePositions,
+          currentInitiativePhase === "phase2"
+            ? phase2InitiativePositions
+            : phase1InitiativePositions,
         value: getCombatRoundInitiativeTotal(selectedCurrentInitiative),
       })
     : undefined;
@@ -1185,13 +931,12 @@ export default function ScenarioPlayerCombatPageContent({
   const declarationControlsDisabled = controlsDisabled || playerDeclarationLocked;
   const initiativeStepStatus =
     currentCombatStep === "initiative_phase_1"
-      ? selectedRoundParticipant?.stepStatuses.initiative_phase_1 ?? "pending"
+      ? (selectedRoundParticipant?.stepStatuses.initiative_phase_1 ?? "pending")
       : currentCombatStep === "initiative_phase_2"
-        ? selectedRoundParticipant?.stepStatuses.initiative_phase_2 ?? "pending"
+        ? (selectedRoundParticipant?.stepStatuses.initiative_phase_2 ?? "pending")
         : undefined;
   const selectedParticipantRolledCurrentInitiative = Boolean(
-    currentInitiativePhase &&
-      selectedCurrentInitiative !== undefined,
+    currentInitiativePhase && selectedCurrentInitiative !== undefined,
   );
   const canUseInitiativeButton =
     Boolean(currentInitiativePhase) &&
@@ -1220,8 +965,8 @@ export default function ScenarioPlayerCombatPageContent({
           ? `Current step: ${currentCombatStepLabel}.`
           : `Current step: ${currentCombatStepLabel}. Waiting for GM.`
       : selectedParticipantDeclaredThisRound ||
-        selectedDeclarationStepStatus === "submitted" ||
-        selectedDeclarationStepStatus === "gmEdited"
+          selectedDeclarationStepStatus === "submitted" ||
+          selectedDeclarationStepStatus === "gmEdited"
         ? `Current step: ${currentCombatStepLabel}. Declared.`
         : declarationStepOpen && selectedDeclarationStepStatus === "pending"
           ? `Current step: ${currentCombatStepLabel}.`
@@ -1340,29 +1085,36 @@ export default function ScenarioPlayerCombatPageContent({
               secondaryActionId={selectedSecondaryActionId}
             />
             {phaseCards.map((phaseCard, index) => {
-              const isPhaseOne = index === 0;
-              const phaseActionId = isPhaseOne ? selectedActionId : selectedSecondaryActionId;
-              const phaseKey = isPhaseOne ? "phase1" : "phase2";
+              const phaseKey: PlayerCombatPhaseKey = index === 0 ? "phase1" : "phase2";
               const phaseCombatContext = phaseCombatContextDrafts[phaseKey];
-              const phaseDefenseStats = buildSelectedDefenseStats(phaseCombatContext);
-              const showsAttackStats =
-                selectedAttackStats && isPlayerEncounterAttackAction(phaseActionId);
-              const showsDefenseContext =
-                phaseDefenseStats && isPlayerEncounterDefenseAction(phaseActionId);
+              const phaseModel = buildPlayerCombatPhasePanelModel({
+                actionId: selectedActionId,
+                attackStats: combatLoadoutSummary.attackStats,
+                defenseStats: buildPlayerCombatDefenseStats({
+                  mainHandParryItemLabel: combatLoadoutSummary.mainHandParryItemLabel,
+                  offHandParryItemLabel: combatLoadoutSummary.offHandParryItemLabel,
+                  phaseContext: phaseCombatContext,
+                  reference: combatLoadoutSummary.reference,
+                }),
+                phaseCard,
+                phaseContext: phaseCombatContext,
+                phaseKey,
+                secondaryActionId: selectedSecondaryActionId,
+              });
 
               return (
-                <PlayerCombatPhasePanel key={phaseCard.phaseLabel} phaseCard={phaseCard}>
-                  {showsAttackStats ? (
-                    <PlayerCombatAttackStatsTable stats={selectedAttackStats} />
+                <PlayerCombatPhasePanel key={phaseModel.phaseCard.phaseLabel} phaseCard={phaseCard}>
+                  {phaseModel.showAttackStats && phaseModel.attackStats ? (
+                    <PlayerCombatAttackStatsTable stats={phaseModel.attackStats} />
                   ) : null}
-                  {showsDefenseContext ? (
+                  {phaseModel.showDefenseContext && phaseModel.defenseStats ? (
                     <>
-                      <PlayerCombatDefenseStatsTable stats={phaseDefenseStats} />
+                      <PlayerCombatDefenseStatsTable stats={phaseModel.defenseStats} />
                       <PlayerCombatParryContextPanel
-                        combatContext={phaseCombatContext}
+                        combatContext={phaseModel.phaseContext}
                         controlsDisabled={declarationControlsDisabled}
-                        mainHandItemLabel={mainHandParryItemLabel}
-                        offHandItemLabel={offHandParryItemLabel}
+                        mainHandItemLabel={combatLoadoutSummary.mainHandParryItemLabel}
+                        offHandItemLabel={combatLoadoutSummary.offHandParryItemLabel}
                         onCombatContextChange={(combatContext) => {
                           markCombatDeclarationDraftDirty();
                           setPhaseCombatContextDrafts((current) => ({

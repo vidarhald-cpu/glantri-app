@@ -29,12 +29,17 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("PlayerCombatParryContextPanel");
     expect(source).toContain("playerCombatTopPanelRowStyle");
     expect(source).toContain("buildPlayerCombatModifierRows");
+    expect(source).toContain("buildPlayerCombatPhasePanelModel");
+    expect(source).toContain("buildPlayerCombatLoadoutSummary");
+    expect(source).toContain("buildPlayerCombatDefenseStats");
     expect(source).toContain("getPlayerCombatActionButtonLabel");
     expect(source).toContain("buildEncounterLiveCombatModifierSummary");
     expect(source).toContain("combatEffects: selectedParticipant?.state.combatEffects");
     expect(source).toContain("liveCombatModifiers");
     expect(source).toContain('workspaceTab = "player-encounter"');
-    expect(source).toContain("displayedParticipant?.displayName ? ` — ${displayedParticipant.displayName}`");
+    expect(source).toContain(
+      "displayedParticipant?.displayName ? ` — ${displayedParticipant.displayName}`",
+    );
     expect(source).toContain("showParticipantSelector = true");
     expect(source).toContain("readOnlyInspection = false");
     expect(source).not.toContain("GM player-view inspection is read-only.");
@@ -66,7 +71,9 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("buildPlayerCombatPhaseContexts");
     expect(source).toContain("phaseCombatContextDrafts");
     expect(source).toContain("phaseContexts: phaseCombatContextDrafts");
-    expect(source).toContain('const phaseKey = isPhaseOne ? "phase1" : "phase2"');
+    expect(source).toContain(
+      'const phaseKey: PlayerCombatPhaseKey = index === 0 ? "phase1" : "phase2"',
+    );
     expect(source).toContain("setPhaseCombatContextDrafts((current) => ({");
     expect(source).toContain("selectedRoundDeclaration");
     expect(source).toContain("markCombatDeclarationDraftDirty");
@@ -77,11 +84,13 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("roundNumber={combatRoundState?.roundNumber}");
     expect(source).toContain("mainHandParryItemLabel");
     expect(source).toContain("offHandParryItemLabel");
-    expect(source).toContain("isPlayerEncounterAttackAction");
-    expect(source).toContain("isPlayerEncounterDefenseAction");
+    expect(source).toContain("phaseModel.showAttackStats");
+    expect(source).toContain("phaseModel.showDefenseContext");
     expect(source).not.toContain("movementLabel=");
     expect(source).not.toContain('description: selectedSecondaryActionId ? "" : "Open"');
-    expect(source).not.toContain("formatCombatInitiativeRoll(selectedRoundParticipant.initiatives.phase1)");
+    expect(source).not.toContain(
+      "formatCombatInitiativeRoll(selectedRoundParticipant.initiatives.phase1)",
+    );
     expect(source).not.toContain("Attack - Parry ·");
     expect(source).not.toContain("visibleOpponentOptions");
     expect(source).toContain("isGameMaster");

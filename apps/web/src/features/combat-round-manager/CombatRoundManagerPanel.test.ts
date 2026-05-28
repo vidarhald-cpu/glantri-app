@@ -68,14 +68,23 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("selectedRoundDeclaration");
     expect(source).toContain("buildInspectorDraftKey");
     expect(source).toContain("buildInspectorPhaseContexts");
-    expect(source).toContain("buildDeclarationDraft(selectedScenarioParticipant, selectedRoundDeclaration)");
+    expect(source).toContain(
+      "buildDeclarationDraft(selectedScenarioParticipant, selectedRoundDeclaration)",
+    );
     expect(source).toContain("draftKey.startsWith(`${participant.id}:`)");
     expect(source).toContain("PlayerCombatModifierPanel");
     expect(source).toContain("PlayerCombatActionSelectorPanel");
     expect(source).toContain("PlayerCombatActionButtonPanel");
     expect(source).toContain("PlayerCombatActionResultPanel");
     expect(source).toContain("PlayerCombatPhasePanel");
+    expect(source).toContain("PlayerCombatAttackStatsTable");
+    expect(source).toContain("PlayerCombatDefenseStatsTable");
     expect(source).toContain("playerCombatTopPanelRowStyle");
+    expect(source).toContain("buildPlayerCombatPhasePanelModel");
+    expect(source).toContain("buildPlayerCombatLoadoutSummary");
+    expect(source).toContain("buildPlayerCombatDefenseStats");
+    expect(source).toContain("loadCanonicalContent");
+    expect(source).toContain("buildEquipmentLoadoutModuleModel");
     expect(source).toContain("buildEncounterLiveCombatModifierSummary");
     expect(source).toContain("selectedScenarioParticipant?.state.combatEffects");
     expect(source).toContain("saveInspectorDeclaration");
@@ -92,13 +101,18 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("rankLabel");
     expect(source).toContain("inspectorInitiativeBase");
     expect(source).toContain("phaseContexts: inspectorDraft.phaseContexts");
-    expect(source).toContain('const phaseKey = index === 0 ? "phase1" : "phase2"');
+    expect(source).toContain(
+      'const phaseKey: PlayerCombatPhaseKey = index === 0 ? "phase1" : "phase2"',
+    );
     expect(source).toContain("const phaseCombatContext = inspectorDraft.phaseContexts[phaseKey]");
-    expect(source).not.toContain("formatCombatInitiativeRoll(inspector.participant.initiatives.phase1)");
+    expect(source).not.toContain(
+      "formatCombatInitiativeRoll(inspector.participant.initiatives.phase1)",
+    );
     expect(source).not.toContain("Action status:");
     expect(source).not.toContain("Damage review:");
     expect(source).toContain("PlayerCombatParryContextPanel");
-    expect(source).toContain("isPlayerEncounterDefenseAction");
+    expect(source).toContain("phaseModel.showAttackStats");
+    expect(source).toContain("phaseModel.showDefenseContext");
     expect(source).not.toContain("inspectorOpponentOptions");
     expect(source).toContain("moveSelectedParticipantDown");
     expect(source).toContain("Select a participant step to inspect combat details.");

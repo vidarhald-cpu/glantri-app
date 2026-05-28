@@ -18,6 +18,7 @@ import {
   COMBAT_ROUND_STEPS,
   advanceCombatRoundStep,
   buildCombatRoundInspector,
+  characterBuildSchema,
   getCombatRoundInitiativeTotal,
   getCombatRoundInitiativePositions,
   initializeCombatRoundState,
@@ -25,6 +26,7 @@ import {
   sortCombatRoundParticipantsByInitiative,
 } from "@glantri/domain";
 
+import { buildEquipmentLoadoutModuleModel } from "@/features/equipment/loadoutModule";
 import {
   clearCurrentCombatRoundStepOnServer,
   rollCombatInitiativeOnServer,
@@ -39,6 +41,8 @@ import {
   PlayerCombatActionButtonPanel,
   PlayerCombatActionResultPanel,
   PlayerCombatActionSelectorPanel,
+  PlayerCombatAttackStatsTable,
+  PlayerCombatDefenseStatsTable,
   PlayerCombatModifierPanel,
   PlayerCombatParryContextPanel,
   PlayerCombatPhasePanel,
@@ -46,14 +50,21 @@ import {
   playerCombatTopPanelRowStyle,
   type PlayerCombatPhaseCardView,
 } from "@/features/player-combat/PlayerCombatPanels";
+import {
+  buildPlayerCombatDefenseStats,
+  buildPlayerCombatLoadoutSummary,
+  buildPlayerCombatPhasePanelModel,
+  isEquipmentFeatureState,
+  type PlayerCombatPhaseKey,
+} from "@/features/player-combat/playerCombatPhaseModel";
 import { buildEncounterLiveCombatModifierSummary } from "@/lib/campaigns/liveCombatModifiers";
 import {
   createEmptyPlayerEncounterCombatContext,
-  isPlayerEncounterDefenseAction,
   isPlayerEncounterActionId,
   type PlayerEncounterActionId,
   type PlayerEncounterMovementId,
 } from "@/lib/campaigns/playerEncounter";
+import { loadCanonicalContent } from "@/lib/content/loadCanonicalContent";
 
 interface CombatRoundManagerPanelProps {
   encounter: EncounterSession;
@@ -196,11 +207,11 @@ function buildInspectorDraftKey(input: {
 function hasCombatRoundDeclarationAction(declaration?: CombatRoundDeclaration): boolean {
   return Boolean(
     declaration?.actionId ||
-      declaration?.secondaryActionId ||
-      declaration?.movementId ||
-      declaration?.additionalActionNotes ||
-      declaration?.combatContext ||
-      declaration?.phaseContexts,
+    declaration?.secondaryActionId ||
+    declaration?.movementId ||
+    declaration?.additionalActionNotes ||
+    declaration?.combatContext ||
+    declaration?.phaseContexts,
   );
 }
 
@@ -293,6 +304,7 @@ export default function CombatRoundManagerPanel({
   const [inspectorDrafts, setInspectorDrafts] = useState<
     Record<string, CombatInspectorDeclarationDraft>
   >({});
+  const [content, setContent] = useState<Awaited<ReturnType<typeof loadCanonicalContent>>>();
   const tableContainerRef = useRef<HTMLDivElement>(null);
   const selectedRoundNumber = roundState.roundNumber;
   const effectiveScenarioParticipants = useMemo(
@@ -348,7 +360,9 @@ export default function CombatRoundManagerPanel({
             participant.characterId === selectedEncounterParticipant.characterId),
       )
     : undefined;
-  const selectedRoundDeclaration = hasCombatRoundDeclarationAction(inspector.participant?.declaration)
+  const selectedRoundDeclaration = hasCombatRoundDeclarationAction(
+    inspector.participant?.declaration,
+  )
     ? inspector.participant?.declaration
     : undefined;
   const inspectorDraftKey = buildInspectorDraftKey({
@@ -374,6 +388,48 @@ export default function CombatRoundManagerPanel({
         liveModifiers: inspectorLiveModifiers,
       }),
     [inspectorDraft.combatContext, inspectorLiveModifiers],
+  );
+  const inspectorBuild = useMemo(() => {
+    const result = characterBuildSchema.safeParse(selectedScenarioParticipant?.snapshot.build);
+    return result.success ? result.data : null;
+  }, [selectedScenarioParticipant?.snapshot.build]);
+  const inspectorEquipmentState = useMemo(() => {
+    const candidate = selectedScenarioParticipant?.snapshot.equipmentState;
+    return isEquipmentFeatureState(candidate) ? candidate : null;
+  }, [selectedScenarioParticipant?.snapshot.equipmentState]);
+  const inspectorLoadoutModel = useMemo(
+    () =>
+      buildEquipmentLoadoutModuleModel({
+        characterContext:
+          content && inspectorBuild
+            ? {
+                content,
+                record: {
+                  build: inspectorBuild,
+                },
+              }
+            : null,
+        characterId: selectedScenarioParticipant?.characterId ?? "",
+        liveCombatModifiers: inspectorLiveModifiers,
+        state: inspectorEquipmentState,
+        throwingWeaponItemId: null,
+      }),
+    [
+      content,
+      inspectorBuild,
+      inspectorEquipmentState,
+      inspectorLiveModifiers,
+      selectedScenarioParticipant?.characterId,
+    ],
+  );
+  const inspectorLoadoutSummary = useMemo(
+    () =>
+      buildPlayerCombatLoadoutSummary({
+        actionId: inspectorDraft.actionId,
+        loadoutModel: inspectorLoadoutModel,
+        secondaryActionId: inspectorDraft.secondaryActionId,
+      }),
+    [inspectorDraft.actionId, inspectorDraft.secondaryActionId, inspectorLoadoutModel],
   );
   const inspectorCurrentInitiativePhase =
     roundState.currentStep === "initiative_phase_1"
@@ -405,10 +461,38 @@ export default function CombatRoundManagerPanel({
     ];
   }, [inspector.participant]);
   const inspectorInitiativeBase =
-    (inspectorLiveModifiers.generalFatigueRaw ?? 0) + (inspectorLiveModifiers.obSkillRaw ?? 0);
+    inspectorLoadoutSummary.passiveInitiative +
+    (inspectorLiveModifiers.generalFatigueRaw ?? 0) +
+    (inspectorLiveModifiers.obSkillRaw ?? 0);
   useEffect(() => {
     setRoundState(initialRoundState);
   }, [initialRoundState]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadContent() {
+      try {
+        const nextContent = await loadCanonicalContent();
+
+        if (!cancelled) {
+          setContent(nextContent);
+        }
+      } catch (caughtError) {
+        if (!cancelled) {
+          setSaveError(
+            caughtError instanceof Error ? caughtError.message : "Unable to load combat content.",
+          );
+        }
+      }
+    }
+
+    void loadContent();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   function focusRoundTable() {
     tableContainerRef.current?.scrollIntoView({ block: "start", behavior: "smooth" });
@@ -464,10 +548,9 @@ export default function CombatRoundManagerPanel({
     setSaving(true);
 
     try {
-      const { encounter: nextEncounter, participants } =
-        await clearCurrentCombatRoundStepOnServer({
-          encounterId: encounter.id,
-        });
+      const { encounter: nextEncounter, participants } = await clearCurrentCombatRoundStepOnServer({
+        encounterId: encounter.id,
+      });
       const nextRoundState = initializeCombatRoundState({ encounter: nextEncounter });
 
       setRoundState(nextRoundState);
@@ -622,12 +705,13 @@ export default function CombatRoundManagerPanel({
           (participant) =>
             participant.id === encounterParticipant.scenarioParticipantId ||
             participant.id === encounterParticipant.id ||
-            (participant.characterId && participant.characterId === encounterParticipant.characterId),
+            (participant.characterId &&
+              participant.characterId === encounterParticipant.characterId),
         )
       : undefined;
     const declaredThisRound = Boolean(
       scenarioParticipant?.state.combat.lastDeclaredActionId &&
-        scenarioParticipant.state.combat.lastDeclaredRoundNumber === roundState.roundNumber,
+      scenarioParticipant.state.combat.lastDeclaredRoundNumber === roundState.roundNumber,
     );
 
     return declaredThisRound && input.status === "pending" ? "submitted" : input.status;
@@ -736,11 +820,7 @@ export default function CombatRoundManagerPanel({
           >
             {saving ? "Saving..." : getAdvanceButtonLabel(roundState.currentStep)}
           </button>
-          <button
-            disabled={saving}
-            onClick={() => void clearCurrentStep()}
-            type="button"
-          >
+          <button disabled={saving} onClick={() => void clearCurrentStep()} type="button">
             Clear current step
           </button>
         </section>
@@ -959,8 +1039,7 @@ export default function CombatRoundManagerPanel({
                   {COMBAT_ROUND_STEP_LABELS[inspector.step]}
                 </h3>
                 <div style={{ color: "#5e5a50", fontSize: "0.92rem" }}>
-                  {COMBAT_ROUND_STEP_LABELS[inspector.step]} ·{" "}
-                  {formatStepStatus(inspector.status)}
+                  {COMBAT_ROUND_STEP_LABELS[inspector.step]} · {formatStepStatus(inspector.status)}
                 </div>
               </div>
               <div style={inspectorNavStyle}>
@@ -998,29 +1077,49 @@ export default function CombatRoundManagerPanel({
                     secondaryActionId={inspectorDraft.secondaryActionId}
                   />
                   {inspectorPhaseCards.map((phaseCard, index) => {
-                    const phaseActionId =
-                      index === 0 ? inspectorDraft.actionId : inspectorDraft.secondaryActionId;
-                    const phaseKey = index === 0 ? "phase1" : "phase2";
+                    const phaseKey: PlayerCombatPhaseKey = index === 0 ? "phase1" : "phase2";
                     const phaseCombatContext = inspectorDraft.phaseContexts[phaseKey];
-                    const showsParryContext = isPlayerEncounterDefenseAction(phaseActionId);
+                    const phaseModel = buildPlayerCombatPhasePanelModel({
+                      actionId: inspectorDraft.actionId,
+                      attackStats: inspectorLoadoutSummary.attackStats,
+                      defenseStats: buildPlayerCombatDefenseStats({
+                        mainHandParryItemLabel: inspectorLoadoutSummary.mainHandParryItemLabel,
+                        offHandParryItemLabel: inspectorLoadoutSummary.offHandParryItemLabel,
+                        phaseContext: phaseCombatContext,
+                        reference: inspectorLoadoutSummary.reference,
+                      }),
+                      phaseCard,
+                      phaseContext: phaseCombatContext,
+                      phaseKey,
+                      secondaryActionId: inspectorDraft.secondaryActionId,
+                    });
 
                     return (
-                      <PlayerCombatPhasePanel key={phaseCard.phaseLabel} phaseCard={phaseCard}>
-                        {showsParryContext ? (
-                          <PlayerCombatParryContextPanel
-                            combatContext={phaseCombatContext}
-                            controlsDisabled={saving}
-                            mainHandItemLabel="Main hand"
-                            offHandItemLabel="Off hand/shield"
-                            onCombatContextChange={(combatContext) =>
-                              updateInspectorDraft({
-                                phaseContexts: {
-                                  ...inspectorDraft.phaseContexts,
-                                  [phaseKey]: combatContext,
-                                },
-                              })
-                            }
-                          />
+                      <PlayerCombatPhasePanel
+                        key={phaseModel.phaseCard.phaseLabel}
+                        phaseCard={phaseCard}
+                      >
+                        {phaseModel.showAttackStats && phaseModel.attackStats ? (
+                          <PlayerCombatAttackStatsTable stats={phaseModel.attackStats} />
+                        ) : null}
+                        {phaseModel.showDefenseContext && phaseModel.defenseStats ? (
+                          <>
+                            <PlayerCombatDefenseStatsTable stats={phaseModel.defenseStats} />
+                            <PlayerCombatParryContextPanel
+                              combatContext={phaseModel.phaseContext}
+                              controlsDisabled={saving}
+                              mainHandItemLabel={inspectorLoadoutSummary.mainHandParryItemLabel}
+                              offHandItemLabel={inspectorLoadoutSummary.offHandParryItemLabel}
+                              onCombatContextChange={(combatContext) =>
+                                updateInspectorDraft({
+                                  phaseContexts: {
+                                    ...inspectorDraft.phaseContexts,
+                                    [phaseKey]: combatContext,
+                                  },
+                                })
+                              }
+                            />
+                          </>
                         ) : null}
                       </PlayerCombatPhasePanel>
                     );
