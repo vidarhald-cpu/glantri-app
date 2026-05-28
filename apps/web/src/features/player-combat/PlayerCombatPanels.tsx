@@ -63,7 +63,9 @@ interface PlayerCombatModifierPanelProps {
   onUpdateEntry?: (
     bucketKey: ScenarioCombatModifierBucket,
     entryId: string,
-    patch: Partial<Pick<ScenarioCombatModifierEntry, "notes" | "scope" | "value">>,
+    patch: Partial<
+      Pick<ScenarioCombatModifierEntry, "durationRounds" | "notes" | "scope" | "value">
+    >,
   ) => void;
   readOnly?: boolean;
   rows: readonly PlayerCombatModifierBucketView[];
@@ -160,6 +162,13 @@ const compactWideFieldLabelStyle = {
   maxWidth: "100%",
 } as const;
 
+const compactModifierEntryRowStyle = {
+  alignItems: "end",
+  display: "grid",
+  gap: "0.35rem",
+  gridTemplateColumns: "4rem 4rem minmax(7rem, 1fr) 4.75rem",
+} as const;
+
 const compactStatsRowStyle = {
   alignItems: "center",
   display: "grid",
@@ -175,6 +184,10 @@ const compactStatsTableStyle = {
 
 function getDisplayTotal(row: PlayerCombatModifierBucketView | undefined): number {
   return row ? row.total + (row.fatigueTotal ?? 0) : 0;
+}
+
+function formatModifierDuration(entry: ScenarioCombatModifierEntry): string {
+  return entry.durationRounds ? `${entry.durationRounds} rnd` : entry.scope;
 }
 
 export function getGmCombatStepActionLabel(step: CombatRoundStep): string {
@@ -304,57 +317,35 @@ export function PlayerCombatModifierPanel({
 
           {editable && !row.locked
             ? row.entries.map((entry) => (
-                <div
-                  key={entry.id}
-                  style={{
-                    display: "grid",
-                    gap: "0.25rem",
-                  }}
-                >
-                  <div
-                    style={{
-                      alignItems: "end",
-                      display: "grid",
-                      gap: "0.35rem",
-                      gridTemplateColumns: "4.5rem 5.5rem auto",
-                    }}
-                  >
-                    <label style={compactWideFieldLabelStyle}>
-                      <span style={{ fontSize: "0.82rem", fontWeight: 600 }}>Mod</span>
-                      <input
-                        disabled={controlsDisabled}
-                        onChange={(event) =>
-                          onUpdateEntry(row.bucketKey, entry.id, {
-                            value: event.target.value.length > 0 ? Number(event.target.value) : 0,
-                          })
-                        }
-                        type="number"
-                        value={entry.value}
-                      />
-                    </label>
-                    <label style={compactWideFieldLabelStyle}>
-                      <span style={{ fontSize: "0.82rem", fontWeight: 600 }}>Dur</span>
-                      <select
-                        disabled={controlsDisabled}
-                        onChange={(event) =>
-                          onUpdateEntry(row.bucketKey, entry.id, {
-                            scope: event.target.value as "until" | "save",
-                          })
-                        }
-                        value={entry.scope}
-                      >
-                        <option value="until">Until</option>
-                        <option value="save">Save</option>
-                      </select>
-                    </label>
-                    <button
+                <div key={entry.id} style={compactModifierEntryRowStyle}>
+                  <label style={compactWideFieldLabelStyle}>
+                    <span style={{ fontSize: "0.82rem", fontWeight: 600 }}>Mod</span>
+                    <input
                       disabled={controlsDisabled}
-                      onClick={() => onRemoveEntry(row.bucketKey, entry.id)}
-                      type="button"
-                    >
-                      Remove
-                    </button>
-                  </div>
+                      onChange={(event) =>
+                        onUpdateEntry(row.bucketKey, entry.id, {
+                          value: event.target.value.length > 0 ? Number(event.target.value) : 0,
+                        })
+                      }
+                      type="number"
+                      value={entry.value}
+                    />
+                  </label>
+                  <label style={compactWideFieldLabelStyle}>
+                    <span style={{ fontSize: "0.82rem", fontWeight: 600 }}>Dur</span>
+                    <input
+                      disabled={controlsDisabled}
+                      min={1}
+                      onChange={(event) =>
+                        onUpdateEntry(row.bucketKey, entry.id, {
+                          durationRounds:
+                            event.target.value.length > 0 ? Number(event.target.value) : undefined,
+                        })
+                      }
+                      type="number"
+                      value={entry.durationRounds ?? ""}
+                    />
+                  </label>
                   <label style={compactWideFieldLabelStyle}>
                     <span style={{ fontSize: "0.82rem", fontWeight: 600 }}>Details</span>
                     <input
@@ -369,25 +360,36 @@ export function PlayerCombatModifierPanel({
                       value={entry.notes ?? ""}
                     />
                   </label>
+                  <button
+                    disabled={controlsDisabled}
+                    onClick={() => onRemoveEntry(row.bucketKey, entry.id)}
+                    type="button"
+                  >
+                    Remove
+                  </button>
                 </div>
               ))
             : row.entries.map((entry) => (
                 <div key={entry.id} style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
                   {entry.value >= 0 ? "+" : ""}
-                  {entry.value} · {entry.scope}
+                  {entry.value} · {formatModifierDuration(entry)}
                   {entry.notes ? ` · ${entry.notes}` : ""}
                 </div>
               ))}
 
           {editable && !row.locked ? (
-            <button
-              disabled={controlsDisabled}
-              onClick={() => onAddEntry(row.bucketKey)}
-              style={{ justifySelf: "start" }}
-              type="button"
-            >
-              Add {row.label}
-            </button>
+            <div style={compactModifierEntryRowStyle}>
+              <span aria-hidden="true" />
+              <span aria-hidden="true" />
+              <span aria-hidden="true" />
+              <button
+                disabled={controlsDisabled}
+                onClick={() => onAddEntry(row.bucketKey)}
+                type="button"
+              >
+                Add
+              </button>
+            </div>
           ) : null}
         </div>
       ))}

@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 type LocalServiceClientModule = typeof import("./localServiceClient");
-type FetchMock = ReturnType<typeof vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>>;
+type FetchMock = ReturnType<
+  typeof vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>
+>;
 
 function jsonResponse(payload: unknown, status = 200): Response {
   return new Response(JSON.stringify(payload), {
@@ -305,7 +307,15 @@ describe("localServiceClient wire contract", () => {
           modifierBuckets: {
             general: [],
             situationDb: [],
-            situationObSkill: [],
+            situationObSkill: [
+              {
+                durationRounds: 2,
+                id: "modifier-1",
+                notes: "High ground",
+                scope: "until",
+                value: 1,
+              },
+            ],
           },
         },
         encounterId: "encounter-1",
@@ -340,7 +350,15 @@ describe("localServiceClient wire contract", () => {
           modifierBuckets: {
             general: [],
             situationDb: [],
-            situationObSkill: [],
+            situationObSkill: [
+              {
+                durationRounds: 2,
+                id: "modifier-1",
+                notes: "High ground",
+                scope: "until",
+                value: 1,
+              },
+            ],
           },
         },
         movementId: "hold",

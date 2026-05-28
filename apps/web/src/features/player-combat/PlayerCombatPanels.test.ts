@@ -31,6 +31,13 @@ describe("PlayerCombatPanels", () => {
     expect(source).toContain("onUpdateEntry");
     expect(source).toContain("disabled={controlsDisabled}");
     expect(source).toContain("row.locked");
+    expect(source).toContain("compactModifierEntryRowStyle");
+    expect(source).toContain('gridTemplateColumns: "4rem 4rem minmax(7rem, 1fr) 4.75rem"');
+    expect(source).toContain('"durationRounds"');
+    expect(source).toContain('value={entry.durationRounds ?? ""}');
+    expect(source).toContain("formatModifierDuration");
+    expect(source).not.toContain('<option value="until">Until</option>');
+    expect(source).not.toContain('<option value="save">Save</option>');
   });
 
   it("renders reusable phase panels for Phase 1 and Phase 2 combat summaries", () => {
