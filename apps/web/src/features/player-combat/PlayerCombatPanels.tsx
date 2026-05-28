@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 
 import type {
   CombatRoundInitiativeResult,
@@ -72,12 +72,6 @@ interface PlayerCombatModifierPanelProps {
   ) => void;
   readOnly?: boolean;
   rows: readonly PlayerCombatModifierBucketView[];
-}
-
-interface ModifierEntryDraft {
-  durationRounds?: number;
-  notes: string;
-  value: number;
 }
 
 interface PlayerCombatPhasePanelProps {
@@ -188,7 +182,7 @@ const compactModifierMiniTableHeaderStyle = {
   alignItems: "center",
   display: "grid",
   gap: "0.35rem",
-  gridTemplateColumns: "2.5rem 2.5rem minmax(0, 1fr)",
+  gridTemplateColumns: "4.5rem 4.5rem minmax(0, 1fr) 1.75rem",
   minWidth: 0,
 } as const;
 
@@ -196,19 +190,14 @@ const compactModifierMiniTableEntryRowStyle = {
   alignItems: "center",
   display: "grid",
   gap: "0.35rem",
-  gridTemplateColumns: "2.5rem 2.5rem minmax(0, 1fr) 1.5rem",
+  gridTemplateColumns: "4.5rem 4.5rem minmax(0, 1fr) 1.75rem",
   minWidth: 0,
-} as const;
-
-const compactModifierMiniTableDraftRowStyle = {
-  ...compactModifierMiniTableHeaderStyle,
-  alignItems: "center",
 } as const;
 
 const compactModifierNumberInputStyle = {
   boxSizing: "border-box",
   minWidth: 0,
-  width: "3.5ch",
+  width: "5.5ch",
 } as const;
 
 const compactModifierDetailsInputStyle = {
@@ -245,13 +234,12 @@ function formatModifierDuration(entry: ScenarioCombatModifierEntry): string {
   return entry.durationRounds ? `${entry.durationRounds} rnd` : entry.scope;
 }
 
-function createModifierEntryFromDraft(draft: ModifierEntryDraft): ScenarioCombatModifierEntry {
+function createModifierEntryDraft(): ScenarioCombatModifierEntry {
   return {
-    durationRounds: draft.durationRounds,
     id: `modifier-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    notes: draft.notes,
+    notes: "",
     scope: "until",
-    value: draft.value,
+    value: 0,
   };
 }
 
@@ -366,38 +354,6 @@ export function PlayerCombatModifierPanel({
   rows,
 }: PlayerCombatModifierPanelProps) {
   const editable = !readOnly && onAddEntry && onRemoveEntry && onUpdateEntry;
-  const [entryDrafts, setEntryDrafts] = useState<
-    Partial<Record<ScenarioCombatModifierBucket, ModifierEntryDraft>>
-  >({});
-
-  function getEntryDraft(bucketKey: ScenarioCombatModifierBucket): ModifierEntryDraft {
-    return entryDrafts[bucketKey] ?? { notes: "", value: 0 };
-  }
-
-  function updateEntryDraft(
-    bucketKey: ScenarioCombatModifierBucket,
-    patch: Partial<ModifierEntryDraft>,
-  ) {
-    setEntryDrafts((current) => ({
-      ...current,
-      [bucketKey]: {
-        ...getEntryDraft(bucketKey),
-        ...patch,
-      },
-    }));
-  }
-
-  function addEntryFromDraft(bucketKey: ScenarioCombatModifierBucket) {
-    if (!onAddEntry) {
-      return;
-    }
-
-    onAddEntry(bucketKey, createModifierEntryFromDraft(getEntryDraft(bucketKey)));
-    setEntryDrafts((current) => ({
-      ...current,
-      [bucketKey]: { notes: "", value: 0 },
-    }));
-  }
 
   return (
     <section style={playerCombatPanelCardStyle}>
@@ -415,7 +371,7 @@ export function PlayerCombatModifierPanel({
             {editable && !row.locked ? (
               <button
                 disabled={controlsDisabled}
-                onClick={() => addEntryFromDraft(row.bucketKey)}
+                onClick={() => onAddEntry(row.bucketKey, createModifierEntryDraft())}
                 style={{ justifySelf: "end" }}
                 type="button"
               >
@@ -424,7 +380,7 @@ export function PlayerCombatModifierPanel({
             ) : null}
           </div>
 
-          {editable && !row.locked ? (
+          {editable && !row.locked && row.entries.length > 0 ? (
             <div style={compactModifierMiniTableStyle}>
               <div style={compactModifierMiniTableHeaderStyle}>
                 {["Mod", "Dur", "Details"].map((heading) => (
@@ -432,6 +388,7 @@ export function PlayerCombatModifierPanel({
                     {heading}
                   </span>
                 ))}
+                <span aria-hidden="true" />
               </div>
               {row.entries.map((entry) => (
                 <div key={entry.id} style={compactModifierMiniTableEntryRowStyle}>
@@ -486,47 +443,6 @@ export function PlayerCombatModifierPanel({
                   </button>
                 </div>
               ))}
-              <div style={compactModifierMiniTableDraftRowStyle}>
-                <input
-                  aria-label={`${row.label} new modifier value`}
-                  disabled={controlsDisabled}
-                  onChange={(event) =>
-                    updateEntryDraft(row.bucketKey, {
-                      value: event.target.value.length > 0 ? Number(event.target.value) : 0,
-                    })
-                  }
-                  style={compactModifierNumberInputStyle}
-                  type="number"
-                  value={getEntryDraft(row.bucketKey).value}
-                />
-                <input
-                  aria-label={`${row.label} new modifier duration`}
-                  disabled={controlsDisabled}
-                  min={1}
-                  onChange={(event) =>
-                    updateEntryDraft(row.bucketKey, {
-                      durationRounds:
-                        event.target.value.length > 0 ? Number(event.target.value) : undefined,
-                    })
-                  }
-                  style={compactModifierNumberInputStyle}
-                  type="number"
-                  value={getEntryDraft(row.bucketKey).durationRounds ?? ""}
-                />
-                <input
-                  aria-label={`${row.label} new modifier details`}
-                  disabled={controlsDisabled}
-                  onChange={(event) =>
-                    updateEntryDraft(row.bucketKey, {
-                      notes: event.target.value,
-                    })
-                  }
-                  placeholder="Details"
-                  style={compactModifierDetailsInputStyle}
-                  type="text"
-                  value={getEntryDraft(row.bucketKey).notes}
-                />
-              </div>
             </div>
           ) : (
             row.entries.map((entry) => (
