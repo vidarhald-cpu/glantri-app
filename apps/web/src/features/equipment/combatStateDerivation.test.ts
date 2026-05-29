@@ -448,11 +448,11 @@ describe("combatStateDerivation", () => {
 
     expect(primaryRow?.ob1).toBe(17);
     expect(primaryRow?.db).toBe(14);
-    expect(primaryRow?.parry).toBe(10);
+    expect(primaryRow?.parry).toBe(9);
     expect(snapshot.readinessSummary).toContain("Posture Parry");
     expect(snapshot.defenseSummary).toContain("Posture Parry");
     expect(snapshot.defenseSummary).toContain("DB 14");
-    expect(snapshot.defenseSummary).toContain("Parry 10");
+    expect(snapshot.defenseSummary).toContain("Parry 9");
     expect(snapshot.encumbranceLevel).toBe(4);
     expect(snapshot.shieldMovementModifierSummary).toBe(2);
     expect(snapshot.movementModifierSummary).toBe(4);
@@ -489,11 +489,11 @@ describe("combatStateDerivation", () => {
     expect(snapshot).not.toBeNull();
     expect(getRowBySlotLabel(snapshot!, "Primary weapon")?.ob1).toBe(17);
     expect(getRowBySlotLabel(snapshot!, "Primary weapon")?.db).toBe(14);
-    expect(getRowBySlotLabel(snapshot!, "Primary weapon")?.parry).toBe(10);
+    expect(getRowBySlotLabel(snapshot!, "Primary weapon")?.parry).toBe(9);
     expect(snapshot?.readinessSummary).toContain("Posture Parry");
   });
 
-  it("sums attack raw modifiers once for encounter-context OB and parry rows", () => {
+  it("sums attack raw modifiers once for encounter-context OB without changing parry rows", () => {
     const theoretical = deriveCombatStateSnapshot(
       cloneState(),
       sampleCharacterId,
@@ -525,11 +525,11 @@ describe("combatStateDerivation", () => {
     expect(theoreticalPrimaryRow?.ob1).toBe(14);
     expect(livePrimaryRow?.ob1).toBe(13);
     expect(theoreticalPrimaryRow?.parry).toBe(8);
-    expect(livePrimaryRow?.parry).toBe(7);
+    expect(livePrimaryRow?.parry).toBe(8);
     expect(theoreticalShieldRow?.parry).toBe(13);
-    expect(liveShieldRow?.parry).toBe(12);
+    expect(liveShieldRow?.parry).toBe(13);
     expect(theoreticalCombinedRow?.parry).toBe(14);
-    expect(liveCombinedRow?.parry).toBe(13);
+    expect(liveCombinedRow?.parry).toBe(14);
     expect(theoreticalKickRow?.ob1).toBe(9);
     expect(liveKickRow?.ob1).toBe(8);
   });
@@ -575,7 +575,7 @@ describe("combatStateDerivation", () => {
     });
   });
 
-  it("sums live defense raw modifiers before applying DB percentage adjustments", () => {
+  it("sums live DB/Parry raw modifiers before applying DB and parry percentage adjustments", () => {
     const theoretical = deriveCombatStateSnapshot(
       cloneState(),
       sampleCharacterId,
@@ -604,6 +604,8 @@ describe("combatStateDerivation", () => {
     expect(theoreticalCombinedRow?.db).toBe(19);
     expect(liveShieldRow?.db).toBe(17);
     expect(liveCombinedRow?.db).toBe(18);
+    expect(liveShieldRow?.parry).toBe(12);
+    expect(liveCombinedRow?.parry).toBe(13);
     expect(liveCombinedRow?.db).toBeGreaterThan(liveShieldRow?.db as number);
     expect(live.twoItemDbSummary).toBe(18);
   });

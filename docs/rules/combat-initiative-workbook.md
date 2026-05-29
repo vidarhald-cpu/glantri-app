@@ -29,9 +29,9 @@ live adjustment = percentageAdjustment(I, raw live modifier)
 final initiative = I + live adjustment + open-ended d6 roll
 ```
 
-Skill/OB and DB do not affect initiative unless a future spreadsheet-backed rule explicitly adds
-them. The Character section shows only theoretical `I`; Player Combat, GM Player Combat, and the GM
-Combat Round Manager show the live initiative roll and result.
+Skill/OB and DB/Parry do not affect initiative unless a future spreadsheet-backed rule explicitly
+adds them. The Character section shows only theoretical `I`; Player Combat, GM Player Combat, and
+the GM Combat Round Manager show the live initiative roll and result.
 
 Example:
 

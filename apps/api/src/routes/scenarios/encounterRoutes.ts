@@ -3,6 +3,7 @@ import type { FastifyPluginAsync } from "fastify";
 import { CampaignService, EncounterService, ScenarioService } from "@glantri/database";
 import {
   buildPlayerSafeRoleplayStateForUser,
+  applyCombatActionGeneratedModifiers,
   buildCombatRoundInitiativeResult,
   canPlayerRollCombatInitiative,
   buildRoleplayCalculationPreview,
@@ -525,12 +526,15 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       const existingCombatContext = scenarioParticipantCombatContextSchema.parse(
         scenarioParticipant.state.combat.combatContext ?? {},
       );
-      const submittedCombatContext = gmAuthorizedOperation
-        ? body.combatContext
-        : preservePlayerCombatModifierBuckets({
-            existingContext: existingCombatContext,
-            requestedContext: body.combatContext,
-          });
+      const submittedCombatContext = applyCombatActionGeneratedModifiers({
+        actionId: body.actionId,
+        combatContext: gmAuthorizedOperation
+          ? body.combatContext
+          : preservePlayerCombatModifierBuckets({
+              existingContext: existingCombatContext,
+              requestedContext: body.combatContext,
+            }),
+      });
       const submittedPhaseContexts = body.phaseContexts
         ? {
             phase1: body.phaseContexts.phase1

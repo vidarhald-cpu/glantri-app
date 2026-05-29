@@ -98,10 +98,18 @@ export function buildEncounterLiveCombatModifierSummary(input: {
   const contextTotals = getPlayerEncounterCombatModifierTotals(input.combatContext);
 
   return {
+    // dbRaw uses the legacy situationDb storage bucket, now presented as DB/Parry.
     dbRaw: effectSums.db + contextTotals.situationDbTotal,
     generalFatigueRaw: effectSums.generalFatigue,
     initiativeRaw: contextTotals.situationInitiativeTotal,
-    modifierNoteLabels: ["Gen/Fatigue", "Initiative", "OB/Skill", "DB", "Enc", "Equipment"],
+    modifierNoteLabels: [
+      "Gen/Fatigue",
+      "Initiative",
+      "OB/Skill",
+      "DB/Parry",
+      "Enc",
+      "Equipment",
+    ],
     obSkillRaw: effectSums.obSkill + contextTotals.situationObSkillTotal,
   };
 }

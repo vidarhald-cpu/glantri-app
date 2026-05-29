@@ -33,6 +33,25 @@ describe("scenario combat modifier entries", () => {
       scope: "save",
       value: 1,
     });
+
+    expect(
+      scenarioCombatModifierEntrySchema.parse({
+        generated: true,
+        id: "generated-db-parry",
+        sourceActionId: "attack_parry",
+        sourcePhase: "phase1",
+        sourceRule: "attack-parry-db-parry-phase1",
+        value: -4,
+      }),
+    ).toEqual({
+      generated: true,
+      id: "generated-db-parry",
+      scope: "until",
+      sourceActionId: "attack_parry",
+      sourcePhase: "phase1",
+      sourceRule: "attack-parry-db-parry-phase1",
+      value: -4,
+    });
   });
 
   it("keeps old combat contexts compatible while supporting Initiative modifiers", () => {

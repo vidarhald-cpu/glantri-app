@@ -20,7 +20,7 @@ describe("PlayerCombatPanels", () => {
     expect(source).toContain("Initiative");
     expect(source).toContain("liveModifiers?.initiativeRaw");
     expect(source).toContain("Skill/OB");
-    expect(source).toContain("DB");
+    expect(source).toContain("DB/Parry");
     expect(source.indexOf('label: "General/Fatigue"')).toBeLessThan(
       source.indexOf('label: "Initiative"'),
     );

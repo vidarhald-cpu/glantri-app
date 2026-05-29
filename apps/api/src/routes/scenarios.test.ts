@@ -68,6 +68,19 @@ vi.mock("../lib/sessionAuth", () => ({
 
 import { scenariosRoutes } from "./scenarios";
 
+const attackParryDbParryModifierEntry = {
+  durationRounds: 1,
+  generated: true,
+  id: "generated:attack-parry:phase1:db-parry",
+  notes: "attack parry",
+  scope: "until",
+  sourceActionId: "attack_parry",
+  sourcePhase: "phase1",
+  sourceRule: "attack-parry-db-parry-phase1",
+  value: -4,
+};
+const attackParryDbParryModifier = expect.objectContaining(attackParryDbParryModifierEntry);
+
 async function buildScenarioTestApp() {
   const app = Fastify({
     logger: false,
@@ -1559,6 +1572,11 @@ describe("scenarios route contract", () => {
             lastDeclaredActionId: "attack_parry",
             lastDeclaredMovementId: "hold",
             lastDeclaredRoundNumber: 1,
+            combatContext: expect.objectContaining({
+              modifierBuckets: expect.objectContaining({
+                situationDb: [attackParryDbParryModifier],
+              }),
+            }),
           }),
         }),
       }),
@@ -1569,6 +1587,11 @@ describe("scenarios route contract", () => {
     );
     expect(updatedEncounter.combatRoundState.participants[0].declaration).toMatchObject({
       actionId: "attack_parry",
+      combatContext: expect.objectContaining({
+        modifierBuckets: expect.objectContaining({
+          situationDb: [attackParryDbParryModifier],
+        }),
+      }),
       movementId: "hold",
       phaseContexts: {
         phase1: expect.objectContaining({
@@ -1686,6 +1709,7 @@ describe("scenarios route contract", () => {
                     scope: "until",
                     value: 2,
                   },
+                  attackParryDbParryModifier,
                 ],
                 situationInitiative: [
                   {
@@ -2117,7 +2141,7 @@ describe("scenarios route contract", () => {
               selectedOpponentId: "guard",
               modifierBuckets: {
                 general: [],
-                situationDb: [],
+                situationDb: [attackParryDbParryModifierEntry],
                 situationInitiative: [],
                 situationObSkill: [],
               },

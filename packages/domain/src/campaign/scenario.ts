@@ -126,9 +126,13 @@ export const scenarioParticipantParryDirectionSchema = z.enum([
 
 export const scenarioCombatModifierEntrySchema = z.object({
   durationRounds: z.number().int().positive().optional(),
+  generated: z.boolean().optional(),
   id: idSchema,
   notes: z.string().optional(),
   scope: scenarioCombatModifierScopeSchema.default("until"),
+  sourceActionId: idSchema.optional(),
+  sourcePhase: z.enum(["phase1", "phase2"]).optional(),
+  sourceRule: z.string().optional(),
   value: z.number().default(0),
 });
 

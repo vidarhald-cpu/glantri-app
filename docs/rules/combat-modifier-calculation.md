@@ -47,7 +47,9 @@ These are raw modifier sources when they apply to a given combat value:
 - General/Fatigue from active combat effects
 - Initiative manual or situational modifiers, for initiative only
 - OB/Skill manual or situational modifiers
-- DB manual or situational modifiers
+- DB/Parry manual or situational modifiers. The stored JSON key may remain `situationDb` for
+  backward compatibility, but the product-facing bucket controls both DB and Parry/P in
+  encounter-context combat.
 - Encumbrance, including the workbook to-hit modifier
 - Equipment-derived raw modifiers where the workbook treats them as modifier steps, such as weapon
   OB/parry values and weapon/shield defensive values
@@ -64,12 +66,12 @@ These are not raw percentage modifiers by themselves:
 
 ## Current implementation boundary
 
-DB and combined defense are implemented with the summed-raw path. Those calculations have a clear
-existing workbook-backed path:
+DB, Parry/P, and combined defense are implemented with the summed-raw path. Those calculations have
+a clear existing workbook-backed path:
 
 ```text
 Base DB = round(Dodge XP / 2) + 4 + DEX GM
-Raw modifiers = equipment defensive value + DB/live modifier + encumbrance to-hit modifier
+Raw modifiers = equipment defensive value + DB/Parry live modifier + encumbrance to-hit modifier
 Final DB = apply workbook percentage adjustment once
 ```
 
@@ -78,16 +80,16 @@ the live modifier sources currently wired through the app:
 
 - OB uses the workbook raw OB as the base value and sums armor activity, weapon OB, General/Fatigue,
   and OB/Skill before one percentage lookup.
-- Parry uses the workbook raw parry as the base value and sums armor activity, weapon/shield parry,
-  General/Fatigue, and OB/Skill before one percentage lookup. Combined parry also keeps the workbook
-  minimum-1 primary/off-hand contribution rule before summing the live raw modifiers.
+- Parry/P uses the workbook raw parry as the base value and sums armor activity, weapon/shield
+  parry, General/Fatigue, and DB/Parry before one percentage lookup. Combined parry also keeps the
+  workbook minimum-1 primary/off-hand contribution rule before summing the live raw modifiers.
 - Encounter-context combat skill rows use the unencumbered skill total as the base value. Their
   live skill value sums General/Fatigue and OB/Skill before one percentage lookup. Their encumbered
   live value adds the existing encumbrance movement modifier as an `Enc` raw modifier into the same
   lookup.
 - Initiative uses the panel/passive initiative as the base value. Its live initiative value sums
   General/Fatigue and Initiative raw modifiers before one percentage lookup, then adds the
-  open-ended d6 roll. OB/Skill and DB are intentionally not part of initiative unless a later
+  open-ended d6 roll. OB/Skill and DB/Parry are intentionally not part of initiative unless a later
   spreadsheet-backed rule adds them.
 
 Older workbook notes may refer to `Game sheet!G10/G11` for initiative. In the modern app model,
@@ -110,6 +112,24 @@ Final encounter initiative = 3 + live adjustment + open-ended d6 roll
 The out-of-play Equip Items view remains theoretical unless an explicit encounter live-modifier
 context is passed. Action-specific combat phase modifiers beyond the current allocation inputs are
 future work and should be added as named raw modifier sources rather than as final-value overlays.
+
+## Attack - Parry generated modifier
+
+Declaring `Attack - Parry` currently creates one generated encounter modifier in the DB/Parry
+bucket:
+
+```text
+Stored bucket key = situationDb
+Value = -4
+Duration = 1 round
+Details = attack parry
+Source phase = phase 1
+```
+
+The generated line is idempotent on repeated declaration saves. Changing away from `Attack - Parry`
+removes the generated line while leaving manual DB/Parry modifiers intact. If the GM removes the
+generated line while the action remains `Attack - Parry`, the next declaration save may recreate it
+because the line is derived from the action choice.
 
 ## Broad sword OB example
 

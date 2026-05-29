@@ -192,6 +192,7 @@ export function getPlayerEncounterCombatModifierTotals(
   const situationObSkillTotal = sumModifierEntries(
     combatContext?.modifierBuckets.situationObSkill ?? [],
   );
+  // situationDb is the backward-compatible storage key for the DB/Parry bucket.
   const situationDbTotal = sumModifierEntries(combatContext?.modifierBuckets.situationDb ?? []);
   const situationInitiativeTotal = sumModifierEntries(
     combatContext?.modifierBuckets.situationInitiative ?? [],

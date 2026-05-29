@@ -354,7 +354,7 @@ export function buildPlayerCombatModifierRows(input: {
     {
       bucketKey: "situation_db",
       entries: combatContext.modifierBuckets.situationDb,
-      label: "DB",
+      label: "DB/Parry",
       total: input.liveModifiers?.dbRaw ?? totals.situationDbTotal,
     },
   ];

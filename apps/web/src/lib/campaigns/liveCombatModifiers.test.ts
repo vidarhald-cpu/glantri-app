@@ -203,7 +203,7 @@ describe("live combat modifiers", () => {
       "Gen/Fatigue",
       "Initiative",
       "OB/Skill",
-      "DB",
+      "DB/Parry",
       "Enc",
       "Equipment",
     ]);
