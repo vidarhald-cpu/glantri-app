@@ -1,4 +1,5 @@
 import type { CanonicalContent } from "@glantri/content";
+import type { CharacterRecord } from "@glantri/domain";
 
 import { loadServerCharacterById } from "../api/characterClient";
 import { loadCanonicalContent } from "../content/loadCanonicalContent";
@@ -10,6 +11,11 @@ const localCharacterRepository = new LocalCharacterRepository();
 export interface LocalCharacterContext {
   content: CanonicalContent;
   record?: LocalCharacterRecord;
+}
+
+export interface CurrentCharacterContext {
+  content: CanonicalContent;
+  record?: CharacterRecord;
 }
 
 export async function loadLocalCharacterContext(id: string): Promise<LocalCharacterContext> {
@@ -38,5 +44,17 @@ export async function loadLocalCharacterContext(id: string): Promise<LocalCharac
   return {
     content,
     record
+  };
+}
+
+export async function loadCurrentCharacterContext(id: string): Promise<CurrentCharacterContext> {
+  const [content, serverRecord] = await Promise.all([
+    loadCanonicalContent(),
+    loadServerCharacterById(id),
+  ]);
+
+  return {
+    content,
+    record: serverRecord,
   };
 }
