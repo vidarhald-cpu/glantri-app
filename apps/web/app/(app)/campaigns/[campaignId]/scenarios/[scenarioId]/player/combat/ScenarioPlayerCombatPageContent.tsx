@@ -893,6 +893,52 @@ export default function ScenarioPlayerCombatPageContent({
       }),
     [loadoutModel, selectedActionId, selectedSecondaryActionId],
   );
+  const phaseCombatLoadoutSummaries = useMemo(() => {
+    const buildPhaseSummary = (phaseKey: PlayerCombatPhaseKey) => {
+      const phaseLiveCombatModifiers = buildEncounterLiveCombatModifierSummary({
+        combatContext: combatContextDraft,
+        combatEffects: selectedParticipant?.state.combatEffects,
+        phaseKey,
+      });
+      const phaseLoadoutModel = buildEquipmentLoadoutModuleModel({
+        characterContext:
+          content && controlledBuild
+            ? {
+                content,
+                record: {
+                  build: controlledBuild,
+                },
+              }
+            : null,
+        characterId: displayedParticipant?.characterId ?? "",
+        combatAllocationInputs,
+        liveCombatModifiers: phaseLiveCombatModifiers,
+        state: controlledEquipmentState,
+        throwingWeaponItemId: null,
+      });
+
+      return buildPlayerCombatLoadoutSummary({
+        actionId: selectedActionId,
+        loadoutModel: phaseLoadoutModel,
+        secondaryActionId: selectedSecondaryActionId,
+      });
+    };
+
+    return {
+      phase1: buildPhaseSummary("phase1"),
+      phase2: buildPhaseSummary("phase2"),
+    };
+  }, [
+    combatAllocationInputs,
+    combatContextDraft,
+    content,
+    controlledBuild,
+    controlledEquipmentState,
+    displayedParticipant?.characterId,
+    selectedActionId,
+    selectedParticipant?.state.combatEffects,
+    selectedSecondaryActionId,
+  ]);
   const initiativeCalculation = useMemo(
     () =>
       buildEncounterInitiativeModifierCalculation({
@@ -1135,14 +1181,15 @@ export default function ScenarioPlayerCombatPageContent({
             {phaseCards.map((phaseCard, index) => {
               const phaseKey: PlayerCombatPhaseKey = index === 0 ? "phase1" : "phase2";
               const phaseCombatContext = phaseCombatContextDrafts[phaseKey];
+              const phaseLoadoutSummary = phaseCombatLoadoutSummaries[phaseKey];
               const phaseModel = buildPlayerCombatPhasePanelModel({
                 actionId: selectedActionId,
-                attackStats: combatLoadoutSummary.attackStats,
+                attackStats: phaseLoadoutSummary.attackStats,
                 defenseStats: buildPlayerCombatDefenseStats({
-                  mainHandParryItemLabel: combatLoadoutSummary.mainHandParryItemLabel,
-                  offHandParryItemLabel: combatLoadoutSummary.offHandParryItemLabel,
+                  mainHandParryItemLabel: phaseLoadoutSummary.mainHandParryItemLabel,
+                  offHandParryItemLabel: phaseLoadoutSummary.offHandParryItemLabel,
                   phaseContext: phaseCombatContext,
-                  reference: combatLoadoutSummary.reference,
+                  reference: phaseLoadoutSummary.reference,
                 }),
                 phaseCard,
                 phaseContext: phaseCombatContext,
@@ -1174,8 +1221,8 @@ export default function ScenarioPlayerCombatPageContent({
                       <PlayerCombatParryContextPanel
                         combatContext={phaseModel.phaseContext}
                         controlsDisabled={declarationControlsDisabled}
-                        mainHandItemLabel={combatLoadoutSummary.mainHandParryItemLabel}
-                        offHandItemLabel={combatLoadoutSummary.offHandParryItemLabel}
+                        mainHandItemLabel={phaseLoadoutSummary.mainHandParryItemLabel}
+                        offHandItemLabel={phaseLoadoutSummary.offHandParryItemLabel}
                         onCombatContextChange={(combatContext) => {
                           markCombatDeclarationDraftDirty();
                           setPhaseCombatContextDrafts((current) => ({

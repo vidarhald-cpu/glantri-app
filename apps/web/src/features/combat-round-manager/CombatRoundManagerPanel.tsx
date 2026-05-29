@@ -498,6 +498,50 @@ export default function CombatRoundManagerPanel({
       }),
     [inspectorDraft.actionId, inspectorDraft.secondaryActionId, inspectorLoadoutModel],
   );
+  const inspectorPhaseLoadoutSummaries = useMemo(() => {
+    const buildPhaseSummary = (phaseKey: PlayerCombatPhaseKey) => {
+      const phaseLiveModifiers = buildEncounterLiveCombatModifierSummary({
+        combatContext: inspectorDraft.combatContext,
+        combatEffects: selectedScenarioParticipant?.state.combatEffects,
+        phaseKey,
+      });
+      const phaseLoadoutModel = buildEquipmentLoadoutModuleModel({
+        characterContext:
+          content && inspectorBuild
+            ? {
+                content,
+                record: {
+                  build: inspectorBuild,
+                },
+              }
+            : null,
+        characterId: selectedScenarioParticipant?.characterId ?? "",
+        liveCombatModifiers: phaseLiveModifiers,
+        state: inspectorEquipmentState,
+        throwingWeaponItemId: null,
+      });
+
+      return buildPlayerCombatLoadoutSummary({
+        actionId: inspectorDraft.actionId,
+        loadoutModel: phaseLoadoutModel,
+        secondaryActionId: inspectorDraft.secondaryActionId,
+      });
+    };
+
+    return {
+      phase1: buildPhaseSummary("phase1"),
+      phase2: buildPhaseSummary("phase2"),
+    };
+  }, [
+    content,
+    inspectorBuild,
+    inspectorDraft.actionId,
+    inspectorDraft.combatContext,
+    inspectorDraft.secondaryActionId,
+    inspectorEquipmentState,
+    selectedScenarioParticipant?.characterId,
+    selectedScenarioParticipant?.state.combatEffects,
+  ]);
   const inspectorCurrentInitiativePhase =
     roundState.currentStep === "initiative_phase_1"
       ? "phase1"
@@ -1197,14 +1241,15 @@ export default function CombatRoundManagerPanel({
                   {inspectorPhaseCards.map((phaseCard, index) => {
                     const phaseKey: PlayerCombatPhaseKey = index === 0 ? "phase1" : "phase2";
                     const phaseCombatContext = inspectorDraft.phaseContexts[phaseKey];
+                    const phaseLoadoutSummary = inspectorPhaseLoadoutSummaries[phaseKey];
                     const phaseModel = buildPlayerCombatPhasePanelModel({
                       actionId: inspectorDraft.actionId,
-                      attackStats: inspectorLoadoutSummary.attackStats,
+                      attackStats: phaseLoadoutSummary.attackStats,
                       defenseStats: buildPlayerCombatDefenseStats({
-                        mainHandParryItemLabel: inspectorLoadoutSummary.mainHandParryItemLabel,
-                        offHandParryItemLabel: inspectorLoadoutSummary.offHandParryItemLabel,
+                        mainHandParryItemLabel: phaseLoadoutSummary.mainHandParryItemLabel,
+                        offHandParryItemLabel: phaseLoadoutSummary.offHandParryItemLabel,
                         phaseContext: phaseCombatContext,
-                        reference: inspectorLoadoutSummary.reference,
+                        reference: phaseLoadoutSummary.reference,
                       }),
                       phaseCard,
                       phaseContext: phaseCombatContext,
@@ -1240,8 +1285,8 @@ export default function CombatRoundManagerPanel({
                             <PlayerCombatParryContextPanel
                               combatContext={phaseModel.phaseContext}
                               controlsDisabled={saving}
-                              mainHandItemLabel={inspectorLoadoutSummary.mainHandParryItemLabel}
-                              offHandItemLabel={inspectorLoadoutSummary.offHandParryItemLabel}
+                              mainHandItemLabel={phaseLoadoutSummary.mainHandParryItemLabel}
+                              offHandItemLabel={phaseLoadoutSummary.offHandParryItemLabel}
                               onCombatContextChange={(combatContext) =>
                                 updateInspectorDraft({
                                   phaseContexts: {

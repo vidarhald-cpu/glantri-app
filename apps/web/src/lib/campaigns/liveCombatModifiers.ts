@@ -1,9 +1,14 @@
 import type {
   CombatEffect,
   CombatEffectsState,
+  ScenarioCombatModifierEntry,
   ScenarioParticipantCombatContext,
 } from "@glantri/domain";
-import { lookupWorkbookPercentageAdjustment } from "@glantri/rules-engine";
+import {
+  calculateWorkbookPercentageAdjustmentTrace,
+  lookupWorkbookPercentageAdjustment,
+  type WorkbookRawModifier,
+} from "@glantri/rules-engine";
 
 import { getPlayerEncounterCombatModifierTotals } from "./playerEncounter";
 
@@ -21,6 +26,16 @@ export interface EncounterLiveCombatModifierSummary {
   initiativeRaw: number;
   modifierNoteLabels: string[];
   obSkillRaw: number;
+}
+
+export type EncounterCombatPhaseKey = "phase1" | "phase2";
+
+export interface EncounterDbParryModifierCalculation {
+  baseValue: number;
+  finalValue: number;
+  percentageAdjustment: number;
+  rawModifierTotal: number;
+  rawModifiers: WorkbookRawModifier[];
 }
 
 export interface EncounterInitiativeModifierCalculation {
@@ -93,13 +108,19 @@ export function sumEncounterCombatEffectModifiers(
 export function buildEncounterLiveCombatModifierSummary(input: {
   combatContext?: ScenarioParticipantCombatContext;
   combatEffects?: CombatEffectsState;
+  phaseKey?: EncounterCombatPhaseKey;
 }): EncounterLiveCombatModifierSummary {
   const effectSums = sumEncounterCombatEffectModifiers(input.combatEffects);
   const contextTotals = getPlayerEncounterCombatModifierTotals(input.combatContext);
+  const phaseScopedDbTotal = sumContextModifierEntriesForPhase(
+    input.combatContext?.modifierBuckets.situationDb ?? [],
+    input.phaseKey,
+  );
 
   return {
     // dbRaw uses the legacy situationDb storage bucket, now presented as DB/Parry.
-    dbRaw: effectSums.db + contextTotals.situationDbTotal,
+    dbRaw:
+      effectSums.db + (input.phaseKey ? phaseScopedDbTotal : contextTotals.situationDbTotal),
     generalFatigueRaw: effectSums.generalFatigue,
     initiativeRaw: contextTotals.situationInitiativeTotal,
     modifierNoteLabels: [
@@ -112,6 +133,15 @@ export function buildEncounterLiveCombatModifierSummary(input: {
     ],
     obSkillRaw: effectSums.obSkill + contextTotals.situationObSkillTotal,
   };
+}
+
+function sumContextModifierEntriesForPhase(
+  entries: ScenarioCombatModifierEntry[],
+  phaseKey?: EncounterCombatPhaseKey,
+): number {
+  return entries
+    .filter((entry) => !phaseKey || !entry.sourcePhase || entry.sourcePhase === phaseKey)
+    .reduce((total, entry) => total + entry.value, 0);
 }
 
 export function applyLiveRawModifierToCombatValue(input: {
@@ -151,4 +181,30 @@ export function buildEncounterInitiativeModifierCalculation(input: {
     modifierAdjustment: modifiedInitiative - input.baseInitiative,
     rawModifierTotal,
   };
+}
+
+export function buildEncounterDbParryModifierCalculation(input: {
+  baseValue: number;
+  liveModifiers?: EncounterLiveCombatModifierSummary;
+}): EncounterDbParryModifierCalculation | null {
+  const rawModifiers: WorkbookRawModifier[] = [
+    {
+      label: "General/Fatigue",
+      value: input.liveModifiers?.generalFatigueRaw ?? 0,
+    },
+    {
+      label: "DB/Parry",
+      value: input.liveModifiers?.dbRaw ?? 0,
+    },
+  ].filter((modifier) => modifier.value !== 0);
+  const trace = calculateWorkbookPercentageAdjustmentTrace({
+    baseValue: input.baseValue,
+    rawModifiers,
+  });
+
+  if (!trace) {
+    return null;
+  }
+
+  return trace;
 }

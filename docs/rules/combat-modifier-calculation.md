@@ -71,7 +71,7 @@ a clear existing workbook-backed path:
 
 ```text
 Base DB = round(Dodge XP / 2) + 4 + DEX GM
-Raw modifiers = equipment defensive value + DB/Parry live modifier + encumbrance to-hit modifier
+Raw modifiers = equipment defensive value + General/Fatigue + DB/Parry + encumbrance to-hit modifier
 Final DB = apply workbook percentage adjustment once
 ```
 
@@ -91,6 +91,18 @@ the live modifier sources currently wired through the app:
   General/Fatigue and Initiative raw modifiers before one percentage lookup, then adds the
   open-ended d6 roll. OB/Skill and DB/Parry are intentionally not part of initiative unless a later
   spreadsheet-backed rule adds them.
+
+DB/Parry does not include Skill/OB or Initiative. The encounter read model uses:
+
+```text
+DB/P raw live modifier = General/Fatigue + DB/Parry
+DB/P adjustment = percentageAdjustment(base DB or base P, abs(DB/P raw live modifier))
+DB/P final = base DB or base P +/- DB/P adjustment
+```
+
+Generated action DB/Parry rows may be phase-specific. Manual DB/Parry rows without a phase apply
+broadly. A generated row with `sourcePhase = phase1` contributes to phase 1 DB/P only; a generated
+row with `sourcePhase = phase2` contributes to phase 2 DB/P only.
 
 Older workbook notes may refer to `Game sheet!G10/G11` for initiative. In the modern app model,
 those cells are not a separate initiative rule. They are the spreadsheet-era place where the GM
@@ -126,6 +138,8 @@ Details = attack parry
 Source phase = phase 1
 ```
 
+This phase 1 row modifies phase 1 DB and Parry/P, but does not modify phase 2 DB/P.
+
 Declaring `Parry - Attack` mirrors the same rule in phase 2:
 
 ```text
@@ -135,6 +149,8 @@ Duration = 1 round
 Details = parry attack
 Source phase = phase 2
 ```
+
+This phase 2 row modifies phase 2 DB and Parry/P, but does not modify phase 1 DB/P.
 
 Generated action lines are idempotent on repeated declaration saves. Changing away from the matching
 action removes that generated line while leaving manual DB/Parry modifiers intact. If the GM removes a

@@ -8,6 +8,7 @@ import {
 
 import {
   applyLiveRawModifierToCombatValue,
+  buildEncounterDbParryModifierCalculation,
   buildEncounterLiveCombatModifierSummary,
   buildEncounterInitiativeModifierCalculation,
   sumEncounterCombatEffectModifiers,
@@ -207,6 +208,88 @@ describe("live combat modifiers", () => {
       "Enc",
       "Equipment",
     ]);
+  });
+
+  it("traces DB/Parry from General/Fatigue plus DB/Parry only", () => {
+    const calculation = buildEncounterDbParryModifierCalculation({
+      baseValue: 10,
+      liveModifiers: {
+        dbRaw: -4,
+        generalFatigueRaw: -1,
+        initiativeRaw: -99,
+        modifierNoteLabels: [],
+        obSkillRaw: -99,
+      },
+    });
+
+    expect(calculation).toMatchObject({
+      baseValue: 10,
+      rawModifierTotal: -5,
+      percentageAdjustment: lookupWorkbookPercentageAdjustment(10, 5),
+      finalValue: 10 - lookupWorkbookPercentageAdjustment(10, 5)!,
+      rawModifiers: [
+        { label: "General/Fatigue", value: -1 },
+        { label: "DB/Parry", value: -4 },
+      ],
+    });
+  });
+
+  it("leaves DB/Parry unchanged when only Skill/OB or Initiative modifiers exist", () => {
+    expect(
+      buildEncounterDbParryModifierCalculation({
+        baseValue: 10,
+        liveModifiers: {
+          dbRaw: 0,
+          generalFatigueRaw: 0,
+          initiativeRaw: -4,
+          modifierNoteLabels: [],
+          obSkillRaw: -4,
+        },
+      }),
+    ).toMatchObject({
+      baseValue: 10,
+      finalValue: 10,
+      percentageAdjustment: 0,
+      rawModifierTotal: 0,
+      rawModifiers: [],
+    });
+  });
+
+  it("filters generated DB/Parry modifiers by source phase while keeping manual rows broad", () => {
+    const combatContext = {
+      modifierBuckets: {
+        general: [],
+        situationDb: [
+          {
+            id: "manual-db-parry",
+            scope: "until" as const,
+            value: -1,
+          },
+          {
+            generated: true,
+            id: "generated:attack-parry:phase1:db-parry",
+            scope: "until" as const,
+            sourcePhase: "phase1" as const,
+            value: -4,
+          },
+          {
+            generated: true,
+            id: "generated:parry-attack:phase2:db-parry",
+            scope: "until" as const,
+            sourcePhase: "phase2" as const,
+            value: -4,
+          },
+        ],
+        situationInitiative: [],
+        situationObSkill: [],
+      },
+    };
+
+    expect(buildEncounterLiveCombatModifierSummary({ combatContext }).dbRaw).toBe(-9);
+    expect(buildEncounterLiveCombatModifierSummary({ combatContext, phaseKey: "phase1" }).dbRaw)
+      .toBe(-5);
+    expect(buildEncounterLiveCombatModifierSummary({ combatContext, phaseKey: "phase2" }).dbRaw)
+      .toBe(-5);
   });
 
   it("applies General/Fatigue and Initiative raw modifiers to initiative through the workbook table", () => {
