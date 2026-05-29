@@ -90,6 +90,23 @@ the live modifier sources currently wired through the app:
   open-ended d6 roll. OB/Skill and DB are intentionally not part of initiative unless a later
   spreadsheet-backed rule adds them.
 
+Older workbook notes may refer to `Game sheet!G10/G11` for initiative. In the modern app model,
+those cells are not a separate initiative rule. They are the spreadsheet-era place where the GM
+entered and reviewed situational initiative modifiers. The app represents those modifiers with the
+GM-controlled Initiative combat modifier bucket, alongside General/Fatigue from live Combat
+Effects.
+
+Example:
+
+```text
+I = 3
+General/Fatigue = -1
+Initiative = +2
+Raw live modifier = +1
+Live adjustment = percentageAdjustment(3, +1)
+Final encounter initiative = 3 + live adjustment + open-ended d6 roll
+```
+
 The out-of-play Equip Items view remains theoretical unless an explicit encounter live-modifier
 context is passed. Action-specific combat phase modifiers beyond the current allocation inputs are
 future work and should be added as named raw modifier sources rather than as final-value overlays.
