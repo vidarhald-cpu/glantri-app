@@ -11,6 +11,7 @@ export * from "./content/skills";
 export * from "./docs/glantriTerms";
 export * from "./encounter/combatRoundManager";
 export * from "./encounter/combatEffects";
+export * from "./encounter/hitLocation";
 export * from "./encounter/session";
 export * from "./encounter/roleplay";
 export * from "./equipment";

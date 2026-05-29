@@ -27,6 +27,7 @@ import {
   getPlayerCombatActionButtonLabel,
   getPlayerCombatStepLabel,
   formatCombatInitiativeFormula,
+  PlayerCombatAttackLocationSelector,
   PlayerCombatAttackStatsTable,
   PlayerCombatActionButtonPanel,
   PlayerCombatActionResultPanel,
@@ -1153,6 +1154,19 @@ export default function ScenarioPlayerCombatPageContent({
                 <PlayerCombatPhasePanel key={phaseModel.phaseCard.phaseLabel} phaseCard={phaseCard}>
                   {phaseModel.showAttackStats && phaseModel.attackStats ? (
                     <PlayerCombatAttackStatsTable stats={phaseModel.attackStats} />
+                  ) : null}
+                  {phaseModel.showAttackLocationSelector ? (
+                    <PlayerCombatAttackLocationSelector
+                      combatContext={phaseModel.phaseContext}
+                      controlsDisabled={declarationControlsDisabled}
+                      onCombatContextChange={(combatContext) => {
+                        markCombatDeclarationDraftDirty();
+                        setPhaseCombatContextDrafts((current) => ({
+                          ...current,
+                          [phaseKey]: combatContext,
+                        }));
+                      }}
+                    />
                   ) : null}
                   {phaseModel.showDefenseContext && phaseModel.defenseStats ? (
                     <>

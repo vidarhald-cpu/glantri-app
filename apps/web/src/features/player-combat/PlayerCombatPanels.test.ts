@@ -93,6 +93,13 @@ describe("PlayerCombatPanels", () => {
     expect(source).toContain("gridTemplateColumns: playerCombatPanelRowStyle.gridTemplateColumns");
     expect(source).toContain("PlayerCombatAttackStatsTable");
     expect(source).toContain("PlayerCombatDefenseStatsTable");
+    expect(source).toContain("PlayerCombatAttackLocationSelector");
+    expect(source).toContain("Attack location");
+    expect(source).toContain("No target");
+    expect(source).toContain("HIT_LOCATIONS.map");
+    expect(source).toContain("getHitLocationFullLabel(location)");
+    expect(source).toContain('value={combatContext.targetLocation ?? "none"}');
+    expect(source).toContain('targetLocation: targetLocation === "none" ? undefined : targetLocation');
     expect(source).toContain("compactStatsRowStyle");
     expect(source).toContain('gridTemplateColumns: "minmax(6rem, 0.8fr) 1fr"');
     expect(source).toContain("compactStatsTableStyle");

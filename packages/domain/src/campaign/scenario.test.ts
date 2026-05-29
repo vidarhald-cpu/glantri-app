@@ -79,4 +79,27 @@ describe("scenario combat modifier entries", () => {
       },
     ]);
   });
+
+  it("keeps old combat contexts compatible while supporting aimed target locations", () => {
+    expect(scenarioParticipantCombatContextSchema.parse({})).toEqual({
+      modifierBuckets: {
+        general: [],
+        situationDb: [],
+        situationInitiative: [],
+        situationObSkill: [],
+      },
+    });
+
+    expect(
+      scenarioParticipantCombatContextSchema.parse({
+        modifierBuckets: {
+          general: [],
+          situationDb: [],
+          situationInitiative: [],
+          situationObSkill: [],
+        },
+        targetLocation: "rightArm",
+      }).targetLocation,
+    ).toBe("rightArm");
+  });
 });

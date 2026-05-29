@@ -2,13 +2,16 @@
 
 import type { ReactNode } from "react";
 
-import type {
-  CombatRoundInitiativeResult,
-  CombatRoundStep,
-  ScenarioCombatModifierBucket,
-  ScenarioCombatModifierEntry,
-  ScenarioParticipantCombatContext,
-  ScenarioParticipantParryDirection,
+import {
+  HIT_LOCATIONS,
+  type CombatRoundInitiativeResult,
+  type CombatRoundStep,
+  type ScenarioCombatModifierBucket,
+  type ScenarioCombatModifierEntry,
+  type ScenarioParticipantCombatContext,
+  type ScenarioParticipantParryDirection,
+  type ScenarioParticipantTargetLocation,
+  getHitLocationFullLabel,
 } from "@glantri/domain";
 
 import {
@@ -105,6 +108,12 @@ interface PlayerCombatParryContextPanelProps {
   controlsDisabled?: boolean;
   mainHandItemLabel?: string;
   offHandItemLabel?: string;
+  onCombatContextChange: (combatContext: ScenarioParticipantCombatContext) => void;
+}
+
+interface PlayerCombatAttackLocationSelectorProps {
+  combatContext: ScenarioParticipantCombatContext;
+  controlsDisabled?: boolean;
   onCombatContextChange: (combatContext: ScenarioParticipantCombatContext) => void;
 }
 
@@ -724,6 +733,53 @@ export function PlayerCombatDefenseStatsTable({ stats }: PlayerCombatDefenseStat
           </tr>
         </tbody>
       </table>
+    </div>
+  );
+}
+
+export function PlayerCombatAttackLocationSelector({
+  combatContext,
+  controlsDisabled = false,
+  onCombatContextChange,
+}: PlayerCombatAttackLocationSelectorProps) {
+  return (
+    <div
+      style={{
+        borderTop: "1px solid #e3e1dc",
+        display: "grid",
+        gap: "0.25rem",
+        paddingTop: "0.4rem",
+      }}
+    >
+      <label
+        style={{
+          alignItems: "center",
+          display: "grid",
+          gap: "0.35rem",
+          gridTemplateColumns: "6.5rem minmax(8rem, 11rem)",
+        }}
+      >
+        <span style={{ fontSize: "0.86rem", fontWeight: 600 }}>Attack location</span>
+        <select
+          disabled={controlsDisabled}
+          onChange={(event) => {
+            const targetLocation = event.target.value as ScenarioParticipantTargetLocation;
+
+            onCombatContextChange({
+              ...combatContext,
+              targetLocation: targetLocation === "none" ? undefined : targetLocation,
+            });
+          }}
+          value={combatContext.targetLocation ?? "none"}
+        >
+          <option value="none">No target</option>
+          {HIT_LOCATIONS.map((location) => (
+            <option key={location} value={location}>
+              {getHitLocationFullLabel(location)}
+            </option>
+          ))}
+        </select>
+      </label>
     </div>
   );
 }

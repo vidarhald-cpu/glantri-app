@@ -73,8 +73,10 @@ describe("player combat phase model", () => {
     });
 
     expect(phase1.showAttackStats).toBe(true);
+    expect(phase1.showAttackLocationSelector).toBe(true);
     expect(phase1.showDefenseContext).toBe(true);
     expect(phase2.showAttackStats).toBe(false);
+    expect(phase2.showAttackLocationSelector).toBe(false);
     expect(phase2.showDefenseContext).toBe(true);
   });
 
@@ -107,8 +109,10 @@ describe("player combat phase model", () => {
     });
 
     expect(phase1.showAttackStats).toBe(false);
+    expect(phase1.showAttackLocationSelector).toBe(false);
     expect(phase1.showDefenseContext).toBe(true);
     expect(phase2.showAttackStats).toBe(true);
+    expect(phase2.showAttackLocationSelector).toBe(true);
     expect(phase2.showDefenseContext).toBe(true);
   });
 
@@ -156,5 +160,19 @@ describe("player combat phase model", () => {
     expect(emptyContext.offHandParryDirection).toBeUndefined();
     expect(savedContext.mainHandParryDirection).toBe("right");
     expect(savedContext.offHandParryDirection).toBe("right_forward");
+  });
+
+  it("keeps phase-specific aimed target locations separable", () => {
+    const phase1Context = {
+      ...createEmptyPlayerEncounterCombatContext(),
+      targetLocation: "head" as const,
+    };
+    const phase2Context = {
+      ...createEmptyPlayerEncounterCombatContext(),
+      targetLocation: "rightArm" as const,
+    };
+
+    expect(applyDefaultPlayerCombatPhaseContext(phase1Context).targetLocation).toBe("head");
+    expect(applyDefaultPlayerCombatPhaseContext(phase2Context).targetLocation).toBe("rightArm");
   });
 });

@@ -25,6 +25,7 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("PlayerCombatModifierPanel");
     expect(source).toContain("PlayerCombatPhasePanel");
     expect(source).toContain("PlayerCombatAttackStatsTable");
+    expect(source).toContain("PlayerCombatAttackLocationSelector");
     expect(source).toContain("PlayerCombatDefenseStatsTable");
     expect(source).toContain("PlayerCombatParryContextPanel");
     expect(source).toContain("playerCombatTopPanelRowStyle");
@@ -103,6 +104,7 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("mainHandParryItemLabel");
     expect(source).toContain("offHandParryItemLabel");
     expect(source).toContain("phaseModel.showAttackStats");
+    expect(source).toContain("phaseModel.showAttackLocationSelector");
     expect(source).toContain("phaseModel.showDefenseContext");
     expect(source).not.toContain("movementLabel=");
     expect(source).not.toContain('description: selectedSecondaryActionId ? "" : "Open"');

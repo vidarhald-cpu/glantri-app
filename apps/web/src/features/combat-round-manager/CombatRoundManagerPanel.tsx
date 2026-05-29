@@ -48,6 +48,7 @@ import {
   PlayerCombatActionButtonPanel,
   PlayerCombatActionResultPanel,
   PlayerCombatActionSelectorPanel,
+  PlayerCombatAttackLocationSelector,
   PlayerCombatAttackStatsTable,
   PlayerCombatDefenseStatsTable,
   PlayerCombatModifierPanel,
@@ -1218,6 +1219,20 @@ export default function CombatRoundManagerPanel({
                       >
                         {phaseModel.showAttackStats && phaseModel.attackStats ? (
                           <PlayerCombatAttackStatsTable stats={phaseModel.attackStats} />
+                        ) : null}
+                        {phaseModel.showAttackLocationSelector ? (
+                          <PlayerCombatAttackLocationSelector
+                            combatContext={phaseModel.phaseContext}
+                            controlsDisabled={saving}
+                            onCombatContextChange={(combatContext) =>
+                              updateInspectorDraft({
+                                phaseContexts: {
+                                  ...inspectorDraft.phaseContexts,
+                                  [phaseKey]: combatContext,
+                                },
+                              })
+                            }
+                          />
                         ) : null}
                         {phaseModel.showDefenseContext && phaseModel.defenseStats ? (
                           <>

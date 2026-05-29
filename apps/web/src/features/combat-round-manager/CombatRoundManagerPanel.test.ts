@@ -80,6 +80,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("PlayerCombatPhasePanel");
     expect(source).toContain("PlayerCombatAttackStatsTable");
     expect(source).toContain("PlayerCombatDefenseStatsTable");
+    expect(source).toContain("PlayerCombatAttackLocationSelector");
     expect(source).toContain("playerCombatTopPanelRowStyle");
     expect(source).toContain("buildPlayerCombatPhasePanelModel");
     expect(source).toContain("buildPlayerCombatLoadoutSummary");
@@ -128,6 +129,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).not.toContain("Damage review:");
     expect(source).toContain("PlayerCombatParryContextPanel");
     expect(source).toContain("phaseModel.showAttackStats");
+    expect(source).toContain("phaseModel.showAttackLocationSelector");
     expect(source).toContain("phaseModel.showDefenseContext");
     expect(source).toContain("actionId: inspectorDraft.actionId");
     expect(source).toContain("secondaryActionId: inspectorDraft.secondaryActionId");

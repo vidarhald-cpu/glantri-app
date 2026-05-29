@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { characterBuildSchema, type CharacterBuild } from "../character/build";
 import { combatEffectsStateSchema } from "../encounter/combatEffects";
+import { hitLocationTargetSchema } from "../encounter/hitLocation";
 
 const idSchema = z.string().min(1);
 const timestampSchema = z.string().min(1);
@@ -150,6 +151,7 @@ export const scenarioParticipantCombatContextSchema = z.object({
   offHandParryDirection: scenarioParticipantParryDirectionSchema.optional(),
   parrySource: scenarioParticipantParrySourceSchema.optional(),
   selectedOpponentId: idSchema.optional(),
+  targetLocation: hitLocationTargetSchema.optional(),
 });
 
 export const scenarioParticipantStateSchema = z.object({
@@ -380,6 +382,7 @@ export type ScenarioParticipantParryDirection = z.infer<
   typeof scenarioParticipantParryDirectionSchema
 >;
 export type ScenarioParticipantParrySource = z.infer<typeof scenarioParticipantParrySourceSchema>;
+export type ScenarioParticipantTargetLocation = z.infer<typeof hitLocationTargetSchema>;
 export type ScenarioCombatModifierEntry = z.infer<typeof scenarioCombatModifierEntrySchema>;
 export type ScenarioParticipantCombatContext = z.infer<
   typeof scenarioParticipantCombatContextSchema

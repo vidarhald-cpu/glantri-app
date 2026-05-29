@@ -49,6 +49,7 @@ export interface PlayerCombatPhasePanelModel {
   phaseCard: PlayerCombatPhaseCardView;
   phaseContext: ScenarioParticipantCombatContext;
   phaseKey: PlayerCombatPhaseKey;
+  showAttackLocationSelector: boolean;
   showAttackStats: boolean;
   showDefenseContext: boolean;
 }
@@ -403,6 +404,7 @@ export function buildPlayerCombatPhasePanelModel(input: {
     phaseCard: input.phaseCard,
     phaseContext: input.phaseContext,
     phaseKey: input.phaseKey,
+    showAttackLocationSelector: flags.attack,
     showAttackStats: Boolean(input.attackStats && flags.attack),
     showDefenseContext: Boolean(input.defenseStats && flags.defense),
   };
