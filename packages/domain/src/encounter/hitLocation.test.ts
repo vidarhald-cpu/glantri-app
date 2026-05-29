@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   chooseTargetedHitLocationRoll,
+  expandHitLocationTable,
   getHitLocationFullLabel,
   getHitLocationShortLabel,
   resolveHitLocationRoll,
@@ -9,26 +10,66 @@ import {
 
 describe("hit location helpers", () => {
   it("resolves closed 1d20 rolls to hit locations", () => {
-    expect(resolveHitLocationRoll(20)).toBe("head");
-    expect(resolveHitLocationRoll(19)).toBe("head");
-    expect(resolveHitLocationRoll(18)).toBe("rightArm");
-    expect(resolveHitLocationRoll(17)).toBe("rightArm");
-    expect(resolveHitLocationRoll(16)).toBe("leftArm");
-    expect(resolveHitLocationRoll(15)).toBe("leftArm");
-    expect(resolveHitLocationRoll(14)).toBe("chest");
-    expect(resolveHitLocationRoll(13)).toBe("chest");
-    expect(resolveHitLocationRoll(12)).toBe("chest");
-    expect(resolveHitLocationRoll(11)).toBe("chest");
-    expect(resolveHitLocationRoll(10)).toBe("abdomen");
-    expect(resolveHitLocationRoll(9)).toBe("abdomen");
-    expect(resolveHitLocationRoll(8)).toBe("abdomen");
-    expect(resolveHitLocationRoll(7)).toBe("abdomen");
-    expect(resolveHitLocationRoll(6)).toBe("rightLeg");
-    expect(resolveHitLocationRoll(5)).toBe("rightLeg");
-    expect(resolveHitLocationRoll(4)).toBe("rightLeg");
-    expect(resolveHitLocationRoll(3)).toBe("leftLeg");
-    expect(resolveHitLocationRoll(2)).toBe("leftLeg");
-    expect(resolveHitLocationRoll(1)).toBe("leftLeg");
+    expect(
+      Array.from({ length: 20 }, (_, index) => {
+        const roll = 20 - index;
+
+        return [roll, resolveHitLocationRoll(roll)];
+      }),
+    ).toEqual([
+      [20, "head"],
+      [19, "head"],
+      [18, "rightArm"],
+      [17, "rightArm"],
+      [16, "leftArm"],
+      [15, "leftArm"],
+      [14, "chest"],
+      [13, "chest"],
+      [12, "chest"],
+      [11, "chest"],
+      [10, "abdomen"],
+      [9, "abdomen"],
+      [8, "abdomen"],
+      [7, "abdomen"],
+      [6, "rightLeg"],
+      [5, "rightLeg"],
+      [4, "rightLeg"],
+      [3, "leftLeg"],
+      [2, "leftLeg"],
+      [1, "leftLeg"],
+    ]);
+  });
+
+  it("expands the canonical table in display order", () => {
+    expect(
+      expandHitLocationTable().map((row) => ({
+        fullLabel: row.fullLabel,
+        key: row.key,
+        roll: row.roll,
+        shortLabel: row.shortLabel,
+      })),
+    ).toEqual([
+      { fullLabel: "Head", key: "head", roll: 20, shortLabel: "Head" },
+      { fullLabel: "Head", key: "head", roll: 19, shortLabel: "Head" },
+      { fullLabel: "Right arm", key: "rightArm", roll: 18, shortLabel: "R arm" },
+      { fullLabel: "Right arm", key: "rightArm", roll: 17, shortLabel: "R arm" },
+      { fullLabel: "Left arm", key: "leftArm", roll: 16, shortLabel: "L arm" },
+      { fullLabel: "Left arm", key: "leftArm", roll: 15, shortLabel: "L arm" },
+      { fullLabel: "Chest", key: "chest", roll: 14, shortLabel: "Chest" },
+      { fullLabel: "Chest", key: "chest", roll: 13, shortLabel: "Chest" },
+      { fullLabel: "Chest", key: "chest", roll: 12, shortLabel: "Chest" },
+      { fullLabel: "Chest", key: "chest", roll: 11, shortLabel: "Chest" },
+      { fullLabel: "Abdomen", key: "abdomen", roll: 10, shortLabel: "Abd" },
+      { fullLabel: "Abdomen", key: "abdomen", roll: 9, shortLabel: "Abd" },
+      { fullLabel: "Abdomen", key: "abdomen", roll: 8, shortLabel: "Abd" },
+      { fullLabel: "Abdomen", key: "abdomen", roll: 7, shortLabel: "Abd" },
+      { fullLabel: "Right leg", key: "rightLeg", roll: 6, shortLabel: "R leg" },
+      { fullLabel: "Right leg", key: "rightLeg", roll: 5, shortLabel: "R leg" },
+      { fullLabel: "Right leg", key: "rightLeg", roll: 4, shortLabel: "R leg" },
+      { fullLabel: "Left leg", key: "leftLeg", roll: 3, shortLabel: "L leg" },
+      { fullLabel: "Left leg", key: "leftLeg", roll: 2, shortLabel: "L leg" },
+      { fullLabel: "Left leg", key: "leftLeg", roll: 1, shortLabel: "L leg" },
+    ]);
   });
 
   it("labels hit locations for compact and full display", () => {

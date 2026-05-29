@@ -1,6 +1,12 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 
+import {
+  expandClosedDieRuleTable,
+  HIT_LOCATION_RULE_TABLE,
+  type ClosedDieRuleTable,
+} from "@glantri/domain";
+
 export interface RulesDocumentRegistryEntry {
   audience: string;
   description: string;
@@ -60,8 +66,21 @@ export const rulesDocumentsRegistry: RulesDocumentRegistryEntry[] = [
     order: 30,
     section: "Combat / Equipment",
     title: "Equip Items Calculations"
+  },
+  {
+    audience: "Players and GM reviewers",
+    description: "Structured reference for closed 1d20 hit-location rolls and aimed-location tie handling.",
+    fileName: "combat-hit-location.md",
+    id: "combat-hit-location",
+    order: 35,
+    section: "Combat",
+    title: "Combat Hit Location"
   }
 ];
+
+const structuredRuleTables: Record<string, ClosedDieRuleTable> = {
+  [HIT_LOCATION_RULE_TABLE.id]: HIT_LOCATION_RULE_TABLE
+};
 
 function getRulesDocsDirectory(): string {
   const cwd = process.cwd();
@@ -71,6 +90,46 @@ function getRulesDocsDirectory(): string {
   }
 
   return path.resolve(cwd, "docs/rules");
+}
+
+function escapeMarkdownTableCell(value: string): string {
+  return value.replace(/\|/g, "\\|");
+}
+
+export function renderClosedDieRuleTableMarkdown(table: ClosedDieRuleTable): string {
+  const rows = expandClosedDieRuleTable(table);
+  const notes = table.notes?.length
+    ? [
+        "",
+        ...table.notes.map((note) => `- ${note}`)
+      ]
+    : [];
+
+  return [
+    `| Roll | ${table.title} | Short | Key |`,
+    "| ---: | --- | --- | --- |",
+    ...rows.map((row) =>
+      [
+        row.roll.toString(),
+        escapeMarkdownTableCell(row.fullLabel),
+        escapeMarkdownTableCell(row.shortLabel),
+        `\`${row.key}\``
+      ].join(" | ")
+    ).map((row) => `| ${row} |`),
+    ...notes
+  ].join("\n");
+}
+
+export function expandStructuredRuleTableDirectives(markdown: string): string {
+  return markdown.replace(/\{\{rule-table:([a-z0-9-]+)\}\}/g, (directive, tableId: string) => {
+    const table = structuredRuleTables[tableId];
+
+    if (!table) {
+      throw new Error(`Unknown structured rule table directive: ${directive}`);
+    }
+
+    return renderClosedDieRuleTableMarkdown(table);
+  });
 }
 
 export function getRulesDocuments(): RulesDocumentRegistryEntry[] {
@@ -88,7 +147,7 @@ export async function readRulesDocumentMarkdown(
   entry: RulesDocumentRegistryEntry
 ): Promise<string> {
   const filePath = path.join(getRulesDocsDirectory(), entry.fileName);
-  return fs.readFile(filePath, "utf8");
+  return expandStructuredRuleTableDirectives(await fs.readFile(filePath, "utf8"));
 }
 
 export async function getRulesDocumentById(id: string | undefined): Promise<RulesDocument> {

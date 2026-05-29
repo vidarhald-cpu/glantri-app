@@ -16,3 +16,4 @@ export * from "./encounter/session";
 export * from "./encounter/roleplay";
 export * from "./equipment";
 export * from "./profession/professions";
+export * from "./rules/ruleTable";

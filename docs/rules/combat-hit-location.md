@@ -7,15 +7,7 @@ resolve attacks, damage, criticals, or armor interaction yet.
 
 If an attack hits, roll a closed `1d20` for hit location. There is no open-ended behavior.
 
-| Roll | Location |
-| ---: | --- |
-| 20-19 | Head |
-| 18-17 | Right arm |
-| 16-15 | Left arm |
-| 14-11 | Chest |
-| 10-7 | Abdomen |
-| 6-4 | Right leg |
-| 3-1 | Left leg |
+{{rule-table:combat-hit-location}}
 
 ## Aimed location
 

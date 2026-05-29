@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  expandStructuredRuleTableDirectives,
   getRulesDocumentEntryById,
   getRulesDocumentationPageModel,
   getRulesDocuments
@@ -39,6 +40,12 @@ describe("rules documentation registry", () => {
           id: "combat-loadout-calculations",
           section: "Combat / Equipment",
           title: "Equip Items Calculations"
+        }),
+        expect.objectContaining({
+          fileName: "combat-hit-location.md",
+          id: "combat-hit-location",
+          section: "Combat",
+          title: "Combat Hit Location"
         })
       ])
     );
@@ -50,7 +57,8 @@ describe("rules documentation registry", () => {
       "Character Sheet Calculations",
       "Character Progression Calculations",
       "Equipment & Encumbrance Calculations",
-      "Equip Items Calculations"
+      "Equip Items Calculations",
+      "Combat Hit Location"
     ]);
   });
 
@@ -130,5 +138,27 @@ describe("rules documentation registry", () => {
     expect(model.selectedDocument.markdown).toContain("Base DB");
     expect(model.selectedDocument.markdown).toContain("Combined parry modifier");
     expect(model.selectedDocument.markdown).toContain("GMR");
+  });
+
+  it("expands structured rule-table directives into markdown tables", () => {
+    expect(expandStructuredRuleTableDirectives("{{rule-table:combat-hit-location}}")).toContain(
+      "| 20 | Head | Head | `head` |"
+    );
+    expect(expandStructuredRuleTableDirectives("{{rule-table:combat-hit-location}}")).toContain(
+      "| 1 | Left leg | L leg | `leftLeg` |"
+    );
+  });
+
+  it("loads the Combat Hit Location document with the generated hit-location table", async () => {
+    const model = await getRulesDocumentationPageModel({
+      selectedDocumentId: "combat-hit-location"
+    });
+
+    expect(model.selectedDocument.title).toBe("Combat Hit Location");
+    expect(model.selectedDocument.markdown).toContain("# Combat Hit Location");
+    expect(model.selectedDocument.markdown).toContain("| Roll | Combat Hit Location | Short | Key |");
+    expect(model.selectedDocument.markdown).toContain("| 18 | Right arm | R arm | `rightArm` |");
+    expect(model.selectedDocument.markdown).toContain("ties use the first roll");
+    expect(model.selectedDocument.markdown).not.toContain("{{rule-table:");
   });
 });
