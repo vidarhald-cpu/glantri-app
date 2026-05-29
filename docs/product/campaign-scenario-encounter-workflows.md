@@ -133,6 +133,8 @@ Parry context belongs in the phase panels rather than the action selector. The r
 
 Attack target location also belongs to the phase panel. The target location selector records No target, Head, Right arm, Left arm, Chest, Abdomen, Right leg, or Left leg for the phase that includes the attack. If an attack later hits, hit location is rolled on a closed `1d20`. An aimed location lets the attacker roll twice and use the roll closer to the target location, with ties using the first roll. This pass records the phase-specific declaration and helper rules only; full attack, damage, and critical resolution remain future work.
 
+Canonical reusable rule tables, including hit location, live in Admin -> Tables. Page/workflow docs may explain how tables are used, but should avoid duplicating the canonical table rows.
+
 Combat Panel is part of the Encounter workflow. It is separate from Character control for now: Character control tracks the current character/loadout/physical state, while the Combat Panel is the scenario or encounter workspace for combat action context. Future damage tracking, round recording, and combat-effect automation should build on these workflows without rendering inactive placeholders.
 
 GM player-facing operation is separate from GM tooling. Player skill rolls is not embedded inside the GM Skill rolls manager, and Player combat is not embedded inside the GM Combat Round Manager. GM operation uses the same participant picker/shuffler pattern as Character control and does not require logging in as that player. Player-facing behavior remains controlled by normal access and visibility rules; normal players can only operate their own controlled participant.

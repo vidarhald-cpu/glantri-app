@@ -7,7 +7,8 @@ resolve attacks, damage, criticals, or armor interaction yet.
 
 If an attack hits, roll a closed `1d20` for hit location. There is no open-ended behavior.
 
-{{rule-table:combat-hit-location}}
+The canonical structured hit-location table lives in Admin -> Tables. That table is the source used
+by hit-location helpers; this page only explains how the rule is intended to be read.
 
 ## Aimed location
 

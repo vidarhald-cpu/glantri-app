@@ -66,15 +66,6 @@ export const rulesDocumentsRegistry: RulesDocumentRegistryEntry[] = [
     order: 30,
     section: "Combat / Equipment",
     title: "Equip Items Calculations"
-  },
-  {
-    audience: "Players and GM reviewers",
-    description: "Structured reference for closed 1d20 hit-location rolls and aimed-location tie handling.",
-    fileName: "combat-hit-location.md",
-    id: "combat-hit-location",
-    order: 35,
-    section: "Combat",
-    title: "Combat Hit Location"
   }
 ];
 

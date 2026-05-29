@@ -1,8 +1,13 @@
 "use client";
 
+import {
+  expandClosedDieRuleTable,
+  HIT_LOCATION_RULE_TABLE,
+  type ClosedDieRuleTable,
+} from "@glantri/domain";
 import { WORKBOOK_MOVEMENT_PERCENT_TABLE } from "@glantri/rules-engine";
 
-import { AdminPageIntro, AdminPanel } from "../admin-ui";
+import { AdminPageIntro, AdminPanel, AdminTag } from "../admin-ui";
 
 const movementModifierColumns = Array.from({ length: 15 }, (_, index) => index + 1);
 
@@ -56,7 +61,68 @@ export default function TablesAdminPage() {
           </table>
         </div>
       </AdminPanel>
+
+      <ClosedDieRuleTablePanel group="Combat" table={HIT_LOCATION_RULE_TABLE} />
     </section>
+  );
+}
+
+function ClosedDieRuleTablePanel(props: {
+  group: string;
+  table: ClosedDieRuleTable;
+}) {
+  const rows = expandClosedDieRuleTable(props.table);
+
+  return (
+    <AdminPanel
+      title={props.table.title}
+      subtitle="Canonical structured rule table used by domain helpers and future combat resolution."
+    >
+      <div style={{ display: "grid", gap: "0.85rem" }}>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+          <AdminTag>{props.group}</AdminTag>
+          <AdminTag>Closed {props.table.dieLabel}</AdminTag>
+          <AdminTag>{rows.length} rows</AdminTag>
+        </div>
+        {props.table.notes?.length ? (
+          <ul style={{ color: "#5f543a", lineHeight: 1.5, margin: 0, paddingLeft: "1.2rem" }}>
+            {props.table.notes.map((note) => (
+              <li key={note}>{note}</li>
+            ))}
+          </ul>
+        ) : null}
+        <div
+          style={{
+            border: "1px solid rgba(85, 73, 48, 0.14)",
+            borderRadius: 18,
+            overflowX: "auto",
+          }}
+        >
+          <table style={{ borderCollapse: "collapse", minWidth: 560, width: "100%" }}>
+            <thead style={{ background: "rgba(255, 252, 245, 0.95)" }}>
+              <tr>
+                <th style={tableHeaderStyle}>Roll</th>
+                <th style={tableHeaderStyle}>Location</th>
+                <th style={tableHeaderStyle}>Short</th>
+                <th style={tableHeaderStyle}>Key</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => (
+                <tr key={row.roll}>
+                  <td style={tableCellStyle}>{row.roll}</td>
+                  <td style={tableCellStyle}>{row.fullLabel}</td>
+                  <td style={tableCellStyle}>{row.shortLabel}</td>
+                  <td style={tableCellStyle}>
+                    <code>{row.key}</code>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </AdminPanel>
   );
 }
 
