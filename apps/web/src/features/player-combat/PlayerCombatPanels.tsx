@@ -232,6 +232,9 @@ const compactStatsTableStyle = {
   width: "100%",
 } as const;
 
+const compactPhaseContextSelectorColumns = "6.5rem 7rem auto";
+const compactPhaseContextSelectStyle = { width: "7rem" } as const;
+
 function getDisplayTotal(row: PlayerCombatModifierBucketView | undefined): number {
   return row ? row.total + (row.fatigueTotal ?? 0) : 0;
 }
@@ -745,10 +748,8 @@ export function PlayerCombatAttackLocationSelector({
   return (
     <div
       style={{
-        borderTop: "1px solid #e3e1dc",
         display: "grid",
         gap: "0.25rem",
-        paddingTop: "0.4rem",
       }}
     >
       <label
@@ -756,7 +757,7 @@ export function PlayerCombatAttackLocationSelector({
           alignItems: "center",
           display: "grid",
           gap: "0.35rem",
-          gridTemplateColumns: "6.5rem minmax(8rem, 11rem)",
+          gridTemplateColumns: compactPhaseContextSelectorColumns,
         }}
       >
         <span style={{ fontSize: "0.86rem", fontWeight: 600 }}>Attack location</span>
@@ -770,6 +771,7 @@ export function PlayerCombatAttackLocationSelector({
               targetLocation: targetLocation === "none" ? undefined : targetLocation,
             });
           }}
+          style={compactPhaseContextSelectStyle}
           value={combatContext.targetLocation ?? "none"}
         >
           <option value="none">No target</option>
@@ -805,7 +807,7 @@ function ParryDirectionSelector({
         alignItems: "center",
         display: "grid",
         gap: "0.2rem",
-        gridTemplateColumns: "4.75rem 7rem auto",
+        gridTemplateColumns: compactPhaseContextSelectorColumns,
       }}
     >
       <span style={{ fontSize: "0.86rem", fontWeight: 600 }}>{itemLabel}</span>
@@ -818,7 +820,7 @@ function ParryDirectionSelector({
               : undefined,
           )
         }
-        style={{ width: "7rem" }}
+        style={compactPhaseContextSelectStyle}
         value={direction ?? ""}
       >
         <option value="">Choose direction</option>

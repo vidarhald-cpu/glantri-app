@@ -94,12 +94,18 @@ describe("PlayerCombatPanels", () => {
     expect(source).toContain("PlayerCombatAttackStatsTable");
     expect(source).toContain("PlayerCombatDefenseStatsTable");
     expect(source).toContain("PlayerCombatAttackLocationSelector");
+    expect(source.indexOf("export function PlayerCombatAttackLocationSelector")).toBeLessThan(
+      source.indexOf("function ParryDirectionSelector"),
+    );
     expect(source).toContain("Attack location");
     expect(source).toContain("No target");
     expect(source).toContain("HIT_LOCATIONS.map");
     expect(source).toContain("getHitLocationFullLabel(location)");
     expect(source).toContain('value={combatContext.targetLocation ?? "none"}');
     expect(source).toContain('targetLocation: targetLocation === "none" ? undefined : targetLocation');
+    expect(source).toContain("compactPhaseContextSelectorColumns");
+    expect(source).toContain('const compactPhaseContextSelectorColumns = "6.5rem 7rem auto"');
+    expect(source).toContain("style={compactPhaseContextSelectStyle}");
     expect(source).toContain("compactStatsRowStyle");
     expect(source).toContain('gridTemplateColumns: "minmax(6rem, 0.8fr) 1fr"');
     expect(source).toContain("compactStatsTableStyle");
@@ -128,8 +134,8 @@ describe("PlayerCombatPanels", () => {
     expect(source).toContain("PLAYER_ENCOUNTER_PARRY_DIRECTION_OPTIONS");
     expect(source).toContain('itemLabel="Main hand"');
     expect(source).toContain('itemLabel="Off hand"');
-    expect(source).toContain('gridTemplateColumns: "4.75rem 7rem auto"');
-    expect(source).toContain('style={{ width: "7rem" }}');
+    expect(source).not.toContain('gridTemplateColumns: "4.75rem 7rem auto"');
+    expect(source).not.toContain('style={{ width: "7rem" }}');
     expect(source).toContain("to ${getPlayerEncounterParryDirectionLabel(coverageDirection)}");
     expect(source).not.toContain('itemLabel={mainHandItemLabel || "Unarmed"}');
     expect(source).not.toContain('itemLabel={offHandItemLabel || "Unarmed"}');
