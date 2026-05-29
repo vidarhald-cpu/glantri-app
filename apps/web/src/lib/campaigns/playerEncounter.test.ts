@@ -135,6 +135,31 @@ describe("playerEncounter", () => {
     });
   });
 
+  it("counts generated Parry - Attack DB/Parry rows in the defense total", () => {
+    expect(
+      getPlayerEncounterCombatModifierTotals({
+        modifierBuckets: {
+          general: [],
+          situationDb: [
+            {
+              durationRounds: 1,
+              generated: true,
+              id: "generated:parry-attack:phase2:db-parry",
+              notes: "parry attack",
+              scope: "until",
+              sourceActionId: "parry_attack",
+              sourcePhase: "phase2",
+              sourceRule: "parry-attack-db-parry-phase2",
+              value: -4,
+            },
+          ],
+          situationInitiative: [],
+          situationObSkill: [],
+        },
+      }).defenseTotal,
+    ).toBe(-4);
+  });
+
   it("keeps current GM modifier buckets when a saved declaration has older combat context", () => {
     const mergedContext = mergeCombatContextWithCurrentModifierBuckets({
       baseContext: {
