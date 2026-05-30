@@ -294,6 +294,20 @@ describe("live combat modifiers", () => {
             sourcePhase: "phase2" as const,
             value: -4,
           },
+          {
+            generated: true,
+            id: "generated:adjust-range-attack:phase1:db-parry",
+            scope: "until" as const,
+            sourcePhase: "phase1" as const,
+            value: -2,
+          },
+          {
+            generated: true,
+            id: "generated:adjust-range-attack:phase2:db-parry",
+            scope: "until" as const,
+            sourcePhase: "phase2" as const,
+            value: -4,
+          },
         ],
         situationInitiative: [],
         situationObSkill: [
@@ -325,9 +339,9 @@ describe("live combat modifiers", () => {
       obSkillRaw: 2,
     });
     expect(buildEncounterLiveCombatModifierSummary({ combatContext, phaseKey: "phase1" }).dbRaw)
-      .toBe(-9);
+      .toBe(-11);
     expect(buildEncounterLiveCombatModifierSummary({ combatContext, phaseKey: "phase2" }).dbRaw)
-      .toBe(-9);
+      .toBe(-13);
     expect(
       buildEncounterLiveCombatModifierSummary({ combatContext, phaseKey: "phase1" }).obSkillRaw,
     ).toBe(1);
@@ -352,6 +366,7 @@ describe("live combat modifiers", () => {
       "manual-db-parry",
       "generated:attack-parry:phase1:db-parry",
       "generated:double-attack:phase1:db-parry",
+      "generated:adjust-range-attack:phase1:db-parry",
     ]);
     expect(
       filterCombatModifierEntriesForPhase(combatContext.modifierBuckets.situationDb, "phase2").map(
@@ -361,6 +376,7 @@ describe("live combat modifiers", () => {
       "manual-db-parry",
       "generated:parry-attack:phase2:db-parry",
       "generated:double-attack:phase2:db-parry",
+      "generated:adjust-range-attack:phase2:db-parry",
     ]);
     expect(
       filterCombatModifierEntriesForPhase(
@@ -395,6 +411,20 @@ describe("live combat modifiers", () => {
             sourcePhase: "phase2" as const,
             value: -4,
           },
+          {
+            generated: true,
+            id: "generated:adjust-range-attack:phase1:db-parry",
+            scope: "until" as const,
+            sourcePhase: "phase1" as const,
+            value: -2,
+          },
+          {
+            generated: true,
+            id: "generated:adjust-range-attack:phase2:db-parry",
+            scope: "until" as const,
+            sourcePhase: "phase2" as const,
+            value: -4,
+          },
         ],
         situationInitiative: [],
         situationObSkill: [
@@ -422,12 +452,12 @@ describe("live combat modifiers", () => {
     });
     expect(buildEncounterLiveCombatModifierSummary({ combatContext, phaseKey: "phase1" }))
       .toMatchObject({
-        dbRaw: -4,
+        dbRaw: -6,
         obSkillRaw: -1,
       });
     expect(buildEncounterLiveCombatModifierSummary({ combatContext, phaseKey: "phase2" }))
       .toMatchObject({
-        dbRaw: -4,
+        dbRaw: -8,
         obSkillRaw: -1,
       });
   });

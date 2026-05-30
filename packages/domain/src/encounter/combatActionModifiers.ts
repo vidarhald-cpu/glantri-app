@@ -21,6 +21,14 @@ export const DOUBLE_ATTACK_PHASE1_DB_PARRY_SOURCE_RULE = "double-attack-db-parry
 export const DOUBLE_ATTACK_PHASE2_DB_PARRY_MODIFIER_ID =
   "generated:double-attack:phase2:db-parry";
 export const DOUBLE_ATTACK_PHASE2_DB_PARRY_SOURCE_RULE = "double-attack-db-parry-phase2";
+export const ADJUST_RANGE_PHASE1_DB_PARRY_MODIFIER_ID =
+  "generated:adjust-range-attack:phase1:db-parry";
+export const ADJUST_RANGE_PHASE1_DB_PARRY_SOURCE_RULE =
+  "adjust-range-phase1-db-parry";
+export const ADJUST_RANGE_PHASE2_DB_PARRY_MODIFIER_ID =
+  "generated:adjust-range-attack:phase2:db-parry";
+export const ADJUST_RANGE_PHASE2_DB_PARRY_SOURCE_RULE =
+  "adjust-range-attack-phase2-db-parry";
 
 export function isAttackParryGeneratedDbParryModifier(
   entry: ScenarioCombatModifierEntry,
@@ -62,11 +70,23 @@ export function isDoubleAttackGeneratedDbParryModifier(
   );
 }
 
+export function isAdjustRangeAttackGeneratedDbParryModifier(
+  entry: ScenarioCombatModifierEntry,
+): boolean {
+  return (
+    entry.id === ADJUST_RANGE_PHASE1_DB_PARRY_MODIFIER_ID ||
+    entry.sourceRule === ADJUST_RANGE_PHASE1_DB_PARRY_SOURCE_RULE ||
+    entry.id === ADJUST_RANGE_PHASE2_DB_PARRY_MODIFIER_ID ||
+    entry.sourceRule === ADJUST_RANGE_PHASE2_DB_PARRY_SOURCE_RULE
+  );
+}
+
 function isCombatActionGeneratedDbParryModifier(entry: ScenarioCombatModifierEntry): boolean {
   return (
     isAttackParryGeneratedDbParryModifier(entry) ||
     isParryAttackGeneratedDbParryModifier(entry) ||
-    isDoubleAttackGeneratedDbParryModifier(entry)
+    isDoubleAttackGeneratedDbParryModifier(entry) ||
+    isAdjustRangeAttackGeneratedDbParryModifier(entry)
   );
 }
 
@@ -156,6 +176,33 @@ export function buildDoubleAttackGeneratedDbParryModifiers(): ScenarioCombatModi
   ];
 }
 
+export function buildAdjustRangeAttackGeneratedDbParryModifiers(): ScenarioCombatModifierEntry[] {
+  return [
+    {
+      durationRounds: 1,
+      generated: true,
+      id: ADJUST_RANGE_PHASE1_DB_PARRY_MODIFIER_ID,
+      notes: "adjust range",
+      scope: "until",
+      sourceActionId: "adjust_range_attack",
+      sourcePhase: "phase1",
+      sourceRule: ADJUST_RANGE_PHASE1_DB_PARRY_SOURCE_RULE,
+      value: -2,
+    },
+    {
+      durationRounds: 1,
+      generated: true,
+      id: ADJUST_RANGE_PHASE2_DB_PARRY_MODIFIER_ID,
+      notes: "adjust range attack",
+      scope: "until",
+      sourceActionId: "adjust_range_attack",
+      sourcePhase: "phase2",
+      sourceRule: ADJUST_RANGE_PHASE2_DB_PARRY_SOURCE_RULE,
+      value: -4,
+    },
+  ];
+}
+
 export function applyCombatActionGeneratedModifiers(input: {
   actionId?: string;
   combatContext: ScenarioParticipantCombatContext;
@@ -173,8 +220,10 @@ export function applyCombatActionGeneratedModifiers(input: {
       ? [buildAttackParryGeneratedDbParryModifier()]
       : input.actionId === "parry_attack"
         ? [buildParryAttackGeneratedDbParryModifier()]
-        : input.actionId === "double_attack"
-          ? buildDoubleAttackGeneratedDbParryModifiers()
+      : input.actionId === "double_attack"
+        ? buildDoubleAttackGeneratedDbParryModifiers()
+        : input.actionId === "adjust_range_attack"
+          ? buildAdjustRangeAttackGeneratedDbParryModifiers()
           : [];
   const generatedObSkillModifiers =
     input.actionId === "double_attack" ? buildDoubleAttackGeneratedObSkillModifiers() : [];

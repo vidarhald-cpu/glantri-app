@@ -380,6 +380,12 @@ function getPhaseContentFlags(input: {
       : { attack: true, defense: true };
   }
 
+  if (input.actionId === "adjust_range_attack") {
+    return input.phaseKey === "phase1"
+      ? { attack: false, defense: false }
+      : { attack: true, defense: false };
+  }
+
   const phaseActionId = input.phaseKey === "phase1" ? input.actionId : input.secondaryActionId;
 
   return {
@@ -402,11 +408,18 @@ export function buildPlayerCombatPhasePanelModel(input: {
     phaseKey: input.phaseKey,
     secondaryActionId: input.secondaryActionId,
   });
+  const isAdjustRangePhase =
+    input.actionId === "adjust_range_attack" && input.phaseKey === "phase1";
 
   return {
     attackStats: input.attackStats,
     defenseStats: input.defenseStats,
-    phaseCard: input.phaseCard,
+    phaseCard: isAdjustRangePhase
+      ? {
+          ...input.phaseCard,
+          title: input.phaseCard.title || "Adjust range",
+        }
+      : input.phaseCard,
     phaseContext: input.phaseContext,
     phaseKey: input.phaseKey,
     showAttackLocationSelector: flags.attack,

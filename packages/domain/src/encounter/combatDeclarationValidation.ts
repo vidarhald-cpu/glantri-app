@@ -33,6 +33,8 @@ export function getCombatDeclarationAttackPhases(input: {
       return ["phase2"];
     case "double_attack":
       return ["phase1", "phase2"];
+    case "adjust_range_attack":
+      return ["phase2"];
     default:
       break;
   }

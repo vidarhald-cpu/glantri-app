@@ -163,6 +163,46 @@ describe("player combat phase model", () => {
     expect(phase2.phaseContext.targetLocation).toBe("rightArm");
   });
 
+  it("maps Adjust Range - Attack into phase 1 range adjustment and phase 2 attack", () => {
+    const phaseContext = createEmptyPlayerEncounterCombatContext();
+    const defenseStats = buildPlayerCombatDefenseStats({
+      mainHandParryItemLabel: "Broad sword",
+      offHandParryItemLabel: "Medium shield",
+      phaseContext,
+      reference,
+    });
+
+    const phase1 = buildPlayerCombatPhasePanelModel({
+      actionId: "adjust_range_attack",
+      attackStats,
+      defenseStats,
+      phaseCard,
+      phaseContext,
+      phaseKey: "phase1",
+      secondaryActionId: "",
+    });
+    const phase2 = buildPlayerCombatPhasePanelModel({
+      actionId: "adjust_range_attack",
+      attackStats,
+      defenseStats,
+      phaseCard: { ...phaseCard, phaseLabel: "Phase 2" },
+      phaseContext: {
+        ...phaseContext,
+        targetParticipantId: "target-phase-2",
+      },
+      phaseKey: "phase2",
+      secondaryActionId: "",
+    });
+
+    expect(phase1.phaseCard.title).toBe("Adjust range");
+    expect(phase1.showAttackStats).toBe(false);
+    expect(phase1.showAttackLocationSelector).toBe(false);
+    expect(phase1.showDefenseContext).toBe(false);
+    expect(phase2.showAttackStats).toBe(true);
+    expect(phase2.showAttackLocationSelector).toBe(true);
+    expect(phase2.phaseContext.targetParticipantId).toBe("target-phase-2");
+  });
+
   it("keeps phase contexts separable for phase-specific parry directions", () => {
     const phase1Context = {
       ...createEmptyPlayerEncounterCombatContext(),

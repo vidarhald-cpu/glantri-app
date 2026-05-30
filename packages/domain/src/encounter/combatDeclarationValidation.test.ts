@@ -147,6 +147,52 @@ describe("combat declaration target validation", () => {
     });
   });
 
+  it("requires only a Phase 2 target for Adjust Range - Attack", () => {
+    expect(
+      validateCombatDeclarationTargets({
+        actionId: "adjust_range_attack",
+        phaseContexts,
+      }),
+    ).toMatchObject({
+      message: "Select a target for Phase 2.",
+      missingPhases: ["phase2"],
+      valid: false,
+    });
+
+    expect(
+      validateCombatDeclarationTargets({
+        actionId: "adjust_range_attack",
+        phaseContexts: {
+          ...phaseContexts,
+          phase1: {
+            ...phaseContexts.phase1,
+            targetParticipantId: "not-required-for-phase-1",
+          },
+        },
+      }),
+    ).toMatchObject({
+      message: "Select a target for Phase 2.",
+      missingPhases: ["phase2"],
+      valid: false,
+    });
+
+    expect(
+      validateCombatDeclarationTargets({
+        actionId: "adjust_range_attack",
+        phaseContexts: {
+          ...phaseContexts,
+          phase2: {
+            ...phaseContexts.phase2,
+            targetParticipantId: "guard",
+          },
+        },
+      }),
+    ).toMatchObject({
+      missingPhases: [],
+      valid: true,
+    });
+  });
+
   it("does not require attack location targeting", () => {
     expect(
       validateCombatDeclarationTargets({
