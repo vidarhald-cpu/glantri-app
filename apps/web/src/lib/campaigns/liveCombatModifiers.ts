@@ -111,16 +111,35 @@ export function buildEncounterLiveCombatModifierSummary(input: {
   phaseKey?: EncounterCombatPhaseKey;
 }): EncounterLiveCombatModifierSummary {
   const effectSums = sumEncounterCombatEffectModifiers(input.combatEffects);
-  const contextTotals = getPlayerEncounterCombatModifierTotals(input.combatContext);
-  const phaseScopedDbTotal = sumContextModifierEntriesForPhase(
-    input.combatContext?.modifierBuckets.situationDb ?? [],
-    input.phaseKey,
-  );
+  const phaseAwareCombatContext =
+    input.combatContext && input.phaseKey
+      ? {
+          ...input.combatContext,
+          modifierBuckets: {
+            general: filterCombatModifierEntriesForPhase(
+              input.combatContext.modifierBuckets.general,
+              input.phaseKey,
+            ),
+            situationDb: filterCombatModifierEntriesForPhase(
+              input.combatContext.modifierBuckets.situationDb,
+              input.phaseKey,
+            ),
+            situationInitiative: filterCombatModifierEntriesForPhase(
+              input.combatContext.modifierBuckets.situationInitiative,
+              input.phaseKey,
+            ),
+            situationObSkill: filterCombatModifierEntriesForPhase(
+              input.combatContext.modifierBuckets.situationObSkill,
+              input.phaseKey,
+            ),
+          },
+        }
+      : input.combatContext;
+  const contextTotals = getPlayerEncounterCombatModifierTotals(phaseAwareCombatContext);
 
   return {
     // dbRaw uses the legacy situationDb storage bucket, now presented as DB/Parry.
-    dbRaw:
-      effectSums.db + (input.phaseKey ? phaseScopedDbTotal : contextTotals.situationDbTotal),
+    dbRaw: effectSums.db + contextTotals.situationDbTotal,
     generalFatigueRaw: effectSums.generalFatigue,
     initiativeRaw: contextTotals.situationInitiativeTotal,
     modifierNoteLabels: [
@@ -135,13 +154,13 @@ export function buildEncounterLiveCombatModifierSummary(input: {
   };
 }
 
-function sumContextModifierEntriesForPhase(
+export function filterCombatModifierEntriesForPhase(
   entries: ScenarioCombatModifierEntry[],
   phaseKey?: EncounterCombatPhaseKey,
-): number {
-  return entries
-    .filter((entry) => !phaseKey || !entry.sourcePhase || entry.sourcePhase === phaseKey)
-    .reduce((total, entry) => total + entry.value, 0);
+): ScenarioCombatModifierEntry[] {
+  return entries.filter(
+    (entry) => !phaseKey || !entry.sourcePhase || entry.sourcePhase === phaseKey,
+  );
 }
 
 export function applyLiveRawModifierToCombatValue(input: {

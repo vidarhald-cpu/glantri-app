@@ -13,6 +13,7 @@ import {
   clearCombatRoundStep,
   clearCurrentCombatRoundStepAndRewind,
   getCombatRoundInitiativePhaseForStep,
+  getCombatRoundModifierPhaseForStep,
   getCombatRoundInitiativePositions,
   getCombatRoundInitiativeRanks,
   getPreviousCombatRoundStep,
@@ -310,6 +311,19 @@ describe("combat round manager", () => {
     expect(getCombatRoundInitiativePhaseForStep("review_phase_2_actions")).toBe("phase1");
     expect(getCombatRoundInitiativePhaseForStep("initiative_phase_2")).toBe("phase2");
     expect(getCombatRoundInitiativePhaseForStep("select_actions")).toBeUndefined();
+  });
+
+  it("maps round steps to their modifier phase context", () => {
+    expect(getCombatRoundModifierPhaseForStep("select_actions")).toBeUndefined();
+    expect(getCombatRoundModifierPhaseForStep("review_action_modifiers")).toBe("phase1");
+    expect(getCombatRoundModifierPhaseForStep("initiative_phase_1")).toBe("phase1");
+    expect(getCombatRoundModifierPhaseForStep("phase_1_actions")).toBe("phase1");
+    expect(getCombatRoundModifierPhaseForStep("review_phase_2_actions")).toBe("phase1");
+    expect(getCombatRoundModifierPhaseForStep("review_phase_2_modifiers")).toBe("phase2");
+    expect(getCombatRoundModifierPhaseForStep("initiative_phase_2")).toBe("phase2");
+    expect(getCombatRoundModifierPhaseForStep("phase_2_actions")).toBe("phase2");
+    expect(getCombatRoundModifierPhaseForStep("review_phase_2_damage")).toBe("phase2");
+    expect(getCombatRoundModifierPhaseForStep("round_summary")).toBeUndefined();
   });
 
   it("records initiative and marks the initiative step submitted", () => {

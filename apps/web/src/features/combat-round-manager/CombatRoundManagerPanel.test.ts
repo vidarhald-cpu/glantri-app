@@ -93,6 +93,9 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("resolvedCharacterStateByParticipantId");
     expect(source).toContain("hydrateInspectorCharacterState");
     expect(source).toContain("buildEncounterLiveCombatModifierSummary");
+    expect(source).toContain("getCombatRoundModifierPhaseForStep");
+    expect(source).toContain("const inspectorModifierPhase = getCombatRoundModifierPhaseForStep(inspector.step)");
+    expect(source).toContain("phaseKey: inspectorModifierPhase");
     expect(source).toContain("selectedScenarioParticipant?.state.combatEffects");
     expect(source).toContain("saveInspectorDeclaration");
     expect(source).toContain("onAddEntry={(bucketKey, entry) =>");

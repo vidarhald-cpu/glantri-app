@@ -26,7 +26,11 @@ import {
   type PlayerEncounterMovementId,
   type PlayerEncounterOpponentOption,
 } from "@/lib/campaigns/playerEncounter";
-import type { EncounterLiveCombatModifierSummary } from "@/lib/campaigns/liveCombatModifiers";
+import {
+  filterCombatModifierEntriesForPhase,
+  type EncounterCombatPhaseKey,
+  type EncounterLiveCombatModifierSummary,
+} from "@/lib/campaigns/liveCombatModifiers";
 
 export interface PlayerCombatModifierBucketView {
   bucketKey: ScenarioCombatModifierBucket;
@@ -335,9 +339,31 @@ export function getPlayerCombatActionButtonLabel(input: {
 export function buildPlayerCombatModifierRows(input: {
   combatContext?: ScenarioParticipantCombatContext;
   liveModifiers?: EncounterLiveCombatModifierSummary;
+  phaseKey?: EncounterCombatPhaseKey;
 }): PlayerCombatModifierBucketView[] {
   const combatContext = input.combatContext ?? createEmptyPlayerEncounterCombatContext();
-  const totals = getPlayerEncounterCombatModifierTotals(combatContext);
+  const filteredModifierBuckets = {
+    general: filterCombatModifierEntriesForPhase(
+      combatContext.modifierBuckets.general,
+      input.phaseKey,
+    ),
+    situationDb: filterCombatModifierEntriesForPhase(
+      combatContext.modifierBuckets.situationDb,
+      input.phaseKey,
+    ),
+    situationInitiative: filterCombatModifierEntriesForPhase(
+      combatContext.modifierBuckets.situationInitiative,
+      input.phaseKey,
+    ),
+    situationObSkill: filterCombatModifierEntriesForPhase(
+      combatContext.modifierBuckets.situationObSkill,
+      input.phaseKey,
+    ),
+  };
+  const totals = getPlayerEncounterCombatModifierTotals({
+    ...combatContext,
+    modifierBuckets: filteredModifierBuckets,
+  });
 
   return [
     {
@@ -349,19 +375,19 @@ export function buildPlayerCombatModifierRows(input: {
     },
     {
       bucketKey: "situation_initiative",
-      entries: combatContext.modifierBuckets.situationInitiative,
+      entries: filteredModifierBuckets.situationInitiative,
       label: "Initiative",
       total: input.liveModifiers?.initiativeRaw ?? totals.situationInitiativeTotal,
     },
     {
       bucketKey: "situation_ob_skill",
-      entries: combatContext.modifierBuckets.situationObSkill,
+      entries: filteredModifierBuckets.situationObSkill,
       label: "Skill/OB",
       total: input.liveModifiers?.obSkillRaw ?? totals.situationObSkillTotal,
     },
     {
       bucketKey: "situation_db",
-      entries: combatContext.modifierBuckets.situationDb,
+      entries: filteredModifierBuckets.situationDb,
       label: "DB/Parry",
       total: input.liveModifiers?.dbRaw ?? totals.situationDbTotal,
     },

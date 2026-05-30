@@ -9,6 +9,7 @@ import {
   characterBuildSchema,
   getCombatRoundInitiativeRanks,
   getCombatRoundInitiativeTotal,
+  getCombatRoundModifierPhaseForStep,
   initializeCombatRoundState,
   type EncounterSession,
   type ScenarioCombatModifierBucket,
@@ -683,21 +684,25 @@ export default function ScenarioPlayerCombatPageContent({
     return isEquipmentFeatureState(candidate) ? candidate : null;
   }, [displayedParticipant]);
 
+  const currentCombatStep = combatRoundState?.currentStep ?? "select_actions";
+  const currentModifierPhase = getCombatRoundModifierPhaseForStep(currentCombatStep);
   const liveCombatModifiers = useMemo(
     () =>
       buildEncounterLiveCombatModifierSummary({
         combatContext: combatContextDraft,
         combatEffects: selectedParticipant?.state.combatEffects,
+        phaseKey: currentModifierPhase,
       }),
-    [combatContextDraft, selectedParticipant?.state.combatEffects],
+    [combatContextDraft, currentModifierPhase, selectedParticipant?.state.combatEffects],
   );
   const modifierRows = useMemo(
     () =>
       buildPlayerCombatModifierRows({
         combatContext: combatContextDraft,
         liveModifiers: liveCombatModifiers,
+        phaseKey: currentModifierPhase,
       }),
-    [combatContextDraft, liveCombatModifiers],
+    [combatContextDraft, currentModifierPhase, liveCombatModifiers],
   );
 
   const loadoutFieldValueMap = useMemo(
@@ -988,7 +993,6 @@ export default function ScenarioPlayerCombatPageContent({
     Boolean(selectedActionId) ||
     Boolean(selectedSecondaryActionId) ||
     additionalActionNotes.trim().length > 0;
-  const currentCombatStep = combatRoundState?.currentStep ?? "select_actions";
   const currentCombatStepLabel = getPlayerCombatStepLabel(currentCombatStep);
   const currentInitiativePhase =
     currentCombatStep === "initiative_phase_1"

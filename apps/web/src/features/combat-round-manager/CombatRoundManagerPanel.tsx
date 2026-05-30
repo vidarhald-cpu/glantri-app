@@ -22,6 +22,7 @@ import {
   characterBuildSchema,
   getCombatRoundInitiativeRanks,
   getCombatRoundInitiativeTotal,
+  getCombatRoundModifierPhaseForStep,
   initializeCombatRoundState,
   setCombatRoundSelection,
   sortCombatRoundParticipantsByInitiative,
@@ -428,21 +429,24 @@ export default function CombatRoundManagerPanel({
     inspectorDraftKey && inspectorDrafts[inspectorDraftKey]
       ? inspectorDrafts[inspectorDraftKey]
       : buildDeclarationDraft(selectedScenarioParticipant, selectedRoundDeclaration);
+  const inspectorModifierPhase = getCombatRoundModifierPhaseForStep(inspector.step);
   const inspectorLiveModifiers = useMemo(
     () =>
       buildEncounterLiveCombatModifierSummary({
         combatContext: inspectorDraft.combatContext,
         combatEffects: selectedScenarioParticipant?.state.combatEffects,
+        phaseKey: inspectorModifierPhase,
       }),
-    [inspectorDraft.combatContext, selectedScenarioParticipant],
+    [inspectorDraft.combatContext, inspectorModifierPhase, selectedScenarioParticipant],
   );
   const inspectorModifierRows = useMemo(
     () =>
       buildPlayerCombatModifierRows({
         combatContext: inspectorDraft.combatContext,
         liveModifiers: inspectorLiveModifiers,
+        phaseKey: inspectorModifierPhase,
       }),
-    [inspectorDraft.combatContext, inspectorLiveModifiers],
+    [inspectorDraft.combatContext, inspectorLiveModifiers, inspectorModifierPhase],
   );
   const resolvedInspectorCharacterState = selectedScenarioParticipant
     ? resolvedCharacterStateByParticipantId[selectedScenarioParticipant.id]

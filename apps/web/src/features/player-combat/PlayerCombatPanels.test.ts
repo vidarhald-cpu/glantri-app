@@ -3,6 +3,8 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
+import { buildPlayerCombatModifierRows } from "./PlayerCombatPanels";
+
 const sourcePath = join(dirname(fileURLToPath(import.meta.url)), "PlayerCombatPanels.tsx");
 
 function readSource(): string {
@@ -15,6 +17,8 @@ describe("PlayerCombatPanels", () => {
 
     expect(source).toContain("buildPlayerCombatModifierRows");
     expect(source).toContain("getPlayerEncounterCombatModifierTotals");
+    expect(source).toContain("filterCombatModifierEntriesForPhase");
+    expect(source).toContain("phaseKey?: EncounterCombatPhaseKey");
     expect(source).toContain("General/Fatigue");
     expect(source).toContain("liveModifiers?.generalFatigueRaw");
     expect(source).toContain("Initiative");
@@ -25,6 +29,55 @@ describe("PlayerCombatPanels", () => {
       source.indexOf('label: "Initiative"'),
     );
     expect(source.indexOf('label: "Initiative"')).toBeLessThan(source.indexOf('label: "Skill/OB"'));
+  });
+
+  it("filters phase-scoped generated modifier rows while keeping manual rows broad", () => {
+    const combatContext = {
+      modifierBuckets: {
+        general: [],
+        situationDb: [
+          { id: "manual-db", scope: "until" as const, value: -1 },
+          {
+            generated: true,
+            id: "generated:attack-parry:phase1:db-parry",
+            notes: "attack parry",
+            scope: "until" as const,
+            sourcePhase: "phase1" as const,
+            value: -4,
+          },
+          {
+            generated: true,
+            id: "generated:parry-attack:phase2:db-parry",
+            notes: "parry attack",
+            scope: "until" as const,
+            sourcePhase: "phase2" as const,
+            value: -4,
+          },
+        ],
+        situationInitiative: [],
+        situationObSkill: [],
+      },
+    };
+
+    const phase1DbRow = buildPlayerCombatModifierRows({
+      combatContext,
+      phaseKey: "phase1",
+    }).find((row) => row.bucketKey === "situation_db");
+    const phase2DbRow = buildPlayerCombatModifierRows({
+      combatContext,
+      phaseKey: "phase2",
+    }).find((row) => row.bucketKey === "situation_db");
+
+    expect(phase1DbRow?.entries.map((entry) => entry.notes ?? entry.id)).toEqual([
+      "manual-db",
+      "attack parry",
+    ]);
+    expect(phase1DbRow?.total).toBe(-5);
+    expect(phase2DbRow?.entries.map((entry) => entry.notes ?? entry.id)).toEqual([
+      "manual-db",
+      "parry attack",
+    ]);
+    expect(phase2DbRow?.total).toBe(-5);
   });
 
   it("keeps player combat modifiers editable while allowing read-only inspector use", () => {

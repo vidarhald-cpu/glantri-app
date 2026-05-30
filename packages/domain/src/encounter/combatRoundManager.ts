@@ -374,6 +374,30 @@ export function getCombatRoundInitiativePhaseForStep(
   return undefined;
 }
 
+export function getCombatRoundModifierPhaseForStep(
+  step: CombatRoundStep,
+): "phase1" | "phase2" | undefined {
+  if (
+    step === "review_action_modifiers" ||
+    step === "initiative_phase_1" ||
+    step === "phase_1_actions" ||
+    step === "review_phase_2_actions"
+  ) {
+    return "phase1";
+  }
+
+  if (
+    step === "review_phase_2_modifiers" ||
+    step === "initiative_phase_2" ||
+    step === "phase_2_actions" ||
+    step === "review_phase_2_damage"
+  ) {
+    return "phase2";
+  }
+
+  return undefined;
+}
+
 export function recordCombatRoundInitiative(input: {
   initiative: CombatRoundInitiativeResult | number;
   participantId: string;

@@ -11,6 +11,7 @@ import {
   buildEncounterDbParryModifierCalculation,
   buildEncounterLiveCombatModifierSummary,
   buildEncounterInitiativeModifierCalculation,
+  filterCombatModifierEntriesForPhase,
   sumEncounterCombatEffectModifiers,
 } from "./liveCombatModifiers";
 
@@ -290,6 +291,16 @@ describe("live combat modifiers", () => {
       .toBe(-5);
     expect(buildEncounterLiveCombatModifierSummary({ combatContext, phaseKey: "phase2" }).dbRaw)
       .toBe(-5);
+    expect(
+      filterCombatModifierEntriesForPhase(combatContext.modifierBuckets.situationDb, "phase1").map(
+        (entry) => entry.id,
+      ),
+    ).toEqual(["manual-db-parry", "generated:attack-parry:phase1:db-parry"]);
+    expect(
+      filterCombatModifierEntriesForPhase(combatContext.modifierBuckets.situationDb, "phase2").map(
+        (entry) => entry.id,
+      ),
+    ).toEqual(["manual-db-parry", "generated:parry-attack:phase2:db-parry"]);
   });
 
   it("applies General/Fatigue and Initiative raw modifiers to initiative through the workbook table", () => {
