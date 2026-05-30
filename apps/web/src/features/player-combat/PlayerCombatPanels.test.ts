@@ -93,10 +93,19 @@ describe("PlayerCombatPanels", () => {
     expect(source).toContain("gridTemplateColumns: playerCombatPanelRowStyle.gridTemplateColumns");
     expect(source).toContain("PlayerCombatAttackStatsTable");
     expect(source).toContain("PlayerCombatDefenseStatsTable");
+    expect(source).toContain("PlayerCombatAttackTargetSelector");
     expect(source).toContain("PlayerCombatAttackLocationSelector");
+    expect(source.indexOf("export function PlayerCombatAttackTargetSelector")).toBeLessThan(
+      source.indexOf("export function PlayerCombatAttackLocationSelector"),
+    );
     expect(source.indexOf("export function PlayerCombatAttackLocationSelector")).toBeLessThan(
       source.indexOf("function ParryDirectionSelector"),
     );
+    expect(source).toContain("Target");
+    expect(source).toContain("targetOptions.map");
+    expect(source).toContain("selectedTargetUnavailable");
+    expect(source).toContain('value={combatContext.targetParticipantId ?? ""}');
+    expect(source).toContain("targetParticipantId: event.target.value || undefined");
     expect(source).toContain("Attack location");
     expect(source).toContain("No target");
     expect(source).toContain("HIT_LOCATIONS.map");

@@ -156,6 +156,7 @@ export const scenarioParticipantCombatContextSchema = z.object({
   parrySource: scenarioParticipantParrySourceSchema.optional(),
   selectedOpponentId: idSchema.optional(),
   targetLocation: hitLocationTargetSchema.optional(),
+  targetParticipantId: idSchema.optional(),
 });
 
 export const scenarioParticipantStateSchema = z.object({

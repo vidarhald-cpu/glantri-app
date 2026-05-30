@@ -29,6 +29,7 @@ import {
   formatCombatInitiativeFormula,
   PlayerCombatAttackLocationSelector,
   PlayerCombatAttackStatsTable,
+  PlayerCombatAttackTargetSelector,
   PlayerCombatActionButtonPanel,
   PlayerCombatActionResultPanel,
   PlayerCombatActionSelectorPanel,
@@ -54,6 +55,7 @@ import {
   createEmptyPlayerEncounterCombatContext,
   evaluatePlayerEncounterParryLegality,
   getPlayerEncounterAccessibleParticipants,
+  getPlayerEncounterOpponentParticipants,
   isPlayerEncounterActionId,
   mergeCombatContextWithCurrentModifierBuckets,
   type PlayerEncounterActionId,
@@ -893,6 +895,23 @@ export default function ScenarioPlayerCombatPageContent({
       }),
     [loadoutModel, selectedActionId, selectedSecondaryActionId],
   );
+  const targetOptions = useMemo(
+    () =>
+      getPlayerEncounterOpponentParticipants({
+        currentUserId: currentUser?.id,
+        isGameMaster,
+        participants: selectableParticipants,
+        projectionVisibleParticipants: projection?.visibleParticipants,
+        selectedParticipantId: selectedParticipant?.id,
+      }),
+    [
+      currentUser?.id,
+      isGameMaster,
+      projection?.visibleParticipants,
+      selectableParticipants,
+      selectedParticipant?.id,
+    ],
+  );
   const phaseCombatLoadoutSummaries = useMemo(() => {
     const buildPhaseSummary = (phaseKey: PlayerCombatPhaseKey) => {
       const phaseLiveCombatModifiers = buildEncounterLiveCombatModifierSummary({
@@ -1203,17 +1222,31 @@ export default function ScenarioPlayerCombatPageContent({
                     <PlayerCombatAttackStatsTable stats={phaseModel.attackStats} />
                   ) : null}
                   {phaseModel.showAttackLocationSelector ? (
-                    <PlayerCombatAttackLocationSelector
-                      combatContext={phaseModel.phaseContext}
-                      controlsDisabled={declarationControlsDisabled}
-                      onCombatContextChange={(combatContext) => {
-                        markCombatDeclarationDraftDirty();
-                        setPhaseCombatContextDrafts((current) => ({
-                          ...current,
-                          [phaseKey]: combatContext,
-                        }));
-                      }}
-                    />
+                    <>
+                      <PlayerCombatAttackTargetSelector
+                        combatContext={phaseModel.phaseContext}
+                        controlsDisabled={declarationControlsDisabled}
+                        onCombatContextChange={(combatContext) => {
+                          markCombatDeclarationDraftDirty();
+                          setPhaseCombatContextDrafts((current) => ({
+                            ...current,
+                            [phaseKey]: combatContext,
+                          }));
+                        }}
+                        targetOptions={targetOptions}
+                      />
+                      <PlayerCombatAttackLocationSelector
+                        combatContext={phaseModel.phaseContext}
+                        controlsDisabled={declarationControlsDisabled}
+                        onCombatContextChange={(combatContext) => {
+                          markCombatDeclarationDraftDirty();
+                          setPhaseCombatContextDrafts((current) => ({
+                            ...current,
+                            [phaseKey]: combatContext,
+                          }));
+                        }}
+                      />
+                    </>
                   ) : null}
                   {phaseModel.showDefenseContext && phaseModel.defenseStats ? (
                     <>

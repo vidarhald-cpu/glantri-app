@@ -121,4 +121,20 @@ describe("scenario combat modifier entries", () => {
       }).targetLocation,
     ).toBe("rightArm");
   });
+
+  it("keeps old combat contexts compatible while supporting phase attack targets", () => {
+    expect(scenarioParticipantCombatContextSchema.parse({}).targetParticipantId).toBeUndefined();
+
+    expect(
+      scenarioParticipantCombatContextSchema.parse({
+        modifierBuckets: {
+          general: [],
+          situationDb: [],
+          situationInitiative: [],
+          situationObSkill: [],
+        },
+        targetParticipantId: "participant-target-1",
+      }).targetParticipantId,
+    ).toBe("participant-target-1");
+  });
 });

@@ -244,6 +244,7 @@ describe("combat round manager", () => {
         phaseContexts: {
           phase1: {
             mainHandParryDirection: "left",
+            targetParticipantId: "guard",
             modifierBuckets: {
               general: [],
               situationDb: [],
@@ -253,6 +254,7 @@ describe("combat round manager", () => {
           },
           phase2: {
             offHandParryDirection: "right_forward",
+            targetParticipantId: "goblin",
             modifierBuckets: {
               general: [],
               situationDb: [],
@@ -284,9 +286,11 @@ describe("combat round manager", () => {
       phaseContexts: {
         phase1: expect.objectContaining({
           mainHandParryDirection: "left",
+          targetParticipantId: "guard",
         }),
         phase2: expect.objectContaining({
           offHandParryDirection: "right_forward",
+          targetParticipantId: "goblin",
         }),
       },
       roundNumber: 3,

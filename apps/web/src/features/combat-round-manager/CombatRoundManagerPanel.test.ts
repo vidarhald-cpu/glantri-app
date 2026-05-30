@@ -79,6 +79,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("PlayerCombatActionResultPanel");
     expect(source).toContain("PlayerCombatPhasePanel");
     expect(source).toContain("PlayerCombatAttackStatsTable");
+    expect(source).toContain("PlayerCombatAttackTargetSelector");
     expect(source).toContain("PlayerCombatDefenseStatsTable");
     expect(source).toContain("PlayerCombatAttackLocationSelector");
     expect(source).toContain("playerCombatTopPanelRowStyle");
@@ -130,6 +131,9 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("PlayerCombatParryContextPanel");
     expect(source).toContain("phaseModel.showAttackStats");
     expect(source).toContain("phaseModel.showAttackLocationSelector");
+    expect(source).toContain("inspectorTargetOptions");
+    expect(source).toContain("getPlayerEncounterOpponentParticipants");
+    expect(source).toContain("targetOptions={inspectorTargetOptions}");
     expect(source).toContain("phaseModel.showDefenseContext");
     expect(source).toContain("actionId: inspectorDraft.actionId");
     expect(source).toContain("secondaryActionId: inspectorDraft.secondaryActionId");

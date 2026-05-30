@@ -24,6 +24,7 @@ import {
   getPlayerEncounterCombatModifierTotals,
   type PlayerEncounterActionId,
   type PlayerEncounterMovementId,
+  type PlayerEncounterOpponentOption,
 } from "@/lib/campaigns/playerEncounter";
 import type { EncounterLiveCombatModifierSummary } from "@/lib/campaigns/liveCombatModifiers";
 
@@ -115,6 +116,13 @@ interface PlayerCombatAttackLocationSelectorProps {
   combatContext: ScenarioParticipantCombatContext;
   controlsDisabled?: boolean;
   onCombatContextChange: (combatContext: ScenarioParticipantCombatContext) => void;
+}
+
+interface PlayerCombatAttackTargetSelectorProps {
+  combatContext: ScenarioParticipantCombatContext;
+  controlsDisabled?: boolean;
+  onCombatContextChange: (combatContext: ScenarioParticipantCombatContext) => void;
+  targetOptions: readonly PlayerEncounterOpponentOption[];
 }
 
 interface PlayerCombatActionButtonPanelProps {
@@ -737,6 +745,54 @@ export function PlayerCombatDefenseStatsTable({ stats }: PlayerCombatDefenseStat
         </tbody>
       </table>
     </div>
+  );
+}
+
+export function PlayerCombatAttackTargetSelector({
+  combatContext,
+  controlsDisabled = false,
+  onCombatContextChange,
+  targetOptions,
+}: PlayerCombatAttackTargetSelectorProps) {
+  const selectedTargetUnavailable = Boolean(
+    combatContext.targetParticipantId &&
+      !targetOptions.some((option) => option.id === combatContext.targetParticipantId),
+  );
+
+  return (
+    <label
+      style={{
+        alignItems: "center",
+        display: "grid",
+        gap: "0.35rem",
+        gridTemplateColumns: compactPhaseContextSelectorColumns,
+      }}
+    >
+      <span style={{ fontSize: "0.86rem", fontWeight: 600 }}>Target</span>
+      <select
+        disabled={controlsDisabled}
+        onChange={(event) =>
+          onCombatContextChange({
+            ...combatContext,
+            targetParticipantId: event.target.value || undefined,
+          })
+        }
+        style={compactPhaseContextSelectStyle}
+        value={combatContext.targetParticipantId ?? ""}
+      >
+        <option value="">No target</option>
+        {selectedTargetUnavailable ? (
+          <option value={combatContext.targetParticipantId}>
+            Saved target ({combatContext.targetParticipantId})
+          </option>
+        ) : null}
+        {targetOptions.map((option) => (
+          <option key={option.id} value={option.id}>
+            {option.displayName}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }
 

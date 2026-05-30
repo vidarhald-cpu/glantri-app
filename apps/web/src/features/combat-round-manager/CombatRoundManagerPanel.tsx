@@ -50,6 +50,7 @@ import {
   PlayerCombatActionSelectorPanel,
   PlayerCombatAttackLocationSelector,
   PlayerCombatAttackStatsTable,
+  PlayerCombatAttackTargetSelector,
   PlayerCombatDefenseStatsTable,
   PlayerCombatModifierPanel,
   PlayerCombatParryContextPanel,
@@ -72,6 +73,7 @@ import {
 } from "@/lib/campaigns/liveCombatModifiers";
 import {
   createEmptyPlayerEncounterCombatContext,
+  getPlayerEncounterOpponentParticipants,
   isPlayerEncounterActionId,
   mergeCombatContextWithCurrentModifierBuckets,
   type PlayerEncounterActionId,
@@ -497,6 +499,15 @@ export default function CombatRoundManagerPanel({
         secondaryActionId: inspectorDraft.secondaryActionId,
       }),
     [inspectorDraft.actionId, inspectorDraft.secondaryActionId, inspectorLoadoutModel],
+  );
+  const inspectorTargetOptions = useMemo(
+    () =>
+      getPlayerEncounterOpponentParticipants({
+        isGameMaster: true,
+        participants: effectiveScenarioParticipants,
+        selectedParticipantId: selectedScenarioParticipant?.id,
+      }),
+    [effectiveScenarioParticipants, selectedScenarioParticipant?.id],
   );
   const inspectorPhaseLoadoutSummaries = useMemo(() => {
     const buildPhaseSummary = (phaseKey: PlayerCombatPhaseKey) => {
@@ -1266,18 +1277,33 @@ export default function CombatRoundManagerPanel({
                           <PlayerCombatAttackStatsTable stats={phaseModel.attackStats} />
                         ) : null}
                         {phaseModel.showAttackLocationSelector ? (
-                          <PlayerCombatAttackLocationSelector
-                            combatContext={phaseModel.phaseContext}
-                            controlsDisabled={saving}
-                            onCombatContextChange={(combatContext) =>
-                              updateInspectorDraft({
-                                phaseContexts: {
-                                  ...inspectorDraft.phaseContexts,
-                                  [phaseKey]: combatContext,
-                                },
-                              })
-                            }
-                          />
+                          <>
+                            <PlayerCombatAttackTargetSelector
+                              combatContext={phaseModel.phaseContext}
+                              controlsDisabled={saving}
+                              onCombatContextChange={(combatContext) =>
+                                updateInspectorDraft({
+                                  phaseContexts: {
+                                    ...inspectorDraft.phaseContexts,
+                                    [phaseKey]: combatContext,
+                                  },
+                                })
+                              }
+                              targetOptions={inspectorTargetOptions}
+                            />
+                            <PlayerCombatAttackLocationSelector
+                              combatContext={phaseModel.phaseContext}
+                              controlsDisabled={saving}
+                              onCombatContextChange={(combatContext) =>
+                                updateInspectorDraft({
+                                  phaseContexts: {
+                                    ...inspectorDraft.phaseContexts,
+                                    [phaseKey]: combatContext,
+                                  },
+                                })
+                              }
+                            />
+                          </>
                         ) : null}
                         {phaseModel.showDefenseContext && phaseModel.defenseStats ? (
                           <>

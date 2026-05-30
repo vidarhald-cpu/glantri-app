@@ -175,4 +175,22 @@ describe("player combat phase model", () => {
     expect(applyDefaultPlayerCombatPhaseContext(phase1Context).targetLocation).toBe("head");
     expect(applyDefaultPlayerCombatPhaseContext(phase2Context).targetLocation).toBe("rightArm");
   });
+
+  it("keeps phase-specific attack targets separable", () => {
+    const phase1Context = {
+      ...createEmptyPlayerEncounterCombatContext(),
+      targetParticipantId: "target-phase-1",
+    };
+    const phase2Context = {
+      ...createEmptyPlayerEncounterCombatContext(),
+      targetParticipantId: "target-phase-2",
+    };
+
+    expect(applyDefaultPlayerCombatPhaseContext(phase1Context).targetParticipantId).toBe(
+      "target-phase-1",
+    );
+    expect(applyDefaultPlayerCombatPhaseContext(phase2Context).targetParticipantId).toBe(
+      "target-phase-2",
+    );
+  });
 });
