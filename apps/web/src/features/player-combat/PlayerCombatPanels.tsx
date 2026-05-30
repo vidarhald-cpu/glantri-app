@@ -135,6 +135,7 @@ interface PlayerCombatActionButtonPanelProps {
   onDeclareAction?: () => void;
   saving?: boolean;
   statusText: string;
+  validationMessage?: string;
 }
 
 interface PlayerCombatActionResultPanelProps {
@@ -594,6 +595,7 @@ export function PlayerCombatActionButtonPanel({
   onDeclareAction,
   saving = false,
   statusText,
+  validationMessage,
 }: PlayerCombatActionButtonPanelProps) {
   return (
     <section style={playerCombatPanelCardStyle}>
@@ -618,6 +620,11 @@ export function PlayerCombatActionButtonPanel({
         <strong>{saving ? "Saving..." : buttonLabel}</strong>
       </button>
       <div style={{ color: "#5e5a50", fontSize: "0.92rem" }}>{statusText}</div>
+      {validationMessage ? (
+        <div style={{ color: "#8b3a1a", fontSize: "0.9rem", fontWeight: 600 }}>
+          {validationMessage}
+        </div>
+      ) : null}
     </section>
   );
 }

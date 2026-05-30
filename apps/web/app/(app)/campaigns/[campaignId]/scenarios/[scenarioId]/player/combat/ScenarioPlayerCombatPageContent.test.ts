@@ -39,6 +39,10 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("getCombatRoundModifierPhaseForStep");
     expect(source).toContain("const currentModifierPhase = getCombatRoundModifierPhaseForStep(currentCombatStep)");
     expect(source).toContain("phaseKey: currentModifierPhase");
+    expect(source).toContain("validateCombatDeclarationTargets");
+    expect(source).toContain("targetValidation");
+    expect(source).toContain("declarationTargetValidationMessage");
+    expect(source).toContain("validationMessage={declarationTargetValidationMessage}");
     expect(source).toContain("mergeCombatContextWithCurrentModifierBuckets");
     expect(source).toContain("combatEffects: selectedParticipant?.state.combatEffects");
     expect(source).toContain("liveCombatModifiers");

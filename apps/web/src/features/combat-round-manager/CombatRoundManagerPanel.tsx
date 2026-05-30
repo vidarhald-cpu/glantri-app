@@ -26,6 +26,7 @@ import {
   initializeCombatRoundState,
   setCombatRoundSelection,
   sortCombatRoundParticipantsByInitiative,
+  validateCombatDeclarationTargets,
 } from "@glantri/domain";
 
 import { buildEquipmentLoadoutModuleModel } from "@/features/equipment/loadoutModule";
@@ -448,6 +449,22 @@ export default function CombatRoundManagerPanel({
       }),
     [inspectorDraft.combatContext, inspectorLiveModifiers, inspectorModifierPhase],
   );
+  const inspectorTargetValidation = useMemo(
+    () =>
+      validateCombatDeclarationTargets({
+        actionId: inspectorDraft.actionId || undefined,
+        phaseContexts: inspectorDraft.phaseContexts,
+        secondaryActionId: inspectorDraft.secondaryActionId || undefined,
+      }),
+    [inspectorDraft.actionId, inspectorDraft.phaseContexts, inspectorDraft.secondaryActionId],
+  );
+  const inspectorCurrentStepIsInitiative =
+    roundState.currentStep === "initiative_phase_1" ||
+    roundState.currentStep === "initiative_phase_2";
+  const inspectorTargetValidationMessage =
+    !inspectorCurrentStepIsInitiative && !inspectorTargetValidation.valid
+      ? inspectorTargetValidation.message
+      : undefined;
   const resolvedInspectorCharacterState = selectedScenarioParticipant
     ? resolvedCharacterStateByParticipantId[selectedScenarioParticipant.id]
     : undefined;
@@ -902,6 +919,17 @@ export default function CombatRoundManagerPanel({
 
   async function saveInspectorDeclaration() {
     if (!encounter.scenarioId || !selectedScenarioParticipant || !selectedEncounterParticipant) {
+      return;
+    }
+
+    const targetValidation = validateCombatDeclarationTargets({
+      actionId: inspectorDraft.actionId || undefined,
+      phaseContexts: inspectorDraft.phaseContexts,
+      secondaryActionId: inspectorDraft.secondaryActionId || undefined,
+    });
+
+    if (!targetValidation.valid) {
+      setSaveError(targetValidation.message ?? "Select a target for each attack phase.");
       return;
     }
 
@@ -1363,10 +1391,9 @@ export default function CombatRoundManagerPanel({
                   />
                   <PlayerCombatActionButtonPanel
                     buttonLabel={getGmCombatStepActionLabel(roundState.currentStep)}
-                    disabled={saving}
+                    disabled={saving || Boolean(inspectorTargetValidationMessage)}
                     onDeclareAction={() =>
-                      void (roundState.currentStep === "initiative_phase_1" ||
-                      roundState.currentStep === "initiative_phase_2"
+                      void (inspectorCurrentStepIsInitiative
                         ? rollInspectorInitiative()
                         : saveInspectorDeclaration())
                     }
@@ -1374,6 +1401,7 @@ export default function CombatRoundManagerPanel({
                     statusText={`Current step: ${getPlayerCombatStepLabel(
                       roundState.currentStep,
                     )}.${inspectorStatusSuffix}`}
+                    validationMessage={inspectorTargetValidationMessage}
                   />
                   <PlayerCombatActionResultPanel
                     result={

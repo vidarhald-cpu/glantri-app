@@ -1611,14 +1611,17 @@ describe("scenarios route contract", () => {
             modifierBuckets: {
               general: [],
               situationDb: [],
+              situationInitiative: [],
               situationObSkill: [],
             },
+            targetParticipantId: "encounter-target-1",
           },
           phase2: {
             offHandParryDirection: "right_forward",
             modifierBuckets: {
               general: [],
               situationDb: [],
+              situationInitiative: [],
               situationObSkill: [],
             },
           },
@@ -1675,6 +1678,97 @@ describe("scenarios route contract", () => {
     });
   });
 
+  it("rejects attack declarations without the required phase target", async () => {
+    setupCombatDeclarationRoute();
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        actionId: "attack_parry",
+        combatContext: {
+          modifierBuckets: {
+            general: [],
+            situationDb: [],
+            situationInitiative: [],
+            situationObSkill: [],
+          },
+        },
+        phaseContexts: {
+          phase1: {
+            modifierBuckets: {
+              general: [],
+              situationDb: [],
+              situationInitiative: [],
+              situationObSkill: [],
+            },
+          },
+        },
+        scenarioParticipantId: "participant-1",
+      },
+      url: "/encounters/encounter-1/combat-declaration",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({
+      error: "Select a target for Phase 1.",
+    });
+    expect(mocks.encounterService.updateScenarioParticipantState).not.toHaveBeenCalled();
+    expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
+  });
+
+  it("rejects GM Double Attack declarations unless both attack phases have targets", async () => {
+    setupCombatDeclarationRoute({ user: mocks.adminUser });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        actionId: "double_attack",
+        combatContext: {
+          modifierBuckets: {
+            general: [],
+            situationDb: [],
+            situationInitiative: [],
+            situationObSkill: [],
+          },
+        },
+        phaseContexts: {
+          phase1: {
+            modifierBuckets: {
+              general: [],
+              situationDb: [],
+              situationInitiative: [],
+              situationObSkill: [],
+            },
+            targetParticipantId: "encounter-target-1",
+          },
+          phase2: {
+            modifierBuckets: {
+              general: [],
+              situationDb: [],
+              situationInitiative: [],
+              situationObSkill: [],
+            },
+          },
+        },
+        scenarioParticipantId: "participant-1",
+      },
+      url: "/encounters/encounter-1/combat-declaration",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({
+      error: "Select a target for Phase 2.",
+    });
+    expect(mocks.encounterService.updateScenarioParticipantState).not.toHaveBeenCalled();
+    expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
+  });
+
   it("creates the phase 2 DB/Parry modifier when a player declares Parry - Attack", async () => {
     setupCombatDeclarationRoute();
     const app = await buildScenarioTestApp();
@@ -1692,6 +1786,17 @@ describe("scenarios route contract", () => {
           },
         },
         movementId: "hold",
+        phaseContexts: {
+          phase2: {
+            modifierBuckets: {
+              general: [],
+              situationDb: [],
+              situationInitiative: [],
+              situationObSkill: [],
+            },
+            targetParticipantId: "encounter-target-1",
+          },
+        },
         scenarioParticipantId: "participant-1",
       },
       url: "/encounters/encounter-1/combat-declaration",
@@ -1746,6 +1851,26 @@ describe("scenarios route contract", () => {
           },
         },
         movementId: "hold",
+        phaseContexts: {
+          phase1: {
+            modifierBuckets: {
+              general: [],
+              situationDb: [],
+              situationInitiative: [],
+              situationObSkill: [],
+            },
+            targetParticipantId: "encounter-target-1",
+          },
+          phase2: {
+            modifierBuckets: {
+              general: [],
+              situationDb: [],
+              situationInitiative: [],
+              situationObSkill: [],
+            },
+            targetParticipantId: "encounter-target-2",
+          },
+        },
         scenarioParticipantId: "participant-1",
       },
       url: "/encounters/encounter-1/combat-declaration",
@@ -1877,6 +2002,17 @@ describe("scenarios route contract", () => {
           },
           selectedOpponentId: "guard",
         },
+        phaseContexts: {
+          phase1: {
+            modifierBuckets: {
+              general: [],
+              situationDb: [],
+              situationInitiative: [],
+              situationObSkill: [],
+            },
+            targetParticipantId: "encounter-target-1",
+          },
+        },
         scenarioParticipantId: "participant-1",
       },
       url: "/encounters/encounter-1/combat-declaration",
@@ -1978,6 +2114,17 @@ describe("scenarios route contract", () => {
             situationObSkill: [],
           },
         },
+        phaseContexts: {
+          phase1: {
+            modifierBuckets: {
+              general: [],
+              situationDb: [],
+              situationInitiative: [],
+              situationObSkill: [],
+            },
+            targetParticipantId: "encounter-target-1",
+          },
+        },
         scenarioParticipantId: "participant-1",
       },
       url: "/encounters/encounter-1/combat-declaration",
@@ -2057,6 +2204,17 @@ describe("scenarios route contract", () => {
             situationDb: [],
             situationInitiative: [],
             situationObSkill: [],
+          },
+        },
+        phaseContexts: {
+          phase2: {
+            modifierBuckets: {
+              general: [],
+              situationDb: [],
+              situationInitiative: [],
+              situationObSkill: [],
+            },
+            targetParticipantId: "encounter-target-1",
           },
         },
         scenarioParticipantId: "participant-1",

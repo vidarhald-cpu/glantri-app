@@ -2,11 +2,11 @@ import type {
   ScenarioParticipantCombatContext,
   ScenarioParticipantParryDirection,
 } from "@glantri/domain";
+import { getCombatDeclarationAttackPhases } from "@glantri/domain";
 
 import type { EquipmentLoadoutModuleModel } from "@/features/equipment/loadoutModule";
 import type { EquipmentFeatureState } from "@/features/equipment/types";
 import {
-  isPlayerEncounterAttackAction,
   isPlayerEncounterDefenseAction,
   type PlayerEncounterActionId,
 } from "@/lib/campaigns/playerEncounter";
@@ -363,6 +363,11 @@ function getPhaseContentFlags(input: {
   phaseKey: PlayerCombatPhaseKey;
   secondaryActionId: PlayerEncounterActionId | "";
 }): { attack: boolean; defense: boolean } {
+  const attackPhases = getCombatDeclarationAttackPhases({
+    actionId: input.actionId,
+    secondaryActionId: input.secondaryActionId,
+  });
+
   if (input.actionId === "attack_parry") {
     return input.phaseKey === "phase1"
       ? { attack: true, defense: true }
@@ -378,7 +383,7 @@ function getPhaseContentFlags(input: {
   const phaseActionId = input.phaseKey === "phase1" ? input.actionId : input.secondaryActionId;
 
   return {
-    attack: isPlayerEncounterAttackAction(phaseActionId),
+    attack: attackPhases.includes(input.phaseKey),
     defense: isPlayerEncounterDefenseAction(phaseActionId),
   };
 }

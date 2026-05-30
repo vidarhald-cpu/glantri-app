@@ -11,6 +11,7 @@ import {
   getCombatRoundInitiativeTotal,
   getCombatRoundModifierPhaseForStep,
   initializeCombatRoundState,
+  validateCombatDeclarationTargets,
   type EncounterSession,
   type ScenarioCombatModifierBucket,
   type ScenarioCombatModifierEntry,
@@ -828,6 +829,17 @@ export default function ScenarioPlayerCombatPageContent({
       return;
     }
 
+    const targetValidation = validateCombatDeclarationTargets({
+      actionId: selectedActionId || undefined,
+      phaseContexts: phaseCombatContextDrafts,
+      secondaryActionId: selectedSecondaryActionId || undefined,
+    });
+
+    if (!targetValidation.valid) {
+      setError(targetValidation.message ?? "Select a target for each attack phase.");
+      return;
+    }
+
     setSavingCombatContext(true);
 
     try {
@@ -1045,13 +1057,27 @@ export default function ScenarioPlayerCombatPageContent({
     Boolean(selectedRoundParticipant) &&
     (isGameMaster ||
       (initiativeStepStatus === "pending" && !selectedParticipantRolledCurrentInitiative));
+  const targetValidation = useMemo(
+    () =>
+      validateCombatDeclarationTargets({
+        actionId: selectedActionId || undefined,
+        phaseContexts: phaseCombatContextDrafts,
+        secondaryActionId: selectedSecondaryActionId || undefined,
+      }),
+    [phaseCombatContextDrafts, selectedActionId, selectedSecondaryActionId],
+  );
+  const declarationTargetValidationMessage =
+    !currentInitiativePhase && hasMeaningfulDeclaration && !targetValidation.valid
+      ? targetValidation.message
+      : undefined;
   const declareActionDisabled =
     controlsDisabled ||
     savingCombatContext ||
     !displayedParticipant ||
     (currentInitiativePhase
       ? !canUseInitiativeButton
-      : !isGameMaster && (playerDeclarationLocked || !hasMeaningfulDeclaration));
+      : (isGameMaster ? false : playerDeclarationLocked || !hasMeaningfulDeclaration) ||
+        !targetValidation.valid);
   const declarationButtonLabel = getPlayerCombatActionButtonLabel({
     currentStep: currentCombatStep,
     disabled: declareActionDisabled,
@@ -1321,6 +1347,7 @@ export default function ScenarioPlayerCombatPageContent({
               }
               saving={savingCombatContext}
               statusText={declarationStatusText}
+              validationMessage={declarationTargetValidationMessage}
             />
             <PlayerCombatActionResultPanel
               result={

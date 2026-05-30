@@ -22,6 +22,7 @@ import {
   rollOpenEndedD6,
   combatRoundPhaseContextsSchema,
   scenarioParticipantCombatContextSchema,
+  validateCombatDeclarationTargets,
 } from "@glantri/domain";
 import type { ScenarioParticipant } from "@glantri/domain";
 import {
@@ -580,6 +581,18 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             error: "Declaration is closed for this round.",
           });
         }
+      }
+
+      const targetValidation = validateCombatDeclarationTargets({
+        actionId: body.actionId,
+        phaseContexts: submittedPhaseContexts,
+        secondaryActionId: body.secondaryActionId,
+      });
+
+      if (!targetValidation.valid) {
+        return reply.code(400).send({
+          error: targetValidation.message ?? "Select a target for each attack phase.",
+        });
       }
 
       const submittedAt = new Date().toISOString();
