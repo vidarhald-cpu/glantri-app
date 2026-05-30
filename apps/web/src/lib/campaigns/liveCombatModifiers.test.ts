@@ -280,27 +280,88 @@ describe("live combat modifiers", () => {
             sourcePhase: "phase2" as const,
             value: -4,
           },
+          {
+            generated: true,
+            id: "generated:double-attack:phase1:db-parry",
+            scope: "until" as const,
+            sourcePhase: "phase1" as const,
+            value: -4,
+          },
+          {
+            generated: true,
+            id: "generated:double-attack:phase2:db-parry",
+            scope: "until" as const,
+            sourcePhase: "phase2" as const,
+            value: -4,
+          },
         ],
         situationInitiative: [],
-        situationObSkill: [],
+        situationObSkill: [
+          {
+            id: "manual-ob-skill",
+            scope: "until" as const,
+            value: 2,
+          },
+          {
+            generated: true,
+            id: "generated:double-attack:phase1:ob-skill",
+            scope: "until" as const,
+            sourcePhase: "phase1" as const,
+            value: -1,
+          },
+          {
+            generated: true,
+            id: "generated:double-attack:phase2:ob-skill",
+            scope: "until" as const,
+            sourcePhase: "phase2" as const,
+            value: -1,
+          },
+        ],
       },
     };
 
-    expect(buildEncounterLiveCombatModifierSummary({ combatContext }).dbRaw).toBe(-9);
+    expect(buildEncounterLiveCombatModifierSummary({ combatContext }).dbRaw).toBe(-17);
+    expect(buildEncounterLiveCombatModifierSummary({ combatContext }).obSkillRaw).toBe(0);
     expect(buildEncounterLiveCombatModifierSummary({ combatContext, phaseKey: "phase1" }).dbRaw)
-      .toBe(-5);
+      .toBe(-9);
     expect(buildEncounterLiveCombatModifierSummary({ combatContext, phaseKey: "phase2" }).dbRaw)
-      .toBe(-5);
+      .toBe(-9);
+    expect(
+      buildEncounterLiveCombatModifierSummary({ combatContext, phaseKey: "phase1" }).obSkillRaw,
+    ).toBe(1);
+    expect(
+      buildEncounterLiveCombatModifierSummary({ combatContext, phaseKey: "phase2" }).obSkillRaw,
+    ).toBe(1);
     expect(
       filterCombatModifierEntriesForPhase(combatContext.modifierBuckets.situationDb, "phase1").map(
         (entry) => entry.id,
       ),
-    ).toEqual(["manual-db-parry", "generated:attack-parry:phase1:db-parry"]);
+    ).toEqual([
+      "manual-db-parry",
+      "generated:attack-parry:phase1:db-parry",
+      "generated:double-attack:phase1:db-parry",
+    ]);
     expect(
       filterCombatModifierEntriesForPhase(combatContext.modifierBuckets.situationDb, "phase2").map(
         (entry) => entry.id,
       ),
-    ).toEqual(["manual-db-parry", "generated:parry-attack:phase2:db-parry"]);
+    ).toEqual([
+      "manual-db-parry",
+      "generated:parry-attack:phase2:db-parry",
+      "generated:double-attack:phase2:db-parry",
+    ]);
+    expect(
+      filterCombatModifierEntriesForPhase(
+        combatContext.modifierBuckets.situationObSkill,
+        "phase1",
+      ).map((entry) => entry.id),
+    ).toEqual(["manual-ob-skill", "generated:double-attack:phase1:ob-skill"]);
+    expect(
+      filterCombatModifierEntriesForPhase(
+        combatContext.modifierBuckets.situationObSkill,
+        "phase2",
+      ).map((entry) => entry.id),
+    ).toEqual(["manual-ob-skill", "generated:double-attack:phase2:ob-skill"]);
   });
 
   it("applies General/Fatigue and Initiative raw modifiers to initiative through the workbook table", () => {

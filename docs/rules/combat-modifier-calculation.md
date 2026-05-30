@@ -125,7 +125,7 @@ The out-of-play Equip Items view remains theoretical unless an explicit encounte
 context is passed. Action-specific combat phase modifiers beyond the current allocation inputs are
 future work and should be added as named raw modifier sources rather than as final-value overlays.
 
-## Generated action DB/Parry modifiers
+## Generated action modifiers
 
 Declaring `Attack - Parry` currently creates one generated encounter modifier in the DB/Parry
 bucket:
@@ -152,10 +152,27 @@ Source phase = phase 2
 
 This phase 2 row modifies phase 2 DB and Parry/P, but does not modify phase 1 DB/P.
 
-Generated action lines are idempotent on repeated declaration saves. Changing away from the matching
-action removes that generated line while leaving manual DB/Parry modifiers intact. If the GM removes a
-generated action line while the action remains selected, the next declaration save may recreate it
-because the line is derived from the action choice.
+Declaring `Double Attack` creates generated modifiers in both combat phases:
+
+```text
+Stored bucket key = situationObSkill
+Value = -1
+Duration = 1 round
+Details = double attack
+Source phase = phase 1 and phase 2
+
+Stored bucket key = situationDb
+Value = -4
+Duration = 1 round
+Details = double attack
+Source phase = phase 1 and phase 2
+```
+
+The phase 1 rows modify phase 1 Skill/OB and DB/Parry only; the phase 2 rows modify phase 2
+Skill/OB and DB/Parry only. Generated action lines are idempotent on repeated declaration saves.
+Changing away from the matching action removes generated lines while leaving manual modifiers intact.
+If the GM removes a generated action line while the action remains selected, the next declaration save
+may recreate it because the line is derived from the action choice.
 
 ## Broad sword OB example
 

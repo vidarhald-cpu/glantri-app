@@ -92,6 +92,62 @@ const parryAttackDbParryModifierEntry = {
   value: -4,
 };
 const parryAttackDbParryModifier = expect.objectContaining(parryAttackDbParryModifierEntry);
+const doubleAttackPhase1ObSkillModifierEntry = {
+  durationRounds: 1,
+  generated: true,
+  id: "generated:double-attack:phase1:ob-skill",
+  notes: "double attack",
+  scope: "until",
+  sourceActionId: "double_attack",
+  sourcePhase: "phase1",
+  sourceRule: "double-attack-ob-skill-phase1",
+  value: -1,
+};
+const doubleAttackPhase2ObSkillModifierEntry = {
+  durationRounds: 1,
+  generated: true,
+  id: "generated:double-attack:phase2:ob-skill",
+  notes: "double attack",
+  scope: "until",
+  sourceActionId: "double_attack",
+  sourcePhase: "phase2",
+  sourceRule: "double-attack-ob-skill-phase2",
+  value: -1,
+};
+const doubleAttackPhase1DbParryModifierEntry = {
+  durationRounds: 1,
+  generated: true,
+  id: "generated:double-attack:phase1:db-parry",
+  notes: "double attack",
+  scope: "until",
+  sourceActionId: "double_attack",
+  sourcePhase: "phase1",
+  sourceRule: "double-attack-db-parry-phase1",
+  value: -4,
+};
+const doubleAttackPhase2DbParryModifierEntry = {
+  durationRounds: 1,
+  generated: true,
+  id: "generated:double-attack:phase2:db-parry",
+  notes: "double attack",
+  scope: "until",
+  sourceActionId: "double_attack",
+  sourcePhase: "phase2",
+  sourceRule: "double-attack-db-parry-phase2",
+  value: -4,
+};
+const doubleAttackPhase1ObSkillModifier = expect.objectContaining(
+  doubleAttackPhase1ObSkillModifierEntry,
+);
+const doubleAttackPhase2ObSkillModifier = expect.objectContaining(
+  doubleAttackPhase2ObSkillModifierEntry,
+);
+const doubleAttackPhase1DbParryModifier = expect.objectContaining(
+  doubleAttackPhase1DbParryModifierEntry,
+);
+const doubleAttackPhase2DbParryModifier = expect.objectContaining(
+  doubleAttackPhase2DbParryModifierEntry,
+);
 
 async function buildScenarioTestApp() {
   const app = Fastify({
@@ -1673,6 +1729,74 @@ describe("scenarios route contract", () => {
     });
   });
 
+  it("creates phase 1 and phase 2 Skill/OB and DB/Parry modifiers when a player declares Double Attack", async () => {
+    setupCombatDeclarationRoute();
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        actionId: "double_attack",
+        combatContext: {
+          modifierBuckets: {
+            general: [],
+            situationDb: [],
+            situationInitiative: [],
+            situationObSkill: [],
+          },
+        },
+        movementId: "hold",
+        scenarioParticipantId: "participant-1",
+      },
+      url: "/encounters/encounter-1/combat-declaration",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(mocks.encounterService.updateScenarioParticipantState).toHaveBeenCalledWith(
+      expect.objectContaining({
+        participantId: "participant-1",
+        scenarioId: "scenario-1",
+        state: expect.objectContaining({
+          combat: expect.objectContaining({
+            lastDeclaredActionId: "double_attack",
+            combatContext: expect.objectContaining({
+              modifierBuckets: expect.objectContaining({
+                situationDb: [
+                  doubleAttackPhase1DbParryModifier,
+                  doubleAttackPhase2DbParryModifier,
+                ],
+                situationObSkill: [
+                  doubleAttackPhase1ObSkillModifier,
+                  doubleAttackPhase2ObSkillModifier,
+                ],
+              }),
+            }),
+          }),
+        }),
+      }),
+    );
+    const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
+    expect(updatedEncounter.combatRoundState.participants[0].declaration).toMatchObject({
+      actionId: "double_attack",
+      combatContext: expect.objectContaining({
+        modifierBuckets: expect.objectContaining({
+          situationDb: [
+            doubleAttackPhase1DbParryModifier,
+            doubleAttackPhase2DbParryModifier,
+          ],
+          situationObSkill: [
+            doubleAttackPhase1ObSkillModifier,
+            doubleAttackPhase2ObSkillModifier,
+          ],
+        }),
+      }),
+      roundNumber: 1,
+      submittedBy: "player",
+    });
+  });
+
   it("preserves existing combat modifier buckets when a player declares", async () => {
     setupCombatDeclarationRoute({
       participant: {
@@ -2287,9 +2411,17 @@ describe("scenarios route contract", () => {
               selectedOpponentId: "guard",
               modifierBuckets: {
                 general: [],
-                situationDb: [attackParryDbParryModifierEntry, parryAttackDbParryModifierEntry],
+                situationDb: [
+                  attackParryDbParryModifierEntry,
+                  parryAttackDbParryModifierEntry,
+                  doubleAttackPhase1DbParryModifierEntry,
+                  doubleAttackPhase2DbParryModifierEntry,
+                ],
                 situationInitiative: [],
-                situationObSkill: [],
+                situationObSkill: [
+                  doubleAttackPhase1ObSkillModifierEntry,
+                  doubleAttackPhase2ObSkillModifierEntry,
+                ],
               },
             },
             lastDeclaredActionId: "parry_attack",

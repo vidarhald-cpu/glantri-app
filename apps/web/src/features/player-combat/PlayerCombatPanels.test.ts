@@ -55,18 +55,40 @@ describe("PlayerCombatPanels", () => {
           },
         ],
         situationInitiative: [],
-        situationObSkill: [],
+        situationObSkill: [
+          { id: "manual-ob", scope: "until" as const, value: 2 },
+          {
+            generated: true,
+            id: "generated:double-attack:phase1:ob-skill",
+            notes: "double attack",
+            scope: "until" as const,
+            sourcePhase: "phase1" as const,
+            value: -1,
+          },
+          {
+            generated: true,
+            id: "generated:double-attack:phase2:ob-skill",
+            notes: "double attack",
+            scope: "until" as const,
+            sourcePhase: "phase2" as const,
+            value: -1,
+          },
+        ],
       },
     };
 
-    const phase1DbRow = buildPlayerCombatModifierRows({
+    const phase1Rows = buildPlayerCombatModifierRows({
       combatContext,
       phaseKey: "phase1",
-    }).find((row) => row.bucketKey === "situation_db");
-    const phase2DbRow = buildPlayerCombatModifierRows({
+    });
+    const phase2Rows = buildPlayerCombatModifierRows({
       combatContext,
       phaseKey: "phase2",
-    }).find((row) => row.bucketKey === "situation_db");
+    });
+    const phase1DbRow = phase1Rows.find((row) => row.bucketKey === "situation_db");
+    const phase2DbRow = phase2Rows.find((row) => row.bucketKey === "situation_db");
+    const phase1ObRow = phase1Rows.find((row) => row.bucketKey === "situation_ob_skill");
+    const phase2ObRow = phase2Rows.find((row) => row.bucketKey === "situation_ob_skill");
 
     expect(phase1DbRow?.entries.map((entry) => entry.notes ?? entry.id)).toEqual([
       "manual-db",
@@ -78,6 +100,16 @@ describe("PlayerCombatPanels", () => {
       "parry attack",
     ]);
     expect(phase2DbRow?.total).toBe(-5);
+    expect(phase1ObRow?.entries.map((entry) => entry.notes ?? entry.id)).toEqual([
+      "manual-ob",
+      "double attack",
+    ]);
+    expect(phase1ObRow?.total).toBe(1);
+    expect(phase2ObRow?.entries.map((entry) => entry.notes ?? entry.id)).toEqual([
+      "manual-ob",
+      "double attack",
+    ]);
+    expect(phase2ObRow?.total).toBe(1);
   });
 
   it("keeps player combat modifiers editable while allowing read-only inspector use", () => {
