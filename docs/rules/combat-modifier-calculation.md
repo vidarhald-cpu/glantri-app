@@ -102,7 +102,9 @@ DB/P final = base DB or base P +/- DB/P adjustment
 
 Generated action DB/Parry rows may be phase-specific. Manual DB/Parry rows without a phase apply
 broadly. A generated row with `sourcePhase = phase1` contributes to phase 1 DB/P only; a generated
-row with `sourcePhase = phase2` contributes to phase 2 DB/P only.
+row with `sourcePhase = phase2` contributes to phase 2 DB/P only. No-specific-phase views such as
+Declaration and Round summary include broad rows only; they do not sum phase 1 and phase 2 generated
+rows together.
 
 Older workbook notes may refer to `Game sheet!G10/G11` for initiative. In the modern app model,
 those cells are not a separate initiative rule. They are the spreadsheet-era place where the GM

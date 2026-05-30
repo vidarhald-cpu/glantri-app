@@ -111,30 +111,29 @@ export function buildEncounterLiveCombatModifierSummary(input: {
   phaseKey?: EncounterCombatPhaseKey;
 }): EncounterLiveCombatModifierSummary {
   const effectSums = sumEncounterCombatEffectModifiers(input.combatEffects);
-  const phaseAwareCombatContext =
-    input.combatContext && input.phaseKey
-      ? {
-          ...input.combatContext,
-          modifierBuckets: {
-            general: filterCombatModifierEntriesForPhase(
-              input.combatContext.modifierBuckets.general,
-              input.phaseKey,
-            ),
-            situationDb: filterCombatModifierEntriesForPhase(
-              input.combatContext.modifierBuckets.situationDb,
-              input.phaseKey,
-            ),
-            situationInitiative: filterCombatModifierEntriesForPhase(
-              input.combatContext.modifierBuckets.situationInitiative,
-              input.phaseKey,
-            ),
-            situationObSkill: filterCombatModifierEntriesForPhase(
-              input.combatContext.modifierBuckets.situationObSkill,
-              input.phaseKey,
-            ),
-          },
-        }
-      : input.combatContext;
+  const phaseAwareCombatContext = input.combatContext
+    ? {
+        ...input.combatContext,
+        modifierBuckets: {
+          general: filterCombatModifierEntriesForPhase(
+            input.combatContext.modifierBuckets.general,
+            input.phaseKey,
+          ),
+          situationDb: filterCombatModifierEntriesForPhase(
+            input.combatContext.modifierBuckets.situationDb,
+            input.phaseKey,
+          ),
+          situationInitiative: filterCombatModifierEntriesForPhase(
+            input.combatContext.modifierBuckets.situationInitiative,
+            input.phaseKey,
+          ),
+          situationObSkill: filterCombatModifierEntriesForPhase(
+            input.combatContext.modifierBuckets.situationObSkill,
+            input.phaseKey,
+          ),
+        },
+      }
+    : undefined;
   const contextTotals = getPlayerEncounterCombatModifierTotals(phaseAwareCombatContext);
 
   return {
@@ -159,7 +158,7 @@ export function filterCombatModifierEntriesForPhase(
   phaseKey?: EncounterCombatPhaseKey,
 ): ScenarioCombatModifierEntry[] {
   return entries.filter(
-    (entry) => !phaseKey || !entry.sourcePhase || entry.sourcePhase === phaseKey,
+    (entry) => !entry.sourcePhase || (phaseKey != null && entry.sourcePhase === phaseKey),
   );
 }
 

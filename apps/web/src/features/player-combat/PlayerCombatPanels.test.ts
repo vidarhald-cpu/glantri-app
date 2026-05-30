@@ -85,11 +85,20 @@ describe("PlayerCombatPanels", () => {
       combatContext,
       phaseKey: "phase2",
     });
+    const noPhaseRows = buildPlayerCombatModifierRows({
+      combatContext,
+    });
     const phase1DbRow = phase1Rows.find((row) => row.bucketKey === "situation_db");
     const phase2DbRow = phase2Rows.find((row) => row.bucketKey === "situation_db");
     const phase1ObRow = phase1Rows.find((row) => row.bucketKey === "situation_ob_skill");
     const phase2ObRow = phase2Rows.find((row) => row.bucketKey === "situation_ob_skill");
+    const noPhaseDbRow = noPhaseRows.find((row) => row.bucketKey === "situation_db");
+    const noPhaseObRow = noPhaseRows.find((row) => row.bucketKey === "situation_ob_skill");
 
+    expect(noPhaseDbRow?.entries.map((entry) => entry.notes ?? entry.id)).toEqual(["manual-db"]);
+    expect(noPhaseDbRow?.total).toBe(-1);
+    expect(noPhaseObRow?.entries.map((entry) => entry.notes ?? entry.id)).toEqual(["manual-ob"]);
+    expect(noPhaseObRow?.total).toBe(2);
     expect(phase1DbRow?.entries.map((entry) => entry.notes ?? entry.id)).toEqual([
       "manual-db",
       "attack parry",
