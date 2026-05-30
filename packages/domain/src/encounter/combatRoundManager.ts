@@ -1,6 +1,10 @@
 import { z } from "zod";
 
-import { scenarioParticipantCombatContextSchema } from "../campaign/scenario";
+import {
+  scenarioCombatModifierBucketSchema,
+  scenarioCombatModifierEntrySchema,
+  scenarioParticipantCombatContextSchema,
+} from "../campaign/scenario";
 import type { EncounterParticipant, EncounterSession } from "./session";
 
 const idSchema = z.string().min(1);
@@ -89,6 +93,8 @@ export const combatRoundPhaseContextsSchema = z.object({
   phase2: scenarioParticipantCombatContextSchema.optional(),
 });
 
+const combatRoundPhaseSchema = z.enum(["phase1", "phase2"]);
+
 export const combatRoundDeclarationSchema = z.object({
   actionId: idSchema.optional(),
   additionalActionNotes: z.string().optional(),
@@ -114,6 +120,70 @@ export const combatRoundParticipantStateSchema = z.object({
   ),
 });
 
+export const combatRoundStepSnapshotSchema = z.object({
+  actionResultSummary: z.string().optional(),
+  attackSummary: z
+    .object({
+      attackMode: z.string(),
+      dmb: z.string(),
+      initiative: z.string(),
+      maxCrits: z.string(),
+      ob: z.string(),
+      weaponName: z.string(),
+    })
+    .optional(),
+  committedAt: z.string().datetime(),
+  declarationSummary: z
+    .object({
+      actionId: idSchema.optional(),
+      additionalActionNotes: z.string().optional(),
+      movementId: idSchema.optional(),
+      secondaryActionId: idSchema.optional(),
+    })
+    .optional(),
+  defenseSummary: z
+    .object({
+      db: z.string(),
+      dm: z.string(),
+      parry: z.string(),
+      sourceName: z.string(),
+    })
+    .optional(),
+  id: idSchema,
+  initiativeRank: z
+    .object({
+      rank: z.number().int().positive(),
+      rankTotal: z.number().int().nonnegative(),
+      tiedCount: z.number().int().positive(),
+    })
+    .optional(),
+  initiativeResult: combatRoundInitiativeResultSchema.optional(),
+  modifierSummary: z
+    .object({
+      dbRaw: z.number().int().default(0),
+      generalFatigueRaw: z.number().int().default(0),
+      initiativeRaw: z.number().int().default(0),
+      obSkillRaw: z.number().int().default(0),
+      rows: z
+        .array(
+          z.object({
+            bucketKey: scenarioCombatModifierBucketSchema,
+            entries: z.array(scenarioCombatModifierEntrySchema).default([]),
+            label: z.string().min(1),
+            total: z.number().int(),
+          }),
+        )
+        .default([]),
+    })
+    .optional(),
+  participantId: idSchema,
+  participantLabel: z.string().min(1),
+  phase: combatRoundPhaseSchema.optional(),
+  phaseContext: scenarioParticipantCombatContextSchema.optional(),
+  roundNumber: z.number().int().positive(),
+  step: combatRoundStepSchema,
+});
+
 export const combatRoundStateSchema = z.object({
   activeParticipantId: idSchema.optional(),
   currentStep: combatRoundStepSchema.default("select_actions"),
@@ -121,6 +191,7 @@ export const combatRoundStateSchema = z.object({
   roundNumber: z.number().int().positive().default(1),
   selectedParticipantId: idSchema.optional(),
   selectedStep: combatRoundStepSchema.optional(),
+  stepSnapshots: z.array(combatRoundStepSnapshotSchema).default([]),
 });
 
 export type CombatRoundStepStatus = z.infer<typeof combatRoundStepStatusSchema>;
@@ -129,6 +200,7 @@ export type CombatRoundPhaseContexts = z.infer<typeof combatRoundPhaseContextsSc
 export type CombatRoundInitiativeResult = z.infer<typeof combatRoundInitiativeResultSchema>;
 export type CombatRoundInitiatives = z.infer<typeof combatRoundInitiativesSchema>;
 export type CombatRoundParticipantState = z.infer<typeof combatRoundParticipantStateSchema>;
+export type CombatRoundStepSnapshot = z.infer<typeof combatRoundStepSnapshotSchema>;
 export type CombatRoundState = z.infer<typeof combatRoundStateSchema>;
 export interface CombatRoundInitiativeRank {
   rank: number;
@@ -227,6 +299,37 @@ function mergeStepStatuses(
   };
 }
 
+function getStepIndex(step: CombatRoundStep): number {
+  return COMBAT_ROUND_STEPS.indexOf(step);
+}
+
+function isSameCombatRoundStepSnapshot(
+  left: CombatRoundStepSnapshot,
+  right: Pick<CombatRoundStepSnapshot, "participantId" | "roundNumber" | "step">,
+): boolean {
+  return (
+    left.roundNumber === right.roundNumber &&
+    left.participantId === right.participantId &&
+    left.step === right.step
+  );
+}
+
+function clearSnapshotsFromStep(input: {
+  roundNumber: number;
+  snapshots: CombatRoundStepSnapshot[];
+  step: CombatRoundStep;
+}): CombatRoundStepSnapshot[] {
+  const clearFromIndex = getStepIndex(input.step);
+
+  return input.snapshots.filter((snapshot) => {
+    if (snapshot.roundNumber !== input.roundNumber) {
+      return true;
+    }
+
+    return getStepIndex(snapshot.step) < clearFromIndex;
+  });
+}
+
 function participantStateFromEncounterParticipant(input: {
   existing?: CombatRoundParticipantState;
   participant: EncounterParticipant;
@@ -272,6 +375,7 @@ export function initializeCombatRoundState(input: {
     roundNumber: existing?.roundNumber ?? input.encounter.currentRound,
     selectedParticipantId,
     selectedStep: existing?.selectedStep ?? existing?.currentStep ?? "select_actions",
+    stepSnapshots: existing?.stepSnapshots ?? [],
   };
 }
 
@@ -287,17 +391,73 @@ export function getPreviousCombatRoundStep(step: CombatRoundStep): CombatRoundSt
   return currentIndex > 0 ? COMBAT_ROUND_STEPS[currentIndex - 1] : undefined;
 }
 
-export function advanceCombatRoundStep(state: CombatRoundState): CombatRoundState {
+export function upsertCombatRoundStepSnapshots(input: {
+  snapshots: CombatRoundStepSnapshot[];
+  state: CombatRoundState;
+}): CombatRoundState {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const nextSnapshots = input.snapshots.map((snapshot) =>
+    combatRoundStepSnapshotSchema.parse(snapshot),
+  );
+
+  return {
+    ...normalized,
+    stepSnapshots: [
+      ...normalized.stepSnapshots.filter(
+        (existingSnapshot) =>
+          !nextSnapshots.some((snapshot) =>
+            isSameCombatRoundStepSnapshot(existingSnapshot, snapshot),
+          ),
+      ),
+      ...nextSnapshots,
+    ],
+  };
+}
+
+export function getCombatRoundStepSnapshot(input: {
+  participantId?: string;
+  roundNumber?: number;
+  state: CombatRoundState;
+  step?: CombatRoundStep;
+}): CombatRoundStepSnapshot | undefined {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const participantId = input.participantId ?? normalized.selectedParticipantId;
+  const roundNumber = input.roundNumber ?? normalized.roundNumber;
+  const step = input.step ?? normalized.selectedStep ?? normalized.currentStep;
+
+  if (!participantId) {
+    return undefined;
+  }
+
+  return normalized.stepSnapshots.find((snapshot) =>
+    isSameCombatRoundStepSnapshot(snapshot, {
+      participantId,
+      roundNumber,
+      step,
+    }),
+  );
+}
+
+export function advanceCombatRoundStep(
+  state: CombatRoundState,
+  input: { stepSnapshots?: CombatRoundStepSnapshot[] } = {},
+): CombatRoundState {
   const normalized = combatRoundStateSchema.parse(state);
+  const withSnapshots = input.stepSnapshots
+    ? upsertCombatRoundStepSnapshots({
+        snapshots: input.stepSnapshots,
+        state: normalized,
+      })
+    : normalized;
   const nextStep = getNextCombatRoundStep(normalized.currentStep);
   const startsNextRound = normalized.currentStep === "round_summary";
   const advancesDeclarationStep = normalized.currentStep === "select_actions";
 
   return {
-    ...normalized,
-    activeParticipantId: startsNextRound ? undefined : normalized.activeParticipantId,
+    ...withSnapshots,
+    activeParticipantId: startsNextRound ? undefined : withSnapshots.activeParticipantId,
     currentStep: nextStep,
-    participants: normalized.participants.map((participant) => ({
+    participants: withSnapshots.participants.map((participant) => ({
       ...participant,
       stepStatuses: startsNextRound
         ? buildDefaultStepStatuses()
@@ -311,7 +471,7 @@ export function advanceCombatRoundStep(state: CombatRoundState): CombatRoundStat
               : "complete",
           },
     })),
-    roundNumber: startsNextRound ? normalized.roundNumber + 1 : normalized.roundNumber,
+    roundNumber: startsNextRound ? withSnapshots.roundNumber + 1 : withSnapshots.roundNumber,
     selectedStep: nextStep,
   };
 }
@@ -463,6 +623,11 @@ export function clearCombatRoundStep(input: {
           [input.step]: "pending",
         },
       };
+    }),
+    stepSnapshots: clearSnapshotsFromStep({
+      roundNumber: normalized.roundNumber,
+      snapshots: normalized.stepSnapshots,
+      step: input.step,
     }),
   };
 }
@@ -690,6 +855,7 @@ export function buildCombatRoundInspector(input: {
   step?: CombatRoundStep;
 }): {
   participant?: CombatRoundParticipantState;
+  snapshot?: CombatRoundStepSnapshot;
   status?: CombatRoundStepStatus;
   step: CombatRoundStep;
 } {
@@ -704,6 +870,14 @@ export function buildCombatRoundInspector(input: {
 
   return {
     participant,
+    snapshot: participant
+      ? getCombatRoundStepSnapshot({
+          participantId: participant.participantId,
+          roundNumber: normalized.roundNumber,
+          state: normalized,
+          step,
+        })
+      : undefined,
     status: participant?.stepStatuses[step],
     step,
   };

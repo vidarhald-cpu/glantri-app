@@ -16,6 +16,7 @@ import {
   getCombatRoundModifierPhaseForStep,
   getCombatRoundInitiativePositions,
   getCombatRoundInitiativeRanks,
+  getCombatRoundStepSnapshot,
   getPreviousCombatRoundStep,
   initializeCombatRoundState,
   recordCombatRoundDeclaration,
@@ -28,6 +29,7 @@ import {
   sortCombatRoundParticipantsByInitiative,
 } from "./combatRoundManager";
 import { encounterSessionSchema } from "./session";
+import type { CombatRoundStepSnapshot } from "./combatRoundManager";
 
 function participant(input: {
   id: string;
@@ -73,6 +75,19 @@ function encounter(input: Partial<EncounterSession> = {}): EncounterSession {
     updatedAt: "2026-01-01T00:00:00.000Z",
     ...input,
   });
+}
+
+function stepSnapshot(
+  input: Partial<CombatRoundStepSnapshot> & Pick<CombatRoundStepSnapshot, "participantId" | "step">,
+): CombatRoundStepSnapshot {
+  return {
+    ...input,
+    committedAt: "2026-01-01T00:02:00.000Z",
+    id: `snapshot-${input.participantId}-${input.step}`,
+    participantId: input.participantId,
+    participantLabel: input.participantId,
+    roundNumber: 3,
+  };
 }
 
 describe("combat round manager", () => {
@@ -128,6 +143,110 @@ describe("combat round manager", () => {
     expect(nextRoundState.participants[0]?.stepStatuses.select_actions).toBe("pending");
   });
 
+  it("commits per-participant snapshots when advancing a step", () => {
+    const state = advanceCombatRoundStep(initializeCombatRoundState({ encounter: encounter() }));
+    const snapshot = stepSnapshot({
+      modifierSummary: {
+        dbRaw: -4,
+        generalFatigueRaw: -1,
+        initiativeRaw: 0,
+        obSkillRaw: 0,
+        rows: [
+          {
+            bucketKey: "situation_db",
+            entries: [
+              {
+                durationRounds: 1,
+                generated: true,
+                id: "generated-db",
+                notes: "double attack",
+                scope: "until",
+                sourcePhase: "phase1",
+                sourceRule: "double-attack-phase1-db-parry",
+                value: -4,
+              },
+            ],
+            label: "DB/Parry",
+            total: -4,
+          },
+        ],
+      },
+      participantId: "gladiator",
+      phase: "phase1",
+      phaseContext: {
+        mainHandParryDirection: "left_forward",
+        modifierBuckets: {
+          general: [],
+          situationDb: [],
+          situationInitiative: [],
+          situationObSkill: [],
+        },
+      },
+      step: "review_action_modifiers",
+    });
+    const advanced = advanceCombatRoundStep(state, { stepSnapshots: [snapshot] });
+
+    expect(advanced.currentStep).toBe("initiative_phase_1");
+    expect(
+      getCombatRoundStepSnapshot({
+        participantId: "gladiator",
+        state: advanced,
+        step: "review_action_modifiers",
+      }),
+    ).toMatchObject({
+      modifierSummary: {
+        dbRaw: -4,
+        rows: [
+          expect.objectContaining({
+            bucketKey: "situation_db",
+            total: -4,
+          }),
+        ],
+      },
+      participantId: "gladiator",
+      phase: "phase1",
+      step: "review_action_modifiers",
+    });
+  });
+
+  it("keeps committed snapshots stable when later live state changes", () => {
+    const state = advanceCombatRoundStep(initializeCombatRoundState({ encounter: encounter() }));
+    const advanced = advanceCombatRoundStep(state, {
+      stepSnapshots: [
+        stepSnapshot({
+          modifierSummary: {
+            dbRaw: -4,
+            generalFatigueRaw: 0,
+            initiativeRaw: 0,
+            obSkillRaw: 0,
+            rows: [],
+          },
+          participantId: "gladiator",
+          phase: "phase1",
+          step: "review_action_modifiers",
+        }),
+      ],
+    });
+    const liveChanged = recordCombatRoundDeclaration({
+      declaration: {
+        actionId: "double_attack",
+        movementId: "hold",
+        roundNumber: 3,
+      },
+      participantId: "gladiator",
+      state: advanced,
+      submittedBy: "gm",
+    });
+
+    expect(
+      getCombatRoundStepSnapshot({
+        participantId: "gladiator",
+        state: liveChanged,
+        step: "review_action_modifiers",
+      })?.modifierSummary?.dbRaw,
+    ).toBe(-4);
+  });
+
   it("finds the previous combat round step", () => {
     expect(getPreviousCombatRoundStep("select_actions")).toBeUndefined();
     expect(getPreviousCombatRoundStep("review_action_modifiers")).toBe("select_actions");
@@ -154,6 +273,47 @@ describe("combat round manager", () => {
     expect(cleared.participants[0]?.stepStatuses.review_action_modifiers).toBe("pending");
     expect(cleared.participants[0]?.stepStatuses.select_actions).toBe("submitted");
     expect(state.participants[0]?.stepStatuses.review_action_modifiers).toBe("complete");
+  });
+
+  it("clears snapshots for the cleared step and later steps only", () => {
+    const state = advanceCombatRoundStep(initializeCombatRoundState({ encounter: encounter() }));
+    const withSnapshots = advanceCombatRoundStep(state, {
+      stepSnapshots: [
+        stepSnapshot({
+          participantId: "gladiator",
+          phase: "phase1",
+          step: "review_action_modifiers",
+        }),
+      ],
+    });
+    const withLaterSnapshot = advanceCombatRoundStep(withSnapshots, {
+      stepSnapshots: [
+        stepSnapshot({
+          participantId: "gladiator",
+          phase: "phase1",
+          step: "initiative_phase_1",
+        }),
+      ],
+    });
+    const cleared = clearCombatRoundStep({
+      state: withLaterSnapshot,
+      step: "review_action_modifiers",
+    });
+
+    expect(
+      getCombatRoundStepSnapshot({
+        participantId: "gladiator",
+        state: cleared,
+        step: "review_action_modifiers",
+      }),
+    ).toBeUndefined();
+    expect(
+      getCombatRoundStepSnapshot({
+        participantId: "gladiator",
+        state: cleared,
+        step: "initiative_phase_1",
+      }),
+    ).toBeUndefined();
   });
 
   it("clears initiative values when clearing initiative steps", () => {
@@ -211,6 +371,43 @@ describe("combat round manager", () => {
     expect(cleared.currentStep).toBe("select_actions");
     expect(cleared.participants[0]?.stepStatuses.select_actions).toBe("pending");
     expect(cleared.participants[0]?.declaration).toBeUndefined();
+  });
+
+  it("clears declaration snapshots when DE is cleared", () => {
+    const state = recordCombatRoundDeclaration({
+      declaration: {
+        actionId: "attack_parry",
+        movementId: "hold",
+        roundNumber: 3,
+      },
+      participantId: "gladiator",
+      state: initializeCombatRoundState({ encounter: encounter() }),
+      submittedBy: "player",
+    });
+    const withSnapshots = advanceCombatRoundStep(state, {
+      stepSnapshots: [
+        stepSnapshot({
+          declarationSummary: {
+            actionId: "attack_parry",
+            movementId: "hold",
+          },
+          participantId: "gladiator",
+          step: "select_actions",
+        }),
+      ],
+    });
+    const cleared = clearCombatRoundStep({
+      state: withSnapshots,
+      step: "select_actions",
+    });
+
+    expect(
+      getCombatRoundStepSnapshot({
+        participantId: "gladiator",
+        state: cleared,
+        step: "select_actions",
+      }),
+    ).toBeUndefined();
   });
 
   it("sets the active participant marker", () => {

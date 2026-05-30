@@ -95,6 +95,11 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("buildEncounterLiveCombatModifierSummary");
     expect(source).toContain("getCombatRoundModifierPhaseForStep");
     expect(source).toContain("const inspectorModifierPhase = getCombatRoundModifierPhaseForStep(inspector.step)");
+    expect(source).toContain("getCombatRoundStepSnapshot");
+    expect(source).toContain("inspectorSnapshot");
+    expect(source).toContain("inspectorDisplayDraft");
+    expect(source).toContain("inspectorDisplayModifierRows");
+    expect(source).toContain("Committed");
     expect(source).toContain("phaseKey: inspectorModifierPhase");
     expect(source).toContain("validateCombatDeclarationTargets");
     expect(source).toContain("inspectorTargetValidation");
@@ -131,7 +136,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain(
       'const phaseKey: PlayerCombatPhaseKey = index === 0 ? "phase1" : "phase2"',
     );
-    expect(source).toContain("const phaseCombatContext = inspectorDraft.phaseContexts[phaseKey]");
+    expect(source).toContain("const phaseCombatContext = inspectorDisplayDraft.phaseContexts[phaseKey]");
     expect(source).not.toContain("formatCombatInitiativeRoll(inspector");
     expect(source).not.toContain("Action status:");
     expect(source).not.toContain("Damage review:");
@@ -142,8 +147,8 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("getPlayerEncounterOpponentParticipants");
     expect(source).toContain("targetOptions={inspectorTargetOptions}");
     expect(source).toContain("phaseModel.showDefenseContext");
-    expect(source).toContain("actionId: inspectorDraft.actionId");
-    expect(source).toContain("secondaryActionId: inspectorDraft.secondaryActionId");
+    expect(source).toContain("actionId: inspectorDisplayDraft.actionId");
+    expect(source).toContain("secondaryActionId: inspectorDisplayDraft.secondaryActionId");
     expect(source).not.toContain("inspectorOpponentOptions");
     expect(source).toContain("moveSelectedParticipantDown");
     expect(source).toContain("Select a participant step to inspect combat details.");
@@ -157,6 +162,8 @@ describe("CombatRoundManagerPanel", () => {
     const source = readSource();
 
     expect(source).toContain("updateEncounterOnServer");
+    expect(source).toContain("buildCombatRoundStepSnapshots");
+    expect(source).toContain("advanceCombatRoundStep(roundState, { stepSnapshots })");
     expect(source).toContain("combatRoundState: nextRoundState");
     expect(source).toContain("currentRound: nextRoundState.roundNumber");
     expect(source).toContain("submitCombatDeclarationOnServer");
