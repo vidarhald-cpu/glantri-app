@@ -147,18 +147,19 @@ describe("rules documentation registry", () => {
     expect(model.selectedDocument.markdown).toContain("GMR");
   });
 
-  it("loads the Combat To Hit document with source and deferred-scope notes", async () => {
+  it("loads the Combat To Hit document with roll and deferred-scope notes", async () => {
     const model = await getRulesDocumentationPageModel({
       selectedDocumentId: "combat-to-hit"
     });
 
     expect(model.selectedDocument.title).toBe("Combat To Hit");
     expect(model.selectedDocument.markdown).toContain("# Combat To Hit");
-    expect(model.selectedDocument.markdown).toContain("Sheet: `to hit (new)`");
-    expect(model.selectedDocument.markdown).toContain("lookup total = OB - DB + roll");
+    expect(model.selectedDocument.markdown).toContain("Roll open-ended `1d20`");
+    expect(model.selectedDocument.markdown).toContain("lookup total = OB - DB + open-ended roll total");
     expect(model.selectedDocument.markdown).toContain("Lookup total `11` is a grazing hit.");
-    expect(model.selectedDocument.markdown).toContain("The legacy workbook sheet `To Hit table` remains reference-only");
-    expect(model.selectedDocument.markdown).toContain("duplicate");
+    expect(model.selectedDocument.markdown).toContain("Damage, critical, and minimum-damage details are deferred.");
+    expect(model.selectedDocument.markdown).not.toContain("New Combat Arena.xlsx");
+    expect(model.selectedDocument.markdown).not.toContain("Sheet: `to hit (new)`");
     expect(model.selectedDocument.markdown).not.toContain("| Lookup total |");
   });
 

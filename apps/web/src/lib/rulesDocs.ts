@@ -69,7 +69,7 @@ export const rulesDocumentsRegistry: RulesDocumentRegistryEntry[] = [
   },
   {
     audience: "Players and GM reviewers",
-    description: "Manual reference for the canonical workbook-backed combat to-hit hit/miss/grazing lookup.",
+    description: "Manual reference for the canonical combat to-hit hit/miss/grazing lookup.",
     fileName: "combat-to-hit.md",
     id: "combat-to-hit",
     order: 35,

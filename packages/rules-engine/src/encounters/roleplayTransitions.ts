@@ -1,5 +1,6 @@
 import type {
   EncounterSession,
+  OpenEndedD20Roll,
   RoleplayDifficulty,
   RoleplayOpenEndedD20Roll,
   RoleplayParticipantDescription,
@@ -7,7 +8,12 @@ import type {
   RoleplayState,
   RoleplaySuccessLevel,
 } from "@glantri/domain";
-import { normalizeRoleplayState, normalizeRollModifiers, roleplayStateSchema } from "@glantri/domain";
+import {
+  normalizeRoleplayState,
+  normalizeRollModifiers,
+  roleplayStateSchema,
+  rollOpenEndedD20,
+} from "@glantri/domain";
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -17,28 +23,8 @@ function makeId(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-function rollDie(sides: number, rng: () => number): number {
-  return Math.floor(rng() * sides) + 1;
-}
-
 export function rollOpenEndedRoleplayD20(rng: () => number = Math.random): RoleplayOpenEndedD20Roll {
-  const rollD20 = rollDie(20, rng);
-  const openEndedD10s: number[] = [];
-  let dieResult = rollD20;
-
-  if (rollD20 === 20 || rollD20 === 1) {
-    const direction = rollD20 === 20 ? 1 : -1;
-    let keepRolling = true;
-
-    while (keepRolling) {
-      const d10 = rollDie(10, rng);
-      openEndedD10s.push(d10);
-      dieResult += direction * d10;
-      keepRolling = d10 === 10;
-    }
-  }
-
-  return { dieResult, openEndedD10s, rollD20 };
+  return rollOpenEndedD20(rng) satisfies OpenEndedD20Roll;
 }
 
 export function withRoleplayState(input: {
