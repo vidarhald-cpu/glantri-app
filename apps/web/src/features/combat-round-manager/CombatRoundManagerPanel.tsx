@@ -21,10 +21,12 @@ import {
   COMBAT_ROUND_STEP_ABBREVIATIONS,
   COMBAT_ROUND_STEP_LABELS,
   COMBAT_ROUND_STEPS,
+  advanceCombatRoundPhaseResolutionSubstepForParticipant,
   advanceCombatRoundStep,
   buildCombatRoundAttackRollResult,
   buildCombatRoundInspector,
   characterBuildSchema,
+  combatRoundParticipantHasPhaseAttack,
   completeCombatRoundPhaseResolutionForParticipant,
   ensureCombatRoundPhaseResolutionResultsForPhase,
   formatOpenEndedD20RollBreakdown,
@@ -412,11 +414,20 @@ function formatCombatResolutionSubstepLabel(substep: string): string {
 }
 
 function getCombatResolutionButtonLabel(input: {
+  hasPhaseAttack?: boolean;
   phase?: CombatRoundPhase;
   substep?: string;
   step: CombatRoundStep;
 }): string {
-  if (input.phase && input.substep === "attack") {
+  if (input.phase && input.hasPhaseAttack === false) {
+    return `Complete ${formatCombatPhaseLabel(input.phase)} for participant`;
+  }
+
+  if (
+    input.phase &&
+    input.hasPhaseAttack !== false &&
+    (!input.substep || input.substep === "pending" || input.substep === "attack")
+  ) {
     return `Roll ${formatCombatPhaseLabel(input.phase)} attack`;
   }
 
@@ -433,6 +444,34 @@ function getCombatResolutionButtonLabel(input: {
   }
 
   return getGmCombatStepActionLabel(input.step);
+}
+
+function formatCombatResolutionNextLabel(input: {
+  hasPhaseAttack?: boolean;
+  phase: CombatRoundPhase;
+  substep: string;
+}): string {
+  const phaseLabel = input.phase === "phase1" ? "Phase 1" : "Phase 2";
+
+  if (input.hasPhaseAttack === false) {
+    return `No ${formatCombatPhaseLabel(input.phase)} attack`;
+  }
+
+  switch (input.substep) {
+    case "attack":
+      return `${phaseLabel} attack roll`;
+    case "parry":
+      return `${phaseLabel} parry review`;
+    case "damage":
+      return `${phaseLabel} damage review`;
+    case "effects":
+      return `${phaseLabel} effects review`;
+    case "done":
+      return `${phaseLabel} done`;
+    case "pending":
+    default:
+      return `${phaseLabel} ${formatCombatResolutionSubstepLabel(input.substep).toLowerCase()}`;
+  }
 }
 
 function parseCombatInteger(value: string, label: string): number {
@@ -702,9 +741,21 @@ export default function CombatRoundManagerPanel({
           state: roundState,
         })
       : undefined;
+  const inspectorCurrentPhaseHasAttack =
+    inspector.participant && inspectorCurrentResolutionPhase
+      ? combatRoundParticipantHasPhaseAttack({
+          participantId: inspector.participant.participantId,
+          phase: inspectorCurrentResolutionPhase,
+          state: roundState,
+        })
+      : undefined;
   const inspectorTargetValidationMessage =
     !inspectorCurrentStepIsInitiative &&
-    (!inspectorCurrentResolutionPhase || inspectorPhaseResolutionStatus?.substep === "attack") &&
+    (!inspectorCurrentResolutionPhase ||
+      (inspectorCurrentPhaseHasAttack !== false &&
+        (!inspectorPhaseResolutionStatus ||
+          inspectorPhaseResolutionStatus.substep === "pending" ||
+          inspectorPhaseResolutionStatus.substep === "attack"))) &&
     !inspectorTargetValidation.valid
       ? inspectorTargetValidation.message
       : undefined;
@@ -857,26 +908,17 @@ export default function CombatRoundManagerPanel({
           state: roundState,
         })
       : undefined);
-  const inspectorAttackPhaseModel = inspectorAttackPhase
-    ? buildPlayerCombatPhasePanelModel({
-        actionId: inspectorDisplayDraft.actionId,
-        attackStats: inspectorPhaseLoadoutSummaries[inspectorAttackPhase].attackStats,
-        defenseStats: null,
-        phaseCard: {
-          description: "",
-          phaseLabel: inspectorAttackPhase === "phase1" ? "Phase 1" : "Phase 2",
-          stats: [],
-          title: "",
-        },
-        phaseContext: inspectorDisplayDraft.phaseContexts[inspectorAttackPhase],
-        phaseKey: inspectorAttackPhase,
-        secondaryActionId: inspectorDisplayDraft.secondaryActionId,
-      })
-    : undefined;
   const inspectorNoPhaseAttack =
     Boolean(inspectorAttackPhase) &&
     !inspectorDisplayAttackResult &&
-    !inspectorAttackPhaseModel?.showAttackStats;
+    inspectorCurrentPhaseHasAttack === false;
+  const inspectorCanRollPhaseAttack =
+    Boolean(inspectorCurrentAttackPhase) &&
+    inspectorCurrentPhaseHasAttack === true &&
+    (!inspectorPhaseResolutionStatus ||
+      inspectorPhaseResolutionStatus.substep === "pending" ||
+      inspectorPhaseResolutionStatus.substep === "attack") &&
+    !inspectorDisplayAttackResult;
   const inspectorIsCursorParticipant =
     Boolean(inspectorPhaseResolutionCursor) &&
     inspectorPhaseResolutionCursor?.participantId === inspector.participant?.participantId;
@@ -887,10 +929,10 @@ export default function CombatRoundManagerPanel({
     : undefined;
   const inspectorActionButtonLabel =
     inspectorCurrentResolutionPhase &&
-    inspectorPhaseResolutionStatus?.substep === "attack" &&
-    inspectorNoPhaseAttack
+    inspectorCurrentPhaseHasAttack === false
       ? `Complete ${formatCombatPhaseLabel(inspectorCurrentResolutionPhase)} for participant`
       : getCombatResolutionButtonLabel({
+          hasPhaseAttack: inspectorCurrentPhaseHasAttack,
           phase: inspectorCurrentResolutionPhase,
           step: roundState.currentStep,
           substep: inspectorPhaseResolutionStatus?.substep,
@@ -922,10 +964,10 @@ export default function CombatRoundManagerPanel({
               }),
               resultLabel: `Result: ${inspectorDisplayAttackResult.tableResult}`,
             }
-          : inspectorNoPhaseAttack
-            ? {
-                interpretedResult: `No ${formatCombatPhaseLabel(inspectorAttackPhase ?? "phase1")} attack.`,
-              }
+            : inspectorNoPhaseAttack
+              ? {
+                  interpretedResult: `No ${formatCombatPhaseLabel(inspectorAttackPhase ?? "phase1")} attack.`,
+                }
             : inspectorDisplayInitiative
               ? {
                   interpretedResult: formatCombatInitiativeFormula(inspectorDisplayInitiative),
@@ -944,7 +986,15 @@ export default function CombatRoundManagerPanel({
   const inspectorStatusSuffix = inspectorSnapshot
     ? " Committed."
     : inspectorPhaseResolutionCursor
-      ? ` Current actor: ${inspectorCursorParticipantLabel ?? inspectorPhaseResolutionCursor.participantId}. Substep: ${formatCombatResolutionSubstepLabel(inspectorPhaseResolutionCursor.substep)}.${inspectorIsCursorParticipant ? "" : " Selected actor differs from current cursor."}`
+      ? ` Current actor: ${inspectorCursorParticipantLabel ?? inspectorPhaseResolutionCursor.participantId} · Next: ${formatCombatResolutionNextLabel({
+          hasPhaseAttack: combatRoundParticipantHasPhaseAttack({
+            participantId: inspectorPhaseResolutionCursor.participantId,
+            phase: inspectorPhaseResolutionCursor.phase,
+            state: roundState,
+          }),
+          phase: inspectorPhaseResolutionCursor.phase,
+          substep: inspectorPhaseResolutionCursor.substep,
+        })}.${inspectorIsCursorParticipant ? "" : " Selected actor differs from current cursor."}`
     : inspectorDisplayPhaseResolutionResult
       ? " Resolution review pending."
     : inspectorDisplayAttackResult
@@ -1483,6 +1533,38 @@ export default function CombatRoundManagerPanel({
         phase,
         state: roundState,
       });
+      const hasPhaseAttack = combatRoundParticipantHasPhaseAttack({
+        participantId: input.participantId,
+        phase,
+        state: roundState,
+      });
+      const attackStep = phase === "phase1" ? "phase_1_actions" : "phase_2_actions";
+      const reviewStep = phase === "phase1" ? "review_phase_2_actions" : "review_phase_2_damage";
+      const participant = roundState.participants.find(
+        (entry) => entry.participantId === input.participantId,
+      );
+
+      if (input.step === attackStep) {
+        if (!hasPhaseAttack) {
+          return phaseStatus.substep === "done" ? "skipped" : input.status;
+        }
+
+        if (
+          participant?.attackResults[phase] ||
+          phaseStatus.substep === "parry" ||
+          phaseStatus.substep === "damage" ||
+          phaseStatus.substep === "effects" ||
+          phaseStatus.substep === "done"
+        ) {
+          return "gmEdited";
+        }
+
+        return input.status;
+      }
+
+      if (input.step === reviewStep) {
+        return phaseStatus.substep === "done" ? "complete" : input.status;
+      }
 
       if (phaseStatus.substep === "done") {
         return "complete";
@@ -1728,6 +1810,34 @@ export default function CombatRoundManagerPanel({
         caughtError instanceof Error
           ? caughtError.message
           : `Unable to complete ${formatCombatPhaseLabel(phase)} resolution.`,
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function advanceInspectorPhaseResolutionSubstep(phase: CombatRoundPhase) {
+    if (!inspector.participant) {
+      return;
+    }
+
+    setSaving(true);
+
+    try {
+      const nextRoundState = advanceCombatRoundPhaseResolutionSubstepForParticipant({
+        participantId: inspector.participant.participantId,
+        phase,
+        state: roundState,
+        updatedAt: new Date().toISOString(),
+      });
+
+      await persistRoundState(nextRoundState);
+      setSaveError(undefined);
+    } catch (caughtError) {
+      setSaveError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : `Unable to advance ${formatCombatPhaseLabel(phase)} resolution.`,
       );
     } finally {
       setSaving(false);
@@ -2147,10 +2257,14 @@ export default function CombatRoundManagerPanel({
                       void (inspectorCurrentStepIsInitiative
                         ? rollInspectorInitiative()
                         : inspectorCurrentResolutionPhase &&
-                            (inspectorPhaseResolutionStatus?.substep !== "attack" ||
-                              inspectorNoPhaseAttack)
+                            (inspectorCurrentPhaseHasAttack === false ||
+                              inspectorPhaseResolutionStatus?.substep === "effects")
                           ? completeInspectorPhaseResolution(inspectorCurrentResolutionPhase)
-                          : inspectorCurrentAttackPhase
+                          : inspectorCurrentResolutionPhase &&
+                              (inspectorPhaseResolutionStatus?.substep === "parry" ||
+                                inspectorPhaseResolutionStatus?.substep === "damage")
+                            ? advanceInspectorPhaseResolutionSubstep(inspectorCurrentResolutionPhase)
+                            : inspectorCanRollPhaseAttack && inspectorCurrentAttackPhase
                           ? rollInspectorPhaseAttack(inspectorCurrentAttackPhase)
                         : saveInspectorDeclaration())
                     }
