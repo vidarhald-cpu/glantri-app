@@ -1,33 +1,32 @@
 // @vitest-environment happy-dom
 
 import { render, screen, within } from "@testing-library/react";
+import { createElement } from "react";
 import { describe, expect, it } from "vitest";
 
 import TablesAdminPage from "./TablesAdminPage";
 
 describe("TablesAdminPage", () => {
   it("renders the canonical combat to-hit table from structured rule data", () => {
-    render(<TablesAdminPage />);
+    render(createElement(TablesAdminPage));
 
     const heading = screen.getByRole("heading", { name: "Combat To Hit" });
     const panel = heading.closest("section");
 
     expect(panel).not.toBeNull();
-    expect(within(panel as HTMLElement).getByText("Closed 1d20")).toBeInTheDocument();
+    expect(within(panel as HTMLElement).queryByText("Open-ended 1d20")).not.toBeNull();
+    expect(within(panel as HTMLElement).queryByText("Roll open-ended 1d20.")).not.toBeNull();
+    expect(within(panel as HTMLElement).queryByText("Add the roll total to OB minus DB.")).not.toBeNull();
     expect(
-      within(panel as HTMLElement).getByText("Sheet: to hit (new)"),
-    ).toBeInTheDocument();
+      within(panel as HTMLElement).queryByText("Lookup total = OB - DB + open-ended roll total."),
+    ).not.toBeNull();
     expect(
-      within(panel as HTMLElement).getByText("docs/source/combat/New Combat Arena.xlsx"),
-    ).toBeInTheDocument();
-    expect(
-      within(panel as HTMLElement).getByText("Lookup total = OB - DB + roll."),
-    ).toBeInTheDocument();
-    expect(
-      within(panel as HTMLElement).getByText(
-        "Damage, critical, and minimum-damage columns from the workbook are deferred because duplicate 17/18 rows need clarification.",
+      within(panel as HTMLElement).queryByText(
+        "Damage and critical details are separate and will be added later.",
       ),
-    ).toBeInTheDocument();
+    ).not.toBeNull();
+    expect(within(panel as HTMLElement).queryByText("Sheet: to hit (new)")).toBeNull();
+    expect(within(panel as HTMLElement).queryByText(/New[_ ]Combat[_ ]Arena\.xlsx/)).toBeNull();
 
     const rows = within(panel as HTMLElement).getAllByRole("row");
     const bodyRows = rows.slice(1).map((row) =>
@@ -37,26 +36,26 @@ describe("TablesAdminPage", () => {
     );
 
     expect(bodyRows).toEqual([
-      ["<= 10", "Miss", "No", "No", "to hit (new)!A3:B4"],
-      ["11", "Grazing hit", "Yes", "Yes", "to hit (new)!A5:B5"],
-      [">= 12", "Hit", "Yes", "No", "to hit (new)!A6:B29"],
+      ["<= 10", "Miss", "No", "No"],
+      ["11", "Grazing hit", "Yes", "Yes"],
+      [">= 12", "Hit", "Yes", "No"],
     ]);
   });
 
   it("renders the canonical combat hit-location table from structured rule data", () => {
-    render(<TablesAdminPage />);
+    render(createElement(TablesAdminPage));
 
     const heading = screen.getByRole("heading", { name: "Combat Hit Location" });
     const panel = heading.closest("section");
 
     expect(panel).not.toBeNull();
-    expect(within(panel as HTMLElement).getByText("Combat")).toBeInTheDocument();
-    expect(within(panel as HTMLElement).getByText("Closed 1d20")).toBeInTheDocument();
+    expect(within(panel as HTMLElement).queryByText("Combat")).not.toBeNull();
+    expect(within(panel as HTMLElement).queryByText("Closed 1d20")).not.toBeNull();
     expect(
-      within(panel as HTMLElement).getByText(
+      within(panel as HTMLElement).queryByText(
         "If an attacker aims at a location, roll closed 1d20 twice and use the roll closest to the aimed location.",
       ),
-    ).toBeInTheDocument();
+    ).not.toBeNull();
 
     const rows = within(panel as HTMLElement).getAllByRole("row");
     const bodyRows = rows.slice(1).map((row) =>

@@ -1,5 +1,7 @@
 "use client";
 
+import React from "react";
+
 import {
   COMBAT_TO_HIT_RULE_TABLE,
   expandClosedDieRuleTable,
@@ -14,7 +16,17 @@ import { AdminPageIntro, AdminPanel, AdminTag } from "../admin-ui";
 const movementModifierColumns = Array.from({ length: 15 }, (_, index) => index + 1);
 
 const percentExplanation =
-  "The Percent table converts a modifier into a workbook percentage adjustment. It is used by workbook-faithful calculations such as movement loss from encumbrance, and by other percentage-based combat adjustments.";
+  "The Percent table converts a modifier into a percentage adjustment. It is used by movement and combat calculations that apply percentage-based modifiers.";
+
+const combatToHitHumanNotes = [
+  "Roll open-ended 1d20.",
+  "Add the roll total to OB minus DB.",
+  "Lookup total = OB - DB + open-ended roll total.",
+  "10 or lower misses.",
+  "11 is a grazing hit.",
+  "12 or higher hits.",
+  "Damage and critical details are separate and will be added later.",
+];
 
 export default function TablesAdminPage() {
   const baseMoveRows = Object.keys(WORKBOOK_MOVEMENT_PERCENT_TABLE)
@@ -26,7 +38,7 @@ export default function TablesAdminPage() {
       <AdminPageIntro
         eyebrow="Admin / Tables"
         title="Tables"
-        summary="Reference tables used by current workbook-faithful combat and movement calculations."
+        summary="Reference tables used by current combat and movement calculations."
       />
 
       <AdminPanel title="Percent table" subtitle={percentExplanation}>
@@ -96,17 +108,15 @@ function CombatToHitRuleTablePanel(props: {
   return (
     <AdminPanel
       title={props.table.title}
-      subtitle="Canonical hit/miss table from the updated New Combat Arena workbook. P1 attack resolution will consume this helper in a later slice."
+      subtitle="Combat hit, miss, and grazing-hit lookup."
     >
       <div style={{ display: "grid", gap: "0.85rem" }}>
         <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
           <AdminTag>Combat</AdminTag>
-          <AdminTag>Closed {props.table.dieLabel}</AdminTag>
-          <AdminTag>{props.table.source.workbook}</AdminTag>
-          <AdminTag>Sheet: {props.table.source.sheet}</AdminTag>
+          <AdminTag>Open-ended {props.table.dieLabel}</AdminTag>
         </div>
         <ul style={{ color: "#5f543a", lineHeight: 1.5, margin: 0, paddingLeft: "1.2rem" }}>
-          {props.table.notes.map((note) => (
+          {combatToHitHumanNotes.map((note) => (
             <li key={note}>{note}</li>
           ))}
         </ul>
@@ -124,7 +134,6 @@ function CombatToHitRuleTablePanel(props: {
                 <th style={tableHeaderStyle}>Result</th>
                 <th style={tableHeaderStyle}>Hit?</th>
                 <th style={tableHeaderStyle}>Grazing?</th>
-                <th style={tableHeaderStyle}>Source rows</th>
               </tr>
             </thead>
             <tbody>
@@ -134,7 +143,6 @@ function CombatToHitRuleTablePanel(props: {
                   <td style={tableCellStyle}>{row.resultLabel}</td>
                   <td style={tableCellStyle}>{formatBoolean(row.hit)}</td>
                   <td style={tableCellStyle}>{formatBoolean(row.grazing)}</td>
-                  <td style={tableCellStyle}>{row.sourceRows.join(", ")}</td>
                 </tr>
               ))}
             </tbody>

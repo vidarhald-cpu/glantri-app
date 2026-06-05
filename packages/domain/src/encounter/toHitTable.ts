@@ -1,3 +1,6 @@
+import { rollOpenEndedD20 } from "../dice/openEndedD20";
+import type { OpenEndedD20Roll } from "../dice/openEndedD20";
+
 export type CombatToHitResultKey = "grazing-hit" | "hit" | "miss";
 
 export interface CombatToHitRuleTableRow {
@@ -32,16 +35,20 @@ export interface CombatToHitResolution {
   ob: number;
   resultKey: CombatToHitResultKey;
   resultLabel: string;
-  roll: number;
+  rollTotal: number;
   sourceRows: readonly string[];
+}
+
+export interface CombatToHitRoll extends OpenEndedD20Roll {
+  rollTotal: number;
 }
 
 export const COMBAT_TO_HIT_RULE_TABLE = {
   dieLabel: "1d20",
   id: "combat-to-hit",
   notes: [
-    "Lookup total = OB - DB + roll.",
-    "The attack roll is a closed 1d20.",
+    "Lookup total = OB - DB + open-ended roll total.",
+    "Roll open-ended 1d20, using the same convention as skill rolls.",
     "Lookup totals of 10 or less miss.",
     "Lookup total 11 is a grazing hit.",
     "Lookup totals of 12 or more hit.",
@@ -77,7 +84,7 @@ export const COMBAT_TO_HIT_RULE_TABLE = {
   source: {
     range: "A1:I32",
     sheet: "to hit (new)",
-    workbook: "docs/source/combat/New Combat Arena.xlsx",
+    workbook: "docs/source/combat/New_Combat_Arena.xlsx",
   },
   title: "Combat To Hit",
 } as const satisfies CombatToHitRuleTable;
@@ -85,27 +92,26 @@ export const COMBAT_TO_HIT_RULE_TABLE = {
 export function calculateToHitLookupTotal(input: {
   db: number;
   ob: number;
-  roll: number;
+  rollTotal: number;
 }): number {
-  assertCombatToHitRoll(input.roll);
+  assertCombatToHitRollTotal(input.rollTotal);
 
-  return input.ob - input.db + input.roll;
+  return input.ob - input.db + input.rollTotal;
 }
 
-export function assertCombatToHitRoll(roll: number): void {
-  if (!Number.isInteger(roll) || roll < 1 || roll > 20) {
-    throw new RangeError("Combat To Hit roll must be a closed 1d20 value from 1 to 20.");
+export function assertCombatToHitRollTotal(rollTotal: number): void {
+  if (!Number.isInteger(rollTotal)) {
+    throw new RangeError("Combat To Hit roll total must be an integer.");
   }
 }
 
-export function rollClosedD20(
-  input: {
-    randomFn?: () => number;
-  } = {},
-): number {
-  const randomFn = input.randomFn ?? Math.random;
+export function rollOpenEndedCombatToHitD20(rng: () => number = Math.random): CombatToHitRoll {
+  const roll = rollOpenEndedD20(rng);
 
-  return Math.min(20, Math.max(1, Math.floor(randomFn() * 20) + 1));
+  return {
+    ...roll,
+    rollTotal: roll.dieResult,
+  };
 }
 
 function rowMatchesLookupTotal(row: CombatToHitRuleTableRow, lookupTotal: number): boolean {
@@ -143,7 +149,7 @@ export function lookupCombatToHitResult(lookupTotal: number): CombatToHitRuleTab
 export function resolveCombatToHit(input: {
   db: number;
   ob: number;
-  roll: number;
+  rollTotal: number;
 }): CombatToHitResolution {
   const lookupTotal = calculateToHitLookupTotal(input);
   const result = lookupCombatToHitResult(lookupTotal);
@@ -156,7 +162,7 @@ export function resolveCombatToHit(input: {
     ob: input.ob,
     resultKey: result.resultKey,
     resultLabel: result.resultLabel,
-    roll: input.roll,
+    rollTotal: input.rollTotal,
     sourceRows: result.sourceRows,
   };
 }
