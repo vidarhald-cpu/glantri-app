@@ -66,6 +66,15 @@ export const rulesDocumentsRegistry: RulesDocumentRegistryEntry[] = [
     order: 30,
     section: "Combat / Equipment",
     title: "Equip Items Calculations"
+  },
+  {
+    audience: "Players and GM reviewers",
+    description: "Manual reference for the canonical workbook-backed combat to-hit hit/miss/grazing lookup.",
+    fileName: "combat-to-hit.md",
+    id: "combat-to-hit",
+    order: 35,
+    section: "Combat",
+    title: "Combat To Hit"
   }
 ];
 

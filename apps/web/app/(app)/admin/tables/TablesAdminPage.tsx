@@ -1,9 +1,11 @@
 "use client";
 
 import {
+  COMBAT_TO_HIT_RULE_TABLE,
   expandClosedDieRuleTable,
   HIT_LOCATION_RULE_TABLE,
   type ClosedDieRuleTable,
+  type CombatToHitRuleTable,
 } from "@glantri/domain";
 import { WORKBOOK_MOVEMENT_PERCENT_TABLE } from "@glantri/rules-engine";
 
@@ -63,7 +65,83 @@ export default function TablesAdminPage() {
       </AdminPanel>
 
       <ClosedDieRuleTablePanel group="Combat" table={HIT_LOCATION_RULE_TABLE} />
+      <CombatToHitRuleTablePanel table={COMBAT_TO_HIT_RULE_TABLE} />
     </section>
+  );
+}
+
+function formatLookupTotal(row: CombatToHitRuleTable["rows"][number]): string {
+  if (row.lookupTotal !== undefined) {
+    return row.lookupTotal.toString();
+  }
+
+  if (row.maxLookupTotal !== undefined) {
+    return `<= ${row.maxLookupTotal}`;
+  }
+
+  if (row.minLookupTotal !== undefined) {
+    return `>= ${row.minLookupTotal}`;
+  }
+
+  return "Unbounded";
+}
+
+function formatBoolean(value: boolean): string {
+  return value ? "Yes" : "No";
+}
+
+function CombatToHitRuleTablePanel(props: {
+  table: CombatToHitRuleTable;
+}) {
+  return (
+    <AdminPanel
+      title={props.table.title}
+      subtitle="Canonical hit/miss table from the updated New Combat Arena workbook. P1 attack resolution will consume this helper in a later slice."
+    >
+      <div style={{ display: "grid", gap: "0.85rem" }}>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+          <AdminTag>Combat</AdminTag>
+          <AdminTag>Closed {props.table.dieLabel}</AdminTag>
+          <AdminTag>{props.table.source.workbook}</AdminTag>
+          <AdminTag>Sheet: {props.table.source.sheet}</AdminTag>
+        </div>
+        <ul style={{ color: "#5f543a", lineHeight: 1.5, margin: 0, paddingLeft: "1.2rem" }}>
+          {props.table.notes.map((note) => (
+            <li key={note}>{note}</li>
+          ))}
+        </ul>
+        <div
+          style={{
+            border: "1px solid rgba(85, 73, 48, 0.14)",
+            borderRadius: 18,
+            overflowX: "auto",
+          }}
+        >
+          <table style={{ borderCollapse: "collapse", minWidth: 620, width: "100%" }}>
+            <thead style={{ background: "rgba(255, 252, 245, 0.95)" }}>
+              <tr>
+                <th style={tableHeaderStyle}>Lookup total</th>
+                <th style={tableHeaderStyle}>Result</th>
+                <th style={tableHeaderStyle}>Hit?</th>
+                <th style={tableHeaderStyle}>Grazing?</th>
+                <th style={tableHeaderStyle}>Source rows</th>
+              </tr>
+            </thead>
+            <tbody>
+              {props.table.rows.map((row) => (
+                <tr key={`${row.resultKey}:${formatLookupTotal(row)}`}>
+                  <td style={tableCellStyle}>{formatLookupTotal(row)}</td>
+                  <td style={tableCellStyle}>{row.resultLabel}</td>
+                  <td style={tableCellStyle}>{formatBoolean(row.hit)}</td>
+                  <td style={tableCellStyle}>{formatBoolean(row.grazing)}</td>
+                  <td style={tableCellStyle}>{row.sourceRows.join(", ")}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </AdminPanel>
   );
 }
 

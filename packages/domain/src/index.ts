@@ -14,6 +14,7 @@ export * from "./encounter/combatEffects";
 export * from "./encounter/combatActionModifiers";
 export * from "./encounter/combatDeclarationValidation";
 export * from "./encounter/hitLocation";
+export * from "./encounter/toHitTable";
 export * from "./encounter/session";
 export * from "./encounter/roleplay";
 export * from "./equipment";

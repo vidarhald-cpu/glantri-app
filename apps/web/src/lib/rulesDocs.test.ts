@@ -40,6 +40,12 @@ describe("rules documentation registry", () => {
           id: "combat-loadout-calculations",
           section: "Combat / Equipment",
           title: "Equip Items Calculations"
+        }),
+        expect.objectContaining({
+          fileName: "combat-to-hit.md",
+          id: "combat-to-hit",
+          section: "Combat",
+          title: "Combat To Hit"
         })
       ])
     );
@@ -58,7 +64,8 @@ describe("rules documentation registry", () => {
       "Character Sheet Calculations",
       "Character Progression Calculations",
       "Equipment & Encumbrance Calculations",
-      "Equip Items Calculations"
+      "Equip Items Calculations",
+      "Combat To Hit"
     ]);
   });
 
@@ -138,6 +145,21 @@ describe("rules documentation registry", () => {
     expect(model.selectedDocument.markdown).toContain("Base DB");
     expect(model.selectedDocument.markdown).toContain("Combined parry modifier");
     expect(model.selectedDocument.markdown).toContain("GMR");
+  });
+
+  it("loads the Combat To Hit document with source and deferred-scope notes", async () => {
+    const model = await getRulesDocumentationPageModel({
+      selectedDocumentId: "combat-to-hit"
+    });
+
+    expect(model.selectedDocument.title).toBe("Combat To Hit");
+    expect(model.selectedDocument.markdown).toContain("# Combat To Hit");
+    expect(model.selectedDocument.markdown).toContain("Sheet: `to hit (new)`");
+    expect(model.selectedDocument.markdown).toContain("lookup total = OB - DB + roll");
+    expect(model.selectedDocument.markdown).toContain("Lookup total `11` is a grazing hit.");
+    expect(model.selectedDocument.markdown).toContain("The legacy workbook sheet `To Hit table` remains reference-only");
+    expect(model.selectedDocument.markdown).toContain("duplicate");
+    expect(model.selectedDocument.markdown).not.toContain("| Lookup total |");
   });
 
   it("expands structured rule-table directives into markdown tables", () => {
