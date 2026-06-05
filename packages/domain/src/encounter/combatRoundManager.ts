@@ -188,6 +188,25 @@ export const combatRoundPhaseResolutionStatusesSchema = z.record(
     .default({}),
 );
 
+export const combatRoundParryResolutionSchema = z.object({
+  combinedParryScore: z.number().int().optional(),
+  mainHandParryScore: z.number().int().optional(),
+  modifierAdjustment: z.number().int().optional(),
+  notes: z.string().optional(),
+  offHandParryScore: z.number().int().optional(),
+  openEndedD10s: z.array(z.number().int().min(1).max(10)).default([]),
+  resultLabel: z.string().min(1).optional(),
+  rollD20: z.number().int().min(1).max(20).optional(),
+  rollTotal: z.number().int().optional(),
+  status: z.enum(["pending", "not_applicable", "resolved"]),
+  success: z.boolean().optional(),
+  targetNumber: z.number().int().positive().optional(),
+  total: z.number().int().optional(),
+  usedMainHand: z.boolean().optional(),
+  usedOffHand: z.boolean().optional(),
+});
+export type CombatRoundParryResolution = z.infer<typeof combatRoundParryResolutionSchema>;
+
 export const combatRoundPhaseResolutionResultSchema = z.object({
   attackResultId: idSchema,
   attackerParticipantId: idSchema,
@@ -207,13 +226,7 @@ export const combatRoundPhaseResolutionResultSchema = z.object({
     })
     .default({ status: "pending" }),
   defenderParticipantId: idSchema,
-  parryResolution: z
-    .object({
-      notes: z.string().optional(),
-      resultLabel: z.string().min(1).optional(),
-      status: z.enum(["pending", "not_applicable", "resolved"]),
-    })
-    .default({ status: "pending" }),
+  parryResolution: combatRoundParryResolutionSchema.default({ status: "pending" }),
   phase: combatRoundPhaseSchema,
   roundNumber: z.number().int().positive(),
   updatedAt: z.string().datetime(),
@@ -1082,6 +1095,49 @@ export function ensureCombatRoundPhaseResolutionResultsForPhase(input: {
 
   return upsertCombatRoundPhaseResolutionResults({
     results,
+    state: normalized,
+  });
+}
+
+export function recordCombatRoundParryResolution(input: {
+  attackResult: CombatRoundAttackRollResult;
+  parryResolution: CombatRoundParryResolution;
+  state: CombatRoundState;
+  updatedAt: string;
+}): CombatRoundState {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const existing =
+    getCombatRoundPhaseResolutionResultForAttack({
+      attackResult: input.attackResult,
+      state: normalized,
+    }) ??
+    buildCombatRoundPhaseResolutionResult({
+      attackResult: input.attackResult,
+      roundNumber: normalized.roundNumber,
+      updatedAt: input.updatedAt,
+    });
+  const nextResult = combatRoundPhaseResolutionResultSchema.parse({
+    ...existing,
+    damageProposal: {
+      proposedEffects: [],
+      status: "not_ready",
+    },
+    damageRoll:
+      input.attackResult.hit && input.parryResolution.success !== true
+        ? {
+            notes: "Parry resolved unsuccessfully. Damage roll is pending.",
+            status: "pending",
+          }
+        : {
+            notes: input.attackResult.hit ? "Parry resolved successfully. Damage is not required." : undefined,
+            status: "not_required",
+          },
+    parryResolution: input.parryResolution,
+    updatedAt: input.updatedAt,
+  });
+
+  return upsertCombatRoundPhaseResolutionResults({
+    results: [nextResult],
     state: normalized,
   });
 }

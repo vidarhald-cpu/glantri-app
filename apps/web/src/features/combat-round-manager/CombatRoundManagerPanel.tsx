@@ -5,6 +5,7 @@ import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react"
 import type {
   CombatRoundDeclaration,
   CombatRoundAttackRollResult,
+  CombatRoundParryResolution,
   CombatRoundPhase,
   CombatRoundPhaseResolutionResult,
   CombatRoundStep,
@@ -40,11 +41,14 @@ import {
   getCombatRoundStepSnapshot,
   initializeCombatRoundState,
   recordCombatRoundAttackResult,
+  recordCombatRoundParryResolution,
+  rollOpenEndedD20,
   rollOpenEndedCombatToHitD20,
   setCombatRoundSelection,
   sortCombatRoundParticipantsByInitiative,
   validateCombatDeclarationTargets,
 } from "@glantri/domain";
+import { resolveCombatParry, type WorkbookRawModifier } from "@glantri/rules-engine";
 
 import { buildEquipmentLoadoutModuleModel } from "@/features/equipment/loadoutModule";
 import type { EquipmentFeatureState } from "@/features/equipment/types";
@@ -74,6 +78,7 @@ import {
   PlayerCombatModifierPanel,
   PlayerCombatParryContextPanel,
   PlayerCombatPhasePanel,
+  playerCombatPanelCardStyle,
   playerCombatPanelRowStyle,
   playerCombatTopPanelRowStyle,
   type PlayerCombatModifierBucketView,
@@ -88,6 +93,7 @@ import {
   type PlayerCombatPhaseKey,
 } from "@/features/player-combat/playerCombatPhaseModel";
 import {
+  buildEncounterDbParryModifierCalculation,
   buildEncounterInitiativeModifierCalculation,
   buildEncounterLiveCombatModifierSummary,
 } from "@/lib/campaigns/liveCombatModifiers";
@@ -159,6 +165,22 @@ interface CombatInspectorDeclarationDraft {
 interface CombatInspectorPhaseContextDrafts {
   phase1: ScenarioParticipantCombatContext;
   phase2: ScenarioParticipantCombatContext;
+}
+
+interface CombatParrySourceOption {
+  label: string;
+  score: number;
+}
+
+interface CombatParrySourceOptions {
+  combinedScore?: number;
+  mainHand?: CombatParrySourceOption;
+  offHand?: CombatParrySourceOption;
+}
+
+interface CombatParrySourceSelection {
+  usedMainHand: boolean;
+  usedOffHand: boolean;
 }
 
 function buildInspectorPhaseContexts(
@@ -334,6 +356,29 @@ function formatCombatAttackResultLine(input: {
     : formatCombatAttackResultMainLine(input.result);
 }
 
+function formatCombatParryCalculationLine(
+  resolution: CombatRoundParryResolution,
+): string | undefined {
+  if (
+    resolution.status !== "resolved" ||
+    resolution.combinedParryScore === undefined ||
+    resolution.modifierAdjustment === undefined ||
+    resolution.rollD20 === undefined ||
+    resolution.rollTotal === undefined ||
+    resolution.total === undefined
+  ) {
+    return undefined;
+  }
+
+  const rollText = formatOpenEndedD20RollBreakdown({
+    dieResult: resolution.rollTotal,
+    openEndedD10s: resolution.openEndedD10s,
+    rollD20: resolution.rollD20,
+  });
+
+  return `Parry: P ${resolution.combinedParryScore} + [mods] ${resolution.modifierAdjustment >= 0 ? "+" : ""}${resolution.modifierAdjustment} + roll ${rollText} = ${resolution.total}`;
+}
+
 function formatResolutionStatusLabel(value: string): string {
   return value
     .split("_")
@@ -353,9 +398,14 @@ function formatCombatPhaseResolutionResultLines(input: {
   const parry = input.resolution.parryResolution;
   const damage = input.resolution.damageRoll;
   const proposal = input.resolution.damageProposal;
-  const parryLine = `Parry: ${formatResolutionStatusLabel(parry.status)}${
-    parry.resultLabel ? ` (${parry.resultLabel})` : ""
-  }`;
+  const resolvedParryLine = formatCombatParryCalculationLine(parry);
+  const parryLine =
+    resolvedParryLine ??
+    `Parry: ${formatResolutionStatusLabel(parry.status)}${
+      parry.resultLabel ? ` (${parry.resultLabel})` : ""
+    }`;
+  const parryResultLine =
+    parry.status === "resolved" && parry.resultLabel ? `Result: ${parry.resultLabel}` : undefined;
   const damageLine = `Damage roll: ${formatResolutionStatusLabel(damage.status)}`;
   const proposalLine = `Proposal: ${formatResolutionStatusLabel(proposal.status)}`;
 
@@ -364,8 +414,8 @@ function formatCombatPhaseResolutionResultLines(input: {
       participantId: input.participantId,
       result: input.attackResult,
     })} · Result: ${input.attackResult.tableResult}`,
-    proposalLine,
-    statusLine: `${parryLine} · ${damageLine}`,
+    proposalLine: parryResultLine ?? proposalLine,
+    statusLine: parryResultLine ? parryLine : `${parryLine} · ${damageLine}`,
   };
 }
 
@@ -484,6 +534,153 @@ function parseCombatInteger(value: string, label: string): number {
   return Number(trimmed);
 }
 
+function parseOptionalCombatInteger(value: string | undefined): number | undefined {
+  if (!value || !/^-?\d+$/.test(value.trim())) {
+    return undefined;
+  }
+
+  return Number(value);
+}
+
+function getCombatTableCell(input: {
+  columns: string[];
+  label: string;
+  row: Array<string | number>;
+}): string {
+  const index = input.columns.indexOf(input.label);
+
+  if (index < 0) {
+    return "—";
+  }
+
+  const value = input.row[index];
+  return value == null ? "—" : String(value);
+}
+
+function findParryScoreForWeaponLabel(input: {
+  model: ReturnType<typeof buildEquipmentLoadoutModuleModel> | null;
+  weaponLabel: string;
+}): number | undefined {
+  if (input.weaponLabel === "Unarmed") {
+    return undefined;
+  }
+
+  const table = input.model?.combatStatePanelModel?.weaponModeTable;
+  if (!table) {
+    return undefined;
+  }
+
+  const row = table?.rows.find(
+    (candidate) =>
+      getCombatTableCell({
+        columns: table.columns,
+        label: "Weapon",
+        row: candidate,
+      }) === input.weaponLabel,
+  );
+
+  return row
+    ? parseOptionalCombatInteger(
+        getCombatTableCell({ columns: table.columns, label: "Parry", row }),
+      )
+    : undefined;
+}
+
+function getCombinedParryScore(
+  model: ReturnType<typeof buildEquipmentLoadoutModuleModel> | null,
+): number | undefined {
+  const table = model?.combatStatePanelModel?.weaponModeTable;
+  if (!table) {
+    return undefined;
+  }
+
+  const row = table?.rows.find(
+    (candidate) =>
+      getCombatTableCell({
+        columns: table.columns,
+        label: "Mode",
+        row: candidate,
+      }) === "Combined",
+  );
+
+  return row
+    ? parseOptionalCombatInteger(
+        getCombatTableCell({ columns: table.columns, label: "Parry", row }),
+      )
+    : undefined;
+}
+
+function buildCombatParrySourceOptions(input: {
+  loadoutModel: ReturnType<typeof buildEquipmentLoadoutModuleModel> | null;
+  mainHandLabel: string;
+  offHandLabel: string;
+}): CombatParrySourceOptions {
+  const mainHandScore = findParryScoreForWeaponLabel({
+    model: input.loadoutModel,
+    weaponLabel: input.mainHandLabel,
+  });
+  const offHandScore = findParryScoreForWeaponLabel({
+    model: input.loadoutModel,
+    weaponLabel: input.offHandLabel,
+  });
+
+  return {
+    combinedScore: getCombinedParryScore(input.loadoutModel),
+    mainHand:
+      mainHandScore !== undefined
+        ? {
+            label: input.mainHandLabel,
+            score: mainHandScore,
+          }
+        : undefined,
+    offHand:
+      offHandScore !== undefined
+        ? {
+            label: input.offHandLabel,
+            score: offHandScore,
+          }
+        : undefined,
+  };
+}
+
+function getCombatParrySourceSelection(input: {
+  selection?: CombatParrySourceSelection;
+  sources?: CombatParrySourceOptions;
+}): CombatParrySourceSelection {
+  return {
+    usedMainHand: input.selection?.usedMainHand ?? Boolean(input.sources?.mainHand),
+    usedOffHand: input.selection?.usedOffHand ?? Boolean(input.sources?.offHand),
+  };
+}
+
+function getSelectedCombatParryBase(input: {
+  selection: CombatParrySourceSelection;
+  sources?: CombatParrySourceOptions;
+}): number | undefined {
+  const mainScore = input.selection.usedMainHand ? input.sources?.mainHand?.score : undefined;
+  const offScore = input.selection.usedOffHand ? input.sources?.offHand?.score : undefined;
+
+  if (mainScore !== undefined && offScore !== undefined) {
+    return input.sources?.combinedScore ?? mainScore + offScore;
+  }
+
+  return mainScore ?? offScore;
+}
+
+function getCombatParrySelectionKey(input: {
+  result?: CombatRoundAttackRollResult;
+  roundNumber: number;
+}): string | undefined {
+  return input.result
+    ? [
+        input.roundNumber,
+        input.result.phase,
+        input.result.attackerParticipantId,
+        input.result.defenderParticipantId,
+      ].join(":")
+    : undefined;
+}
+
 function findScenarioParticipantForEncounterParticipant(input: {
   encounterParticipant: EncounterSession["participants"][number];
   scenarioParticipants: ScenarioParticipant[];
@@ -558,6 +755,78 @@ function getStatusMarker(input: { current: boolean; status: string | undefined }
   }
 }
 
+function CombatParryResolutionPanel(input: {
+  attackResult: CombatRoundAttackRollResult;
+  controlsDisabled?: boolean;
+  modifierAdjustment: number;
+  onSelectionChange: (selection: CombatParrySourceSelection) => void;
+  parryBase?: number;
+  resolution?: CombatRoundParryResolution;
+  selection: CombatParrySourceSelection;
+  sources?: CombatParrySourceOptions;
+}) {
+  const canUseMainHand = Boolean(input.sources?.mainHand);
+  const canUseOffHand = Boolean(input.sources?.offHand);
+  const sourceSummary =
+    input.parryBase !== undefined
+      ? `P ${input.parryBase} + [mods] ${input.modifierAdjustment >= 0 ? "+" : ""}${input.modifierAdjustment}`
+      : "No available parry score.";
+
+  return (
+    <section style={playerCombatPanelCardStyle}>
+      <strong>Parry resolution</strong>
+      <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
+        {input.attackResult.weaponName} attack result: {input.attackResult.tableResult}
+      </div>
+      {input.resolution?.status === "resolved" ? (
+        <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
+          {input.resolution.resultLabel}
+        </div>
+      ) : null}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
+        <label style={{ alignItems: "center", display: "flex", gap: "0.35rem" }}>
+          <input
+            checked={input.selection.usedMainHand}
+            disabled={input.controlsDisabled || !canUseMainHand}
+            onChange={(event) =>
+              input.onSelectionChange({
+                ...input.selection,
+                usedMainHand: event.target.checked,
+              })
+            }
+            type="checkbox"
+          />
+          Main hand
+          {input.sources?.mainHand ? ` (${input.sources.mainHand.label} P ${input.sources.mainHand.score})` : ""}
+        </label>
+        <label style={{ alignItems: "center", display: "flex", gap: "0.35rem" }}>
+          <input
+            checked={input.selection.usedOffHand}
+            disabled={input.controlsDisabled || !canUseOffHand}
+            onChange={(event) =>
+              input.onSelectionChange({
+                ...input.selection,
+                usedOffHand: event.target.checked,
+              })
+            }
+            type="checkbox"
+          />
+          Off hand
+          {input.sources?.offHand ? ` (${input.sources.offHand.label} P ${input.sources.offHand.score})` : ""}
+        </label>
+      </div>
+      <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
+        {sourceSummary}
+        {input.sources?.combinedScore !== undefined &&
+        input.selection.usedMainHand &&
+        input.selection.usedOffHand
+          ? ` · combined row P ${input.sources.combinedScore}`
+          : ""}
+      </div>
+    </section>
+  );
+}
+
 function shouldSortByInitiative(step: CombatRoundStep): "phase1" | "phase2" | undefined {
   if (step === "phase_1_actions" || step === "review_phase_2_actions") {
     return "phase1";
@@ -585,6 +854,9 @@ export default function CombatRoundManagerPanel({
   >({});
   const [inspectorDrafts, setInspectorDrafts] = useState<
     Record<string, CombatInspectorDeclarationDraft>
+  >({});
+  const [parrySourceSelections, setParrySourceSelections] = useState<
+    Record<string, CombatParrySourceSelection>
   >({});
   const [content, setContent] = useState<Awaited<ReturnType<typeof loadCanonicalContent>>>();
   const [resolvedCharacterStateByParticipantId, setResolvedCharacterStateByParticipantId] =
@@ -908,6 +1180,55 @@ export default function CombatRoundManagerPanel({
           state: roundState,
         })
       : undefined);
+  const inspectorParrySelectionKey = getCombatParrySelectionKey({
+    result: inspectorResolutionAttackResult,
+    roundNumber: roundState.roundNumber,
+  });
+  const inspectorParryDefenderRoundParticipant = inspectorResolutionAttackResult
+    ? roundState.participants.find(
+        (participant) =>
+          participant.participantId === inspectorResolutionAttackResult.defenderParticipantId,
+      )
+    : undefined;
+  const inspectorParryDefenderEncounterParticipant = inspectorResolutionAttackResult
+    ? encounter.participants.find(
+        (participant) => participant.id === inspectorResolutionAttackResult.defenderParticipantId,
+      )
+    : undefined;
+  const inspectorParryDefenderScenarioParticipant = inspectorParryDefenderEncounterParticipant
+    ? findScenarioParticipantForEncounterParticipant({
+        encounterParticipant: inspectorParryDefenderEncounterParticipant,
+        scenarioParticipants: effectiveScenarioParticipants,
+      })
+    : undefined;
+  const inspectorParryDefenderPhaseSummary =
+    inspectorResolutionPhase && inspectorParryDefenderScenarioParticipant
+      ? buildScenarioParticipantPhaseSummary({
+          declaration: inspectorParryDefenderRoundParticipant?.declaration,
+          phaseKey: inspectorResolutionPhase,
+          scenarioParticipant: inspectorParryDefenderScenarioParticipant,
+        })
+      : undefined;
+  const inspectorParrySelection = getCombatParrySourceSelection({
+    selection: inspectorParrySelectionKey
+      ? parrySourceSelections[inspectorParrySelectionKey]
+      : undefined,
+    sources: inspectorParryDefenderPhaseSummary?.parrySources,
+  });
+  const inspectorParryBase = getSelectedCombatParryBase({
+    selection: inspectorParrySelection,
+    sources: inspectorParryDefenderPhaseSummary?.parrySources,
+  });
+  const inspectorParryModifierCalculation =
+    inspectorParryBase !== undefined
+      ? buildEncounterDbParryModifierCalculation({
+          baseValue: inspectorParryBase,
+          liveModifiers: inspectorParryDefenderPhaseSummary?.liveModifiers,
+        })
+      : null;
+  const inspectorParryModifierAdjustment = inspectorParryModifierCalculation
+    ? inspectorParryModifierCalculation.finalValue - (inspectorParryBase ?? 0)
+    : 0;
   const inspectorNoPhaseAttack =
     Boolean(inspectorAttackPhase) &&
     !inspectorDisplayAttackResult &&
@@ -919,6 +1240,13 @@ export default function CombatRoundManagerPanel({
       inspectorPhaseResolutionStatus.substep === "pending" ||
       inspectorPhaseResolutionStatus.substep === "attack") &&
     !inspectorDisplayAttackResult;
+  const inspectorCanRollParry =
+    Boolean(inspectorResolutionPhase) &&
+    Boolean(inspectorResolutionAttackResult?.hit) &&
+    inspectorDisplayPhaseResolutionResult?.parryResolution.status === "pending" &&
+    inspectorPhaseResolutionStatus?.substep === "parry" &&
+    inspectorParryBase !== undefined &&
+    !inspectorSnapshot;
   const inspectorIsCursorParticipant =
     Boolean(inspectorPhaseResolutionCursor) &&
     inspectorPhaseResolutionCursor?.participantId === inspector.participant?.participantId;
@@ -928,8 +1256,9 @@ export default function CombatRoundManagerPanel({
       )?.label
     : undefined;
   const inspectorActionButtonLabel =
-    inspectorCurrentResolutionPhase &&
-    inspectorCurrentPhaseHasAttack === false
+    inspectorCanRollParry
+      ? "Roll parry"
+      : inspectorCurrentResolutionPhase && inspectorCurrentPhaseHasAttack === false
       ? `Complete ${formatCombatPhaseLabel(inspectorCurrentResolutionPhase)} for participant`
       : getCombatResolutionButtonLabel({
           hasPhaseAttack: inspectorCurrentPhaseHasAttack,
@@ -1149,6 +1478,7 @@ export default function CombatRoundManagerPanel({
     defenseStats: ReturnType<typeof buildPlayerCombatDefenseStats>;
     liveModifiers: ReturnType<typeof buildEncounterLiveCombatModifierSummary>;
     modifierRows: ReturnType<typeof buildPlayerCombatModifierRows>;
+    parrySources: CombatParrySourceOptions;
     phaseContext?: ScenarioParticipantCombatContext;
   } {
     const draft = buildDeclarationDraft(input.scenarioParticipant, input.declaration);
@@ -1193,6 +1523,11 @@ export default function CombatRoundManagerPanel({
       loadoutModel,
       secondaryActionId: draft.secondaryActionId,
     });
+    const parrySources = buildCombatParrySourceOptions({
+      loadoutModel,
+      mainHandLabel: loadoutSummary.mainHandParryItemLabel,
+      offHandLabel: loadoutSummary.offHandParryItemLabel,
+    });
     const phaseContext = input.phaseKey ? draft.phaseContexts[input.phaseKey] : undefined;
     const defenseStats = phaseContext
       ? buildPlayerCombatDefenseStats({
@@ -1208,6 +1543,7 @@ export default function CombatRoundManagerPanel({
       defenseStats,
       liveModifiers,
       modifierRows,
+      parrySources,
       phaseContext,
     };
   }
@@ -1787,6 +2123,91 @@ export default function CombatRoundManagerPanel({
     }
   }
 
+  async function rollInspectorParry() {
+    const attackResult = inspectorResolutionAttackResult;
+    const phase = inspectorResolutionPhase;
+
+    if (!attackResult || !phase) {
+      setSaveError("No attack result is available for parry.");
+      return;
+    }
+
+    if (!attackResult.hit) {
+      setSaveError("Attack missed; parry is not applicable.");
+      return;
+    }
+
+    if (inspectorParryBase === undefined) {
+      setSaveError("Select at least one available parry source.");
+      return;
+    }
+
+    const sources = inspectorParryDefenderPhaseSummary?.parrySources;
+    const rawModifiers: WorkbookRawModifier[] = [
+      {
+        label: "General/Fatigue",
+        value: inspectorParryDefenderPhaseSummary?.liveModifiers.generalFatigueRaw ?? 0,
+      },
+      {
+        label: "DB/Parry",
+        value: inspectorParryDefenderPhaseSummary?.liveModifiers.dbRaw ?? 0,
+      },
+    ];
+    const roll = rollOpenEndedD20();
+    const parry = resolveCombatParry({
+      parryBase: inspectorParryBase,
+      rawModifiers,
+      rollTotal: roll.dieResult,
+    });
+    const usedMainHand = inspectorParrySelection.usedMainHand && Boolean(sources?.mainHand);
+    const usedOffHand = inspectorParrySelection.usedOffHand && Boolean(sources?.offHand);
+    const updatedAt = new Date().toISOString();
+    const parryResolution: CombatRoundParryResolution = {
+      combinedParryScore: parry.parryBase,
+      mainHandParryScore: usedMainHand ? sources?.mainHand?.score : undefined,
+      modifierAdjustment: parry.modifierAdjustment,
+      notes:
+        "Direction, location coverage, and multi-opponent source allocation are deferred in this first parry slice.",
+      offHandParryScore: usedOffHand ? sources?.offHand?.score : undefined,
+      openEndedD10s: roll.openEndedD10s,
+      resultLabel: parry.success ? "Parry successful" : "Parry failed",
+      rollD20: roll.rollD20,
+      rollTotal: roll.dieResult,
+      status: "resolved",
+      success: parry.success,
+      targetNumber: parry.targetNumber,
+      total: parry.total,
+      usedMainHand,
+      usedOffHand,
+    };
+
+    setSaving(true);
+
+    try {
+      const withParry = recordCombatRoundParryResolution({
+        attackResult,
+        parryResolution,
+        state: roundState,
+        updatedAt,
+      });
+      const nextRoundState = advanceCombatRoundPhaseResolutionSubstepForParticipant({
+        participantId: attackResult.attackerParticipantId,
+        phase,
+        state: withParry,
+        updatedAt,
+      });
+
+      await persistRoundState(nextRoundState);
+      setSaveError(undefined);
+    } catch (caughtError) {
+      setSaveError(
+        caughtError instanceof Error ? caughtError.message : "Unable to roll parry.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function completeInspectorPhaseResolution(phase: CombatRoundPhase) {
     if (!inspector.participant) {
       return;
@@ -2246,34 +2667,69 @@ export default function CombatRoundManagerPanel({
                     readOnly={Boolean(inspectorSnapshot)}
                     rows={inspectorDisplayModifierRows}
                   />
-                  <PlayerCombatActionButtonPanel
-                    buttonLabel={inspectorActionButtonLabel}
-                    disabled={
-                      saving ||
-                      Boolean(inspectorTargetValidationMessage) ||
-                      Boolean(inspectorSnapshot)
-                    }
-                    onDeclareAction={() =>
-                      void (inspectorCurrentStepIsInitiative
-                        ? rollInspectorInitiative()
-                        : inspectorCurrentResolutionPhase &&
-                            (inspectorCurrentPhaseHasAttack === false ||
-                              inspectorPhaseResolutionStatus?.substep === "effects")
-                          ? completeInspectorPhaseResolution(inspectorCurrentResolutionPhase)
+                  <div style={{ display: "grid", gap: "0.75rem" }}>
+                    {inspectorResolutionAttackResult?.hit &&
+                    inspectorDisplayPhaseResolutionResult &&
+                    inspectorDisplayPhaseResolutionResult?.parryResolution.status !==
+                      "not_applicable" ? (
+                      <CombatParryResolutionPanel
+                        attackResult={inspectorResolutionAttackResult}
+                        controlsDisabled={
+                          saving ||
+                          Boolean(inspectorSnapshot) ||
+                          inspectorDisplayPhaseResolutionResult.parryResolution.status ===
+                            "resolved"
+                        }
+                        modifierAdjustment={inspectorParryModifierAdjustment}
+                        onSelectionChange={(selection) => {
+                          if (!inspectorParrySelectionKey) {
+                            return;
+                          }
+
+                          setParrySourceSelections((current) => ({
+                            ...current,
+                            [inspectorParrySelectionKey]: selection,
+                          }));
+                        }}
+                        parryBase={inspectorParryBase}
+                        resolution={inspectorDisplayPhaseResolutionResult.parryResolution}
+                        selection={inspectorParrySelection}
+                        sources={inspectorParryDefenderPhaseSummary?.parrySources}
+                      />
+                    ) : null}
+                    <PlayerCombatActionButtonPanel
+                      buttonLabel={inspectorActionButtonLabel}
+                      disabled={
+                        saving ||
+                        Boolean(inspectorTargetValidationMessage) ||
+                        Boolean(inspectorSnapshot)
+                      }
+                      onDeclareAction={() =>
+                        void (inspectorCurrentStepIsInitiative
+                          ? rollInspectorInitiative()
+                          : inspectorCanRollParry
+                            ? rollInspectorParry()
                           : inspectorCurrentResolutionPhase &&
-                              (inspectorPhaseResolutionStatus?.substep === "parry" ||
-                                inspectorPhaseResolutionStatus?.substep === "damage")
-                            ? advanceInspectorPhaseResolutionSubstep(inspectorCurrentResolutionPhase)
-                            : inspectorCanRollPhaseAttack && inspectorCurrentAttackPhase
-                          ? rollInspectorPhaseAttack(inspectorCurrentAttackPhase)
-                        : saveInspectorDeclaration())
-                    }
-                    saving={saving}
-                    statusText={`Current step: ${getPlayerCombatStepLabel(
-                      inspectorSnapshot ? inspector.step : roundState.currentStep,
-                    )}.${inspectorStatusSuffix}`}
-                    validationMessage={inspectorTargetValidationMessage}
-                  />
+                              (inspectorCurrentPhaseHasAttack === false ||
+                                inspectorPhaseResolutionStatus?.substep === "effects")
+                            ? completeInspectorPhaseResolution(inspectorCurrentResolutionPhase)
+                            : inspectorCurrentResolutionPhase &&
+                                (inspectorPhaseResolutionStatus?.substep === "parry" ||
+                                  inspectorPhaseResolutionStatus?.substep === "damage")
+                              ? advanceInspectorPhaseResolutionSubstep(
+                                  inspectorCurrentResolutionPhase,
+                                )
+                              : inspectorCanRollPhaseAttack && inspectorCurrentAttackPhase
+                                ? rollInspectorPhaseAttack(inspectorCurrentAttackPhase)
+                                : saveInspectorDeclaration())
+                      }
+                      saving={saving}
+                      statusText={`Current step: ${getPlayerCombatStepLabel(
+                        inspectorSnapshot ? inspector.step : roundState.currentStep,
+                      )}.${inspectorStatusSuffix}`}
+                      validationMessage={inspectorTargetValidationMessage}
+                    />
+                  </div>
                   <PlayerCombatActionResultPanel
                     result={inspectorActionResult}
                   />

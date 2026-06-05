@@ -120,9 +120,14 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("rollInspectorInitiative");
     expect(source).toContain("rollCombatInitiativeOnServer");
     expect(source).toContain("rollInspectorPhaseAttack");
+    expect(source).toContain("rollInspectorParry");
     expect(source).toContain("rollOpenEndedCombatToHitD20");
+    expect(source).toContain("rollOpenEndedD20");
+    expect(source).toContain("resolveCombatParry");
+    expect(source).toContain("recordCombatRoundParryResolution");
     expect(source).toContain("formatOpenEndedD20RollBreakdown");
     expect(source).toContain("formatCombatDefenseResultMainLine");
+    expect(source).toContain("formatCombatParryCalculationLine");
     expect(source).toContain("getCombatRoundDisplayAttackResultForParticipantPhase");
     expect(source).toContain("ensureCombatRoundPhaseResolutionResultsForPhase");
     expect(source).toContain("getCombatRoundDisplayPhaseResolutionResultForParticipantPhase");
@@ -136,6 +141,8 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("getCombatResolutionButtonLabel");
     expect(source).toContain("formatCombatPhaseResolutionResultLines");
     expect(source).toContain("Parry: ${formatResolutionStatusLabel");
+    expect(source).toContain("Parry successful");
+    expect(source).toContain("Parry failed");
     expect(source).toContain("Damage roll: ${formatResolutionStatusLabel");
     expect(source).toContain("Proposal: ${formatResolutionStatusLabel");
     expect(source).toContain("buildCombatRoundAttackRollResult");
@@ -153,6 +160,11 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("inspectorIsCursorParticipant");
     expect(source).toContain("inspectorCurrentPhaseHasAttack");
     expect(source).toContain("inspectorCanRollPhaseAttack");
+    expect(source).toContain("inspectorCanRollParry");
+    expect(source).toContain("CombatParryResolutionPanel");
+    expect(source).toContain("Main hand");
+    expect(source).toContain("Off hand");
+    expect(source).toContain("Roll parry");
     expect(source).toContain("inspectorActionButtonLabel");
     expect(source).toContain("advanceInspectorPhaseResolutionSubstep");
     expect(source).toContain("Current actor:");

@@ -100,6 +100,24 @@ DB/P adjustment = percentageAdjustment(base DB or base P, abs(DB/P raw live modi
 DB/P final = base DB or base P +/- DB/P adjustment
 ```
 
+Manual parry resolution reuses that DB/P modifier path. After a hit or grazing hit, the GM selects
+the defender's available main-hand and/or off-hand parry sources for the selected incoming attack.
+The first implementation uses a combined Parry/P row when the current combat-state read model
+exposes one; otherwise it sums the selected source parry values. It then applies General/Fatigue and
+DB/Parry as raw modifiers through the same percentage adjustment helper:
+
+```text
+Parry/P base = selected source parry value, or combined Parry/P when available
+Parry raw modifier = General/Fatigue + DB/Parry
+Parry adjustment = percentageAdjustment(Parry/P base, abs(Parry raw modifier))
+Parry total = Parry/P base +/- Parry adjustment + open-ended d20 roll total
+Parry succeeds when Parry total >= 21
+```
+
+Hit-table or to-hit-table parry modifiers are deferred until those values are explicitly available
+in the stored attack/parry result model. Direction legality, hit-location coverage legality, and
+per-phase parry source allocation across multiple incoming opponents are also future work.
+
 Generated action DB/Parry rows may be phase-specific. Manual DB/Parry rows without a phase apply
 broadly. A generated row with `sourcePhase = phase1` contributes to phase 1 DB/P only; a generated
 row with `sourcePhase = phase2` contributes to phase 2 DB/P only. No-specific-phase views such as

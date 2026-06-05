@@ -36,6 +36,7 @@ import {
   recordCombatRoundDeclaration,
   recordCombatRoundAttackResult,
   recordCombatRoundInitiative,
+  recordCombatRoundParryResolution,
   recordCombatRoundParticipantStepReview,
   rollOpenEndedD6,
   setCombatRoundActiveParticipant,
@@ -1073,6 +1074,72 @@ describe("combat round manager", () => {
       attackResultId: "3:phase2:guard:gladiator",
       damageRoll: { status: "not_required" },
       parryResolution: { status: "not_applicable" },
+    });
+  });
+
+  it("stores resolved parry rolls with open-ended d20 breakdown", () => {
+    const state = initializeCombatRoundState({ encounter: encounter() });
+    const result = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackerParticipantId: "gladiator",
+      defenderDb: 10,
+      defenderParticipantId: "guard",
+      ob: 10,
+      phase: "phase1",
+      rollD20: 12,
+      rollTotal: 12,
+      rolledAt: "2026-01-01T00:03:00.000Z",
+      weaponName: "Broad sword",
+    });
+    const withResult = recordCombatRoundAttackResult({
+      participantId: "gladiator",
+      result,
+      state,
+      submittedBy: "gm",
+    });
+    const withParry = recordCombatRoundParryResolution({
+      attackResult: result,
+      parryResolution: {
+        combinedParryScore: 9,
+        mainHandParryScore: 4,
+        modifierAdjustment: -1,
+        offHandParryScore: 5,
+        openEndedD10s: [7],
+        resultLabel: "Parry successful",
+        rollD20: 20,
+        rollTotal: 27,
+        status: "resolved",
+        success: true,
+        targetNumber: 21,
+        total: 35,
+        usedMainHand: true,
+        usedOffHand: true,
+      },
+      state: withResult,
+      updatedAt: "2026-01-01T00:04:00.000Z",
+    });
+
+    expect(
+      getCombatRoundDisplayPhaseResolutionResultForParticipantPhase({
+        participantId: "gladiator",
+        phase: "phase1",
+        state: withParry,
+      }),
+    ).toMatchObject({
+      damageProposal: { proposedEffects: [], status: "not_ready" },
+      damageRoll: { status: "not_required" },
+      parryResolution: {
+        combinedParryScore: 9,
+        modifierAdjustment: -1,
+        openEndedD10s: [7],
+        resultLabel: "Parry successful",
+        rollD20: 20,
+        rollTotal: 27,
+        status: "resolved",
+        success: true,
+        targetNumber: 21,
+        total: 35,
+      },
     });
   });
 

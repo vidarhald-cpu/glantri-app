@@ -90,6 +90,9 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("selectedCurrentAttackResultPanel");
     expect(source).toContain("selectedCurrentPhaseResolutionResultPanel");
     expect(source).toContain("formatCombatPhaseResolutionResultLines");
+    expect(source).toContain("formatCombatParryCalculationLine");
+    expect(source).toContain("Parry: P ${resolution.combinedParryScore}");
+    expect(source).toContain("Result: ${parry.resultLabel}");
     expect(source).toContain("Parry: ${formatResolutionStatusLabel");
     expect(source).toContain("Damage roll: ${formatResolutionStatusLabel");
     expect(source).toContain("Proposal: ${formatResolutionStatusLabel");

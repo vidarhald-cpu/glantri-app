@@ -7,6 +7,7 @@ import {
   type CombatRoundAttackRollResult,
   type CombatRoundDeclaration,
   type CombatRoundInitiativeRank,
+  type CombatRoundParryResolution,
   type CombatRoundPhase,
   type CombatRoundPhaseResolutionResult,
   type CombatRoundStep,
@@ -159,6 +160,29 @@ function formatResolutionStatusLabel(value: string): string {
     .join(" ");
 }
 
+function formatCombatParryCalculationLine(
+  resolution: CombatRoundParryResolution,
+): string | undefined {
+  if (
+    resolution.status !== "resolved" ||
+    resolution.combinedParryScore === undefined ||
+    resolution.modifierAdjustment === undefined ||
+    resolution.rollD20 === undefined ||
+    resolution.rollTotal === undefined ||
+    resolution.total === undefined
+  ) {
+    return undefined;
+  }
+
+  const rollText = formatOpenEndedD20RollBreakdown({
+    dieResult: resolution.rollTotal,
+    openEndedD10s: resolution.openEndedD10s,
+    rollD20: resolution.rollD20,
+  });
+
+  return `Parry: P ${resolution.combinedParryScore} + [mods] ${resolution.modifierAdjustment >= 0 ? "+" : ""}${resolution.modifierAdjustment} + roll ${rollText} = ${resolution.total}`;
+}
+
 function formatCombatPhaseResolutionResultLines(input: {
   attackResult: CombatRoundAttackRollResult;
   participantId?: string;
@@ -171,17 +195,24 @@ function formatCombatPhaseResolutionResultLines(input: {
   const parry = input.resolution.parryResolution;
   const damage = input.resolution.damageRoll;
   const proposal = input.resolution.damageProposal;
-  const parryLine = `Parry: ${formatResolutionStatusLabel(parry.status)}${
-    parry.resultLabel ? ` (${parry.resultLabel})` : ""
-  }`;
+  const resolvedParryLine = formatCombatParryCalculationLine(parry);
+  const parryLine =
+    resolvedParryLine ??
+    `Parry: ${formatResolutionStatusLabel(parry.status)}${
+      parry.resultLabel ? ` (${parry.resultLabel})` : ""
+    }`;
+  const parryResultLine =
+    parry.status === "resolved" && parry.resultLabel ? `Result: ${parry.resultLabel}` : undefined;
 
   return {
     attackLine: `${formatCombatAttackResultLine({
       participantId: input.participantId,
       result: input.attackResult,
     })} · Result: ${input.attackResult.tableResult}`,
-    proposalLine: `Proposal: ${formatResolutionStatusLabel(proposal.status)}`,
-    statusLine: `${parryLine} · Damage roll: ${formatResolutionStatusLabel(damage.status)}`,
+    proposalLine: parryResultLine ?? `Proposal: ${formatResolutionStatusLabel(proposal.status)}`,
+    statusLine: parryResultLine
+      ? parryLine
+      : `${parryLine} · Damage roll: ${formatResolutionStatusLabel(damage.status)}`,
   };
 }
 
