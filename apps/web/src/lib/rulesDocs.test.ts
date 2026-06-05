@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  expandStructuredRuleTableDirectives,
   getRulesDocumentEntryById,
   getRulesDocumentationPageModel,
   getRulesDocuments
@@ -39,6 +40,19 @@ describe("rules documentation registry", () => {
           id: "combat-loadout-calculations",
           section: "Combat / Equipment",
           title: "Equip Items Calculations"
+        }),
+        expect.objectContaining({
+          fileName: "combat-to-hit.md",
+          id: "combat-to-hit",
+          section: "Combat",
+          title: "Combat To Hit"
+        })
+      ])
+    );
+    expect(getRulesDocuments()).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "combat-hit-location"
         })
       ])
     );
@@ -50,7 +64,8 @@ describe("rules documentation registry", () => {
       "Character Sheet Calculations",
       "Character Progression Calculations",
       "Equipment & Encumbrance Calculations",
-      "Equip Items Calculations"
+      "Equip Items Calculations",
+      "Combat To Hit"
     ]);
   });
 
@@ -131,4 +146,30 @@ describe("rules documentation registry", () => {
     expect(model.selectedDocument.markdown).toContain("Combined parry modifier");
     expect(model.selectedDocument.markdown).toContain("GMR");
   });
+
+  it("loads the Combat To Hit document with roll and deferred-scope notes", async () => {
+    const model = await getRulesDocumentationPageModel({
+      selectedDocumentId: "combat-to-hit"
+    });
+
+    expect(model.selectedDocument.title).toBe("Combat To Hit");
+    expect(model.selectedDocument.markdown).toContain("# Combat To Hit");
+    expect(model.selectedDocument.markdown).toContain("Roll open-ended `1d20`");
+    expect(model.selectedDocument.markdown).toContain("lookup total = OB - DB + open-ended roll total");
+    expect(model.selectedDocument.markdown).toContain("Lookup total `11` is a grazing hit.");
+    expect(model.selectedDocument.markdown).toContain("Damage, critical, and minimum-damage details are deferred.");
+    expect(model.selectedDocument.markdown).not.toContain("New Combat Arena.xlsx");
+    expect(model.selectedDocument.markdown).not.toContain("Sheet: `to hit (new)`");
+    expect(model.selectedDocument.markdown).not.toContain("| Lookup total |");
+  });
+
+  it("expands structured rule-table directives into markdown tables", () => {
+    expect(expandStructuredRuleTableDirectives("{{rule-table:combat-hit-location}}")).toContain(
+      "| 20 | Head | Head | `head` |"
+    );
+    expect(expandStructuredRuleTableDirectives("{{rule-table:combat-hit-location}}")).toContain(
+      "| 1 | Left leg | L leg | `leftLeg` |"
+    );
+  });
+
 });

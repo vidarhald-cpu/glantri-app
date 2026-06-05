@@ -3,6 +3,7 @@ import type { FastifyPluginAsync } from "fastify";
 import { CampaignService, EncounterService, ScenarioService } from "@glantri/database";
 import {
   buildPlayerSafeRoleplayStateForUser,
+  applyCombatActionGeneratedModifiers,
   buildCombatRoundInitiativeResult,
   canPlayerRollCombatInitiative,
   buildRoleplayCalculationPreview,
@@ -21,9 +22,13 @@ import {
   rollOpenEndedD6,
   combatRoundPhaseContextsSchema,
   scenarioParticipantCombatContextSchema,
+  validateCombatDeclarationTargets,
 } from "@glantri/domain";
 import type { ScenarioParticipant } from "@glantri/domain";
-import { recordRoleplayGmSkillRoll, resolveRoleplaySkillRollModifiers } from "@glantri/rules-engine";
+import {
+  recordRoleplayGmSkillRoll,
+  resolveRoleplaySkillRollModifiers,
+} from "@glantri/rules-engine";
 
 import { requireAdminUser, requireAuthenticatedUser } from "../../lib/sessionAuth";
 import { parseBodyObject, parseId } from "./parsing";
@@ -59,13 +64,13 @@ function computeDieResult(rollD20: number, openEndedD10s: number[]): number {
 
 function parseRollFields(
   roll: Record<string, unknown>,
-  prefix: string
+  prefix: string,
 ): { dieResult: number; openEndedD10s: number[]; rollD20: number } {
   const rollD20 = parseIntegerInRange(roll.rollD20, `${prefix}.rollD20`, 1, 20);
   const openEndedD10sValue = roll.openEndedD10s;
   const openEndedD10s = Array.isArray(openEndedD10sValue)
     ? openEndedD10sValue.map((entry, index) =>
-        parseIntegerInRange(entry, `${prefix}.openEndedD10s[${index}]`, 1, 10)
+        parseIntegerInRange(entry, `${prefix}.openEndedD10s[${index}]`, 1, 10),
       )
     : [];
   return { dieResult: computeDieResult(rollD20, openEndedD10s), openEndedD10s, rollD20 };
@@ -144,7 +149,10 @@ function parseCombatDeclarationBody(body: unknown): {
   };
 }
 
-function parseParticipantCommandBody(body: unknown, label: string): {
+function parseParticipantCommandBody(
+  body: unknown,
+  label: string,
+): {
   scenarioParticipantId: string;
 } {
   const value = parseBodyObject(body, label);
@@ -159,19 +167,30 @@ function parseParticipantCommandBody(body: unknown, label: string): {
 
 function parseCombatInitiativeBody(body: unknown): {
   initiativeBase?: number;
+  initiativeModifierAdjustment?: number;
   scenarioParticipantId: string;
 } {
   const value = parseBodyObject(body, "Combat initiative payload");
   const parsed = parseParticipantCommandBody(value, "Combat initiative payload");
   const initiativeBase = value.initiativeBase;
+  const initiativeModifierAdjustment = value.initiativeModifierAdjustment;
 
   if (initiativeBase !== undefined && !Number.isInteger(initiativeBase)) {
     throw new Error("initiativeBase must be an integer.");
   }
 
+  if (
+    initiativeModifierAdjustment !== undefined &&
+    !Number.isInteger(initiativeModifierAdjustment)
+  ) {
+    throw new Error("initiativeModifierAdjustment must be an integer.");
+  }
+
   return {
     ...parsed,
     initiativeBase: typeof initiativeBase === "number" ? initiativeBase : undefined,
+    initiativeModifierAdjustment:
+      typeof initiativeModifierAdjustment === "number" ? initiativeModifierAdjustment : undefined,
   };
 }
 
@@ -222,13 +241,13 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         {
           scenarioId,
           userId: user.id,
-          userRoles: user.roles
-        }
+          userRoles: user.roles,
+        },
       );
 
       if (!access) {
         return reply.code(404).send({
-          error: "Scenario not found."
+          error: "Scenario not found.",
         });
       }
 
@@ -246,15 +265,15 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
                   scenarioParticipants,
                   userId: user.id,
                 })
-              : undefined
-          }))
+              : undefined,
+          })),
         };
       }
 
       return { encounters };
     } catch (error) {
       return reply.code(400).send({
-        error: error instanceof Error ? error.message : "Unable to list encounters."
+        error: error instanceof Error ? error.message : "Unable to list encounters.",
       });
     }
   });
@@ -276,13 +295,13 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         {
           scenarioId,
           userId: user.id,
-          userRoles: user.roles
-        }
+          userRoles: user.roles,
+        },
       );
 
       if (!access || access.mode !== "gm") {
         return reply.code(404).send({
-          error: "Scenario not found."
+          error: "Scenario not found.",
         });
       }
 
@@ -292,7 +311,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         campaignId: access.campaignId,
         createdByUserId: user.id,
         scenarioId,
-        session: encounterSession
+        session: encounterSession,
       });
 
       await scenarioService.recordScenarioEvent({
@@ -301,16 +320,16 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         payload: {
           encounterId: encounter.id,
           kind: encounter.kind,
-          status: encounter.status
+          status: encounter.status,
         },
         scenarioId,
-        summary: `Created ${encounter.kind} encounter ${encounter.title}.`
+        summary: `Created ${encounter.kind} encounter ${encounter.title}.`,
       });
 
       return { encounter };
     } catch (error) {
       return reply.code(400).send({
-        error: error instanceof Error ? error.message : "Unable to create encounter."
+        error: error instanceof Error ? error.message : "Unable to create encounter.",
       });
     }
   });
@@ -328,7 +347,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
 
       if (!encounter?.scenarioId) {
         return reply.code(404).send({
-          error: "Encounter not found."
+          error: "Encounter not found.",
         });
       }
 
@@ -341,18 +360,20 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         {
           scenarioId,
           userId: user.id,
-          userRoles: user.roles
-        }
+          userRoles: user.roles,
+        },
       );
 
       if (!access) {
         return reply.code(404).send({
-          error: "Encounter not found."
+          error: "Encounter not found.",
         });
       }
 
       if (access.mode === "player") {
-        const scenarioParticipants = await scenarioService.listScenarioParticipants(encounter.scenarioId);
+        const scenarioParticipants = await scenarioService.listScenarioParticipants(
+          encounter.scenarioId,
+        );
 
         return {
           encounter: {
@@ -363,15 +384,15 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
                   scenarioParticipants,
                   userId: user.id,
                 })
-              : undefined
-          }
+              : undefined,
+          },
         };
       }
 
       return { encounter };
     } catch (error) {
       return reply.code(400).send({
-        error: error instanceof Error ? error.message : "Unable to load encounter."
+        error: error instanceof Error ? error.message : "Unable to load encounter.",
       });
     }
   });
@@ -389,7 +410,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
 
       if (!existingEncounter?.scenarioId) {
         return reply.code(404).send({
-          error: "Encounter not found."
+          error: "Encounter not found.",
         });
       }
 
@@ -401,13 +422,13 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         {
           scenarioId: existingEncounter.scenarioId,
           userId: user.id,
-          userRoles: user.roles
-        }
+          userRoles: user.roles,
+        },
       );
 
       if (!access || access.mode !== "gm") {
         return reply.code(404).send({
-          error: "Encounter not found."
+          error: "Encounter not found.",
         });
       }
 
@@ -417,7 +438,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         campaignId: access.campaignId,
         encounterId,
         scenarioId: existingEncounter.scenarioId,
-        session: encounterSession
+        session: encounterSession,
       });
 
       await scenarioService.recordScenarioEvent({
@@ -426,16 +447,16 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         payload: {
           encounterId: encounter.id,
           participantCount: encounter.participants.length,
-          status: encounter.status
+          status: encounter.status,
         },
         scenarioId: existingEncounter.scenarioId,
-        summary: `Updated encounter ${encounter.title}.`
+        summary: `Updated encounter ${encounter.title}.`,
       });
 
       return { encounter };
     } catch (error) {
       return reply.code(400).send({
-        error: error instanceof Error ? error.message : "Unable to update encounter."
+        error: error instanceof Error ? error.message : "Unable to update encounter.",
       });
     }
   });
@@ -453,7 +474,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
 
       if (!encounter?.scenarioId) {
         return reply.code(404).send({
-          error: "Encounter not found."
+          error: "Encounter not found.",
         });
       }
 
@@ -466,20 +487,20 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         {
           scenarioId,
           userId: user.id,
-          userRoles: user.roles
-        }
+          userRoles: user.roles,
+        },
       );
 
       if (!access) {
         return reply.code(404).send({
-          error: "Encounter not found."
+          error: "Encounter not found.",
         });
       }
 
       const body = parseCombatDeclarationBody(request.body);
       const scenarioParticipants = await scenarioService.listScenarioParticipants(scenarioId);
       const scenarioParticipant = scenarioParticipants.find(
-        (participant) => participant.id === body.scenarioParticipantId
+        (participant) => participant.id === body.scenarioParticipantId,
       );
       const membership = resolveEncounterParticipantMembership({
         encounter,
@@ -491,13 +512,13 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
               participant.scenarioParticipantId === scenarioParticipant.id ||
               participant.id === scenarioParticipant.id ||
               (scenarioParticipant.characterId &&
-                participant.characterId === scenarioParticipant.characterId)
+                participant.characterId === scenarioParticipant.characterId),
           )
         : undefined;
 
       if (!scenarioParticipant || !scenarioParticipant.isActive || !encounterParticipant) {
         return reply.code(403).send({
-          error: "Participant is not assigned to this encounter."
+          error: "Participant is not assigned to this encounter.",
         });
       }
 
@@ -506,12 +527,15 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       const existingCombatContext = scenarioParticipantCombatContextSchema.parse(
         scenarioParticipant.state.combat.combatContext ?? {},
       );
-      const submittedCombatContext = gmAuthorizedOperation
-        ? body.combatContext
-        : preservePlayerCombatModifierBuckets({
-            existingContext: existingCombatContext,
-            requestedContext: body.combatContext,
-          });
+      const submittedCombatContext = applyCombatActionGeneratedModifiers({
+        actionId: body.actionId,
+        combatContext: gmAuthorizedOperation
+          ? body.combatContext
+          : preservePlayerCombatModifierBuckets({
+              existingContext: existingCombatContext,
+              requestedContext: body.combatContext,
+            }),
+      });
       const submittedPhaseContexts = body.phaseContexts
         ? {
             phase1: body.phaseContexts.phase1
@@ -543,7 +567,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           })
         ) {
           return reply.code(403).send({
-            error: "Player is not assigned to this encounter participant."
+            error: "Player is not assigned to this encounter participant.",
           });
         }
 
@@ -554,9 +578,21 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           })
         ) {
           return reply.code(409).send({
-            error: "Declaration is closed for this round."
+            error: "Declaration is closed for this round.",
           });
         }
+      }
+
+      const targetValidation = validateCombatDeclarationTargets({
+        actionId: body.actionId,
+        phaseContexts: submittedPhaseContexts,
+        secondaryActionId: body.secondaryActionId,
+      });
+
+      if (!targetValidation.valid) {
+        return reply.code(400).send({
+          error: targetValidation.message ?? "Select a target for each attack phase.",
+        });
       }
 
       const submittedAt = new Date().toISOString();
@@ -595,7 +631,8 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         submittedBy: gmAuthorizedOperation ? "gm" : "player",
       });
       const nextRoundState =
-        gmAuthorizedOperation && roundState.currentStep !== "initiative_phase_1" &&
+        gmAuthorizedOperation &&
+        roundState.currentStep !== "initiative_phase_1" &&
         roundState.currentStep !== "initiative_phase_2"
           ? recordCombatRoundParticipantStepReview({
               participantId: encounterParticipant.id,
@@ -619,7 +656,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       return { encounter: savedEncounter, participant };
     } catch (error) {
       return reply.code(400).send({
-        error: error instanceof Error ? error.message : "Unable to save combat declaration."
+        error: error instanceof Error ? error.message : "Unable to save combat declaration.",
       });
     }
   });
@@ -637,7 +674,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
 
       if (!encounter?.scenarioId) {
         return reply.code(404).send({
-          error: "Encounter not found."
+          error: "Encounter not found.",
         });
       }
 
@@ -650,20 +687,20 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         {
           scenarioId,
           userId: user.id,
-          userRoles: user.roles
-        }
+          userRoles: user.roles,
+        },
       );
 
       if (!access) {
         return reply.code(404).send({
-          error: "Encounter not found."
+          error: "Encounter not found.",
         });
       }
 
       const body = parseCombatInitiativeBody(request.body);
       const scenarioParticipants = await scenarioService.listScenarioParticipants(scenarioId);
       const scenarioParticipant = scenarioParticipants.find(
-        (participant) => participant.id === body.scenarioParticipantId
+        (participant) => participant.id === body.scenarioParticipantId,
       );
       const membership = resolveEncounterParticipantMembership({
         encounter,
@@ -675,13 +712,13 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
               participant.scenarioParticipantId === scenarioParticipant.id ||
               participant.id === scenarioParticipant.id ||
               (scenarioParticipant.characterId &&
-                participant.characterId === scenarioParticipant.characterId)
+                participant.characterId === scenarioParticipant.characterId),
           )
         : undefined;
 
       if (!scenarioParticipant || !scenarioParticipant.isActive || !encounterParticipant) {
         return reply.code(403).send({
-          error: "Participant is not assigned to this encounter."
+          error: "Participant is not assigned to this encounter.",
         });
       }
 
@@ -689,9 +726,13 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       const roundState = initializeCombatRoundState({ encounter });
       const phase = getCombatRoundInitiativePhaseForStep(roundState.currentStep);
 
-      if (!phase || (roundState.currentStep !== "initiative_phase_1" && roundState.currentStep !== "initiative_phase_2")) {
+      if (
+        !phase ||
+        (roundState.currentStep !== "initiative_phase_1" &&
+          roundState.currentStep !== "initiative_phase_2")
+      ) {
         return reply.code(409).send({
-          error: "Initiative is not open for this step."
+          error: "Initiative is not open for this step.",
         });
       }
 
@@ -705,7 +746,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           })
         ) {
           return reply.code(403).send({
-            error: "Player is not assigned to this encounter participant."
+            error: "Player is not assigned to this encounter participant.",
           });
         }
 
@@ -717,7 +758,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           })
         ) {
           return reply.code(409).send({
-            error: "Initiative is closed for this step."
+            error: "Initiative is closed for this step.",
           });
         }
       }
@@ -725,6 +766,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       const initiativeRoll = rollOpenEndedD6();
       const rolledInitiative = buildCombatRoundInitiativeResult({
         baseInitiative: body.initiativeBase,
+        modifierAdjustment: body.initiativeModifierAdjustment,
         roll: initiativeRoll,
       });
       const submittedAt = new Date().toISOString();
@@ -750,7 +792,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       return { encounter: savedEncounter, initiative: rolledInitiative };
     } catch (error) {
       return reply.code(400).send({
-        error: error instanceof Error ? error.message : "Unable to roll combat initiative."
+        error: error instanceof Error ? error.message : "Unable to roll combat initiative.",
       });
     }
   });
@@ -768,7 +810,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
 
       if (!encounter?.scenarioId) {
         return reply.code(404).send({
-          error: "Encounter not found."
+          error: "Encounter not found.",
         });
       }
 
@@ -781,13 +823,13 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         {
           scenarioId,
           userId: user.id,
-          userRoles: user.roles
-        }
+          userRoles: user.roles,
+        },
       );
 
       if (!access || access.mode !== "gm") {
         return reply.code(403).send({
-          error: "Only GM users can clear combat round steps."
+          error: "Only GM users can clear combat round steps.",
         });
       }
 
@@ -825,15 +867,15 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
                   participantId: participant.id,
                   scenarioId,
                   state: clearScenarioParticipantCombatDeclaration(participant),
-                })
-              )
+                }),
+              ),
           )
         : [];
 
       return { encounter: savedEncounter, participants: updatedParticipants };
     } catch (error) {
       return reply.code(400).send({
-        error: error instanceof Error ? error.message : "Unable to clear combat round step."
+        error: error instanceof Error ? error.message : "Unable to clear combat round step.",
       });
     }
   });
@@ -851,7 +893,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
 
       if (!encounter?.scenarioId) {
         return reply.code(404).send({
-          error: "Encounter not found."
+          error: "Encounter not found.",
         });
       }
 
@@ -863,18 +905,20 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         {
           scenarioId: encounter.scenarioId,
           userId: user.id,
-          userRoles: user.roles
-        }
+          userRoles: user.roles,
+        },
       );
 
       if (!access) {
         return reply.code(404).send({
-          error: "Encounter not found."
+          error: "Encounter not found.",
         });
       }
 
       const body = parsePlayerRollBody(request.body);
-      const scenarioParticipants = await scenarioService.listScenarioParticipants(encounter.scenarioId);
+      const scenarioParticipants = await scenarioService.listScenarioParticipants(
+        encounter.scenarioId,
+      );
       const membership = resolveEncounterParticipantMembership({
         encounter,
         scenarioParticipants,
@@ -884,11 +928,12 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
 
       if (!pendingRoll || pendingRoll.silent) {
         return reply.code(403).send({
-          error: "Roll is not available to this player."
+          error: "Roll is not available to this player.",
         });
       }
 
-      const pendingRollSide = pendingRoll.side ?? (pendingRoll.mode === "opposed" ? "actor" : undefined);
+      const pendingRollSide =
+        pendingRoll.side ?? (pendingRoll.mode === "opposed" ? "actor" : undefined);
       const existingResult = state.actionLog.find(
         (entry) =>
           entry.type === "gm_skill_roll" &&
@@ -898,12 +943,12 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
               entry.rollSetId === pendingRoll.rollSetId &&
               (pendingRollSide ? entry.side === pendingRollSide : true) &&
               entry.participantId === pendingRoll.participantId &&
-              entry.skillId === pendingRoll.skillId))
+              entry.skillId === pendingRoll.skillId)),
       );
 
       if (existingResult) {
         return reply.code(409).send({
-          error: "Roll has already been submitted."
+          error: "Roll has already been submitted.",
         });
       }
 
@@ -918,7 +963,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         })
       ) {
         return reply.code(403).send({
-          error: "Player is not assigned to this encounter."
+          error: "Player is not assigned to this encounter.",
         });
       }
 
@@ -937,7 +982,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         !scenarioParticipant.isActive
       ) {
         return reply.code(403).send({
-          error: "Roll is not assigned to this player."
+          error: "Roll is not assigned to this player.",
         });
       }
 
@@ -1023,7 +1068,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       return { encounter: savedEncounter };
     } catch (error) {
       return reply.code(400).send({
-        error: error instanceof Error ? error.message : "Unable to submit player roll."
+        error: error instanceof Error ? error.message : "Unable to submit player roll.",
       });
     }
   });

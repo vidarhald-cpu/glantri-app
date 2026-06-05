@@ -159,14 +159,21 @@ Missile DMB generally comes from the weapon rules data unless a weapon has a for
 
 ### Initiative
 
-Melee initiative uses the weapon skill XP, DEX GM, weapon initiative, and a skill modifier table.
+Melee initiative in the Character `Equip Items` section is theoretical and pre-encounter. It uses
+the weapon skill XP, DEX GM, weapon initiative, and a skill modifier table. It does not include live
+Combat Effects, GM encounter modifier buckets, or an initiative roll.
 
 | Step | Formula |
 | --- | --- |
 | Skill initiative modifier | `0` for skill XP `0-10`; then `floor((skill XP - 6) / 5)` for `11-31`. |
 | Base initiative | `DEX GM + weapon initiative + skill initiative modifier` |
-| Game modifier adjustment | If the live game modifier is above `2` or below `-2`, add `floor(game modifier / 2)`. Otherwise add `0`. |
-| Final initiative | `base initiative + game modifier adjustment` |
+| Final theoretical initiative | `base initiative` |
+
+Spreadsheet-era `Game sheet!G10/G11` initiative entries are not a separate character-section rule.
+They were the workbook input location for GM-reviewed situational modifiers. In the encounter
+combat workflow, the app represents those situational modifiers with the GM-controlled Initiative
+modifier bucket and applies them with General/Fatigue through the workbook percentage modifier
+helper before adding the open-ended d6 initiative roll.
 
 Missile and thrown initiative currently use:
 

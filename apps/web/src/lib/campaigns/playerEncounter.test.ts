@@ -14,6 +14,7 @@ import {
   getPlayerEncounterParryDirectionLabel,
   isPlayerEncounterAttackAction,
   isPlayerEncounterDefenseAction,
+  mergeCombatContextWithCurrentModifierBuckets,
 } from "./playerEncounter";
 
 function createScenarioParticipant(
@@ -38,6 +39,7 @@ function createScenarioParticipant(
             modifierBuckets: {
               general: [],
               situationDb: [],
+              situationInitiative: [],
               situationObSkill: [],
             },
           },
@@ -110,7 +112,7 @@ describe("playerEncounter", () => {
     expect(getPlayerEncounterMovementLabel("")).toBe("Hold position");
   });
 
-  it("derives combat modifier totals from the three modifier buckets", () => {
+  it("derives combat modifier totals from the combat modifier buckets", () => {
     expect(
       getPlayerEncounterCombatModifierTotals({
         modifierBuckets: {
@@ -119,6 +121,7 @@ describe("playerEncounter", () => {
             { id: "g-2", scope: "save", value: -1 },
           ],
           situationDb: [{ id: "db-1", scope: "until", value: 4 }],
+          situationInitiative: [{ id: "initiative-1", scope: "until", value: 5 }],
           situationObSkill: [{ id: "ob-1", scope: "until", value: 3 }],
         },
       }),
@@ -127,7 +130,64 @@ describe("playerEncounter", () => {
       defenseTotal: 5,
       generalTotal: 1,
       situationDbTotal: 4,
+      situationInitiativeTotal: 5,
       situationObSkillTotal: 3,
+    });
+  });
+
+  it("counts generated Parry - Attack DB/Parry rows in the defense total", () => {
+    expect(
+      getPlayerEncounterCombatModifierTotals({
+        modifierBuckets: {
+          general: [],
+          situationDb: [
+            {
+              durationRounds: 1,
+              generated: true,
+              id: "generated:parry-attack:phase2:db-parry",
+              notes: "parry attack",
+              scope: "until",
+              sourceActionId: "parry_attack",
+              sourcePhase: "phase2",
+              sourceRule: "parry-attack-db-parry-phase2",
+              value: -4,
+            },
+          ],
+          situationInitiative: [],
+          situationObSkill: [],
+        },
+      }).defenseTotal,
+    ).toBe(-4);
+  });
+
+  it("keeps current GM modifier buckets when a saved declaration has older combat context", () => {
+    const mergedContext = mergeCombatContextWithCurrentModifierBuckets({
+      baseContext: {
+        selectedOpponentId: "guard-1",
+        modifierBuckets: {
+          general: [],
+          situationDb: [],
+          situationInitiative: [],
+          situationObSkill: [],
+        },
+      },
+      currentContext: {
+        selectedOpponentId: "guard-2",
+        modifierBuckets: {
+          general: [],
+          situationDb: [{ id: "db-1", scope: "until", value: 2 }],
+          situationInitiative: [{ id: "initiative-1", scope: "until", value: 3 }],
+          situationObSkill: [{ id: "ob-1", scope: "until", value: -1 }],
+        },
+      },
+    });
+
+    expect(mergedContext.selectedOpponentId).toBe("guard-1");
+    expect(mergedContext.modifierBuckets).toEqual({
+      general: [],
+      situationDb: [{ id: "db-1", scope: "until", value: 2 }],
+      situationInitiative: [{ id: "initiative-1", scope: "until", value: 3 }],
+      situationObSkill: [{ id: "ob-1", scope: "until", value: -1 }],
     });
   });
 
@@ -238,6 +298,7 @@ describe("playerEncounter", () => {
       modifierBuckets: {
         general: [],
         situationDb: [],
+        situationInitiative: [],
         situationObSkill: [],
       },
     });

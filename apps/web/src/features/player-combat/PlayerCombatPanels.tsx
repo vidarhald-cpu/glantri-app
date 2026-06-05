@@ -2,13 +2,16 @@
 
 import type { ReactNode } from "react";
 
-import type {
-  CombatRoundInitiativeResult,
-  CombatRoundStep,
-  ScenarioCombatModifierBucket,
-  ScenarioCombatModifierEntry,
-  ScenarioParticipantCombatContext,
-  ScenarioParticipantParryDirection,
+import {
+  HIT_LOCATIONS,
+  type CombatRoundInitiativeResult,
+  type CombatRoundStep,
+  type ScenarioCombatModifierBucket,
+  type ScenarioCombatModifierEntry,
+  type ScenarioParticipantCombatContext,
+  type ScenarioParticipantParryDirection,
+  type ScenarioParticipantTargetLocation,
+  getHitLocationFullLabel,
 } from "@glantri/domain";
 
 import {
@@ -21,8 +24,13 @@ import {
   getPlayerEncounterCombatModifierTotals,
   type PlayerEncounterActionId,
   type PlayerEncounterMovementId,
+  type PlayerEncounterOpponentOption,
 } from "@/lib/campaigns/playerEncounter";
-import type { EncounterLiveCombatModifierSummary } from "@/lib/campaigns/liveCombatModifiers";
+import {
+  filterCombatModifierEntriesForPhase,
+  type EncounterCombatPhaseKey,
+  type EncounterLiveCombatModifierSummary,
+} from "@/lib/campaigns/liveCombatModifiers";
 
 export interface PlayerCombatModifierBucketView {
   bucketKey: ScenarioCombatModifierBucket;
@@ -108,21 +116,33 @@ interface PlayerCombatParryContextPanelProps {
   onCombatContextChange: (combatContext: ScenarioParticipantCombatContext) => void;
 }
 
+interface PlayerCombatAttackLocationSelectorProps {
+  combatContext: ScenarioParticipantCombatContext;
+  controlsDisabled?: boolean;
+  onCombatContextChange: (combatContext: ScenarioParticipantCombatContext) => void;
+}
+
+interface PlayerCombatAttackTargetSelectorProps {
+  combatContext: ScenarioParticipantCombatContext;
+  controlsDisabled?: boolean;
+  onCombatContextChange: (combatContext: ScenarioParticipantCombatContext) => void;
+  targetOptions: readonly PlayerEncounterOpponentOption[];
+}
+
 interface PlayerCombatActionButtonPanelProps {
   buttonLabel?: string;
   disabled?: boolean;
   onDeclareAction?: () => void;
   saving?: boolean;
   statusText: string;
+  validationMessage?: string;
 }
 
 interface PlayerCombatActionResultPanelProps {
-  additionalActionNotes: string;
   result?: {
     interpretedResult: string;
-    phaseLabel?: string;
     rankLabel?: string;
-    value: number;
+    resultLabel?: string;
   } | null;
 }
 
@@ -226,6 +246,9 @@ const compactStatsTableStyle = {
   width: "100%",
 } as const;
 
+const compactPhaseContextSelectorColumns = "6.5rem 7rem auto";
+const compactPhaseContextSelectStyle = { width: "7rem" } as const;
+
 function getDisplayTotal(row: PlayerCombatModifierBucketView | undefined): number {
   return row ? row.total + (row.fatigueTotal ?? 0) : 0;
 }
@@ -250,17 +273,17 @@ export function getGmCombatStepActionLabel(step: CombatRoundStep): string {
     case "review_action_modifiers":
       return "Declare modifiers";
     case "initiative_phase_1":
-      return "Set/Roll phase 1 initiative";
+      return "Roll phase 1 initiative";
     case "phase_1_actions":
-      return "Record phase 1 action";
+      return "Roll phase 1 attack";
     case "review_phase_2_actions":
       return "Review phase 1 effects";
     case "review_phase_2_modifiers":
-      return "Review phase 2";
+      return "Declare phase 2 modifiers";
     case "initiative_phase_2":
-      return "Set/Roll phase 2 initiative";
+      return "Roll phase 2 initiative";
     case "phase_2_actions":
-      return "Record phase 2 action";
+      return "Roll phase 2 attack";
     case "review_phase_2_damage":
       return "Review phase 2 effects";
     case "round_summary":
@@ -318,9 +341,31 @@ export function getPlayerCombatActionButtonLabel(input: {
 export function buildPlayerCombatModifierRows(input: {
   combatContext?: ScenarioParticipantCombatContext;
   liveModifiers?: EncounterLiveCombatModifierSummary;
+  phaseKey?: EncounterCombatPhaseKey;
 }): PlayerCombatModifierBucketView[] {
   const combatContext = input.combatContext ?? createEmptyPlayerEncounterCombatContext();
-  const totals = getPlayerEncounterCombatModifierTotals(combatContext);
+  const filteredModifierBuckets = {
+    general: filterCombatModifierEntriesForPhase(
+      combatContext.modifierBuckets.general,
+      input.phaseKey,
+    ),
+    situationDb: filterCombatModifierEntriesForPhase(
+      combatContext.modifierBuckets.situationDb,
+      input.phaseKey,
+    ),
+    situationInitiative: filterCombatModifierEntriesForPhase(
+      combatContext.modifierBuckets.situationInitiative,
+      input.phaseKey,
+    ),
+    situationObSkill: filterCombatModifierEntriesForPhase(
+      combatContext.modifierBuckets.situationObSkill,
+      input.phaseKey,
+    ),
+  };
+  const totals = getPlayerEncounterCombatModifierTotals({
+    ...combatContext,
+    modifierBuckets: filteredModifierBuckets,
+  });
 
   return [
     {
@@ -331,15 +376,21 @@ export function buildPlayerCombatModifierRows(input: {
       total: input.liveModifiers?.generalFatigueRaw ?? 0,
     },
     {
+      bucketKey: "situation_initiative",
+      entries: filteredModifierBuckets.situationInitiative,
+      label: "Initiative",
+      total: input.liveModifiers?.initiativeRaw ?? totals.situationInitiativeTotal,
+    },
+    {
       bucketKey: "situation_ob_skill",
-      entries: combatContext.modifierBuckets.situationObSkill,
+      entries: filteredModifierBuckets.situationObSkill,
       label: "Skill/OB",
       total: input.liveModifiers?.obSkillRaw ?? totals.situationObSkillTotal,
     },
     {
       bucketKey: "situation_db",
-      entries: combatContext.modifierBuckets.situationDb,
-      label: "DB",
+      entries: filteredModifierBuckets.situationDb,
+      label: "DB/Parry",
       total: input.liveModifiers?.dbRaw ?? totals.situationDbTotal,
     },
   ];
@@ -545,6 +596,7 @@ export function PlayerCombatActionButtonPanel({
   onDeclareAction,
   saving = false,
   statusText,
+  validationMessage,
 }: PlayerCombatActionButtonPanelProps) {
   return (
     <section style={playerCombatPanelCardStyle}>
@@ -558,32 +610,32 @@ export function PlayerCombatActionButtonPanel({
           borderRadius: 10,
           color: disabled ? "#8a8477" : "#2f2415",
           cursor: disabled ? "not-allowed" : "pointer",
+          justifySelf: "center",
           minHeight: 70,
           padding: "0.75rem 0.9rem",
-          textAlign: "left",
-          width: "100%",
+          textAlign: "center",
+          width: "80%",
         }}
         type="button"
       >
         <strong>{saving ? "Saving..." : buttonLabel}</strong>
       </button>
       <div style={{ color: "#5e5a50", fontSize: "0.92rem" }}>{statusText}</div>
+      {validationMessage ? (
+        <div style={{ color: "#8b3a1a", fontSize: "0.9rem", fontWeight: 600 }}>
+          {validationMessage}
+        </div>
+      ) : null}
     </section>
   );
 }
 
-export function PlayerCombatActionResultPanel({
-  additionalActionNotes,
-  result,
-}: PlayerCombatActionResultPanelProps) {
-  const detailText = additionalActionNotes.trim();
-
+export function PlayerCombatActionResultPanel({ result }: PlayerCombatActionResultPanelProps) {
   return (
     <section
       style={{
         ...playerCombatPanelCardStyle,
         alignContent: "start",
-        minHeight: 136,
       }}
     >
       <strong>Action result</strong>
@@ -593,27 +645,29 @@ export function PlayerCombatActionResultPanel({
           background: "#f6f5ef",
           border: "1px solid #d9ddd8",
           borderRadius: 8,
-          display: "flex",
-          fontSize: "1.3rem",
+          boxSizing: "border-box",
+          display: "grid",
+          fontSize: "0.98rem",
           fontWeight: 700,
+          gap: "0.35rem",
           justifyContent: "center",
-          minHeight: 44,
+          justifyItems: "center",
+          minHeight: 58,
+          padding: "0.45rem 0.6rem",
+          textAlign: "center",
+          width: "100%",
         }}
       >
-        {result?.value ?? "—"}
+        {result ? (
+          <>
+            {result.rankLabel ? <div>{result.rankLabel}</div> : null}
+            <div>{result.interpretedResult}</div>
+            {result.resultLabel ? <div>{result.resultLabel}</div> : null}
+          </>
+        ) : (
+          "—"
+        )}
       </div>
-      <div style={{ fontSize: "0.95rem", fontWeight: 600 }}>
-        {result?.interpretedResult ?? "No result recorded."}
-      </div>
-      {result?.phaseLabel ? (
-        <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>{result.phaseLabel}</div>
-      ) : null}
-      {result?.rankLabel ? (
-        <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>{result.rankLabel}</div>
-      ) : null}
-      {detailText ? (
-        <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>Description: {detailText}</div>
-      ) : null}
     </section>
   );
 }
@@ -625,7 +679,9 @@ export function formatCombatInitiativeRoll(initiative?: CombatRoundInitiativeRes
 
   const rollText =
     initiative.rolls.length > 0 ? initiative.rolls.join(" + ") : String(initiative.total);
-  const rollTotal = initiative.rollTotal ?? initiative.total - (initiative.baseInitiative ?? 0);
+  const baseInitiative = initiative.baseInitiative ?? 0;
+  const modifierAdjustment = initiative.modifierAdjustment ?? 0;
+  const rollTotal = initiative.rollTotal ?? initiative.total - baseInitiative - modifierAdjustment;
 
   return `Roll: ${rollText} = ${rollTotal}`;
 }
@@ -637,8 +693,10 @@ export function formatCombatInitiativeFormula(initiative?: CombatRoundInitiative
 
   const baseInitiative = initiative.baseInitiative ?? 0;
   const rollTotal = initiative.rollTotal ?? initiative.total - baseInitiative;
+  const modifierAdjustment =
+    initiative.modifierAdjustment ?? initiative.total - baseInitiative - rollTotal;
 
-  return `Main: I ${baseInitiative} + [ ] 0 + roll ${rollTotal} = ${initiative.total}`;
+  return `Main: I ${baseInitiative} + [Gen/Fatigue + Initiative] ${modifierAdjustment} + roll ${rollTotal} = ${initiative.total}`;
 }
 
 export function PlayerCombatAttackStatsTable({ stats }: PlayerCombatAttackStatsTableProps) {
@@ -725,6 +783,100 @@ export function PlayerCombatDefenseStatsTable({ stats }: PlayerCombatDefenseStat
   );
 }
 
+export function PlayerCombatAttackTargetSelector({
+  combatContext,
+  controlsDisabled = false,
+  onCombatContextChange,
+  targetOptions,
+}: PlayerCombatAttackTargetSelectorProps) {
+  const selectedTargetUnavailable = Boolean(
+    combatContext.targetParticipantId &&
+      !targetOptions.some((option) => option.id === combatContext.targetParticipantId),
+  );
+
+  return (
+    <label
+      style={{
+        alignItems: "center",
+        display: "grid",
+        gap: "0.35rem",
+        gridTemplateColumns: compactPhaseContextSelectorColumns,
+      }}
+    >
+      <span style={{ fontSize: "0.86rem", fontWeight: 600 }}>Target</span>
+      <select
+        disabled={controlsDisabled}
+        onChange={(event) =>
+          onCombatContextChange({
+            ...combatContext,
+            targetParticipantId: event.target.value || undefined,
+          })
+        }
+        style={compactPhaseContextSelectStyle}
+        value={combatContext.targetParticipantId ?? ""}
+      >
+        <option value="">No target</option>
+        {selectedTargetUnavailable ? (
+          <option value={combatContext.targetParticipantId}>
+            Saved target ({combatContext.targetParticipantId})
+          </option>
+        ) : null}
+        {targetOptions.map((option) => (
+          <option key={option.id} value={option.id}>
+            {option.displayName}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+export function PlayerCombatAttackLocationSelector({
+  combatContext,
+  controlsDisabled = false,
+  onCombatContextChange,
+}: PlayerCombatAttackLocationSelectorProps) {
+  return (
+    <div
+      style={{
+        display: "grid",
+        gap: "0.25rem",
+      }}
+    >
+      <label
+        style={{
+          alignItems: "center",
+          display: "grid",
+          gap: "0.35rem",
+          gridTemplateColumns: compactPhaseContextSelectorColumns,
+        }}
+      >
+        <span style={{ fontSize: "0.86rem", fontWeight: 600 }}>Attack location</span>
+        <select
+          disabled={controlsDisabled}
+          onChange={(event) => {
+            const targetLocation = event.target.value as ScenarioParticipantTargetLocation;
+
+            onCombatContextChange({
+              ...combatContext,
+              targetLocation: targetLocation === "none" ? undefined : targetLocation,
+            });
+          }}
+          style={compactPhaseContextSelectStyle}
+          value={combatContext.targetLocation ?? "none"}
+        >
+          <option value="none">No target</option>
+          {HIT_LOCATIONS.map((location) => (
+            <option key={location} value={location}>
+              {getHitLocationFullLabel(location)}
+            </option>
+          ))}
+        </select>
+      </label>
+    </div>
+  );
+}
+
 function ParryDirectionSelector({
   controlsDisabled,
   direction,
@@ -746,7 +898,7 @@ function ParryDirectionSelector({
         alignItems: "center",
         display: "grid",
         gap: "0.2rem",
-        gridTemplateColumns: "4.75rem 7rem auto",
+        gridTemplateColumns: compactPhaseContextSelectorColumns,
       }}
     >
       <span style={{ fontSize: "0.86rem", fontWeight: 600 }}>{itemLabel}</span>
@@ -759,7 +911,7 @@ function ParryDirectionSelector({
               : undefined,
           )
         }
-        style={{ width: "7rem" }}
+        style={compactPhaseContextSelectStyle}
         value={direction ?? ""}
       >
         <option value="">Choose direction</option>

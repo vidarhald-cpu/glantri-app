@@ -2,11 +2,11 @@ import type {
   ScenarioParticipantCombatContext,
   ScenarioParticipantParryDirection,
 } from "@glantri/domain";
+import { getCombatDeclarationAttackPhases } from "@glantri/domain";
 
 import type { EquipmentLoadoutModuleModel } from "@/features/equipment/loadoutModule";
 import type { EquipmentFeatureState } from "@/features/equipment/types";
 import {
-  isPlayerEncounterAttackAction,
   isPlayerEncounterDefenseAction,
   type PlayerEncounterActionId,
 } from "@/lib/campaigns/playerEncounter";
@@ -49,6 +49,7 @@ export interface PlayerCombatPhasePanelModel {
   phaseCard: PlayerCombatPhaseCardView;
   phaseContext: ScenarioParticipantCombatContext;
   phaseKey: PlayerCombatPhaseKey;
+  showAttackLocationSelector: boolean;
   showAttackStats: boolean;
   showDefenseContext: boolean;
 }
@@ -362,6 +363,11 @@ function getPhaseContentFlags(input: {
   phaseKey: PlayerCombatPhaseKey;
   secondaryActionId: PlayerEncounterActionId | "";
 }): { attack: boolean; defense: boolean } {
+  const attackPhases = getCombatDeclarationAttackPhases({
+    actionId: input.actionId,
+    secondaryActionId: input.secondaryActionId,
+  });
+
   if (input.actionId === "attack_parry") {
     return input.phaseKey === "phase1"
       ? { attack: true, defense: true }
@@ -374,10 +380,16 @@ function getPhaseContentFlags(input: {
       : { attack: true, defense: true };
   }
 
+  if (input.actionId === "adjust_range_attack") {
+    return input.phaseKey === "phase1"
+      ? { attack: false, defense: false }
+      : { attack: true, defense: false };
+  }
+
   const phaseActionId = input.phaseKey === "phase1" ? input.actionId : input.secondaryActionId;
 
   return {
-    attack: isPlayerEncounterAttackAction(phaseActionId),
+    attack: attackPhases.includes(input.phaseKey),
     defense: isPlayerEncounterDefenseAction(phaseActionId),
   };
 }
@@ -396,13 +408,21 @@ export function buildPlayerCombatPhasePanelModel(input: {
     phaseKey: input.phaseKey,
     secondaryActionId: input.secondaryActionId,
   });
+  const isAdjustRangePhase =
+    input.actionId === "adjust_range_attack" && input.phaseKey === "phase1";
 
   return {
     attackStats: input.attackStats,
     defenseStats: input.defenseStats,
-    phaseCard: input.phaseCard,
+    phaseCard: isAdjustRangePhase
+      ? {
+          ...input.phaseCard,
+          title: input.phaseCard.title || "Adjust range",
+        }
+      : input.phaseCard,
     phaseContext: input.phaseContext,
     phaseKey: input.phaseKey,
+    showAttackLocationSelector: flags.attack,
     showAttackStats: Boolean(input.attackStats && flags.attack),
     showDefenseContext: Boolean(input.defenseStats && flags.defense),
   };

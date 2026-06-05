@@ -29,10 +29,7 @@ function createCharacter(input: {
   };
 }
 
-function createParticipant(input: {
-  characterId?: string;
-  id: string;
-}): ScenarioParticipant {
+function createParticipant(input: { characterId?: string; id: string }): ScenarioParticipant {
   return {
     createdAt: "2026-04-23T00:00:00.000Z",
     id: input.id,
@@ -48,6 +45,7 @@ function createParticipant(input: {
           modifierBuckets: {
             general: [],
             situationDb: [],
+            situationInitiative: [],
             situationObSkill: [],
           },
         },

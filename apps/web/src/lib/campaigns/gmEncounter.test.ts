@@ -2,10 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { EncounterParticipant, ScenarioParticipant } from "@glantri/domain";
 
-import {
-  buildGmEncounterParticipantRows,
-  deriveGmEncounterControlState,
-} from "./gmEncounter";
+import { buildGmEncounterParticipantRows, deriveGmEncounterControlState } from "./gmEncounter";
 
 function createEncounterParticipant(
   input: Partial<EncounterParticipant> & Pick<EncounterParticipant, "id" | "label">,
@@ -49,6 +46,7 @@ function createScenarioParticipant(
           modifierBuckets: {
             general: [],
             situationDb: [],
+            situationInitiative: [],
             situationObSkill: [],
           },
         },
@@ -110,6 +108,7 @@ describe("gmEncounter", () => {
                 modifierBuckets: {
                   general: [{ id: "general-1", scope: "until", value: 2 }],
                   situationDb: [],
+                  situationInitiative: [],
                   situationObSkill: [{ id: "ob-1", scope: "until", value: 1 }],
                 },
                 selectedOpponentId: "scn-2",

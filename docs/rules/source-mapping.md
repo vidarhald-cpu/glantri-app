@@ -13,6 +13,10 @@ Track how workbook columns and rule text map into app structures.
 
 ## Source Files Used
 
+- `docs/source/combat/merged_3968_3980.pdf`
+  - 13-page scanned combat rules source
+  - used for the combat action rule inventory in `docs/rules/combat-action-rule-inventory.md`
+  - source covers round timing, phases, combat experience, initiative, perception, single-round actions, two-part actions, and extra actions
 - `data/raw/glantri/Themistogenes 1.07.xlsx`
   - `Character sheet entry`
     - rows `A3:A16` for the stat/profile field list shown on the sheet

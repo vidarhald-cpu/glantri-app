@@ -40,6 +40,7 @@ describe("CampaignWorkspaceShell roleplay encounter routing", () => {
     expect(source).toContain("You are in this scenario, but not assigned to this encounter.");
     expect(source).toContain("refreshWorkspaceContextWithErrorHandling");
     expect(source).toContain("visibilitychange");
+    expect(source).toContain("const searchParamString = searchParams.toString()");
     expect(source).not.toContain("Accessible scenarios:");
   });
 
@@ -101,6 +102,7 @@ describe("CampaignWorkspaceShell roleplay encounter routing", () => {
     expect(source).toContain(
       'selectInspectableParticipant({ participantId, tab: "player-combat" })',
     );
+    expect(source).toContain("if (nextHref !== currentHref) {");
     expect(source).toContain("No participant is available for player combat.");
   });
 });

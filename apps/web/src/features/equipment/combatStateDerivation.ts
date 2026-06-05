@@ -216,17 +216,7 @@ function getDefenseRawModifiers(
 
   return defenseModifier === 0
     ? []
-    : [{ label: "DB", value: defenseModifier }];
-}
-
-function getObSkillRawModifiers(
-  allocationInputs: CombatStateAllocationInputs,
-): WorkbookRawModifier[] {
-  const attackModifier = allocationInputs.situationalModifiers.attack;
-
-  return attackModifier === 0
-    ? []
-    : [{ label: "OB/Skill", value: attackModifier }];
+    : [{ label: "DB/Parry", value: defenseModifier }];
 }
 
 function getAttackLabel(mode: WeaponAttackMode | null): DerivedCombatValue {
@@ -498,7 +488,7 @@ function buildWeaponRow(input: {
     parry: getWorkbookWeaponRowParry({
       armorTemplate: input.armorTemplate,
       characterInputs: input.characterInputs,
-      rawModifiers: getObSkillRawModifiers(input.allocationInputs),
+      rawModifiers: getDefenseRawModifiers(input.allocationInputs),
       template: input.template,
     }),
     ob2: getDerivedObValue({
@@ -590,7 +580,7 @@ function buildBrawlingSummaryRow(input: {
     parry: getWorkbookWeaponRowParry({
       armorTemplate: input.armorTemplate,
       characterInputs: input.characterInputs,
-      rawModifiers: getObSkillRawModifiers(input.allocationInputs),
+      rawModifiers: getDefenseRawModifiers(input.allocationInputs),
       template: input.template,
     }),
     attack2: "—",
@@ -640,7 +630,7 @@ function buildShieldRow(input: {
     parry: getWorkbookShieldRowParry({
       armorTemplate: input.armorTemplate,
       characterInputs: input.characterInputs,
-      rawModifiers: getObSkillRawModifiers(input.allocationInputs),
+      rawModifiers: getDefenseRawModifiers(input.allocationInputs),
       shieldTemplate: input.shieldTemplate,
     }),
     attack2: "—",
@@ -687,7 +677,7 @@ function buildCombinedDefenseRow(input: {
       characterInputs: input.characterInputs,
       offHandShieldTemplate: input.offHandShieldTemplate,
       primaryWeaponTemplate: input.primaryWeaponTemplate,
-      rawModifiers: getObSkillRawModifiers(input.allocationInputs),
+      rawModifiers: getDefenseRawModifiers(input.allocationInputs),
       secondaryWeaponTemplate: input.secondaryWeaponTemplate,
     }),
     attack2: "—",

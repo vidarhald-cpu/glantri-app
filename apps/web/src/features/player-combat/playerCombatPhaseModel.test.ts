@@ -73,8 +73,10 @@ describe("player combat phase model", () => {
     });
 
     expect(phase1.showAttackStats).toBe(true);
+    expect(phase1.showAttackLocationSelector).toBe(true);
     expect(phase1.showDefenseContext).toBe(true);
     expect(phase2.showAttackStats).toBe(false);
+    expect(phase2.showAttackLocationSelector).toBe(false);
     expect(phase2.showDefenseContext).toBe(true);
   });
 
@@ -107,9 +109,98 @@ describe("player combat phase model", () => {
     });
 
     expect(phase1.showAttackStats).toBe(false);
+    expect(phase1.showAttackLocationSelector).toBe(false);
     expect(phase1.showDefenseContext).toBe(true);
     expect(phase2.showAttackStats).toBe(true);
+    expect(phase2.showAttackLocationSelector).toBe(true);
     expect(phase2.showDefenseContext).toBe(true);
+  });
+
+  it("maps Double Attack into phase 1 and phase 2 attacks", () => {
+    const phase1Context = {
+      ...createEmptyPlayerEncounterCombatContext(),
+      targetParticipantId: "target-phase-1",
+      targetLocation: "head" as const,
+    };
+    const phase2Context = {
+      ...createEmptyPlayerEncounterCombatContext(),
+      targetParticipantId: "target-phase-2",
+      targetLocation: "rightArm" as const,
+    };
+    const defenseStats = buildPlayerCombatDefenseStats({
+      mainHandParryItemLabel: "Broad sword",
+      offHandParryItemLabel: "Medium shield",
+      phaseContext: phase1Context,
+      reference,
+    });
+
+    const phase1 = buildPlayerCombatPhasePanelModel({
+      actionId: "double_attack",
+      attackStats,
+      defenseStats,
+      phaseCard,
+      phaseContext: phase1Context,
+      phaseKey: "phase1",
+      secondaryActionId: "",
+    });
+    const phase2 = buildPlayerCombatPhasePanelModel({
+      actionId: "double_attack",
+      attackStats,
+      defenseStats,
+      phaseCard: { ...phaseCard, phaseLabel: "Phase 2" },
+      phaseContext: phase2Context,
+      phaseKey: "phase2",
+      secondaryActionId: "",
+    });
+
+    expect(phase1.showAttackStats).toBe(true);
+    expect(phase1.showAttackLocationSelector).toBe(true);
+    expect(phase1.phaseContext.targetParticipantId).toBe("target-phase-1");
+    expect(phase1.phaseContext.targetLocation).toBe("head");
+    expect(phase2.showAttackStats).toBe(true);
+    expect(phase2.showAttackLocationSelector).toBe(true);
+    expect(phase2.phaseContext.targetParticipantId).toBe("target-phase-2");
+    expect(phase2.phaseContext.targetLocation).toBe("rightArm");
+  });
+
+  it("maps Adjust Range - Attack into phase 1 range adjustment and phase 2 attack", () => {
+    const phaseContext = createEmptyPlayerEncounterCombatContext();
+    const defenseStats = buildPlayerCombatDefenseStats({
+      mainHandParryItemLabel: "Broad sword",
+      offHandParryItemLabel: "Medium shield",
+      phaseContext,
+      reference,
+    });
+
+    const phase1 = buildPlayerCombatPhasePanelModel({
+      actionId: "adjust_range_attack",
+      attackStats,
+      defenseStats,
+      phaseCard,
+      phaseContext,
+      phaseKey: "phase1",
+      secondaryActionId: "",
+    });
+    const phase2 = buildPlayerCombatPhasePanelModel({
+      actionId: "adjust_range_attack",
+      attackStats,
+      defenseStats,
+      phaseCard: { ...phaseCard, phaseLabel: "Phase 2" },
+      phaseContext: {
+        ...phaseContext,
+        targetParticipantId: "target-phase-2",
+      },
+      phaseKey: "phase2",
+      secondaryActionId: "",
+    });
+
+    expect(phase1.phaseCard.title).toBe("Adjust range");
+    expect(phase1.showAttackStats).toBe(false);
+    expect(phase1.showAttackLocationSelector).toBe(false);
+    expect(phase1.showDefenseContext).toBe(false);
+    expect(phase2.showAttackStats).toBe(true);
+    expect(phase2.showAttackLocationSelector).toBe(true);
+    expect(phase2.phaseContext.targetParticipantId).toBe("target-phase-2");
   });
 
   it("keeps phase contexts separable for phase-specific parry directions", () => {
@@ -156,5 +247,37 @@ describe("player combat phase model", () => {
     expect(emptyContext.offHandParryDirection).toBeUndefined();
     expect(savedContext.mainHandParryDirection).toBe("right");
     expect(savedContext.offHandParryDirection).toBe("right_forward");
+  });
+
+  it("keeps phase-specific aimed target locations separable", () => {
+    const phase1Context = {
+      ...createEmptyPlayerEncounterCombatContext(),
+      targetLocation: "head" as const,
+    };
+    const phase2Context = {
+      ...createEmptyPlayerEncounterCombatContext(),
+      targetLocation: "rightArm" as const,
+    };
+
+    expect(applyDefaultPlayerCombatPhaseContext(phase1Context).targetLocation).toBe("head");
+    expect(applyDefaultPlayerCombatPhaseContext(phase2Context).targetLocation).toBe("rightArm");
+  });
+
+  it("keeps phase-specific attack targets separable", () => {
+    const phase1Context = {
+      ...createEmptyPlayerEncounterCombatContext(),
+      targetParticipantId: "target-phase-1",
+    };
+    const phase2Context = {
+      ...createEmptyPlayerEncounterCombatContext(),
+      targetParticipantId: "target-phase-2",
+    };
+
+    expect(applyDefaultPlayerCombatPhaseContext(phase1Context).targetParticipantId).toBe(
+      "target-phase-1",
+    );
+    expect(applyDefaultPlayerCombatPhaseContext(phase2Context).targetParticipantId).toBe(
+      "target-phase-2",
+    );
   });
 });

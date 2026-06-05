@@ -38,6 +38,7 @@ function participant(input: {
           modifierBuckets: {
             general: [],
             situationDb: [],
+            situationInitiative: [],
             situationObSkill: [],
           },
         },
@@ -84,10 +85,12 @@ function makeEncounterParticipant(
   };
 }
 
-function encounter(input: {
-  participantIds?: string[];
-  participantMembershipMode?: EncounterSession["participantMembershipMode"];
-} = {}): EncounterSession {
+function encounter(
+  input: {
+    participantIds?: string[];
+    participantMembershipMode?: EncounterSession["participantMembershipMode"];
+  } = {},
+): EncounterSession {
   return {
     actionLog: [],
     campaignId: "campaign-1",
@@ -196,10 +199,7 @@ describe("character workspace read model", () => {
       scenarioParticipants,
     });
 
-    expect(candidates.map((candidate) => candidate.label)).toEqual([
-      "City guard",
-      "The Gladiator",
-    ]);
+    expect(candidates.map((candidate) => candidate.label)).toEqual(["City guard", "The Gladiator"]);
   });
 
   it("excludes active scenario participants without a reusable character sheet", () => {

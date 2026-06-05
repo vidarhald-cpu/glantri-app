@@ -25,6 +25,8 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("PlayerCombatModifierPanel");
     expect(source).toContain("PlayerCombatPhasePanel");
     expect(source).toContain("PlayerCombatAttackStatsTable");
+    expect(source).toContain("PlayerCombatAttackTargetSelector");
+    expect(source).toContain("PlayerCombatAttackLocationSelector");
     expect(source).toContain("PlayerCombatDefenseStatsTable");
     expect(source).toContain("PlayerCombatParryContextPanel");
     expect(source).toContain("playerCombatTopPanelRowStyle");
@@ -34,6 +36,14 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("buildPlayerCombatDefenseStats");
     expect(source).toContain("getPlayerCombatActionButtonLabel");
     expect(source).toContain("buildEncounterLiveCombatModifierSummary");
+    expect(source).toContain("getCombatRoundModifierPhaseForStep");
+    expect(source).toContain("const currentModifierPhase = getCombatRoundModifierPhaseForStep(currentCombatStep)");
+    expect(source).toContain("phaseKey: currentModifierPhase");
+    expect(source).toContain("validateCombatDeclarationTargets");
+    expect(source).toContain("targetValidation");
+    expect(source).toContain("declarationTargetValidationMessage");
+    expect(source).toContain("validationMessage={declarationTargetValidationMessage}");
+    expect(source).toContain("mergeCombatContextWithCurrentModifierBuckets");
     expect(source).toContain("combatEffects: selectedParticipant?.state.combatEffects");
     expect(source).toContain("liveCombatModifiers");
     expect(source).toContain('workspaceTab = "player-encounter"');
@@ -41,6 +51,7 @@ describe("ScenarioPlayerCombatPageContent", () => {
       "displayedParticipant?.displayName ? ` — ${displayedParticipant.displayName}`",
     );
     expect(source).toContain("showParticipantSelector = true");
+    expect(source).toContain("if (!showParticipantSelector) {");
     expect(source).toContain("readOnlyInspection = false");
     expect(source).not.toContain("GM player-view inspection is read-only.");
     expect(source).toContain("declarationStepOpen");
@@ -50,17 +61,42 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("Current step: ${currentCombatStepLabel}");
     expect(source).not.toContain("Current step: ${currentCombatStepAbbreviation}");
     expect(source).toContain("Declared.");
+    expect(source).toContain("selectedParticipantHasDeclared");
+    expect(source).toContain("gmStatusSuffix");
+    expect(source).toContain('" Initiative rolled."');
+    expect(source).toContain('" Modifiers declared."');
+    expect(source).not.toContain("GM can save or revise this participant declaration.");
     expect(source).toContain("Declaration closed.");
     expect(source).toContain("rollCombatInitiativeOnServer");
     expect(source).toContain("rollInitiative");
     expect(source).toContain("currentInitiativePhase");
     expect(source).toContain("Initiative rolled.");
-    expect(source).toContain("formatCombatInitiativeRoll");
     expect(source).toContain("formatCombatInitiativeFormula");
-    expect(source).toContain("initiativeBase");
+    expect(source).toContain("buildEncounterInitiativeModifierCalculation");
+    expect(source).toContain("initiativeCalculation");
+    expect(source).toContain(
+      "initiativeModifierAdjustment: initiativeCalculation.modifierAdjustment",
+    );
     expect(source).toContain("formatPlayerCombatInitiativeRank");
+    expect(source).toContain("getCombatRoundInitiativeRanks");
+    expect(source).toContain("rank.tiedCount > 1");
+    expect(source).toContain("tied with ${rank.tiedCount}");
     expect(source).toContain("selectedCurrentInitiative");
     expect(source).toContain("rankLabel: selectedCurrentInitiativeRankLabel");
+    expect(source).toContain("getCombatRoundDisplayAttackResultForParticipantPhase");
+    expect(source).toContain("getCombatRoundDisplayPhaseResolutionResultForParticipantPhase");
+    expect(source).toContain("getCombatRoundResolutionPhaseForStep");
+    expect(source).toContain("selectedCurrentAttackResult");
+    expect(source).toContain("selectedCurrentAttackResultPanel");
+    expect(source).toContain("selectedCurrentPhaseResolutionResultPanel");
+    expect(source).toContain("formatCombatPhaseResolutionResultLines");
+    expect(source).toContain("Parry: ${formatResolutionStatusLabel");
+    expect(source).toContain("Damage roll: ${formatResolutionStatusLabel");
+    expect(source).toContain("Proposal: ${formatResolutionStatusLabel");
+    expect(source).toContain("Defense: DB ${input.result.defenderDb}");
+    expect(source).toContain("Main: ${input.result.weaponName} OB");
+    expect(source).toContain("resultLabel: `Result: ${selectedCurrentAttackResult.tableResult}`");
+    expect(source).toContain("selectedCurrentPhaseResolutionResultPanel ??");
     expect(source).toContain("declarationButtonLabel");
     expect(source).toContain("buttonLabel={declarationButtonLabel}");
     expect(source).toContain("window.setInterval");
@@ -90,12 +126,15 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("mainHandParryItemLabel");
     expect(source).toContain("offHandParryItemLabel");
     expect(source).toContain("phaseModel.showAttackStats");
+    expect(source).toContain("phaseModel.showAttackLocationSelector");
+    expect(source).toContain("targetOptions={targetOptions}");
+    expect(source).toContain("getPlayerEncounterOpponentParticipants");
+    expect(source).toContain("projectionVisibleParticipants: projection?.visibleParticipants");
+    expect(source).toContain("selectedParticipantId: selectedParticipant?.id");
     expect(source).toContain("phaseModel.showDefenseContext");
     expect(source).not.toContain("movementLabel=");
     expect(source).not.toContain('description: selectedSecondaryActionId ? "" : "Open"');
-    expect(source).not.toContain(
-      "formatCombatInitiativeRoll(selectedRoundParticipant.initiatives.phase1)",
-    );
+    expect(source).not.toContain("formatCombatInitiativeRoll(selectedRoundParticipant");
     expect(source).not.toContain("Attack - Parry ·");
     expect(source).not.toContain("visibleOpponentOptions");
     expect(source).toContain("isGameMaster");

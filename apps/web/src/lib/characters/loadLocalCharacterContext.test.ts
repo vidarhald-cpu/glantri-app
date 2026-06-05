@@ -175,4 +175,83 @@ describe("loadLocalCharacterContext", () => {
       record: savedRecord
     });
   });
+
+  it("can load the current server record even when a stale local cache exists", async () => {
+    const content = { skills: [] };
+    const staleLocalRecord = {
+      build: {
+        equipment: { items: [] },
+        id: "character-3",
+        name: "Stale Local Character",
+        profile: {
+          description: "Test",
+          distractionLevel: 3,
+          id: "profile-3",
+          label: "Profile",
+          rolledStats: {
+            cha: 10,
+            com: 10,
+            con: 10,
+            dex: 10,
+            health: 10,
+            int: 10,
+            lck: 10,
+            pow: 10,
+            siz: 10,
+            str: 10,
+            will: 10
+          },
+          societyLevel: 0
+        },
+        progression: {
+          chargenMode: "standard",
+          educationPoints: 0,
+          level: 1,
+          primaryPoolSpent: 0,
+          primaryPoolTotal: 60,
+          secondaryPoolSpent: 0,
+          secondaryPoolTotal: 0,
+          skillGroups: [],
+          skills: [{ skillId: "1-h edged", xp: 6 }],
+          specializations: []
+        }
+      },
+      createdAt: "2026-04-21T00:00:00.000Z",
+      finalizedAt: "2026-04-21T00:00:00.000Z",
+      id: "character-3",
+      syncStatus: "synced",
+      updatedAt: "2026-04-21T00:00:00.000Z"
+    };
+    const currentServerRecord = {
+      build: {
+        ...staleLocalRecord.build,
+        name: "Current Server Character",
+        progression: {
+          ...staleLocalRecord.build.progression,
+          skills: [{ skillId: "1-h edged", xp: 8 }],
+        },
+      },
+      createdAt: "2026-04-21T00:00:00.000Z",
+      id: "character-3",
+      level: 1,
+      name: "Current Server Character",
+      ownerId: "owner-1",
+      updatedAt: "2026-04-21T02:00:00.000Z"
+    };
+
+    loadCanonicalContentMock.mockResolvedValue(content);
+    getMock.mockResolvedValue(staleLocalRecord);
+    loadServerCharacterByIdMock.mockResolvedValue(currentServerRecord);
+
+    const { loadCurrentCharacterContext } = await import("./loadLocalCharacterContext");
+    const result = await loadCurrentCharacterContext("character-3");
+
+    expect(getMock).not.toHaveBeenCalled();
+    expect(saveMock).not.toHaveBeenCalled();
+    expect(loadServerCharacterByIdMock).toHaveBeenCalledWith("character-3");
+    expect(result).toEqual({
+      content,
+      record: currentServerRecord,
+    });
+  });
 });

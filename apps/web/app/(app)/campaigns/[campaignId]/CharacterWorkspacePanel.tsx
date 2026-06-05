@@ -154,6 +154,7 @@ export default function CharacterWorkspacePanel({
             physicalStateGeneralHitpoints={selectedCandidate.scenarioParticipant.state.health.maxHp}
             physicalStateScenarioId={scenarioId}
             physicalStateTargetParticipantId={selectedCandidate.scenarioParticipant.id}
+            preferCurrentCharacterRecord
             showPhysicalState
           />
         </>

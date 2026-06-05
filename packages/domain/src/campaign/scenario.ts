@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { characterBuildSchema, type CharacterBuild } from "../character/build";
 import { combatEffectsStateSchema } from "../encounter/combatEffects";
+import { hitLocationTargetSchema } from "../encounter/hitLocation";
 
 const idSchema = z.string().min(1);
 const timestampSchema = z.string().min(1);
@@ -9,19 +10,8 @@ const timestampSchema = z.string().min(1);
 export const scenarioVisibilitySchema = z.enum(["hidden", "visible_to_all", "gm_only"]);
 export const campaignStatusSchema = z.enum(["draft", "active", "archived"]);
 export const scenarioKindSchema = z.enum(["combat", "social", "travel", "mixed"]);
-export const scenarioStatusSchema = z.enum([
-  "draft",
-  "prepared",
-  "live",
-  "completed",
-  "archived"
-]);
-export const scenarioCombatStatusSchema = z.enum([
-  "not_started",
-  "in_progress",
-  "paused",
-  "ended"
-]);
+export const scenarioStatusSchema = z.enum(["draft", "prepared", "live", "completed", "archived"]);
+export const scenarioCombatStatusSchema = z.enum(["not_started", "in_progress", "paused", "ended"]);
 export const scenarioParticipantSourceTypeSchema = z.enum(["character", "entity"]);
 export const scenarioParticipantRoleSchema = z.enum([
   "player_character",
@@ -30,12 +20,12 @@ export const scenarioParticipantRoleSchema = z.enum([
   "animal",
   "neutral",
   "ally",
-  "enemy"
+  "enemy",
 ]);
 export const scenarioParticipantJoinSourceSchema = z.enum([
   "gm_added",
   "player_joined",
-  "imported_from_template"
+  "imported_from_template",
 ]);
 export const scenarioRelationshipTypeSchema = z.enum(["continues_from"]);
 export const campaignAssetTypeSchema = z.enum(["map", "image", "document", "handout", "drawing"]);
@@ -45,7 +35,7 @@ export const campaignRosterCategorySchema = z.enum(["pc", "npc", "template"]);
 
 export const campaignSettingsSchema = z.object({
   allowPlayerSelfJoin: z.boolean().default(false),
-  defaultVisibility: scenarioVisibilitySchema.default("hidden")
+  defaultVisibility: scenarioVisibilitySchema.default("hidden"),
 });
 
 export const campaignSchema = z.object({
@@ -56,11 +46,11 @@ export const campaignSchema = z.object({
   name: z.string().min(1),
   settings: campaignSettingsSchema.default({
     allowPlayerSelfJoin: false,
-    defaultVisibility: "hidden"
+    defaultVisibility: "hidden",
   }),
   slug: z.string().min(1),
   status: campaignStatusSchema.default("draft"),
-  updatedAt: timestampSchema
+  updatedAt: timestampSchema,
 });
 
 export const scenarioLiveStateSchema = z.object({
@@ -68,7 +58,7 @@ export const scenarioLiveStateSchema = z.object({
   endedAt: timestampSchema.optional(),
   phase: z.union([z.literal(1), z.literal(2)]).default(1),
   roundNumber: z.number().int().positive().default(1),
-  startedAt: timestampSchema.optional()
+  startedAt: timestampSchema.optional(),
 });
 
 export const scenarioSchema = z.object({
@@ -81,13 +71,13 @@ export const scenarioSchema = z.object({
   mapAssetId: idSchema.optional(),
   name: z.string().min(1),
   status: scenarioStatusSchema.default("draft"),
-  updatedAt: timestampSchema
+  updatedAt: timestampSchema,
 });
 
 export const scenarioParticipantPositionSchema = z.object({
   x: z.number().default(0),
   y: z.number().default(0),
-  zone: z.string().min(1).default("center")
+  zone: z.string().min(1).default("center"),
 });
 
 export const scenarioParticipantModifierSchema = z.object({
@@ -95,33 +85,34 @@ export const scenarioParticipantModifierSchema = z.object({
   label: z.string().min(1),
   source: z.string().min(1).optional(),
   value: z.number(),
-  notes: z.string().optional()
+  notes: z.string().optional(),
 });
 
 export const scenarioParticipantConditionSchema = z.object({
   id: idSchema,
   label: z.string().min(1),
   severity: z.string().optional(),
-  notes: z.string().optional()
+  notes: z.string().optional(),
 });
 
 export const scenarioCombatModifierScopeSchema = z.enum(["until", "save"]);
 export const scenarioCombatModifierBucketSchema = z.enum([
   "general",
+  "situation_initiative",
   "situation_ob_skill",
-  "situation_db"
+  "situation_db",
 ]);
 export const scenarioParticipantIncomingAttackSideSchema = z.enum([
   "front",
   "left",
   "right",
-  "rear"
+  "rear",
 ]);
 export const scenarioParticipantParrySourceSchema = z.enum([
   "auto",
   "mainHand",
   "offHand",
-  "shield"
+  "shield",
 ]);
 export const scenarioParticipantParryDirectionSchema = z.enum([
   "left_backward",
@@ -130,15 +121,19 @@ export const scenarioParticipantParryDirectionSchema = z.enum([
   "forward",
   "right_forward",
   "right",
-  "right_backward"
+  "right_backward",
 ]);
 
 export const scenarioCombatModifierEntrySchema = z.object({
   durationRounds: z.number().int().positive().optional(),
+  generated: z.boolean().optional(),
   id: idSchema,
   notes: z.string().optional(),
   scope: scenarioCombatModifierScopeSchema.default("until"),
-  value: z.number().default(0)
+  sourceActionId: idSchema.optional(),
+  sourcePhase: z.enum(["phase1", "phase2"]).optional(),
+  sourceRule: z.string().optional(),
+  value: z.number().default(0),
 });
 
 export const scenarioParticipantCombatContextSchema = z.object({
@@ -148,16 +143,20 @@ export const scenarioParticipantCombatContextSchema = z.object({
     .object({
       general: z.array(scenarioCombatModifierEntrySchema).default([]),
       situationDb: z.array(scenarioCombatModifierEntrySchema).default([]),
-      situationObSkill: z.array(scenarioCombatModifierEntrySchema).default([])
+      situationInitiative: z.array(scenarioCombatModifierEntrySchema).default([]),
+      situationObSkill: z.array(scenarioCombatModifierEntrySchema).default([]),
     })
     .default({
       general: [],
       situationDb: [],
-      situationObSkill: []
+      situationInitiative: [],
+      situationObSkill: [],
     }),
   offHandParryDirection: scenarioParticipantParryDirectionSchema.optional(),
   parrySource: scenarioParticipantParrySourceSchema.optional(),
-  selectedOpponentId: idSchema.optional()
+  selectedOpponentId: idSchema.optional(),
+  targetLocation: hitLocationTargetSchema.optional(),
+  targetParticipantId: idSchema.optional(),
 });
 
 export const scenarioParticipantStateSchema = z.object({
@@ -166,8 +165,9 @@ export const scenarioParticipantStateSchema = z.object({
       modifierBuckets: {
         general: [],
         situationDb: [],
-        situationObSkill: []
-      }
+        situationInitiative: [],
+        situationObSkill: [],
+      },
     }),
     currentDistanceBand: z.string().min(1).optional(),
     declarationSubmittedAt: z.string().datetime().optional(),
@@ -179,14 +179,14 @@ export const scenarioParticipantStateSchema = z.object({
     lastDeclaredRoundNumber: z.number().int().positive().optional(),
     lastDeclaredSecondaryActionId: idSchema.optional(),
     lastDeclarationNotes: z.string().optional(),
-    stance: z.string().min(1).optional()
+    stance: z.string().min(1).optional(),
   }),
   combatEffects: combatEffectsStateSchema.optional(),
   conditions: z.array(scenarioParticipantConditionSchema).default([]),
   equipment: z.object({
     carriedItemIds: z.array(idSchema).optional(),
     equippedItemIds: z.array(idSchema).optional(),
-    readyItemIds: z.array(idSchema).optional()
+    readyItemIds: z.array(idSchema).optional(),
   }),
   health: z.object({
     bleeding: z.number().int().default(0),
@@ -194,15 +194,15 @@ export const scenarioParticipantStateSchema = z.object({
     dead: z.boolean().default(false),
     maxHp: z.number().int().default(0),
     unconscious: z.boolean().default(false),
-    wounds: z.number().int().default(0)
+    wounds: z.number().int().default(0),
   }),
   modifiers: z.array(scenarioParticipantModifierSchema).default([]),
   resources: z.object({
     actionPoints: z.number().int().optional(),
     ammo: z.number().int().optional(),
-    fatigue: z.number().int().optional()
+    fatigue: z.number().int().optional(),
   }),
-  snapshotVersion: z.number().int().positive().default(1)
+  snapshotVersion: z.number().int().positive().default(1),
 });
 
 export const scenarioParticipantSnapshotSchema = z.object({
@@ -213,12 +213,12 @@ export const scenarioParticipantSnapshotSchema = z.object({
       description: z.string().optional(),
       kind: reusableEntityKindSchema,
       name: z.string().min(1),
-      notes: z.string().optional()
+      notes: z.string().optional(),
     })
     .optional(),
   equipmentState: z.unknown().optional(),
   sheetSummary: z.unknown().optional(),
-  sourceUpdatedAt: timestampSchema.optional()
+  sourceUpdatedAt: timestampSchema.optional(),
 });
 
 export const scenarioParticipantSchema = z.object({
@@ -243,9 +243,9 @@ export const scenarioParticipantSchema = z.object({
   updatedAt: timestampSchema,
   visibilityOverrides: z
     .object({
-      visibility: scenarioVisibilitySchema.optional()
+      visibility: scenarioVisibilitySchema.optional(),
     })
-    .optional()
+    .optional(),
 });
 
 export const campaignAssetSchema = z.object({
@@ -259,7 +259,7 @@ export const campaignAssetSchema = z.object({
   title: z.string().min(1),
   type: campaignAssetTypeSchema,
   updatedAt: timestampSchema,
-  visibility: scenarioVisibilitySchema
+  visibility: scenarioVisibilitySchema,
 });
 
 export const campaignRosterEntrySchema = z.object({
@@ -272,7 +272,7 @@ export const campaignRosterEntrySchema = z.object({
   notes: z.string().optional(),
   sourceId: idSchema,
   sourceType: campaignRosterSourceTypeSchema,
-  updatedAt: timestampSchema
+  updatedAt: timestampSchema,
 });
 
 export const scenarioRelationshipSchema = z.object({
@@ -283,7 +283,7 @@ export const scenarioRelationshipSchema = z.object({
   relationType: scenarioRelationshipTypeSchema,
   sortOrder: z.number().int().optional(),
   toScenarioId: idSchema,
-  updatedAt: timestampSchema
+  updatedAt: timestampSchema,
 });
 
 export const scenarioEventLogSchema = z.object({
@@ -296,7 +296,7 @@ export const scenarioEventLogSchema = z.object({
   phase: z.union([z.literal(1), z.literal(2)]).optional(),
   roundNumber: z.number().int().positive().optional(),
   scenarioId: idSchema,
-  summary: z.string().min(1)
+  summary: z.string().min(1),
 });
 
 export const reusableEntitySchema = z.object({
@@ -308,7 +308,7 @@ export const reusableEntitySchema = z.object({
   name: z.string().min(1),
   notes: z.string().optional(),
   snapshot: z.unknown().optional(),
-  updatedAt: timestampSchema
+  updatedAt: timestampSchema,
 });
 
 export const scenarioPlayerVisibleParticipantSchema = z.object({
@@ -318,12 +318,13 @@ export const scenarioPlayerVisibleParticipantSchema = z.object({
   isActive: z.boolean(),
   isControlledByPlayer: z.boolean().default(false),
   role: scenarioParticipantRoleSchema,
-  sourceType: scenarioParticipantSourceTypeSchema
+  sourceType: scenarioParticipantSourceTypeSchema,
 });
 
 export const scenarioPlayerControlledParticipantSchema = z.object({
   build: characterBuildSchema.optional(),
   characterId: idSchema.optional(),
+  combatContext: z.lazy(() => scenarioParticipantCombatContextSchema).optional(),
   conditionCount: z.number().int().nonnegative(),
   currentHp: z.number().int(),
   displayName: z.string().min(1),
@@ -332,13 +333,13 @@ export const scenarioPlayerControlledParticipantSchema = z.object({
   id: idSchema,
   maxHp: z.number().int().positive(),
   role: scenarioParticipantRoleSchema,
-  sourceType: scenarioParticipantSourceTypeSchema
+  sourceType: scenarioParticipantSourceTypeSchema,
 });
 
 export const scenarioPlayerProjectionSchema = z.object({
   actionStub: z.object({
     canDeclareActions: z.boolean().default(false),
-    message: z.string().min(1)
+    message: z.string().min(1),
   }),
   controlledParticipant: scenarioPlayerControlledParticipantSchema.optional(),
   controlledParticipantId: idSchema.optional(),
@@ -351,10 +352,10 @@ export const scenarioPlayerProjectionSchema = z.object({
     name: z.string().min(1),
     phase: z.union([z.literal(1), z.literal(2)]).default(1),
     roundNumber: z.number().int().positive().default(1),
-    status: scenarioStatusSchema
+    status: scenarioStatusSchema,
   }),
   visibilityMode: z.literal("all_active_participants"),
-  visibleParticipants: z.array(scenarioPlayerVisibleParticipantSchema)
+  visibleParticipants: z.array(scenarioPlayerVisibleParticipantSchema),
 });
 
 export type ScenarioVisibility = z.infer<typeof scenarioVisibilitySchema>;
@@ -362,13 +363,9 @@ export type CampaignStatus = z.infer<typeof campaignStatusSchema>;
 export type ScenarioKind = z.infer<typeof scenarioKindSchema>;
 export type ScenarioStatus = z.infer<typeof scenarioStatusSchema>;
 export type ScenarioCombatStatus = z.infer<typeof scenarioCombatStatusSchema>;
-export type ScenarioParticipantSourceType = z.infer<
-  typeof scenarioParticipantSourceTypeSchema
->;
+export type ScenarioParticipantSourceType = z.infer<typeof scenarioParticipantSourceTypeSchema>;
 export type ScenarioParticipantRole = z.infer<typeof scenarioParticipantRoleSchema>;
-export type ScenarioParticipantJoinSource = z.infer<
-  typeof scenarioParticipantJoinSourceSchema
->;
+export type ScenarioParticipantJoinSource = z.infer<typeof scenarioParticipantJoinSourceSchema>;
 export type ScenarioRelationshipType = z.infer<typeof scenarioRelationshipTypeSchema>;
 export type CampaignAssetType = z.infer<typeof campaignAssetTypeSchema>;
 export type ReusableEntityKind = z.infer<typeof reusableEntityKindSchema>;
@@ -390,6 +387,7 @@ export type ScenarioParticipantParryDirection = z.infer<
   typeof scenarioParticipantParryDirectionSchema
 >;
 export type ScenarioParticipantParrySource = z.infer<typeof scenarioParticipantParrySourceSchema>;
+export type ScenarioParticipantTargetLocation = z.infer<typeof hitLocationTargetSchema>;
 export type ScenarioCombatModifierEntry = z.infer<typeof scenarioCombatModifierEntrySchema>;
 export type ScenarioParticipantCombatContext = z.infer<
   typeof scenarioParticipantCombatContextSchema
@@ -429,7 +427,7 @@ function inferHealthFromCharacter(build: CharacterBuild): ScenarioParticipantSta
     dead: false,
     maxHp,
     unconscious: false,
-    wounds: 0
+    wounds: 0,
   };
 }
 
@@ -467,13 +465,13 @@ function inferEquipmentArrays(equipmentState: unknown): {
     loadout?.activePrimaryWeaponItemId,
     loadout?.activeSecondaryWeaponItemId,
     loadout?.activeMissileWeaponItemId,
-    ...(loadout?.activeAmmoItemIds ?? [])
+    ...(loadout?.activeAmmoItemIds ?? []),
   ].filter((itemId): itemId is string => typeof itemId === "string" && itemId.length > 0);
 
   return {
     carriedItemIds: Object.keys(state.itemsById ?? {}),
     equippedItemIds,
-    readyItemIds
+    readyItemIds,
   };
 }
 
@@ -481,45 +479,45 @@ export function createScenarioLiveState(): ScenarioLiveState {
   return scenarioLiveStateSchema.parse({
     combatStatus: "not_started",
     phase: 1,
-    roundNumber: 1
+    roundNumber: 1,
   });
 }
 
 export function startScenario(
   liveState: ScenarioLiveState | undefined,
-  startedAt: string
+  startedAt: string,
 ): ScenarioLiveState {
   return scenarioLiveStateSchema.parse({
     ...(liveState ?? createScenarioLiveState()),
     combatStatus: "in_progress",
     phase: liveState?.phase ?? 1,
     roundNumber: liveState?.roundNumber ?? 1,
-    startedAt
+    startedAt,
   });
 }
 
 export function advanceScenarioRound(
   liveState: ScenarioLiveState | undefined,
-  nextRoundNumber?: number
+  nextRoundNumber?: number,
 ): ScenarioLiveState {
   const current = scenarioLiveStateSchema.parse(liveState ?? createScenarioLiveState());
 
   return scenarioLiveStateSchema.parse({
     ...current,
     phase: 1,
-    roundNumber: nextRoundNumber ?? current.roundNumber + 1
+    roundNumber: nextRoundNumber ?? current.roundNumber + 1,
   });
 }
 
 export function setScenarioPhase(
   liveState: ScenarioLiveState | undefined,
-  phase: 1 | 2
+  phase: 1 | 2,
 ): ScenarioLiveState {
   const current = scenarioLiveStateSchema.parse(liveState ?? createScenarioLiveState());
 
   return scenarioLiveStateSchema.parse({
     ...current,
-    phase
+    phase,
   });
 }
 
@@ -545,19 +543,19 @@ export function createParticipantSnapshotFromCharacter(input: {
       displayName: input.build.name,
       equipmentState: input.equipmentState,
       sheetSummary: input.sheetSummary,
-      sourceUpdatedAt: input.sourceUpdatedAt
+      sourceUpdatedAt: input.sourceUpdatedAt,
     }),
     state: scenarioParticipantStateSchema.parse({
       combat: {
-        engaged: false
+        engaged: false,
       },
       conditions: [],
       equipment: inferEquipmentArrays(input.equipmentState),
       health,
       modifiers: [],
       resources: {},
-      snapshotVersion: 1
-    })
+      snapshotVersion: 1,
+    }),
   };
 }
 
@@ -585,7 +583,10 @@ function readEntitySnapshotBuild(snapshot: unknown): unknown {
   return snapshot;
 }
 
-function readEntitySnapshotField(snapshot: unknown, field: "equipmentState" | "sheetSummary"): unknown {
+function readEntitySnapshotField(
+  snapshot: unknown,
+  field: "equipmentState" | "sheetSummary",
+): unknown {
   if (!isRecord(snapshot)) {
     return undefined;
   }
@@ -620,15 +621,15 @@ export function createParticipantSnapshotFromEntity(input: {
         description: input.entity.description ?? undefined,
         kind: input.entity.kind,
         name: input.entity.name,
-        notes: input.entity.notes ?? undefined
+        notes: input.entity.notes ?? undefined,
       },
       equipmentState,
       sheetSummary,
-      sourceUpdatedAt: input.sourceUpdatedAt
+      sourceUpdatedAt: input.sourceUpdatedAt,
     }),
     state: scenarioParticipantStateSchema.parse({
       combat: {
-        engaged: false
+        engaged: false,
       },
       conditions: [],
       equipment: inferEquipmentArrays(equipmentState),
@@ -638,12 +639,12 @@ export function createParticipantSnapshotFromEntity(input: {
         dead: false,
         maxHp,
         unconscious: false,
-        wounds: 0
+        wounds: 0,
       },
       modifiers: [],
       resources: {},
-      snapshotVersion: 1
-    })
+      snapshotVersion: 1,
+    }),
   };
 }
 
@@ -672,8 +673,8 @@ export function buildScenarioPlayerVisibleParticipants(input: {
         isActive: participant.isActive,
         isControlledByPlayer: participant.id === input.controlledParticipantId,
         role: participant.role,
-        sourceType: participant.sourceType
-      })
+        sourceType: participant.sourceType,
+      }),
     );
 }
 
@@ -685,14 +686,14 @@ export function buildScenarioPlayerProjection(input: {
   const controlledParticipant = input.participants.find((participant) =>
     isPlayerControlledScenarioParticipant({
       participant,
-      userId: input.userId
-    })
+      userId: input.userId,
+    }),
   );
 
   const visibleParticipants = controlledParticipant
     ? buildScenarioPlayerVisibleParticipants({
         controlledParticipantId: controlledParticipant.id,
-        participants: input.participants
+        participants: input.participants,
       })
     : [];
 
@@ -701,12 +702,13 @@ export function buildScenarioPlayerProjection(input: {
       canDeclareActions: false,
       message: controlledParticipant
         ? "Actions, movement, and interaction declarations will land here in the next scenario phase."
-        : "Once the GM assigns you an active character in this scenario, your action controls will appear here."
+        : "Once the GM assigns you an active character in this scenario, your action controls will appear here.",
     },
     controlledParticipant: controlledParticipant
       ? {
           build: controlledParticipant.snapshot.build as CharacterBuild | undefined,
           characterId: controlledParticipant.characterId,
+          combatContext: controlledParticipant.state.combat.combatContext,
           conditionCount: controlledParticipant.state.conditions.length,
           currentHp: controlledParticipant.state.health.currentHp,
           displayName: controlledParticipant.snapshot.displayName,
@@ -715,7 +717,7 @@ export function buildScenarioPlayerProjection(input: {
           id: controlledParticipant.id,
           maxHp: controlledParticipant.state.health.maxHp,
           role: controlledParticipant.role,
-          sourceType: controlledParticipant.sourceType
+          sourceType: controlledParticipant.sourceType,
         }
       : undefined,
     controlledParticipantId: controlledParticipant?.id,
@@ -728,9 +730,9 @@ export function buildScenarioPlayerProjection(input: {
       name: input.scenario.name,
       phase: input.scenario.liveState?.phase ?? 1,
       roundNumber: input.scenario.liveState?.roundNumber ?? 1,
-      status: input.scenario.status
+      status: input.scenario.status,
     },
     visibilityMode: "all_active_participants",
-    visibleParticipants
+    visibleParticipants,
   });
 }

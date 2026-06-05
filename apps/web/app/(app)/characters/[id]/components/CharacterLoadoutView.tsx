@@ -27,7 +27,10 @@ import {
   setCharacterReadyShieldOnServer,
   setCharacterWornArmorOnServer
 } from "@/lib/api/localServiceClient";
-import { loadLocalCharacterContext } from "@/lib/characters/loadLocalCharacterContext";
+import {
+  loadCurrentCharacterContext,
+  loadLocalCharacterContext,
+} from "@/lib/characters/loadLocalCharacterContext";
 import { buildCharacterPhysicalStateView } from "@/lib/characters/physicalState";
 import { buildEncounterLiveCombatModifierSummary } from "@/lib/campaigns/liveCombatModifiers";
 
@@ -42,8 +45,13 @@ interface CharacterLoadoutViewProps {
   physicalStateCurrentRoundNumber?: number;
   physicalStateScenarioId?: string;
   physicalStateTargetParticipantId?: string;
+  preferCurrentCharacterRecord?: boolean;
   showPhysicalState?: boolean;
 }
+
+type CharacterLoadoutContext =
+  | Awaited<ReturnType<typeof loadCurrentCharacterContext>>
+  | Awaited<ReturnType<typeof loadLocalCharacterContext>>;
 
 function getCharacterName(name: string | undefined): string {
   return name?.trim() || "Unnamed character";
@@ -74,12 +82,11 @@ export default function CharacterLoadoutView({
   physicalStateGeneralHitpoints,
   physicalStateScenarioId,
   physicalStateTargetParticipantId,
+  preferCurrentCharacterRecord = false,
   showPhysicalState = false,
 }: CharacterLoadoutViewProps) {
   const [state, setState] = useState<EquipmentFeatureState | null>(null);
-  const [characterContext, setCharacterContext] = useState<
-    Awaited<ReturnType<typeof loadLocalCharacterContext>> | null
-  >(null);
+  const [characterContext, setCharacterContext] = useState<CharacterLoadoutContext | null>(null);
   const [loading, setLoading] = useState(true);
   const [pageError, setPageError] = useState<string>();
   const [throwingWeaponItemId, setThrowingWeaponItemId] = useState<string>("");
@@ -95,9 +102,12 @@ export default function CharacterLoadoutView({
 
   useEffect(() => {
     let cancelled = false;
+    const loadCharacterContext = preferCurrentCharacterRecord
+      ? loadCurrentCharacterContext
+      : loadLocalCharacterContext;
 
     setLoading(true);
-    Promise.all([loadCharacterEquipmentState(characterId), loadLocalCharacterContext(characterId)])
+    Promise.all([loadCharacterEquipmentState(characterId), loadCharacterContext(characterId)])
       .then(([nextState, nextCharacterContext]) => {
         if (cancelled) {
           return;
@@ -128,7 +138,7 @@ export default function CharacterLoadoutView({
     return () => {
       cancelled = true;
     };
-  }, [characterId]);
+  }, [characterId, preferCurrentCharacterRecord]);
 
   useEffect(() => {
     if (!throwingWeaponItemId || !state) {
