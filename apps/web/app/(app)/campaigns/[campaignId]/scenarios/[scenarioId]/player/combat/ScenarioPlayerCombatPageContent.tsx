@@ -8,13 +8,16 @@ import {
   type CombatRoundDeclaration,
   type CombatRoundInitiativeRank,
   type CombatRoundPhase,
+  type CombatRoundPhaseResolutionResult,
   type CombatRoundStep,
   characterBuildSchema,
   formatOpenEndedD20RollBreakdown,
   getCombatRoundDisplayAttackResultForParticipantPhase,
+  getCombatRoundDisplayPhaseResolutionResultForParticipantPhase,
   getCombatRoundInitiativeRanks,
   getCombatRoundInitiativeTotal,
   getCombatRoundModifierPhaseForStep,
+  getCombatRoundResolutionPhaseForStep,
   initializeCombatRoundState,
   validateCombatDeclarationTargets,
   type EncounterSession,
@@ -141,6 +144,45 @@ function formatCombatAttackResultLine(input: {
   return input.participantId === input.result.defenderParticipantId
     ? `Defense: DB ${input.result.defenderDb} vs ${attackText} = ${lookupText}`
     : `Main: ${input.result.weaponName} OB ${input.result.ob} - DB ${input.result.defenderDb} + roll ${rollText} = ${lookupText}`;
+}
+
+function formatResolutionStatusLabel(value: string): string {
+  return value
+    .split("_")
+    .map((part, index) => {
+      if (index !== 0) {
+        return part;
+      }
+
+      return part.length > 0 ? `${part[0]?.toUpperCase()}${part.slice(1)}` : part;
+    })
+    .join(" ");
+}
+
+function formatCombatPhaseResolutionResultLines(input: {
+  attackResult: CombatRoundAttackRollResult;
+  participantId?: string;
+  resolution: CombatRoundPhaseResolutionResult;
+}): {
+  attackLine: string;
+  proposalLine: string;
+  statusLine: string;
+} {
+  const parry = input.resolution.parryResolution;
+  const damage = input.resolution.damageRoll;
+  const proposal = input.resolution.damageProposal;
+  const parryLine = `Parry: ${formatResolutionStatusLabel(parry.status)}${
+    parry.resultLabel ? ` (${parry.resultLabel})` : ""
+  }`;
+
+  return {
+    attackLine: `${formatCombatAttackResultLine({
+      participantId: input.participantId,
+      result: input.attackResult,
+    })} · Result: ${input.attackResult.tableResult}`,
+    proposalLine: `Proposal: ${formatResolutionStatusLabel(proposal.status)}`,
+    statusLine: `${parryLine} · Damage roll: ${formatResolutionStatusLabel(damage.status)}`,
+  };
 }
 
 function createModifierEntryDraft(): ScenarioCombatModifierEntry {
@@ -1067,6 +1109,38 @@ export default function ScenarioPlayerCombatPageContent({
         resultLabel: `Result: ${selectedCurrentAttackResult.tableResult}`,
       }
     : null;
+  const currentResolutionPhase = getCombatRoundResolutionPhaseForStep(currentCombatStep);
+  const selectedCurrentResolutionAttackResult =
+    combatRoundState && selectedRoundParticipant && currentResolutionPhase
+      ? getCombatRoundDisplayAttackResultForParticipantPhase({
+          participantId: selectedRoundParticipant.participantId,
+          phase: currentResolutionPhase,
+          state: combatRoundState,
+        })
+      : undefined;
+  const selectedCurrentPhaseResolutionResult =
+    combatRoundState && selectedRoundParticipant && currentResolutionPhase
+      ? getCombatRoundDisplayPhaseResolutionResultForParticipantPhase({
+          participantId: selectedRoundParticipant.participantId,
+          phase: currentResolutionPhase,
+          state: combatRoundState,
+        })
+      : undefined;
+  const selectedCurrentPhaseResolutionLines =
+    selectedCurrentResolutionAttackResult && selectedCurrentPhaseResolutionResult
+      ? formatCombatPhaseResolutionResultLines({
+          attackResult: selectedCurrentResolutionAttackResult,
+          participantId: selectedRoundParticipant?.participantId,
+          resolution: selectedCurrentPhaseResolutionResult,
+        })
+      : undefined;
+  const selectedCurrentPhaseResolutionResultPanel = selectedCurrentPhaseResolutionLines
+    ? {
+        interpretedResult: selectedCurrentPhaseResolutionLines.statusLine,
+        rankLabel: selectedCurrentPhaseResolutionLines.attackLine,
+        resultLabel: selectedCurrentPhaseResolutionLines.proposalLine,
+      }
+    : null;
   const phase1InitiativeRanks = useMemo(
     () =>
       combatRoundState
@@ -1408,7 +1482,9 @@ export default function ScenarioPlayerCombatPageContent({
                       interpretedResult: formatCombatInitiativeFormula(selectedCurrentInitiative),
                       rankLabel: selectedCurrentInitiativeRankLabel,
                     }
-                  : selectedCurrentAttackResultPanel ?? actionRollResult
+                  : selectedCurrentPhaseResolutionResultPanel ??
+                    selectedCurrentAttackResultPanel ??
+                    actionRollResult
               }
             />
           </div>

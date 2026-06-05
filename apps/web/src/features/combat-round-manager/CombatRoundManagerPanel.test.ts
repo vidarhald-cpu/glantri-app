@@ -124,6 +124,13 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("formatOpenEndedD20RollBreakdown");
     expect(source).toContain("formatCombatDefenseResultMainLine");
     expect(source).toContain("getCombatRoundDisplayAttackResultForParticipantPhase");
+    expect(source).toContain("ensureCombatRoundPhaseResolutionResultsForPhase");
+    expect(source).toContain("getCombatRoundDisplayPhaseResolutionResultForParticipantPhase");
+    expect(source).toContain("getCombatRoundResolutionPhaseForStep");
+    expect(source).toContain("formatCombatPhaseResolutionResultLines");
+    expect(source).toContain("Parry: ${formatResolutionStatusLabel");
+    expect(source).toContain("Damage roll: ${formatResolutionStatusLabel");
+    expect(source).toContain("Proposal: ${formatResolutionStatusLabel");
     expect(source).toContain("buildCombatRoundAttackRollResult");
     expect(source).toContain("recordCombatRoundAttackResult");
     expect(source).toContain("getCombatRoundInitiativeRanks");
@@ -132,6 +139,9 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("formatCombatAttackResultMainLine");
     expect(source).toContain("formatCombatAttackResultLine");
     expect(source).toContain("Result: ${inspectorDisplayAttackResult.tableResult}");
+    expect(source).toContain("inspectorDisplayPhaseResolutionResult");
+    expect(source).toContain("phaseResolutionResult");
+    expect(source).toContain("Resolution review pending.");
     expect(source).toContain("No ${formatCombatPhaseLabel");
     expect(source).toContain("const inspectorCurrentAttackPhase = getCombatAttackPhaseForStep(roundState.currentStep)");
     expect(source).toContain('step === "phase_2_actions"');
@@ -176,7 +186,8 @@ describe("CombatRoundManagerPanel", () => {
 
     expect(source).toContain("updateEncounterOnServer");
     expect(source).toContain("buildCombatRoundStepSnapshots");
-    expect(source).toContain("advanceCombatRoundStep(roundState, { stepSnapshots })");
+    expect(source).toContain("const stateForCommit = resolutionPhase");
+    expect(source).toContain("advanceCombatRoundStep(stateForCommit, { stepSnapshots })");
     expect(source).toContain("attackResult");
     expect(source).toContain("combatRoundState: nextRoundState");
     expect(source).toContain("currentRound: nextRoundState.roundNumber");

@@ -152,6 +152,37 @@ export const combatRoundAttackResultsSchema = z.object({
   phase2: combatRoundAttackRollResultSchema.optional(),
 });
 
+export const combatRoundPhaseResolutionResultSchema = z.object({
+  attackResultId: idSchema,
+  attackerParticipantId: idSchema,
+  damageProposal: z
+    .object({
+      proposedEffects: z.array(z.never()).default([]),
+      status: z.enum(["not_ready", "drafted", "committed"]),
+    })
+    .default({ proposedEffects: [], status: "not_ready" }),
+  damageRoll: z
+    .object({
+      diceExpression: z.string().min(1).optional(),
+      notes: z.string().optional(),
+      rolls: z.array(z.number().int()).optional(),
+      status: z.enum(["not_required", "pending", "rolled"]),
+      total: z.number().int().optional(),
+    })
+    .default({ status: "pending" }),
+  defenderParticipantId: idSchema,
+  parryResolution: z
+    .object({
+      notes: z.string().optional(),
+      resultLabel: z.string().min(1).optional(),
+      status: z.enum(["pending", "not_applicable", "resolved"]),
+    })
+    .default({ status: "pending" }),
+  phase: combatRoundPhaseSchema,
+  roundNumber: z.number().int().positive(),
+  updatedAt: z.string().datetime(),
+});
+
 export const combatRoundDeclarationSchema = z.object({
   actionId: idSchema.optional(),
   additionalActionNotes: z.string().optional(),
@@ -239,6 +270,7 @@ export const combatRoundStepSnapshotSchema = z.object({
   participantLabel: z.string().min(1),
   phase: combatRoundPhaseSchema.optional(),
   phaseContext: scenarioParticipantCombatContextSchema.optional(),
+  phaseResolutionResult: combatRoundPhaseResolutionResultSchema.optional(),
   roundNumber: z.number().int().positive(),
   step: combatRoundStepSchema,
 });
@@ -246,6 +278,7 @@ export const combatRoundStepSnapshotSchema = z.object({
 export const combatRoundStateSchema = z.object({
   activeParticipantId: idSchema.optional(),
   currentStep: combatRoundStepSchema.default("select_actions"),
+  phaseResolutionResults: z.array(combatRoundPhaseResolutionResultSchema).default([]),
   participants: z.array(combatRoundParticipantStateSchema).default([]),
   roundNumber: z.number().int().positive().default(1),
   selectedParticipantId: idSchema.optional(),
@@ -260,6 +293,9 @@ export type CombatRoundInitiativeResult = z.infer<typeof combatRoundInitiativeRe
 export type CombatRoundInitiatives = z.infer<typeof combatRoundInitiativesSchema>;
 export type CombatRoundAttackRollResult = z.infer<typeof combatRoundAttackRollResultSchema>;
 export type CombatRoundAttackResults = z.infer<typeof combatRoundAttackResultsSchema>;
+export type CombatRoundPhaseResolutionResult = z.infer<
+  typeof combatRoundPhaseResolutionResultSchema
+>;
 export type CombatRoundParticipantState = z.infer<typeof combatRoundParticipantStateSchema>;
 export type CombatRoundStepSnapshot = z.infer<typeof combatRoundStepSnapshotSchema>;
 export type CombatRoundState = z.infer<typeof combatRoundStateSchema>;
@@ -487,6 +523,176 @@ export function getCombatRoundDisplayAttackResultForParticipantPhase(input: {
   return results.outgoing ?? results.incoming[0];
 }
 
+export function getCombatRoundResolutionPhaseForStep(
+  step: CombatRoundStep,
+): CombatRoundPhase | undefined {
+  if (step === "review_phase_2_actions") {
+    return "phase1";
+  }
+
+  if (step === "review_phase_2_damage") {
+    return "phase2";
+  }
+
+  return undefined;
+}
+
+export function getCombatRoundDamageReviewStepForPhase(phase: CombatRoundPhase): CombatRoundStep {
+  return phase === "phase1" ? "review_phase_2_actions" : "review_phase_2_damage";
+}
+
+export function getCombatRoundAttackResultId(input: {
+  result: Pick<
+    CombatRoundAttackRollResult,
+    "attackerParticipantId" | "defenderParticipantId" | "phase"
+  >;
+  roundNumber: number;
+}): string {
+  return [
+    input.roundNumber,
+    input.result.phase,
+    input.result.attackerParticipantId,
+    input.result.defenderParticipantId,
+  ].join(":");
+}
+
+export function buildCombatRoundPhaseResolutionResult(input: {
+  attackResult: CombatRoundAttackRollResult;
+  roundNumber: number;
+  updatedAt: string;
+}): CombatRoundPhaseResolutionResult {
+  const attackResultId = getCombatRoundAttackResultId({
+    result: input.attackResult,
+    roundNumber: input.roundNumber,
+  });
+
+  return combatRoundPhaseResolutionResultSchema.parse({
+    attackResultId,
+    attackerParticipantId: input.attackResult.attackerParticipantId,
+    damageProposal: {
+      proposedEffects: [],
+      status: "not_ready",
+    },
+    damageRoll: input.attackResult.hit
+      ? {
+          notes: "Awaiting parry resolution.",
+          status: "pending",
+        }
+      : {
+          status: "not_required",
+        },
+    defenderParticipantId: input.attackResult.defenderParticipantId,
+    parryResolution: input.attackResult.hit
+      ? {
+          status: "pending",
+        }
+      : {
+          resultLabel: "Attack missed",
+          status: "not_applicable",
+        },
+    phase: input.attackResult.phase,
+    roundNumber: input.roundNumber,
+    updatedAt: input.updatedAt,
+  });
+}
+
+export function getCombatRoundPhaseResolutionResultForAttack(input: {
+  attackResult: CombatRoundAttackRollResult;
+  state: CombatRoundState;
+}): CombatRoundPhaseResolutionResult | undefined {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const attackResultId = getCombatRoundAttackResultId({
+    result: input.attackResult,
+    roundNumber: normalized.roundNumber,
+  });
+
+  return normalized.phaseResolutionResults.find(
+    (resolution) => resolution.attackResultId === attackResultId,
+  );
+}
+
+export function getCombatRoundDisplayPhaseResolutionResultForParticipantPhase(input: {
+  participantId: string;
+  phase: CombatRoundPhase;
+  state: CombatRoundState;
+  updatedAt?: string;
+}): CombatRoundPhaseResolutionResult | undefined {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const attackResult = getCombatRoundDisplayAttackResultForParticipantPhase({
+    participantId: input.participantId,
+    phase: input.phase,
+    state: normalized,
+  });
+
+  if (!attackResult) {
+    return undefined;
+  }
+
+  return (
+    getCombatRoundPhaseResolutionResultForAttack({
+      attackResult,
+      state: normalized,
+    }) ??
+    buildCombatRoundPhaseResolutionResult({
+      attackResult,
+      roundNumber: normalized.roundNumber,
+      updatedAt: input.updatedAt ?? attackResult.rolledAt,
+    })
+  );
+}
+
+function upsertCombatRoundPhaseResolutionResults(input: {
+  results: CombatRoundPhaseResolutionResult[];
+  state: CombatRoundState;
+}): CombatRoundState {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const nextResults = input.results.map((result) =>
+    combatRoundPhaseResolutionResultSchema.parse(result),
+  );
+
+  return {
+    ...normalized,
+    phaseResolutionResults: [
+      ...normalized.phaseResolutionResults.filter(
+        (existing) =>
+          !nextResults.some((result) => result.attackResultId === existing.attackResultId),
+      ),
+      ...nextResults,
+    ],
+  };
+}
+
+export function ensureCombatRoundPhaseResolutionResultsForPhase(input: {
+  phase: CombatRoundPhase;
+  state: CombatRoundState;
+  updatedAt: string;
+}): CombatRoundState {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const results = normalized.participants
+    .map((participant) => participant.attackResults[input.phase])
+    .filter((result): result is CombatRoundAttackRollResult => result !== undefined)
+    .map((attackResult) => {
+      const existing = getCombatRoundPhaseResolutionResultForAttack({
+        attackResult,
+        state: normalized,
+      });
+
+      return (
+        existing ??
+        buildCombatRoundPhaseResolutionResult({
+          attackResult,
+          roundNumber: normalized.roundNumber,
+          updatedAt: input.updatedAt,
+        })
+      );
+    });
+
+  return upsertCombatRoundPhaseResolutionResults({
+    results,
+    state: normalized,
+  });
+}
+
 export function initializeCombatRoundState(input: {
   encounter: Pick<EncounterSession, "combatRoundState" | "currentRound" | "participants">;
 }): CombatRoundState {
@@ -515,6 +721,7 @@ export function initializeCombatRoundState(input: {
   return {
     activeParticipantId,
     currentStep: existing?.currentStep ?? "select_actions",
+    phaseResolutionResults: existing?.phaseResolutionResults ?? [],
     participants,
     roundNumber: existing?.roundNumber ?? input.encounter.currentRound,
     selectedParticipantId,
@@ -775,9 +982,21 @@ export function clearCombatRoundStep(input: {
   step: CombatRoundStep;
 }): CombatRoundState {
   const normalized = combatRoundStateSchema.parse(input.state);
+  const clearResolutionPhase =
+    input.step === "phase_1_actions" || input.step === "review_phase_2_actions"
+      ? "phase1"
+      : input.step === "phase_2_actions" || input.step === "review_phase_2_damage"
+        ? "phase2"
+        : undefined;
 
   return {
     ...normalized,
+    phaseResolutionResults: clearResolutionPhase
+      ? normalized.phaseResolutionResults.filter(
+          (result) =>
+            result.roundNumber !== normalized.roundNumber || result.phase !== clearResolutionPhase,
+        )
+      : normalized.phaseResolutionResults,
     participants: normalized.participants.map((participant) => {
       const nextAttackResults = { ...participant.attackResults };
       const nextInitiatives = { ...participant.initiatives };

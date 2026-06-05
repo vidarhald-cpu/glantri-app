@@ -6,6 +6,7 @@ import {
   COMBAT_ROUND_STEP_ABBREVIATIONS,
   COMBAT_ROUND_STEPS,
   advanceCombatRoundStep,
+  buildCombatRoundPhaseResolutionResult,
   buildCombatRoundAttackRollResult,
   buildCombatRoundInspector,
   buildCombatRoundInitiativeResult,
@@ -20,9 +21,12 @@ import {
   getCombatRoundInitiativeRanks,
   getCombatRoundAttackResultsForParticipantPhase,
   getCombatRoundDisplayAttackResultForParticipantPhase,
+  getCombatRoundDisplayPhaseResolutionResultForParticipantPhase,
+  getCombatRoundResolutionPhaseForStep,
   getCombatRoundStepSnapshot,
   getPreviousCombatRoundStep,
   initializeCombatRoundState,
+  ensureCombatRoundPhaseResolutionResultsForPhase,
   recordCombatRoundDeclaration,
   recordCombatRoundAttackResult,
   recordCombatRoundInitiative,
@@ -922,6 +926,272 @@ describe("combat round manager", () => {
         step: "phase_2_actions",
       }),
     ).toBeUndefined();
+  });
+
+  it("builds phase resolution scaffolds for misses and hits", () => {
+    const miss = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackerParticipantId: "gladiator",
+      defenderDb: 10,
+      defenderParticipantId: "guard",
+      ob: 10,
+      phase: "phase1",
+      rollD20: 10,
+      rollTotal: 10,
+      rolledAt: "2026-01-01T00:03:00.000Z",
+      weaponName: "Broad sword",
+    });
+    const hit = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackerParticipantId: "gladiator",
+      defenderDb: 10,
+      defenderParticipantId: "guard",
+      ob: 10,
+      phase: "phase1",
+      rollD20: 12,
+      rollTotal: 12,
+      rolledAt: "2026-01-01T00:03:00.000Z",
+      weaponName: "Broad sword",
+    });
+
+    expect(
+      buildCombatRoundPhaseResolutionResult({
+        attackResult: miss,
+        roundNumber: 3,
+        updatedAt: "2026-01-01T00:04:00.000Z",
+      }),
+    ).toMatchObject({
+      attackResultId: "3:phase1:gladiator:guard",
+      damageProposal: { proposedEffects: [], status: "not_ready" },
+      damageRoll: { status: "not_required" },
+      parryResolution: { resultLabel: "Attack missed", status: "not_applicable" },
+    });
+    expect(
+      buildCombatRoundPhaseResolutionResult({
+        attackResult: hit,
+        roundNumber: 3,
+        updatedAt: "2026-01-01T00:04:00.000Z",
+      }),
+    ).toMatchObject({
+      damageProposal: { proposedEffects: [], status: "not_ready" },
+      damageRoll: { notes: "Awaiting parry resolution.", status: "pending" },
+      parryResolution: { status: "pending" },
+    });
+  });
+
+  it("creates and retrieves phase1 and phase2 resolution scaffolds from attack results", () => {
+    const state = initializeCombatRoundState({ encounter: encounter() });
+    const phase1Attack = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackerParticipantId: "gladiator",
+      defenderDb: 10,
+      defenderParticipantId: "guard",
+      ob: 10,
+      phase: "phase1",
+      rollD20: 11,
+      rollTotal: 11,
+      rolledAt: "2026-01-01T00:03:00.000Z",
+      weaponName: "Broad sword",
+    });
+    const phase2Attack = buildCombatRoundAttackRollResult({
+      actionId: "parry_attack",
+      attackerParticipantId: "guard",
+      defenderDb: 10,
+      defenderParticipantId: "gladiator",
+      ob: 10,
+      phase: "phase2",
+      rollD20: 10,
+      rollTotal: 10,
+      rolledAt: "2026-01-01T00:03:00.000Z",
+      weaponName: "Long sword",
+    });
+    const withPhase1Attack = recordCombatRoundAttackResult({
+      participantId: "gladiator",
+      result: phase1Attack,
+      state,
+      submittedBy: "gm",
+    });
+    const withPhase2Attack = recordCombatRoundAttackResult({
+      participantId: "guard",
+      result: phase2Attack,
+      state: withPhase1Attack,
+      submittedBy: "gm",
+    });
+    const withPhase1Resolution = ensureCombatRoundPhaseResolutionResultsForPhase({
+      phase: "phase1",
+      state: withPhase2Attack,
+      updatedAt: "2026-01-01T00:04:00.000Z",
+    });
+    const withBothResolutions = ensureCombatRoundPhaseResolutionResultsForPhase({
+      phase: "phase2",
+      state: withPhase1Resolution,
+      updatedAt: "2026-01-01T00:05:00.000Z",
+    });
+
+    expect(getCombatRoundResolutionPhaseForStep("review_phase_2_actions")).toBe("phase1");
+    expect(getCombatRoundResolutionPhaseForStep("review_phase_2_damage")).toBe("phase2");
+    expect(withBothResolutions.phaseResolutionResults).toHaveLength(2);
+    expect(
+      getCombatRoundDisplayPhaseResolutionResultForParticipantPhase({
+        participantId: "gladiator",
+        phase: "phase1",
+        state: withBothResolutions,
+      }),
+    ).toMatchObject({
+      attackResultId: "3:phase1:gladiator:guard",
+      parryResolution: { status: "pending" },
+    });
+    expect(
+      getCombatRoundDisplayPhaseResolutionResultForParticipantPhase({
+        participantId: "gladiator",
+        phase: "phase2",
+        state: withBothResolutions,
+      }),
+    ).toMatchObject({
+      attackResultId: "3:phase2:guard:gladiator",
+      damageRoll: { status: "not_required" },
+      parryResolution: { status: "not_applicable" },
+    });
+  });
+
+  it("clears D1 resolution without clearing the P1 attack result", () => {
+    const state = initializeCombatRoundState({ encounter: encounter() });
+    const result = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackerParticipantId: "gladiator",
+      defenderDb: 10,
+      defenderParticipantId: "guard",
+      ob: 10,
+      phase: "phase1",
+      rollD20: 12,
+      rollTotal: 12,
+      rolledAt: "2026-01-01T00:03:00.000Z",
+      weaponName: "Broad sword",
+    });
+    const withResult = recordCombatRoundAttackResult({
+      participantId: "gladiator",
+      result,
+      state,
+      submittedBy: "gm",
+    });
+    const withResolution = ensureCombatRoundPhaseResolutionResultsForPhase({
+      phase: "phase1",
+      state: withResult,
+      updatedAt: "2026-01-01T00:04:00.000Z",
+    });
+    const withSnapshot = advanceCombatRoundStep(withResolution, {
+      stepSnapshots: [
+        stepSnapshot({
+          attackResult: result,
+          participantId: "gladiator",
+          phase: "phase1",
+          phaseResolutionResult: withResolution.phaseResolutionResults[0],
+          step: "review_phase_2_actions",
+        }),
+      ],
+    });
+    const cleared = clearCombatRoundStep({
+      state: withSnapshot,
+      step: "review_phase_2_actions",
+    });
+
+    expect(cleared.participants[0]?.attackResults.phase1).toEqual(result);
+    expect(cleared.phaseResolutionResults).toEqual([]);
+    expect(cleared.participants[0]?.stepStatuses.review_phase_2_actions).toBe("pending");
+    expect(
+      getCombatRoundStepSnapshot({
+        participantId: "gladiator",
+        state: cleared,
+        step: "review_phase_2_actions",
+      }),
+    ).toBeUndefined();
+  });
+
+  it("clears P1 attack result and its associated D1 resolution", () => {
+    const state = initializeCombatRoundState({ encounter: encounter() });
+    const result = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackerParticipantId: "gladiator",
+      defenderDb: 10,
+      defenderParticipantId: "guard",
+      ob: 10,
+      phase: "phase1",
+      rollD20: 12,
+      rollTotal: 12,
+      rolledAt: "2026-01-01T00:03:00.000Z",
+      weaponName: "Broad sword",
+    });
+    const withResult = recordCombatRoundAttackResult({
+      participantId: "gladiator",
+      result,
+      state,
+      submittedBy: "gm",
+    });
+    const withResolution = ensureCombatRoundPhaseResolutionResultsForPhase({
+      phase: "phase1",
+      state: withResult,
+      updatedAt: "2026-01-01T00:04:00.000Z",
+    });
+    const cleared = clearCombatRoundStep({
+      state: withResolution,
+      step: "phase_1_actions",
+    });
+
+    expect(cleared.participants[0]?.attackResults.phase1).toBeUndefined();
+    expect(cleared.phaseResolutionResults).toEqual([]);
+  });
+
+  it("committed D1 snapshots preserve resolution scaffold status", () => {
+    const state = initializeCombatRoundState({ encounter: encounter() });
+    const result = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackerParticipantId: "gladiator",
+      defenderDb: 10,
+      defenderParticipantId: "guard",
+      ob: 10,
+      phase: "phase1",
+      rollD20: 12,
+      rollTotal: 12,
+      rolledAt: "2026-01-01T00:03:00.000Z",
+      weaponName: "Broad sword",
+    });
+    const withResult = recordCombatRoundAttackResult({
+      participantId: "gladiator",
+      result,
+      state,
+      submittedBy: "gm",
+    });
+    const withResolution = ensureCombatRoundPhaseResolutionResultsForPhase({
+      phase: "phase1",
+      state: withResult,
+      updatedAt: "2026-01-01T00:04:00.000Z",
+    });
+    const snapshot = stepSnapshot({
+      actionResultSummary:
+        "Main: Broad sword OB 10 - DB 10 + roll 12 = 12 · Result: Hit\nParry: Pending · Damage roll: Pending\nProposal: Not ready",
+      attackResult: result,
+      participantId: "gladiator",
+      phase: "phase1",
+      phaseResolutionResult: withResolution.phaseResolutionResults[0],
+      step: "review_phase_2_actions",
+    });
+    const advanced = advanceCombatRoundStep(withResolution, { stepSnapshots: [snapshot] });
+
+    expect(
+      getCombatRoundStepSnapshot({
+        participantId: "gladiator",
+        state: advanced,
+        step: "review_phase_2_actions",
+      }),
+    ).toMatchObject({
+      actionResultSummary: expect.stringContaining("Parry: Pending"),
+      phaseResolutionResult: {
+        damageProposal: { proposedEffects: [], status: "not_ready" },
+        damageRoll: { status: "pending" },
+        parryResolution: { status: "pending" },
+      },
+      step: "review_phase_2_actions",
+    });
   });
 
   it("rolls open-ended d6 initiative", () => {
