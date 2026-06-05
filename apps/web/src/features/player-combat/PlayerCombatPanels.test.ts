@@ -260,7 +260,7 @@ describe("PlayerCombatPanels", () => {
     expect(source).toContain("Roll phase 1 initiative");
     expect(source).toContain("Roll phase 2 initiative");
     expect(source).toContain("Roll phase 1 attack");
-    expect(source).toContain("Declare phase 2 action");
+    expect(source).toContain("Roll phase 2 attack");
     expect(source).toContain("Declare phase 2 modifiers");
     expect(source).toContain('textAlign: "center"');
     expect(source).toContain('width: "80%"');

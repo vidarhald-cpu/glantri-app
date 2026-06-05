@@ -4,9 +4,14 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import {
+  type CombatRoundAttackRollResult,
   type CombatRoundDeclaration,
   type CombatRoundInitiativeRank,
+  type CombatRoundPhase,
+  type CombatRoundStep,
   characterBuildSchema,
+  formatOpenEndedD20RollBreakdown,
+  getCombatRoundDisplayAttackResultForParticipantPhase,
   getCombatRoundInitiativeRanks,
   getCombatRoundInitiativeTotal,
   getCombatRoundModifierPhaseForStep,
@@ -108,6 +113,35 @@ const panelStyle = {
   gap: "0.75rem",
   padding: "1rem",
 } as const;
+
+function getCombatAttackPhaseForStep(step: CombatRoundStep): CombatRoundPhase | undefined {
+  if (step === "phase_1_actions") {
+    return "phase1";
+  }
+
+  if (step === "phase_2_actions") {
+    return "phase2";
+  }
+
+  return undefined;
+}
+
+function formatCombatAttackResultLine(input: {
+  participantId?: string;
+  result: CombatRoundAttackRollResult;
+}): string {
+  const rollText = formatOpenEndedD20RollBreakdown({
+    dieResult: input.result.rollTotal,
+    openEndedD10s: input.result.openEndedD10s,
+    rollD20: input.result.rollD20,
+  });
+  const attackText = `${input.result.weaponName} OB ${input.result.ob} + roll ${rollText}`;
+  const lookupText = String(input.result.lookupTotal);
+
+  return input.participantId === input.result.defenderParticipantId
+    ? `Defense: DB ${input.result.defenderDb} vs ${attackText} = ${lookupText}`
+    : `Main: ${input.result.weaponName} OB ${input.result.ob} - DB ${input.result.defenderDb} + roll ${rollText} = ${lookupText}`;
+}
 
 function createModifierEntryDraft(): ScenarioCombatModifierEntry {
   return {
@@ -1015,6 +1049,24 @@ export default function ScenarioPlayerCombatPageContent({
   const selectedCurrentInitiative = currentInitiativePhase
     ? selectedRoundParticipant?.initiatives[currentInitiativePhase]
     : undefined;
+  const currentAttackPhase = getCombatAttackPhaseForStep(currentCombatStep);
+  const selectedCurrentAttackResult =
+    combatRoundState && selectedRoundParticipant && currentAttackPhase
+      ? getCombatRoundDisplayAttackResultForParticipantPhase({
+          participantId: selectedRoundParticipant.participantId,
+          phase: currentAttackPhase,
+          state: combatRoundState,
+        })
+      : undefined;
+  const selectedCurrentAttackResultPanel = selectedCurrentAttackResult
+    ? {
+        interpretedResult: formatCombatAttackResultLine({
+          participantId: selectedRoundParticipant?.participantId,
+          result: selectedCurrentAttackResult,
+        }),
+        resultLabel: `Result: ${selectedCurrentAttackResult.tableResult}`,
+      }
+    : null;
   const phase1InitiativeRanks = useMemo(
     () =>
       combatRoundState
@@ -1356,7 +1408,7 @@ export default function ScenarioPlayerCombatPageContent({
                       interpretedResult: formatCombatInitiativeFormula(selectedCurrentInitiative),
                       rankLabel: selectedCurrentInitiativeRankLabel,
                     }
-                  : actionRollResult
+                  : selectedCurrentAttackResultPanel ?? actionRollResult
               }
             />
           </div>

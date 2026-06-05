@@ -13,10 +13,13 @@ import {
   canPlayerRollCombatInitiative,
   clearCombatRoundStep,
   clearCurrentCombatRoundStepAndRewind,
+  combatRoundAttackRollResultSchema,
   getCombatRoundInitiativePhaseForStep,
   getCombatRoundModifierPhaseForStep,
   getCombatRoundInitiativePositions,
   getCombatRoundInitiativeRanks,
+  getCombatRoundAttackResultsForParticipantPhase,
+  getCombatRoundDisplayAttackResultForParticipantPhase,
   getCombatRoundStepSnapshot,
   getPreviousCombatRoundStep,
   initializeCombatRoundState,
@@ -90,6 +93,19 @@ function stepSnapshot(
     participantLabel: input.participantId,
     roundNumber: 3,
   };
+}
+
+function advanceToStep(
+  state: ReturnType<typeof initializeCombatRoundState>,
+  step: (typeof COMBAT_ROUND_STEPS)[number],
+): ReturnType<typeof initializeCombatRoundState> {
+  let current = state;
+
+  while (current.currentStep !== step) {
+    current = advanceCombatRoundStep(current);
+  }
+
+  return current;
 }
 
 describe("combat round manager", () => {
@@ -563,8 +579,10 @@ describe("combat round manager", () => {
         defenderDb: 11,
         defenderParticipantId: "guard",
         ob: 9,
+        openEndedD10s: [],
         phase: "phase1",
-        roll: 18,
+        rollD20: 18,
+        rollTotal: 18,
         rolledAt: "2026-01-01T00:03:00.000Z",
         rolledByUserId: "gm-1",
         weaponName: "Broad sword",
@@ -580,12 +598,66 @@ describe("combat round manager", () => {
       lookupTotal: 16,
       marginOverMissThreshold: 6,
       ob: 9,
+      openEndedD10s: [],
       phase: "phase1",
-      roll: 18,
+      rollD20: 18,
+      rollTotal: 18,
       rolledAt: "2026-01-01T00:03:00.000Z",
       rolledByUserId: "gm-1",
       tableResult: "Hit",
       weaponName: "Broad sword",
+    });
+  });
+
+  it("uses open-ended roll totals for P1 attack lookup totals", () => {
+    expect(
+      buildCombatRoundAttackRollResult({
+        actionId: "attack_parry",
+        attackerParticipantId: "gladiator",
+        defenderDb: 11,
+        defenderParticipantId: "guard",
+        ob: 9,
+        openEndedD10s: [7],
+        phase: "phase1",
+        rollD20: 20,
+        rollTotal: 27,
+        rolledAt: "2026-01-01T00:03:00.000Z",
+        weaponName: "Broad sword",
+      }),
+    ).toMatchObject({
+      hit: true,
+      lookupTotal: 25,
+      openEndedD10s: [7],
+      rollD20: 20,
+      rollTotal: 27,
+      tableResult: "Hit",
+    });
+  });
+
+  it("normalizes legacy closed-roll attack results into the open-ended result shape", () => {
+    expect(
+      combatRoundAttackRollResultSchema.parse({
+        actionId: "attack_parry",
+        attackerParticipantId: "gladiator",
+        defenderDb: 10,
+        defenderParticipantId: "guard",
+        grazing: false,
+        hit: false,
+        kind: "attackRoll",
+        lookupTotal: 10,
+        marginOverMissThreshold: 0,
+        ob: 10,
+        phase: "phase1",
+        roll: 10,
+        rolledAt: "2026-01-01T00:03:00.000Z",
+        tableResult: "Miss",
+        weaponName: "Broad sword",
+      }),
+    ).toMatchObject({
+      openEndedD10s: [],
+      roll: 10,
+      rollD20: 10,
+      rollTotal: 10,
     });
   });
 
@@ -602,7 +674,8 @@ describe("combat round manager", () => {
       defenderParticipantId: "guard",
       ob: 10,
       phase: "phase1",
-      roll: 11,
+      rollD20: 11,
+      rollTotal: 11,
       rolledAt: "2026-01-01T00:03:00.000Z",
       weaponName: "Broad sword",
     });
@@ -618,6 +691,8 @@ describe("combat round manager", () => {
       grazing: true,
       hit: true,
       lookupTotal: 11,
+      rollD20: 11,
+      rollTotal: 11,
       tableResult: "Grazing hit",
     });
     expect(nextState.participants[0]?.stepStatuses.phase_1_actions).toBe("gmEdited");
@@ -636,7 +711,8 @@ describe("combat round manager", () => {
       defenderParticipantId: "guard",
       ob: 10,
       phase: "phase1",
-      roll: 10,
+      rollD20: 10,
+      rollTotal: 10,
       rolledAt: "2026-01-01T00:03:00.000Z",
       weaponName: "Broad sword",
     });
@@ -662,6 +738,7 @@ describe("combat round manager", () => {
       attackResult: {
         hit: false,
         lookupTotal: 10,
+        rollTotal: 10,
         tableResult: "Miss",
       },
       participantId: "gladiator",
@@ -694,7 +771,8 @@ describe("combat round manager", () => {
       defenderParticipantId: "guard",
       ob: 10,
       phase: "phase1",
-      roll: 10,
+      rollD20: 10,
+      rollTotal: 10,
       rolledAt: "2026-01-01T00:03:00.000Z",
       weaponName: "Broad sword",
     });
@@ -727,6 +805,121 @@ describe("combat round manager", () => {
         participantId: "gladiator",
         state: cleared,
         step: "phase_1_actions",
+      }),
+    ).toBeUndefined();
+  });
+
+  it("builds and records P2 attack results with attacker and defender lookup", () => {
+    const state = advanceToStep(
+      initializeCombatRoundState({ encounter: encounter() }),
+      "phase_2_actions",
+    );
+    const result = buildCombatRoundAttackRollResult({
+      actionId: "parry_attack",
+      attackerParticipantId: "gladiator",
+      defenderDb: 14,
+      defenderParticipantId: "guard",
+      ob: 11,
+      openEndedD10s: [7],
+      phase: "phase2",
+      rollD20: 20,
+      rollTotal: 27,
+      rolledAt: "2026-01-01T00:03:00.000Z",
+      weaponName: "Long sword",
+    });
+    const nextState = recordCombatRoundAttackResult({
+      participantId: "gladiator",
+      result,
+      state,
+      submittedBy: "gm",
+    });
+
+    expect(result).toMatchObject({
+      hit: true,
+      lookupTotal: 24,
+      phase: "phase2",
+      tableResult: "Hit",
+    });
+    expect(nextState.participants[0]?.attackResults.phase2).toEqual(result);
+    expect(nextState.participants[0]?.stepStatuses.phase_2_actions).toBe("gmEdited");
+    expect(
+      getCombatRoundAttackResultsForParticipantPhase({
+        participantId: "gladiator",
+        phase: "phase2",
+        state: nextState,
+      }).outgoing,
+    ).toEqual(result);
+    expect(
+      getCombatRoundAttackResultsForParticipantPhase({
+        participantId: "guard",
+        phase: "phase2",
+        state: nextState,
+      }).incoming,
+    ).toEqual([result]);
+    expect(
+      getCombatRoundDisplayAttackResultForParticipantPhase({
+        participantId: "guard",
+        phase: "phase2",
+        state: nextState,
+      }),
+    ).toEqual(result);
+  });
+
+  it("clears P2 attack result, snapshot, and status without clearing declaration", () => {
+    const state = advanceToStep(
+      recordCombatRoundDeclaration({
+        declaration: {
+          actionId: "parry_attack",
+          movementId: "hold",
+          roundNumber: 3,
+        },
+        participantId: "gladiator",
+        state: initializeCombatRoundState({ encounter: encounter() }),
+        submittedBy: "player",
+      }),
+      "phase_2_actions",
+    );
+    const result = buildCombatRoundAttackRollResult({
+      actionId: "parry_attack",
+      attackerParticipantId: "gladiator",
+      defenderDb: 14,
+      defenderParticipantId: "guard",
+      ob: 11,
+      phase: "phase2",
+      rollD20: 10,
+      rollTotal: 10,
+      rolledAt: "2026-01-01T00:03:00.000Z",
+      weaponName: "Long sword",
+    });
+    const withResult = recordCombatRoundAttackResult({
+      participantId: "gladiator",
+      result,
+      state,
+      submittedBy: "gm",
+    });
+    const withSnapshot = advanceCombatRoundStep(withResult, {
+      stepSnapshots: [
+        stepSnapshot({
+          attackResult: result,
+          participantId: "gladiator",
+          phase: "phase2",
+          step: "phase_2_actions",
+        }),
+      ],
+    });
+    const cleared = clearCombatRoundStep({
+      state: withSnapshot,
+      step: "phase_2_actions",
+    });
+
+    expect(cleared.participants[0]?.attackResults.phase2).toBeUndefined();
+    expect(cleared.participants[0]?.declaration).toMatchObject({ actionId: "parry_attack" });
+    expect(cleared.participants[0]?.stepStatuses.phase_2_actions).toBe("pending");
+    expect(
+      getCombatRoundStepSnapshot({
+        participantId: "gladiator",
+        state: cleared,
+        step: "phase_2_actions",
       }),
     ).toBeUndefined();
   });

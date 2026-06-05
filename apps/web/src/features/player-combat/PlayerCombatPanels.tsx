@@ -283,7 +283,7 @@ export function getGmCombatStepActionLabel(step: CombatRoundStep): string {
     case "initiative_phase_2":
       return "Roll phase 2 initiative";
     case "phase_2_actions":
-      return "Declare phase 2 action";
+      return "Roll phase 2 attack";
     case "review_phase_2_damage":
       return "Review phase 2 effects";
     case "round_summary":

@@ -5,6 +5,7 @@ import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react"
 import type {
   CombatRoundDeclaration,
   CombatRoundAttackRollResult,
+  CombatRoundPhase,
   CombatRoundStep,
   CombatRoundStepStatus,
   CombatRoundInitiativeRank,
@@ -23,13 +24,15 @@ import {
   buildCombatRoundAttackRollResult,
   buildCombatRoundInspector,
   characterBuildSchema,
+  formatOpenEndedD20RollBreakdown,
+  getCombatRoundDisplayAttackResultForParticipantPhase,
   getCombatRoundInitiativeRanks,
   getCombatRoundInitiativeTotal,
   getCombatRoundModifierPhaseForStep,
   getCombatRoundStepSnapshot,
   initializeCombatRoundState,
   recordCombatRoundAttackResult,
-  rollClosedD20,
+  rollOpenEndedCombatToHitD20,
   setCombatRoundSelection,
   sortCombatRoundParticipantsByInitiative,
   validateCombatDeclarationTargets,
@@ -295,7 +298,48 @@ function formatSnapshotInitiativeRankLabel(rank?: CombatRoundInitiativeRank): st
 }
 
 function formatCombatAttackResultMainLine(result: CombatRoundAttackRollResult): string {
-  return `Main: ${result.weaponName} OB ${result.ob} - DB ${result.defenderDb} + roll ${result.roll} = ${result.lookupTotal}`;
+  const rollText = formatOpenEndedD20RollBreakdown({
+    dieResult: result.rollTotal,
+    openEndedD10s: result.openEndedD10s,
+    rollD20: result.rollD20,
+  });
+
+  return `Main: ${result.weaponName} OB ${result.ob} - DB ${result.defenderDb} + roll ${rollText} = ${result.lookupTotal}`;
+}
+
+function formatCombatDefenseResultMainLine(result: CombatRoundAttackRollResult): string {
+  const rollText = formatOpenEndedD20RollBreakdown({
+    dieResult: result.rollTotal,
+    openEndedD10s: result.openEndedD10s,
+    rollD20: result.rollD20,
+  });
+
+  return `Defense: DB ${result.defenderDb} vs ${result.weaponName} OB ${result.ob} + roll ${rollText} = ${result.lookupTotal}`;
+}
+
+function formatCombatAttackResultLine(input: {
+  participantId?: string;
+  result: CombatRoundAttackRollResult;
+}): string {
+  return input.participantId === input.result.defenderParticipantId
+    ? formatCombatDefenseResultMainLine(input.result)
+    : formatCombatAttackResultMainLine(input.result);
+}
+
+function getCombatAttackPhaseForStep(step: CombatRoundStep): CombatRoundPhase | undefined {
+  if (step === "phase_1_actions") {
+    return "phase1";
+  }
+
+  if (step === "phase_2_actions") {
+    return "phase2";
+  }
+
+  return undefined;
+}
+
+function formatCombatPhaseLabel(phase: CombatRoundPhase): string {
+  return phase === "phase1" ? "phase 1" : "phase 2";
 }
 
 function parseCombatInteger(value: string, label: string): number {
@@ -550,6 +594,7 @@ export default function CombatRoundManagerPanel({
   const inspectorCurrentStepIsInitiative =
     roundState.currentStep === "initiative_phase_1" ||
     roundState.currentStep === "initiative_phase_2";
+  const inspectorCurrentAttackPhase = getCombatAttackPhaseForStep(roundState.currentStep);
   const inspectorTargetValidationMessage =
     !inspectorCurrentStepIsInitiative && !inspectorTargetValidation.valid
       ? inspectorTargetValidation.message
@@ -674,37 +719,47 @@ export default function CombatRoundManagerPanel({
     : undefined;
   const inspectorDisplayInitiative =
     inspectorSnapshot?.initiativeResult ?? inspectorCurrentInitiative;
+  const inspectorAttackPhase = getCombatAttackPhaseForStep(inspector.step);
   const inspectorDisplayAttackResult =
     inspectorSnapshot?.attackResult ??
-    (inspector.step === "phase_1_actions"
-      ? inspector.participant?.attackResults.phase1
+    (inspector.participant && inspectorAttackPhase
+      ? getCombatRoundDisplayAttackResultForParticipantPhase({
+          participantId: inspector.participant.participantId,
+          phase: inspectorAttackPhase,
+          state: roundState,
+        })
       : undefined);
-  const inspectorPhase1Model = buildPlayerCombatPhasePanelModel({
-    actionId: inspectorDisplayDraft.actionId,
-    attackStats: inspectorPhaseLoadoutSummaries.phase1.attackStats,
-    defenseStats: null,
-    phaseCard: {
-      description: "",
-      phaseLabel: "Phase 1",
-      stats: [],
-      title: "",
-    },
-    phaseContext: inspectorDisplayDraft.phaseContexts.phase1,
-    phaseKey: "phase1",
-    secondaryActionId: inspectorDisplayDraft.secondaryActionId,
-  });
-  const inspectorNoPhase1Attack =
-    inspector.step === "phase_1_actions" &&
+  const inspectorAttackPhaseModel = inspectorAttackPhase
+    ? buildPlayerCombatPhasePanelModel({
+        actionId: inspectorDisplayDraft.actionId,
+        attackStats: inspectorPhaseLoadoutSummaries[inspectorAttackPhase].attackStats,
+        defenseStats: null,
+        phaseCard: {
+          description: "",
+          phaseLabel: inspectorAttackPhase === "phase1" ? "Phase 1" : "Phase 2",
+          stats: [],
+          title: "",
+        },
+        phaseContext: inspectorDisplayDraft.phaseContexts[inspectorAttackPhase],
+        phaseKey: inspectorAttackPhase,
+        secondaryActionId: inspectorDisplayDraft.secondaryActionId,
+      })
+    : undefined;
+  const inspectorNoPhaseAttack =
+    Boolean(inspectorAttackPhase) &&
     !inspectorDisplayAttackResult &&
-    !inspectorPhase1Model.showAttackStats;
+    !inspectorAttackPhaseModel?.showAttackStats;
   const inspectorActionResult = inspectorDisplayAttackResult
     ? {
-        interpretedResult: formatCombatAttackResultMainLine(inspectorDisplayAttackResult),
+        interpretedResult: formatCombatAttackResultLine({
+          participantId: inspector.participant?.participantId,
+          result: inspectorDisplayAttackResult,
+        }),
         resultLabel: `Result: ${inspectorDisplayAttackResult.tableResult}`,
       }
-    : inspectorNoPhase1Attack
+    : inspectorNoPhaseAttack
       ? {
-          interpretedResult: "No phase 1 attack.",
+          interpretedResult: `No ${formatCombatPhaseLabel(inspectorAttackPhase ?? "phase1")} attack.`,
         }
       : inspectorDisplayInitiative
         ? {
@@ -986,11 +1041,20 @@ export default function CombatRoundManagerPanel({
             })
           : undefined;
       const initiativeResult = phase ? roundParticipant.initiatives[phase] : undefined;
-      const attackResult = phase ? roundParticipant.attackResults[phase] : undefined;
+      const attackResult = phase
+        ? getCombatRoundDisplayAttackResultForParticipantPhase({
+            participantId: roundParticipant.participantId,
+            phase,
+            state: roundState,
+          })
+        : undefined;
 
       return {
         actionResultSummary: attackResult
-          ? `${formatCombatAttackResultMainLine(attackResult)}\nResult: ${attackResult.tableResult}`
+          ? `${formatCombatAttackResultLine({
+              participantId: roundParticipant.participantId,
+              result: attackResult,
+            })}\nResult: ${attackResult.tableResult}`
           : initiativeResult
             ? formatCombatInitiativeFormula(initiativeResult)
             : undefined,
@@ -1303,29 +1367,30 @@ export default function CombatRoundManagerPanel({
     }
   }
 
-  async function rollInspectorPhase1Attack() {
+  async function rollInspectorPhaseAttack(phase: CombatRoundPhase) {
     if (!selectedScenarioParticipant || !selectedEncounterParticipant) {
       return;
     }
 
-    const phaseContext = inspectorDraft.phaseContexts.phase1;
+    const phaseLabel = formatCombatPhaseLabel(phase);
+    const phaseContext = inspectorDraft.phaseContexts[phase];
     const phaseModel = buildPlayerCombatPhasePanelModel({
       actionId: inspectorDraft.actionId,
-      attackStats: inspectorPhaseLoadoutSummaries.phase1.attackStats,
+      attackStats: inspectorPhaseLoadoutSummaries[phase].attackStats,
       defenseStats: null,
       phaseCard: {
         description: "",
-        phaseLabel: "Phase 1",
+        phaseLabel: phase === "phase1" ? "Phase 1" : "Phase 2",
         stats: [],
         title: "",
       },
       phaseContext,
-      phaseKey: "phase1",
+      phaseKey: phase,
       secondaryActionId: inspectorDraft.secondaryActionId,
     });
 
     if (!phaseModel.showAttackStats || !phaseModel.attackStats) {
-      setSaveError("No phase 1 attack.");
+      setSaveError(`No ${phaseLabel} attack.`);
       return;
     }
 
@@ -1342,42 +1407,49 @@ export default function CombatRoundManagerPanel({
     );
 
     if (!targetScenarioParticipant || !targetEncounterParticipant) {
-      setSaveError("Select a target for phase 1 attack.");
+      setSaveError(`Select a target for ${phaseLabel} attack.`);
       return;
     }
 
     const targetPhaseSummary = buildScenarioParticipantPhaseSummary({
       declaration: targetRoundParticipant?.declaration,
-      phaseKey: "phase1",
+      phaseKey: phase,
       scenarioParticipant: targetScenarioParticipant,
     });
 
     if (!targetPhaseSummary.defenseStats) {
-      setSaveError("Target phase 1 DB is not available.");
+      setSaveError(`Target ${phaseLabel} DB is not available.`);
       return;
     }
 
     let attackResult: CombatRoundAttackRollResult;
 
     try {
-      const ob = parseCombatInteger(phaseModel.attackStats.ob, "Phase 1 OB");
-      const defenderDb = parseCombatInteger(targetPhaseSummary.defenseStats.db, "Target phase 1 DB");
-      const roll = rollClosedD20();
+      const ob = parseCombatInteger(phaseModel.attackStats.ob, `${phaseLabel} OB`);
+      const defenderDb = parseCombatInteger(
+        targetPhaseSummary.defenseStats.db,
+        `Target ${phaseLabel} DB`,
+      );
+      const roll = rollOpenEndedCombatToHitD20();
 
       attackResult = buildCombatRoundAttackRollResult({
-        actionId: inspectorDraft.actionId || "phase_1_attack",
+        actionId: inspectorDraft.actionId || `${phase}_attack`,
         attackerParticipantId: selectedEncounterParticipant.id,
         defenderDb,
         defenderParticipantId: targetEncounterParticipant.id,
         ob,
-        phase: "phase1",
-        roll,
+        openEndedD10s: roll.openEndedD10s,
+        phase,
+        rollD20: roll.rollD20,
+        rollTotal: roll.rollTotal,
         rolledAt: new Date().toISOString(),
         weaponName: phaseModel.attackStats.weaponName,
       });
     } catch (caughtError) {
       setSaveError(
-        caughtError instanceof Error ? caughtError.message : "Unable to resolve phase 1 attack.",
+        caughtError instanceof Error
+          ? caughtError.message
+          : `Unable to resolve ${phaseLabel} attack.`,
       );
       return;
     }
@@ -1397,7 +1469,9 @@ export default function CombatRoundManagerPanel({
       setSaveError(undefined);
     } catch (caughtError) {
       setSaveError(
-        caughtError instanceof Error ? caughtError.message : "Unable to save phase 1 attack result.",
+        caughtError instanceof Error
+          ? caughtError.message
+          : `Unable to save ${phaseLabel} attack result.`,
       );
     } finally {
       setSaving(false);
@@ -1812,13 +1886,13 @@ export default function CombatRoundManagerPanel({
                       saving ||
                       Boolean(inspectorTargetValidationMessage) ||
                       Boolean(inspectorSnapshot) ||
-                      (roundState.currentStep === "phase_1_actions" && inspectorNoPhase1Attack)
+                      (Boolean(inspectorCurrentAttackPhase) && inspectorNoPhaseAttack)
                     }
                     onDeclareAction={() =>
                       void (inspectorCurrentStepIsInitiative
                         ? rollInspectorInitiative()
-                        : roundState.currentStep === "phase_1_actions"
-                          ? rollInspectorPhase1Attack()
+                        : inspectorCurrentAttackPhase
+                          ? rollInspectorPhaseAttack(inspectorCurrentAttackPhase)
                         : saveInspectorDeclaration())
                     }
                     saving={saving}

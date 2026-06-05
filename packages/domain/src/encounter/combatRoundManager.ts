@@ -94,7 +94,8 @@ export const combatRoundPhaseContextsSchema = z.object({
   phase2: scenarioParticipantCombatContextSchema.optional(),
 });
 
-const combatRoundPhaseSchema = z.enum(["phase1", "phase2"]);
+export const combatRoundPhaseSchema = z.enum(["phase1", "phase2"]);
+export type CombatRoundPhase = z.infer<typeof combatRoundPhaseSchema>;
 
 export const combatRoundAttackRollResultSchema = z.object({
   actionId: idSchema,
@@ -107,12 +108,43 @@ export const combatRoundAttackRollResultSchema = z.object({
   lookupTotal: z.number().int(),
   marginOverMissThreshold: z.number().int(),
   ob: z.number().int(),
+  openEndedD10s: z.array(z.number().int().min(1).max(10)).default([]),
   phase: combatRoundPhaseSchema,
-  roll: z.number().int().min(1).max(20),
+  roll: z.number().int().min(1).max(20).optional(),
+  rollD20: z.number().int().min(1).max(20).optional(),
+  rollTotal: z.number().int().optional(),
   rolledAt: z.string().datetime(),
   rolledByUserId: idSchema.optional(),
   tableResult: z.string().min(1),
   weaponName: z.string().min(1),
+}).superRefine((result, context) => {
+  if (result.rollTotal === undefined && result.roll === undefined) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Combat attack result requires rollTotal or legacy roll.",
+      path: ["rollTotal"],
+    });
+  }
+  if (result.rollD20 === undefined && result.roll === undefined) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Combat attack result requires rollD20 or legacy roll.",
+      path: ["rollD20"],
+    });
+  }
+}).transform((result) => {
+  const rollTotal = result.rollTotal ?? result.roll;
+  const rollD20 = result.rollD20 ?? result.roll;
+
+  if (rollTotal === undefined || rollD20 === undefined) {
+    throw new RangeError("Combat attack result requires an open-ended roll breakdown.");
+  }
+
+  return {
+    ...result,
+    rollD20,
+    rollTotal,
+  };
 });
 
 export const combatRoundAttackResultsSchema = z.object({
@@ -379,16 +411,25 @@ export function buildCombatRoundAttackRollResult(input: {
   defenderDb: number;
   defenderParticipantId: string;
   ob: number;
-  phase: "phase1";
-  roll: number;
+  openEndedD10s?: number[];
+  phase: CombatRoundPhase;
+  roll?: number;
+  rollD20?: number;
+  rollTotal?: number;
   rolledAt: string;
   rolledByUserId?: string;
   weaponName: string;
 }): CombatRoundAttackRollResult {
+  const rollTotal = input.rollTotal ?? input.roll;
+
+  if (rollTotal === undefined) {
+    throw new RangeError("Combat attack result requires an open-ended roll total.");
+  }
+
   const toHit = resolveCombatToHit({
     db: input.defenderDb,
     ob: input.ob,
-    roll: input.roll,
+    rollTotal,
   });
 
   return combatRoundAttackRollResultSchema.parse({
@@ -402,13 +443,48 @@ export function buildCombatRoundAttackRollResult(input: {
     lookupTotal: toHit.lookupTotal,
     marginOverMissThreshold: toHit.lookupTotal - 10,
     ob: input.ob,
+    openEndedD10s: input.openEndedD10s ?? [],
     phase: input.phase,
     roll: input.roll,
+    rollD20: input.rollD20 ?? input.roll,
+    rollTotal,
     rolledAt: input.rolledAt,
     rolledByUserId: input.rolledByUserId,
     tableResult: toHit.resultLabel,
     weaponName: input.weaponName,
   });
+}
+
+export function getCombatRoundAttackResultsForParticipantPhase(input: {
+  participantId: string;
+  phase: CombatRoundPhase;
+  state: CombatRoundState;
+}): {
+  incoming: CombatRoundAttackRollResult[];
+  outgoing?: CombatRoundAttackRollResult;
+} {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const outgoing = normalized.participants.find(
+    (participant) => participant.participantId === input.participantId,
+  )?.attackResults[input.phase];
+  const incoming = normalized.participants
+    .map((participant) => participant.attackResults[input.phase])
+    .filter(
+      (result): result is CombatRoundAttackRollResult =>
+        result !== undefined && result.defenderParticipantId === input.participantId,
+    );
+
+  return { incoming, outgoing };
+}
+
+export function getCombatRoundDisplayAttackResultForParticipantPhase(input: {
+  participantId: string;
+  phase: CombatRoundPhase;
+  state: CombatRoundState;
+}): CombatRoundAttackRollResult | undefined {
+  const results = getCombatRoundAttackResultsForParticipantPhase(input);
+
+  return results.outgoing ?? results.incoming[0];
 }
 
 export function initializeCombatRoundState(input: {

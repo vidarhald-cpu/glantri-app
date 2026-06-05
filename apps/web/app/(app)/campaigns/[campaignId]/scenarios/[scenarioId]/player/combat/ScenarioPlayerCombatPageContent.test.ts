@@ -83,6 +83,12 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("tied with ${rank.tiedCount}");
     expect(source).toContain("selectedCurrentInitiative");
     expect(source).toContain("rankLabel: selectedCurrentInitiativeRankLabel");
+    expect(source).toContain("getCombatRoundDisplayAttackResultForParticipantPhase");
+    expect(source).toContain("selectedCurrentAttackResult");
+    expect(source).toContain("selectedCurrentAttackResultPanel");
+    expect(source).toContain("Defense: DB ${input.result.defenderDb}");
+    expect(source).toContain("Main: ${input.result.weaponName} OB");
+    expect(source).toContain("resultLabel: `Result: ${selectedCurrentAttackResult.tableResult}`");
     expect(source).toContain("declarationButtonLabel");
     expect(source).toContain("buttonLabel={declarationButtonLabel}");
     expect(source).toContain("window.setInterval");
