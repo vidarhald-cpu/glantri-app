@@ -142,6 +142,7 @@ interface PlayerCombatActionResultPanelProps {
   result?: {
     interpretedResult: string;
     rankLabel?: string;
+    resultLabel?: string;
   } | null;
 }
 
@@ -274,7 +275,7 @@ export function getGmCombatStepActionLabel(step: CombatRoundStep): string {
     case "initiative_phase_1":
       return "Roll phase 1 initiative";
     case "phase_1_actions":
-      return "Declare phase 1 action";
+      return "Roll phase 1 attack";
     case "review_phase_2_actions":
       return "Review phase 1 effects";
     case "review_phase_2_modifiers":
@@ -661,6 +662,7 @@ export function PlayerCombatActionResultPanel({ result }: PlayerCombatActionResu
           <>
             {result.rankLabel ? <div>{result.rankLabel}</div> : null}
             <div>{result.interpretedResult}</div>
+            {result.resultLabel ? <div>{result.resultLabel}</div> : null}
           </>
         ) : (
           "—"

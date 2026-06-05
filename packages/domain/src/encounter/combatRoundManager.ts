@@ -5,6 +5,7 @@ import {
   scenarioCombatModifierEntrySchema,
   scenarioParticipantCombatContextSchema,
 } from "../campaign/scenario";
+import { resolveCombatToHit } from "./toHitTable";
 import type { EncounterParticipant, EncounterSession } from "./session";
 
 const idSchema = z.string().min(1);
@@ -95,6 +96,30 @@ export const combatRoundPhaseContextsSchema = z.object({
 
 const combatRoundPhaseSchema = z.enum(["phase1", "phase2"]);
 
+export const combatRoundAttackRollResultSchema = z.object({
+  actionId: idSchema,
+  attackerParticipantId: idSchema,
+  defenderParticipantId: idSchema,
+  defenderDb: z.number().int(),
+  grazing: z.boolean(),
+  hit: z.boolean(),
+  kind: z.literal("attackRoll"),
+  lookupTotal: z.number().int(),
+  marginOverMissThreshold: z.number().int(),
+  ob: z.number().int(),
+  phase: combatRoundPhaseSchema,
+  roll: z.number().int().min(1).max(20),
+  rolledAt: z.string().datetime(),
+  rolledByUserId: idSchema.optional(),
+  tableResult: z.string().min(1),
+  weaponName: z.string().min(1),
+});
+
+export const combatRoundAttackResultsSchema = z.object({
+  phase1: combatRoundAttackRollResultSchema.optional(),
+  phase2: combatRoundAttackRollResultSchema.optional(),
+});
+
 export const combatRoundDeclarationSchema = z.object({
   actionId: idSchema.optional(),
   additionalActionNotes: z.string().optional(),
@@ -111,6 +136,7 @@ export const combatRoundDeclarationSchema = z.object({
 const combatRoundStepStatusesSchema = z.record(combatRoundStepSchema, combatRoundStepStatusSchema);
 
 export const combatRoundParticipantStateSchema = z.object({
+  attackResults: combatRoundAttackResultsSchema.default({}),
   declaration: combatRoundDeclarationSchema.optional(),
   initiatives: combatRoundInitiativesSchema.default({}),
   label: z.string().min(1),
@@ -122,6 +148,7 @@ export const combatRoundParticipantStateSchema = z.object({
 
 export const combatRoundStepSnapshotSchema = z.object({
   actionResultSummary: z.string().optional(),
+  attackResult: combatRoundAttackRollResultSchema.optional(),
   attackSummary: z
     .object({
       attackMode: z.string(),
@@ -199,6 +226,8 @@ export type CombatRoundDeclaration = z.infer<typeof combatRoundDeclarationSchema
 export type CombatRoundPhaseContexts = z.infer<typeof combatRoundPhaseContextsSchema>;
 export type CombatRoundInitiativeResult = z.infer<typeof combatRoundInitiativeResultSchema>;
 export type CombatRoundInitiatives = z.infer<typeof combatRoundInitiativesSchema>;
+export type CombatRoundAttackRollResult = z.infer<typeof combatRoundAttackRollResultSchema>;
+export type CombatRoundAttackResults = z.infer<typeof combatRoundAttackResultsSchema>;
 export type CombatRoundParticipantState = z.infer<typeof combatRoundParticipantStateSchema>;
 export type CombatRoundStepSnapshot = z.infer<typeof combatRoundStepSnapshotSchema>;
 export type CombatRoundState = z.infer<typeof combatRoundStateSchema>;
@@ -335,12 +364,51 @@ function participantStateFromEncounterParticipant(input: {
   participant: EncounterParticipant;
 }): CombatRoundParticipantState {
   return {
+    attackResults: input.existing?.attackResults ?? {},
     declaration: input.existing?.declaration,
     initiatives: input.existing?.initiatives ?? {},
     label: input.participant.label,
     participantId: input.participant.id,
     stepStatuses: mergeStepStatuses(input.existing?.stepStatuses),
   };
+}
+
+export function buildCombatRoundAttackRollResult(input: {
+  actionId: string;
+  attackerParticipantId: string;
+  defenderDb: number;
+  defenderParticipantId: string;
+  ob: number;
+  phase: "phase1";
+  roll: number;
+  rolledAt: string;
+  rolledByUserId?: string;
+  weaponName: string;
+}): CombatRoundAttackRollResult {
+  const toHit = resolveCombatToHit({
+    db: input.defenderDb,
+    ob: input.ob,
+    roll: input.roll,
+  });
+
+  return combatRoundAttackRollResultSchema.parse({
+    actionId: input.actionId,
+    attackerParticipantId: input.attackerParticipantId,
+    defenderDb: input.defenderDb,
+    defenderParticipantId: input.defenderParticipantId,
+    grazing: toHit.grazing,
+    hit: toHit.hit,
+    kind: "attackRoll",
+    lookupTotal: toHit.lookupTotal,
+    marginOverMissThreshold: toHit.lookupTotal - 10,
+    ob: input.ob,
+    phase: input.phase,
+    roll: input.roll,
+    rolledAt: input.rolledAt,
+    rolledByUserId: input.rolledByUserId,
+    tableResult: toHit.resultLabel,
+    weaponName: input.weaponName,
+  });
 }
 
 export function initializeCombatRoundState(input: {
@@ -581,6 +649,37 @@ export function recordCombatRoundInitiative(input: {
   });
 }
 
+export function recordCombatRoundAttackResult(input: {
+  participantId: string;
+  result: CombatRoundAttackRollResult;
+  state: CombatRoundState;
+  submittedBy: "gm" | "player";
+}): CombatRoundState {
+  const attackStep = input.result.phase === "phase1" ? "phase_1_actions" : "phase_2_actions";
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const withResult: CombatRoundState = {
+    ...normalized,
+    participants: normalized.participants.map((participant) =>
+      participant.participantId === input.participantId
+        ? {
+            ...participant,
+            attackResults: {
+              ...participant.attackResults,
+              [input.result.phase]: input.result,
+            },
+          }
+        : participant,
+    ),
+  };
+
+  return setCombatRoundParticipantStepStatus({
+    participantId: input.participantId,
+    state: withResult,
+    status: input.submittedBy === "gm" ? "gmEdited" : "submitted",
+    step: attackStep,
+  });
+}
+
 export function recordCombatRoundParticipantStepReview(input: {
   participantId: string;
   state: CombatRoundState;
@@ -604,7 +703,16 @@ export function clearCombatRoundStep(input: {
   return {
     ...normalized,
     participants: normalized.participants.map((participant) => {
+      const nextAttackResults = { ...participant.attackResults };
       const nextInitiatives = { ...participant.initiatives };
+
+      if (input.step === "phase_1_actions") {
+        delete nextAttackResults.phase1;
+      }
+
+      if (input.step === "phase_2_actions") {
+        delete nextAttackResults.phase2;
+      }
 
       if (input.step === "initiative_phase_1") {
         delete nextInitiatives.phase1;
@@ -616,6 +724,7 @@ export function clearCombatRoundStep(input: {
 
       return {
         ...participant,
+        attackResults: nextAttackResults,
         declaration: input.step === "select_actions" ? undefined : participant.declaration,
         initiatives: nextInitiatives,
         stepStatuses: {

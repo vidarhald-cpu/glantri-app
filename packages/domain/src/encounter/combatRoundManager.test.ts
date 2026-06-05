@@ -6,6 +6,7 @@ import {
   COMBAT_ROUND_STEP_ABBREVIATIONS,
   COMBAT_ROUND_STEPS,
   advanceCombatRoundStep,
+  buildCombatRoundAttackRollResult,
   buildCombatRoundInspector,
   buildCombatRoundInitiativeResult,
   canPlayerSubmitCombatDeclaration,
@@ -20,6 +21,7 @@ import {
   getPreviousCombatRoundStep,
   initializeCombatRoundState,
   recordCombatRoundDeclaration,
+  recordCombatRoundAttackResult,
   recordCombatRoundInitiative,
   recordCombatRoundParticipantStepReview,
   rollOpenEndedD6,
@@ -551,6 +553,182 @@ describe("combat round manager", () => {
         state: nextState,
       }),
     ).toBe(false);
+  });
+
+  it("builds a P1 attack result from the canonical to-hit table", () => {
+    expect(
+      buildCombatRoundAttackRollResult({
+        actionId: "attack_parry",
+        attackerParticipantId: "gladiator",
+        defenderDb: 11,
+        defenderParticipantId: "guard",
+        ob: 9,
+        phase: "phase1",
+        roll: 18,
+        rolledAt: "2026-01-01T00:03:00.000Z",
+        rolledByUserId: "gm-1",
+        weaponName: "Broad sword",
+      }),
+    ).toEqual({
+      actionId: "attack_parry",
+      attackerParticipantId: "gladiator",
+      defenderDb: 11,
+      defenderParticipantId: "guard",
+      grazing: false,
+      hit: true,
+      kind: "attackRoll",
+      lookupTotal: 16,
+      marginOverMissThreshold: 6,
+      ob: 9,
+      phase: "phase1",
+      roll: 18,
+      rolledAt: "2026-01-01T00:03:00.000Z",
+      rolledByUserId: "gm-1",
+      tableResult: "Hit",
+      weaponName: "Broad sword",
+    });
+  });
+
+  it("records P1 attack results and marks P1 submitted", () => {
+    const state = advanceCombatRoundStep(
+      advanceCombatRoundStep(
+        advanceCombatRoundStep(initializeCombatRoundState({ encounter: encounter() })),
+      ),
+    );
+    const result = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackerParticipantId: "gladiator",
+      defenderDb: 10,
+      defenderParticipantId: "guard",
+      ob: 10,
+      phase: "phase1",
+      roll: 11,
+      rolledAt: "2026-01-01T00:03:00.000Z",
+      weaponName: "Broad sword",
+    });
+    const nextState = recordCombatRoundAttackResult({
+      participantId: "gladiator",
+      result,
+      state,
+      submittedBy: "gm",
+    });
+
+    expect(state.currentStep).toBe("phase_1_actions");
+    expect(nextState.participants[0]?.attackResults.phase1).toMatchObject({
+      grazing: true,
+      hit: true,
+      lookupTotal: 11,
+      tableResult: "Grazing hit",
+    });
+    expect(nextState.participants[0]?.stepStatuses.phase_1_actions).toBe("gmEdited");
+  });
+
+  it("committed P1 snapshots can include an attack result", () => {
+    const state = advanceCombatRoundStep(
+      advanceCombatRoundStep(
+        advanceCombatRoundStep(initializeCombatRoundState({ encounter: encounter() })),
+      ),
+    );
+    const result = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackerParticipantId: "gladiator",
+      defenderDb: 10,
+      defenderParticipantId: "guard",
+      ob: 10,
+      phase: "phase1",
+      roll: 10,
+      rolledAt: "2026-01-01T00:03:00.000Z",
+      weaponName: "Broad sword",
+    });
+    const advanced = advanceCombatRoundStep(state, {
+      stepSnapshots: [
+        stepSnapshot({
+          actionResultSummary: "Main: Broad sword OB 10 - DB 10 + roll 10 = 10\nResult: Miss",
+          attackResult: result,
+          participantId: "gladiator",
+          phase: "phase1",
+          step: "phase_1_actions",
+        }),
+      ],
+    });
+
+    expect(
+      getCombatRoundStepSnapshot({
+        participantId: "gladiator",
+        state: advanced,
+        step: "phase_1_actions",
+      }),
+    ).toMatchObject({
+      attackResult: {
+        hit: false,
+        lookupTotal: 10,
+        tableResult: "Miss",
+      },
+      participantId: "gladiator",
+      phase: "phase1",
+      step: "phase_1_actions",
+    });
+  });
+
+  it("clears P1 attack result, snapshot, and status without clearing declaration", () => {
+    const state = advanceCombatRoundStep(
+      advanceCombatRoundStep(
+        advanceCombatRoundStep(
+          recordCombatRoundDeclaration({
+            declaration: {
+              actionId: "attack_parry",
+              movementId: "hold",
+              roundNumber: 3,
+            },
+            participantId: "gladiator",
+            state: initializeCombatRoundState({ encounter: encounter() }),
+            submittedBy: "player",
+          }),
+        ),
+      ),
+    );
+    const result = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackerParticipantId: "gladiator",
+      defenderDb: 10,
+      defenderParticipantId: "guard",
+      ob: 10,
+      phase: "phase1",
+      roll: 10,
+      rolledAt: "2026-01-01T00:03:00.000Z",
+      weaponName: "Broad sword",
+    });
+    const withResult = recordCombatRoundAttackResult({
+      participantId: "gladiator",
+      result,
+      state,
+      submittedBy: "gm",
+    });
+    const withSnapshot = advanceCombatRoundStep(withResult, {
+      stepSnapshots: [
+        stepSnapshot({
+          attackResult: result,
+          participantId: "gladiator",
+          phase: "phase1",
+          step: "phase_1_actions",
+        }),
+      ],
+    });
+    const cleared = clearCombatRoundStep({
+      state: withSnapshot,
+      step: "phase_1_actions",
+    });
+
+    expect(cleared.participants[0]?.attackResults.phase1).toBeUndefined();
+    expect(cleared.participants[0]?.declaration).toMatchObject({ actionId: "attack_parry" });
+    expect(cleared.participants[0]?.stepStatuses.phase_1_actions).toBe("pending");
+    expect(
+      getCombatRoundStepSnapshot({
+        participantId: "gladiator",
+        state: cleared,
+        step: "phase_1_actions",
+      }),
+    ).toBeUndefined();
   });
 
   it("rolls open-ended d6 initiative", () => {

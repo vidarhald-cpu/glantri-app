@@ -119,9 +119,17 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("statusText={`Current step: ${getPlayerCombatStepLabel(");
     expect(source).toContain("rollInspectorInitiative");
     expect(source).toContain("rollCombatInitiativeOnServer");
+    expect(source).toContain("rollInspectorPhase1Attack");
+    expect(source).toContain("rollClosedD20");
+    expect(source).toContain("buildCombatRoundAttackRollResult");
+    expect(source).toContain("recordCombatRoundAttackResult");
     expect(source).toContain("getCombatRoundInitiativeRanks");
     expect(source).toContain("getCombatRoundInitiativeTotal");
     expect(source).toContain("formatCombatInitiativeFormula");
+    expect(source).toContain("formatCombatAttackResultMainLine");
+    expect(source).toContain("Result: ${inspectorDisplayAttackResult.tableResult}");
+    expect(source).toContain("No phase 1 attack.");
+    expect(source).toContain('roundState.currentStep === "phase_1_actions"');
     expect(source).not.toContain("phaseLabel: formatCombatInitiativeRoll");
     expect(source).toContain("formatInitiativeRankLabel");
     expect(source).toContain("rankLabel");
@@ -164,6 +172,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("updateEncounterOnServer");
     expect(source).toContain("buildCombatRoundStepSnapshots");
     expect(source).toContain("advanceCombatRoundStep(roundState, { stepSnapshots })");
+    expect(source).toContain("attackResult");
     expect(source).toContain("combatRoundState: nextRoundState");
     expect(source).toContain("currentRound: nextRoundState.roundNumber");
     expect(source).toContain("submitCombatDeclarationOnServer");

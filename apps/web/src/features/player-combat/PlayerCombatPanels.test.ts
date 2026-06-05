@@ -259,7 +259,7 @@ describe("PlayerCombatPanels", () => {
     expect(source).not.toContain("Set/Roll");
     expect(source).toContain("Roll phase 1 initiative");
     expect(source).toContain("Roll phase 2 initiative");
-    expect(source).toContain("Declare phase 1 action");
+    expect(source).toContain("Roll phase 1 attack");
     expect(source).toContain("Declare phase 2 action");
     expect(source).toContain("Declare phase 2 modifiers");
     expect(source).toContain('textAlign: "center"');
@@ -272,8 +272,12 @@ describe("PlayerCombatPanels", () => {
       "Main: I ${baseInitiative} + [Gen/Fatigue + Initiative] ${modifierAdjustment} + roll ${rollTotal} = ${initiative.total}",
     );
     expect(source).toContain("rankLabel");
+    expect(source).toContain("resultLabel");
     expect(source.indexOf("result.rankLabel")).toBeLessThan(
       source.indexOf("result.interpretedResult"),
+    );
+    expect(source.indexOf("result.interpretedResult")).toBeLessThan(
+      source.indexOf("result.resultLabel"),
     );
     expect(source).toContain('background: "#f6f5ef"');
     expect(source).toContain('boxSizing: "border-box"');

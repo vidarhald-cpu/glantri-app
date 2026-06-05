@@ -4,6 +4,7 @@ import {
   COMBAT_TO_HIT_RULE_TABLE,
   calculateToHitLookupTotal,
   lookupCombatToHitResult,
+  rollClosedD20,
   resolveCombatToHit,
 } from "./toHitTable";
 
@@ -55,6 +56,12 @@ describe("combat to-hit table helpers", () => {
   it("rejects rolls outside a closed 1d20", () => {
     expect(() => resolveCombatToHit({ db: 0, ob: 0, roll: 0 })).toThrow(RangeError);
     expect(() => resolveCombatToHit({ db: 0, ob: 0, roll: 21 })).toThrow(RangeError);
+  });
+
+  it("rolls a closed d20", () => {
+    expect(rollClosedD20({ randomFn: () => 0 })).toBe(1);
+    expect(rollClosedD20({ randomFn: () => 0.5 })).toBe(11);
+    expect(rollClosedD20({ randomFn: () => 0.999 })).toBe(20);
   });
 
   it("does not let duplicate 17/18 damage rows affect hit classification", () => {

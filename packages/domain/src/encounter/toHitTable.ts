@@ -98,6 +98,16 @@ export function assertCombatToHitRoll(roll: number): void {
   }
 }
 
+export function rollClosedD20(
+  input: {
+    randomFn?: () => number;
+  } = {},
+): number {
+  const randomFn = input.randomFn ?? Math.random;
+
+  return Math.min(20, Math.max(1, Math.floor(randomFn() * 20) + 1));
+}
+
 function rowMatchesLookupTotal(row: CombatToHitRuleTableRow, lookupTotal: number): boolean {
   if (row.lookupTotal !== undefined) {
     return lookupTotal === row.lookupTotal;
