@@ -161,6 +161,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("inspectorIsCursorParticipant");
     expect(source).toContain("inspectorCurrentPhaseHasAttack");
     expect(source).toContain("inspectorCanRollPhaseAttack");
+    expect(source).toContain("inspectorSelectedAttackAlreadyRolled");
     expect(source).toContain("inspectorCanRollParry");
     expect(source).toContain("inspectorResolutionStepKind === \"parry\"");
     expect(source).toContain("inspectorPhaseResolutionOwnerParticipantId");
@@ -168,6 +169,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("Main hand");
     expect(source).toContain("Off hand");
     expect(source).toContain("Roll parry");
+    expect(source).toContain('"Attack already rolled"');
     expect(source).toContain("inspectorActionButtonLabel");
     expect(source).toContain("advanceInspectorPhaseResolutionSubstep");
     expect(source).toContain("Current actor:");
@@ -225,6 +227,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("Use inspector for phase resolution");
     expect(source).toContain("isSequentialResolutionStep(roundState.currentStep)");
     expect(source).toContain("disabled={saving || isSequentialResolutionStep(roundState.currentStep)}");
+    expect(source).toContain("inspectorSelectedAttackAlreadyRolled ||");
     expect(source).toContain("Select a participant step to inspect combat details.");
     expect(source).toContain("Previous participant");
     expect(source).toContain("Next participant");
@@ -245,5 +248,22 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("submitCombatDeclarationOnServer");
     expect(source).toContain("clearCurrentCombatRoundStepOnServer");
     expect(source).not.toContain("actionLog:");
+  });
+
+  it("guards recorded attack results against accidental re-rolls", () => {
+    const source = readSource();
+
+    expect(source).toContain("const inspectorSelectedAttackAlreadyRolled = Boolean(");
+    expect(source).toContain(
+      "inspectorSelectedAttackAlreadyRolled\n      ? \"Attack already rolled\"",
+    );
+    expect(source).toContain(
+      "const existingAttackResult = getCombatRoundOutgoingAttackResultForParticipantPhase({",
+    );
+    expect(source).toContain(
+      "Clear ${phase === \"phase1\" ? \"A1\" : \"A2\"} before rolling again.",
+    );
+    expect(source).toContain("if (existingAttackResult) {");
+    expect(source).toContain("return;");
   });
 });

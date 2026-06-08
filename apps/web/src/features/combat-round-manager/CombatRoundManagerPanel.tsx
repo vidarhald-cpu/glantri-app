@@ -1326,6 +1326,9 @@ export default function CombatRoundManagerPanel({
     Boolean(inspectorAttackPhase) &&
     !inspectorDisplayAttackResult &&
     inspectorCurrentPhaseHasAttack === false;
+  const inspectorSelectedAttackAlreadyRolled = Boolean(
+    inspectorAttackPhase && inspectorDisplayAttackResult,
+  );
   const inspectorCanRollPhaseAttack =
     Boolean(inspectorCurrentAttackPhase) &&
     inspectorCurrentPhaseHasAttack === true &&
@@ -1374,7 +1377,9 @@ export default function CombatRoundManagerPanel({
       )?.label
     : undefined;
   const inspectorActionButtonLabel =
-    inspectorCanRollParry
+    inspectorSelectedAttackAlreadyRolled
+      ? "Attack already rolled"
+      : inspectorCanRollParry
       ? "Roll parry"
       : inspectorCurrentResolutionPhase && inspectorActionPhaseHasAttack === false
       ? `Complete ${formatCombatPhaseLabel(inspectorCurrentResolutionPhase)} for participant`
@@ -2166,6 +2171,19 @@ export default function CombatRoundManagerPanel({
       return;
     }
 
+    const existingAttackResult = getCombatRoundOutgoingAttackResultForParticipantPhase({
+      participantId: selectedEncounterParticipant.id,
+      phase,
+      state: roundState,
+    });
+
+    if (existingAttackResult) {
+      setSaveError(
+        `Attack already rolled. Clear ${phase === "phase1" ? "A1" : "A2"} before rolling again.`,
+      );
+      return;
+    }
+
     const phaseLabel = formatCombatPhaseLabel(phase);
     const phaseContext = inspectorDraft.phaseContexts[phase];
     const phaseModel = buildPlayerCombatPhasePanelModel({
@@ -2909,6 +2927,7 @@ export default function CombatRoundManagerPanel({
                       disabled={
                         saving ||
                         Boolean(inspectorTargetValidationMessage) ||
+                        inspectorSelectedAttackAlreadyRolled ||
                         Boolean(inspectorSnapshot)
                       }
                       onDeclareAction={() =>
