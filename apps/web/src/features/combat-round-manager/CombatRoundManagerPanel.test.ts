@@ -215,8 +215,13 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("secondaryActionId: inspectorDisplayDraft.secondaryActionId");
     expect(source).not.toContain("inspectorOpponentOptions");
     expect(source).not.toContain("moveSelectedParticipantDown");
-    expect(source).toContain("selectNextParticipantDown");
-    expect(source).toContain("fromParticipantId: selectedEncounterParticipant.id");
+    expect(source).toContain("const actedParticipantId = selectedEncounterParticipant.id");
+    expect(source).toContain("fromParticipantId: actedParticipantId");
+    expect(source).toContain("pendingSelectionRef");
+    expect(source).toContain("manualSelectionRef");
+    expect(source).toContain("normalizeCombatRoundManagerSelection");
+    expect(source).toContain("getNextCombatRoundParticipantSelection");
+    expect(source).toContain("step: actedStep");
     expect(source).toContain("Use inspector for phase resolution");
     expect(source).toContain("isSequentialResolutionStep(roundState.currentStep)");
     expect(source).toContain("disabled={saving || isSequentialResolutionStep(roundState.currentStep)}");

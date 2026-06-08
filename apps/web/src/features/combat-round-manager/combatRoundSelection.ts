@@ -1,0 +1,144 @@
+import type { CombatRoundState, CombatRoundStep } from "@glantri/domain";
+import { setCombatRoundSelection, sortCombatRoundParticipantsByInitiative } from "@glantri/domain";
+
+export interface CombatRoundSelectionTarget {
+  participantId?: string;
+  step: CombatRoundStep;
+}
+
+export function isGlobalCombatRoundParticipantStep(step: CombatRoundStep): boolean {
+  return (
+    step === "select_actions" ||
+    step === "review_action_modifiers" ||
+    step === "initiative_phase_1" ||
+    step === "review_phase_2_modifiers" ||
+    step === "initiative_phase_2"
+  );
+}
+
+function getInitiativeSortPhase(step: CombatRoundStep): "phase1" | "phase2" | undefined {
+  if (step === "phase_1_actions" || step === "review_phase_2_actions") {
+    return "phase1";
+  }
+
+  if (step === "phase_2_actions" || step === "review_phase_2_damage") {
+    return "phase2";
+  }
+
+  return undefined;
+}
+
+export function getCombatRoundManagerDisplayParticipantIds(
+  state: CombatRoundState,
+): string[] {
+  const phase = getInitiativeSortPhase(state.currentStep);
+
+  if (!phase) {
+    return state.participants.map((participant) => participant.participantId);
+  }
+
+  const hasInitiative = state.participants.some(
+    (participant) => participant.initiatives[phase] !== undefined,
+  );
+
+  return (hasInitiative
+    ? sortCombatRoundParticipantsByInitiative({ phase, state })
+    : state.participants
+  ).map((participant) => participant.participantId);
+}
+
+export function getNextCombatRoundParticipantSelection(input: {
+  fromParticipantId?: string;
+  participantIds: string[];
+  step: CombatRoundStep;
+}): CombatRoundSelectionTarget {
+  const participantIndex = input.participantIds.indexOf(input.fromParticipantId ?? "");
+
+  if (participantIndex < 0 || participantIndex >= input.participantIds.length - 1) {
+    return {
+      participantId: input.fromParticipantId,
+      step: input.step,
+    };
+  }
+
+  return {
+    participantId: input.participantIds[participantIndex + 1],
+    step: input.step,
+  };
+}
+
+export function applyCombatRoundSelectionTarget(input: {
+  selection: CombatRoundSelectionTarget;
+  state: CombatRoundState;
+}): CombatRoundState {
+  if (!input.selection.participantId) {
+    return {
+      ...input.state,
+      selectedParticipantId: undefined,
+      selectedStep: input.selection.step,
+    };
+  }
+
+  return setCombatRoundSelection({
+    participantId: input.selection.participantId,
+    state: input.state,
+    step: input.selection.step,
+  });
+}
+
+function isValidSelection(input: {
+  participantIds: string[];
+  selection?: CombatRoundSelectionTarget;
+  step: CombatRoundStep;
+}): boolean {
+  return Boolean(
+    input.selection?.participantId &&
+      input.selection.step === input.step &&
+      input.participantIds.includes(input.selection.participantId),
+  );
+}
+
+export function normalizeCombatRoundManagerSelection(input: {
+  manualSelection?: CombatRoundSelectionTarget;
+  pendingSelection?: CombatRoundSelectionTarget;
+  state: CombatRoundState;
+}): CombatRoundState {
+  if (!isGlobalCombatRoundParticipantStep(input.state.currentStep)) {
+    return input.state;
+  }
+
+  const participantIds = getCombatRoundManagerDisplayParticipantIds(input.state);
+  const pendingSelection = input.pendingSelection;
+  const manualSelection = input.manualSelection;
+  let selection: CombatRoundSelectionTarget;
+
+  if (
+    pendingSelection &&
+    isValidSelection({
+      participantIds,
+      selection: pendingSelection,
+      step: input.state.currentStep,
+    })
+  ) {
+    selection = pendingSelection;
+  } else if (
+    manualSelection &&
+    isValidSelection({
+      participantIds,
+      selection: manualSelection,
+      step: input.state.currentStep,
+    })
+  ) {
+    selection = manualSelection;
+  } else {
+    selection = {
+      participantId: participantIds[0],
+      step: input.state.currentStep,
+    };
+  }
+
+  return applyCombatRoundSelectionTarget({
+    selection,
+    state: input.state,
+  });
+}

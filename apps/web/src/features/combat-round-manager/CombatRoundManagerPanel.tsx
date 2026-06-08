@@ -111,6 +111,13 @@ import {
   type PlayerEncounterMovementId,
 } from "@/lib/campaigns/playerEncounter";
 import { loadCanonicalContent } from "@/lib/content/loadCanonicalContent";
+import {
+  applyCombatRoundSelectionTarget,
+  getNextCombatRoundParticipantSelection,
+  isGlobalCombatRoundParticipantStep,
+  normalizeCombatRoundManagerSelection,
+  type CombatRoundSelectionTarget,
+} from "./combatRoundSelection";
 
 interface CombatRoundManagerPanelProps {
   encounter: EncounterSession;
@@ -923,8 +930,10 @@ export default function CombatRoundManagerPanel({
           serverRecord: ServerCharacterRecord;
         }
       >
-    >({});
+  >({});
   const tableContainerRef = useRef<HTMLDivElement>(null);
+  const manualSelectionRef = useRef<CombatRoundSelectionTarget | undefined>(undefined);
+  const pendingSelectionRef = useRef<CombatRoundSelectionTarget | undefined>(undefined);
   const selectedRoundNumber = roundState.roundNumber;
   const effectiveScenarioParticipants = useMemo(
     () =>
@@ -1475,7 +1484,29 @@ export default function CombatRoundManagerPanel({
     liveModifiers: inspectorLiveModifiers,
   });
   useEffect(() => {
-    setRoundState(initialRoundState);
+    const pendingSelection = pendingSelectionRef.current;
+    const manualSelection = manualSelectionRef.current;
+    const nextRoundState = normalizeCombatRoundManagerSelection({
+      manualSelection,
+      pendingSelection,
+      state: initialRoundState,
+    });
+
+    if (pendingSelection) {
+      pendingSelectionRef.current = undefined;
+    }
+
+    if (
+      manualSelection &&
+      (manualSelection.step !== nextRoundState.currentStep ||
+        !nextRoundState.participants.some(
+          (participant) => participant.participantId === manualSelection.participantId,
+        ))
+    ) {
+      manualSelectionRef.current = undefined;
+    }
+
+    setRoundState(nextRoundState);
   }, [initialRoundState]);
 
   useEffect(() => {
@@ -1560,30 +1591,6 @@ export default function CombatRoundManagerPanel({
     tableContainerRef.current?.scrollIntoView({ block: "start", behavior: "smooth" });
     tableContainerRef.current?.focus({ preventScroll: true });
     tableContainerRef.current?.scrollTo({ left: 0, top: 0 });
-  }
-
-  function selectNextParticipantDown(input: {
-    fromParticipantId?: string;
-    state: typeof roundState;
-    step?: CombatRoundStep;
-  }): typeof roundState {
-    const participantIndex = displayParticipants.findIndex(
-      (participant) => participant.participantId === input.fromParticipantId,
-    );
-
-    if (participantIndex < 0 || participantIndex >= displayParticipants.length - 1) {
-      return setCombatRoundSelection({
-        participantId: input.fromParticipantId,
-        state: input.state,
-        step: input.step,
-      });
-    }
-
-    return setCombatRoundSelection({
-      participantId: displayParticipants[participantIndex + 1]?.participantId,
-      state: input.state,
-      step: input.step,
-    });
   }
 
   function buildScenarioParticipantPhaseSummary(input: {
@@ -1895,6 +1902,10 @@ export default function CombatRoundManagerPanel({
   }
 
   function selectInspector(participantId: string, step: CombatRoundStep) {
+    manualSelectionRef.current = {
+      participantId,
+      step,
+    };
     setRoundState((current) =>
       setCombatRoundSelection({
         participantId,
@@ -1927,6 +1938,11 @@ export default function CombatRoundManagerPanel({
             COMBAT_ROUND_STEPS.length - 1,
           )
         ];
+
+      manualSelectionRef.current = {
+        participantId: nextParticipant?.participantId,
+        step: nextStep,
+      };
 
       return setCombatRoundSelection({
         participantId: nextParticipant?.participantId,
@@ -2046,6 +2062,11 @@ export default function CombatRoundManagerPanel({
     setSaving(true);
 
     try {
+      const actedParticipantId = selectedEncounterParticipant.id;
+      const actedStep = roundState.currentStep;
+      const displayedParticipantIds = displayParticipants.map(
+        (participant) => participant.participantId,
+      );
       const { encounter: nextEncounter, participant } = await submitCombatDeclarationOnServer({
         actionId: inspectorDraft.actionId || undefined,
         additionalActionNotes: inspectorDraft.additionalActionNotes,
@@ -2057,16 +2078,27 @@ export default function CombatRoundManagerPanel({
         secondaryActionId: inspectorDraft.secondaryActionId || undefined,
       });
       const nextRoundState = initializeCombatRoundState({ encounter: nextEncounter });
-      const nextSelectedRoundState = selectNextParticipantDown({
-        fromParticipantId: selectedEncounterParticipant.id,
+      const nextSelection = isGlobalCombatRoundParticipantStep(actedStep)
+        ? getNextCombatRoundParticipantSelection({
+            fromParticipantId: actedParticipantId,
+            participantIds: displayedParticipantIds,
+            step: actedStep,
+          })
+        : {
+            participantId: actedParticipantId,
+            step: roundState.selectedStep ?? actedStep,
+          };
+      const nextSelectedRoundState = applyCombatRoundSelectionTarget({
+        selection: nextSelection,
         state: nextRoundState,
-        step: roundState.selectedStep ?? roundState.currentStep,
       });
 
       setScenarioParticipantOverrides((current) => ({
         ...current,
         [participant.id]: participant,
       }));
+      pendingSelectionRef.current = nextSelection;
+      manualSelectionRef.current = nextSelection;
       setRoundState(nextSelectedRoundState);
       onEncounterUpdated?.(nextEncounter);
       onScenarioParticipantsUpdated?.([participant]);
@@ -2088,6 +2120,11 @@ export default function CombatRoundManagerPanel({
     setSaving(true);
 
     try {
+      const actedParticipantId = selectedEncounterParticipant.id;
+      const actedStep = roundState.currentStep;
+      const displayedParticipantIds = displayParticipants.map(
+        (participant) => participant.participantId,
+      );
       const { encounter: nextEncounter } = await rollCombatInitiativeOnServer({
         encounterId: encounter.id,
         initiativeBase: inspectorInitiativeCalculation.baseInitiative,
@@ -2095,12 +2132,23 @@ export default function CombatRoundManagerPanel({
         scenarioParticipantId: selectedScenarioParticipant.id,
       });
       const nextRoundState = initializeCombatRoundState({ encounter: nextEncounter });
-      const nextSelectedRoundState = selectNextParticipantDown({
-        fromParticipantId: selectedEncounterParticipant.id,
+      const nextSelection = isGlobalCombatRoundParticipantStep(actedStep)
+        ? getNextCombatRoundParticipantSelection({
+            fromParticipantId: actedParticipantId,
+            participantIds: displayedParticipantIds,
+            step: actedStep,
+          })
+        : {
+            participantId: actedParticipantId,
+            step: roundState.selectedStep ?? actedStep,
+          };
+      const nextSelectedRoundState = applyCombatRoundSelectionTarget({
+        selection: nextSelection,
         state: nextRoundState,
-        step: roundState.selectedStep ?? roundState.currentStep,
       });
 
+      pendingSelectionRef.current = nextSelection;
+      manualSelectionRef.current = nextSelection;
       setRoundState(nextSelectedRoundState);
       onEncounterUpdated?.(nextEncounter);
       setSaveError(undefined);
