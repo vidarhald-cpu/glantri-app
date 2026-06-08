@@ -3058,6 +3058,199 @@ describe("scenarios route contract", () => {
     expect(updatedEncounter.combatRoundState.participants[0].initiatives.phase1).toBeUndefined();
   });
 
+  it("falls back from an empty selected A1 cell to the latest i1 command undo", async () => {
+    const encounterParticipants = [
+      makeCombatEncounter().participants[0],
+      {
+        ...makeCombatEncounter().participants[0],
+        id: "encounter-participant-2",
+        label: "City guard",
+        scenarioParticipantId: "participant-2",
+      },
+    ];
+    const combatEncounter = makeCombatEncounter({
+      participants: encounterParticipants,
+    }) as EncounterSession;
+    const initiativeState = {
+      ...initializeCombatRoundState({ encounter: combatEncounter }),
+      currentStep: "initiative_phase_1" as const,
+      selectedParticipantId: "encounter-participant-1",
+      selectedStep: "initiative_phase_1" as const,
+    };
+    const afterTopRoll = recordCombatRoundInitiative({
+      command: {
+        createdAt: "2026-01-01T00:01:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      initiative: 14,
+      participantId: "encounter-participant-1",
+      phase: "phase1",
+      state: initiativeState,
+      submittedBy: "gm",
+    });
+    const afterGuardRoll = recordCombatRoundInitiative({
+      command: {
+        createdAt: "2026-01-01T00:02:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      initiative: 12,
+      participantId: "encounter-participant-2",
+      phase: "phase1",
+      state: afterTopRoll,
+      submittedBy: "gm",
+    });
+    setupCombatDeclarationRoute({
+      encounter: {
+        combatRoundState: {
+          ...afterGuardRoll,
+          currentStep: "phase_1_actions",
+          selectedParticipantId: "encounter-participant-2",
+          selectedStep: "phase_1_actions",
+        },
+        participants: encounterParticipants,
+      },
+      user: mocks.adminUser,
+    });
+    mocks.scenarioService.listScenarioParticipants.mockResolvedValue([
+      makeCombatScenarioParticipant({ id: "participant-1" }),
+      makeCombatScenarioParticipant({ id: "participant-2" }),
+    ]);
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      body: {
+        participantId: "encounter-participant-2",
+        step: "phase_1_actions",
+      },
+      method: "POST",
+      url: "/encounters/encounter-1/combat-round/clear-current-step",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
+    expect(updatedEncounter.combatRoundState.commands).toHaveLength(1);
+    expect(updatedEncounter.combatRoundState.commands[0]).toMatchObject({
+      participantId: "encounter-participant-1",
+      type: "roll_initiative_phase1",
+    });
+    expect(updatedEncounter.combatRoundState.currentCursor).toEqual({
+      participantId: "encounter-participant-2",
+      roundNumber: 1,
+      step: "i1",
+    });
+    expect(updatedEncounter.combatRoundState.currentStep).toBe("initiative_phase_1");
+    expect(updatedEncounter.combatRoundState.selectedParticipantId).toBe("encounter-participant-2");
+    expect(updatedEncounter.combatRoundState.selectedStep).toBe("initiative_phase_1");
+    expect(updatedEncounter.combatRoundState.participants[1].initiatives.phase1).toBeUndefined();
+    expect(mocks.encounterService.updateScenarioParticipantState).not.toHaveBeenCalled();
+  });
+
+  it("fallback DE undo from an empty selected A1 cell clears mirrored declaration state", async () => {
+    const encounterParticipants = [
+      makeCombatEncounter().participants[0],
+      {
+        ...makeCombatEncounter().participants[0],
+        id: "encounter-participant-2",
+        label: "City guard",
+        scenarioParticipantId: "participant-2",
+      },
+    ];
+    const combatEncounter = makeCombatEncounter({
+      participants: encounterParticipants,
+    }) as EncounterSession;
+    const stateWithCommand = recordCombatRoundDeclaration({
+      command: {
+        createdAt: "2026-01-01T00:01:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      declaration: {
+        actionId: "attack_parry",
+        roundNumber: 1,
+      },
+      participantId: "encounter-participant-1",
+      state: initializeCombatRoundState({ encounter: combatEncounter }),
+      submittedBy: "gm",
+    });
+    setupCombatDeclarationRoute({
+      encounter: {
+        combatRoundState: {
+          ...stateWithCommand,
+          currentStep: "phase_1_actions",
+          selectedParticipantId: "encounter-participant-2",
+          selectedStep: "phase_1_actions",
+        },
+        participants: encounterParticipants,
+      },
+      participant: {
+        state: {
+          combat: {
+            combatContext: {
+              modifierBuckets: {
+                general: [],
+                situationDb: [attackParryDbParryModifierEntry],
+                situationInitiative: [],
+                situationObSkill: [],
+              },
+            },
+            lastDeclaredActionId: "attack_parry",
+            lastDeclaredEncounterId: "encounter-1",
+            lastDeclaredMovementId: "hold",
+            lastDeclaredRoundNumber: 1,
+          },
+          conditions: [],
+          equipment: {},
+          health: {},
+          modifiers: [],
+          resources: {},
+        },
+      },
+      user: mocks.adminUser,
+    });
+    mocks.scenarioService.listScenarioParticipants.mockResolvedValue([
+      makeCombatScenarioParticipant({ id: "participant-1" }),
+      makeCombatScenarioParticipant({ id: "participant-2" }),
+    ]);
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      body: {
+        participantId: "encounter-participant-2",
+        step: "phase_1_actions",
+      },
+      method: "POST",
+      url: "/encounters/encounter-1/combat-round/clear-current-step",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
+    expect(updatedEncounter.combatRoundState.commands).toEqual([]);
+    expect(updatedEncounter.combatRoundState.currentCursor).toEqual({
+      participantId: "encounter-participant-1",
+      roundNumber: 1,
+      step: "DE",
+    });
+    expect(updatedEncounter.combatRoundState.currentStep).toBe("select_actions");
+    expect(updatedEncounter.combatRoundState.selectedParticipantId).toBe("encounter-participant-1");
+    expect(updatedEncounter.combatRoundState.selectedStep).toBe("select_actions");
+    expect(updatedEncounter.combatRoundState.participants[0].declaration).toBeUndefined();
+    expect(mocks.encounterService.updateScenarioParticipantState).toHaveBeenCalledWith(
+      expect.objectContaining({
+        participantId: "participant-1",
+        state: expect.objectContaining({
+          combat: expect.objectContaining({
+            lastDeclaredActionId: undefined,
+            lastDeclaredEncounterId: undefined,
+            lastDeclaredRoundNumber: undefined,
+          }),
+        }),
+      }),
+    );
+  });
+
   it("clears the selected A1 cell without rewinding to initiative", async () => {
     const encounterParticipants = [
       makeCombatEncounter().participants[0],

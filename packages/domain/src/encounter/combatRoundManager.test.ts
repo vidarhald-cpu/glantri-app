@@ -1427,6 +1427,149 @@ describe("combat round manager", () => {
     expect(cleared.participants[0]?.attackResults.phase2).toBeUndefined();
   });
 
+  it("falls back to the latest command undo when selected empty A1 has no local state", () => {
+    const initiativePhase1 = advanceToStep(
+      initializeCombatRoundState({ encounter: encounter() }),
+      "initiative_phase_1",
+    );
+    const afterTopRoll = recordCombatRoundInitiative({
+      command: {
+        createdAt: "2026-01-01T00:01:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      initiative: 14,
+      participantId: "gladiator",
+      phase: "phase1",
+      state: initiativePhase1,
+      submittedBy: "gm",
+    });
+    const afterGuardRoll = recordCombatRoundInitiative({
+      command: {
+        createdAt: "2026-01-01T00:02:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      initiative: 12,
+      participantId: "guard",
+      phase: "phase1",
+      state: afterTopRoll,
+      submittedBy: "gm",
+    });
+    const cleared = clearCombatRoundStep({
+      state: {
+        ...afterGuardRoll,
+        currentStep: "phase_1_actions",
+        selectedParticipantId: "guard",
+        selectedStep: "phase_1_actions",
+      },
+      step: "phase_1_actions",
+    });
+
+    expect(cleared.commands).toHaveLength(1);
+    expect(cleared.commands[0]).toMatchObject({
+      participantId: "gladiator",
+      type: "roll_initiative_phase1",
+    });
+    expect(cleared.currentCursor).toEqual({
+      participantId: "guard",
+      roundNumber: 3,
+      step: "i1",
+    });
+    expect(cleared.currentStep).toBe("initiative_phase_1");
+    expect(cleared.selectedParticipantId).toBe("guard");
+    expect(cleared.selectedStep).toBe("initiative_phase_1");
+    expect(cleared.participants[1]?.initiatives.phase1).toBeUndefined();
+    expect(cleared.participants[0]?.initiatives.phase1).toMatchObject({ total: 14 });
+  });
+
+  it("falls back from selected empty A1 to the latest M1 command", () => {
+    const reviewPhase1 = advanceToStep(
+      initializeCombatRoundState({ encounter: encounter() }),
+      "review_action_modifiers",
+    );
+    const reviewed = recordCombatRoundParticipantStepReview({
+      command: {
+        createdAt: "2026-01-01T00:01:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      participantId: "gladiator",
+      state: reviewPhase1,
+      step: "review_action_modifiers",
+      submittedBy: "gm",
+    });
+    const cleared = clearCombatRoundStep({
+      state: {
+        ...reviewed,
+        currentStep: "phase_1_actions",
+        selectedParticipantId: "guard",
+        selectedStep: "phase_1_actions",
+      },
+      step: "phase_1_actions",
+    });
+
+    expect(cleared.commands).toEqual([]);
+    expect(cleared.currentCursor).toEqual({
+      participantId: "gladiator",
+      roundNumber: 3,
+      step: "M1",
+    });
+    expect(cleared.currentStep).toBe("review_action_modifiers");
+    expect(cleared.selectedParticipantId).toBe("gladiator");
+    expect(cleared.selectedStep).toBe("review_action_modifiers");
+    expect(cleared.participants[0]?.stepStatuses.review_action_modifiers).toBe("pending");
+  });
+
+  it("falls back from selected empty A1 to the latest DE command", () => {
+    const declared = recordCombatRoundDeclaration({
+      command: {
+        createdAt: "2026-01-01T00:01:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      declaration: {
+        actionId: "attack_parry",
+        roundNumber: 3,
+      },
+      participantId: "gladiator",
+      state: initializeCombatRoundState({ encounter: encounter() }),
+      submittedBy: "gm",
+    });
+    const cleared = clearCombatRoundStep({
+      state: {
+        ...declared,
+        currentStep: "phase_1_actions",
+        selectedParticipantId: "guard",
+        selectedStep: "phase_1_actions",
+      },
+      step: "phase_1_actions",
+    });
+
+    expect(cleared.commands).toEqual([]);
+    expect(cleared.currentCursor).toEqual({
+      participantId: "gladiator",
+      roundNumber: 3,
+      step: "DE",
+    });
+    expect(cleared.currentStep).toBe("select_actions");
+    expect(cleared.selectedParticipantId).toBe("gladiator");
+    expect(cleared.selectedStep).toBe("select_actions");
+    expect(cleared.participants[0]?.declaration).toBeUndefined();
+    expect(cleared.participants[0]?.stepStatuses.select_actions).toBe("pending");
+  });
+
+  it("leaves selected empty A1 unchanged when there is no local state or command to undo", () => {
+    const state = {
+      ...initializeCombatRoundState({ encounter: encounter() }),
+      currentStep: "phase_1_actions" as const,
+      selectedParticipantId: "guard",
+      selectedStep: "phase_1_actions" as const,
+    };
+    const cleared = clearCombatRoundStep({
+      state,
+      step: "phase_1_actions",
+    });
+
+    expect(cleared).toEqual(state);
+  });
+
   it("builds a P1 attack result from the canonical to-hit table", () => {
     expect(
       buildCombatRoundAttackRollResult({

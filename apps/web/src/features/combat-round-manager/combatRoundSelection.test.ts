@@ -209,4 +209,33 @@ describe("combat round manager selection", () => {
     expect(normalized.selectedParticipantId).toBe("top");
     expect(normalized.selectedStep).toBe("initiative_phase_1");
   });
+
+  it("uses fallback-undo currentCursor after clearing an empty A1 cell", () => {
+    const existing = initializeCombatRoundState({ encounter: encounter() });
+    const refreshedState = {
+      ...existing,
+      currentCursor: {
+        participantId: "middle",
+        roundNumber: existing.roundNumber,
+        step: "i1" as const,
+      },
+      currentStep: "initiative_phase_1" as const,
+      selectedParticipantId: "bottom",
+      selectedStep: "phase_1_actions" as const,
+    };
+    const normalized = normalizeCombatRoundManagerSelection({
+      manualSelection: {
+        participantId: "bottom",
+        step: "phase_1_actions",
+      },
+      pendingSelection: {
+        participantId: "bottom",
+        step: "phase_1_actions",
+      },
+      state: refreshedState,
+    });
+
+    expect(normalized.selectedParticipantId).toBe("middle");
+    expect(normalized.selectedStep).toBe("initiative_phase_1");
+  });
 });

@@ -864,11 +864,6 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         encounter,
         scenarioParticipants,
       });
-      const encounterScenarioParticipantIds = new Set(
-        membership.participants
-          .map((participant) => participant.scenarioParticipantId)
-          .filter((id): id is string => Boolean(id)),
-      );
       const body =
         request.body && typeof request.body === "object"
           ? (request.body as Record<string, unknown>)
@@ -896,6 +891,34 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
               step: selectedStep,
             })
           : clearCurrentCombatRoundStepAndRewind(roundState);
+      const removedDeclareCommandParticipantIds = new Set(
+        roundState.commands
+          .filter(
+            (command) =>
+              command.roundNumber === roundState.roundNumber &&
+              command.type === "declare_action" &&
+              !nextRoundState.commands.some(
+                (remainingCommand) => remainingCommand.id === command.id,
+              ),
+          )
+          .map((command) => command.participantId),
+      );
+      const declarationClearEncounterParticipantIds = new Set<string>();
+
+      if (clearsDeclarationStep) {
+        if (selectedParticipantId) {
+          declarationClearEncounterParticipantIds.add(selectedParticipantId);
+        } else {
+          for (const participant of membership.participants) {
+            declarationClearEncounterParticipantIds.add(participant.id);
+          }
+        }
+      }
+
+      for (const participantId of removedDeclareCommandParticipantIds) {
+        declarationClearEncounterParticipantIds.add(participantId);
+      }
+
       const submittedAt = new Date().toISOString();
       const savedEncounter = await encounterService.updateEncounter({
         campaignId: access.campaignId,
@@ -908,27 +931,26 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           updatedAt: submittedAt,
         },
       });
-      const updatedParticipants = clearsDeclarationStep
-        ? await Promise.all(
-            scenarioParticipants
-              .filter((participant) =>
-                selectedParticipantId
-                  ? membership.participants.some(
-                      (encounterParticipant) =>
-                        encounterParticipant.id === selectedParticipantId &&
-                        encounterParticipant.scenarioParticipantId === participant.id,
-                    )
-                  : encounterScenarioParticipantIds.has(participant.id),
-              )
-              .map((participant) =>
-                encounterService.updateScenarioParticipantState({
-                  participantId: participant.id,
-                  scenarioId,
-                  state: clearScenarioParticipantCombatDeclaration(participant),
-                }),
-              ),
-          )
-        : [];
+      const updatedParticipants =
+        declarationClearEncounterParticipantIds.size > 0
+          ? await Promise.all(
+              scenarioParticipants
+                .filter((participant) =>
+                  membership.participants.some(
+                    (encounterParticipant) =>
+                      declarationClearEncounterParticipantIds.has(encounterParticipant.id) &&
+                      encounterParticipant.scenarioParticipantId === participant.id,
+                  ),
+                )
+                .map((participant) =>
+                  encounterService.updateScenarioParticipantState({
+                    participantId: participant.id,
+                    scenarioId,
+                    state: clearScenarioParticipantCombatDeclaration(participant),
+                  }),
+                ),
+            )
+          : [];
 
       return { encounter: savedEncounter, participants: updatedParticipants };
     } catch (error) {

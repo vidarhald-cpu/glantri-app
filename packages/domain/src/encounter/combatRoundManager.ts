@@ -696,6 +696,34 @@ function getLatestCombatRoundGlobalParticipantCommandIndex(input: {
   return -1;
 }
 
+function isGlobalCombatRoundCommandType(type: CombatRoundCommandType): boolean {
+  return (
+    type === "declare_action" ||
+    type === "review_modifiers_phase1" ||
+    type === "roll_initiative_phase1" ||
+    type === "review_modifiers_phase2" ||
+    type === "roll_initiative_phase2"
+  );
+}
+
+function getLatestCombatRoundGlobalCommandIndex(input: {
+  roundNumber: number;
+  state: CombatRoundState;
+}): number {
+  for (let index = input.state.commands.length - 1; index >= 0; index -= 1) {
+    const command = input.state.commands[index];
+
+    if (
+      command?.roundNumber === input.roundNumber &&
+      isGlobalCombatRoundCommandType(command.type)
+    ) {
+      return index;
+    }
+  }
+
+  return -1;
+}
+
 function getStepIndex(step: CombatRoundStep): number {
   return COMBAT_ROUND_STEPS.indexOf(step);
 }
@@ -2662,24 +2690,131 @@ export function undoLatestCombatRoundGlobalParticipantCommand(input: {
     return undefined;
   }
 
+  return undoCombatRoundGlobalCommandAtIndex({
+    commandIndex,
+    state: normalized,
+  });
+}
+
+function undoCombatRoundGlobalCommandAtIndex(input: {
+  commandIndex: number;
+  state: CombatRoundState;
+}): CombatRoundState | undefined {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const command = normalized.commands[input.commandIndex];
+
+  if (
+    !command ||
+    command.roundNumber !== normalized.roundNumber ||
+    !isGlobalCombatRoundCommandType(command.type)
+  ) {
+    return undefined;
+  }
+
+  const step = getCombatRoundStepForCursorStep(command.beforeCursor.step);
+  const participantId = command.beforeCursor.participantId ?? command.participantId;
+
   const stateForLegacyClear = setCombatRoundSelection({
     participantId,
     state: normalized,
-    step: input.step,
+    step,
   });
   const cleared = clearCombatRoundStepLegacy({
     state: stateForLegacyClear,
-    step: input.step,
+    step,
   });
   const selectedStep = getCombatRoundStepForCursorStep(command.beforeCursor.step);
 
   return {
     ...cleared,
-    commands: normalized.commands.filter((_, index) => index !== commandIndex),
+    commands: normalized.commands.filter((_, index) => index !== input.commandIndex),
     currentCursor: command.beforeCursor,
+    currentStep: selectedStep,
     selectedParticipantId: command.beforeCursor.participantId ?? participantId,
     selectedStep,
   };
+}
+
+export function undoLatestCombatRoundGlobalCommand(input: {
+  state: CombatRoundState;
+}): CombatRoundState | undefined {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const commandIndex = getLatestCombatRoundGlobalCommandIndex({
+    roundNumber: normalized.roundNumber,
+    state: normalized,
+  });
+
+  return undoCombatRoundGlobalCommandAtIndex({
+    commandIndex,
+    state: normalized,
+  });
+}
+
+function combatRoundSelectedStepHasClearableState(input: {
+  state: CombatRoundState;
+  step: CombatRoundStep;
+}): boolean {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const selectedParticipant = normalized.participants.find(
+    (participant) => participant.participantId === normalized.selectedParticipantId,
+  );
+
+  if (!selectedParticipant) {
+    return false;
+  }
+
+  const status = selectedParticipant.stepStatuses[input.step] ?? "pending";
+  const hasNonPendingStatus = status !== "pending";
+  const phase =
+    getCombatRoundAttackPhaseForStep(input.step) ??
+    getCombatRoundResolutionPhaseForStep(input.step);
+
+  if (!phase) {
+    if (input.step === "select_actions") {
+      return Boolean(selectedParticipant.declaration) || hasNonPendingStatus;
+    }
+
+    if (input.step === "initiative_phase_1") {
+      return Boolean(selectedParticipant.initiatives.phase1) || hasNonPendingStatus;
+    }
+
+    if (input.step === "initiative_phase_2") {
+      return Boolean(selectedParticipant.initiatives.phase2) || hasNonPendingStatus;
+    }
+
+    return hasNonPendingStatus;
+  }
+
+  const actionStep = getCombatRoundPhaseActionStepForPhase(phase);
+
+  if (input.step === actionStep) {
+    return (
+      Boolean(
+        getCombatRoundOutgoingAttackResultForParticipantPhase({
+          participantId: selectedParticipant.participantId,
+          phase,
+          state: normalized,
+        }),
+      ) ||
+      Boolean(
+        getCombatRoundDisplayIncomingAttackResultForParticipantPhase({
+          participantId: selectedParticipant.participantId,
+          phase,
+          state: normalized,
+        }),
+      ) || hasNonPendingStatus
+    );
+  }
+
+  return (
+    Boolean(
+      getCombatRoundDisplayIncomingAttackResultForParticipantPhase({
+        participantId: selectedParticipant.participantId,
+        phase,
+        state: normalized,
+      }),
+    ) || hasNonPendingStatus
+  );
 }
 
 export function clearCombatRoundStep(input: {
@@ -2692,7 +2827,15 @@ export function clearCombatRoundStep(input: {
     step: input.step,
   });
 
-  return commandUndoneState ?? clearCombatRoundStepLegacy({ state: normalized, step: input.step });
+  if (commandUndoneState) {
+    return commandUndoneState;
+  }
+
+  if (combatRoundSelectedStepHasClearableState({ state: normalized, step: input.step })) {
+    return clearCombatRoundStepLegacy({ state: normalized, step: input.step });
+  }
+
+  return undoLatestCombatRoundGlobalCommand({ state: normalized }) ?? normalized;
 }
 
 export function clearCurrentCombatRoundStepAndRewind(state: CombatRoundState): CombatRoundState {
