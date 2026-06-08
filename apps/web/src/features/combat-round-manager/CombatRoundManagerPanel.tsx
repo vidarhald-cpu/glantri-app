@@ -1059,13 +1059,16 @@ export default function CombatRoundManagerPanel({
       }),
     [inspectorDraft.actionId, inspectorDraft.phaseContexts, inspectorDraft.secondaryActionId],
   );
+  const inspectorAttackPhase = getCombatAttackPhaseForStep(inspector.step);
+  const inspectorResolutionPhase = getCombatRoundResolutionPhaseForStep(inspector.step);
+  const inspectorResolutionStepKind = getCombatResolutionStepKind(inspector.step);
+  const inspectorSelectedStepIsSequential = isSequentialResolutionStep(inspector.step);
   const inspectorCurrentStepIsInitiative =
-    roundState.currentStep === "initiative_phase_1" ||
-    roundState.currentStep === "initiative_phase_2";
-  const inspectorCurrentAttackPhase = getCombatAttackPhaseForStep(roundState.currentStep);
-  const inspectorCurrentResolutionPhase =
-    inspectorCurrentAttackPhase ?? getCombatRoundResolutionPhaseForStep(roundState.currentStep);
+    inspector.step === "initiative_phase_1" || inspector.step === "initiative_phase_2";
+  const inspectorCurrentAttackPhase = inspectorAttackPhase;
+  const inspectorCurrentResolutionPhase = inspectorAttackPhase ?? inspectorResolutionPhase;
   const inspectorPhaseResolutionCursor =
+    inspectorSelectedStepIsSequential &&
     roundState.phaseResolutionCursor?.phase === inspectorCurrentResolutionPhase
       ? roundState.phaseResolutionCursor
       : undefined;
@@ -1205,9 +1208,9 @@ export default function CombatRoundManagerPanel({
     selectedScenarioParticipant?.state.combatEffects,
   ]);
   const inspectorCurrentInitiativePhase =
-    roundState.currentStep === "initiative_phase_1"
+    inspector.step === "initiative_phase_1"
       ? "phase1"
-      : roundState.currentStep === "initiative_phase_2"
+      : inspector.step === "initiative_phase_2"
         ? "phase2"
         : undefined;
   const inspectorCurrentInitiative = inspectorCurrentInitiativePhase
@@ -1215,7 +1218,6 @@ export default function CombatRoundManagerPanel({
     : undefined;
   const inspectorDisplayInitiative =
     inspectorSnapshot?.initiativeResult ?? inspectorCurrentInitiative;
-  const inspectorAttackPhase = getCombatAttackPhaseForStep(inspector.step);
   const inspectorDisplayAttackResult =
     inspectorSnapshot?.attackResult ??
     (inspector.participant && inspectorAttackPhase
@@ -1225,8 +1227,6 @@ export default function CombatRoundManagerPanel({
           state: roundState,
         })
       : undefined);
-  const inspectorResolutionPhase = getCombatRoundResolutionPhaseForStep(inspector.step);
-  const inspectorResolutionStepKind = getCombatResolutionStepKind(inspector.step);
   const inspectorResolutionAttackResult =
     inspectorSnapshot?.attackResult ??
     (inspector.participant && inspectorResolutionPhase
@@ -1386,7 +1386,7 @@ export default function CombatRoundManagerPanel({
       : getCombatResolutionButtonLabel({
           hasPhaseAttack: inspectorActionPhaseHasAttack,
           phase: inspectorCurrentResolutionPhase,
-          step: roundState.currentStep,
+          step: inspector.step,
           substep: inspectorActionPhaseResolutionStatus?.substep,
         });
   const inspectorPhaseResolutionLines =
@@ -1433,7 +1433,7 @@ export default function CombatRoundManagerPanel({
                     }),
                 }
               : null;
-  const inspectorCurrentStepStatus = inspector.participant?.stepStatuses[roundState.currentStep];
+  const inspectorCurrentStepStatus = inspector.participant?.stepStatuses[inspector.step];
   const inspectorParticipantHasDeclared = Boolean(selectedRoundDeclaration);
   const inspectorStatusSuffix = inspectorSnapshot
     ? " Committed."
@@ -1455,10 +1455,10 @@ export default function CombatRoundManagerPanel({
       ? " Attack rolled."
     : inspectorCurrentInitiative
     ? " Initiative rolled."
-    : roundState.currentStep === "review_action_modifiers" &&
+    : inspector.step === "review_action_modifiers" &&
         (inspectorCurrentStepStatus === "complete" || inspectorCurrentStepStatus === "gmEdited")
       ? " Modifiers declared."
-      : roundState.currentStep === "review_phase_2_modifiers" &&
+      : inspector.step === "review_phase_2_modifiers" &&
           (inspectorCurrentStepStatus === "complete" || inspectorCurrentStepStatus === "gmEdited")
         ? " Phase 2 modifiers declared."
         : inspectorParticipantHasDeclared
@@ -2511,11 +2511,11 @@ export default function CombatRoundManagerPanel({
           }}
         >
           <button
-            disabled={saving || isSequentialResolutionStep(roundState.currentStep)}
+            disabled={saving || inspectorSelectedStepIsSequential}
             onClick={() => void commitCurrentStep()}
             type="button"
           >
-            {saving ? "Saving..." : getAdvanceButtonLabel(roundState.currentStep)}
+            {saving ? "Saving..." : getAdvanceButtonLabel(inspector.step)}
           </button>
           <button disabled={saving} onClick={() => void clearCurrentStep()} type="button">
             Clear current step
@@ -2963,7 +2963,7 @@ export default function CombatRoundManagerPanel({
                       }
                       saving={saving}
                       statusText={`Current step: ${getPlayerCombatStepLabel(
-                        inspectorSnapshot ? inspector.step : roundState.currentStep,
+                        inspector.step,
                       )}.${inspectorStatusSuffix}`}
                       validationMessage={inspectorTargetValidationMessage}
                     />

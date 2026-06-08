@@ -186,7 +186,17 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).not.toContain("input.sources.mainHand.label} P");
     expect(source).not.toContain("input.sources.offHand.label} P");
     expect(source).toContain("No ${formatCombatPhaseLabel");
-    expect(source).toContain("const inspectorCurrentAttackPhase = getCombatAttackPhaseForStep(roundState.currentStep)");
+    expect(source).toContain("const inspectorAttackPhase = getCombatAttackPhaseForStep(inspector.step)");
+    expect(source).toContain(
+      "const inspectorResolutionPhase = getCombatRoundResolutionPhaseForStep(inspector.step)",
+    );
+    expect(source).toContain(
+      "const inspectorSelectedStepIsSequential = isSequentialResolutionStep(inspector.step)",
+    );
+    expect(source).toContain("const inspectorCurrentAttackPhase = inspectorAttackPhase");
+    expect(source).not.toContain(
+      "const inspectorCurrentAttackPhase = getCombatAttackPhaseForStep(roundState.currentStep)",
+    );
     expect(source).toContain('step === "phase_2_actions"');
     expect(source).not.toContain("phaseLabel: formatCombatInitiativeRoll");
     expect(source).toContain("formatInitiativeRankLabel");
@@ -225,8 +235,8 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("getNextCombatRoundParticipantSelection");
     expect(source).toContain("step: actedStep");
     expect(source).toContain("Use inspector for phase resolution");
-    expect(source).toContain("isSequentialResolutionStep(roundState.currentStep)");
-    expect(source).toContain("disabled={saving || isSequentialResolutionStep(roundState.currentStep)}");
+    expect(source).toContain("isSequentialResolutionStep(inspector.step)");
+    expect(source).toContain("disabled={saving || inspectorSelectedStepIsSequential}");
     expect(source).toContain("inspectorSelectedAttackAlreadyRolled ||");
     expect(source).toContain("Select a participant step to inspect combat details.");
     expect(source).toContain("Previous participant");
@@ -266,6 +276,30 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("step: nextRoundState.selectedStep ?? clearedSelection.step");
     expect(source).toContain("pendingSelectionRef.current = nextSelection");
     expect(source).toContain("manualSelectionRef.current = nextSelection");
+  });
+
+  it("uses the selected cell as the authoritative inspector mode", () => {
+    const source = readSource();
+
+    expect(source).toContain(
+      'inspector.step === "initiative_phase_1" || inspector.step === "initiative_phase_2"',
+    );
+    expect(source).toContain(
+      "const inspectorCurrentResolutionPhase = inspectorAttackPhase ?? inspectorResolutionPhase",
+    );
+    expect(source).toContain("roundState.phaseResolutionCursor?.phase === inspectorCurrentResolutionPhase");
+    expect(source).toContain("inspector.participant?.stepStatuses[inspector.step]");
+    expect(source).toContain("step: inspector.step");
+    expect(source).toContain("getAdvanceButtonLabel(inspector.step)");
+    expect(source).toContain("statusText={`Current step: ${getPlayerCombatStepLabel(");
+    expect(source).toContain("inspector.step,");
+    expect(source).not.toContain("inspectorSnapshot ? inspector.step : roundState.currentStep");
+    expect(source).not.toContain(
+      'roundState.currentStep === "review_action_modifiers" &&',
+    );
+    expect(source).not.toContain(
+      'roundState.currentStep === "review_phase_2_modifiers" &&',
+    );
   });
 
   it("guards recorded attack results against accidental re-rolls", () => {
