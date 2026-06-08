@@ -177,14 +177,12 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("phaseResolutionResult");
     expect(source).toContain("phaseResolutionStatus");
     expect(source).toContain("Resolution review pending.");
-    expect(source).toContain("const attackStep = phase === \"phase1\" ? \"phase_1_actions\" : \"phase_2_actions\"");
-    expect(source).toContain(
-      "const reviewStep = phase === \"phase1\" ? \"review_phase_2_actions\" : \"review_phase_2_damage\"",
-    );
-    expect(source).toContain("if (input.step === attackStep)");
-    expect(source).toContain("participant?.attackResults[phase]");
-    expect(source).toContain("if (input.step === reviewStep)");
-    expect(source).toContain('return phaseStatus.substep === "done" ? "complete" : input.status;');
+    expect(source).toContain("getCombatRoundParticipantPhaseStepStatus");
+    expect(source).toContain("buildSelectedCombatParryDefenseStats");
+    expect(source).toContain("formatSelectedCombatParrySourceName");
+    expect(source).toContain("shouldShowSelectedParryStats");
+    expect(source).not.toContain("input.sources.mainHand.label} P");
+    expect(source).not.toContain("input.sources.offHand.label} P");
     expect(source).toContain("No ${formatCombatPhaseLabel");
     expect(source).toContain("const inspectorCurrentAttackPhase = getCombatAttackPhaseForStep(roundState.currentStep)");
     expect(source).toContain('step === "phase_2_actions"');

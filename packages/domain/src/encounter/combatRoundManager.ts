@@ -682,6 +682,22 @@ export function getCombatRoundPhaseActionStepForPhase(phase: CombatRoundPhase): 
   return phase === "phase1" ? "phase_1_actions" : "phase_2_actions";
 }
 
+function getCombatRoundAttackPhaseForStep(step: CombatRoundStep): CombatRoundPhase | undefined {
+  if (step === "phase_1_actions") {
+    return "phase1";
+  }
+
+  if (step === "phase_2_actions") {
+    return "phase2";
+  }
+
+  return undefined;
+}
+
+function getCombatRoundPhaseParryStepForPhase(phase: CombatRoundPhase): CombatRoundStep {
+  return phase === "phase1" ? "review_phase_2_actions" : "review_phase_2_damage";
+}
+
 export function combatRoundParticipantHasPhaseAttack(input: {
   participantId: string;
   phase: CombatRoundPhase;
@@ -728,6 +744,97 @@ export function getCombatRoundPhaseResolutionStatus(input: {
       substep: "pending",
     }
   );
+}
+
+export function getCombatRoundParticipantPhaseStepStatus(input: {
+  participantId: string;
+  state: CombatRoundState;
+  step: CombatRoundStep;
+}): CombatRoundStepStatus {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const phase =
+    getCombatRoundAttackPhaseForStep(input.step) ??
+    getCombatRoundResolutionPhaseForStep(input.step);
+  const participant = normalized.participants.find(
+    (entry) => entry.participantId === input.participantId,
+  );
+  const storedStatus = participant?.stepStatuses[input.step] ?? "pending";
+
+  if (!phase) {
+    return storedStatus;
+  }
+
+  const actionStep = getCombatRoundPhaseActionStepForPhase(phase);
+  const parryStep = getCombatRoundPhaseParryStepForPhase(phase);
+  const damageStep = getCombatRoundDamageReviewStepForPhase(phase);
+  const phaseStatus = getCombatRoundPhaseResolutionStatus({
+    participantId: input.participantId,
+    phase,
+    state: normalized,
+  });
+
+  if (input.step === actionStep) {
+    const hasPhaseAttack = combatRoundParticipantHasPhaseAttack({
+      participantId: input.participantId,
+      phase,
+      state: normalized,
+    });
+
+    if (!hasPhaseAttack) {
+      return phaseStatus.substep === "done" ? "skipped" : storedStatus;
+    }
+
+    const outgoingAttackResult = getCombatRoundOutgoingAttackResultForParticipantPhase({
+      participantId: input.participantId,
+      phase,
+      state: normalized,
+    });
+
+    return outgoingAttackResult ? "gmEdited" : storedStatus;
+  }
+
+  const incomingAttackResult = getCombatRoundDisplayIncomingAttackResultForParticipantPhase({
+    participantId: input.participantId,
+    phase,
+    state: normalized,
+  });
+
+  if (!incomingAttackResult) {
+    return "skipped";
+  }
+
+  const resolution =
+    getCombatRoundPhaseResolutionResultForAttack({
+      attackResult: incomingAttackResult,
+      state: normalized,
+    }) ??
+    buildCombatRoundPhaseResolutionResult({
+      attackResult: incomingAttackResult,
+      roundNumber: normalized.roundNumber,
+      updatedAt: incomingAttackResult.rolledAt,
+    });
+
+  if (input.step === parryStep) {
+    if (!incomingAttackResult.hit || resolution.parryResolution.status === "not_applicable") {
+      return "skipped";
+    }
+
+    return resolution.parryResolution.status === "resolved" ? "complete" : "pending";
+  }
+
+  if (input.step === damageStep) {
+    if (!incomingAttackResult.hit || resolution.damageRoll.status === "not_required") {
+      return "skipped";
+    }
+
+    if (storedStatus === "submitted" || storedStatus === "gmEdited" || storedStatus === "complete") {
+      return storedStatus;
+    }
+
+    return "pending";
+  }
+
+  return storedStatus;
 }
 
 function setCombatRoundPhaseResolutionStatus(input: {
@@ -986,6 +1093,11 @@ export function completeCombatRoundPhaseResolutionForParticipant(input: {
     phase: input.phase,
     state: withStatus,
   });
+  const attackResult = getCombatRoundOutgoingAttackResultForParticipantPhase({
+    participantId: input.participantId,
+    phase: input.phase,
+    state: withStatus,
+  });
   const withActionStepStatus = hasPhaseAttack
     ? withStatus
     : setCombatRoundParticipantStepStatus({
@@ -994,15 +1106,23 @@ export function completeCombatRoundPhaseResolutionForParticipant(input: {
         status: "skipped",
         step: getCombatRoundPhaseActionStepForPhase(input.phase),
       });
-  const reviewStep = hasPhaseAttack
-    ? getCombatRoundDamageReviewStepForPhase(input.phase)
-    : getCombatRoundParryReviewStepForPhase(input.phase);
-  const withStepStatus = setCombatRoundParticipantStepStatus({
-    participantId: input.participantId,
-    state: withActionStepStatus,
-    status: input.submittedBy === "gm" ? "gmEdited" : "submitted",
-    step: reviewStep,
-  });
+  const reviewParticipantId =
+    hasPhaseAttack && attackResult?.hit
+      ? attackResult.defenderParticipantId
+      : input.participantId;
+  const reviewStep =
+    hasPhaseAttack && attackResult?.hit
+      ? getCombatRoundDamageReviewStepForPhase(input.phase)
+      : getCombatRoundParryReviewStepForPhase(input.phase);
+  const withStepStatus =
+    hasPhaseAttack && !attackResult?.hit
+      ? withActionStepStatus
+      : setCombatRoundParticipantStepStatus({
+          participantId: reviewParticipantId,
+          state: withActionStepStatus,
+          status: input.submittedBy === "gm" ? "gmEdited" : "submitted",
+          step: reviewStep,
+        });
 
   return moveCombatRoundPhaseResolutionCursorToNextParticipant({
     phase: input.phase,
@@ -1788,10 +1908,20 @@ export function clearCombatRoundStep(input: {
                       review_phase_2_actions: "pending" as const,
                     }
                   : {}),
+                ...(input.step === "review_phase_2_actions" && resetsSelectedStep
+                  ? {
+                      phase_1_damage: "pending" as const,
+                    }
+                  : {}),
                 ...(input.step === "phase_2_actions" && resetsDownstreamReview
                   ? {
                       phase_2_damage: "pending" as const,
                       review_phase_2_damage: "pending" as const,
+                    }
+                  : {}),
+                ...(input.step === "review_phase_2_damage" && resetsSelectedStep
+                  ? {
+                      phase_2_damage: "pending" as const,
                     }
                   : {}),
               }

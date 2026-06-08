@@ -35,6 +35,7 @@ import {
   getCombatRoundDisplayIncomingAttackResultForParticipantPhase,
   getCombatRoundDamageReviewStepForPhase,
   getCombatRoundOutgoingAttackResultForParticipantPhase,
+  getCombatRoundParticipantPhaseStepStatus,
   getCombatRoundPhaseResolutionResultForAttack,
   getCombatRoundPhaseResolutionStatus,
   getCombatRoundInitiativeRanks,
@@ -84,6 +85,7 @@ import {
   playerCombatPanelCardStyle,
   playerCombatPanelRowStyle,
   playerCombatTopPanelRowStyle,
+  type PlayerCombatDefenseStatsView,
   type PlayerCombatModifierBucketView,
   type PlayerCombatPhaseCardView,
 } from "@/features/player-combat/PlayerCombatPanels";
@@ -682,6 +684,38 @@ function getSelectedCombatParryBase(input: {
   return mainScore ?? offScore;
 }
 
+function formatSelectedCombatParrySourceName(input: {
+  selection: CombatParrySourceSelection;
+  sources?: CombatParrySourceOptions;
+}): string {
+  const labels = [
+    input.selection.usedMainHand ? input.sources?.mainHand?.label : undefined,
+    input.selection.usedOffHand ? input.sources?.offHand?.label : undefined,
+  ].filter((label): label is string => Boolean(label));
+
+  return labels.length > 0 ? labels.join(" + ") : "No parry source selected";
+}
+
+function buildSelectedCombatParryDefenseStats(input: {
+  baseStats: PlayerCombatDefenseStatsView | null;
+  parryBase?: number;
+  selection: CombatParrySourceSelection;
+  sources?: CombatParrySourceOptions;
+}): PlayerCombatDefenseStatsView | null {
+  if (!input.baseStats) {
+    return null;
+  }
+
+  return {
+    ...input.baseStats,
+    parry: input.parryBase === undefined ? "0" : String(input.parryBase),
+    sourceName: formatSelectedCombatParrySourceName({
+      selection: input.selection,
+      sources: input.sources,
+    }),
+  };
+}
+
 function getCombatParrySelectionKey(input: {
   result?: CombatRoundAttackRollResult;
   roundNumber: number;
@@ -812,7 +846,6 @@ function CombatParryResolutionPanel(input: {
             type="checkbox"
           />
           Main hand
-          {input.sources?.mainHand ? ` (${input.sources.mainHand.label} P ${input.sources.mainHand.score})` : ""}
         </label>
         <label style={{ alignItems: "center", display: "flex", gap: "0.35rem" }}>
           <input
@@ -827,17 +860,9 @@ function CombatParryResolutionPanel(input: {
             type="checkbox"
           />
           Off hand
-          {input.sources?.offHand ? ` (${input.sources.offHand.label} P ${input.sources.offHand.score})` : ""}
         </label>
       </div>
-      <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
-        {sourceSummary}
-        {input.sources?.combinedScore !== undefined &&
-        input.selection.usedMainHand &&
-        input.selection.usedOffHand
-          ? ` · combined row P ${input.sources.combinedScore}`
-          : ""}
-      </div>
+      <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>{sourceSummary}</div>
     </section>
   );
 }
@@ -1946,51 +1971,11 @@ export default function CombatRoundManagerPanel({
       getCombatAttackPhaseForStep(input.step) ?? getCombatRoundResolutionPhaseForStep(input.step);
 
     if (phase) {
-      const phaseStatus = getCombatRoundPhaseResolutionStatus({
+      return getCombatRoundParticipantPhaseStepStatus({
         participantId: input.participantId,
-        phase,
         state: roundState,
+        step: input.step,
       });
-      const hasPhaseAttack = combatRoundParticipantHasPhaseAttack({
-        participantId: input.participantId,
-        phase,
-        state: roundState,
-      });
-      const attackStep = phase === "phase1" ? "phase_1_actions" : "phase_2_actions";
-      const reviewStep = phase === "phase1" ? "review_phase_2_actions" : "review_phase_2_damage";
-      const participant = roundState.participants.find(
-        (entry) => entry.participantId === input.participantId,
-      );
-
-      if (input.step === attackStep) {
-        if (!hasPhaseAttack) {
-          return phaseStatus.substep === "done" ? "skipped" : input.status;
-        }
-
-        if (
-          participant?.attackResults[phase] ||
-          phaseStatus.substep === "parry" ||
-          phaseStatus.substep === "damage" ||
-          phaseStatus.substep === "effects" ||
-          phaseStatus.substep === "done"
-        ) {
-          return "gmEdited";
-        }
-
-        return input.status;
-      }
-
-      if (input.step === reviewStep) {
-        return phaseStatus.substep === "done" ? "complete" : input.status;
-      }
-
-      if (phaseStatus.substep === "done") {
-        return "complete";
-      }
-
-      if (phaseStatus.substep !== "pending") {
-        return "gmEdited";
-      }
     }
 
     if (input.step !== "select_actions") {
@@ -2675,7 +2660,7 @@ export default function CombatRoundManagerPanel({
                     const phaseLoadoutSummary = inspectorPhaseLoadoutSummaries[phaseKey];
                     const snapshotForPhase =
                       inspectorSnapshot?.phase === phaseKey ? inspectorSnapshot : undefined;
-                    const defenseStats =
+                    const baseDefenseStats =
                       snapshotForPhase?.defenseSummary ??
                       buildPlayerCombatDefenseStats({
                         mainHandParryItemLabel: phaseLoadoutSummary.mainHandParryItemLabel,
@@ -2683,6 +2668,20 @@ export default function CombatRoundManagerPanel({
                         phaseContext: phaseCombatContext,
                         reference: phaseLoadoutSummary.reference,
                       });
+                    const shouldShowSelectedParryStats =
+                      !snapshotForPhase &&
+                      phaseKey === inspectorResolutionPhase &&
+                      inspector.participant?.participantId ===
+                        inspectorResolutionAttackResult?.defenderParticipantId &&
+                      inspectorResolutionStepKind === "parry";
+                    const defenseStats = shouldShowSelectedParryStats
+                      ? buildSelectedCombatParryDefenseStats({
+                          baseStats: baseDefenseStats,
+                          parryBase: inspectorParryBase,
+                          selection: inspectorParrySelection,
+                          sources: inspectorParryDefenderPhaseSummary?.parrySources,
+                        })
+                      : baseDefenseStats;
                     const phaseModel = buildPlayerCombatPhasePanelModel({
                       actionId: inspectorDisplayDraft.actionId,
                       attackStats: snapshotForPhase?.attackSummary ?? phaseLoadoutSummary.attackStats,
