@@ -1767,10 +1767,17 @@ describe("combat round manager", () => {
       substep: "attack",
     });
     expect(afterMiss.phaseResolutionCursor).toEqual({
-      participantId: "guard",
+      participantId: "gladiator",
       phase: "phase2",
-      substep: "effects",
+      substep: "parry",
     });
+    expect(
+      getCombatRoundPhaseResolutionStatus({
+        participantId: "guard",
+        phase: "phase2",
+        state: afterMiss,
+      }).substep,
+    ).toBe("done");
   });
 
   it("detects phase attack availability from the declared phase model", () => {

@@ -985,6 +985,24 @@ export function recordCombatRoundPhaseResolutionAttackDone(input: {
   state: CombatRoundState;
   updatedAt: string;
 }): CombatRoundState {
+  if (!input.attackResult.hit) {
+    const withMissDoneStatus = setCombatRoundPhaseResolutionStatus({
+      participantId: input.attackResult.attackerParticipantId,
+      phase: input.attackResult.phase,
+      state: input.state,
+      status: {
+        substep: "done",
+        updatedAt: input.updatedAt,
+      },
+    });
+
+    return moveCombatRoundPhaseResolutionCursorToNextParticipant({
+      phase: input.attackResult.phase,
+      state: withMissDoneStatus,
+      updatedAt: input.updatedAt,
+    });
+  }
+
   const nextSubstep = getCombatRoundPostAttackResolutionSubstep(input.attackResult);
   const withStatus = setCombatRoundPhaseResolutionStatus({
     participantId: input.attackResult.attackerParticipantId,

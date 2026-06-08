@@ -217,7 +217,22 @@ function getNextStepLabel(step: CombatRoundStep): string {
   return COMBAT_ROUND_STEP_ABBREVIATIONS[nextStep];
 }
 
+function isSequentialResolutionStep(step: CombatRoundStep): boolean {
+  return (
+    step === "phase_1_actions" ||
+    step === "review_phase_2_actions" ||
+    step === "phase_1_damage" ||
+    step === "phase_2_actions" ||
+    step === "review_phase_2_damage" ||
+    step === "phase_2_damage"
+  );
+}
+
 function getAdvanceButtonLabel(step: CombatRoundStep): string {
+  if (isSequentialResolutionStep(step)) {
+    return "Use inspector for phase resolution";
+  }
+
   return `Commit ${COMBAT_ROUND_STEP_ABBREVIATIONS[step]} and advance to ${getNextStepLabel(step)}`;
 }
 
@@ -1547,21 +1562,27 @@ export default function CombatRoundManagerPanel({
     tableContainerRef.current?.scrollTo({ left: 0, top: 0 });
   }
 
-  function moveSelectedParticipantDown() {
-    setRoundState((current) => {
-      const participantIndex = displayParticipants.findIndex(
-        (participant) => participant.participantId === current.selectedParticipantId,
-      );
+  function selectNextParticipantDown(input: {
+    fromParticipantId?: string;
+    state: typeof roundState;
+    step?: CombatRoundStep;
+  }): typeof roundState {
+    const participantIndex = displayParticipants.findIndex(
+      (participant) => participant.participantId === input.fromParticipantId,
+    );
 
-      if (participantIndex < 0 || participantIndex >= displayParticipants.length - 1) {
-        return current;
-      }
-
+    if (participantIndex < 0 || participantIndex >= displayParticipants.length - 1) {
       return setCombatRoundSelection({
-        participantId: displayParticipants[participantIndex + 1]?.participantId,
-        state: current,
-        step: current.selectedStep,
+        participantId: input.fromParticipantId,
+        state: input.state,
+        step: input.step,
       });
+    }
+
+    return setCombatRoundSelection({
+      participantId: displayParticipants[participantIndex + 1]?.participantId,
+      state: input.state,
+      step: input.step,
     });
   }
 
@@ -1786,6 +1807,10 @@ export default function CombatRoundManagerPanel({
   }
 
   async function commitCurrentStep() {
+    if (isSequentialResolutionStep(roundState.currentStep)) {
+      return;
+    }
+
     const committedAt = new Date().toISOString();
     const resolutionPhase = getCombatRoundResolutionPhaseForStep(roundState.currentStep);
     const stateForCommit = resolutionPhase
@@ -2032,15 +2057,19 @@ export default function CombatRoundManagerPanel({
         secondaryActionId: inspectorDraft.secondaryActionId || undefined,
       });
       const nextRoundState = initializeCombatRoundState({ encounter: nextEncounter });
+      const nextSelectedRoundState = selectNextParticipantDown({
+        fromParticipantId: selectedEncounterParticipant.id,
+        state: nextRoundState,
+        step: roundState.selectedStep ?? roundState.currentStep,
+      });
 
       setScenarioParticipantOverrides((current) => ({
         ...current,
         [participant.id]: participant,
       }));
-      setRoundState(nextRoundState);
+      setRoundState(nextSelectedRoundState);
       onEncounterUpdated?.(nextEncounter);
       onScenarioParticipantsUpdated?.([participant]);
-      moveSelectedParticipantDown();
       setSaveError(undefined);
     } catch (caughtError) {
       setSaveError(
@@ -2066,10 +2095,14 @@ export default function CombatRoundManagerPanel({
         scenarioParticipantId: selectedScenarioParticipant.id,
       });
       const nextRoundState = initializeCombatRoundState({ encounter: nextEncounter });
+      const nextSelectedRoundState = selectNextParticipantDown({
+        fromParticipantId: selectedEncounterParticipant.id,
+        state: nextRoundState,
+        step: roundState.selectedStep ?? roundState.currentStep,
+      });
 
-      setRoundState(nextRoundState);
+      setRoundState(nextSelectedRoundState);
       onEncounterUpdated?.(nextEncounter);
-      moveSelectedParticipantDown();
       setSaveError(undefined);
     } catch (caughtError) {
       setSaveError(
@@ -2257,22 +2290,32 @@ export default function CombatRoundManagerPanel({
         state: roundState,
         updatedAt,
       });
-      const nextRoundState = advanceCombatRoundPhaseResolutionSubstepForParticipant({
-        participantId: attackResult.attackerParticipantId,
-        phase,
-        state: withParry,
-        updatedAt,
-      });
-      const defenderOwnedNextRoundState = {
-        ...nextRoundState,
-        phaseResolutionCursor: {
-          participantId: attackResult.defenderParticipantId,
-          phase,
-          substep: "damage" as const,
-        },
-        selectedParticipantId: attackResult.defenderParticipantId,
-        selectedStep: getCombatRoundDamageReviewStepForPhase(phase),
-      };
+      const nextRoundState = parry.success
+        ? completeCombatRoundPhaseResolutionForParticipant({
+            participantId: attackResult.attackerParticipantId,
+            phase,
+            state: withParry,
+            submittedBy: "gm",
+            updatedAt,
+          })
+        : advanceCombatRoundPhaseResolutionSubstepForParticipant({
+            participantId: attackResult.attackerParticipantId,
+            phase,
+            state: withParry,
+            updatedAt,
+          });
+      const defenderOwnedNextRoundState = parry.success
+        ? nextRoundState
+        : {
+            ...nextRoundState,
+            phaseResolutionCursor: {
+              participantId: attackResult.defenderParticipantId,
+              phase,
+              substep: "damage" as const,
+            },
+            selectedParticipantId: attackResult.defenderParticipantId,
+            selectedStep: getCombatRoundDamageReviewStepForPhase(phase),
+          };
 
       await persistRoundState(defenderOwnedNextRoundState);
       setSaveError(undefined);
@@ -2390,7 +2433,7 @@ export default function CombatRoundManagerPanel({
           }}
         >
           <button
-            disabled={saving}
+            disabled={saving || isSequentialResolutionStep(roundState.currentStep)}
             onClick={() => void commitCurrentStep()}
             type="button"
           >
