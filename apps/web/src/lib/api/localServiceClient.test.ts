@@ -443,6 +443,33 @@ describe("localServiceClient wire contract", () => {
     });
   });
 
+  it("passes selected combat round cell details when clearing a specific step", async () => {
+    const encounter = {
+      id: "encounter-1",
+      scenarioId: "scenario-1",
+    };
+    const participants = [{ id: "participant-1" }];
+    const fetchMock = stubFetch({ encounter, participants });
+    const client = await loadClient();
+
+    await expect(
+      client.clearCurrentCombatRoundStepOnServer({
+        encounterId: "encounter-1",
+        participantId: "encounter-participant-1",
+        step: "phase_1_actions",
+      }),
+    ).resolves.toEqual({ encounter, participants });
+
+    expectFetchCall(fetchMock, {
+      body: {
+        participantId: "encounter-participant-1",
+        step: "phase_1_actions",
+      },
+      method: "POST",
+      url: "https://api.example.test/encounters/encounter-1/combat-round/clear-current-step",
+    });
+  });
+
   it("posts equipment moves under the character equipment domain", async () => {
     const state = {
       inventory: [],

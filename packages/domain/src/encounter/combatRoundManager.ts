@@ -479,6 +479,7 @@ function isSameCombatRoundStepSnapshot(
 }
 
 function clearSnapshotsFromStep(input: {
+  participantId?: string;
   roundNumber: number;
   snapshots: CombatRoundStepSnapshot[];
   step: CombatRoundStep;
@@ -490,12 +491,18 @@ function clearSnapshotsFromStep(input: {
       return true;
     }
 
+    if (input.participantId && snapshot.participantId !== input.participantId) {
+      return true;
+    }
+
     return getStepIndex(snapshot.step) < clearFromIndex;
   });
 }
 
 function clearSnapshotsForCombatRoundStep(input: {
+  participantId?: string;
   roundNumber: number;
+  selectedAttackResult?: CombatRoundAttackRollResult;
   snapshots: CombatRoundStepSnapshot[];
   step: CombatRoundStep;
 }): CombatRoundStepSnapshot[] {
@@ -511,6 +518,52 @@ function clearSnapshotsForCombatRoundStep(input: {
 
   if (!pairedSteps) {
     return clearSnapshotsFromStep(input);
+  }
+
+  if (input.selectedAttackResult) {
+    const attackStep = getCombatRoundPhaseActionStepForPhase(input.selectedAttackResult.phase);
+    const parryStep = getCombatRoundParryReviewStepForPhase(input.selectedAttackResult.phase);
+    const damageStep = getCombatRoundDamageReviewStepForPhase(input.selectedAttackResult.phase);
+    const clearedSnapshotKeys = new Set<string>();
+
+    if (input.step === attackStep) {
+      clearedSnapshotKeys.add(`${input.selectedAttackResult.attackerParticipantId}:${attackStep}`);
+      clearedSnapshotKeys.add(`${input.selectedAttackResult.defenderParticipantId}:${parryStep}`);
+      clearedSnapshotKeys.add(`${input.selectedAttackResult.defenderParticipantId}:${damageStep}`);
+    } else if (input.step === parryStep) {
+      clearedSnapshotKeys.add(`${input.selectedAttackResult.defenderParticipantId}:${parryStep}`);
+      clearedSnapshotKeys.add(`${input.selectedAttackResult.defenderParticipantId}:${damageStep}`);
+    } else if (input.step === damageStep) {
+      clearedSnapshotKeys.add(`${input.selectedAttackResult.defenderParticipantId}:${damageStep}`);
+    }
+
+    return input.snapshots.filter(
+      (snapshot) =>
+        snapshot.roundNumber !== input.roundNumber ||
+        !clearedSnapshotKeys.has(`${snapshot.participantId}:${snapshot.step}`),
+    );
+  }
+
+  if (input.participantId) {
+    return input.snapshots.filter((snapshot) => {
+      if (snapshot.roundNumber !== input.roundNumber) {
+        return true;
+      }
+
+      if (snapshot.participantId !== input.participantId) {
+        return true;
+      }
+
+      if (input.step === "review_phase_2_actions") {
+        return snapshot.step !== "review_phase_2_actions" && snapshot.step !== "phase_1_damage";
+      }
+
+      if (input.step === "review_phase_2_damage") {
+        return snapshot.step !== "review_phase_2_damage" && snapshot.step !== "phase_2_damage";
+      }
+
+      return !pairedSteps.includes(snapshot.step);
+    });
   }
 
   return input.snapshots.filter(
@@ -2089,7 +2142,9 @@ export function clearCombatRoundStep(input: {
           : getCombatRoundDamageReviewStepForPhase(clearResolutionPhase)
         : normalized.selectedStep,
     stepSnapshots: clearSnapshotsForCombatRoundStep({
+      participantId: normalized.selectedParticipantId,
       roundNumber: normalized.roundNumber,
+      selectedAttackResult: selectedAttackResultForClear,
       snapshots: normalized.stepSnapshots,
       step: input.step,
     }),

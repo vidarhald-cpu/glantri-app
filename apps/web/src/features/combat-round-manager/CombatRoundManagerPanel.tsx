@@ -1867,11 +1867,23 @@ export default function CombatRoundManagerPanel({
     setSaving(true);
 
     try {
+      const clearedSelection: CombatRoundSelectionTarget = {
+        participantId: inspector.participant?.participantId,
+        step: inspector.step,
+      };
       const { encounter: nextEncounter, participants } = await clearCurrentCombatRoundStepOnServer({
         encounterId: encounter.id,
+        participantId: clearedSelection.participantId,
+        step: clearedSelection.step,
       });
       const nextRoundState = initializeCombatRoundState({ encounter: nextEncounter });
+      const nextSelection: CombatRoundSelectionTarget = {
+        participantId: nextRoundState.selectedParticipantId ?? clearedSelection.participantId,
+        step: nextRoundState.selectedStep ?? clearedSelection.step,
+      };
 
+      pendingSelectionRef.current = nextSelection;
+      manualSelectionRef.current = nextSelection;
       setRoundState(nextRoundState);
       setSaveError(undefined);
       onEncounterUpdated?.(nextEncounter);

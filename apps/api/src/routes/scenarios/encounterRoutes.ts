@@ -8,7 +8,9 @@ import {
   canPlayerRollCombatInitiative,
   buildRoleplayCalculationPreview,
   canPlayerSubmitCombatDeclaration,
+  clearCombatRoundStep,
   clearCurrentCombatRoundStepAndRewind,
+  combatRoundStepSchema,
   encounterSessionSchema,
   getCombatRoundInitiativePhaseForStep,
   initializeCombatRoundState,
@@ -22,6 +24,7 @@ import {
   rollOpenEndedD6,
   combatRoundPhaseContextsSchema,
   scenarioParticipantCombatContextSchema,
+  setCombatRoundSelection,
   validateCombatDeclarationTargets,
 } from "@glantri/domain";
 import type { ScenarioParticipant } from "@glantri/domain";
@@ -31,7 +34,7 @@ import {
 } from "@glantri/rules-engine";
 
 import { requireAdminUser, requireAuthenticatedUser } from "../../lib/sessionAuth";
-import { parseBodyObject, parseId } from "./parsing";
+import { parseBodyObject, parseId, parseOptionalString } from "./parsing";
 import { resolveScenarioWorkspaceAccess } from "./access";
 
 const campaignService = new CampaignService();
@@ -843,9 +846,32 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           .map((participant) => participant.scenarioParticipantId)
           .filter((id): id is string => Boolean(id)),
       );
+      const body = request.body && typeof request.body === "object"
+        ? (request.body as Record<string, unknown>)
+        : {};
+      const selectedParticipantId = parseOptionalString(body, "participantId");
+      const selectedStepValue = parseOptionalString(body, "step");
+      const selectedStep = selectedStepValue
+        ? combatRoundStepSchema.parse(selectedStepValue)
+        : undefined;
       const roundState = initializeCombatRoundState({ encounter });
-      const clearsDeclarationStep = roundState.currentStep === "select_actions";
-      const nextRoundState = clearCurrentCombatRoundStepAndRewind(roundState);
+      const stateForClear =
+        selectedParticipantId && selectedStep
+          ? setCombatRoundSelection({
+              participantId: selectedParticipantId,
+              state: roundState,
+              step: selectedStep,
+            })
+          : roundState;
+      const clearStep = selectedStep ?? stateForClear.currentStep;
+      const clearsDeclarationStep = clearStep === "select_actions";
+      const nextRoundState =
+        selectedParticipantId && selectedStep
+          ? clearCombatRoundStep({
+              state: stateForClear,
+              step: selectedStep,
+            })
+          : clearCurrentCombatRoundStepAndRewind(roundState);
       const submittedAt = new Date().toISOString();
       const savedEncounter = await encounterService.updateEncounter({
         campaignId: access.campaignId,
@@ -861,7 +887,15 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       const updatedParticipants = clearsDeclarationStep
         ? await Promise.all(
             scenarioParticipants
-              .filter((participant) => encounterScenarioParticipantIds.has(participant.id))
+              .filter((participant) =>
+                selectedParticipantId
+                  ? membership.participants.some(
+                      (encounterParticipant) =>
+                        encounterParticipant.id === selectedParticipantId &&
+                        encounterParticipant.scenarioParticipantId === participant.id,
+                    )
+                  : encounterScenarioParticipantIds.has(participant.id),
+              )
               .map((participant) =>
                 encounterService.updateScenarioParticipantState({
                   participantId: participant.id,

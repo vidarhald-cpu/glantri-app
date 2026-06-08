@@ -1601,6 +1601,13 @@ describe("combat round manager", () => {
           phaseResolutionResult: withResolution.phaseResolutionResults[0],
           step: "review_phase_2_actions",
         }),
+        stepSnapshot({
+          attackResult: result,
+          participantId: "guard",
+          phase: "phase1",
+          phaseResolutionResult: withResolution.phaseResolutionResults[0],
+          step: "phase_1_damage",
+        }),
       ],
     });
     const cleared = clearCombatRoundStep({
@@ -1628,6 +1635,13 @@ describe("combat round manager", () => {
         participantId: "guard",
         state: cleared,
         step: "review_phase_2_actions",
+      }),
+    ).toBeUndefined();
+    expect(
+      getCombatRoundStepSnapshot({
+        participantId: "guard",
+        state: cleared,
+        step: "phase_1_damage",
       }),
     ).toBeUndefined();
   });
@@ -1672,6 +1686,11 @@ describe("combat round manager", () => {
           phaseResolutionResult: withResolution.phaseResolutionResults[0],
           step: "review_phase_2_actions",
         }),
+        stepSnapshot({
+          participantId: "guard",
+          phase: "phase1",
+          step: "phase_1_actions",
+        }),
       ],
     });
     const cleared = clearCombatRoundStep({
@@ -1698,6 +1717,16 @@ describe("combat round manager", () => {
         step: "review_phase_2_actions",
       }),
     ).toBeUndefined();
+    expect(
+      getCombatRoundStepSnapshot({
+        participantId: "guard",
+        state: cleared,
+        step: "phase_1_actions",
+      }),
+    ).toMatchObject({
+      participantId: "guard",
+      step: "phase_1_actions",
+    });
   });
 
   it("committed D1 snapshots preserve resolution scaffold status", () => {

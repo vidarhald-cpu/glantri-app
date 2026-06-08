@@ -1,6 +1,7 @@
 import type {
   CombatRoundInitiativeResult,
   CombatRoundPhaseContexts,
+  CombatRoundStep,
   EncounterSession,
   ScenarioParticipant,
   ScenarioParticipantCombatContext,
@@ -113,11 +114,21 @@ export async function rollCombatInitiativeOnServer(input: {
 
 export async function clearCurrentCombatRoundStepOnServer(input: {
   encounterId: string;
+  participantId?: string;
+  step?: CombatRoundStep;
 }): Promise<{ encounter: EncounterSession; participants: ScenarioParticipant[] }> {
+  const body =
+    input.participantId || input.step
+      ? JSON.stringify({
+          participantId: input.participantId,
+          step: input.step,
+        })
+      : undefined;
   const payload = await sendJson<{
     encounter: EncounterSession;
     participants: ScenarioParticipant[];
   }>(`/encounters/${input.encounterId}/combat-round/clear-current-step`, {
+    body,
     method: "POST",
   });
 

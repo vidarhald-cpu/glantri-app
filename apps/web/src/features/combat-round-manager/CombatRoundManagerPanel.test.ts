@@ -247,7 +247,25 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("currentRound: nextRoundState.roundNumber");
     expect(source).toContain("submitCombatDeclarationOnServer");
     expect(source).toContain("clearCurrentCombatRoundStepOnServer");
+    expect(source).toContain("const clearedSelection: CombatRoundSelectionTarget =");
+    expect(source).toContain("participantId: inspector.participant?.participantId");
+    expect(source).toContain("step: inspector.step");
+    expect(source).toContain("participantId: clearedSelection.participantId");
+    expect(source).toContain("step: clearedSelection.step");
     expect(source).not.toContain("actionLog:");
+  });
+
+  it("clears the selected inspector cell instead of rewinding the current global step", () => {
+    const source = readSource();
+
+    expect(source).toContain("const clearedSelection: CombatRoundSelectionTarget =");
+    expect(source).toContain("const nextSelection: CombatRoundSelectionTarget =");
+    expect(source).toContain(
+      "participantId: nextRoundState.selectedParticipantId ?? clearedSelection.participantId",
+    );
+    expect(source).toContain("step: nextRoundState.selectedStep ?? clearedSelection.step");
+    expect(source).toContain("pendingSelectionRef.current = nextSelection");
+    expect(source).toContain("manualSelectionRef.current = nextSelection");
   });
 
   it("guards recorded attack results against accidental re-rolls", () => {
