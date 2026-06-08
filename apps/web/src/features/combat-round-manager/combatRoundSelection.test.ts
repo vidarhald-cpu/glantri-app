@@ -180,4 +180,33 @@ describe("combat round manager selection", () => {
     expect(normalized.selectedParticipantId).toBe("middle");
     expect(normalized.selectedStep).toBe("select_actions");
   });
+
+  it("uses a command-undo currentCursor for initiative selection after refresh", () => {
+    const existing = initializeCombatRoundState({ encounter: encounter() });
+    const refreshedState = {
+      ...existing,
+      currentCursor: {
+        participantId: "top",
+        roundNumber: existing.roundNumber,
+        step: "i1" as const,
+      },
+      currentStep: "initiative_phase_1" as const,
+      selectedParticipantId: "bottom",
+      selectedStep: "initiative_phase_1" as const,
+    };
+    const normalized = normalizeCombatRoundManagerSelection({
+      manualSelection: {
+        participantId: "bottom",
+        step: "initiative_phase_1",
+      },
+      pendingSelection: {
+        participantId: "middle",
+        step: "initiative_phase_1",
+      },
+      state: refreshedState,
+    });
+
+    expect(normalized.selectedParticipantId).toBe("top");
+    expect(normalized.selectedStep).toBe("initiative_phase_1");
+  });
 });

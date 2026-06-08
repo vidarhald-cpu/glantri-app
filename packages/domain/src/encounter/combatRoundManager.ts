@@ -674,6 +674,27 @@ export function recordCombatRoundGlobalParticipantCommand(input: {
   };
 }
 
+function getLatestCombatRoundGlobalParticipantCommandIndex(input: {
+  commandType: CombatRoundCommandType;
+  participantId: string;
+  roundNumber: number;
+  state: CombatRoundState;
+}): number {
+  for (let index = input.state.commands.length - 1; index >= 0; index -= 1) {
+    const command = input.state.commands[index];
+
+    if (
+      command?.roundNumber === input.roundNumber &&
+      command.participantId === input.participantId &&
+      command.type === input.commandType
+    ) {
+      return index;
+    }
+  }
+
+  return -1;
+}
+
 function getStepIndex(step: CombatRoundStep): number {
   return COMBAT_ROUND_STEPS.indexOf(step);
 }
@@ -2247,7 +2268,7 @@ function getCombatRoundGlobalDependencyPhaseForStep(
   return undefined;
 }
 
-export function clearCombatRoundStep(input: {
+function clearCombatRoundStepLegacy(input: {
   state: CombatRoundState;
   step: CombatRoundStep;
 }): CombatRoundState {
@@ -2525,7 +2546,10 @@ export function clearCombatRoundStep(input: {
       return {
         ...participant,
         attackResults: nextAttackResults,
-        declaration: input.step === "select_actions" ? undefined : participant.declaration,
+        declaration:
+          input.step === "select_actions" && participant.participantId === selectedParticipantId
+            ? undefined
+            : participant.declaration,
         initiatives: nextInitiatives,
         stepStatuses:
           resetsSelectedStep || resetsDownstreamReview
@@ -2602,6 +2626,71 @@ export function clearCombatRoundStep(input: {
           : input.step,
     }),
   };
+}
+
+export function undoLatestCombatRoundGlobalParticipantCommand(input: {
+  participantId?: string;
+  state: CombatRoundState;
+  step: CombatRoundStep;
+}): CombatRoundState | undefined {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const commandType = getCombatRoundGlobalCommandTypeForStep(input.step);
+  const participantId =
+    input.participantId ??
+    (normalized.selectedParticipantId &&
+    normalized.participants.some(
+      (participant) => participant.participantId === normalized.selectedParticipantId,
+    )
+      ? normalized.selectedParticipantId
+      : undefined);
+
+  if (!commandType || !isGlobalCombatRoundStep(input.step) || !participantId) {
+    return undefined;
+  }
+
+  const commandIndex = getLatestCombatRoundGlobalParticipantCommandIndex({
+    commandType,
+    participantId,
+    roundNumber: normalized.roundNumber,
+    state: normalized,
+  });
+  const command = normalized.commands[commandIndex];
+
+  if (!command) {
+    return undefined;
+  }
+
+  const stateForLegacyClear = setCombatRoundSelection({
+    participantId,
+    state: normalized,
+    step: input.step,
+  });
+  const cleared = clearCombatRoundStepLegacy({
+    state: stateForLegacyClear,
+    step: input.step,
+  });
+  const selectedStep = getCombatRoundStepForCursorStep(command.beforeCursor.step);
+
+  return {
+    ...cleared,
+    commands: normalized.commands.filter((_, index) => index !== commandIndex),
+    currentCursor: command.beforeCursor,
+    selectedParticipantId: command.beforeCursor.participantId ?? participantId,
+    selectedStep,
+  };
+}
+
+export function clearCombatRoundStep(input: {
+  state: CombatRoundState;
+  step: CombatRoundStep;
+}): CombatRoundState {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const commandUndoneState = undoLatestCombatRoundGlobalParticipantCommand({
+    state: normalized,
+    step: input.step,
+  });
+
+  return commandUndoneState ?? clearCombatRoundStepLegacy({ state: normalized, step: input.step });
 }
 
 export function clearCurrentCombatRoundStepAndRewind(state: CombatRoundState): CombatRoundState {

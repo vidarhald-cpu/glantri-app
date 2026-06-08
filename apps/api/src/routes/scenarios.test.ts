@@ -4,6 +4,8 @@ import {
   buildCombatRoundAttackRollResult,
   initializeCombatRoundState,
   recordCombatRoundAttackResult,
+  recordCombatRoundDeclaration,
+  recordCombatRoundInitiative,
   type EncounterSession,
 } from "@glantri/domain";
 
@@ -2892,6 +2894,79 @@ describe("scenarios route contract", () => {
     );
   });
 
+  it("clears a command-backed DE cell by restoring the command before cursor", async () => {
+    const combatEncounter = makeCombatEncounter() as EncounterSession;
+    const stateWithCommand = recordCombatRoundDeclaration({
+      command: {
+        createdAt: "2026-01-01T00:01:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      declaration: {
+        actionId: "attack_parry",
+        roundNumber: 1,
+      },
+      participantId: "encounter-participant-1",
+      state: initializeCombatRoundState({ encounter: combatEncounter }),
+      submittedBy: "gm",
+    });
+    setupCombatDeclarationRoute({
+      encounter: {
+        combatRoundState: stateWithCommand,
+      },
+      participant: {
+        state: {
+          combat: {
+            combatContext: {
+              selectedOpponentId: "guard",
+              modifierBuckets: {
+                general: [],
+                situationDb: [attackParryDbParryModifierEntry],
+                situationInitiative: [],
+                situationObSkill: [],
+              },
+            },
+            lastDeclaredActionId: "attack_parry",
+            lastDeclaredMovementId: "hold",
+            lastDeclaredRoundNumber: 1,
+          },
+          conditions: [],
+          equipment: {},
+          health: {},
+          modifiers: [],
+          resources: {},
+        },
+      },
+      user: mocks.adminUser,
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      body: {
+        participantId: "encounter-participant-1",
+        step: "select_actions",
+      },
+      method: "POST",
+      url: "/encounters/encounter-1/combat-round/clear-current-step",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
+    expect(updatedEncounter.combatRoundState.commands).toEqual([]);
+    expect(updatedEncounter.combatRoundState.currentCursor).toEqual({
+      participantId: "encounter-participant-1",
+      roundNumber: 1,
+      step: "DE",
+    });
+    expect(updatedEncounter.combatRoundState.selectedParticipantId).toBe(
+      "encounter-participant-1",
+    );
+    expect(updatedEncounter.combatRoundState.selectedStep).toBe("select_actions");
+    expect(updatedEncounter.combatRoundState.participants[0].declaration).toBeUndefined();
+    expect(mocks.encounterService.updateScenarioParticipantState).toHaveBeenCalled();
+  });
+
   it("clears M1 and rewinds without erasing submitted DE declarations", async () => {
     setupCombatDeclarationRoute({
       encounter: {
@@ -2940,6 +3015,59 @@ describe("scenarios route contract", () => {
       "submitted",
     );
     expect(mocks.encounterService.updateScenarioParticipantState).not.toHaveBeenCalled();
+  });
+
+  it("clears a command-backed i1 cell by restoring the command before cursor", async () => {
+    const combatEncounter = makeCombatEncounter() as EncounterSession;
+    const initiativeState = {
+      ...initializeCombatRoundState({ encounter: combatEncounter }),
+      currentStep: "initiative_phase_1" as const,
+      selectedParticipantId: "encounter-participant-1",
+      selectedStep: "initiative_phase_1" as const,
+    };
+    const stateWithCommand = recordCombatRoundInitiative({
+      command: {
+        createdAt: "2026-01-01T00:01:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      initiative: 14,
+      participantId: "encounter-participant-1",
+      phase: "phase1",
+      state: initiativeState,
+      submittedBy: "gm",
+    });
+    setupCombatDeclarationRoute({
+      encounter: {
+        combatRoundState: stateWithCommand,
+      },
+      user: mocks.adminUser,
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      body: {
+        participantId: "encounter-participant-1",
+        step: "initiative_phase_1",
+      },
+      method: "POST",
+      url: "/encounters/encounter-1/combat-round/clear-current-step",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
+    expect(updatedEncounter.combatRoundState.commands).toEqual([]);
+    expect(updatedEncounter.combatRoundState.currentCursor).toEqual({
+      participantId: "encounter-participant-1",
+      roundNumber: 1,
+      step: "i1",
+    });
+    expect(updatedEncounter.combatRoundState.selectedParticipantId).toBe(
+      "encounter-participant-1",
+    );
+    expect(updatedEncounter.combatRoundState.selectedStep).toBe("initiative_phase_1");
+    expect(updatedEncounter.combatRoundState.participants[0].initiatives.phase1).toBeUndefined();
   });
 
   it("clears the selected A1 cell without rewinding to initiative", async () => {
