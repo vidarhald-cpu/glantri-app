@@ -83,6 +83,7 @@ function createScenarioParticipant(
 describe("gmEncounter", () => {
   it("derives selected actions and targets from persisted scenario participant combat state", () => {
     const rows = buildGmEncounterParticipantRows({
+      encounterId: "encounter-1",
       encounterParticipants: [
         createEncounterParticipant({
           characterId: "char-1",
@@ -95,6 +96,7 @@ describe("gmEncounter", () => {
           participantType: "ad-hoc",
         }),
       ],
+      roundNumber: 1,
       scenarioParticipants: [
         createScenarioParticipant({
           characterId: "char-1",
@@ -116,6 +118,8 @@ describe("gmEncounter", () => {
               engaged: false,
               initiativeRoll: 14,
               lastDeclaredActionId: "attack_parry",
+              lastDeclaredEncounterId: "encounter-1",
+              lastDeclaredRoundNumber: 1,
             },
             conditions: [],
             equipment: {},
@@ -151,6 +155,64 @@ describe("gmEncounter", () => {
       }),
     );
     expect(rows[1].selectedAction).toBe("Waiting for action");
+  });
+
+  it("does not treat another encounter's last declaration as current", () => {
+    const rows = buildGmEncounterParticipantRows({
+      encounterId: "encounter-2",
+      encounterParticipants: [
+        createEncounterParticipant({
+          characterId: "char-1",
+          id: "enc-1",
+          label: "Ariadne",
+        }),
+      ],
+      roundNumber: 1,
+      scenarioParticipants: [
+        createScenarioParticipant({
+          characterId: "char-1",
+          id: "scn-1",
+          scenarioId: "scenario-1",
+          snapshot: { displayName: "Ariadne" },
+          sourceType: "character",
+          state: {
+            combat: {
+              combatContext: {
+                modifierBuckets: {
+                  general: [{ id: "general-1", scope: "until", value: 2 }],
+                  situationDb: [],
+                  situationInitiative: [],
+                  situationObSkill: [],
+                },
+                selectedOpponentId: "scn-2",
+              },
+              engaged: false,
+              lastDeclaredActionId: "attack_parry",
+              lastDeclaredEncounterId: "encounter-1",
+              lastDeclaredRoundNumber: 1,
+            },
+            conditions: [],
+            equipment: {},
+            health: {
+              bleeding: 0,
+              currentHp: 12,
+              dead: false,
+              maxHp: 12,
+              unconscious: false,
+              wounds: 0,
+            },
+            modifiers: [],
+            resources: {},
+            snapshotVersion: 1,
+          },
+        }),
+      ],
+    });
+
+    expect(rows[0]?.hasDeclaredAction).toBe(false);
+    expect(rows[0]?.selectedAction).toBe("Waiting for action");
+    expect(rows[0]?.phaseOneAdjustments).toBe("—");
+    expect(rows[0]?.target).toBe("—");
   });
 
   it("enables initiative first, then advances to the current phase once initiative exists", () => {

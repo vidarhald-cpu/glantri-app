@@ -167,10 +167,29 @@ describe("combat round manager", () => {
       roundNumber: 3,
       step: "DE",
     });
+    expect(state.phaseResolutionCursor).toBeUndefined();
+    expect(state.phaseResolutionResults).toEqual([]);
+    expect(state.phaseResolutionStatuses).toEqual({});
+    expect(state.stepSnapshots).toEqual([]);
     expect(state.selectedParticipantId).toBe("gladiator");
     expect(state.participants.map((entry) => entry.participantId)).toEqual(["gladiator", "guard"]);
     expect(state.participants[0]?.stepStatuses.select_actions).toBe("pending");
     expect(state.participants[0]?.stepStatuses.round_summary).toBe("pending");
+    expect(state.participants[0]?.attackResults).toEqual({});
+    expect(
+      getCombatRoundParticipantPhaseStepStatus({
+        participantId: "guard",
+        state,
+        step: "review_phase_2_actions",
+      }),
+    ).toBe("pending");
+    expect(
+      getCombatRoundParticipantPhaseStepStatus({
+        participantId: "guard",
+        state,
+        step: "phase_1_damage",
+      }),
+    ).toBe("pending");
   });
 
   it("parses legacy round state without commands or current cursor", () => {
@@ -700,7 +719,7 @@ describe("combat round manager", () => {
         state: cleared,
         step: "review_phase_2_actions",
       }),
-    ).toBe("skipped");
+    ).toBe("pending");
     expect(
       getCombatRoundStepSnapshot({
         participantId: "gladiator",
@@ -769,7 +788,7 @@ describe("combat round manager", () => {
         state: redeclared,
         step: "review_phase_2_actions",
       }),
-    ).toBe("skipped");
+    ).toBe("pending");
   });
 
   it("clears declaration snapshots when DE is cleared", () => {
@@ -1099,7 +1118,9 @@ describe("combat round manager", () => {
   });
 
   it("records global review and initiative commands with same-step cursor movement", () => {
-    const reviewPhase1 = advanceCombatRoundStep(initializeCombatRoundState({ encounter: encounter() }));
+    const reviewPhase1 = advanceCombatRoundStep(
+      initializeCombatRoundState({ encounter: encounter() }),
+    );
     const reviewedPhase1 = recordCombatRoundParticipantStepReview({
       command: {
         createdAt: "2026-01-01T00:01:00.000Z",
@@ -2591,9 +2612,7 @@ describe("combat round manager", () => {
     });
 
     expect(afterResolvedP1Clear.participants[0]?.attackResults.phase1).toEqual(result);
-    expect(afterResolvedP1Clear.phaseResolutionResults[0]?.parryResolution.status).toBe(
-      "pending",
-    );
+    expect(afterResolvedP1Clear.phaseResolutionResults[0]?.parryResolution.status).toBe("pending");
     expect(afterResolvedP1Clear.phaseResolutionCursor).toEqual({
       participantId: "guard",
       phase: "phase1",
@@ -2717,9 +2736,7 @@ describe("combat round manager", () => {
       participantId: "scout",
       state: initializeCombatRoundState({
         encounter: encounter({
-          participants: [
-            participant({ id: "scout", label: "Scout" }),
-          ],
+          participants: [participant({ id: "scout", label: "Scout" })],
         }),
       }),
       submittedBy: "gm",
