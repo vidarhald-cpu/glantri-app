@@ -175,6 +175,7 @@ export const scenarioParticipantStateSchema = z.object({
     engaged: z.boolean().default(false),
     initiativeRoll: z.number().int().optional(),
     lastDeclaredActionId: idSchema.optional(),
+    lastDeclaredEncounterId: idSchema.optional(),
     lastDeclaredMovementId: z.string().min(1).optional(),
     lastDeclaredRoundNumber: z.number().int().positive().optional(),
     lastDeclaredSecondaryActionId: idSchema.optional(),
@@ -519,6 +520,20 @@ export function setScenarioPhase(
     ...current,
     phase,
   });
+}
+
+export function hasScenarioParticipantCombatDeclarationForEncounterRound(input: {
+  encounterId?: string;
+  participant?: ScenarioParticipant;
+  roundNumber?: number;
+}): boolean {
+  const combat = input.participant?.state.combat;
+
+  return Boolean(
+    combat?.lastDeclaredActionId &&
+    combat.lastDeclaredEncounterId === input.encounterId &&
+    combat.lastDeclaredRoundNumber === input.roundNumber,
+  );
 }
 
 export function createParticipantSnapshotFromCharacter(input: {

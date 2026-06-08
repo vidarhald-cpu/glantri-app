@@ -208,6 +208,7 @@ function clearScenarioParticipantCombatDeclaration(
       declarationSubmittedAt: undefined,
       declarationSubmittedByUserId: undefined,
       lastDeclaredActionId: undefined,
+      lastDeclaredEncounterId: undefined,
       lastDeclaredMovementId: undefined,
       lastDeclaredRoundNumber: undefined,
       lastDeclaredSecondaryActionId: undefined,
@@ -610,6 +611,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             declarationSubmittedAt: submittedAt,
             declarationSubmittedByUserId: user.id,
             lastDeclaredActionId: body.actionId,
+            lastDeclaredEncounterId: encounter.id,
             lastDeclaredMovementId: body.movementId,
             lastDeclaredRoundNumber: roundState.roundNumber,
             lastDeclaredSecondaryActionId: body.secondaryActionId,
@@ -867,9 +869,10 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           .map((participant) => participant.scenarioParticipantId)
           .filter((id): id is string => Boolean(id)),
       );
-      const body = request.body && typeof request.body === "object"
-        ? (request.body as Record<string, unknown>)
-        : {};
+      const body =
+        request.body && typeof request.body === "object"
+          ? (request.body as Record<string, unknown>)
+          : {};
       const selectedParticipantId = parseOptionalString(body, "participantId");
       const selectedStepValue = parseOptionalString(body, "step");
       const selectedStep = selectedStepValue

@@ -1677,6 +1677,7 @@ describe("scenarios route contract", () => {
         state: expect.objectContaining({
           combat: expect.objectContaining({
             lastDeclaredActionId: "attack_parry",
+            lastDeclaredEncounterId: "encounter-1",
             lastDeclaredMovementId: "hold",
             lastDeclaredRoundNumber: 1,
             combatContext: expect.objectContaining({
@@ -1949,6 +1950,7 @@ describe("scenarios route contract", () => {
         state: expect.objectContaining({
           combat: expect.objectContaining({
             lastDeclaredActionId: "parry_attack",
+            lastDeclaredEncounterId: "encounter-1",
             combatContext: expect.objectContaining({
               modifierBuckets: expect.objectContaining({
                 situationDb: [parryAttackDbParryModifier],
@@ -2023,12 +2025,10 @@ describe("scenarios route contract", () => {
         state: expect.objectContaining({
           combat: expect.objectContaining({
             lastDeclaredActionId: "double_attack",
+            lastDeclaredEncounterId: "encounter-1",
             combatContext: expect.objectContaining({
               modifierBuckets: expect.objectContaining({
-                situationDb: [
-                  doubleAttackPhase1DbParryModifier,
-                  doubleAttackPhase2DbParryModifier,
-                ],
+                situationDb: [doubleAttackPhase1DbParryModifier, doubleAttackPhase2DbParryModifier],
                 situationObSkill: [
                   doubleAttackPhase1ObSkillModifier,
                   doubleAttackPhase2ObSkillModifier,
@@ -2044,14 +2044,8 @@ describe("scenarios route contract", () => {
       actionId: "double_attack",
       combatContext: expect.objectContaining({
         modifierBuckets: expect.objectContaining({
-          situationDb: [
-            doubleAttackPhase1DbParryModifier,
-            doubleAttackPhase2DbParryModifier,
-          ],
-          situationObSkill: [
-            doubleAttackPhase1ObSkillModifier,
-            doubleAttackPhase2ObSkillModifier,
-          ],
+          situationDb: [doubleAttackPhase1DbParryModifier, doubleAttackPhase2DbParryModifier],
+          situationObSkill: [doubleAttackPhase1ObSkillModifier, doubleAttackPhase2ObSkillModifier],
         }),
       }),
       roundNumber: 1,
@@ -2110,12 +2104,10 @@ describe("scenarios route contract", () => {
         state: expect.objectContaining({
           combat: expect.objectContaining({
             lastDeclaredActionId: "adjust_range_attack",
+            lastDeclaredEncounterId: "encounter-1",
             combatContext: expect.objectContaining({
               modifierBuckets: expect.objectContaining({
-                situationDb: [
-                  adjustRangePhase1DbParryModifier,
-                  adjustRangePhase2DbParryModifier,
-                ],
+                situationDb: [adjustRangePhase1DbParryModifier, adjustRangePhase2DbParryModifier],
               }),
             }),
           }),
@@ -2127,10 +2119,7 @@ describe("scenarios route contract", () => {
       actionId: "adjust_range_attack",
       combatContext: expect.objectContaining({
         modifierBuckets: expect.objectContaining({
-          situationDb: [
-            adjustRangePhase1DbParryModifier,
-            adjustRangePhase2DbParryModifier,
-          ],
+          situationDb: [adjustRangePhase1DbParryModifier, adjustRangePhase2DbParryModifier],
         }),
       }),
       phaseContexts: {
@@ -2483,6 +2472,7 @@ describe("scenarios route contract", () => {
               }),
             }),
             lastDeclaredActionId: "parry_attack",
+            lastDeclaredEncounterId: "encounter-1",
           }),
         }),
       }),
@@ -2886,6 +2876,7 @@ describe("scenarios route contract", () => {
               },
             },
             lastDeclaredActionId: undefined,
+            lastDeclaredEncounterId: undefined,
             lastDeclaredMovementId: undefined,
             lastDeclaredRoundNumber: undefined,
           }),
@@ -2926,6 +2917,7 @@ describe("scenarios route contract", () => {
               },
             },
             lastDeclaredActionId: "attack_parry",
+            lastDeclaredEncounterId: "encounter-1",
             lastDeclaredMovementId: "hold",
             lastDeclaredRoundNumber: 1,
           },
@@ -2959,9 +2951,7 @@ describe("scenarios route contract", () => {
       roundNumber: 1,
       step: "DE",
     });
-    expect(updatedEncounter.combatRoundState.selectedParticipantId).toBe(
-      "encounter-participant-1",
-    );
+    expect(updatedEncounter.combatRoundState.selectedParticipantId).toBe("encounter-participant-1");
     expect(updatedEncounter.combatRoundState.selectedStep).toBe("select_actions");
     expect(updatedEncounter.combatRoundState.participants[0].declaration).toBeUndefined();
     expect(mocks.encounterService.updateScenarioParticipantState).toHaveBeenCalled();
@@ -3063,9 +3053,7 @@ describe("scenarios route contract", () => {
       roundNumber: 1,
       step: "i1",
     });
-    expect(updatedEncounter.combatRoundState.selectedParticipantId).toBe(
-      "encounter-participant-1",
-    );
+    expect(updatedEncounter.combatRoundState.selectedParticipantId).toBe("encounter-participant-1");
     expect(updatedEncounter.combatRoundState.selectedStep).toBe("initiative_phase_1");
     expect(updatedEncounter.combatRoundState.participants[0].initiatives.phase1).toBeUndefined();
   });
@@ -3135,9 +3123,7 @@ describe("scenarios route contract", () => {
     expect(updatedEncounter.combatRoundState.currentStep).toBe("initiative_phase_1");
     expect(updatedEncounter.combatRoundState.selectedStep).toBe("phase_1_actions");
     expect(updatedEncounter.combatRoundState.selectedParticipantId).toBe("encounter-participant-1");
-    expect(
-      updatedEncounter.combatRoundState.participants[0].attackResults.phase1,
-    ).toBeUndefined();
+    expect(updatedEncounter.combatRoundState.participants[0].attackResults.phase1).toBeUndefined();
     expect(updatedEncounter.combatRoundState.participants[0].stepStatuses.phase_1_actions).toBe(
       "pending",
     );
@@ -3208,9 +3194,7 @@ describe("scenarios route contract", () => {
     expect(updatedEncounter.combatRoundState.currentStep).toBe("initiative_phase_1");
     expect(updatedEncounter.combatRoundState.selectedStep).toBe("phase_1_actions");
     expect(updatedEncounter.combatRoundState.selectedParticipantId).toBe("encounter-participant-1");
-    expect(
-      updatedEncounter.combatRoundState.participants[0].attackResults.phase1,
-    ).toBeUndefined();
+    expect(updatedEncounter.combatRoundState.participants[0].attackResults.phase1).toBeUndefined();
     expect(updatedEncounter.combatRoundState.participants[0].stepStatuses.phase_1_actions).toBe(
       "pending",
     );

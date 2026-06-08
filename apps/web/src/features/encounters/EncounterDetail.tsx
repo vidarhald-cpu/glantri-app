@@ -21,7 +21,7 @@ import {
   setEncounterDeclarationsLocked,
   updateEncounterAttackResolution,
   updateEncounterParticipantDeclaration,
-  updateEncounterParticipantTurnData
+  updateEncounterParticipantTurnData,
 } from "@glantri/rules-engine";
 
 import {
@@ -41,7 +41,10 @@ import { loadCanonicalContent } from "@/lib/content/loadCanonicalContent";
 import RememberedCampaignWorkspaceEffect from "@/lib/campaigns/RememberedCampaignWorkspaceEffect";
 import { buildCampaignWorkspaceHref } from "@/lib/campaigns/workspace";
 import { LocalEncounterRepository } from "@/lib/offline/repositories/localEncounterRepository";
-import { LocalCharacterRepository, UNNAMED_CHARACTER_PLACEHOLDER } from "@/lib/offline/repositories/localCharacterRepository";
+import {
+  LocalCharacterRepository,
+  UNNAMED_CHARACTER_PLACEHOLDER,
+} from "@/lib/offline/repositories/localCharacterRepository";
 import { GmRoleplayingEncounterScreen } from "@/features/roleplay/RoleplayEncounterScreens";
 
 interface EncounterDetailProps {
@@ -60,27 +63,27 @@ const ACTION_OPTIONS = [
   { label: "Move", value: "move" },
   { label: "Defend", value: "defend" },
   { label: "Ready", value: "ready" },
-  { label: "Other", value: "other" }
+  { label: "Other", value: "other" },
 ] as const;
 const DEFENSE_POSTURE_OPTIONS = [
   { label: "None", value: "none" },
   { label: "Guard", value: "guard" },
   { label: "Parry", value: "parry" },
   { label: "Shield defense", value: "shield" },
-  { label: "Full defense", value: "full-defense" }
+  { label: "Full defense", value: "full-defense" },
 ] as const;
 const TARGET_LOCATION_OPTIONS = [
   { label: "Any", value: "any" },
   { label: "Head", value: "head" },
   { label: "Torso", value: "torso" },
   { label: "Arm", value: "arm" },
-  { label: "Leg", value: "leg" }
+  { label: "Leg", value: "leg" },
 ] as const;
 const DEFENSE_FOCUS_OPTIONS = [
   { label: "None", value: "none" },
   { label: "Self", value: "self" },
   { label: "Weapon side", value: "weapon-side" },
-  { label: "Shield side", value: "shield-side" }
+  { label: "Shield side", value: "shield-side" },
 ] as const;
 
 type EncounterCharacterRecord = Pick<ServerCharacterRecord, "build" | "id" | "name">;
@@ -98,7 +101,7 @@ export default function EncounterDetail({
   embedded = false,
   id,
   surface = "full",
-  scenarioId
+  scenarioId,
 }: EncounterDetailProps) {
   const [adHocName, setAdHocName] = useState("");
   const [characters, setCharacters] = useState<EncounterCharacterRecord[]>([]);
@@ -252,7 +255,7 @@ export default function EncounterDetail({
 
   const characterBuildsById = useMemo(
     () => Object.fromEntries(characters.map((character) => [character.id, character.build])),
-    [characters]
+    [characters],
   );
 
   const encounterView = useMemo(() => {
@@ -263,7 +266,7 @@ export default function EncounterDetail({
     return buildEncounterSessionView({
       characterBuildsById,
       content,
-      session: encounter
+      session: encounter,
     });
   }, [characters, content, encounter]);
   const isNestedScenarioFlow = Boolean(campaignId && scenarioId);
@@ -271,11 +274,19 @@ export default function EncounterDetail({
     () =>
       isNestedScenarioFlow
         ? buildGmEncounterParticipantRows({
+            encounterId: encounter?.id,
             encounterParticipants: encounter?.participants ?? [],
+            roundNumber: encounter?.currentRound,
             scenarioParticipants,
           })
         : [],
-    [encounter?.participants, isNestedScenarioFlow, scenarioParticipants],
+    [
+      encounter?.currentRound,
+      encounter?.id,
+      encounter?.participants,
+      isNestedScenarioFlow,
+      scenarioParticipants,
+    ],
   );
   const gmEncounterControlState = useMemo(
     () =>
@@ -334,9 +345,9 @@ export default function EncounterDetail({
       addCharacterParticipant({
         characterId: character.id,
         label: getCharacterName(character),
-        session: encounter
+        session: encounter,
       }),
-      `Added ${getCharacterName(character)} to the encounter.`
+      `Added ${getCharacterName(character)} to the encounter.`,
     );
   }
 
@@ -351,23 +362,23 @@ export default function EncounterDetail({
       await addScenarioParticipantFromEntityOnServer({
         entityInput: {
           kind: "npc",
-          name: trimmedName
+          name: trimmedName,
         },
         isTemporary: true,
         joinSource: "gm_added",
         role: "npc",
-        scenarioId
+        scenarioId,
       });
     }
 
     await persistEncounter(
       addAdHocParticipant({
         label: trimmedName,
-        session: encounter
+        session: encounter,
       }),
       isNestedScenarioFlow
         ? `Added ${trimmedName} to the encounter and scenario participants.`
-        : `Added ${trimmedName} to the encounter.`
+        : `Added ${trimmedName} to the encounter.`,
     );
     setAdHocName("");
   }
@@ -378,9 +389,13 @@ export default function EncounterDetail({
     }
 
     const participant = encounter.participants.find((entry) => entry.id === participantId);
-    const attackerBuild = participant?.characterId ? characterBuildsById[participant.characterId] : undefined;
+    const attackerBuild = participant?.characterId
+      ? characterBuildsById[participant.characterId]
+      : undefined;
     const defender = participant?.declaration.targetParticipantId
-      ? encounter.participants.find((entry) => entry.id === participant.declaration.targetParticipantId)
+      ? encounter.participants.find(
+          (entry) => entry.id === participant.declaration.targetParticipantId,
+        )
       : undefined;
     const parryRoll =
       defender?.declaration.defensePosture === "parry" ? rollPercentile() : undefined;
@@ -391,7 +406,7 @@ export default function EncounterDetail({
       characterBuildsById,
       content,
       parryRoll,
-      session: encounter
+      session: encounter,
     });
 
     if (!resolutionResult.resolution) {
@@ -401,12 +416,12 @@ export default function EncounterDetail({
 
     const nextEncounter = appendEncounterAttackResolution({
       resolution: resolutionResult.resolution,
-      session: encounter
+      session: encounter,
     });
 
     await persistEncounter(
       nextEncounter,
-      `Resolved attack: ${resolutionResult.resolution.outcome}.`
+      `Resolved attack: ${resolutionResult.resolution.outcome}.`,
     );
   }
 
@@ -423,18 +438,22 @@ export default function EncounterDetail({
     }
 
     const attacker = encounter.participants.find(
-      (participant) => participant.id === existingResolution.attackerParticipantId
+      (participant) => participant.id === existingResolution.attackerParticipantId,
     );
     const defender = encounter.participants.find(
-      (participant) => participant.id === existingResolution.defenderParticipantId
+      (participant) => participant.id === existingResolution.defenderParticipantId,
     );
-    const attackerBuild = attacker?.characterId ? characterBuildsById[attacker.characterId] : undefined;
-    const defenderBuild = defender?.characterId ? characterBuildsById[defender.characterId] : undefined;
+    const attackerBuild = attacker?.characterId
+      ? characterBuildsById[attacker.characterId]
+      : undefined;
+    const defenderBuild = defender?.characterId
+      ? characterBuildsById[defender.characterId]
+      : undefined;
     const damageResult = resolveEncounterDamage({
       attackerBuild,
       defenderBuild,
       hitLocationRoll: rollPercentile(),
-      resolution: existingResolution
+      resolution: existingResolution,
     });
 
     if (!damageResult.resolution) {
@@ -446,14 +465,14 @@ export default function EncounterDetail({
       ...encounter,
       actionLog: updateEncounterAttackResolution({
         resolution: damageResult.resolution,
-        sessionActionLog: encounter.actionLog
+        sessionActionLog: encounter.actionLog,
       }),
-      updatedAt: new Date().toISOString()
+      updatedAt: new Date().toISOString(),
     };
 
     await persistEncounter(
       nextEncounter,
-      `Resolved damage: ${damageResult.resolution.damage?.finalDamage ?? 0} damage.`
+      `Resolved damage: ${damageResult.resolution.damage?.finalDamage ?? 0} damage.`,
     );
   }
 
@@ -471,7 +490,7 @@ export default function EncounterDetail({
 
     const criticalResult = resolveEncounterCritical({
       criticalRoll: rollPercentile(),
-      resolution: existingResolution
+      resolution: existingResolution,
     });
 
     if (!criticalResult.resolution) {
@@ -483,14 +502,14 @@ export default function EncounterDetail({
       ...encounter,
       actionLog: updateEncounterAttackResolution({
         resolution: criticalResult.resolution,
-        sessionActionLog: encounter.actionLog
+        sessionActionLog: encounter.actionLog,
       }),
-      updatedAt: new Date().toISOString()
+      updatedAt: new Date().toISOString(),
     };
 
     await persistEncounter(
       nextEncounter,
-      `Resolved critical: ${criticalResult.resolution.critical?.effect?.summary ?? "critical resolved"}.`
+      `Resolved critical: ${criticalResult.resolution.critical?.effect?.summary ?? "critical resolved"}.`,
     );
   }
 
@@ -587,7 +606,7 @@ export default function EncounterDetail({
             background: "#f6f5ef",
             border: "1px solid #d9ddd8",
             borderRadius: 12,
-            padding: "1rem"
+            padding: "1rem",
           }}
         >
           {feedback}
@@ -726,7 +745,7 @@ export default function EncounterDetail({
           borderRadius: 12,
           display: "grid",
           gap: "0.75rem",
-          padding: "1rem"
+          padding: "1rem",
         }}
       >
         <h2 style={{ margin: 0 }}>Turn scaffolding</h2>
@@ -741,9 +760,9 @@ export default function EncounterDetail({
               void persistEncounter(
                 setEncounterCurrentTurnIndex({
                   currentTurnIndex: encounterView.currentTurnIndex - 1,
-                  session: encounter
+                  session: encounter,
                 }),
-                "Moved current turn backward."
+                "Moved current turn backward.",
               )
             }
             type="button"
@@ -756,9 +775,9 @@ export default function EncounterDetail({
               void persistEncounter(
                 setEncounterCurrentTurnIndex({
                   currentTurnIndex: encounterView.currentTurnIndex + 1,
-                  session: encounter
+                  session: encounter,
                 }),
-                "Moved current turn forward."
+                "Moved current turn forward.",
               )
             }
             type="button"
@@ -775,7 +794,7 @@ export default function EncounterDetail({
           borderRadius: 12,
           display: "grid",
           gap: "0.75rem",
-          padding: "1rem"
+          padding: "1rem",
         }}
       >
         <h2 style={{ margin: 0 }}>Action log</h2>
@@ -789,7 +808,7 @@ export default function EncounterDetail({
                 borderRadius: 10,
                 display: "grid",
                 gap: "0.25rem",
-                padding: "0.75rem"
+                padding: "0.75rem",
               }}
             >
               <strong>
@@ -799,7 +818,8 @@ export default function EncounterDetail({
               <div>Weapon: {entry.selectedWeaponName ?? "None"}</div>
               <div>Shield: {entry.selectedShieldName ?? "None"}</div>
               <div>
-                Attack: roll {entry.attackRoll}, total {entry.attackTotal}, defense target {entry.dbValue}
+                Attack: roll {entry.attackRoll}, total {entry.attackTotal}, defense target{" "}
+                {entry.dbValue}
               </div>
               <div>
                 Parry:{" "}
@@ -808,7 +828,9 @@ export default function EncounterDetail({
                   : "No parry roll"}
               </div>
               <div>Resolved location: {entry.hitLocation ?? "Pending"}</div>
-              <div>Armor: {entry.armorLabel ?? "No modeled armor"} ({entry.armorValue ?? 0})</div>
+              <div>
+                Armor: {entry.armorLabel ?? "No modeled armor"} ({entry.armorValue ?? 0})
+              </div>
               <div>Weapon/armor modifier: {entry.weaponArmorModifier ?? "Pending"}</div>
               <div>Raw damage: {entry.rawDamage ?? "Pending"}</div>
               <div>Final damage: {entry.finalDamage ?? "Pending"}</div>
@@ -824,7 +846,8 @@ export default function EncounterDetail({
               <div>Critical result row: {entry.criticalResultRow ?? "Pending"}</div>
               <div>Critical effect: {entry.criticalEffectSummary ?? "None"}</div>
               <div>
-                Critical trigger threshold: {entry.criticalTriggerThreshold ?? "Provisional pending"}
+                Critical trigger threshold:{" "}
+                {entry.criticalTriggerThreshold ?? "Provisional pending"}
               </div>
               <div>Resolved: {new Date(entry.resolvedAt).toLocaleString()}</div>
               {entry.outcome === "hit-pending-damage" ? (
@@ -855,14 +878,16 @@ export default function EncounterDetail({
           borderRadius: 12,
           display: "grid",
           gap: "0.75rem",
-          padding: "1rem"
+          padding: "1rem",
         }}
       >
         <h2 style={{ margin: 0 }}>Round summary</h2>
         <div>Declarations locked: {encounterView.declarationsLocked ? "Yes" : "No"}</div>
         <div>
           Declaration status:{" "}
-          {encounterView.declarationsComplete ? "All participants declared" : "Declarations pending"}
+          {encounterView.declarationsComplete
+            ? "All participants declared"
+            : "Declarations pending"}
         </div>
         <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
           <button
@@ -870,9 +895,11 @@ export default function EncounterDetail({
               void persistEncounter(
                 setEncounterDeclarationsLocked({
                   locked: !encounterView.declarationsLocked,
-                  session: encounter
+                  session: encounter,
                 }),
-                encounterView.declarationsLocked ? "Unlocked declarations." : "Locked declarations."
+                encounterView.declarationsLocked
+                  ? "Unlocked declarations."
+                  : "Locked declarations.",
               )
             }
             type="button"
@@ -884,9 +911,9 @@ export default function EncounterDetail({
             onClick={() =>
               void persistEncounter(
                 clearEncounterDeclarations({
-                  session: encounter
+                  session: encounter,
                 }),
-                "Cleared round declarations."
+                "Cleared round declarations.",
               )
             }
             type="button"
@@ -897,9 +924,9 @@ export default function EncounterDetail({
             onClick={() =>
               void persistEncounter(
                 advanceEncounterRound({
-                  session: encounter
+                  session: encounter,
                 }),
-                "Moved encounter to the next round."
+                "Moved encounter to the next round.",
               )
             }
             type="button"
@@ -917,7 +944,7 @@ export default function EncounterDetail({
                 borderRadius: 10,
                 display: "grid",
                 gap: "0.25rem",
-                padding: "0.75rem"
+                padding: "0.75rem",
               }}
             >
               <strong>{entry.displayName}</strong>
@@ -942,7 +969,7 @@ export default function EncounterDetail({
           borderRadius: 12,
           display: "grid",
           gap: "0.75rem",
-          padding: "1rem"
+          padding: "1rem",
         }}
       >
         <h2 style={{ margin: 0 }}>Add participants</h2>
@@ -990,7 +1017,7 @@ export default function EncounterDetail({
               const equippedWeapons = summary.sheetSummary?.equipment.equippedWeapons ?? [];
               const equippedShields = summary.sheetSummary?.equipment.equippedShields ?? [];
               const declarationTargetOptions = encounterView.participants.filter(
-                (entry) => entry.participant.id !== participant.id
+                (entry) => entry.participant.id !== participant.id,
               );
 
               return (
@@ -1002,11 +1029,16 @@ export default function EncounterDetail({
                     borderRadius: 12,
                     display: "grid",
                     gap: "0.75rem",
-                    padding: "1rem"
+                    padding: "1rem",
                   }}
                 >
                   <div
-                    style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", alignItems: "center" }}
+                    style={{
+                      display: "flex",
+                      gap: "0.75rem",
+                      flexWrap: "wrap",
+                      alignItems: "center",
+                    }}
                   >
                     <strong>{summary.displayName}</strong>
                     <span>Order: {participant.order + 1}</span>
@@ -1065,10 +1097,17 @@ export default function EncounterDetail({
                       borderRadius: 10,
                       display: "grid",
                       gap: "0.75rem",
-                      padding: "0.75rem"
+                      padding: "0.75rem",
                     }}
                   >
-                    <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", alignItems: "center" }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: "0.75rem",
+                        flexWrap: "wrap",
+                        alignItems: "center",
+                      }}
+                    >
                       <strong>Declaration</strong>
                       <span>Status: {declarationSummary.isComplete ? "Ready" : "Incomplete"}</span>
                     </div>
@@ -1098,7 +1137,7 @@ export default function EncounterDetail({
                       style={{
                         display: "grid",
                         gap: "0.75rem",
-                        gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))"
+                        gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
                       }}
                     >
                       <label style={{ display: "grid", gap: "0.25rem" }}>
@@ -1109,12 +1148,13 @@ export default function EncounterDetail({
                             void persistEncounter(
                               updateEncounterParticipantDeclaration({
                                 declaration: {
-                                  actionType: event.target.value as typeof participant.declaration.actionType
+                                  actionType: event.target
+                                    .value as typeof participant.declaration.actionType,
                                 },
                                 participantId: participant.id,
-                                session: encounter
+                                session: encounter,
                               }),
-                              "Updated participant declaration."
+                              "Updated participant declaration.",
                             )
                           }
                           style={{ padding: "0.5rem" }}
@@ -1136,12 +1176,12 @@ export default function EncounterDetail({
                             void persistEncounter(
                               updateEncounterParticipantDeclaration({
                                 declaration: {
-                                  targetParticipantId: event.target.value || undefined
+                                  targetParticipantId: event.target.value || undefined,
                                 },
                                 participantId: participant.id,
-                                session: encounter
+                                session: encounter,
                               }),
-                              "Updated declaration target."
+                              "Updated declaration target.",
                             )
                           }
                           style={{ padding: "0.5rem" }}
@@ -1159,17 +1199,19 @@ export default function EncounterDetail({
                       <label style={{ display: "grid", gap: "0.25rem" }}>
                         Weapon
                         <select
-                          disabled={encounterView.declarationsLocked || equippedWeapons.length === 0}
+                          disabled={
+                            encounterView.declarationsLocked || equippedWeapons.length === 0
+                          }
                           onChange={(event) =>
                             void persistEncounter(
                               updateEncounterParticipantDeclaration({
                                 declaration: {
-                                  weaponItemId: event.target.value || undefined
+                                  weaponItemId: event.target.value || undefined,
                                 },
                                 participantId: participant.id,
-                                session: encounter
+                                session: encounter,
                               }),
-                              "Updated declaration weapon."
+                              "Updated declaration weapon.",
                             )
                           }
                           style={{ padding: "0.5rem" }}
@@ -1187,17 +1229,19 @@ export default function EncounterDetail({
                       <label style={{ display: "grid", gap: "0.25rem" }}>
                         Shield
                         <select
-                          disabled={encounterView.declarationsLocked || equippedShields.length === 0}
+                          disabled={
+                            encounterView.declarationsLocked || equippedShields.length === 0
+                          }
                           onChange={(event) =>
                             void persistEncounter(
                               updateEncounterParticipantDeclaration({
                                 declaration: {
-                                  shieldItemId: event.target.value || undefined
+                                  shieldItemId: event.target.value || undefined,
                                 },
                                 participantId: participant.id,
-                                session: encounter
+                                session: encounter,
                               }),
-                              "Updated declaration shield."
+                              "Updated declaration shield.",
                             )
                           }
                           style={{ padding: "0.5rem" }}
@@ -1220,12 +1264,13 @@ export default function EncounterDetail({
                             void persistEncounter(
                               updateEncounterParticipantDeclaration({
                                 declaration: {
-                                  defensePosture: event.target.value as typeof participant.declaration.defensePosture
+                                  defensePosture: event.target
+                                    .value as typeof participant.declaration.defensePosture,
                                 },
                                 participantId: participant.id,
-                                session: encounter
+                                session: encounter,
                               }),
-                              "Updated defense posture."
+                              "Updated defense posture.",
                             )
                           }
                           style={{ padding: "0.5rem" }}
@@ -1247,12 +1292,13 @@ export default function EncounterDetail({
                             void persistEncounter(
                               updateEncounterParticipantDeclaration({
                                 declaration: {
-                                  targetLocation: event.target.value as typeof participant.declaration.targetLocation
+                                  targetLocation: event.target
+                                    .value as typeof participant.declaration.targetLocation,
                                 },
                                 participantId: participant.id,
-                                session: encounter
+                                session: encounter,
                               }),
-                              "Updated target location."
+                              "Updated target location.",
                             )
                           }
                           style={{ padding: "0.5rem" }}
@@ -1274,12 +1320,13 @@ export default function EncounterDetail({
                             void persistEncounter(
                               updateEncounterParticipantDeclaration({
                                 declaration: {
-                                  defenseFocus: event.target.value as typeof participant.declaration.defenseFocus
+                                  defenseFocus: event.target
+                                    .value as typeof participant.declaration.defenseFocus,
                                 },
                                 participantId: participant.id,
-                                session: encounter
+                                session: encounter,
                               }),
-                              "Updated defense focus."
+                              "Updated defense focus.",
                             )
                           }
                           style={{ padding: "0.5rem" }}
@@ -1307,9 +1354,9 @@ export default function EncounterDetail({
                           void persistEncounter(
                             clearEncounterParticipantDeclaration({
                               participantId: participant.id,
-                              session: encounter
+                              session: encounter,
                             }),
-                            "Cleared participant declaration."
+                            "Cleared participant declaration.",
                           )
                         }
                         type="button"
@@ -1323,139 +1370,139 @@ export default function EncounterDetail({
                     style={{
                       display: "grid",
                       gap: "0.75rem",
-                      gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))"
+                      gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
                     }}
                   >
-                <label style={{ display: "grid", gap: "0.25rem" }}>
-                  Initiative
-                  <input
-                    onChange={(event) =>
-                      void persistEncounter(
-                        updateEncounterParticipantTurnData({
-                          initiative: Number.parseInt(event.target.value, 10) || 0,
-                          participantId: participant.id,
-                          session: encounter
-                        }),
-                        "Updated participant initiative."
-                      )
-                    }
-                    style={{ padding: "0.5rem" }}
-                    type="number"
-                    value={participant.initiative}
-                  />
-                </label>
+                    <label style={{ display: "grid", gap: "0.25rem" }}>
+                      Initiative
+                      <input
+                        onChange={(event) =>
+                          void persistEncounter(
+                            updateEncounterParticipantTurnData({
+                              initiative: Number.parseInt(event.target.value, 10) || 0,
+                              participantId: participant.id,
+                              session: encounter,
+                            }),
+                            "Updated participant initiative.",
+                          )
+                        }
+                        style={{ padding: "0.5rem" }}
+                        type="number"
+                        value={participant.initiative}
+                      />
+                    </label>
 
-                <label style={{ display: "grid", gap: "0.25rem" }}>
-                  X
-                  <input
-                    onChange={(event) =>
-                      void persistEncounter(
-                        updateEncounterParticipantTurnData({
-                          participantId: participant.id,
-                          position: {
-                            ...participant.position,
-                            x: Number.parseInt(event.target.value, 10) || 0
-                          },
-                          session: encounter
-                        }),
-                        "Updated participant position."
-                      )
-                    }
-                    style={{ padding: "0.5rem" }}
-                    type="number"
-                    value={participant.position.x}
-                  />
-                </label>
+                    <label style={{ display: "grid", gap: "0.25rem" }}>
+                      X
+                      <input
+                        onChange={(event) =>
+                          void persistEncounter(
+                            updateEncounterParticipantTurnData({
+                              participantId: participant.id,
+                              position: {
+                                ...participant.position,
+                                x: Number.parseInt(event.target.value, 10) || 0,
+                              },
+                              session: encounter,
+                            }),
+                            "Updated participant position.",
+                          )
+                        }
+                        style={{ padding: "0.5rem" }}
+                        type="number"
+                        value={participant.position.x}
+                      />
+                    </label>
 
-                <label style={{ display: "grid", gap: "0.25rem" }}>
-                  Y
-                  <input
-                    onChange={(event) =>
-                      void persistEncounter(
-                        updateEncounterParticipantTurnData({
-                          participantId: participant.id,
-                          position: {
-                            ...participant.position,
-                            y: Number.parseInt(event.target.value, 10) || 0
-                          },
-                          session: encounter
-                        }),
-                        "Updated participant position."
-                      )
-                    }
-                    style={{ padding: "0.5rem" }}
-                    type="number"
-                    value={participant.position.y}
-                  />
-                </label>
+                    <label style={{ display: "grid", gap: "0.25rem" }}>
+                      Y
+                      <input
+                        onChange={(event) =>
+                          void persistEncounter(
+                            updateEncounterParticipantTurnData({
+                              participantId: participant.id,
+                              position: {
+                                ...participant.position,
+                                y: Number.parseInt(event.target.value, 10) || 0,
+                              },
+                              session: encounter,
+                            }),
+                            "Updated participant position.",
+                          )
+                        }
+                        style={{ padding: "0.5rem" }}
+                        type="number"
+                        value={participant.position.y}
+                      />
+                    </label>
 
-                <label style={{ display: "grid", gap: "0.25rem" }}>
-                  Zone
-                  <input
-                    onChange={(event) =>
-                      void persistEncounter(
-                        updateEncounterParticipantTurnData({
-                          participantId: participant.id,
-                          position: {
-                            ...participant.position,
-                            zone: event.target.value || "center"
-                          },
-                          session: encounter
-                        }),
-                        "Updated participant position."
-                      )
-                    }
-                    style={{ padding: "0.5rem" }}
-                    type="text"
-                    value={participant.position.zone}
-                  />
-                </label>
+                    <label style={{ display: "grid", gap: "0.25rem" }}>
+                      Zone
+                      <input
+                        onChange={(event) =>
+                          void persistEncounter(
+                            updateEncounterParticipantTurnData({
+                              participantId: participant.id,
+                              position: {
+                                ...participant.position,
+                                zone: event.target.value || "center",
+                              },
+                              session: encounter,
+                            }),
+                            "Updated participant position.",
+                          )
+                        }
+                        style={{ padding: "0.5rem" }}
+                        type="text"
+                        value={participant.position.zone}
+                      />
+                    </label>
 
-                <label style={{ display: "grid", gap: "0.25rem" }}>
-                  Facing
-                  <select
-                    onChange={(event) =>
-                      void persistEncounter(
-                        updateEncounterParticipantTurnData({
-                          facing: event.target.value as typeof participant.facing,
-                          participantId: participant.id,
-                          session: encounter
-                        }),
-                        "Updated participant facing."
-                      )
-                    }
-                    style={{ padding: "0.5rem" }}
-                    value={participant.facing}
-                  >
-                    <option value="north">North</option>
-                    <option value="east">East</option>
-                    <option value="south">South</option>
-                    <option value="west">West</option>
-                  </select>
-                </label>
+                    <label style={{ display: "grid", gap: "0.25rem" }}>
+                      Facing
+                      <select
+                        onChange={(event) =>
+                          void persistEncounter(
+                            updateEncounterParticipantTurnData({
+                              facing: event.target.value as typeof participant.facing,
+                              participantId: participant.id,
+                              session: encounter,
+                            }),
+                            "Updated participant facing.",
+                          )
+                        }
+                        style={{ padding: "0.5rem" }}
+                        value={participant.facing}
+                      >
+                        <option value="north">North</option>
+                        <option value="east">East</option>
+                        <option value="south">South</option>
+                        <option value="west">West</option>
+                      </select>
+                    </label>
 
-                <label style={{ display: "grid", gap: "0.25rem" }}>
-                  Orientation
-                  <select
-                    onChange={(event) =>
-                      void persistEncounter(
-                        updateEncounterParticipantTurnData({
-                          orientation: event.target.value as typeof participant.orientation,
-                          participantId: participant.id,
-                          session: encounter
-                        }),
-                        "Updated participant orientation."
-                      )
-                    }
-                    style={{ padding: "0.5rem" }}
-                    value={participant.orientation}
-                  >
-                    <option value="neutral">Neutral</option>
-                    <option value="front">Front</option>
-                    <option value="side">Side</option>
-                    <option value="behind">Behind</option>
-                  </select>
-                </label>
+                    <label style={{ display: "grid", gap: "0.25rem" }}>
+                      Orientation
+                      <select
+                        onChange={(event) =>
+                          void persistEncounter(
+                            updateEncounterParticipantTurnData({
+                              orientation: event.target.value as typeof participant.orientation,
+                              participantId: participant.id,
+                              session: encounter,
+                            }),
+                            "Updated participant orientation.",
+                          )
+                        }
+                        style={{ padding: "0.5rem" }}
+                        value={participant.orientation}
+                      >
+                        <option value="neutral">Neutral</option>
+                        <option value="front">Front</option>
+                        <option value="side">Side</option>
+                        <option value="behind">Behind</option>
+                      </select>
+                    </label>
                   </div>
 
                   <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
@@ -1466,9 +1513,9 @@ export default function EncounterDetail({
                           moveEncounterParticipant({
                             direction: "up",
                             participantId: participant.id,
-                            session: encounter
+                            session: encounter,
                           }),
-                          "Moved participant up in turn order."
+                          "Moved participant up in turn order.",
                         )
                       }
                       type="button"
@@ -1482,9 +1529,9 @@ export default function EncounterDetail({
                           moveEncounterParticipant({
                             direction: "down",
                             participantId: participant.id,
-                            session: encounter
+                            session: encounter,
                           }),
-                          "Moved participant down in turn order."
+                          "Moved participant down in turn order.",
                         )
                       }
                       type="button"
@@ -1496,9 +1543,9 @@ export default function EncounterDetail({
                         void persistEncounter(
                           setEncounterCurrentTurnIndex({
                             currentTurnIndex: index,
-                            session: encounter
+                            session: encounter,
                           }),
-                          "Set current turn."
+                          "Set current turn.",
                         )
                       }
                       type="button"
@@ -1510,9 +1557,9 @@ export default function EncounterDetail({
                         void persistEncounter(
                           removeEncounterParticipant({
                             participantId: participant.id,
-                            session: encounter
+                            session: encounter,
                           }),
-                          "Removed participant from encounter."
+                          "Removed participant from encounter.",
                         )
                       }
                       type="button"
@@ -1522,7 +1569,7 @@ export default function EncounterDetail({
                   </div>
                 </div>
               );
-            }
+            },
           )
         ) : (
           <div
@@ -1530,7 +1577,7 @@ export default function EncounterDetail({
               background: "#f6f5ef",
               border: "1px solid #d9ddd8",
               borderRadius: 12,
-              padding: "1rem"
+              padding: "1rem",
             }}
           >
             No participants yet.

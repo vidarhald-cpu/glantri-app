@@ -163,55 +163,58 @@ export type CombatRoundPhaseResolutionSubstep = z.infer<
   typeof combatRoundPhaseResolutionSubstepSchema
 >;
 
-export const combatRoundAttackRollResultSchema = z.object({
-  actionId: idSchema,
-  attackerParticipantId: idSchema,
-  defenderParticipantId: idSchema,
-  defenderDb: z.number().int(),
-  grazing: z.boolean(),
-  hit: z.boolean(),
-  kind: z.literal("attackRoll"),
-  lookupTotal: z.number().int(),
-  marginOverMissThreshold: z.number().int(),
-  ob: z.number().int(),
-  openEndedD10s: z.array(z.number().int().min(1).max(10)).default([]),
-  phase: combatRoundPhaseSchema,
-  roll: z.number().int().min(1).max(20).optional(),
-  rollD20: z.number().int().min(1).max(20).optional(),
-  rollTotal: z.number().int().optional(),
-  rolledAt: z.string().datetime(),
-  rolledByUserId: idSchema.optional(),
-  tableResult: z.string().min(1),
-  weaponName: z.string().min(1),
-}).superRefine((result, context) => {
-  if (result.rollTotal === undefined && result.roll === undefined) {
-    context.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: "Combat attack result requires rollTotal or legacy roll.",
-      path: ["rollTotal"],
-    });
-  }
-  if (result.rollD20 === undefined && result.roll === undefined) {
-    context.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: "Combat attack result requires rollD20 or legacy roll.",
-      path: ["rollD20"],
-    });
-  }
-}).transform((result) => {
-  const rollTotal = result.rollTotal ?? result.roll;
-  const rollD20 = result.rollD20 ?? result.roll;
+export const combatRoundAttackRollResultSchema = z
+  .object({
+    actionId: idSchema,
+    attackerParticipantId: idSchema,
+    defenderParticipantId: idSchema,
+    defenderDb: z.number().int(),
+    grazing: z.boolean(),
+    hit: z.boolean(),
+    kind: z.literal("attackRoll"),
+    lookupTotal: z.number().int(),
+    marginOverMissThreshold: z.number().int(),
+    ob: z.number().int(),
+    openEndedD10s: z.array(z.number().int().min(1).max(10)).default([]),
+    phase: combatRoundPhaseSchema,
+    roll: z.number().int().min(1).max(20).optional(),
+    rollD20: z.number().int().min(1).max(20).optional(),
+    rollTotal: z.number().int().optional(),
+    rolledAt: z.string().datetime(),
+    rolledByUserId: idSchema.optional(),
+    tableResult: z.string().min(1),
+    weaponName: z.string().min(1),
+  })
+  .superRefine((result, context) => {
+    if (result.rollTotal === undefined && result.roll === undefined) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Combat attack result requires rollTotal or legacy roll.",
+        path: ["rollTotal"],
+      });
+    }
+    if (result.rollD20 === undefined && result.roll === undefined) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Combat attack result requires rollD20 or legacy roll.",
+        path: ["rollD20"],
+      });
+    }
+  })
+  .transform((result) => {
+    const rollTotal = result.rollTotal ?? result.roll;
+    const rollD20 = result.rollD20 ?? result.roll;
 
-  if (rollTotal === undefined || rollD20 === undefined) {
-    throw new RangeError("Combat attack result requires an open-ended roll breakdown.");
-  }
+    if (rollTotal === undefined || rollD20 === undefined) {
+      throw new RangeError("Combat attack result requires an open-ended roll breakdown.");
+    }
 
-  return {
-    ...result,
-    rollD20,
-    rollTotal,
-  };
-});
+    return {
+      ...result,
+      rollD20,
+      rollTotal,
+    };
+  });
 
 export const combatRoundAttackResultsSchema = z.object({
   phase1: combatRoundAttackRollResultSchema.optional(),
@@ -514,9 +517,7 @@ export function getCombatRoundCursorStepForStep(step: CombatRoundStep): CombatRo
   return combatRoundCursorStepSchema.parse(COMBAT_ROUND_STEP_ABBREVIATIONS[step]);
 }
 
-export function getCombatRoundStepForCursorStep(
-  step: CombatRoundCursorStep,
-): CombatRoundStep {
+export function getCombatRoundStepForCursorStep(step: CombatRoundCursorStep): CombatRoundStep {
   const entry = COMBAT_ROUND_STEPS.find(
     (candidate) => COMBAT_ROUND_STEP_ABBREVIATIONS[candidate] === step,
   );
@@ -800,8 +801,7 @@ function clearSnapshotsForCombatRoundStep(input: {
 
   return input.snapshots.filter(
     (snapshot) =>
-      snapshot.roundNumber !== input.roundNumber ||
-      !pairedSteps.includes(snapshot.step),
+      snapshot.roundNumber !== input.roundNumber || !pairedSteps.includes(snapshot.step),
   );
 }
 
@@ -921,15 +921,13 @@ function clearCombatRoundParticipantOutgoingResolutionState(input: {
           }
         : participant;
     }),
-    stepSnapshots: normalized.stepSnapshots.filter(
-      (snapshot) => {
-        if (snapshot.roundNumber !== normalized.roundNumber) {
-          return true;
-        }
+    stepSnapshots: normalized.stepSnapshots.filter((snapshot) => {
+      if (snapshot.roundNumber !== normalized.roundNumber) {
+        return true;
+      }
 
-        return !affectedSnapshotSteps.get(snapshot.participantId)?.has(snapshot.step);
-      },
-    ),
+      return !affectedSnapshotSteps.get(snapshot.participantId)?.has(snapshot.step);
+    }),
   };
 }
 
@@ -1213,7 +1211,7 @@ export function getCombatRoundParticipantPhaseStepStatus(input: {
   });
 
   if (!incomingAttackResult) {
-    return "skipped";
+    return storedStatus;
   }
 
   const resolution =
@@ -1240,7 +1238,11 @@ export function getCombatRoundParticipantPhaseStepStatus(input: {
       return "skipped";
     }
 
-    if (storedStatus === "submitted" || storedStatus === "gmEdited" || storedStatus === "complete") {
+    if (
+      storedStatus === "submitted" ||
+      storedStatus === "gmEdited" ||
+      storedStatus === "complete"
+    ) {
       return storedStatus;
     }
 
@@ -1538,9 +1540,7 @@ export function completeCombatRoundPhaseResolutionForParticipant(input: {
         step: getCombatRoundPhaseActionStepForPhase(input.phase),
       });
   const reviewParticipantId =
-    hasPhaseAttack && attackResult?.hit
-      ? attackResult.defenderParticipantId
-      : input.participantId;
+    hasPhaseAttack && attackResult?.hit ? attackResult.defenderParticipantId : input.participantId;
   const reviewStep =
     hasPhaseAttack && attackResult?.hit
       ? getCombatRoundDamageReviewStepForPhase(input.phase)
@@ -1744,7 +1744,9 @@ export function recordCombatRoundParryResolution(input: {
             status: "pending",
           }
         : {
-            notes: input.attackResult.hit ? "Parry resolved successfully. Damage is not required." : undefined,
+            notes: input.attackResult.hit
+              ? "Parry resolved successfully. Damage is not required."
+              : undefined,
             status: "not_required",
           },
     parryResolution: input.parryResolution,
@@ -1904,8 +1906,14 @@ export function advanceCombatRoundStep(
   const startsNextRound = normalized.currentStep === "round_summary";
   const advancesDeclarationStep = normalized.currentStep === "select_actions";
   const startsPhaseResolution =
-    nextStep === "phase_1_actions" ? "phase1" : nextStep === "phase_2_actions" ? "phase2" : undefined;
-  const nextRoundNumber = startsNextRound ? withSnapshots.roundNumber + 1 : withSnapshots.roundNumber;
+    nextStep === "phase_1_actions"
+      ? "phase1"
+      : nextStep === "phase_2_actions"
+        ? "phase2"
+        : undefined;
+  const nextRoundNumber = startsNextRound
+    ? withSnapshots.roundNumber + 1
+    : withSnapshots.roundNumber;
   const nextGlobalParticipantId = withSnapshots.participants[0]?.participantId;
   const baseState: CombatRoundState = {
     ...withSnapshots,
@@ -2282,10 +2290,7 @@ function clearCombatRoundStepLegacy(input: {
       : undefined;
   const globalDependencyPhase = getCombatRoundGlobalDependencyPhaseForStep(input.step);
   const declarationClearParticipantId =
-    input.step === "select_actions" &&
-    selectedParticipantId
-      ? selectedParticipantId
-      : undefined;
+    input.step === "select_actions" && selectedParticipantId ? selectedParticipantId : undefined;
   const dependencyClearParticipantId =
     declarationClearParticipantId ?? (globalDependencyPhase ? selectedParticipantId : undefined);
   const normalized = dependencyClearParticipantId
@@ -2295,8 +2300,7 @@ function clearCombatRoundStepLegacy(input: {
         state: parsed,
       })
     : parsed;
-  const clearsPhaseAction =
-    input.step === "phase_1_actions" || input.step === "phase_2_actions";
+  const clearsPhaseAction = input.step === "phase_1_actions" || input.step === "phase_2_actions";
   const clearsParryReview =
     input.step === "review_phase_2_actions" || input.step === "review_phase_2_damage";
   const clearResolutionPhase =
@@ -2309,8 +2313,7 @@ function clearCombatRoundStepLegacy(input: {
           input.step === "phase_2_damage"
         ? "phase2"
         : undefined;
-  const clearsDamageReview =
-    input.step === "phase_1_damage" || input.step === "phase_2_damage";
+  const clearsDamageReview = input.step === "phase_1_damage" || input.step === "phase_2_damage";
   const selectedParticipantForClear = clearResolutionPhase
     ? normalized.selectedParticipantId &&
       normalized.participants.some(
@@ -2338,7 +2341,7 @@ function clearCombatRoundStepLegacy(input: {
         })
       : undefined;
   const selectedAttackResultForClear = clearsPhaseAction
-    ? selectedOutgoingAttackResult ?? selectedIncomingAttackResult
+    ? (selectedOutgoingAttackResult ?? selectedIncomingAttackResult)
     : selectedIncomingAttackResult;
   const selectedResolutionForClear = selectedAttackResultForClear
     ? getCombatRoundPhaseResolutionResultForAttack({
@@ -2351,8 +2354,7 @@ function clearCombatRoundStepLegacy(input: {
     Boolean(selectedAttackResultForClear?.hit) &&
     (!selectedResolutionForClear ||
       selectedResolutionForClear.parryResolution.status === "pending");
-  const clearsPhaseActionRedo =
-    clearsPhaseAction || clearsAutoCreatedPendingParry;
+  const clearsPhaseActionRedo = clearsPhaseAction || clearsAutoCreatedPendingParry;
   const selectedAttackResultId = selectedAttackResultForClear
     ? getCombatRoundAttackResultId({
         result: selectedAttackResultForClear,
@@ -2393,12 +2395,12 @@ function clearCombatRoundStepLegacy(input: {
     : normalized.phaseResolutionStatuses;
   const nextCursorParticipant =
     clearResolutionPhase && clearsPhaseActionRedo
-      ? selectedAttackResultForClear?.attackerParticipantId ??
+      ? (selectedAttackResultForClear?.attackerParticipantId ??
         selectedParticipantForClear ??
         getCombatRoundPhaseResolutionOrder({
           phase: clearResolutionPhase,
           state: normalized,
-        })[0]
+        })[0])
       : clearResolutionPhase && (clearsParryReview || clearsDamageReview)
         ? selectedParticipantForClear
         : undefined;
@@ -2424,11 +2426,11 @@ function clearCombatRoundStepLegacy(input: {
                 phase: clearResolutionPhase,
                 state: normalized,
               })
-        : getCombatRoundInitialPhaseResolutionSubstep({
-            participantId: nextCursorParticipant,
-            phase: clearResolutionPhase,
-            state: normalized,
-          })
+            : getCombatRoundInitialPhaseResolutionSubstep({
+                participantId: nextCursorParticipant,
+                phase: clearResolutionPhase,
+                state: normalized,
+              })
       : undefined;
 
   return {
@@ -2613,7 +2615,7 @@ function clearCombatRoundStepLegacy(input: {
           ? getCombatRoundPhaseActionStepForPhase(clearResolutionPhase)
           : clearsParryReview
             ? getCombatRoundParryReviewStepForPhase(clearResolutionPhase)
-          : getCombatRoundDamageReviewStepForPhase(clearResolutionPhase)
+            : getCombatRoundDamageReviewStepForPhase(clearResolutionPhase)
         : normalized.selectedStep,
     stepSnapshots: clearSnapshotsForCombatRoundStep({
       participantId: normalized.selectedParticipantId,
