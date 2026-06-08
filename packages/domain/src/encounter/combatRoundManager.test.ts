@@ -25,8 +25,9 @@ import {
   getCombatRoundInitiativePositions,
   getCombatRoundInitiativeRanks,
   getCombatRoundAttackResultsForParticipantPhase,
-  getCombatRoundDisplayAttackResultForParticipantPhase,
+  getCombatRoundDisplayIncomingAttackResultForParticipantPhase,
   getCombatRoundDisplayPhaseResolutionResultForParticipantPhase,
+  getCombatRoundOutgoingAttackResultForParticipantPhase,
   getCombatRoundResolutionPhaseForStep,
   getCombatRoundStepSnapshot,
   getPreviousCombatRoundStep,
@@ -141,10 +142,12 @@ describe("combat round manager", () => {
       "DE",
       "M1",
       "i1",
+      "A1",
       "P1",
       "D1",
       "M2",
       "i2",
+      "A2",
       "P2",
       "D2",
       "SU",
@@ -175,10 +178,12 @@ describe("combat round manager", () => {
       "initiative_phase_1",
       "phase_1_actions",
       "review_phase_2_actions",
+      "phase_1_damage",
       "review_phase_2_modifiers",
       "initiative_phase_2",
       "phase_2_actions",
       "review_phase_2_damage",
+      "phase_2_damage",
     ].reduce((current) => advanceCombatRoundStep(current), reviewState);
     const nextRoundState = advanceCombatRoundStep(roundSummaryState);
 
@@ -884,12 +889,26 @@ describe("combat round manager", () => {
       }).incoming,
     ).toEqual([result]);
     expect(
-      getCombatRoundDisplayAttackResultForParticipantPhase({
+      getCombatRoundOutgoingAttackResultForParticipantPhase({
+        participantId: "gladiator",
+        phase: "phase2",
+        state: nextState,
+      }),
+    ).toEqual(result);
+    expect(
+      getCombatRoundDisplayIncomingAttackResultForParticipantPhase({
         participantId: "guard",
         phase: "phase2",
         state: nextState,
       }),
     ).toEqual(result);
+    expect(
+      getCombatRoundDisplayIncomingAttackResultForParticipantPhase({
+        participantId: "gladiator",
+        phase: "phase2",
+        state: nextState,
+      }),
+    ).toBeUndefined();
   });
 
   it("clears P2 attack result, snapshot, and status without clearing declaration", () => {
@@ -1143,7 +1162,7 @@ describe("combat round manager", () => {
     });
   });
 
-  it("clears D1 resolution without clearing the P1 attack result", () => {
+  it("clears P1 parry without clearing the A1 attack result", () => {
     const state = initializeCombatRoundState({ encounter: encounter() });
     const result = buildCombatRoundAttackRollResult({
       actionId: "attack_parry",
@@ -1178,7 +1197,7 @@ describe("combat round manager", () => {
         }),
         stepSnapshot({
           attackResult: result,
-          participantId: "gladiator",
+          participantId: "guard",
           phase: "phase1",
           phaseResolutionResult: withResolution.phaseResolutionResults[0],
           step: "review_phase_2_actions",
@@ -1191,8 +1210,10 @@ describe("combat round manager", () => {
     });
 
     expect(cleared.participants[0]?.attackResults.phase1).toEqual(result);
-    expect(cleared.phaseResolutionResults).toEqual([]);
-    expect(cleared.participants[0]?.stepStatuses.review_phase_2_actions).toBe("pending");
+    expect(cleared.phaseResolutionResults).toHaveLength(1);
+    expect(cleared.phaseResolutionResults[0]?.parryResolution.status).toBe("pending");
+    expect(cleared.phaseResolutionResults[0]?.damageRoll.status).toBe("pending");
+    expect(cleared.participants[1]?.stepStatuses.review_phase_2_actions).toBe("pending");
     expect(
       getCombatRoundStepSnapshot({
         participantId: "gladiator",
@@ -1205,14 +1226,14 @@ describe("combat round manager", () => {
     });
     expect(
       getCombatRoundStepSnapshot({
-        participantId: "gladiator",
+        participantId: "guard",
         state: cleared,
         step: "review_phase_2_actions",
       }),
     ).toBeUndefined();
   });
 
-  it("clears P1 attack result and its associated D1 resolution", () => {
+  it("clears A1 attack result and its downstream P1/D1 resolution", () => {
     const state = initializeCombatRoundState({ encounter: encounter() });
     const result = buildCombatRoundAttackRollResult({
       actionId: "attack_parry",
@@ -1247,7 +1268,7 @@ describe("combat round manager", () => {
         }),
         stepSnapshot({
           attackResult: result,
-          participantId: "gladiator",
+          participantId: "guard",
           phase: "phase1",
           phaseResolutionResult: withResolution.phaseResolutionResults[0],
           step: "review_phase_2_actions",
@@ -1262,7 +1283,8 @@ describe("combat round manager", () => {
     expect(cleared.participants[0]?.attackResults.phase1).toBeUndefined();
     expect(cleared.phaseResolutionResults).toEqual([]);
     expect(cleared.participants[0]?.stepStatuses.phase_1_actions).toBe("pending");
-    expect(cleared.participants[0]?.stepStatuses.review_phase_2_actions).toBe("pending");
+    expect(cleared.participants[1]?.stepStatuses.review_phase_2_actions).toBe("pending");
+    expect(cleared.participants[1]?.stepStatuses.phase_1_damage).toBe("pending");
     expect(
       getCombatRoundStepSnapshot({
         participantId: "gladiator",
@@ -1272,7 +1294,7 @@ describe("combat round manager", () => {
     ).toBeUndefined();
     expect(
       getCombatRoundStepSnapshot({
-        participantId: "gladiator",
+        participantId: "guard",
         state: cleared,
         step: "review_phase_2_actions",
       }),
@@ -1444,7 +1466,7 @@ describe("combat round manager", () => {
     });
 
     expect(afterAttack.phaseResolutionCursor).toEqual({
-      participantId: "gladiator",
+      participantId: "guard",
       phase: "phase1",
       substep: "parry",
     });
@@ -1515,7 +1537,7 @@ describe("combat round manager", () => {
 
     expect(afterD1Clear.participants[0]?.attackResults.phase1).toEqual(result);
     expect(afterD1Clear.phaseResolutionCursor).toEqual({
-      participantId: "gladiator",
+      participantId: "guard",
       phase: "phase1",
       substep: "parry",
     });

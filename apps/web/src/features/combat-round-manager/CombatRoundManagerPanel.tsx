@@ -25,14 +25,17 @@ import {
   advanceCombatRoundPhaseResolutionSubstepForParticipant,
   advanceCombatRoundStep,
   buildCombatRoundAttackRollResult,
+  buildCombatRoundPhaseResolutionResult,
   buildCombatRoundInspector,
   characterBuildSchema,
   combatRoundParticipantHasPhaseAttack,
   completeCombatRoundPhaseResolutionForParticipant,
   ensureCombatRoundPhaseResolutionResultsForPhase,
   formatOpenEndedD20RollBreakdown,
-  getCombatRoundDisplayAttackResultForParticipantPhase,
-  getCombatRoundDisplayPhaseResolutionResultForParticipantPhase,
+  getCombatRoundDisplayIncomingAttackResultForParticipantPhase,
+  getCombatRoundDamageReviewStepForPhase,
+  getCombatRoundOutgoingAttackResultForParticipantPhase,
+  getCombatRoundPhaseResolutionResultForAttack,
   getCombatRoundPhaseResolutionStatus,
   getCombatRoundInitiativeRanks,
   getCombatRoundInitiativeTotal,
@@ -436,6 +439,18 @@ function getCombatAttackPhaseForStep(step: CombatRoundStep): CombatRoundPhase | 
 
   if (step === "phase_2_actions") {
     return "phase2";
+  }
+
+  return undefined;
+}
+
+function getCombatResolutionStepKind(step: CombatRoundStep): "parry" | "damage" | undefined {
+  if (step === "review_phase_2_actions" || step === "review_phase_2_damage") {
+    return "parry";
+  }
+
+  if (step === "phase_1_damage" || step === "phase_2_damage") {
+    return "damage";
   }
 
   return undefined;
@@ -1155,17 +1170,18 @@ export default function CombatRoundManagerPanel({
   const inspectorDisplayAttackResult =
     inspectorSnapshot?.attackResult ??
     (inspector.participant && inspectorAttackPhase
-      ? getCombatRoundDisplayAttackResultForParticipantPhase({
+      ? getCombatRoundOutgoingAttackResultForParticipantPhase({
           participantId: inspector.participant.participantId,
           phase: inspectorAttackPhase,
           state: roundState,
         })
       : undefined);
   const inspectorResolutionPhase = getCombatRoundResolutionPhaseForStep(inspector.step);
+  const inspectorResolutionStepKind = getCombatResolutionStepKind(inspector.step);
   const inspectorResolutionAttackResult =
     inspectorSnapshot?.attackResult ??
     (inspector.participant && inspectorResolutionPhase
-      ? getCombatRoundDisplayAttackResultForParticipantPhase({
+      ? getCombatRoundDisplayIncomingAttackResultForParticipantPhase({
           participantId: inspector.participant.participantId,
           phase: inspectorResolutionPhase,
           state: roundState,
@@ -1173,13 +1189,41 @@ export default function CombatRoundManagerPanel({
       : undefined);
   const inspectorDisplayPhaseResolutionResult =
     inspectorSnapshot?.phaseResolutionResult ??
-    (inspector.participant && inspectorResolutionPhase
-      ? getCombatRoundDisplayPhaseResolutionResultForParticipantPhase({
-          participantId: inspector.participant.participantId,
-          phase: inspectorResolutionPhase,
+    (inspectorResolutionAttackResult
+      ? getCombatRoundPhaseResolutionResultForAttack({
+          attackResult: inspectorResolutionAttackResult,
           state: roundState,
+        }) ??
+        buildCombatRoundPhaseResolutionResult({
+          attackResult: inspectorResolutionAttackResult,
+          roundNumber: roundState.roundNumber,
+          updatedAt: inspectorResolutionAttackResult.rolledAt,
         })
       : undefined);
+  const inspectorPhaseResolutionOwnerParticipantId =
+    inspectorResolutionAttackResult?.attackerParticipantId ?? inspector.participant?.participantId;
+  const inspectorPhaseResolutionOwnerStatus =
+    inspectorPhaseResolutionOwnerParticipantId && inspectorCurrentResolutionPhase
+      ? getCombatRoundPhaseResolutionStatus({
+          participantId: inspectorPhaseResolutionOwnerParticipantId,
+          phase: inspectorCurrentResolutionPhase,
+          state: roundState,
+        })
+      : undefined;
+  const inspectorPhaseResolutionOwnerHasAttack =
+    inspectorPhaseResolutionOwnerParticipantId && inspectorCurrentResolutionPhase
+      ? combatRoundParticipantHasPhaseAttack({
+          participantId: inspectorPhaseResolutionOwnerParticipantId,
+          phase: inspectorCurrentResolutionPhase,
+          state: roundState,
+        })
+      : undefined;
+  const inspectorActionPhaseHasAttack = inspectorCurrentAttackPhase
+    ? inspectorCurrentPhaseHasAttack
+    : inspectorPhaseResolutionOwnerHasAttack;
+  const inspectorActionPhaseResolutionStatus = inspectorCurrentAttackPhase
+    ? inspectorPhaseResolutionStatus
+    : inspectorPhaseResolutionOwnerStatus;
   const inspectorParrySelectionKey = getCombatParrySelectionKey({
     result: inspectorResolutionAttackResult,
     roundNumber: roundState.roundNumber,
@@ -1242,9 +1286,11 @@ export default function CombatRoundManagerPanel({
     !inspectorDisplayAttackResult;
   const inspectorCanRollParry =
     Boolean(inspectorResolutionPhase) &&
+    inspectorResolutionStepKind === "parry" &&
     Boolean(inspectorResolutionAttackResult?.hit) &&
     inspectorDisplayPhaseResolutionResult?.parryResolution.status === "pending" &&
-    inspectorPhaseResolutionStatus?.substep === "parry" &&
+    inspectorPhaseResolutionOwnerStatus?.substep === "parry" &&
+    inspector.participant?.participantId === inspectorResolutionAttackResult?.defenderParticipantId &&
     inspectorParryBase !== undefined &&
     !inspectorSnapshot;
   const inspectorIsCursorParticipant =
@@ -1255,16 +1301,39 @@ export default function CombatRoundManagerPanel({
         (participant) => participant.participantId === inspectorPhaseResolutionCursor.participantId,
       )?.label
     : undefined;
+  const inspectorCursorIncomingAttackResult =
+    inspectorPhaseResolutionCursor &&
+    (inspectorPhaseResolutionCursor.substep === "parry" ||
+      inspectorPhaseResolutionCursor.substep === "damage" ||
+      inspectorPhaseResolutionCursor.substep === "effects")
+      ? getCombatRoundDisplayIncomingAttackResultForParticipantPhase({
+          participantId: inspectorPhaseResolutionCursor.participantId,
+          phase: inspectorPhaseResolutionCursor.phase,
+          state: roundState,
+        })
+      : undefined;
+  const inspectorCursorActorLabel = inspectorCursorIncomingAttackResult
+    ? roundState.participants.find(
+        (participant) =>
+          participant.participantId === inspectorCursorIncomingAttackResult.attackerParticipantId,
+      )?.label
+    : inspectorCursorParticipantLabel;
+  const inspectorCursorDefenderLabel = inspectorCursorIncomingAttackResult
+    ? roundState.participants.find(
+        (participant) =>
+          participant.participantId === inspectorCursorIncomingAttackResult.defenderParticipantId,
+      )?.label
+    : undefined;
   const inspectorActionButtonLabel =
     inspectorCanRollParry
       ? "Roll parry"
-      : inspectorCurrentResolutionPhase && inspectorCurrentPhaseHasAttack === false
+      : inspectorCurrentResolutionPhase && inspectorActionPhaseHasAttack === false
       ? `Complete ${formatCombatPhaseLabel(inspectorCurrentResolutionPhase)} for participant`
       : getCombatResolutionButtonLabel({
-          hasPhaseAttack: inspectorCurrentPhaseHasAttack,
+          hasPhaseAttack: inspectorActionPhaseHasAttack,
           phase: inspectorCurrentResolutionPhase,
           step: roundState.currentStep,
-          substep: inspectorPhaseResolutionStatus?.substep,
+          substep: inspectorActionPhaseResolutionStatus?.substep,
         });
   const inspectorPhaseResolutionLines =
     inspectorResolutionAttackResult && inspectorDisplayPhaseResolutionResult
@@ -1315,9 +1384,11 @@ export default function CombatRoundManagerPanel({
   const inspectorStatusSuffix = inspectorSnapshot
     ? " Committed."
     : inspectorPhaseResolutionCursor
-      ? ` Current actor: ${inspectorCursorParticipantLabel ?? inspectorPhaseResolutionCursor.participantId} · Next: ${formatCombatResolutionNextLabel({
+      ? ` Current actor: ${inspectorCursorActorLabel ?? inspectorPhaseResolutionCursor.participantId}${inspectorCursorDefenderLabel ? ` · Defender: ${inspectorCursorDefenderLabel}` : ""} · Next: ${formatCombatResolutionNextLabel({
           hasPhaseAttack: combatRoundParticipantHasPhaseAttack({
-            participantId: inspectorPhaseResolutionCursor.participantId,
+            participantId:
+              inspectorCursorIncomingAttackResult?.attackerParticipantId ??
+              inspectorPhaseResolutionCursor.participantId,
             phase: inspectorPhaseResolutionCursor.phase,
             state: roundState,
           }),
@@ -1554,6 +1625,8 @@ export default function CombatRoundManagerPanel({
   ): CombatRoundStepSnapshot[] {
     const step = stateForSnapshots.currentStep;
     const phase = getCombatRoundModifierPhaseForStep(step);
+    const attackPhase = getCombatAttackPhaseForStep(step);
+    const resolutionStepKind = getCombatResolutionStepKind(step);
     const ranks = phase
       ? getCombatRoundInitiativeRanks({ phase, state: stateForSnapshots })
       : {};
@@ -1602,19 +1675,28 @@ export default function CombatRoundManagerPanel({
             })
           : undefined;
       const initiativeResult = phase ? roundParticipant.initiatives[phase] : undefined;
-      const attackResult = phase
-        ? getCombatRoundDisplayAttackResultForParticipantPhase({
+      const attackResult = attackPhase
+        ? getCombatRoundOutgoingAttackResultForParticipantPhase({
             participantId: roundParticipant.participantId,
-            phase,
+            phase: attackPhase,
             state: stateForSnapshots,
           })
-        : undefined;
-      const phaseResolutionResult =
-        phase && getCombatRoundResolutionPhaseForStep(step)
-          ? getCombatRoundDisplayPhaseResolutionResultForParticipantPhase({
+        : phase && resolutionStepKind
+          ? getCombatRoundDisplayIncomingAttackResultForParticipantPhase({
               participantId: roundParticipant.participantId,
               phase,
               state: stateForSnapshots,
+            })
+        : undefined;
+      const phaseResolutionResult =
+        phase && resolutionStepKind && attackResult
+          ? getCombatRoundPhaseResolutionResultForAttack({
+              attackResult,
+              state: stateForSnapshots,
+            }) ??
+            buildCombatRoundPhaseResolutionResult({
+              attackResult,
+              roundNumber: stateForSnapshots.roundNumber,
               updatedAt: committedAt,
             })
           : undefined;
@@ -2196,8 +2278,18 @@ export default function CombatRoundManagerPanel({
         state: withParry,
         updatedAt,
       });
+      const defenderOwnedNextRoundState = {
+        ...nextRoundState,
+        phaseResolutionCursor: {
+          participantId: attackResult.defenderParticipantId,
+          phase,
+          substep: "damage" as const,
+        },
+        selectedParticipantId: attackResult.defenderParticipantId,
+        selectedStep: getCombatRoundDamageReviewStepForPhase(phase),
+      };
 
-      await persistRoundState(nextRoundState);
+      await persistRoundState(defenderOwnedNextRoundState);
       setSaveError(undefined);
     } catch (caughtError) {
       setSaveError(
@@ -2209,7 +2301,9 @@ export default function CombatRoundManagerPanel({
   }
 
   async function completeInspectorPhaseResolution(phase: CombatRoundPhase) {
-    if (!inspector.participant) {
+    const ownerParticipantId = inspectorPhaseResolutionOwnerParticipantId;
+
+    if (!ownerParticipantId) {
       return;
     }
 
@@ -2217,7 +2311,7 @@ export default function CombatRoundManagerPanel({
 
     try {
       const nextRoundState = completeCombatRoundPhaseResolutionForParticipant({
-        participantId: inspector.participant.participantId,
+        participantId: ownerParticipantId,
         phase,
         state: roundState,
         submittedBy: "gm",
@@ -2238,7 +2332,9 @@ export default function CombatRoundManagerPanel({
   }
 
   async function advanceInspectorPhaseResolutionSubstep(phase: CombatRoundPhase) {
-    if (!inspector.participant) {
+    const ownerParticipantId = inspectorPhaseResolutionOwnerParticipantId;
+
+    if (!ownerParticipantId) {
       return;
     }
 
@@ -2246,13 +2342,33 @@ export default function CombatRoundManagerPanel({
 
     try {
       const nextRoundState = advanceCombatRoundPhaseResolutionSubstepForParticipant({
-        participantId: inspector.participant.participantId,
+        participantId: ownerParticipantId,
         phase,
         state: roundState,
         updatedAt: new Date().toISOString(),
       });
+      const nextOwnerStatus = getCombatRoundPhaseResolutionStatus({
+        participantId: ownerParticipantId,
+        phase,
+        state: nextRoundState,
+      });
+      const defenderParticipantId =
+        inspectorResolutionAttackResult?.defenderParticipantId ?? ownerParticipantId;
+      const defenderOwnedNextRoundState =
+        nextOwnerStatus.substep === "damage" || nextOwnerStatus.substep === "effects"
+          ? {
+              ...nextRoundState,
+              phaseResolutionCursor: {
+                participantId: defenderParticipantId,
+                phase,
+                substep: nextOwnerStatus.substep,
+              },
+              selectedParticipantId: defenderParticipantId,
+              selectedStep: getCombatRoundDamageReviewStepForPhase(phase),
+            }
+          : nextRoundState;
 
-      await persistRoundState(nextRoundState);
+      await persistRoundState(defenderOwnedNextRoundState);
       setSaveError(undefined);
     } catch (caughtError) {
       setSaveError(
@@ -2668,7 +2784,8 @@ export default function CombatRoundManagerPanel({
                     rows={inspectorDisplayModifierRows}
                   />
                   <div style={{ display: "grid", gap: "0.75rem" }}>
-                    {inspectorResolutionAttackResult?.hit &&
+                    {inspectorResolutionStepKind === "parry" &&
+                    inspectorResolutionAttackResult?.hit &&
                     inspectorDisplayPhaseResolutionResult &&
                     inspectorDisplayPhaseResolutionResult?.parryResolution.status !==
                       "not_applicable" ? (
@@ -2710,12 +2827,12 @@ export default function CombatRoundManagerPanel({
                           : inspectorCanRollParry
                             ? rollInspectorParry()
                           : inspectorCurrentResolutionPhase &&
-                              (inspectorCurrentPhaseHasAttack === false ||
-                                inspectorPhaseResolutionStatus?.substep === "effects")
+                              (inspectorActionPhaseHasAttack === false ||
+                                inspectorActionPhaseResolutionStatus?.substep === "effects")
                             ? completeInspectorPhaseResolution(inspectorCurrentResolutionPhase)
                             : inspectorCurrentResolutionPhase &&
-                                (inspectorPhaseResolutionStatus?.substep === "parry" ||
-                                  inspectorPhaseResolutionStatus?.substep === "damage")
+                                (inspectorActionPhaseResolutionStatus?.substep === "parry" ||
+                                  inspectorActionPhaseResolutionStatus?.substep === "damage")
                               ? advanceInspectorPhaseResolutionSubstep(
                                   inspectorCurrentResolutionPhase,
                                 )

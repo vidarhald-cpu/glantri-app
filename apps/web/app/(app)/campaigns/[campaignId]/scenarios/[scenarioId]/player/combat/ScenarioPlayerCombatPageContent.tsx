@@ -13,8 +13,9 @@ import {
   type CombatRoundStep,
   characterBuildSchema,
   formatOpenEndedD20RollBreakdown,
-  getCombatRoundDisplayAttackResultForParticipantPhase,
-  getCombatRoundDisplayPhaseResolutionResultForParticipantPhase,
+  getCombatRoundDisplayIncomingAttackResultForParticipantPhase,
+  getCombatRoundOutgoingAttackResultForParticipantPhase,
+  getCombatRoundPhaseResolutionResultForAttack,
   getCombatRoundInitiativeRanks,
   getCombatRoundInitiativeTotal,
   getCombatRoundModifierPhaseForStep,
@@ -27,6 +28,7 @@ import {
   type ScenarioParticipantCombatContext,
   type ScenarioParticipant,
   type ScenarioPlayerProjection,
+  buildCombatRoundPhaseResolutionResult,
 } from "@glantri/domain";
 
 import {
@@ -1125,7 +1127,7 @@ export default function ScenarioPlayerCombatPageContent({
   const currentAttackPhase = getCombatAttackPhaseForStep(currentCombatStep);
   const selectedCurrentAttackResult =
     combatRoundState && selectedRoundParticipant && currentAttackPhase
-      ? getCombatRoundDisplayAttackResultForParticipantPhase({
+      ? getCombatRoundOutgoingAttackResultForParticipantPhase({
           participantId: selectedRoundParticipant.participantId,
           phase: currentAttackPhase,
           state: combatRoundState,
@@ -1143,18 +1145,22 @@ export default function ScenarioPlayerCombatPageContent({
   const currentResolutionPhase = getCombatRoundResolutionPhaseForStep(currentCombatStep);
   const selectedCurrentResolutionAttackResult =
     combatRoundState && selectedRoundParticipant && currentResolutionPhase
-      ? getCombatRoundDisplayAttackResultForParticipantPhase({
+      ? getCombatRoundDisplayIncomingAttackResultForParticipantPhase({
           participantId: selectedRoundParticipant.participantId,
           phase: currentResolutionPhase,
           state: combatRoundState,
         })
       : undefined;
   const selectedCurrentPhaseResolutionResult =
-    combatRoundState && selectedRoundParticipant && currentResolutionPhase
-      ? getCombatRoundDisplayPhaseResolutionResultForParticipantPhase({
-          participantId: selectedRoundParticipant.participantId,
-          phase: currentResolutionPhase,
+    combatRoundState && selectedCurrentResolutionAttackResult
+      ? getCombatRoundPhaseResolutionResultForAttack({
+          attackResult: selectedCurrentResolutionAttackResult,
           state: combatRoundState,
+        }) ??
+        buildCombatRoundPhaseResolutionResult({
+          attackResult: selectedCurrentResolutionAttackResult,
+          roundNumber: combatRoundState.roundNumber,
+          updatedAt: selectedCurrentResolutionAttackResult.rolledAt,
         })
       : undefined;
   const selectedCurrentPhaseResolutionLines =

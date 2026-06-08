@@ -83,8 +83,9 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("tied with ${rank.tiedCount}");
     expect(source).toContain("selectedCurrentInitiative");
     expect(source).toContain("rankLabel: selectedCurrentInitiativeRankLabel");
-    expect(source).toContain("getCombatRoundDisplayAttackResultForParticipantPhase");
-    expect(source).toContain("getCombatRoundDisplayPhaseResolutionResultForParticipantPhase");
+    expect(source).toContain("getCombatRoundOutgoingAttackResultForParticipantPhase");
+    expect(source).toContain("getCombatRoundDisplayIncomingAttackResultForParticipantPhase");
+    expect(source).toContain("getCombatRoundPhaseResolutionResultForAttack");
     expect(source).toContain("getCombatRoundResolutionPhaseForStep");
     expect(source).toContain("selectedCurrentAttackResult");
     expect(source).toContain("selectedCurrentAttackResultPanel");

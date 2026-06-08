@@ -17,10 +17,12 @@ export const combatRoundStepSchema = z.enum([
   "initiative_phase_1",
   "phase_1_actions",
   "review_phase_2_actions",
+  "phase_1_damage",
   "review_phase_2_modifiers",
   "initiative_phase_2",
   "phase_2_actions",
   "review_phase_2_damage",
+  "phase_2_damage",
   "round_summary",
 ]);
 
@@ -30,11 +32,13 @@ export type CombatRoundStep = z.infer<typeof combatRoundStepSchema>;
 export const COMBAT_ROUND_STEP_ABBREVIATIONS = {
   initiative_phase_1: "i1",
   initiative_phase_2: "i2",
-  phase_1_actions: "P1",
-  phase_2_actions: "P2",
+  phase_1_actions: "A1",
+  phase_1_damage: "D1",
+  phase_2_actions: "A2",
+  phase_2_damage: "D2",
   review_action_modifiers: "M1",
-  review_phase_2_actions: "D1",
-  review_phase_2_damage: "D2",
+  review_phase_2_actions: "P1",
+  review_phase_2_damage: "P2",
   review_phase_2_modifiers: "M2",
   round_summary: "SU",
   select_actions: "DE",
@@ -43,11 +47,13 @@ export const COMBAT_ROUND_STEP_ABBREVIATIONS = {
 export const COMBAT_ROUND_STEP_LABELS = {
   initiative_phase_1: "Initiative phase 1",
   initiative_phase_2: "Initiative phase 2",
-  phase_1_actions: "Phase 1 actions",
-  phase_2_actions: "Phase 2 actions",
+  phase_1_actions: "A1 Attack/action roll",
+  phase_1_damage: "D1 Damage/effects review",
+  phase_2_actions: "A2 Attack/action roll",
+  phase_2_damage: "D2 Damage/effects review",
   review_action_modifiers: "Review phase 1 modifiers",
-  review_phase_2_actions: "Phase 1 damage/effects review",
-  review_phase_2_damage: "Phase 2 damage/effects review",
+  review_phase_2_actions: "P1 Parry/defense resolution",
+  review_phase_2_damage: "P2 Parry/defense resolution",
   review_phase_2_modifiers: "Review/modify phase 2 actions/modifiers",
   round_summary: "Summary/update",
   select_actions: "Declaration",
@@ -494,8 +500,10 @@ function clearSnapshotsForCombatRoundStep(input: {
   step: CombatRoundStep;
 }): CombatRoundStepSnapshot[] {
   const pairedStepsByStep: Partial<Record<CombatRoundStep, CombatRoundStep[]>> = {
-    phase_1_actions: ["phase_1_actions", "review_phase_2_actions"],
-    phase_2_actions: ["phase_2_actions", "review_phase_2_damage"],
+    phase_1_actions: ["phase_1_actions", "review_phase_2_actions", "phase_1_damage"],
+    phase_1_damage: ["phase_1_damage"],
+    phase_2_actions: ["phase_2_actions", "review_phase_2_damage", "phase_2_damage"],
+    phase_2_damage: ["phase_2_damage"],
     review_phase_2_actions: ["review_phase_2_actions"],
     review_phase_2_damage: ["review_phase_2_damage"],
   };
@@ -598,6 +606,46 @@ export function getCombatRoundAttackResultsForParticipantPhase(input: {
   return { incoming, outgoing };
 }
 
+export function getCombatRoundOutgoingAttackResultForParticipantPhase(input: {
+  participantId: string;
+  phase: CombatRoundPhase;
+  state: CombatRoundState;
+}): CombatRoundAttackRollResult | undefined {
+  return getCombatRoundAttackResultsForParticipantPhase(input).outgoing;
+}
+
+export function getCombatRoundIncomingAttackResultsForParticipantPhase(input: {
+  participantId: string;
+  phase: CombatRoundPhase;
+  state: CombatRoundState;
+}): CombatRoundAttackRollResult[] {
+  return getCombatRoundAttackResultsForParticipantPhase(input).incoming;
+}
+
+export function getCombatRoundDisplayIncomingAttackResultForParticipantPhase(input: {
+  participantId: string;
+  phase: CombatRoundPhase;
+  state: CombatRoundState;
+}): CombatRoundAttackRollResult | undefined {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const incoming = getCombatRoundIncomingAttackResultsForParticipantPhase({
+    participantId: input.participantId,
+    phase: input.phase,
+    state: normalized,
+  });
+
+  return (
+    incoming.find((attackResult) => {
+      const resolution = getCombatRoundPhaseResolutionResultForAttack({
+        attackResult,
+        state: normalized,
+      });
+
+      return resolution?.parryResolution.status === "pending";
+    }) ?? incoming[0]
+  );
+}
+
 export function getCombatRoundDisplayAttackResultForParticipantPhase(input: {
   participantId: string;
   phase: CombatRoundPhase;
@@ -611,19 +659,23 @@ export function getCombatRoundDisplayAttackResultForParticipantPhase(input: {
 export function getCombatRoundResolutionPhaseForStep(
   step: CombatRoundStep,
 ): CombatRoundPhase | undefined {
-  if (step === "review_phase_2_actions") {
+  if (step === "review_phase_2_actions" || step === "phase_1_damage") {
     return "phase1";
   }
 
-  if (step === "review_phase_2_damage") {
+  if (step === "review_phase_2_damage" || step === "phase_2_damage") {
     return "phase2";
   }
 
   return undefined;
 }
 
-export function getCombatRoundDamageReviewStepForPhase(phase: CombatRoundPhase): CombatRoundStep {
+export function getCombatRoundParryReviewStepForPhase(phase: CombatRoundPhase): CombatRoundStep {
   return phase === "phase1" ? "review_phase_2_actions" : "review_phase_2_damage";
+}
+
+export function getCombatRoundDamageReviewStepForPhase(phase: CombatRoundPhase): CombatRoundStep {
+  return phase === "phase1" ? "phase_1_damage" : "phase_2_damage";
 }
 
 export function getCombatRoundPhaseActionStepForPhase(phase: CombatRoundPhase): CombatRoundStep {
@@ -840,12 +892,18 @@ export function recordCombatRoundPhaseResolutionAttackDone(input: {
   return {
     ...withStatus,
     phaseResolutionCursor: {
-      participantId: input.attackResult.attackerParticipantId,
+      participantId: input.attackResult.hit
+        ? input.attackResult.defenderParticipantId
+        : input.attackResult.attackerParticipantId,
       phase: input.attackResult.phase,
       substep: nextSubstep,
     },
-    selectedParticipantId: input.attackResult.attackerParticipantId,
-    selectedStep: getCombatRoundDamageReviewStepForPhase(input.attackResult.phase),
+    selectedParticipantId: input.attackResult.hit
+      ? input.attackResult.defenderParticipantId
+      : input.attackResult.attackerParticipantId,
+    selectedStep: input.attackResult.hit
+      ? getCombatRoundParryReviewStepForPhase(input.attackResult.phase)
+      : getCombatRoundDamageReviewStepForPhase(input.attackResult.phase),
   };
 }
 
@@ -900,7 +958,10 @@ export function advanceCombatRoundPhaseResolutionSubstepForParticipant(input: {
       substep: nextSubstep,
     },
     selectedParticipantId: input.participantId,
-    selectedStep: getCombatRoundDamageReviewStepForPhase(input.phase),
+    selectedStep:
+      nextSubstep === "parry"
+        ? getCombatRoundParryReviewStepForPhase(input.phase)
+        : getCombatRoundDamageReviewStepForPhase(input.phase),
   };
 }
 
@@ -933,11 +994,14 @@ export function completeCombatRoundPhaseResolutionForParticipant(input: {
         status: "skipped",
         step: getCombatRoundPhaseActionStepForPhase(input.phase),
       });
+  const reviewStep = hasPhaseAttack
+    ? getCombatRoundDamageReviewStepForPhase(input.phase)
+    : getCombatRoundParryReviewStepForPhase(input.phase);
   const withStepStatus = setCombatRoundParticipantStepStatus({
     participantId: input.participantId,
     state: withActionStepStatus,
     status: input.submittedBy === "gm" ? "gmEdited" : "submitted",
-    step: getCombatRoundDamageReviewStepForPhase(input.phase),
+    step: reviewStep,
   });
 
   return moveCombatRoundPhaseResolutionCursorToNextParticipant({
@@ -1329,7 +1393,8 @@ export function getCombatRoundInitiativePhaseForStep(
   if (
     step === "initiative_phase_1" ||
     step === "phase_1_actions" ||
-    step === "review_phase_2_actions"
+    step === "review_phase_2_actions" ||
+    step === "phase_1_damage"
   ) {
     return "phase1";
   }
@@ -1337,7 +1402,8 @@ export function getCombatRoundInitiativePhaseForStep(
   if (
     step === "initiative_phase_2" ||
     step === "phase_2_actions" ||
-    step === "review_phase_2_damage"
+    step === "review_phase_2_damage" ||
+    step === "phase_2_damage"
   ) {
     return "phase2";
   }
@@ -1352,7 +1418,8 @@ export function getCombatRoundModifierPhaseForStep(
     step === "review_action_modifiers" ||
     step === "initiative_phase_1" ||
     step === "phase_1_actions" ||
-    step === "review_phase_2_actions"
+    step === "review_phase_2_actions" ||
+    step === "phase_1_damage"
   ) {
     return "phase1";
   }
@@ -1361,7 +1428,8 @@ export function getCombatRoundModifierPhaseForStep(
     step === "review_phase_2_modifiers" ||
     step === "initiative_phase_2" ||
     step === "phase_2_actions" ||
-    step === "review_phase_2_damage"
+    step === "review_phase_2_damage" ||
+    step === "phase_2_damage"
   ) {
     return "phase2";
   }
@@ -1441,6 +1509,67 @@ export function recordCombatRoundParticipantStepReview(input: {
   });
 }
 
+function resetCombatRoundParryForAttackResult(input: {
+  attackResult: CombatRoundAttackRollResult;
+  resolution: CombatRoundPhaseResolutionResult;
+  updatedAt: string;
+}): CombatRoundPhaseResolutionResult {
+  return combatRoundPhaseResolutionResultSchema.parse({
+    ...input.resolution,
+    damageProposal: {
+      proposedEffects: [],
+      status: "not_ready",
+    },
+    damageRoll: input.attackResult.hit
+      ? {
+          notes: "Awaiting parry resolution.",
+          status: "pending",
+        }
+      : {
+          status: "not_required",
+        },
+    parryResolution: input.attackResult.hit
+      ? {
+          status: "pending",
+        }
+      : {
+          resultLabel: "Attack missed",
+          status: "not_applicable",
+        },
+    updatedAt: input.updatedAt,
+  });
+}
+
+function resetCombatRoundDamageForAttackResult(input: {
+  attackResult: CombatRoundAttackRollResult;
+  resolution: CombatRoundPhaseResolutionResult;
+  updatedAt: string;
+}): CombatRoundPhaseResolutionResult {
+  return combatRoundPhaseResolutionResultSchema.parse({
+    ...input.resolution,
+    damageProposal: {
+      proposedEffects: [],
+      status: "not_ready",
+    },
+    damageRoll:
+      input.attackResult.hit && input.resolution.parryResolution.success !== true
+        ? {
+            notes:
+              input.resolution.parryResolution.status === "resolved"
+                ? "Parry resolved unsuccessfully. Damage roll is pending."
+                : "Awaiting parry resolution.",
+            status: "pending",
+          }
+        : {
+            notes: input.attackResult.hit
+              ? "Parry resolved successfully. Damage is not required."
+              : undefined,
+            status: "not_required",
+          },
+    updatedAt: input.updatedAt,
+  });
+}
+
 export function clearCombatRoundStep(input: {
   state: CombatRoundState;
   step: CombatRoundStep;
@@ -1448,14 +1577,20 @@ export function clearCombatRoundStep(input: {
   const normalized = combatRoundStateSchema.parse(input.state);
   const clearsPhaseAction =
     input.step === "phase_1_actions" || input.step === "phase_2_actions";
+  const clearsParryReview =
+    input.step === "review_phase_2_actions" || input.step === "review_phase_2_damage";
   const clearResolutionPhase =
-    input.step === "phase_1_actions" || input.step === "review_phase_2_actions"
+    input.step === "phase_1_actions" ||
+    input.step === "review_phase_2_actions" ||
+    input.step === "phase_1_damage"
       ? "phase1"
-      : input.step === "phase_2_actions" || input.step === "review_phase_2_damage"
+      : input.step === "phase_2_actions" ||
+          input.step === "review_phase_2_damage" ||
+          input.step === "phase_2_damage"
         ? "phase2"
         : undefined;
   const clearsDamageReview =
-    input.step === "review_phase_2_actions" || input.step === "review_phase_2_damage";
+    input.step === "phase_1_damage" || input.step === "phase_2_damage";
   const selectedParticipantForClear = clearResolutionPhase
     ? normalized.selectedParticipantId &&
       normalized.participants.some(
@@ -1466,26 +1601,58 @@ export function clearCombatRoundStep(input: {
         ? normalized.phaseResolutionCursor.participantId
         : undefined
     : undefined;
+  const selectedOutgoingAttackResult =
+    clearResolutionPhase && selectedParticipantForClear
+      ? getCombatRoundOutgoingAttackResultForParticipantPhase({
+          participantId: selectedParticipantForClear,
+          phase: clearResolutionPhase,
+          state: normalized,
+        })
+      : undefined;
+  const selectedIncomingAttackResult =
+    clearResolutionPhase && selectedParticipantForClear
+      ? getCombatRoundDisplayIncomingAttackResultForParticipantPhase({
+          participantId: selectedParticipantForClear,
+          phase: clearResolutionPhase,
+          state: normalized,
+        })
+      : undefined;
+  const selectedAttackResultForClear = clearsPhaseAction
+    ? selectedOutgoingAttackResult ?? selectedIncomingAttackResult
+    : selectedIncomingAttackResult;
+  const selectedAttackResultId = selectedAttackResultForClear
+    ? getCombatRoundAttackResultId({
+        result: selectedAttackResultForClear,
+        roundNumber: normalized.roundNumber,
+      })
+    : undefined;
   const nextPhaseResolutionStatuses = clearResolutionPhase
     ? Object.fromEntries(
         Object.entries(normalized.phaseResolutionStatuses).map(([participantId, statuses]) => {
-          const participant = normalized.participants.find(
-            (entry) => entry.participantId === participantId,
-          );
-          const attackResult = clearsDamageReview
-            ? participant?.attackResults[clearResolutionPhase]
-            : undefined;
+          const clearsOwnerStatus =
+            selectedAttackResultForClear?.attackerParticipantId === participantId;
+          const nextStatus =
+            clearsOwnerStatus && clearsPhaseAction
+              ? undefined
+              : clearsOwnerStatus && clearsParryReview && selectedAttackResultForClear
+                ? {
+                    substep: getCombatRoundPostAttackResolutionSubstep(
+                      selectedAttackResultForClear,
+                    ),
+                    updatedAt: selectedAttackResultForClear.rolledAt,
+                  }
+                : clearsOwnerStatus && clearsDamageReview && selectedAttackResultForClear
+                  ? {
+                      substep: "damage" as const,
+                      updatedAt: selectedAttackResultForClear.rolledAt,
+                    }
+                  : statuses[clearResolutionPhase];
 
           return [
             participantId,
             {
               ...statuses,
-              [clearResolutionPhase]: attackResult
-                ? {
-                    substep: getCombatRoundPostAttackResolutionSubstep(attackResult),
-                    updatedAt: attackResult.rolledAt,
-                  }
-                : undefined,
+              [clearResolutionPhase]: nextStatus,
             },
           ];
         }),
@@ -1493,38 +1660,27 @@ export function clearCombatRoundStep(input: {
     : normalized.phaseResolutionStatuses;
   const nextCursorParticipant =
     clearResolutionPhase && clearsPhaseAction
-      ? selectedParticipantForClear ??
+      ? selectedAttackResultForClear?.attackerParticipantId ??
+        selectedParticipantForClear ??
         getCombatRoundPhaseResolutionOrder({
           phase: clearResolutionPhase,
           state: normalized,
         })[0]
-      : clearResolutionPhase && clearsDamageReview
-        ? selectedParticipantForClear &&
-          normalized.participants.find(
-            (participant) => participant.participantId === selectedParticipantForClear,
-          )?.attackResults[clearResolutionPhase]
-          ? selectedParticipantForClear
-          : getCombatRoundPhaseResolutionOrder({
-              phase: clearResolutionPhase,
-              state: normalized,
-            }).find((participantId) =>
-              Boolean(
-                normalized.participants.find(
-                  (participant) => participant.participantId === participantId,
-                )?.attackResults[clearResolutionPhase],
-              ),
-            )
+      : clearResolutionPhase && (clearsParryReview || clearsDamageReview)
+        ? selectedParticipantForClear
         : undefined;
-  const nextCursorAttackResult =
-    clearResolutionPhase && nextCursorParticipant && !clearsPhaseAction
-      ? normalized.participants.find(
-          (participant) => participant.participantId === nextCursorParticipant,
-        )?.attackResults[clearResolutionPhase]
-      : undefined;
   const nextCursorSubstep =
     clearResolutionPhase && nextCursorParticipant
-      ? nextCursorAttackResult
-        ? getCombatRoundPostAttackResolutionSubstep(nextCursorAttackResult)
+      ? clearsParryReview && selectedAttackResultForClear
+        ? getCombatRoundPostAttackResolutionSubstep(selectedAttackResultForClear)
+        : clearsDamageReview
+          ? "damage"
+          : selectedAttackResultForClear && clearsPhaseAction
+            ? getCombatRoundInitialPhaseResolutionSubstep({
+                participantId: selectedAttackResultForClear.attackerParticipantId,
+                phase: clearResolutionPhase,
+                state: normalized,
+              })
         : getCombatRoundInitialPhaseResolutionSubstep({
             participantId: nextCursorParticipant,
             phase: clearResolutionPhase,
@@ -1545,21 +1701,57 @@ export function clearCombatRoundStep(input: {
           ? undefined
           : normalized.phaseResolutionCursor,
     phaseResolutionResults: clearResolutionPhase
-      ? normalized.phaseResolutionResults.filter(
-          (result) =>
-            result.roundNumber !== normalized.roundNumber || result.phase !== clearResolutionPhase,
-        )
+      ? normalized.phaseResolutionResults
+          .filter((result) => {
+            if (
+              result.roundNumber !== normalized.roundNumber ||
+              result.phase !== clearResolutionPhase
+            ) {
+              return true;
+            }
+
+            return !(clearsPhaseAction && result.attackResultId === selectedAttackResultId);
+          })
+          .map((result) => {
+            if (result.attackResultId !== selectedAttackResultId || !selectedAttackResultForClear) {
+              return result;
+            }
+
+            if (clearsParryReview) {
+              return resetCombatRoundParryForAttackResult({
+                attackResult: selectedAttackResultForClear,
+                resolution: result,
+                updatedAt: selectedAttackResultForClear.rolledAt,
+              });
+            }
+
+            if (clearsDamageReview) {
+              return resetCombatRoundDamageForAttackResult({
+                attackResult: selectedAttackResultForClear,
+                resolution: result,
+                updatedAt: selectedAttackResultForClear.rolledAt,
+              });
+            }
+
+            return result;
+          })
       : normalized.phaseResolutionResults,
     phaseResolutionStatuses: nextPhaseResolutionStatuses,
     participants: normalized.participants.map((participant) => {
       const nextAttackResults = { ...participant.attackResults };
       const nextInitiatives = { ...participant.initiatives };
 
-      if (input.step === "phase_1_actions") {
+      if (
+        input.step === "phase_1_actions" &&
+        participant.participantId === selectedAttackResultForClear?.attackerParticipantId
+      ) {
         delete nextAttackResults.phase1;
       }
 
-      if (input.step === "phase_2_actions") {
+      if (
+        input.step === "phase_2_actions" &&
+        participant.participantId === selectedAttackResultForClear?.attackerParticipantId
+      ) {
         delete nextAttackResults.phase2;
       }
 
@@ -1571,17 +1763,39 @@ export function clearCombatRoundStep(input: {
         delete nextInitiatives.phase2;
       }
 
+      const resetsSelectedStep =
+        !clearResolutionPhase ||
+        participant.participantId === selectedParticipantForClear ||
+        (clearsPhaseAction &&
+          participant.participantId === selectedAttackResultForClear?.attackerParticipantId);
+      const resetsDownstreamReview =
+        clearsPhaseAction &&
+        participant.participantId === selectedAttackResultForClear?.defenderParticipantId;
+
       return {
         ...participant,
         attackResults: nextAttackResults,
         declaration: input.step === "select_actions" ? undefined : participant.declaration,
         initiatives: nextInitiatives,
-        stepStatuses: {
-          ...participant.stepStatuses,
-          [input.step]: "pending",
-          ...(input.step === "phase_1_actions" ? { review_phase_2_actions: "pending" as const } : {}),
-          ...(input.step === "phase_2_actions" ? { review_phase_2_damage: "pending" as const } : {}),
-        },
+        stepStatuses:
+          resetsSelectedStep || resetsDownstreamReview
+            ? {
+                ...participant.stepStatuses,
+                ...(resetsSelectedStep ? { [input.step]: "pending" as const } : {}),
+                ...(input.step === "phase_1_actions" && resetsDownstreamReview
+                  ? {
+                      phase_1_damage: "pending" as const,
+                      review_phase_2_actions: "pending" as const,
+                    }
+                  : {}),
+                ...(input.step === "phase_2_actions" && resetsDownstreamReview
+                  ? {
+                      phase_2_damage: "pending" as const,
+                      review_phase_2_damage: "pending" as const,
+                    }
+                  : {}),
+              }
+            : participant.stepStatuses,
       };
     }),
     selectedParticipantId: nextCursorParticipant ?? normalized.selectedParticipantId,
@@ -1589,6 +1803,8 @@ export function clearCombatRoundStep(input: {
       clearResolutionPhase && nextCursorParticipant
         ? clearsPhaseAction
           ? getCombatRoundPhaseActionStepForPhase(clearResolutionPhase)
+          : clearsParryReview
+            ? getCombatRoundParryReviewStepForPhase(clearResolutionPhase)
           : getCombatRoundDamageReviewStepForPhase(clearResolutionPhase)
         : normalized.selectedStep,
     stepSnapshots: clearSnapshotsForCombatRoundStep({

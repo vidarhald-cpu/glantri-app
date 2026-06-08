@@ -128,9 +128,10 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("formatOpenEndedD20RollBreakdown");
     expect(source).toContain("formatCombatDefenseResultMainLine");
     expect(source).toContain("formatCombatParryCalculationLine");
-    expect(source).toContain("getCombatRoundDisplayAttackResultForParticipantPhase");
+    expect(source).toContain("getCombatRoundOutgoingAttackResultForParticipantPhase");
+    expect(source).toContain("getCombatRoundDisplayIncomingAttackResultForParticipantPhase");
     expect(source).toContain("ensureCombatRoundPhaseResolutionResultsForPhase");
-    expect(source).toContain("getCombatRoundDisplayPhaseResolutionResultForParticipantPhase");
+    expect(source).toContain("getCombatRoundPhaseResolutionResultForAttack");
     expect(source).toContain("getCombatRoundPhaseResolutionStatus");
     expect(source).toContain("getCombatRoundResolutionPhaseForStep");
     expect(source).toContain("completeCombatRoundPhaseResolutionForParticipant");
@@ -161,6 +162,8 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("inspectorCurrentPhaseHasAttack");
     expect(source).toContain("inspectorCanRollPhaseAttack");
     expect(source).toContain("inspectorCanRollParry");
+    expect(source).toContain("inspectorResolutionStepKind === \"parry\"");
+    expect(source).toContain("inspectorPhaseResolutionOwnerParticipantId");
     expect(source).toContain("CombatParryResolutionPanel");
     expect(source).toContain("Main hand");
     expect(source).toContain("Off hand");
