@@ -1,6 +1,7 @@
 import Fastify from "fastify";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  advanceCombatRoundStep,
   buildCombatRoundAttackRollResult,
   initializeCombatRoundState,
   recordCombatRoundAttackResult,
@@ -3007,6 +3008,54 @@ describe("scenarios route contract", () => {
     expect(mocks.encounterService.updateScenarioParticipantState).not.toHaveBeenCalled();
   });
 
+  it("clears a top-advance M1 command after the UI has landed on i1", async () => {
+    const combatEncounter = makeCombatEncounter() as EncounterSession;
+    const reviewPhase1 = advanceCombatRoundStep(
+      initializeCombatRoundState({ encounter: combatEncounter }),
+    );
+    const topAdvanced = advanceCombatRoundStep(reviewPhase1, {
+      command: {
+        createdAt: "2026-01-01T00:01:00.000Z",
+        createdByUserId: "gm-1",
+        participantId: "encounter-participant-1",
+      },
+    });
+    setupCombatDeclarationRoute({
+      encounter: {
+        combatRoundState: topAdvanced,
+      },
+      user: mocks.adminUser,
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      body: {
+        participantId: "encounter-participant-1",
+        step: "initiative_phase_1",
+      },
+      method: "POST",
+      url: "/encounters/encounter-1/combat-round/clear-current-step",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
+    expect(updatedEncounter.combatRoundState.commands).toEqual([]);
+    expect(updatedEncounter.combatRoundState.currentCursor).toEqual({
+      participantId: "encounter-participant-1",
+      roundNumber: 1,
+      step: "M1",
+    });
+    expect(updatedEncounter.combatRoundState.currentStep).toBe("review_action_modifiers");
+    expect(updatedEncounter.combatRoundState.selectedParticipantId).toBe("encounter-participant-1");
+    expect(updatedEncounter.combatRoundState.selectedStep).toBe("review_action_modifiers");
+    expect(
+      updatedEncounter.combatRoundState.participants[0].stepStatuses.review_action_modifiers,
+    ).toBe("pending");
+    expect(mocks.encounterService.updateScenarioParticipantState).not.toHaveBeenCalled();
+  });
+
   it("clears a command-backed i1 cell by restoring the command before cursor", async () => {
     const combatEncounter = makeCombatEncounter() as EncounterSession;
     const initiativeState = {
@@ -3056,6 +3105,69 @@ describe("scenarios route contract", () => {
     expect(updatedEncounter.combatRoundState.selectedParticipantId).toBe("encounter-participant-1");
     expect(updatedEncounter.combatRoundState.selectedStep).toBe("initiative_phase_1");
     expect(updatedEncounter.combatRoundState.participants[0].initiatives.phase1).toBeUndefined();
+  });
+
+  it("clears a top-advance i1 command without leaving no-action A1 state selected", async () => {
+    const combatEncounter = makeCombatEncounter() as EncounterSession;
+    const initiativePhase1 = advanceCombatRoundStep(
+      advanceCombatRoundStep(initializeCombatRoundState({ encounter: combatEncounter })),
+    );
+    const topAdvanced = advanceCombatRoundStep(initiativePhase1, {
+      command: {
+        createdAt: "2026-01-01T00:01:00.000Z",
+        createdByUserId: "gm-1",
+        participantId: "encounter-participant-1",
+      },
+    });
+    setupCombatDeclarationRoute({
+      encounter: {
+        combatRoundState: {
+          ...topAdvanced,
+          phaseResolutionCursor: {
+            participantId: "encounter-participant-1",
+            phase: "phase1",
+            substep: "damage",
+          },
+          selectedParticipantId: "encounter-participant-1",
+          selectedStep: "phase_1_actions",
+        },
+      },
+      user: mocks.adminUser,
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      body: {
+        participantId: "encounter-participant-1",
+        step: "phase_1_actions",
+      },
+      method: "POST",
+      url: "/encounters/encounter-1/combat-round/clear-current-step",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
+    expect(updatedEncounter.combatRoundState.commands).toEqual([]);
+    expect(updatedEncounter.combatRoundState.currentCursor).toEqual({
+      participantId: "encounter-participant-1",
+      roundNumber: 1,
+      step: "i1",
+    });
+    expect(updatedEncounter.combatRoundState.currentStep).toBe("initiative_phase_1");
+    expect(updatedEncounter.combatRoundState.selectedParticipantId).toBe("encounter-participant-1");
+    expect(updatedEncounter.combatRoundState.selectedStep).toBe("initiative_phase_1");
+    expect(updatedEncounter.combatRoundState.phaseResolutionCursor).toBeUndefined();
+    expect(updatedEncounter.combatRoundState.participants[0].stepStatuses.phase_1_actions).toBe(
+      "pending",
+    );
+    expect(
+      updatedEncounter.combatRoundState.participants[0].stepStatuses.review_phase_2_actions,
+    ).toBe("pending");
+    expect(updatedEncounter.combatRoundState.participants[0].stepStatuses.phase_1_damage).toBe(
+      "pending",
+    );
   });
 
   it("falls back from an empty selected A1 cell to the latest i1 command undo", async () => {

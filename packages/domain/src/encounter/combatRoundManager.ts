@@ -1921,15 +1921,45 @@ export function getCombatRoundStepSnapshot(input: {
 
 export function advanceCombatRoundStep(
   state: CombatRoundState,
-  input: { stepSnapshots?: CombatRoundStepSnapshot[] } = {},
+  input: {
+    command?: {
+      commandId?: string;
+      createdAt: string;
+      createdByUserId?: string;
+      facts?: Record<string, unknown>;
+      participantId?: string;
+    };
+    stepSnapshots?: CombatRoundStepSnapshot[];
+  } = {},
 ): CombatRoundState {
   const normalized = combatRoundStateSchema.parse(state);
+  const commandParticipantId =
+    input.command?.participantId ??
+    normalized.currentCursor?.participantId ??
+    normalized.selectedParticipantId ??
+    normalized.participants[0]?.participantId;
+  const withCommand =
+    input.command && commandParticipantId && isGlobalCombatRoundStep(normalized.currentStep)
+      ? recordCombatRoundGlobalParticipantCommand({
+          commandId: input.command.commandId,
+          createdAt: input.command.createdAt,
+          createdByUserId: input.command.createdByUserId,
+          facts: {
+            source: "advance_step",
+            status: normalized.currentStep === "select_actions" ? "locked" : "complete",
+            ...input.command.facts,
+          },
+          participantId: commandParticipantId,
+          state: normalized,
+          step: normalized.currentStep,
+        })
+      : normalized;
   const withSnapshots = input.stepSnapshots
     ? upsertCombatRoundStepSnapshots({
         snapshots: input.stepSnapshots,
-        state: normalized,
+        state: withCommand,
       })
-    : normalized;
+    : withCommand;
   const nextStep = getNextCombatRoundStep(normalized.currentStep);
   const startsNextRound = normalized.currentStep === "round_summary";
   const advancesDeclarationStep = normalized.currentStep === "select_actions";
@@ -2472,6 +2502,9 @@ function clearCombatRoundStepLegacy(input: {
           }
         : clearResolutionPhase && normalized.phaseResolutionCursor?.phase === clearResolutionPhase
           ? undefined
+          : globalDependencyPhase &&
+              normalized.phaseResolutionCursor?.phase === globalDependencyPhase
+            ? undefined
           : normalized.phaseResolutionCursor,
     phaseResolutionResults: clearResolutionPhase
       ? normalized.phaseResolutionResults
@@ -2554,7 +2587,21 @@ function clearCombatRoundStepLegacy(input: {
       }
 
       if (
+        input.step === "review_action_modifiers" &&
+        participant.participantId === selectedParticipantId
+      ) {
+        delete nextInitiatives.phase1;
+      }
+
+      if (
         input.step === "initiative_phase_2" &&
+        participant.participantId === selectedParticipantId
+      ) {
+        delete nextInitiatives.phase2;
+      }
+
+      if (
+        input.step === "review_phase_2_modifiers" &&
         participant.participantId === selectedParticipantId
       ) {
         delete nextInitiatives.phase2;

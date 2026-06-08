@@ -250,6 +250,10 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("Use inspector for phase resolution");
     expect(source).toContain("isSequentialResolutionStep(inspector.step)");
     expect(source).toContain("disabled={saving || inspectorSelectedStepIsSequential}");
+    expect(source).toContain("const commandParticipantId =");
+    expect(source).toContain("advanceCombatRoundStep(stateForCommit, advanceInput)");
+    expect(source).toContain("command: {");
+    expect(source).toContain("participantId: commandParticipantId");
     expect(source).toContain("inspectorSelectedAttackAlreadyRolled ||");
     expect(source).toContain("Select a participant step to inspect combat details.");
     expect(source).toContain("Previous participant");
@@ -264,7 +268,8 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("updateEncounterOnServer");
     expect(source).toContain("buildCombatRoundStepSnapshots");
     expect(source).toContain("const stateForCommit = resolutionPhase");
-    expect(source).toContain("advanceCombatRoundStep(stateForCommit, { stepSnapshots })");
+    expect(source).toContain("advanceCombatRoundStep(stateForCommit, advanceInput)");
+    expect(source).toContain("const commandParticipantId =");
     expect(source).toContain("attackResult");
     expect(source).toContain("combatRoundState: nextRoundState");
     expect(source).toContain("currentRound: nextRoundState.roundNumber");

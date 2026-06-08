@@ -1859,8 +1859,21 @@ export default function CombatRoundManagerPanel({
         })
       : roundState;
     const stepSnapshots = buildCombatRoundStepSnapshots(committedAt, stateForCommit);
+    const commandParticipantId =
+      inspector.participant?.participantId ??
+      stateForCommit.currentCursor?.participantId ??
+      stateForCommit.selectedParticipantId;
+    const advanceInput = commandParticipantId
+      ? {
+          command: {
+            createdAt: committedAt,
+            participantId: commandParticipantId,
+          },
+          stepSnapshots,
+        }
+      : { stepSnapshots };
 
-    await persistRoundState(advanceCombatRoundStep(stateForCommit, { stepSnapshots }));
+    await persistRoundState(advanceCombatRoundStep(stateForCommit, advanceInput));
   }
 
   async function persistRoundState(nextRoundState: typeof roundState) {
