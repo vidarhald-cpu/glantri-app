@@ -130,10 +130,11 @@ describe("combat round manager selection", () => {
     ).toEqual({ participantId: "middle", step: "initiative_phase_1" });
   });
 
-  it("applies pending post-save selection across a refreshed encounter state", () => {
+  it("applies legacy pending post-save selection when no current cursor exists", () => {
     const existing = initializeCombatRoundState({ encounter: encounter() });
+    const { currentCursor, ...legacyExisting } = existing;
     const refreshedState = {
-      ...existing,
+      ...legacyExisting,
       currentStep: "select_actions" as const,
       selectedParticipantId: "bottom",
       selectedStep: "select_actions" as const,
@@ -141,6 +142,36 @@ describe("combat round manager selection", () => {
     const normalized = normalizeCombatRoundManagerSelection({
       pendingSelection: {
         participantId: "middle",
+        step: "select_actions",
+      },
+      state: refreshedState,
+    });
+
+    expect(currentCursor).toMatchObject({ step: "DE" });
+    expect(normalized.selectedParticipantId).toBe("middle");
+    expect(normalized.selectedStep).toBe("select_actions");
+  });
+
+  it("uses persisted currentCursor after refresh instead of stale pending/manual selection", () => {
+    const existing = initializeCombatRoundState({ encounter: encounter() });
+    const refreshedState = {
+      ...existing,
+      currentCursor: {
+        participantId: "middle",
+        roundNumber: existing.roundNumber,
+        step: "DE" as const,
+      },
+      currentStep: "select_actions" as const,
+      selectedParticipantId: "bottom",
+      selectedStep: "select_actions" as const,
+    };
+    const normalized = normalizeCombatRoundManagerSelection({
+      manualSelection: {
+        participantId: "bottom",
+        step: "select_actions",
+      },
+      pendingSelection: {
+        participantId: "top",
         step: "select_actions",
       },
       state: refreshedState,

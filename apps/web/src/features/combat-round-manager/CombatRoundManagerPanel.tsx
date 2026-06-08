@@ -2081,6 +2081,7 @@ export default function CombatRoundManagerPanel({
     try {
       const actedParticipantId = selectedEncounterParticipant.id;
       const actedStep = roundState.currentStep;
+      const shouldUsePersistedCursor = isGlobalCombatRoundParticipantStep(actedStep);
       const displayedParticipantIds = displayParticipants.map(
         (participant) => participant.participantId,
       );
@@ -2095,27 +2096,38 @@ export default function CombatRoundManagerPanel({
         secondaryActionId: inspectorDraft.secondaryActionId || undefined,
       });
       const nextRoundState = initializeCombatRoundState({ encounter: nextEncounter });
-      const nextSelection = isGlobalCombatRoundParticipantStep(actedStep)
-        ? getNextCombatRoundParticipantSelection({
+      const nextSelection = shouldUsePersistedCursor
+        ? undefined
+        : getNextCombatRoundParticipantSelection({
             fromParticipantId: actedParticipantId,
             participantIds: displayedParticipantIds,
-            step: actedStep,
-          })
-        : {
-            participantId: actedParticipantId,
             step: roundState.selectedStep ?? actedStep,
-          };
-      const nextSelectedRoundState = applyCombatRoundSelectionTarget({
-        selection: nextSelection,
-        state: nextRoundState,
-      });
+          });
+      const nextSelectedRoundState = shouldUsePersistedCursor
+        ? normalizeCombatRoundManagerSelection({
+            state: nextRoundState,
+          })
+        : applyCombatRoundSelectionTarget({
+            selection: nextSelection ?? {
+              participantId: actedParticipantId,
+              step: roundState.selectedStep ?? actedStep,
+            },
+            state: nextRoundState,
+          });
 
       setScenarioParticipantOverrides((current) => ({
         ...current,
         [participant.id]: participant,
       }));
-      pendingSelectionRef.current = nextSelection;
-      manualSelectionRef.current = nextSelection;
+
+      if (nextSelection) {
+        pendingSelectionRef.current = nextSelection;
+        manualSelectionRef.current = nextSelection;
+      } else {
+        pendingSelectionRef.current = undefined;
+        manualSelectionRef.current = undefined;
+      }
+
       setRoundState(nextSelectedRoundState);
       onEncounterUpdated?.(nextEncounter);
       onScenarioParticipantsUpdated?.([participant]);
@@ -2139,6 +2151,7 @@ export default function CombatRoundManagerPanel({
     try {
       const actedParticipantId = selectedEncounterParticipant.id;
       const actedStep = roundState.currentStep;
+      const shouldUsePersistedCursor = isGlobalCombatRoundParticipantStep(actedStep);
       const displayedParticipantIds = displayParticipants.map(
         (participant) => participant.participantId,
       );
@@ -2149,23 +2162,33 @@ export default function CombatRoundManagerPanel({
         scenarioParticipantId: selectedScenarioParticipant.id,
       });
       const nextRoundState = initializeCombatRoundState({ encounter: nextEncounter });
-      const nextSelection = isGlobalCombatRoundParticipantStep(actedStep)
-        ? getNextCombatRoundParticipantSelection({
+      const nextSelection = shouldUsePersistedCursor
+        ? undefined
+        : getNextCombatRoundParticipantSelection({
             fromParticipantId: actedParticipantId,
             participantIds: displayedParticipantIds,
-            step: actedStep,
-          })
-        : {
-            participantId: actedParticipantId,
             step: roundState.selectedStep ?? actedStep,
-          };
-      const nextSelectedRoundState = applyCombatRoundSelectionTarget({
-        selection: nextSelection,
-        state: nextRoundState,
-      });
+          });
+      const nextSelectedRoundState = shouldUsePersistedCursor
+        ? normalizeCombatRoundManagerSelection({
+            state: nextRoundState,
+          })
+        : applyCombatRoundSelectionTarget({
+            selection: nextSelection ?? {
+              participantId: actedParticipantId,
+              step: roundState.selectedStep ?? actedStep,
+            },
+            state: nextRoundState,
+          });
 
-      pendingSelectionRef.current = nextSelection;
-      manualSelectionRef.current = nextSelection;
+      if (nextSelection) {
+        pendingSelectionRef.current = nextSelection;
+        manualSelectionRef.current = nextSelection;
+      } else {
+        pendingSelectionRef.current = undefined;
+        manualSelectionRef.current = undefined;
+      }
+
       setRoundState(nextSelectedRoundState);
       onEncounterUpdated?.(nextEncounter);
       setSaveError(undefined);

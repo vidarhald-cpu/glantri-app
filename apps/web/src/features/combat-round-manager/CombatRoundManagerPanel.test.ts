@@ -233,7 +233,13 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("manualSelectionRef");
     expect(source).toContain("normalizeCombatRoundManagerSelection");
     expect(source).toContain("getNextCombatRoundParticipantSelection");
-    expect(source).toContain("step: actedStep");
+    expect(source).toContain(
+      "const shouldUsePersistedCursor = isGlobalCombatRoundParticipantStep(actedStep)",
+    );
+    expect(source).toContain("const nextSelection = shouldUsePersistedCursor");
+    expect(source).toContain("? normalizeCombatRoundManagerSelection({");
+    expect(source).toContain("pendingSelectionRef.current = undefined");
+    expect(source).toContain("manualSelectionRef.current = undefined");
     expect(source).toContain("Use inspector for phase resolution");
     expect(source).toContain("isSequentialResolutionStep(inspector.step)");
     expect(source).toContain("disabled={saving || inspectorSelectedStepIsSequential}");

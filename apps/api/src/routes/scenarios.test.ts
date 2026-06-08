@@ -1710,6 +1710,66 @@ describe("scenarios route contract", () => {
       submittedBy: "player",
       submittedByUserId: "player-1",
     });
+    expect(updatedEncounter.combatRoundState.commands).toEqual([]);
+  });
+
+  it("records a GM declare_action command during DE", async () => {
+    setupCombatDeclarationRoute({
+      user: mocks.adminUser,
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        actionId: "attack_parry",
+        combatContext: {
+          modifierBuckets: {
+            general: [],
+            situationDb: [],
+            situationInitiative: [],
+            situationObSkill: [],
+          },
+        },
+        phaseContexts: {
+          phase1: {
+            modifierBuckets: {
+              general: [],
+              situationDb: [],
+              situationInitiative: [],
+              situationObSkill: [],
+            },
+            targetParticipantId: "encounter-target-1",
+          },
+        },
+        scenarioParticipantId: "participant-1",
+      },
+      url: "/encounters/encounter-1/combat-declaration",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
+    expect(updatedEncounter.combatRoundState.commands).toHaveLength(1);
+    expect(updatedEncounter.combatRoundState.commands[0]).toMatchObject({
+      afterCursor: {
+        participantId: "encounter-participant-1",
+        roundNumber: 1,
+        step: "DE",
+      },
+      beforeCursor: {
+        participantId: "encounter-participant-1",
+        roundNumber: 1,
+        step: "DE",
+      },
+      createdByUserId: "gm-1",
+      participantId: "encounter-participant-1",
+      type: "declare_action",
+    });
+    expect(updatedEncounter.combatRoundState.currentCursor).toEqual(
+      updatedEncounter.combatRoundState.commands[0].afterCursor,
+    );
   });
 
   it("rejects attack declarations without the required phase target", async () => {
@@ -2321,6 +2381,20 @@ describe("scenarios route contract", () => {
     expect(
       updatedEncounter.combatRoundState.participants[0].stepStatuses.review_action_modifiers,
     ).toBe("gmEdited");
+    expect(updatedEncounter.combatRoundState.commands[0]).toMatchObject({
+      afterCursor: {
+        participantId: "encounter-participant-1",
+        step: "M1",
+      },
+      beforeCursor: {
+        participantId: "encounter-participant-1",
+        step: "M1",
+      },
+      type: "review_modifiers_phase1",
+    });
+    expect(updatedEncounter.combatRoundState.currentCursor).toEqual(
+      updatedEncounter.combatRoundState.commands[0].afterCursor,
+    );
   });
 
   it("allows a GM to declare Parry - Attack for another player's participant after DE", async () => {
@@ -2466,6 +2540,17 @@ describe("scenarios route contract", () => {
     expect(
       updatedEncounter.combatRoundState.participants[0].stepStatuses.review_phase_2_modifiers,
     ).toBe("gmEdited");
+    expect(updatedEncounter.combatRoundState.commands[0]).toMatchObject({
+      afterCursor: {
+        participantId: "encounter-participant-1",
+        step: "M2",
+      },
+      beforeCursor: {
+        participantId: "encounter-participant-1",
+        step: "M2",
+      },
+      type: "review_modifiers_phase2",
+    });
   });
 
   it("rejects a player combat declaration after DE has advanced", async () => {
@@ -2594,6 +2679,7 @@ describe("scenarios route contract", () => {
     expect(updatedEncounter.combatRoundState.participants[0].stepStatuses.initiative_phase_1).toBe(
       "submitted",
     );
+    expect(updatedEncounter.combatRoundState.commands).toEqual([]);
   });
 
   it("allows a GM to roll initiative for another player's participant", async () => {
@@ -2645,6 +2731,20 @@ describe("scenarios route contract", () => {
     });
     expect(updatedEncounter.combatRoundState.participants[0].stepStatuses.initiative_phase_2).toBe(
       "gmEdited",
+    );
+    expect(updatedEncounter.combatRoundState.commands[0]).toMatchObject({
+      afterCursor: {
+        participantId: "encounter-participant-1",
+        step: "i2",
+      },
+      beforeCursor: {
+        participantId: "encounter-participant-1",
+        step: "i2",
+      },
+      type: "roll_initiative_phase2",
+    });
+    expect(updatedEncounter.combatRoundState.currentCursor).toEqual(
+      updatedEncounter.combatRoundState.commands[0].afterCursor,
     );
   });
 

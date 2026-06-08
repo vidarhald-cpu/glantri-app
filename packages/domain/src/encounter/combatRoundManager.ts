@@ -59,6 +59,51 @@ export const COMBAT_ROUND_STEP_LABELS = {
   select_actions: "Declaration",
 } satisfies Record<CombatRoundStep, string>;
 
+export const combatRoundCursorStepSchema = z.enum([
+  "DE",
+  "M1",
+  "i1",
+  "A1",
+  "P1",
+  "D1",
+  "M2",
+  "i2",
+  "A2",
+  "P2",
+  "D2",
+  "SU",
+]);
+export type CombatRoundCursorStep = z.infer<typeof combatRoundCursorStepSchema>;
+
+export const combatRoundCursorSchema = z.object({
+  participantId: idSchema.optional(),
+  roundNumber: z.number().int().positive(),
+  step: combatRoundCursorStepSchema,
+});
+export type CombatRoundCursor = z.infer<typeof combatRoundCursorSchema>;
+
+export const combatRoundCommandTypeSchema = z.enum([
+  "declare_action",
+  "review_modifiers_phase1",
+  "roll_initiative_phase1",
+  "review_modifiers_phase2",
+  "roll_initiative_phase2",
+]);
+export type CombatRoundCommandType = z.infer<typeof combatRoundCommandTypeSchema>;
+
+export const combatRoundCommandSchema = z.object({
+  afterCursor: combatRoundCursorSchema,
+  beforeCursor: combatRoundCursorSchema,
+  createdAt: z.string().datetime(),
+  createdByUserId: idSchema.optional(),
+  facts: z.record(z.string(), z.unknown()).default({}),
+  id: idSchema,
+  participantId: idSchema,
+  roundNumber: z.number().int().positive(),
+  type: combatRoundCommandTypeSchema,
+});
+export type CombatRoundCommand = z.infer<typeof combatRoundCommandSchema>;
+
 export const combatRoundStepStatusSchema = z.enum([
   "pending",
   "ready",
@@ -333,6 +378,8 @@ export const combatRoundStepSnapshotSchema = z.object({
 
 export const combatRoundStateSchema = z.object({
   activeParticipantId: idSchema.optional(),
+  commands: z.array(combatRoundCommandSchema).default([]),
+  currentCursor: combatRoundCursorSchema.optional(),
   currentStep: combatRoundStepSchema.default("select_actions"),
   phaseResolutionCursor: combatRoundPhaseResolutionCursorSchema.optional(),
   phaseResolutionResults: z.array(combatRoundPhaseResolutionResultSchema).default([]),
@@ -460,6 +507,170 @@ function mergeStepStatuses(
   return {
     ...buildDefaultStepStatuses(),
     ...existing,
+  };
+}
+
+export function getCombatRoundCursorStepForStep(step: CombatRoundStep): CombatRoundCursorStep {
+  return combatRoundCursorStepSchema.parse(COMBAT_ROUND_STEP_ABBREVIATIONS[step]);
+}
+
+export function getCombatRoundStepForCursorStep(
+  step: CombatRoundCursorStep,
+): CombatRoundStep {
+  const entry = COMBAT_ROUND_STEPS.find(
+    (candidate) => COMBAT_ROUND_STEP_ABBREVIATIONS[candidate] === step,
+  );
+
+  if (!entry) {
+    throw new RangeError(`Unsupported combat round cursor step: ${step}`);
+  }
+
+  return entry;
+}
+
+export function isGlobalCombatRoundCursorStep(step: CombatRoundCursorStep): boolean {
+  return step === "DE" || step === "M1" || step === "i1" || step === "M2" || step === "i2";
+}
+
+function isGlobalCombatRoundStep(step: CombatRoundStep): boolean {
+  return (
+    step === "select_actions" ||
+    step === "review_action_modifiers" ||
+    step === "initiative_phase_1" ||
+    step === "review_phase_2_modifiers" ||
+    step === "initiative_phase_2"
+  );
+}
+
+function getCombatRoundGlobalCommandTypeForStep(
+  step: CombatRoundStep,
+): CombatRoundCommandType | undefined {
+  switch (step) {
+    case "select_actions":
+      return "declare_action";
+    case "review_action_modifiers":
+      return "review_modifiers_phase1";
+    case "initiative_phase_1":
+      return "roll_initiative_phase1";
+    case "review_phase_2_modifiers":
+      return "review_modifiers_phase2";
+    case "initiative_phase_2":
+      return "roll_initiative_phase2";
+    default:
+      return undefined;
+  }
+}
+
+function getNextCombatRoundGlobalParticipantId(input: {
+  participantId: string;
+  state: CombatRoundState;
+}): string {
+  const participantIds = input.state.participants.map((participant) => participant.participantId);
+  const participantIndex = participantIds.indexOf(input.participantId);
+
+  if (participantIndex < 0 || participantIndex >= participantIds.length - 1) {
+    return input.participantId;
+  }
+
+  return participantIds[participantIndex + 1] ?? input.participantId;
+}
+
+function getDefaultCombatRoundCursor(input: {
+  participantId?: string;
+  roundNumber: number;
+  step: CombatRoundStep;
+}): CombatRoundCursor {
+  return combatRoundCursorSchema.parse({
+    participantId: input.participantId,
+    roundNumber: input.roundNumber,
+    step: getCombatRoundCursorStepForStep(input.step),
+  });
+}
+
+function buildCombatRoundCommandId(input: {
+  createdAt: string;
+  participantId: string;
+  state: CombatRoundState;
+  type: CombatRoundCommandType;
+}): string {
+  return [
+    "combat-command",
+    input.state.roundNumber,
+    input.state.commands.length + 1,
+    input.type,
+    input.participantId,
+    input.createdAt,
+  ].join(":");
+}
+
+export function recordCombatRoundGlobalParticipantCommand(input: {
+  commandId?: string;
+  createdAt: string;
+  createdByUserId?: string;
+  facts?: Record<string, unknown>;
+  participantId: string;
+  state: CombatRoundState;
+  step: CombatRoundStep;
+  type?: CombatRoundCommandType;
+}): CombatRoundState {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const commandType = input.type ?? getCombatRoundGlobalCommandTypeForStep(input.step);
+
+  if (!commandType || !isGlobalCombatRoundStep(input.step)) {
+    return normalized;
+  }
+
+  const actorExists = normalized.participants.some(
+    (participant) => participant.participantId === input.participantId,
+  );
+
+  if (!actorExists) {
+    return normalized;
+  }
+
+  const beforeCursor = getDefaultCombatRoundCursor({
+    participantId: input.participantId,
+    roundNumber: normalized.roundNumber,
+    step: input.step,
+  });
+  const afterParticipantId = getNextCombatRoundGlobalParticipantId({
+    participantId: input.participantId,
+    state: normalized,
+  });
+  const afterCursor = getDefaultCombatRoundCursor({
+    participantId: afterParticipantId,
+    roundNumber: normalized.roundNumber,
+    step: input.step,
+  });
+  const command = combatRoundCommandSchema.parse({
+    afterCursor,
+    beforeCursor,
+    createdAt: input.createdAt,
+    createdByUserId: input.createdByUserId,
+    facts: {
+      step: beforeCursor.step,
+      ...input.facts,
+    },
+    id:
+      input.commandId ??
+      buildCombatRoundCommandId({
+        createdAt: input.createdAt,
+        participantId: input.participantId,
+        state: normalized,
+        type: commandType,
+      }),
+    participantId: input.participantId,
+    roundNumber: normalized.roundNumber,
+    type: commandType,
+  });
+  const selectedStep = getCombatRoundStepForCursorStep(command.afterCursor.step);
+
+  return {
+    ...normalized,
+    commands: [...normalized.commands, command],
+    currentCursor: command.afterCursor,
+    selectedParticipantId: command.afterCursor.participantId ?? normalized.selectedParticipantId,
+    selectedStep,
   };
 }
 
@@ -1542,16 +1753,28 @@ export function initializeCombatRoundState(input: {
   );
   const participantIds = new Set(participants.map((participant) => participant.participantId));
   const currentStep = existing?.currentStep ?? "select_actions";
+  const roundNumber = existing?.roundNumber ?? input.encounter.currentRound;
+  const existingCursorStep = existing?.currentCursor
+    ? getCombatRoundStepForCursorStep(existing.currentCursor.step)
+    : undefined;
+  const existingCursorParticipantId = existing?.currentCursor?.participantId;
+  const canUseExistingCurrentCursor =
+    existing?.currentCursor &&
+    existing.currentCursor.roundNumber === roundNumber &&
+    existingCursorStep === currentStep &&
+    (!existingCursorParticipantId || participantIds.has(existingCursorParticipantId));
   const resetsStaleDeclarationSelection =
     currentStep === "select_actions" &&
     existing?.selectedStep !== undefined &&
     existing.selectedStep !== "select_actions";
   const selectedParticipantId =
-    !resetsStaleDeclarationSelection &&
-    existing?.selectedParticipantId &&
-    participantIds.has(existing.selectedParticipantId)
-      ? existing.selectedParticipantId
-      : participants[0]?.participantId;
+    canUseExistingCurrentCursor && existingCursorParticipantId
+      ? existingCursorParticipantId
+      : !resetsStaleDeclarationSelection &&
+          existing?.selectedParticipantId &&
+          participantIds.has(existing.selectedParticipantId)
+        ? existing.selectedParticipantId
+        : participants[0]?.participantId;
   const activeParticipantId =
     existing?.activeParticipantId && participantIds.has(existing.activeParticipantId)
       ? existing.activeParticipantId
@@ -1559,17 +1782,29 @@ export function initializeCombatRoundState(input: {
 
   return {
     activeParticipantId,
+    commands: existing?.commands ?? [],
+    currentCursor: canUseExistingCurrentCursor
+      ? existing.currentCursor
+      : isGlobalCombatRoundStep(currentStep)
+        ? getDefaultCombatRoundCursor({
+            participantId: selectedParticipantId,
+            roundNumber,
+            step: currentStep,
+          })
+        : undefined,
     currentStep,
     phaseResolutionCursor:
       currentStep === "select_actions" ? undefined : existing?.phaseResolutionCursor,
     phaseResolutionResults: existing?.phaseResolutionResults ?? [],
     phaseResolutionStatuses: existing?.phaseResolutionStatuses ?? {},
     participants,
-    roundNumber: existing?.roundNumber ?? input.encounter.currentRound,
+    roundNumber,
     selectedParticipantId,
-    selectedStep: resetsStaleDeclarationSelection
-      ? "select_actions"
-      : (existing?.selectedStep ?? currentStep),
+    selectedStep: canUseExistingCurrentCursor
+      ? currentStep
+      : resetsStaleDeclarationSelection
+        ? "select_actions"
+        : (existing?.selectedStep ?? currentStep),
     stepSnapshots: existing?.stepSnapshots ?? [],
   };
 }
@@ -1649,9 +1884,20 @@ export function advanceCombatRoundStep(
   const advancesDeclarationStep = normalized.currentStep === "select_actions";
   const startsPhaseResolution =
     nextStep === "phase_1_actions" ? "phase1" : nextStep === "phase_2_actions" ? "phase2" : undefined;
+  const nextRoundNumber = startsNextRound ? withSnapshots.roundNumber + 1 : withSnapshots.roundNumber;
+  const nextGlobalParticipantId = withSnapshots.participants[0]?.participantId;
   const baseState: CombatRoundState = {
     ...withSnapshots,
     activeParticipantId: startsNextRound ? undefined : withSnapshots.activeParticipantId,
+    commands: startsNextRound ? [] : withSnapshots.commands,
+    currentCursor:
+      startsNextRound || isGlobalCombatRoundStep(nextStep)
+        ? getDefaultCombatRoundCursor({
+            participantId: nextGlobalParticipantId,
+            roundNumber: nextRoundNumber,
+            step: nextStep,
+          })
+        : undefined,
     currentStep: nextStep,
     phaseResolutionCursor: startsNextRound ? undefined : withSnapshots.phaseResolutionCursor,
     phaseResolutionResults: startsNextRound ? [] : withSnapshots.phaseResolutionResults,
@@ -1673,10 +1919,12 @@ export function advanceCombatRoundStep(
               : "complete",
           },
     })),
-    roundNumber: startsNextRound ? withSnapshots.roundNumber + 1 : withSnapshots.roundNumber,
+    roundNumber: nextRoundNumber,
     selectedParticipantId: startsNextRound
-      ? withSnapshots.participants[0]?.participantId
-      : withSnapshots.selectedParticipantId,
+      ? nextGlobalParticipantId
+      : isGlobalCombatRoundStep(nextStep)
+        ? nextGlobalParticipantId
+        : withSnapshots.selectedParticipantId,
     selectedStep: nextStep,
   };
 
@@ -1689,6 +1937,11 @@ export function advanceCombatRoundStep(
 }
 
 export function recordCombatRoundDeclaration(input: {
+  command?: {
+    commandId?: string;
+    createdAt: string;
+    createdByUserId?: string;
+  };
   declaration?: Omit<CombatRoundDeclaration, "submittedBy">;
   participantId: string;
   state: CombatRoundState;
@@ -1706,7 +1959,18 @@ export function recordCombatRoundDeclaration(input: {
   });
 
   if (!input.declaration) {
-    return withStatus;
+    return input.command
+      ? recordCombatRoundGlobalParticipantCommand({
+          ...input.command,
+          facts: {
+            status: input.submittedBy === "gm" ? "gmEdited" : "submitted",
+          },
+          participantId: input.participantId,
+          state: withStatus,
+          step: "select_actions",
+          type: "declare_action",
+        })
+      : withStatus;
   }
 
   const normalized = combatRoundStateSchema.parse(withStatus);
@@ -1715,7 +1979,7 @@ export function recordCombatRoundDeclaration(input: {
     submittedBy: input.submittedBy,
   });
 
-  return {
+  const withDeclaration: CombatRoundState = {
     ...normalized,
     participants: normalized.participants.map((participant) =>
       participant.participantId === input.participantId
@@ -1726,6 +1990,20 @@ export function recordCombatRoundDeclaration(input: {
         : participant,
     ),
   };
+
+  return input.command
+    ? recordCombatRoundGlobalParticipantCommand({
+        ...input.command,
+        facts: {
+          actionId: declaration.actionId,
+          status: input.submittedBy === "gm" ? "gmEdited" : "submitted",
+        },
+        participantId: input.participantId,
+        state: withDeclaration,
+        step: "select_actions",
+        type: "declare_action",
+      })
+    : withDeclaration;
 }
 
 export function getCombatRoundInitiativePhaseForStep(
@@ -1779,6 +2057,11 @@ export function getCombatRoundModifierPhaseForStep(
 }
 
 export function recordCombatRoundInitiative(input: {
+  command?: {
+    commandId?: string;
+    createdAt: string;
+    createdByUserId?: string;
+  };
   initiative: CombatRoundInitiativeResult | number;
   participantId: string;
   phase: "phase1" | "phase2";
@@ -1793,12 +2076,26 @@ export function recordCombatRoundInitiative(input: {
     state: input.state,
   });
 
-  return setCombatRoundParticipantStepStatus({
+  const withStatus = setCombatRoundParticipantStepStatus({
     participantId: input.participantId,
     state: withInitiative,
     status: input.submittedBy === "gm" ? "gmEdited" : "submitted",
     step: initiativeStep,
   });
+
+  return input.command
+    ? recordCombatRoundGlobalParticipantCommand({
+        ...input.command,
+        facts: {
+          phase: input.phase,
+          status: input.submittedBy === "gm" ? "gmEdited" : "submitted",
+        },
+        participantId: input.participantId,
+        state: withStatus,
+        step: initiativeStep,
+        type: input.phase === "phase1" ? "roll_initiative_phase1" : "roll_initiative_phase2",
+      })
+    : withStatus;
 }
 
 export function recordCombatRoundAttackResult(input: {
@@ -1837,17 +2134,42 @@ export function recordCombatRoundAttackResult(input: {
 }
 
 export function recordCombatRoundParticipantStepReview(input: {
+  command?: {
+    commandId?: string;
+    createdAt: string;
+    createdByUserId?: string;
+  };
   participantId: string;
   state: CombatRoundState;
   step: CombatRoundStep;
   submittedBy: "gm" | "player";
 }): CombatRoundState {
-  return setCombatRoundParticipantStepStatus({
+  const withStatus = setCombatRoundParticipantStepStatus({
     participantId: input.participantId,
     state: input.state,
     status: input.submittedBy === "gm" ? "gmEdited" : "submitted",
     step: input.step,
   });
+
+  const commandType =
+    input.step === "review_action_modifiers"
+      ? "review_modifiers_phase1"
+      : input.step === "review_phase_2_modifiers"
+        ? "review_modifiers_phase2"
+        : undefined;
+
+  return input.command && commandType
+    ? recordCombatRoundGlobalParticipantCommand({
+        ...input.command,
+        facts: {
+          status: input.submittedBy === "gm" ? "gmEdited" : "submitted",
+        },
+        participantId: input.participantId,
+        state: withStatus,
+        step: input.step,
+        type: commandType,
+      })
+    : withStatus;
 }
 
 function resetCombatRoundParryForAttackResult(input: {

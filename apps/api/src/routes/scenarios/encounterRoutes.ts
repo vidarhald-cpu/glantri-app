@@ -618,6 +618,13 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         },
       });
       const declaredRoundState = recordCombatRoundDeclaration({
+        command:
+          gmAuthorizedOperation && roundState.currentStep === "select_actions"
+            ? {
+                createdAt: submittedAt,
+                createdByUserId: user.id,
+              }
+            : undefined,
         declaration: {
           actionId: body.actionId,
           additionalActionNotes: body.additionalActionNotes,
@@ -638,6 +645,14 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         roundState.currentStep !== "initiative_phase_1" &&
         roundState.currentStep !== "initiative_phase_2"
           ? recordCombatRoundParticipantStepReview({
+              command:
+                roundState.currentStep === "review_action_modifiers" ||
+                roundState.currentStep === "review_phase_2_modifiers"
+                  ? {
+                      createdAt: submittedAt,
+                      createdByUserId: user.id,
+                    }
+                  : undefined,
               participantId: encounterParticipant.id,
               state: declaredRoundState,
               step: roundState.currentStep,
@@ -774,6 +789,12 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       });
       const submittedAt = new Date().toISOString();
       const nextRoundState = recordCombatRoundInitiative({
+        command: gmAuthorizedOperation
+          ? {
+              createdAt: submittedAt,
+              createdByUserId: user.id,
+            }
+          : undefined,
         initiative: rolledInitiative,
         participantId: encounterParticipant.id,
         phase,

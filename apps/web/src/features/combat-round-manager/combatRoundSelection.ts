@@ -1,5 +1,10 @@
 import type { CombatRoundState, CombatRoundStep } from "@glantri/domain";
-import { setCombatRoundSelection, sortCombatRoundParticipantsByInitiative } from "@glantri/domain";
+import {
+  getCombatRoundStepForCursorStep,
+  isGlobalCombatRoundCursorStep,
+  setCombatRoundSelection,
+  sortCombatRoundParticipantsByInitiative,
+} from "@glantri/domain";
 
 export interface CombatRoundSelectionTarget {
   participantId?: string;
@@ -110,9 +115,31 @@ export function normalizeCombatRoundManagerSelection(input: {
   const participantIds = getCombatRoundManagerDisplayParticipantIds(input.state);
   const pendingSelection = input.pendingSelection;
   const manualSelection = input.manualSelection;
+  const cursorStep = input.state.currentCursor
+    ? getCombatRoundStepForCursorStep(input.state.currentCursor.step)
+    : undefined;
+  const cursorSelection: CombatRoundSelectionTarget | undefined =
+    input.state.currentCursor &&
+    input.state.currentCursor.roundNumber === input.state.roundNumber &&
+    isGlobalCombatRoundCursorStep(input.state.currentCursor.step) &&
+    cursorStep === input.state.currentStep
+      ? {
+          participantId: input.state.currentCursor.participantId,
+          step: cursorStep,
+        }
+      : undefined;
   let selection: CombatRoundSelectionTarget;
 
   if (
+    cursorSelection &&
+    isValidSelection({
+      participantIds,
+      selection: cursorSelection,
+      step: input.state.currentStep,
+    })
+  ) {
+    selection = cursorSelection;
+  } else if (
     pendingSelection &&
     isValidSelection({
       participantIds,
