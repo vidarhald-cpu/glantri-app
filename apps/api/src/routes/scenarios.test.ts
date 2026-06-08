@@ -2915,6 +2915,82 @@ describe("scenarios route contract", () => {
     );
   });
 
+  it("clears an auto-opened defender P1 cell back to the attacker A1 redo point", async () => {
+    const encounterParticipants = [
+      makeCombatEncounter().participants[0],
+      {
+        ...makeCombatEncounter().participants[0],
+        id: "encounter-participant-2",
+        label: "City guard",
+        scenarioParticipantId: "participant-2",
+      },
+    ];
+    const combatEncounter = makeCombatEncounter({
+      participants: encounterParticipants,
+    }) as EncounterSession;
+    const attackResult = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackerParticipantId: "encounter-participant-1",
+      defenderDb: 10,
+      defenderParticipantId: "encounter-participant-2",
+      ob: 10,
+      phase: "phase1",
+      rollD20: 12,
+      rollTotal: 12,
+      rolledAt: "2026-01-01T00:03:00.000Z",
+      weaponName: "Broad sword",
+    });
+    const stateWithAttack = recordCombatRoundAttackResult({
+      participantId: "encounter-participant-1",
+      result: attackResult,
+      state: initializeCombatRoundState({ encounter: combatEncounter }),
+      submittedBy: "gm",
+    });
+    setupCombatDeclarationRoute({
+      encounter: {
+        combatRoundState: {
+          ...stateWithAttack,
+          currentStep: "initiative_phase_1",
+          selectedParticipantId: "encounter-participant-2",
+          selectedStep: "review_phase_2_actions",
+        },
+        participants: encounterParticipants,
+      },
+      user: mocks.adminUser,
+    });
+    mocks.scenarioService.listScenarioParticipants.mockResolvedValue([
+      makeCombatScenarioParticipant({ id: "participant-1" }),
+      makeCombatScenarioParticipant({ id: "participant-2" }),
+    ]);
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      body: {
+        participantId: "encounter-participant-2",
+        step: "review_phase_2_actions",
+      },
+      method: "POST",
+      url: "/encounters/encounter-1/combat-round/clear-current-step",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
+    expect(updatedEncounter.combatRoundState.currentStep).toBe("initiative_phase_1");
+    expect(updatedEncounter.combatRoundState.selectedStep).toBe("phase_1_actions");
+    expect(updatedEncounter.combatRoundState.selectedParticipantId).toBe("encounter-participant-1");
+    expect(
+      updatedEncounter.combatRoundState.participants[0].attackResults.phase1,
+    ).toBeUndefined();
+    expect(updatedEncounter.combatRoundState.participants[0].stepStatuses.phase_1_actions).toBe(
+      "pending",
+    );
+    expect(
+      updatedEncounter.combatRoundState.participants[1].stepStatuses.review_phase_2_actions,
+    ).toBe("pending");
+  });
+
   it("does not allow players to clear combat round steps", async () => {
     setupCombatDeclarationRoute();
     const app = await buildScenarioTestApp();

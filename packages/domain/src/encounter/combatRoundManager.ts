@@ -575,6 +575,7 @@ function clearSnapshotsForCombatRoundStep(input: {
 
 function clearCombatRoundParticipantOutgoingResolutionState(input: {
   participantId: string;
+  phase?: CombatRoundPhase;
   state: CombatRoundState;
 }): CombatRoundState {
   const normalized = combatRoundStateSchema.parse(input.state);
@@ -584,7 +585,8 @@ function clearCombatRoundParticipantOutgoingResolutionState(input: {
       [participant.attackResults.phase1, participant.attackResults.phase2].filter(
         (result): result is CombatRoundAttackRollResult => Boolean(result),
       ),
-    );
+    )
+    .filter((result) => !input.phase || result.phase === input.phase);
   const affectedParticipantIds = new Set<string>([input.participantId]);
   const affectedDefenderSteps = new Map<string, Partial<Record<CombatRoundStep, "pending">>>();
   const affectedSnapshotSteps = new Map<string, Set<CombatRoundStep>>();
@@ -623,25 +625,54 @@ function clearCombatRoundParticipantOutgoingResolutionState(input: {
     phaseResolutionResults: normalized.phaseResolutionResults.filter(
       (result) =>
         result.roundNumber !== normalized.roundNumber ||
-        result.attackerParticipantId !== input.participantId,
+        result.attackerParticipantId !== input.participantId ||
+        (input.phase !== undefined && result.phase !== input.phase),
     ),
     phaseResolutionStatuses: {
       ...normalized.phaseResolutionStatuses,
-      [input.participantId]: {},
+      [input.participantId]: input.phase
+        ? {
+            ...normalized.phaseResolutionStatuses[input.participantId],
+            [input.phase]: undefined,
+          }
+        : {},
     },
     participants: normalized.participants.map((participant) => {
       if (participant.participantId === input.participantId) {
+        const nextAttackResults =
+          input.phase === "phase1"
+            ? { ...participant.attackResults, phase1: undefined }
+            : input.phase === "phase2"
+              ? { ...participant.attackResults, phase2: undefined }
+              : {};
+        const phaseStepStatuses =
+          input.phase === "phase1"
+            ? {
+                phase_1_actions: "pending" as const,
+                phase_1_damage: "pending" as const,
+                review_phase_2_actions: "pending" as const,
+              }
+            : input.phase === "phase2"
+              ? {
+                  phase_2_actions: "pending" as const,
+                  phase_2_damage: "pending" as const,
+                  review_phase_2_damage: "pending" as const,
+                }
+              : {
+                  phase_1_actions: "pending" as const,
+                  phase_1_damage: "pending" as const,
+                  phase_2_actions: "pending" as const,
+                  phase_2_damage: "pending" as const,
+                  review_phase_2_actions: "pending" as const,
+                  review_phase_2_damage: "pending" as const,
+                };
+
         return {
           ...participant,
-          attackResults: {},
+          attackResults: nextAttackResults,
           stepStatuses: {
             ...participant.stepStatuses,
-            phase_1_actions: "pending",
-            phase_1_damage: "pending",
-            phase_2_actions: "pending",
-            phase_2_damage: "pending",
-            review_phase_2_actions: "pending",
-            review_phase_2_damage: "pending",
+            ...phaseStepStatuses,
           },
         };
       }
@@ -1880,22 +1911,44 @@ function resetCombatRoundDamageForAttackResult(input: {
   });
 }
 
+function getCombatRoundGlobalDependencyPhaseForStep(
+  step: CombatRoundStep,
+): CombatRoundPhase | undefined {
+  if (step === "review_action_modifiers" || step === "initiative_phase_1") {
+    return "phase1";
+  }
+
+  if (step === "review_phase_2_modifiers" || step === "initiative_phase_2") {
+    return "phase2";
+  }
+
+  return undefined;
+}
+
 export function clearCombatRoundStep(input: {
   state: CombatRoundState;
   step: CombatRoundStep;
 }): CombatRoundState {
   const parsed = combatRoundStateSchema.parse(input.state);
-  const declarationClearParticipantId =
-    input.step === "select_actions" &&
+  const selectedParticipantId =
     parsed.selectedParticipantId &&
     parsed.participants.some(
       (participant) => participant.participantId === parsed.selectedParticipantId,
     )
       ? parsed.selectedParticipantId
       : undefined;
-  const normalized = declarationClearParticipantId
+  const globalDependencyPhase = getCombatRoundGlobalDependencyPhaseForStep(input.step);
+  const declarationClearParticipantId =
+    input.step === "select_actions" &&
+    selectedParticipantId
+      ? selectedParticipantId
+      : undefined;
+  const dependencyClearParticipantId =
+    declarationClearParticipantId ?? (globalDependencyPhase ? selectedParticipantId : undefined);
+  const normalized = dependencyClearParticipantId
     ? clearCombatRoundParticipantOutgoingResolutionState({
-        participantId: declarationClearParticipantId,
+        participantId: dependencyClearParticipantId,
+        phase: globalDependencyPhase,
         state: parsed,
       })
     : parsed;
@@ -1944,6 +1997,19 @@ export function clearCombatRoundStep(input: {
   const selectedAttackResultForClear = clearsPhaseAction
     ? selectedOutgoingAttackResult ?? selectedIncomingAttackResult
     : selectedIncomingAttackResult;
+  const selectedResolutionForClear = selectedAttackResultForClear
+    ? getCombatRoundPhaseResolutionResultForAttack({
+        attackResult: selectedAttackResultForClear,
+        state: normalized,
+      })
+    : undefined;
+  const clearsAutoCreatedPendingParry =
+    clearsParryReview &&
+    Boolean(selectedAttackResultForClear?.hit) &&
+    (!selectedResolutionForClear ||
+      selectedResolutionForClear.parryResolution.status === "pending");
+  const clearsPhaseActionRedo =
+    clearsPhaseAction || clearsAutoCreatedPendingParry;
   const selectedAttackResultId = selectedAttackResultForClear
     ? getCombatRoundAttackResultId({
         result: selectedAttackResultForClear,
@@ -1956,7 +2022,7 @@ export function clearCombatRoundStep(input: {
           const clearsOwnerStatus =
             selectedAttackResultForClear?.attackerParticipantId === participantId;
           const nextStatus =
-            clearsOwnerStatus && clearsPhaseAction
+            clearsOwnerStatus && clearsPhaseActionRedo
               ? undefined
               : clearsOwnerStatus && clearsParryReview && selectedAttackResultForClear
                 ? {
@@ -1983,7 +2049,7 @@ export function clearCombatRoundStep(input: {
       )
     : normalized.phaseResolutionStatuses;
   const nextCursorParticipant =
-    clearResolutionPhase && clearsPhaseAction
+    clearResolutionPhase && clearsPhaseActionRedo
       ? selectedAttackResultForClear?.attackerParticipantId ??
         selectedParticipantForClear ??
         getCombatRoundPhaseResolutionOrder({
@@ -1996,10 +2062,20 @@ export function clearCombatRoundStep(input: {
   const nextCursorSubstep =
     clearResolutionPhase && nextCursorParticipant
       ? clearsParryReview && selectedAttackResultForClear
-        ? getCombatRoundPostAttackResolutionSubstep(selectedAttackResultForClear)
+        ? clearsAutoCreatedPendingParry
+          ? getCombatRoundInitialPhaseResolutionSubstep({
+              participantId: selectedAttackResultForClear.attackerParticipantId,
+              phase: clearResolutionPhase,
+              state: normalized,
+            })
+          : getCombatRoundPostAttackResolutionSubstep(selectedAttackResultForClear)
         : clearsDamageReview
-          ? "damage"
-          : selectedAttackResultForClear && clearsPhaseAction
+          ? selectedResolutionForClear?.damageRoll.status === "pending" &&
+            selectedResolutionForClear.parryResolution.status === "resolved" &&
+            selectedResolutionForClear.parryResolution.success === false
+            ? "damage"
+            : "parry"
+          : selectedAttackResultForClear && clearsPhaseActionRedo
             ? getCombatRoundInitialPhaseResolutionSubstep({
                 participantId: selectedAttackResultForClear.attackerParticipantId,
                 phase: clearResolutionPhase,
@@ -2034,7 +2110,7 @@ export function clearCombatRoundStep(input: {
               return true;
             }
 
-            return !(clearsPhaseAction && result.attackResultId === selectedAttackResultId);
+            return !(clearsPhaseActionRedo && result.attackResultId === selectedAttackResultId);
           })
           .map((result) => {
             if (result.attackResultId !== selectedAttackResultId || !selectedAttackResultForClear) {
@@ -2067,6 +2143,7 @@ export function clearCombatRoundStep(input: {
 
       if (
         input.step === "phase_1_actions" &&
+        clearsPhaseActionRedo &&
         participant.participantId === selectedAttackResultForClear?.attackerParticipantId
       ) {
         delete nextAttackResults.phase1;
@@ -2074,27 +2151,54 @@ export function clearCombatRoundStep(input: {
 
       if (
         input.step === "phase_2_actions" &&
+        clearsPhaseActionRedo &&
         participant.participantId === selectedAttackResultForClear?.attackerParticipantId
       ) {
         delete nextAttackResults.phase2;
       }
 
-      if (input.step === "initiative_phase_1") {
+      if (
+        clearsAutoCreatedPendingParry &&
+        selectedAttackResultForClear?.phase === "phase1" &&
+        participant.participantId === selectedAttackResultForClear.attackerParticipantId
+      ) {
+        delete nextAttackResults.phase1;
+      }
+
+      if (
+        clearsAutoCreatedPendingParry &&
+        selectedAttackResultForClear?.phase === "phase2" &&
+        participant.participantId === selectedAttackResultForClear.attackerParticipantId
+      ) {
+        delete nextAttackResults.phase2;
+      }
+
+      if (
+        input.step === "initiative_phase_1" &&
+        participant.participantId === selectedParticipantId
+      ) {
         delete nextInitiatives.phase1;
       }
 
-      if (input.step === "initiative_phase_2") {
+      if (
+        input.step === "initiative_phase_2" &&
+        participant.participantId === selectedParticipantId
+      ) {
         delete nextInitiatives.phase2;
       }
 
       const resetsSelectedStep =
-        !clearResolutionPhase ||
+        (!clearResolutionPhase && participant.participantId === selectedParticipantId) ||
         participant.participantId === selectedParticipantForClear ||
-        (clearsPhaseAction &&
+        (clearsPhaseActionRedo &&
           participant.participantId === selectedAttackResultForClear?.attackerParticipantId);
       const resetsDownstreamReview =
-        clearsPhaseAction &&
+        clearsPhaseActionRedo &&
         participant.participantId === selectedAttackResultForClear?.defenderParticipantId;
+      const resetsGlobalPhaseDependency =
+        !clearResolutionPhase &&
+        participant.participantId === selectedParticipantId &&
+        globalDependencyPhase;
 
       return {
         ...participant,
@@ -2106,6 +2210,30 @@ export function clearCombatRoundStep(input: {
             ? {
                 ...participant.stepStatuses,
                 ...(resetsSelectedStep ? { [input.step]: "pending" as const } : {}),
+                ...(clearsPhaseActionRedo &&
+                participant.participantId === selectedAttackResultForClear?.attackerParticipantId &&
+                selectedAttackResultForClear.phase === "phase1"
+                  ? {
+                      phase_1_actions: "pending" as const,
+                    }
+                  : {}),
+                ...(clearsPhaseActionRedo &&
+                participant.participantId === selectedAttackResultForClear?.attackerParticipantId &&
+                selectedAttackResultForClear.phase === "phase2"
+                  ? {
+                      phase_2_actions: "pending" as const,
+                    }
+                  : {}),
+                ...(input.step === "review_action_modifiers" && resetsGlobalPhaseDependency
+                  ? {
+                      initiative_phase_1: "pending" as const,
+                    }
+                  : {}),
+                ...(input.step === "review_phase_2_modifiers" && resetsGlobalPhaseDependency
+                  ? {
+                      initiative_phase_2: "pending" as const,
+                    }
+                  : {}),
                 ...(input.step === "phase_1_actions" && resetsDownstreamReview
                   ? {
                       phase_1_damage: "pending" as const,
@@ -2135,7 +2263,7 @@ export function clearCombatRoundStep(input: {
     selectedParticipantId: nextCursorParticipant ?? normalized.selectedParticipantId,
     selectedStep:
       clearResolutionPhase && nextCursorParticipant
-        ? clearsPhaseAction
+        ? clearsPhaseActionRedo
           ? getCombatRoundPhaseActionStepForPhase(clearResolutionPhase)
           : clearsParryReview
             ? getCombatRoundParryReviewStepForPhase(clearResolutionPhase)
@@ -2146,7 +2274,10 @@ export function clearCombatRoundStep(input: {
       roundNumber: normalized.roundNumber,
       selectedAttackResult: selectedAttackResultForClear,
       snapshots: normalized.stepSnapshots,
-      step: input.step,
+      step:
+        clearsAutoCreatedPendingParry && clearResolutionPhase
+          ? getCombatRoundPhaseActionStepForPhase(clearResolutionPhase)
+          : input.step,
     }),
   };
 }
