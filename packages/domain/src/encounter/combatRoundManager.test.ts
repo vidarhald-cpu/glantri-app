@@ -326,8 +326,8 @@ describe("combat round manager", () => {
       defenderParticipantId: "guard",
       ob: 10,
       phase: "phase1",
-      rollD20: 12,
-      rollTotal: 12,
+      rollD20: 14,
+      rollTotal: 14,
       rolledAt: "2026-01-01T00:03:00.000Z",
       weaponName: "Broad sword",
     });
@@ -603,8 +603,8 @@ describe("combat round manager", () => {
       defenderParticipantId: "guard",
       ob: 10,
       phase: "phase1",
-      rollD20: 12,
-      rollTotal: 12,
+      rollD20: 14,
+      rollTotal: 14,
       rolledAt: "2026-01-01T00:03:00.000Z",
       weaponName: "Broad sword",
     });
@@ -2340,8 +2340,8 @@ describe("combat round manager", () => {
       defenderParticipantId: "gladiator",
       ob: 10,
       phase: "phase2",
-      rollD20: 12,
-      rollTotal: 12,
+      rollD20: 14,
+      rollTotal: 14,
       rolledAt: "2026-01-01T00:03:00.000Z",
       weaponName: "Long sword",
     });
@@ -3033,8 +3033,8 @@ describe("combat round manager", () => {
       defenderParticipantId: "guard",
       ob: 10,
       phase: "phase1",
-      rollD20: 12,
-      rollTotal: 12,
+      rollD20: 14,
+      rollTotal: 14,
       rolledAt: "2026-01-01T00:03:00.000Z",
       weaponName: "Broad sword",
     });
@@ -3123,9 +3123,12 @@ describe("combat round manager", () => {
       defenderParticipantId: "guard",
       dmb: 8,
       grazing: false,
+      hitLookupTotal: 14,
       kind: "damage_result",
-      lookupTotal: 12,
-      tableDamageModifier: 1,
+      criticalGrade: "b",
+      damageLookupTotal: 22,
+      minDamage: 1,
+      tableDamage: 9,
       totalDamage: 9,
       weaponName: "Broad sword",
     });
@@ -3226,11 +3229,14 @@ describe("combat round manager", () => {
 
     expect(result.lookupTotal).toBe(17);
     expect(afterDamage.phaseResolutionResults[0]?.damageResult).toMatchObject({
+      criticalGrade: "c",
       damageRoll: {
         required: false,
       },
-      lookupTotal: 17,
-      tableDamageModifier: 4,
+      damageLookupTotal: 25,
+      hitLookupTotal: 17,
+      minDamage: 2,
+      tableDamage: 12,
       totalDamage: 12,
     });
     expect(afterDamage.commands.at(-1)).toMatchObject({
@@ -3238,6 +3244,77 @@ describe("combat round manager", () => {
         totalDamage: 12,
       }),
       type: "resolve_damage",
+    });
+  });
+
+  it("uses a second table lookup for normal hit damage", () => {
+    const result = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackerParticipantId: "gladiator",
+      defenderDb: 15,
+      defenderParticipantId: "guard",
+      ob: 10,
+      phase: "phase1",
+      rollD20: 19,
+      rollTotal: 19,
+      rolledAt: "2026-01-01T00:03:00.000Z",
+      weaponName: "Broad sword",
+    });
+    const highDmbDamage = buildCombatRoundDamageResult({
+      armorModifier: 0,
+      attackResult: result,
+      createdAt: "2026-01-01T00:05:00.000Z",
+      defenderDm: 0,
+      dmb: 8,
+      roundNumber: 3,
+    });
+    const noDmbDamage = buildCombatRoundDamageResult({
+      armorModifier: 0,
+      attackResult: result,
+      createdAt: "2026-01-01T00:05:00.000Z",
+      defenderDm: 0,
+      dmb: 0,
+      roundNumber: 3,
+    });
+    const continuedDamage = buildCombatRoundDamageResult({
+      armorModifier: 0,
+      attackResult: result,
+      createdAt: "2026-01-01T00:05:00.000Z",
+      defenderDm: 0,
+      dmb: 21,
+      roundNumber: 3,
+    });
+
+    expect(result.lookupTotal).toBe(14);
+    expect(highDmbDamage).toMatchObject({
+      armorModifier: 0,
+      criticalGrade: "b",
+      damageLookupTotal: 22,
+      defenderDm: 0,
+      dmb: 8,
+      hitLookupTotal: 14,
+      minDamage: 1,
+      tableDamage: 9,
+      totalDamage: 9,
+    });
+    expect(noDmbDamage).toMatchObject({
+      armorModifier: 0,
+      damageLookupTotal: 14,
+      defenderDm: 0,
+      dmb: 0,
+      hitLookupTotal: 14,
+      tableDamage: 2,
+      totalDamage: 2,
+    });
+    expect(noDmbDamage.criticalGrade).toBeUndefined();
+    expect(continuedDamage).toMatchObject({
+      criticalGrade: "f",
+      damageLookupTotal: 35,
+      hitLookupTotal: 14,
+      maxDamageNote: "max damage: 17 + GM STR when relevant",
+      minDamage: 5,
+      tableDamage: 22,
+      totalDamage: 22,
     });
   });
 
@@ -3321,18 +3398,22 @@ describe("combat round manager", () => {
     expect(result.lookupTotal).toBe(11);
     expect(result.grazing).toBe(true);
     expect(afterDamage.phaseResolutionResults[0]?.damageResult).toMatchObject({
+      damageLookupTotal: 20,
       damageRoll: {
+        grazingReferenceDamage: 7,
+        grazingReferenceDamageLookupTotal: 20,
+        grazingReferenceHitLookupTotal: 12,
         derivedFromLookupTotal: 12,
-        derivedNormalDamageTotal: 9,
-        diceExpression: "1d9",
+        derivedNormalDamageTotal: 7,
+        diceExpression: "1d7",
         required: true,
         rolls: [1],
         total: 1,
       },
       dmb: 8,
       grazing: true,
-      lookupTotal: 11,
-      tableDamageModifier: 0,
+      hitLookupTotal: 11,
+      tableDamage: 7,
       totalDamage: 1,
     });
     expect(afterDamage.commands.at(-1)).toMatchObject({
@@ -3378,7 +3459,11 @@ describe("combat round manager", () => {
     });
 
     expect(damageResult).toMatchObject({
+      damageLookupTotal: 12,
       damageRoll: {
+        grazingReferenceDamage: 1,
+        grazingReferenceDamageLookupTotal: 12,
+        grazingReferenceHitLookupTotal: 12,
         derivedFromLookupTotal: 12,
         derivedNormalDamageTotal: 1,
         diceExpression: "1d1",
@@ -3387,7 +3472,8 @@ describe("combat round manager", () => {
         total: 1,
       },
       grazing: true,
-      tableDamageModifier: 0,
+      hitLookupTotal: 11,
+      tableDamage: 1,
       totalDamage: 1,
     });
   });
@@ -3414,8 +3500,8 @@ describe("combat round manager", () => {
       defenderParticipantId: "guard",
       ob: 10,
       phase: "phase1",
-      rollD20: 12,
-      rollTotal: 12,
+      rollD20: 14,
+      rollTotal: 14,
       rolledAt: "2026-01-01T00:03:00.000Z",
       weaponName: "Broad sword",
     });
@@ -3628,8 +3714,8 @@ describe("combat round manager", () => {
       defenderParticipantId: "gladiator",
       ob: 10,
       phase: "phase2",
-      rollD20: 12,
-      rollTotal: 12,
+      rollD20: 14,
+      rollTotal: 14,
       rolledAt: "2026-01-01T00:03:00.000Z",
       weaponName: "Long sword",
     });

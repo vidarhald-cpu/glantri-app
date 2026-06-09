@@ -155,15 +155,18 @@ describe("rules documentation registry", () => {
     expect(model.selectedDocument.title).toBe("Glantri Combat To Hit / Damage");
     expect(model.selectedDocument.markdown).toContain("# Glantri Combat To Hit / Damage");
     expect(model.selectedDocument.markdown).toContain("Roll open-ended `1d20`");
-    expect(model.selectedDocument.markdown).toContain("lookup total = OB - DB + open-ended roll total");
+    expect(model.selectedDocument.markdown).toContain("hit lookup total = OB - DB + open-ended roll total");
     expect(model.selectedDocument.markdown).toContain("Lookup total `11` is a grazing hit.");
     expect(model.selectedDocument.markdown).toContain(
       "Damage metadata is available for hits and grazing hits.",
     );
     expect(model.selectedDocument.markdown).toContain("Lookup totals `17` and `18` are resolved");
     expect(model.selectedDocument.markdown).toContain("Lookup totals above the displayed table continue");
-    expect(model.selectedDocument.markdown).toContain("Grazing-hit damage does not use a fixed normal damage modifier.");
-    expect(model.selectedDocument.markdown).toContain("the grazing hit rolls `1d9`");
+    expect(model.selectedDocument.markdown).toContain(
+      "damage lookup total = hit lookup total + weapon DMB + defender DM + armor modifier",
+    );
+    expect(model.selectedDocument.markdown).toContain("damage lookup is `14 + 8 + 0 + 0 = 22`");
+    expect(model.selectedDocument.markdown).toContain("the grazing hit rolls `1d7`");
     expect(model.selectedDocument.markdown).toContain("damage result proposal");
     expect(model.selectedDocument.markdown).toContain("Commit phase damage");
     expect(model.selectedDocument.markdown).toContain("one active `general_damage` effect row");

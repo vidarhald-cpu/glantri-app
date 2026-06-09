@@ -18,16 +18,16 @@ describe("TablesAdminPage", () => {
     expect(within(panel as HTMLElement).queryByText("Roll open-ended 1d20.")).not.toBeNull();
     expect(within(panel as HTMLElement).queryByText("Add the roll total to OB minus DB.")).not.toBeNull();
     expect(
-      within(panel as HTMLElement).queryByText("Lookup total = OB - DB + open-ended roll total."),
+      within(panel as HTMLElement).queryByText("Hit lookup total = OB - DB + open-ended roll total."),
     ).not.toBeNull();
     expect(
       within(panel as HTMLElement).queryByText(
-        "Non-grazing damage uses weapon DMB, defender DM, the table damage modifier, armor modifier, and any required roll.",
+        "Normal hit damage uses a second lookup: hit lookup total + weapon DMB + defender DM + armor modifier.",
       ),
     ).not.toBeNull();
     expect(
       within(panel as HTMLElement).queryByText(
-        "Grazing damage rolls 1d of the full normal damage total one lookup row higher.",
+        "Grazing damage rolls 1d of the table damage from lookup 12 plus the same DMB, DM, and armor modifier.",
       ),
     ).not.toBeNull();
     expect(
@@ -46,15 +46,24 @@ describe("TablesAdminPage", () => {
     );
 
     expect(bodyRows.slice(0, 3)).toEqual([
-      ["<= 10", "Miss", "No", "No", "—", "—", "—"],
-      ["11", "Grazing hit", "Yes", "Yes", "1d next-hit damage", "—", "—"],
-      ["12", "Hit", "Yes", "No", "1", "—", "—"],
+      ["<= 10", "Miss", "No", "No", "—", "—", "—", "—"],
+      ["11", "Grazing hit", "Yes", "Yes", "1d reference damage", "—", "—", "—"],
+      ["12", "Hit", "Yes", "No", "1", "—", "—", "—"],
     ]);
-    expect(bodyRows).toContainEqual(["17", "Hit", "Yes", "No", "4", "—", "—"]);
-    expect(bodyRows).toContainEqual(["18", "Hit", "Yes", "No", "5", "—", "—"]);
-    expect(bodyRows).toContainEqual(["20", "Hit", "Yes", "No", "7", "A", "—"]);
-    expect(bodyRows).toContainEqual(["22", "Hit", "Yes", "No", "9", "B", "1"]);
-    expect(bodyRows.at(-1)).toEqual([">= 35", "Hit", "Yes", "No", "Lookup - 13", "F", "5"]);
+    expect(bodyRows).toContainEqual(["17", "Hit", "Yes", "No", "4", "—", "—", "—"]);
+    expect(bodyRows).toContainEqual(["18", "Hit", "Yes", "No", "5", "—", "—", "—"]);
+    expect(bodyRows).toContainEqual(["20", "Hit", "Yes", "No", "7", "A", "—", "—"]);
+    expect(bodyRows).toContainEqual(["22", "Hit", "Yes", "No", "9", "B", "1", "—"]);
+    expect(bodyRows.at(-1)).toEqual([
+      ">= 35",
+      "Hit",
+      "Yes",
+      "No",
+      "Lookup - 13",
+      "F",
+      "5",
+      "max damage: 17 + GM STR when relevant",
+    ]);
   });
 
   it("renders the canonical combat hit-location table from structured rule data", () => {

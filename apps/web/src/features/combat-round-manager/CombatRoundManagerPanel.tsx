@@ -441,27 +441,36 @@ function formatCombatDamageCalculationLine(
     return undefined;
   }
 
+  const armorModifier = damage.armorModifier ?? 0;
+  const hitLookupTotal = damage.hitLookupTotal ?? damage.lookupTotal;
+  const tableDamage = damage.tableDamage ?? damage.tableDamageModifier;
+
   if (damage.grazing && damage.damageRoll.required) {
     const rollLabel =
       damage.damageRoll.diceExpression && damage.damageRoll.total !== undefined
         ? `${damage.damageRoll.diceExpression} ${damage.damageRoll.total}`
         : "required roll";
-    const derivedLabel =
-      damage.damageRoll.derivedFromLookupTotal !== undefined &&
-      damage.damageRoll.derivedNormalDamageTotal !== undefined
-        ? ` from lookup ${damage.damageRoll.derivedFromLookupTotal} normal damage ${damage.damageRoll.derivedNormalDamageTotal}`
-        : "";
+    const referenceHitLookupTotal =
+      damage.damageRoll.grazingReferenceHitLookupTotal ?? damage.damageRoll.derivedFromLookupTotal;
+    const referenceDamageLookupTotal =
+      damage.damageRoll.grazingReferenceDamageLookupTotal ?? damage.damageLookupTotal;
+    const referenceDamage =
+      damage.damageRoll.grazingReferenceDamage ?? damage.damageRoll.derivedNormalDamageTotal;
+    const referenceLabel =
+      referenceHitLookupTotal !== undefined &&
+      referenceDamageLookupTotal !== undefined &&
+      referenceDamage !== undefined
+        ? `grazing reference hit ${referenceHitLookupTotal} + DMB ${damage.dmb} + DM ${damage.defenderDm} + armor ${armorModifier} = lookup ${referenceDamageLookupTotal}; table damage ${referenceDamage}`
+        : "grazing reference damage lookup";
 
-    return `Damage: grazing ${rollLabel}${derivedLabel} = ${damage.totalDamage}`;
+    return `Damage lookup: ${referenceLabel}; roll ${rollLabel} = ${damage.totalDamage}`;
   }
 
-  const damageLabel = damage.grazing ? "grazing" : "hit";
-  const rollPart =
-    damage.damageRoll.required && damage.damageRoll.total !== undefined
-      ? ` + roll ${damage.damageRoll.total}`
-      : "";
+  if (hitLookupTotal === undefined || damage.damageLookupTotal === undefined) {
+    return `Damage: table damage ${tableDamage ?? damage.totalDamage} = ${damage.totalDamage}`;
+  }
 
-  return `Damage: DMB ${damage.dmb} + DM ${damage.defenderDm} + ${damageLabel} ${damage.tableDamageModifier}${rollPart} + armor ${damage.armorModifier ?? 0} = ${damage.totalDamage}`;
+  return `Damage lookup: hit ${hitLookupTotal} + DMB ${damage.dmb} + DM ${damage.defenderDm} + armor ${armorModifier} = ${damage.damageLookupTotal}`;
 }
 
 function formatCombatDamageResultLine(
@@ -474,8 +483,16 @@ function formatCombatDamageResultLine(
   const critical = damage.criticalGrade
     ? ` · Critical: ${damage.criticalGrade.toUpperCase()} pending`
     : "";
+  const minDamage =
+    damage.minDamage !== undefined ? ` · Min damage: ${damage.minDamage}` : "";
+  const maxDamage = damage.maxDamageNote ? ` · ${damage.maxDamageNote}` : "";
+  const tableDamage = damage.tableDamage ?? damage.tableDamageModifier ?? damage.totalDamage;
 
-  return `Result: ${damage.totalDamage} damage${critical}`;
+  if (damage.grazing && damage.damageRoll.required) {
+    return `Damage: grazing roll ${damage.totalDamage}${critical}${minDamage}${maxDamage}`;
+  }
+
+  return `Damage: table damage ${tableDamage}${critical}${minDamage}${maxDamage}`;
 }
 
 function formatCombatPhaseResolutionResultLines(input: {

@@ -17,7 +17,7 @@ Roll open-ended `1d20`, using the same open-ended convention as skill rolls.
 Use:
 
 ```text
-lookup total = OB - DB + open-ended roll total
+hit lookup total = OB - DB + open-ended roll total
 ```
 
 The canonical structured Glantri Combat To Hit / Damage table lives in Admin -> Tables. That table is
@@ -30,14 +30,25 @@ Current hit/miss classification:
 - Lookup totals of `12` or more hit.
 
 Damage metadata is available for hits and grazing hits. Lookup totals `17` and `18` are resolved in the
-refreshed table. Lookup totals above the displayed table continue by adding `1` damage per row, keeping
+current table. Lookup totals above the displayed table continue by adding `1` damage per row, keeping
 critical grade `F` and minimum damage `5`.
 
-Grazing-hit damage does not use a fixed normal damage modifier. It rolls `1dX`, where `X` is the full
-normal damage total one lookup row higher, using the current known damage inputs. For lookup total
-`11`, calculate normal lookup-total-`12` damage first, then use that total as the grazing die size.
-For example, weapon DMB `8`, defender DM `0`, armor modifier `0`, and lookup-total-`12` table damage
-modifier `1` make normal lookup-total-`12` damage `9`, so the grazing hit rolls `1d9`.
+For a normal hit, calculate a second lookup before reading final damage:
+
+```text
+damage lookup total = hit lookup total + weapon DMB + defender DM + armor modifier
+```
+
+The damage lookup row gives final table damage, critical grade, minimum damage, and any max-damage
+note. For example, `OB 10 - DB 15 + roll 19 = hit lookup 14`; with weapon DMB `8`, defender DM `0`,
+and armor modifier `0`, damage lookup is `14 + 8 + 0 + 0 = 22`, so the table gives damage `9`,
+critical `B`, and minimum damage `1`.
+
+Grazing-hit damage does not use a fixed row modifier. A grazing hit at hit lookup `11`
+uses hit lookup `12` as its reference, then applies the same DMB, defender DM, and armor modifier to
+find the reference damage lookup row. The grazing hit rolls `1dX`, where `X` is that reference row's
+table damage. For example, weapon DMB `8`, defender DM `0`, and armor modifier `0` make the reference
+damage lookup `12 + 8 + 0 + 0 = 20`; row `20` gives table damage `7`, so the grazing hit rolls `1d7`.
 
 ## Current attack and damage result
 
@@ -55,12 +66,14 @@ modifier breakdown.
 After a failed parry, D1/D2 can resolve and store a damage proposal:
 
 ```text
-damage = weapon DMB + defender DM + table damage modifier + armor modifier + required roll
+hit lookup total = OB - DB + open-ended roll total
+damage lookup total = hit lookup total + weapon DMB + defender DM + armor modifier
+damage = table damage at the damage lookup total
 ```
 
-For grazing hits, the required roll is the final damage result. Weapon DMB, defender DM, table damage,
-and armor are used to derive the grazing die size from the next normal hit row, then only the grazing
-roll total is stored as damage.
+For grazing hits, the required roll is the final damage result. Weapon DMB, defender DM, and armor are
+used with reference hit lookup `12` to derive the grazing die size, then only the grazing roll total is
+stored as damage.
 
 The current armor modifier is `0` until armor and hit-location interaction is implemented. Critical
 grade and minimum damage are stored as table metadata when present, but critical effects remain a GM

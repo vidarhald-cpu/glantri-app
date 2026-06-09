@@ -21,12 +21,13 @@ const percentExplanation =
 const combatToHitHumanNotes = [
   "Roll open-ended 1d20.",
   "Add the roll total to OB minus DB.",
-  "Lookup total = OB - DB + open-ended roll total.",
+  "Hit lookup total = OB - DB + open-ended roll total.",
   "10 or lower misses.",
   "11 is a grazing hit.",
   "12 or higher hits.",
-  "Non-grazing damage uses weapon DMB, defender DM, the table damage modifier, armor modifier, and any required roll.",
-  "Grazing damage rolls 1d of the full normal damage total one lookup row higher.",
+  "Normal hit damage uses a second lookup: hit lookup total + weapon DMB + defender DM + armor modifier.",
+  "The damage lookup row gives final table damage, critical grade, and minimum damage.",
+  "Grazing damage rolls 1d of the table damage from lookup 12 plus the same DMB, DM, and armor modifier.",
   "Hit location and armor modifier are resolved in later damage steps.",
 ];
 
@@ -104,20 +105,20 @@ function formatBoolean(value: boolean): string {
   return value ? "Yes" : "No";
 }
 
-function formatCombatDamageModifier(row: CombatToHitRuleTable["rows"][number]): string {
+function formatCombatTableDamage(row: CombatToHitRuleTable["rows"][number]): string {
   if (row.ambiguousDamage) {
     return "Needs clarification";
   }
 
   if (row.damageRollFormula === "grazing-from-lookup-12") {
-    return "1d next-hit damage";
+    return "1d reference damage";
   }
 
-  if (row.damageModifier !== undefined) {
-    return row.damageModifier.toString();
+  if (row.damage !== undefined) {
+    return row.damage.toString();
   }
 
-  if (row.damageModifierFormula === "lookup-minus-13") {
+  if (row.damageFormula === "lookup-minus-13") {
     return "Lookup - 13";
   }
 
@@ -130,6 +131,10 @@ function formatCombatCriticalGrade(row: CombatToHitRuleTable["rows"][number]): s
 
 function formatMinimumDamage(row: CombatToHitRuleTable["rows"][number]): string {
   return row.minDamage !== undefined ? row.minDamage.toString() : "—";
+}
+
+function formatMaximumDamage(row: CombatToHitRuleTable["rows"][number]): string {
+  return row.maxDamageNote ?? "—";
 }
 
 function CombatToHitRuleTablePanel(props: {
@@ -164,9 +169,10 @@ function CombatToHitRuleTablePanel(props: {
                 <th style={tableHeaderStyle}>Result</th>
                 <th style={tableHeaderStyle}>Hit?</th>
                 <th style={tableHeaderStyle}>Grazing?</th>
-                <th style={tableHeaderStyle}>Damage mod</th>
+                <th style={tableHeaderStyle}>Table damage</th>
                 <th style={tableHeaderStyle}>Critical</th>
                 <th style={tableHeaderStyle}>Min damage</th>
+                <th style={tableHeaderStyle}>Max damage</th>
               </tr>
             </thead>
             <tbody>
@@ -176,9 +182,10 @@ function CombatToHitRuleTablePanel(props: {
                   <td style={tableCellStyle}>{row.resultLabel}</td>
                   <td style={tableCellStyle}>{formatBoolean(row.hit)}</td>
                   <td style={tableCellStyle}>{formatBoolean(row.grazing)}</td>
-                  <td style={tableCellStyle}>{formatCombatDamageModifier(row)}</td>
+                  <td style={tableCellStyle}>{formatCombatTableDamage(row)}</td>
                   <td style={tableCellStyle}>{formatCombatCriticalGrade(row)}</td>
                   <td style={tableCellStyle}>{formatMinimumDamage(row)}</td>
+                  <td style={tableCellStyle}>{formatMaximumDamage(row)}</td>
                 </tr>
               ))}
             </tbody>

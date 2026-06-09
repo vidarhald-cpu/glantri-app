@@ -289,6 +289,9 @@ export const combatRoundDamageResultSchema = z.object({
       derivedFromLookupTotal: z.number().int().optional(),
       derivedNormalDamageTotal: z.number().int().optional(),
       diceExpression: z.string().min(1).optional(),
+      grazingReferenceDamage: z.number().int().optional(),
+      grazingReferenceDamageLookupTotal: z.number().int().optional(),
+      grazingReferenceHitLookupTotal: z.number().int().optional(),
       required: z.boolean(),
       rolls: z.array(z.number().int()).optional(),
       total: z.number().int().optional(),
@@ -296,14 +299,18 @@ export const combatRoundDamageResultSchema = z.object({
     .default({ required: false }),
   defenderDm: z.number().int(),
   defenderParticipantId: idSchema,
+  damageLookupTotal: z.number().int().optional(),
   dmb: z.number().int(),
   grazing: z.boolean(),
+  hitLookupTotal: z.number().int().optional(),
   kind: z.literal("damage_result"),
-  lookupTotal: z.number().int(),
+  lookupTotal: z.number().int().optional(),
+  maxDamageNote: z.string().min(1).optional(),
   minDamage: z.number().int().optional(),
   parryResultId: idSchema.optional(),
   phase: combatRoundPhaseSchema,
-  tableDamageModifier: z.number().int(),
+  tableDamage: z.number().int().optional(),
+  tableDamageModifier: z.number().int().optional(),
   totalDamage: z.number().int(),
   weaponName: z.string().min(1).optional(),
 });
@@ -2221,36 +2228,24 @@ function rollCombatDamageDie(input: {
   return Math.min(input.sides, Math.floor(input.rng() * input.sides) + 1);
 }
 
-function calculateCombatRoundNormalDamageTotal(input: {
+function calculateCombatRoundDamageLookupTotal(input: {
   armorModifier: number;
   defenderDm: number;
   dmb: number;
-  lookupTotal: number;
-  rng: () => number;
+  hitLookupTotal: number;
 }): number {
-  const damageMetadata = lookupCombatToHitDamageMetadata(input.lookupTotal);
+  return input.hitLookupTotal + input.dmb + input.defenderDm + input.armorModifier;
+}
 
+function getCombatRoundDamageMetadataForLookup(damageLookupTotal: number) {
+  const damageMetadata = lookupCombatToHitDamageMetadata(damageLookupTotal);
   if (!damageMetadata) {
     throw new RangeError(
-      `Combat To Hit lookup total ${input.lookupTotal} does not produce damage.`,
+      `Combat To Hit damage lookup total ${damageLookupTotal} does not produce damage.`,
     );
   }
 
-  const metadataDamageRoll = damageMetadata.damageRoll;
-  const damageRollTotal = metadataDamageRoll?.required
-    ? rollCombatDamageDie({
-        rng: input.rng,
-        sides: Math.max(1, damageMetadata.damageModifier),
-      })
-    : 0;
-
-  return (
-    input.dmb +
-    input.defenderDm +
-    damageMetadata.damageModifier +
-    damageRollTotal +
-    input.armorModifier
-  );
+  return damageMetadata;
 }
 
 export function buildCombatRoundDamageResult(input: {
@@ -2267,59 +2262,65 @@ export function buildCombatRoundDamageResult(input: {
     throw new RangeError("Damage cannot be resolved for a missed attack.");
   }
 
-  const damageMetadata = lookupCombatToHitDamageMetadata(input.attackResult.lookupTotal);
-
-  if (!damageMetadata) {
-    throw new RangeError(
-      `Combat To Hit lookup total ${input.attackResult.lookupTotal} does not produce damage.`,
-    );
-  }
-
   const armorModifier = input.armorModifier ?? 0;
-  const metadataDamageRoll = damageMetadata.damageRoll;
+  const hitLookupTotal = input.attackResult.lookupTotal;
+  const normalDamageLookupTotal = calculateCombatRoundDamageLookupTotal({
+    armorModifier,
+    defenderDm: input.defenderDm,
+    dmb: input.dmb,
+    hitLookupTotal,
+  });
   const rng = input.rng ?? Math.random;
   let damageRoll: CombatRoundDamageResult["damageRoll"] = {
     required: false,
   };
   let damageRollTotal = 0;
+  let damageLookupTotal = normalDamageLookupTotal;
+  let tableDamage: number;
+  let criticalGrade: string | undefined;
+  let maxDamageNote: string | undefined;
+  let minDamage: number | undefined;
 
-  if (metadataDamageRoll?.required) {
-    const derivedFromLookupTotal = metadataDamageRoll.sourceLookupTotal;
-
-    if (!derivedFromLookupTotal) {
-      throw new RangeError("Combat damage roll is required but no source lookup total is defined.");
-    }
-
-    const derivedNormalDamageTotal = calculateCombatRoundNormalDamageTotal({
+  if (input.attackResult.grazing) {
+    const grazingReferenceHitLookupTotal = 12;
+    const grazingReferenceDamageLookupTotal = calculateCombatRoundDamageLookupTotal({
       armorModifier,
       defenderDm: input.defenderDm,
       dmb: input.dmb,
-      lookupTotal: derivedFromLookupTotal,
-      rng,
+      hitLookupTotal: grazingReferenceHitLookupTotal,
     });
-    const dieSides = Math.max(1, derivedNormalDamageTotal);
+    const grazingReferenceDamageMetadata = getCombatRoundDamageMetadataForLookup(
+      grazingReferenceDamageLookupTotal,
+    );
+    const grazingReferenceDamage = grazingReferenceDamageMetadata.damage;
+    const dieSides = Math.max(1, grazingReferenceDamage);
 
     damageRollTotal = rollCombatDamageDie({
       rng,
       sides: dieSides,
     });
+    damageLookupTotal = grazingReferenceDamageLookupTotal;
+    tableDamage = grazingReferenceDamage;
     damageRoll = {
-      derivedFromLookupTotal,
-      derivedNormalDamageTotal,
+      derivedFromLookupTotal: grazingReferenceHitLookupTotal,
+      derivedNormalDamageTotal: grazingReferenceDamage,
       diceExpression: `1d${dieSides}`,
+      grazingReferenceDamage,
+      grazingReferenceDamageLookupTotal,
+      grazingReferenceHitLookupTotal,
       required: true,
       rolls: [damageRollTotal],
       total: damageRollTotal,
     };
+  } else {
+    const damageMetadata = getCombatRoundDamageMetadataForLookup(normalDamageLookupTotal);
+    tableDamage = damageMetadata.damage;
+    criticalGrade = damageMetadata.criticalGrade;
+    maxDamageNote = damageMetadata.maxDamageNote;
+    minDamage = damageMetadata.minDamage;
   }
 
-  const totalDamage = input.attackResult.grazing
-    ? damageRollTotal
-    : input.dmb +
-      input.defenderDm +
-      damageMetadata.damageModifier +
-      damageRollTotal +
-      armorModifier;
+  const totalDamage = input.attackResult.grazing ? damageRollTotal : tableDamage;
   const attackResultId = getCombatRoundAttackResultId({
     result: input.attackResult,
     roundNumber: input.roundNumber,
@@ -2331,18 +2332,20 @@ export function buildCombatRoundDamageResult(input: {
     attackerParticipantId: input.attackResult.attackerParticipantId,
     createdAt: input.createdAt,
     createdByUserId: input.createdByUserId,
-    criticalGrade: damageMetadata.criticalGrade,
+    criticalGrade,
     damageRoll,
+    damageLookupTotal,
     defenderDm: input.defenderDm,
     defenderParticipantId: input.attackResult.defenderParticipantId,
     dmb: input.dmb,
     grazing: input.attackResult.grazing,
+    hitLookupTotal,
     kind: "damage_result",
-    lookupTotal: input.attackResult.lookupTotal,
-    minDamage: damageMetadata.minDamage,
+    maxDamageNote,
+    minDamage,
     parryResultId: `${attackResultId}:parry`,
     phase: input.attackResult.phase,
-    tableDamageModifier: damageMetadata.damageModifier,
+    tableDamage,
     totalDamage,
     weaponName: input.attackResult.weaponName,
   });

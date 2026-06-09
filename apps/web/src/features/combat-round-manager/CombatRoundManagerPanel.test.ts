@@ -155,9 +155,9 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("commitCombatRoundPhaseDamage");
     expect(source).toContain("updateScenarioParticipantStateOnServer");
     expect(source).toContain("combatEffects: committed.combatEffects");
-    expect(source).toContain("Damage: grazing ${rollLabel}${derivedLabel}");
-    expect(source).toContain("Damage: DMB ${damage.dmb} + DM ${damage.defenderDm}");
-    expect(source).toContain("Result: ${damage.totalDamage} damage");
+    expect(source).toContain("Damage lookup: ${referenceLabel}; roll ${rollLabel}");
+    expect(source).toContain("Damage lookup: hit ${hitLookupTotal} + DMB ${damage.dmb}");
+    expect(source).toContain("Damage: table damage ${tableDamage}");
     expect(source).toContain("Damage roll: ${formatResolutionStatusLabel");
     expect(source).toContain("Proposal: ${formatResolutionStatusLabel");
     expect(source).toContain("buildCombatRoundAttackRollResult");

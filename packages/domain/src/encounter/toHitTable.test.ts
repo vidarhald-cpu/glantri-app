@@ -39,7 +39,7 @@ describe("combat to-hit table helpers", () => {
 
   it("resolves OB = DB and roll total 11 as a grazing hit", () => {
     expect(resolveCombatToHit({ db: 12, ob: 12, rollTotal: 11 })).toMatchObject({
-      damageModifier: 0,
+      damage: 0,
       grazing: true,
       hit: true,
       lookupTotal: 11,
@@ -47,7 +47,7 @@ describe("combat to-hit table helpers", () => {
       resultLabel: "Grazing hit",
     });
     expect(lookupCombatToHitDamageMetadata(11)).toEqual({
-      damageModifier: 0,
+      damage: 0,
       damageRoll: {
         required: true,
         sourceLookupTotal: 12,
@@ -91,37 +91,38 @@ describe("combat to-hit table helpers", () => {
 
   it("returns damage metadata for unambiguous hit rows", () => {
     expect(lookupCombatToHitDamageMetadata(12)).toEqual({
-      damageModifier: 1,
+      damage: 1,
       sourceRows: ["to hit (new)!A6:E6"],
     });
     expect(lookupCombatToHitDamageMetadata(16)).toEqual({
-      damageModifier: 3,
+      damage: 3,
       sourceRows: ["to hit (new)!A10:E10"],
     });
     expect(lookupCombatToHitDamageMetadata(17)).toEqual({
-      damageModifier: 4,
+      damage: 4,
       sourceRows: ["to hit (new)!A11:E11"],
     });
     expect(lookupCombatToHitDamageMetadata(18)).toEqual({
-      damageModifier: 5,
+      damage: 5,
       sourceRows: ["to hit (new)!A12:E12"],
     });
     expect(lookupCombatToHitDamageMetadata(20)).toEqual({
       criticalGrade: "a",
-      damageModifier: 7,
+      damage: 7,
       sourceRows: ["to hit (new)!A14:F14"],
     });
     expect(lookupCombatToHitDamageMetadata(22)).toEqual({
       criticalGrade: "b",
-      damageModifier: 9,
+      damage: 9,
       minDamage: 1,
       sourceRows: ["to hit (new)!A16:G16"],
     });
     expect(lookupCombatToHitDamageMetadata(35)).toEqual({
       criticalGrade: "f",
-      damageModifier: 22,
+      damage: 22,
+      maxDamageNote: "max damage: 17 + GM STR when relevant",
       minDamage: 5,
-      sourceRows: ["to hit (new)!A29:G29"],
+      sourceRows: ["to hit (new)!A29:I29"],
     });
   });
 
@@ -136,14 +137,14 @@ describe("combat to-hit table helpers", () => {
       hit: true,
       resultKey: "hit",
     });
-    expect(lookupCombatToHitDamageMetadata(17)?.damageModifier).toBe(4);
-    expect(lookupCombatToHitDamageMetadata(18)?.damageModifier).toBe(5);
+    expect(lookupCombatToHitDamageMetadata(17)?.damage).toBe(4);
+    expect(lookupCombatToHitDamageMetadata(18)?.damage).toBe(5);
   });
 
   it("continues above the displayed table without clamping high open-ended results", () => {
     expect(resolveCombatToHit({ db: 0, ob: 0, rollTotal: 50 })).toMatchObject({
       criticalGrade: "f",
-      damageModifier: 37,
+      damage: 37,
       hit: true,
       lookupTotal: 50,
       minDamage: 5,
@@ -151,9 +152,10 @@ describe("combat to-hit table helpers", () => {
     });
     expect(lookupCombatToHitDamageMetadata(50)).toEqual({
       criticalGrade: "f",
-      damageModifier: 37,
+      damage: 37,
+      maxDamageNote: "max damage: 17 + GM STR when relevant",
       minDamage: 5,
-      sourceRows: ["to hit (new)!A29:G29"],
+      sourceRows: ["to hit (new)!A29:I29"],
     });
   });
 
