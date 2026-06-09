@@ -138,12 +138,19 @@ interface PlayerCombatActionButtonPanelProps {
   validationMessage?: string;
 }
 
+interface PlayerCombatActionResultSection {
+  calculationLines: readonly string[];
+  resultLine?: string;
+  title: string;
+}
+
 interface PlayerCombatActionResultPanelProps {
   result?: {
     detailLines?: readonly string[];
     interpretedResult: string;
     rankLabel?: string;
     resultLabel?: string;
+    sections?: readonly PlayerCombatActionResultSection[];
   } | null;
 }
 
@@ -667,7 +674,30 @@ export function PlayerCombatActionResultPanel({ result }: PlayerCombatActionResu
           width: "100%",
         }}
       >
-        {result ? (
+        {result?.sections?.length ? (
+          <div
+            style={{
+              display: "grid",
+              fontWeight: 400,
+              gap: "0.55rem",
+              justifyItems: "stretch",
+              textAlign: "left",
+              width: "100%",
+            }}
+          >
+            {result.sections.map((section) => (
+              <section key={section.title} style={{ display: "grid", gap: "0.16rem" }}>
+                <div>{section.title}</div>
+                {section.calculationLines.map((line) => (
+                  <div key={line} style={{ color: "#5e5a50", fontSize: "0.88rem" }}>
+                    {line}
+                  </div>
+                ))}
+                {section.resultLine ? <strong>{section.resultLine}</strong> : null}
+              </section>
+            ))}
+          </div>
+        ) : result ? (
           <>
             {result.rankLabel ? <div>{result.rankLabel}</div> : null}
             <div>{result.interpretedResult}</div>
