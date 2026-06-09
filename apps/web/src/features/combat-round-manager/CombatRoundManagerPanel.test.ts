@@ -128,6 +128,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("rollOpenEndedD20");
     expect(source).toContain("resolveCombatParry");
     expect(source).toContain("recordCombatRoundParryResult");
+    expect(source).toContain("recordCombatRoundDamageReviewPlaceholder");
     expect(source).toContain("formatOpenEndedD20RollBreakdown");
     expect(source).toContain("formatCombatDefenseResultMainLine");
     expect(source).toContain("formatCombatParryCalculationLine");
@@ -147,6 +148,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("Parry: ${formatResolutionStatusLabel");
     expect(source).toContain("Parry successful");
     expect(source).toContain("Parry failed");
+    expect(source).toContain("Mark damage review deferred");
     expect(source).toContain("Damage roll: ${formatResolutionStatusLabel");
     expect(source).toContain("Proposal: ${formatResolutionStatusLabel");
     expect(source).toContain("buildCombatRoundAttackRollResult");

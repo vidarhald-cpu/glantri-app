@@ -46,6 +46,7 @@ import {
   hasScenarioParticipantCombatDeclarationForEncounterRound,
   initializeCombatRoundState,
   recordCombatRoundAttackResult,
+  recordCombatRoundDamageReviewPlaceholder,
   recordCombatRoundParryResult,
   rollOpenEndedD20,
   rollOpenEndedCombatToHitD20,
@@ -540,7 +541,7 @@ function getCombatResolutionButtonLabel(input: {
   }
 
   if (input.phase && input.substep === "damage") {
-    return "Mark damage reviewed";
+    return "Mark damage review deferred";
   }
 
   if (input.phase && input.substep === "effects") {
@@ -2489,12 +2490,39 @@ export default function CombatRoundManagerPanel({
     setSaving(true);
 
     try {
-      const nextRoundState = advanceCombatRoundPhaseResolutionSubstepForParticipant({
+      const updatedAt = new Date().toISOString();
+      const currentOwnerStatus = getCombatRoundPhaseResolutionStatus({
         participantId: ownerParticipantId,
         phase,
         state: roundState,
-        updatedAt: new Date().toISOString(),
       });
+      const damageReviewAttackResult = inspectorResolutionAttackResult;
+      let nextRoundState: typeof roundState;
+
+      if (currentOwnerStatus.substep === "damage") {
+        if (!damageReviewAttackResult) {
+          setSaveError("No attack result is available for damage review.");
+          return;
+        }
+
+        nextRoundState = recordCombatRoundDamageReviewPlaceholder({
+          attackResult: damageReviewAttackResult,
+          command: {
+            createdAt: updatedAt,
+          },
+          state: roundState,
+          submittedBy: "gm",
+          updatedAt,
+        });
+      } else {
+        nextRoundState = advanceCombatRoundPhaseResolutionSubstepForParticipant({
+          participantId: ownerParticipantId,
+          phase,
+          state: roundState,
+          updatedAt,
+        });
+      }
+
       const nextOwnerStatus = getCombatRoundPhaseResolutionStatus({
         participantId: ownerParticipantId,
         phase,
