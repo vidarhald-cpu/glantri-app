@@ -284,7 +284,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).not.toContain("actionLog:");
   });
 
-  it("clears the selected inspector cell instead of rewinding the current global step", () => {
+  it("uses the server-returned selection after command-stack Clear", () => {
     const source = readSource();
 
     expect(source).toContain("const clearedSelection: CombatRoundSelectionTarget =");

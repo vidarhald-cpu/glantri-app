@@ -2925,104 +2925,6 @@ function getCombatRoundAttackCommandPhase(command: CombatRoundCommand): CombatRo
   return undefined;
 }
 
-function getLatestCombatRoundAttackCommandIndexForAttackResult(input: {
-  result: CombatRoundAttackRollResult;
-  roundNumber: number;
-  state: CombatRoundState;
-}): number {
-  const attackResultId = getCombatRoundAttackResultId({
-    result: input.result,
-    roundNumber: input.roundNumber,
-  });
-
-  for (let index = input.state.commands.length - 1; index >= 0; index -= 1) {
-    const command = input.state.commands[index];
-
-    if (
-      command?.roundNumber !== input.roundNumber ||
-      command.type !== "roll_attack" ||
-      command.participantId !== input.result.attackerParticipantId
-    ) {
-      continue;
-    }
-
-    if (command.facts.attackResultId === attackResultId) {
-      return index;
-    }
-
-    if (
-      getCombatRoundAttackCommandPhase(command) === input.result.phase &&
-      command.facts.defenderParticipantId === input.result.defenderParticipantId
-    ) {
-      return index;
-    }
-  }
-
-  return -1;
-}
-
-function getLatestCombatRoundSelectedAttackCommandIndex(input: {
-  state: CombatRoundState;
-  step: CombatRoundStep;
-}): number {
-  const normalized = combatRoundStateSchema.parse(input.state);
-  const selectedParticipantId = normalized.selectedParticipantId;
-  const phase =
-    getCombatRoundAttackPhaseForStep(input.step) ??
-    getCombatRoundResolutionPhaseForStep(input.step);
-
-  if (!selectedParticipantId || !phase) {
-    return -1;
-  }
-
-  const actionStep = getCombatRoundPhaseActionStepForPhase(phase);
-
-  if (input.step === actionStep) {
-    const outgoingAttackResult = getCombatRoundOutgoingAttackResultForParticipantPhase({
-      participantId: selectedParticipantId,
-      phase,
-      state: normalized,
-    });
-
-    return outgoingAttackResult
-      ? getLatestCombatRoundAttackCommandIndexForAttackResult({
-          result: outgoingAttackResult,
-          roundNumber: normalized.roundNumber,
-          state: normalized,
-        })
-      : -1;
-  }
-
-  if (input.step !== getCombatRoundParryReviewStepForPhase(phase)) {
-    return -1;
-  }
-
-  const incomingAttackResult = getCombatRoundDisplayIncomingAttackResultForParticipantPhase({
-    participantId: selectedParticipantId,
-    phase,
-    state: normalized,
-  });
-
-  if (!incomingAttackResult?.hit) {
-    return -1;
-  }
-
-  const resolution = getCombatRoundPhaseResolutionResultForAttack({
-    attackResult: incomingAttackResult,
-    state: normalized,
-  });
-
-  if (resolution?.parryResolution.status === "resolved") {
-    return -1;
-  }
-
-  return getLatestCombatRoundAttackCommandIndexForAttackResult({
-    result: incomingAttackResult,
-    roundNumber: normalized.roundNumber,
-    state: normalized,
-  });
-}
-
 function undoCombatRoundGlobalCommandAtIndex(input: {
   commandIndex: number;
   state: CombatRoundState;
@@ -3164,22 +3066,6 @@ export function undoLatestCombatRoundCommand(input: {
   });
 }
 
-function undoLatestCombatRoundAttackCommandForSelectedCell(input: {
-  state: CombatRoundState;
-  step: CombatRoundStep;
-}): CombatRoundState | undefined {
-  const normalized = combatRoundStateSchema.parse(input.state);
-  const commandIndex = getLatestCombatRoundSelectedAttackCommandIndex({
-    state: normalized,
-    step: input.step,
-  });
-
-  return undoCombatRoundAttackCommandAtIndex({
-    commandIndex,
-    state: normalized,
-  });
-}
-
 function combatRoundSelectedStepHasClearableState(input: {
   state: CombatRoundState;
   step: CombatRoundStep;
@@ -3252,37 +3138,34 @@ export function clearCombatRoundStep(input: {
   step: CombatRoundStep;
 }): CombatRoundState {
   const normalized = combatRoundStateSchema.parse(input.state);
-  const commandUndoneState = undoLatestCombatRoundGlobalParticipantCommand({
-    state: normalized,
-    step: input.step,
-  });
+  const commandUndoneState = undoLatestCombatRoundCommand({ state: normalized });
 
   if (commandUndoneState) {
     return commandUndoneState;
-  }
-
-  const attackCommandUndoneState = undoLatestCombatRoundAttackCommandForSelectedCell({
-    state: normalized,
-    step: input.step,
-  });
-
-  if (attackCommandUndoneState) {
-    return attackCommandUndoneState;
   }
 
   if (combatRoundSelectedStepHasClearableState({ state: normalized, step: input.step })) {
     return clearCombatRoundStepLegacy({ state: normalized, step: input.step });
   }
 
-  return undoLatestCombatRoundCommand({ state: normalized }) ?? normalized;
+  return normalized;
 }
 
 export function clearCurrentCombatRoundStepAndRewind(state: CombatRoundState): CombatRoundState {
   const normalized = combatRoundStateSchema.parse(state);
+  const commandIndex = getLatestCombatRoundUndoableCommandIndex({
+    roundNumber: normalized.roundNumber,
+    state: normalized,
+  });
   const clearedState = clearCombatRoundStep({
     state: normalized,
     step: normalized.currentStep,
   });
+
+  if (commandIndex >= 0) {
+    return clearedState;
+  }
+
   const previousStep = getPreviousCombatRoundStep(normalized.currentStep);
   const nextStep = previousStep ?? normalized.currentStep;
 

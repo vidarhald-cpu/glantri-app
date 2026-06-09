@@ -1004,7 +1004,7 @@ describe("combat round manager", () => {
     ]);
   });
 
-  it("undoes a DE command by removing the declaration and restoring the before cursor", () => {
+  it("undoes the latest DE command even when an older DE cell is selected", () => {
     const threeParticipantEncounter = encounter({
       participants: [
         participant({ id: "gladiator", label: "The Gladiator" }),
@@ -1050,20 +1050,20 @@ describe("combat round manager", () => {
 
     expect(cleared.commands).toHaveLength(1);
     expect(cleared.commands[0]).toMatchObject({
-      participantId: "guard",
+      participantId: "gladiator",
       type: "declare_action",
     });
     expect(cleared.currentCursor).toEqual({
-      participantId: "gladiator",
+      participantId: "guard",
       roundNumber: 3,
       step: "DE",
     });
-    expect(cleared.selectedParticipantId).toBe("gladiator");
+    expect(cleared.selectedParticipantId).toBe("guard");
     expect(cleared.selectedStep).toBe("select_actions");
-    expect(cleared.participants[0]?.declaration).toBeUndefined();
-    expect(cleared.participants[0]?.stepStatuses.select_actions).toBe("pending");
-    expect(cleared.participants[1]?.declaration?.actionId).toBe("parry_attack");
-    expect(cleared.participants[1]?.stepStatuses.select_actions).toBe("gmEdited");
+    expect(cleared.participants[0]?.declaration?.actionId).toBe("attack_parry");
+    expect(cleared.participants[0]?.stepStatuses.select_actions).toBe("gmEdited");
+    expect(cleared.participants[1]?.declaration).toBeUndefined();
+    expect(cleared.participants[1]?.stepStatuses.select_actions).toBe("pending");
   });
 
   it("maps initiative and action review steps to their initiative phase", () => {
@@ -1411,17 +1411,17 @@ describe("combat round manager", () => {
 
     expect(cleared.commands).toHaveLength(1);
     expect(cleared.commands[0]).toMatchObject({
-      participantId: "guard",
+      participantId: "gladiator",
       type: "roll_initiative_phase1",
     });
     expect(cleared.currentCursor).toEqual({
-      participantId: "gladiator",
+      participantId: "guard",
       roundNumber: 3,
       step: "i1",
     });
-    expect(cleared.participants[0]?.initiatives.phase1).toBeUndefined();
-    expect(cleared.participants[1]?.initiatives.phase1).toMatchObject({ total: 12 });
-    expect(cleared.participants[0]?.attackResults.phase1).toBeUndefined();
+    expect(cleared.participants[0]?.initiatives.phase1).toMatchObject({ total: 14 });
+    expect(cleared.participants[1]?.initiatives.phase1).toBeUndefined();
+    expect(cleared.participants[0]?.attackResults.phase1).toEqual(result);
     expect(cleared.participants[0]?.declaration?.actionId).toBe("attack_parry");
     expect(cleared.participants[0]?.stepStatuses.review_action_modifiers).toBe("gmEdited");
   });
@@ -1602,17 +1602,73 @@ describe("combat round manager", () => {
 
     expect(cleared.commands).toHaveLength(1);
     expect(cleared.commands[0]).toMatchObject({
-      participantId: "guard",
+      participantId: "gladiator",
       type: "roll_initiative_phase2",
+    });
+    expect(cleared.currentCursor).toEqual({
+      participantId: "guard",
+      roundNumber: 3,
+      step: "i2",
+    });
+    expect(cleared.participants[0]?.initiatives.phase2).toMatchObject({ total: 11 });
+    expect(cleared.participants[1]?.initiatives.phase2).toBeUndefined();
+    expect(cleared.participants[0]?.attackResults.phase2).toEqual(result);
+  });
+
+  it("manual selection of an older DE cell still undoes the latest i1 command", () => {
+    const declared = recordCombatRoundDeclaration({
+      command: {
+        createdAt: "2026-01-01T00:01:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      declaration: {
+        actionId: "attack_parry",
+        roundNumber: 3,
+      },
+      participantId: "gladiator",
+      state: initializeCombatRoundState({ encounter: encounter() }),
+      submittedBy: "gm",
+    });
+    const initiativePhase1 = {
+      ...advanceToStep(declared, "initiative_phase_1"),
+      selectedParticipantId: "gladiator",
+      selectedStep: "initiative_phase_1" as const,
+    };
+    const rolled = recordCombatRoundInitiative({
+      command: {
+        createdAt: "2026-01-01T00:02:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      initiative: 14,
+      participantId: "gladiator",
+      phase: "phase1",
+      state: initiativePhase1,
+      submittedBy: "gm",
+    });
+    const cleared = clearCombatRoundStep({
+      state: {
+        ...rolled,
+        selectedParticipantId: "gladiator",
+        selectedStep: "select_actions",
+      },
+      step: "select_actions",
+    });
+
+    expect(cleared.commands).toHaveLength(1);
+    expect(cleared.commands[0]).toMatchObject({
+      participantId: "gladiator",
+      type: "declare_action",
     });
     expect(cleared.currentCursor).toEqual({
       participantId: "gladiator",
       roundNumber: 3,
-      step: "i2",
+      step: "i1",
     });
-    expect(cleared.participants[0]?.initiatives.phase2).toBeUndefined();
-    expect(cleared.participants[1]?.initiatives.phase2).toMatchObject({ total: 9 });
-    expect(cleared.participants[0]?.attackResults.phase2).toBeUndefined();
+    expect(cleared.currentStep).toBe("initiative_phase_1");
+    expect(cleared.selectedParticipantId).toBe("gladiator");
+    expect(cleared.selectedStep).toBe("initiative_phase_1");
+    expect(cleared.participants[0]?.declaration?.actionId).toBe("attack_parry");
+    expect(cleared.participants[0]?.initiatives.phase1).toBeUndefined();
   });
 
   it("falls back to the latest command undo when selected empty A1 has no local state", () => {
@@ -3026,7 +3082,7 @@ describe("combat round manager", () => {
     expect(cleared.participants[0]?.stepStatuses.phase_1_actions).toBe("pending");
   });
 
-  it("fallback Clear undoes the latest roll_attack instead of jumping to the next actor i1", () => {
+  it("manual selection of old i1 after later A1 attacks still undoes the latest roll_attack", () => {
     const threeParticipantEncounter = encounter({
       participants: [
         participant({ id: "gladiator", label: "The Gladiator" }),
@@ -3123,10 +3179,10 @@ describe("combat round manager", () => {
           step: "i1",
         },
         currentStep: "phase_1_actions",
-        selectedParticipantId: "scout",
-        selectedStep: "phase_1_actions",
+        selectedParticipantId: "gladiator",
+        selectedStep: "initiative_phase_1",
       },
-      step: "phase_1_actions",
+      step: "initiative_phase_1",
     });
 
     expect(afterGuardMiss.commands.map((command) => command.participantId)).toEqual([
@@ -3148,6 +3204,7 @@ describe("combat round manager", () => {
     expect(cleared.selectedStep).toBe("phase_1_actions");
     expect(cleared.participants[0]?.attackResults.phase1).toEqual(gladiatorMiss);
     expect(cleared.participants[1]?.attackResults.phase1).toBeUndefined();
+    expect(cleared.participants[0]?.initiatives.phase1).toMatchObject({ total: 6 });
   });
 
   it("committed D1 snapshots preserve resolution scaffold status", () => {
