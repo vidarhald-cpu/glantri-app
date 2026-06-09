@@ -3,11 +3,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   advanceCombatRoundStep,
   buildCombatRoundAttackRollResult,
+  commitCombatRoundPhaseDamage,
   initializeCombatRoundState,
   recordCombatRoundAttackResult,
   recordCombatRoundDeclaration,
+  recordCombatRoundDamageResult,
   recordCombatRoundInitiative,
   recordCombatRoundParryResult,
+  type CombatEffectsState,
   type EncounterSession,
 } from "@glantri/domain";
 
@@ -3555,6 +3558,247 @@ describe("scenarios route contract", () => {
     ).toBe("pending");
     expect(updatedEncounter.combatRoundState.phaseResolutionResults[0]?.damageRoll.status).toBe(
       "pending",
+    );
+  });
+
+  it("clears the latest committed damage command and removes only its combat effect rows", async () => {
+    const encounterParticipants = [
+      makeCombatEncounter().participants[0],
+      {
+        ...makeCombatEncounter().participants[0],
+        id: "encounter-participant-2",
+        label: "City guard",
+        scenarioParticipantId: "participant-2",
+      },
+    ];
+    const combatEncounter = makeCombatEncounter({
+      participants: encounterParticipants,
+    }) as EncounterSession;
+    const declaredState = recordCombatRoundDeclaration({
+      declaration: {
+        actionId: "attack_parry",
+        roundNumber: 1,
+      },
+      participantId: "encounter-participant-2",
+      state: recordCombatRoundDeclaration({
+        declaration: {
+          actionId: "attack_parry",
+          roundNumber: 1,
+        },
+        participantId: "encounter-participant-1",
+        state: initializeCombatRoundState({ encounter: combatEncounter }),
+        submittedBy: "gm",
+      }),
+      submittedBy: "gm",
+    });
+    const afterGladiatorInitiative = recordCombatRoundInitiative({
+      command: {
+        createdAt: "2026-01-01T00:01:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      initiative: 14,
+      participantId: "encounter-participant-1",
+      phase: "phase1",
+      state: declaredState,
+      submittedBy: "gm",
+    });
+    const afterGuardInitiative = recordCombatRoundInitiative({
+      command: {
+        createdAt: "2026-01-01T00:02:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      initiative: 12,
+      participantId: "encounter-participant-2",
+      phase: "phase1",
+      state: afterGladiatorInitiative,
+      submittedBy: "gm",
+    });
+    const attackHit = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackerParticipantId: "encounter-participant-1",
+      defenderDb: 10,
+      defenderParticipantId: "encounter-participant-2",
+      ob: 10,
+      phase: "phase1",
+      rollD20: 12,
+      rollTotal: 12,
+      rolledAt: "2026-01-01T00:03:00.000Z",
+      weaponName: "Broad sword",
+    });
+    const afterAttack = recordCombatRoundAttackResult({
+      command: {
+        createdAt: attackHit.rolledAt,
+        createdByUserId: "gm-1",
+      },
+      participantId: "encounter-participant-1",
+      result: attackHit,
+      state: afterGuardInitiative,
+      submittedBy: "gm",
+    });
+    const afterParry = recordCombatRoundParryResult({
+      attackResult: attackHit,
+      command: {
+        createdAt: "2026-01-01T00:04:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      parryResolution: {
+        combinedParryScore: 9,
+        modifierAdjustment: 0,
+        openEndedD10s: [],
+        resultLabel: "Parry failed",
+        rollD20: 8,
+        rollTotal: 8,
+        status: "resolved",
+        success: false,
+        targetNumber: 21,
+        total: 17,
+      },
+      state: afterAttack,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:04:00.000Z",
+    });
+    const afterDamage = recordCombatRoundDamageResult({
+      attackResult: attackHit,
+      command: {
+        createdAt: "2026-01-01T00:05:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      defenderDm: 0,
+      dmb: 8,
+      state: afterParry,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:05:00.000Z",
+    });
+    const existingCombatEffects: CombatEffectsState = {
+      effects: [
+        {
+          createdAt: "2026-01-01T00:00:00.000Z",
+          damage: 0,
+          description: "Existing row",
+          effectGroup: "general",
+          generalDamage: 0,
+          id: "existing-effect",
+          sourceEventId: "existing-event",
+          status: "active",
+          targetParticipantId: "participant-2",
+          type: "special",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        },
+      ],
+      events: [
+        {
+          createdAt: "2026-01-01T00:00:00.000Z",
+          description: "",
+          id: "existing-event",
+          sourceLabel: "Existing event",
+          sourceType: "manual",
+          targetParticipantId: "participant-2",
+        },
+      ],
+    };
+    const committed = commitCombatRoundPhaseDamage({
+      attackerScenarioParticipantId: "participant-1",
+      command: {
+        commandId: "commit-d1-api",
+        createdAt: "2026-01-01T00:06:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      combatEffects: existingCombatEffects,
+      defenderScenarioParticipantId: "participant-2",
+      encounterId: "encounter-1",
+      scenarioId: "scenario-1",
+      state: afterDamage,
+    });
+    const expectedCommitEventId =
+      "commit-d1-api:r1:phase1:1-phase1-encounter-participant-1-encounter-participant-2:1-phase1-encounter-participant-1-encounter-participant-2-damage:combat-effect-event";
+    const expectedCommitEffectId =
+      "commit-d1-api:r1:phase1:1-phase1-encounter-participant-1-encounter-participant-2:1-phase1-encounter-participant-1-encounter-participant-2-damage:combat-effect:general-damage";
+    const scenarioParticipants = [
+      makeCombatScenarioParticipant({ id: "participant-1" }),
+      makeCombatScenarioParticipant({
+        id: "participant-2",
+        state: {
+          ...makeCombatScenarioParticipant().state,
+          combatEffects: committed.combatEffects,
+        },
+      }),
+    ];
+
+    setupCombatDeclarationRoute({
+      encounter: {
+        combatRoundState: {
+          ...committed.state,
+          selectedParticipantId: "encounter-participant-1",
+          selectedStep: "initiative_phase_1",
+        },
+        participants: encounterParticipants,
+      },
+      user: mocks.adminUser,
+    });
+    mocks.scenarioService.listScenarioParticipants.mockResolvedValue(scenarioParticipants);
+    mocks.encounterService.updateScenarioParticipantState.mockImplementation(
+      async (update: { participantId: string; state: unknown }) => ({
+        ...scenarioParticipants.find((participant) => participant.id === update.participantId),
+        state: update.state,
+      }),
+    );
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      body: {
+        participantId: "encounter-participant-1",
+        step: "initiative_phase_1",
+      },
+      method: "POST",
+      url: "/encounters/encounter-1/combat-round/clear-current-step",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
+    expect(updatedEncounter.combatRoundState.commands.at(-1)).toMatchObject({
+      type: "resolve_damage",
+    });
+    expect(updatedEncounter.combatRoundState.currentCursor).toEqual({
+      participantId: "encounter-participant-2",
+      roundNumber: 1,
+      step: "D1",
+    });
+    expect(updatedEncounter.combatRoundState.selectedParticipantId).toBe("encounter-participant-2");
+    expect(updatedEncounter.combatRoundState.selectedStep).toBe("phase_1_damage");
+    expect(updatedEncounter.combatRoundState.phaseResolutionResults[0]?.damageResult).toBeDefined();
+    expect(updatedEncounter.combatRoundState.phaseResolutionResults[0]?.damageProposal.status).toBe(
+      "drafted",
+    );
+    expect(mocks.encounterService.updateScenarioParticipantState).toHaveBeenCalledTimes(1);
+    expect(mocks.encounterService.updateScenarioParticipantState).toHaveBeenCalledWith(
+      expect.objectContaining({
+        participantId: "participant-2",
+        scenarioId: "scenario-1",
+        state: expect.objectContaining({
+          combatEffects: expect.objectContaining({
+            effects: [
+              expect.objectContaining({
+                id: "existing-effect",
+              }),
+            ],
+            events: [
+              expect.objectContaining({
+                id: "existing-event",
+              }),
+            ],
+          }),
+        }),
+      }),
+    );
+    const updatedParticipantState =
+      mocks.encounterService.updateScenarioParticipantState.mock.calls[0]?.[0]?.state;
+    expect(updatedParticipantState.combatEffects.effects).not.toContainEqual(
+      expect.objectContaining({ id: expectedCommitEffectId }),
+    );
+    expect(updatedParticipantState.combatEffects.events).not.toContainEqual(
+      expect.objectContaining({ id: expectedCommitEventId }),
     );
   });
 

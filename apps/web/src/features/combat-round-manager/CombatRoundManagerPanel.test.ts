@@ -150,7 +150,11 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("Parry successful");
     expect(source).toContain("Parry failed");
     expect(source).toContain("Resolve damage");
-    expect(source).toContain('"Damage resolved"');
+    expect(source).toContain("Commit phase damage");
+    expect(source).toContain("Phase damage committed");
+    expect(source).toContain("commitCombatRoundPhaseDamage");
+    expect(source).toContain("updateScenarioParticipantStateOnServer");
+    expect(source).toContain("combatEffects: committed.combatEffects");
     expect(source).toContain("Damage: grazing ${rollLabel}${derivedLabel}");
     expect(source).toContain("Damage: DMB ${damage.dmb} + DM ${damage.defenderDm}");
     expect(source).toContain("Result: ${damage.totalDamage} damage");
@@ -263,7 +267,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("command: {");
     expect(source).toContain("participantId: commandParticipantId");
     expect(source).toContain("inspectorSelectedAttackAlreadyRolled ||");
-    expect(source).toContain("inspectorDamageAlreadyResolved ||");
+    expect(source).toContain("inspectorDamageCommitted ||");
     expect(source).toContain("Select a participant step to inspect combat details.");
     expect(source).toContain("Previous participant");
     expect(source).toContain("Next participant");
@@ -284,6 +288,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("currentRound: nextRoundState.roundNumber");
     expect(source).toContain("submitCombatDeclarationOnServer");
     expect(source).toContain("clearCurrentCombatRoundStepOnServer");
+    expect(source).toContain("updateScenarioParticipantStateOnServer");
     expect(source).toContain("const clearedSelection: CombatRoundSelectionTarget =");
     expect(source).toContain("participantId: inspector.participant?.participantId");
     expect(source).toContain("step: inspector.step");

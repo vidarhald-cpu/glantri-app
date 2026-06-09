@@ -164,9 +164,10 @@ describe("rules documentation registry", () => {
     expect(model.selectedDocument.markdown).toContain("Lookup totals above the displayed table continue");
     expect(model.selectedDocument.markdown).toContain("Grazing-hit damage does not use a fixed normal damage modifier.");
     expect(model.selectedDocument.markdown).toContain("the grazing hit rolls `1d9`");
-    expect(model.selectedDocument.markdown).toContain("critical effects and final");
-    expect(model.selectedDocument.markdown).toContain("wound/HP");
-    expect(model.selectedDocument.markdown).toContain("application remain future work.");
+    expect(model.selectedDocument.markdown).toContain("damage result proposal");
+    expect(model.selectedDocument.markdown).toContain("Commit phase damage");
+    expect(model.selectedDocument.markdown).toContain("one active `general_damage` effect row");
+    expect(model.selectedDocument.markdown).toContain("critical effects remain a GM");
     expect(model.selectedDocument.markdown).not.toContain("New Combat Arena.xlsx");
     expect(model.selectedDocument.markdown).not.toContain("Sheet: `to hit (new)`");
     expect(model.selectedDocument.markdown).not.toContain("| Lookup total |");

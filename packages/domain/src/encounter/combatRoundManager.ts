@@ -6,6 +6,12 @@ import {
   scenarioParticipantCombatContextSchema,
 } from "../campaign/scenario";
 import { getCombatDeclarationAttackPhases } from "./combatDeclarationValidation";
+import {
+  combatEffectEventSchema,
+  combatEffectsStateSchema,
+  combatEffectSchema,
+  type CombatEffectsState,
+} from "./combatEffects";
 import { lookupCombatToHitDamageMetadata, resolveCombatToHit } from "./toHitTable";
 import type { EncounterParticipant, EncounterSession } from "./session";
 
@@ -97,6 +103,7 @@ export const combatRoundCommandTypeSchema = z.enum([
   "complete_damage_review_phase1",
   "complete_damage_review_phase2",
   "resolve_damage",
+  "commit_phase_damage",
 ]);
 export type CombatRoundCommandType = z.infer<typeof combatRoundCommandTypeSchema>;
 
@@ -307,10 +314,12 @@ export const combatRoundPhaseResolutionResultSchema = z.object({
   attackerParticipantId: idSchema,
   damageProposal: z
     .object({
+      committedCombatEffectEventId: idSchema.optional(),
+      committedCombatEffectIds: z.array(idSchema).default([]),
       proposedEffects: z.array(z.never()).default([]),
       status: z.enum(["not_ready", "drafted", "committed"]),
     })
-    .default({ proposedEffects: [], status: "not_ready" }),
+    .default({ committedCombatEffectIds: [], proposedEffects: [], status: "not_ready" }),
   damageRoll: z
     .object({
       diceExpression: z.string().min(1).optional(),
@@ -784,7 +793,8 @@ function isUndoableCombatRoundCommandType(type: CombatRoundCommandType): boolean
     type === "skip_phase_action" ||
     type === "complete_damage_review_phase1" ||
     type === "complete_damage_review_phase2" ||
-    type === "resolve_damage"
+    type === "resolve_damage" ||
+    type === "commit_phase_damage"
   );
 }
 
@@ -1364,6 +1374,14 @@ export function getCombatRoundParticipantPhaseStepStatus(input: {
   if (input.step === damageStep) {
     if (!incomingAttackResult.hit || resolution.damageRoll.status === "not_required") {
       return "skipped";
+    }
+
+    if (resolution.damageProposal.status === "committed") {
+      return "complete";
+    }
+
+    if (resolution.damageResult) {
+      return "ready";
     }
 
     if (
@@ -2008,6 +2026,7 @@ export function recordCombatRoundParryResolution(input: {
   const nextResult = combatRoundPhaseResolutionResultSchema.parse({
     ...existing,
     damageProposal: {
+      committedCombatEffectIds: [],
       proposedEffects: [],
       status: "not_ready",
     },
@@ -2349,8 +2368,9 @@ function recordCombatRoundDamageResolution(input: {
   const nextResult = combatRoundPhaseResolutionResultSchema.parse({
     ...existing,
     damageProposal: {
+      committedCombatEffectIds: [],
       proposedEffects: [],
-      status: "not_ready",
+      status: "drafted",
     },
     damageResult: input.damageResult,
     damageRoll: {
@@ -2383,10 +2403,7 @@ function recordCombatRoundResolveDamageCommand(input: {
     roundNumber: normalized.roundNumber,
     step: getCombatRoundDamageCursorStepForPhase(input.attackResult.phase),
   });
-  const afterCursor = getCombatRoundDamageReviewCommandAfterCursor({
-    phase: input.attackResult.phase,
-    state: normalized,
-  });
+  const afterCursor = beforeCursor;
   const commandType = "resolve_damage" satisfies CombatRoundCommandType;
   const command = combatRoundCommandSchema.parse({
     afterCursor,
@@ -2488,12 +2505,27 @@ export function recordCombatRoundDamageResult(input: {
     state: normalized,
     updatedAt: input.updatedAt,
   });
-  const withCompletedReview = completeCombatRoundPhaseResolutionForParticipant({
-    participantId: input.attackResult.attackerParticipantId,
-    phase: input.attackResult.phase,
-    state: withDamageResult,
-    submittedBy: input.submittedBy,
-    updatedAt: input.updatedAt,
+  const damageStep = getCombatRoundDamageReviewStepForPhase(input.attackResult.phase);
+  const withDraftedReview = setCombatRoundParticipantStepStatus({
+    participantId: input.attackResult.defenderParticipantId,
+    state: {
+      ...withDamageResult,
+      currentCursor: {
+        participantId: input.attackResult.defenderParticipantId,
+        roundNumber: normalized.roundNumber,
+        step: getCombatRoundDamageCursorStepForPhase(input.attackResult.phase),
+      },
+      currentStep: damageStep,
+      phaseResolutionCursor: {
+        participantId: input.attackResult.defenderParticipantId,
+        phase: input.attackResult.phase,
+        substep: "damage",
+      },
+      selectedParticipantId: input.attackResult.defenderParticipantId,
+      selectedStep: damageStep,
+    },
+    status: "ready",
+    step: damageStep,
   });
 
   return input.command
@@ -2501,9 +2533,355 @@ export function recordCombatRoundDamageResult(input: {
         attackResult: input.attackResult,
         command: input.command,
         damageResult,
-        state: withCompletedReview,
+        state: withDraftedReview,
       })
-    : withCompletedReview;
+    : withDraftedReview;
+}
+
+type CombatRoundDamageCommitIdInput = {
+  attackResultId: string;
+  commandId: string;
+  damageResultId: string;
+  phase: CombatRoundPhase;
+  roundNumber: number;
+};
+
+function formatCombatRoundDamageCommitIdPart(value: string): string {
+  return value.replace(/[^A-Za-z0-9_-]+/g, "-");
+}
+
+function buildCombatRoundDamageCommitIdBase(input: CombatRoundDamageCommitIdInput): string {
+  return [
+    input.commandId,
+    `r${input.roundNumber}`,
+    input.phase,
+    formatCombatRoundDamageCommitIdPart(input.attackResultId),
+    formatCombatRoundDamageCommitIdPart(input.damageResultId),
+  ].join(":");
+}
+
+export function buildCombatRoundDamageCommitEventId(
+  input: CombatRoundDamageCommitIdInput,
+): string {
+  return `${buildCombatRoundDamageCommitIdBase(input)}:combat-effect-event`;
+}
+
+export function buildCombatRoundDamageCommitEffectId(input: CombatRoundDamageCommitIdInput & {
+  commandId: string;
+  kind: "general-damage";
+}): string {
+  return `${buildCombatRoundDamageCommitIdBase(input)}:combat-effect:${input.kind}`;
+}
+
+function formatCombatRoundDamageCommitPhaseLabel(phase: CombatRoundPhase): string {
+  return phase === "phase1" ? "Phase 1" : "Phase 2";
+}
+
+function formatCombatRoundDamageCommitDescription(input: {
+  damageResult: CombatRoundDamageResult;
+}): string {
+  const critical = input.damageResult.criticalGrade
+    ? ` Critical ${input.damageResult.criticalGrade.toUpperCase()} pending.`
+    : "";
+
+  return `${formatCombatRoundDamageCommitPhaseLabel(
+    input.damageResult.phase,
+  )} damage result: ${input.damageResult.totalDamage} damage.${critical}`;
+}
+
+function buildCombatRoundDamageCommitRows(input: {
+  attackerScenarioParticipantId?: string;
+  command: CombatRoundCommand;
+  combatEffects?: CombatEffectsState;
+  damageResult: CombatRoundDamageResult;
+  defenderScenarioParticipantId: string;
+  encounterId?: string;
+  scenarioId?: string;
+}): {
+  eventId: string;
+  effectIds: string[];
+  nextCombatEffects: CombatEffectsState;
+} {
+  const currentCombatEffects = combatEffectsStateSchema.parse(input.combatEffects);
+  const damageResultId = getCombatRoundDamageResultId({
+    attackResultId: input.damageResult.attackResultId,
+  });
+  const idInput = {
+    attackResultId: input.damageResult.attackResultId,
+    commandId: input.command.id,
+    damageResultId,
+    phase: input.damageResult.phase,
+    roundNumber: input.command.roundNumber,
+  };
+  const eventId = buildCombatRoundDamageCommitEventId(idInput);
+  const effectIds =
+    input.damageResult.totalDamage > 0
+      ? [
+          buildCombatRoundDamageCommitEffectId({
+            ...idInput,
+            kind: "general-damage",
+          }),
+        ]
+      : [];
+  const description = formatCombatRoundDamageCommitDescription({
+    damageResult: input.damageResult,
+  });
+  const event = combatEffectEventSchema.parse({
+    createdAt: input.command.createdAt,
+    createdByUserId: input.command.createdByUserId,
+    description,
+    encounterId: input.encounterId,
+    id: eventId,
+    phase: input.damageResult.phase,
+    roundNumber: input.command.roundNumber,
+    scenarioId: input.scenarioId,
+    sourceActorId: input.attackerScenarioParticipantId,
+    sourceLabel: `${formatCombatRoundDamageCommitPhaseLabel(input.damageResult.phase)} damage`,
+    sourceType: "combat_action",
+    targetParticipantId: input.defenderScenarioParticipantId,
+  });
+  const effects =
+    input.damageResult.totalDamage > 0
+      ? [
+          combatEffectSchema.parse({
+            createdAt: input.command.createdAt,
+            damage: 0,
+            description,
+            effectGroup: "none",
+            generalDamage: input.damageResult.totalDamage,
+            id: effectIds[0] ?? buildCombatRoundDamageCommitEffectId({
+              ...idInput,
+              kind: "general-damage",
+            }),
+            roundNumber: input.command.roundNumber,
+            sourceEventId: eventId,
+            status: "active",
+            targetParticipantId: input.defenderScenarioParticipantId,
+            type: "general_damage",
+            updatedAt: input.command.createdAt,
+          }),
+        ]
+      : [];
+
+  return {
+    effectIds,
+    eventId,
+    nextCombatEffects: combatEffectsStateSchema.parse({
+      effects: [
+        ...currentCombatEffects.effects.filter((effect) => !effectIds.includes(effect.id)),
+        ...effects,
+      ],
+      events: [
+        ...currentCombatEffects.events.filter((existingEvent) => existingEvent.id !== eventId),
+        event,
+      ],
+    }),
+  };
+}
+
+export function removeCombatRoundCommittedDamageEffects(input: {
+  combatEffects?: CombatEffectsState;
+  command: CombatRoundCommand;
+}): CombatEffectsState {
+  const currentCombatEffects = combatEffectsStateSchema.parse(input.combatEffects);
+  const eventId =
+    typeof input.command.facts.createdCombatEffectEventId === "string"
+      ? input.command.facts.createdCombatEffectEventId
+      : undefined;
+  const effectIds = Array.isArray(input.command.facts.createdCombatEffectIds)
+    ? input.command.facts.createdCombatEffectIds.filter(
+        (effectId): effectId is string => typeof effectId === "string",
+      )
+    : [];
+  const effectIdSet = new Set(effectIds);
+
+  return combatEffectsStateSchema.parse({
+    effects: currentCombatEffects.effects.filter((effect) => !effectIdSet.has(effect.id)),
+    events: currentCombatEffects.events.filter((event) => event.id !== eventId),
+  });
+}
+
+function recordCombatRoundCommitPhaseDamageCommand(input: {
+  attackerScenarioParticipantId?: string;
+  command: {
+    commandId?: string;
+    createdAt: string;
+    createdByUserId?: string;
+  };
+  combatEffects?: CombatEffectsState;
+  damageResult: CombatRoundDamageResult;
+  defenderScenarioParticipantId: string;
+  encounterId?: string;
+  scenarioId?: string;
+  state: CombatRoundState;
+}): {
+  combatEffects: CombatEffectsState;
+  command: CombatRoundCommand;
+  state: CombatRoundState;
+} {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const beforeCursor = combatRoundCursorSchema.parse({
+    participantId: input.damageResult.defenderParticipantId,
+    roundNumber: normalized.roundNumber,
+    step: getCombatRoundDamageCursorStepForPhase(input.damageResult.phase),
+  });
+  const completed = completeCombatRoundPhaseResolutionForParticipant({
+    participantId: input.damageResult.attackerParticipantId,
+    phase: input.damageResult.phase,
+    state: normalized,
+    submittedBy: "gm",
+    updatedAt: input.command.createdAt,
+  });
+  const afterCursor = getCombatRoundDamageReviewCommandAfterCursor({
+    phase: input.damageResult.phase,
+    state: completed,
+  });
+  const commandId =
+    input.command.commandId ??
+    buildCombatRoundCommandId({
+      createdAt: input.command.createdAt,
+      participantId: input.damageResult.defenderParticipantId,
+      state: normalized,
+      type: "commit_phase_damage",
+    });
+  const damageResultId = getCombatRoundDamageResultId({
+    attackResultId: input.damageResult.attackResultId,
+  });
+  const idInput = {
+    attackResultId: input.damageResult.attackResultId,
+    commandId,
+    damageResultId,
+    phase: input.damageResult.phase,
+    roundNumber: normalized.roundNumber,
+  };
+  const createdCombatEffectEventId = buildCombatRoundDamageCommitEventId(idInput);
+  const createdCombatEffectIds =
+    input.damageResult.totalDamage > 0
+      ? [
+          buildCombatRoundDamageCommitEffectId({
+            ...idInput,
+            kind: "general-damage",
+          }),
+        ]
+      : [];
+  const command = combatRoundCommandSchema.parse({
+    afterCursor,
+    beforeCursor,
+    createdAt: input.command.createdAt,
+    createdByUserId: input.command.createdByUserId,
+    facts: {
+      attackResultId: input.damageResult.attackResultId,
+      attackerParticipantId: input.damageResult.attackerParticipantId,
+      createdCombatEffectEventId,
+      createdCombatEffectIds,
+      criticalGrade: input.damageResult.criticalGrade,
+      damageResultId,
+      defenderParticipantId: input.damageResult.defenderParticipantId,
+      status: "committed",
+      totalDamage: input.damageResult.totalDamage,
+      ...(afterCursor.participantId
+        ? {
+            nextStepOpened: {
+              participantId: afterCursor.participantId,
+              step: afterCursor.step,
+            },
+          }
+        : {}),
+    },
+    id: commandId,
+    participantId: input.damageResult.defenderParticipantId,
+    phase: input.damageResult.phase,
+    roundNumber: normalized.roundNumber,
+    step: beforeCursor.step,
+    type: "commit_phase_damage",
+  });
+  const rows = buildCombatRoundDamageCommitRows({
+    attackerScenarioParticipantId: input.attackerScenarioParticipantId,
+    command,
+    combatEffects: input.combatEffects,
+    damageResult: input.damageResult,
+    defenderScenarioParticipantId: input.defenderScenarioParticipantId,
+    encounterId: input.encounterId,
+    scenarioId: input.scenarioId,
+  });
+  const selectedStep = getCombatRoundStepForCursorStep(command.afterCursor.step);
+  const stateWithCommittedProposal = {
+    ...completed,
+    commands: [...normalized.commands, command],
+    currentCursor: command.afterCursor,
+    currentStep: selectedStep,
+    phaseResolutionResults: completed.phaseResolutionResults.map((result) =>
+      result.attackResultId === input.damageResult.attackResultId
+        ? combatRoundPhaseResolutionResultSchema.parse({
+            ...result,
+            damageProposal: {
+              committedCombatEffectEventId: rows.eventId,
+              committedCombatEffectIds: rows.effectIds,
+              proposedEffects: [],
+              status: "committed",
+            },
+            updatedAt: input.command.createdAt,
+          })
+        : result,
+    ),
+    selectedParticipantId: command.afterCursor.participantId ?? normalized.selectedParticipantId,
+    selectedStep,
+  };
+
+  return {
+    combatEffects: rows.nextCombatEffects,
+    command,
+    state: combatRoundStateSchema.parse(stateWithCommittedProposal),
+  };
+}
+
+export function commitCombatRoundPhaseDamage(input: {
+  attackerScenarioParticipantId?: string;
+  command: {
+    commandId?: string;
+    createdAt: string;
+    createdByUserId?: string;
+  };
+  combatEffects?: CombatEffectsState;
+  defenderScenarioParticipantId: string;
+  encounterId?: string;
+  scenarioId?: string;
+  state: CombatRoundState;
+}): {
+  combatEffects: CombatEffectsState;
+  command: CombatRoundCommand;
+  state: CombatRoundState;
+} {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const attackResult = normalized.phaseResolutionCursor
+    ? getCombatRoundDisplayIncomingAttackResultForParticipantPhase({
+        participantId: normalized.phaseResolutionCursor.participantId,
+        phase: normalized.phaseResolutionCursor.phase,
+        state: normalized,
+      })
+    : undefined;
+  const resolution = attackResult
+    ? getCombatRoundPhaseResolutionResultForAttack({
+        attackResult,
+        state: normalized,
+      })
+    : undefined;
+  const damageResult = resolution?.damageResult;
+
+  if (!attackResult || !damageResult || resolution.damageProposal.status === "committed") {
+    throw new RangeError("Phase damage proposal is not ready to commit.");
+  }
+
+  return recordCombatRoundCommitPhaseDamageCommand({
+    attackerScenarioParticipantId: input.attackerScenarioParticipantId,
+    command: input.command,
+    combatEffects: input.combatEffects,
+    damageResult,
+    defenderScenarioParticipantId: input.defenderScenarioParticipantId,
+    encounterId: input.encounterId,
+    scenarioId: input.scenarioId,
+    state: normalized,
+  });
 }
 
 function getCombatRoundDamageReviewCommandTypeForPhase(
@@ -4159,6 +4537,108 @@ function undoCombatRoundDamageReviewCommandAtIndex(input: {
   };
 }
 
+function undoCombatRoundCommittedDamageCommandAtIndex(input: {
+  commandIndex: number;
+  state: CombatRoundState;
+}): CombatRoundState | undefined {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const command = normalized.commands[input.commandIndex];
+
+  if (
+    !command ||
+    command.roundNumber !== normalized.roundNumber ||
+    command.type !== "commit_phase_damage"
+  ) {
+    return undefined;
+  }
+
+  const phase = getCombatRoundAttackCommandPhase(command);
+  const attackResultId =
+    typeof command.facts.attackResultId === "string" ? command.facts.attackResultId : undefined;
+
+  if (!phase || !attackResultId) {
+    return undefined;
+  }
+
+  const attackResult = getCombatRoundAttackResultById({
+    attackResultId,
+    state: normalized,
+  });
+
+  if (!attackResult) {
+    return undefined;
+  }
+
+  const resolution = getCombatRoundPhaseResolutionResultForAttack({
+    attackResult,
+    state: normalized,
+  });
+  const participantId = command.beforeCursor.participantId ?? command.participantId;
+  const selectedStep = getCombatRoundStepForCursorStep(command.beforeCursor.step);
+  const damageStep = getCombatRoundDamageReviewStepForPhase(phase);
+  const phaseResolutionStatusesAfterUndo: CombatRoundPhaseResolutionStatuses = {
+    ...normalized.phaseResolutionStatuses,
+    [attackResult.attackerParticipantId]: {
+      ...normalized.phaseResolutionStatuses[attackResult.attackerParticipantId],
+      [phase]: {
+        substep: "damage",
+        updatedAt: command.createdAt,
+      },
+    },
+  };
+
+  if (
+    command.afterCursor.participantId &&
+    command.afterCursor.participantId !== attackResult.attackerParticipantId
+  ) {
+    phaseResolutionStatusesAfterUndo[command.afterCursor.participantId] = {
+      ...phaseResolutionStatusesAfterUndo[command.afterCursor.participantId],
+      [phase]: undefined,
+    };
+  }
+
+  return {
+    ...normalized,
+    commands: normalized.commands.filter((_, index) => index !== input.commandIndex),
+    currentCursor: command.beforeCursor,
+    currentStep: selectedStep,
+    phaseResolutionCursor: {
+      participantId,
+      phase,
+      substep: "damage",
+    },
+    phaseResolutionResults: resolution
+      ? normalized.phaseResolutionResults.map((result) =>
+          result.attackResultId === attackResultId
+            ? combatRoundPhaseResolutionResultSchema.parse({
+                ...result,
+                damageProposal: {
+                  committedCombatEffectIds: [],
+                  proposedEffects: [],
+                  status: "drafted",
+                },
+                updatedAt: command.createdAt,
+              })
+            : result,
+        )
+      : normalized.phaseResolutionResults,
+    phaseResolutionStatuses: phaseResolutionStatusesAfterUndo,
+    participants: normalized.participants.map((participant) =>
+      participant.participantId === attackResult.defenderParticipantId
+        ? {
+            ...participant,
+            stepStatuses: {
+              ...participant.stepStatuses,
+              [damageStep]: "ready",
+            },
+          }
+        : participant,
+    ),
+    selectedParticipantId: participantId,
+    selectedStep,
+  };
+}
+
 function undoCombatRoundResolvedDamageCommandAtIndex(input: {
   commandIndex: number;
   state: CombatRoundState;
@@ -4316,6 +4796,13 @@ function undoCombatRoundCommandAtIndex(input: {
     command.type === "complete_damage_review_phase2"
   ) {
     return undoCombatRoundDamageReviewCommandAtIndex({
+      commandIndex: input.commandIndex,
+      state: normalized,
+    });
+  }
+
+  if (command.type === "commit_phase_damage") {
+    return undoCombatRoundCommittedDamageCommandAtIndex({
       commandIndex: input.commandIndex,
       state: normalized,
     });

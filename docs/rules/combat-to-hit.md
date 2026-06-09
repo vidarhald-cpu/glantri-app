@@ -1,9 +1,10 @@
 # Glantri Combat To Hit / Damage
 
-This first pass records the canonical hit/miss/grazing rule table for combat to-hit lookup and wires
-GM Phase 1 and Phase 2 attack rolls to that table. D1/D2 can now record a first damage result for
-hits after a failed parry. It does not apply hit points, critical effects, hit location, bleeding, or
-Combat Effects yet.
+This page records the canonical hit/miss/grazing rule table for combat to-hit lookup and wires GM
+Phase 1 and Phase 2 attack rolls to that table. D1/D2 damage resolution first creates a reviewable
+damage result proposal for hits after a failed parry. Committing that proposal writes source-linked
+combat-effect rows for the defender, but hit location, critical-effect automation, bleeding, and
+armor-location lookup remain future work.
 
 ## Hit lookup
 
@@ -51,7 +52,7 @@ applied by the existing combat panel read model.
 Attack result lines show final modified OB and DB totals without exposing the opponent's individual
 modifier breakdown.
 
-After a failed parry, D1/D2 can resolve and store:
+After a failed parry, D1/D2 can resolve and store a damage proposal:
 
 ```text
 damage = weapon DMB + defender DM + table damage modifier + armor modifier + required roll
@@ -62,14 +63,21 @@ and armor are used to derive the grazing die size from the next normal hit row, 
 roll total is stored as damage.
 
 The current armor modifier is `0` until armor and hit-location interaction is implemented. Critical
-grade and minimum damage are stored as table metadata when present, but critical effects and final
-wound/HP application remain future work.
+grade and minimum damage are stored as table metadata when present, but critical effects remain a GM
+review note for now.
 
-Future final-damage sequencing remains:
+The proposal is not applied until the GM uses Commit phase damage. That command writes one
+combat-effect event and, when total damage is positive, one active `general_damage` effect row for
+the defender. The row is source-linked to the command by deterministic event/effect IDs. Phase-one
+committed rows are part of the participant's live JSON-backed combatEffects state before phase two
+continues. Clear unwinds this in two visible steps: first removing only the committed rows and
+returning to the D1/D2 proposal, then removing the proposal and returning to pending damage review.
+
+The intended final-damage sequencing remains:
 
 1. Attack hit/miss/grazing.
 2. Parry.
 3. Hit location with closed `1d20`; if the attacker selected a target location, roll twice and choose
    the result closest to the target.
 4. Armor modifier from hit location plus the armor modifier table.
-5. Final damage/effect proposal.
+5. Final damage/effect proposal and GM commit.

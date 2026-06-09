@@ -19,6 +19,7 @@ import {
   recordCombatRoundDeclaration,
   recordCombatRoundInitiative,
   recordCombatRoundParticipantStepReview,
+  removeCombatRoundCommittedDamageEffects,
   resolveEncounterParticipantByRollParticipantId,
   resolveEncounterParticipantMembership,
   rollOpenEndedD6,
@@ -903,6 +904,12 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           )
           .map((command) => command.participantId),
       );
+      const removedCommittedDamageCommands = roundState.commands.filter(
+        (command) =>
+          command.roundNumber === roundState.roundNumber &&
+          command.type === "commit_phase_damage" &&
+          !nextRoundState.commands.some((remainingCommand) => remainingCommand.id === command.id),
+      );
       const declarationClearEncounterParticipantIds = new Set<string>();
 
       if (clearsDeclarationStep) {
@@ -932,23 +939,51 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         },
       });
       const updatedParticipants =
-        declarationClearEncounterParticipantIds.size > 0
+        declarationClearEncounterParticipantIds.size > 0 ||
+        removedCommittedDamageCommands.length > 0
           ? await Promise.all(
               scenarioParticipants
-                .filter((participant) =>
-                  membership.participants.some(
-                    (encounterParticipant) =>
-                      declarationClearEncounterParticipantIds.has(encounterParticipant.id) &&
-                      encounterParticipant.scenarioParticipantId === participant.id,
-                  ),
-                )
-                .map((participant) =>
-                  encounterService.updateScenarioParticipantState({
-                    participantId: participant.id,
-                    scenarioId,
-                    state: clearScenarioParticipantCombatDeclaration(participant),
-                  }),
-                ),
+                .map((participant) => {
+                  const encounterParticipant = membership.participants.find(
+                    (entry) => entry.scenarioParticipantId === participant.id,
+                  );
+
+                  if (!encounterParticipant) {
+                    return undefined;
+                  }
+
+                  let nextState = participant.state;
+
+                  if (declarationClearEncounterParticipantIds.has(encounterParticipant.id)) {
+                    nextState = clearScenarioParticipantCombatDeclaration({
+                      ...participant,
+                      state: nextState,
+                    });
+                  }
+
+                  for (const command of removedCommittedDamageCommands) {
+                    if (command.participantId !== encounterParticipant.id) {
+                      continue;
+                    }
+
+                    nextState = {
+                      ...nextState,
+                      combatEffects: removeCombatRoundCommittedDamageEffects({
+                        combatEffects: nextState.combatEffects,
+                        command,
+                      }),
+                    };
+                  }
+
+                  return nextState === participant.state
+                    ? undefined
+                    : encounterService.updateScenarioParticipantState({
+                        participantId: participant.id,
+                        scenarioId,
+                        state: nextState,
+                      });
+                })
+                .filter((update): update is Promise<ScenarioParticipant> => Boolean(update)),
             )
           : [];
 

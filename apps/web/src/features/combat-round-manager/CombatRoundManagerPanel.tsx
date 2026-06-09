@@ -29,6 +29,7 @@ import {
   buildCombatRoundInspector,
   characterBuildSchema,
   combatRoundParticipantHasPhaseAttack,
+  commitCombatRoundPhaseDamage,
   completeCombatRoundPhaseResolutionForParticipant,
   ensureCombatRoundPhaseResolutionResultsForPhase,
   formatOpenEndedD20RollBreakdown,
@@ -59,6 +60,9 @@ import { resolveCombatParry, type WorkbookRawModifier } from "@glantri/rules-eng
 
 import { buildEquipmentLoadoutModuleModel } from "@/features/equipment/loadoutModule";
 import type { EquipmentFeatureState } from "@/features/equipment/types";
+import {
+  updateScenarioParticipantStateOnServer,
+} from "@/lib/api/scenarioClient";
 import {
   clearCurrentCombatRoundStepOnServer,
   rollCombatInitiativeOnServer,
@@ -498,7 +502,16 @@ function formatCombatPhaseResolutionResultLines(input: {
   const parryResultLine =
     parry.status === "resolved" && parry.resultLabel ? `Result: ${parry.resultLabel}` : undefined;
   const damageLine = `Damage roll: ${formatResolutionStatusLabel(damage.status)}`;
-  const proposalLine = `Proposal: ${formatResolutionStatusLabel(proposal.status)}`;
+  const proposalLine =
+    proposal.status === "committed"
+      ? `Phase damage committed${
+          proposal.committedCombatEffectIds.length > 0
+            ? ` · ${proposal.committedCombatEffectIds.length} active row${
+                proposal.committedCombatEffectIds.length === 1 ? "" : "s"
+              }`
+            : " · no damage row"
+        }`
+      : `Proposal: ${formatResolutionStatusLabel(proposal.status)}`;
   const statusLine = resolvedDamageLine
     ? `${parryLine} · ${resolvedDamageLine}`
     : parryResultLine
@@ -510,7 +523,10 @@ function formatCombatPhaseResolutionResultLines(input: {
       participantId: input.participantId,
       result: input.attackResult,
     })} · Result: ${input.attackResult.tableResult}`,
-    proposalLine: resolvedDamageResultLine ?? parryResultLine ?? proposalLine,
+    proposalLine:
+      proposal.status === "committed"
+        ? proposalLine
+        : resolvedDamageResultLine ?? parryResultLine ?? proposalLine,
     statusLine,
   };
 }
@@ -1418,9 +1434,13 @@ export default function CombatRoundManagerPanel({
       inspectorResolutionAttackResult?.defenderParticipantId &&
     inspectorParryBase !== undefined &&
     !inspectorSnapshot;
-  const inspectorDamageAlreadyResolved =
+  const inspectorDamageProposalReady =
     inspectorResolutionStepKind === "damage" &&
-    Boolean(inspectorDisplayPhaseResolutionResult?.damageResult);
+    Boolean(inspectorDisplayPhaseResolutionResult?.damageResult) &&
+    inspectorDisplayPhaseResolutionResult?.damageProposal.status !== "committed";
+  const inspectorDamageCommitted =
+    inspectorResolutionStepKind === "damage" &&
+    inspectorDisplayPhaseResolutionResult?.damageProposal.status === "committed";
   const inspectorIsCursorParticipant =
     Boolean(inspectorPhaseResolutionCursor) &&
     inspectorPhaseResolutionCursor?.participantId === inspector.participant?.participantId;
@@ -1454,8 +1474,10 @@ export default function CombatRoundManagerPanel({
     : undefined;
   const inspectorActionButtonLabel = inspectorSelectedAttackAlreadyRolled
     ? "Attack already rolled"
-    : inspectorDamageAlreadyResolved
-      ? "Damage resolved"
+    : inspectorDamageCommitted
+      ? "Phase damage committed"
+      : inspectorDamageProposalReady
+        ? "Commit phase damage"
       : inspectorCanRollParry
       ? "Roll parry"
       : inspectorCurrentResolutionPhase && inspectorActionPhaseHasAttack === false
@@ -2580,6 +2602,74 @@ export default function CombatRoundManagerPanel({
           return;
         }
 
+        const existingDamageResolution = getCombatRoundPhaseResolutionResultForAttack({
+          attackResult: damageReviewAttackResult,
+          state: roundState,
+        });
+
+        if (
+          existingDamageResolution?.damageResult &&
+          existingDamageResolution.damageProposal.status !== "committed"
+        ) {
+          if (!encounter.scenarioId) {
+            setSaveError("Scenario id is required to commit phase damage.");
+            return;
+          }
+
+          const defenderEncounterParticipant = encounter.participants.find(
+            (participant) => participant.id === damageReviewAttackResult.defenderParticipantId,
+          );
+          const defenderScenarioParticipant = defenderEncounterParticipant
+            ? findScenarioParticipantForEncounterParticipant({
+                encounterParticipant: defenderEncounterParticipant,
+                scenarioParticipants: effectiveScenarioParticipants,
+              })
+            : undefined;
+          const attackerEncounterParticipant = encounter.participants.find(
+            (participant) => participant.id === damageReviewAttackResult.attackerParticipantId,
+          );
+          const attackerScenarioParticipant = attackerEncounterParticipant
+            ? findScenarioParticipantForEncounterParticipant({
+                encounterParticipant: attackerEncounterParticipant,
+                scenarioParticipants: effectiveScenarioParticipants,
+              })
+            : undefined;
+
+          if (!defenderScenarioParticipant) {
+            setSaveError("Defender scenario participant state is required to commit damage.");
+            return;
+          }
+
+          const committed = commitCombatRoundPhaseDamage({
+            attackerScenarioParticipantId: attackerScenarioParticipant?.id,
+            command: {
+              createdAt: updatedAt,
+            },
+            combatEffects: defenderScenarioParticipant.state.combatEffects,
+            defenderScenarioParticipantId: defenderScenarioParticipant.id,
+            encounterId: encounter.id,
+            scenarioId: encounter.scenarioId,
+            state: roundState,
+          });
+          const updatedParticipant = await updateScenarioParticipantStateOnServer({
+            participantId: defenderScenarioParticipant.id,
+            scenarioId: encounter.scenarioId,
+            state: {
+              ...defenderScenarioParticipant.state,
+              combatEffects: committed.combatEffects,
+            },
+          });
+
+          setScenarioParticipantOverrides((current) => ({
+            ...current,
+            [updatedParticipant.id]: updatedParticipant,
+          }));
+          onScenarioParticipantsUpdated?.([updatedParticipant]);
+          await persistRoundState(committed.state);
+          setSaveError(undefined);
+          return;
+        }
+
         const phaseLabel = formatCombatPhaseLabel(phase);
         const attackerRoundParticipant = roundState.participants.find(
           (participant) =>
@@ -3124,7 +3214,7 @@ export default function CombatRoundManagerPanel({
                         saving ||
                         Boolean(inspectorTargetValidationMessage) ||
                         inspectorSelectedAttackAlreadyRolled ||
-                        inspectorDamageAlreadyResolved ||
+                        inspectorDamageCommitted ||
                         Boolean(inspectorSnapshot)
                       }
                       onDeclareAction={() =>
