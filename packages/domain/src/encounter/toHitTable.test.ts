@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   COMBAT_TO_HIT_RULE_TABLE,
   calculateToHitLookupTotal,
+  lookupCombatToHitDamageMetadata,
   lookupCombatToHitResult,
   rollOpenEndedCombatToHitD20,
   resolveCombatToHit,
@@ -20,6 +21,7 @@ describe("combat to-hit table helpers", () => {
       title: "Combat To Hit",
     });
     expect(COMBAT_TO_HIT_RULE_TABLE.notes.join(" ")).toContain("Legacy workbook sheet `To Hit table` is not canonical");
+    expect(COMBAT_TO_HIT_RULE_TABLE.notes.join(" ")).toContain("Lookup totals 17 and 18 have duplicate damage rows");
   });
 
   it("resolves OB = DB and roll total 10 as a miss", () => {
@@ -31,6 +33,7 @@ describe("combat to-hit table helpers", () => {
       resultKey: "miss",
       resultLabel: "Miss",
     });
+    expect(lookupCombatToHitDamageMetadata(10)).toBeUndefined();
   });
 
   it("resolves OB = DB and roll total 11 as a grazing hit", () => {
@@ -41,6 +44,7 @@ describe("combat to-hit table helpers", () => {
       resultKey: "grazing-hit",
       resultLabel: "Grazing hit",
     });
+    expect(() => lookupCombatToHitDamageMetadata(11)).toThrow(/Grazing damage/);
   });
 
   it("resolves OB 9, DB 11, roll total 18 as a hit", () => {
@@ -76,7 +80,35 @@ describe("combat to-hit table helpers", () => {
     });
   });
 
-  it("does not let duplicate 17/18 damage rows affect hit classification", () => {
+  it("returns damage metadata for unambiguous hit rows", () => {
+    expect(lookupCombatToHitDamageMetadata(12)).toEqual({
+      damageModifier: 1,
+      sourceRows: ["to hit (new)!A6:E6"],
+    });
+    expect(lookupCombatToHitDamageMetadata(16)).toEqual({
+      damageModifier: 3,
+      sourceRows: ["to hit (new)!A10:E10"],
+    });
+    expect(lookupCombatToHitDamageMetadata(19)).toEqual({
+      criticalGrade: "a",
+      damageModifier: 8,
+      sourceRows: ["to hit (new)!A15:F15"],
+    });
+    expect(lookupCombatToHitDamageMetadata(20)).toEqual({
+      criticalGrade: "b",
+      damageModifier: 9,
+      minDamage: 1,
+      sourceRows: ["to hit (new)!A16:G16"],
+    });
+    expect(lookupCombatToHitDamageMetadata(33)).toEqual({
+      criticalGrade: "f",
+      damageModifier: 22,
+      minDamage: 5,
+      sourceRows: ["to hit (new)!A29:G29"],
+    });
+  });
+
+  it("does not let duplicate 17/18 damage rows affect hit classification and rejects their damage metadata", () => {
     expect(lookupCombatToHitResult(17)).toMatchObject({
       grazing: false,
       hit: true,
@@ -87,7 +119,8 @@ describe("combat to-hit table helpers", () => {
       hit: true,
       resultKey: "hit",
     });
-    expect(COMBAT_TO_HIT_RULE_TABLE.notes.join(" ")).toContain("duplicate 17/18 rows");
+    expect(() => lookupCombatToHitDamageMetadata(17)).toThrow(/ambiguous damage metadata/);
+    expect(() => lookupCombatToHitDamageMetadata(18)).toThrow(/ambiguous damage metadata/);
   });
 
   it("rejects non-integer lookup totals instead of silently normalizing them", () => {

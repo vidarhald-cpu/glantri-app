@@ -25,7 +25,8 @@ const combatToHitHumanNotes = [
   "10 or lower misses.",
   "11 is a grazing hit.",
   "12 or higher hits.",
-  "Damage and critical details are separate and will be added later.",
+  "Damage result uses weapon DMB, defender DM, the table damage modifier, armor modifier, and any required roll.",
+  "Rows marked needs clarification are blocked from automated damage until the table ambiguity is resolved.",
 ];
 
 export default function TablesAdminPage() {
@@ -102,6 +103,30 @@ function formatBoolean(value: boolean): string {
   return value ? "Yes" : "No";
 }
 
+function formatCombatDamageModifier(row: CombatToHitRuleTable["rows"][number]): string {
+  if (row.ambiguousDamage) {
+    return "Needs clarification";
+  }
+
+  if (row.damageModifier !== undefined) {
+    return row.damageModifier.toString();
+  }
+
+  if (row.damageModifierFormula === "lookup-minus-11") {
+    return "Lookup - 11";
+  }
+
+  return "—";
+}
+
+function formatCombatCriticalGrade(row: CombatToHitRuleTable["rows"][number]): string {
+  return row.criticalGrade ? row.criticalGrade.toUpperCase() : "—";
+}
+
+function formatMinimumDamage(row: CombatToHitRuleTable["rows"][number]): string {
+  return row.minDamage !== undefined ? row.minDamage.toString() : "—";
+}
+
 function CombatToHitRuleTablePanel(props: {
   table: CombatToHitRuleTable;
 }) {
@@ -127,13 +152,16 @@ function CombatToHitRuleTablePanel(props: {
             overflowX: "auto",
           }}
         >
-          <table style={{ borderCollapse: "collapse", minWidth: 620, width: "100%" }}>
+          <table style={{ borderCollapse: "collapse", minWidth: 860, width: "100%" }}>
             <thead style={{ background: "rgba(255, 252, 245, 0.95)" }}>
               <tr>
                 <th style={tableHeaderStyle}>Lookup total</th>
                 <th style={tableHeaderStyle}>Result</th>
                 <th style={tableHeaderStyle}>Hit?</th>
                 <th style={tableHeaderStyle}>Grazing?</th>
+                <th style={tableHeaderStyle}>Damage mod</th>
+                <th style={tableHeaderStyle}>Critical</th>
+                <th style={tableHeaderStyle}>Min damage</th>
               </tr>
             </thead>
             <tbody>
@@ -143,6 +171,9 @@ function CombatToHitRuleTablePanel(props: {
                   <td style={tableCellStyle}>{row.resultLabel}</td>
                   <td style={tableCellStyle}>{formatBoolean(row.hit)}</td>
                   <td style={tableCellStyle}>{formatBoolean(row.grazing)}</td>
+                  <td style={tableCellStyle}>{formatCombatDamageModifier(row)}</td>
+                  <td style={tableCellStyle}>{formatCombatCriticalGrade(row)}</td>
+                  <td style={tableCellStyle}>{formatMinimumDamage(row)}</td>
                 </tr>
               ))}
             </tbody>

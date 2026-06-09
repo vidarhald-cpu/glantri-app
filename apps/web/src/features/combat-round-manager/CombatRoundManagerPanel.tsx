@@ -46,7 +46,7 @@ import {
   hasScenarioParticipantCombatDeclarationForEncounterRound,
   initializeCombatRoundState,
   recordCombatRoundAttackResult,
-  recordCombatRoundDamageReviewPlaceholder,
+  recordCombatRoundDamageResult,
   recordCombatRoundNoAttackPhaseReview,
   recordCombatRoundParryResult,
   rollOpenEndedD20,
@@ -430,6 +430,36 @@ function formatResolutionStatusLabel(value: string): string {
     .join(" ");
 }
 
+function formatCombatDamageCalculationLine(
+  damage: CombatRoundPhaseResolutionResult["damageResult"],
+): string | undefined {
+  if (!damage) {
+    return undefined;
+  }
+
+  const damageLabel = damage.grazing ? "grazing" : "hit";
+  const rollPart =
+    damage.damageRoll.required && damage.damageRoll.total !== undefined
+      ? ` + roll ${damage.damageRoll.total}`
+      : "";
+
+  return `Damage: DMB ${damage.dmb} + DM ${damage.defenderDm} + ${damageLabel} ${damage.tableDamageModifier}${rollPart} + armor ${damage.armorModifier ?? 0} = ${damage.totalDamage}`;
+}
+
+function formatCombatDamageResultLine(
+  damage: CombatRoundPhaseResolutionResult["damageResult"],
+): string | undefined {
+  if (!damage) {
+    return undefined;
+  }
+
+  const critical = damage.criticalGrade
+    ? ` · Critical: ${damage.criticalGrade.toUpperCase()} pending`
+    : "";
+
+  return `Result: ${damage.totalDamage} damage${critical}`;
+}
+
 function formatCombatPhaseResolutionResultLines(input: {
   attackResult: CombatRoundAttackRollResult;
   participantId?: string;
@@ -441,8 +471,11 @@ function formatCombatPhaseResolutionResultLines(input: {
 } {
   const parry = input.resolution.parryResolution;
   const damage = input.resolution.damageRoll;
+  const damageResult = input.resolution.damageResult;
   const proposal = input.resolution.damageProposal;
   const resolvedParryLine = formatCombatParryCalculationLine(parry);
+  const resolvedDamageLine = formatCombatDamageCalculationLine(damageResult);
+  const resolvedDamageResultLine = formatCombatDamageResultLine(damageResult);
   const parryLine =
     resolvedParryLine ??
     `Parry: ${formatResolutionStatusLabel(parry.status)}${
@@ -452,14 +485,19 @@ function formatCombatPhaseResolutionResultLines(input: {
     parry.status === "resolved" && parry.resultLabel ? `Result: ${parry.resultLabel}` : undefined;
   const damageLine = `Damage roll: ${formatResolutionStatusLabel(damage.status)}`;
   const proposalLine = `Proposal: ${formatResolutionStatusLabel(proposal.status)}`;
+  const statusLine = resolvedDamageLine
+    ? `${parryLine} · ${resolvedDamageLine}`
+    : parryResultLine
+      ? parryLine
+      : `${parryLine} · ${damageLine}`;
 
   return {
     attackLine: `${formatCombatAttackResultLine({
       participantId: input.participantId,
       result: input.attackResult,
     })} · Result: ${input.attackResult.tableResult}`,
-    proposalLine: parryResultLine ?? proposalLine,
-    statusLine: parryResultLine ? parryLine : `${parryLine} · ${damageLine}`,
+    proposalLine: resolvedDamageResultLine ?? parryResultLine ?? proposalLine,
+    statusLine,
   };
 }
 
@@ -542,7 +580,7 @@ function getCombatResolutionButtonLabel(input: {
   }
 
   if (input.phase && input.substep === "damage") {
-    return "Mark damage review deferred";
+    return "Resolve damage";
   }
 
   if (input.phase && input.substep === "effects") {
@@ -1366,6 +1404,9 @@ export default function CombatRoundManagerPanel({
       inspectorResolutionAttackResult?.defenderParticipantId &&
     inspectorParryBase !== undefined &&
     !inspectorSnapshot;
+  const inspectorDamageAlreadyResolved =
+    inspectorResolutionStepKind === "damage" &&
+    Boolean(inspectorDisplayPhaseResolutionResult?.damageResult);
   const inspectorIsCursorParticipant =
     Boolean(inspectorPhaseResolutionCursor) &&
     inspectorPhaseResolutionCursor?.participantId === inspector.participant?.participantId;
@@ -1399,7 +1440,9 @@ export default function CombatRoundManagerPanel({
     : undefined;
   const inspectorActionButtonLabel = inspectorSelectedAttackAlreadyRolled
     ? "Attack already rolled"
-    : inspectorCanRollParry
+    : inspectorDamageAlreadyResolved
+      ? "Damage resolved"
+      : inspectorCanRollParry
       ? "Roll parry"
       : inspectorCurrentResolutionPhase && inspectorActionPhaseHasAttack === false
         ? `Complete ${formatCombatPhaseLabel(inspectorCurrentResolutionPhase)} for participant`
@@ -2523,11 +2566,49 @@ export default function CombatRoundManagerPanel({
           return;
         }
 
-        nextRoundState = recordCombatRoundDamageReviewPlaceholder({
+        const phaseLabel = formatCombatPhaseLabel(phase);
+        const attackerRoundParticipant = roundState.participants.find(
+          (participant) =>
+            participant.participantId === damageReviewAttackResult.attackerParticipantId,
+        );
+        const attackerEncounterParticipant = encounter.participants.find(
+          (participant) => participant.id === damageReviewAttackResult.attackerParticipantId,
+        );
+        const attackerScenarioParticipant = attackerEncounterParticipant
+          ? findScenarioParticipantForEncounterParticipant({
+              encounterParticipant: attackerEncounterParticipant,
+              scenarioParticipants: effectiveScenarioParticipants,
+            })
+          : undefined;
+        const attackerPhaseSummary = buildScenarioParticipantPhaseSummary({
+          declaration: attackerRoundParticipant?.declaration,
+          phaseKey: phase,
+          scenarioParticipant: attackerScenarioParticipant,
+        });
+        const attackStats = attackerPhaseSummary.attackStats;
+        const defenseStats = inspectorParryDefenderPhaseSummary?.defenseStats;
+
+        if (!attackStats) {
+          setSaveError(`${phaseLabel} attack DMB is not available.`);
+          return;
+        }
+
+        if (!defenseStats) {
+          setSaveError(`${phaseLabel} defender DM is not available.`);
+          return;
+        }
+
+        const dmb = parseCombatInteger(attackStats.dmb, `${phaseLabel} DMB`);
+        const defenderDm = parseCombatInteger(defenseStats.dm, `${phaseLabel} defender DM`);
+
+        nextRoundState = recordCombatRoundDamageResult({
           attackResult: damageReviewAttackResult,
           command: {
             createdAt: updatedAt,
           },
+          armorModifier: 0,
+          defenderDm,
+          dmb,
           state: roundState,
           submittedBy: "gm",
           updatedAt,
@@ -3029,6 +3110,7 @@ export default function CombatRoundManagerPanel({
                         saving ||
                         Boolean(inspectorTargetValidationMessage) ||
                         inspectorSelectedAttackAlreadyRolled ||
+                        inspectorDamageAlreadyResolved ||
                         Boolean(inspectorSnapshot)
                       }
                       onDeclareAction={() =>

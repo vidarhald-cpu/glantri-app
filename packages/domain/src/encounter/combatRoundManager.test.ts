@@ -39,6 +39,7 @@ import {
   recordCombatRoundDeclaration,
   recordCombatRoundAttackResult,
   recordCombatRoundDamageReviewPlaceholder,
+  recordCombatRoundDamageResult,
   recordCombatRoundInitiative,
   recordCombatRoundNoAttackPhaseReview,
   recordCombatRoundParryResult,
@@ -2989,6 +2990,237 @@ describe("combat round manager", () => {
         step: "phase_1_damage",
       }),
     ).toBe("pending");
+  });
+
+  it("records and undoes D1 damage result commands after failed parry", () => {
+    const state = initializeCombatRoundPhaseResolutionCursor({
+      phase: "phase1",
+      state: setCombatRoundParticipantInitiative({
+        initiative: { baseInitiative: 0, modifierAdjustment: 0, rolls: [6], rollTotal: 6, total: 6 },
+        participantId: "gladiator",
+        phase: "phase1",
+        state: setCombatRoundParticipantInitiative({
+          initiative: {
+            baseInitiative: 0,
+            modifierAdjustment: 0,
+            rolls: [4],
+            rollTotal: 4,
+            total: 4,
+          },
+          participantId: "guard",
+          phase: "phase1",
+          state: declareRoundAction({
+            actionId: "attack_parry",
+            participantId: "guard",
+            state: declareRoundAction({
+              actionId: "attack_parry",
+              participantId: "gladiator",
+              state: initializeCombatRoundState({ encounter: encounter() }),
+            }),
+          }),
+        }),
+      }),
+      updatedAt: "2026-01-01T00:02:00.000Z",
+    });
+    const result = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackerParticipantId: "gladiator",
+      defenderDb: 10,
+      defenderParticipantId: "guard",
+      ob: 10,
+      phase: "phase1",
+      rollD20: 12,
+      rollTotal: 12,
+      rolledAt: "2026-01-01T00:03:00.000Z",
+      weaponName: "Broad sword",
+    });
+    const afterAttack = recordCombatRoundAttackResult({
+      command: {
+        createdAt: result.rolledAt,
+        createdByUserId: "gm-1",
+      },
+      participantId: "gladiator",
+      result,
+      state,
+      submittedBy: "gm",
+    });
+    const afterParry = recordCombatRoundParryResult({
+      attackResult: result,
+      command: {
+        createdAt: "2026-01-01T00:04:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      parryResolution: {
+        combinedParryScore: 9,
+        modifierAdjustment: 0,
+        openEndedD10s: [],
+        resultLabel: "Parry failed",
+        rollD20: 8,
+        rollTotal: 8,
+        status: "resolved",
+        success: false,
+        targetNumber: 21,
+        total: 17,
+      },
+      state: afterAttack,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:04:00.000Z",
+    });
+    const afterDamage = recordCombatRoundDamageResult({
+      attackResult: result,
+      command: {
+        createdAt: "2026-01-01T00:05:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      defenderDm: 0,
+      dmb: 8,
+      state: afterParry,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:05:00.000Z",
+    });
+    const cleared = clearCombatRoundStep({
+      state: {
+        ...afterDamage,
+        selectedParticipantId: "gladiator",
+        selectedStep: "initiative_phase_1",
+      },
+      step: "initiative_phase_1",
+    });
+
+    expect(afterDamage.commands.at(-1)).toMatchObject({
+      afterCursor: {
+        participantId: "guard",
+        roundNumber: 3,
+        step: "A1",
+      },
+      beforeCursor: {
+        participantId: "guard",
+        roundNumber: 3,
+        step: "D1",
+      },
+      facts: expect.objectContaining({
+        attackResultId: "3:phase1:gladiator:guard",
+        attackerParticipantId: "gladiator",
+        damageResultId: "3:phase1:gladiator:guard:damage",
+        defenderParticipantId: "guard",
+        status: "resolved",
+        totalDamage: 9,
+      }),
+      participantId: "guard",
+      phase: "phase1",
+      step: "D1",
+      type: "resolve_damage",
+    });
+    expect(afterDamage.phaseResolutionResults[0]?.damageResult).toMatchObject({
+      armorModifier: 0,
+      attackResultId: "3:phase1:gladiator:guard",
+      attackerParticipantId: "gladiator",
+      defenderDm: 0,
+      defenderParticipantId: "guard",
+      dmb: 8,
+      grazing: false,
+      kind: "damage_result",
+      lookupTotal: 12,
+      tableDamageModifier: 1,
+      totalDamage: 9,
+      weaponName: "Broad sword",
+    });
+    expect(afterDamage.phaseResolutionResults[0]?.damageRoll).toMatchObject({
+      status: "rolled",
+      total: 9,
+    });
+    expect(afterDamage.phaseResolutionResults[0]?.damageProposal.proposedEffects).toEqual([]);
+    expect(
+      getCombatRoundParticipantPhaseStepStatus({
+        participantId: "guard",
+        state: afterDamage,
+        step: "phase_1_damage",
+      }),
+    ).toBe("gmEdited");
+    expect(cleared.commands.at(-1)).toMatchObject({
+      participantId: "guard",
+      type: "roll_parry",
+    });
+    expect(cleared.currentCursor).toEqual({
+      participantId: "guard",
+      roundNumber: 3,
+      step: "D1",
+    });
+    expect(cleared.currentStep).toBe("phase_1_damage");
+    expect(cleared.selectedParticipantId).toBe("guard");
+    expect(cleared.selectedStep).toBe("phase_1_damage");
+    expect(cleared.participants[0]?.attackResults.phase1).toEqual(result);
+    expect(cleared.phaseResolutionResults[0]?.parryResolution).toMatchObject({
+      status: "resolved",
+      success: false,
+    });
+    expect(cleared.phaseResolutionResults[0]?.damageResult).toBeUndefined();
+    expect(cleared.phaseResolutionResults[0]?.damageRoll.status).toBe("pending");
+    expect(cleared.phaseResolutionResults[0]?.damageProposal.proposedEffects).toEqual([]);
+  });
+
+  it("rejects D1 damage resolution for ambiguous 17/18 hit rows", () => {
+    const state = initializeCombatRoundPhaseResolutionCursor({
+      phase: "phase1",
+      state: declareRoundAction({
+        actionId: "attack_parry",
+        participantId: "gladiator",
+        state: initializeCombatRoundState({ encounter: encounter() }),
+      }),
+      updatedAt: "2026-01-01T00:02:00.000Z",
+    });
+    const result = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackerParticipantId: "gladiator",
+      defenderDb: 10,
+      defenderParticipantId: "guard",
+      ob: 10,
+      phase: "phase1",
+      rollD20: 17,
+      rollTotal: 17,
+      rolledAt: "2026-01-01T00:03:00.000Z",
+      weaponName: "Broad sword",
+    });
+    const afterAttack = recordCombatRoundAttackResult({
+      participantId: "gladiator",
+      result,
+      state,
+      submittedBy: "gm",
+    });
+    const afterParry = recordCombatRoundParryResult({
+      attackResult: result,
+      parryResolution: {
+        combinedParryScore: 9,
+        modifierAdjustment: 0,
+        openEndedD10s: [],
+        resultLabel: "Parry failed",
+        rollD20: 8,
+        rollTotal: 8,
+        status: "resolved",
+        success: false,
+        targetNumber: 21,
+        total: 17,
+      },
+      state: afterAttack,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:04:00.000Z",
+    });
+
+    expect(result.lookupTotal).toBe(17);
+    expect(() =>
+      recordCombatRoundDamageResult({
+        attackResult: result,
+        command: {
+          createdAt: "2026-01-01T00:05:00.000Z",
+          createdByUserId: "gm-1",
+        },
+        defenderDm: 0,
+        dmb: 8,
+        state: afterParry,
+        submittedBy: "gm",
+        updatedAt: "2026-01-01T00:05:00.000Z",
+      }),
+    ).toThrow(/ambiguous damage metadata/);
   });
 
   it("records and undoes D2 placeholder damage review commands after failed parry", () => {

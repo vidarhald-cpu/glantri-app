@@ -128,7 +128,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("rollOpenEndedD20");
     expect(source).toContain("resolveCombatParry");
     expect(source).toContain("recordCombatRoundParryResult");
-    expect(source).toContain("recordCombatRoundDamageReviewPlaceholder");
+    expect(source).toContain("recordCombatRoundDamageResult");
     expect(source).toContain("recordCombatRoundNoAttackPhaseReview");
     expect(source).toContain("formatOpenEndedD20RollBreakdown");
     expect(source).toContain("formatCombatDefenseResultMainLine");
@@ -149,7 +149,10 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("Parry: ${formatResolutionStatusLabel");
     expect(source).toContain("Parry successful");
     expect(source).toContain("Parry failed");
-    expect(source).toContain("Mark damage review deferred");
+    expect(source).toContain("Resolve damage");
+    expect(source).toContain('"Damage resolved"');
+    expect(source).toContain("Damage: DMB ${damage.dmb} + DM ${damage.defenderDm}");
+    expect(source).toContain("Result: ${damage.totalDamage} damage");
     expect(source).toContain("Damage roll: ${formatResolutionStatusLabel");
     expect(source).toContain("Proposal: ${formatResolutionStatusLabel");
     expect(source).toContain("buildCombatRoundAttackRollResult");
@@ -259,6 +262,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("command: {");
     expect(source).toContain("participantId: commandParticipantId");
     expect(source).toContain("inspectorSelectedAttackAlreadyRolled ||");
+    expect(source).toContain("inspectorDamageAlreadyResolved ||");
     expect(source).toContain("Select a participant step to inspect combat details.");
     expect(source).toContain("Previous participant");
     expect(source).toContain("Next participant");

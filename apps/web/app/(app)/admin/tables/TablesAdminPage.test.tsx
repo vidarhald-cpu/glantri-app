@@ -22,7 +22,12 @@ describe("TablesAdminPage", () => {
     ).not.toBeNull();
     expect(
       within(panel as HTMLElement).queryByText(
-        "Damage and critical details are separate and will be added later.",
+        "Damage result uses weapon DMB, defender DM, the table damage modifier, armor modifier, and any required roll.",
+      ),
+    ).not.toBeNull();
+    expect(
+      within(panel as HTMLElement).queryByText(
+        "Rows marked needs clarification are blocked from automated damage until the table ambiguity is resolved.",
       ),
     ).not.toBeNull();
     expect(within(panel as HTMLElement).queryByText("Sheet: to hit (new)")).toBeNull();
@@ -35,11 +40,15 @@ describe("TablesAdminPage", () => {
         .map((cell) => cell.textContent),
     );
 
-    expect(bodyRows).toEqual([
-      ["<= 10", "Miss", "No", "No"],
-      ["11", "Grazing hit", "Yes", "Yes"],
-      [">= 12", "Hit", "Yes", "No"],
+    expect(bodyRows.slice(0, 3)).toEqual([
+      ["<= 10", "Miss", "No", "No", "—", "—", "—"],
+      ["11", "Grazing hit", "Yes", "Yes", "Needs clarification", "—", "—"],
+      ["12", "Hit", "Yes", "No", "1", "—", "—"],
     ]);
+    expect(bodyRows).toContainEqual(["17", "Hit", "Yes", "No", "Needs clarification", "—", "—"]);
+    expect(bodyRows).toContainEqual(["18", "Hit", "Yes", "No", "Needs clarification", "—", "—"]);
+    expect(bodyRows).toContainEqual(["20", "Hit", "Yes", "No", "9", "B", "1"]);
+    expect(bodyRows.at(-1)).toEqual([">= 33", "Hit", "Yes", "No", "Lookup - 11", "F", "5"]);
   });
 
   it("renders the canonical combat hit-location table from structured rule data", () => {
