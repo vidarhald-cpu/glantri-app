@@ -47,6 +47,7 @@ import {
   initializeCombatRoundState,
   recordCombatRoundAttackResult,
   recordCombatRoundDamageReviewPlaceholder,
+  recordCombatRoundNoAttackPhaseReview,
   recordCombatRoundParryResult,
   rollOpenEndedD20,
   rollOpenEndedCombatToHitD20,
@@ -2459,13 +2460,30 @@ export default function CombatRoundManagerPanel({
     setSaving(true);
 
     try {
-      const nextRoundState = completeCombatRoundPhaseResolutionForParticipant({
+      const updatedAt = new Date().toISOString();
+      const ownerHasPhaseAttack = combatRoundParticipantHasPhaseAttack({
         participantId: ownerParticipantId,
         phase,
         state: roundState,
-        submittedBy: "gm",
-        updatedAt: new Date().toISOString(),
       });
+      const nextRoundState = ownerHasPhaseAttack
+        ? completeCombatRoundPhaseResolutionForParticipant({
+            participantId: ownerParticipantId,
+            phase,
+            state: roundState,
+            submittedBy: "gm",
+            updatedAt,
+          })
+        : recordCombatRoundNoAttackPhaseReview({
+            command: {
+              createdAt: updatedAt,
+            },
+            participantId: ownerParticipantId,
+            phase,
+            state: roundState,
+            submittedBy: "gm",
+            updatedAt,
+          });
 
       await persistRoundState(nextRoundState);
       setSaveError(undefined);
