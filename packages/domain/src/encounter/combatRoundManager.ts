@@ -113,6 +113,7 @@ export const combatRoundCommandTypeSchema = z.enum([
   "complete_damage_review_phase2",
   "resolve_damage",
   "commit_phase_damage",
+  "complete_round",
 ]);
 export type CombatRoundCommandType = z.infer<typeof combatRoundCommandTypeSchema>;
 
@@ -704,7 +705,14 @@ export function getCombatRoundStepForCursorStep(step: CombatRoundCursorStep): Co
 }
 
 export function isGlobalCombatRoundCursorStep(step: CombatRoundCursorStep): boolean {
-  return step === "DE" || step === "M1" || step === "i1" || step === "M2" || step === "i2";
+  return (
+    step === "DE" ||
+    step === "M1" ||
+    step === "i1" ||
+    step === "M2" ||
+    step === "i2" ||
+    step === "SU"
+  );
 }
 
 function isGlobalCombatRoundStep(step: CombatRoundStep): boolean {
@@ -713,7 +721,8 @@ function isGlobalCombatRoundStep(step: CombatRoundStep): boolean {
     step === "review_action_modifiers" ||
     step === "initiative_phase_1" ||
     step === "review_phase_2_modifiers" ||
-    step === "initiative_phase_2"
+    step === "initiative_phase_2" ||
+    step === "round_summary"
   );
 }
 
@@ -731,6 +740,8 @@ function getCombatRoundGlobalCommandTypeForStep(
       return "review_modifiers_phase2";
     case "initiative_phase_2":
       return "roll_initiative_phase2";
+    case "round_summary":
+      return "complete_round";
     default:
       return undefined;
   }
@@ -788,6 +799,39 @@ function getCombatRoundCursorStepForPhaseResolutionSubstep(input: {
     case "damage":
       return getCombatRoundDamageCursorStepForPhase(input.phase);
   }
+}
+
+function getCombatRoundPhaseCompletionCursor(input: {
+  phase: CombatRoundPhase;
+  state: CombatRoundState;
+}): CombatRoundCursor {
+  const participantId = input.state.participants[0]?.participantId;
+
+  return combatRoundCursorSchema.parse({
+    participantId,
+    roundNumber: input.state.roundNumber,
+    step: input.phase === "phase1" ? "M2" : "SU",
+  });
+}
+
+function getCombatRoundPhaseActionOrCompletionCursor(input: {
+  phase: CombatRoundPhase;
+  state: CombatRoundState;
+}): CombatRoundCursor {
+  const phaseCursor =
+    input.state.phaseResolutionCursor?.phase === input.phase
+      ? input.state.phaseResolutionCursor
+      : undefined;
+
+  if (!phaseCursor?.participantId) {
+    return getCombatRoundPhaseCompletionCursor(input);
+  }
+
+  return combatRoundCursorSchema.parse({
+    participantId: phaseCursor.participantId,
+    roundNumber: input.state.roundNumber,
+    step: getCombatRoundAttackCursorStepForPhase(input.phase),
+  });
 }
 
 function buildCombatRoundCommandId(input: {
@@ -904,7 +948,8 @@ function isGlobalCombatRoundCommandType(type: CombatRoundCommandType): boolean {
     type === "review_modifiers_phase1" ||
     type === "roll_initiative_phase1" ||
     type === "review_modifiers_phase2" ||
-    type === "roll_initiative_phase2"
+    type === "roll_initiative_phase2" ||
+    type === "complete_round"
   );
 }
 
@@ -1835,16 +1880,7 @@ function getCombatRoundPhaseActionSkipCommandAfterCursor(input: {
   phase: CombatRoundPhase;
   state: CombatRoundState;
 }): CombatRoundCursor {
-  const phaseCursor =
-    input.state.phaseResolutionCursor?.phase === input.phase
-      ? input.state.phaseResolutionCursor
-      : undefined;
-
-  return combatRoundCursorSchema.parse({
-    participantId: phaseCursor?.participantId,
-    roundNumber: input.state.roundNumber,
-    step: getCombatRoundAttackCursorStepForPhase(input.phase),
-  });
+  return getCombatRoundPhaseActionOrCompletionCursor(input);
 }
 
 function recordCombatRoundPhaseActionSkipCommand(input: {
@@ -2182,15 +2218,9 @@ function getCombatRoundParryCommandAfterCursor(input: {
   state: CombatRoundState;
 }): CombatRoundCursor {
   if (input.parryResolution.success === true) {
-    const phaseCursor =
-      input.state.phaseResolutionCursor?.phase === input.attackResult.phase
-        ? input.state.phaseResolutionCursor
-        : undefined;
-
-    return combatRoundCursorSchema.parse({
-      participantId: phaseCursor?.participantId,
-      roundNumber: input.state.roundNumber,
-      step: getCombatRoundAttackCursorStepForPhase(input.attackResult.phase),
+    return getCombatRoundPhaseActionOrCompletionCursor({
+      phase: input.attackResult.phase,
+      state: input.state,
     });
   }
 
@@ -3383,16 +3413,7 @@ function getCombatRoundDamageReviewCommandAfterCursor(input: {
   phase: CombatRoundPhase;
   state: CombatRoundState;
 }): CombatRoundCursor {
-  const phaseCursor =
-    input.state.phaseResolutionCursor?.phase === input.phase
-      ? input.state.phaseResolutionCursor
-      : undefined;
-
-  return combatRoundCursorSchema.parse({
-    participantId: phaseCursor?.participantId,
-    roundNumber: input.state.roundNumber,
-    step: getCombatRoundAttackCursorStepForPhase(input.phase),
-  });
+  return getCombatRoundPhaseActionOrCompletionCursor(input);
 }
 
 function recordCombatRoundDamageReviewCommand(input: {
@@ -3670,6 +3691,8 @@ function getCombatRoundTopAdvanceParticipantStatus(input: {
       return input.participant.initiatives.phase1 ? undefined : "complete";
     case "initiative_phase_2":
       return input.participant.initiatives.phase2 ? undefined : "complete";
+    case "round_summary":
+      return "complete";
     default:
       return undefined;
   }
@@ -3734,7 +3757,8 @@ export function advanceCombatRoundStep(
       })
     : withCommand;
   const nextStep = getNextCombatRoundStep(normalized.currentStep);
-  const startsNextRound = normalized.currentStep === "round_summary";
+  const completesRoundSummary = normalized.currentStep === "round_summary" && Boolean(advanceCommand);
+  const startsNextRound = normalized.currentStep === "round_summary" && !advanceCommand;
   const advancesDeclarationStep = normalized.currentStep === "select_actions";
   const startsPhaseResolution =
     nextStep === "phase_1_actions"
@@ -3746,6 +3770,32 @@ export function advanceCombatRoundStep(
     ? withSnapshots.roundNumber + 1
     : withSnapshots.roundNumber;
   const nextGlobalParticipantId = withSnapshots.participants[0]?.participantId;
+
+  if (completesRoundSummary) {
+    return combatRoundStateSchema.parse({
+      ...withSnapshots,
+      currentCursor:
+        withSnapshots.currentCursor ??
+        getDefaultCombatRoundCursor({
+          participantId: nextGlobalParticipantId,
+          roundNumber: nextRoundNumber,
+          step: "round_summary",
+        }),
+      currentStep: "round_summary",
+      participants: withSnapshots.participants.map((participant) => ({
+        ...participant,
+        stepStatuses: {
+          ...participant.stepStatuses,
+          round_summary:
+            commandBackedGlobalAdvanceStatusByParticipantId.get(participant.participantId) ??
+            participant.stepStatuses.round_summary,
+        },
+      })),
+      selectedParticipantId: withSnapshots.selectedParticipantId ?? nextGlobalParticipantId,
+      selectedStep: "round_summary",
+    });
+  }
+
   const baseState: CombatRoundState = {
     ...withSnapshots,
     activeParticipantId: startsNextRound ? undefined : withSnapshots.activeParticipantId,
@@ -3980,15 +4030,9 @@ function getCombatRoundAttackCommandAfterCursor(input: {
     });
   }
 
-  const phaseCursor =
-    input.state.phaseResolutionCursor?.phase === input.result.phase
-      ? input.state.phaseResolutionCursor
-      : undefined;
-
-  return combatRoundCursorSchema.parse({
-    participantId: phaseCursor?.participantId,
-    roundNumber: input.state.roundNumber,
-    step: getCombatRoundAttackCursorStepForPhase(input.result.phase),
+  return getCombatRoundPhaseActionOrCompletionCursor({
+    phase: input.result.phase,
+    state: input.state,
   });
 }
 
@@ -4653,6 +4697,16 @@ function getCombatRoundAttackCommandPhase(command: CombatRoundCommand): CombatRo
   return undefined;
 }
 
+function combatRoundCommandAfterCursorOpensPhaseAction(input: {
+  command: CombatRoundCommand;
+  phase: CombatRoundPhase;
+}): boolean {
+  return (
+    input.command.afterCursor.step === getCombatRoundAttackCursorStepForPhase(input.phase) &&
+    Boolean(input.command.afterCursor.participantId)
+  );
+}
+
 function undoCombatRoundGlobalCommandAtIndex(input: {
   commandIndex: number;
   state: CombatRoundState;
@@ -4782,7 +4836,11 @@ function undoCombatRoundPhaseActionSkipCommandAtIndex(input: {
     },
   };
 
-  if (command.afterCursor.participantId && command.afterCursor.participantId !== participantId) {
+  if (
+    combatRoundCommandAfterCursorOpensPhaseAction({ command, phase }) &&
+    command.afterCursor.participantId &&
+    command.afterCursor.participantId !== participantId
+  ) {
     phaseResolutionStatusesAfterUndo[command.afterCursor.participantId] = {
       ...phaseResolutionStatusesAfterUndo[command.afterCursor.participantId],
       [phase]: undefined,
@@ -4972,6 +5030,7 @@ function undoCombatRoundDamageReviewCommandAtIndex(input: {
   };
 
   if (
+    combatRoundCommandAfterCursorOpensPhaseAction({ command, phase }) &&
     command.afterCursor.participantId &&
     command.afterCursor.participantId !== attackResult.attackerParticipantId
   ) {
@@ -5077,6 +5136,7 @@ function undoCombatRoundCommittedDamageCommandAtIndex(input: {
   };
 
   if (
+    combatRoundCommandAfterCursorOpensPhaseAction({ command, phase }) &&
     command.afterCursor.participantId &&
     command.afterCursor.participantId !== attackResult.attackerParticipantId
   ) {
@@ -5179,6 +5239,7 @@ function undoCombatRoundResolvedDamageCommandAtIndex(input: {
   };
 
   if (
+    combatRoundCommandAfterCursorOpensPhaseAction({ command, phase }) &&
     command.afterCursor.participantId &&
     command.afterCursor.participantId !== attackResult.attackerParticipantId
   ) {

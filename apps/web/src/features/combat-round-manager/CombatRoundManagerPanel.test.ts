@@ -18,6 +18,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).not.toContain("Rows are participants. Columns are round timeline cells.");
     expect(source).toContain("Commit");
     expect(source).toContain("and advance to");
+    expect(source).toContain('"Complete round"');
     expect(source).toContain("Clear current step");
     expect(source).toContain("clearCurrentCombatRoundStepOnServer");
     expect(source).toContain("Step controller");

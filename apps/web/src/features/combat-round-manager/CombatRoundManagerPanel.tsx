@@ -282,6 +282,10 @@ function isSequentialResolutionStep(step: CombatRoundStep): boolean {
 }
 
 function getAdvanceButtonLabel(step: CombatRoundStep): string {
+  if (step === "round_summary") {
+    return "Complete round";
+  }
+
   if (isSequentialResolutionStep(step)) {
     return "Use inspector for phase resolution";
   }
