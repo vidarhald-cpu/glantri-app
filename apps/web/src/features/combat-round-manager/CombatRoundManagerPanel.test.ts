@@ -151,6 +151,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("Parry failed");
     expect(source).toContain("Resolve damage");
     expect(source).toContain('"Damage resolved"');
+    expect(source).toContain("Damage: grazing ${rollLabel} + DM ${damage.defenderDm}");
     expect(source).toContain("Damage: DMB ${damage.dmb} + DM ${damage.defenderDm}");
     expect(source).toContain("Result: ${damage.totalDamage} damage");
     expect(source).toContain("Damage roll: ${formatResolutionStatusLabel");

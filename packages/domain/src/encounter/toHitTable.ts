@@ -4,9 +4,17 @@ import type { OpenEndedD20Roll } from "../dice/openEndedD20";
 export type CombatToHitResultKey = "grazing-hit" | "hit" | "miss";
 export type CombatToHitCriticalGrade = "a" | "b" | "c" | "d" | "e" | "f";
 
+export interface CombatToHitDamageRollMetadata {
+  diceExpression?: string;
+  dieSides?: number;
+  required: boolean;
+  sourceLookupTotal?: number;
+}
+
 export interface CombatToHitDamageMetadata {
   criticalGrade?: CombatToHitCriticalGrade;
   damageModifier: number;
+  damageRoll?: CombatToHitDamageRollMetadata;
   minDamage?: number;
   sourceRows: readonly string[];
 }
@@ -16,7 +24,8 @@ export interface CombatToHitRuleTableRow {
   ambiguityReason?: string;
   criticalGrade?: CombatToHitCriticalGrade;
   damageModifier?: number;
-  damageModifierFormula?: "lookup-minus-11";
+  damageModifierFormula?: "lookup-minus-13";
+  damageRollFormula?: "grazing-from-lookup-12";
   grazing: boolean;
   hit: boolean;
   lookupTotal?: number;
@@ -69,9 +78,10 @@ export const COMBAT_TO_HIT_RULE_TABLE = {
     "Lookup totals of 10 or less miss.",
     "Lookup total 11 is a grazing hit.",
     "Lookup totals of 12 or more hit.",
-    "Damage metadata is available for unambiguous hit rows.",
-    "Lookup totals 17 and 18 have duplicate damage rows and must not be used for damage calculation until clarified.",
-    "Grazing-hit damage has a special DMB note that must be clarified before automated damage calculation.",
+    "Damage metadata follows the refreshed Combat To Hit / Damage table.",
+    "Lookup totals 17 and 18 are resolved in the refreshed table.",
+    "Grazing-hit damage rolls 1dX, where X is the damage modifier for lookup total 12.",
+    "Lookup totals above 34 continue by adding 1 damage per row, with critical grade f and minimum damage 5.",
     "Legacy workbook sheet `To Hit table` is not canonical for current app hit/miss logic.",
   ],
   rows: [
@@ -84,15 +94,14 @@ export const COMBAT_TO_HIT_RULE_TABLE = {
       sourceRows: ["to hit (new)!A3:B4"],
     },
     {
-      ambiguousDamage: true,
-      ambiguityReason:
-        "Grazing damage says `1 -> DMB *` and refers to a special effective DMB note; damage automation needs clarification.",
+      damageModifier: 0,
+      damageRollFormula: "grazing-from-lookup-12",
       grazing: true,
       hit: true,
       lookupTotal: 11,
       resultKey: "grazing-hit",
       resultLabel: "Grazing hit",
-      sourceRows: ["to hit (new)!A5:E5", "to hit (new)!C32"],
+      sourceRows: ["to hit (new)!A5:E5", "to hit (new)!A6:E6", "to hit (new)!C32"],
     },
     {
       damageModifier: 1,
@@ -140,33 +149,48 @@ export const COMBAT_TO_HIT_RULE_TABLE = {
       sourceRows: ["to hit (new)!A10:E10"],
     },
     {
-      ambiguousDamage: true,
-      ambiguityReason:
-        "Lookup total 17 appears twice with damage modifiers 4 and 6.",
+      damageModifier: 4,
       grazing: false,
       hit: true,
       lookupTotal: 17,
       resultKey: "hit",
       resultLabel: "Hit",
-      sourceRows: ["to hit (new)!A11:E11", "to hit (new)!A13:E13"],
+      sourceRows: ["to hit (new)!A11:E11"],
     },
     {
-      ambiguousDamage: true,
-      ambiguityReason:
-        "Lookup total 18 appears twice with damage modifiers 5 and 7, and only the second row has critical grade a.",
+      damageModifier: 5,
       grazing: false,
       hit: true,
       lookupTotal: 18,
       resultKey: "hit",
       resultLabel: "Hit",
-      sourceRows: ["to hit (new)!A12:E12", "to hit (new)!A14:F14"],
+      sourceRows: ["to hit (new)!A12:E12"],
+    },
+    {
+      damageModifier: 6,
+      grazing: false,
+      hit: true,
+      lookupTotal: 19,
+      resultKey: "hit",
+      resultLabel: "Hit",
+      sourceRows: ["to hit (new)!A13:E13"],
+    },
+    {
+      criticalGrade: "a",
+      damageModifier: 7,
+      grazing: false,
+      hit: true,
+      lookupTotal: 20,
+      resultKey: "hit",
+      resultLabel: "Hit",
+      sourceRows: ["to hit (new)!A14:F14"],
     },
     {
       criticalGrade: "a",
       damageModifier: 8,
       grazing: false,
       hit: true,
-      lookupTotal: 19,
+      lookupTotal: 21,
       resultKey: "hit",
       resultLabel: "Hit",
       sourceRows: ["to hit (new)!A15:F15"],
@@ -177,7 +201,7 @@ export const COMBAT_TO_HIT_RULE_TABLE = {
       minDamage: 1,
       grazing: false,
       hit: true,
-      lookupTotal: 20,
+      lookupTotal: 22,
       resultKey: "hit",
       resultLabel: "Hit",
       sourceRows: ["to hit (new)!A16:G16"],
@@ -188,7 +212,7 @@ export const COMBAT_TO_HIT_RULE_TABLE = {
       minDamage: 1,
       grazing: false,
       hit: true,
-      lookupTotal: 21,
+      lookupTotal: 23,
       resultKey: "hit",
       resultLabel: "Hit",
       sourceRows: ["to hit (new)!A17:G17"],
@@ -199,7 +223,7 @@ export const COMBAT_TO_HIT_RULE_TABLE = {
       minDamage: 2,
       grazing: false,
       hit: true,
-      lookupTotal: 22,
+      lookupTotal: 24,
       resultKey: "hit",
       resultLabel: "Hit",
       sourceRows: ["to hit (new)!A18:G18"],
@@ -210,7 +234,7 @@ export const COMBAT_TO_HIT_RULE_TABLE = {
       minDamage: 2,
       grazing: false,
       hit: true,
-      lookupTotal: 23,
+      lookupTotal: 25,
       resultKey: "hit",
       resultLabel: "Hit",
       sourceRows: ["to hit (new)!A19:G19"],
@@ -221,7 +245,7 @@ export const COMBAT_TO_HIT_RULE_TABLE = {
       minDamage: 3,
       grazing: false,
       hit: true,
-      lookupTotal: 24,
+      lookupTotal: 26,
       resultKey: "hit",
       resultLabel: "Hit",
       sourceRows: ["to hit (new)!A20:G20"],
@@ -232,7 +256,7 @@ export const COMBAT_TO_HIT_RULE_TABLE = {
       minDamage: 3,
       grazing: false,
       hit: true,
-      lookupTotal: 25,
+      lookupTotal: 27,
       resultKey: "hit",
       resultLabel: "Hit",
       sourceRows: ["to hit (new)!A21:G21"],
@@ -243,7 +267,7 @@ export const COMBAT_TO_HIT_RULE_TABLE = {
       minDamage: 4,
       grazing: false,
       hit: true,
-      lookupTotal: 26,
+      lookupTotal: 28,
       resultKey: "hit",
       resultLabel: "Hit",
       sourceRows: ["to hit (new)!A22:G22"],
@@ -254,7 +278,7 @@ export const COMBAT_TO_HIT_RULE_TABLE = {
       minDamage: 4,
       grazing: false,
       hit: true,
-      lookupTotal: 27,
+      lookupTotal: 29,
       resultKey: "hit",
       resultLabel: "Hit",
       sourceRows: ["to hit (new)!A23:G23"],
@@ -265,7 +289,7 @@ export const COMBAT_TO_HIT_RULE_TABLE = {
       minDamage: 5,
       grazing: false,
       hit: true,
-      lookupTotal: 28,
+      lookupTotal: 30,
       resultKey: "hit",
       resultLabel: "Hit",
       sourceRows: ["to hit (new)!A24:G24"],
@@ -276,7 +300,7 @@ export const COMBAT_TO_HIT_RULE_TABLE = {
       minDamage: 5,
       grazing: false,
       hit: true,
-      lookupTotal: 29,
+      lookupTotal: 31,
       resultKey: "hit",
       resultLabel: "Hit",
       sourceRows: ["to hit (new)!A25:G25"],
@@ -287,7 +311,7 @@ export const COMBAT_TO_HIT_RULE_TABLE = {
       minDamage: 5,
       grazing: false,
       hit: true,
-      lookupTotal: 30,
+      lookupTotal: 32,
       resultKey: "hit",
       resultLabel: "Hit",
       sourceRows: ["to hit (new)!A26:G26"],
@@ -298,7 +322,7 @@ export const COMBAT_TO_HIT_RULE_TABLE = {
       minDamage: 5,
       grazing: false,
       hit: true,
-      lookupTotal: 31,
+      lookupTotal: 33,
       resultKey: "hit",
       resultLabel: "Hit",
       sourceRows: ["to hit (new)!A27:G27"],
@@ -309,18 +333,18 @@ export const COMBAT_TO_HIT_RULE_TABLE = {
       minDamage: 5,
       grazing: false,
       hit: true,
-      lookupTotal: 32,
+      lookupTotal: 34,
       resultKey: "hit",
       resultLabel: "Hit",
       sourceRows: ["to hit (new)!A28:G28"],
     },
     {
       criticalGrade: "f",
-      damageModifierFormula: "lookup-minus-11",
+      damageModifierFormula: "lookup-minus-13",
       minDamage: 5,
       grazing: false,
       hit: true,
-      minLookupTotal: 33,
+      minLookupTotal: 35,
       resultKey: "hit",
       resultLabel: "Hit",
       sourceRows: ["to hit (new)!A29:G29"],
@@ -331,7 +355,7 @@ export const COMBAT_TO_HIT_RULE_TABLE = {
     sheet: "to hit (new)",
     workbook: "docs/source/combat/New_Combat_Arena.xlsx",
   },
-  title: "Combat To Hit",
+  title: "Glantri Combat To Hit / Damage",
 } as const satisfies CombatToHitRuleTable;
 
 export function calculateToHitLookupTotal(input: {
@@ -399,8 +423,33 @@ function getCombatToHitDamageModifier(
     return row.damageModifier;
   }
 
-  if (row.damageModifierFormula === "lookup-minus-11") {
-    return lookupTotal - 11;
+  if (row.damageModifierFormula === "lookup-minus-13") {
+    return lookupTotal - 13;
+  }
+
+  return undefined;
+}
+
+function getCombatToHitDamageRollMetadata(
+  row: CombatToHitRuleTableRow,
+): CombatToHitDamageRollMetadata | undefined {
+  if (row.damageRollFormula === "grazing-from-lookup-12") {
+    const sourceLookupTotal = 12;
+    const sourceRow = lookupCombatToHitResult(sourceLookupTotal);
+    const dieSides = getCombatToHitDamageModifier(sourceRow, sourceLookupTotal);
+
+    if (dieSides === undefined || dieSides < 1) {
+      throw new RangeError(
+        "Combat To Hit grazing damage cannot be resolved because lookup total 12 has no positive damage value.",
+      );
+    }
+
+    return {
+      diceExpression: `1d${dieSides}`,
+      dieSides,
+      required: true,
+      sourceLookupTotal,
+    };
   }
 
   return undefined;
@@ -432,6 +481,7 @@ export function lookupCombatToHitDamageMetadata(
   return {
     criticalGrade: row.criticalGrade,
     damageModifier,
+    damageRoll: getCombatToHitDamageRollMetadata(row),
     minDamage: row.minDamage,
     sourceRows: row.sourceRows,
   };

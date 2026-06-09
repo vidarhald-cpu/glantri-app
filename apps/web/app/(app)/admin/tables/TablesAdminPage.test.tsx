@@ -10,7 +10,7 @@ describe("TablesAdminPage", () => {
   it("renders the canonical combat to-hit table from structured rule data", () => {
     render(createElement(TablesAdminPage));
 
-    const heading = screen.getByRole("heading", { name: "Combat To Hit" });
+    const heading = screen.getByRole("heading", { name: "Glantri Combat To Hit / Damage" });
     const panel = heading.closest("section");
 
     expect(panel).not.toBeNull();
@@ -22,12 +22,17 @@ describe("TablesAdminPage", () => {
     ).not.toBeNull();
     expect(
       within(panel as HTMLElement).queryByText(
-        "Damage result uses weapon DMB, defender DM, the table damage modifier, armor modifier, and any required roll.",
+        "Non-grazing damage uses weapon DMB, defender DM, the table damage modifier, armor modifier, and any required roll.",
       ),
     ).not.toBeNull();
     expect(
       within(panel as HTMLElement).queryByText(
-        "Rows marked needs clarification are blocked from automated damage until the table ambiguity is resolved.",
+        "Grazing damage rolls 1d of the damage value for lookup total 12.",
+      ),
+    ).not.toBeNull();
+    expect(
+      within(panel as HTMLElement).queryByText(
+        "Hit location and armor modifier are resolved in later damage steps.",
       ),
     ).not.toBeNull();
     expect(within(panel as HTMLElement).queryByText("Sheet: to hit (new)")).toBeNull();
@@ -42,13 +47,14 @@ describe("TablesAdminPage", () => {
 
     expect(bodyRows.slice(0, 3)).toEqual([
       ["<= 10", "Miss", "No", "No", "—", "—", "—"],
-      ["11", "Grazing hit", "Yes", "Yes", "Needs clarification", "—", "—"],
+      ["11", "Grazing hit", "Yes", "Yes", "1d hit-12 damage", "—", "—"],
       ["12", "Hit", "Yes", "No", "1", "—", "—"],
     ]);
-    expect(bodyRows).toContainEqual(["17", "Hit", "Yes", "No", "Needs clarification", "—", "—"]);
-    expect(bodyRows).toContainEqual(["18", "Hit", "Yes", "No", "Needs clarification", "—", "—"]);
-    expect(bodyRows).toContainEqual(["20", "Hit", "Yes", "No", "9", "B", "1"]);
-    expect(bodyRows.at(-1)).toEqual([">= 33", "Hit", "Yes", "No", "Lookup - 11", "F", "5"]);
+    expect(bodyRows).toContainEqual(["17", "Hit", "Yes", "No", "4", "—", "—"]);
+    expect(bodyRows).toContainEqual(["18", "Hit", "Yes", "No", "5", "—", "—"]);
+    expect(bodyRows).toContainEqual(["20", "Hit", "Yes", "No", "7", "A", "—"]);
+    expect(bodyRows).toContainEqual(["22", "Hit", "Yes", "No", "9", "B", "1"]);
+    expect(bodyRows.at(-1)).toEqual([">= 35", "Hit", "Yes", "No", "Lookup - 13", "F", "5"]);
   });
 
   it("renders the canonical combat hit-location table from structured rule data", () => {

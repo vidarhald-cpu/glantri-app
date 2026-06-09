@@ -25,8 +25,9 @@ const combatToHitHumanNotes = [
   "10 or lower misses.",
   "11 is a grazing hit.",
   "12 or higher hits.",
-  "Damage result uses weapon DMB, defender DM, the table damage modifier, armor modifier, and any required roll.",
-  "Rows marked needs clarification are blocked from automated damage until the table ambiguity is resolved.",
+  "Non-grazing damage uses weapon DMB, defender DM, the table damage modifier, armor modifier, and any required roll.",
+  "Grazing damage rolls 1d of the damage value for lookup total 12.",
+  "Hit location and armor modifier are resolved in later damage steps.",
 ];
 
 export default function TablesAdminPage() {
@@ -108,12 +109,16 @@ function formatCombatDamageModifier(row: CombatToHitRuleTable["rows"][number]): 
     return "Needs clarification";
   }
 
+  if (row.damageRollFormula === "grazing-from-lookup-12") {
+    return "1d hit-12 damage";
+  }
+
   if (row.damageModifier !== undefined) {
     return row.damageModifier.toString();
   }
 
-  if (row.damageModifierFormula === "lookup-minus-11") {
-    return "Lookup - 11";
+  if (row.damageModifierFormula === "lookup-minus-13") {
+    return "Lookup - 13";
   }
 
   return "—";

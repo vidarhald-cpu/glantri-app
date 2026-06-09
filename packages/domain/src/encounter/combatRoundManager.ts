@@ -2189,6 +2189,17 @@ export function getCombatRoundDamageResultId(input: { attackResultId: string }):
   return `${input.attackResultId}:damage`;
 }
 
+function rollCombatDamageDie(input: {
+  rng: () => number;
+  sides: number;
+}): number {
+  if (!Number.isInteger(input.sides) || input.sides < 1) {
+    throw new RangeError("Combat damage die must have at least one side.");
+  }
+
+  return Math.min(input.sides, Math.floor(input.rng() * input.sides) + 1);
+}
+
 export function buildCombatRoundDamageResult(input: {
   armorModifier?: number;
   attackResult: CombatRoundAttackRollResult;
@@ -2196,6 +2207,7 @@ export function buildCombatRoundDamageResult(input: {
   createdByUserId?: string;
   defenderDm: number;
   dmb: number;
+  rng?: () => number;
   roundNumber: number;
 }): CombatRoundDamageResult {
   if (!input.attackResult.hit) {
@@ -2211,8 +2223,36 @@ export function buildCombatRoundDamageResult(input: {
   }
 
   const armorModifier = input.armorModifier ?? 0;
-  const totalDamage =
-    input.dmb + input.defenderDm + damageMetadata.damageModifier + armorModifier;
+  const metadataDamageRoll = damageMetadata.damageRoll;
+  let damageRoll: CombatRoundDamageResult["damageRoll"] = {
+    required: false,
+  };
+  let damageRollTotal = 0;
+
+  if (metadataDamageRoll?.required) {
+    if (!metadataDamageRoll.dieSides) {
+      throw new RangeError("Combat damage roll is required but no die size is defined.");
+    }
+
+    damageRollTotal = rollCombatDamageDie({
+      rng: input.rng ?? Math.random,
+      sides: metadataDamageRoll.dieSides,
+    });
+    damageRoll = {
+      diceExpression: metadataDamageRoll.diceExpression,
+      required: true,
+      rolls: [damageRollTotal],
+      total: damageRollTotal,
+    };
+  }
+
+  const totalDamage = input.attackResult.grazing
+    ? damageRollTotal + input.defenderDm + armorModifier
+    : input.dmb +
+      input.defenderDm +
+      damageMetadata.damageModifier +
+      damageRollTotal +
+      armorModifier;
   const attackResultId = getCombatRoundAttackResultId({
     result: input.attackResult,
     roundNumber: input.roundNumber,
@@ -2225,9 +2265,7 @@ export function buildCombatRoundDamageResult(input: {
     createdAt: input.createdAt,
     createdByUserId: input.createdByUserId,
     criticalGrade: damageMetadata.criticalGrade,
-    damageRoll: {
-      required: false,
-    },
+    damageRoll,
     defenderDm: input.defenderDm,
     defenderParticipantId: input.attackResult.defenderParticipantId,
     dmb: input.dmb,
@@ -2362,6 +2400,7 @@ export function recordCombatRoundDamageResult(input: {
   };
   defenderDm: number;
   dmb: number;
+  rng?: () => number;
   state: CombatRoundState;
   submittedBy: "gm" | "player";
   updatedAt: string;
@@ -2392,6 +2431,7 @@ export function recordCombatRoundDamageResult(input: {
     createdByUserId: input.command?.createdByUserId,
     defenderDm: input.defenderDm,
     dmb: input.dmb,
+    rng: input.rng,
     roundNumber: normalized.roundNumber,
   });
   const withDamageResult = recordCombatRoundDamageResolution({

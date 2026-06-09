@@ -437,6 +437,15 @@ function formatCombatDamageCalculationLine(
     return undefined;
   }
 
+  if (damage.grazing && damage.damageRoll.required) {
+    const rollLabel =
+      damage.damageRoll.diceExpression && damage.damageRoll.total !== undefined
+        ? `${damage.damageRoll.diceExpression} ${damage.damageRoll.total}`
+        : "required roll";
+
+    return `Damage: grazing ${rollLabel} + DM ${damage.defenderDm} + armor ${damage.armorModifier ?? 0} = ${damage.totalDamage}`;
+  }
+
   const damageLabel = damage.grazing ? "grazing" : "hit";
   const rollPart =
     damage.damageRoll.required && damage.damageRoll.total !== undefined

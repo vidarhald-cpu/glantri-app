@@ -45,7 +45,7 @@ describe("rules documentation registry", () => {
           fileName: "combat-to-hit.md",
           id: "combat-to-hit",
           section: "Combat",
-          title: "Combat To Hit"
+          title: "Glantri Combat To Hit / Damage"
         })
       ])
     );
@@ -65,7 +65,7 @@ describe("rules documentation registry", () => {
       "Character Progression Calculations",
       "Equipment & Encumbrance Calculations",
       "Equip Items Calculations",
-      "Combat To Hit"
+      "Glantri Combat To Hit / Damage"
     ]);
   });
 
@@ -147,17 +147,25 @@ describe("rules documentation registry", () => {
     expect(model.selectedDocument.markdown).toContain("GMR");
   });
 
-  it("loads the Combat To Hit document with roll and deferred-scope notes", async () => {
+  it("loads the Glantri Combat To Hit / Damage document with roll and damage-scope notes", async () => {
     const model = await getRulesDocumentationPageModel({
       selectedDocumentId: "combat-to-hit"
     });
 
-    expect(model.selectedDocument.title).toBe("Combat To Hit");
-    expect(model.selectedDocument.markdown).toContain("# Combat To Hit");
+    expect(model.selectedDocument.title).toBe("Glantri Combat To Hit / Damage");
+    expect(model.selectedDocument.markdown).toContain("# Glantri Combat To Hit / Damage");
     expect(model.selectedDocument.markdown).toContain("Roll open-ended `1d20`");
     expect(model.selectedDocument.markdown).toContain("lookup total = OB - DB + open-ended roll total");
     expect(model.selectedDocument.markdown).toContain("Lookup total `11` is a grazing hit.");
-    expect(model.selectedDocument.markdown).toContain("Damage, critical, and minimum-damage details are deferred.");
+    expect(model.selectedDocument.markdown).toContain(
+      "Damage metadata is available for hits and grazing hits.",
+    );
+    expect(model.selectedDocument.markdown).toContain("Lookup totals `17` and `18` are resolved");
+    expect(model.selectedDocument.markdown).toContain("Lookup totals above the displayed table continue");
+    expect(model.selectedDocument.markdown).toContain("Grazing-hit damage does not use a fixed normal damage modifier.");
+    expect(model.selectedDocument.markdown).toContain("critical effects and final");
+    expect(model.selectedDocument.markdown).toContain("wound/HP");
+    expect(model.selectedDocument.markdown).toContain("application remain future work.");
     expect(model.selectedDocument.markdown).not.toContain("New Combat Arena.xlsx");
     expect(model.selectedDocument.markdown).not.toContain("Sheet: `to hit (new)`");
     expect(model.selectedDocument.markdown).not.toContain("| Lookup total |");

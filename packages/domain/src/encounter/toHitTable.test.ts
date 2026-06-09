@@ -18,10 +18,11 @@ describe("combat to-hit table helpers", () => {
         sheet: "to hit (new)",
         workbook: "docs/source/combat/New_Combat_Arena.xlsx",
       },
-      title: "Combat To Hit",
+      title: "Glantri Combat To Hit / Damage",
     });
     expect(COMBAT_TO_HIT_RULE_TABLE.notes.join(" ")).toContain("Legacy workbook sheet `To Hit table` is not canonical");
-    expect(COMBAT_TO_HIT_RULE_TABLE.notes.join(" ")).toContain("Lookup totals 17 and 18 have duplicate damage rows");
+    expect(COMBAT_TO_HIT_RULE_TABLE.notes.join(" ")).toContain("Lookup totals 17 and 18 are resolved");
+    expect(COMBAT_TO_HIT_RULE_TABLE.notes.join(" ")).toContain("Lookup totals above 34 continue");
   });
 
   it("resolves OB = DB and roll total 10 as a miss", () => {
@@ -38,13 +39,23 @@ describe("combat to-hit table helpers", () => {
 
   it("resolves OB = DB and roll total 11 as a grazing hit", () => {
     expect(resolveCombatToHit({ db: 12, ob: 12, rollTotal: 11 })).toMatchObject({
+      damageModifier: 0,
       grazing: true,
       hit: true,
       lookupTotal: 11,
       resultKey: "grazing-hit",
       resultLabel: "Grazing hit",
     });
-    expect(() => lookupCombatToHitDamageMetadata(11)).toThrow(/Grazing damage/);
+    expect(lookupCombatToHitDamageMetadata(11)).toEqual({
+      damageModifier: 0,
+      damageRoll: {
+        diceExpression: "1d1",
+        dieSides: 1,
+        required: true,
+        sourceLookupTotal: 12,
+      },
+      sourceRows: ["to hit (new)!A5:E5", "to hit (new)!A6:E6", "to hit (new)!C32"],
+    });
   });
 
   it("resolves OB 9, DB 11, roll total 18 as a hit", () => {
@@ -89,18 +100,26 @@ describe("combat to-hit table helpers", () => {
       damageModifier: 3,
       sourceRows: ["to hit (new)!A10:E10"],
     });
-    expect(lookupCombatToHitDamageMetadata(19)).toEqual({
-      criticalGrade: "a",
-      damageModifier: 8,
-      sourceRows: ["to hit (new)!A15:F15"],
+    expect(lookupCombatToHitDamageMetadata(17)).toEqual({
+      damageModifier: 4,
+      sourceRows: ["to hit (new)!A11:E11"],
+    });
+    expect(lookupCombatToHitDamageMetadata(18)).toEqual({
+      damageModifier: 5,
+      sourceRows: ["to hit (new)!A12:E12"],
     });
     expect(lookupCombatToHitDamageMetadata(20)).toEqual({
+      criticalGrade: "a",
+      damageModifier: 7,
+      sourceRows: ["to hit (new)!A14:F14"],
+    });
+    expect(lookupCombatToHitDamageMetadata(22)).toEqual({
       criticalGrade: "b",
       damageModifier: 9,
       minDamage: 1,
       sourceRows: ["to hit (new)!A16:G16"],
     });
-    expect(lookupCombatToHitDamageMetadata(33)).toEqual({
+    expect(lookupCombatToHitDamageMetadata(35)).toEqual({
       criticalGrade: "f",
       damageModifier: 22,
       minDamage: 5,
@@ -108,7 +127,7 @@ describe("combat to-hit table helpers", () => {
     });
   });
 
-  it("does not let duplicate 17/18 damage rows affect hit classification and rejects their damage metadata", () => {
+  it("uses the refreshed resolved 17/18 rows for hit classification and damage metadata", () => {
     expect(lookupCombatToHitResult(17)).toMatchObject({
       grazing: false,
       hit: true,
@@ -119,8 +138,25 @@ describe("combat to-hit table helpers", () => {
       hit: true,
       resultKey: "hit",
     });
-    expect(() => lookupCombatToHitDamageMetadata(17)).toThrow(/ambiguous damage metadata/);
-    expect(() => lookupCombatToHitDamageMetadata(18)).toThrow(/ambiguous damage metadata/);
+    expect(lookupCombatToHitDamageMetadata(17)?.damageModifier).toBe(4);
+    expect(lookupCombatToHitDamageMetadata(18)?.damageModifier).toBe(5);
+  });
+
+  it("continues above the displayed table without clamping high open-ended results", () => {
+    expect(resolveCombatToHit({ db: 0, ob: 0, rollTotal: 50 })).toMatchObject({
+      criticalGrade: "f",
+      damageModifier: 37,
+      hit: true,
+      lookupTotal: 50,
+      minDamage: 5,
+      resultKey: "hit",
+    });
+    expect(lookupCombatToHitDamageMetadata(50)).toEqual({
+      criticalGrade: "f",
+      damageModifier: 37,
+      minDamage: 5,
+      sourceRows: ["to hit (new)!A29:G29"],
+    });
   });
 
   it("rejects non-integer lookup totals instead of silently normalizing them", () => {
