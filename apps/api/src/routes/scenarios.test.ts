@@ -7,6 +7,7 @@ import {
   recordCombatRoundAttackResult,
   recordCombatRoundDeclaration,
   recordCombatRoundInitiative,
+  recordCombatRoundParryResult,
   type EncounterSession,
 } from "@glantri/domain";
 
@@ -3398,6 +3399,163 @@ describe("scenarios route contract", () => {
       gladiatorMiss,
     );
     expect(updatedEncounter.combatRoundState.participants[1].attackResults.phase1).toBeUndefined();
+  });
+
+  it("clears the latest parry command even when the inspected cell is an older i1", async () => {
+    const encounterParticipants = [
+      makeCombatEncounter().participants[0],
+      {
+        ...makeCombatEncounter().participants[0],
+        id: "encounter-participant-2",
+        label: "City guard",
+        scenarioParticipantId: "participant-2",
+      },
+    ];
+    const combatEncounter = makeCombatEncounter({
+      participants: encounterParticipants,
+    }) as EncounterSession;
+    const declaredState = recordCombatRoundDeclaration({
+      declaration: {
+        actionId: "attack_parry",
+        roundNumber: 1,
+      },
+      participantId: "encounter-participant-2",
+      state: recordCombatRoundDeclaration({
+        declaration: {
+          actionId: "attack_parry",
+          roundNumber: 1,
+        },
+        participantId: "encounter-participant-1",
+        state: initializeCombatRoundState({ encounter: combatEncounter }),
+        submittedBy: "gm",
+      }),
+      submittedBy: "gm",
+    });
+    const afterGladiatorInitiative = recordCombatRoundInitiative({
+      command: {
+        createdAt: "2026-01-01T00:01:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      initiative: 14,
+      participantId: "encounter-participant-1",
+      phase: "phase1",
+      state: declaredState,
+      submittedBy: "gm",
+    });
+    const afterGuardInitiative = recordCombatRoundInitiative({
+      command: {
+        createdAt: "2026-01-01T00:02:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      initiative: 12,
+      participantId: "encounter-participant-2",
+      phase: "phase1",
+      state: afterGladiatorInitiative,
+      submittedBy: "gm",
+    });
+    const attackHit = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackerParticipantId: "encounter-participant-1",
+      defenderDb: 10,
+      defenderParticipantId: "encounter-participant-2",
+      ob: 10,
+      phase: "phase1",
+      rollD20: 12,
+      rollTotal: 12,
+      rolledAt: "2026-01-01T00:03:00.000Z",
+      weaponName: "Broad sword",
+    });
+    const afterAttack = recordCombatRoundAttackResult({
+      command: {
+        createdAt: attackHit.rolledAt,
+        createdByUserId: "gm-1",
+      },
+      participantId: "encounter-participant-1",
+      result: attackHit,
+      state: afterGuardInitiative,
+      submittedBy: "gm",
+    });
+    const afterParry = recordCombatRoundParryResult({
+      attackResult: attackHit,
+      command: {
+        createdAt: "2026-01-01T00:04:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      parryResolution: {
+        combinedParryScore: 9,
+        modifierAdjustment: 0,
+        openEndedD10s: [],
+        resultLabel: "Parry failed",
+        rollD20: 8,
+        rollTotal: 8,
+        status: "resolved",
+        success: false,
+        targetNumber: 21,
+        total: 17,
+      },
+      state: afterAttack,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:04:00.000Z",
+    });
+
+    setupCombatDeclarationRoute({
+      encounter: {
+        combatRoundState: {
+          ...afterParry,
+          selectedParticipantId: "encounter-participant-1",
+          selectedStep: "initiative_phase_1",
+        },
+        participants: encounterParticipants,
+      },
+      user: mocks.adminUser,
+    });
+    mocks.scenarioService.listScenarioParticipants.mockResolvedValue([
+      makeCombatScenarioParticipant({ id: "participant-1" }),
+      makeCombatScenarioParticipant({ id: "participant-2" }),
+    ]);
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      body: {
+        participantId: "encounter-participant-1",
+        step: "initiative_phase_1",
+      },
+      method: "POST",
+      url: "/encounters/encounter-1/combat-round/clear-current-step",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
+    expect(updatedEncounter.combatRoundState.commands).toHaveLength(3);
+    expect(updatedEncounter.combatRoundState.commands.at(-1)).toMatchObject({
+      participantId: "encounter-participant-1",
+      type: "roll_attack",
+    });
+    expect(updatedEncounter.combatRoundState.currentCursor).toEqual({
+      participantId: "encounter-participant-2",
+      roundNumber: 1,
+      step: "P1",
+    });
+    expect(updatedEncounter.combatRoundState.currentStep).toBe("review_phase_2_actions");
+    expect(updatedEncounter.combatRoundState.selectedParticipantId).toBe("encounter-participant-2");
+    expect(updatedEncounter.combatRoundState.selectedStep).toBe("review_phase_2_actions");
+    expect(updatedEncounter.combatRoundState.participants[0].attackResults.phase1).toEqual(
+      attackHit,
+    );
+    expect(updatedEncounter.combatRoundState.participants[0].initiatives.phase1).toMatchObject({
+      total: 14,
+    });
+    expect(updatedEncounter.combatRoundState.participants[1].initiatives.phase1).toMatchObject({
+      total: 12,
+    });
+    expect(
+      updatedEncounter.combatRoundState.phaseResolutionResults[0]?.parryResolution.status,
+    ).toBe("pending");
+    expect(updatedEncounter.combatRoundState.phaseResolutionResults[0]?.damageRoll.status).toBe(
+      "pending",
+    );
   });
 
   it("fallback DE undo from an empty selected A1 cell clears mirrored declaration state", async () => {

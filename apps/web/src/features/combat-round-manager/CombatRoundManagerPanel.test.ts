@@ -127,7 +127,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("rollOpenEndedCombatToHitD20");
     expect(source).toContain("rollOpenEndedD20");
     expect(source).toContain("resolveCombatParry");
-    expect(source).toContain("recordCombatRoundParryResolution");
+    expect(source).toContain("recordCombatRoundParryResult");
     expect(source).toContain("formatOpenEndedD20RollBreakdown");
     expect(source).toContain("formatCombatDefenseResultMainLine");
     expect(source).toContain("formatCombatParryCalculationLine");

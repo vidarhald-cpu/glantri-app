@@ -46,7 +46,7 @@ import {
   hasScenarioParticipantCombatDeclarationForEncounterRound,
   initializeCombatRoundState,
   recordCombatRoundAttackResult,
-  recordCombatRoundParryResolution,
+  recordCombatRoundParryResult,
   rollOpenEndedD20,
   rollOpenEndedCombatToHitD20,
   setCombatRoundSelection,
@@ -2428,40 +2428,18 @@ export default function CombatRoundManagerPanel({
     setSaving(true);
 
     try {
-      const withParry = recordCombatRoundParryResolution({
+      const nextRoundState = recordCombatRoundParryResult({
         attackResult,
+        command: {
+          createdAt: updatedAt,
+        },
         parryResolution,
         state: roundState,
+        submittedBy: "gm",
         updatedAt,
       });
-      const nextRoundState = parry.success
-        ? completeCombatRoundPhaseResolutionForParticipant({
-            participantId: attackResult.attackerParticipantId,
-            phase,
-            state: withParry,
-            submittedBy: "gm",
-            updatedAt,
-          })
-        : advanceCombatRoundPhaseResolutionSubstepForParticipant({
-            participantId: attackResult.attackerParticipantId,
-            phase,
-            state: withParry,
-            updatedAt,
-          });
-      const defenderOwnedNextRoundState = parry.success
-        ? nextRoundState
-        : {
-            ...nextRoundState,
-            phaseResolutionCursor: {
-              participantId: attackResult.defenderParticipantId,
-              phase,
-              substep: "damage" as const,
-            },
-            selectedParticipantId: attackResult.defenderParticipantId,
-            selectedStep: getCombatRoundDamageReviewStepForPhase(phase),
-          };
 
-      await persistRoundState(defenderOwnedNextRoundState);
+      await persistRoundState(nextRoundState);
       setSaveError(undefined);
     } catch (caughtError) {
       setSaveError(caughtError instanceof Error ? caughtError.message : "Unable to roll parry.");
