@@ -3266,7 +3266,24 @@ describe("combat round manager", () => {
       createdAt: "2026-01-01T00:05:00.000Z",
       defenderDm: 0,
       dmb: 8,
+      hitLocationRolls: [14],
       roundNumber: 3,
+    });
+    const armoredDamage = buildCombatRoundDamageResult({
+      armorModifier: -2,
+      armorModifierSource: {
+        armorClass: "C",
+        label: "Leather vs weapon armor class A",
+        status: "applied",
+        weaponArmorClass: "A",
+      },
+      attackResult: result,
+      createdAt: "2026-01-01T00:05:00.000Z",
+      defenderDm: 0,
+      dmb: 8,
+      hitLocationRolls: [19, 4],
+      roundNumber: 3,
+      targetLocation: "head",
     });
     const noDmbDamage = buildCombatRoundDamageResult({
       armorModifier: 0,
@@ -3293,9 +3310,33 @@ describe("combat round manager", () => {
       defenderDm: 0,
       dmb: 8,
       hitLookupTotal: 14,
+      hitLocationRolls: [14],
+      hitLocationSelectionReason: "single_roll",
       minDamage: 1,
+      selectedHitLocation: "chest",
+      selectedHitLocationRoll: 14,
       tableDamage: 9,
       totalDamage: 9,
+    });
+    expect(highDmbDamage.armorModifierSource.status).toBe("not_applied");
+    expect(armoredDamage).toMatchObject({
+      armorModifier: -2,
+      armorModifierSource: {
+        armorClass: "C",
+        label: "Leather vs weapon armor class A",
+        status: "applied",
+        weaponArmorClass: "A",
+      },
+      criticalGrade: "a",
+      damageLookupTotal: 20,
+      hitLookupTotal: 14,
+      hitLocationRolls: [19, 4],
+      hitLocationSelectionReason: "targeted_closest",
+      selectedHitLocation: "head",
+      selectedHitLocationRoll: 19,
+      tableDamage: 7,
+      targetLocation: "head",
+      totalDamage: 7,
     });
     expect(noDmbDamage).toMatchObject({
       armorModifier: 0,
@@ -3412,7 +3453,11 @@ describe("combat round manager", () => {
       },
       dmb: 8,
       grazing: true,
+      hitLocationRolls: [1],
+      hitLocationSelectionReason: "single_roll",
       hitLookupTotal: 11,
+      selectedHitLocation: "leftLeg",
+      selectedHitLocationRoll: 1,
       tableDamage: 7,
       totalDamage: 1,
     });
@@ -3433,6 +3478,49 @@ describe("combat round manager", () => {
     });
     expect(cleared.phaseResolutionResults[0]?.damageResult).toBeUndefined();
     expect(cleared.phaseResolutionResults[0]?.damageRoll.status).toBe("pending");
+  });
+
+  it("uses armor modifier for grazing damage reference lookup", () => {
+    const result = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackerParticipantId: "gladiator",
+      defenderDb: 10,
+      defenderParticipantId: "guard",
+      ob: 10,
+      phase: "phase1",
+      rollD20: 11,
+      rollTotal: 11,
+      rolledAt: "2026-01-01T00:03:00.000Z",
+      weaponName: "Broad sword",
+    });
+    const damageResult = buildCombatRoundDamageResult({
+      armorModifier: -2,
+      attackResult: result,
+      createdAt: "2026-01-01T00:05:00.000Z",
+      defenderDm: 0,
+      dmb: 8,
+      hitLocationRolls: [8],
+      rng: () => 0,
+      roundNumber: 3,
+    });
+
+    expect(damageResult).toMatchObject({
+      armorModifier: -2,
+      damageLookupTotal: 18,
+      damageRoll: {
+        diceExpression: "1d5",
+        grazingReferenceDamage: 5,
+        grazingReferenceDamageLookupTotal: 18,
+        grazingReferenceHitLookupTotal: 12,
+        required: true,
+        rolls: [1],
+        total: 1,
+      },
+      hitLookupTotal: 11,
+      selectedHitLocation: "abdomen",
+      tableDamage: 5,
+      totalDamage: 1,
+    });
   });
 
   it("uses at least a 1-sided grazing damage die with no DMB, DM, or armor modifier", () => {
@@ -3545,8 +3633,10 @@ describe("combat round manager", () => {
       },
       defenderDm: 0,
       dmb: 8,
+      hitLocationRolls: [18, 7],
       state: afterParry,
       submittedBy: "gm",
+      targetLocation: "chest",
       updatedAt: "2026-01-01T00:05:00.000Z",
     });
     const existingCombatEffects: CombatEffectsState = {
@@ -3612,6 +3702,23 @@ describe("combat round manager", () => {
     });
 
     expect(afterDamage.phaseResolutionResults[0]?.damageProposal.status).toBe("drafted");
+    expect(afterDamage.phaseResolutionResults[0]?.damageResult).toMatchObject({
+      hitLocationRolls: [18, 7],
+      hitLocationSelectionReason: "targeted_closest",
+      selectedHitLocation: "abdomen",
+      selectedHitLocationRoll: 7,
+      targetLocation: "chest",
+    });
+    expect(afterDamage.commands.at(-1)).toMatchObject({
+      facts: expect.objectContaining({
+        hitLocationRolls: [18, 7],
+        hitLocationSelectionReason: "targeted_closest",
+        selectedHitLocation: "abdomen",
+        selectedHitLocationRoll: 7,
+        targetLocation: "chest",
+      }),
+      type: "resolve_damage",
+    });
     expect(committed.command).toMatchObject({
       beforeCursor: {
         participantId: "guard",
@@ -3664,7 +3771,11 @@ describe("combat round manager", () => {
       roundNumber: 3,
       step: "D1",
     });
-    expect(clearedCommitState.phaseResolutionResults[0]?.damageResult).toBeDefined();
+    expect(clearedCommitState.phaseResolutionResults[0]?.damageResult).toMatchObject({
+      hitLocationRolls: [18, 7],
+      selectedHitLocation: "abdomen",
+      targetLocation: "chest",
+    });
     expect(clearedCommitState.phaseResolutionResults[0]?.damageProposal.status).toBe("drafted");
     expect(cleanedCombatEffects.effects).toContainEqual(
       expect.objectContaining({

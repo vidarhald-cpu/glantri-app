@@ -3,8 +3,8 @@
 This page records the canonical hit/miss/grazing rule table for combat to-hit lookup and wires GM
 Phase 1 and Phase 2 attack rolls to that table. D1/D2 damage resolution first creates a reviewable
 damage result proposal for hits after a failed parry. Committing that proposal writes source-linked
-combat-effect rows for the defender, but hit location, critical-effect automation, bleeding, and
-armor-location lookup remain future work.
+combat-effect rows for the defender. The proposal now includes hit location. Critical-effect
+automation, bleeding, full injury typing, and live armor-location equipment lookup remain future work.
 
 ## Hit lookup
 
@@ -67,17 +67,26 @@ After a failed parry, D1/D2 can resolve and store a damage proposal:
 
 ```text
 hit lookup total = OB - DB + open-ended roll total
+hit location = closed 1d20, or two closed 1d20 rolls when an aimed location was declared
 damage lookup total = hit lookup total + weapon DMB + defender DM + armor modifier
 damage = table damage at the damage lookup total
 ```
+
+The attacker rolls hit location. If no aimed location was declared for that attack phase, roll one
+closed `1d20`. If the attacker declared an aimed location, roll closed `1d20` twice and use the
+result whose selected body location is closest by table order. If both rolls are equally close, use the first
+roll. The proposal stores the aimed location, all hit-location rolls, the selected location, and why
+that selection was made.
 
 For grazing hits, the required roll is the final damage result. Weapon DMB, defender DM, and armor are
 used with reference hit lookup `12` to derive the grazing die size, then only the grazing roll total is
 stored as damage.
 
-The current armor modifier is `0` until armor and hit-location interaction is implemented. Critical
-grade and minimum damage are stored as table metadata when present, but critical effects remain a GM
-review note for now.
+The armor modifier table is available as structured rule data and participates in damage lookup when a
+safe armor source is provided. Current D1/D2 proposals keep live armor modifier at `0` and display
+armor as not applied until exact hit-location-to-equipped-armor wiring is safe. Critical grade and
+minimum damage are stored as table metadata when present, but critical effects remain a GM review note
+for now.
 
 The proposal is not applied until the GM uses Commit phase damage. That command writes one
 combat-effect event and, when total damage is positive, one active `general_damage` effect row for
@@ -92,5 +101,6 @@ The intended final-damage sequencing remains:
 2. Parry.
 3. Hit location with closed `1d20`; if the attacker selected a target location, roll twice and choose
    the result closest to the target.
-4. Armor modifier from hit location plus the armor modifier table.
+4. Armor modifier from hit location plus the armor modifier table when a safe equipped-armor source is
+   available.
 5. Final damage/effect proposal and GM commit.

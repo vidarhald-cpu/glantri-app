@@ -12,6 +12,11 @@ import {
   combatEffectSchema,
   type CombatEffectsState,
 } from "./combatEffects";
+import {
+  hitLocationSchema,
+  hitLocationTargetSchema,
+  resolveHitLocationSelection,
+} from "./hitLocation";
 import { lookupCombatToHitDamageMetadata, resolveCombatToHit } from "./toHitTable";
 import type { EncounterParticipant, EncounterSession } from "./session";
 
@@ -279,6 +284,19 @@ export type CombatRoundParryResolution = z.infer<typeof combatRoundParryResoluti
 
 export const combatRoundDamageResultSchema = z.object({
   armorModifier: z.number().int().optional(),
+  armorModifierSource: z
+    .object({
+      armorClass: z.string().min(1).optional(),
+      label: z.string().min(1).optional(),
+      reason: z.string().min(1).optional(),
+      status: z.enum(["applied", "not_applied"]),
+      weaponArmorClass: z.string().min(1).optional(),
+    })
+    .default({
+      label: "Armor not applied yet",
+      reason: "Hit-location armor lookup is not wired to live defender equipment yet.",
+      status: "not_applied",
+    }),
   attackResultId: idSchema,
   attackerParticipantId: idSchema,
   createdAt: z.string().datetime(),
@@ -302,6 +320,8 @@ export const combatRoundDamageResultSchema = z.object({
   damageLookupTotal: z.number().int().optional(),
   dmb: z.number().int(),
   grazing: z.boolean(),
+  hitLocationRolls: z.array(z.number().int().min(1).max(20)).default([]),
+  hitLocationSelectionReason: z.enum(["single_roll", "targeted_closest"]).optional(),
   hitLookupTotal: z.number().int().optional(),
   kind: z.literal("damage_result"),
   lookupTotal: z.number().int().optional(),
@@ -309,8 +329,11 @@ export const combatRoundDamageResultSchema = z.object({
   minDamage: z.number().int().optional(),
   parryResultId: idSchema.optional(),
   phase: combatRoundPhaseSchema,
+  selectedHitLocation: hitLocationSchema.optional(),
+  selectedHitLocationRoll: z.number().int().min(1).max(20).optional(),
   tableDamage: z.number().int().optional(),
   tableDamageModifier: z.number().int().optional(),
+  targetLocation: hitLocationTargetSchema.optional(),
   totalDamage: z.number().int(),
   weaponName: z.string().min(1).optional(),
 });
@@ -2228,6 +2251,10 @@ function rollCombatDamageDie(input: {
   return Math.min(input.sides, Math.floor(input.rng() * input.sides) + 1);
 }
 
+function rollClosedCombatD20(rng: () => number): number {
+  return Math.min(20, Math.floor(rng() * 20) + 1);
+}
+
 function calculateCombatRoundDamageLookupTotal(input: {
   armorModifier: number;
   defenderDm: number;
@@ -2250,13 +2277,16 @@ function getCombatRoundDamageMetadataForLookup(damageLookupTotal: number) {
 
 export function buildCombatRoundDamageResult(input: {
   armorModifier?: number;
+  armorModifierSource?: CombatRoundDamageResult["armorModifierSource"];
   attackResult: CombatRoundAttackRollResult;
   createdAt: string;
   createdByUserId?: string;
   defenderDm: number;
   dmb: number;
+  hitLocationRolls?: number[];
   rng?: () => number;
   roundNumber: number;
+  targetLocation?: CombatRoundDamageResult["targetLocation"];
 }): CombatRoundDamageResult {
   if (!input.attackResult.hit) {
     throw new RangeError("Damage cannot be resolved for a missed attack.");
@@ -2264,13 +2294,23 @@ export function buildCombatRoundDamageResult(input: {
 
   const armorModifier = input.armorModifier ?? 0;
   const hitLookupTotal = input.attackResult.lookupTotal;
+  const rng = input.rng ?? Math.random;
+  const targetedLocation = Boolean(input.targetLocation && input.targetLocation !== "none");
+  const rollA = input.hitLocationRolls?.[0] ?? rollClosedCombatD20(rng);
+  const rollB = targetedLocation
+    ? input.hitLocationRolls?.[1] ?? rollClosedCombatD20(rng)
+    : undefined;
+  const hitLocationSelection = resolveHitLocationSelection({
+    rollA,
+    rollB,
+    targetLocation: input.targetLocation,
+  });
   const normalDamageLookupTotal = calculateCombatRoundDamageLookupTotal({
     armorModifier,
     defenderDm: input.defenderDm,
     dmb: input.dmb,
     hitLookupTotal,
   });
-  const rng = input.rng ?? Math.random;
   let damageRoll: CombatRoundDamageResult["damageRoll"] = {
     required: false,
   };
@@ -2339,15 +2379,21 @@ export function buildCombatRoundDamageResult(input: {
     defenderParticipantId: input.attackResult.defenderParticipantId,
     dmb: input.dmb,
     grazing: input.attackResult.grazing,
+    hitLocationRolls: hitLocationSelection.hitLocationRolls,
+    hitLocationSelectionReason: hitLocationSelection.hitLocationSelectionReason,
     hitLookupTotal,
     kind: "damage_result",
     maxDamageNote,
     minDamage,
     parryResultId: `${attackResultId}:parry`,
     phase: input.attackResult.phase,
+    selectedHitLocation: hitLocationSelection.selectedHitLocation,
+    selectedHitLocationRoll: hitLocationSelection.selectedHitLocationRoll,
     tableDamage,
+    targetLocation: hitLocationSelection.targetLocation,
     totalDamage,
     weaponName: input.attackResult.weaponName,
+    armorModifierSource: input.armorModifierSource,
   });
 }
 
@@ -2421,6 +2467,13 @@ function recordCombatRoundResolveDamageCommand(input: {
         attackResultId: input.damageResult.attackResultId,
       }),
       defenderParticipantId: input.attackResult.defenderParticipantId,
+      hitLocationRolls: input.damageResult.hitLocationRolls,
+      hitLocationSelectionReason: input.damageResult.hitLocationSelectionReason,
+      selectedHitLocation: input.damageResult.selectedHitLocation,
+      selectedHitLocationRoll: input.damageResult.selectedHitLocationRoll,
+      targetLocation: input.damageResult.targetLocation,
+      armorModifier: input.damageResult.armorModifier,
+      armorModifierSource: input.damageResult.armorModifierSource,
       status: "resolved",
       totalDamage: input.damageResult.totalDamage,
       ...(afterCursor.participantId
@@ -2460,6 +2513,7 @@ function recordCombatRoundResolveDamageCommand(input: {
 
 export function recordCombatRoundDamageResult(input: {
   armorModifier?: number;
+  armorModifierSource?: CombatRoundDamageResult["armorModifierSource"];
   attackResult: CombatRoundAttackRollResult;
   command?: {
     commandId?: string;
@@ -2468,9 +2522,11 @@ export function recordCombatRoundDamageResult(input: {
   };
   defenderDm: number;
   dmb: number;
+  hitLocationRolls?: number[];
   rng?: () => number;
   state: CombatRoundState;
   submittedBy: "gm" | "player";
+  targetLocation?: CombatRoundDamageResult["targetLocation"];
   updatedAt: string;
 }): CombatRoundState {
   const normalized = combatRoundStateSchema.parse(input.state);
@@ -2494,13 +2550,16 @@ export function recordCombatRoundDamageResult(input: {
 
   const damageResult = buildCombatRoundDamageResult({
     armorModifier: input.armorModifier,
+    armorModifierSource: input.armorModifierSource,
     attackResult: input.attackResult,
     createdAt: input.updatedAt,
     createdByUserId: input.command?.createdByUserId,
     defenderDm: input.defenderDm,
     dmb: input.dmb,
+    hitLocationRolls: input.hitLocationRolls,
     rng: input.rng,
     roundNumber: normalized.roundNumber,
+    targetLocation: input.targetLocation,
   });
   const withDamageResult = recordCombatRoundDamageResolution({
     attackResult: input.attackResult,

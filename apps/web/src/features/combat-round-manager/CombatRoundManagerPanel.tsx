@@ -44,6 +44,7 @@ import {
   getCombatRoundModifierPhaseForStep,
   getCombatRoundResolutionPhaseForStep,
   getCombatRoundStepSnapshot,
+  getHitLocationFullLabel,
   hasScenarioParticipantCombatDeclarationForEncounterRound,
   initializeCombatRoundState,
   recordCombatRoundAttackResult,
@@ -495,12 +496,52 @@ function formatCombatDamageResultLine(
   return `Damage: table damage ${tableDamage}${critical}${minDamage}${maxDamage}`;
 }
 
+function formatCombatHitLocationLine(
+  damage: CombatRoundPhaseResolutionResult["damageResult"],
+): string | undefined {
+  if (!damage?.selectedHitLocation) {
+    return undefined;
+  }
+
+  const target =
+    damage.targetLocation && damage.targetLocation !== "none"
+      ? getHitLocationFullLabel(damage.targetLocation)
+      : "None";
+  const selected = getHitLocationFullLabel(damage.selectedHitLocation);
+  const rolls =
+    damage.hitLocationRolls.length > 0
+      ? damage.hitLocationRolls.join(", ")
+      : damage.selectedHitLocationRoll?.toString() ?? "not recorded";
+
+  return `Location: Target: ${target} · Rolls: ${rolls} -> ${selected} selected`;
+}
+
+function formatCombatArmorLine(
+  damage: CombatRoundPhaseResolutionResult["damageResult"],
+): string | undefined {
+  if (!damage) {
+    return undefined;
+  }
+
+  if (damage.armorModifierSource.status === "not_applied") {
+    return "Armor: not applied yet";
+  }
+
+  const source = damage.armorModifierSource.label
+    ? `${damage.armorModifierSource.label} `
+    : "";
+
+  return `Armor: ${source}${damage.armorModifier ?? 0}`;
+}
+
 function formatCombatPhaseResolutionResultLines(input: {
   attackResult: CombatRoundAttackRollResult;
   participantId?: string;
   resolution: CombatRoundPhaseResolutionResult;
 }): {
   attackLine: string;
+  armorLine?: string;
+  locationLine?: string;
   proposalLine: string;
   statusLine: string;
 } {
@@ -511,6 +552,8 @@ function formatCombatPhaseResolutionResultLines(input: {
   const resolvedParryLine = formatCombatParryCalculationLine(parry);
   const resolvedDamageLine = formatCombatDamageCalculationLine(damageResult);
   const resolvedDamageResultLine = formatCombatDamageResultLine(damageResult);
+  const resolvedHitLocationLine = formatCombatHitLocationLine(damageResult);
+  const resolvedArmorLine = formatCombatArmorLine(damageResult);
   const parryLine =
     resolvedParryLine ??
     `Parry: ${formatResolutionStatusLabel(parry.status)}${
@@ -544,6 +587,8 @@ function formatCombatPhaseResolutionResultLines(input: {
       proposal.status === "committed"
         ? proposalLine
         : resolvedDamageResultLine ?? parryResultLine ?? proposalLine,
+    armorLine: resolvedArmorLine,
+    locationLine: resolvedHitLocationLine,
     statusLine,
   };
 }
@@ -555,7 +600,13 @@ function formatCombatPhaseResolutionSummary(input: {
 }): string {
   const lines = formatCombatPhaseResolutionResultLines(input);
 
-  return `${lines.attackLine}\n${lines.statusLine}\n${lines.proposalLine}`;
+  return [
+    lines.attackLine,
+    lines.statusLine,
+    lines.locationLine,
+    lines.armorLine,
+    lines.proposalLine,
+  ].filter((line): line is string => Boolean(line)).join("\n");
 }
 
 function getCombatAttackPhaseForStep(step: CombatRoundStep): CombatRoundPhase | undefined {
@@ -1515,6 +1566,10 @@ export default function CombatRoundManagerPanel({
       : undefined;
   const inspectorActionResult = inspectorPhaseResolutionLines
     ? {
+        detailLines: [
+          inspectorPhaseResolutionLines.locationLine,
+          inspectorPhaseResolutionLines.armorLine,
+        ].filter((line): line is string => Boolean(line)),
         interpretedResult: inspectorPhaseResolutionLines.statusLine,
         rankLabel: inspectorPhaseResolutionLines.attackLine,
         resultLabel: inspectorPhaseResolutionLines.proposalLine,
@@ -2732,6 +2787,8 @@ export default function CombatRoundManagerPanel({
           dmb,
           state: roundState,
           submittedBy: "gm",
+          targetLocation:
+            attackerRoundParticipant?.declaration?.phaseContexts?.[phase]?.targetLocation,
           updatedAt,
         });
       } else {

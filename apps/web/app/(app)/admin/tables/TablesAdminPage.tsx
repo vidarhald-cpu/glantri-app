@@ -3,10 +3,12 @@
 import React from "react";
 
 import {
+  COMBAT_ARMOR_MODIFIER_RULE_TABLE,
   COMBAT_TO_HIT_RULE_TABLE,
   expandClosedDieRuleTable,
   HIT_LOCATION_RULE_TABLE,
   type ClosedDieRuleTable,
+  type CombatArmorModifierRuleTable,
   type CombatToHitRuleTable,
 } from "@glantri/domain";
 import { WORKBOOK_MOVEMENT_PERCENT_TABLE } from "@glantri/rules-engine";
@@ -28,7 +30,8 @@ const combatToHitHumanNotes = [
   "Normal hit damage uses a second lookup: hit lookup total + weapon DMB + defender DM + armor modifier.",
   "The damage lookup row gives final table damage, critical grade, and minimum damage.",
   "Grazing damage rolls 1d of the table damage from lookup 12 plus the same DMB, DM, and armor modifier.",
-  "Hit location and armor modifier are resolved in later damage steps.",
+  "D1/D2 damage proposals resolve hit location with a closed 1d20 before damage is committed.",
+  "Armor modifier participates in the damage lookup when a safe armor source is available.",
 ];
 
 export default function TablesAdminPage() {
@@ -80,6 +83,7 @@ export default function TablesAdminPage() {
       </AdminPanel>
 
       <ClosedDieRuleTablePanel group="Combat" table={HIT_LOCATION_RULE_TABLE} />
+      <CombatArmorModifierRuleTablePanel table={COMBAT_ARMOR_MODIFIER_RULE_TABLE} />
       <CombatToHitRuleTablePanel table={COMBAT_TO_HIT_RULE_TABLE} />
     </section>
   );
@@ -186,6 +190,63 @@ function CombatToHitRuleTablePanel(props: {
                   <td style={tableCellStyle}>{formatCombatCriticalGrade(row)}</td>
                   <td style={tableCellStyle}>{formatMinimumDamage(row)}</td>
                   <td style={tableCellStyle}>{formatMaximumDamage(row)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </AdminPanel>
+  );
+}
+
+function CombatArmorModifierRuleTablePanel(props: {
+  table: CombatArmorModifierRuleTable;
+}) {
+  return (
+    <AdminPanel
+      title={props.table.title}
+      subtitle="Damage lookup modifier by weapon armor class and defender armor class."
+    >
+      <div style={{ display: "grid", gap: "0.85rem" }}>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+          <AdminTag>Combat</AdminTag>
+          <AdminTag>Armor modifier</AdminTag>
+        </div>
+        <ul style={{ color: "#5f543a", lineHeight: 1.5, margin: 0, paddingLeft: "1.2rem" }}>
+          {props.table.notes.map((note) => (
+            <li key={note}>{note}</li>
+          ))}
+        </ul>
+        <div
+          style={{
+            border: "1px solid rgba(85, 73, 48, 0.14)",
+            borderRadius: 18,
+            overflowX: "auto",
+          }}
+        >
+          <table style={{ borderCollapse: "collapse", minWidth: 620, width: "100%" }}>
+            <thead style={{ background: "rgba(255, 252, 245, 0.95)" }}>
+              <tr>
+                <th style={tableHeaderStyle}>Armor</th>
+                <th style={tableHeaderStyle}>Armor class</th>
+                {props.table.columns.map((column) => (
+                  <th key={column} style={tableHeaderStyle}>
+                    Weapon {column}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {props.table.rows.map((row) => (
+                <tr key={row.armorKey}>
+                  <td style={tableCellStyle}>{row.armorLabel}</td>
+                  <td style={tableCellStyle}>{row.armorClass}</td>
+                  {props.table.columns.map((column) => (
+                    <td key={`${row.armorKey}:${column}`} style={tableCellStyle}>
+                      {row.modifiersByWeaponArmorClass[column]}
+                    </td>
+                  ))}
                 </tr>
               ))}
             </tbody>

@@ -32,7 +32,12 @@ describe("TablesAdminPage", () => {
     ).not.toBeNull();
     expect(
       within(panel as HTMLElement).queryByText(
-        "Hit location and armor modifier are resolved in later damage steps.",
+        "D1/D2 damage proposals resolve hit location with a closed 1d20 before damage is committed.",
+      ),
+    ).not.toBeNull();
+    expect(
+      within(panel as HTMLElement).queryByText(
+        "Armor modifier participates in the damage lookup when a safe armor source is available.",
       ),
     ).not.toBeNull();
     expect(within(panel as HTMLElement).queryByText("Sheet: to hit (new)")).toBeNull();
@@ -80,6 +85,11 @@ describe("TablesAdminPage", () => {
         "If an attacker aims at a location, roll closed 1d20 twice and use the roll closest to the aimed location.",
       ),
     ).not.toBeNull();
+    expect(
+      within(panel as HTMLElement).queryByText(
+        "Distance to an aimed location is measured by table location order; ties use the first roll.",
+      ),
+    ).not.toBeNull();
 
     const rows = within(panel as HTMLElement).getAllByRole("row");
     const bodyRows = rows.slice(1).map((row) =>
@@ -94,5 +104,36 @@ describe("TablesAdminPage", () => {
       ["18", "Right arm", "R arm", "rightArm"],
     ]);
     expect(bodyRows.at(-1)).toEqual(["1", "Left leg", "L leg", "leftLeg"]);
+  });
+
+  it("renders the canonical combat armor modifier table from structured rule data", () => {
+    render(createElement(TablesAdminPage));
+
+    const heading = screen.getByRole("heading", { name: "Combat Armor Modifier" });
+    const panel = heading.closest("section");
+
+    expect(panel).not.toBeNull();
+    expect(within(panel as HTMLElement).queryByText("Armor modifier")).not.toBeNull();
+    expect(
+      within(panel as HTMLElement).queryByText(
+        "Lookup armor damage modifier by weapon armor class and defender armor class.",
+      ),
+    ).not.toBeNull();
+    expect(within(panel as HTMLElement).queryByText(/New[_ ]Combat[_ ]Arena\.xlsx/)).toBeNull();
+
+    const rows = within(panel as HTMLElement).getAllByRole("row");
+    const bodyRows = rows.slice(1).map((row) =>
+      within(row)
+        .getAllByRole("cell")
+        .map((cell) => cell.textContent),
+    );
+
+    expect(bodyRows).toEqual([
+      ["Plate", "E", "-8", "-6", "-4", "-2", "0"],
+      ["Chain", "D", "-6", "-4", "-2", "0", "0"],
+      ["Leather", "C", "-4", "-2", "0", "0", "0"],
+      ["Cloth", "B", "-2", "0", "0", "0", "0"],
+      ["No armor", "A", "0", "0", "0", "0", "0"],
+    ]);
   });
 });

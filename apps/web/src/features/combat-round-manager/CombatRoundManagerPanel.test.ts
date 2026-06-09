@@ -139,6 +139,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("getCombatRoundPhaseResolutionResultForAttack");
     expect(source).toContain("getCombatRoundPhaseResolutionStatus");
     expect(source).toContain("getCombatRoundResolutionPhaseForStep");
+    expect(source).toContain("getHitLocationFullLabel");
     expect(source).toContain("completeCombatRoundPhaseResolutionForParticipant");
     expect(source).toContain("advanceCombatRoundPhaseResolutionSubstepForParticipant");
     expect(source).toContain("combatRoundParticipantHasPhaseAttack");
@@ -158,6 +159,10 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("Damage lookup: ${referenceLabel}; roll ${rollLabel}");
     expect(source).toContain("Damage lookup: hit ${hitLookupTotal} + DMB ${damage.dmb}");
     expect(source).toContain("Damage: table damage ${tableDamage}");
+    expect(source).toContain("Location: Target: ${target}");
+    expect(source).toContain("Armor: not applied yet");
+    expect(source).toContain("targetLocation:");
+    expect(source).toContain("attackerRoundParticipant?.declaration?.phaseContexts?.[phase]?.targetLocation");
     expect(source).toContain("Damage roll: ${formatResolutionStatusLabel");
     expect(source).toContain("Proposal: ${formatResolutionStatusLabel");
     expect(source).toContain("buildCombatRoundAttackRollResult");
