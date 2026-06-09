@@ -279,6 +279,8 @@ export const combatRoundDamageResultSchema = z.object({
   criticalGrade: z.string().min(1).optional(),
   damageRoll: z
     .object({
+      derivedFromLookupTotal: z.number().int().optional(),
+      derivedNormalDamageTotal: z.number().int().optional(),
       diceExpression: z.string().min(1).optional(),
       required: z.boolean(),
       rolls: z.array(z.number().int()).optional(),
@@ -2200,6 +2202,38 @@ function rollCombatDamageDie(input: {
   return Math.min(input.sides, Math.floor(input.rng() * input.sides) + 1);
 }
 
+function calculateCombatRoundNormalDamageTotal(input: {
+  armorModifier: number;
+  defenderDm: number;
+  dmb: number;
+  lookupTotal: number;
+  rng: () => number;
+}): number {
+  const damageMetadata = lookupCombatToHitDamageMetadata(input.lookupTotal);
+
+  if (!damageMetadata) {
+    throw new RangeError(
+      `Combat To Hit lookup total ${input.lookupTotal} does not produce damage.`,
+    );
+  }
+
+  const metadataDamageRoll = damageMetadata.damageRoll;
+  const damageRollTotal = metadataDamageRoll?.required
+    ? rollCombatDamageDie({
+        rng: input.rng,
+        sides: Math.max(1, damageMetadata.damageModifier),
+      })
+    : 0;
+
+  return (
+    input.dmb +
+    input.defenderDm +
+    damageMetadata.damageModifier +
+    damageRollTotal +
+    input.armorModifier
+  );
+}
+
 export function buildCombatRoundDamageResult(input: {
   armorModifier?: number;
   attackResult: CombatRoundAttackRollResult;
@@ -2224,22 +2258,36 @@ export function buildCombatRoundDamageResult(input: {
 
   const armorModifier = input.armorModifier ?? 0;
   const metadataDamageRoll = damageMetadata.damageRoll;
+  const rng = input.rng ?? Math.random;
   let damageRoll: CombatRoundDamageResult["damageRoll"] = {
     required: false,
   };
   let damageRollTotal = 0;
 
   if (metadataDamageRoll?.required) {
-    if (!metadataDamageRoll.dieSides) {
-      throw new RangeError("Combat damage roll is required but no die size is defined.");
+    const derivedFromLookupTotal = metadataDamageRoll.sourceLookupTotal;
+
+    if (!derivedFromLookupTotal) {
+      throw new RangeError("Combat damage roll is required but no source lookup total is defined.");
     }
 
+    const derivedNormalDamageTotal = calculateCombatRoundNormalDamageTotal({
+      armorModifier,
+      defenderDm: input.defenderDm,
+      dmb: input.dmb,
+      lookupTotal: derivedFromLookupTotal,
+      rng,
+    });
+    const dieSides = Math.max(1, derivedNormalDamageTotal);
+
     damageRollTotal = rollCombatDamageDie({
-      rng: input.rng ?? Math.random,
-      sides: metadataDamageRoll.dieSides,
+      rng,
+      sides: dieSides,
     });
     damageRoll = {
-      diceExpression: metadataDamageRoll.diceExpression,
+      derivedFromLookupTotal,
+      derivedNormalDamageTotal,
+      diceExpression: `1d${dieSides}`,
       required: true,
       rolls: [damageRollTotal],
       total: damageRollTotal,
@@ -2247,7 +2295,7 @@ export function buildCombatRoundDamageResult(input: {
   }
 
   const totalDamage = input.attackResult.grazing
-    ? damageRollTotal + input.defenderDm + armorModifier
+    ? damageRollTotal
     : input.dmb +
       input.defenderDm +
       damageMetadata.damageModifier +

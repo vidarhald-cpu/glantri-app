@@ -49,8 +49,6 @@ describe("combat to-hit table helpers", () => {
     expect(lookupCombatToHitDamageMetadata(11)).toEqual({
       damageModifier: 0,
       damageRoll: {
-        diceExpression: "1d1",
-        dieSides: 1,
         required: true,
         sourceLookupTotal: 12,
       },

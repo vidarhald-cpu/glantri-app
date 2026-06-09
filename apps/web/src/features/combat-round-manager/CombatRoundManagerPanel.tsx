@@ -442,8 +442,13 @@ function formatCombatDamageCalculationLine(
       damage.damageRoll.diceExpression && damage.damageRoll.total !== undefined
         ? `${damage.damageRoll.diceExpression} ${damage.damageRoll.total}`
         : "required roll";
+    const derivedLabel =
+      damage.damageRoll.derivedFromLookupTotal !== undefined &&
+      damage.damageRoll.derivedNormalDamageTotal !== undefined
+        ? ` from lookup ${damage.damageRoll.derivedFromLookupTotal} normal damage ${damage.damageRoll.derivedNormalDamageTotal}`
+        : "";
 
-    return `Damage: grazing ${rollLabel} + DM ${damage.defenderDm} + armor ${damage.armorModifier ?? 0} = ${damage.totalDamage}`;
+    return `Damage: grazing ${rollLabel}${derivedLabel} = ${damage.totalDamage}`;
   }
 
   const damageLabel = damage.grazing ? "grazing" : "hit";

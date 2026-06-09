@@ -5,8 +5,6 @@ export type CombatToHitResultKey = "grazing-hit" | "hit" | "miss";
 export type CombatToHitCriticalGrade = "a" | "b" | "c" | "d" | "e" | "f";
 
 export interface CombatToHitDamageRollMetadata {
-  diceExpression?: string;
-  dieSides?: number;
   required: boolean;
   sourceLookupTotal?: number;
 }
@@ -80,7 +78,7 @@ export const COMBAT_TO_HIT_RULE_TABLE = {
     "Lookup totals of 12 or more hit.",
     "Damage metadata follows the refreshed Combat To Hit / Damage table.",
     "Lookup totals 17 and 18 are resolved in the refreshed table.",
-    "Grazing-hit damage rolls 1dX, where X is the damage modifier for lookup total 12.",
+    "Grazing-hit damage rolls 1dX, where X is the full normal damage total for lookup total 12 using the current combat inputs.",
     "Lookup totals above 34 continue by adding 1 damage per row, with critical grade f and minimum damage 5.",
     "Legacy workbook sheet `To Hit table` is not canonical for current app hit/miss logic.",
   ],
@@ -434,21 +432,9 @@ function getCombatToHitDamageRollMetadata(
   row: CombatToHitRuleTableRow,
 ): CombatToHitDamageRollMetadata | undefined {
   if (row.damageRollFormula === "grazing-from-lookup-12") {
-    const sourceLookupTotal = 12;
-    const sourceRow = lookupCombatToHitResult(sourceLookupTotal);
-    const dieSides = getCombatToHitDamageModifier(sourceRow, sourceLookupTotal);
-
-    if (dieSides === undefined || dieSides < 1) {
-      throw new RangeError(
-        "Combat To Hit grazing damage cannot be resolved because lookup total 12 has no positive damage value.",
-      );
-    }
-
     return {
-      diceExpression: `1d${dieSides}`,
-      dieSides,
       required: true,
-      sourceLookupTotal,
+      sourceLookupTotal: 12,
     };
   }
 

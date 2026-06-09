@@ -27,7 +27,7 @@ describe("TablesAdminPage", () => {
     ).not.toBeNull();
     expect(
       within(panel as HTMLElement).queryByText(
-        "Grazing damage rolls 1d of the damage value for lookup total 12.",
+        "Grazing damage rolls 1d of the full normal damage total one lookup row higher.",
       ),
     ).not.toBeNull();
     expect(
@@ -47,7 +47,7 @@ describe("TablesAdminPage", () => {
 
     expect(bodyRows.slice(0, 3)).toEqual([
       ["<= 10", "Miss", "No", "No", "—", "—", "—"],
-      ["11", "Grazing hit", "Yes", "Yes", "1d hit-12 damage", "—", "—"],
+      ["11", "Grazing hit", "Yes", "Yes", "1d next-hit damage", "—", "—"],
       ["12", "Hit", "Yes", "No", "1", "—", "—"],
     ]);
     expect(bodyRows).toContainEqual(["17", "Hit", "Yes", "No", "4", "—", "—"]);

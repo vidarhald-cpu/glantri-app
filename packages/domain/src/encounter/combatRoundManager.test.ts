@@ -7,6 +7,7 @@ import {
   COMBAT_ROUND_STEPS,
   advanceCombatRoundPhaseResolutionSubstepForParticipant,
   advanceCombatRoundStep,
+  buildCombatRoundDamageResult,
   buildCombatRoundPhaseResolutionResult,
   buildCombatRoundAttackRollResult,
   buildCombatRoundInspector,
@@ -3317,7 +3318,9 @@ describe("combat round manager", () => {
     expect(result.grazing).toBe(true);
     expect(afterDamage.phaseResolutionResults[0]?.damageResult).toMatchObject({
       damageRoll: {
-        diceExpression: "1d1",
+        derivedFromLookupTotal: 12,
+        derivedNormalDamageTotal: 9,
+        diceExpression: "1d9",
         required: true,
         rolls: [1],
         total: 1,
@@ -3345,6 +3348,44 @@ describe("combat round manager", () => {
     });
     expect(cleared.phaseResolutionResults[0]?.damageResult).toBeUndefined();
     expect(cleared.phaseResolutionResults[0]?.damageRoll.status).toBe("pending");
+  });
+
+  it("uses at least a 1-sided grazing damage die with no DMB, DM, or armor modifier", () => {
+    const result = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackerParticipantId: "gladiator",
+      defenderDb: 10,
+      defenderParticipantId: "guard",
+      ob: 10,
+      phase: "phase1",
+      rollD20: 11,
+      rollTotal: 11,
+      rolledAt: "2026-01-01T00:03:00.000Z",
+      weaponName: "Broad sword",
+    });
+    const damageResult = buildCombatRoundDamageResult({
+      armorModifier: 0,
+      attackResult: result,
+      createdAt: "2026-01-01T00:05:00.000Z",
+      defenderDm: 0,
+      dmb: 0,
+      rng: () => 0,
+      roundNumber: 3,
+    });
+
+    expect(damageResult).toMatchObject({
+      damageRoll: {
+        derivedFromLookupTotal: 12,
+        derivedNormalDamageTotal: 1,
+        diceExpression: "1d1",
+        required: true,
+        rolls: [1],
+        total: 1,
+      },
+      grazing: true,
+      tableDamageModifier: 0,
+      totalDamage: 1,
+    });
   });
 
   it("records and undoes D2 placeholder damage review commands after failed parry", () => {

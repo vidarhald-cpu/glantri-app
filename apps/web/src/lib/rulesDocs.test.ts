@@ -163,6 +163,7 @@ describe("rules documentation registry", () => {
     expect(model.selectedDocument.markdown).toContain("Lookup totals `17` and `18` are resolved");
     expect(model.selectedDocument.markdown).toContain("Lookup totals above the displayed table continue");
     expect(model.selectedDocument.markdown).toContain("Grazing-hit damage does not use a fixed normal damage modifier.");
+    expect(model.selectedDocument.markdown).toContain("the grazing hit rolls `1d9`");
     expect(model.selectedDocument.markdown).toContain("critical effects and final");
     expect(model.selectedDocument.markdown).toContain("wound/HP");
     expect(model.selectedDocument.markdown).toContain("application remain future work.");

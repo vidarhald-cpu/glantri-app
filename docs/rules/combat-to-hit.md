@@ -32,8 +32,11 @@ Damage metadata is available for hits and grazing hits. Lookup totals `17` and `
 refreshed table. Lookup totals above the displayed table continue by adding `1` damage per row, keeping
 critical grade `F` and minimum damage `5`.
 
-Grazing-hit damage does not use a fixed normal damage modifier. It rolls `1dX`, where `X` is the damage
-value for lookup total `12`.
+Grazing-hit damage does not use a fixed normal damage modifier. It rolls `1dX`, where `X` is the full
+normal damage total one lookup row higher, using the current known damage inputs. For lookup total
+`11`, calculate normal lookup-total-`12` damage first, then use that total as the grazing die size.
+For example, weapon DMB `8`, defender DM `0`, armor modifier `0`, and lookup-total-`12` table damage
+modifier `1` make normal lookup-total-`12` damage `9`, so the grazing hit rolls `1d9`.
 
 ## Current attack and damage result
 
@@ -54,8 +57,9 @@ After a failed parry, D1/D2 can resolve and store:
 damage = weapon DMB + defender DM + table damage modifier + armor modifier + required roll
 ```
 
-For grazing hits, the required roll is the grazing die and weapon DMB is retained for context but not
-added as fixed normal damage.
+For grazing hits, the required roll is the final damage result. Weapon DMB, defender DM, table damage,
+and armor are used to derive the grazing die size from the next normal hit row, then only the grazing
+roll total is stored as damage.
 
 The current armor modifier is `0` until armor and hit-location interaction is implemented. Critical
 grade and minimum damage are stored as table metadata when present, but critical effects and final

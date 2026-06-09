@@ -26,7 +26,7 @@ const combatToHitHumanNotes = [
   "11 is a grazing hit.",
   "12 or higher hits.",
   "Non-grazing damage uses weapon DMB, defender DM, the table damage modifier, armor modifier, and any required roll.",
-  "Grazing damage rolls 1d of the damage value for lookup total 12.",
+  "Grazing damage rolls 1d of the full normal damage total one lookup row higher.",
   "Hit location and armor modifier are resolved in later damage steps.",
 ];
 
@@ -110,7 +110,7 @@ function formatCombatDamageModifier(row: CombatToHitRuleTable["rows"][number]): 
   }
 
   if (row.damageRollFormula === "grazing-from-lookup-12") {
-    return "1d hit-12 damage";
+    return "1d next-hit damage";
   }
 
   if (row.damageModifier !== undefined) {
