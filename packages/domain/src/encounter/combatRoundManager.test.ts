@@ -34,6 +34,7 @@ import {
   getCombatRoundParticipantPhaseStepStatus,
   getCombatRoundResolutionPhaseForStep,
   getCombatRoundStepSnapshot,
+  getCombatRoundEffectiveDamageResult,
   getPreviousCombatRoundStep,
   initializeCombatRoundState,
   ensureCombatRoundPhaseResolutionResultsForPhase,
@@ -42,6 +43,7 @@ import {
   recordCombatRoundAttackResult,
   recordCombatRoundDamageReviewPlaceholder,
   recordCombatRoundDamageResult,
+  reviewCombatRoundDamageResult,
   recordCombatRoundInitiative,
   recordCombatRoundNoAttackPhaseReview,
   recordCombatRoundParryResult,
@@ -3359,6 +3361,57 @@ describe("combat round manager", () => {
     });
   });
 
+  it("derives effective D1 damage values from GM review overrides without replacing computed values", () => {
+    const result = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackerParticipantId: "gladiator",
+      defenderDb: 15,
+      defenderParticipantId: "guard",
+      ob: 10,
+      phase: "phase1",
+      rollD20: 19,
+      rollTotal: 19,
+      rolledAt: "2026-01-01T00:03:00.000Z",
+      weaponName: "Broad sword",
+    });
+    const damageResult = buildCombatRoundDamageResult({
+      armorModifier: 0,
+      attackResult: result,
+      createdAt: "2026-01-01T00:05:00.000Z",
+      defenderDm: 0,
+      dmb: 8,
+      hitLocationRolls: [14],
+      roundNumber: 3,
+    });
+    const reviewedDamageResult = {
+      ...damageResult,
+      review: {
+        armorModifierOverride: -2,
+        criticalGradeOverride: "a",
+        notes: "armor adjusted manually",
+        reviewedAt: "2026-01-01T00:06:00.000Z",
+        selectedHitLocationOverride: "rightArm" as const,
+      },
+    };
+
+    expect(getCombatRoundEffectiveDamageResult(reviewedDamageResult)).toMatchObject({
+      computedArmorModifier: 0,
+      computedCriticalGrade: "b",
+      computedDamageLookupTotal: 22,
+      computedSelectedHitLocation: "chest",
+      computedTableDamage: 9,
+      computedTotalDamage: 9,
+      effectiveArmorModifier: -2,
+      effectiveCriticalGrade: "a",
+      effectiveDamageLookupTotal: 20,
+      effectiveSelectedHitLocation: "rightArm",
+      effectiveTableDamage: 7,
+      effectiveTotalDamage: 7,
+      hasReviewOverrides: true,
+      requiresTotalDamageOverride: false,
+    });
+  });
+
   it("records and undoes grazing D1 damage rolls after failed parry", () => {
     const state = initializeCombatRoundPhaseResolutionCursor({
       phase: "phase1",
@@ -3639,6 +3692,18 @@ describe("combat round manager", () => {
       targetLocation: "chest",
       updatedAt: "2026-01-01T00:05:00.000Z",
     });
+    const afterReview = reviewCombatRoundDamageResult({
+      attackResultId: "3:phase1:gladiator:guard",
+      reviewedAt: "2026-01-01T00:05:30.000Z",
+      reviewedByUserId: "gm-1",
+      review: {
+        armorModifierOverride: -2,
+        criticalGradeOverride: "a",
+        notes: "armor adjusted manually",
+        totalDamageOverride: 6,
+      },
+      state: afterDamage,
+    });
     const existingCombatEffects: CombatEffectsState = {
       effects: [
         {
@@ -3677,7 +3742,7 @@ describe("combat round manager", () => {
       defenderScenarioParticipantId: "scenario-guard",
       encounterId: "encounter-1",
       scenarioId: "scenario-1",
-      state: afterDamage,
+      state: afterReview,
     });
     const commitCommand = committed.command;
     const expectedCommitEventId =
@@ -3709,6 +3774,26 @@ describe("combat round manager", () => {
       selectedHitLocationRoll: 7,
       targetLocation: "chest",
     });
+    const reviewedDamageResult = afterReview.phaseResolutionResults[0]?.damageResult;
+
+    expect(reviewedDamageResult?.review).toMatchObject({
+      armorModifierOverride: -2,
+      criticalGradeOverride: "a",
+      notes: "armor adjusted manually",
+      reviewedAt: "2026-01-01T00:05:30.000Z",
+      reviewedByUserId: "gm-1",
+      totalDamageOverride: 6,
+    });
+    if (!reviewedDamageResult) {
+      throw new Error("Expected reviewed damage result.");
+    }
+    expect(getCombatRoundEffectiveDamageResult(reviewedDamageResult)).toMatchObject({
+      computedTotalDamage: 9,
+      effectiveArmorModifier: -2,
+      effectiveCriticalGrade: "a",
+      effectiveDamageLookupTotal: 20,
+      effectiveTotalDamage: 6,
+    });
     expect(afterDamage.commands.at(-1)).toMatchObject({
       facts: expect.objectContaining({
         hitLocationRolls: [18, 7],
@@ -3730,10 +3815,17 @@ describe("combat round manager", () => {
         attackerParticipantId: "gladiator",
         createdCombatEffectEventId: expectedCommitEventId,
         createdCombatEffectIds: [expectedCommitEffectId],
+        criticalGrade: "a",
         damageResultId: "3:phase1:gladiator:guard:damage",
         defenderParticipantId: "guard",
+        effectiveArmorModifier: -2,
+        effectiveDamageLookupTotal: 20,
+        review: expect.objectContaining({
+          notes: "armor adjusted manually",
+          totalDamageOverride: 6,
+        }),
         status: "committed",
-        totalDamage: 9,
+        totalDamage: 6,
       }),
       participantId: "guard",
       phase: "phase1",
@@ -3742,6 +3834,7 @@ describe("combat round manager", () => {
     });
     expect(committed.combatEffects.events).toContainEqual(
       expect.objectContaining({
+        description: expect.stringContaining("armor adjusted manually"),
         id: expectedCommitEventId,
         sourceActorId: "scenario-gladiator",
         sourceType: "combat_action",
@@ -3750,7 +3843,7 @@ describe("combat round manager", () => {
     );
     expect(committed.combatEffects.effects).toContainEqual(
       expect.objectContaining({
-        generalDamage: 9,
+        generalDamage: 6,
         id: expectedCommitEffectId,
         sourceEventId: expectedCommitEventId,
         status: "active",
@@ -3773,6 +3866,10 @@ describe("combat round manager", () => {
     });
     expect(clearedCommitState.phaseResolutionResults[0]?.damageResult).toMatchObject({
       hitLocationRolls: [18, 7],
+      review: expect.objectContaining({
+        armorModifierOverride: -2,
+        totalDamageOverride: 6,
+      }),
       selectedHitLocation: "abdomen",
       targetLocation: "chest",
     });

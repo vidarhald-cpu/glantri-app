@@ -5,6 +5,8 @@ import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react"
 import type {
   CombatRoundDeclaration,
   CombatRoundAttackRollResult,
+  CombatRoundDamageReview,
+  CombatRoundDamageResult,
   CombatRoundParryResolution,
   CombatRoundPhase,
   CombatRoundPhaseResolutionResult,
@@ -35,6 +37,7 @@ import {
   formatOpenEndedD20RollBreakdown,
   getCombatRoundDisplayIncomingAttackResultForParticipantPhase,
   getCombatRoundDamageReviewStepForPhase,
+  getCombatRoundEffectiveDamageResult,
   getCombatRoundOutgoingAttackResultForParticipantPhase,
   getCombatRoundParticipantPhaseStepStatus,
   getCombatRoundPhaseResolutionResultForAttack,
@@ -45,10 +48,12 @@ import {
   getCombatRoundResolutionPhaseForStep,
   getCombatRoundStepSnapshot,
   getHitLocationFullLabel,
+  HIT_LOCATIONS,
   hasScenarioParticipantCombatDeclarationForEncounterRound,
   initializeCombatRoundState,
   recordCombatRoundAttackResult,
   recordCombatRoundDamageResult,
+  reviewCombatRoundDamageResult,
   recordCombatRoundNoAttackPhaseReview,
   recordCombatRoundParryResult,
   rollOpenEndedD20,
@@ -200,6 +205,14 @@ interface CombatParrySourceOptions {
 interface CombatParrySourceSelection {
   usedMainHand: boolean;
   usedOffHand: boolean;
+}
+
+interface CombatDamageReviewDraft {
+  armorModifierOverride: string;
+  criticalGradeOverride: string;
+  notes: string;
+  selectedHitLocationOverride: string;
+  totalDamageOverride: string;
 }
 
 function buildInspectorPhaseContexts(
@@ -442,21 +455,26 @@ function formatCombatDamageCalculationLine(
     return undefined;
   }
 
-  const armorModifier = damage.armorModifier ?? 0;
+  const effectiveDamage = getCombatRoundEffectiveDamageResult(damage);
+  const armorModifier = effectiveDamage.effectiveArmorModifier;
   const hitLookupTotal = damage.hitLookupTotal ?? damage.lookupTotal;
-  const tableDamage = damage.tableDamage ?? damage.tableDamageModifier;
+  const tableDamage = effectiveDamage.effectiveTableDamage;
 
   if (damage.grazing && damage.damageRoll.required) {
     const rollLabel =
-      damage.damageRoll.diceExpression && damage.damageRoll.total !== undefined
-        ? `${damage.damageRoll.diceExpression} ${damage.damageRoll.total}`
+      effectiveDamage.effectiveDamageRoll.diceExpression &&
+      effectiveDamage.effectiveDamageRoll.total !== undefined
+        ? `${effectiveDamage.effectiveDamageRoll.diceExpression} ${effectiveDamage.effectiveDamageRoll.total}`
         : "required roll";
     const referenceHitLookupTotal =
-      damage.damageRoll.grazingReferenceHitLookupTotal ?? damage.damageRoll.derivedFromLookupTotal;
+      effectiveDamage.effectiveDamageRoll.grazingReferenceHitLookupTotal ??
+      effectiveDamage.effectiveDamageRoll.derivedFromLookupTotal;
     const referenceDamageLookupTotal =
-      damage.damageRoll.grazingReferenceDamageLookupTotal ?? damage.damageLookupTotal;
+      effectiveDamage.effectiveDamageRoll.grazingReferenceDamageLookupTotal ??
+      effectiveDamage.effectiveDamageLookupTotal;
     const referenceDamage =
-      damage.damageRoll.grazingReferenceDamage ?? damage.damageRoll.derivedNormalDamageTotal;
+      effectiveDamage.effectiveDamageRoll.grazingReferenceDamage ??
+      effectiveDamage.effectiveDamageRoll.derivedNormalDamageTotal;
     const referenceLabel =
       referenceHitLookupTotal !== undefined &&
       referenceDamageLookupTotal !== undefined &&
@@ -464,14 +482,14 @@ function formatCombatDamageCalculationLine(
         ? `grazing reference hit ${referenceHitLookupTotal} + DMB ${damage.dmb} + DM ${damage.defenderDm} + armor ${armorModifier} = lookup ${referenceDamageLookupTotal}; table damage ${referenceDamage}`
         : "grazing reference damage lookup";
 
-    return `Damage lookup: ${referenceLabel}; roll ${rollLabel} = ${damage.totalDamage}`;
+    return `Damage lookup: ${referenceLabel}; roll ${rollLabel} = ${effectiveDamage.effectiveTotalDamage}`;
   }
 
-  if (hitLookupTotal === undefined || damage.damageLookupTotal === undefined) {
-    return `Damage: table damage ${tableDamage ?? damage.totalDamage} = ${damage.totalDamage}`;
+  if (hitLookupTotal === undefined || effectiveDamage.effectiveDamageLookupTotal === undefined) {
+    return `Damage: table damage ${tableDamage ?? effectiveDamage.effectiveTotalDamage} = ${effectiveDamage.effectiveTotalDamage}`;
   }
 
-  return `Damage lookup: hit ${hitLookupTotal} + DMB ${damage.dmb} + DM ${damage.defenderDm} + armor ${armorModifier} = ${damage.damageLookupTotal}`;
+  return `Damage lookup: hit ${hitLookupTotal} + DMB ${damage.dmb} + DM ${damage.defenderDm} + armor ${armorModifier} = ${effectiveDamage.effectiveDamageLookupTotal}`;
 }
 
 function formatCombatDamageResultLine(
@@ -481,16 +499,21 @@ function formatCombatDamageResultLine(
     return undefined;
   }
 
-  const critical = damage.criticalGrade
-    ? ` · Critical: ${damage.criticalGrade.toUpperCase()} pending`
+  const effectiveDamage = getCombatRoundEffectiveDamageResult(damage);
+  const critical = effectiveDamage.effectiveCriticalGrade
+    ? ` · Critical: ${effectiveDamage.effectiveCriticalGrade.toUpperCase()} pending`
     : "";
   const minDamage =
-    damage.minDamage !== undefined ? ` · Min damage: ${damage.minDamage}` : "";
-  const maxDamage = damage.maxDamageNote ? ` · ${damage.maxDamageNote}` : "";
-  const tableDamage = damage.tableDamage ?? damage.tableDamageModifier ?? damage.totalDamage;
+    effectiveDamage.effectiveMinDamage !== undefined
+      ? ` · Min damage: ${effectiveDamage.effectiveMinDamage}`
+      : "";
+  const maxDamage = effectiveDamage.effectiveMaxDamageNote
+    ? ` · ${effectiveDamage.effectiveMaxDamageNote}`
+    : "";
+  const tableDamage = effectiveDamage.effectiveTableDamage ?? effectiveDamage.effectiveTotalDamage;
 
   if (damage.grazing && damage.damageRoll.required) {
-    return `Damage: grazing roll ${damage.totalDamage}${critical}${minDamage}${maxDamage}`;
+    return `Damage: grazing roll ${effectiveDamage.effectiveTotalDamage}${critical}${minDamage}${maxDamage}`;
   }
 
   return `Damage: table damage ${tableDamage}${critical}${minDamage}${maxDamage}`;
@@ -499,7 +522,13 @@ function formatCombatDamageResultLine(
 function formatCombatHitLocationLine(
   damage: CombatRoundPhaseResolutionResult["damageResult"],
 ): string | undefined {
-  if (!damage?.selectedHitLocation) {
+  if (!damage) {
+    return undefined;
+  }
+
+  const effectiveDamage = getCombatRoundEffectiveDamageResult(damage);
+
+  if (!effectiveDamage.effectiveSelectedHitLocation) {
     return undefined;
   }
 
@@ -507,7 +536,7 @@ function formatCombatHitLocationLine(
     damage.targetLocation && damage.targetLocation !== "none"
       ? getHitLocationFullLabel(damage.targetLocation)
       : "None";
-  const selected = getHitLocationFullLabel(damage.selectedHitLocation);
+  const selected = getHitLocationFullLabel(effectiveDamage.effectiveSelectedHitLocation);
   const rolls =
     damage.hitLocationRolls.length > 0
       ? damage.hitLocationRolls.join(", ")
@@ -523,15 +552,19 @@ function formatCombatArmorLine(
     return undefined;
   }
 
+  const effectiveDamage = getCombatRoundEffectiveDamageResult(damage);
+
   if (damage.armorModifierSource.status === "not_applied") {
-    return "Armor: not applied yet";
+    return effectiveDamage.hasReviewOverrides
+      ? `Armor: ${effectiveDamage.effectiveArmorModifier}`
+      : "Armor: not applied yet";
   }
 
   const source = damage.armorModifierSource.label
     ? `${damage.armorModifierSource.label} `
     : "";
 
-  return `Armor: ${source}${damage.armorModifier ?? 0}`;
+  return `Armor: ${source}${effectiveDamage.effectiveArmorModifier}`;
 }
 
 function formatCombatPhaseResolutionResultLines(input: {
@@ -732,6 +765,57 @@ function parseOptionalCombatInteger(value: string | undefined): number | undefin
   }
 
   return Number(value);
+}
+
+function parseOptionalCombatReviewInteger(value: string, label: string): number | undefined {
+  if (!value.trim()) {
+    return undefined;
+  }
+
+  return parseCombatInteger(value, label);
+}
+
+function buildCombatDamageReviewDraft(
+  damageResult?: CombatRoundDamageResult,
+): CombatDamageReviewDraft {
+  return {
+    armorModifierOverride: damageResult?.review?.armorModifierOverride?.toString() ?? "",
+    criticalGradeOverride:
+      damageResult?.review &&
+      Object.prototype.hasOwnProperty.call(damageResult.review, "criticalGradeOverride")
+        ? damageResult.review.criticalGradeOverride ?? "none"
+        : "",
+    notes: damageResult?.review?.notes ?? "",
+    selectedHitLocationOverride: damageResult?.review?.selectedHitLocationOverride ?? "",
+    totalDamageOverride: damageResult?.review?.totalDamageOverride?.toString() ?? "",
+  };
+}
+
+function buildCombatDamageReviewFromDraft(input: {
+  draft: CombatDamageReviewDraft;
+}): Omit<CombatRoundDamageReview, "reviewedAt" | "reviewedByUserId"> {
+  const selectedHitLocationOverride = HIT_LOCATIONS.find(
+    (location) => location === input.draft.selectedHitLocationOverride,
+  );
+  const criticalGradeOverride =
+    input.draft.criticalGradeOverride === "none"
+      ? null
+      : input.draft.criticalGradeOverride.trim() || undefined;
+  const notes = input.draft.notes.trim();
+
+  return {
+    armorModifierOverride: parseOptionalCombatReviewInteger(
+      input.draft.armorModifierOverride,
+      "Armor modifier override",
+    ),
+    criticalGradeOverride,
+    notes: notes || undefined,
+    selectedHitLocationOverride,
+    totalDamageOverride: parseOptionalCombatReviewInteger(
+      input.draft.totalDamageOverride,
+      "Total damage override",
+    ),
+  };
 }
 
 function getCombatTableCell(input: {
@@ -1041,6 +1125,163 @@ function CombatParryResolutionPanel(input: {
   );
 }
 
+function CombatDamageReviewPanel(input: {
+  controlsDisabled?: boolean;
+  damageResult: CombatRoundDamageResult;
+  draft: CombatDamageReviewDraft;
+  onDraftChange: (draft: CombatDamageReviewDraft) => void;
+  onSaveReview: () => void;
+  saving?: boolean;
+}) {
+  const effectiveDamage = getCombatRoundEffectiveDamageResult(input.damageResult);
+  const computedLocation = effectiveDamage.computedSelectedHitLocation
+    ? getHitLocationFullLabel(effectiveDamage.computedSelectedHitLocation)
+    : "Not recorded";
+  const effectiveLocation = effectiveDamage.effectiveSelectedHitLocation
+    ? getHitLocationFullLabel(effectiveDamage.effectiveSelectedHitLocation)
+    : computedLocation;
+  const computedCritical = effectiveDamage.computedCriticalGrade
+    ? effectiveDamage.computedCriticalGrade.toUpperCase()
+    : "None";
+  const effectiveCritical = effectiveDamage.effectiveCriticalGrade
+    ? effectiveDamage.effectiveCriticalGrade.toUpperCase()
+    : "None";
+  const computedDamageLine =
+    effectiveDamage.computedDamageLookupTotal !== undefined
+      ? `hit ${input.damageResult.hitLookupTotal ?? input.damageResult.lookupTotal} + DMB ${input.damageResult.dmb} + DM ${input.damageResult.defenderDm} + armor ${effectiveDamage.computedArmorModifier} = lookup ${effectiveDamage.computedDamageLookupTotal}`
+      : "Damage lookup not recorded";
+  const effectiveDamageLine =
+    effectiveDamage.effectiveDamageLookupTotal !== undefined
+      ? `hit ${input.damageResult.grazing ? 12 : input.damageResult.hitLookupTotal ?? input.damageResult.lookupTotal} + DMB ${input.damageResult.dmb} + DM ${input.damageResult.defenderDm} + armor ${effectiveDamage.effectiveArmorModifier} = lookup ${effectiveDamage.effectiveDamageLookupTotal}`
+      : "Damage lookup not available";
+  const disabled = input.controlsDisabled || input.saving;
+
+  return (
+    <section style={playerCombatPanelCardStyle}>
+      <strong>Damage review</strong>
+      <div style={{ color: "#5e5a50", display: "grid", fontSize: "0.88rem", gap: "0.25rem" }}>
+        <div>Computed: {computedLocation}</div>
+        <div>{computedDamageLine}</div>
+        <div>
+          Table damage {effectiveDamage.computedTableDamage ?? input.damageResult.totalDamage}
+          {" · "}
+          Critical {computedCritical}
+        </div>
+        <div>
+          Effective: {effectiveLocation} · damage {effectiveDamage.effectiveTotalDamage} · critical{" "}
+          {effectiveCritical}
+        </div>
+        <div>{effectiveDamageLine}</div>
+        {effectiveDamage.requiresTotalDamageOverride ? (
+          <div style={{ color: "#8b3a1a", fontWeight: 700 }}>
+            Enter total damage: reviewed grazing die no longer fits the armor-adjusted die size.
+          </div>
+        ) : null}
+      </div>
+      <div
+        style={{
+          display: "grid",
+          gap: "0.5rem",
+          gridTemplateColumns: "repeat(auto-fit, minmax(8rem, 1fr))",
+        }}
+      >
+        <label style={{ display: "grid", gap: "0.2rem" }}>
+          <span style={{ color: "#5e5a50", fontSize: "0.8rem", fontWeight: 700 }}>Location</span>
+          <select
+            disabled={disabled}
+            onChange={(event) =>
+              input.onDraftChange({
+                ...input.draft,
+                selectedHitLocationOverride: event.target.value,
+              })
+            }
+            value={input.draft.selectedHitLocationOverride}
+          >
+            <option value="">Computed</option>
+            {HIT_LOCATIONS.map((location) => (
+              <option key={location} value={location}>
+                {getHitLocationFullLabel(location)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label style={{ display: "grid", gap: "0.2rem" }}>
+          <span style={{ color: "#5e5a50", fontSize: "0.8rem", fontWeight: 700 }}>Armor</span>
+          <input
+            disabled={disabled}
+            inputMode="numeric"
+            onChange={(event) =>
+              input.onDraftChange({
+                ...input.draft,
+                armorModifierOverride: event.target.value,
+              })
+            }
+            placeholder={effectiveDamage.computedArmorModifier.toString()}
+            type="text"
+            value={input.draft.armorModifierOverride}
+          />
+        </label>
+        <label style={{ display: "grid", gap: "0.2rem" }}>
+          <span style={{ color: "#5e5a50", fontSize: "0.8rem", fontWeight: 700 }}>Damage</span>
+          <input
+            disabled={disabled}
+            inputMode="numeric"
+            onChange={(event) =>
+              input.onDraftChange({
+                ...input.draft,
+                totalDamageOverride: event.target.value,
+              })
+            }
+            placeholder={(
+              effectiveDamage.effectiveTableDamage ?? input.damageResult.totalDamage
+            ).toString()}
+            type="text"
+            value={input.draft.totalDamageOverride}
+          />
+        </label>
+        <label style={{ display: "grid", gap: "0.2rem" }}>
+          <span style={{ color: "#5e5a50", fontSize: "0.8rem", fontWeight: 700 }}>Critical</span>
+          <select
+            disabled={disabled}
+            onChange={(event) =>
+              input.onDraftChange({
+                ...input.draft,
+                criticalGradeOverride: event.target.value,
+              })
+            }
+            value={input.draft.criticalGradeOverride}
+          >
+            <option value="">Computed</option>
+            <option value="none">None</option>
+            {["a", "b", "c", "d", "e", "f"].map((grade) => (
+              <option key={grade} value={grade}>
+                {grade.toUpperCase()}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+      <label style={{ display: "grid", gap: "0.2rem" }}>
+        <span style={{ color: "#5e5a50", fontSize: "0.8rem", fontWeight: 700 }}>Notes</span>
+        <input
+          disabled={disabled}
+          onChange={(event) =>
+            input.onDraftChange({
+              ...input.draft,
+              notes: event.target.value,
+            })
+          }
+          type="text"
+          value={input.draft.notes}
+        />
+      </label>
+      <button disabled={disabled} onClick={input.onSaveReview} type="button">
+        {input.saving ? "Saving..." : "Save review"}
+      </button>
+    </section>
+  );
+}
+
 function shouldSortByInitiative(step: CombatRoundStep): "phase1" | "phase2" | undefined {
   if (step === "phase_1_actions" || step === "review_phase_2_actions") {
     return "phase1";
@@ -1071,6 +1312,9 @@ export default function CombatRoundManagerPanel({
   >({});
   const [parrySourceSelections, setParrySourceSelections] = useState<
     Record<string, CombatParrySourceSelection>
+  >({});
+  const [damageReviewDrafts, setDamageReviewDrafts] = useState<
+    Record<string, CombatDamageReviewDraft>
   >({});
   const [content, setContent] = useState<Awaited<ReturnType<typeof loadCanonicalContent>>>();
   const [resolvedCharacterStateByParticipantId, setResolvedCharacterStateByParticipantId] =
@@ -1509,6 +1753,12 @@ export default function CombatRoundManagerPanel({
   const inspectorDamageCommitted =
     inspectorResolutionStepKind === "damage" &&
     inspectorDisplayPhaseResolutionResult?.damageProposal.status === "committed";
+  const inspectorDamageReviewKey =
+    inspectorDisplayPhaseResolutionResult?.damageResult?.attackResultId;
+  const inspectorDamageReviewDraft =
+    inspectorDamageReviewKey && damageReviewDrafts[inspectorDamageReviewKey]
+      ? damageReviewDrafts[inspectorDamageReviewKey]
+      : buildCombatDamageReviewDraft(inspectorDisplayPhaseResolutionResult?.damageResult);
   const inspectorIsCursorParticipant =
     Boolean(inspectorPhaseResolutionCursor) &&
     inspectorPhaseResolutionCursor?.participantId === inspector.participant?.participantId;
@@ -2649,6 +2899,52 @@ export default function CombatRoundManagerPanel({
     }
   }
 
+  function buildRoundStateWithInspectorDamageReview(input: {
+    reviewedAt: string;
+    state: typeof roundState;
+  }): typeof roundState {
+    const damageResult = inspectorDisplayPhaseResolutionResult?.damageResult;
+
+    if (!damageResult) {
+      throw new Error("No damage proposal is available for review.");
+    }
+
+    return reviewCombatRoundDamageResult({
+      attackResultId: damageResult.attackResultId,
+      review: buildCombatDamageReviewFromDraft({
+        draft: inspectorDamageReviewDraft,
+      }),
+      reviewedAt: input.reviewedAt,
+      state: input.state,
+    });
+  }
+
+  async function saveInspectorDamageReview() {
+    if (!inspectorDamageReviewKey) {
+      return;
+    }
+
+    try {
+      const reviewedAt = new Date().toISOString();
+      const reviewedState = buildRoundStateWithInspectorDamageReview({
+        reviewedAt,
+        state: roundState,
+      });
+
+      await persistRoundState(reviewedState);
+      setDamageReviewDrafts((current) => {
+        const rest = { ...current };
+        delete rest[inspectorDamageReviewKey];
+
+        return rest;
+      });
+    } catch (caughtError) {
+      setSaveError(
+        caughtError instanceof Error ? caughtError.message : "Unable to save damage review.",
+      );
+    }
+  }
+
   async function advanceInspectorPhaseResolutionSubstep(phase: CombatRoundPhase) {
     const ownerParticipantId = inspectorPhaseResolutionOwnerParticipantId;
 
@@ -2712,6 +3008,10 @@ export default function CombatRoundManagerPanel({
             return;
           }
 
+          const reviewedRoundState = buildRoundStateWithInspectorDamageReview({
+            reviewedAt: updatedAt,
+            state: roundState,
+          });
           const committed = commitCombatRoundPhaseDamage({
             attackerScenarioParticipantId: attackerScenarioParticipant?.id,
             command: {
@@ -2721,7 +3021,7 @@ export default function CombatRoundManagerPanel({
             defenderScenarioParticipantId: defenderScenarioParticipant.id,
             encounterId: encounter.id,
             scenarioId: encounter.scenarioId,
-            state: roundState,
+            state: reviewedRoundState,
           });
           const updatedParticipant = await updateScenarioParticipantStateOnServer({
             participantId: defenderScenarioParticipant.id,
@@ -2736,6 +3036,14 @@ export default function CombatRoundManagerPanel({
             ...current,
             [updatedParticipant.id]: updatedParticipant,
           }));
+          if (inspectorDamageReviewKey) {
+            setDamageReviewDrafts((current) => {
+              const rest = { ...current };
+              delete rest[inspectorDamageReviewKey];
+
+              return rest;
+            });
+          }
           onScenarioParticipantsUpdated?.([updatedParticipant]);
           await persistRoundState(committed.state);
           setSaveError(undefined);
@@ -3280,6 +3588,26 @@ export default function CombatRoundManagerPanel({
                         resolution={inspectorDisplayPhaseResolutionResult.parryResolution}
                         selection={inspectorParrySelection}
                         sources={inspectorParryDefenderPhaseSummary?.parrySources}
+                      />
+                    ) : null}
+                    {inspectorDamageProposalReady &&
+                    inspectorDisplayPhaseResolutionResult?.damageResult ? (
+                      <CombatDamageReviewPanel
+                        controlsDisabled={saving || Boolean(inspectorSnapshot)}
+                        damageResult={inspectorDisplayPhaseResolutionResult.damageResult}
+                        draft={inspectorDamageReviewDraft}
+                        onDraftChange={(draft) => {
+                          if (!inspectorDamageReviewKey) {
+                            return;
+                          }
+
+                          setDamageReviewDrafts((current) => ({
+                            ...current,
+                            [inspectorDamageReviewKey]: draft,
+                          }));
+                        }}
+                        onSaveReview={() => void saveInspectorDamageReview()}
+                        saving={saving}
                       />
                     ) : null}
                     <PlayerCombatActionButtonPanel

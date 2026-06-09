@@ -3,8 +3,9 @@
 This page records the canonical hit/miss/grazing rule table for combat to-hit lookup and wires GM
 Phase 1 and Phase 2 attack rolls to that table. D1/D2 damage resolution first creates a reviewable
 damage result proposal for hits after a failed parry. Committing that proposal writes source-linked
-combat-effect rows for the defender. The proposal now includes hit location. Critical-effect
-automation, bleeding, full injury typing, and live armor-location equipment lookup remain future work.
+combat-effect rows for the defender. The proposal now includes hit location plus compact GM review
+overrides for location, armor, total damage, critical grade, and notes. Critical-effect automation,
+bleeding, full injury typing, and live armor-location equipment lookup remain future work.
 
 ## Hit lookup
 
@@ -88,12 +89,21 @@ armor as not applied until exact hit-location-to-equipped-armor wiring is safe. 
 minimum damage are stored as table metadata when present, but critical effects remain a GM review note
 for now.
 
+During D1/D2 review, the GM may record compact overrides without replacing the computed proposal.
+Review fields can override selected hit location, armor modifier, total damage, and critical grade;
+they can also carry notes. The effective damage preview is recalculated from the reviewed armor
+modifier and selected location where applicable. For grazing hits, changing armor can change the
+reviewed die size; if the original grazing roll no longer fits that die, the GM must enter a total
+damage override before commit.
+
 The proposal is not applied until the GM uses Commit phase damage. That command writes one
 combat-effect event and, when total damage is positive, one active `general_damage` effect row for
-the defender. The row is source-linked to the command by deterministic event/effect IDs. Phase-one
+the defender using the effective reviewed values. The row is source-linked to the command by
+deterministic event/effect IDs, and GM review notes are carried into the commit description. Phase-one
 committed rows are part of the participant's live JSON-backed combatEffects state before phase two
 continues. Clear unwinds this in two visible steps: first removing only the committed rows and
-returning to the D1/D2 proposal, then removing the proposal and returning to pending damage review.
+returning to the D1/D2 proposal with review overrides intact, then removing the proposal and returning
+to pending damage review.
 
 The intended final-damage sequencing remains:
 

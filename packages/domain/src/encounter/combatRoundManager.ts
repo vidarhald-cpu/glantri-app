@@ -16,6 +16,7 @@ import {
   hitLocationSchema,
   hitLocationTargetSchema,
   resolveHitLocationSelection,
+  type HitLocation,
 } from "./hitLocation";
 import { lookupCombatToHitDamageMetadata, resolveCombatToHit } from "./toHitTable";
 import type { EncounterParticipant, EncounterSession } from "./session";
@@ -329,6 +330,17 @@ export const combatRoundDamageResultSchema = z.object({
   minDamage: z.number().int().optional(),
   parryResultId: idSchema.optional(),
   phase: combatRoundPhaseSchema,
+  review: z
+    .object({
+      armorModifierOverride: z.number().int().optional(),
+      criticalGradeOverride: z.string().min(1).nullable().optional(),
+      notes: z.string().optional(),
+      reviewedAt: z.string().datetime().optional(),
+      reviewedByUserId: idSchema.optional(),
+      selectedHitLocationOverride: hitLocationSchema.optional(),
+      totalDamageOverride: z.number().int().min(0).optional(),
+    })
+    .optional(),
   selectedHitLocation: hitLocationSchema.optional(),
   selectedHitLocationRoll: z.number().int().min(1).max(20).optional(),
   tableDamage: z.number().int().optional(),
@@ -338,6 +350,30 @@ export const combatRoundDamageResultSchema = z.object({
   weaponName: z.string().min(1).optional(),
 });
 export type CombatRoundDamageResult = z.infer<typeof combatRoundDamageResultSchema>;
+export type CombatRoundDamageReview = NonNullable<CombatRoundDamageResult["review"]>;
+
+export interface CombatRoundEffectiveDamageResult {
+  computedArmorModifier: number;
+  computedCriticalGrade?: string;
+  computedDamageLookupTotal?: number;
+  computedMaxDamageNote?: string;
+  computedMinDamage?: number;
+  computedSelectedHitLocation?: HitLocation;
+  computedTableDamage?: number;
+  computedTotalDamage: number;
+  effectiveArmorModifier: number;
+  effectiveCriticalGrade?: string;
+  effectiveDamageLookupTotal?: number;
+  effectiveDamageRoll: CombatRoundDamageResult["damageRoll"];
+  effectiveMaxDamageNote?: string;
+  effectiveMinDamage?: number;
+  effectiveSelectedHitLocation?: HitLocation;
+  effectiveTableDamage?: number;
+  effectiveTotalDamage: number;
+  hasReviewOverrides: boolean;
+  requiresTotalDamageOverride: boolean;
+  review?: CombatRoundDamageReview;
+}
 
 export const combatRoundPhaseResolutionResultSchema = z.object({
   attackResultId: idSchema,
@@ -2275,6 +2311,148 @@ function getCombatRoundDamageMetadataForLookup(damageLookupTotal: number) {
   return damageMetadata;
 }
 
+function combatRoundReviewHasOwnField(
+  review: CombatRoundDamageReview | undefined,
+  field: keyof CombatRoundDamageReview,
+): boolean {
+  return Boolean(review && Object.prototype.hasOwnProperty.call(review, field));
+}
+
+function hasCombatRoundDamageReviewOverrides(
+  review: CombatRoundDamageReview | undefined,
+): boolean {
+  return Boolean(
+    review &&
+      (review.armorModifierOverride !== undefined ||
+        review.selectedHitLocationOverride !== undefined ||
+        review.totalDamageOverride !== undefined ||
+        combatRoundReviewHasOwnField(review, "criticalGradeOverride") ||
+        Boolean(review.notes?.trim())),
+  );
+}
+
+function getCombatRoundReviewedCriticalGrade(input: {
+  computedCriticalGrade?: string;
+  review?: CombatRoundDamageReview;
+  tableCriticalGrade?: string;
+}): string | undefined {
+  if (combatRoundReviewHasOwnField(input.review, "criticalGradeOverride")) {
+    return input.review?.criticalGradeOverride ?? undefined;
+  }
+
+  return input.tableCriticalGrade ?? input.computedCriticalGrade;
+}
+
+export function getCombatRoundEffectiveDamageResult(
+  damageResult: CombatRoundDamageResult,
+): CombatRoundEffectiveDamageResult {
+  const computedArmorModifier = damageResult.armorModifier ?? 0;
+  const effectiveArmorModifier =
+    damageResult.review?.armorModifierOverride ?? computedArmorModifier;
+  const computedSelectedHitLocation = damageResult.selectedHitLocation;
+  const effectiveSelectedHitLocation =
+    damageResult.review?.selectedHitLocationOverride ?? computedSelectedHitLocation;
+  const hitLookupTotal = damageResult.hitLookupTotal ?? damageResult.lookupTotal;
+  const hasTotalDamageOverride = damageResult.review?.totalDamageOverride !== undefined;
+  const computedDamageRoll = damageResult.damageRoll;
+  let effectiveDamageLookupTotal = damageResult.damageLookupTotal;
+  let effectiveTableDamage = damageResult.tableDamage ?? damageResult.tableDamageModifier;
+  let effectiveCriticalGrade = getCombatRoundReviewedCriticalGrade({
+    computedCriticalGrade: damageResult.criticalGrade,
+    review: damageResult.review,
+  });
+  let effectiveMaxDamageNote = damageResult.maxDamageNote;
+  let effectiveMinDamage = damageResult.minDamage;
+  let effectiveDamageRoll: CombatRoundDamageResult["damageRoll"] = computedDamageRoll;
+  let effectiveTotalDamage = damageResult.review?.totalDamageOverride ?? damageResult.totalDamage;
+  let requiresTotalDamageOverride = false;
+
+  if (hitLookupTotal !== undefined) {
+    if (damageResult.grazing) {
+      const grazingReferenceHitLookupTotal = 12;
+      effectiveDamageLookupTotal = calculateCombatRoundDamageLookupTotal({
+        armorModifier: effectiveArmorModifier,
+        defenderDm: damageResult.defenderDm,
+        dmb: damageResult.dmb,
+        hitLookupTotal: grazingReferenceHitLookupTotal,
+      });
+      const metadata = getCombatRoundDamageMetadataForLookup(effectiveDamageLookupTotal);
+      effectiveTableDamage = metadata.damage;
+      effectiveMaxDamageNote = metadata.maxDamageNote;
+      effectiveMinDamage = metadata.minDamage;
+      effectiveCriticalGrade = getCombatRoundReviewedCriticalGrade({
+        computedCriticalGrade: damageResult.criticalGrade,
+        review: damageResult.review,
+        tableCriticalGrade: undefined,
+      });
+
+      const dieSides = Math.max(1, metadata.damage);
+      const existingRoll =
+        computedDamageRoll.rolls?.[0] ?? computedDamageRoll.total ?? damageResult.totalDamage;
+      const canKeepExistingRoll =
+        Number.isInteger(existingRoll) && existingRoll >= 1 && existingRoll <= dieSides;
+      requiresTotalDamageOverride = !hasTotalDamageOverride && !canKeepExistingRoll;
+      effectiveTotalDamage = hasTotalDamageOverride
+        ? damageResult.review?.totalDamageOverride ?? 0
+        : existingRoll;
+      effectiveDamageRoll = {
+        derivedFromLookupTotal: grazingReferenceHitLookupTotal,
+        derivedNormalDamageTotal: metadata.damage,
+        diceExpression: `1d${dieSides}`,
+        grazingReferenceDamage: metadata.damage,
+        grazingReferenceDamageLookupTotal: effectiveDamageLookupTotal,
+        grazingReferenceHitLookupTotal,
+        required: true,
+        rolls: canKeepExistingRoll && !hasTotalDamageOverride ? [existingRoll] : undefined,
+        total: effectiveTotalDamage,
+      };
+    } else {
+      effectiveDamageLookupTotal = calculateCombatRoundDamageLookupTotal({
+        armorModifier: effectiveArmorModifier,
+        defenderDm: damageResult.defenderDm,
+        dmb: damageResult.dmb,
+        hitLookupTotal,
+      });
+      const metadata = getCombatRoundDamageMetadataForLookup(effectiveDamageLookupTotal);
+      effectiveTableDamage = metadata.damage;
+      effectiveMaxDamageNote = metadata.maxDamageNote;
+      effectiveMinDamage = metadata.minDamage;
+      effectiveCriticalGrade = getCombatRoundReviewedCriticalGrade({
+        computedCriticalGrade: damageResult.criticalGrade,
+        review: damageResult.review,
+        tableCriticalGrade: metadata.criticalGrade,
+      });
+      effectiveTotalDamage = damageResult.review?.totalDamageOverride ?? metadata.damage;
+      effectiveDamageRoll = {
+        required: false,
+      };
+    }
+  }
+
+  return {
+    computedArmorModifier,
+    computedCriticalGrade: damageResult.criticalGrade,
+    computedDamageLookupTotal: damageResult.damageLookupTotal,
+    computedMaxDamageNote: damageResult.maxDamageNote,
+    computedMinDamage: damageResult.minDamage,
+    computedSelectedHitLocation,
+    computedTableDamage: damageResult.tableDamage ?? damageResult.tableDamageModifier,
+    computedTotalDamage: damageResult.totalDamage,
+    effectiveArmorModifier,
+    effectiveCriticalGrade,
+    effectiveDamageLookupTotal,
+    effectiveDamageRoll,
+    effectiveMaxDamageNote,
+    effectiveMinDamage,
+    effectiveSelectedHitLocation,
+    effectiveTableDamage,
+    effectiveTotalDamage,
+    hasReviewOverrides: hasCombatRoundDamageReviewOverrides(damageResult.review),
+    requiresTotalDamageOverride,
+    review: damageResult.review,
+  };
+}
+
 export function buildCombatRoundDamageResult(input: {
   armorModifier?: number;
   armorModifierSource?: CombatRoundDamageResult["armorModifierSource"];
@@ -2600,6 +2778,45 @@ export function recordCombatRoundDamageResult(input: {
     : withDraftedReview;
 }
 
+export function reviewCombatRoundDamageResult(input: {
+  attackResultId: string;
+  reviewedAt: string;
+  reviewedByUserId?: string;
+  review: Omit<CombatRoundDamageReview, "reviewedAt" | "reviewedByUserId">;
+  state: CombatRoundState;
+}): CombatRoundState {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const nextReview = combatRoundDamageResultSchema.shape.review.unwrap().parse({
+    ...input.review,
+    reviewedAt: input.reviewedAt,
+    reviewedByUserId: input.reviewedByUserId,
+  });
+  const nextResults = normalized.phaseResolutionResults.map((result) => {
+    if (result.attackResultId !== input.attackResultId || !result.damageResult) {
+      return result;
+    }
+
+    return combatRoundPhaseResolutionResultSchema.parse({
+      ...result,
+      damageProposal: {
+        committedCombatEffectIds: [],
+        proposedEffects: [],
+        status: "drafted",
+      },
+      damageResult: {
+        ...result.damageResult,
+        review: nextReview,
+      },
+      updatedAt: input.reviewedAt,
+    });
+  });
+
+  return combatRoundStateSchema.parse({
+    ...normalized,
+    phaseResolutionResults: nextResults,
+  });
+}
+
 type CombatRoundDamageCommitIdInput = {
   attackResultId: string;
   commandId: string;
@@ -2642,13 +2859,17 @@ function formatCombatRoundDamageCommitPhaseLabel(phase: CombatRoundPhase): strin
 function formatCombatRoundDamageCommitDescription(input: {
   damageResult: CombatRoundDamageResult;
 }): string {
-  const critical = input.damageResult.criticalGrade
-    ? ` Critical ${input.damageResult.criticalGrade.toUpperCase()} pending.`
+  const effectiveDamage = getCombatRoundEffectiveDamageResult(input.damageResult);
+  const critical = effectiveDamage.effectiveCriticalGrade
+    ? ` Critical ${effectiveDamage.effectiveCriticalGrade.toUpperCase()} pending.`
+    : "";
+  const notes = input.damageResult.review?.notes?.trim()
+    ? ` GM review: ${input.damageResult.review.notes.trim()}`
     : "";
 
   return `${formatCombatRoundDamageCommitPhaseLabel(
     input.damageResult.phase,
-  )} damage result: ${input.damageResult.totalDamage} damage.${critical}`;
+  )} damage result: ${effectiveDamage.effectiveTotalDamage} damage.${critical}${notes}`;
 }
 
 function buildCombatRoundDamageCommitRows(input: {
@@ -2665,6 +2886,13 @@ function buildCombatRoundDamageCommitRows(input: {
   nextCombatEffects: CombatEffectsState;
 } {
   const currentCombatEffects = combatEffectsStateSchema.parse(input.combatEffects);
+  const effectiveDamage = getCombatRoundEffectiveDamageResult(input.damageResult);
+  if (effectiveDamage.requiresTotalDamageOverride) {
+    throw new RangeError(
+      "Grazing damage review changed the die size; enter a total damage override before committing.",
+    );
+  }
+
   const damageResultId = getCombatRoundDamageResultId({
     attackResultId: input.damageResult.attackResultId,
   });
@@ -2677,7 +2905,7 @@ function buildCombatRoundDamageCommitRows(input: {
   };
   const eventId = buildCombatRoundDamageCommitEventId(idInput);
   const effectIds =
-    input.damageResult.totalDamage > 0
+    effectiveDamage.effectiveTotalDamage > 0
       ? [
           buildCombatRoundDamageCommitEffectId({
             ...idInput,
@@ -2703,14 +2931,14 @@ function buildCombatRoundDamageCommitRows(input: {
     targetParticipantId: input.defenderScenarioParticipantId,
   });
   const effects =
-    input.damageResult.totalDamage > 0
+    effectiveDamage.effectiveTotalDamage > 0
       ? [
           combatEffectSchema.parse({
             createdAt: input.command.createdAt,
             damage: 0,
             description,
             effectGroup: "none",
-            generalDamage: input.damageResult.totalDamage,
+            generalDamage: effectiveDamage.effectiveTotalDamage,
             id: effectIds[0] ?? buildCombatRoundDamageCommitEffectId({
               ...idInput,
               kind: "general-damage",
@@ -2806,6 +3034,13 @@ function recordCombatRoundCommitPhaseDamageCommand(input: {
       state: normalized,
       type: "commit_phase_damage",
     });
+  const effectiveDamage = getCombatRoundEffectiveDamageResult(input.damageResult);
+  if (effectiveDamage.requiresTotalDamageOverride) {
+    throw new RangeError(
+      "Grazing damage review changed the die size; enter a total damage override before committing.",
+    );
+  }
+
   const damageResultId = getCombatRoundDamageResultId({
     attackResultId: input.damageResult.attackResultId,
   });
@@ -2818,7 +3053,7 @@ function recordCombatRoundCommitPhaseDamageCommand(input: {
   };
   const createdCombatEffectEventId = buildCombatRoundDamageCommitEventId(idInput);
   const createdCombatEffectIds =
-    input.damageResult.totalDamage > 0
+    effectiveDamage.effectiveTotalDamage > 0
       ? [
           buildCombatRoundDamageCommitEffectId({
             ...idInput,
@@ -2836,11 +3071,17 @@ function recordCombatRoundCommitPhaseDamageCommand(input: {
       attackerParticipantId: input.damageResult.attackerParticipantId,
       createdCombatEffectEventId,
       createdCombatEffectIds,
-      criticalGrade: input.damageResult.criticalGrade,
+      computedCriticalGrade: input.damageResult.criticalGrade,
+      computedTotalDamage: input.damageResult.totalDamage,
+      criticalGrade: effectiveDamage.effectiveCriticalGrade,
       damageResultId,
       defenderParticipantId: input.damageResult.defenderParticipantId,
+      effectiveArmorModifier: effectiveDamage.effectiveArmorModifier,
+      effectiveDamageLookupTotal: effectiveDamage.effectiveDamageLookupTotal,
+      effectiveHitLocation: effectiveDamage.effectiveSelectedHitLocation,
+      review: input.damageResult.review,
       status: "committed",
-      totalDamage: input.damageResult.totalDamage,
+      totalDamage: effectiveDamage.effectiveTotalDamage,
       ...(afterCursor.participantId
         ? {
             nextStepOpened: {

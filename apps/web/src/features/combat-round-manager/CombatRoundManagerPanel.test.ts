@@ -139,6 +139,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("getCombatRoundPhaseResolutionResultForAttack");
     expect(source).toContain("getCombatRoundPhaseResolutionStatus");
     expect(source).toContain("getCombatRoundResolutionPhaseForStep");
+    expect(source).toContain("getCombatRoundEffectiveDamageResult");
     expect(source).toContain("getHitLocationFullLabel");
     expect(source).toContain("completeCombatRoundPhaseResolutionForParticipant");
     expect(source).toContain("advanceCombatRoundPhaseResolutionSubstepForParticipant");
@@ -153,6 +154,9 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("Resolve damage");
     expect(source).toContain("Commit phase damage");
     expect(source).toContain("Phase damage committed");
+    expect(source).toContain("Damage review");
+    expect(source).toContain("Save review");
+    expect(source).toContain("reviewCombatRoundDamageResult");
     expect(source).toContain("commitCombatRoundPhaseDamage");
     expect(source).toContain("updateScenarioParticipantStateOnServer");
     expect(source).toContain("combatEffects: committed.combatEffects");
