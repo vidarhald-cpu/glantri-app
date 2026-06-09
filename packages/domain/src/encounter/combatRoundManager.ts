@@ -10,6 +10,9 @@ import {
   combatEffectEventSchema,
   combatEffectsStateSchema,
   combatEffectSchema,
+  type CombatEffect,
+  type CombatEffectGroup,
+  type CombatEffectType,
   type CombatEffectsState,
 } from "./combatEffects";
 import {
@@ -283,6 +286,56 @@ export const combatRoundParryResolutionSchema = z.object({
 });
 export type CombatRoundParryResolution = z.infer<typeof combatRoundParryResolutionSchema>;
 
+export const combatRoundDamageReviewAdditionalEffectKindSchema = z.enum([
+  "modifier",
+  "fatigue",
+  "special",
+  "note",
+]);
+export const combatRoundDamageReviewModifierBucketSchema = z.enum([
+  "general",
+  "obSkill",
+  "db",
+]);
+export const combatRoundDamageReviewEffectPhaseSchema = z.enum([
+  "phase1",
+  "phase2",
+  "round",
+  "untilCleared",
+]);
+
+export const combatRoundDamageReviewAdditionalEffectSchema = z
+  .object({
+    durationRounds: z.number().int().positive().optional(),
+    id: idSchema,
+    kind: combatRoundDamageReviewAdditionalEffectKindSchema,
+    label: z.string().min(1),
+    modifierBucket: combatRoundDamageReviewModifierBucketSchema.optional(),
+    modifierValue: z.number().int().optional(),
+    notes: z.string().optional(),
+    phase: combatRoundDamageReviewEffectPhaseSchema.optional(),
+  })
+  .superRefine((effect, context) => {
+    if (effect.kind === "modifier" && !effect.modifierBucket) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Modifier effects require a modifier bucket.",
+        path: ["modifierBucket"],
+      });
+    }
+
+    if (
+      (effect.kind === "modifier" || effect.kind === "fatigue") &&
+      effect.modifierValue === undefined
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Modifier and fatigue effects require a modifier value.",
+        path: ["modifierValue"],
+      });
+    }
+  });
+
 export const combatRoundDamageResultSchema = z.object({
   armorModifier: z.number().int().optional(),
   armorModifierSource: z
@@ -332,6 +385,7 @@ export const combatRoundDamageResultSchema = z.object({
   phase: combatRoundPhaseSchema,
   review: z
     .object({
+      additionalEffects: z.array(combatRoundDamageReviewAdditionalEffectSchema).default([]),
       armorModifierOverride: z.number().int().optional(),
       criticalGradeOverride: z.string().min(1).nullable().optional(),
       notes: z.string().optional(),
@@ -351,6 +405,9 @@ export const combatRoundDamageResultSchema = z.object({
 });
 export type CombatRoundDamageResult = z.infer<typeof combatRoundDamageResultSchema>;
 export type CombatRoundDamageReview = NonNullable<CombatRoundDamageResult["review"]>;
+export type CombatRoundDamageReviewAdditionalEffect = NonNullable<
+  CombatRoundDamageReview["additionalEffects"]
+>[number];
 
 export interface CombatRoundEffectiveDamageResult {
   computedArmorModifier: number;
@@ -2324,6 +2381,7 @@ function hasCombatRoundDamageReviewOverrides(
   return Boolean(
     review &&
       (review.armorModifierOverride !== undefined ||
+        (review.additionalEffects?.length ?? 0) > 0 ||
         review.selectedHitLocationOverride !== undefined ||
         review.totalDamageOverride !== undefined ||
         combatRoundReviewHasOwnField(review, "criticalGradeOverride") ||
@@ -2847,13 +2905,86 @@ export function buildCombatRoundDamageCommitEventId(
 
 export function buildCombatRoundDamageCommitEffectId(input: CombatRoundDamageCommitIdInput & {
   commandId: string;
-  kind: "general-damage";
+  kind: string;
 }): string {
-  return `${buildCombatRoundDamageCommitIdBase(input)}:combat-effect:${input.kind}`;
+  return `${buildCombatRoundDamageCommitIdBase(input)}:combat-effect:${formatCombatRoundDamageCommitIdPart(input.kind)}`;
 }
 
 function formatCombatRoundDamageCommitPhaseLabel(phase: CombatRoundPhase): string {
   return phase === "phase1" ? "Phase 1" : "Phase 2";
+}
+
+function formatCombatRoundDamageReviewEffectDescription(
+  effect: CombatRoundDamageReviewAdditionalEffect,
+): string {
+  return effect.notes?.trim() ? `${effect.label}: ${effect.notes.trim()}` : effect.label;
+}
+
+function formatCombatRoundDamageReviewEffectDuration(
+  effect: CombatRoundDamageReviewAdditionalEffect,
+): string | undefined {
+  const parts: string[] = [];
+
+  if (effect.durationRounds !== undefined) {
+    parts.push(`${effect.durationRounds} round${effect.durationRounds === 1 ? "" : "s"}`);
+  }
+
+  if (effect.phase === "phase1") {
+    parts.push("phase 1");
+  } else if (effect.phase === "phase2") {
+    parts.push("phase 2");
+  } else if (effect.phase === "round") {
+    parts.push("this round");
+  } else if (effect.phase === "untilCleared") {
+    parts.push("until cleared");
+  }
+
+  return parts.length > 0 ? parts.join(" · ") : undefined;
+}
+
+function getCombatRoundDamageReviewEffectRowShape(
+  effect: CombatRoundDamageReviewAdditionalEffect,
+): {
+  effectGroup: CombatEffectGroup;
+  modifierValue?: number;
+  type: CombatEffectType;
+} {
+  if (effect.kind === "fatigue") {
+    return {
+      effectGroup: "fatigue",
+      modifierValue: effect.modifierValue,
+      type: "fatigue",
+    };
+  }
+
+  if (effect.kind === "modifier") {
+    if (effect.modifierBucket === "obSkill") {
+      return {
+        effectGroup: "obSkill",
+        modifierValue: effect.modifierValue,
+        type: "ob_skill_modifier",
+      };
+    }
+
+    if (effect.modifierBucket === "db") {
+      return {
+        effectGroup: "db",
+        modifierValue: effect.modifierValue,
+        type: "db_modifier",
+      };
+    }
+
+    return {
+      effectGroup: "general",
+      modifierValue: effect.modifierValue,
+      type: "general_modifier",
+    };
+  }
+
+  return {
+    effectGroup: "special",
+    type: "special",
+  };
 }
 
 function formatCombatRoundDamageCommitDescription(input: {
@@ -2866,10 +2997,15 @@ function formatCombatRoundDamageCommitDescription(input: {
   const notes = input.damageResult.review?.notes?.trim()
     ? ` GM review: ${input.damageResult.review.notes.trim()}`
     : "";
+  const additionalEffects = input.damageResult.review?.additionalEffects?.length
+    ? ` Additional effects: ${input.damageResult.review.additionalEffects
+        .map((effect) => effect.label)
+        .join(", ")}.`
+    : "";
 
   return `${formatCombatRoundDamageCommitPhaseLabel(
     input.damageResult.phase,
-  )} damage result: ${effectiveDamage.effectiveTotalDamage} damage.${critical}${notes}`;
+  )} damage result: ${effectiveDamage.effectiveTotalDamage} damage.${critical}${notes}${additionalEffects}`;
 }
 
 function buildCombatRoundDamageCommitRows(input: {
@@ -2904,7 +3040,8 @@ function buildCombatRoundDamageCommitRows(input: {
     roundNumber: input.command.roundNumber,
   };
   const eventId = buildCombatRoundDamageCommitEventId(idInput);
-  const effectIds =
+  const reviewAdditionalEffects = input.damageResult.review?.additionalEffects ?? [];
+  const generalDamageEffectIds =
     effectiveDamage.effectiveTotalDamage > 0
       ? [
           buildCombatRoundDamageCommitEffectId({
@@ -2913,6 +3050,13 @@ function buildCombatRoundDamageCommitRows(input: {
           }),
         ]
       : [];
+  const additionalEffectIds = reviewAdditionalEffects.map((effect) =>
+    buildCombatRoundDamageCommitEffectId({
+      ...idInput,
+      kind: `additional-${effect.id}`,
+    }),
+  );
+  const effectIds = [...generalDamageEffectIds, ...additionalEffectIds];
   const description = formatCombatRoundDamageCommitDescription({
     damageResult: input.damageResult,
   });
@@ -2930,7 +3074,7 @@ function buildCombatRoundDamageCommitRows(input: {
     sourceType: "combat_action",
     targetParticipantId: input.defenderScenarioParticipantId,
   });
-  const effects =
+  const generalDamageEffects: CombatEffect[] =
     effectiveDamage.effectiveTotalDamage > 0
       ? [
           combatEffectSchema.parse({
@@ -2939,10 +3083,12 @@ function buildCombatRoundDamageCommitRows(input: {
             description,
             effectGroup: "none",
             generalDamage: effectiveDamage.effectiveTotalDamage,
-            id: effectIds[0] ?? buildCombatRoundDamageCommitEffectId({
-              ...idInput,
-              kind: "general-damage",
-            }),
+            id:
+              generalDamageEffectIds[0] ??
+              buildCombatRoundDamageCommitEffectId({
+                ...idInput,
+                kind: "general-damage",
+              }),
             roundNumber: input.command.roundNumber,
             sourceEventId: eventId,
             status: "active",
@@ -2952,6 +3098,32 @@ function buildCombatRoundDamageCommitRows(input: {
           }),
         ]
       : [];
+  const additionalEffects = reviewAdditionalEffects.map((effect, index) => {
+    const rowShape = getCombatRoundDamageReviewEffectRowShape(effect);
+
+    return combatEffectSchema.parse({
+      createdAt: input.command.createdAt,
+      damage: 0,
+      description: formatCombatRoundDamageReviewEffectDescription(effect),
+      duration: formatCombatRoundDamageReviewEffectDuration(effect),
+      effectGroup: rowShape.effectGroup,
+      generalDamage: 0,
+      id:
+        additionalEffectIds[index] ??
+        buildCombatRoundDamageCommitEffectId({
+          ...idInput,
+          kind: `additional-${effect.id}`,
+        }),
+      modifierValue: rowShape.modifierValue,
+      roundNumber: input.command.roundNumber,
+      sourceEventId: eventId,
+      status: "active",
+      targetParticipantId: input.defenderScenarioParticipantId,
+      type: rowShape.type,
+      updatedAt: input.command.createdAt,
+    });
+  });
+  const effects = [...generalDamageEffects, ...additionalEffects];
 
   return {
     effectIds,
@@ -3052,7 +3224,7 @@ function recordCombatRoundCommitPhaseDamageCommand(input: {
     roundNumber: normalized.roundNumber,
   };
   const createdCombatEffectEventId = buildCombatRoundDamageCommitEventId(idInput);
-  const createdCombatEffectIds =
+  const createdGeneralDamageEffectIds =
     effectiveDamage.effectiveTotalDamage > 0
       ? [
           buildCombatRoundDamageCommitEffectId({
@@ -3061,6 +3233,18 @@ function recordCombatRoundCommitPhaseDamageCommand(input: {
           }),
         ]
       : [];
+  const createdAdditionalCombatEffectIds = (
+    input.damageResult.review?.additionalEffects ?? []
+  ).map((effect) =>
+    buildCombatRoundDamageCommitEffectId({
+      ...idInput,
+      kind: `additional-${effect.id}`,
+    }),
+  );
+  const createdCombatEffectIds = [
+    ...createdGeneralDamageEffectIds,
+    ...createdAdditionalCombatEffectIds,
+  ];
   const command = combatRoundCommandSchema.parse({
     afterCursor,
     beforeCursor,
@@ -3069,6 +3253,8 @@ function recordCombatRoundCommitPhaseDamageCommand(input: {
     facts: {
       attackResultId: input.damageResult.attackResultId,
       attackerParticipantId: input.damageResult.attackerParticipantId,
+      additionalEffects: input.damageResult.review?.additionalEffects ?? [],
+      createdAdditionalCombatEffectIds,
       createdCombatEffectEventId,
       createdCombatEffectIds,
       computedCriticalGrade: input.damageResult.criticalGrade,

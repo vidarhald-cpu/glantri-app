@@ -3386,6 +3386,7 @@ describe("combat round manager", () => {
     const reviewedDamageResult = {
       ...damageResult,
       review: {
+        additionalEffects: [],
         armorModifierOverride: -2,
         criticalGradeOverride: "a",
         notes: "armor adjusted manually",
@@ -3697,6 +3698,24 @@ describe("combat round manager", () => {
       reviewedAt: "2026-01-01T00:05:30.000Z",
       reviewedByUserId: "gm-1",
       review: {
+        additionalEffects: [
+          {
+            durationRounds: 2,
+            id: "guard-stun",
+            kind: "modifier",
+            label: "Stunned",
+            modifierBucket: "general",
+            modifierValue: -4,
+            notes: "critical stun manual",
+            phase: "untilCleared",
+          },
+          {
+            id: "guard-note",
+            kind: "note",
+            label: "Dropped weapon",
+            notes: "manual special note",
+          },
+        ],
         armorModifierOverride: -2,
         criticalGradeOverride: "a",
         notes: "armor adjusted manually",
@@ -3749,6 +3768,10 @@ describe("combat round manager", () => {
       "commit-d1:r3:phase1:3-phase1-gladiator-guard:3-phase1-gladiator-guard-damage:combat-effect-event";
     const expectedCommitEffectId =
       "commit-d1:r3:phase1:3-phase1-gladiator-guard:3-phase1-gladiator-guard-damage:combat-effect:general-damage";
+    const expectedStunEffectId =
+      "commit-d1:r3:phase1:3-phase1-gladiator-guard:3-phase1-gladiator-guard-damage:combat-effect:additional-guard-stun";
+    const expectedNoteEffectId =
+      "commit-d1:r3:phase1:3-phase1-gladiator-guard:3-phase1-gladiator-guard-damage:combat-effect:additional-guard-note";
     const clearedCommitState = clearCombatRoundStep({
       state: {
         ...committed.state,
@@ -3777,6 +3800,18 @@ describe("combat round manager", () => {
     const reviewedDamageResult = afterReview.phaseResolutionResults[0]?.damageResult;
 
     expect(reviewedDamageResult?.review).toMatchObject({
+      additionalEffects: [
+        expect.objectContaining({
+          id: "guard-stun",
+          kind: "modifier",
+          modifierBucket: "general",
+          modifierValue: -4,
+        }),
+        expect.objectContaining({
+          id: "guard-note",
+          kind: "note",
+        }),
+      ],
       armorModifierOverride: -2,
       criticalGradeOverride: "a",
       notes: "armor adjusted manually",
@@ -3812,9 +3847,23 @@ describe("combat round manager", () => {
       },
       facts: expect.objectContaining({
         attackResultId: "3:phase1:gladiator:guard",
+        additionalEffects: [
+          expect.objectContaining({
+            id: "guard-stun",
+            modifierValue: -4,
+          }),
+          expect.objectContaining({
+            id: "guard-note",
+          }),
+        ],
         attackerParticipantId: "gladiator",
+        createdAdditionalCombatEffectIds: [expectedStunEffectId, expectedNoteEffectId],
         createdCombatEffectEventId: expectedCommitEventId,
-        createdCombatEffectIds: [expectedCommitEffectId],
+        createdCombatEffectIds: [
+          expectedCommitEffectId,
+          expectedStunEffectId,
+          expectedNoteEffectId,
+        ],
         criticalGrade: "a",
         damageResultId: "3:phase1:gladiator:guard:damage",
         defenderParticipantId: "guard",
@@ -3841,6 +3890,10 @@ describe("combat round manager", () => {
         targetParticipantId: "scenario-guard",
       }),
     );
+    expect(
+      committed.combatEffects.events.find((event) => event.id === expectedCommitEventId)
+        ?.description,
+    ).toContain("Additional effects: Stunned, Dropped weapon.");
     expect(committed.combatEffects.effects).toContainEqual(
       expect.objectContaining({
         generalDamage: 6,
@@ -3851,9 +3904,37 @@ describe("combat round manager", () => {
         type: "general_damage",
       }),
     );
+    expect(committed.combatEffects.effects).toContainEqual(
+      expect.objectContaining({
+        description: "Stunned: critical stun manual",
+        duration: "2 rounds · until cleared",
+        effectGroup: "general",
+        id: expectedStunEffectId,
+        modifierValue: -4,
+        sourceEventId: expectedCommitEventId,
+        status: "active",
+        targetParticipantId: "scenario-guard",
+        type: "general_modifier",
+      }),
+    );
+    expect(committed.combatEffects.effects).toContainEqual(
+      expect.objectContaining({
+        description: "Dropped weapon: manual special note",
+        effectGroup: "special",
+        id: expectedNoteEffectId,
+        sourceEventId: expectedCommitEventId,
+        status: "active",
+        targetParticipantId: "scenario-guard",
+        type: "special",
+      }),
+    );
     expect(committed.state.phaseResolutionResults[0]?.damageProposal).toMatchObject({
       committedCombatEffectEventId: expectedCommitEventId,
-      committedCombatEffectIds: [expectedCommitEffectId],
+      committedCombatEffectIds: [
+        expectedCommitEffectId,
+        expectedStunEffectId,
+        expectedNoteEffectId,
+      ],
       status: "committed",
     });
     expect(clearedCommitState.commands.at(-1)).toMatchObject({
@@ -3867,6 +3948,15 @@ describe("combat round manager", () => {
     expect(clearedCommitState.phaseResolutionResults[0]?.damageResult).toMatchObject({
       hitLocationRolls: [18, 7],
       review: expect.objectContaining({
+        additionalEffects: [
+          expect.objectContaining({
+            id: "guard-stun",
+            modifierValue: -4,
+          }),
+          expect.objectContaining({
+            id: "guard-note",
+          }),
+        ],
         armorModifierOverride: -2,
         totalDamageOverride: 6,
       }),
@@ -3883,6 +3973,12 @@ describe("combat round manager", () => {
     );
     expect(cleanedCombatEffects.effects).not.toContainEqual(
       expect.objectContaining({ id: expectedCommitEffectId }),
+    );
+    expect(cleanedCombatEffects.effects).not.toContainEqual(
+      expect.objectContaining({ id: expectedStunEffectId }),
+    );
+    expect(cleanedCombatEffects.effects).not.toContainEqual(
+      expect.objectContaining({ id: expectedNoteEffectId }),
     );
     expect(cleanedCombatEffects.events).toContainEqual(
       expect.objectContaining({

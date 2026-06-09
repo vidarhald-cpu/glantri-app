@@ -155,6 +155,9 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("Commit phase damage");
     expect(source).toContain("Phase damage committed");
     expect(source).toContain("Damage review");
+    expect(source).toContain("Additional immediate effects");
+    expect(source).toContain("Add modifier effect");
+    expect(source).toContain("Add note effect");
     expect(source).toContain("Save review");
     expect(source).toContain("reviewCombatRoundDamageResult");
     expect(source).toContain("commitCombatRoundPhaseDamage");
@@ -169,6 +172,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("attackerRoundParticipant?.declaration?.phaseContexts?.[phase]?.targetLocation");
     expect(source).toContain("Damage roll: ${formatResolutionStatusLabel");
     expect(source).toContain("Proposal: ${formatResolutionStatusLabel");
+    expect(source).toContain("Effects: ${damageResult.review.additionalEffects");
     expect(source).toContain("buildCombatRoundAttackRollResult");
     expect(source).toContain("recordCombatRoundAttackResult");
     expect(source).toContain("createdAt: attackResult.rolledAt");

@@ -6,6 +6,7 @@ import type {
   CombatRoundDeclaration,
   CombatRoundAttackRollResult,
   CombatRoundDamageReview,
+  CombatRoundDamageReviewAdditionalEffect,
   CombatRoundDamageResult,
   CombatRoundParryResolution,
   CombatRoundPhase,
@@ -207,7 +208,19 @@ interface CombatParrySourceSelection {
   usedOffHand: boolean;
 }
 
+interface CombatDamageReviewAdditionalEffectDraft {
+  durationRounds: string;
+  id: string;
+  kind: CombatRoundDamageReviewAdditionalEffect["kind"];
+  label: string;
+  modifierBucket: string;
+  modifierValue: string;
+  notes: string;
+  phase: string;
+}
+
 interface CombatDamageReviewDraft {
+  additionalEffects: CombatDamageReviewAdditionalEffectDraft[];
   armorModifierOverride: string;
   criticalGradeOverride: string;
   notes: string;
@@ -555,7 +568,7 @@ function formatCombatArmorLine(
   const effectiveDamage = getCombatRoundEffectiveDamageResult(damage);
 
   if (damage.armorModifierSource.status === "not_applied") {
-    return effectiveDamage.hasReviewOverrides
+    return damage.review?.armorModifierOverride !== undefined
       ? `Armor: ${effectiveDamage.effectiveArmorModifier}`
       : "Armor: not applied yet";
   }
@@ -587,6 +600,11 @@ function formatCombatPhaseResolutionResultLines(input: {
   const resolvedDamageResultLine = formatCombatDamageResultLine(damageResult);
   const resolvedHitLocationLine = formatCombatHitLocationLine(damageResult);
   const resolvedArmorLine = formatCombatArmorLine(damageResult);
+  const additionalEffectsLine = damageResult?.review?.additionalEffects?.length
+    ? ` · Effects: ${damageResult.review.additionalEffects
+        .map((effect) => effect.label)
+        .join(", ")}`
+    : "";
   const parryLine =
     resolvedParryLine ??
     `Parry: ${formatResolutionStatusLabel(parry.status)}${
@@ -603,7 +621,7 @@ function formatCombatPhaseResolutionResultLines(input: {
                 proposal.committedCombatEffectIds.length === 1 ? "" : "s"
               }`
             : " · no damage row"
-        }`
+        }${additionalEffectsLine}`
       : `Proposal: ${formatResolutionStatusLabel(proposal.status)}`;
   const statusLine = resolvedDamageLine
     ? `${parryLine} · ${resolvedDamageLine}`
@@ -775,10 +793,77 @@ function parseOptionalCombatReviewInteger(value: string, label: string): number 
   return parseCombatInteger(value, label);
 }
 
+function parseOptionalCombatReviewPositiveInteger(
+  value: string,
+  label: string,
+): number | undefined {
+  const parsed = parseOptionalCombatReviewInteger(value, label);
+
+  if (parsed !== undefined && parsed <= 0) {
+    throw new RangeError(`${label} must be a positive whole number.`);
+  }
+
+  return parsed;
+}
+
+const COMBAT_DAMAGE_REVIEW_MODIFIER_BUCKETS = [
+  { label: "General/Fatigue", value: "general" },
+  { label: "OB/Skill", value: "obSkill" },
+  { label: "DB/Parry", value: "db" },
+] as const;
+
+const COMBAT_DAMAGE_REVIEW_EFFECT_PHASES = [
+  { label: "No phase", value: "" },
+  { label: "Phase 1", value: "phase1" },
+  { label: "Phase 2", value: "phase2" },
+  { label: "This round", value: "round" },
+  { label: "Until cleared", value: "untilCleared" },
+] as const;
+
+function createCombatDamageReviewEffectDraft(
+  kind: "modifier" | "note",
+): CombatDamageReviewAdditionalEffectDraft {
+  const id = `review-effect-${globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`}`;
+
+  if (kind === "modifier") {
+    return {
+      durationRounds: "",
+      id,
+      kind,
+      label: "Manual modifier",
+      modifierBucket: "general",
+      modifierValue: "-1",
+      notes: "",
+      phase: "",
+    };
+  }
+
+  return {
+    durationRounds: "",
+    id,
+    kind,
+    label: "Manual note",
+    modifierBucket: "general",
+    modifierValue: "",
+    notes: "",
+    phase: "",
+  };
+}
+
 function buildCombatDamageReviewDraft(
   damageResult?: CombatRoundDamageResult,
 ): CombatDamageReviewDraft {
   return {
+    additionalEffects: (damageResult?.review?.additionalEffects ?? []).map((effect) => ({
+      durationRounds: effect.durationRounds?.toString() ?? "",
+      id: effect.id,
+      kind: effect.kind,
+      label: effect.label,
+      modifierBucket: effect.modifierBucket ?? "general",
+      modifierValue: effect.modifierValue?.toString() ?? "",
+      notes: effect.notes ?? "",
+      phase: effect.phase ?? "",
+    })),
     armorModifierOverride: damageResult?.review?.armorModifierOverride?.toString() ?? "",
     criticalGradeOverride:
       damageResult?.review &&
@@ -789,6 +874,33 @@ function buildCombatDamageReviewDraft(
     selectedHitLocationOverride: damageResult?.review?.selectedHitLocationOverride ?? "",
     totalDamageOverride: damageResult?.review?.totalDamageOverride?.toString() ?? "",
   };
+}
+
+function getCombatDamageReviewEffectLabel(
+  draft: CombatDamageReviewAdditionalEffectDraft,
+): string {
+  if (draft.label.trim()) {
+    return draft.label.trim();
+  }
+
+  if (draft.kind === "modifier") {
+    const bucketLabel =
+      COMBAT_DAMAGE_REVIEW_MODIFIER_BUCKETS.find(
+        (bucket) => bucket.value === draft.modifierBucket,
+      )?.label ?? "Modifier";
+
+    return bucketLabel;
+  }
+
+  if (draft.kind === "fatigue") {
+    return "Fatigue";
+  }
+
+  if (draft.kind === "special") {
+    return "Special effect";
+  }
+
+  return "Manual note";
 }
 
 function buildCombatDamageReviewFromDraft(input: {
@@ -802,8 +914,40 @@ function buildCombatDamageReviewFromDraft(input: {
       ? null
       : input.draft.criticalGradeOverride.trim() || undefined;
   const notes = input.draft.notes.trim();
+  const additionalEffects = input.draft.additionalEffects.map((effect) => {
+    const kind = effect.kind;
+    const phase = COMBAT_DAMAGE_REVIEW_EFFECT_PHASES.find(
+      (candidate) => candidate.value === effect.phase,
+    )?.value;
+    const durationRounds = parseOptionalCombatReviewPositiveInteger(
+      effect.durationRounds,
+      "Effect duration",
+    );
+    const modifierValue =
+      kind === "modifier" || kind === "fatigue"
+        ? parseCombatInteger(effect.modifierValue, "Effect modifier")
+        : undefined;
+    const modifierBucket =
+      kind === "modifier"
+        ? COMBAT_DAMAGE_REVIEW_MODIFIER_BUCKETS.find(
+            (bucket) => bucket.value === effect.modifierBucket,
+          )?.value ?? "general"
+        : undefined;
+
+    return {
+      durationRounds,
+      id: effect.id,
+      kind,
+      label: getCombatDamageReviewEffectLabel(effect),
+      modifierBucket,
+      modifierValue,
+      notes: effect.notes.trim() || undefined,
+      phase: phase || undefined,
+    };
+  });
 
   return {
+    additionalEffects,
     armorModifierOverride: parseOptionalCombatReviewInteger(
       input.draft.armorModifierOverride,
       "Armor modifier override",
@@ -1155,6 +1299,23 @@ function CombatDamageReviewPanel(input: {
       ? `hit ${input.damageResult.grazing ? 12 : input.damageResult.hitLookupTotal ?? input.damageResult.lookupTotal} + DMB ${input.damageResult.dmb} + DM ${input.damageResult.defenderDm} + armor ${effectiveDamage.effectiveArmorModifier} = lookup ${effectiveDamage.effectiveDamageLookupTotal}`
       : "Damage lookup not available";
   const disabled = input.controlsDisabled || input.saving;
+  const updateAdditionalEffect = (
+    effectId: string,
+    patch: Partial<CombatDamageReviewAdditionalEffectDraft>,
+  ) => {
+    input.onDraftChange({
+      ...input.draft,
+      additionalEffects: input.draft.additionalEffects.map((effect) =>
+        effect.id === effectId ? { ...effect, ...patch } : effect,
+      ),
+    });
+  };
+  const removeAdditionalEffect = (effectId: string) => {
+    input.onDraftChange({
+      ...input.draft,
+      additionalEffects: input.draft.additionalEffects.filter((effect) => effect.id !== effectId),
+    });
+  };
 
   return (
     <section style={playerCombatPanelCardStyle}>
@@ -1275,6 +1436,214 @@ function CombatDamageReviewPanel(input: {
           value={input.draft.notes}
         />
       </label>
+      <section style={{ display: "grid", gap: "0.5rem" }}>
+        <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+          <strong style={{ fontSize: "0.9rem" }}>Additional immediate effects</strong>
+          <button
+            disabled={disabled}
+            onClick={() =>
+              input.onDraftChange({
+                ...input.draft,
+                additionalEffects: [
+                  ...input.draft.additionalEffects,
+                  createCombatDamageReviewEffectDraft("modifier"),
+                ],
+              })
+            }
+            type="button"
+          >
+            Add modifier effect
+          </button>
+          <button
+            disabled={disabled}
+            onClick={() =>
+              input.onDraftChange({
+                ...input.draft,
+                additionalEffects: [
+                  ...input.draft.additionalEffects,
+                  createCombatDamageReviewEffectDraft("note"),
+                ],
+              })
+            }
+            type="button"
+          >
+            Add note effect
+          </button>
+        </div>
+        {input.draft.additionalEffects.length === 0 ? (
+          <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
+            No additional immediate effects.
+          </div>
+        ) : null}
+        {input.draft.additionalEffects.map((effect) => {
+          const isMechanical = effect.kind === "modifier" || effect.kind === "fatigue";
+
+          return (
+            <div
+              key={effect.id}
+              style={{
+                borderTop: "1px solid #ddd3bf",
+                display: "grid",
+                gap: "0.45rem",
+                paddingTop: "0.5rem",
+              }}
+            >
+              <div
+                style={{
+                  display: "grid",
+                  gap: "0.45rem",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(7rem, 1fr))",
+                }}
+              >
+                <label style={{ display: "grid", gap: "0.2rem" }}>
+                  <span style={{ color: "#5e5a50", fontSize: "0.8rem", fontWeight: 700 }}>
+                    Kind
+                  </span>
+                  <select
+                    disabled={disabled}
+                    onChange={(event) => {
+                      const nextKind = event.target
+                        .value as CombatDamageReviewAdditionalEffectDraft["kind"];
+
+                      updateAdditionalEffect(effect.id, {
+                        kind: nextKind,
+                        modifierBucket: nextKind === "modifier" ? effect.modifierBucket : "general",
+                        modifierValue:
+                          nextKind === "modifier" || nextKind === "fatigue"
+                            ? effect.modifierValue || "-1"
+                            : "",
+                      });
+                    }}
+                    value={effect.kind}
+                  >
+                    <option value="modifier">Modifier</option>
+                    <option value="fatigue">Fatigue</option>
+                    <option value="special">Special</option>
+                    <option value="note">Note</option>
+                  </select>
+                </label>
+                <label style={{ display: "grid", gap: "0.2rem" }}>
+                  <span style={{ color: "#5e5a50", fontSize: "0.8rem", fontWeight: 700 }}>
+                    Label
+                  </span>
+                  <input
+                    disabled={disabled}
+                    onChange={(event) =>
+                      updateAdditionalEffect(effect.id, { label: event.target.value })
+                    }
+                    type="text"
+                    value={effect.label}
+                  />
+                </label>
+                {effect.kind === "modifier" ? (
+                  <label style={{ display: "grid", gap: "0.2rem" }}>
+                    <span style={{ color: "#5e5a50", fontSize: "0.8rem", fontWeight: 700 }}>
+                      Bucket
+                    </span>
+                    <select
+                      disabled={disabled}
+                      onChange={(event) =>
+                        updateAdditionalEffect(effect.id, {
+                          modifierBucket: event.target.value,
+                        })
+                      }
+                      value={effect.modifierBucket}
+                    >
+                      {COMBAT_DAMAGE_REVIEW_MODIFIER_BUCKETS.map((bucket) => (
+                        <option key={bucket.value} value={bucket.value}>
+                          {bucket.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
+                {isMechanical ? (
+                  <label style={{ display: "grid", gap: "0.2rem" }}>
+                    <span style={{ color: "#5e5a50", fontSize: "0.8rem", fontWeight: 700 }}>
+                      Value
+                    </span>
+                    <input
+                      disabled={disabled}
+                      inputMode="numeric"
+                      onChange={(event) =>
+                        updateAdditionalEffect(effect.id, {
+                          modifierValue: event.target.value,
+                        })
+                      }
+                      type="text"
+                      value={effect.modifierValue}
+                    />
+                  </label>
+                ) : null}
+                <label style={{ display: "grid", gap: "0.2rem" }}>
+                  <span style={{ color: "#5e5a50", fontSize: "0.8rem", fontWeight: 700 }}>
+                    Duration
+                  </span>
+                  <input
+                    disabled={disabled}
+                    inputMode="numeric"
+                    onChange={(event) =>
+                      updateAdditionalEffect(effect.id, {
+                        durationRounds: event.target.value,
+                      })
+                    }
+                    placeholder="rounds"
+                    type="text"
+                    value={effect.durationRounds}
+                  />
+                </label>
+                <label style={{ display: "grid", gap: "0.2rem" }}>
+                  <span style={{ color: "#5e5a50", fontSize: "0.8rem", fontWeight: 700 }}>
+                    Phase
+                  </span>
+                  <select
+                    disabled={disabled}
+                    onChange={(event) =>
+                      updateAdditionalEffect(effect.id, { phase: event.target.value })
+                    }
+                    value={effect.phase}
+                  >
+                    {COMBAT_DAMAGE_REVIEW_EFFECT_PHASES.map((phase) => (
+                      <option key={phase.value || "none"} value={phase.value}>
+                        {phase.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <div
+                style={{
+                  alignItems: "end",
+                  display: "grid",
+                  gap: "0.45rem",
+                  gridTemplateColumns: "minmax(10rem, 1fr) auto",
+                }}
+              >
+                <label style={{ display: "grid", gap: "0.2rem" }}>
+                  <span style={{ color: "#5e5a50", fontSize: "0.8rem", fontWeight: 700 }}>
+                    Effect notes
+                  </span>
+                  <input
+                    disabled={disabled}
+                    onChange={(event) =>
+                      updateAdditionalEffect(effect.id, { notes: event.target.value })
+                    }
+                    type="text"
+                    value={effect.notes}
+                  />
+                </label>
+                <button
+                  disabled={disabled}
+                  onClick={() => removeAdditionalEffect(effect.id)}
+                  type="button"
+                >
+                  Remove
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </section>
       <button disabled={disabled} onClick={input.onSaveReview} type="button">
         {input.saving ? "Saving..." : "Save review"}
       </button>

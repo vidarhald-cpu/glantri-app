@@ -71,6 +71,36 @@ describe("live combat modifiers", () => {
     expect(summary.dbRaw).toBe(0);
   });
 
+  it("keeps committed phase-one combat action effects live for phase-two modifiers", () => {
+    const summary = buildEncounterLiveCombatModifierSummary({
+      combatEffects: {
+        effects: [
+          effect({
+            effectGroup: "db",
+            id: "commit-d1:combat-effect:additional-manual-db",
+            modifierValue: -2,
+            sourceEventId: "commit-d1:combat-effect-event",
+            type: "db_modifier",
+          }),
+        ],
+        events: [
+          {
+            createdAt: "2026-05-19T00:00:00.000Z",
+            description: "Phase 1 damage result",
+            id: "commit-d1:combat-effect-event",
+            phase: "phase1",
+            sourceLabel: "Phase 1 damage",
+            sourceType: "combat_action",
+            targetParticipantId: "participant-1",
+          },
+        ],
+      },
+      phaseKey: "phase2",
+    });
+
+    expect(summary.dbRaw).toBe(-2);
+  });
+
   it("uses the workbook percentage modifier table for live combat value adjustments", () => {
     const expectedAdjustment = lookupWorkbookPercentageAdjustment(20, 6);
 
