@@ -140,6 +140,7 @@ interface PlayerCombatActionButtonPanelProps {
 
 interface PlayerCombatActionResultPanelProps {
   result?: {
+    detailLines?: readonly string[];
     interpretedResult: string;
     rankLabel?: string;
     resultLabel?: string;
@@ -670,6 +671,11 @@ export function PlayerCombatActionResultPanel({ result }: PlayerCombatActionResu
           <>
             {result.rankLabel ? <div>{result.rankLabel}</div> : null}
             <div>{result.interpretedResult}</div>
+            {result.detailLines?.map((line) => (
+              <div key={line} style={{ color: "#5e5a50", fontSize: "0.88rem", fontWeight: 600 }}>
+                {line}
+              </div>
+            ))}
             {result.resultLabel ? <div>{result.resultLabel}</div> : null}
           </>
         ) : (
