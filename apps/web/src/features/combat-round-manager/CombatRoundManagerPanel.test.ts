@@ -151,6 +151,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("Proposal: ${formatResolutionStatusLabel");
     expect(source).toContain("buildCombatRoundAttackRollResult");
     expect(source).toContain("recordCombatRoundAttackResult");
+    expect(source).toContain("createdAt: attackResult.rolledAt");
     expect(source).toContain("completeInspectorPhaseResolution");
     expect(source).toContain("getCombatRoundInitiativeRanks");
     expect(source).toContain("getCombatRoundInitiativeTotal");

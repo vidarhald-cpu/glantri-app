@@ -2345,6 +2345,9 @@ export default function CombatRoundManagerPanel({
 
     try {
       const nextRoundState = recordCombatRoundAttackResult({
+        command: {
+          createdAt: attackResult.rolledAt,
+        },
         participantId: selectedEncounterParticipant.id,
         result: attackResult,
         state: roundState,
