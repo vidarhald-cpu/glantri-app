@@ -922,6 +922,31 @@ function getCombatRoundPhaseActionOrCompletionCursor(input: {
   });
 }
 
+function getCombatRoundCursorForPhaseResolutionCursor(input: {
+  cursor: CombatRoundPhaseResolutionCursor;
+  roundNumber?: number;
+  state: CombatRoundState;
+}): CombatRoundCursor {
+  const incomingAttackResult = getCombatRoundDisplayIncomingAttackResultForParticipantPhase({
+    participantId: input.cursor.participantId,
+    phase: input.cursor.phase,
+    state: input.state,
+  });
+  const step =
+    input.cursor.substep === "parry" && !incomingAttackResult
+      ? getCombatRoundAttackCursorStepForPhase(input.cursor.phase)
+      : getCombatRoundCursorStepForPhaseResolutionSubstep({
+          phase: input.cursor.phase,
+          substep: input.cursor.substep,
+        });
+
+  return combatRoundCursorSchema.parse({
+    participantId: input.cursor.participantId,
+    roundNumber: input.roundNumber ?? input.state.roundNumber,
+    step,
+  });
+}
+
 function buildCombatRoundCommandId(input: {
   createdAt: string;
   participantId: string;
@@ -1734,16 +1759,24 @@ export function initializeCombatRoundPhaseResolutionCursor(input: {
       updatedAt: input.updatedAt ?? existingStatus.updatedAt,
     },
   });
+  const phaseResolutionCursor = {
+    participantId,
+    phase: input.phase,
+    substep: nextSubstep,
+  };
+  const currentCursor = getCombatRoundCursorForPhaseResolutionCursor({
+    cursor: phaseResolutionCursor,
+    state: withStatus,
+  });
+  const selectedStep = getCombatRoundStepForCursorStep(currentCursor.step);
 
   return {
     ...withStatus,
-    phaseResolutionCursor: {
-      participantId,
-      phase: input.phase,
-      substep: nextSubstep,
-    },
+    currentCursor,
+    currentStep: selectedStep,
+    phaseResolutionCursor,
     selectedParticipantId: participantId,
-    selectedStep: getCombatRoundPhaseActionStepForPhase(input.phase),
+    selectedStep,
   };
 }
 
@@ -1787,16 +1820,24 @@ function moveCombatRoundPhaseResolutionCursorToNextParticipant(input: {
       updatedAt: input.updatedAt,
     },
   });
+  const phaseResolutionCursor = {
+    participantId,
+    phase: input.phase,
+    substep: nextSubstep,
+  };
+  const currentCursor = getCombatRoundCursorForPhaseResolutionCursor({
+    cursor: phaseResolutionCursor,
+    state: withStatus,
+  });
+  const selectedStep = getCombatRoundStepForCursorStep(currentCursor.step);
 
   return {
     ...withStatus,
-    phaseResolutionCursor: {
-      participantId,
-      phase: input.phase,
-      substep: nextSubstep,
-    },
+    currentCursor,
+    currentStep: selectedStep,
+    phaseResolutionCursor,
     selectedParticipantId: participantId,
-    selectedStep: getCombatRoundPhaseActionStepForPhase(input.phase),
+    selectedStep,
   };
 }
 
@@ -4165,6 +4206,24 @@ export function initializeCombatRoundState(input: {
     existing.currentCursor.roundNumber === roundNumber &&
     existingCursorStep === currentStep &&
     (!existingCursorParticipantId || participantIds.has(existingCursorParticipantId));
+  const recoveredPhaseResolutionCursor =
+    !canUseExistingCurrentCursor &&
+    currentStep !== "select_actions" &&
+    existing?.phaseResolutionCursor &&
+    participantIds.has(existing.phaseResolutionCursor.participantId)
+      ? getCombatRoundCursorForPhaseResolutionCursor({
+          cursor: existing.phaseResolutionCursor,
+          roundNumber,
+          state: {
+            ...existing,
+            participants,
+            roundNumber,
+          },
+        })
+      : undefined;
+  const canUseRecoveredPhaseResolutionCursor =
+    recoveredPhaseResolutionCursor &&
+    getCombatRoundStepForCursorStep(recoveredPhaseResolutionCursor.step) === currentStep;
   const resetsStaleDeclarationSelection =
     currentStep === "select_actions" &&
     existing?.selectedStep !== undefined &&
@@ -4172,6 +4231,8 @@ export function initializeCombatRoundState(input: {
   const selectedParticipantId =
     canUseExistingCurrentCursor && existingCursorParticipantId
       ? existingCursorParticipantId
+      : canUseRecoveredPhaseResolutionCursor && recoveredPhaseResolutionCursor.participantId
+        ? recoveredPhaseResolutionCursor.participantId
       : !resetsStaleDeclarationSelection &&
           existing?.selectedParticipantId &&
           participantIds.has(existing.selectedParticipantId)
@@ -4187,6 +4248,8 @@ export function initializeCombatRoundState(input: {
     commands: existing?.commands ?? [],
     currentCursor: canUseExistingCurrentCursor
       ? existing.currentCursor
+      : canUseRecoveredPhaseResolutionCursor
+        ? recoveredPhaseResolutionCursor
       : isGlobalCombatRoundStep(currentStep)
         ? getDefaultCombatRoundCursor({
             participantId: selectedParticipantId,

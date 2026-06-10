@@ -73,6 +73,35 @@ describe("combat round manager selection", () => {
     });
   });
 
+  it("recovers the current task selection from a persisted phase cursor at A1", () => {
+    const existing = initializeCombatRoundState({ encounter: encounter() });
+    const refreshedEncounter = encounter({
+      combatRoundState: {
+        ...existing,
+        currentCursor: undefined,
+        currentStep: "phase_1_actions",
+        phaseResolutionCursor: {
+          participantId: "middle",
+          phase: "phase1",
+          substep: "attack",
+        },
+        selectedParticipantId: "bottom",
+        selectedStep: "review_phase_2_actions",
+      },
+    });
+    const state = initializeCombatRoundState({ encounter: refreshedEncounter });
+
+    expect(state.currentCursor).toEqual({
+      participantId: "middle",
+      roundNumber: existing.roundNumber,
+      step: "A1",
+    });
+    expect(getCurrentCombatRoundTaskSelection(state)).toEqual({
+      participantId: "middle",
+      step: "phase_1_actions",
+    });
+  });
+
   it("does not guess a current task when the cursor is missing or stale", () => {
     const existing = initializeCombatRoundState({ encounter: encounter() });
 

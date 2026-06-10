@@ -715,7 +715,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       });
       const declaredRoundState = recordCombatRoundDeclaration({
         command:
-          gmAuthorizedOperation && roundState.currentStep === "select_actions"
+          roundState.currentStep === "select_actions"
             ? {
                 createdAt: submittedAt,
                 createdByUserId: user.id,

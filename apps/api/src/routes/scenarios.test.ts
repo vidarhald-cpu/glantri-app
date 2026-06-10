@@ -1724,7 +1724,25 @@ describe("scenarios route contract", () => {
       submittedBy: "player",
       submittedByUserId: "player-1",
     });
-    expect(updatedEncounter.combatRoundState.commands).toEqual([]);
+    expect(updatedEncounter.combatRoundState.commands).toHaveLength(1);
+    expect(updatedEncounter.combatRoundState.commands[0]).toMatchObject({
+      afterCursor: {
+        participantId: "encounter-participant-1",
+        roundNumber: 1,
+        step: "DE",
+      },
+      beforeCursor: {
+        participantId: "encounter-participant-1",
+        roundNumber: 1,
+        step: "DE",
+      },
+      createdByUserId: "player-1",
+      participantId: "encounter-participant-1",
+      type: "declare_action",
+    });
+    expect(updatedEncounter.combatRoundState.currentCursor).toEqual(
+      updatedEncounter.combatRoundState.commands[0].afterCursor,
+    );
   });
 
   it("allows a player to complete an incomplete submitted combat declaration during DE", async () => {
@@ -1811,6 +1829,11 @@ describe("scenarios route contract", () => {
     expect(updatedEncounter.combatRoundState.participants[0].stepStatuses.select_actions).toBe(
       "submitted",
     );
+    expect(updatedEncounter.combatRoundState.commands[0]).toMatchObject({
+      createdByUserId: "player-1",
+      participantId: "encounter-participant-1",
+      type: "declare_action",
+    });
   });
 
   it("records a GM declare_action command during DE", async () => {
@@ -3689,6 +3712,98 @@ describe("scenarios route contract", () => {
     expect(updatedEncounter.combatRoundState.selectedStep).toBe("select_actions");
     expect(updatedEncounter.combatRoundState.participants[0].declaration).toBeUndefined();
     expect(mocks.encounterService.updateScenarioParticipantState).toHaveBeenCalled();
+  });
+
+  it("clears a player-originated command-backed DE declaration", async () => {
+    const combatEncounter = makeCombatEncounter() as EncounterSession;
+    const stateWithCommand = recordCombatRoundDeclaration({
+      command: {
+        createdAt: "2026-01-01T00:01:00.000Z",
+        createdByUserId: "player-1",
+      },
+      declaration: {
+        actionId: "attack_parry",
+        phaseContexts: {
+          phase1: {
+            modifierBuckets: {
+              general: [],
+              situationDb: [],
+              situationInitiative: [],
+              situationObSkill: [],
+            },
+            targetParticipantId: "participant-2",
+          },
+        },
+        roundNumber: 1,
+      },
+      participantId: "encounter-participant-1",
+      state: initializeCombatRoundState({ encounter: combatEncounter }),
+      submittedBy: "player",
+    });
+    setupCombatDeclarationRoute({
+      encounter: {
+        combatRoundState: stateWithCommand,
+      },
+      participant: {
+        state: {
+          combat: {
+            combatContext: {
+              modifierBuckets: {
+                general: [],
+                situationDb: [attackParryDbParryModifierEntry],
+                situationInitiative: [],
+                situationObSkill: [],
+              },
+            },
+            lastDeclaredActionId: "attack_parry",
+            lastDeclaredEncounterId: "encounter-1",
+            lastDeclaredMovementId: "hold",
+            lastDeclaredRoundNumber: 1,
+          },
+          conditions: [],
+          equipment: {},
+          health: {},
+          modifiers: [],
+          resources: {},
+        },
+      },
+      user: mocks.adminUser,
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      body: {
+        participantId: "encounter-participant-1",
+        step: "select_actions",
+      },
+      method: "POST",
+      url: "/encounters/encounter-1/combat-round/clear-current-step",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
+    expect(updatedEncounter.combatRoundState.commands).toEqual([]);
+    expect(updatedEncounter.combatRoundState.currentCursor).toEqual({
+      participantId: "encounter-participant-1",
+      roundNumber: 1,
+      step: "DE",
+    });
+    expect(updatedEncounter.combatRoundState.participants[0].declaration).toBeUndefined();
+    expect(mocks.encounterService.updateScenarioParticipantState).toHaveBeenCalledWith(
+      expect.objectContaining({
+        participantId: "participant-1",
+        state: expect.objectContaining({
+          combat: expect.objectContaining({
+            lastDeclaredActionId: undefined,
+            lastDeclaredEncounterId: undefined,
+            lastDeclaredMovementId: undefined,
+            lastDeclaredRoundNumber: undefined,
+          }),
+        }),
+      }),
+    );
   });
 
   it("clears M1 and rewinds without erasing submitted DE declarations", async () => {
