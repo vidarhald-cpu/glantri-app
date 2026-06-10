@@ -2783,6 +2783,70 @@ describe("combat round manager", () => {
     expect(nextState.selectedStep).toBe("review_phase_2_damage");
   });
 
+  it.each([
+    { phase: "phase1" as const, step: "A1" as const, weaponName: "Broad sword", ob: 9 },
+    { phase: "phase2" as const, step: "A2" as const, weaponName: "Broad sword", ob: 8 },
+  ])("records Double Attack $step rolls through the normal roll_attack command", (caseInput) => {
+    const state = initializeCombatRoundPhaseResolutionCursor({
+      phase: caseInput.phase,
+      state: declareRoundAction({
+        actionId: "double_attack",
+        participantId: "gladiator",
+        state: initializeCombatRoundState({ encounter: encounter() }),
+      }),
+      updatedAt: "2026-01-01T00:02:00.000Z",
+    });
+    const result = buildCombatRoundAttackRollResult({
+      actionId: "double_attack",
+      attackerParticipantId: "gladiator",
+      defenderDb: 10,
+      defenderParticipantId: "guard",
+      ob: caseInput.ob,
+      phase: caseInput.phase,
+      rollD20: 14,
+      rollTotal: 14,
+      rolledAt: "2026-01-01T00:03:00.000Z",
+      weaponName: caseInput.weaponName,
+    });
+    const nextState = recordCombatRoundAttackResult({
+      command: {
+        createdAt: result.rolledAt,
+        createdByUserId: "gm-1",
+      },
+      participantId: "gladiator",
+      result,
+      state,
+      submittedBy: "gm",
+    });
+
+    expect(nextState.commands[0]).toMatchObject({
+      beforeCursor: {
+        participantId: "gladiator",
+        roundNumber: 3,
+        step: caseInput.step,
+      },
+      facts: expect.objectContaining({
+        attackResultId: `3:${caseInput.phase}:gladiator:guard`,
+        defenderParticipantId: "guard",
+      }),
+      participantId: "gladiator",
+      phase: caseInput.phase,
+      step: caseInput.step,
+      type: "roll_attack",
+    });
+    expect(
+      getCombatRoundOutgoingAttackResultForParticipantPhase({
+        participantId: "gladiator",
+        phase: caseInput.phase,
+        state: nextState,
+      }),
+    ).toMatchObject({
+      actionId: "double_attack",
+      ob: caseInput.ob,
+      weaponName: caseInput.weaponName,
+    });
+  });
+
   it("records successful P1 parry commands and undoes them back to the defender P1", () => {
     const state = initializeCombatRoundPhaseResolutionCursor({
       phase: "phase1",

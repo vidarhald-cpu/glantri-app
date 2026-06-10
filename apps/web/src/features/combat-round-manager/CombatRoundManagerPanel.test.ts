@@ -109,7 +109,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("validateCombatDeclarationTargets");
     expect(source).toContain("inspectorTargetValidation");
     expect(source).toContain("inspectorTargetValidationMessage");
-    expect(source).toContain("validationMessage={inspectorTargetValidationMessage}");
+    expect(source).toContain("validationMessage={inspectorActionValidationMessage}");
     expect(source).toContain("hasScenarioParticipantCombatDeclarationForEncounterRound");
     expect(source).toContain("selectedScenarioParticipant?.state.combatEffects");
     expect(source).toContain("saveInspectorDeclaration");
@@ -302,6 +302,9 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("PlayerCombatParryContextPanel");
     expect(source).toContain("phaseModel.showAttackStats");
     expect(source).toContain("phaseModel.showAttackLocationSelector");
+    expect(source).toContain("inspectorAttackSourceValidationMessage");
+    expect(source).toContain("No ${formatCombatPhaseLabel(inspectorCurrentAttackPhase)} attack source available.");
+    expect(source).toContain("phaseKey: input.phaseKey");
     expect(source).toContain("inspectorTargetOptions");
     expect(source).toContain("getPlayerEncounterOpponentParticipants");
     expect(source).toContain("targetOptions={inspectorTargetOptions}");

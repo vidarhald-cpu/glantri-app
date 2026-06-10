@@ -2541,6 +2541,16 @@ export default function CombatRoundManagerPanel({
       inspectorPhaseResolutionStatus.substep === "pending" ||
       inspectorPhaseResolutionStatus.substep === "attack") &&
     !inspectorDisplayAttackResult;
+  const inspectorCurrentAttackSourceMissing =
+    inspectorCanRollPhaseAttack &&
+    Boolean(inspectorCurrentAttackPhase) &&
+    !inspectorPhaseLoadoutSummaries[inspectorCurrentAttackPhase ?? "phase1"].attackStats;
+  const inspectorAttackSourceValidationMessage =
+    inspectorCurrentAttackSourceMissing && inspectorCurrentAttackPhase
+      ? `No ${formatCombatPhaseLabel(inspectorCurrentAttackPhase)} attack source available.`
+      : undefined;
+  const inspectorActionValidationMessage =
+    inspectorTargetValidationMessage ?? inspectorAttackSourceValidationMessage;
   const inspectorCanRollParry =
     Boolean(inspectorResolutionPhase) &&
     inspectorResolutionStepKind === "parry" &&
@@ -2616,6 +2626,8 @@ export default function CombatRoundManagerPanel({
         ? "Commit phase damage"
       : inspectorCanRollParry
       ? "Roll parry"
+      : inspectorAttackSourceValidationMessage
+        ? inspectorAttackSourceValidationMessage
       : inspectorCurrentResolutionPhase && inspectorActionPhaseHasAttack === false
         ? `Complete ${formatCombatPhaseLabel(inspectorCurrentResolutionPhase)} for participant`
         : getCombatResolutionButtonLabel({
@@ -2922,11 +2934,13 @@ export default function CombatRoundManagerPanel({
     const loadoutSummary = buildPlayerCombatLoadoutSummary({
       actionId: draft.actionId,
       loadoutModel,
+      phaseKey: input.phaseKey,
       secondaryActionId: draft.secondaryActionId,
     });
     const baseLoadoutSummary = buildPlayerCombatLoadoutSummary({
       actionId: draft.actionId,
       loadoutModel: baseLoadoutModel,
+      phaseKey: input.phaseKey,
       secondaryActionId: draft.secondaryActionId,
     });
     const parrySources = buildCombatParrySourceOptions({
@@ -3556,7 +3570,7 @@ export default function CombatRoundManagerPanel({
     });
 
     if (!phaseModel.showAttackStats || !phaseModel.attackStats) {
-      setSaveError(`No ${phaseLabel} attack.`);
+      setSaveError(`No ${phaseLabel} attack source available.`);
       return;
     }
 
@@ -4550,7 +4564,7 @@ export default function CombatRoundManagerPanel({
                       buttonLabel={inspectorActionButtonLabel}
                       disabled={
                         saving ||
-                        Boolean(inspectorTargetValidationMessage) ||
+                        Boolean(inspectorActionValidationMessage) ||
                         inspectorSelectedAttackAlreadyRolled ||
                         inspectorDamageCommitted ||
                         Boolean(inspectorSnapshot)
@@ -4578,7 +4592,7 @@ export default function CombatRoundManagerPanel({
                       statusText={`Current step: ${getPlayerCombatStepLabel(
                         inspector.step,
                       )}.${inspectorStatusSuffix}`}
-                      validationMessage={inspectorTargetValidationMessage}
+                      validationMessage={inspectorActionValidationMessage}
                     />
                   </div>
                   <PlayerCombatActionResultPanel result={inspectorActionResult} />

@@ -21,17 +21,22 @@ export type PlayerCombatPhaseKey = "phase1" | "phase2";
 
 export interface PlayerCombatLoadoutReference {
   am: string;
+  am2: string;
   attackMode: string;
+  attackMode2: string;
   combinedDb: string;
   combinedDm: string;
   combinedParry: string;
   combinedSourceName: string;
   crit: string;
+  crit2: string;
   db: string;
   dmb: string;
+  dmb2: string;
   dm: string;
   initiative: string;
   ob: string;
+  ob2: string;
   parry: string;
   secondCrit: string;
   selectedWeapon: string;
@@ -134,6 +139,7 @@ export function isEquipmentFeatureState(value: unknown): value is EquipmentFeatu
 export function buildPlayerCombatLoadoutSummary(input: {
   actionId: PlayerEncounterActionId | "";
   loadoutModel: EquipmentLoadoutModuleModel;
+  phaseKey?: PlayerCombatPhaseKey;
   secondaryActionId: PlayerEncounterActionId | "";
 }): PlayerCombatLoadoutSummary {
   const loadoutFieldDisplayMap = new Map(
@@ -198,24 +204,32 @@ export function buildPlayerCombatLoadoutSummary(input: {
   if (!referenceRow) {
     const reference = {
       am: "—",
+      am2: "—",
       attackMode: "—",
+      attackMode2: "—",
       combinedDb: "—",
       combinedDm: "—",
       combinedParry: "—",
       combinedSourceName: "—",
       crit: "—",
+      crit2: "—",
       db: "—",
       dmb: "—",
+      dmb2: "—",
       dm: "—",
       initiative: "—",
       ob: "—",
+      ob2: "—",
       parry: "—",
       secondCrit: "—",
       selectedWeapon: "No ready weapon",
     };
 
     return {
-      attackStats: buildPlayerCombatAttackStats(reference),
+      attackStats: buildPlayerCombatAttackStats(reference, {
+        actionId: input.actionId,
+        phaseKey: input.phaseKey,
+      }),
       mainHandParryItemLabel,
       offHandParryItemLabel,
       passiveInitiative: 0,
@@ -229,9 +243,19 @@ export function buildPlayerCombatLoadoutSummary(input: {
       label: "AM",
       row: referenceRow,
     }),
+    am2: getCombatTableCell({
+      columns: combatPanelModel.weaponModeTable.columns,
+      label: "AM 2",
+      row: referenceRow,
+    }),
     attackMode: getCombatTableCell({
       columns: combatPanelModel.weaponModeTable.columns,
       label: "Attack 1",
+      row: referenceRow,
+    }),
+    attackMode2: getCombatTableCell({
+      columns: combatPanelModel.weaponModeTable.columns,
+      label: "Attack 2",
       row: referenceRow,
     }),
     combinedDb: combinedRow
@@ -267,6 +291,11 @@ export function buildPlayerCombatLoadoutSummary(input: {
       label: "Crit 1",
       row: referenceRow,
     }),
+    crit2: getCombatTableCell({
+      columns: combatPanelModel.weaponModeTable.columns,
+      label: "Crit 2",
+      row: referenceRow,
+    }),
     db: getCombatTableCell({
       columns: combatPanelModel.weaponModeTable.columns,
       label: "DB",
@@ -275,6 +304,11 @@ export function buildPlayerCombatLoadoutSummary(input: {
     dmb: getCombatTableCell({
       columns: combatPanelModel.weaponModeTable.columns,
       label: "DMB",
+      row: referenceRow,
+    }),
+    dmb2: getCombatTableCell({
+      columns: combatPanelModel.weaponModeTable.columns,
+      label: "DMB2",
       row: referenceRow,
     }),
     dm: getCombatTableCell({
@@ -290,6 +324,11 @@ export function buildPlayerCombatLoadoutSummary(input: {
     ob: getCombatTableCell({
       columns: combatPanelModel.weaponModeTable.columns,
       label: "OB",
+      row: referenceRow,
+    }),
+    ob2: getCombatTableCell({
+      columns: combatPanelModel.weaponModeTable.columns,
+      label: "OB2",
       row: referenceRow,
     }),
     parry: getCombatTableCell({
@@ -310,7 +349,10 @@ export function buildPlayerCombatLoadoutSummary(input: {
   };
 
   return {
-    attackStats: buildPlayerCombatAttackStats(reference),
+    attackStats: buildPlayerCombatAttackStats(reference, {
+      actionId: input.actionId,
+      phaseKey: input.phaseKey,
+    }),
     mainHandParryItemLabel,
     offHandParryItemLabel,
     passiveInitiative: parsePassiveInitiative(reference.initiative),
@@ -320,17 +362,38 @@ export function buildPlayerCombatLoadoutSummary(input: {
 
 export function buildPlayerCombatAttackStats(
   reference: PlayerCombatLoadoutReference | null,
+  input: {
+    actionId?: PlayerEncounterActionId | "";
+    phaseKey?: PlayerCombatPhaseKey;
+  } = {},
 ): PlayerCombatAttackStatsView | null {
   if (!reference) {
     return null;
   }
 
+  const useSecondAttack =
+    input.actionId === "double_attack" &&
+    input.phaseKey === "phase2" &&
+    (hasDisplayValue(reference.attackMode2) ||
+      hasDisplayValue(reference.ob2) ||
+      hasDisplayValue(reference.dmb2) ||
+      hasDisplayValue(reference.am2) ||
+      hasDisplayValue(reference.crit2));
+  const attackMode = useSecondAttack ? reference.am2 : reference.am;
+  const crit = useSecondAttack ? reference.crit2 : reference.crit;
+  const dmb = useSecondAttack ? reference.dmb2 : reference.dmb;
+  const ob = useSecondAttack ? reference.ob2 : reference.ob;
+
+  if (!hasDisplayValue(reference.selectedWeapon) || !hasDisplayValue(ob)) {
+    return null;
+  }
+
   return {
-    attackMode: reference.am,
-    dmb: reference.dmb,
+    attackMode,
+    dmb,
     initiative: reference.initiative,
-    maxCrits: `${reference.crit}${hasDisplayValue(reference.secondCrit) ? ` / ${reference.secondCrit}` : ""}`,
-    ob: reference.ob,
+    maxCrits: `${crit}${!useSecondAttack && hasDisplayValue(reference.secondCrit) ? ` / ${reference.secondCrit}` : ""}`,
+    ob,
     weaponName: reference.selectedWeapon,
   };
 }

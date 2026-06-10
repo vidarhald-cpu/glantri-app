@@ -42,7 +42,7 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("validateCombatDeclarationTargets");
     expect(source).toContain("targetValidation");
     expect(source).toContain("declarationTargetValidationMessage");
-    expect(source).toContain("validationMessage={declarationTargetValidationMessage}");
+    expect(source).toContain("declarationTargetValidationMessage ?? currentAttackSourceValidationMessage");
     expect(source).toContain("mergeCombatContextWithCurrentModifierBuckets");
     expect(source).toContain("combatEffects: selectedParticipant?.state.combatEffects");
     expect(source).toContain("liveCombatModifiers");
@@ -144,6 +144,9 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("currentAttackTargetParticipantId");
     expect(source).toContain("selectedRoundDeclaration?.phaseContexts?.[currentAttackPhase]");
     expect(source).toContain("Boolean(currentAttackTargetParticipantId)");
+    expect(source).toContain("currentAttackSourceValidationMessage");
+    expect(source).toContain("No ${currentAttackPhase === \"phase1\" ? \"phase 1\" : \"phase 2\"} attack source available.");
+    expect(source).toContain("phaseKey,");
     expect(source).toContain("Roll phase 1 attack");
     expect(source).toContain("Roll phase 2 attack");
     expect(source).toContain("window.setInterval");

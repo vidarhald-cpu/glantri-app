@@ -1104,7 +1104,9 @@ export default function ScenarioPlayerCombatPageContent({
     const defenderScenarioParticipantId = phaseContext.targetParticipantId;
 
     if (!phaseAttackStats) {
-      setError(`No ${currentAttackPhase === "phase1" ? "phase 1" : "phase 2"} attack.`);
+      setError(
+        `No ${currentAttackPhase === "phase1" ? "phase 1" : "phase 2"} attack source available.`,
+      );
       return;
     }
 
@@ -1282,6 +1284,7 @@ export default function ScenarioPlayerCombatPageContent({
       return buildPlayerCombatLoadoutSummary({
         actionId: selectedActionId,
         loadoutModel: phaseLoadoutModel,
+        phaseKey,
         secondaryActionId: selectedSecondaryActionId,
       });
     };
@@ -1559,6 +1562,19 @@ export default function ScenarioPlayerCombatPageContent({
     Boolean(phaseCombatLoadoutSummaries[currentAttackPhase ?? "phase1"].attackStats) &&
     currentRollAction?.kind === "attack" &&
     currentRollAction.phase === currentAttackPhase;
+  const currentAttackSourceMissing =
+    Boolean(currentAttackPhase) &&
+    Boolean(displayedParticipant) &&
+    Boolean(selectedRoundParticipant) &&
+    Boolean(combatRoundState) &&
+    Boolean(currentAttackTargetParticipantId) &&
+    currentRollAction?.kind === "attack" &&
+    currentRollAction.phase === currentAttackPhase &&
+    !phaseCombatLoadoutSummaries[currentAttackPhase ?? "phase1"].attackStats;
+  const currentAttackSourceValidationMessage =
+    currentAttackSourceMissing && currentAttackPhase
+      ? `No ${currentAttackPhase === "phase1" ? "phase 1" : "phase 2"} attack source available.`
+      : undefined;
   const currentAttackAction = canUseCurrentAttackButton
     ? {
         disabled: false,
@@ -1668,6 +1684,8 @@ export default function ScenarioPlayerCombatPageContent({
         ? `Current step: ${currentCombatStepLabel}. Ready to roll.`
       : currentAttackAction
         ? `Current step: ${currentCombatStepLabel}. Ready to roll.`
+      : currentAttackSourceValidationMessage
+        ? `Current step: ${currentCombatStepLabel}. ${currentAttackSourceValidationMessage}`
       : declarationIncomplete
         ? `Current step: ${currentCombatStepLabel}. Incomplete declaration.`
       : selectedParticipantHasDeclared
@@ -1916,7 +1934,9 @@ export default function ScenarioPlayerCombatPageContent({
               }
               saving={savingCombatContext}
               statusText={declarationStatusText}
-              validationMessage={declarationTargetValidationMessage}
+              validationMessage={
+                declarationTargetValidationMessage ?? currentAttackSourceValidationMessage
+              }
             />
             <PlayerCombatActionResultPanel
               result={
