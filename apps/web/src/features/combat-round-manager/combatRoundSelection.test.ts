@@ -4,6 +4,7 @@ import type { EncounterParticipant, EncounterSession } from "@glantri/domain";
 import { encounterSessionSchema, initializeCombatRoundState } from "@glantri/domain";
 
 import {
+  getCurrentCombatRoundTaskSelection,
   getNextCombatRoundParticipantSelection,
   normalizeCombatRoundManagerSelection,
 } from "./combatRoundSelection";
@@ -52,6 +53,54 @@ function encounter(input: Partial<EncounterSession> = {}): EncounterSession {
 }
 
 describe("combat round manager selection", () => {
+  it("maps the current cursor to the current task selection", () => {
+    const existing = initializeCombatRoundState({ encounter: encounter() });
+    const state = {
+      ...existing,
+      currentCursor: {
+        participantId: "middle",
+        roundNumber: existing.roundNumber,
+        step: "A1" as const,
+      },
+      currentStep: "phase_1_actions" as const,
+      selectedParticipantId: "top",
+      selectedStep: "select_actions" as const,
+    };
+
+    expect(getCurrentCombatRoundTaskSelection(state)).toEqual({
+      participantId: "middle",
+      step: "phase_1_actions",
+    });
+  });
+
+  it("does not guess a current task when the cursor is missing or stale", () => {
+    const existing = initializeCombatRoundState({ encounter: encounter() });
+
+    expect(getCurrentCombatRoundTaskSelection({ ...existing, currentCursor: undefined })).toBe(
+      undefined,
+    );
+    expect(
+      getCurrentCombatRoundTaskSelection({
+        ...existing,
+        currentCursor: {
+          participantId: "middle",
+          roundNumber: existing.roundNumber + 1,
+          step: "A1" as const,
+        },
+      }),
+    ).toBe(undefined);
+    expect(
+      getCurrentCombatRoundTaskSelection({
+        ...existing,
+        currentCursor: {
+          participantId: "missing",
+          roundNumber: existing.roundNumber,
+          step: "A1" as const,
+        },
+      }),
+    ).toBe(undefined);
+  });
+
   it("starts fresh DE selection at the top participant despite a stale phase cursor", () => {
     const existing = initializeCombatRoundState({ encounter: encounter() });
     const state = {

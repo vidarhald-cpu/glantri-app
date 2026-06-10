@@ -11,6 +11,28 @@ export interface CombatRoundSelectionTarget {
   step: CombatRoundStep;
 }
 
+export function getCurrentCombatRoundTaskSelection(
+  state: CombatRoundState,
+): CombatRoundSelectionTarget | undefined {
+  const cursor = state.currentCursor;
+
+  if (!cursor || cursor.roundNumber !== state.roundNumber) {
+    return undefined;
+  }
+
+  if (
+    cursor.participantId &&
+    !state.participants.some((participant) => participant.participantId === cursor.participantId)
+  ) {
+    return undefined;
+  }
+
+  return {
+    participantId: cursor.participantId,
+    step: getCombatRoundStepForCursorStep(cursor.step),
+  };
+}
+
 export function isGlobalCombatRoundParticipantStep(step: CombatRoundStep): boolean {
   return (
     step === "select_actions" ||

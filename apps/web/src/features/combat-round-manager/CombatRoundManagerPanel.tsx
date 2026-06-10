@@ -132,6 +132,7 @@ import {
 import { loadCanonicalContent } from "@/lib/content/loadCanonicalContent";
 import {
   applyCombatRoundSelectionTarget,
+  getCurrentCombatRoundTaskSelection,
   getNextCombatRoundParticipantSelection,
   isGlobalCombatRoundParticipantStep,
   normalizeCombatRoundManagerSelection,
@@ -2168,6 +2169,7 @@ export default function CombatRoundManagerPanel({
     { length: timelineRounds },
     (_, index) => roundState.roundNumber + index,
   );
+  const currentTaskSelection = getCurrentCombatRoundTaskSelection(roundState);
   const inspector = buildCombatRoundInspector({
     participantId: roundState.selectedParticipantId,
     state: roundState,
@@ -2870,8 +2872,11 @@ export default function CombatRoundManagerPanel({
     selectedScenarioParticipant?.id,
   ]);
 
-  function focusRoundTable() {
-    tableContainerRef.current?.scrollIntoView({ block: "start", behavior: "smooth" });
+  function focusRoundTable(input: { scrollIntoView?: boolean } = {}) {
+    if (input.scrollIntoView !== false) {
+      tableContainerRef.current?.scrollIntoView({ block: "start", behavior: "smooth" });
+    }
+
     tableContainerRef.current?.focus({ preventScroll: true });
     tableContainerRef.current?.scrollTo({ left: 0, top: 0 });
   }
@@ -3213,7 +3218,7 @@ export default function CombatRoundManagerPanel({
       setRoundState(nextRoundState);
       setSaveError(undefined);
       onEncounterUpdated?.(nextEncounter);
-      focusRoundTable();
+      focusRoundTable({ scrollIntoView: false });
 
       if (participants.length > 0) {
         setScenarioParticipantOverrides((current) => ({
@@ -3242,6 +3247,21 @@ export default function CombatRoundManagerPanel({
     } finally {
       setSaving(false);
     }
+  }
+
+  function selectCurrentTask() {
+    manualSelectionRef.current = undefined;
+    pendingSelectionRef.current = undefined;
+    setRoundState((current) => {
+      const selection = getCurrentCombatRoundTaskSelection(current);
+
+      return selection
+        ? applyCombatRoundSelectionTarget({
+            selection,
+            state: current,
+          })
+        : current;
+    });
   }
 
   function selectInspector(participantId: string, step: CombatRoundStep) {
@@ -4088,6 +4108,14 @@ export default function CombatRoundManagerPanel({
             type="button"
           >
             {saving ? "Saving..." : getAdvanceButtonLabel(inspector.step)}
+          </button>
+          <button
+            disabled={saving || !currentTaskSelection}
+            onClick={selectCurrentTask}
+            title="Return to the current unresolved combat step"
+            type="button"
+          >
+            Current task
           </button>
           <button disabled={saving} onClick={() => void clearCurrentStep()} type="button">
             Clear current step

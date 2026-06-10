@@ -19,6 +19,8 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("Commit");
     expect(source).toContain("and advance to");
     expect(source).toContain('"Complete round"');
+    expect(source).toContain("Current task");
+    expect(source).toContain("Return to the current unresolved combat step");
     expect(source).toContain("Clear current step");
     expect(source).toContain("clearCurrentCombatRoundStepOnServer");
     expect(source).toContain("Step controller");
@@ -312,6 +314,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("pendingSelectionRef");
     expect(source).toContain("manualSelectionRef");
     expect(source).toContain("normalizeCombatRoundManagerSelection");
+    expect(source).toContain("getCurrentCombatRoundTaskSelection");
     expect(source).toContain("getNextCombatRoundParticipantSelection");
     expect(source).toContain(
       "const shouldUsePersistedCursor = isGlobalCombatRoundParticipantStep(actedStep)",
@@ -334,6 +337,19 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("Next participant");
     expect(source).toContain("Previous step");
     expect(source).toContain("Next step");
+  });
+
+  it("returns from inspection to the current task without mutating combat state", () => {
+    const source = readSource();
+
+    expect(source).toContain("const currentTaskSelection = getCurrentCombatRoundTaskSelection");
+    expect(source).toContain("function selectCurrentTask()");
+    expect(source).toContain("manualSelectionRef.current = undefined");
+    expect(source).toContain("pendingSelectionRef.current = undefined");
+    expect(source).toContain("applyCombatRoundSelectionTarget({");
+    expect(source).toContain("disabled={saving || !currentTaskSelection}");
+    expect(source).toContain("onClick={selectCurrentTask}");
+    expect(source).not.toContain("selectCurrentTaskOnServer");
   });
 
   it("persists combat round updates through narrow encounter commands", () => {
@@ -369,6 +385,15 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("step: nextRoundState.selectedStep ?? clearedSelection.step");
     expect(source).toContain("pendingSelectionRef.current = nextSelection");
     expect(source).toContain("manualSelectionRef.current = nextSelection");
+  });
+
+  it("keeps Clear current step visible by avoiding explicit scroll after clear", () => {
+    const source = readSource();
+
+    expect(source).toContain("function focusRoundTable(input: { scrollIntoView?: boolean } = {})");
+    expect(source).toContain("input.scrollIntoView !== false");
+    expect(source).toContain("focusRoundTable({ scrollIntoView: false })");
+    expect(source).toContain("Clear current step");
   });
 
   it("uses the selected cell as the authoritative inspector mode", () => {
