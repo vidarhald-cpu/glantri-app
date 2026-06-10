@@ -6441,6 +6441,11 @@ export function canPlayerRollCombatAttack(input: {
   const normalized = combatRoundStateSchema.parse(input.state);
   const requiredStep = input.phase === "phase1" ? "phase_1_actions" : "phase_2_actions";
   const requiredCursorStep = input.phase === "phase1" ? "A1" : "A2";
+  const participant = normalized.participants.find(
+    (entry) => entry.participantId === input.participantId,
+  );
+  const targetParticipantId =
+    participant?.declaration?.phaseContexts?.[input.phase]?.targetParticipantId;
   const existingAttackResult = getCombatRoundOutgoingAttackResultForParticipantPhase({
     participantId: input.participantId,
     phase: input.phase,
@@ -6452,8 +6457,239 @@ export function canPlayerRollCombatAttack(input: {
     normalized.currentCursor?.participantId === input.participantId &&
     normalized.currentCursor.step === requiredCursorStep &&
     combatRoundParticipantHasPhaseAttack(input) &&
+    Boolean(targetParticipantId) &&
     existingAttackResult === undefined
   );
+}
+
+export type PlayerCombatCurrentRollAction =
+  | {
+      kind: "attack";
+      participantId: string;
+      phase: CombatRoundPhase;
+      step: "A1" | "A2";
+    }
+  | {
+      attackResultId: string;
+      attackerParticipantId: string;
+      defenderParticipantId: string;
+      kind: "parry";
+      participantId: string;
+      phase: CombatRoundPhase;
+      step: "P1" | "P2";
+    }
+  | {
+      attackResultId: string;
+      attackerParticipantId: string;
+      defenderParticipantId: string;
+      kind: "hit_location";
+      participantId: string;
+      phase: CombatRoundPhase;
+      step: "D1" | "D2";
+    }
+  | {
+      attackResultId: string;
+      attackerParticipantId: string;
+      defenderParticipantId: string;
+      kind: "critical";
+      participantId: string;
+      phase: CombatRoundPhase;
+      step: "D1" | "D2";
+    };
+
+function getCombatRoundAttackPhaseForCursorStep(
+  step: CombatRoundCursorStep,
+): CombatRoundPhase | undefined {
+  if (step === "A1") {
+    return "phase1";
+  }
+
+  if (step === "A2") {
+    return "phase2";
+  }
+
+  return undefined;
+}
+
+function getCombatRoundParryPhaseForCursorStep(
+  step: CombatRoundCursorStep,
+): CombatRoundPhase | undefined {
+  if (step === "P1") {
+    return "phase1";
+  }
+
+  if (step === "P2") {
+    return "phase2";
+  }
+
+  return undefined;
+}
+
+function getCombatRoundDamagePhaseForCursorStep(
+  step: CombatRoundCursorStep,
+): CombatRoundPhase | undefined {
+  if (step === "D1") {
+    return "phase1";
+  }
+
+  if (step === "D2") {
+    return "phase2";
+  }
+
+  return undefined;
+}
+
+function getCurrentCursorIncomingAttackContext(input: {
+  phase: CombatRoundPhase;
+  state: CombatRoundState;
+}):
+  | {
+      attackResult: CombatRoundAttackRollResult;
+      attackResultId: string;
+      resolution: CombatRoundPhaseResolutionResult;
+    }
+  | undefined {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const participantId = normalized.currentCursor?.participantId;
+
+  if (!participantId) {
+    return undefined;
+  }
+
+  const attackResult = getCombatRoundDisplayIncomingAttackResultForParticipantPhase({
+    participantId,
+    phase: input.phase,
+    state: normalized,
+  });
+
+  if (!attackResult) {
+    return undefined;
+  }
+
+  return {
+    attackResult,
+    attackResultId: getCombatRoundAttackResultId({
+      result: attackResult,
+      roundNumber: normalized.roundNumber,
+    }),
+    resolution:
+      getCombatRoundPhaseResolutionResultForAttack({
+        attackResult,
+        state: normalized,
+      }) ??
+      buildCombatRoundPhaseResolutionResult({
+        attackResult,
+        roundNumber: normalized.roundNumber,
+        updatedAt: attackResult.rolledAt,
+      }),
+  };
+}
+
+export function getPlayerCombatCurrentRollAction(input: {
+  participantId: string;
+  state: CombatRoundState;
+}): PlayerCombatCurrentRollAction | undefined {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const cursor = normalized.currentCursor;
+
+  if (!cursor || cursor.roundNumber !== normalized.roundNumber) {
+    return undefined;
+  }
+
+  const attackPhase = getCombatRoundAttackPhaseForCursorStep(cursor.step);
+
+  if (
+    attackPhase &&
+    (cursor.step === "A1" || cursor.step === "A2") &&
+    cursor.participantId === input.participantId
+  ) {
+    return canPlayerRollCombatAttack({
+      participantId: input.participantId,
+      phase: attackPhase,
+      state: normalized,
+    })
+      ? {
+          kind: "attack",
+          participantId: input.participantId,
+          phase: attackPhase,
+          step: cursor.step,
+        }
+      : undefined;
+  }
+
+  const parryPhase = getCombatRoundParryPhaseForCursorStep(cursor.step);
+
+  if (
+    parryPhase &&
+    (cursor.step === "P1" || cursor.step === "P2") &&
+    cursor.participantId === input.participantId
+  ) {
+    const context = getCurrentCursorIncomingAttackContext({
+      phase: parryPhase,
+      state: normalized,
+    });
+
+    return context?.attackResult.hit &&
+      context.attackResult.defenderParticipantId === input.participantId &&
+      context.resolution.parryResolution.status === "pending"
+      ? {
+          attackResultId: context.attackResultId,
+          attackerParticipantId: context.attackResult.attackerParticipantId,
+          defenderParticipantId: context.attackResult.defenderParticipantId,
+          kind: "parry",
+          participantId: input.participantId,
+          phase: parryPhase,
+          step: cursor.step,
+        }
+      : undefined;
+  }
+
+  const damagePhase = getCombatRoundDamagePhaseForCursorStep(cursor.step);
+
+  if (!damagePhase || (cursor.step !== "D1" && cursor.step !== "D2")) {
+    return undefined;
+  }
+
+  const context = getCurrentCursorIncomingAttackContext({
+    phase: damagePhase,
+    state: normalized,
+  });
+
+  if (
+    !context ||
+    context.attackResult.attackerParticipantId !== input.participantId ||
+    context.attackResult.defenderParticipantId !== cursor.participantId
+  ) {
+    return undefined;
+  }
+
+  const damageSubstate = getCombatRoundDamageSubstate(context.resolution);
+
+  if (damageSubstate === "location_pending") {
+    return {
+      attackResultId: context.attackResultId,
+      attackerParticipantId: context.attackResult.attackerParticipantId,
+      defenderParticipantId: context.attackResult.defenderParticipantId,
+      kind: "hit_location",
+      participantId: input.participantId,
+      phase: damagePhase,
+      step: cursor.step,
+    };
+  }
+
+  if (damageSubstate === "critical_pending") {
+    return {
+      attackResultId: context.attackResultId,
+      attackerParticipantId: context.attackResult.attackerParticipantId,
+      defenderParticipantId: context.attackResult.defenderParticipantId,
+      kind: "critical",
+      participantId: input.participantId,
+      phase: damagePhase,
+      step: cursor.step,
+    };
+  }
+
+  return undefined;
 }
 
 export function setCombatRoundActiveParticipant(

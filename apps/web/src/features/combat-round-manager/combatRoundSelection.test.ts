@@ -73,6 +73,39 @@ describe("combat round manager selection", () => {
     });
   });
 
+  it("keeps current task enabled for parry and damage cursors", () => {
+    const existing = initializeCombatRoundState({ encounter: encounter() });
+
+    expect(
+      getCurrentCombatRoundTaskSelection({
+        ...existing,
+        currentCursor: {
+          participantId: "middle",
+          roundNumber: existing.roundNumber,
+          step: "P1",
+        },
+        currentStep: "review_phase_2_actions",
+      }),
+    ).toEqual({
+      participantId: "middle",
+      step: "review_phase_2_actions",
+    });
+    expect(
+      getCurrentCombatRoundTaskSelection({
+        ...existing,
+        currentCursor: {
+          participantId: "middle",
+          roundNumber: existing.roundNumber,
+          step: "D1",
+        },
+        currentStep: "phase_1_damage",
+      }),
+    ).toEqual({
+      participantId: "middle",
+      step: "phase_1_damage",
+    });
+  });
+
   it("recovers the current task selection from a persisted phase cursor at A1", () => {
     const existing = initializeCombatRoundState({ encounter: encounter() });
     const refreshedEncounter = encounter({

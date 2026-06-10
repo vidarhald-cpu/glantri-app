@@ -422,6 +422,52 @@ describe("localServiceClient wire contract", () => {
     });
   });
 
+  it("rolls combat parry through the encounter round domain", async () => {
+    const encounter = {
+      id: "encounter-1",
+      scenarioId: "scenario-1",
+    };
+    const fetchMock = stubFetch({ encounter });
+    const client = await loadClient();
+
+    await expect(
+      client.rollCombatParryOnServer({
+        attackResultId: "1:phase1:attacker:defender",
+        encounterId: "encounter-1",
+        modifierBreakdown: [
+          { label: "General/Fatigue", value: 0 },
+          { label: "DB/Parry", value: -4 },
+          { label: "attack result", value: -2 },
+        ],
+        parryBase: 13,
+        parrySourceLabel: "Sword / shield",
+        scenarioParticipantId: "participant-2",
+        usedMainHand: true,
+        usedOffHand: true,
+      }),
+    ).resolves.toEqual(encounter);
+
+    expectFetchCall(fetchMock, {
+      body: {
+        attackResultId: "1:phase1:attacker:defender",
+        mainHandParryScore: undefined,
+        modifierBreakdown: [
+          { label: "General/Fatigue", value: 0 },
+          { label: "DB/Parry", value: -4 },
+          { label: "attack result", value: -2 },
+        ],
+        offHandParryScore: undefined,
+        parryBase: 13,
+        parrySourceLabel: "Sword / shield",
+        scenarioParticipantId: "participant-2",
+        usedMainHand: true,
+        usedOffHand: true,
+      },
+      method: "POST",
+      url: "https://api.example.test/encounters/encounter-1/combat-round/roll-parry",
+    });
+  });
+
   it("clears the current combat round step through the encounter domain", async () => {
     const encounter = {
       id: "encounter-1",

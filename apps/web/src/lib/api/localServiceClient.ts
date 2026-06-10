@@ -77,6 +77,7 @@ export {
   rollCombatCriticalOnServer,
   rollCombatHitLocationOnServer,
   rollCombatInitiativeOnServer,
+  rollCombatParryOnServer,
   submitCombatDeclarationOnServer,
   submitPlayerRoleplayRollOnServer,
   updateEncounterOnServer

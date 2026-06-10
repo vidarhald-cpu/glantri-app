@@ -6,7 +6,6 @@ import {
   applyCombatActionGeneratedModifiers,
   buildCombatRoundAttackRollResult,
   buildCombatRoundInitiativeResult,
-  canPlayerRollCombatAttack,
   canPlayerRollCombatInitiative,
   buildRoleplayCalculationPreview,
   canPlayerSubmitCombatDeclaration,
@@ -17,6 +16,7 @@ import {
   encounterSessionSchema,
   getCombatRoundInitiativePhaseForStep,
   getCombatRoundAttackResultById,
+  getPlayerCombatCurrentRollAction,
   getCombatRoundOutgoingAttackResultForParticipantPhase,
   initializeCombatRoundState,
   isUserAssignedToEncounterMembership,
@@ -26,11 +26,13 @@ import {
   recordCombatRoundHitLocationRoll,
   recordCombatRoundInitiative,
   recordCombatRoundAttackResult,
+  recordCombatRoundParryResult,
   recordCombatRoundParticipantStepReview,
   removeCombatRoundCommittedDamageEffects,
   resolveEncounterParticipantByRollParticipantId,
   resolveEncounterParticipantMembership,
   rollOpenEndedCombatToHitD20,
+  rollOpenEndedD20,
   rollOpenEndedD6,
   combatRoundPhaseContextsSchema,
   scenarioParticipantCombatContextSchema,
@@ -40,6 +42,7 @@ import {
 import type { ScenarioParticipant } from "@glantri/domain";
 import {
   recordRoleplayGmSkillRoll,
+  resolveCombatParry,
   resolveRoleplaySkillRollModifiers,
 } from "@glantri/rules-engine";
 
@@ -256,6 +259,73 @@ function parseCombatAttackBody(body: unknown): {
     ob: parseOptionalInteger(value.ob, "ob"),
     phase,
     weaponName,
+  };
+}
+
+function parseOptionalBoolean(value: unknown, label: string): boolean | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (typeof value !== "boolean") {
+    throw new Error(`${label} must be a boolean.`);
+  }
+
+  return value;
+}
+
+function parseCombatParryModifierBreakdown(value: unknown): Array<{ label: string; value: number }> {
+  if (value === undefined) {
+    return [];
+  }
+
+  if (!Array.isArray(value)) {
+    throw new Error("modifierBreakdown must be an array.");
+  }
+
+  return value.map((entry, index) => {
+    if (!entry || typeof entry !== "object") {
+      throw new Error(`modifierBreakdown[${index}] must be an object.`);
+    }
+
+    const candidate = entry as Record<string, unknown>;
+
+    return {
+      label: parseNonEmptyString(candidate.label, `modifierBreakdown[${index}].label`),
+      value: parseInteger(candidate.value, `modifierBreakdown[${index}].value`),
+    };
+  });
+}
+
+function parseCombatParryBody(body: unknown): {
+  attackResultId: string;
+  mainHandParryScore?: number;
+  modifierBreakdown: Array<{ label: string; value: number }>;
+  offHandParryScore?: number;
+  parryBase: number;
+  parrySourceLabel?: string;
+  scenarioParticipantId: string;
+  usedMainHand?: boolean;
+  usedOffHand?: boolean;
+} {
+  const value = parseBodyObject(body, "Combat parry payload");
+  const parsed = parseParticipantCommandBody(value, "Combat parry payload");
+  const attackResultId = parseNonEmptyString(value.attackResultId, "attackResultId");
+  const parrySourceLabel =
+    typeof value.parrySourceLabel === "string" && value.parrySourceLabel.trim().length > 0
+      ? value.parrySourceLabel
+      : undefined;
+
+  return {
+    ...parsed,
+    attackResultId,
+    mainHandParryScore: parseOptionalInteger(value.mainHandParryScore, "mainHandParryScore"),
+    modifierBreakdown: parseCombatParryModifierBreakdown(value.modifierBreakdown),
+    offHandParryScore: parseOptionalInteger(value.offHandParryScore, "offHandParryScore"),
+    parryBase: parseInteger(value.parryBase, "parryBase"),
+    parrySourceLabel,
+    usedMainHand: parseOptionalBoolean(value.usedMainHand, "usedMainHand"),
+    usedOffHand: parseOptionalBoolean(value.usedOffHand, "usedOffHand"),
   };
 }
 
@@ -885,12 +955,10 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       });
       const submittedAt = new Date().toISOString();
       const nextRoundState = recordCombatRoundInitiative({
-        command: gmAuthorizedOperation
-          ? {
-              createdAt: submittedAt,
-              createdByUserId: user.id,
-            }
-          : undefined,
+        command: {
+          createdAt: submittedAt,
+          createdByUserId: user.id,
+        },
         initiative: rolledInitiative,
         participantId: encounterParticipant.id,
         phase,
@@ -1024,13 +1092,12 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         });
       }
 
-      if (
-        !canPlayerRollCombatAttack({
-          participantId: encounterParticipant.id,
-          phase: body.phase,
-          state: roundState,
-        })
-      ) {
+      const currentRollAction = getPlayerCombatCurrentRollAction({
+        participantId: encounterParticipant.id,
+        state: roundState,
+      });
+
+      if (currentRollAction?.kind !== "attack" || currentRollAction.phase !== body.phase) {
         return reply.code(409).send({
           error: "Attack is not open for this participant.",
         });
@@ -1133,6 +1200,167 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
     }
   });
 
+  app.post("/encounters/:encounterId/combat-round/roll-parry", async (request, reply) => {
+    const user = await requireAuthenticatedUser(request, reply);
+
+    if (!user) {
+      return;
+    }
+
+    try {
+      const encounterId = parseId(request.params, "encounterId", "Encounter id");
+      const encounter = await encounterService.getEncounterById(encounterId);
+
+      if (!encounter?.scenarioId) {
+        return reply.code(404).send({
+          error: "Encounter not found.",
+        });
+      }
+
+      const scenarioId = encounter.scenarioId;
+      const access = await resolveScenarioWorkspaceAccess(
+        {
+          campaignService,
+          scenarioService,
+        },
+        {
+          scenarioId,
+          userId: user.id,
+          userRoles: user.roles,
+        },
+      );
+
+      if (!access) {
+        return reply.code(404).send({
+          error: "Encounter not found.",
+        });
+      }
+
+      const body = parseCombatParryBody(request.body);
+      const scenarioParticipants = await scenarioService.listScenarioParticipants(scenarioId);
+      const scenarioParticipant = scenarioParticipants.find(
+        (participant) => participant.id === body.scenarioParticipantId,
+      );
+      const membership = resolveEncounterParticipantMembership({
+        encounter,
+        scenarioParticipants,
+      });
+      const encounterParticipant = scenarioParticipant
+        ? membership.participants.find(
+            (participant) =>
+              participant.scenarioParticipantId === scenarioParticipant.id ||
+              participant.id === scenarioParticipant.id ||
+              (scenarioParticipant.characterId &&
+                participant.characterId === scenarioParticipant.characterId),
+          )
+        : undefined;
+
+      if (!scenarioParticipant || !scenarioParticipant.isActive || !encounterParticipant) {
+        return reply.code(403).send({
+          error: "Participant is not assigned to this encounter.",
+        });
+      }
+
+      if (
+        access.mode !== "gm" &&
+        (scenarioParticipant.controlledByUserId !== user.id ||
+          !isUserAssignedToEncounterMembership({
+            encounter,
+            scenarioParticipants,
+            userId: user.id,
+          }))
+      ) {
+        return reply.code(403).send({
+          error: "Player is not assigned to this encounter participant.",
+        });
+      }
+
+      const roundState = initializeCombatRoundState({ encounter });
+      const currentRollAction = getPlayerCombatCurrentRollAction({
+        participantId: encounterParticipant.id,
+        state: roundState,
+      });
+
+      if (
+        currentRollAction?.kind !== "parry" ||
+        currentRollAction.attackResultId !== body.attackResultId
+      ) {
+        return reply.code(409).send({
+          error: "Parry is not open for this participant.",
+        });
+      }
+
+      const attackResult = getCombatRoundAttackResultById({
+        attackResultId: body.attackResultId,
+        state: roundState,
+      });
+
+      if (!attackResult) {
+        return reply.code(404).send({
+          error: "Attack result not found.",
+        });
+      }
+
+      const submittedAt = new Date().toISOString();
+      const roll = rollOpenEndedD20();
+      const parry = resolveCombatParry({
+        parryBase: body.parryBase,
+        rawModifiers: body.modifierBreakdown,
+        rollTotal: roll.dieResult,
+      });
+      const parryResolution = {
+        combinedParryScore: parry.parryBase,
+        mainHandParryScore: body.mainHandParryScore,
+        modifiedParryBeforeRoll: parry.parryBase + parry.modifierAdjustment,
+        modifierAdjustment: parry.modifierAdjustment,
+        modifierBreakdown: parry.rawModifiers.map((modifier) => ({ ...modifier })),
+        notes:
+          "Direction, location coverage, and multi-opponent source allocation are deferred in this first parry slice.",
+        offHandParryScore: body.offHandParryScore,
+        openEndedD10s: roll.openEndedD10s,
+        parrySourceLabel: body.parrySourceLabel,
+        rawModifierTotal: parry.rawModifierTotal,
+        resultLabel: parry.success ? "Parry successful" : "Parry failed",
+        rollD20: roll.rollD20,
+        rollTotal: roll.dieResult,
+        status: "resolved" as const,
+        success: parry.success,
+        targetNumber: parry.targetNumber,
+        total: parry.total,
+        usedMainHand: body.usedMainHand,
+        usedOffHand: body.usedOffHand,
+      };
+      const nextRoundState = recordCombatRoundParryResult({
+        attackResult,
+        command: {
+          createdAt: submittedAt,
+          createdByUserId: user.id,
+        },
+        parryResolution,
+        state: roundState,
+        submittedBy: access.mode === "gm" ? "gm" : "player",
+        updatedAt: submittedAt,
+      });
+      const savedEncounter = await encounterService.updateEncounter({
+        campaignId: access.campaignId,
+        encounterId,
+        scenarioId,
+        session: {
+          ...encounter,
+          combatRoundState: nextRoundState,
+          currentRound: nextRoundState.roundNumber,
+          updatedAt: submittedAt,
+        },
+      });
+
+      return { encounter: savedEncounter };
+    } catch (error) {
+      return reply.code(400).send({
+        error: error instanceof Error ? error.message : "Unable to roll combat parry.",
+      });
+    }
+  });
+
   app.post("/encounters/:encounterId/combat-round/roll-hit-location", async (request, reply) => {
     const user = await requireAuthenticatedUser(request, reply);
 
@@ -1209,6 +1437,20 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       if (attackResult.attackerParticipantId !== encounterParticipant.id) {
         return reply.code(403).send({
           error: "Only the attacking participant can roll hit location.",
+        });
+      }
+
+      const currentRollAction = getPlayerCombatCurrentRollAction({
+        participantId: encounterParticipant.id,
+        state: roundState,
+      });
+
+      if (
+        currentRollAction?.kind !== "hit_location" ||
+        currentRollAction.attackResultId !== body.attackResultId
+      ) {
+        return reply.code(409).send({
+          error: "Hit location is not open for this attack.",
         });
       }
 
@@ -1340,6 +1582,20 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       if (attackResult.attackerParticipantId !== encounterParticipant.id) {
         return reply.code(403).send({
           error: "Only the attacking participant can roll the critical die.",
+        });
+      }
+
+      const currentRollAction = getPlayerCombatCurrentRollAction({
+        participantId: encounterParticipant.id,
+        state: roundState,
+      });
+
+      if (
+        currentRollAction?.kind !== "critical" ||
+        currentRollAction.attackResultId !== body.attackResultId
+      ) {
+        return reply.code(409).send({
+          error: "Critical roll is not open for this attack.",
         });
       }
 

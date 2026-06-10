@@ -68,9 +68,11 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).not.toContain("GM can save or revise this participant declaration.");
     expect(source).toContain("Declaration closed.");
     expect(source).toContain("rollCombatAttackOnServer");
+    expect(source).toContain("rollCombatParryOnServer");
     expect(source).toContain("rollCombatInitiativeOnServer");
     expect(source).toContain("rollInitiative");
     expect(source).toContain("rollPhaseAttack");
+    expect(source).toContain("rollCurrentParry");
     expect(source).toContain("currentInitiativePhase");
     expect(source).toContain("Initiative rolled.");
     expect(source).toContain("Initiative rolled — waiting for others");
@@ -95,6 +97,8 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("selectedCurrentAttackResult");
     expect(source).toContain("selectedCurrentAttackResultPanel");
     expect(source).toContain("selectedCurrentPhaseResolutionResultPanel");
+    expect(source).toContain("currentParryAction");
+    expect(source).toContain("Roll parry");
     expect(source).toContain("selectedAttackerPrivilegedResolution");
     expect(source).toContain("selectedAttackerPrivilegedAttackResult");
     expect(source).toContain("getCombatRoundDamageSubstate");
@@ -134,7 +138,8 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("rollAttackerPrivilegedCombatDie(attackerPrivilegedAction.kind)");
     expect(source).toContain("currentAttackAction");
     expect(source).toContain("rollPhaseAttack()");
-    expect(source).toContain("canPlayerRollCombatAttack");
+    expect(source).toContain("getPlayerCombatCurrentRollAction");
+    expect(source).toContain("currentRollAction");
     expect(source).toContain("currentAttackPhaseContext");
     expect(source).toContain("currentAttackTargetParticipantId");
     expect(source).toContain("selectedRoundDeclaration?.phaseContexts?.[currentAttackPhase]");

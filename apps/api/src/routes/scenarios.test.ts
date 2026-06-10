@@ -2791,7 +2791,21 @@ describe("scenarios route contract", () => {
     expect(updatedEncounter.combatRoundState.participants[0].stepStatuses.initiative_phase_1).toBe(
       "submitted",
     );
-    expect(updatedEncounter.combatRoundState.commands).toEqual([]);
+    expect(updatedEncounter.combatRoundState.commands[0]).toMatchObject({
+      afterCursor: {
+        participantId: "encounter-participant-1",
+        step: "i1",
+      },
+      beforeCursor: {
+        participantId: "encounter-participant-1",
+        step: "i1",
+      },
+      participantId: "encounter-participant-1",
+      type: "roll_initiative_phase1",
+    });
+    expect(updatedEncounter.combatRoundState.currentCursor).toEqual(
+      updatedEncounter.combatRoundState.commands[0].afterCursor,
+    );
   });
 
   it("allows a GM to roll initiative for another player's participant", async () => {
@@ -3318,6 +3332,106 @@ describe("scenarios route contract", () => {
 
     expect(response.statusCode).toBe(409);
     expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
+  });
+
+  it("allows the current defending player to roll the open phase 1 parry once", async () => {
+    const encounterParticipants = [
+      makeCombatEncounter().participants[0],
+      {
+        ...makeCombatEncounter().participants[0],
+        id: "encounter-participant-2",
+        label: "City guard",
+        scenarioParticipantId: "participant-2",
+      },
+    ];
+    const combatEncounter = makeCombatEncounter({
+      participants: encounterParticipants,
+    }) as EncounterSession;
+    const attackHit = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackerParticipantId: "encounter-participant-1",
+      defenderDb: 10,
+      defenderParticipantId: "encounter-participant-2",
+      ob: 10,
+      phase: "phase1",
+      rollD20: 14,
+      rollTotal: 14,
+      rolledAt: "2026-01-01T00:03:00.000Z",
+      weaponName: "Broad sword",
+    });
+    const afterAttack = recordCombatRoundAttackResult({
+      command: {
+        createdAt: attackHit.rolledAt,
+        createdByUserId: "gm-1",
+      },
+      participantId: "encounter-participant-1",
+      result: attackHit,
+      state: initializeCombatRoundState({ encounter: combatEncounter }),
+      submittedBy: "gm",
+    });
+
+    setupCombatDeclarationRoute({
+      encounter: {
+        combatRoundState: afterAttack,
+        participants: encounterParticipants,
+      },
+      participant: {
+        id: "participant-2",
+      },
+      participants: [
+        {
+          controlledByUserId: "other-player",
+          id: "participant-1",
+        },
+        {
+          controlledByUserId: "player-1",
+          id: "participant-2",
+        },
+      ],
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        attackResultId: "1:phase1:encounter-participant-1:encounter-participant-2",
+        modifierBreakdown: [
+          { label: "General/Fatigue", value: 0 },
+          { label: "DB/Parry", value: -4 },
+          { label: "attack result", value: -2 },
+        ],
+        parryBase: 13,
+        parrySourceLabel: "Sword / shield",
+        scenarioParticipantId: "participant-2",
+        usedMainHand: true,
+        usedOffHand: true,
+      },
+      url: "/encounters/encounter-1/combat-round/roll-parry",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
+    expect(updatedEncounter.combatRoundState.commands.at(-1)).toMatchObject({
+      facts: expect.objectContaining({
+        attackResultId: "1:phase1:encounter-participant-1:encounter-participant-2",
+        defenderParticipantId: "encounter-participant-2",
+      }),
+      participantId: "encounter-participant-2",
+      type: "roll_parry",
+    });
+    expect(
+      updatedEncounter.combatRoundState.phaseResolutionResults[0]?.parryResolution,
+    ).toMatchObject({
+      combinedParryScore: 13,
+      modifierBreakdown: [
+        { label: "DB/Parry", value: -4 },
+        { label: "attack result", value: -2 },
+      ],
+      parrySourceLabel: "Sword / shield",
+      status: "resolved",
+    });
   });
 
   it("allows the attacking player to roll hit location for a pending D1 result", async () => {

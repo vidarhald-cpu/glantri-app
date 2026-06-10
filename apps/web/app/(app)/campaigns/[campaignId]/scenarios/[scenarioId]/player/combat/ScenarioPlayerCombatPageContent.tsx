@@ -11,7 +11,6 @@ import {
   type CombatRoundPhase,
   type CombatRoundPhaseResolutionResult,
   type CombatRoundStep,
-  canPlayerRollCombatAttack,
   characterBuildSchema,
   formatOpenEndedD20RollBreakdown,
   getCombatRoundAttackResultById,
@@ -23,6 +22,7 @@ import {
   getCombatRoundInitiativeTotal,
   getCombatRoundModifierPhaseForStep,
   getCombatRoundResolutionPhaseForStep,
+  getPlayerCombatCurrentRollAction,
   initializeCombatRoundState,
   isCombatRoundPhaseInitiativeComplete,
   validateCombatDeclarationTargets,
@@ -90,6 +90,7 @@ import {
   rollCombatCriticalOnServer,
   rollCombatHitLocationOnServer,
   rollCombatInitiativeOnServer,
+  rollCombatParryOnServer,
   submitCombatDeclarationOnServer,
   type ServerCharacterRecord,
 } from "@/lib/api/localServiceClient";
@@ -381,6 +382,41 @@ function parsePlayerCombatInteger(value: string | undefined, label: string): num
   }
 
   return parsed;
+}
+
+function parsePlayerCombatDisplayInteger(value: string | undefined): number | undefined {
+  if (!value || value === "—" || value === "incomplete") {
+    return undefined;
+  }
+
+  const parsed = Number(value);
+  return Number.isInteger(parsed) ? parsed : undefined;
+}
+
+function buildPlayerCombatParryModifierBreakdown(input: {
+  attackResult?: CombatRoundAttackRollResult;
+  liveModifiers: ReturnType<typeof buildEncounterLiveCombatModifierSummary>;
+}): Array<{ label: string; value: number }> {
+  const attackResultModifier = input.attackResult?.defenderParryModifier ?? 0;
+
+  return [
+    {
+      label: "General/Fatigue",
+      value: input.liveModifiers.generalFatigueRaw,
+    },
+    {
+      label: "DB/Parry",
+      value: input.liveModifiers.dbRaw,
+    },
+    ...(attackResultModifier === 0
+      ? []
+      : [
+          {
+            label: "attack result",
+            value: attackResultModifier,
+          },
+        ]),
+  ];
 }
 
 export default function ScenarioPlayerCombatPageContent({
@@ -833,6 +869,13 @@ export default function ScenarioPlayerCombatPageContent({
   }, [displayedParticipant]);
 
   const currentCombatStep = combatRoundState?.currentStep ?? "select_actions";
+  const currentRollAction =
+    combatRoundState && selectedRoundParticipant
+      ? getPlayerCombatCurrentRollAction({
+          participantId: selectedRoundParticipant.participantId,
+          state: combatRoundState,
+        })
+      : undefined;
   const currentModifierPhase = getCombatRoundModifierPhaseForStep(currentCombatStep);
   const liveCombatModifiers = useMemo(
     () =>
@@ -1101,6 +1144,49 @@ export default function ScenarioPlayerCombatPageContent({
     }
   }
 
+  async function rollCurrentParry() {
+    if (
+      readOnlyInspection ||
+      !selectedParticipant ||
+      !encounterId ||
+      currentRollAction?.kind !== "parry"
+    ) {
+      return;
+    }
+
+    if (!selectedCurrentResolutionAttackResult) {
+      setError("No attack result is available for parry.");
+      return;
+    }
+
+    if (currentParryBase === undefined) {
+      setError("No parry source is available.");
+      return;
+    }
+
+    setSavingCombatContext(true);
+
+    try {
+      const encounter = await rollCombatParryOnServer({
+        attackResultId: currentRollAction.attackResultId,
+        encounterId,
+        modifierBreakdown: currentParryModifierBreakdown,
+        parryBase: currentParryBase,
+        parrySourceLabel: currentParryDefenseStats?.sourceName,
+        scenarioParticipantId: selectedParticipant.id,
+        usedMainHand: true,
+        usedOffHand: true,
+      });
+
+      setEncounterSession(encounter);
+      setError(undefined);
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : "Unable to roll combat parry.");
+    } finally {
+      setSavingCombatContext(false);
+    }
+  }
+
   async function rollAttackerPrivilegedCombatDie(kind: "critical" | "hitLocation") {
     if (readOnlyInspection || !selectedParticipant || !encounterId) {
       return;
@@ -1322,14 +1408,26 @@ export default function ScenarioPlayerCombatPageContent({
         resultLabel: selectedCurrentPhaseResolutionLines.proposalLine,
       }
     : null;
+  const currentParryDefenseStats = currentResolutionPhase
+    ? buildPlayerCombatDefenseStats({
+        mainHandParryItemLabel:
+          phaseCombatLoadoutSummaries[currentResolutionPhase].mainHandParryItemLabel,
+        offHandParryItemLabel:
+          phaseCombatLoadoutSummaries[currentResolutionPhase].offHandParryItemLabel,
+        phaseContext: phaseCombatContextDrafts[currentResolutionPhase],
+        reference: phaseCombatLoadoutSummaries[currentResolutionPhase].reference,
+      })
+    : null;
+  const currentParryBase = parsePlayerCombatDisplayInteger(currentParryDefenseStats?.parry);
+  const currentParryModifierBreakdown = buildPlayerCombatParryModifierBreakdown({
+    attackResult: selectedCurrentResolutionAttackResult,
+    liveModifiers: liveCombatModifiers,
+  });
   const selectedAttackerPrivilegedResolution =
-    combatRoundState && selectedRoundParticipant
+    combatRoundState &&
+    (currentRollAction?.kind === "hit_location" || currentRollAction?.kind === "critical")
       ? combatRoundState.phaseResolutionResults.find(
-          (resolution) =>
-            resolution.attackerParticipantId === selectedRoundParticipant.participantId &&
-            ["location_pending", "location_rolled", "critical_pending", "critical_rolled"].includes(
-              getCombatRoundDamageSubstate(resolution),
-            ),
+          (resolution) => resolution.attackResultId === currentRollAction.attackResultId,
         )
       : undefined;
   const selectedAttackerPrivilegedDamageSubstate = selectedAttackerPrivilegedResolution
@@ -1358,14 +1456,16 @@ export default function ScenarioPlayerCombatPageContent({
       }
     : null;
   const attackerPrivilegedAction =
-    !isGameMaster && selectedAttackerPrivilegedAttackResult
-      ? selectedAttackerPrivilegedDamageSubstate === "location_pending"
+    selectedAttackerPrivilegedAttackResult
+      ? currentRollAction?.kind === "hit_location" &&
+        selectedAttackerPrivilegedDamageSubstate === "location_pending"
         ? {
             disabled: false,
             kind: "hitLocation" as const,
             label: "Roll hit location",
           }
-        : selectedAttackerPrivilegedDamageSubstate === "critical_pending"
+        : currentRollAction?.kind === "critical" &&
+            selectedAttackerPrivilegedDamageSubstate === "critical_pending"
           ? {
               disabled: false,
               kind: "critical" as const,
@@ -1457,18 +1557,28 @@ export default function ScenarioPlayerCombatPageContent({
     Boolean(combatRoundState) &&
     Boolean(currentAttackTargetParticipantId) &&
     Boolean(phaseCombatLoadoutSummaries[currentAttackPhase ?? "phase1"].attackStats) &&
-    (combatRoundState
-      ? canPlayerRollCombatAttack({
-          participantId: selectedRoundParticipant?.participantId ?? "",
-          phase: currentAttackPhase ?? "phase1",
-          state: combatRoundState,
-        })
-      : false);
+    currentRollAction?.kind === "attack" &&
+    currentRollAction.phase === currentAttackPhase;
   const currentAttackAction = canUseCurrentAttackButton
     ? {
         disabled: false,
         kind: "attack" as const,
         label: currentAttackPhase === "phase2" ? "Roll phase 2 attack" : "Roll phase 1 attack",
+      }
+    : undefined;
+  const canUseCurrentParryButton =
+    Boolean(displayedParticipant) &&
+    Boolean(selectedRoundParticipant) &&
+    Boolean(combatRoundState) &&
+    currentRollAction?.kind === "parry" &&
+    selectedCurrentResolutionAttackResult?.hit === true &&
+    selectedCurrentPhaseResolutionResult?.parryResolution.status === "pending" &&
+    currentParryBase !== undefined;
+  const currentParryAction = canUseCurrentParryButton
+    ? {
+        disabled: false,
+        kind: "parry" as const,
+        label: "Roll parry",
       }
     : undefined;
   const targetValidation = useMemo(
@@ -1518,9 +1628,14 @@ export default function ScenarioPlayerCombatPageContent({
           isGameMaster,
         });
   const playerActionButtonLabel =
-    attackerPrivilegedAction?.label ?? currentAttackAction?.label ?? declarationButtonLabel;
+    attackerPrivilegedAction?.label ??
+    currentParryAction?.label ??
+    currentAttackAction?.label ??
+    declarationButtonLabel;
   const playerActionButtonDisabled = attackerPrivilegedAction
     ? controlsDisabled || savingCombatContext || attackerPrivilegedAction.disabled
+    : currentParryAction
+      ? controlsDisabled || savingCombatContext || currentParryAction.disabled
     : currentAttackAction
       ? controlsDisabled || savingCombatContext || currentAttackAction.disabled
     : declareActionDisabled;
@@ -1549,6 +1664,8 @@ export default function ScenarioPlayerCombatPageContent({
         : initiativeStepStatus === "pending"
           ? `Current step: ${currentCombatStepLabel}.`
           : `Current step: ${currentCombatStepLabel}. Waiting for GM.`
+      : currentParryAction
+        ? `Current step: ${currentCombatStepLabel}. Ready to roll.`
       : currentAttackAction
         ? `Current step: ${currentCombatStepLabel}. Ready to roll.`
       : declarationIncomplete
@@ -1789,6 +1906,8 @@ export default function ScenarioPlayerCombatPageContent({
               onDeclareAction={() =>
                 void (attackerPrivilegedAction?.kind
                   ? rollAttackerPrivilegedCombatDie(attackerPrivilegedAction.kind)
+                  : currentParryAction
+                    ? rollCurrentParry()
                   : currentAttackAction
                     ? rollPhaseAttack()
                   : currentInitiativePhase
