@@ -671,11 +671,28 @@ export default function ScenarioPlayerCombatPageContent({
     roundNumber: declarationRoundNumber,
     stepStatus: selectedDeclarationStepStatus,
   });
-  const selectedParticipantDeclaredThisRound = Boolean(
+  const selectedParticipantStoredDeclarationThisRound = Boolean(
     selectedRoundDeclaration ??
     (declarationRoundNumber &&
       selectedParticipant?.state.combat.lastDeclaredActionId &&
       selectedParticipant.state.combat.lastDeclaredRoundNumber === declarationRoundNumber),
+  );
+  const selectedStoredDeclarationTargetValidation = selectedRoundDeclaration
+    ? validateCombatDeclarationTargets({
+        actionId: selectedRoundDeclaration.actionId,
+        phaseContexts: selectedRoundDeclaration.phaseContexts,
+        secondaryActionId: selectedRoundDeclaration.secondaryActionId,
+      })
+    : declarationRoundNumber &&
+        selectedParticipant?.state.combat.lastDeclaredActionId &&
+        selectedParticipant.state.combat.lastDeclaredRoundNumber === declarationRoundNumber
+      ? validateCombatDeclarationTargets({
+          actionId: selectedParticipant.state.combat.lastDeclaredActionId,
+          secondaryActionId: selectedParticipant.state.combat.lastDeclaredSecondaryActionId,
+        })
+      : undefined;
+  const selectedStoredDeclarationComplete = Boolean(
+    selectedParticipantStoredDeclarationThisRound && selectedStoredDeclarationTargetValidation?.valid,
   );
   const declarationStepOpen =
     !combatRoundState || combatRoundState.currentStep === "select_actions";
@@ -1418,12 +1435,6 @@ export default function ScenarioPlayerCombatPageContent({
         ],
       }
     : null;
-  const playerDeclarationLocked =
-    !isGameMaster &&
-    (!declarationStepOpen ||
-      selectedParticipantDeclaredThisRound ||
-      selectedDeclarationStepStatus !== "pending");
-  const declarationControlsDisabled = controlsDisabled || playerDeclarationLocked;
   const initiativeStepStatus =
     currentCombatStep === "initiative_phase_1"
       ? (selectedRoundParticipant?.stepStatuses.initiative_phase_1 ?? "pending")
@@ -1469,8 +1480,23 @@ export default function ScenarioPlayerCombatPageContent({
       }),
     [phaseCombatContextDrafts, selectedActionId, selectedSecondaryActionId],
   );
+  const declarationIncomplete =
+    declarationStepOpen && hasMeaningfulDeclaration && !targetValidation.valid;
+  const declarationStepHardLocked =
+    selectedDeclarationStepStatus === "locked" ||
+    selectedDeclarationStepStatus === "complete" ||
+    selectedDeclarationStepStatus === "skipped";
+  const declarationSubmittedAndComplete =
+    (selectedDeclarationStepStatus === "submitted" ||
+      selectedDeclarationStepStatus === "gmEdited" ||
+      selectedParticipantStoredDeclarationThisRound) &&
+    selectedStoredDeclarationComplete;
+  const playerDeclarationLocked =
+    !isGameMaster &&
+    (!declarationStepOpen || declarationStepHardLocked || declarationSubmittedAndComplete);
+  const declarationControlsDisabled = controlsDisabled || playerDeclarationLocked;
   const declarationTargetValidationMessage =
-    !currentInitiativePhase && hasMeaningfulDeclaration && !targetValidation.valid
+    !currentInitiativePhase && declarationIncomplete
       ? targetValidation.message
       : undefined;
   const declareActionDisabled =
@@ -1481,11 +1507,16 @@ export default function ScenarioPlayerCombatPageContent({
       ? !canUseInitiativeButton
       : (isGameMaster ? false : playerDeclarationLocked || !hasMeaningfulDeclaration) ||
         !targetValidation.valid);
-  const declarationButtonLabel = getPlayerCombatActionButtonLabel({
-    currentStep: currentCombatStep,
-    disabled: declareActionDisabled,
-    isGameMaster,
-  });
+  const declarationButtonLabel =
+    !isGameMaster &&
+    currentCombatStep === "select_actions" &&
+    (!playerDeclarationLocked || declarationIncomplete)
+      ? "Declare action"
+      : getPlayerCombatActionButtonLabel({
+          currentStep: currentCombatStep,
+          disabled: declareActionDisabled,
+          isGameMaster,
+        });
   const playerActionButtonLabel =
     attackerPrivilegedAction?.label ?? currentAttackAction?.label ?? declarationButtonLabel;
   const playerActionButtonDisabled = attackerPrivilegedAction
@@ -1494,9 +1525,10 @@ export default function ScenarioPlayerCombatPageContent({
       ? controlsDisabled || savingCombatContext || currentAttackAction.disabled
     : declareActionDisabled;
   const selectedParticipantHasDeclared =
-    selectedParticipantDeclaredThisRound ||
-    selectedDeclarationStepStatus === "submitted" ||
-    selectedDeclarationStepStatus === "gmEdited";
+    selectedStoredDeclarationComplete &&
+    (selectedParticipantStoredDeclarationThisRound ||
+      selectedDeclarationStepStatus === "submitted" ||
+      selectedDeclarationStepStatus === "gmEdited");
   const selectedCurrentStepStatus = selectedRoundParticipant?.stepStatuses[currentCombatStep];
   const gmStatusSuffix = selectedParticipantRolledCurrentInitiative
     ? " Initiative rolled."
@@ -1519,9 +1551,9 @@ export default function ScenarioPlayerCombatPageContent({
           : `Current step: ${currentCombatStepLabel}. Waiting for GM.`
       : currentAttackAction
         ? `Current step: ${currentCombatStepLabel}. Ready to roll.`
-      : selectedParticipantDeclaredThisRound ||
-          selectedDeclarationStepStatus === "submitted" ||
-          selectedDeclarationStepStatus === "gmEdited"
+      : declarationIncomplete
+        ? `Current step: ${currentCombatStepLabel}. Incomplete declaration.`
+      : selectedParticipantHasDeclared
         ? `Current step: ${currentCombatStepLabel}. Declared.`
         : declarationStepOpen && selectedDeclarationStepStatus === "pending"
           ? `Current step: ${currentCombatStepLabel}.`

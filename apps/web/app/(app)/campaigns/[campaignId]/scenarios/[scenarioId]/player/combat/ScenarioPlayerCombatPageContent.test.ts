@@ -56,7 +56,7 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).not.toContain("GM player-view inspection is read-only.");
     expect(source).toContain("declarationStepOpen");
     expect(source).toContain("selectedDeclarationStepStatus");
-    expect(source).toContain("selectedParticipantDeclaredThisRound");
+    expect(source).toContain("selectedParticipantStoredDeclarationThisRound");
     expect(source).toContain("getPlayerCombatStepLabel");
     expect(source).toContain("Current step: ${currentCombatStepLabel}");
     expect(source).not.toContain("Current step: ${currentCombatStepAbbreviation}");
@@ -121,6 +121,14 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("selectedRelevantInitiativeResultPanel ??");
     expect(source).toContain("declarationButtonLabel");
     expect(source).toContain("playerActionButtonLabel");
+    expect(source).toContain("selectedParticipantStoredDeclarationThisRound");
+    expect(source).toContain("selectedStoredDeclarationTargetValidation");
+    expect(source).toContain("selectedStoredDeclarationComplete");
+    expect(source).toContain("declarationIncomplete");
+    expect(source).toContain("declarationStepHardLocked");
+    expect(source).toContain("declarationSubmittedAndComplete");
+    expect(source).toContain("Incomplete declaration.");
+    expect(source).toContain("!playerDeclarationLocked || declarationIncomplete");
     expect(source).toContain("currentAttackAction?.label");
     expect(source).toContain("buttonLabel={playerActionButtonLabel}");
     expect(source).toContain("rollAttackerPrivilegedCombatDie(attackerPrivilegedAction.kind)");

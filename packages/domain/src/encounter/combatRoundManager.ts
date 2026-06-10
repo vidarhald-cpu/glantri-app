@@ -5,7 +5,10 @@ import {
   scenarioCombatModifierEntrySchema,
   scenarioParticipantCombatContextSchema,
 } from "../campaign/scenario";
-import { getCombatDeclarationAttackPhases } from "./combatDeclarationValidation";
+import {
+  getCombatDeclarationAttackPhases,
+  validateCombatDeclarationTargets,
+} from "./combatDeclarationValidation";
 import {
   combatEffectEventSchema,
   combatEffectsStateSchema,
@@ -6304,8 +6307,23 @@ export function canPlayerSubmitCombatDeclaration(input: {
     (entry) => entry.participantId === input.participantId,
   );
   const declarationStatus = participant?.stepStatuses.select_actions ?? "pending";
+  const existingDeclarationIsIncomplete = participant?.declaration
+    ? !validateCombatDeclarationTargets({
+        actionId: participant.declaration.actionId,
+        phaseContexts: participant.declaration.phaseContexts,
+        secondaryActionId: participant.declaration.secondaryActionId,
+      }).valid
+    : false;
+  const declarationStatusIsHardClosed =
+    declarationStatus === "locked" ||
+    declarationStatus === "complete" ||
+    declarationStatus === "skipped";
 
-  return normalized.currentStep === "select_actions" && declarationStatus === "pending";
+  return (
+    normalized.currentStep === "select_actions" &&
+    !declarationStatusIsHardClosed &&
+    (declarationStatus === "pending" || existingDeclarationIsIncomplete)
+  );
 }
 
 export function canPlayerRollCombatInitiative(input: {

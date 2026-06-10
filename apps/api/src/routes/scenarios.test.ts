@@ -1727,6 +1727,92 @@ describe("scenarios route contract", () => {
     expect(updatedEncounter.combatRoundState.commands).toEqual([]);
   });
 
+  it("allows a player to complete an incomplete submitted combat declaration during DE", async () => {
+    setupCombatDeclarationRoute({
+      encounter: {
+        combatRoundState: {
+          currentStep: "select_actions",
+          participants: [
+            {
+              attackResults: {},
+              declaration: {
+                actionId: "attack_parry",
+                movementId: "hold",
+                roundNumber: 1,
+                submittedAt: "2026-01-01T00:01:00.000Z",
+                submittedBy: "player",
+                submittedByUserId: "player-1",
+              },
+              initiatives: {},
+              label: "The Gladiator",
+              participantId: "encounter-participant-1",
+              stepStatuses: {
+                initiative_phase_1: "pending",
+                initiative_phase_2: "pending",
+                phase_1_actions: "pending",
+                phase_2_actions: "pending",
+                review_action_modifiers: "pending",
+                review_phase_2_actions: "pending",
+                review_phase_2_damage: "pending",
+                review_phase_2_modifiers: "pending",
+                round_summary: "pending",
+                select_actions: "submitted",
+              },
+            },
+          ],
+          roundNumber: 1,
+        },
+      },
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        actionId: "attack_parry",
+        combatContext: {
+          modifierBuckets: {
+            general: [],
+            situationDb: [],
+            situationInitiative: [],
+            situationObSkill: [],
+          },
+        },
+        movementId: "hold",
+        phaseContexts: {
+          phase1: {
+            modifierBuckets: {
+              general: [],
+              situationDb: [],
+              situationInitiative: [],
+              situationObSkill: [],
+            },
+            targetParticipantId: "encounter-target-1",
+          },
+        },
+        scenarioParticipantId: "participant-1",
+      },
+      url: "/encounters/encounter-1/combat-declaration",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
+    expect(updatedEncounter.combatRoundState.participants[0].declaration).toMatchObject({
+      actionId: "attack_parry",
+      phaseContexts: {
+        phase1: expect.objectContaining({
+          targetParticipantId: "encounter-target-1",
+        }),
+      },
+      submittedBy: "player",
+    });
+    expect(updatedEncounter.combatRoundState.participants[0].stepStatuses.select_actions).toBe(
+      "submitted",
+    );
+  });
+
   it("records a GM declare_action command during DE", async () => {
     setupCombatDeclarationRoute({
       user: mocks.adminUser,

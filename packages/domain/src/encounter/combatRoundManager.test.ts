@@ -1211,6 +1211,65 @@ describe("combat round manager", () => {
     ).toBe(false);
   });
 
+  it("allows a player to correct an incomplete submitted declaration during DE", () => {
+    const invalidSubmitted = recordCombatRoundDeclaration({
+      declaration: {
+        actionId: "attack_parry",
+        movementId: "hold",
+        roundNumber: 3,
+      },
+      participantId: "gladiator",
+      state: initializeCombatRoundState({ encounter: encounter() }),
+      submittedBy: "player",
+    });
+    const validSubmitted = recordCombatRoundDeclaration({
+      declaration: {
+        actionId: "attack_parry",
+        movementId: "hold",
+        phaseContexts: {
+          phase1: {
+            modifierBuckets: {
+              general: [],
+              situationDb: [],
+              situationInitiative: [],
+              situationObSkill: [],
+            },
+            targetParticipantId: "guard",
+          },
+        },
+        roundNumber: 3,
+      },
+      participantId: "gladiator",
+      state: initializeCombatRoundState({ encounter: encounter() }),
+      submittedBy: "player",
+    });
+    const lockedInvalid = {
+      ...invalidSubmitted,
+      participants: invalidSubmitted.participants.map((participant) =>
+        participant.participantId === "gladiator"
+          ? {
+              ...participant,
+              stepStatuses: {
+                ...participant.stepStatuses,
+                select_actions: "locked" as const,
+              },
+            }
+          : participant,
+      ),
+    };
+
+    expect(invalidSubmitted.participants[0]?.stepStatuses.select_actions).toBe("submitted");
+    expect(
+      canPlayerSubmitCombatDeclaration({ participantId: "gladiator", state: invalidSubmitted }),
+    ).toBe(true);
+    expect(
+      canPlayerSubmitCombatDeclaration({ participantId: "gladiator", state: validSubmitted }),
+    ).toBe(false);
+    expect(
+      canPlayerSubmitCombatDeclaration({ participantId: "gladiator", state: lockedInvalid }),
+    ).toBe(false);
+  });
+
   it("records declare_action commands and advances the current cursor row by row", () => {
     const threeParticipantEncounter = encounter({
       participants: [
