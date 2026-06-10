@@ -9,6 +9,7 @@ import type {
   CombatRoundDamageReviewAdditionalEffect,
   CombatRoundDamageResult,
   CombatRoundParryResolution,
+  CombatRoundParryModifierBreakdownEntry,
   CombatRoundPhase,
   CombatRoundPhaseResolutionResult,
   CombatRoundStep,
@@ -119,6 +120,7 @@ import {
   buildEncounterDbParryModifierCalculation,
   buildEncounterInitiativeModifierCalculation,
   buildEncounterLiveCombatModifierSummary,
+  type EncounterLiveCombatModifierSummary,
 } from "@/lib/campaigns/liveCombatModifiers";
 import {
   getPlayerEncounterOpponentParticipants,
@@ -202,6 +204,7 @@ interface CombatParrySourceOption {
 }
 
 interface CombatParrySourceOptions {
+  combinedLabel?: string;
   combinedScore?: number;
   mainHand?: CombatParrySourceOption;
   offHand?: CombatParrySourceOption;
@@ -459,6 +462,25 @@ function formatCombatToHitCalculationLine(result: CombatRoundAttackRollResult): 
   return `OB ${result.ob} - DB ${result.defenderDb} + roll ${rollText} = ${result.lookupTotal}`;
 }
 
+function formatSignedCombatNumber(value: number): string {
+  return `${value >= 0 ? "+" : ""}${value}`;
+}
+
+function formatCombatParryModifierBreakdown(input: {
+  fallbackAdjustment: number;
+  modifiers?: readonly CombatRoundParryModifierBreakdownEntry[];
+}): string {
+  const modifiers = input.modifiers?.filter((modifier) => modifier.value !== 0) ?? [];
+
+  if (modifiers.length === 0) {
+    return `mods ${formatSignedCombatNumber(input.fallbackAdjustment)}`;
+  }
+
+  return modifiers
+    .map((modifier) => `${modifier.label} ${formatSignedCombatNumber(modifier.value)}`)
+    .join(" + ");
+}
+
 function formatCombatParryCalculationLine(
   resolution: CombatRoundParryResolution,
 ): string | undefined {
@@ -478,8 +500,22 @@ function formatCombatParryCalculationLine(
     openEndedD10s: resolution.openEndedD10s,
     rollD20: resolution.rollD20,
   });
+  const modifierText = formatCombatParryModifierBreakdown({
+    fallbackAdjustment: resolution.modifierAdjustment,
+    modifiers: resolution.modifierBreakdown,
+  });
+  const sourcePrefix = resolution.parrySourceLabel
+    ? `${resolution.parrySourceLabel} P ${resolution.combinedParryScore}`
+    : `P ${resolution.combinedParryScore}`;
+  const modifiedParryBeforeRoll =
+    resolution.modifiedParryBeforeRoll ??
+    resolution.combinedParryScore + resolution.modifierAdjustment;
+  const adjustmentText =
+    modifiedParryBeforeRoll === resolution.combinedParryScore
+      ? ""
+      : ` -> P ${modifiedParryBeforeRoll}`;
 
-  return `P ${resolution.combinedParryScore} + mods ${resolution.modifierAdjustment >= 0 ? "+" : ""}${resolution.modifierAdjustment} + roll ${rollText} = ${resolution.total}`;
+  return `${sourcePrefix} + ${modifierText}${adjustmentText} + roll ${rollText} = ${resolution.total}`;
 }
 
 function formatResolutionStatusLabel(value: string): string {
@@ -1304,9 +1340,9 @@ function findParryScoreForWeaponLabel(input: {
     : undefined;
 }
 
-function getCombinedParryScore(
+function getCombinedParrySource(
   model: ReturnType<typeof buildEquipmentLoadoutModuleModel> | null,
-): number | undefined {
+): CombatParrySourceOption | undefined {
   const table = model?.combatStatePanelModel?.weaponModeTable;
   if (!table) {
     return undefined;
@@ -1321,11 +1357,20 @@ function getCombinedParryScore(
       }) === "Combined",
   );
 
-  return row
-    ? parseOptionalCombatInteger(
-        getCombatTableCell({ columns: table.columns, label: "Parry", row }),
-      )
-    : undefined;
+  if (!row) {
+    return undefined;
+  }
+
+  const score = parseOptionalCombatInteger(
+    getCombatTableCell({ columns: table.columns, label: "Parry", row }),
+  );
+
+  return score === undefined
+    ? undefined
+    : {
+        label: getCombatTableCell({ columns: table.columns, label: "Weapon", row }),
+        score,
+      };
 }
 
 function buildCombatParrySourceOptions(input: {
@@ -1341,9 +1386,11 @@ function buildCombatParrySourceOptions(input: {
     model: input.loadoutModel,
     weaponLabel: input.offHandLabel,
   });
+  const combinedSource = getCombinedParrySource(input.loadoutModel);
 
   return {
-    combinedScore: getCombinedParryScore(input.loadoutModel),
+    combinedLabel: combinedSource?.label,
+    combinedScore: combinedSource?.score,
     mainHand:
       mainHandScore !== undefined
         ? {
@@ -1389,6 +1436,15 @@ function formatSelectedCombatParrySourceName(input: {
   selection: CombatParrySourceSelection;
   sources?: CombatParrySourceOptions;
 }): string {
+  if (
+    input.selection.usedMainHand &&
+    input.selection.usedOffHand &&
+    input.sources?.combinedScore !== undefined &&
+    input.sources.combinedLabel
+  ) {
+    return input.sources.combinedLabel;
+  }
+
   const labels = [
     input.selection.usedMainHand ? input.sources?.mainHand?.label : undefined,
     input.selection.usedOffHand ? input.sources?.offHand?.label : undefined,
@@ -1506,10 +1562,43 @@ function getStatusMarker(input: { current: boolean; status: string | undefined }
   }
 }
 
+function buildCombatAttackResultParryModifiers(
+  attackResult?: CombatRoundAttackRollResult,
+): WorkbookRawModifier[] {
+  const attackResultModifier = attackResult?.defenderParryModifier ?? 0;
+
+  return attackResultModifier === 0
+    ? []
+    : [
+        {
+          label: "attack result",
+          value: attackResultModifier,
+        },
+      ];
+}
+
+function buildCombatParryRawModifiers(input: {
+  attackResult?: CombatRoundAttackRollResult;
+  liveModifiers?: EncounterLiveCombatModifierSummary;
+}): WorkbookRawModifier[] {
+  return [
+    {
+      label: "General/Fatigue",
+      value: input.liveModifiers?.generalFatigueRaw ?? 0,
+    },
+    {
+      label: "DB/Parry",
+      value: input.liveModifiers?.dbRaw ?? 0,
+    },
+    ...buildCombatAttackResultParryModifiers(input.attackResult),
+  ];
+}
+
 function CombatParryResolutionPanel(input: {
   attackResult: CombatRoundAttackRollResult;
   controlsDisabled?: boolean;
   modifierAdjustment: number;
+  modifierBreakdown?: readonly CombatRoundParryModifierBreakdownEntry[];
   onSelectionChange: (selection: CombatParrySourceSelection) => void;
   parryBase?: number;
   resolution?: CombatRoundParryResolution;
@@ -1518,9 +1607,22 @@ function CombatParryResolutionPanel(input: {
 }) {
   const canUseMainHand = Boolean(input.sources?.mainHand);
   const canUseOffHand = Boolean(input.sources?.offHand);
+  const selectedSourceLabel = formatSelectedCombatParrySourceName({
+    selection: input.selection,
+    sources: input.sources,
+  });
+  const modifiedParryBeforeRoll =
+    input.parryBase === undefined ? undefined : input.parryBase + input.modifierAdjustment;
   const sourceSummary =
     input.parryBase !== undefined
-      ? `P ${input.parryBase} + [mods] ${input.modifierAdjustment >= 0 ? "+" : ""}${input.modifierAdjustment}`
+      ? `${selectedSourceLabel} P ${input.parryBase} + ${formatCombatParryModifierBreakdown({
+          fallbackAdjustment: input.modifierAdjustment,
+          modifiers: input.modifierBreakdown,
+        })}${
+          modifiedParryBeforeRoll !== undefined && modifiedParryBeforeRoll !== input.parryBase
+            ? ` -> P ${modifiedParryBeforeRoll}`
+            : ""
+        }`
       : "No available parry score.";
 
   return (
@@ -2306,6 +2408,42 @@ export default function CombatRoundManagerPanel({
     selectedScenarioParticipant?.characterId,
     selectedScenarioParticipant?.state.combatEffects,
   ]);
+  const inspectorPhaseBaseLoadoutSummaries = useMemo(() => {
+    const buildPhaseSummary = () => {
+      const phaseLoadoutModel = buildEquipmentLoadoutModuleModel({
+        characterContext:
+          content && inspectorBuild
+            ? {
+                content,
+                record: {
+                  build: inspectorBuild,
+                },
+              }
+            : null,
+        characterId: selectedScenarioParticipant?.characterId ?? "",
+        state: inspectorEquipmentState,
+        throwingWeaponItemId: null,
+      });
+
+      return buildPlayerCombatLoadoutSummary({
+        actionId: inspectorDraft.actionId,
+        loadoutModel: phaseLoadoutModel,
+        secondaryActionId: inspectorDraft.secondaryActionId,
+      });
+    };
+
+    return {
+      phase1: buildPhaseSummary(),
+      phase2: buildPhaseSummary(),
+    };
+  }, [
+    content,
+    inspectorBuild,
+    inspectorDraft.actionId,
+    inspectorDraft.secondaryActionId,
+    inspectorEquipmentState,
+    selectedScenarioParticipant?.characterId,
+  ]);
   const inspectorCurrentInitiativePhase =
     inspector.step === "initiative_phase_1"
       ? "phase1"
@@ -2411,16 +2549,21 @@ export default function CombatRoundManagerPanel({
     selection: inspectorParrySelection,
     sources: inspectorParryDefenderPhaseSummary?.parrySources,
   });
+  const inspectorParryExtraRawModifiers = buildCombatAttackResultParryModifiers(
+    inspectorResolutionAttackResult,
+  );
   const inspectorParryModifierCalculation =
     inspectorParryBase !== undefined
       ? buildEncounterDbParryModifierCalculation({
           baseValue: inspectorParryBase,
+          extraRawModifiers: inspectorParryExtraRawModifiers,
           liveModifiers: inspectorParryDefenderPhaseSummary?.liveModifiers,
         })
       : null;
   const inspectorParryModifierAdjustment = inspectorParryModifierCalculation
     ? inspectorParryModifierCalculation.finalValue - (inspectorParryBase ?? 0)
     : 0;
+  const inspectorParryModifierBreakdown = inspectorParryModifierCalculation?.rawModifiers ?? [];
   const inspectorNoPhaseAttack =
     Boolean(inspectorAttackPhase) &&
     !inspectorDisplayAttackResult &&
@@ -2739,6 +2882,7 @@ export default function CombatRoundManagerPanel({
     scenarioParticipant?: ScenarioParticipant;
   }): {
     attackStats: ReturnType<typeof buildPlayerCombatLoadoutSummary>["attackStats"];
+    baseDefenseStats: ReturnType<typeof buildPlayerCombatDefenseStats>;
     defenseStats: ReturnType<typeof buildPlayerCombatDefenseStats>;
     liveModifiers: ReturnType<typeof buildEncounterLiveCombatModifierSummary>;
     modifierRows: ReturnType<typeof buildPlayerCombatModifierRows>;
@@ -2785,17 +2929,44 @@ export default function CombatRoundManagerPanel({
       state: equipmentState,
       throwingWeaponItemId: null,
     });
+    const baseLoadoutModel = buildEquipmentLoadoutModuleModel({
+      characterContext:
+        content && buildResult.success
+          ? {
+              content,
+              record: {
+                build: buildResult.data,
+              },
+            }
+          : null,
+      characterId: input.scenarioParticipant?.characterId ?? "",
+      state: equipmentState,
+      throwingWeaponItemId: null,
+    });
     const loadoutSummary = buildPlayerCombatLoadoutSummary({
       actionId: draft.actionId,
       loadoutModel,
       secondaryActionId: draft.secondaryActionId,
     });
+    const baseLoadoutSummary = buildPlayerCombatLoadoutSummary({
+      actionId: draft.actionId,
+      loadoutModel: baseLoadoutModel,
+      secondaryActionId: draft.secondaryActionId,
+    });
     const parrySources = buildCombatParrySourceOptions({
-      loadoutModel,
-      mainHandLabel: loadoutSummary.mainHandParryItemLabel,
-      offHandLabel: loadoutSummary.offHandParryItemLabel,
+      loadoutModel: baseLoadoutModel,
+      mainHandLabel: baseLoadoutSummary.mainHandParryItemLabel,
+      offHandLabel: baseLoadoutSummary.offHandParryItemLabel,
     });
     const phaseContext = input.phaseKey ? draft.phaseContexts[input.phaseKey] : undefined;
+    const baseDefenseStats = phaseContext
+      ? buildPlayerCombatDefenseStats({
+          mainHandParryItemLabel: baseLoadoutSummary.mainHandParryItemLabel,
+          offHandParryItemLabel: baseLoadoutSummary.offHandParryItemLabel,
+          phaseContext,
+          reference: baseLoadoutSummary.reference,
+        })
+      : null;
     const defenseStats = phaseContext
       ? buildPlayerCombatDefenseStats({
           mainHandParryItemLabel: loadoutSummary.mainHandParryItemLabel,
@@ -2807,6 +2978,7 @@ export default function CombatRoundManagerPanel({
 
     return {
       attackStats: loadoutSummary.attackStats,
+      baseDefenseStats,
       defenseStats,
       liveModifiers,
       modifierRows,
@@ -3502,16 +3674,10 @@ export default function CombatRoundManagerPanel({
     }
 
     const sources = inspectorParryDefenderPhaseSummary?.parrySources;
-    const rawModifiers: WorkbookRawModifier[] = [
-      {
-        label: "General/Fatigue",
-        value: inspectorParryDefenderPhaseSummary?.liveModifiers.generalFatigueRaw ?? 0,
-      },
-      {
-        label: "DB/Parry",
-        value: inspectorParryDefenderPhaseSummary?.liveModifiers.dbRaw ?? 0,
-      },
-    ];
+    const rawModifiers = buildCombatParryRawModifiers({
+      attackResult,
+      liveModifiers: inspectorParryDefenderPhaseSummary?.liveModifiers,
+    });
     const roll = rollOpenEndedD20();
     const parry = resolveCombatParry({
       parryBase: inspectorParryBase,
@@ -3520,15 +3686,26 @@ export default function CombatRoundManagerPanel({
     });
     const usedMainHand = inspectorParrySelection.usedMainHand && Boolean(sources?.mainHand);
     const usedOffHand = inspectorParrySelection.usedOffHand && Boolean(sources?.offHand);
+    const parrySourceLabel = formatSelectedCombatParrySourceName({
+      selection: {
+        usedMainHand,
+        usedOffHand,
+      },
+      sources,
+    });
     const updatedAt = new Date().toISOString();
     const parryResolution: CombatRoundParryResolution = {
       combinedParryScore: parry.parryBase,
       mainHandParryScore: usedMainHand ? sources?.mainHand?.score : undefined,
+      modifiedParryBeforeRoll: parry.parryBase + parry.modifierAdjustment,
       modifierAdjustment: parry.modifierAdjustment,
+      modifierBreakdown: parry.rawModifiers.map((modifier) => ({ ...modifier })),
       notes:
         "Direction, location coverage, and multi-opponent source allocation are deferred in this first parry slice.",
       offHandParryScore: usedOffHand ? sources?.offHand?.score : undefined,
       openEndedD10s: roll.openEndedD10s,
+      parrySourceLabel,
+      rawModifierTotal: parry.rawModifierTotal,
       resultLabel: parry.success ? "Parry successful" : "Parry failed",
       rollD20: roll.rollD20,
       rollTotal: roll.dieResult,
@@ -4174,15 +4351,16 @@ export default function CombatRoundManagerPanel({
                     const phaseKey: PlayerCombatPhaseKey = index === 0 ? "phase1" : "phase2";
                     const phaseCombatContext = inspectorDisplayDraft.phaseContexts[phaseKey];
                     const phaseLoadoutSummary = inspectorPhaseLoadoutSummaries[phaseKey];
+                    const phaseBaseLoadoutSummary = inspectorPhaseBaseLoadoutSummaries[phaseKey];
                     const snapshotForPhase =
                       inspectorSnapshot?.phase === phaseKey ? inspectorSnapshot : undefined;
                     const baseDefenseStats =
                       snapshotForPhase?.defenseSummary ??
                       buildPlayerCombatDefenseStats({
-                        mainHandParryItemLabel: phaseLoadoutSummary.mainHandParryItemLabel,
-                        offHandParryItemLabel: phaseLoadoutSummary.offHandParryItemLabel,
+                        mainHandParryItemLabel: phaseBaseLoadoutSummary.mainHandParryItemLabel,
+                        offHandParryItemLabel: phaseBaseLoadoutSummary.offHandParryItemLabel,
                         phaseContext: phaseCombatContext,
-                        reference: phaseLoadoutSummary.reference,
+                        reference: phaseBaseLoadoutSummary.reference,
                       });
                     const shouldShowSelectedParryStats =
                       !snapshotForPhase &&
@@ -4252,8 +4430,8 @@ export default function CombatRoundManagerPanel({
                             <PlayerCombatParryContextPanel
                               combatContext={phaseModel.phaseContext}
                               controlsDisabled={saving || Boolean(inspectorSnapshot)}
-                              mainHandItemLabel={phaseLoadoutSummary.mainHandParryItemLabel}
-                              offHandItemLabel={phaseLoadoutSummary.offHandParryItemLabel}
+                              mainHandItemLabel={phaseBaseLoadoutSummary.mainHandParryItemLabel}
+                              offHandItemLabel={phaseBaseLoadoutSummary.offHandParryItemLabel}
                               onCombatContextChange={(combatContext) =>
                                 updateInspectorDraft({
                                   phaseContexts: {
@@ -4314,6 +4492,7 @@ export default function CombatRoundManagerPanel({
                             "resolved"
                         }
                         modifierAdjustment={inspectorParryModifierAdjustment}
+                        modifierBreakdown={inspectorParryModifierBreakdown}
                         onSelectionChange={(selection) => {
                           if (!inspectorParrySelectionKey) {
                             return;

@@ -32,6 +32,7 @@ export interface CombatToHitRuleTableRow {
   maxDamageNote?: string;
   minLookupTotal?: number;
   minDamage?: number;
+  parryModifier?: number;
   resultKey: CombatToHitResultKey;
   resultLabel: string;
   sourceRows: readonly string[];
@@ -59,6 +60,7 @@ export interface CombatToHitResolution {
   lookupTotal: number;
   minDamage?: number;
   ob: number;
+  parryModifier: number;
   resultKey: CombatToHitResultKey;
   resultLabel: string;
   rollTotal: number;
@@ -80,9 +82,10 @@ export const COMBAT_TO_HIT_RULE_TABLE = {
     "Lookup totals of 12 or more hit.",
     "Damage lookup total = hit lookup total + weapon DMB + defender DM + armor modifier.",
     "Damage, critical grade, and minimum damage are read from the damage lookup total row.",
+    "Melee hit lookup totals 16 and higher impose a defender parry modifier from the hit lookup row.",
     "Lookup totals 17 and 18 are resolved in the refreshed table.",
     "Grazing-hit damage rolls 1dX, where X is the table damage at damage lookup total 12 + DMB + DM + armor modifier.",
-    "Lookup totals above 34 continue by adding 1 damage per row, with critical grade f and minimum damage 5.",
+    "Lookup totals above 34 continue by adding 1 damage per row, with critical grade f, minimum damage 5, and defender parry modifier -10.",
     "Legacy workbook sheet `To Hit table` is not canonical for current app hit/miss logic.",
   ],
   rows: [
@@ -145,6 +148,7 @@ export const COMBAT_TO_HIT_RULE_TABLE = {
       grazing: false,
       hit: true,
       lookupTotal: 16,
+      parryModifier: -1,
       resultKey: "hit",
       resultLabel: "Hit",
       sourceRows: ["to hit (new)!A10:E10"],
@@ -154,6 +158,7 @@ export const COMBAT_TO_HIT_RULE_TABLE = {
       grazing: false,
       hit: true,
       lookupTotal: 17,
+      parryModifier: -2,
       resultKey: "hit",
       resultLabel: "Hit",
       sourceRows: ["to hit (new)!A11:E11"],
@@ -163,6 +168,7 @@ export const COMBAT_TO_HIT_RULE_TABLE = {
       grazing: false,
       hit: true,
       lookupTotal: 18,
+      parryModifier: -3,
       resultKey: "hit",
       resultLabel: "Hit",
       sourceRows: ["to hit (new)!A12:E12"],
@@ -172,6 +178,7 @@ export const COMBAT_TO_HIT_RULE_TABLE = {
       grazing: false,
       hit: true,
       lookupTotal: 19,
+      parryModifier: -4,
       resultKey: "hit",
       resultLabel: "Hit",
       sourceRows: ["to hit (new)!A13:E13"],
@@ -182,6 +189,7 @@ export const COMBAT_TO_HIT_RULE_TABLE = {
       grazing: false,
       hit: true,
       lookupTotal: 20,
+      parryModifier: -5,
       resultKey: "hit",
       resultLabel: "Hit",
       sourceRows: ["to hit (new)!A14:F14"],
@@ -192,6 +200,7 @@ export const COMBAT_TO_HIT_RULE_TABLE = {
       grazing: false,
       hit: true,
       lookupTotal: 21,
+      parryModifier: -6,
       resultKey: "hit",
       resultLabel: "Hit",
       sourceRows: ["to hit (new)!A15:F15"],
@@ -203,6 +212,7 @@ export const COMBAT_TO_HIT_RULE_TABLE = {
       grazing: false,
       hit: true,
       lookupTotal: 22,
+      parryModifier: -7,
       resultKey: "hit",
       resultLabel: "Hit",
       sourceRows: ["to hit (new)!A16:G16"],
@@ -214,6 +224,7 @@ export const COMBAT_TO_HIT_RULE_TABLE = {
       grazing: false,
       hit: true,
       lookupTotal: 23,
+      parryModifier: -8,
       resultKey: "hit",
       resultLabel: "Hit",
       sourceRows: ["to hit (new)!A17:G17"],
@@ -225,6 +236,7 @@ export const COMBAT_TO_HIT_RULE_TABLE = {
       grazing: false,
       hit: true,
       lookupTotal: 24,
+      parryModifier: -9,
       resultKey: "hit",
       resultLabel: "Hit",
       sourceRows: ["to hit (new)!A18:G18"],
@@ -236,6 +248,7 @@ export const COMBAT_TO_HIT_RULE_TABLE = {
       grazing: false,
       hit: true,
       lookupTotal: 25,
+      parryModifier: -10,
       resultKey: "hit",
       resultLabel: "Hit",
       sourceRows: ["to hit (new)!A19:G19"],
@@ -247,6 +260,7 @@ export const COMBAT_TO_HIT_RULE_TABLE = {
       grazing: false,
       hit: true,
       lookupTotal: 26,
+      parryModifier: -10,
       resultKey: "hit",
       resultLabel: "Hit",
       sourceRows: ["to hit (new)!A20:G20"],
@@ -258,6 +272,7 @@ export const COMBAT_TO_HIT_RULE_TABLE = {
       grazing: false,
       hit: true,
       lookupTotal: 27,
+      parryModifier: -10,
       resultKey: "hit",
       resultLabel: "Hit",
       sourceRows: ["to hit (new)!A21:G21"],
@@ -269,6 +284,7 @@ export const COMBAT_TO_HIT_RULE_TABLE = {
       grazing: false,
       hit: true,
       lookupTotal: 28,
+      parryModifier: -10,
       resultKey: "hit",
       resultLabel: "Hit",
       sourceRows: ["to hit (new)!A22:G22"],
@@ -280,6 +296,7 @@ export const COMBAT_TO_HIT_RULE_TABLE = {
       grazing: false,
       hit: true,
       lookupTotal: 29,
+      parryModifier: -10,
       resultKey: "hit",
       resultLabel: "Hit",
       sourceRows: ["to hit (new)!A23:G23"],
@@ -292,6 +309,7 @@ export const COMBAT_TO_HIT_RULE_TABLE = {
       grazing: false,
       hit: true,
       lookupTotal: 30,
+      parryModifier: -10,
       resultKey: "hit",
       resultLabel: "Hit",
       sourceRows: ["to hit (new)!A24:I24"],
@@ -304,6 +322,7 @@ export const COMBAT_TO_HIT_RULE_TABLE = {
       grazing: false,
       hit: true,
       lookupTotal: 31,
+      parryModifier: -10,
       resultKey: "hit",
       resultLabel: "Hit",
       sourceRows: ["to hit (new)!A25:I25"],
@@ -316,6 +335,7 @@ export const COMBAT_TO_HIT_RULE_TABLE = {
       grazing: false,
       hit: true,
       lookupTotal: 32,
+      parryModifier: -10,
       resultKey: "hit",
       resultLabel: "Hit",
       sourceRows: ["to hit (new)!A26:I26"],
@@ -328,6 +348,7 @@ export const COMBAT_TO_HIT_RULE_TABLE = {
       grazing: false,
       hit: true,
       lookupTotal: 33,
+      parryModifier: -10,
       resultKey: "hit",
       resultLabel: "Hit",
       sourceRows: ["to hit (new)!A27:I27"],
@@ -340,6 +361,7 @@ export const COMBAT_TO_HIT_RULE_TABLE = {
       grazing: false,
       hit: true,
       lookupTotal: 34,
+      parryModifier: -10,
       resultKey: "hit",
       resultLabel: "Hit",
       sourceRows: ["to hit (new)!A28:I28"],
@@ -352,6 +374,7 @@ export const COMBAT_TO_HIT_RULE_TABLE = {
       grazing: false,
       hit: true,
       minLookupTotal: 35,
+      parryModifier: -10,
       resultKey: "hit",
       resultLabel: "Hit",
       sourceRows: ["to hit (new)!A29:I29"],
@@ -483,6 +506,12 @@ export function lookupCombatToHitDamageMetadata(
   };
 }
 
+export function lookupCombatToHitParryModifier(lookupTotal: number): number {
+  const row = lookupCombatToHitResult(lookupTotal);
+
+  return row.parryModifier ?? 0;
+}
+
 export function resolveCombatToHit(input: {
   db: number;
   ob: number;
@@ -509,6 +538,7 @@ export function resolveCombatToHit(input: {
     lookupTotal,
     minDamage: damageMetadata?.minDamage,
     ob: input.ob,
+    parryModifier: lookupCombatToHitParryModifier(lookupTotal),
     resultKey: result.resultKey,
     resultLabel: result.resultLabel,
     rollTotal: input.rollTotal,

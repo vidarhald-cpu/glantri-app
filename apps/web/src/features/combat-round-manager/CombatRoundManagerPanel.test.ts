@@ -134,6 +134,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("formatOpenEndedD20RollBreakdown");
     expect(source).toContain("formatCombatDefenseResultMainLine");
     expect(source).toContain("formatCombatParryCalculationLine");
+    expect(source).toContain("formatCombatParryModifierBreakdown");
     expect(source).toContain("getCombatRoundOutgoingAttackResultForParticipantPhase");
     expect(source).toContain("getCombatRoundDisplayIncomingAttackResultForParticipantPhase");
     expect(source).toContain("ensureCombatRoundPhaseResolutionResultsForPhase");
@@ -154,7 +155,16 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("recordCombatRoundCriticalRoll");
     expect(source).toContain("formatCombatToHitCalculationLine");
     expect(source).toContain("Parry: ${formatResolutionStatusLabel");
-    expect(source).toContain("P ${resolution.combinedParryScore} + mods");
+    expect(source).toContain("sourcePrefix");
+    expect(source).toContain("modifiedParryBeforeRoll");
+    expect(source).toContain("inspectorPhaseBaseLoadoutSummaries");
+    expect(source).toContain('label: "attack result"');
+    expect(source).toContain("value: attackResultModifier");
+    expect(source).toContain("extraRawModifiers: inspectorParryExtraRawModifiers");
+    expect(source).toContain("loadoutModel: baseLoadoutModel");
+    expect(source).toContain("parrySourceLabel");
+    expect(source).toContain("modifierBreakdown: parry.rawModifiers");
+    expect(source).toContain("rawModifierTotal: parry.rawModifierTotal");
     expect(source).toContain("Parry successful");
     expect(source).toContain("Parry failed");
     expect(source).toContain("Roll hit location");

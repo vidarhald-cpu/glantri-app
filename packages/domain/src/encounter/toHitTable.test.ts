@@ -4,6 +4,7 @@ import {
   COMBAT_TO_HIT_RULE_TABLE,
   calculateToHitLookupTotal,
   lookupCombatToHitDamageMetadata,
+  lookupCombatToHitParryModifier,
   lookupCombatToHitResult,
   rollOpenEndedCombatToHitD20,
   resolveCombatToHit,
@@ -23,6 +24,7 @@ describe("combat to-hit table helpers", () => {
     expect(COMBAT_TO_HIT_RULE_TABLE.notes.join(" ")).toContain("Legacy workbook sheet `To Hit table` is not canonical");
     expect(COMBAT_TO_HIT_RULE_TABLE.notes.join(" ")).toContain("Lookup totals 17 and 18 are resolved");
     expect(COMBAT_TO_HIT_RULE_TABLE.notes.join(" ")).toContain("Lookup totals above 34 continue");
+    expect(COMBAT_TO_HIT_RULE_TABLE.notes.join(" ")).toContain("defender parry modifier");
   });
 
   it("resolves OB = DB and roll total 10 as a miss", () => {
@@ -123,6 +125,20 @@ describe("combat to-hit table helpers", () => {
       maxDamageNote: "max damage: 17 + GM STR when relevant",
       minDamage: 5,
       sourceRows: ["to hit (new)!A29:I29"],
+    });
+  });
+
+  it("returns melee defender parry modifiers from the hit lookup row", () => {
+    expect(lookupCombatToHitParryModifier(14)).toBe(0);
+    expect(lookupCombatToHitParryModifier(16)).toBe(-1);
+    expect(lookupCombatToHitParryModifier(18)).toBe(-3);
+    expect(lookupCombatToHitParryModifier(24)).toBe(-9);
+    expect(lookupCombatToHitParryModifier(25)).toBe(-10);
+    expect(lookupCombatToHitParryModifier(35)).toBe(-10);
+
+    expect(resolveCombatToHit({ db: 0, ob: 0, rollTotal: 18 })).toMatchObject({
+      lookupTotal: 18,
+      parryModifier: -3,
     });
   });
 

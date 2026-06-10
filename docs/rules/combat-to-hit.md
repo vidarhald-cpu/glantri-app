@@ -37,6 +37,29 @@ Damage metadata is available for hits and grazing hits. Lookup totals `17` and `
 current table. Lookup totals above the displayed table continue by adding `1` damage per row, keeping
 critical grade `F` and minimum damage `5`.
 
+Melee hit lookup rows can also impose a defender parry modifier for this specific incoming attack.
+The modifier is read from the hit lookup row, not the later damage lookup row, and is stored with the
+attack result. Current parry modifiers are:
+
+| Hit lookup total | Defender parry modifier |
+| --- | --- |
+| `15` or less | `0` |
+| `16` | `-1` |
+| `17` | `-2` |
+| `18` | `-3` |
+| `19` | `-4` |
+| `20` | `-5` |
+| `21` | `-6` |
+| `22` | `-7` |
+| `23` | `-8` |
+| `24` | `-9` |
+| `25` or more | `-10` |
+
+During P1/P2, this stored attack-result modifier is added to General/Fatigue and DB/Parry raw
+modifiers before the normal percentage adjustment is calculated. Clear undoing a parry removes the
+parry result but keeps the attack result and its stored modifier; Clear undoing the attack removes the
+modifier source.
+
 For a normal hit, calculate a second lookup before reading final damage:
 
 ```text

@@ -944,8 +944,8 @@ describe("combat round manager", () => {
       defenderParticipantId: "guard",
       ob: 10,
       phase: "phase1",
-      rollD20: 12,
-      rollTotal: 12,
+      rollD20: 18,
+      rollTotal: 18,
       rolledAt: "2026-01-01T00:03:00.000Z",
       weaponName: "Broad sword",
     });
@@ -1033,8 +1033,8 @@ describe("combat round manager", () => {
       defenderParticipantId: "guard",
       ob: 10,
       phase: "phase1",
-      rollD20: 12,
-      rollTotal: 12,
+      rollD20: 18,
+      rollTotal: 18,
       rolledAt: "2026-01-01T00:03:00.000Z",
       weaponName: "Broad sword",
     });
@@ -2330,6 +2330,7 @@ describe("combat round manager", () => {
       actionId: "attack_parry",
       attackerParticipantId: "gladiator",
       defenderDb: 11,
+      defenderParryModifier: -1,
       defenderParticipantId: "guard",
       grazing: false,
       hit: true,
@@ -2339,6 +2340,7 @@ describe("combat round manager", () => {
       ob: 9,
       openEndedD10s: [],
       phase: "phase1",
+      roll: undefined,
       rollD20: 18,
       rollTotal: 18,
       rolledAt: "2026-01-01T00:03:00.000Z",
@@ -2454,8 +2456,8 @@ describe("combat round manager", () => {
       defenderParticipantId: "guard",
       ob: 10,
       phase: "phase1",
-      rollD20: 12,
-      rollTotal: 12,
+      rollD20: 18,
+      rollTotal: 18,
       rolledAt: "2026-01-01T00:03:00.000Z",
       weaponName: "Broad sword",
     });
@@ -5599,9 +5601,16 @@ describe("combat round manager", () => {
       parryResolution: {
         combinedParryScore: 9,
         mainHandParryScore: 4,
+        modifiedParryBeforeRoll: 8,
         modifierAdjustment: -1,
+        modifierBreakdown: [
+          { label: "DB/Parry", value: -1 },
+          { label: "attack result", value: -3 },
+        ],
         offHandParryScore: 5,
         openEndedD10s: [7],
+        parrySourceLabel: "Sword / shield",
+        rawModifierTotal: -4,
         resultLabel: "Parry successful",
         rollD20: 20,
         rollTotal: 27,
@@ -5627,8 +5636,15 @@ describe("combat round manager", () => {
       damageRoll: { status: "not_required" },
       parryResolution: {
         combinedParryScore: 9,
+        modifiedParryBeforeRoll: 8,
         modifierAdjustment: -1,
+        modifierBreakdown: [
+          { label: "DB/Parry", value: -1 },
+          { label: "attack result", value: -3 },
+        ],
         openEndedD10s: [7],
+        parrySourceLabel: "Sword / shield",
+        rawModifierTotal: -4,
         resultLabel: "Parry successful",
         rollD20: 20,
         rollTotal: 27,
@@ -5637,6 +5653,64 @@ describe("combat round manager", () => {
         targetNumber: 21,
         total: 35,
       },
+    });
+  });
+
+  it("stores defender parry modifiers from the attack hit lookup row", () => {
+    const lowHit = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackerParticipantId: "gladiator",
+      defenderDb: 10,
+      defenderParticipantId: "guard",
+      ob: 10,
+      phase: "phase1",
+      rollD20: 14,
+      rollTotal: 14,
+      rolledAt: "2026-01-01T00:03:00.000Z",
+      weaponName: "Broad sword",
+    });
+    const lookup18 = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackerParticipantId: "gladiator",
+      defenderDb: 10,
+      defenderParticipantId: "guard",
+      ob: 10,
+      phase: "phase1",
+      rollD20: 18,
+      rollTotal: 18,
+      rolledAt: "2026-01-01T00:03:00.000Z",
+      weaponName: "Broad sword",
+    });
+    const highOpenEnded = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackerParticipantId: "gladiator",
+      defenderDb: 0,
+      defenderParticipantId: "guard",
+      ob: 0,
+      openEndedD10s: [10, 5],
+      phase: "phase1",
+      rollD20: 20,
+      rollTotal: 35,
+      rolledAt: "2026-01-01T00:03:00.000Z",
+      weaponName: "Broad sword",
+    });
+    const legacySerialized = JSON.parse(JSON.stringify(lowHit)) as Record<string, unknown>;
+    delete legacySerialized.defenderParryModifier;
+
+    expect(lowHit).toMatchObject({
+      defenderParryModifier: 0,
+      lookupTotal: 14,
+    });
+    expect(lookup18).toMatchObject({
+      defenderParryModifier: -3,
+      lookupTotal: 18,
+    });
+    expect(highOpenEnded).toMatchObject({
+      defenderParryModifier: -10,
+      lookupTotal: 35,
+    });
+    expect(combatRoundAttackRollResultSchema.parse(legacySerialized)).toMatchObject({
+      defenderParryModifier: 0,
     });
   });
 
@@ -5793,8 +5867,8 @@ describe("combat round manager", () => {
       defenderParticipantId: "guard",
       ob: 10,
       phase: "phase1",
-      rollD20: 12,
-      rollTotal: 12,
+      rollD20: 18,
+      rollTotal: 18,
       rolledAt: "2026-01-01T00:03:00.000Z",
       weaponName: "Broad sword",
     });
@@ -5861,6 +5935,7 @@ describe("combat round manager", () => {
     });
 
     expect(cleared.participants[0]?.attackResults.phase1).toEqual(result);
+    expect(cleared.participants[0]?.attackResults.phase1?.defenderParryModifier).toBe(-3);
     expect(cleared.phaseResolutionResults).toHaveLength(1);
     expect(cleared.phaseResolutionResults[0]?.parryResolution.status).toBe("pending");
     expect(cleared.phaseResolutionResults[0]?.damageRoll.status).toBe("pending");
@@ -5900,8 +5975,8 @@ describe("combat round manager", () => {
       defenderParticipantId: "guard",
       ob: 10,
       phase: "phase1",
-      rollD20: 12,
-      rollTotal: 12,
+      rollD20: 18,
+      rollTotal: 18,
       rolledAt: "2026-01-01T00:03:00.000Z",
       weaponName: "Broad sword",
     });

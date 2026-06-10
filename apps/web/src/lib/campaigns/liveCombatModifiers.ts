@@ -203,6 +203,7 @@ export function buildEncounterInitiativeModifierCalculation(input: {
 
 export function buildEncounterDbParryModifierCalculation(input: {
   baseValue: number;
+  extraRawModifiers?: readonly WorkbookRawModifier[];
   liveModifiers?: EncounterLiveCombatModifierSummary;
 }): EncounterDbParryModifierCalculation | null {
   const rawModifiers: WorkbookRawModifier[] = [
@@ -214,6 +215,7 @@ export function buildEncounterDbParryModifierCalculation(input: {
       label: "DB/Parry",
       value: input.liveModifiers?.dbRaw ?? 0,
     },
+    ...(input.extraRawModifiers ?? []),
   ].filter((modifier) => modifier.value !== 0);
   const trace = calculateWorkbookPercentageAdjustmentTrace({
     baseValue: input.baseValue,

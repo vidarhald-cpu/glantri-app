@@ -199,6 +199,7 @@ export const combatRoundAttackRollResultSchema = z
     attackerParticipantId: idSchema,
     defenderParticipantId: idSchema,
     defenderDb: z.number().int(),
+    defenderParryModifier: z.number().int().default(0),
     grazing: z.boolean(),
     hit: z.boolean(),
     kind: z.literal("attackRoll"),
@@ -272,13 +273,25 @@ export const combatRoundPhaseResolutionStatusesSchema = z.record(
     .default({}),
 );
 
+export const combatRoundParryModifierBreakdownEntrySchema = z.object({
+  label: z.string().min(1),
+  value: z.number().int(),
+});
+export type CombatRoundParryModifierBreakdownEntry = z.infer<
+  typeof combatRoundParryModifierBreakdownEntrySchema
+>;
+
 export const combatRoundParryResolutionSchema = z.object({
   combinedParryScore: z.number().int().optional(),
   mainHandParryScore: z.number().int().optional(),
+  modifiedParryBeforeRoll: z.number().int().optional(),
   modifierAdjustment: z.number().int().optional(),
+  modifierBreakdown: z.array(combatRoundParryModifierBreakdownEntrySchema).optional(),
   notes: z.string().optional(),
   offHandParryScore: z.number().int().optional(),
+  parrySourceLabel: z.string().min(1).optional(),
   openEndedD10s: z.array(z.number().int().min(1).max(10)).default([]),
+  rawModifierTotal: z.number().int().optional(),
   resultLabel: z.string().min(1).optional(),
   rollD20: z.number().int().min(1).max(20).optional(),
   rollTotal: z.number().int().optional(),
@@ -1356,6 +1369,7 @@ export function buildCombatRoundAttackRollResult(input: {
     actionId: input.actionId,
     attackerParticipantId: input.attackerParticipantId,
     defenderDb: input.defenderDb,
+    defenderParryModifier: toHit.parryModifier,
     defenderParticipantId: input.defenderParticipantId,
     grazing: toHit.grazing,
     hit: toHit.hit,
@@ -4658,6 +4672,7 @@ function recordCombatRoundAttackCommand(input: {
         roundNumber: normalized.roundNumber,
       }),
       defenderParticipantId: input.result.defenderParticipantId,
+      defenderParryModifier: input.result.defenderParryModifier,
       grazing: input.result.grazing,
       hit: input.result.hit,
       ...(afterCursor.participantId
