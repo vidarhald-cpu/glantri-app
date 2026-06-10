@@ -6360,10 +6360,6 @@ export function canPlayerRollCombatAttack(input: {
   const normalized = combatRoundStateSchema.parse(input.state);
   const requiredStep = input.phase === "phase1" ? "phase_1_actions" : "phase_2_actions";
   const requiredCursorStep = input.phase === "phase1" ? "A1" : "A2";
-  const participant = normalized.participants.find(
-    (entry) => entry.participantId === input.participantId,
-  );
-  const stepStatus = participant?.stepStatuses[requiredStep] ?? "pending";
   const existingAttackResult = getCombatRoundOutgoingAttackResultForParticipantPhase({
     participantId: input.participantId,
     phase: input.phase,
@@ -6375,8 +6371,7 @@ export function canPlayerRollCombatAttack(input: {
     normalized.currentCursor?.participantId === input.participantId &&
     normalized.currentCursor.step === requiredCursorStep &&
     combatRoundParticipantHasPhaseAttack(input) &&
-    existingAttackResult === undefined &&
-    stepStatus === "pending"
+    existingAttackResult === undefined
   );
 }
 

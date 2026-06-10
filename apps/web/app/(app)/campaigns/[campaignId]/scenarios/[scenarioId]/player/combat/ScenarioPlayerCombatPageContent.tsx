@@ -1038,7 +1038,8 @@ export default function ScenarioPlayerCombatPageContent({
       return;
     }
 
-    const phaseContext = phaseCombatContextDrafts[currentAttackPhase];
+    const phaseContext =
+      currentAttackPhaseContext ?? phaseCombatContextDrafts[currentAttackPhase];
     const phaseAttackStats = phaseCombatLoadoutSummaries[currentAttackPhase].attackStats;
     const defenderScenarioParticipantId = phaseContext.targetParticipantId;
 
@@ -1238,6 +1239,11 @@ export default function ScenarioPlayerCombatPageContent({
     ? selectedRoundParticipant?.initiatives[currentInitiativePhase]
     : undefined;
   const currentAttackPhase = getCombatAttackPhaseForStep(currentCombatStep);
+  const currentAttackPhaseContext = currentAttackPhase
+    ? (selectedRoundDeclaration?.phaseContexts?.[currentAttackPhase] ??
+      phaseCombatContextDrafts[currentAttackPhase])
+    : undefined;
+  const currentAttackTargetParticipantId = currentAttackPhaseContext?.targetParticipantId;
   const selectedCurrentAttackResult =
     combatRoundState && selectedRoundParticipant && currentAttackPhase
       ? getCombatRoundOutgoingAttackResultForParticipantPhase({
@@ -1438,7 +1444,7 @@ export default function ScenarioPlayerCombatPageContent({
     Boolean(displayedParticipant) &&
     Boolean(selectedRoundParticipant) &&
     Boolean(combatRoundState) &&
-    Boolean(phaseCombatContextDrafts[currentAttackPhase ?? "phase1"].targetParticipantId) &&
+    Boolean(currentAttackTargetParticipantId) &&
     Boolean(phaseCombatLoadoutSummaries[currentAttackPhase ?? "phase1"].attackStats) &&
     (combatRoundState
       ? canPlayerRollCombatAttack({

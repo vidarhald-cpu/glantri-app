@@ -7149,6 +7149,66 @@ describe("combat round manager", () => {
         state: openState,
       }),
     ).toBe(true);
+
+    const submittedMarkerOpenState = {
+      ...openState,
+      participants: openState.participants.map((participant) =>
+        participant.participantId === "gladiator"
+          ? {
+              ...participant,
+              stepStatuses: {
+                ...participant.stepStatuses,
+                phase_1_actions: "submitted" as const,
+              },
+            }
+          : participant,
+      ),
+    };
+
+    expect(
+      canPlayerRollCombatAttack({
+        participantId: "gladiator",
+        phase: "phase1",
+        state: submittedMarkerOpenState,
+      }),
+    ).toBe(true);
+
+    const phase2PreparedState = preparePhaseResolutionState({
+      guardActionId: "parry_attack",
+      gladiatorActionId: "parry_attack",
+      phase: "phase2",
+    });
+    const phase2OpenState = {
+      ...phase2PreparedState,
+      currentCursor: {
+        participantId: "gladiator",
+        roundNumber: phase2PreparedState.roundNumber,
+        step: "A2" as const,
+      },
+      currentStep: "phase_2_actions" as const,
+      participants: phase2PreparedState.participants.map((participant) =>
+        participant.participantId === "gladiator"
+          ? {
+              ...participant,
+              stepStatuses: {
+                ...participant.stepStatuses,
+                phase_2_actions: "submitted" as const,
+              },
+            }
+          : participant,
+      ),
+      selectedParticipantId: "gladiator",
+      selectedStep: "phase_2_actions" as const,
+    };
+
+    expect(
+      canPlayerRollCombatAttack({
+        participantId: "gladiator",
+        phase: "phase2",
+        state: phase2OpenState,
+      }),
+    ).toBe(true);
+
     expect(
       canPlayerRollCombatAttack({
         participantId: "guard",

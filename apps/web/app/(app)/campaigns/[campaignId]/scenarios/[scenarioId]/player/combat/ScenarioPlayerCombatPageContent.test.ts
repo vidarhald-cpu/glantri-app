@@ -127,6 +127,12 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("currentAttackAction");
     expect(source).toContain("rollPhaseAttack()");
     expect(source).toContain("canPlayerRollCombatAttack");
+    expect(source).toContain("currentAttackPhaseContext");
+    expect(source).toContain("currentAttackTargetParticipantId");
+    expect(source).toContain("selectedRoundDeclaration?.phaseContexts?.[currentAttackPhase]");
+    expect(source).toContain("Boolean(currentAttackTargetParticipantId)");
+    expect(source).toContain("Roll phase 1 attack");
+    expect(source).toContain("Roll phase 2 attack");
     expect(source).toContain("window.setInterval");
     expect(source).toContain("visibilitychange");
     expect(source).toContain("combatDeclarationDraftDirty");
