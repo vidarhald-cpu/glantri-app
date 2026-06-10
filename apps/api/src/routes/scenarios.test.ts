@@ -274,11 +274,15 @@ function setupCombatDeclarationRoute(
   input: {
     encounter?: Record<string, unknown>;
     participant?: Record<string, unknown>;
+    participants?: Array<Record<string, unknown>>;
     user?: typeof mocks.playerUser | typeof mocks.adminUser;
   } = {},
 ) {
   const encounter = makeCombatEncounter(input.encounter);
   const participant = makeCombatScenarioParticipant(input.participant);
+  const participants = input.participants
+    ? input.participants.map((entry) => makeCombatScenarioParticipant(entry))
+    : [participant];
 
   if (input.user) {
     mocks.requireAuthenticatedUser.mockResolvedValue(input.user);
@@ -308,9 +312,9 @@ function setupCombatDeclarationRoute(
     status: "active",
   });
   mocks.scenarioService.userHasPlayerScenarioAccess.mockResolvedValue(true);
-  mocks.scenarioService.listScenarioParticipants.mockResolvedValue([participant]);
+  mocks.scenarioService.listScenarioParticipants.mockResolvedValue(participants);
 
-  return { encounter, participant };
+  return { encounter, participant, participants };
 }
 
 describe("scenarios route contract", () => {
@@ -2791,6 +2795,255 @@ describe("scenarios route contract", () => {
     await app.close();
 
     expect(response.statusCode).toBe(403);
+    expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
+  });
+
+  it("allows the current attacking player to roll the open phase 1 attack once", async () => {
+    const encounterParticipants = [
+      makeCombatEncounter().participants[0],
+      {
+        ...makeCombatEncounter().participants[0],
+        id: "encounter-participant-2",
+        label: "City guard",
+        scenarioParticipantId: "participant-2",
+      },
+    ];
+    const stepStatuses = {
+      initiative_phase_1: "submitted",
+      initiative_phase_2: "pending",
+      phase_1_actions: "pending",
+      phase_2_actions: "pending",
+      review_action_modifiers: "complete",
+      review_phase_2_actions: "pending",
+      review_phase_2_damage: "pending",
+      review_phase_2_modifiers: "pending",
+      round_summary: "pending",
+      select_actions: "submitted",
+    };
+
+    setupCombatDeclarationRoute({
+      encounter: {
+        combatRoundState: {
+          commands: [],
+          currentCursor: {
+            participantId: "encounter-participant-1",
+            roundNumber: 1,
+            step: "A1",
+          },
+          currentStep: "phase_1_actions",
+          participants: [
+            {
+              attackResults: {},
+              declaration: {
+                actionId: "attack_parry",
+                phaseContexts: {
+                  phase1: {
+                    targetParticipantId: "participant-2",
+                  },
+                },
+                roundNumber: 1,
+                submittedAt: "2026-01-01T00:01:00.000Z",
+                submittedBy: "player",
+              },
+              initiatives: {
+                phase1: {
+                  baseInitiative: 0,
+                  modifierAdjustment: 0,
+                  rolls: [6],
+                  rollTotal: 6,
+                  total: 6,
+                },
+              },
+              label: "The Gladiator",
+              participantId: "encounter-participant-1",
+              stepStatuses,
+            },
+            {
+              attackResults: {},
+              initiatives: {
+                phase1: {
+                  baseInitiative: 0,
+                  modifierAdjustment: 0,
+                  rolls: [4],
+                  rollTotal: 4,
+                  total: 4,
+                },
+              },
+              label: "City guard",
+              participantId: "encounter-participant-2",
+              stepStatuses,
+            },
+          ],
+          phaseResolutionCursor: {
+            participantId: "encounter-participant-1",
+            phase: "phase1",
+            substep: "attack",
+          },
+          phaseResolutionResults: [],
+          phaseResolutionStatuses: {},
+          roundNumber: 1,
+          stepSnapshots: [
+            {
+              attackSummary: {
+                attackMode: "C",
+                dmb: "8",
+                initiative: "3",
+                maxCrits: "FS",
+                ob: "10",
+                weaponName: "Long sword",
+              },
+              committedAt: "2026-01-01T00:02:00.000Z",
+              id: "snapshot-attack",
+              participantId: "encounter-participant-1",
+              participantLabel: "The Gladiator",
+              phase: "phase1",
+              roundNumber: 1,
+              step: "phase_1_actions",
+            },
+            {
+              committedAt: "2026-01-01T00:02:00.000Z",
+              defenseSummary: {
+                db: "11",
+                dm: "0",
+                parry: "9",
+                sourceName: "Sword / shield",
+              },
+              id: "snapshot-defense",
+              participantId: "encounter-participant-2",
+              participantLabel: "City guard",
+              phase: "phase1",
+              roundNumber: 1,
+              step: "phase_1_actions",
+            },
+          ],
+        },
+        participants: encounterParticipants,
+      },
+      participants: [
+        { id: "participant-1" },
+        {
+          controlledByUserId: "other-player",
+          id: "participant-2",
+        },
+      ],
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        defenderScenarioParticipantId: "participant-2",
+        phase: "phase1",
+        scenarioParticipantId: "participant-1",
+      },
+      url: "/encounters/encounter-1/combat-round/roll-attack",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
+    const attackResult =
+      updatedEncounter.combatRoundState.participants[0].attackResults.phase1;
+    expect(attackResult).toMatchObject({
+      attackerParticipantId: "encounter-participant-1",
+      defenderDb: 11,
+      defenderParticipantId: "encounter-participant-2",
+      ob: 10,
+      phase: "phase1",
+      weaponName: "Long sword",
+    });
+    expect(updatedEncounter.combatRoundState.commands.at(-1)).toMatchObject({
+      facts: {
+        attackResultId: "1:phase1:encounter-participant-1:encounter-participant-2",
+      },
+      participantId: "encounter-participant-1",
+      type: "roll_attack",
+    });
+  });
+
+  it("rejects duplicate player attack rolls for the same current phase action", async () => {
+    const attackResult = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackerParticipantId: "encounter-participant-1",
+      defenderDb: 11,
+      defenderParticipantId: "encounter-participant-2",
+      ob: 10,
+      phase: "phase1",
+      rollD20: 12,
+      rollTotal: 12,
+      rolledAt: "2026-01-01T00:03:00.000Z",
+      weaponName: "Long sword",
+    });
+
+    setupCombatDeclarationRoute({
+      encounter: {
+        combatRoundState: {
+          currentCursor: {
+            participantId: "encounter-participant-1",
+            roundNumber: 1,
+            step: "A1",
+          },
+          currentStep: "phase_1_actions",
+          participants: [
+            {
+              attackResults: {
+                phase1: attackResult,
+              },
+              declaration: {
+                actionId: "attack_parry",
+                phaseContexts: {
+                  phase1: {
+                    targetParticipantId: "participant-2",
+                  },
+                },
+                roundNumber: 1,
+                submittedAt: "2026-01-01T00:01:00.000Z",
+                submittedBy: "player",
+              },
+              initiatives: {},
+              label: "The Gladiator",
+              participantId: "encounter-participant-1",
+              stepStatuses: {
+                phase_1_actions: "submitted",
+              },
+            },
+          ],
+          roundNumber: 1,
+        },
+        participants: [
+          makeCombatEncounter().participants[0],
+          {
+            ...makeCombatEncounter().participants[0],
+            id: "encounter-participant-2",
+            label: "City guard",
+            scenarioParticipantId: "participant-2",
+          },
+        ],
+      },
+      participants: [
+        { id: "participant-1" },
+        {
+          controlledByUserId: "other-player",
+          id: "participant-2",
+        },
+      ],
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        defenderScenarioParticipantId: "participant-2",
+        phase: "phase1",
+        scenarioParticipantId: "participant-1",
+      },
+      url: "/encounters/encounter-1/combat-round/roll-attack",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(409);
     expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
   });
 

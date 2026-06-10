@@ -4723,6 +4723,16 @@ export function recordCombatRoundAttackResult(input: {
 }): CombatRoundState {
   const attackStep = input.result.phase === "phase1" ? "phase_1_actions" : "phase_2_actions";
   const normalized = combatRoundStateSchema.parse(input.state);
+  const existingAttackResult = getCombatRoundOutgoingAttackResultForParticipantPhase({
+    participantId: input.participantId,
+    phase: input.result.phase,
+    state: normalized,
+  });
+
+  if (existingAttackResult) {
+    throw new RangeError("Attack already rolled for this participant and phase.");
+  }
+
   const withResult: CombatRoundState = {
     ...normalized,
     participants: normalized.participants.map((participant) =>
@@ -6314,6 +6324,58 @@ export function canPlayerRollCombatInitiative(input: {
   return (
     normalized.currentStep === requiredStep &&
     initiativeValue === undefined &&
+    stepStatus === "pending"
+  );
+}
+
+export function isCombatRoundPhaseInitiativeComplete(input: {
+  phase: "phase1" | "phase2";
+  state: CombatRoundState;
+}): boolean {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const requiredStep = input.phase === "phase1" ? "initiative_phase_1" : "initiative_phase_2";
+
+  return normalized.participants.every((participant) => {
+    if (participant.initiatives[input.phase] !== undefined) {
+      return true;
+    }
+
+    const stepStatus = participant.stepStatuses[requiredStep] ?? "pending";
+
+    return (
+      stepStatus === "complete" ||
+      stepStatus === "gmEdited" ||
+      stepStatus === "locked" ||
+      stepStatus === "skipped" ||
+      stepStatus === "submitted"
+    );
+  });
+}
+
+export function canPlayerRollCombatAttack(input: {
+  participantId: string;
+  phase: "phase1" | "phase2";
+  state: CombatRoundState;
+}): boolean {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const requiredStep = input.phase === "phase1" ? "phase_1_actions" : "phase_2_actions";
+  const requiredCursorStep = input.phase === "phase1" ? "A1" : "A2";
+  const participant = normalized.participants.find(
+    (entry) => entry.participantId === input.participantId,
+  );
+  const stepStatus = participant?.stepStatuses[requiredStep] ?? "pending";
+  const existingAttackResult = getCombatRoundOutgoingAttackResultForParticipantPhase({
+    participantId: input.participantId,
+    phase: input.phase,
+    state: normalized,
+  });
+
+  return (
+    normalized.currentStep === requiredStep &&
+    normalized.currentCursor?.participantId === input.participantId &&
+    normalized.currentCursor.step === requiredCursorStep &&
+    combatRoundParticipantHasPhaseAttack(input) &&
+    existingAttackResult === undefined &&
     stepStatus === "pending"
   );
 }

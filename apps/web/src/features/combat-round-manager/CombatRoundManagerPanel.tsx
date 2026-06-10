@@ -28,7 +28,6 @@ import {
   COMBAT_ROUND_STEPS,
   advanceCombatRoundPhaseResolutionSubstepForParticipant,
   advanceCombatRoundStep,
-  buildCombatRoundAttackRollResult,
   buildCombatRoundPhaseResolutionResult,
   buildCombatRoundInspector,
   characterBuildSchema,
@@ -55,7 +54,6 @@ import {
   HIT_LOCATIONS,
   hasScenarioParticipantCombatDeclarationForEncounterRound,
   initializeCombatRoundState,
-  recordCombatRoundAttackResult,
   recordCombatRoundCriticalRoll,
   recordCombatRoundDamageResult,
   recordCombatRoundHitLocationRoll,
@@ -63,7 +61,6 @@ import {
   recordCombatRoundNoAttackPhaseReview,
   recordCombatRoundParryResult,
   rollOpenEndedD20,
-  rollOpenEndedCombatToHitD20,
   setCombatRoundSelection,
   sortCombatRoundParticipantsByInitiative,
   validateCombatDeclarationTargets,
@@ -77,6 +74,7 @@ import {
 } from "@/lib/api/scenarioClient";
 import {
   clearCurrentCombatRoundStepOnServer,
+  rollCombatAttackOnServer,
   rollCombatInitiativeOnServer,
   submitCombatDeclarationOnServer,
   updateEncounterOnServer,
@@ -3560,29 +3558,15 @@ export default function CombatRoundManagerPanel({
       return;
     }
 
-    let attackResult: CombatRoundAttackRollResult;
+    let ob: number;
+    let defenderDb: number;
 
     try {
-      const ob = parseCombatInteger(phaseModel.attackStats.ob, `${phaseLabel} OB`);
-      const defenderDb = parseCombatInteger(
+      ob = parseCombatInteger(phaseModel.attackStats.ob, `${phaseLabel} OB`);
+      defenderDb = parseCombatInteger(
         targetPhaseSummary.defenseStats.db,
         `Target ${phaseLabel} DB`,
       );
-      const roll = rollOpenEndedCombatToHitD20();
-
-      attackResult = buildCombatRoundAttackRollResult({
-        actionId: inspectorDraft.actionId || `${phase}_attack`,
-        attackerParticipantId: selectedEncounterParticipant.id,
-        defenderDb,
-        defenderParticipantId: targetEncounterParticipant.id,
-        ob,
-        openEndedD10s: roll.openEndedD10s,
-        phase,
-        rollD20: roll.rollD20,
-        rollTotal: roll.rollTotal,
-        rolledAt: new Date().toISOString(),
-        weaponName: phaseModel.attackStats.weaponName,
-      });
     } catch (caughtError) {
       setSaveError(
         caughtError instanceof Error
@@ -3595,17 +3579,25 @@ export default function CombatRoundManagerPanel({
     setSaving(true);
 
     try {
-      const nextRoundState = recordCombatRoundAttackResult({
-        command: {
-          createdAt: attackResult.rolledAt,
-        },
-        participantId: selectedEncounterParticipant.id,
-        result: attackResult,
-        state: roundState,
-        submittedBy: "gm",
+      const { encounter: nextEncounter } = await rollCombatAttackOnServer({
+        actionId: inspectorDraft.actionId || `${phase}_attack`,
+        defenderDb,
+        defenderScenarioParticipantId: targetScenarioParticipant.id,
+        encounterId: encounter.id,
+        ob,
+        phase,
+        scenarioParticipantId: selectedScenarioParticipant.id,
+        weaponName: phaseModel.attackStats.weaponName,
+      });
+      const nextRoundState = normalizeCombatRoundManagerSelection({
+        state: initializeCombatRoundState({ encounter: nextEncounter }),
       });
 
-      await persistRoundState(nextRoundState);
+      pendingSelectionRef.current = undefined;
+      manualSelectionRef.current = undefined;
+      setRoundState(nextRoundState);
+      onEncounterUpdated?.(nextEncounter);
+      focusRoundTable();
       setSaveError(undefined);
     } catch (caughtError) {
       setSaveError(

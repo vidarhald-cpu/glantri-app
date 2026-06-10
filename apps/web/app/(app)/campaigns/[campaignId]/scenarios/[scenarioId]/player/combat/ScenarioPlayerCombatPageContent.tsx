@@ -11,6 +11,7 @@ import {
   type CombatRoundPhase,
   type CombatRoundPhaseResolutionResult,
   type CombatRoundStep,
+  canPlayerRollCombatAttack,
   characterBuildSchema,
   formatOpenEndedD20RollBreakdown,
   getCombatRoundAttackResultById,
@@ -23,6 +24,7 @@ import {
   getCombatRoundModifierPhaseForStep,
   getCombatRoundResolutionPhaseForStep,
   initializeCombatRoundState,
+  isCombatRoundPhaseInitiativeComplete,
   validateCombatDeclarationTargets,
   type EncounterSession,
   type ScenarioCombatModifierBucket,
@@ -84,6 +86,7 @@ import {
   loadScenarioParticipants,
   loadScenarioPlayerProjection,
   loadServerCharacterById,
+  rollCombatAttackOnServer,
   rollCombatCriticalOnServer,
   rollCombatHitLocationOnServer,
   rollCombatInitiativeOnServer,
@@ -364,6 +367,20 @@ function formatPlayerCombatInitiativeRank(input: {
   const tieLabel = rank.tiedCount > 1 ? ` (tied with ${rank.tiedCount})` : "";
 
   return `Rank: ${rank.rank} of ${rank.rankTotal}${tieLabel}`;
+}
+
+function parsePlayerCombatInteger(value: string | undefined, label: string): number | undefined {
+  if (!value || value === "—" || value === "incomplete") {
+    return undefined;
+  }
+
+  const parsed = Number(value);
+
+  if (!Number.isInteger(parsed)) {
+    throw new Error(`${label} must be an integer.`);
+  }
+
+  return parsed;
 }
 
 export default function ScenarioPlayerCombatPageContent({
@@ -1016,6 +1033,56 @@ export default function ScenarioPlayerCombatPageContent({
     }
   }
 
+  async function rollPhaseAttack() {
+    if (readOnlyInspection || !selectedParticipant || !encounterId || !currentAttackPhase) {
+      return;
+    }
+
+    const phaseContext = phaseCombatContextDrafts[currentAttackPhase];
+    const phaseAttackStats = phaseCombatLoadoutSummaries[currentAttackPhase].attackStats;
+    const defenderScenarioParticipantId = phaseContext.targetParticipantId;
+
+    if (!phaseAttackStats) {
+      setError(`No ${currentAttackPhase === "phase1" ? "phase 1" : "phase 2"} attack.`);
+      return;
+    }
+
+    if (!defenderScenarioParticipantId) {
+      setError("Select an attack target before rolling.");
+      return;
+    }
+
+    let ob: number | undefined;
+
+    try {
+      ob = parsePlayerCombatInteger(phaseAttackStats.ob, "Attack OB");
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : "Attack OB is not available.");
+      return;
+    }
+
+    setSavingCombatContext(true);
+
+    try {
+      const { encounter } = await rollCombatAttackOnServer({
+        actionId: selectedActionId || `${currentAttackPhase}_attack`,
+        defenderScenarioParticipantId,
+        encounterId,
+        ob,
+        phase: currentAttackPhase,
+        scenarioParticipantId: selectedParticipant.id,
+        weaponName: phaseAttackStats.weaponName,
+      });
+
+      setEncounterSession(encounter);
+      setError(undefined);
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : "Unable to roll combat attack.");
+    } finally {
+      setSavingCombatContext(false);
+    }
+  }
+
   async function rollAttackerPrivilegedCombatDie(kind: "critical" | "hitLocation") {
     if (readOnlyInspection || !selectedParticipant || !encounterId) {
       return;
@@ -1181,11 +1248,19 @@ export default function ScenarioPlayerCombatPageContent({
       : undefined;
   const selectedCurrentAttackResultPanel = selectedCurrentAttackResult
     ? {
-        interpretedResult: formatCombatAttackResultLine({
-          participantId: selectedRoundParticipant?.participantId,
-          result: selectedCurrentAttackResult,
-        }),
-        resultLabel: `Result: ${selectedCurrentAttackResult.tableResult}`,
+        interpretedResult: selectedCurrentAttackResult.tableResult,
+        sections: [
+          {
+            calculationLines: [
+              formatCombatAttackResultLine({
+                participantId: selectedRoundParticipant?.participantId,
+                result: selectedCurrentAttackResult,
+              }),
+            ],
+            resultLine: `Result: ${selectedCurrentAttackResult.tableResult}`,
+            title: "To hit",
+          },
+        ],
       }
     : null;
   const currentResolutionPhase = getCombatRoundResolutionPhaseForStep(currentCombatStep);
@@ -1301,13 +1376,42 @@ export default function ScenarioPlayerCombatPageContent({
         : {},
     [combatRoundState],
   );
-  const selectedCurrentInitiativeRankLabel = currentInitiativePhase
+  const phase1InitiativeComplete = Boolean(
+    combatRoundState &&
+      isCombatRoundPhaseInitiativeComplete({ phase: "phase1", state: combatRoundState }),
+  );
+  const phase2InitiativeComplete = Boolean(
+    combatRoundState &&
+      isCombatRoundPhaseInitiativeComplete({ phase: "phase2", state: combatRoundState }),
+  );
+  const currentResultPhase = currentModifierPhase ?? currentInitiativePhase;
+  const selectedRelevantInitiative = currentResultPhase
+    ? selectedRoundParticipant?.initiatives[currentResultPhase]
+    : undefined;
+  const selectedRelevantInitiativeComplete =
+    currentResultPhase === "phase2" ? phase2InitiativeComplete : phase1InitiativeComplete;
+  const selectedRelevantInitiativeRankLabel =
+    currentResultPhase && selectedRelevantInitiativeComplete
     ? formatPlayerCombatInitiativeRank({
         participantId: selectedRoundParticipant?.participantId,
-        ranks: currentInitiativePhase === "phase2" ? phase2InitiativeRanks : phase1InitiativeRanks,
-        value: getCombatRoundInitiativeTotal(selectedCurrentInitiative),
+        ranks: currentResultPhase === "phase2" ? phase2InitiativeRanks : phase1InitiativeRanks,
+        value: getCombatRoundInitiativeTotal(selectedRelevantInitiative),
       })
     : undefined;
+  const selectedRelevantInitiativeResultPanel = selectedRelevantInitiative
+    ? {
+        interpretedResult: formatCombatInitiativeFormula(selectedRelevantInitiative),
+        sections: [
+          {
+            calculationLines: [formatCombatInitiativeFormula(selectedRelevantInitiative)],
+            resultLine: selectedRelevantInitiativeComplete
+              ? `Result: ${selectedRelevantInitiativeRankLabel ?? `Initiative ${selectedRelevantInitiative.total}`}`
+              : "Result: Initiative rolled — waiting for others",
+            title: "Initiative",
+          },
+        ],
+      }
+    : null;
   const playerDeclarationLocked =
     !isGameMaster &&
     (!declarationStepOpen ||
@@ -1329,6 +1433,27 @@ export default function ScenarioPlayerCombatPageContent({
     Boolean(selectedRoundParticipant) &&
     (isGameMaster ||
       (initiativeStepStatus === "pending" && !selectedParticipantRolledCurrentInitiative));
+  const canUseCurrentAttackButton =
+    Boolean(currentAttackPhase) &&
+    Boolean(displayedParticipant) &&
+    Boolean(selectedRoundParticipant) &&
+    Boolean(combatRoundState) &&
+    Boolean(phaseCombatContextDrafts[currentAttackPhase ?? "phase1"].targetParticipantId) &&
+    Boolean(phaseCombatLoadoutSummaries[currentAttackPhase ?? "phase1"].attackStats) &&
+    (combatRoundState
+      ? canPlayerRollCombatAttack({
+          participantId: selectedRoundParticipant?.participantId ?? "",
+          phase: currentAttackPhase ?? "phase1",
+          state: combatRoundState,
+        })
+      : false);
+  const currentAttackAction = canUseCurrentAttackButton
+    ? {
+        disabled: false,
+        kind: "attack" as const,
+        label: currentAttackPhase === "phase2" ? "Roll phase 2 attack" : "Roll phase 1 attack",
+      }
+    : undefined;
   const targetValidation = useMemo(
     () =>
       validateCombatDeclarationTargets({
@@ -1355,9 +1480,12 @@ export default function ScenarioPlayerCombatPageContent({
     disabled: declareActionDisabled,
     isGameMaster,
   });
-  const playerActionButtonLabel = attackerPrivilegedAction?.label ?? declarationButtonLabel;
+  const playerActionButtonLabel =
+    attackerPrivilegedAction?.label ?? currentAttackAction?.label ?? declarationButtonLabel;
   const playerActionButtonDisabled = attackerPrivilegedAction
     ? controlsDisabled || savingCombatContext || attackerPrivilegedAction.disabled
+    : currentAttackAction
+      ? controlsDisabled || savingCombatContext || currentAttackAction.disabled
     : declareActionDisabled;
   const selectedParticipantHasDeclared =
     selectedParticipantDeclaredThisRound ||
@@ -1383,6 +1511,8 @@ export default function ScenarioPlayerCombatPageContent({
         : initiativeStepStatus === "pending"
           ? `Current step: ${currentCombatStepLabel}.`
           : `Current step: ${currentCombatStepLabel}. Waiting for GM.`
+      : currentAttackAction
+        ? `Current step: ${currentCombatStepLabel}. Ready to roll.`
       : selectedParticipantDeclaredThisRound ||
           selectedDeclarationStepStatus === "submitted" ||
           selectedDeclarationStepStatus === "gmEdited"
@@ -1621,6 +1751,8 @@ export default function ScenarioPlayerCombatPageContent({
               onDeclareAction={() =>
                 void (attackerPrivilegedAction?.kind
                   ? rollAttackerPrivilegedCombatDie(attackerPrivilegedAction.kind)
+                  : currentAttackAction
+                    ? rollPhaseAttack()
                   : currentInitiativePhase
                     ? rollInitiative()
                     : saveCombatContext())
@@ -1631,15 +1763,11 @@ export default function ScenarioPlayerCombatPageContent({
             />
             <PlayerCombatActionResultPanel
               result={
-                selectedCurrentInitiative
-                  ? {
-                      interpretedResult: formatCombatInitiativeFormula(selectedCurrentInitiative),
-                      rankLabel: selectedCurrentInitiativeRankLabel,
-                    }
-                  : selectedCurrentPhaseResolutionResultPanel ??
-                    selectedAttackerPrivilegedResultPanel ??
-                    selectedCurrentAttackResultPanel ??
-                    actionRollResult
+                selectedCurrentPhaseResolutionResultPanel ??
+                selectedAttackerPrivilegedResultPanel ??
+                selectedCurrentAttackResultPanel ??
+                selectedRelevantInitiativeResultPanel ??
+                actionRollResult
               }
             />
           </div>

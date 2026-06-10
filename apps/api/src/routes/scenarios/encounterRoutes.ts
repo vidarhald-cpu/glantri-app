@@ -4,16 +4,20 @@ import { CampaignService, EncounterService, ScenarioService } from "@glantri/dat
 import {
   buildPlayerSafeRoleplayStateForUser,
   applyCombatActionGeneratedModifiers,
+  buildCombatRoundAttackRollResult,
   buildCombatRoundInitiativeResult,
+  canPlayerRollCombatAttack,
   canPlayerRollCombatInitiative,
   buildRoleplayCalculationPreview,
   canPlayerSubmitCombatDeclaration,
   clearCombatRoundStep,
   clearCurrentCombatRoundStepAndRewind,
+  combatRoundPhaseSchema,
   combatRoundStepSchema,
   encounterSessionSchema,
   getCombatRoundInitiativePhaseForStep,
   getCombatRoundAttackResultById,
+  getCombatRoundOutgoingAttackResultForParticipantPhase,
   initializeCombatRoundState,
   isUserAssignedToEncounterMembership,
   normalizeRoleplayState,
@@ -21,10 +25,12 @@ import {
   recordCombatRoundDeclaration,
   recordCombatRoundHitLocationRoll,
   recordCombatRoundInitiative,
+  recordCombatRoundAttackResult,
   recordCombatRoundParticipantStepReview,
   removeCombatRoundCommittedDamageEffects,
   resolveEncounterParticipantByRollParticipantId,
   resolveEncounterParticipantMembership,
+  rollOpenEndedCombatToHitD20,
   rollOpenEndedD6,
   combatRoundPhaseContextsSchema,
   scenarioParticipantCombatContextSchema,
@@ -201,6 +207,58 @@ function parseCombatInitiativeBody(body: unknown): {
   };
 }
 
+function parseOptionalInteger(value: unknown, label: string): number | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  return parseInteger(value, label);
+}
+
+function parseNonEmptyString(value: unknown, label: string): string {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    throw new Error(`${label} is required.`);
+  }
+
+  return value;
+}
+
+function parseCombatAttackBody(body: unknown): {
+  actionId?: string;
+  defenderDb?: number;
+  defenderScenarioParticipantId: string;
+  ob?: number;
+  phase: "phase1" | "phase2";
+  scenarioParticipantId: string;
+  weaponName?: string;
+} {
+  const value = parseBodyObject(body, "Combat attack payload");
+  const parsed = parseParticipantCommandBody(value, "Combat attack payload");
+  const defenderScenarioParticipantId = parseNonEmptyString(
+    value.defenderScenarioParticipantId,
+    "defenderScenarioParticipantId",
+  );
+  const phase = combatRoundPhaseSchema.parse(value.phase);
+  const actionId =
+    typeof value.actionId === "string" && value.actionId.trim().length > 0
+      ? value.actionId
+      : undefined;
+  const weaponName =
+    typeof value.weaponName === "string" && value.weaponName.trim().length > 0
+      ? value.weaponName
+      : undefined;
+
+  return {
+    ...parsed,
+    actionId,
+    defenderDb: parseOptionalInteger(value.defenderDb, "defenderDb"),
+    defenderScenarioParticipantId,
+    ob: parseOptionalInteger(value.ob, "ob"),
+    phase,
+    weaponName,
+  };
+}
+
 function parseCombatAttackerPrivilegedRollBody(body: unknown): {
   attackResultId: string;
   scenarioParticipantId: string;
@@ -237,6 +295,20 @@ function clearScenarioParticipantCombatDeclaration(
       lastDeclarationNotes: undefined,
     },
   };
+}
+
+function parseCombatSummaryInteger(value: string | undefined, label: string): number | undefined {
+  if (!value || value === "—" || value === "incomplete") {
+    return undefined;
+  }
+
+  const parsed = Number(value);
+
+  if (!Number.isInteger(parsed)) {
+    throw new Error(`${label} must be an integer.`);
+  }
+
+  return parsed;
 }
 
 function preservePlayerCombatModifierBuckets(input: {
@@ -841,6 +913,222 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
     } catch (error) {
       return reply.code(400).send({
         error: error instanceof Error ? error.message : "Unable to roll combat initiative.",
+      });
+    }
+  });
+
+  app.post("/encounters/:encounterId/combat-round/roll-attack", async (request, reply) => {
+    const user = await requireAuthenticatedUser(request, reply);
+
+    if (!user) {
+      return;
+    }
+
+    try {
+      const encounterId = parseId(request.params, "encounterId", "Encounter id");
+      const encounter = await encounterService.getEncounterById(encounterId);
+
+      if (!encounter?.scenarioId) {
+        return reply.code(404).send({
+          error: "Encounter not found.",
+        });
+      }
+
+      const scenarioId = encounter.scenarioId;
+      const access = await resolveScenarioWorkspaceAccess(
+        {
+          campaignService,
+          scenarioService,
+        },
+        {
+          scenarioId,
+          userId: user.id,
+          userRoles: user.roles,
+        },
+      );
+
+      if (!access) {
+        return reply.code(404).send({
+          error: "Encounter not found.",
+        });
+      }
+
+      const body = parseCombatAttackBody(request.body);
+      const scenarioParticipants = await scenarioService.listScenarioParticipants(scenarioId);
+      const scenarioParticipant = scenarioParticipants.find(
+        (participant) => participant.id === body.scenarioParticipantId,
+      );
+      const defenderScenarioParticipant = scenarioParticipants.find(
+        (participant) => participant.id === body.defenderScenarioParticipantId,
+      );
+      const membership = resolveEncounterParticipantMembership({
+        encounter,
+        scenarioParticipants,
+      });
+      const encounterParticipant = scenarioParticipant
+        ? membership.participants.find(
+            (participant) =>
+              participant.scenarioParticipantId === scenarioParticipant.id ||
+              participant.id === scenarioParticipant.id ||
+              (scenarioParticipant.characterId &&
+                participant.characterId === scenarioParticipant.characterId),
+          )
+        : undefined;
+      const defenderEncounterParticipant = defenderScenarioParticipant
+        ? membership.participants.find(
+            (participant) =>
+              participant.scenarioParticipantId === defenderScenarioParticipant.id ||
+              participant.id === defenderScenarioParticipant.id ||
+              (defenderScenarioParticipant.characterId &&
+                participant.characterId === defenderScenarioParticipant.characterId),
+          )
+        : undefined;
+
+      if (
+        !scenarioParticipant ||
+        !scenarioParticipant.isActive ||
+        !encounterParticipant ||
+        !defenderScenarioParticipant ||
+        !defenderScenarioParticipant.isActive ||
+        !defenderEncounterParticipant
+      ) {
+        return reply.code(403).send({
+          error: "Participant is not assigned to this encounter.",
+        });
+      }
+
+      if (
+        access.mode !== "gm" &&
+        (scenarioParticipant.controlledByUserId !== user.id ||
+          !isUserAssignedToEncounterMembership({
+            encounter,
+            scenarioParticipants,
+            userId: user.id,
+          }))
+      ) {
+        return reply.code(403).send({
+          error: "Player is not assigned to this encounter participant.",
+        });
+      }
+
+      const roundState = initializeCombatRoundState({ encounter });
+      const existingAttackResult = getCombatRoundOutgoingAttackResultForParticipantPhase({
+        participantId: encounterParticipant.id,
+        phase: body.phase,
+        state: roundState,
+      });
+
+      if (existingAttackResult) {
+        return reply.code(409).send({
+          error: "Attack already rolled for this participant and phase.",
+        });
+      }
+
+      if (
+        !canPlayerRollCombatAttack({
+          participantId: encounterParticipant.id,
+          phase: body.phase,
+          state: roundState,
+        })
+      ) {
+        return reply.code(409).send({
+          error: "Attack is not open for this participant.",
+        });
+      }
+
+      const attackerRoundParticipant = roundState.participants.find(
+        (participant) => participant.participantId === encounterParticipant.id,
+      );
+      const declaredTargetId =
+        attackerRoundParticipant?.declaration?.phaseContexts?.[body.phase]?.targetParticipantId;
+
+      if (
+        declaredTargetId &&
+        declaredTargetId !== defenderScenarioParticipant.id &&
+        declaredTargetId !== defenderEncounterParticipant.id
+      ) {
+        return reply.code(409).send({
+          error: "Selected defender does not match the declared attack target.",
+        });
+      }
+
+      const latestAttackerSnapshot = [...roundState.stepSnapshots]
+        .reverse()
+        .find(
+          (snapshot) =>
+            snapshot.roundNumber === roundState.roundNumber &&
+            snapshot.participantId === encounterParticipant.id &&
+            snapshot.phase === body.phase &&
+            snapshot.attackSummary,
+        );
+      const latestDefenderSnapshot = [...roundState.stepSnapshots]
+        .reverse()
+        .find(
+          (snapshot) =>
+            snapshot.roundNumber === roundState.roundNumber &&
+            snapshot.participantId === defenderEncounterParticipant.id &&
+            snapshot.phase === body.phase &&
+            snapshot.defenseSummary,
+        );
+      const ob =
+        parseCombatSummaryInteger(latestAttackerSnapshot?.attackSummary?.ob, "Attacker OB") ??
+        body.ob;
+      const weaponName = latestAttackerSnapshot?.attackSummary?.weaponName ?? body.weaponName;
+      const defenderDb =
+        parseCombatSummaryInteger(latestDefenderSnapshot?.defenseSummary?.db, "Defender DB") ??
+        body.defenderDb;
+
+      if (ob === undefined || !weaponName || defenderDb === undefined) {
+        return reply.code(409).send({
+          error: "Attack or defender combat summary is not available.",
+        });
+      }
+
+      const submittedAt = new Date().toISOString();
+      const roll = rollOpenEndedCombatToHitD20();
+      const attackResult = buildCombatRoundAttackRollResult({
+        actionId:
+          body.actionId ??
+          attackerRoundParticipant?.declaration?.actionId ??
+          `${body.phase}_attack`,
+        attackerParticipantId: encounterParticipant.id,
+        defenderDb,
+        defenderParticipantId: defenderEncounterParticipant.id,
+        ob,
+        openEndedD10s: roll.openEndedD10s,
+        phase: body.phase,
+        rollD20: roll.rollD20,
+        rollTotal: roll.rollTotal,
+        rolledAt: submittedAt,
+        rolledByUserId: user.id,
+        weaponName,
+      });
+      const nextRoundState = recordCombatRoundAttackResult({
+        command: {
+          createdAt: submittedAt,
+          createdByUserId: user.id,
+        },
+        participantId: encounterParticipant.id,
+        result: attackResult,
+        state: roundState,
+        submittedBy: access.mode === "gm" ? "gm" : "player",
+      });
+      const savedEncounter = await encounterService.updateEncounter({
+        campaignId: access.campaignId,
+        encounterId,
+        scenarioId,
+        session: {
+          ...encounter,
+          combatRoundState: nextRoundState,
+          currentRound: nextRoundState.roundNumber,
+          updatedAt: submittedAt,
+        },
+      });
+
+      return { attackResult, encounter: savedEncounter };
+    } catch (error) {
+      return reply.code(400).send({
+        error: error instanceof Error ? error.message : "Unable to roll combat attack.",
       });
     }
   });

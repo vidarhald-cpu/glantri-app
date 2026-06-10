@@ -1,4 +1,5 @@
 import type {
+  CombatRoundAttackRollResult,
   CombatRoundInitiativeResult,
   CombatRoundPhaseContexts,
   CombatRoundStep,
@@ -105,6 +106,35 @@ export async function rollCombatInitiativeOnServer(input: {
       initiativeBase: input.initiativeBase,
       initiativeModifierAdjustment: input.initiativeModifierAdjustment,
       scenarioParticipantId: input.scenarioParticipantId,
+    }),
+    method: "POST",
+  });
+
+  return payload;
+}
+
+export async function rollCombatAttackOnServer(input: {
+  actionId?: string;
+  defenderDb?: number;
+  defenderScenarioParticipantId: string;
+  encounterId: string;
+  ob?: number;
+  phase: "phase1" | "phase2";
+  scenarioParticipantId: string;
+  weaponName?: string;
+}): Promise<{ attackResult: CombatRoundAttackRollResult; encounter: EncounterSession }> {
+  const payload = await sendJson<{
+    attackResult: CombatRoundAttackRollResult;
+    encounter: EncounterSession;
+  }>(`/encounters/${input.encounterId}/combat-round/roll-attack`, {
+    body: JSON.stringify({
+      actionId: input.actionId,
+      defenderDb: input.defenderDb,
+      defenderScenarioParticipantId: input.defenderScenarioParticipantId,
+      ob: input.ob,
+      phase: input.phase,
+      scenarioParticipantId: input.scenarioParticipantId,
+      weaponName: input.weaponName,
     }),
     method: "POST",
   });

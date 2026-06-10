@@ -126,8 +126,8 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("rollInspectorInitiative");
     expect(source).toContain("rollCombatInitiativeOnServer");
     expect(source).toContain("rollInspectorPhaseAttack");
+    expect(source).toContain("rollCombatAttackOnServer");
     expect(source).toContain("rollInspectorParry");
-    expect(source).toContain("rollOpenEndedCombatToHitD20");
     expect(source).toContain("rollOpenEndedD20");
     expect(source).toContain("resolveCombatParry");
     expect(source).toContain("recordCombatRoundParryResult");
@@ -224,9 +224,9 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("Damage roll: ${formatResolutionStatusLabel");
     expect(source).toContain("Proposal: ${formatResolutionStatusLabel");
     expect(source).toContain("Effects: ${damageResult.review.additionalEffects");
-    expect(source).toContain("buildCombatRoundAttackRollResult");
-    expect(source).toContain("recordCombatRoundAttackResult");
-    expect(source).toContain("createdAt: attackResult.rolledAt");
+    expect(source).toContain("rollCombatAttackOnServer({");
+    expect(source).toContain("defenderScenarioParticipantId: targetScenarioParticipant.id");
+    expect(source).toContain("scenarioParticipantId: selectedScenarioParticipant.id");
     expect(source).toContain("completeInspectorPhaseResolution");
     expect(source).toContain("getCombatRoundInitiativeRanks");
     expect(source).toContain("getCombatRoundInitiativeTotal");

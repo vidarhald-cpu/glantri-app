@@ -12,6 +12,7 @@ import {
   buildCombatRoundAttackRollResult,
   buildCombatRoundInspector,
   buildCombatRoundInitiativeResult,
+  canPlayerRollCombatAttack,
   canPlayerSubmitCombatDeclaration,
   canPlayerRollCombatInitiative,
   clearCombatRoundStep,
@@ -40,6 +41,7 @@ import {
   initializeCombatRoundState,
   ensureCombatRoundPhaseResolutionResultsForPhase,
   initializeCombatRoundPhaseResolutionCursor,
+  isCombatRoundPhaseInitiativeComplete,
   recordCombatRoundDeclaration,
   recordCombatRoundAttackResult,
   recordCombatRoundDamageReviewPlaceholder,
@@ -7083,6 +7085,121 @@ describe("combat round manager", () => {
     expect(
       canPlayerRollCombatInitiative({ participantId: "gladiator", phase: "phase2", state }),
     ).toBe(false);
+  });
+
+  it("marks phase initiative complete only after every participant is rolled or non-pending", () => {
+    const baseState = initializeCombatRoundState({ encounter: encounter() });
+    const withGladiatorInitiative = recordCombatRoundInitiative({
+      initiative: { baseInitiative: 0, modifierAdjustment: 0, rolls: [5], rollTotal: 5, total: 5 },
+      participantId: "gladiator",
+      phase: "phase1",
+      state: baseState,
+      submittedBy: "player",
+    });
+
+    expect(
+      isCombatRoundPhaseInitiativeComplete({
+        phase: "phase1",
+        state: withGladiatorInitiative,
+      }),
+    ).toBe(false);
+
+    const withSkippedGuard = setCombatRoundParticipantStepStatus({
+      participantId: "guard",
+      state: withGladiatorInitiative,
+      status: "skipped",
+      step: "initiative_phase_1",
+    });
+
+    expect(
+      isCombatRoundPhaseInitiativeComplete({
+        phase: "phase1",
+        state: withSkippedGuard,
+      }),
+    ).toBe(true);
+  });
+
+  it("allows player attack only for the current unresolved attack cursor and rejects duplicates", () => {
+    const preparedState = preparePhaseResolutionState({
+      guardActionId: "attack_parry",
+      gladiatorActionId: "attack_parry",
+      phase: "phase1",
+    });
+    const openState = {
+      ...preparedState,
+      currentCursor: {
+        participantId: "gladiator",
+        roundNumber: preparedState.roundNumber,
+        step: "A1" as const,
+      },
+      currentStep: "phase_1_actions" as const,
+      selectedParticipantId: "gladiator",
+      selectedStep: "phase_1_actions" as const,
+    };
+
+    expect(openState.currentStep).toBe("phase_1_actions");
+    expect(openState.currentCursor).toMatchObject({
+      participantId: "gladiator",
+      step: "A1",
+    });
+    expect(
+      canPlayerRollCombatAttack({
+        participantId: "gladiator",
+        phase: "phase1",
+        state: openState,
+      }),
+    ).toBe(true);
+    expect(
+      canPlayerRollCombatAttack({
+        participantId: "guard",
+        phase: "phase1",
+        state: openState,
+      }),
+    ).toBe(false);
+
+    const result = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackerParticipantId: "gladiator",
+      defenderDb: 10,
+      defenderParticipantId: "guard",
+      ob: 10,
+      phase: "phase1",
+      rollD20: 12,
+      rollTotal: 12,
+      rolledAt: "2026-01-01T00:05:00.000Z",
+      weaponName: "Broad sword",
+    });
+    const afterAttack = recordCombatRoundAttackResult({
+      command: {
+        createdAt: result.rolledAt,
+      },
+      participantId: "gladiator",
+      result,
+      state: openState,
+      submittedBy: "player",
+    });
+
+    expect(
+      canPlayerRollCombatAttack({
+        participantId: "gladiator",
+        phase: "phase1",
+        state: afterAttack,
+      }),
+    ).toBe(false);
+    expect(() =>
+      recordCombatRoundAttackResult({
+        command: {
+          createdAt: "2026-01-01T00:05:01.000Z",
+        },
+        participantId: "gladiator",
+        result: {
+          ...result,
+          rolledAt: "2026-01-01T00:05:01.000Z",
+        },
+        state: afterAttack,
+        submittedBy: "player",
+      }),
+    ).toThrow("Attack already rolled for this participant and phase.");
   });
 
   it("locks pending declarations when advancing past DE while preserving submitted markers", () => {
