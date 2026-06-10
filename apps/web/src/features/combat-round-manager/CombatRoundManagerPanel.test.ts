@@ -159,7 +159,8 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("Parry: ${formatResolutionStatusLabel");
     expect(source).toContain("sourcePrefix");
     expect(source).toContain("modifiedParryBeforeRoll");
-    expect(source).toContain("inspectorPhaseBaseLoadoutSummaries");
+    expect(source).toContain("buildCombatRoundPhasePanelProjection");
+    expect(source).toContain("selectedResolutionContext");
     expect(source).toContain('label: "attack result"');
     expect(source).toContain("value: attackResultModifier");
     expect(source).toContain("extraRawModifiers: inspectorParryExtraRawModifiers");
@@ -258,9 +259,9 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("phaseResolutionStatus");
     expect(source).toContain("Resolution review pending.");
     expect(source).toContain("getCombatRoundParticipantPhaseStepStatus");
-    expect(source).toContain("buildSelectedCombatParryDefenseStats");
     expect(source).toContain("formatSelectedCombatParrySourceName");
-    expect(source).toContain("shouldShowSelectedParryStats");
+    expect(source).toContain("phaseProjection.phaseModel");
+    expect(source).toContain("phaseDefenseStats");
     expect(source).not.toContain("input.sources.mainHand.label} P");
     expect(source).not.toContain("input.sources.offHand.label} P");
     expect(source).toContain("No ${formatCombatPhaseLabel");

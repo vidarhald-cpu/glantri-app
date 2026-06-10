@@ -104,7 +104,6 @@ import {
   playerCombatPanelCardStyle,
   playerCombatPanelRowStyle,
   playerCombatTopPanelRowStyle,
-  type PlayerCombatDefenseStatsView,
   type PlayerCombatModifierBucketView,
   type PlayerCombatPhaseCardView,
 } from "@/features/player-combat/PlayerCombatPanels";
@@ -138,6 +137,7 @@ import {
   normalizeCombatRoundManagerSelection,
   type CombatRoundSelectionTarget,
 } from "./combatRoundSelection";
+import { buildCombatRoundPhasePanelProjection } from "./combatRoundPhasePanelProjection";
 
 interface CombatRoundManagerPanelProps {
   encounter: EncounterSession;
@@ -1454,26 +1454,6 @@ function formatSelectedCombatParrySourceName(input: {
   return labels.length > 0 ? labels.join(" + ") : "No parry source selected";
 }
 
-function buildSelectedCombatParryDefenseStats(input: {
-  baseStats: PlayerCombatDefenseStatsView | null;
-  parryBase?: number;
-  selection: CombatParrySourceSelection;
-  sources?: CombatParrySourceOptions;
-}): PlayerCombatDefenseStatsView | null {
-  if (!input.baseStats) {
-    return null;
-  }
-
-  return {
-    ...input.baseStats,
-    parry: input.parryBase === undefined ? "0" : String(input.parryBase),
-    sourceName: formatSelectedCombatParrySourceName({
-      selection: input.selection,
-      sources: input.sources,
-    }),
-  };
-}
-
 function getCombatParrySelectionKey(input: {
   result?: CombatRoundAttackRollResult;
   roundNumber: number;
@@ -2409,42 +2389,6 @@ export default function CombatRoundManagerPanel({
     inspectorEquipmentState,
     selectedScenarioParticipant?.characterId,
     selectedScenarioParticipant?.state.combatEffects,
-  ]);
-  const inspectorPhaseBaseLoadoutSummaries = useMemo(() => {
-    const buildPhaseSummary = () => {
-      const phaseLoadoutModel = buildEquipmentLoadoutModuleModel({
-        characterContext:
-          content && inspectorBuild
-            ? {
-                content,
-                record: {
-                  build: inspectorBuild,
-                },
-              }
-            : null,
-        characterId: selectedScenarioParticipant?.characterId ?? "",
-        state: inspectorEquipmentState,
-        throwingWeaponItemId: null,
-      });
-
-      return buildPlayerCombatLoadoutSummary({
-        actionId: inspectorDraft.actionId,
-        loadoutModel: phaseLoadoutModel,
-        secondaryActionId: inspectorDraft.secondaryActionId,
-      });
-    };
-
-    return {
-      phase1: buildPhaseSummary(),
-      phase2: buildPhaseSummary(),
-    };
-  }, [
-    content,
-    inspectorBuild,
-    inspectorDraft.actionId,
-    inspectorDraft.secondaryActionId,
-    inspectorEquipmentState,
-    selectedScenarioParticipant?.characterId,
   ]);
   const inspectorCurrentInitiativePhase =
     inspector.step === "initiative_phase_1"
@@ -4379,41 +4323,63 @@ export default function CombatRoundManagerPanel({
                     const phaseKey: PlayerCombatPhaseKey = index === 0 ? "phase1" : "phase2";
                     const phaseCombatContext = inspectorDisplayDraft.phaseContexts[phaseKey];
                     const phaseLoadoutSummary = inspectorPhaseLoadoutSummaries[phaseKey];
-                    const phaseBaseLoadoutSummary = inspectorPhaseBaseLoadoutSummaries[phaseKey];
                     const snapshotForPhase =
                       inspectorSnapshot?.phase === phaseKey ? inspectorSnapshot : undefined;
-                    const baseDefenseStats =
-                      snapshotForPhase?.defenseSummary ??
-                      buildPlayerCombatDefenseStats({
-                        mainHandParryItemLabel: phaseBaseLoadoutSummary.mainHandParryItemLabel,
-                        offHandParryItemLabel: phaseBaseLoadoutSummary.offHandParryItemLabel,
-                        phaseContext: phaseCombatContext,
-                        reference: phaseBaseLoadoutSummary.reference,
-                      });
-                    const shouldShowSelectedParryStats =
-                      !snapshotForPhase &&
+                    const phaseDefenseStats = buildPlayerCombatDefenseStats({
+                      mainHandParryItemLabel: phaseLoadoutSummary.mainHandParryItemLabel,
+                      offHandParryItemLabel: phaseLoadoutSummary.offHandParryItemLabel,
+                      phaseContext: phaseCombatContext,
+                      reference: phaseLoadoutSummary.reference,
+                    });
+                    const selectedResolutionContext =
                       phaseKey === inspectorResolutionPhase &&
                       inspector.participant?.participantId ===
                         inspectorResolutionAttackResult?.defenderParticipantId &&
-                      inspectorResolutionStepKind === "parry";
-                    const defenseStats = shouldShowSelectedParryStats
-                      ? buildSelectedCombatParryDefenseStats({
-                          baseStats: baseDefenseStats,
-                          parryBase: inspectorParryBase,
-                          selection: inspectorParrySelection,
-                          sources: inspectorParryDefenderPhaseSummary?.parrySources,
-                        })
-                      : baseDefenseStats;
-                    const phaseModel = buildPlayerCombatPhasePanelModel({
+                      (inspectorResolutionStepKind === "parry" ||
+                        inspectorResolutionStepKind === "damage") &&
+                      inspectorDisplayPhaseResolutionResult
+                        ? {
+                            attackResultId: inspectorDisplayPhaseResolutionResult.attackResultId,
+                            parryBase: inspectorParryBase,
+                            parryModifierCalculation: inspectorParryModifierCalculation,
+                            parryResolution:
+                              inspectorDisplayPhaseResolutionResult.parryResolution,
+                            parrySourceLabel: formatSelectedCombatParrySourceName({
+                              selection: inspectorParrySelection,
+                              sources: inspectorParryDefenderPhaseSummary?.parrySources,
+                            }),
+                          }
+                        : undefined;
+                    const phaseProjection = buildCombatRoundPhasePanelProjection({
                       actionId: inspectorDisplayDraft.actionId,
-                      attackStats:
-                        snapshotForPhase?.attackSummary ?? phaseLoadoutSummary.attackStats,
-                      defenseStats,
+                      attackStats: phaseLoadoutSummary.attackStats,
+                      liveModifiers:
+                        phaseKey === inspectorResolutionPhase
+                          ? inspectorParryDefenderPhaseSummary?.liveModifiers
+                          : buildEncounterLiveCombatModifierSummary({
+                              combatContext: inspectorDraft.combatContext,
+                              combatEffects: selectedScenarioParticipant?.state.combatEffects,
+                              phaseKey,
+                            }),
+                      participantId: inspector.participant?.participantId,
                       phaseCard,
                       phaseContext: phaseCombatContext,
+                      phaseDefenseStats,
                       phaseKey,
                       secondaryActionId: inspectorDisplayDraft.secondaryActionId,
+                      selectedResolutionContext,
+                      selectedStep: inspector.step,
+                      snapshotAttackStats: snapshotForPhase?.attackSummary,
+                      snapshotDefenseStats: snapshotForPhase?.defenseSummary,
                     });
+                    const phaseModel = phaseProjection.phaseModel;
+
+                    /*
+                     * The phase projection is intentionally context-aware:
+                     * normal rows use phase-aware stats, while selected P/D
+                     * rows can replay the specific incoming attack's parry
+                     * context without leaking it into later actor views.
+                     */
 
                     return (
                       <PlayerCombatPhasePanel
@@ -4458,8 +4424,8 @@ export default function CombatRoundManagerPanel({
                             <PlayerCombatParryContextPanel
                               combatContext={phaseModel.phaseContext}
                               controlsDisabled={saving || Boolean(inspectorSnapshot)}
-                              mainHandItemLabel={phaseBaseLoadoutSummary.mainHandParryItemLabel}
-                              offHandItemLabel={phaseBaseLoadoutSummary.offHandParryItemLabel}
+                              mainHandItemLabel={phaseLoadoutSummary.mainHandParryItemLabel}
+                              offHandItemLabel={phaseLoadoutSummary.offHandParryItemLabel}
                               onCombatContextChange={(combatContext) =>
                                 updateInspectorDraft({
                                   phaseContexts: {

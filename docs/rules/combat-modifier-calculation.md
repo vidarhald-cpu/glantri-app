@@ -120,9 +120,19 @@ result, so undoing P1/P2 keeps the modifier available for a rerolled parry while
 removes the modifier source. Direction legality, hit-location coverage legality, and per-phase parry
 source allocation across multiple incoming opponents are future work.
 
-Phase defense panels display base source values for DB, DM, and Parry/P. They should not be treated
-as already-modified parry roll inputs. The P1/P2 roll report starts from the selected base source,
-then shows DB/Parry and attack-result raw modifiers once before the adjusted pre-roll P value.
+The Combat Round Manager inspector is context/time based. Base combat state is the equipment/loadout
+value before round or action modifiers. Round/phase modifiers include declared action modifiers,
+General/Fatigue, Initiative when relevant, OB/Skill, DB/Parry, active committed combatEffects, and
+manual GM modifiers for the selected phase. Situational resolution modifiers belong to one specific
+interaction, such as the attack-result parry modifier on a particular incoming attack.
+
+Phase mini tables display effective values for the selected participant and selected context. Normal
+phase rows include the relevant round/phase modifiers. P1/P2 and D1/D2 rows can also show the
+selected incoming attack's situational parry context, including the stored attack-result parry
+modifier, but that situational modifier does not follow the participant into unrelated later attacks
+or inspections. The P1/P2 roll report remains the detailed breakdown: it starts from the selected
+base source, then shows DB/Parry and attack-result raw modifiers once before the adjusted pre-roll P
+value.
 
 Generated action DB/Parry rows may be phase-specific. Manual DB/Parry rows without a phase apply
 broadly. A generated row with `sourcePhase = phase1` contributes to phase 1 DB/P only; a generated
