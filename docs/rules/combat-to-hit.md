@@ -2,11 +2,13 @@
 
 This page records the canonical hit/miss/grazing rule table for combat to-hit lookup and wires GM
 Phase 1 and Phase 2 attack rolls to that table. D1/D2 damage resolution first creates a reviewable
-damage result proposal for hits after a failed parry. Committing that proposal writes source-linked
-combat-effect rows for the defender. The proposal now includes hit location plus compact GM review
-overrides for location, armor, total damage, critical grade, notes, and manual immediate effect
-rows. Critical-effect automation, bleeding, full injury typing, and live armor-location equipment
-lookup remain future work.
+damage result proposal for hits after a failed parry. Hit location is rolled as an explicit D1/D2
+substep before that proposal is calculated; if the proposal has a critical grade, the critical roll
+is a second explicit D1/D2 substep before commit. Committing that proposal writes source-linked
+combat-effect rows for the defender. The proposal includes compact GM review overrides for location,
+armor, total damage, critical grade, critical-roll modifiers/result, notes, and manual immediate
+effect rows. Critical-effect automation, bleeding, full injury typing, and live armor-location
+equipment lookup remain future work.
 
 ## Hit lookup
 
@@ -65,7 +67,8 @@ applied by the existing combat panel read model.
 Attack result lines show final modified OB and DB totals without exposing the opponent's individual
 modifier breakdown.
 
-After a failed parry, D1/D2 can resolve and store a damage proposal:
+After a failed parry, D1/D2 first requires the attacker-owned hit-location roll, then can resolve and
+store a damage proposal:
 
 ```text
 hit lookup total = OB - DB + open-ended roll total
@@ -76,9 +79,10 @@ damage = table damage at the damage lookup total
 
 The attacker rolls hit location. If no aimed location was declared for that attack phase, roll one
 closed `1d20`. If the attacker declared an aimed location, roll closed `1d20` twice and use the
-result whose selected body location is closest by table order. If both rolls are equally close, use the first
-roll. The proposal stores the aimed location, all hit-location rolls, the selected location, and why
-that selection was made.
+result whose selected body location is closest by table order. If both rolls are equally close, use
+the first roll. The `roll_hit_location` command stores the aimed location, all hit-location rolls, the
+selected location, and why that selection was made; the damage proposal consumes that stored result
+and will not create a proposal while location is missing.
 
 For grazing hits, the required roll is the final damage result. Weapon DMB, defender DM, and armor are
 used with reference hit lookup `12` to derive the grazing die size, then only the grazing roll total is
@@ -90,11 +94,20 @@ armor as not applied until exact hit-location-to-equipped-armor wiring is safe. 
 minimum damage are stored as table metadata when present, but critical effects remain a GM review note
 for now.
 
+If the damage lookup produces a critical grade, D1/D2 enters critical pending after the damage
+proposal is created. The attacker rolls `2d8`; the final critical roll is `2d8 + critical type
+modifier + armor critical modifier`. The critical type modifier comes from the combat critical
+modifier table. Armor critical modifier is currently `0` until live hit-location armor mapping is
+wired, and the GM may review or override the critical type modifier, armor critical modifier, final
+critical roll, and critical location. The stored critical roll is informational for now and does not
+create automated critical-effect rows.
+
 During D1/D2 review, the GM may record compact overrides without replacing the computed proposal.
-Review fields can override selected hit location, armor modifier, total damage, and critical grade;
-they can also carry notes and manual additional effect rows. Additional effect rows can be immediate
-modifier, fatigue, special, or note rows. Modifier rows use the existing General/Fatigue, OB/Skill,
-and DB/Parry live modifier groups; special and note rows are descriptive until the GM adds explicit
+Review fields can override selected hit location, armor modifier, total damage, critical grade,
+critical type modifier, armor critical modifier, final critical roll, and critical location; they can
+also carry notes and manual additional effect rows. Additional effect rows can be immediate modifier,
+fatigue, special, or note rows. Modifier rows use the existing General/Fatigue, OB/Skill, and
+DB/Parry live modifier groups; special and note rows are descriptive until the GM adds explicit
 modifier values. The effective damage preview is recalculated from the reviewed armor modifier and
 selected location where applicable. For grazing hits, changing armor can change the reviewed die size;
 if the original grazing roll no longer fits that die, the GM must enter a total damage override before
@@ -107,9 +120,8 @@ additional effect. The rows are source-linked to the command by deterministic ev
 GM review notes are carried into the commit description. Phase-one committed rows are part of the
 participant's live JSON-backed combatEffects state before phase two continues, so reviewed modifier
 rows affect phase-two combat values where the existing live modifier path supports them. Clear unwinds
-this in two visible steps: first removing only the committed rows and returning to the D1/D2 proposal
-with review overrides and additional effects intact, then removing the proposal and returning to
-pending damage review.
+this command stack in visible steps: commit first, then critical roll if one exists, then damage
+proposal, then hit-location roll, then parry/attack as normal.
 
 The intended final-damage sequencing remains:
 
@@ -119,4 +131,5 @@ The intended final-damage sequencing remains:
    the result closest to the target.
 4. Armor modifier from hit location plus the armor modifier table when a safe equipped-armor source is
    available.
-5. Final damage/effect proposal, manual immediate effect review, and GM commit.
+5. Critical roll when a critical grade is present.
+6. Final damage/effect proposal, manual immediate effect review, and GM commit.

@@ -13,6 +13,8 @@ import {
   type CombatRoundStep,
   characterBuildSchema,
   formatOpenEndedD20RollBreakdown,
+  getCombatRoundAttackResultById,
+  getCombatRoundDamageSubstate,
   getCombatRoundDisplayIncomingAttackResultForParticipantPhase,
   getCombatRoundOutgoingAttackResultForParticipantPhase,
   getCombatRoundPhaseResolutionResultForAttack,
@@ -82,6 +84,8 @@ import {
   loadScenarioParticipants,
   loadScenarioPlayerProjection,
   loadServerCharacterById,
+  rollCombatCriticalOnServer,
+  rollCombatHitLocationOnServer,
   rollCombatInitiativeOnServer,
   submitCombatDeclarationOnServer,
   type ServerCharacterRecord,
@@ -1012,6 +1016,48 @@ export default function ScenarioPlayerCombatPageContent({
     }
   }
 
+  async function rollAttackerPrivilegedCombatDie(kind: "critical" | "hitLocation") {
+    if (readOnlyInspection || !selectedParticipant || !encounterId) {
+      return;
+    }
+
+    const attackResultId = selectedAttackerPrivilegedResolution?.attackResultId;
+
+    if (!attackResultId) {
+      return;
+    }
+
+    setSavingCombatContext(true);
+
+    try {
+      const encounter =
+        kind === "hitLocation"
+          ? await rollCombatHitLocationOnServer({
+              attackResultId,
+              encounterId,
+              scenarioParticipantId: selectedParticipant.id,
+            })
+          : await rollCombatCriticalOnServer({
+              attackResultId,
+              encounterId,
+              scenarioParticipantId: selectedParticipant.id,
+            });
+
+      setEncounterSession(encounter);
+      setError(undefined);
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : kind === "hitLocation"
+            ? "Unable to roll hit location."
+            : "Unable to roll critical.",
+      );
+    } finally {
+      setSavingCombatContext(false);
+    }
+  }
+
   const combatLoadoutSummary = useMemo(
     () =>
       buildPlayerCombatLoadoutSummary({
@@ -1178,6 +1224,69 @@ export default function ScenarioPlayerCombatPageContent({
         resultLabel: selectedCurrentPhaseResolutionLines.proposalLine,
       }
     : null;
+  const selectedAttackerPrivilegedResolution =
+    combatRoundState && selectedRoundParticipant
+      ? combatRoundState.phaseResolutionResults.find(
+          (resolution) =>
+            resolution.attackerParticipantId === selectedRoundParticipant.participantId &&
+            ["location_pending", "location_rolled", "critical_pending", "critical_rolled"].includes(
+              getCombatRoundDamageSubstate(resolution),
+            ),
+        )
+      : undefined;
+  const selectedAttackerPrivilegedDamageSubstate = selectedAttackerPrivilegedResolution
+    ? getCombatRoundDamageSubstate(selectedAttackerPrivilegedResolution)
+    : undefined;
+  const selectedAttackerPrivilegedAttackResult =
+    combatRoundState && selectedAttackerPrivilegedResolution
+      ? getCombatRoundAttackResultById({
+          attackResultId: selectedAttackerPrivilegedResolution.attackResultId,
+          state: combatRoundState,
+        })
+      : undefined;
+  const selectedAttackerPrivilegedResolutionLines =
+    selectedAttackerPrivilegedAttackResult && selectedAttackerPrivilegedResolution
+      ? formatCombatPhaseResolutionResultLines({
+          attackResult: selectedAttackerPrivilegedAttackResult,
+          participantId: selectedRoundParticipant?.participantId,
+          resolution: selectedAttackerPrivilegedResolution,
+        })
+      : undefined;
+  const selectedAttackerPrivilegedResultPanel = selectedAttackerPrivilegedResolutionLines
+    ? {
+        interpretedResult: selectedAttackerPrivilegedResolutionLines.statusLine,
+        rankLabel: selectedAttackerPrivilegedResolutionLines.attackLine,
+        resultLabel: selectedAttackerPrivilegedResolutionLines.proposalLine,
+      }
+    : null;
+  const attackerPrivilegedAction =
+    !isGameMaster && selectedAttackerPrivilegedAttackResult
+      ? selectedAttackerPrivilegedDamageSubstate === "location_pending"
+        ? {
+            disabled: false,
+            kind: "hitLocation" as const,
+            label: "Roll hit location",
+          }
+        : selectedAttackerPrivilegedDamageSubstate === "critical_pending"
+          ? {
+              disabled: false,
+              kind: "critical" as const,
+              label: "Roll critical",
+            }
+          : selectedAttackerPrivilegedDamageSubstate === "location_rolled"
+            ? {
+                disabled: true,
+                kind: undefined,
+                label: "Hit location rolled",
+              }
+            : selectedAttackerPrivilegedDamageSubstate === "critical_rolled"
+              ? {
+                  disabled: true,
+                  kind: undefined,
+                  label: "Critical rolled",
+                }
+              : undefined
+      : undefined;
   const phase1InitiativeRanks = useMemo(
     () =>
       combatRoundState
@@ -1246,6 +1355,10 @@ export default function ScenarioPlayerCombatPageContent({
     disabled: declareActionDisabled,
     isGameMaster,
   });
+  const playerActionButtonLabel = attackerPrivilegedAction?.label ?? declarationButtonLabel;
+  const playerActionButtonDisabled = attackerPrivilegedAction
+    ? controlsDisabled || savingCombatContext || attackerPrivilegedAction.disabled
+    : declareActionDisabled;
   const selectedParticipantHasDeclared =
     selectedParticipantDeclaredThisRound ||
     selectedDeclarationStepStatus === "submitted" ||
@@ -1503,10 +1616,14 @@ export default function ScenarioPlayerCombatPageContent({
               rows={modifierRows}
             />
             <PlayerCombatActionButtonPanel
-              buttonLabel={declarationButtonLabel}
-              disabled={declareActionDisabled}
+              buttonLabel={playerActionButtonLabel}
+              disabled={playerActionButtonDisabled}
               onDeclareAction={() =>
-                void (currentInitiativePhase ? rollInitiative() : saveCombatContext())
+                void (attackerPrivilegedAction?.kind
+                  ? rollAttackerPrivilegedCombatDie(attackerPrivilegedAction.kind)
+                  : currentInitiativePhase
+                    ? rollInitiative()
+                    : saveCombatContext())
               }
               saving={savingCombatContext}
               statusText={declarationStatusText}
@@ -1520,6 +1637,7 @@ export default function ScenarioPlayerCombatPageContent({
                       rankLabel: selectedCurrentInitiativeRankLabel,
                     }
                   : selectedCurrentPhaseResolutionResultPanel ??
+                    selectedAttackerPrivilegedResultPanel ??
                     selectedCurrentAttackResultPanel ??
                     actionRollResult
               }

@@ -36,8 +36,10 @@ import {
   completeCombatRoundPhaseResolutionForParticipant,
   ensureCombatRoundPhaseResolutionResultsForPhase,
   formatOpenEndedD20RollBreakdown,
+  getCombatRoundDamageSubstate,
   getCombatRoundDisplayIncomingAttackResultForParticipantPhase,
   getCombatRoundDamageReviewStepForPhase,
+  getCombatRoundEffectiveCriticalRoll,
   getCombatRoundEffectiveDamageResult,
   getCombatRoundOutgoingAttackResultForParticipantPhase,
   getCombatRoundParticipantPhaseStepStatus,
@@ -53,7 +55,9 @@ import {
   hasScenarioParticipantCombatDeclarationForEncounterRound,
   initializeCombatRoundState,
   recordCombatRoundAttackResult,
+  recordCombatRoundCriticalRoll,
   recordCombatRoundDamageResult,
+  recordCombatRoundHitLocationRoll,
   reviewCombatRoundDamageResult,
   recordCombatRoundNoAttackPhaseReview,
   recordCombatRoundParryResult,
@@ -221,8 +225,12 @@ interface CombatDamageReviewAdditionalEffectDraft {
 
 interface CombatDamageReviewDraft {
   additionalEffects: CombatDamageReviewAdditionalEffectDraft[];
+  armorCriticalModifierOverride: string;
   armorModifierOverride: string;
   criticalGradeOverride: string;
+  criticalLocationOverride: string;
+  criticalTypeModifierOverride: string;
+  finalCriticalRollOverride: string;
   notes: string;
   selectedHitLocationOverride: string;
   totalDamageOverride: string;
@@ -598,6 +606,94 @@ function formatCombatArmorLine(
   return `Armor: ${source}${effectiveDamage.effectiveArmorModifier}`;
 }
 
+function formatHitLocationTargetLabel(
+  targetLocation: CombatRoundPhaseResolutionResult["hitLocationRoll"]["targetLocation"],
+): string {
+  return targetLocation && targetLocation !== "none"
+    ? getHitLocationFullLabel(targetLocation)
+    : "None";
+}
+
+function formatCombatLocationCalculationLine(
+  resolution: CombatRoundPhaseResolutionResult,
+): string {
+  const locationRoll = resolution.hitLocationRoll;
+
+  if (locationRoll.status !== "rolled") {
+    return "Hit location roll required";
+  }
+
+  const targetLabel = formatHitLocationTargetLabel(locationRoll.targetLocation);
+  const rollsLabel = locationRoll.hitLocationRolls.join(", ");
+  const selectedLabel = locationRoll.selectedHitLocation
+    ? getHitLocationFullLabel(locationRoll.selectedHitLocation)
+    : "Unknown";
+
+  return locationRoll.selectionReason === "targeted_closest"
+    ? `Target: ${targetLabel} · Rolls: ${rollsLabel} -> ${selectedLabel} selected`
+    : `Roll: ${rollsLabel}`;
+}
+
+function formatCombatLocationResultLine(
+  resolution: CombatRoundPhaseResolutionResult,
+): string {
+  const locationRoll = resolution.hitLocationRoll;
+
+  if (locationRoll.status !== "rolled" || !locationRoll.selectedHitLocation) {
+    return "Result: Pending";
+  }
+
+  return `Result: ${getHitLocationFullLabel(locationRoll.selectedHitLocation)}`;
+}
+
+function formatCombatCriticalCalculationLine(
+  resolution: CombatRoundPhaseResolutionResult,
+): string | undefined {
+  const criticalRoll = resolution.criticalRoll;
+  const effectiveCritical = getCombatRoundEffectiveCriticalRoll({
+    criticalRoll,
+    review: resolution.damageResult?.review,
+  });
+
+  if (criticalRoll.status === "not_required") {
+    return resolution.damageResult ? "No critical roll required" : undefined;
+  }
+
+  if (criticalRoll.status !== "rolled" || !criticalRoll.criticalDice) {
+    return "Critical roll required";
+  }
+
+  return `2d8 ${criticalRoll.criticalDice.join(" + ")} + type mod ${
+    effectiveCritical.criticalTypeModifier ?? criticalRoll.criticalTypeModifier ?? 0
+  } + armor crit mod ${
+    effectiveCritical.armorCriticalModifier ?? criticalRoll.armorCriticalModifier ?? 0
+  } = ${effectiveCritical.finalCriticalRoll ?? criticalRoll.finalCriticalRoll}`;
+}
+
+function formatCombatCriticalResultLine(
+  resolution: CombatRoundPhaseResolutionResult,
+): string | undefined {
+  const criticalRoll = resolution.criticalRoll;
+  const effectiveCritical = getCombatRoundEffectiveCriticalRoll({
+    criticalRoll,
+    review: resolution.damageResult?.review,
+  });
+
+  if (criticalRoll.status === "not_required") {
+    return resolution.damageResult ? "Result: No critical" : undefined;
+  }
+
+  if (criticalRoll.status !== "rolled") {
+    return "Result: Pending";
+  }
+
+  const location = effectiveCritical.criticalLocation
+    ? getHitLocationFullLabel(effectiveCritical.criticalLocation)
+    : "unknown location";
+
+  return `Result: critical roll ${effectiveCritical.finalCriticalRoll ?? criticalRoll.finalCriticalRoll} at ${location}`;
+}
+
 function formatCombatPhaseResolutionResultLines(input: {
   attackResult: CombatRoundAttackRollResult;
   participantId?: string;
@@ -619,9 +715,10 @@ function formatCombatPhaseResolutionResultLines(input: {
   const resolvedDamageResultLine = formatCombatDamageResultLine(damageResult);
   const resolvedHitLocationLine = formatCombatHitLocationLine(damageResult);
   const resolvedArmorLine = formatCombatArmorLine(damageResult);
-  const locationArmorLine = [resolvedHitLocationLine, resolvedArmorLine]
-    .filter((line): line is string => Boolean(line))
-    .join(" · ");
+  const locationCalculationLine = formatCombatLocationCalculationLine(input.resolution);
+  const locationResultLine = formatCombatLocationResultLine(input.resolution);
+  const criticalCalculationLine = formatCombatCriticalCalculationLine(input.resolution);
+  const criticalResultLine = formatCombatCriticalResultLine(input.resolution);
   const additionalEffectsLine = damageResult?.review?.additionalEffects?.length
     ? ` · Effects: ${damageResult.review.additionalEffects
         .map((effect) => effect.label)
@@ -670,15 +767,28 @@ function formatCombatPhaseResolutionResultLines(input: {
       title: "Parry",
     },
     {
+      calculationLines: [locationCalculationLine],
+      resultLine: locationResultLine,
+      title: "Location",
+    },
+    {
       calculationLines: [
         resolvedDamageLine ?? damageLine,
         resolvedDamageResultLine,
-        locationArmorLine || undefined,
+        resolvedArmorLine,
       ].filter((line): line is string => Boolean(line)),
       resultLine: damageResultLine,
       title: "Damage",
     },
   ];
+
+  if (criticalCalculationLine || criticalResultLine) {
+    sections.push({
+      calculationLines: [criticalCalculationLine].filter((line): line is string => Boolean(line)),
+      resultLine: criticalResultLine,
+      title: "Critical",
+    });
+  }
 
   return {
     attackLine: `${formatCombatAttackResultLine({
@@ -901,10 +1011,15 @@ function createCombatDamageReviewEffectDraft(
 
 function buildCombatDamageReviewDraft(
   damageResult?: CombatRoundDamageResult,
+  criticalRoll?: CombatRoundPhaseResolutionResult["criticalRoll"],
 ): CombatDamageReviewDraft {
   const effectiveDamage = damageResult
     ? getCombatRoundEffectiveDamageResult(damageResult)
     : undefined;
+  const effectiveCritical = getCombatRoundEffectiveCriticalRoll({
+    criticalRoll,
+    review: damageResult?.review,
+  });
 
   return {
     additionalEffects: (damageResult?.review?.additionalEffects ?? []).map((effect) => ({
@@ -917,8 +1032,12 @@ function buildCombatDamageReviewDraft(
       notes: effect.notes ?? "",
       phase: effect.phase ?? "",
     })),
+    armorCriticalModifierOverride: effectiveCritical.armorCriticalModifier?.toString() ?? "",
     armorModifierOverride: effectiveDamage?.effectiveArmorModifier.toString() ?? "",
     criticalGradeOverride: effectiveDamage?.effectiveCriticalGrade ?? "none",
+    criticalLocationOverride: effectiveCritical.criticalLocation ?? "",
+    criticalTypeModifierOverride: effectiveCritical.criticalTypeModifier?.toString() ?? "",
+    finalCriticalRollOverride: effectiveCritical.finalCriticalRoll?.toString() ?? "",
     notes: damageResult?.review?.notes ?? "",
     selectedHitLocationOverride: effectiveDamage?.effectiveSelectedHitLocation ?? "",
     totalDamageOverride: effectiveDamage?.effectiveTotalDamage.toString() ?? "",
@@ -953,17 +1072,29 @@ function getCombatDamageReviewEffectLabel(
 }
 
 function buildCombatDamageReviewFromDraft(input: {
+  criticalRoll?: CombatRoundPhaseResolutionResult["criticalRoll"];
   damageResult: CombatRoundDamageResult;
   draft: CombatDamageReviewDraft;
 }): Omit<CombatRoundDamageReview, "reviewedAt" | "reviewedByUserId"> {
   const effectiveDamage = getCombatRoundEffectiveDamageResult(input.damageResult);
+  const effectiveCritical = getCombatRoundEffectiveCriticalRoll({
+    criticalRoll: input.criticalRoll,
+    review: input.damageResult.review,
+  });
   const selectedHitLocationValue = HIT_LOCATIONS.find(
     (location) => location === input.draft.selectedHitLocationOverride,
+  );
+  const criticalLocationValue = HIT_LOCATIONS.find(
+    (location) => location === input.draft.criticalLocationOverride,
   );
   const selectedHitLocationOverride =
     selectedHitLocationValue &&
     selectedHitLocationValue !== effectiveDamage.computedSelectedHitLocation
       ? selectedHitLocationValue
+      : undefined;
+  const criticalLocationOverride =
+    criticalLocationValue && criticalLocationValue !== effectiveCritical.criticalLocation
+      ? criticalLocationValue
       : undefined;
   const selectedCriticalGrade =
     input.draft.criticalGradeOverride === "none"
@@ -980,6 +1111,32 @@ function buildCombatDamageReviewFromDraft(input: {
   const armorModifierOverride =
     armorModifier !== undefined && armorModifier !== effectiveDamage.computedArmorModifier
       ? armorModifier
+      : undefined;
+  const armorCriticalModifier = parseOptionalCombatReviewInteger(
+    input.draft.armorCriticalModifierOverride,
+    "Armor critical modifier override",
+  );
+  const armorCriticalModifierOverride =
+    armorCriticalModifier !== undefined &&
+    armorCriticalModifier !== effectiveCritical.armorCriticalModifier
+      ? armorCriticalModifier
+      : undefined;
+  const criticalTypeModifier = parseOptionalCombatReviewInteger(
+    input.draft.criticalTypeModifierOverride,
+    "Critical type modifier override",
+  );
+  const criticalTypeModifierOverride =
+    criticalTypeModifier !== undefined &&
+    criticalTypeModifier !== effectiveCritical.criticalTypeModifier
+      ? criticalTypeModifier
+      : undefined;
+  const finalCriticalRoll = parseOptionalCombatReviewInteger(
+    input.draft.finalCriticalRollOverride,
+    "Final critical roll override",
+  );
+  const finalCriticalRollOverride =
+    finalCriticalRoll !== undefined && finalCriticalRoll !== effectiveCritical.finalCriticalRoll
+      ? finalCriticalRoll
       : undefined;
   const notes = input.draft.notes.trim();
   const additionalEffects = input.draft.additionalEffects.map((effect) => {
@@ -1024,8 +1181,24 @@ function buildCombatDamageReviewFromDraft(input: {
     reviewWithoutTotalDamageOverride.armorModifierOverride = armorModifierOverride;
   }
 
+  if (armorCriticalModifierOverride !== undefined) {
+    reviewWithoutTotalDamageOverride.armorCriticalModifierOverride = armorCriticalModifierOverride;
+  }
+
   if (criticalGradeOverride !== undefined) {
     reviewWithoutTotalDamageOverride.criticalGradeOverride = criticalGradeOverride;
+  }
+
+  if (criticalLocationOverride !== undefined) {
+    reviewWithoutTotalDamageOverride.criticalLocationOverride = criticalLocationOverride;
+  }
+
+  if (criticalTypeModifierOverride !== undefined) {
+    reviewWithoutTotalDamageOverride.criticalTypeModifierOverride = criticalTypeModifierOverride;
+  }
+
+  if (finalCriticalRollOverride !== undefined) {
+    reviewWithoutTotalDamageOverride.finalCriticalRollOverride = finalCriticalRollOverride;
   }
 
   if (selectedHitLocationOverride !== undefined) {
@@ -1052,8 +1225,24 @@ function buildCombatDamageReviewFromDraft(input: {
     review.armorModifierOverride = armorModifierOverride;
   }
 
+  if (armorCriticalModifierOverride !== undefined) {
+    review.armorCriticalModifierOverride = armorCriticalModifierOverride;
+  }
+
   if (criticalGradeOverride !== undefined) {
     review.criticalGradeOverride = criticalGradeOverride;
+  }
+
+  if (criticalLocationOverride !== undefined) {
+    review.criticalLocationOverride = criticalLocationOverride;
+  }
+
+  if (criticalTypeModifierOverride !== undefined) {
+    review.criticalTypeModifierOverride = criticalTypeModifierOverride;
+  }
+
+  if (finalCriticalRollOverride !== undefined) {
+    review.finalCriticalRollOverride = finalCriticalRollOverride;
   }
 
   if (notes) {
@@ -1486,6 +1675,81 @@ function CombatDamageReviewPanel(input: {
               </option>
             ))}
           </select>
+        </label>
+        <label style={{ display: "grid", gap: "0.2rem" }}>
+          <span style={{ color: "#5e5a50", fontSize: "0.8rem", fontWeight: 700 }}>
+            Critical location
+          </span>
+          <select
+            disabled={disabled}
+            onChange={(event) =>
+              input.onDraftChange({
+                ...input.draft,
+                criticalLocationOverride: event.target.value,
+              })
+            }
+            value={input.draft.criticalLocationOverride}
+          >
+            {input.draft.criticalLocationOverride ? null : (
+              <option value="">Not recorded</option>
+            )}
+            {HIT_LOCATIONS.map((location) => (
+              <option key={location} value={location}>
+                {getHitLocationFullLabel(location)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label style={{ display: "grid", gap: "0.2rem" }}>
+          <span style={{ color: "#5e5a50", fontSize: "0.8rem", fontWeight: 700 }}>
+            Critical type mod
+          </span>
+          <input
+            disabled={disabled}
+            inputMode="numeric"
+            onChange={(event) =>
+              input.onDraftChange({
+                ...input.draft,
+                criticalTypeModifierOverride: event.target.value,
+              })
+            }
+            type="text"
+            value={input.draft.criticalTypeModifierOverride}
+          />
+        </label>
+        <label style={{ display: "grid", gap: "0.2rem" }}>
+          <span style={{ color: "#5e5a50", fontSize: "0.8rem", fontWeight: 700 }}>
+            Armor critical
+          </span>
+          <input
+            disabled={disabled}
+            inputMode="numeric"
+            onChange={(event) =>
+              input.onDraftChange({
+                ...input.draft,
+                armorCriticalModifierOverride: event.target.value,
+              })
+            }
+            type="text"
+            value={input.draft.armorCriticalModifierOverride}
+          />
+        </label>
+        <label style={{ display: "grid", gap: "0.2rem" }}>
+          <span style={{ color: "#5e5a50", fontSize: "0.8rem", fontWeight: 700 }}>
+            Critical roll
+          </span>
+          <input
+            disabled={disabled}
+            inputMode="numeric"
+            onChange={(event) =>
+              input.onDraftChange({
+                ...input.draft,
+                finalCriticalRollOverride: event.target.value,
+              })
+            }
+            type="text"
+            value={input.draft.finalCriticalRollOverride}
+          />
         </label>
       </div>
       <label style={{ display: "grid", gap: "0.2rem" }}>
@@ -2181,6 +2445,10 @@ export default function CombatRoundManagerPanel({
       inspectorResolutionAttackResult?.defenderParticipantId &&
     inspectorParryBase !== undefined &&
     !inspectorSnapshot;
+  const inspectorDamageSubstate =
+    inspectorResolutionStepKind === "damage"
+      ? getCombatRoundDamageSubstate(inspectorDisplayPhaseResolutionResult)
+      : undefined;
   const inspectorDamageProposalReady =
     inspectorResolutionStepKind === "damage" &&
     Boolean(inspectorDisplayPhaseResolutionResult?.damageResult) &&
@@ -2193,7 +2461,10 @@ export default function CombatRoundManagerPanel({
   const inspectorDamageReviewDraft =
     inspectorDamageReviewKey && damageReviewDrafts[inspectorDamageReviewKey]
       ? damageReviewDrafts[inspectorDamageReviewKey]
-      : buildCombatDamageReviewDraft(inspectorDisplayPhaseResolutionResult?.damageResult);
+      : buildCombatDamageReviewDraft(
+          inspectorDisplayPhaseResolutionResult?.damageResult,
+          inspectorDisplayPhaseResolutionResult?.criticalRoll,
+        );
   const inspectorIsCursorParticipant =
     Boolean(inspectorPhaseResolutionCursor) &&
     inspectorPhaseResolutionCursor?.participantId === inspector.participant?.participantId;
@@ -2229,6 +2500,12 @@ export default function CombatRoundManagerPanel({
     ? "Attack already rolled"
     : inspectorDamageCommitted
       ? "Phase damage committed"
+      : inspectorDamageSubstate === "critical_pending"
+        ? "Roll critical"
+      : inspectorDamageSubstate === "location_pending"
+        ? "Roll hit location"
+      : inspectorDamageSubstate === "location_rolled"
+        ? "Resolve damage"
       : inspectorDamageProposalReady
         ? "Commit phase damage"
       : inspectorCanRollParry
@@ -2252,7 +2529,6 @@ export default function CombatRoundManagerPanel({
   const inspectorActionResult = inspectorPhaseResolutionLines
     ? {
         detailLines: [
-          inspectorPhaseResolutionLines.locationLine,
           inspectorPhaseResolutionLines.armorLine,
         ].filter((line): line is string => Boolean(line)),
         interpretedResult: inspectorPhaseResolutionLines.statusLine,
@@ -3348,6 +3624,7 @@ export default function CombatRoundManagerPanel({
     return reviewCombatRoundDamageResult({
       attackResultId: damageResult.attackResultId,
       review: buildCombatDamageReviewFromDraft({
+        criticalRoll: inspectorDisplayPhaseResolutionResult?.criticalRoll,
         damageResult,
         draft: inspectorDamageReviewDraft,
       }),
@@ -3411,8 +3688,81 @@ export default function CombatRoundManagerPanel({
           attackResult: damageReviewAttackResult,
           state: roundState,
         });
+        const damageSubstate = getCombatRoundDamageSubstate(existingDamageResolution);
+        const attackerRoundParticipant = roundState.participants.find(
+          (participant) =>
+            participant.participantId === damageReviewAttackResult.attackerParticipantId,
+        );
 
-        if (
+        if (damageSubstate === "location_pending") {
+          nextRoundState = recordCombatRoundHitLocationRoll({
+            attackResult: damageReviewAttackResult,
+            command: {
+              createdAt: updatedAt,
+            },
+            rolledByParticipantId: damageReviewAttackResult.attackerParticipantId,
+            state: roundState,
+            submittedBy: "gm",
+            targetLocation:
+              attackerRoundParticipant?.declaration?.phaseContexts?.[phase]?.targetLocation,
+            updatedAt,
+          });
+        } else if (damageSubstate === "location_rolled") {
+          const phaseLabel = formatCombatPhaseLabel(phase);
+          const attackerEncounterParticipant = encounter.participants.find(
+            (participant) => participant.id === damageReviewAttackResult.attackerParticipantId,
+          );
+          const attackerScenarioParticipant = attackerEncounterParticipant
+            ? findScenarioParticipantForEncounterParticipant({
+                encounterParticipant: attackerEncounterParticipant,
+                scenarioParticipants: effectiveScenarioParticipants,
+              })
+            : undefined;
+          const attackerPhaseSummary = buildScenarioParticipantPhaseSummary({
+            declaration: attackerRoundParticipant?.declaration,
+            phaseKey: phase,
+            scenarioParticipant: attackerScenarioParticipant,
+          });
+          const attackStats = attackerPhaseSummary.attackStats;
+          const defenseStats = inspectorParryDefenderPhaseSummary?.defenseStats;
+
+          if (!attackStats) {
+            setSaveError(`${phaseLabel} attack DMB is not available.`);
+            return;
+          }
+
+          if (!defenseStats) {
+            setSaveError(`${phaseLabel} defender DM is not available.`);
+            return;
+          }
+
+          const dmb = parseCombatInteger(attackStats.dmb, `${phaseLabel} DMB`);
+          const defenderDm = parseCombatInteger(defenseStats.dm, `${phaseLabel} defender DM`);
+
+          nextRoundState = recordCombatRoundDamageResult({
+            attackResult: damageReviewAttackResult,
+            command: {
+              createdAt: updatedAt,
+            },
+            armorModifier: 0,
+            defenderDm,
+            dmb,
+            state: roundState,
+            submittedBy: "gm",
+            updatedAt,
+          });
+        } else if (damageSubstate === "critical_pending") {
+          nextRoundState = recordCombatRoundCriticalRoll({
+            attackResult: damageReviewAttackResult,
+            command: {
+              createdAt: updatedAt,
+            },
+            rolledByParticipantId: damageReviewAttackResult.attackerParticipantId,
+            state: roundState,
+            submittedBy: "gm",
+            updatedAt,
+          });
+        } else if (
           existingDamageResolution?.damageResult &&
           existingDamageResolution.damageProposal.status !== "committed"
         ) {
@@ -3485,57 +3835,10 @@ export default function CombatRoundManagerPanel({
           await persistRoundState(committed.state);
           setSaveError(undefined);
           return;
-        }
-
-        const phaseLabel = formatCombatPhaseLabel(phase);
-        const attackerRoundParticipant = roundState.participants.find(
-          (participant) =>
-            participant.participantId === damageReviewAttackResult.attackerParticipantId,
-        );
-        const attackerEncounterParticipant = encounter.participants.find(
-          (participant) => participant.id === damageReviewAttackResult.attackerParticipantId,
-        );
-        const attackerScenarioParticipant = attackerEncounterParticipant
-          ? findScenarioParticipantForEncounterParticipant({
-              encounterParticipant: attackerEncounterParticipant,
-              scenarioParticipants: effectiveScenarioParticipants,
-            })
-          : undefined;
-        const attackerPhaseSummary = buildScenarioParticipantPhaseSummary({
-          declaration: attackerRoundParticipant?.declaration,
-          phaseKey: phase,
-          scenarioParticipant: attackerScenarioParticipant,
-        });
-        const attackStats = attackerPhaseSummary.attackStats;
-        const defenseStats = inspectorParryDefenderPhaseSummary?.defenseStats;
-
-        if (!attackStats) {
-          setSaveError(`${phaseLabel} attack DMB is not available.`);
+        } else {
+          setSaveError("Hit location roll required.");
           return;
         }
-
-        if (!defenseStats) {
-          setSaveError(`${phaseLabel} defender DM is not available.`);
-          return;
-        }
-
-        const dmb = parseCombatInteger(attackStats.dmb, `${phaseLabel} DMB`);
-        const defenderDm = parseCombatInteger(defenseStats.dm, `${phaseLabel} defender DM`);
-
-        nextRoundState = recordCombatRoundDamageResult({
-          attackResult: damageReviewAttackResult,
-          command: {
-            createdAt: updatedAt,
-          },
-          armorModifier: 0,
-          defenderDm,
-          dmb,
-          state: roundState,
-          submittedBy: "gm",
-          targetLocation:
-            attackerRoundParticipant?.declaration?.phaseContexts?.[phase]?.targetLocation,
-          updatedAt,
-        });
       } else {
         nextRoundState = advanceCombatRoundPhaseResolutionSubstepForParticipant({
           participantId: ownerParticipantId,

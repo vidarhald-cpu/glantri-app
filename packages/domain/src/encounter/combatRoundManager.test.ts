@@ -35,6 +35,7 @@ import {
   getCombatRoundResolutionPhaseForStep,
   getCombatRoundStepSnapshot,
   getCombatRoundEffectiveDamageResult,
+  getCombatRoundDamageSubstate,
   getPreviousCombatRoundStep,
   initializeCombatRoundState,
   ensureCombatRoundPhaseResolutionResultsForPhase,
@@ -43,6 +44,8 @@ import {
   recordCombatRoundAttackResult,
   recordCombatRoundDamageReviewPlaceholder,
   recordCombatRoundDamageResult,
+  recordCombatRoundHitLocationRoll,
+  recordCombatRoundCriticalRoll,
   reviewCombatRoundDamageResult,
   recordCombatRoundInitiative,
   recordCombatRoundNoAttackPhaseReview,
@@ -148,6 +151,47 @@ function declareRoundAction(input: {
   });
 }
 
+function fixedChestLocationSelection() {
+  return {
+    hitLocationRolls: [12],
+    hitLocationSelectionReason: "single_roll" as const,
+    selectedHitLocation: "chest" as const,
+    selectedHitLocationRoll: 12,
+  };
+}
+
+function recordTestHitLocation(input: {
+  attackResult: ReturnType<typeof buildCombatRoundAttackRollResult>;
+  command?: {
+    createdAt?: string;
+    createdByUserId?: string;
+  };
+  hitLocationRolls?: number[];
+  rolledByParticipantId?: string;
+  state: ReturnType<typeof initializeCombatRoundState>;
+  targetLocation?: "none" | "head" | "rightArm" | "leftArm" | "chest" | "abdomen" | "rightLeg" | "leftLeg";
+  updatedAt?: string;
+}): ReturnType<typeof initializeCombatRoundState> {
+  const updatedAt = input.updatedAt ?? input.command?.createdAt ?? "2026-01-01T00:04:30.000Z";
+
+  return recordCombatRoundHitLocationRoll({
+    attackResult: input.attackResult,
+    command: input.command
+      ? {
+          createdAt: input.command.createdAt ?? updatedAt,
+          createdByUserId: input.command.createdByUserId,
+        }
+      : undefined,
+    hitLocationRolls: input.hitLocationRolls ?? [12],
+    rolledByParticipantId:
+      input.rolledByParticipantId ?? input.attackResult.attackerParticipantId,
+    state: input.state,
+    submittedBy: "gm",
+    targetLocation: input.targetLocation,
+    updatedAt,
+  });
+}
+
 function preparePhaseResolutionState(input: {
   guardAlreadyDone?: boolean;
   guardActionId: string;
@@ -189,6 +233,83 @@ function preparePhaseResolutionState(input: {
         updatedAt: "2026-01-01T00:02:30.000Z",
       })
     : withCursor;
+}
+
+function prepareFailedParryPendingDamage(input: {
+  actionId?: string;
+  defenderDb?: number;
+  ob?: number;
+  phase?: "phase1" | "phase2";
+  rollD20?: number;
+}): {
+  attackResult: ReturnType<typeof buildCombatRoundAttackRollResult>;
+  state: ReturnType<typeof initializeCombatRoundState>;
+} {
+  const phase = input.phase ?? "phase1";
+  const actionId = input.actionId ?? "attack_parry";
+  const state = initializeCombatRoundPhaseResolutionCursor({
+    phase,
+    state: setCombatRoundParticipantInitiative({
+      initiative: { baseInitiative: 0, modifierAdjustment: 0, rolls: [6], rollTotal: 6, total: 6 },
+      participantId: "gladiator",
+      phase,
+      state: declareRoundAction({
+        actionId,
+        participantId: "gladiator",
+        state: initializeCombatRoundState({ encounter: encounter() }),
+      }),
+    }),
+    updatedAt: "2026-01-01T00:02:00.000Z",
+  });
+  const attackResult = buildCombatRoundAttackRollResult({
+    actionId,
+    attackerParticipantId: "gladiator",
+    defenderDb: input.defenderDb ?? 10,
+    defenderParticipantId: "guard",
+    ob: input.ob ?? 10,
+    phase,
+    rollD20: input.rollD20 ?? 14,
+    rollTotal: input.rollD20 ?? 14,
+    rolledAt: "2026-01-01T00:03:00.000Z",
+    weaponName: "Broad sword",
+  });
+  const afterAttack = recordCombatRoundAttackResult({
+    command: {
+      createdAt: attackResult.rolledAt,
+      createdByUserId: "gm-1",
+    },
+    participantId: "gladiator",
+    result: attackResult,
+    state,
+    submittedBy: "gm",
+  });
+  const afterParry = recordCombatRoundParryResult({
+    attackResult,
+    command: {
+      createdAt: "2026-01-01T00:04:00.000Z",
+      createdByUserId: "gm-1",
+    },
+    parryResolution: {
+      combinedParryScore: 9,
+      modifierAdjustment: 0,
+      openEndedD10s: [],
+      resultLabel: "Parry failed",
+      rollD20: 8,
+      rollTotal: 8,
+      status: "resolved",
+      success: false,
+      targetNumber: 21,
+      total: 17,
+    },
+    state: afterAttack,
+    submittedBy: "gm",
+    updatedAt: "2026-01-01T00:04:00.000Z",
+  });
+
+  return {
+    attackResult,
+    state: afterParry,
+  };
 }
 
 function commitFailedParryDamage(input: {
@@ -240,6 +361,18 @@ function commitFailedParryDamage(input: {
     submittedBy: "gm",
     updatedAt: "2026-01-01T00:04:00.000Z",
   });
+  const afterLocation = recordCombatRoundHitLocationRoll({
+    attackResult: result,
+    command: {
+      createdAt: "2026-01-01T00:04:30.000Z",
+      createdByUserId: "gm-1",
+    },
+    hitLocationRolls: [12],
+    rolledByParticipantId: "gladiator",
+    state: afterParry,
+    submittedBy: "gm",
+    updatedAt: "2026-01-01T00:04:30.000Z",
+  });
   const afterDamage = recordCombatRoundDamageResult({
     attackResult: result,
     command: {
@@ -248,9 +381,21 @@ function commitFailedParryDamage(input: {
     },
     defenderDm: 0,
     dmb: 8,
-    state: afterParry,
+    state: afterLocation,
     submittedBy: "gm",
     updatedAt: "2026-01-01T00:05:00.000Z",
+  });
+  const afterCritical = recordCombatRoundCriticalRoll({
+    attackResult: result,
+    command: {
+      createdAt: "2026-01-01T00:05:30.000Z",
+      createdByUserId: "gm-1",
+    },
+    criticalDice: [4, 5],
+    rolledByParticipantId: "gladiator",
+    state: afterDamage,
+    submittedBy: "gm",
+    updatedAt: "2026-01-01T00:05:30.000Z",
   });
 
   return commitCombatRoundPhaseDamage({
@@ -262,7 +407,7 @@ function commitFailedParryDamage(input: {
     defenderScenarioParticipantId: "scenario-guard",
     encounterId: "encounter-1",
     scenarioId: "scenario-1",
-    state: afterDamage,
+    state: afterCritical,
   });
 }
 
@@ -3190,6 +3335,14 @@ describe("combat round manager", () => {
       submittedBy: "gm",
       updatedAt: "2026-01-01T00:04:00.000Z",
     });
+    const afterLocation = recordTestHitLocation({
+      attackResult: result,
+      command: {
+        createdAt: "2026-01-01T00:04:30.000Z",
+        createdByUserId: "gm-1",
+      },
+      state: afterParry,
+    });
     const afterDamage = recordCombatRoundDamageResult({
       attackResult: result,
       command: {
@@ -3198,7 +3351,7 @@ describe("combat round manager", () => {
       },
       defenderDm: 0,
       dmb: 8,
-      state: afterParry,
+      state: afterLocation,
       submittedBy: "gm",
       updatedAt: "2026-01-01T00:05:00.000Z",
     });
@@ -3267,7 +3420,7 @@ describe("combat round manager", () => {
     ).toBe("ready");
     expect(cleared.commands.at(-1)).toMatchObject({
       participantId: "guard",
-      type: "roll_parry",
+      type: "roll_hit_location",
     });
     expect(cleared.currentCursor).toEqual({
       participantId: "guard",
@@ -3284,6 +3437,7 @@ describe("combat round manager", () => {
     });
     expect(cleared.phaseResolutionResults[0]?.damageResult).toBeUndefined();
     expect(cleared.phaseResolutionResults[0]?.damageRoll.status).toBe("pending");
+    expect(cleared.phaseResolutionResults[0]?.hitLocationRoll.status).toBe("rolled");
     expect(cleared.phaseResolutionResults[0]?.damageProposal.proposedEffects).toEqual([]);
   });
 
@@ -3333,6 +3487,14 @@ describe("combat round manager", () => {
       submittedBy: "gm",
       updatedAt: "2026-01-01T00:04:00.000Z",
     });
+    const afterLocation = recordTestHitLocation({
+      attackResult: result,
+      command: {
+        createdAt: "2026-01-01T00:04:30.000Z",
+        createdByUserId: "gm-1",
+      },
+      state: afterParry,
+    });
 
     const afterDamage = recordCombatRoundDamageResult({
       attackResult: result,
@@ -3342,7 +3504,7 @@ describe("combat round manager", () => {
       },
       defenderDm: 0,
       dmb: 8,
-      state: afterParry,
+      state: afterLocation,
       submittedBy: "gm",
       updatedAt: "2026-01-01T00:05:00.000Z",
     });
@@ -3367,6 +3529,187 @@ describe("combat round manager", () => {
     });
   });
 
+  it("records one-roll and targeted two-roll hit-location commands", () => {
+    const pending = prepareFailedParryPendingDamage({});
+    const afterSingleLocation = recordCombatRoundHitLocationRoll({
+      attackResult: pending.attackResult,
+      command: {
+        createdAt: "2026-01-01T00:04:30.000Z",
+        createdByUserId: "gm-1",
+      },
+      hitLocationRolls: [12],
+      rolledByParticipantId: "gladiator",
+      state: pending.state,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:04:30.000Z",
+    });
+    const targetedPending = prepareFailedParryPendingDamage({});
+    const afterTargetedLocation = recordCombatRoundHitLocationRoll({
+      attackResult: targetedPending.attackResult,
+      command: {
+        createdAt: "2026-01-01T00:04:30.000Z",
+        createdByUserId: "gm-1",
+      },
+      hitLocationRolls: [7, 14],
+      rolledByParticipantId: "gladiator",
+      state: targetedPending.state,
+      submittedBy: "gm",
+      targetLocation: "head",
+      updatedAt: "2026-01-01T00:04:30.000Z",
+    });
+
+    expect(afterSingleLocation.phaseResolutionResults[0]?.hitLocationRoll).toMatchObject({
+      hitLocationRolls: [12],
+      rolledByParticipantId: "gladiator",
+      rollPrivilege: "attacker",
+      selectedHitLocation: "chest",
+      selectedHitLocationRoll: 12,
+      selectionReason: "single_roll",
+      status: "rolled",
+    });
+    expect(afterSingleLocation.commands.at(-1)).toMatchObject({
+      facts: expect.objectContaining({
+        hitLocationRolls: [12],
+        rolledByParticipantId: "gladiator",
+        rollPrivilege: "attacker",
+        selectedHitLocation: "chest",
+      }),
+      participantId: "guard",
+      step: "D1",
+      type: "roll_hit_location",
+    });
+    expect(afterTargetedLocation.phaseResolutionResults[0]?.hitLocationRoll).toMatchObject({
+      hitLocationRolls: [7, 14],
+      selectedHitLocation: "chest",
+      selectedHitLocationRoll: 14,
+      selectionReason: "targeted_closest",
+      targetLocation: "head",
+    });
+  });
+
+  it("requires location before damage and tracks critical substates", () => {
+    const pending = prepareFailedParryPendingDamage({});
+
+    expect(() =>
+      recordCombatRoundDamageResult({
+        attackResult: pending.attackResult,
+        command: {
+          createdAt: "2026-01-01T00:05:00.000Z",
+          createdByUserId: "gm-1",
+        },
+        defenderDm: 0,
+        dmb: 8,
+        state: pending.state,
+        submittedBy: "gm",
+        updatedAt: "2026-01-01T00:05:00.000Z",
+      }),
+    ).toThrow("Hit location roll required before resolving damage.");
+
+    const afterLocation = recordTestHitLocation({
+      attackResult: pending.attackResult,
+      command: {
+        createdAt: "2026-01-01T00:04:30.000Z",
+        createdByUserId: "gm-1",
+      },
+      state: pending.state,
+    });
+    const afterDamage = recordCombatRoundDamageResult({
+      attackResult: pending.attackResult,
+      command: {
+        createdAt: "2026-01-01T00:05:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      defenderDm: 0,
+      dmb: 8,
+      state: afterLocation,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:05:00.000Z",
+    });
+
+    expect(getCombatRoundDamageSubstate(afterLocation.phaseResolutionResults[0])).toBe(
+      "location_rolled",
+    );
+    expect(afterDamage.phaseResolutionResults[0]?.criticalRoll.status).toBe("pending");
+    expect(getCombatRoundDamageSubstate(afterDamage.phaseResolutionResults[0])).toBe(
+      "critical_pending",
+    );
+  });
+
+  it("records and unwinds critical rolls before damage and location", () => {
+    const pending = prepareFailedParryPendingDamage({});
+    const afterLocation = recordTestHitLocation({
+      attackResult: pending.attackResult,
+      command: {
+        createdAt: "2026-01-01T00:04:30.000Z",
+        createdByUserId: "gm-1",
+      },
+      state: pending.state,
+    });
+    const afterDamage = recordCombatRoundDamageResult({
+      attackResult: pending.attackResult,
+      command: {
+        createdAt: "2026-01-01T00:05:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      defenderDm: 0,
+      dmb: 8,
+      state: afterLocation,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:05:00.000Z",
+    });
+    const afterCritical = recordCombatRoundCriticalRoll({
+      attackResult: pending.attackResult,
+      command: {
+        createdAt: "2026-01-01T00:05:30.000Z",
+        createdByUserId: "gm-1",
+      },
+      criticalDice: [4, 5],
+      rolledByParticipantId: "gladiator",
+      state: afterDamage,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:05:30.000Z",
+    });
+    const afterCriticalUndo = clearCombatRoundStep({
+      state: afterCritical,
+      step: "phase_1_damage",
+    });
+    const afterDamageUndo = clearCombatRoundStep({
+      state: afterCriticalUndo,
+      step: "phase_1_damage",
+    });
+    const afterLocationUndo = clearCombatRoundStep({
+      state: afterDamageUndo,
+      step: "phase_1_damage",
+    });
+
+    expect(afterCritical.phaseResolutionResults[0]?.criticalRoll).toMatchObject({
+      armorCriticalModifier: 0,
+      criticalDice: [4, 5],
+      criticalDiceTotal: 9,
+      criticalGrade: "b",
+      criticalTypeModifier: -4,
+      finalCriticalRoll: 5,
+      rolledByParticipantId: "gladiator",
+      rollPrivilege: "attacker",
+      selectedHitLocation: "chest",
+      status: "rolled",
+    });
+    expect(afterCritical.commands.at(-1)).toMatchObject({
+      facts: expect.objectContaining({
+        criticalDice: [4, 5],
+        finalCriticalRoll: 5,
+        rollPrivilege: "attacker",
+      }),
+      type: "roll_critical",
+    });
+    expect(afterCriticalUndo.phaseResolutionResults[0]?.criticalRoll.status).toBe("pending");
+    expect(afterCriticalUndo.phaseResolutionResults[0]?.damageResult).toBeDefined();
+    expect(afterDamageUndo.phaseResolutionResults[0]?.criticalRoll.status).toBe("not_required");
+    expect(afterDamageUndo.phaseResolutionResults[0]?.damageResult).toBeUndefined();
+    expect(afterDamageUndo.phaseResolutionResults[0]?.hitLocationRoll.status).toBe("rolled");
+    expect(afterLocationUndo.phaseResolutionResults[0]?.hitLocationRoll.status).toBe("pending");
+  });
+
   it("uses a second table lookup for normal hit damage", () => {
     const result = buildCombatRoundAttackRollResult({
       actionId: "attack_parry",
@@ -3386,7 +3729,11 @@ describe("combat round manager", () => {
       createdAt: "2026-01-01T00:05:00.000Z",
       defenderDm: 0,
       dmb: 8,
-      hitLocationRolls: [14],
+      hitLocationSelection: {
+        ...fixedChestLocationSelection(),
+        hitLocationRolls: [14],
+        selectedHitLocationRoll: 14,
+      },
       roundNumber: 3,
     });
     const armoredDamage = buildCombatRoundDamageResult({
@@ -3401,9 +3748,14 @@ describe("combat round manager", () => {
       createdAt: "2026-01-01T00:05:00.000Z",
       defenderDm: 0,
       dmb: 8,
-      hitLocationRolls: [19, 4],
+      hitLocationSelection: {
+        hitLocationRolls: [19, 4],
+        hitLocationSelectionReason: "targeted_closest",
+        selectedHitLocation: "head",
+        selectedHitLocationRoll: 19,
+        targetLocation: "head",
+      },
       roundNumber: 3,
-      targetLocation: "head",
     });
     const noDmbDamage = buildCombatRoundDamageResult({
       armorModifier: 0,
@@ -3411,6 +3763,7 @@ describe("combat round manager", () => {
       createdAt: "2026-01-01T00:05:00.000Z",
       defenderDm: 0,
       dmb: 0,
+      hitLocationSelection: fixedChestLocationSelection(),
       roundNumber: 3,
     });
     const continuedDamage = buildCombatRoundDamageResult({
@@ -3419,6 +3772,7 @@ describe("combat round manager", () => {
       createdAt: "2026-01-01T00:05:00.000Z",
       defenderDm: 0,
       dmb: 21,
+      hitLocationSelection: fixedChestLocationSelection(),
       roundNumber: 3,
     });
 
@@ -3498,7 +3852,11 @@ describe("combat round manager", () => {
       createdAt: "2026-01-01T00:05:00.000Z",
       defenderDm: 0,
       dmb: 8,
-      hitLocationRolls: [14],
+      hitLocationSelection: {
+        ...fixedChestLocationSelection(),
+        hitLocationRolls: [14],
+        selectedHitLocationRoll: 14,
+      },
       roundNumber: 3,
     });
     const reviewedDamageResult = {
@@ -3590,6 +3948,15 @@ describe("combat round manager", () => {
       submittedBy: "gm",
       updatedAt: "2026-01-01T00:04:00.000Z",
     });
+    const afterLocation = recordTestHitLocation({
+      attackResult: result,
+      command: {
+        createdAt: "2026-01-01T00:04:30.000Z",
+        createdByUserId: "gm-1",
+      },
+      hitLocationRolls: [1],
+      state: afterParry,
+    });
     const afterDamage = recordCombatRoundDamageResult({
       attackResult: result,
       command: {
@@ -3599,7 +3966,7 @@ describe("combat round manager", () => {
       defenderDm: 0,
       dmb: 8,
       rng: () => 0,
-      state: afterParry,
+      state: afterLocation,
       submittedBy: "gm",
       updatedAt: "2026-01-01T00:05:00.000Z",
     });
@@ -3650,6 +4017,7 @@ describe("combat round manager", () => {
     });
     expect(cleared.phaseResolutionResults[0]?.damageResult).toBeUndefined();
     expect(cleared.phaseResolutionResults[0]?.damageRoll.status).toBe("pending");
+    expect(cleared.phaseResolutionResults[0]?.hitLocationRoll.status).toBe("rolled");
   });
 
   it("uses armor modifier for grazing damage reference lookup", () => {
@@ -3671,7 +4039,12 @@ describe("combat round manager", () => {
       createdAt: "2026-01-01T00:05:00.000Z",
       defenderDm: 0,
       dmb: 8,
-      hitLocationRolls: [8],
+      hitLocationSelection: {
+        ...fixedChestLocationSelection(),
+        hitLocationRolls: [8],
+        selectedHitLocation: "abdomen",
+        selectedHitLocationRoll: 8,
+      },
       rng: () => 0,
       roundNumber: 3,
     });
@@ -3714,6 +4087,7 @@ describe("combat round manager", () => {
       createdAt: "2026-01-01T00:05:00.000Z",
       defenderDm: 0,
       dmb: 0,
+      hitLocationSelection: fixedChestLocationSelection(),
       rng: () => 0,
       roundNumber: 3,
     });
@@ -3797,6 +4171,16 @@ describe("combat round manager", () => {
       submittedBy: "gm",
       updatedAt: "2026-01-01T00:04:00.000Z",
     });
+    const afterLocation = recordTestHitLocation({
+      attackResult: result,
+      command: {
+        createdAt: "2026-01-01T00:04:30.000Z",
+        createdByUserId: "gm-1",
+      },
+      hitLocationRolls: [18, 7],
+      state: afterParry,
+      targetLocation: "chest",
+    });
     const afterDamage = recordCombatRoundDamageResult({
       attackResult: result,
       command: {
@@ -3805,10 +4189,8 @@ describe("combat round manager", () => {
       },
       defenderDm: 0,
       dmb: 8,
-      hitLocationRolls: [18, 7],
-      state: afterParry,
+      state: afterLocation,
       submittedBy: "gm",
-      targetLocation: "chest",
       updatedAt: "2026-01-01T00:05:00.000Z",
     });
     const afterReview = reviewCombatRoundDamageResult({
@@ -3840,6 +4222,18 @@ describe("combat round manager", () => {
         totalDamageOverride: 6,
       },
       state: afterDamage,
+    });
+    const afterCritical = recordCombatRoundCriticalRoll({
+      attackResult: result,
+      command: {
+        createdAt: "2026-01-01T00:05:45.000Z",
+        createdByUserId: "gm-1",
+      },
+      criticalDice: [4, 5],
+      rolledByParticipantId: "gladiator",
+      state: afterReview,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:05:45.000Z",
     });
     const existingCombatEffects: CombatEffectsState = {
       effects: [
@@ -3879,7 +4273,7 @@ describe("combat round manager", () => {
       defenderScenarioParticipantId: "scenario-guard",
       encounterId: "encounter-1",
       scenarioId: "scenario-1",
-      state: afterReview,
+      state: afterCritical,
     });
     const commitCommand = committed.command;
     const expectedCommitEventId =
@@ -3902,8 +4296,12 @@ describe("combat round manager", () => {
       combatEffects: committed.combatEffects,
       command: commitCommand,
     });
-    const clearedProposalState = clearCombatRoundStep({
+    const clearedCriticalState = clearCombatRoundStep({
       state: clearedCommitState,
+      step: "phase_1_damage",
+    });
+    const clearedProposalState = clearCombatRoundStep({
+      state: clearedCriticalState,
       step: "phase_1_damage",
     });
 
@@ -3983,6 +4381,14 @@ describe("combat round manager", () => {
           expectedNoteEffectId,
         ],
         criticalGrade: "a",
+        criticalRoll: expect.objectContaining({
+          criticalDice: [4, 5],
+          criticalDiceTotal: 9,
+          criticalGrade: "a",
+          criticalTypeModifier: -6,
+          finalCriticalRoll: 3,
+          selectedHitLocation: "abdomen",
+        }),
         damageResultId: "3:phase1:gladiator:guard:damage",
         defenderParticipantId: "guard",
         effectiveArmorModifier: -2,
@@ -4056,7 +4462,7 @@ describe("combat round manager", () => {
       status: "committed",
     });
     expect(clearedCommitState.commands.at(-1)).toMatchObject({
-      type: "resolve_damage",
+      type: "roll_critical",
     });
     expect(clearedCommitState.currentCursor).toEqual({
       participantId: "guard",
@@ -4082,6 +4488,7 @@ describe("combat round manager", () => {
       targetLocation: "chest",
     });
     expect(clearedCommitState.phaseResolutionResults[0]?.damageProposal.status).toBe("drafted");
+    expect(clearedCommitState.phaseResolutionResults[0]?.criticalRoll.status).toBe("rolled");
     expect(cleanedCombatEffects.effects).toContainEqual(
       expect.objectContaining({
         id: "existing-stun",
@@ -4107,11 +4514,17 @@ describe("combat round manager", () => {
     expect(cleanedCombatEffects.events).not.toContainEqual(
       expect.objectContaining({ id: expectedCommitEventId }),
     );
+    expect(clearedCriticalState.commands.at(-1)).toMatchObject({
+      type: "resolve_damage",
+    });
+    expect(clearedCriticalState.phaseResolutionResults[0]?.criticalRoll.status).toBe("pending");
+    expect(clearedCriticalState.phaseResolutionResults[0]?.damageResult).toBeDefined();
     expect(clearedProposalState.commands.at(-1)).toMatchObject({
-      type: "roll_parry",
+      type: "roll_hit_location",
     });
     expect(clearedProposalState.phaseResolutionResults[0]?.damageResult).toBeUndefined();
     expect(clearedProposalState.phaseResolutionResults[0]?.damageRoll.status).toBe("pending");
+    expect(clearedProposalState.phaseResolutionResults[0]?.hitLocationRoll.status).toBe("rolled");
   });
 
   it("commits D2 damage rows and clears commit before clearing the proposal", () => {
@@ -4173,6 +4586,14 @@ describe("combat round manager", () => {
       submittedBy: "gm",
       updatedAt: "2026-01-01T00:04:00.000Z",
     });
+    const afterLocation = recordTestHitLocation({
+      attackResult: result,
+      command: {
+        createdAt: "2026-01-01T00:04:30.000Z",
+        createdByUserId: "gm-1",
+      },
+      state: afterParry,
+    });
     const afterDamage = recordCombatRoundDamageResult({
       attackResult: result,
       command: {
@@ -4181,9 +4602,21 @@ describe("combat round manager", () => {
       },
       defenderDm: 0,
       dmb: 8,
-      state: afterParry,
+      state: afterLocation,
       submittedBy: "gm",
       updatedAt: "2026-01-01T00:05:00.000Z",
+    });
+    const afterCritical = recordCombatRoundCriticalRoll({
+      attackResult: result,
+      command: {
+        createdAt: "2026-01-01T00:05:30.000Z",
+        createdByUserId: "gm-1",
+      },
+      criticalDice: [4, 5],
+      rolledByParticipantId: "guard",
+      state: afterDamage,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:05:30.000Z",
     });
     const committed = commitCombatRoundPhaseDamage({
       attackerScenarioParticipantId: "scenario-guard",
@@ -4195,7 +4628,7 @@ describe("combat round manager", () => {
       defenderScenarioParticipantId: "scenario-gladiator",
       encounterId: "encounter-1",
       scenarioId: "scenario-1",
-      state: afterDamage,
+      state: afterCritical,
     });
     const expectedCommitEventId =
       "commit-d2:r3:phase2:3-phase2-guard-gladiator:3-phase2-guard-gladiator-damage:combat-effect-event";
@@ -4222,6 +4655,14 @@ describe("combat round manager", () => {
         attackerParticipantId: "guard",
         createdCombatEffectEventId: expectedCommitEventId,
         createdCombatEffectIds: [expectedCommitEffectId],
+        criticalRoll: expect.objectContaining({
+          criticalDice: [4, 5],
+          criticalDiceTotal: 9,
+          criticalGrade: "b",
+          criticalTypeModifier: -4,
+          finalCriticalRoll: 5,
+          selectedHitLocation: "chest",
+        }),
         damageResultId: "3:phase2:guard:gladiator:damage",
         defenderParticipantId: "gladiator",
         status: "committed",
@@ -4248,7 +4689,7 @@ describe("combat round manager", () => {
       status: "committed",
     });
     expect(clearedCommitState.commands.at(-1)).toMatchObject({
-      type: "resolve_damage",
+      type: "roll_critical",
     });
     expect(clearedCommitState.currentCursor).toEqual({
       participantId: "gladiator",

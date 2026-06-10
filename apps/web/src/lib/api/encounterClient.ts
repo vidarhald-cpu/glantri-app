@@ -135,6 +135,44 @@ export async function clearCurrentCombatRoundStepOnServer(input: {
   return payload;
 }
 
+export async function rollCombatHitLocationOnServer(input: {
+  attackResultId: string;
+  encounterId: string;
+  scenarioParticipantId: string;
+}): Promise<EncounterSession> {
+  const payload = await sendJson<{ encounter: EncounterSession }>(
+    `/encounters/${input.encounterId}/combat-round/roll-hit-location`,
+    {
+      body: JSON.stringify({
+        attackResultId: input.attackResultId,
+        scenarioParticipantId: input.scenarioParticipantId,
+      }),
+      method: "POST",
+    },
+  );
+
+  return payload.encounter;
+}
+
+export async function rollCombatCriticalOnServer(input: {
+  attackResultId: string;
+  encounterId: string;
+  scenarioParticipantId: string;
+}): Promise<EncounterSession> {
+  const payload = await sendJson<{ encounter: EncounterSession }>(
+    `/encounters/${input.encounterId}/combat-round/roll-critical`,
+    {
+      body: JSON.stringify({
+        attackResultId: input.attackResultId,
+        scenarioParticipantId: input.scenarioParticipantId,
+      }),
+      method: "POST",
+    },
+  );
+
+  return payload.encounter;
+}
+
 export async function submitPlayerRoleplayRollOnServer(input: {
   encounterId: string;
   pendingRollId: string;

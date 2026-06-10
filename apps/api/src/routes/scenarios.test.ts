@@ -6,8 +6,10 @@ import {
   commitCombatRoundPhaseDamage,
   initializeCombatRoundState,
   recordCombatRoundAttackResult,
+  recordCombatRoundCriticalRoll,
   recordCombatRoundDeclaration,
   recordCombatRoundDamageResult,
+  recordCombatRoundHitLocationRoll,
   recordCombatRoundInitiative,
   recordCombatRoundParryResult,
   type CombatEffectsState,
@@ -2792,6 +2794,230 @@ describe("scenarios route contract", () => {
     expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
   });
 
+  it("allows the attacking player to roll hit location for a pending D1 result", async () => {
+    const encounterParticipants = [
+      makeCombatEncounter().participants[0],
+      {
+        ...makeCombatEncounter().participants[0],
+        id: "encounter-participant-2",
+        label: "City guard",
+        scenarioParticipantId: "participant-2",
+      },
+    ];
+    const combatEncounter = makeCombatEncounter({
+      participants: encounterParticipants,
+    }) as EncounterSession;
+    const attackHit = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackerParticipantId: "encounter-participant-1",
+      defenderDb: 10,
+      defenderParticipantId: "encounter-participant-2",
+      ob: 10,
+      phase: "phase1",
+      rollD20: 14,
+      rollTotal: 14,
+      rolledAt: "2026-01-01T00:03:00.000Z",
+      weaponName: "Broad sword",
+    });
+    const afterAttack = recordCombatRoundAttackResult({
+      command: {
+        createdAt: attackHit.rolledAt,
+        createdByUserId: "gm-1",
+      },
+      participantId: "encounter-participant-1",
+      result: attackHit,
+      state: initializeCombatRoundState({ encounter: combatEncounter }),
+      submittedBy: "gm",
+    });
+    const afterParry = recordCombatRoundParryResult({
+      attackResult: attackHit,
+      command: {
+        createdAt: "2026-01-01T00:04:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      parryResolution: {
+        combinedParryScore: 9,
+        modifierAdjustment: 0,
+        openEndedD10s: [],
+        resultLabel: "Parry failed",
+        rollD20: 8,
+        rollTotal: 8,
+        status: "resolved",
+        success: false,
+        targetNumber: 21,
+        total: 17,
+      },
+      state: afterAttack,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:04:00.000Z",
+    });
+    const scenarioParticipants = [
+      makeCombatScenarioParticipant({ id: "participant-1" }),
+      makeCombatScenarioParticipant({
+        controlledByUserId: "other-player",
+        id: "participant-2",
+      }),
+    ];
+
+    setupCombatDeclarationRoute({
+      encounter: {
+        combatRoundState: afterParry,
+        participants: encounterParticipants,
+      },
+    });
+    mocks.scenarioService.listScenarioParticipants.mockResolvedValue(scenarioParticipants);
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        attackResultId: "1:phase1:encounter-participant-1:encounter-participant-2",
+        scenarioParticipantId: "participant-1",
+      },
+      url: "/encounters/encounter-1/combat-round/roll-hit-location",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
+    expect(updatedEncounter.combatRoundState.commands.at(-1)).toMatchObject({
+      facts: expect.objectContaining({
+        rolledByParticipantId: "encounter-participant-1",
+        rollPrivilege: "attacker",
+      }),
+      participantId: "encounter-participant-2",
+      type: "roll_hit_location",
+    });
+    expect(updatedEncounter.combatRoundState.phaseResolutionResults[0]?.hitLocationRoll.status).toBe(
+      "rolled",
+    );
+  });
+
+  it("allows the attacking player to roll critical for their critical damage proposal", async () => {
+    const encounterParticipants = [
+      makeCombatEncounter().participants[0],
+      {
+        ...makeCombatEncounter().participants[0],
+        id: "encounter-participant-2",
+        label: "City guard",
+        scenarioParticipantId: "participant-2",
+      },
+    ];
+    const combatEncounter = makeCombatEncounter({
+      participants: encounterParticipants,
+    }) as EncounterSession;
+    const attackHit = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackerParticipantId: "encounter-participant-1",
+      defenderDb: 10,
+      defenderParticipantId: "encounter-participant-2",
+      ob: 10,
+      phase: "phase1",
+      rollD20: 14,
+      rollTotal: 14,
+      rolledAt: "2026-01-01T00:03:00.000Z",
+      weaponName: "Broad sword",
+    });
+    const afterAttack = recordCombatRoundAttackResult({
+      command: {
+        createdAt: attackHit.rolledAt,
+        createdByUserId: "gm-1",
+      },
+      participantId: "encounter-participant-1",
+      result: attackHit,
+      state: initializeCombatRoundState({ encounter: combatEncounter }),
+      submittedBy: "gm",
+    });
+    const afterParry = recordCombatRoundParryResult({
+      attackResult: attackHit,
+      command: {
+        createdAt: "2026-01-01T00:04:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      parryResolution: {
+        combinedParryScore: 9,
+        modifierAdjustment: 0,
+        openEndedD10s: [],
+        resultLabel: "Parry failed",
+        rollD20: 8,
+        rollTotal: 8,
+        status: "resolved",
+        success: false,
+        targetNumber: 21,
+        total: 17,
+      },
+      state: afterAttack,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:04:00.000Z",
+    });
+    const afterLocation = recordCombatRoundHitLocationRoll({
+      attackResult: attackHit,
+      command: {
+        createdAt: "2026-01-01T00:04:30.000Z",
+        createdByUserId: "gm-1",
+      },
+      hitLocationRolls: [12],
+      rolledByParticipantId: "encounter-participant-1",
+      state: afterParry,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:04:30.000Z",
+    });
+    const afterDamage = recordCombatRoundDamageResult({
+      attackResult: attackHit,
+      command: {
+        createdAt: "2026-01-01T00:05:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      defenderDm: 0,
+      dmb: 8,
+      state: afterLocation,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:05:00.000Z",
+    });
+    const scenarioParticipants = [
+      makeCombatScenarioParticipant({ id: "participant-1" }),
+      makeCombatScenarioParticipant({
+        controlledByUserId: "other-player",
+        id: "participant-2",
+      }),
+    ];
+
+    setupCombatDeclarationRoute({
+      encounter: {
+        combatRoundState: afterDamage,
+        participants: encounterParticipants,
+      },
+    });
+    mocks.scenarioService.listScenarioParticipants.mockResolvedValue(scenarioParticipants);
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        attackResultId: "1:phase1:encounter-participant-1:encounter-participant-2",
+        scenarioParticipantId: "participant-1",
+      },
+      url: "/encounters/encounter-1/combat-round/roll-critical",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
+    expect(updatedEncounter.combatRoundState.commands.at(-1)).toMatchObject({
+      facts: expect.objectContaining({
+        rolledByParticipantId: "encounter-participant-1",
+        rollPrivilege: "attacker",
+      }),
+      participantId: "encounter-participant-2",
+      type: "roll_critical",
+    });
+    expect(updatedEncounter.combatRoundState.phaseResolutionResults[0]?.criticalRoll.status).toBe(
+      "rolled",
+    );
+  });
+
   it("clears DE declarations and participant action selections for GM correction", async () => {
     setupCombatDeclarationRoute({
       encounter: {
@@ -3657,6 +3883,18 @@ describe("scenarios route contract", () => {
       submittedBy: "gm",
       updatedAt: "2026-01-01T00:04:00.000Z",
     });
+    const afterLocation = recordCombatRoundHitLocationRoll({
+      attackResult: attackHit,
+      command: {
+        createdAt: "2026-01-01T00:04:30.000Z",
+        createdByUserId: "gm-1",
+      },
+      hitLocationRolls: [12],
+      rolledByParticipantId: "encounter-participant-1",
+      state: afterParry,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:04:30.000Z",
+    });
     const afterDamage = recordCombatRoundDamageResult({
       attackResult: attackHit,
       command: {
@@ -3665,9 +3903,21 @@ describe("scenarios route contract", () => {
       },
       defenderDm: 0,
       dmb: 8,
-      state: afterParry,
+      state: afterLocation,
       submittedBy: "gm",
       updatedAt: "2026-01-01T00:05:00.000Z",
+    });
+    const afterCritical = recordCombatRoundCriticalRoll({
+      attackResult: attackHit,
+      command: {
+        createdAt: "2026-01-01T00:05:30.000Z",
+        createdByUserId: "gm-1",
+      },
+      criticalDice: [4, 5],
+      rolledByParticipantId: "encounter-participant-1",
+      state: afterDamage,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:05:30.000Z",
     });
     const existingCombatEffects: CombatEffectsState = {
       effects: [
@@ -3707,7 +3957,7 @@ describe("scenarios route contract", () => {
       defenderScenarioParticipantId: "participant-2",
       encounterId: "encounter-1",
       scenarioId: "scenario-1",
-      state: afterDamage,
+      state: afterCritical,
     });
     const expectedCommitEventId =
       "commit-d1-api:r1:phase1:1-phase1-encounter-participant-1-encounter-participant-2:1-phase1-encounter-participant-1-encounter-participant-2-damage:combat-effect-event";
@@ -3758,7 +4008,7 @@ describe("scenarios route contract", () => {
     expect(response.statusCode).toBe(200);
     const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
     expect(updatedEncounter.combatRoundState.commands.at(-1)).toMatchObject({
-      type: "resolve_damage",
+      type: "roll_critical",
     });
     expect(updatedEncounter.combatRoundState.currentCursor).toEqual({
       participantId: "encounter-participant-2",
@@ -3768,6 +4018,9 @@ describe("scenarios route contract", () => {
     expect(updatedEncounter.combatRoundState.selectedParticipantId).toBe("encounter-participant-2");
     expect(updatedEncounter.combatRoundState.selectedStep).toBe("phase_1_damage");
     expect(updatedEncounter.combatRoundState.phaseResolutionResults[0]?.damageResult).toBeDefined();
+    expect(updatedEncounter.combatRoundState.phaseResolutionResults[0]?.criticalRoll.status).toBe(
+      "rolled",
+    );
     expect(updatedEncounter.combatRoundState.phaseResolutionResults[0]?.damageProposal.status).toBe(
       "drafted",
     );

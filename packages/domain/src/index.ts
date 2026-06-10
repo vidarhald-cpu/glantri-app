@@ -15,6 +15,7 @@ export * from "./encounter/combatRoundManager";
 export * from "./encounter/combatEffects";
 export * from "./encounter/combatActionModifiers";
 export * from "./encounter/combatDeclarationValidation";
+export * from "./encounter/critical";
 export * from "./encounter/hitLocation";
 export * from "./encounter/toHitTable";
 export * from "./encounter/session";

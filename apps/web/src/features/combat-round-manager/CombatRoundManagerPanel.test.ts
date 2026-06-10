@@ -149,11 +149,16 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("formatCombatResolutionNextLabel");
     expect(source).toContain("getCombatResolutionButtonLabel");
     expect(source).toContain("formatCombatPhaseResolutionResultLines");
+    expect(source).toContain("getCombatRoundDamageSubstate");
+    expect(source).toContain("recordCombatRoundHitLocationRoll");
+    expect(source).toContain("recordCombatRoundCriticalRoll");
     expect(source).toContain("formatCombatToHitCalculationLine");
     expect(source).toContain("Parry: ${formatResolutionStatusLabel");
     expect(source).toContain("P ${resolution.combinedParryScore} + mods");
     expect(source).toContain("Parry successful");
     expect(source).toContain("Parry failed");
+    expect(source).toContain("Roll hit location");
+    expect(source).toContain("Roll critical");
     expect(source).toContain("Resolve damage");
     expect(source).toContain("Commit phase damage");
     expect(source).toContain("Phase damage committed");
@@ -169,6 +174,15 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("selectedHitLocationOverride: effectiveDamage?.effectiveSelectedHitLocation");
     expect(source).toContain("criticalGradeOverride: effectiveDamage?.effectiveCriticalGrade ?? \"none\"");
     expect(source).toContain("armorModifierOverride: effectiveDamage?.effectiveArmorModifier.toString()");
+    expect(source).toContain(
+      "armorCriticalModifierOverride: effectiveCritical.armorCriticalModifier?.toString()",
+    );
+    expect(source).toContain(
+      "criticalTypeModifierOverride: effectiveCritical.criticalTypeModifier?.toString()",
+    );
+    expect(source).toContain(
+      "finalCriticalRollOverride: effectiveCritical.finalCriticalRoll?.toString()",
+    );
     expect(source).toContain("totalDamageOverride: effectiveDamage?.effectiveTotalDamage.toString()");
     expect(source).toContain("selectedHitLocationValue !== effectiveDamage.computedSelectedHitLocation");
     expect(source).toContain("armorModifier !== effectiveDamage.computedArmorModifier");
@@ -184,7 +198,11 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("Armor: not applied yet");
     expect(source).toContain('title: "To hit"');
     expect(source).toContain('title: "Parry"');
+    expect(source).toContain('title: "Location"');
     expect(source).toContain('title: "Damage"');
+    expect(source).toContain('title: "Critical"');
+    expect(source).toContain("Critical roll required");
+    expect(source).toContain("Result: critical roll");
     expect(source).toContain("sections: inspectorPhaseResolutionLines.sections");
     expect(source).toContain("resultLine: `Result: ${formatCombatAttackTableResultLabel");
     expect(source).toContain("Result: ${getCombatRoundEffectiveDamageResult(damageResult).effectiveTotalDamage} damage");
