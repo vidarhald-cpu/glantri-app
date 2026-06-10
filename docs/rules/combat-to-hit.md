@@ -71,6 +71,11 @@ note. For example, `OB 10 - DB 15 + roll 19 = hit lookup 14`; with weapon DMB `8
 and armor modifier `0`, damage lookup is `14 + 8 + 0 + 0 = 22`, so the table gives damage `9`,
 critical `B`, and minimum damage `1`.
 
+When a damage lookup row has a max-damage cap, the proposal preserves the uncapped table damage for
+audit, but the capped value is the effective damage used for commit. Current capped rows use
+`17 + attacker STR GM` as the cap. If the GM reviews and edits the proposed damage number, that
+reviewed value is still capped unless a later UI adds an explicit max-damage bypass.
+
 Grazing-hit damage does not use a fixed row modifier. A grazing hit at hit lookup `11`
 uses hit lookup `12` as its reference, then applies the same DMB, defender DM, and armor modifier to
 find the reference damage lookup row. The grazing hit rolls `1dX`, where `X` is that reference row's
@@ -137,14 +142,17 @@ if the original grazing roll no longer fits that die, the GM must enter a total 
 commit.
 
 The proposal is not applied until the GM uses Commit phase damage. That command writes one
-combat-effect event and, when total damage is positive, one active `general_damage` effect row for
-the defender using the effective reviewed values. It also writes one active row for each reviewed
-additional effect. The rows are source-linked to the command by deterministic event/effect IDs, and
-GM review notes are carried into the commit description. Phase-one committed rows are part of the
-participant's live JSON-backed combatEffects state before phase two continues, so reviewed modifier
-rows affect phase-two combat values where the existing live modifier path supports them. Clear unwinds
-this command stack in visible steps: commit first, then critical roll if one exists, then damage
-proposal, then hit-location roll, then parry/attack as normal.
+combat-effect event and, when total damage is positive, one active physical damage effect row for the
+defender using the effective reviewed values. If the proposal has an effective hit location, the row
+is recorded at that character damage location; General damage is used only when no specific location
+is available. Critical grade and critical roll remain commit notes until the critical effect table is
+implemented. Commit also writes one active row for each reviewed additional effect. The rows are
+source-linked to the command by deterministic event/effect IDs, and GM review notes are carried into
+the commit description. Phase-one committed rows are part of the participant's live JSON-backed
+combatEffects state before phase two continues, so reviewed modifier rows affect phase-two combat
+values where the existing live modifier path supports them. Clear unwinds this command stack in
+visible steps: commit first, then critical roll if one exists, then damage proposal, then hit-location
+roll, then parry/attack as normal.
 
 The intended final-damage sequencing remains:
 

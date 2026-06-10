@@ -218,7 +218,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("Result: critical roll");
     expect(source).toContain("sections: inspectorPhaseResolutionLines.sections");
     expect(source).toContain("resultLine: `Result: ${formatCombatAttackTableResultLabel");
-    expect(source).toContain("Result: ${getCombatRoundEffectiveDamageResult(damageResult).effectiveTotalDamage} damage");
+    expect(source).toContain("damage${formatCombatDamageResultLocationSuffix(damageResult)}");
     expect(source).toContain("targetLocation:");
     expect(source).toContain("attackerRoundParticipant?.declaration?.phaseContexts?.[phase]?.targetLocation");
     expect(source).toContain("Damage roll: ${formatResolutionStatusLabel");

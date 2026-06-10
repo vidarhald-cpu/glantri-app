@@ -30,6 +30,7 @@ import { lookupCombatToHitDamageMetadata, resolveCombatToHit } from "./toHitTabl
 import type { EncounterParticipant, EncounterSession } from "./session";
 
 const idSchema = z.string().min(1);
+const COMBAT_ROUND_STRENGTH_GM_MAX_DAMAGE_NOTE = "max damage: 17 + GM STR when relevant";
 
 export const combatRoundStepSchema = z.enum([
   "select_actions",
@@ -450,6 +451,10 @@ export const combatRoundDamageResultSchema = z.object({
   hitLocationSelectionReason: z.enum(["single_roll", "targeted_closest"]).optional(),
   hitLookupTotal: z.number().int().optional(),
   kind: z.literal("damage_result"),
+  attackerStrengthGm: z.number().int().optional(),
+  cappedTotalDamage: z.number().int().min(0).optional(),
+  maxDamageApplied: z.boolean().default(false),
+  maxDamageCap: z.number().int().min(0).optional(),
   lookupTotal: z.number().int().optional(),
   maxDamageNote: z.string().min(1).optional(),
   minDamage: z.number().int().optional(),
@@ -476,6 +481,7 @@ export const combatRoundDamageResultSchema = z.object({
   tableDamage: z.number().int().optional(),
   tableDamageModifier: z.number().int().optional(),
   targetLocation: hitLocationTargetSchema.optional(),
+  rawTotalDamage: z.number().int().min(0).optional(),
   totalDamage: z.number().int(),
   weaponName: z.string().min(1).optional(),
 });
@@ -500,6 +506,9 @@ export interface CombatRoundEffectiveDamageResult {
   computedArmorModifier: number;
   computedCriticalGrade?: string;
   computedDamageLookupTotal?: number;
+  computedCappedTotalDamage?: number;
+  computedMaxDamageApplied: boolean;
+  computedMaxDamageCap?: number;
   computedMaxDamageNote?: string;
   computedMinDamage?: number;
   computedSelectedHitLocation?: HitLocation;
@@ -509,8 +518,12 @@ export interface CombatRoundEffectiveDamageResult {
   effectiveCriticalGrade?: string;
   effectiveDamageLookupTotal?: number;
   effectiveDamageRoll: CombatRoundDamageResult["damageRoll"];
+  effectiveCappedTotalDamage?: number;
+  effectiveMaxDamageApplied: boolean;
+  effectiveMaxDamageCap?: number;
   effectiveMaxDamageNote?: string;
   effectiveMinDamage?: number;
+  effectiveRawTotalDamage: number;
   effectiveSelectedHitLocation?: HitLocation;
   effectiveTableDamage?: number;
   effectiveTotalDamage: number;
@@ -2683,6 +2696,44 @@ function getCombatRoundReviewedCriticalGrade(input: {
   return input.tableCriticalGrade ?? input.computedCriticalGrade;
 }
 
+function getCombatRoundMaxDamageCap(input: {
+  attackerStrengthGm?: number;
+  maxDamageNote?: string;
+}): number | undefined {
+  if (
+    input.maxDamageNote !== COMBAT_ROUND_STRENGTH_GM_MAX_DAMAGE_NOTE ||
+    input.attackerStrengthGm === undefined
+  ) {
+    return undefined;
+  }
+
+  return 17 + input.attackerStrengthGm;
+}
+
+function applyCombatRoundMaxDamageCap(input: {
+  maxDamageCap?: number;
+  rawTotalDamage: number;
+}): {
+  cappedTotalDamage?: number;
+  maxDamageApplied: boolean;
+  totalDamage: number;
+} {
+  if (input.maxDamageCap === undefined) {
+    return {
+      maxDamageApplied: false,
+      totalDamage: input.rawTotalDamage,
+    };
+  }
+
+  const cappedTotalDamage = Math.min(input.rawTotalDamage, input.maxDamageCap);
+
+  return {
+    cappedTotalDamage,
+    maxDamageApplied: input.rawTotalDamage > input.maxDamageCap,
+    totalDamage: cappedTotalDamage,
+  };
+}
+
 export function getCombatRoundEffectiveDamageResult(
   damageResult: CombatRoundDamageResult,
 ): CombatRoundEffectiveDamageResult {
@@ -2704,8 +2755,21 @@ export function getCombatRoundEffectiveDamageResult(
   let effectiveMaxDamageNote = damageResult.maxDamageNote;
   let effectiveMinDamage = damageResult.minDamage;
   let effectiveDamageRoll: CombatRoundDamageResult["damageRoll"] = computedDamageRoll;
-  let effectiveTotalDamage = damageResult.review?.totalDamageOverride ?? damageResult.totalDamage;
+  let effectiveRawTotalDamage =
+    damageResult.review?.totalDamageOverride ??
+    damageResult.rawTotalDamage ??
+    damageResult.totalDamage;
   let requiresTotalDamageOverride = false;
+  const computedMaxDamageCap =
+    damageResult.maxDamageCap ??
+    getCombatRoundMaxDamageCap({
+      attackerStrengthGm: damageResult.attackerStrengthGm,
+      maxDamageNote: damageResult.maxDamageNote,
+    });
+  const computedCappedDamage = applyCombatRoundMaxDamageCap({
+    maxDamageCap: computedMaxDamageCap,
+    rawTotalDamage: damageResult.rawTotalDamage ?? damageResult.totalDamage,
+  });
 
   if (hitLookupTotal !== undefined) {
     if (damageResult.grazing) {
@@ -2732,7 +2796,7 @@ export function getCombatRoundEffectiveDamageResult(
       const canKeepExistingRoll =
         Number.isInteger(existingRoll) && existingRoll >= 1 && existingRoll <= dieSides;
       requiresTotalDamageOverride = !hasTotalDamageOverride && !canKeepExistingRoll;
-      effectiveTotalDamage = hasTotalDamageOverride
+      effectiveRawTotalDamage = hasTotalDamageOverride
         ? damageResult.review?.totalDamageOverride ?? 0
         : existingRoll;
       effectiveDamageRoll = {
@@ -2744,7 +2808,7 @@ export function getCombatRoundEffectiveDamageResult(
         grazingReferenceHitLookupTotal,
         required: true,
         rolls: canKeepExistingRoll && !hasTotalDamageOverride ? [existingRoll] : undefined,
-        total: effectiveTotalDamage,
+        total: effectiveRawTotalDamage,
       };
     } else {
       effectiveDamageLookupTotal = calculateCombatRoundDamageLookupTotal({
@@ -2762,17 +2826,29 @@ export function getCombatRoundEffectiveDamageResult(
         review: damageResult.review,
         tableCriticalGrade: metadata.criticalGrade,
       });
-      effectiveTotalDamage = damageResult.review?.totalDamageOverride ?? metadata.damage;
+      effectiveRawTotalDamage = damageResult.review?.totalDamageOverride ?? metadata.damage;
       effectiveDamageRoll = {
         required: false,
       };
     }
   }
 
+  const effectiveMaxDamageCap = getCombatRoundMaxDamageCap({
+    attackerStrengthGm: damageResult.attackerStrengthGm,
+    maxDamageNote: effectiveMaxDamageNote,
+  });
+  const effectiveCappedDamage = applyCombatRoundMaxDamageCap({
+    maxDamageCap: effectiveMaxDamageCap,
+    rawTotalDamage: effectiveRawTotalDamage,
+  });
+
   return {
     computedArmorModifier,
     computedCriticalGrade: damageResult.criticalGrade,
     computedDamageLookupTotal: damageResult.damageLookupTotal,
+    computedCappedTotalDamage: computedCappedDamage.cappedTotalDamage,
+    computedMaxDamageApplied: computedCappedDamage.maxDamageApplied,
+    computedMaxDamageCap,
     computedMaxDamageNote: damageResult.maxDamageNote,
     computedMinDamage: damageResult.minDamage,
     computedSelectedHitLocation,
@@ -2782,11 +2858,15 @@ export function getCombatRoundEffectiveDamageResult(
     effectiveCriticalGrade,
     effectiveDamageLookupTotal,
     effectiveDamageRoll,
+    effectiveCappedTotalDamage: effectiveCappedDamage.cappedTotalDamage,
+    effectiveMaxDamageApplied: effectiveCappedDamage.maxDamageApplied,
+    effectiveMaxDamageCap,
     effectiveMaxDamageNote,
     effectiveMinDamage,
+    effectiveRawTotalDamage,
     effectiveSelectedHitLocation,
     effectiveTableDamage,
-    effectiveTotalDamage,
+    effectiveTotalDamage: effectiveCappedDamage.totalDamage,
     hasReviewOverrides: hasCombatRoundDamageReviewOverrides(damageResult.review),
     requiresTotalDamageOverride,
     review: damageResult.review,
@@ -2858,6 +2938,7 @@ export function getCombatRoundDamageSubstate(
 export function buildCombatRoundDamageResult(input: {
   armorModifier?: number;
   armorModifierSource?: CombatRoundDamageResult["armorModifierSource"];
+  attackerStrengthGm?: number;
   attackResult: CombatRoundAttackRollResult;
   createdAt: string;
   createdByUserId?: string;
@@ -2931,6 +3012,14 @@ export function buildCombatRoundDamageResult(input: {
   }
 
   const totalDamage = input.attackResult.grazing ? damageRollTotal : tableDamage;
+  const maxDamageCap = getCombatRoundMaxDamageCap({
+    attackerStrengthGm: input.attackerStrengthGm,
+    maxDamageNote,
+  });
+  const cappedDamage = applyCombatRoundMaxDamageCap({
+    maxDamageCap,
+    rawTotalDamage: totalDamage,
+  });
   const attackResultId = getCombatRoundAttackResultId({
     result: input.attackResult,
     roundNumber: input.roundNumber,
@@ -2940,6 +3029,8 @@ export function buildCombatRoundDamageResult(input: {
     armorModifier,
     attackResultId,
     attackerParticipantId: input.attackResult.attackerParticipantId,
+    attackerStrengthGm: input.attackerStrengthGm,
+    cappedTotalDamage: cappedDamage.cappedTotalDamage,
     createdAt: input.createdAt,
     createdByUserId: input.createdByUserId,
     criticalGrade,
@@ -2953,6 +3044,8 @@ export function buildCombatRoundDamageResult(input: {
     hitLocationSelectionReason: hitLocationSelection.hitLocationSelectionReason,
     hitLookupTotal,
     kind: "damage_result",
+    maxDamageApplied: cappedDamage.maxDamageApplied,
+    maxDamageCap,
     maxDamageNote,
     minDamage,
     parryResultId: `${attackResultId}:parry`,
@@ -2961,6 +3054,7 @@ export function buildCombatRoundDamageResult(input: {
     selectedHitLocationRoll: hitLocationSelection.selectedHitLocationRoll,
     tableDamage,
     targetLocation: hitLocationSelection.targetLocation,
+    rawTotalDamage: totalDamage,
     totalDamage,
     weaponName: input.attackResult.weaponName,
     armorModifierSource: input.armorModifierSource,
@@ -3247,6 +3341,7 @@ export function recordCombatRoundHitLocationRoll(input: {
 export function recordCombatRoundDamageResult(input: {
   armorModifier?: number;
   armorModifierSource?: CombatRoundDamageResult["armorModifierSource"];
+  attackerStrengthGm?: number;
   attackResult: CombatRoundAttackRollResult;
   command?: {
     commandId?: string;
@@ -3286,6 +3381,7 @@ export function recordCombatRoundDamageResult(input: {
   const damageResult = buildCombatRoundDamageResult({
     armorModifier: input.armorModifier,
     armorModifierSource: input.armorModifierSource,
+    attackerStrengthGm: input.attackerStrengthGm,
     attackResult: input.attackResult,
     createdAt: input.updatedAt,
     createdByUserId: input.command?.createdByUserId,
@@ -3621,6 +3717,37 @@ function getCombatRoundDamageReviewEffectRowShape(
   };
 }
 
+function getCombatRoundCommittedDamageLocation(
+  location?: HitLocation,
+): { id: string; label: string; note?: string } | undefined {
+  switch (location) {
+    case "head":
+      return { id: "head", label: "Head" };
+    case "leftArm":
+      return { id: "leftArm", label: "Left arm" };
+    case "rightArm":
+      return { id: "rightArm", label: "Right arm" };
+    case "chest":
+      return { id: "chestBack", label: "Chest/back" };
+    case "abdomen":
+      return { id: "abdomenLowerBack", label: "Abdomen/lower back" };
+    case "leftLeg":
+      return {
+        id: "upperLeftLeg",
+        label: "Upper left leg",
+        note: "Whole-leg hit mapped to upper left leg until upper/lower leg review is available.",
+      };
+    case "rightLeg":
+      return {
+        id: "upperRightLeg",
+        label: "Upper right leg",
+        note: "Whole-leg hit mapped to upper right leg until upper/lower leg review is available.",
+      };
+    default:
+      return undefined;
+  }
+}
+
 function formatCombatRoundDamageCommitDescription(input: {
   criticalRoll?: CombatRoundCriticalRollResult;
   damageResult: CombatRoundDamageResult;
@@ -3641,6 +3768,11 @@ function formatCombatRoundDamageCommitDescription(input: {
             : ""
         }.`
       : "";
+  const damage =
+    effectiveDamage.effectiveMaxDamageApplied &&
+    effectiveDamage.effectiveMaxDamageCap !== undefined
+      ? `${effectiveDamage.effectiveRawTotalDamage} raw damage, capped to ${effectiveDamage.effectiveTotalDamage}`
+      : `${effectiveDamage.effectiveTotalDamage} damage`;
   const notes = input.damageResult.review?.notes?.trim()
     ? ` GM review: ${input.damageResult.review.notes.trim()}`
     : "";
@@ -3652,7 +3784,7 @@ function formatCombatRoundDamageCommitDescription(input: {
 
   return `${formatCombatRoundDamageCommitPhaseLabel(
     input.damageResult.phase,
-  )} damage result: ${effectiveDamage.effectiveTotalDamage} damage.${critical}${criticalRoll}${notes}${additionalEffects}`;
+  )} damage result: ${damage}.${critical}${criticalRoll}${notes}${additionalEffects}`;
 }
 
 function buildCombatRoundDamageCommitRows(input: {
@@ -3689,12 +3821,15 @@ function buildCombatRoundDamageCommitRows(input: {
   };
   const eventId = buildCombatRoundDamageCommitEventId(idInput);
   const reviewAdditionalEffects = input.damageResult.review?.additionalEffects ?? [];
-  const generalDamageEffectIds =
+  const damageLocation = getCombatRoundCommittedDamageLocation(
+    effectiveDamage.effectiveSelectedHitLocation,
+  );
+  const committedDamageEffectIds =
     effectiveDamage.effectiveTotalDamage > 0
       ? [
           buildCombatRoundDamageCommitEffectId({
             ...idInput,
-            kind: "general-damage",
+            kind: damageLocation ? `physical-damage-${damageLocation.id}` : "general-damage",
           }),
         ]
       : [];
@@ -3704,7 +3839,7 @@ function buildCombatRoundDamageCommitRows(input: {
       kind: `additional-${effect.id}`,
     }),
   );
-  const effectIds = [...generalDamageEffectIds, ...additionalEffectIds];
+  const effectIds = [...committedDamageEffectIds, ...additionalEffectIds];
   const description = formatCombatRoundDamageCommitDescription({
     criticalRoll: input.criticalRoll,
     damageResult: input.damageResult,
@@ -3723,26 +3858,29 @@ function buildCombatRoundDamageCommitRows(input: {
     sourceType: "combat_action",
     targetParticipantId: input.defenderScenarioParticipantId,
   });
-  const generalDamageEffects: CombatEffect[] =
+  const committedDamageEffects: CombatEffect[] =
     effectiveDamage.effectiveTotalDamage > 0
       ? [
           combatEffectSchema.parse({
             createdAt: input.command.createdAt,
-            damage: 0,
-            description,
+            damage: damageLocation ? effectiveDamage.effectiveTotalDamage : 0,
+            description: damageLocation?.note
+              ? `${description} ${damageLocation.note}`
+              : description,
             effectGroup: "none",
-            generalDamage: effectiveDamage.effectiveTotalDamage,
+            generalDamage: damageLocation ? 0 : effectiveDamage.effectiveTotalDamage,
             id:
-              generalDamageEffectIds[0] ??
+              committedDamageEffectIds[0] ??
               buildCombatRoundDamageCommitEffectId({
                 ...idInput,
-                kind: "general-damage",
+                kind: damageLocation ? `physical-damage-${damageLocation.id}` : "general-damage",
               }),
+            location: damageLocation?.id,
             roundNumber: input.command.roundNumber,
             sourceEventId: eventId,
             status: "active",
             targetParticipantId: input.defenderScenarioParticipantId,
-            type: "general_damage",
+            type: damageLocation ? "physical_damage" : "general_damage",
             updatedAt: input.command.createdAt,
           }),
         ]
@@ -3772,7 +3910,7 @@ function buildCombatRoundDamageCommitRows(input: {
       updatedAt: input.command.createdAt,
     });
   });
-  const effects = [...generalDamageEffects, ...additionalEffects];
+  const effects = [...committedDamageEffects, ...additionalEffects];
 
   return {
     effectIds,
@@ -3878,12 +4016,15 @@ function recordCombatRoundCommitPhaseDamageCommand(input: {
     roundNumber: normalized.roundNumber,
   };
   const createdCombatEffectEventId = buildCombatRoundDamageCommitEventId(idInput);
-  const createdGeneralDamageEffectIds =
+  const damageLocation = getCombatRoundCommittedDamageLocation(
+    effectiveDamage.effectiveSelectedHitLocation,
+  );
+  const createdDamageEffectIds =
     effectiveDamage.effectiveTotalDamage > 0
       ? [
           buildCombatRoundDamageCommitEffectId({
             ...idInput,
-            kind: "general-damage",
+            kind: damageLocation ? `physical-damage-${damageLocation.id}` : "general-damage",
           }),
         ]
       : [];
@@ -3896,7 +4037,7 @@ function recordCombatRoundCommitPhaseDamageCommand(input: {
     }),
   );
   const createdCombatEffectIds = [
-    ...createdGeneralDamageEffectIds,
+    ...createdDamageEffectIds,
     ...createdAdditionalCombatEffectIds,
   ];
   const command = combatRoundCommandSchema.parse({
@@ -3911,6 +4052,7 @@ function recordCombatRoundCommitPhaseDamageCommand(input: {
       createdAdditionalCombatEffectIds,
       createdCombatEffectEventId,
       createdCombatEffectIds,
+      createdDamageEffectIds,
       computedCriticalGrade: input.damageResult.criticalGrade,
       computedTotalDamage: input.damageResult.totalDamage,
       criticalRoll:
@@ -3935,8 +4077,13 @@ function recordCombatRoundCommitPhaseDamageCommand(input: {
       damageResultId,
       defenderParticipantId: input.damageResult.defenderParticipantId,
       effectiveArmorModifier: effectiveDamage.effectiveArmorModifier,
+      effectiveCappedTotalDamage: effectiveDamage.effectiveCappedTotalDamage,
       effectiveDamageLookupTotal: effectiveDamage.effectiveDamageLookupTotal,
       effectiveHitLocation: effectiveDamage.effectiveSelectedHitLocation,
+      effectivePhysicalDamageLocation: damageLocation,
+      maxDamageApplied: effectiveDamage.effectiveMaxDamageApplied,
+      maxDamageCap: effectiveDamage.effectiveMaxDamageCap,
+      rawTotalDamage: effectiveDamage.effectiveRawTotalDamage,
       review: input.damageResult.review,
       status: "committed",
       totalDamage: effectiveDamage.effectiveTotalDamage,

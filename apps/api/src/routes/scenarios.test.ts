@@ -4694,7 +4694,7 @@ describe("scenarios route contract", () => {
     const expectedCommitEventId =
       "commit-d1-api:r1:phase1:1-phase1-encounter-participant-1-encounter-participant-2:1-phase1-encounter-participant-1-encounter-participant-2-damage:combat-effect-event";
     const expectedCommitEffectId =
-      "commit-d1-api:r1:phase1:1-phase1-encounter-participant-1-encounter-participant-2:1-phase1-encounter-participant-1-encounter-participant-2-damage:combat-effect:general-damage";
+      "commit-d1-api:r1:phase1:1-phase1-encounter-participant-1-encounter-participant-2:1-phase1-encounter-participant-1-encounter-participant-2-damage:combat-effect:physical-damage-chestBack";
     const scenarioParticipants = [
       makeCombatScenarioParticipant({ id: "participant-1" }),
       makeCombatScenarioParticipant({

@@ -65,7 +65,12 @@ import {
   sortCombatRoundParticipantsByInitiative,
   validateCombatDeclarationTargets,
 } from "@glantri/domain";
-import { resolveCombatParry, type WorkbookRawModifier } from "@glantri/rules-engine";
+import {
+  buildCharacterSheetSummary,
+  buildCombatStateCharacterInputs,
+  resolveCombatParry,
+  type WorkbookRawModifier,
+} from "@glantri/rules-engine";
 
 import { buildEquipmentLoadoutModuleModel } from "@/features/equipment/loadoutModule";
 import type { EquipmentFeatureState } from "@/features/equipment/types";
@@ -590,15 +595,27 @@ function formatCombatDamageResultLine(
       ? ` · min damage ${effectiveDamage.effectiveMinDamage}`
       : "";
   const maxDamage = effectiveDamage.effectiveMaxDamageNote
-    ? ` · ${effectiveDamage.effectiveMaxDamageNote}`
+    ? effectiveDamage.effectiveMaxDamageCap !== undefined
+      ? ` · max ${effectiveDamage.effectiveMaxDamageCap}`
+      : ` · ${effectiveDamage.effectiveMaxDamageNote}`
     : "";
   const tableDamage = effectiveDamage.effectiveTableDamage ?? effectiveDamage.effectiveTotalDamage;
 
   if (damage.grazing && damage.damageRoll.required) {
-    return `grazing roll ${effectiveDamage.effectiveTotalDamage}${critical}${minDamage}${maxDamage}`;
+    return `grazing roll ${effectiveDamage.effectiveRawTotalDamage}${critical}${minDamage}${maxDamage}`;
   }
 
   return `table damage ${tableDamage}${critical}${minDamage}${maxDamage}`;
+}
+
+function formatCombatDamageResultLocationSuffix(
+  damage: CombatRoundPhaseResolutionResult["damageResult"],
+): string {
+  const location = damage
+    ? getCombatRoundEffectiveDamageResult(damage).effectiveSelectedHitLocation
+    : undefined;
+
+  return location ? ` at ${getHitLocationFullLabel(location).toLowerCase()}` : "";
 }
 
 function formatCombatHitLocationLine(
@@ -786,7 +803,9 @@ function formatCombatPhaseResolutionResultLines(input: {
       : `${parryLine} · ${damageLine}`;
   const damageResultLine =
     damageResult && resolvedDamageLine
-      ? `Result: ${getCombatRoundEffectiveDamageResult(damageResult).effectiveTotalDamage} damage`
+      ? `Result: ${getCombatRoundEffectiveDamageResult(
+          damageResult,
+        ).effectiveTotalDamage} damage${formatCombatDamageResultLocationSuffix(damageResult)}`
       : proposal.status === "committed"
         ? `Result: ${proposalLine}`
         : `Result: ${formatResolutionStatusLabel(proposal.status)}`;
@@ -2831,6 +2850,7 @@ export default function CombatRoundManagerPanel({
     attackStats: ReturnType<typeof buildPlayerCombatLoadoutSummary>["attackStats"];
     baseDefenseStats: ReturnType<typeof buildPlayerCombatDefenseStats>;
     defenseStats: ReturnType<typeof buildPlayerCombatDefenseStats>;
+    strengthGm?: number;
     liveModifiers: ReturnType<typeof buildEncounterLiveCombatModifierSummary>;
     modifierRows: ReturnType<typeof buildPlayerCombatModifierRows>;
     parrySources: CombatParrySourceOptions;
@@ -2856,6 +2876,15 @@ export default function CombatRoundManagerPanel({
     const buildResult = characterBuildSchema.safeParse(
       resolvedCharacterState?.serverRecord.build ?? input.scenarioParticipant?.snapshot.build,
     );
+    const characterCombatInputs =
+      content && buildResult.success
+        ? buildCombatStateCharacterInputs(
+            buildCharacterSheetSummary({
+              build: buildResult.data,
+              content,
+            }),
+          )
+        : undefined;
     const equipmentStateCandidate =
       resolvedCharacterState?.equipmentState ?? input.scenarioParticipant?.snapshot.equipmentState;
     const equipmentState = isEquipmentFeatureState(equipmentStateCandidate)
@@ -2927,6 +2956,7 @@ export default function CombatRoundManagerPanel({
       attackStats: loadoutSummary.attackStats,
       baseDefenseStats,
       defenseStats,
+      strengthGm: characterCombatInputs?.strengthGm ?? undefined,
       liveModifiers,
       modifierRows,
       parrySources,
@@ -3878,6 +3908,7 @@ export default function CombatRoundManagerPanel({
               createdAt: updatedAt,
             },
             armorModifier: 0,
+            attackerStrengthGm: attackerPhaseSummary.strengthGm,
             defenderDm,
             dmb,
             state: roundState,

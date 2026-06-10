@@ -4025,6 +4025,213 @@ describe("combat round manager", () => {
     });
   });
 
+  it("caps max damage before committing a location-specific D1 physical damage row", () => {
+    const { attackResult, state } = prepareFailedParryPendingDamage({
+      defenderDb: 10,
+      ob: 10,
+      rollD20: 18,
+    });
+    const afterLocation = recordTestHitLocation({
+      attackResult,
+      command: {
+        createdAt: "2026-01-01T00:04:30.000Z",
+        createdByUserId: "gm-1",
+      },
+      hitLocationRolls: [8],
+      state,
+    });
+    const afterDamage = recordCombatRoundDamageResult({
+      attackResult,
+      attackerStrengthGm: 4,
+      command: {
+        createdAt: "2026-01-01T00:05:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      defenderDm: 0,
+      dmb: 18,
+      state: afterLocation,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:05:00.000Z",
+    });
+    const afterCritical = recordCombatRoundCriticalRoll({
+      attackResult,
+      command: {
+        createdAt: "2026-01-01T00:05:30.000Z",
+        createdByUserId: "gm-1",
+      },
+      criticalDice: [5, 6],
+      rolledByParticipantId: "gladiator",
+      state: afterDamage,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:05:30.000Z",
+    });
+    const committed = commitCombatRoundPhaseDamage({
+      attackerScenarioParticipantId: "scenario-gladiator",
+      command: {
+        commandId: "commit-capped",
+        createdAt: "2026-01-01T00:06:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      defenderScenarioParticipantId: "scenario-guard",
+      encounterId: "encounter-1",
+      scenarioId: "scenario-1",
+      state: afterCritical,
+    });
+    const cleanedCombatEffects = removeCombatRoundCommittedDamageEffects({
+      combatEffects: committed.combatEffects,
+      command: committed.command,
+    });
+    const damageResult = afterDamage.phaseResolutionResults[0]?.damageResult;
+    const expectedCommitEffectId =
+      "commit-capped:r3:phase1:3-phase1-gladiator-guard:3-phase1-gladiator-guard-damage:combat-effect:physical-damage-abdomenLowerBack";
+
+    expect(damageResult).toMatchObject({
+      attackerStrengthGm: 4,
+      cappedTotalDamage: 21,
+      criticalGrade: "f",
+      damageLookupTotal: 36,
+      maxDamageApplied: true,
+      maxDamageCap: 21,
+      rawTotalDamage: 23,
+      selectedHitLocation: "abdomen",
+      tableDamage: 23,
+      totalDamage: 23,
+    });
+    expect(damageResult ? getCombatRoundEffectiveDamageResult(damageResult) : undefined)
+      .toMatchObject({
+        computedMaxDamageApplied: true,
+        computedMaxDamageCap: 21,
+        computedTotalDamage: 23,
+        effectiveMaxDamageApplied: true,
+        effectiveMaxDamageCap: 21,
+        effectiveRawTotalDamage: 23,
+        effectiveTotalDamage: 21,
+      });
+    expect(committed.command).toMatchObject({
+      facts: expect.objectContaining({
+        createdDamageEffectIds: [expectedCommitEffectId],
+        effectivePhysicalDamageLocation: expect.objectContaining({
+          id: "abdomenLowerBack",
+          label: "Abdomen/lower back",
+        }),
+        maxDamageApplied: true,
+        maxDamageCap: 21,
+        rawTotalDamage: 23,
+        totalDamage: 21,
+      }),
+      type: "commit_phase_damage",
+    });
+    expect(committed.combatEffects.events[0]?.description).toContain(
+      "23 raw damage, capped to 21",
+    );
+    expect(committed.combatEffects.effects).toContainEqual(
+      expect.objectContaining({
+        damage: 21,
+        generalDamage: 0,
+        id: expectedCommitEffectId,
+        location: "abdomenLowerBack",
+        targetParticipantId: "scenario-guard",
+        type: "physical_damage",
+      }),
+    );
+    expect(cleanedCombatEffects).toEqual({ effects: [], events: [] });
+  });
+
+  it("applies the max damage cap to GM total damage overrides", () => {
+    const result = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackerParticipantId: "gladiator",
+      defenderDb: 10,
+      defenderParticipantId: "guard",
+      ob: 10,
+      phase: "phase1",
+      rollD20: 18,
+      rollTotal: 18,
+      rolledAt: "2026-01-01T00:03:00.000Z",
+      weaponName: "Broad sword",
+    });
+    const damageResult = buildCombatRoundDamageResult({
+      armorModifier: 0,
+      attackerStrengthGm: 4,
+      attackResult: result,
+      createdAt: "2026-01-01T00:05:00.000Z",
+      defenderDm: 0,
+      dmb: 18,
+      hitLocationSelection: {
+        ...fixedChestLocationSelection(),
+        hitLocationRolls: [8],
+        selectedHitLocation: "abdomen",
+        selectedHitLocationRoll: 8,
+      },
+      roundNumber: 3,
+    });
+    const reviewedDamageResult = {
+      ...damageResult,
+      review: {
+        additionalEffects: [],
+        reviewedAt: "2026-01-01T00:05:30.000Z",
+        totalDamageOverride: 30,
+      },
+    };
+
+    expect(getCombatRoundEffectiveDamageResult(reviewedDamageResult)).toMatchObject({
+      effectiveMaxDamageApplied: true,
+      effectiveMaxDamageCap: 21,
+      effectiveRawTotalDamage: 30,
+      effectiveTotalDamage: 21,
+    });
+  });
+
+  it.each([
+    { effectLocation: "head", roll: 19 },
+    { effectLocation: "rightArm", roll: 18 },
+    { effectLocation: "leftArm", roll: 16 },
+    { effectLocation: "chestBack", roll: 12 },
+    { effectLocation: "upperRightLeg", roll: 4 },
+    { effectLocation: "upperLeftLeg", roll: 1 },
+  ])("commits hit location roll $roll to physical damage location $effectLocation", (caseInput) => {
+    const { attackResult, state } = prepareFailedParryPendingDamage({});
+    const afterLocation = recordTestHitLocation({
+      attackResult,
+      hitLocationRolls: [caseInput.roll],
+      state,
+    });
+    const afterDamage = recordCombatRoundDamageResult({
+      attackResult,
+      command: {
+        createdAt: "2026-01-01T00:05:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      defenderDm: 0,
+      dmb: 0,
+      state: afterLocation,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:05:00.000Z",
+    });
+    const committed = commitCombatRoundPhaseDamage({
+      attackerScenarioParticipantId: "scenario-gladiator",
+      command: {
+        commandId: `commit-${caseInput.effectLocation}`,
+        createdAt: "2026-01-01T00:06:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      defenderScenarioParticipantId: "scenario-guard",
+      encounterId: "encounter-1",
+      scenarioId: "scenario-1",
+      state: afterDamage,
+    });
+
+    expect(committed.combatEffects.effects).toContainEqual(
+      expect.objectContaining({
+        damage: 2,
+        generalDamage: 0,
+        location: caseInput.effectLocation,
+        targetParticipantId: "scenario-guard",
+        type: "physical_damage",
+      }),
+    );
+  });
+
   it("records and undoes grazing D1 damage rolls after failed parry", () => {
     const state = initializeCombatRoundPhaseResolutionCursor({
       phase: "phase1",
@@ -4415,7 +4622,7 @@ describe("combat round manager", () => {
     const expectedCommitEventId =
       "commit-d1:r3:phase1:3-phase1-gladiator-guard:3-phase1-gladiator-guard-damage:combat-effect-event";
     const expectedCommitEffectId =
-      "commit-d1:r3:phase1:3-phase1-gladiator-guard:3-phase1-gladiator-guard-damage:combat-effect:general-damage";
+      "commit-d1:r3:phase1:3-phase1-gladiator-guard:3-phase1-gladiator-guard-damage:combat-effect:physical-damage-abdomenLowerBack";
     const expectedStunEffectId =
       "commit-d1:r3:phase1:3-phase1-gladiator-guard:3-phase1-gladiator-guard-damage:combat-effect:additional-guard-stun";
     const expectedNoteEffectId =
@@ -4516,6 +4723,7 @@ describe("combat round manager", () => {
           expectedStunEffectId,
           expectedNoteEffectId,
         ],
+        createdDamageEffectIds: [expectedCommitEffectId],
         criticalGrade: "a",
         criticalRoll: expect.objectContaining({
           criticalDice: [4, 5],
@@ -4556,12 +4764,13 @@ describe("combat round manager", () => {
     ).toContain("Additional effects: Stunned, Dropped weapon.");
     expect(committed.combatEffects.effects).toContainEqual(
       expect.objectContaining({
-        generalDamage: 6,
+        damage: 6,
         id: expectedCommitEffectId,
+        location: "abdomenLowerBack",
         sourceEventId: expectedCommitEventId,
         status: "active",
         targetParticipantId: "scenario-guard",
-        type: "general_damage",
+        type: "physical_damage",
       }),
     );
     expect(committed.combatEffects.effects).toContainEqual(
@@ -4769,7 +4978,7 @@ describe("combat round manager", () => {
     const expectedCommitEventId =
       "commit-d2:r3:phase2:3-phase2-guard-gladiator:3-phase2-guard-gladiator-damage:combat-effect-event";
     const expectedCommitEffectId =
-      "commit-d2:r3:phase2:3-phase2-guard-gladiator:3-phase2-guard-gladiator-damage:combat-effect:general-damage";
+      "commit-d2:r3:phase2:3-phase2-guard-gladiator:3-phase2-guard-gladiator-damage:combat-effect:physical-damage-chestBack";
     const clearedCommitState = clearCombatRoundStep({
       state: committed.state,
       step: "phase_2_damage",
@@ -4790,6 +4999,7 @@ describe("combat round manager", () => {
         attackResultId: "3:phase2:guard:gladiator",
         attackerParticipantId: "guard",
         createdCombatEffectEventId: expectedCommitEventId,
+        createdDamageEffectIds: [expectedCommitEffectId],
         createdCombatEffectIds: [expectedCommitEffectId],
         criticalRoll: expect.objectContaining({
           criticalDice: [4, 5],
@@ -4811,12 +5021,13 @@ describe("combat round manager", () => {
     });
     expect(committed.combatEffects.effects).toContainEqual(
       expect.objectContaining({
-        generalDamage: 9,
+        damage: 9,
         id: expectedCommitEffectId,
+        location: "chestBack",
         sourceEventId: expectedCommitEventId,
         status: "active",
         targetParticipantId: "scenario-gladiator",
-        type: "general_damage",
+        type: "physical_damage",
       }),
     );
     expect(committed.state.phaseResolutionResults[0]?.damageProposal).toMatchObject({
