@@ -3,7 +3,6 @@ import { z } from "zod";
 import {
   assertClosedDieRoll,
   expandClosedDieRuleTable,
-  getClosedDieRuleTableBandDistance,
   resolveClosedDieRuleTableRoll,
   type ClosedDieRuleTableBand,
 } from "../rules/ruleTable";
@@ -22,6 +21,15 @@ export const hitLocationTargetSchema = z.union([hitLocationSchema, z.literal("no
 
 export type HitLocation = z.infer<typeof hitLocationSchema>;
 export type HitLocationTarget = z.infer<typeof hitLocationTargetSchema>;
+export type HitLocationSelectionReason = "single_roll" | "targeted_closest";
+
+export interface HitLocationSelection {
+  hitLocationRolls: readonly number[];
+  hitLocationSelectionReason: HitLocationSelectionReason;
+  selectedHitLocation: HitLocation;
+  selectedHitLocationRoll: number;
+  targetLocation?: HitLocationTarget;
+}
 
 export const HIT_LOCATIONS = hitLocationSchema.options;
 
@@ -40,10 +48,15 @@ export const HIT_LOCATION_RULE_TABLE = {
   notes: [
     "If no location is aimed, use one closed 1d20 roll.",
     "If an attacker aims at a location, roll closed 1d20 twice and use the roll closest to the aimed location.",
-    "Distance to an aimed location is measured against the nearest roll in that location's band; ties use the first roll.",
+    "Distance to an aimed location is measured by table location order; ties use the first roll.",
   ],
   rollOrder: "descending",
   sides: 20,
+  source: {
+    range: "A1:C21",
+    sheet: "Location table",
+    workbook: "docs/source/combat/New_Combat_Arena.xlsx",
+  },
   title: "Combat Hit Location",
 } as const;
 
@@ -73,6 +86,16 @@ export function getHitLocationFullLabel(location: HitLocation): string {
   return getHitLocationBand(location).fullLabel;
 }
 
+export function getHitLocationOrderIndex(location: HitLocation): number {
+  const index = HIT_LOCATION_RULE_TABLE.bands.findIndex((band) => band.key === location);
+
+  if (index === -1) {
+    throw new RangeError(`Unknown hit location: ${location}`);
+  }
+
+  return index;
+}
+
 export function chooseTargetedHitLocationRoll(
   targetLocation: HitLocationTarget | undefined,
   rollA: number,
@@ -90,9 +113,32 @@ export function chooseTargetedHitLocationRoll(
 
   assertClosedDieRoll(HIT_LOCATION_RULE_TABLE, rollB);
 
-  const targetBand = getHitLocationBand(targetLocation);
-  const distanceA = getClosedDieRuleTableBandDistance(targetBand, rollA);
-  const distanceB = getClosedDieRuleTableBandDistance(targetBand, rollB);
+  const targetIndex = getHitLocationOrderIndex(targetLocation);
+  const distanceA = Math.abs(getHitLocationOrderIndex(resolveHitLocationRoll(rollA)) - targetIndex);
+  const distanceB = Math.abs(getHitLocationOrderIndex(resolveHitLocationRoll(rollB)) - targetIndex);
 
   return distanceA <= distanceB ? rollA : rollB;
+}
+
+export function resolveHitLocationSelection(input: {
+  rollA: number;
+  rollB?: number;
+  targetLocation?: HitLocationTarget;
+}): HitLocationSelection {
+  const targeted = Boolean(input.targetLocation && input.targetLocation !== "none");
+  const selectedHitLocationRoll = chooseTargetedHitLocationRoll(
+    input.targetLocation,
+    input.rollA,
+    input.rollB,
+  );
+
+  return {
+    hitLocationRolls: targeted && input.rollB !== undefined
+      ? [input.rollA, input.rollB]
+      : [input.rollA],
+    hitLocationSelectionReason: targeted ? "targeted_closest" : "single_roll",
+    selectedHitLocation: resolveHitLocationRoll(selectedHitLocationRoll),
+    selectedHitLocationRoll,
+    targetLocation: input.targetLocation,
+  };
 }

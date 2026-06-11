@@ -5,36 +5,57 @@ import type { EncounterParticipant, EncounterSession } from "./session";
 import {
   COMBAT_ROUND_STEP_ABBREVIATIONS,
   COMBAT_ROUND_STEPS,
+  advanceCombatRoundPhaseResolutionSubstepForParticipant,
   advanceCombatRoundStep,
+  buildCombatRoundDamageResult,
   buildCombatRoundPhaseResolutionResult,
   buildCombatRoundAttackRollResult,
   buildCombatRoundInspector,
   buildCombatRoundInitiativeResult,
+  canPlayerRollCombatAttack,
   canPlayerSubmitCombatDeclaration,
   canPlayerRollCombatInitiative,
   clearCombatRoundStep,
   clearCurrentCombatRoundStepAndRewind,
+  combatRoundStateSchema,
+  combatRoundParticipantHasPhaseAttack,
+  commitCombatRoundPhaseDamage,
   completeCombatRoundPhaseResolutionForParticipant,
   combatRoundAttackRollResultSchema,
   getCombatRoundPhaseResolutionOrder,
   getCombatRoundPhaseResolutionStatus,
+  getPlayerCombatCurrentRollAction,
   getCombatRoundInitiativePhaseForStep,
   getCombatRoundModifierPhaseForStep,
   getCombatRoundInitiativePositions,
   getCombatRoundInitiativeRanks,
   getCombatRoundAttackResultsForParticipantPhase,
-  getCombatRoundDisplayAttackResultForParticipantPhase,
+  getCombatRoundDisplayIncomingAttackResultForParticipantPhase,
   getCombatRoundDisplayPhaseResolutionResultForParticipantPhase,
+  getCombatRoundOutgoingAttackResultForParticipantPhase,
+  getCombatRoundParticipantPhaseStepStatus,
   getCombatRoundResolutionPhaseForStep,
   getCombatRoundStepSnapshot,
+  getCombatRoundEffectiveDamageResult,
+  getCombatRoundDamageSubstate,
   getPreviousCombatRoundStep,
   initializeCombatRoundState,
   ensureCombatRoundPhaseResolutionResultsForPhase,
   initializeCombatRoundPhaseResolutionCursor,
+  isCombatRoundPhaseInitiativeComplete,
   recordCombatRoundDeclaration,
   recordCombatRoundAttackResult,
+  recordCombatRoundDamageReviewPlaceholder,
+  recordCombatRoundDamageResult,
+  recordCombatRoundHitLocationRoll,
+  recordCombatRoundCriticalRoll,
+  reviewCombatRoundDamageResult,
   recordCombatRoundInitiative,
+  recordCombatRoundNoAttackPhaseReview,
+  recordCombatRoundParryResult,
+  recordCombatRoundParryResolution,
   recordCombatRoundParticipantStepReview,
+  removeCombatRoundCommittedDamageEffects,
   rollOpenEndedD6,
   setCombatRoundActiveParticipant,
   setCombatRoundParticipantInitiative,
@@ -43,6 +64,7 @@ import {
 } from "./combatRoundManager";
 import { encounterSessionSchema } from "./session";
 import type { CombatRoundStepSnapshot } from "./combatRoundManager";
+import type { CombatEffectsState } from "./combatEffects";
 
 function participant(input: {
   id: string;
@@ -116,16 +138,312 @@ function advanceToStep(
   return current;
 }
 
+function declareRoundAction(input: {
+  actionId: string;
+  participantId: string;
+  state: ReturnType<typeof initializeCombatRoundState>;
+}): ReturnType<typeof initializeCombatRoundState> {
+  const targetParticipantId = input.participantId === "gladiator" ? "guard" : "gladiator";
+
+  return recordCombatRoundDeclaration({
+    declaration: {
+      actionId: input.actionId,
+      phaseContexts: {
+        phase1: testPhaseContext(targetParticipantId),
+        phase2: testPhaseContext(targetParticipantId),
+      },
+      roundNumber: 3,
+    },
+    participantId: input.participantId,
+    state: input.state,
+    submittedBy: "gm",
+  });
+}
+
+function testPhaseContext(targetParticipantId: string) {
+  return {
+    modifierBuckets: {
+      general: [],
+      situationDb: [],
+      situationInitiative: [],
+      situationObSkill: [],
+    },
+    targetParticipantId,
+  };
+}
+
+function fixedChestLocationSelection() {
+  return {
+    hitLocationRolls: [12],
+    hitLocationSelectionReason: "single_roll" as const,
+    selectedHitLocation: "chest" as const,
+    selectedHitLocationRoll: 12,
+  };
+}
+
+function recordTestHitLocation(input: {
+  attackResult: ReturnType<typeof buildCombatRoundAttackRollResult>;
+  command?: {
+    createdAt?: string;
+    createdByUserId?: string;
+  };
+  hitLocationRolls?: number[];
+  rolledByParticipantId?: string;
+  state: ReturnType<typeof initializeCombatRoundState>;
+  targetLocation?: "none" | "head" | "rightArm" | "leftArm" | "chest" | "abdomen" | "rightLeg" | "leftLeg";
+  updatedAt?: string;
+}): ReturnType<typeof initializeCombatRoundState> {
+  const updatedAt = input.updatedAt ?? input.command?.createdAt ?? "2026-01-01T00:04:30.000Z";
+
+  return recordCombatRoundHitLocationRoll({
+    attackResult: input.attackResult,
+    command: input.command
+      ? {
+          createdAt: input.command.createdAt ?? updatedAt,
+          createdByUserId: input.command.createdByUserId,
+        }
+      : undefined,
+    hitLocationRolls: input.hitLocationRolls ?? [12],
+    rolledByParticipantId:
+      input.rolledByParticipantId ?? input.attackResult.attackerParticipantId,
+    state: input.state,
+    submittedBy: "gm",
+    targetLocation: input.targetLocation,
+    updatedAt,
+  });
+}
+
+function preparePhaseResolutionState(input: {
+  guardAlreadyDone?: boolean;
+  guardActionId: string;
+  gladiatorActionId: string;
+  phase: "phase1" | "phase2";
+}): ReturnType<typeof initializeCombatRoundState> {
+  const withDeclarations = declareRoundAction({
+    actionId: input.guardActionId,
+    participantId: "guard",
+    state: declareRoundAction({
+      actionId: input.gladiatorActionId,
+      participantId: "gladiator",
+      state: initializeCombatRoundState({ encounter: encounter() }),
+    }),
+  });
+  const withInitiatives = setCombatRoundParticipantInitiative({
+    initiative: { baseInitiative: 0, modifierAdjustment: 0, rolls: [4], rollTotal: 4, total: 4 },
+    participantId: "guard",
+    phase: input.phase,
+    state: setCombatRoundParticipantInitiative({
+      initiative: { baseInitiative: 0, modifierAdjustment: 0, rolls: [6], rollTotal: 6, total: 6 },
+      participantId: "gladiator",
+      phase: input.phase,
+      state: withDeclarations,
+    }),
+  });
+  const withCursor = initializeCombatRoundPhaseResolutionCursor({
+    phase: input.phase,
+    state: withInitiatives,
+    updatedAt: "2026-01-01T00:02:00.000Z",
+  });
+
+  return input.guardAlreadyDone
+    ? completeCombatRoundPhaseResolutionForParticipant({
+        participantId: "guard",
+        phase: input.phase,
+        state: withCursor,
+        submittedBy: "gm",
+        updatedAt: "2026-01-01T00:02:30.000Z",
+      })
+    : withCursor;
+}
+
+function prepareFailedParryPendingDamage(input: {
+  actionId?: string;
+  defenderDb?: number;
+  ob?: number;
+  phase?: "phase1" | "phase2";
+  rollD20?: number;
+}): {
+  attackResult: ReturnType<typeof buildCombatRoundAttackRollResult>;
+  state: ReturnType<typeof initializeCombatRoundState>;
+} {
+  const phase = input.phase ?? "phase1";
+  const actionId = input.actionId ?? "attack_parry";
+  const state = initializeCombatRoundPhaseResolutionCursor({
+    phase,
+    state: setCombatRoundParticipantInitiative({
+      initiative: { baseInitiative: 0, modifierAdjustment: 0, rolls: [6], rollTotal: 6, total: 6 },
+      participantId: "gladiator",
+      phase,
+      state: declareRoundAction({
+        actionId,
+        participantId: "gladiator",
+        state: initializeCombatRoundState({ encounter: encounter() }),
+      }),
+    }),
+    updatedAt: "2026-01-01T00:02:00.000Z",
+  });
+  const attackResult = buildCombatRoundAttackRollResult({
+    actionId,
+    attackerParticipantId: "gladiator",
+    defenderDb: input.defenderDb ?? 10,
+    defenderParticipantId: "guard",
+    ob: input.ob ?? 10,
+    phase,
+    rollD20: input.rollD20 ?? 14,
+    rollTotal: input.rollD20 ?? 14,
+    rolledAt: "2026-01-01T00:03:00.000Z",
+    weaponName: "Broad sword",
+  });
+  const afterAttack = recordCombatRoundAttackResult({
+    command: {
+      createdAt: attackResult.rolledAt,
+      createdByUserId: "gm-1",
+    },
+    participantId: "gladiator",
+    result: attackResult,
+    state,
+    submittedBy: "gm",
+  });
+  const afterParry = recordCombatRoundParryResult({
+    attackResult,
+    command: {
+      createdAt: "2026-01-01T00:04:00.000Z",
+      createdByUserId: "gm-1",
+    },
+    parryResolution: {
+      combinedParryScore: 9,
+      modifierAdjustment: 0,
+      openEndedD10s: [],
+      resultLabel: "Parry failed",
+      rollD20: 8,
+      rollTotal: 8,
+      status: "resolved",
+      success: false,
+      targetNumber: 21,
+      total: 17,
+    },
+    state: afterAttack,
+    submittedBy: "gm",
+    updatedAt: "2026-01-01T00:04:00.000Z",
+  });
+
+  return {
+    attackResult,
+    state: afterParry,
+  };
+}
+
+function commitFailedParryDamage(input: {
+  actionId: string;
+  phase: "phase1" | "phase2";
+  state: ReturnType<typeof initializeCombatRoundState>;
+}) {
+  const result = buildCombatRoundAttackRollResult({
+    actionId: input.actionId,
+    attackerParticipantId: "gladiator",
+    defenderDb: 10,
+    defenderParticipantId: "guard",
+    ob: 10,
+    phase: input.phase,
+    rollD20: 14,
+    rollTotal: 14,
+    rolledAt: "2026-01-01T00:03:00.000Z",
+    weaponName: "Broad sword",
+  });
+  const afterAttack = recordCombatRoundAttackResult({
+    command: {
+      createdAt: result.rolledAt,
+      createdByUserId: "gm-1",
+    },
+    participantId: "gladiator",
+    result,
+    state: input.state,
+    submittedBy: "gm",
+  });
+  const afterParry = recordCombatRoundParryResult({
+    attackResult: result,
+    command: {
+      createdAt: "2026-01-01T00:04:00.000Z",
+      createdByUserId: "gm-1",
+    },
+    parryResolution: {
+      combinedParryScore: 9,
+      modifierAdjustment: 0,
+      openEndedD10s: [],
+      resultLabel: "Parry failed",
+      rollD20: 8,
+      rollTotal: 8,
+      status: "resolved",
+      success: false,
+      targetNumber: 21,
+      total: 17,
+    },
+    state: afterAttack,
+    submittedBy: "gm",
+    updatedAt: "2026-01-01T00:04:00.000Z",
+  });
+  const afterLocation = recordCombatRoundHitLocationRoll({
+    attackResult: result,
+    command: {
+      createdAt: "2026-01-01T00:04:30.000Z",
+      createdByUserId: "gm-1",
+    },
+    hitLocationRolls: [12],
+    rolledByParticipantId: "gladiator",
+    state: afterParry,
+    submittedBy: "gm",
+    updatedAt: "2026-01-01T00:04:30.000Z",
+  });
+  const afterDamage = recordCombatRoundDamageResult({
+    attackResult: result,
+    command: {
+      createdAt: "2026-01-01T00:05:00.000Z",
+      createdByUserId: "gm-1",
+    },
+    defenderDm: 0,
+    dmb: 8,
+    state: afterLocation,
+    submittedBy: "gm",
+    updatedAt: "2026-01-01T00:05:00.000Z",
+  });
+  const afterCritical = recordCombatRoundCriticalRoll({
+    attackResult: result,
+    command: {
+      createdAt: "2026-01-01T00:05:30.000Z",
+      createdByUserId: "gm-1",
+    },
+    criticalDice: [4, 5],
+    rolledByParticipantId: "gladiator",
+    state: afterDamage,
+    submittedBy: "gm",
+    updatedAt: "2026-01-01T00:05:30.000Z",
+  });
+
+  return commitCombatRoundPhaseDamage({
+    attackerScenarioParticipantId: "scenario-gladiator",
+    command: {
+      createdAt: "2026-01-01T00:06:00.000Z",
+      createdByUserId: "gm-1",
+    },
+    defenderScenarioParticipantId: "scenario-guard",
+    encounterId: "encounter-1",
+    scenarioId: "scenario-1",
+    state: afterCritical,
+  });
+}
+
 describe("combat round manager", () => {
   it("defines the compact round timeline steps in order", () => {
     expect(COMBAT_ROUND_STEPS.map((step) => COMBAT_ROUND_STEP_ABBREVIATIONS[step])).toEqual([
       "DE",
       "M1",
       "i1",
+      "A1",
       "P1",
       "D1",
       "M2",
       "i2",
+      "A2",
       "P2",
       "D2",
       "SU",
@@ -137,10 +455,124 @@ describe("combat round manager", () => {
 
     expect(state.roundNumber).toBe(3);
     expect(state.currentStep).toBe("select_actions");
+    expect(state.commands).toEqual([]);
+    expect(state.currentCursor).toEqual({
+      participantId: "gladiator",
+      roundNumber: 3,
+      step: "DE",
+    });
+    expect(state.phaseResolutionCursor).toBeUndefined();
+    expect(state.phaseResolutionResults).toEqual([]);
+    expect(state.phaseResolutionStatuses).toEqual({});
+    expect(state.stepSnapshots).toEqual([]);
     expect(state.selectedParticipantId).toBe("gladiator");
     expect(state.participants.map((entry) => entry.participantId)).toEqual(["gladiator", "guard"]);
     expect(state.participants[0]?.stepStatuses.select_actions).toBe("pending");
     expect(state.participants[0]?.stepStatuses.round_summary).toBe("pending");
+    expect(state.participants[0]?.attackResults).toEqual({});
+    expect(
+      getCombatRoundParticipantPhaseStepStatus({
+        participantId: "guard",
+        state,
+        step: "review_phase_2_actions",
+      }),
+    ).toBe("pending");
+    expect(
+      getCombatRoundParticipantPhaseStepStatus({
+        participantId: "guard",
+        state,
+        step: "phase_1_damage",
+      }),
+    ).toBe("pending");
+  });
+
+  it("parses legacy round state without commands or current cursor", () => {
+    const state = initializeCombatRoundState({ encounter: encounter() });
+    const { commands, currentCursor, ...legacyState } = state;
+    const parsed = combatRoundStateSchema.parse(legacyState);
+
+    expect(commands).toEqual([]);
+    expect(currentCursor).toMatchObject({ step: "DE" });
+    expect(parsed.commands).toEqual([]);
+    expect(parsed.currentCursor).toBeUndefined();
+  });
+
+  it("falls back to the first participant when persisted selection is invalid", () => {
+    const existing = initializeCombatRoundState({ encounter: encounter() });
+    const state = initializeCombatRoundState({
+      encounter: encounter({
+        combatRoundState: {
+          ...existing,
+          selectedParticipantId: "missing",
+          selectedStep: "select_actions",
+        },
+      }),
+    });
+
+    expect(state.selectedParticipantId).toBe("gladiator");
+    expect(state.selectedStep).toBe("select_actions");
+  });
+
+  it("preserves a legacy manual DE participant selection when no current cursor exists", () => {
+    const existing = initializeCombatRoundState({ encounter: encounter() });
+    const { currentCursor, ...legacyExisting } = existing;
+    const state = initializeCombatRoundState({
+      encounter: encounter({
+        combatRoundState: {
+          ...legacyExisting,
+          selectedParticipantId: "guard",
+          selectedStep: "select_actions",
+        },
+      }),
+    });
+
+    expect(currentCursor).toMatchObject({ step: "DE" });
+    expect(state.selectedParticipantId).toBe("guard");
+    expect(state.selectedStep).toBe("select_actions");
+  });
+
+  it("uses persisted currentCursor over stale selected participant for global steps", () => {
+    const existing = initializeCombatRoundState({ encounter: encounter() });
+    const state = initializeCombatRoundState({
+      encounter: encounter({
+        combatRoundState: {
+          ...existing,
+          currentCursor: {
+            participantId: "guard",
+            roundNumber: existing.roundNumber,
+            step: "DE",
+          },
+          selectedParticipantId: "gladiator",
+          selectedStep: "select_actions",
+        },
+      }),
+    });
+
+    expect(state.selectedParticipantId).toBe("guard");
+    expect(state.selectedStep).toBe("select_actions");
+  });
+
+  it("resets stale phase selection when reinitializing a DE round", () => {
+    const existing = initializeCombatRoundState({ encounter: encounter() });
+    const state = initializeCombatRoundState({
+      encounter: encounter({
+        combatRoundState: {
+          ...existing,
+          currentStep: "select_actions",
+          phaseResolutionCursor: {
+            participantId: "guard",
+            phase: "phase1",
+            substep: "damage",
+          },
+          selectedParticipantId: "guard",
+          selectedStep: "phase_1_damage",
+        },
+      }),
+    });
+
+    expect(state.phaseResolutionCursor).toBeUndefined();
+    expect(state.selectedParticipantId).toBe("gladiator");
+    expect(state.selectedStep).toBe("select_actions");
   });
 
   it("advances steps in order and resets after round summary", () => {
@@ -156,17 +588,74 @@ describe("combat round manager", () => {
       "initiative_phase_1",
       "phase_1_actions",
       "review_phase_2_actions",
+      "phase_1_damage",
       "review_phase_2_modifiers",
       "initiative_phase_2",
       "phase_2_actions",
       "review_phase_2_damage",
+      "phase_2_damage",
     ].reduce((current) => advanceCombatRoundStep(current), reviewState);
     const nextRoundState = advanceCombatRoundStep(roundSummaryState);
 
     expect(roundSummaryState.currentStep).toBe("round_summary");
     expect(nextRoundState.currentStep).toBe("select_actions");
     expect(nextRoundState.roundNumber).toBe(4);
+    expect(nextRoundState.selectedParticipantId).toBe("gladiator");
     expect(nextRoundState.participants[0]?.stepStatuses.select_actions).toBe("pending");
+  });
+
+  it("starts a new round without stale declaration, initiative, attack, or phase-resolution state", () => {
+    const result = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackerParticipantId: "gladiator",
+      defenderDb: 10,
+      defenderParticipantId: "guard",
+      ob: 10,
+      phase: "phase1",
+      rollD20: 14,
+      rollTotal: 14,
+      rolledAt: "2026-01-01T00:03:00.000Z",
+      weaponName: "Broad sword",
+    });
+    const withDeclaration = declareRoundAction({
+      actionId: "attack_parry",
+      participantId: "gladiator",
+      state: initializeCombatRoundState({ encounter: encounter() }),
+    });
+    const withInitiative = setCombatRoundParticipantInitiative({
+      initiative: 14,
+      participantId: "gladiator",
+      phase: "phase1",
+      state: withDeclaration,
+    });
+    const withAttack = recordCombatRoundAttackResult({
+      participantId: "gladiator",
+      result,
+      state: withInitiative,
+      submittedBy: "gm",
+    });
+    const withResolution = ensureCombatRoundPhaseResolutionResultsForPhase({
+      phase: "phase1",
+      state: withAttack,
+      updatedAt: "2026-01-01T00:04:00.000Z",
+    });
+    const roundSummaryState: ReturnType<typeof initializeCombatRoundState> = {
+      ...withResolution,
+      currentStep: "round_summary",
+      selectedParticipantId: "guard",
+      selectedStep: "phase_1_damage",
+    };
+    const nextRoundState = advanceCombatRoundStep(roundSummaryState);
+
+    expect(nextRoundState.currentStep).toBe("select_actions");
+    expect(nextRoundState.roundNumber).toBe(4);
+    expect(nextRoundState.phaseResolutionCursor).toBeUndefined();
+    expect(nextRoundState.phaseResolutionResults).toEqual([]);
+    expect(nextRoundState.phaseResolutionStatuses).toEqual({});
+    expect(nextRoundState.selectedParticipantId).toBe("gladiator");
+    expect(nextRoundState.participants[0]?.declaration).toBeUndefined();
+    expect(nextRoundState.participants[0]?.initiatives).toEqual({});
+    expect(nextRoundState.participants[0]?.attackResults).toEqual({});
   });
 
   it("commits per-participant snapshots when advancing a step", () => {
@@ -321,8 +810,24 @@ describe("combat round manager", () => {
         }),
       ],
     });
+    const clearableState = {
+      ...withLaterSnapshot,
+      participants: withLaterSnapshot.participants.map((participant) =>
+        participant.participantId === "gladiator"
+          ? {
+              ...participant,
+              stepStatuses: {
+                ...participant.stepStatuses,
+                review_action_modifiers: "complete" as const,
+              },
+            }
+          : participant,
+      ),
+      selectedParticipantId: "gladiator",
+      selectedStep: "review_action_modifiers" as const,
+    };
     const cleared = clearCombatRoundStep({
-      state: withLaterSnapshot,
+      state: clearableState,
       step: "review_action_modifiers",
     });
 
@@ -364,6 +869,59 @@ describe("combat round manager", () => {
     expect(cleared.participants[0]?.initiatives.phase1).toBeUndefined();
   });
 
+  it("clears i1 for the selected participant and returns to the selected i1 cell", () => {
+    const baseState = initializeCombatRoundState({ encounter: encounter() });
+    const withInitiatives = setCombatRoundParticipantInitiative({
+      initiative: 12,
+      participantId: "guard",
+      phase: "phase1",
+      state: setCombatRoundParticipantInitiative({
+        initiative: 14,
+        participantId: "gladiator",
+        phase: "phase1",
+        state: baseState,
+      }),
+    });
+    const result = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackerParticipantId: "gladiator",
+      defenderDb: 10,
+      defenderParticipantId: "guard",
+      ob: 10,
+      phase: "phase1",
+      rollD20: 14,
+      rollTotal: 14,
+      rolledAt: "2026-01-01T00:03:00.000Z",
+      weaponName: "Broad sword",
+    });
+    const withAttack = recordCombatRoundAttackResult({
+      participantId: "gladiator",
+      result,
+      state: {
+        ...withInitiatives,
+        selectedParticipantId: "gladiator",
+        selectedStep: "initiative_phase_1",
+      },
+      submittedBy: "gm",
+    });
+    const cleared = clearCombatRoundStep({
+      state: {
+        ...withAttack,
+        selectedParticipantId: "gladiator",
+        selectedStep: "initiative_phase_1",
+      },
+      step: "initiative_phase_1",
+    });
+
+    expect(cleared.selectedParticipantId).toBe("gladiator");
+    expect(cleared.selectedStep).toBe("initiative_phase_1");
+    expect(cleared.participants[0]?.initiatives.phase1).toBeUndefined();
+    expect(cleared.participants[1]?.initiatives.phase1).toMatchObject({ total: 12 });
+    expect(cleared.participants[0]?.attackResults.phase1).toBeUndefined();
+    expect(cleared.participants[0]?.stepStatuses.phase_1_actions).toBe("pending");
+    expect(cleared.participants[1]?.stepStatuses.review_phase_2_actions).toBe("pending");
+  });
+
   it("clears the current step and rewinds to the previous step", () => {
     const state = advanceCombatRoundStep(initializeCombatRoundState({ encounter: encounter() }));
     const withCompleteReview = setCombatRoundParticipantStepStatus({
@@ -397,6 +955,150 @@ describe("combat round manager", () => {
     expect(cleared.currentStep).toBe("select_actions");
     expect(cleared.participants[0]?.stepStatuses.select_actions).toBe("pending");
     expect(cleared.participants[0]?.declaration).toBeUndefined();
+  });
+
+  it("clears stale A/P/D state when DE is cleared for the attacker", () => {
+    const result = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackerParticipantId: "gladiator",
+      defenderDb: 10,
+      defenderParticipantId: "guard",
+      ob: 10,
+      phase: "phase1",
+      rollD20: 18,
+      rollTotal: 18,
+      rolledAt: "2026-01-01T00:03:00.000Z",
+      weaponName: "Broad sword",
+    });
+    const withDeclaration = recordCombatRoundDeclaration({
+      declaration: {
+        actionId: "attack_parry",
+        movementId: "hold",
+        roundNumber: 3,
+      },
+      participantId: "gladiator",
+      state: initializeCombatRoundState({ encounter: encounter() }),
+      submittedBy: "player",
+    });
+    const withAttack = recordCombatRoundAttackResult({
+      participantId: "gladiator",
+      result,
+      state: withDeclaration,
+      submittedBy: "gm",
+    });
+    const withResolution = ensureCombatRoundPhaseResolutionResultsForPhase({
+      phase: "phase1",
+      state: withAttack,
+      updatedAt: "2026-01-01T00:04:00.000Z",
+    });
+    const withSnapshots = {
+      ...withResolution,
+      selectedParticipantId: "gladiator",
+      selectedStep: "select_actions" as const,
+      stepSnapshots: [
+        stepSnapshot({
+          attackResult: result,
+          participantId: "gladiator",
+          phase: "phase1",
+          step: "phase_1_actions",
+        }),
+        stepSnapshot({
+          attackResult: result,
+          participantId: "guard",
+          phase: "phase1",
+          phaseResolutionResult: withResolution.phaseResolutionResults[0],
+          step: "review_phase_2_actions",
+        }),
+      ],
+    };
+    const cleared = clearCombatRoundStep({
+      state: withSnapshots,
+      step: "select_actions",
+    });
+
+    expect(cleared.participants[0]?.declaration).toBeUndefined();
+    expect(cleared.participants[0]?.attackResults.phase1).toBeUndefined();
+    expect(cleared.phaseResolutionCursor).toBeUndefined();
+    expect(cleared.phaseResolutionResults).toEqual([]);
+    expect(cleared.participants[0]?.stepStatuses.phase_1_actions).toBe("pending");
+    expect(cleared.participants[1]?.stepStatuses.review_phase_2_actions).toBe("pending");
+    expect(cleared.participants[1]?.stepStatuses.phase_1_damage).toBe("pending");
+    expect(
+      getCombatRoundParticipantPhaseStepStatus({
+        participantId: "guard",
+        state: cleared,
+        step: "review_phase_2_actions",
+      }),
+    ).toBe("pending");
+    expect(
+      getCombatRoundStepSnapshot({
+        participantId: "gladiator",
+        state: cleared,
+        step: "phase_1_actions",
+      }),
+    ).toBeUndefined();
+    expect(
+      getCombatRoundStepSnapshot({
+        participantId: "guard",
+        state: cleared,
+        step: "review_phase_2_actions",
+      }),
+    ).toBeUndefined();
+  });
+
+  it("clears stale outgoing A/P/D state when a declaration is replaced", () => {
+    const result = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackerParticipantId: "gladiator",
+      defenderDb: 10,
+      defenderParticipantId: "guard",
+      ob: 10,
+      phase: "phase1",
+      rollD20: 18,
+      rollTotal: 18,
+      rolledAt: "2026-01-01T00:03:00.000Z",
+      weaponName: "Broad sword",
+    });
+    const withDeclaration = declareRoundAction({
+      actionId: "attack_parry",
+      participantId: "gladiator",
+      state: initializeCombatRoundState({ encounter: encounter() }),
+    });
+    const withAttack = recordCombatRoundAttackResult({
+      participantId: "gladiator",
+      result,
+      state: withDeclaration,
+      submittedBy: "gm",
+    });
+    const withResolution = ensureCombatRoundPhaseResolutionResultsForPhase({
+      phase: "phase1",
+      state: withAttack,
+      updatedAt: "2026-01-01T00:04:00.000Z",
+    });
+    const redeclared = recordCombatRoundDeclaration({
+      declaration: {
+        actionId: "parry_attack",
+        movementId: "hold",
+        roundNumber: 3,
+      },
+      participantId: "gladiator",
+      state: withResolution,
+      submittedBy: "gm",
+    });
+
+    expect(redeclared.participants[0]?.declaration).toMatchObject({
+      actionId: "parry_attack",
+    });
+    expect(redeclared.participants[0]?.attackResults.phase1).toBeUndefined();
+    expect(redeclared.phaseResolutionResults).toEqual([]);
+    expect(redeclared.participants[1]?.stepStatuses.review_phase_2_actions).toBe("pending");
+    expect(
+      getCombatRoundParticipantPhaseStepStatus({
+        participantId: "guard",
+        state: redeclared,
+        step: "review_phase_2_actions",
+      }),
+    ).toBe("pending");
   });
 
   it("clears declaration snapshots when DE is cleared", () => {
@@ -528,6 +1230,319 @@ describe("combat round manager", () => {
     ).toBe(false);
   });
 
+  it("records and undoes player declaration commands like GM declaration commands", () => {
+    const state = initializeCombatRoundState({ encounter: encounter() });
+    const playerDeclared = recordCombatRoundDeclaration({
+      command: {
+        createdAt: "2026-01-01T00:01:00.000Z",
+        createdByUserId: "player-1",
+      },
+      declaration: {
+        actionId: "attack_parry",
+        phaseContexts: {
+          phase1: {
+            modifierBuckets: {
+              general: [],
+              situationDb: [],
+              situationInitiative: [],
+              situationObSkill: [],
+            },
+            targetParticipantId: "guard",
+          },
+        },
+        roundNumber: 3,
+      },
+      participantId: "gladiator",
+      state,
+      submittedBy: "player",
+    });
+    const cleared = clearCombatRoundStep({
+      state: {
+        ...playerDeclared,
+        selectedParticipantId: "guard",
+        selectedStep: "select_actions",
+      },
+      step: "select_actions",
+    });
+
+    expect(playerDeclared.commands).toHaveLength(1);
+    expect(playerDeclared.commands[0]).toMatchObject({
+      beforeCursor: { participantId: "gladiator", step: "DE" },
+      createdByUserId: "player-1",
+      participantId: "gladiator",
+      type: "declare_action",
+    });
+    expect(cleared.commands).toEqual([]);
+    expect(cleared.currentCursor).toEqual({
+      participantId: "gladiator",
+      roundNumber: 3,
+      step: "DE",
+    });
+    expect(cleared.selectedParticipantId).toBe("gladiator");
+    expect(cleared.selectedStep).toBe("select_actions");
+    expect(cleared.participants[0]?.declaration).toBeUndefined();
+    expect(cleared.participants[0]?.stepStatuses.select_actions).toBe("pending");
+  });
+
+  it("allows a player to correct an incomplete submitted declaration during DE", () => {
+    const invalidSubmitted = recordCombatRoundDeclaration({
+      declaration: {
+        actionId: "attack_parry",
+        movementId: "hold",
+        roundNumber: 3,
+      },
+      participantId: "gladiator",
+      state: initializeCombatRoundState({ encounter: encounter() }),
+      submittedBy: "player",
+    });
+    const validSubmitted = recordCombatRoundDeclaration({
+      declaration: {
+        actionId: "attack_parry",
+        movementId: "hold",
+        phaseContexts: {
+          phase1: {
+            modifierBuckets: {
+              general: [],
+              situationDb: [],
+              situationInitiative: [],
+              situationObSkill: [],
+            },
+            targetParticipantId: "guard",
+          },
+        },
+        roundNumber: 3,
+      },
+      participantId: "gladiator",
+      state: initializeCombatRoundState({ encounter: encounter() }),
+      submittedBy: "player",
+    });
+    const lockedInvalid = {
+      ...invalidSubmitted,
+      participants: invalidSubmitted.participants.map((participant) =>
+        participant.participantId === "gladiator"
+          ? {
+              ...participant,
+              stepStatuses: {
+                ...participant.stepStatuses,
+                select_actions: "locked" as const,
+              },
+            }
+          : participant,
+      ),
+    };
+
+    expect(invalidSubmitted.participants[0]?.stepStatuses.select_actions).toBe("submitted");
+    expect(
+      canPlayerSubmitCombatDeclaration({ participantId: "gladiator", state: invalidSubmitted }),
+    ).toBe(true);
+    expect(
+      canPlayerSubmitCombatDeclaration({ participantId: "gladiator", state: validSubmitted }),
+    ).toBe(false);
+    expect(
+      canPlayerSubmitCombatDeclaration({ participantId: "gladiator", state: lockedInvalid }),
+    ).toBe(false);
+  });
+
+  it("records declare_action commands and advances the current cursor row by row", () => {
+    const threeParticipantEncounter = encounter({
+      participants: [
+        participant({ id: "gladiator", label: "The Gladiator" }),
+        participant({ id: "guard", label: "City guard" }),
+        participant({ id: "archer", label: "Archer" }),
+      ],
+    });
+    const initial = initializeCombatRoundState({ encounter: threeParticipantEncounter });
+    const afterTop = recordCombatRoundDeclaration({
+      command: {
+        createdAt: "2026-01-01T00:01:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      declaration: {
+        actionId: "attack_parry",
+        roundNumber: initial.roundNumber,
+      },
+      participantId: "gladiator",
+      state: initial,
+      submittedBy: "gm",
+    });
+    const afterMiddle = recordCombatRoundDeclaration({
+      command: {
+        createdAt: "2026-01-01T00:02:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      declaration: {
+        actionId: "parry_attack",
+        roundNumber: initial.roundNumber,
+      },
+      participantId: "guard",
+      state: afterTop,
+      submittedBy: "gm",
+    });
+    const afterBottom = recordCombatRoundDeclaration({
+      command: {
+        createdAt: "2026-01-01T00:03:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      declaration: {
+        actionId: "double_attack",
+        roundNumber: initial.roundNumber,
+      },
+      participantId: "archer",
+      state: afterMiddle,
+      submittedBy: "gm",
+    });
+
+    expect(afterTop.commands).toHaveLength(1);
+    expect(afterTop.commands[0]).toMatchObject({
+      afterCursor: {
+        participantId: "guard",
+        roundNumber: 3,
+        step: "DE",
+      },
+      beforeCursor: {
+        participantId: "gladiator",
+        roundNumber: 3,
+        step: "DE",
+      },
+      createdByUserId: "gm-1",
+      participantId: "gladiator",
+      type: "declare_action",
+    });
+    expect(afterTop.currentCursor).toEqual(afterTop.commands[0]?.afterCursor);
+    expect(afterTop.selectedParticipantId).toBe("guard");
+    expect(afterTop.selectedStep).toBe("select_actions");
+    expect(afterMiddle.currentCursor).toMatchObject({
+      participantId: "archer",
+      step: "DE",
+    });
+    expect(afterBottom.currentCursor).toMatchObject({
+      participantId: "archer",
+      step: "DE",
+    });
+    expect(afterBottom.selectedParticipantId).toBe("archer");
+    expect(afterBottom.commands.map((command) => command.type)).toEqual([
+      "declare_action",
+      "declare_action",
+      "declare_action",
+    ]);
+  });
+
+  it("undoes the latest DE command even when an older DE cell is selected", () => {
+    const threeParticipantEncounter = encounter({
+      participants: [
+        participant({ id: "gladiator", label: "The Gladiator" }),
+        participant({ id: "guard", label: "City guard" }),
+        participant({ id: "archer", label: "Archer" }),
+      ],
+    });
+    const initial = initializeCombatRoundState({ encounter: threeParticipantEncounter });
+    const afterTop = recordCombatRoundDeclaration({
+      command: {
+        createdAt: "2026-01-01T00:01:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      declaration: {
+        actionId: "attack_parry",
+        roundNumber: initial.roundNumber,
+      },
+      participantId: "gladiator",
+      state: initial,
+      submittedBy: "gm",
+    });
+    const afterGuard = recordCombatRoundDeclaration({
+      command: {
+        createdAt: "2026-01-01T00:02:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      declaration: {
+        actionId: "parry_attack",
+        roundNumber: initial.roundNumber,
+      },
+      participantId: "guard",
+      state: afterTop,
+      submittedBy: "gm",
+    });
+    const cleared = clearCombatRoundStep({
+      state: {
+        ...afterGuard,
+        selectedParticipantId: "gladiator",
+        selectedStep: "select_actions",
+      },
+      step: "select_actions",
+    });
+
+    expect(cleared.commands).toHaveLength(1);
+    expect(cleared.commands[0]).toMatchObject({
+      participantId: "gladiator",
+      type: "declare_action",
+    });
+    expect(cleared.currentCursor).toEqual({
+      participantId: "guard",
+      roundNumber: 3,
+      step: "DE",
+    });
+    expect(cleared.selectedParticipantId).toBe("guard");
+    expect(cleared.selectedStep).toBe("select_actions");
+    expect(cleared.participants[0]?.declaration?.actionId).toBe("attack_parry");
+    expect(cleared.participants[0]?.stepStatuses.select_actions).toBe("gmEdited");
+    expect(cleared.participants[1]?.declaration).toBeUndefined();
+    expect(cleared.participants[1]?.stepStatuses.select_actions).toBe("pending");
+  });
+
+  it("unwinds top-advance DE skip commands in reverse participant order", () => {
+    const initial = initializeCombatRoundState({ encounter: encounter() });
+    const advanced = advanceCombatRoundStep(initial, {
+      command: {
+        createdAt: "2026-01-01T00:01:00.000Z",
+        createdByUserId: "gm-1",
+      },
+    });
+    const cleared = clearCombatRoundStep({
+      state: {
+        ...advanced,
+        selectedParticipantId: "gladiator",
+        selectedStep: "review_action_modifiers",
+      },
+      step: "review_action_modifiers",
+    });
+    const clearedAgain = clearCombatRoundStep({
+      state: cleared,
+      step: "select_actions",
+    });
+
+    expect(advanced.currentStep).toBe("review_action_modifiers");
+    expect(advanced.commands.map((command) => command.participantId)).toEqual([
+      "gladiator",
+      "guard",
+    ]);
+    expect(advanced.commands.map((command) => command.type)).toEqual([
+      "declare_action",
+      "declare_action",
+    ]);
+    expect(advanced.participants[0]?.stepStatuses.select_actions).toBe("locked");
+    expect(advanced.participants[1]?.stepStatuses.select_actions).toBe("locked");
+    expect(cleared.commands).toHaveLength(1);
+    expect(cleared.currentCursor).toEqual({
+      participantId: "guard",
+      roundNumber: 3,
+      step: "DE",
+    });
+    expect(cleared.selectedParticipantId).toBe("guard");
+    expect(cleared.selectedStep).toBe("select_actions");
+    expect(cleared.participants[0]?.stepStatuses.select_actions).toBe("locked");
+    expect(cleared.participants[1]?.stepStatuses.select_actions).toBe("pending");
+    expect(clearedAgain.commands).toEqual([]);
+    expect(clearedAgain.currentCursor).toEqual({
+      participantId: "gladiator",
+      roundNumber: 3,
+      step: "DE",
+    });
+    expect(clearedAgain.selectedParticipantId).toBe("gladiator");
+    expect(clearedAgain.selectedStep).toBe("select_actions");
+    expect(clearedAgain.participants[0]?.stepStatuses.select_actions).toBe("pending");
+    expect(clearedAgain.participants[1]?.stepStatuses.select_actions).toBe("pending");
+  });
+
   it("maps initiative and action review steps to their initiative phase", () => {
     expect(getCombatRoundInitiativePhaseForStep("initiative_phase_1")).toBe("phase1");
     expect(getCombatRoundInitiativePhaseForStep("phase_1_actions")).toBe("phase1");
@@ -579,6 +1594,856 @@ describe("combat round manager", () => {
     ).toBe(false);
   });
 
+  it("records global review and initiative commands with same-step cursor movement", () => {
+    const reviewPhase1 = advanceCombatRoundStep(
+      initializeCombatRoundState({ encounter: encounter() }),
+    );
+    const reviewedPhase1 = recordCombatRoundParticipantStepReview({
+      command: {
+        createdAt: "2026-01-01T00:01:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      participantId: "gladiator",
+      state: reviewPhase1,
+      step: "review_action_modifiers",
+      submittedBy: "gm",
+    });
+    const initiativePhase1 = advanceToStep(
+      initializeCombatRoundState({ encounter: encounter() }),
+      "initiative_phase_1",
+    );
+    const rolledPhase1 = recordCombatRoundInitiative({
+      command: {
+        createdAt: "2026-01-01T00:02:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      initiative: 12,
+      participantId: "gladiator",
+      phase: "phase1",
+      state: initiativePhase1,
+      submittedBy: "gm",
+    });
+    const reviewPhase2 = advanceToStep(
+      initializeCombatRoundState({ encounter: encounter() }),
+      "review_phase_2_modifiers",
+    );
+    const reviewedPhase2 = recordCombatRoundParticipantStepReview({
+      command: {
+        createdAt: "2026-01-01T00:03:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      participantId: "gladiator",
+      state: reviewPhase2,
+      step: "review_phase_2_modifiers",
+      submittedBy: "gm",
+    });
+    const initiativePhase2 = advanceToStep(
+      initializeCombatRoundState({ encounter: encounter() }),
+      "initiative_phase_2",
+    );
+    const rolledPhase2 = recordCombatRoundInitiative({
+      command: {
+        createdAt: "2026-01-01T00:04:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      initiative: 9,
+      participantId: "gladiator",
+      phase: "phase2",
+      state: initiativePhase2,
+      submittedBy: "gm",
+    });
+
+    expect(reviewedPhase1.commands[0]).toMatchObject({
+      afterCursor: { participantId: "guard", step: "M1" },
+      beforeCursor: { participantId: "gladiator", step: "M1" },
+      type: "review_modifiers_phase1",
+    });
+    expect(reviewedPhase1.currentCursor).toMatchObject({ participantId: "guard", step: "M1" });
+    expect(rolledPhase1.commands[0]).toMatchObject({
+      afterCursor: { participantId: "guard", step: "i1" },
+      beforeCursor: { participantId: "gladiator", step: "i1" },
+      type: "roll_initiative_phase1",
+    });
+    expect(rolledPhase1.currentCursor).toMatchObject({ participantId: "guard", step: "i1" });
+    expect(reviewedPhase2.commands[0]).toMatchObject({
+      afterCursor: { participantId: "guard", step: "M2" },
+      beforeCursor: { participantId: "gladiator", step: "M2" },
+      type: "review_modifiers_phase2",
+    });
+    expect(reviewedPhase2.currentCursor).toMatchObject({ participantId: "guard", step: "M2" });
+    expect(rolledPhase2.commands[0]).toMatchObject({
+      afterCursor: { participantId: "guard", step: "i2" },
+      beforeCursor: { participantId: "gladiator", step: "i2" },
+      type: "roll_initiative_phase2",
+    });
+    expect(rolledPhase2.currentCursor).toMatchObject({ participantId: "guard", step: "i2" });
+  });
+
+  it("undoes M1 and M2 review commands without clearing declarations", () => {
+    const declared = recordCombatRoundDeclaration({
+      declaration: {
+        actionId: "attack_parry",
+        roundNumber: 3,
+      },
+      participantId: "gladiator",
+      state: initializeCombatRoundState({ encounter: encounter() }),
+      submittedBy: "gm",
+    });
+    const reviewPhase1 = advanceToStep(declared, "review_action_modifiers");
+    const reviewedPhase1 = recordCombatRoundParticipantStepReview({
+      command: {
+        createdAt: "2026-01-01T00:01:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      participantId: "gladiator",
+      state: reviewPhase1,
+      step: "review_action_modifiers",
+      submittedBy: "gm",
+    });
+    const clearedPhase1 = clearCombatRoundStep({
+      state: {
+        ...reviewedPhase1,
+        selectedParticipantId: "gladiator",
+        selectedStep: "review_action_modifiers",
+      },
+      step: "review_action_modifiers",
+    });
+    const reviewPhase2 = advanceToStep(declared, "review_phase_2_modifiers");
+    const reviewedPhase2 = recordCombatRoundParticipantStepReview({
+      command: {
+        createdAt: "2026-01-01T00:02:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      participantId: "gladiator",
+      state: reviewPhase2,
+      step: "review_phase_2_modifiers",
+      submittedBy: "gm",
+    });
+    const clearedPhase2 = clearCombatRoundStep({
+      state: {
+        ...reviewedPhase2,
+        selectedParticipantId: "gladiator",
+        selectedStep: "review_phase_2_modifiers",
+      },
+      step: "review_phase_2_modifiers",
+    });
+
+    expect(clearedPhase1.commands).toEqual([]);
+    expect(clearedPhase1.currentCursor).toEqual({
+      participantId: "gladiator",
+      roundNumber: 3,
+      step: "M1",
+    });
+    expect(clearedPhase1.participants[0]?.stepStatuses.review_action_modifiers).toBe("pending");
+    expect(clearedPhase1.participants[0]?.stepStatuses.select_actions).toBe("gmEdited");
+    expect(clearedPhase1.participants[0]?.declaration?.actionId).toBe("attack_parry");
+    expect(clearedPhase2.commands).toEqual([]);
+    expect(clearedPhase2.currentCursor).toEqual({
+      participantId: "gladiator",
+      roundNumber: 3,
+      step: "M2",
+    });
+    expect(clearedPhase2.participants[0]?.stepStatuses.review_phase_2_modifiers).toBe("pending");
+    expect(clearedPhase2.participants[0]?.declaration?.actionId).toBe("attack_parry");
+  });
+
+  it("unwinds top-advance M1 commands in reverse participant order", () => {
+    const reviewPhase1 = advanceToStep(
+      initializeCombatRoundState({ encounter: encounter() }),
+      "review_action_modifiers",
+    );
+    const advanced = advanceCombatRoundStep(reviewPhase1, {
+      command: {
+        createdAt: "2026-01-01T00:01:00.000Z",
+        createdByUserId: "gm-1",
+        participantId: "gladiator",
+      },
+      stepSnapshots: [
+        stepSnapshot({
+          participantId: "gladiator",
+          step: "review_action_modifiers",
+        }),
+        stepSnapshot({
+          participantId: "guard",
+          step: "review_action_modifiers",
+        }),
+      ],
+    });
+    const cleared = clearCombatRoundStep({
+      state: advanced,
+      step: "initiative_phase_1",
+    });
+    const clearedAgain = clearCombatRoundStep({
+      state: cleared,
+      step: "review_action_modifiers",
+    });
+
+    expect(advanced.currentStep).toBe("initiative_phase_1");
+    expect(advanced.commands.map((command) => command.participantId)).toEqual([
+      "gladiator",
+      "guard",
+    ]);
+    expect(advanced.commands[0]).toMatchObject({
+      beforeCursor: { participantId: "gladiator", step: "M1" },
+      participantId: "gladiator",
+      type: "review_modifiers_phase1",
+    });
+    expect(advanced.commands[1]).toMatchObject({
+      beforeCursor: { participantId: "guard", step: "M1" },
+      facts: expect.objectContaining({
+        source: "advance_step",
+        status: "complete",
+      }),
+      participantId: "guard",
+      type: "review_modifiers_phase1",
+    });
+    expect(advanced.participants[0]?.stepStatuses.review_action_modifiers).toBe("complete");
+    expect(advanced.participants[1]?.stepStatuses.review_action_modifiers).toBe("complete");
+    expect(cleared.commands).toHaveLength(1);
+    expect(cleared.commands[0]).toMatchObject({
+      participantId: "gladiator",
+      type: "review_modifiers_phase1",
+    });
+    expect(cleared.currentCursor).toEqual({
+      participantId: "guard",
+      roundNumber: 3,
+      step: "M1",
+    });
+    expect(cleared.currentStep).toBe("review_action_modifiers");
+    expect(cleared.selectedParticipantId).toBe("guard");
+    expect(cleared.selectedStep).toBe("review_action_modifiers");
+    expect(cleared.participants[0]?.stepStatuses.review_action_modifiers).toBe("complete");
+    expect(cleared.participants[1]?.stepStatuses.review_action_modifiers).toBe("pending");
+    expect(
+      getCombatRoundStepSnapshot({
+        participantId: "gladiator",
+        state: cleared,
+        step: "review_action_modifiers",
+      }),
+    ).toMatchObject({
+      participantId: "gladiator",
+      step: "review_action_modifiers",
+    });
+    expect(
+      getCombatRoundStepSnapshot({
+        participantId: "guard",
+        state: cleared,
+        step: "review_action_modifiers",
+      }),
+    ).toBeUndefined();
+    expect(clearedAgain.commands).toEqual([]);
+    expect(clearedAgain.currentCursor).toEqual({
+      participantId: "gladiator",
+      roundNumber: 3,
+      step: "M1",
+    });
+    expect(clearedAgain.selectedParticipantId).toBe("gladiator");
+    expect(clearedAgain.selectedStep).toBe("review_action_modifiers");
+    expect(clearedAgain.participants[0]?.stepStatuses.review_action_modifiers).toBe("pending");
+    expect(clearedAgain.participants[1]?.stepStatuses.review_action_modifiers).toBe("pending");
+  });
+
+  it("unwinds top-advance M2 commands in reverse participant order", () => {
+    const reviewPhase2 = advanceToStep(
+      initializeCombatRoundState({ encounter: encounter() }),
+      "review_phase_2_modifiers",
+    );
+    const advanced = advanceCombatRoundStep(reviewPhase2, {
+      command: {
+        createdAt: "2026-01-01T00:01:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      stepSnapshots: [
+        stepSnapshot({
+          participantId: "gladiator",
+          step: "review_phase_2_modifiers",
+        }),
+        stepSnapshot({
+          participantId: "guard",
+          step: "review_phase_2_modifiers",
+        }),
+      ],
+    });
+    const cleared = clearCombatRoundStep({
+      state: {
+        ...advanced,
+        selectedParticipantId: "gladiator",
+        selectedStep: "initiative_phase_2",
+      },
+      step: "initiative_phase_2",
+    });
+    const clearedAgain = clearCombatRoundStep({
+      state: cleared,
+      step: "review_phase_2_modifiers",
+    });
+
+    expect(advanced.currentStep).toBe("initiative_phase_2");
+    expect(advanced.commands.map((command) => command.participantId)).toEqual([
+      "gladiator",
+      "guard",
+    ]);
+    expect(advanced.commands.map((command) => command.type)).toEqual([
+      "review_modifiers_phase2",
+      "review_modifiers_phase2",
+    ]);
+    expect(cleared.commands).toHaveLength(1);
+    expect(cleared.currentCursor).toEqual({
+      participantId: "guard",
+      roundNumber: 3,
+      step: "M2",
+    });
+    expect(cleared.selectedParticipantId).toBe("guard");
+    expect(cleared.selectedStep).toBe("review_phase_2_modifiers");
+    expect(cleared.participants[0]?.stepStatuses.review_phase_2_modifiers).toBe("complete");
+    expect(cleared.participants[1]?.stepStatuses.review_phase_2_modifiers).toBe("pending");
+    expect(clearedAgain.commands).toEqual([]);
+    expect(clearedAgain.currentCursor).toEqual({
+      participantId: "gladiator",
+      roundNumber: 3,
+      step: "M2",
+    });
+    expect(clearedAgain.participants[0]?.stepStatuses.review_phase_2_modifiers).toBe("pending");
+    expect(clearedAgain.participants[1]?.stepStatuses.review_phase_2_modifiers).toBe("pending");
+  });
+
+  it("undoes i1 commands and clears phase 1 downstream state for the participant", () => {
+    const declared = recordCombatRoundDeclaration({
+      declaration: {
+        actionId: "attack_parry",
+        roundNumber: 3,
+      },
+      participantId: "gladiator",
+      state: initializeCombatRoundState({ encounter: encounter() }),
+      submittedBy: "gm",
+    });
+    const withReviewedModifiers = setCombatRoundParticipantStepStatus({
+      participantId: "gladiator",
+      state: declared,
+      status: "gmEdited",
+      step: "review_action_modifiers",
+    });
+    const initiativePhase1 = setCombatRoundParticipantStepStatus({
+      participantId: "gladiator",
+      state: advanceToStep(withReviewedModifiers, "initiative_phase_1"),
+      status: "gmEdited",
+      step: "review_action_modifiers",
+    });
+    const afterTopRoll = recordCombatRoundInitiative({
+      command: {
+        createdAt: "2026-01-01T00:01:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      initiative: 14,
+      participantId: "gladiator",
+      phase: "phase1",
+      state: initiativePhase1,
+      submittedBy: "gm",
+    });
+    const afterGuardRoll = recordCombatRoundInitiative({
+      command: {
+        createdAt: "2026-01-01T00:02:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      initiative: 12,
+      participantId: "guard",
+      phase: "phase1",
+      state: afterTopRoll,
+      submittedBy: "gm",
+    });
+    const result = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackerParticipantId: "gladiator",
+      defenderDb: 10,
+      defenderParticipantId: "guard",
+      ob: 10,
+      phase: "phase1",
+      rollD20: 12,
+      rollTotal: 12,
+      rolledAt: "2026-01-01T00:03:00.000Z",
+      weaponName: "Broad sword",
+    });
+    const withDownstreamPhaseState = recordCombatRoundAttackResult({
+      participantId: "gladiator",
+      result,
+      state: afterGuardRoll,
+      submittedBy: "gm",
+    });
+    const cleared = clearCombatRoundStep({
+      state: {
+        ...withDownstreamPhaseState,
+        selectedParticipantId: "gladiator",
+        selectedStep: "initiative_phase_1",
+      },
+      step: "initiative_phase_1",
+    });
+
+    expect(cleared.commands).toHaveLength(1);
+    expect(cleared.commands[0]).toMatchObject({
+      participantId: "gladiator",
+      type: "roll_initiative_phase1",
+    });
+    expect(cleared.currentCursor).toEqual({
+      participantId: "guard",
+      roundNumber: 3,
+      step: "i1",
+    });
+    expect(cleared.participants[0]?.initiatives.phase1).toMatchObject({ total: 14 });
+    expect(cleared.participants[1]?.initiatives.phase1).toBeUndefined();
+    expect(cleared.participants[0]?.attackResults.phase1).toEqual(result);
+    expect(cleared.participants[0]?.declaration?.actionId).toBe("attack_parry");
+    expect(cleared.participants[0]?.stepStatuses.review_action_modifiers).toBe("gmEdited");
+  });
+
+  it("undoes M1 commands by clearing dependent i1 and phase 1 state", () => {
+    const declared = recordCombatRoundDeclaration({
+      declaration: {
+        actionId: "attack_parry",
+        roundNumber: 3,
+      },
+      participantId: "gladiator",
+      state: initializeCombatRoundState({ encounter: encounter() }),
+      submittedBy: "gm",
+    });
+    const reviewPhase1 = advanceToStep(declared, "review_action_modifiers");
+    const reviewed = recordCombatRoundParticipantStepReview({
+      command: {
+        createdAt: "2026-01-01T00:01:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      participantId: "gladiator",
+      state: reviewPhase1,
+      step: "review_action_modifiers",
+      submittedBy: "gm",
+    });
+    const withInitiative = recordCombatRoundInitiative({
+      initiative: 14,
+      participantId: "gladiator",
+      phase: "phase1",
+      state: reviewed,
+      submittedBy: "gm",
+    });
+    const result = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackerParticipantId: "gladiator",
+      defenderDb: 10,
+      defenderParticipantId: "guard",
+      ob: 10,
+      phase: "phase1",
+      rollD20: 12,
+      rollTotal: 12,
+      rolledAt: "2026-01-01T00:03:00.000Z",
+      weaponName: "Broad sword",
+    });
+    const withDownstreamPhaseState = recordCombatRoundAttackResult({
+      participantId: "gladiator",
+      result,
+      state: withInitiative,
+      submittedBy: "gm",
+    });
+    const cleared = clearCombatRoundStep({
+      state: {
+        ...withDownstreamPhaseState,
+        selectedParticipantId: "gladiator",
+        selectedStep: "review_action_modifiers",
+      },
+      step: "review_action_modifiers",
+    });
+
+    expect(cleared.commands).toEqual([]);
+    expect(cleared.currentCursor).toEqual({
+      participantId: "gladiator",
+      roundNumber: 3,
+      step: "M1",
+    });
+    expect(cleared.participants[0]?.stepStatuses.review_action_modifiers).toBe("pending");
+    expect(cleared.participants[0]?.stepStatuses.initiative_phase_1).toBe("pending");
+    expect(cleared.participants[0]?.initiatives.phase1).toBeUndefined();
+    expect(cleared.participants[0]?.attackResults.phase1).toBeUndefined();
+    expect(cleared.phaseResolutionCursor).toBeUndefined();
+  });
+
+  it("unwinds top-advance i1 skip commands in reverse participant order", () => {
+    const initiativePhase1 = advanceToStep(
+      initializeCombatRoundState({ encounter: encounter() }),
+      "initiative_phase_1",
+    );
+    const advanced = advanceCombatRoundStep(initiativePhase1, {
+      command: {
+        createdAt: "2026-01-01T00:01:00.000Z",
+        createdByUserId: "gm-1",
+        participantId: "gladiator",
+      },
+    });
+    const cleared = clearCombatRoundStep({
+      state: {
+        ...advanced,
+        selectedParticipantId: "gladiator",
+        selectedStep: "phase_1_actions",
+      },
+      step: "phase_1_actions",
+    });
+    const clearedAgain = clearCombatRoundStep({
+      state: cleared,
+      step: "initiative_phase_1",
+    });
+
+    expect(advanced.currentStep).toBe("phase_1_actions");
+    expect(advanced.commands.map((command) => command.participantId)).toEqual([
+      "gladiator",
+      "guard",
+    ]);
+    expect(advanced.commands.map((command) => command.type)).toEqual([
+      "roll_initiative_phase1",
+      "roll_initiative_phase1",
+    ]);
+    expect(advanced.commands[1]).toMatchObject({
+      beforeCursor: { participantId: "guard", step: "i1" },
+      facts: expect.objectContaining({
+        source: "advance_step",
+        status: "complete",
+      }),
+      participantId: "guard",
+      type: "roll_initiative_phase1",
+    });
+    expect(cleared.commands).toHaveLength(1);
+    expect(cleared.currentCursor).toEqual({
+      participantId: "guard",
+      roundNumber: 3,
+      step: "i1",
+    });
+    expect(cleared.currentStep).toBe("initiative_phase_1");
+    expect(cleared.selectedParticipantId).toBe("guard");
+    expect(cleared.selectedStep).toBe("initiative_phase_1");
+    expect(cleared.participants[0]?.stepStatuses.initiative_phase_1).toBe("complete");
+    expect(cleared.participants[1]?.stepStatuses.initiative_phase_1).toBe("pending");
+    expect(cleared.phaseResolutionCursor).toBeUndefined();
+    expect(clearedAgain.commands).toEqual([]);
+    expect(clearedAgain.currentCursor).toEqual({
+      participantId: "gladiator",
+      roundNumber: 3,
+      step: "i1",
+    });
+    expect(clearedAgain.selectedParticipantId).toBe("gladiator");
+    expect(clearedAgain.selectedStep).toBe("initiative_phase_1");
+    expect(clearedAgain.participants[0]?.stepStatuses.initiative_phase_1).toBe("pending");
+    expect(clearedAgain.participants[1]?.stepStatuses.initiative_phase_1).toBe("pending");
+  });
+
+  it("does not add invisible top-advance i1 commands for already rolled rows", () => {
+    const initiativePhase1 = advanceToStep(
+      initializeCombatRoundState({ encounter: encounter() }),
+      "initiative_phase_1",
+    );
+    const afterGladiatorRoll = recordCombatRoundInitiative({
+      command: {
+        createdAt: "2026-01-01T00:01:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      initiative: 14,
+      participantId: "gladiator",
+      phase: "phase1",
+      state: initiativePhase1,
+      submittedBy: "gm",
+    });
+    const afterGuardRoll = recordCombatRoundInitiative({
+      command: {
+        createdAt: "2026-01-01T00:02:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      initiative: 12,
+      participantId: "guard",
+      phase: "phase1",
+      state: afterGladiatorRoll,
+      submittedBy: "gm",
+    });
+    const advanced = advanceCombatRoundStep(afterGuardRoll, {
+      command: {
+        createdAt: "2026-01-01T00:03:00.000Z",
+        createdByUserId: "gm-1",
+        participantId: "guard",
+      },
+    });
+
+    expect(advanced.currentStep).toBe("phase_1_actions");
+    expect(advanced.commands).toHaveLength(2);
+    expect(advanced.commands.map((command) => command.type)).toEqual([
+      "roll_initiative_phase1",
+      "roll_initiative_phase1",
+    ]);
+    expect(advanced.participants[0]?.initiatives.phase1).toMatchObject({ total: 14 });
+    expect(advanced.participants[1]?.initiatives.phase1).toMatchObject({ total: 12 });
+    expect(advanced.participants[0]?.stepStatuses.initiative_phase_1).toBe("gmEdited");
+    expect(advanced.participants[1]?.stepStatuses.initiative_phase_1).toBe("gmEdited");
+  });
+
+  it("undoes i2 commands and clears phase 2 downstream state for the participant", () => {
+    const initiativePhase2 = advanceToStep(
+      initializeCombatRoundState({ encounter: encounter() }),
+      "initiative_phase_2",
+    );
+    const afterTopRoll = recordCombatRoundInitiative({
+      command: {
+        createdAt: "2026-01-01T00:01:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      initiative: 11,
+      participantId: "gladiator",
+      phase: "phase2",
+      state: initiativePhase2,
+      submittedBy: "gm",
+    });
+    const afterGuardRoll = recordCombatRoundInitiative({
+      command: {
+        createdAt: "2026-01-01T00:02:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      initiative: 9,
+      participantId: "guard",
+      phase: "phase2",
+      state: afterTopRoll,
+      submittedBy: "gm",
+    });
+    const result = buildCombatRoundAttackRollResult({
+      actionId: "double_attack",
+      attackerParticipantId: "gladiator",
+      defenderDb: 10,
+      defenderParticipantId: "guard",
+      ob: 10,
+      phase: "phase2",
+      rollD20: 12,
+      rollTotal: 12,
+      rolledAt: "2026-01-01T00:03:00.000Z",
+      weaponName: "Broad sword",
+    });
+    const withDownstreamPhaseState = recordCombatRoundAttackResult({
+      participantId: "gladiator",
+      result,
+      state: afterGuardRoll,
+      submittedBy: "gm",
+    });
+    const cleared = clearCombatRoundStep({
+      state: {
+        ...withDownstreamPhaseState,
+        selectedParticipantId: "gladiator",
+        selectedStep: "initiative_phase_2",
+      },
+      step: "initiative_phase_2",
+    });
+
+    expect(cleared.commands).toHaveLength(1);
+    expect(cleared.commands[0]).toMatchObject({
+      participantId: "gladiator",
+      type: "roll_initiative_phase2",
+    });
+    expect(cleared.currentCursor).toEqual({
+      participantId: "guard",
+      roundNumber: 3,
+      step: "i2",
+    });
+    expect(cleared.participants[0]?.initiatives.phase2).toMatchObject({ total: 11 });
+    expect(cleared.participants[1]?.initiatives.phase2).toBeUndefined();
+    expect(cleared.participants[0]?.attackResults.phase2).toEqual(result);
+  });
+
+  it("manual selection of an older DE cell still undoes the latest i1 command", () => {
+    const declared = recordCombatRoundDeclaration({
+      command: {
+        createdAt: "2026-01-01T00:01:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      declaration: {
+        actionId: "attack_parry",
+        roundNumber: 3,
+      },
+      participantId: "gladiator",
+      state: initializeCombatRoundState({ encounter: encounter() }),
+      submittedBy: "gm",
+    });
+    const initiativePhase1 = {
+      ...advanceToStep(declared, "initiative_phase_1"),
+      selectedParticipantId: "gladiator",
+      selectedStep: "initiative_phase_1" as const,
+    };
+    const rolled = recordCombatRoundInitiative({
+      command: {
+        createdAt: "2026-01-01T00:02:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      initiative: 14,
+      participantId: "gladiator",
+      phase: "phase1",
+      state: initiativePhase1,
+      submittedBy: "gm",
+    });
+    const cleared = clearCombatRoundStep({
+      state: {
+        ...rolled,
+        selectedParticipantId: "gladiator",
+        selectedStep: "select_actions",
+      },
+      step: "select_actions",
+    });
+
+    expect(cleared.commands).toHaveLength(1);
+    expect(cleared.commands[0]).toMatchObject({
+      participantId: "gladiator",
+      type: "declare_action",
+    });
+    expect(cleared.currentCursor).toEqual({
+      participantId: "gladiator",
+      roundNumber: 3,
+      step: "i1",
+    });
+    expect(cleared.currentStep).toBe("initiative_phase_1");
+    expect(cleared.selectedParticipantId).toBe("gladiator");
+    expect(cleared.selectedStep).toBe("initiative_phase_1");
+    expect(cleared.participants[0]?.declaration?.actionId).toBe("attack_parry");
+    expect(cleared.participants[0]?.initiatives.phase1).toBeUndefined();
+  });
+
+  it("falls back to the latest command undo when selected empty A1 has no local state", () => {
+    const initiativePhase1 = advanceToStep(
+      initializeCombatRoundState({ encounter: encounter() }),
+      "initiative_phase_1",
+    );
+    const afterTopRoll = recordCombatRoundInitiative({
+      command: {
+        createdAt: "2026-01-01T00:01:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      initiative: 14,
+      participantId: "gladiator",
+      phase: "phase1",
+      state: initiativePhase1,
+      submittedBy: "gm",
+    });
+    const afterGuardRoll = recordCombatRoundInitiative({
+      command: {
+        createdAt: "2026-01-01T00:02:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      initiative: 12,
+      participantId: "guard",
+      phase: "phase1",
+      state: afterTopRoll,
+      submittedBy: "gm",
+    });
+    const cleared = clearCombatRoundStep({
+      state: {
+        ...afterGuardRoll,
+        currentStep: "phase_1_actions",
+        selectedParticipantId: "guard",
+        selectedStep: "phase_1_actions",
+      },
+      step: "phase_1_actions",
+    });
+
+    expect(cleared.commands).toHaveLength(1);
+    expect(cleared.commands[0]).toMatchObject({
+      participantId: "gladiator",
+      type: "roll_initiative_phase1",
+    });
+    expect(cleared.currentCursor).toEqual({
+      participantId: "guard",
+      roundNumber: 3,
+      step: "i1",
+    });
+    expect(cleared.currentStep).toBe("initiative_phase_1");
+    expect(cleared.selectedParticipantId).toBe("guard");
+    expect(cleared.selectedStep).toBe("initiative_phase_1");
+    expect(cleared.participants[1]?.initiatives.phase1).toBeUndefined();
+    expect(cleared.participants[0]?.initiatives.phase1).toMatchObject({ total: 14 });
+  });
+
+  it("falls back from selected empty A1 to the latest M1 command", () => {
+    const reviewPhase1 = advanceToStep(
+      initializeCombatRoundState({ encounter: encounter() }),
+      "review_action_modifiers",
+    );
+    const reviewed = recordCombatRoundParticipantStepReview({
+      command: {
+        createdAt: "2026-01-01T00:01:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      participantId: "gladiator",
+      state: reviewPhase1,
+      step: "review_action_modifiers",
+      submittedBy: "gm",
+    });
+    const cleared = clearCombatRoundStep({
+      state: {
+        ...reviewed,
+        currentStep: "phase_1_actions",
+        selectedParticipantId: "guard",
+        selectedStep: "phase_1_actions",
+      },
+      step: "phase_1_actions",
+    });
+
+    expect(cleared.commands).toEqual([]);
+    expect(cleared.currentCursor).toEqual({
+      participantId: "gladiator",
+      roundNumber: 3,
+      step: "M1",
+    });
+    expect(cleared.currentStep).toBe("review_action_modifiers");
+    expect(cleared.selectedParticipantId).toBe("gladiator");
+    expect(cleared.selectedStep).toBe("review_action_modifiers");
+    expect(cleared.participants[0]?.stepStatuses.review_action_modifiers).toBe("pending");
+  });
+
+  it("falls back from selected empty A1 to the latest DE command", () => {
+    const declared = recordCombatRoundDeclaration({
+      command: {
+        createdAt: "2026-01-01T00:01:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      declaration: {
+        actionId: "attack_parry",
+        roundNumber: 3,
+      },
+      participantId: "gladiator",
+      state: initializeCombatRoundState({ encounter: encounter() }),
+      submittedBy: "gm",
+    });
+    const cleared = clearCombatRoundStep({
+      state: {
+        ...declared,
+        currentStep: "phase_1_actions",
+        selectedParticipantId: "guard",
+        selectedStep: "phase_1_actions",
+      },
+      step: "phase_1_actions",
+    });
+
+    expect(cleared.commands).toEqual([]);
+    expect(cleared.currentCursor).toEqual({
+      participantId: "gladiator",
+      roundNumber: 3,
+      step: "DE",
+    });
+    expect(cleared.currentStep).toBe("select_actions");
+    expect(cleared.selectedParticipantId).toBe("gladiator");
+    expect(cleared.selectedStep).toBe("select_actions");
+    expect(cleared.participants[0]?.declaration).toBeUndefined();
+    expect(cleared.participants[0]?.stepStatuses.select_actions).toBe("pending");
+  });
+
+  it("leaves selected empty A1 unchanged when there is no local state or command to undo", () => {
+    const state = {
+      ...initializeCombatRoundState({ encounter: encounter() }),
+      currentStep: "phase_1_actions" as const,
+      selectedParticipantId: "guard",
+      selectedStep: "phase_1_actions" as const,
+    };
+    const cleared = clearCombatRoundStep({
+      state,
+      step: "phase_1_actions",
+    });
+
+    expect(cleared).toEqual(state);
+  });
+
   it("builds a P1 attack result from the canonical to-hit table", () => {
     expect(
       buildCombatRoundAttackRollResult({
@@ -599,6 +2464,7 @@ describe("combat round manager", () => {
       actionId: "attack_parry",
       attackerParticipantId: "gladiator",
       defenderDb: 11,
+      defenderParryModifier: -1,
       defenderParticipantId: "guard",
       grazing: false,
       hit: true,
@@ -608,6 +2474,7 @@ describe("combat round manager", () => {
       ob: 9,
       openEndedD10s: [],
       phase: "phase1",
+      roll: undefined,
       rollD20: 18,
       rollTotal: 18,
       rolledAt: "2026-01-01T00:03:00.000Z",
@@ -704,6 +2571,2988 @@ describe("combat round manager", () => {
       tableResult: "Grazing hit",
     });
     expect(nextState.participants[0]?.stepStatuses.phase_1_actions).toBe("gmEdited");
+  });
+
+  it("records A1 hit attack commands with defender P1 as the explicit after cursor", () => {
+    const state = initializeCombatRoundPhaseResolutionCursor({
+      phase: "phase1",
+      state: declareRoundAction({
+        actionId: "attack_parry",
+        participantId: "gladiator",
+        state: initializeCombatRoundState({ encounter: encounter() }),
+      }),
+      updatedAt: "2026-01-01T00:02:00.000Z",
+    });
+    const result = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackerParticipantId: "gladiator",
+      defenderDb: 10,
+      defenderParticipantId: "guard",
+      ob: 10,
+      phase: "phase1",
+      rollD20: 18,
+      rollTotal: 18,
+      rolledAt: "2026-01-01T00:03:00.000Z",
+      weaponName: "Broad sword",
+    });
+    const nextState = recordCombatRoundAttackResult({
+      command: {
+        createdAt: result.rolledAt,
+        createdByUserId: "gm-1",
+      },
+      participantId: "gladiator",
+      result,
+      state,
+      submittedBy: "gm",
+    });
+
+    expect(nextState.commands).toHaveLength(1);
+    expect(nextState.commands[0]).toMatchObject({
+      afterCursor: {
+        participantId: "guard",
+        roundNumber: 3,
+        step: "P1",
+      },
+      beforeCursor: {
+        participantId: "gladiator",
+        roundNumber: 3,
+        step: "A1",
+      },
+      facts: {
+        attackResultId: "3:phase1:gladiator:guard",
+        defenderParticipantId: "guard",
+        grazing: false,
+        hit: true,
+        nextStepOpened: {
+          participantId: "guard",
+          step: "P1",
+        },
+      },
+      participantId: "gladiator",
+      phase: "phase1",
+      step: "A1",
+      type: "roll_attack",
+    });
+    expect(nextState.currentCursor).toEqual(nextState.commands[0]?.afterCursor);
+    expect(nextState.currentStep).toBe("review_phase_2_actions");
+    expect(nextState.selectedParticipantId).toBe("guard");
+    expect(nextState.selectedStep).toBe("review_phase_2_actions");
+  });
+
+  it("records A1 miss attack commands with the next actor A1 as the explicit after cursor", () => {
+    const state = initializeCombatRoundPhaseResolutionCursor({
+      phase: "phase1",
+      state: setCombatRoundParticipantInitiative({
+        initiative: { baseInitiative: 0, modifierAdjustment: 0, rolls: [6], rollTotal: 6, total: 6 },
+        participantId: "gladiator",
+        phase: "phase1",
+        state: setCombatRoundParticipantInitiative({
+          initiative: {
+            baseInitiative: 0,
+            modifierAdjustment: 0,
+            rolls: [4],
+            rollTotal: 4,
+            total: 4,
+          },
+          participantId: "guard",
+          phase: "phase1",
+          state: declareRoundAction({
+            actionId: "attack_parry",
+            participantId: "guard",
+            state: declareRoundAction({
+              actionId: "attack_parry",
+              participantId: "gladiator",
+              state: initializeCombatRoundState({ encounter: encounter() }),
+            }),
+          }),
+        }),
+      }),
+      updatedAt: "2026-01-01T00:02:00.000Z",
+    });
+    const result = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackerParticipantId: "gladiator",
+      defenderDb: 10,
+      defenderParticipantId: "guard",
+      ob: 10,
+      phase: "phase1",
+      rollD20: 10,
+      rollTotal: 10,
+      rolledAt: "2026-01-01T00:03:00.000Z",
+      weaponName: "Broad sword",
+    });
+    const nextState = recordCombatRoundAttackResult({
+      command: {
+        createdAt: result.rolledAt,
+        createdByUserId: "gm-1",
+      },
+      participantId: "gladiator",
+      result,
+      state,
+      submittedBy: "gm",
+    });
+
+    expect(nextState.commands).toHaveLength(1);
+    expect(nextState.commands[0]).toMatchObject({
+      afterCursor: {
+        participantId: "guard",
+        roundNumber: 3,
+        step: "A1",
+      },
+      beforeCursor: {
+        participantId: "gladiator",
+        roundNumber: 3,
+        step: "A1",
+      },
+      facts: expect.objectContaining({
+        attackResultId: "3:phase1:gladiator:guard",
+        defenderParticipantId: "guard",
+        hit: false,
+        nextStepOpened: {
+          participantId: "guard",
+          step: "A1",
+        },
+      }),
+      participantId: "gladiator",
+      phase: "phase1",
+      step: "A1",
+      type: "roll_attack",
+    });
+    expect(nextState.currentCursor).toEqual(nextState.commands[0]?.afterCursor);
+    expect(nextState.currentStep).toBe("phase_1_actions");
+    expect(nextState.selectedParticipantId).toBe("guard");
+    expect(nextState.selectedStep).toBe("phase_1_actions");
+  });
+
+  it("records A2 attack commands with phase 2 cursor metadata", () => {
+    const state = initializeCombatRoundPhaseResolutionCursor({
+      phase: "phase2",
+      state: declareRoundAction({
+        actionId: "parry_attack",
+        participantId: "guard",
+        state: initializeCombatRoundState({ encounter: encounter() }),
+      }),
+      updatedAt: "2026-01-01T00:02:00.000Z",
+    });
+    const result = buildCombatRoundAttackRollResult({
+      actionId: "parry_attack",
+      attackerParticipantId: "guard",
+      defenderDb: 10,
+      defenderParticipantId: "gladiator",
+      ob: 10,
+      phase: "phase2",
+      rollD20: 14,
+      rollTotal: 14,
+      rolledAt: "2026-01-01T00:03:00.000Z",
+      weaponName: "Long sword",
+    });
+    const nextState = recordCombatRoundAttackResult({
+      command: {
+        createdAt: result.rolledAt,
+        createdByUserId: "gm-1",
+      },
+      participantId: "guard",
+      result,
+      state,
+      submittedBy: "gm",
+    });
+
+    expect(nextState.commands[0]).toMatchObject({
+      afterCursor: {
+        participantId: "gladiator",
+        roundNumber: 3,
+        step: "P2",
+      },
+      beforeCursor: {
+        participantId: "guard",
+        roundNumber: 3,
+        step: "A2",
+      },
+      facts: expect.objectContaining({
+        attackResultId: "3:phase2:guard:gladiator",
+        defenderParticipantId: "gladiator",
+        hit: true,
+      }),
+      participantId: "guard",
+      phase: "phase2",
+      step: "A2",
+      type: "roll_attack",
+    });
+    expect(nextState.currentCursor).toEqual(nextState.commands[0]?.afterCursor);
+    expect(nextState.currentStep).toBe("review_phase_2_damage");
+    expect(nextState.selectedStep).toBe("review_phase_2_damage");
+  });
+
+  it("records successful P1 parry commands and undoes them back to the defender P1", () => {
+    const state = initializeCombatRoundPhaseResolutionCursor({
+      phase: "phase1",
+      state: setCombatRoundParticipantInitiative({
+        initiative: { baseInitiative: 0, modifierAdjustment: 0, rolls: [6], rollTotal: 6, total: 6 },
+        participantId: "gladiator",
+        phase: "phase1",
+        state: setCombatRoundParticipantInitiative({
+          initiative: {
+            baseInitiative: 0,
+            modifierAdjustment: 0,
+            rolls: [4],
+            rollTotal: 4,
+            total: 4,
+          },
+          participantId: "guard",
+          phase: "phase1",
+          state: declareRoundAction({
+            actionId: "attack_parry",
+            participantId: "guard",
+            state: declareRoundAction({
+              actionId: "attack_parry",
+              participantId: "gladiator",
+              state: initializeCombatRoundState({ encounter: encounter() }),
+            }),
+          }),
+        }),
+      }),
+      updatedAt: "2026-01-01T00:02:00.000Z",
+    });
+    const result = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackerParticipantId: "gladiator",
+      defenderDb: 10,
+      defenderParticipantId: "guard",
+      ob: 10,
+      phase: "phase1",
+      rollD20: 12,
+      rollTotal: 12,
+      rolledAt: "2026-01-01T00:03:00.000Z",
+      weaponName: "Broad sword",
+    });
+    const afterAttack = recordCombatRoundAttackResult({
+      command: {
+        createdAt: result.rolledAt,
+        createdByUserId: "gm-1",
+      },
+      participantId: "gladiator",
+      result,
+      state,
+      submittedBy: "gm",
+    });
+    const parryResolution = {
+      combinedParryScore: 9,
+      modifierAdjustment: 0,
+      openEndedD10s: [],
+      resultLabel: "Parry successful",
+      rollD20: 12,
+      rollTotal: 12,
+      status: "resolved" as const,
+      success: true,
+      targetNumber: 21,
+      total: 21,
+    };
+    const afterParry = recordCombatRoundParryResult({
+      attackResult: result,
+      command: {
+        createdAt: "2026-01-01T00:04:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      parryResolution,
+      state: afterAttack,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:04:00.000Z",
+    });
+
+    expect(afterParry.commands.at(-1)).toMatchObject({
+      afterCursor: {
+        participantId: "guard",
+        roundNumber: 3,
+        step: "A1",
+      },
+      beforeCursor: {
+        participantId: "guard",
+        roundNumber: 3,
+        step: "P1",
+      },
+      facts: {
+        attackResultId: "3:phase1:gladiator:guard",
+        attackerParticipantId: "gladiator",
+        defenderParticipantId: "guard",
+        nextStepOpened: {
+          participantId: "guard",
+          step: "A1",
+        },
+        success: true,
+      },
+      participantId: "guard",
+      phase: "phase1",
+      step: "P1",
+      type: "roll_parry",
+    });
+    expect(afterParry.currentCursor).toEqual(afterParry.commands.at(-1)?.afterCursor);
+    expect(afterParry.selectedStep).toBe("phase_1_actions");
+    expect(afterParry.phaseResolutionResults[0]?.parryResolution).toMatchObject({
+      status: "resolved",
+      success: true,
+    });
+    expect(afterParry.phaseResolutionResults[0]?.damageRoll.status).toBe("not_required");
+
+    const withSnapshots = {
+      ...afterParry,
+      stepSnapshots: [
+        stepSnapshot({
+          attackResult: result,
+          participantId: "gladiator",
+          phase: "phase1",
+          step: "phase_1_actions",
+        }),
+        stepSnapshot({
+          attackResult: result,
+          participantId: "guard",
+          phase: "phase1",
+          phaseResolutionResult: afterParry.phaseResolutionResults[0],
+          step: "review_phase_2_actions",
+        }),
+        stepSnapshot({
+          attackResult: result,
+          participantId: "guard",
+          phase: "phase1",
+          phaseResolutionResult: afterParry.phaseResolutionResults[0],
+          step: "phase_1_damage",
+        }),
+      ],
+    };
+    const cleared = clearCombatRoundStep({
+      state: withSnapshots,
+      step: "review_phase_2_actions",
+    });
+
+    expect(cleared.commands).toHaveLength(1);
+    expect(cleared.commands[0]).toMatchObject({
+      participantId: "gladiator",
+      type: "roll_attack",
+    });
+    expect(cleared.participants[0]?.attackResults.phase1).toEqual(result);
+    expect(cleared.phaseResolutionResults).toHaveLength(1);
+    expect(cleared.phaseResolutionResults[0]?.parryResolution.status).toBe("pending");
+    expect(cleared.phaseResolutionResults[0]?.damageRoll.status).toBe("pending");
+    expect(cleared.currentCursor).toEqual({
+      participantId: "guard",
+      roundNumber: 3,
+      step: "P1",
+    });
+    expect(cleared.currentStep).toBe("review_phase_2_actions");
+    expect(cleared.phaseResolutionCursor).toEqual({
+      participantId: "guard",
+      phase: "phase1",
+      substep: "parry",
+    });
+    expect(cleared.selectedParticipantId).toBe("guard");
+    expect(cleared.selectedStep).toBe("review_phase_2_actions");
+    expect(
+      getCombatRoundPhaseResolutionStatus({
+        participantId: "gladiator",
+        phase: "phase1",
+        state: cleared,
+      }).substep,
+    ).toBe("parry");
+    expect(
+      getCombatRoundParticipantPhaseStepStatus({
+        participantId: "guard",
+        state: cleared,
+        step: "review_phase_2_actions",
+      }),
+    ).toBe("pending");
+    expect(
+      getCombatRoundParticipantPhaseStepStatus({
+        participantId: "guard",
+        state: cleared,
+        step: "phase_1_damage",
+      }),
+    ).toBe("pending");
+    expect(
+      getCombatRoundStepSnapshot({
+        participantId: "gladiator",
+        state: cleared,
+        step: "phase_1_actions",
+      }),
+    ).toMatchObject({
+      attackResult: result,
+      step: "phase_1_actions",
+    });
+    expect(
+      getCombatRoundStepSnapshot({
+        participantId: "guard",
+        state: cleared,
+        step: "review_phase_2_actions",
+      }),
+    ).toBeUndefined();
+    expect(
+      getCombatRoundStepSnapshot({
+        participantId: "guard",
+        state: cleared,
+        step: "phase_1_damage",
+      }),
+    ).toBeUndefined();
+  });
+
+  it("records failed P2 parry commands and undoes their D2 opening", () => {
+    const state = initializeCombatRoundPhaseResolutionCursor({
+      phase: "phase2",
+      state: setCombatRoundParticipantInitiative({
+        initiative: { baseInitiative: 0, modifierAdjustment: 0, rolls: [6], rollTotal: 6, total: 6 },
+        participantId: "guard",
+        phase: "phase2",
+        state: declareRoundAction({
+          actionId: "parry_attack",
+          participantId: "guard",
+          state: initializeCombatRoundState({ encounter: encounter() }),
+        }),
+      }),
+      updatedAt: "2026-01-01T00:02:00.000Z",
+    });
+    const result = buildCombatRoundAttackRollResult({
+      actionId: "parry_attack",
+      attackerParticipantId: "guard",
+      defenderDb: 10,
+      defenderParticipantId: "gladiator",
+      ob: 10,
+      phase: "phase2",
+      rollD20: 12,
+      rollTotal: 12,
+      rolledAt: "2026-01-01T00:03:00.000Z",
+      weaponName: "Long sword",
+    });
+    const afterAttack = recordCombatRoundAttackResult({
+      command: {
+        createdAt: result.rolledAt,
+        createdByUserId: "gm-1",
+      },
+      participantId: "guard",
+      result,
+      state,
+      submittedBy: "gm",
+    });
+    const afterParry = recordCombatRoundParryResult({
+      attackResult: result,
+      command: {
+        createdAt: "2026-01-01T00:04:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      parryResolution: {
+        combinedParryScore: 9,
+        modifierAdjustment: 0,
+        openEndedD10s: [],
+        resultLabel: "Parry failed",
+        rollD20: 8,
+        rollTotal: 8,
+        status: "resolved",
+        success: false,
+        targetNumber: 21,
+        total: 17,
+      },
+      state: afterAttack,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:04:00.000Z",
+    });
+
+    expect(afterParry.commands.at(-1)).toMatchObject({
+      afterCursor: {
+        participantId: "gladiator",
+        roundNumber: 3,
+        step: "D2",
+      },
+      beforeCursor: {
+        participantId: "gladiator",
+        roundNumber: 3,
+        step: "P2",
+      },
+      facts: expect.objectContaining({
+        attackResultId: "3:phase2:guard:gladiator",
+        attackerParticipantId: "guard",
+        defenderParticipantId: "gladiator",
+        success: false,
+      }),
+      participantId: "gladiator",
+      phase: "phase2",
+      step: "P2",
+      type: "roll_parry",
+    });
+    expect(afterParry.currentCursor).toEqual({
+      participantId: "gladiator",
+      roundNumber: 3,
+      step: "D2",
+    });
+    expect(afterParry.currentStep).toBe("phase_2_damage");
+    expect(afterParry.phaseResolutionCursor).toEqual({
+      participantId: "gladiator",
+      phase: "phase2",
+      substep: "damage",
+    });
+
+    const cleared = clearCombatRoundStep({
+      state: afterParry,
+      step: "phase_2_damage",
+    });
+
+    expect(cleared.commands).toHaveLength(1);
+    expect(cleared.participants[1]?.attackResults.phase2).toEqual(result);
+    expect(cleared.phaseResolutionResults[0]?.parryResolution.status).toBe("pending");
+    expect(cleared.phaseResolutionResults[0]?.damageRoll.status).toBe("pending");
+    expect(cleared.currentCursor).toEqual({
+      participantId: "gladiator",
+      roundNumber: 3,
+      step: "P2",
+    });
+    expect(cleared.currentStep).toBe("review_phase_2_damage");
+    expect(cleared.phaseResolutionCursor).toEqual({
+      participantId: "gladiator",
+      phase: "phase2",
+      substep: "parry",
+    });
+    expect(cleared.selectedParticipantId).toBe("gladiator");
+    expect(cleared.selectedStep).toBe("review_phase_2_damage");
+    expect(
+      getCombatRoundParticipantPhaseStepStatus({
+        participantId: "gladiator",
+        state: cleared,
+        step: "review_phase_2_damage",
+      }),
+    ).toBe("pending");
+    expect(
+      getCombatRoundParticipantPhaseStepStatus({
+        participantId: "gladiator",
+        state: cleared,
+        step: "phase_2_damage",
+      }),
+    ).toBe("pending");
+  });
+
+  it("manual selection of an older i1 cell still undoes the latest roll_parry", () => {
+    const state = initializeCombatRoundPhaseResolutionCursor({
+      phase: "phase1",
+      state: setCombatRoundParticipantInitiative({
+        initiative: { baseInitiative: 0, modifierAdjustment: 0, rolls: [6], rollTotal: 6, total: 6 },
+        participantId: "gladiator",
+        phase: "phase1",
+        state: setCombatRoundParticipantInitiative({
+          initiative: {
+            baseInitiative: 0,
+            modifierAdjustment: 0,
+            rolls: [4],
+            rollTotal: 4,
+            total: 4,
+          },
+          participantId: "guard",
+          phase: "phase1",
+          state: declareRoundAction({
+            actionId: "attack_parry",
+            participantId: "guard",
+            state: declareRoundAction({
+              actionId: "attack_parry",
+              participantId: "gladiator",
+              state: initializeCombatRoundState({ encounter: encounter() }),
+            }),
+          }),
+        }),
+      }),
+      updatedAt: "2026-01-01T00:02:00.000Z",
+    });
+    const result = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackerParticipantId: "gladiator",
+      defenderDb: 10,
+      defenderParticipantId: "guard",
+      ob: 10,
+      phase: "phase1",
+      rollD20: 12,
+      rollTotal: 12,
+      rolledAt: "2026-01-01T00:03:00.000Z",
+      weaponName: "Broad sword",
+    });
+    const afterAttack = recordCombatRoundAttackResult({
+      command: {
+        createdAt: result.rolledAt,
+        createdByUserId: "gm-1",
+      },
+      participantId: "gladiator",
+      result,
+      state,
+      submittedBy: "gm",
+    });
+    const afterParry = recordCombatRoundParryResult({
+      attackResult: result,
+      command: {
+        createdAt: "2026-01-01T00:04:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      parryResolution: {
+        combinedParryScore: 9,
+        modifierAdjustment: 0,
+        openEndedD10s: [],
+        resultLabel: "Parry failed",
+        rollD20: 8,
+        rollTotal: 8,
+        status: "resolved",
+        success: false,
+        targetNumber: 21,
+        total: 17,
+      },
+      state: afterAttack,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:04:00.000Z",
+    });
+    const cleared = clearCombatRoundStep({
+      state: {
+        ...afterParry,
+        selectedParticipantId: "gladiator",
+        selectedStep: "initiative_phase_1",
+      },
+      step: "initiative_phase_1",
+    });
+
+    expect(afterParry.commands.at(-1)).toMatchObject({
+      participantId: "guard",
+      type: "roll_parry",
+    });
+    expect(cleared.commands).toHaveLength(1);
+    expect(cleared.commands[0]).toMatchObject({
+      participantId: "gladiator",
+      type: "roll_attack",
+    });
+    expect(cleared.participants[0]?.attackResults.phase1).toEqual(result);
+    expect(cleared.participants[0]?.initiatives.phase1).toMatchObject({ total: 6 });
+    expect(cleared.phaseResolutionResults[0]?.parryResolution.status).toBe("pending");
+    expect(cleared.currentCursor).toEqual({
+      participantId: "guard",
+      roundNumber: 3,
+      step: "P1",
+    });
+    expect(cleared.currentStep).toBe("review_phase_2_actions");
+    expect(cleared.selectedParticipantId).toBe("guard");
+    expect(cleared.selectedStep).toBe("review_phase_2_actions");
+  });
+
+  it("records and undoes D1 placeholder damage review commands after failed parry", () => {
+    const state = initializeCombatRoundPhaseResolutionCursor({
+      phase: "phase1",
+      state: setCombatRoundParticipantInitiative({
+        initiative: { baseInitiative: 0, modifierAdjustment: 0, rolls: [6], rollTotal: 6, total: 6 },
+        participantId: "gladiator",
+        phase: "phase1",
+        state: setCombatRoundParticipantInitiative({
+          initiative: {
+            baseInitiative: 0,
+            modifierAdjustment: 0,
+            rolls: [4],
+            rollTotal: 4,
+            total: 4,
+          },
+          participantId: "guard",
+          phase: "phase1",
+          state: declareRoundAction({
+            actionId: "attack_parry",
+            participantId: "guard",
+            state: declareRoundAction({
+              actionId: "attack_parry",
+              participantId: "gladiator",
+              state: initializeCombatRoundState({ encounter: encounter() }),
+            }),
+          }),
+        }),
+      }),
+      updatedAt: "2026-01-01T00:02:00.000Z",
+    });
+    const result = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackerParticipantId: "gladiator",
+      defenderDb: 10,
+      defenderParticipantId: "guard",
+      ob: 10,
+      phase: "phase1",
+      rollD20: 12,
+      rollTotal: 12,
+      rolledAt: "2026-01-01T00:03:00.000Z",
+      weaponName: "Broad sword",
+    });
+    const afterAttack = recordCombatRoundAttackResult({
+      command: {
+        createdAt: result.rolledAt,
+        createdByUserId: "gm-1",
+      },
+      participantId: "gladiator",
+      result,
+      state,
+      submittedBy: "gm",
+    });
+    const afterParry = recordCombatRoundParryResult({
+      attackResult: result,
+      command: {
+        createdAt: "2026-01-01T00:04:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      parryResolution: {
+        combinedParryScore: 9,
+        modifierAdjustment: 0,
+        openEndedD10s: [],
+        resultLabel: "Parry failed",
+        rollD20: 8,
+        rollTotal: 8,
+        status: "resolved",
+        success: false,
+        targetNumber: 21,
+        total: 17,
+      },
+      state: afterAttack,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:04:00.000Z",
+    });
+    const afterDamageReview = recordCombatRoundDamageReviewPlaceholder({
+      attackResult: result,
+      command: {
+        createdAt: "2026-01-01T00:05:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      state: afterParry,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:05:00.000Z",
+    });
+    const cleared = clearCombatRoundStep({
+      state: {
+        ...afterDamageReview,
+        selectedParticipantId: "gladiator",
+        selectedStep: "initiative_phase_1",
+      },
+      step: "initiative_phase_1",
+    });
+
+    expect(
+      getCombatRoundParticipantPhaseStepStatus({
+        participantId: "guard",
+        state: afterParry,
+        step: "phase_1_damage",
+      }),
+    ).toBe("pending");
+    expect(afterDamageReview.commands.at(-1)).toMatchObject({
+      afterCursor: {
+        participantId: "guard",
+        roundNumber: 3,
+        step: "A1",
+      },
+      beforeCursor: {
+        participantId: "guard",
+        roundNumber: 3,
+        step: "D1",
+      },
+      facts: {
+        attackResultId: "3:phase1:gladiator:guard",
+        attackerParticipantId: "gladiator",
+        defenderParticipantId: "guard",
+        nextStepOpened: {
+          participantId: "guard",
+          step: "A1",
+        },
+        status: "deferred",
+      },
+      participantId: "guard",
+      phase: "phase1",
+      step: "D1",
+      type: "complete_damage_review_phase1",
+    });
+    expect(
+      getCombatRoundParticipantPhaseStepStatus({
+        participantId: "guard",
+        state: afterDamageReview,
+        step: "phase_1_damage",
+      }),
+    ).toBe("gmEdited");
+    expect(afterDamageReview.phaseResolutionResults[0]?.damageProposal.proposedEffects).toEqual([]);
+    expect(afterDamageReview.phaseResolutionResults[0]?.damageRoll.status).toBe("pending");
+    expect(cleared.commands.at(-1)).toMatchObject({
+      participantId: "guard",
+      type: "roll_parry",
+    });
+    expect(cleared.currentCursor).toEqual({
+      participantId: "guard",
+      roundNumber: 3,
+      step: "D1",
+    });
+    expect(cleared.currentStep).toBe("phase_1_damage");
+    expect(cleared.phaseResolutionCursor).toEqual({
+      participantId: "guard",
+      phase: "phase1",
+      substep: "damage",
+    });
+    expect(cleared.selectedParticipantId).toBe("guard");
+    expect(cleared.selectedStep).toBe("phase_1_damage");
+    expect(cleared.participants[0]?.attackResults.phase1).toEqual(result);
+    expect(cleared.phaseResolutionResults[0]?.parryResolution).toMatchObject({
+      status: "resolved",
+      success: false,
+    });
+    expect(cleared.phaseResolutionResults[0]?.damageProposal.proposedEffects).toEqual([]);
+    expect(cleared.phaseResolutionResults[0]?.damageRoll.status).toBe("pending");
+    expect(
+      getCombatRoundParticipantPhaseStepStatus({
+        participantId: "guard",
+        state: cleared,
+        step: "phase_1_damage",
+      }),
+    ).toBe("pending");
+  });
+
+  it("records and undoes D1 damage result commands after failed parry", () => {
+    const state = initializeCombatRoundPhaseResolutionCursor({
+      phase: "phase1",
+      state: setCombatRoundParticipantInitiative({
+        initiative: { baseInitiative: 0, modifierAdjustment: 0, rolls: [6], rollTotal: 6, total: 6 },
+        participantId: "gladiator",
+        phase: "phase1",
+        state: setCombatRoundParticipantInitiative({
+          initiative: {
+            baseInitiative: 0,
+            modifierAdjustment: 0,
+            rolls: [4],
+            rollTotal: 4,
+            total: 4,
+          },
+          participantId: "guard",
+          phase: "phase1",
+          state: declareRoundAction({
+            actionId: "attack_parry",
+            participantId: "guard",
+            state: declareRoundAction({
+              actionId: "attack_parry",
+              participantId: "gladiator",
+              state: initializeCombatRoundState({ encounter: encounter() }),
+            }),
+          }),
+        }),
+      }),
+      updatedAt: "2026-01-01T00:02:00.000Z",
+    });
+    const result = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackerParticipantId: "gladiator",
+      defenderDb: 10,
+      defenderParticipantId: "guard",
+      ob: 10,
+      phase: "phase1",
+      rollD20: 14,
+      rollTotal: 14,
+      rolledAt: "2026-01-01T00:03:00.000Z",
+      weaponName: "Broad sword",
+    });
+    const afterAttack = recordCombatRoundAttackResult({
+      command: {
+        createdAt: result.rolledAt,
+        createdByUserId: "gm-1",
+      },
+      participantId: "gladiator",
+      result,
+      state,
+      submittedBy: "gm",
+    });
+    const afterParry = recordCombatRoundParryResult({
+      attackResult: result,
+      command: {
+        createdAt: "2026-01-01T00:04:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      parryResolution: {
+        combinedParryScore: 9,
+        modifierAdjustment: 0,
+        openEndedD10s: [],
+        resultLabel: "Parry failed",
+        rollD20: 8,
+        rollTotal: 8,
+        status: "resolved",
+        success: false,
+        targetNumber: 21,
+        total: 17,
+      },
+      state: afterAttack,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:04:00.000Z",
+    });
+    const afterLocation = recordTestHitLocation({
+      attackResult: result,
+      command: {
+        createdAt: "2026-01-01T00:04:30.000Z",
+        createdByUserId: "gm-1",
+      },
+      state: afterParry,
+    });
+    const afterDamage = recordCombatRoundDamageResult({
+      attackResult: result,
+      command: {
+        createdAt: "2026-01-01T00:05:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      defenderDm: 0,
+      dmb: 8,
+      state: afterLocation,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:05:00.000Z",
+    });
+    const cleared = clearCombatRoundStep({
+      state: {
+        ...afterDamage,
+        selectedParticipantId: "gladiator",
+        selectedStep: "initiative_phase_1",
+      },
+      step: "initiative_phase_1",
+    });
+
+    expect(afterDamage.commands.at(-1)).toMatchObject({
+      afterCursor: {
+        participantId: "guard",
+        roundNumber: 3,
+        step: "D1",
+      },
+      beforeCursor: {
+        participantId: "guard",
+        roundNumber: 3,
+        step: "D1",
+      },
+      facts: expect.objectContaining({
+        attackResultId: "3:phase1:gladiator:guard",
+        attackerParticipantId: "gladiator",
+        damageResultId: "3:phase1:gladiator:guard:damage",
+        defenderParticipantId: "guard",
+        status: "resolved",
+        totalDamage: 9,
+      }),
+      participantId: "guard",
+      phase: "phase1",
+      step: "D1",
+      type: "resolve_damage",
+    });
+    expect(afterDamage.phaseResolutionResults[0]?.damageResult).toMatchObject({
+      armorModifier: 0,
+      attackResultId: "3:phase1:gladiator:guard",
+      attackerParticipantId: "gladiator",
+      defenderDm: 0,
+      defenderParticipantId: "guard",
+      dmb: 8,
+      grazing: false,
+      hitLookupTotal: 14,
+      kind: "damage_result",
+      criticalGrade: "b",
+      damageLookupTotal: 22,
+      minDamage: 1,
+      tableDamage: 9,
+      totalDamage: 9,
+      weaponName: "Broad sword",
+    });
+    expect(afterDamage.phaseResolutionResults[0]?.damageRoll).toMatchObject({
+      status: "rolled",
+      total: 9,
+    });
+    expect(afterDamage.phaseResolutionResults[0]?.damageProposal.status).toBe("drafted");
+    expect(afterDamage.phaseResolutionResults[0]?.damageProposal.proposedEffects).toEqual([]);
+    expect(
+      getCombatRoundParticipantPhaseStepStatus({
+        participantId: "guard",
+        state: afterDamage,
+        step: "phase_1_damage",
+      }),
+    ).toBe("ready");
+    expect(cleared.commands.at(-1)).toMatchObject({
+      participantId: "guard",
+      type: "roll_hit_location",
+    });
+    expect(cleared.currentCursor).toEqual({
+      participantId: "guard",
+      roundNumber: 3,
+      step: "D1",
+    });
+    expect(cleared.currentStep).toBe("phase_1_damage");
+    expect(cleared.selectedParticipantId).toBe("guard");
+    expect(cleared.selectedStep).toBe("phase_1_damage");
+    expect(cleared.participants[0]?.attackResults.phase1).toEqual(result);
+    expect(cleared.phaseResolutionResults[0]?.parryResolution).toMatchObject({
+      status: "resolved",
+      success: false,
+    });
+    expect(cleared.phaseResolutionResults[0]?.damageResult).toBeUndefined();
+    expect(cleared.phaseResolutionResults[0]?.damageRoll.status).toBe("pending");
+    expect(cleared.phaseResolutionResults[0]?.hitLocationRoll.status).toBe("rolled");
+    expect(cleared.phaseResolutionResults[0]?.damageProposal.proposedEffects).toEqual([]);
+  });
+
+  it("records D1 damage results for refreshed 17/18 hit rows", () => {
+    const state = initializeCombatRoundPhaseResolutionCursor({
+      phase: "phase1",
+      state: declareRoundAction({
+        actionId: "attack_parry",
+        participantId: "gladiator",
+        state: initializeCombatRoundState({ encounter: encounter() }),
+      }),
+      updatedAt: "2026-01-01T00:02:00.000Z",
+    });
+    const result = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackerParticipantId: "gladiator",
+      defenderDb: 10,
+      defenderParticipantId: "guard",
+      ob: 10,
+      phase: "phase1",
+      rollD20: 17,
+      rollTotal: 17,
+      rolledAt: "2026-01-01T00:03:00.000Z",
+      weaponName: "Broad sword",
+    });
+    const afterAttack = recordCombatRoundAttackResult({
+      participantId: "gladiator",
+      result,
+      state,
+      submittedBy: "gm",
+    });
+    const afterParry = recordCombatRoundParryResult({
+      attackResult: result,
+      parryResolution: {
+        combinedParryScore: 9,
+        modifierAdjustment: 0,
+        openEndedD10s: [],
+        resultLabel: "Parry failed",
+        rollD20: 8,
+        rollTotal: 8,
+        status: "resolved",
+        success: false,
+        targetNumber: 21,
+        total: 17,
+      },
+      state: afterAttack,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:04:00.000Z",
+    });
+    const afterLocation = recordTestHitLocation({
+      attackResult: result,
+      command: {
+        createdAt: "2026-01-01T00:04:30.000Z",
+        createdByUserId: "gm-1",
+      },
+      state: afterParry,
+    });
+
+    const afterDamage = recordCombatRoundDamageResult({
+      attackResult: result,
+      command: {
+        createdAt: "2026-01-01T00:05:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      defenderDm: 0,
+      dmb: 8,
+      state: afterLocation,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:05:00.000Z",
+    });
+
+    expect(result.lookupTotal).toBe(17);
+    expect(afterDamage.phaseResolutionResults[0]?.damageResult).toMatchObject({
+      criticalGrade: "c",
+      damageRoll: {
+        required: false,
+      },
+      damageLookupTotal: 25,
+      hitLookupTotal: 17,
+      minDamage: 2,
+      tableDamage: 12,
+      totalDamage: 12,
+    });
+    expect(afterDamage.commands.at(-1)).toMatchObject({
+      facts: expect.objectContaining({
+        totalDamage: 12,
+      }),
+      type: "resolve_damage",
+    });
+  });
+
+  it("records one-roll and targeted two-roll hit-location commands", () => {
+    const pending = prepareFailedParryPendingDamage({});
+    const afterSingleLocation = recordCombatRoundHitLocationRoll({
+      attackResult: pending.attackResult,
+      command: {
+        createdAt: "2026-01-01T00:04:30.000Z",
+        createdByUserId: "gm-1",
+      },
+      hitLocationRolls: [12],
+      rolledByParticipantId: "gladiator",
+      state: pending.state,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:04:30.000Z",
+    });
+    const targetedPending = prepareFailedParryPendingDamage({});
+    const afterTargetedLocation = recordCombatRoundHitLocationRoll({
+      attackResult: targetedPending.attackResult,
+      command: {
+        createdAt: "2026-01-01T00:04:30.000Z",
+        createdByUserId: "gm-1",
+      },
+      hitLocationRolls: [7, 14],
+      rolledByParticipantId: "gladiator",
+      state: targetedPending.state,
+      submittedBy: "gm",
+      targetLocation: "head",
+      updatedAt: "2026-01-01T00:04:30.000Z",
+    });
+
+    expect(afterSingleLocation.phaseResolutionResults[0]?.hitLocationRoll).toMatchObject({
+      hitLocationRolls: [12],
+      rolledByParticipantId: "gladiator",
+      rollPrivilege: "attacker",
+      selectedHitLocation: "chest",
+      selectedHitLocationRoll: 12,
+      selectionReason: "single_roll",
+      status: "rolled",
+    });
+    expect(afterSingleLocation.commands.at(-1)).toMatchObject({
+      facts: expect.objectContaining({
+        hitLocationRolls: [12],
+        rolledByParticipantId: "gladiator",
+        rollPrivilege: "attacker",
+        selectedHitLocation: "chest",
+      }),
+      participantId: "guard",
+      step: "D1",
+      type: "roll_hit_location",
+    });
+    expect(afterTargetedLocation.phaseResolutionResults[0]?.hitLocationRoll).toMatchObject({
+      hitLocationRolls: [7, 14],
+      selectedHitLocation: "chest",
+      selectedHitLocationRoll: 14,
+      selectionReason: "targeted_closest",
+      targetLocation: "head",
+    });
+  });
+
+  it("requires location before damage and tracks critical substates", () => {
+    const pending = prepareFailedParryPendingDamage({});
+
+    expect(() =>
+      recordCombatRoundDamageResult({
+        attackResult: pending.attackResult,
+        command: {
+          createdAt: "2026-01-01T00:05:00.000Z",
+          createdByUserId: "gm-1",
+        },
+        defenderDm: 0,
+        dmb: 8,
+        state: pending.state,
+        submittedBy: "gm",
+        updatedAt: "2026-01-01T00:05:00.000Z",
+      }),
+    ).toThrow("Hit location roll required before resolving damage.");
+
+    const afterLocation = recordTestHitLocation({
+      attackResult: pending.attackResult,
+      command: {
+        createdAt: "2026-01-01T00:04:30.000Z",
+        createdByUserId: "gm-1",
+      },
+      state: pending.state,
+    });
+    const afterDamage = recordCombatRoundDamageResult({
+      attackResult: pending.attackResult,
+      command: {
+        createdAt: "2026-01-01T00:05:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      defenderDm: 0,
+      dmb: 8,
+      state: afterLocation,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:05:00.000Z",
+    });
+
+    expect(getCombatRoundDamageSubstate(afterLocation.phaseResolutionResults[0])).toBe(
+      "location_rolled",
+    );
+    expect(afterDamage.phaseResolutionResults[0]?.criticalRoll.status).toBe("pending");
+    expect(getCombatRoundDamageSubstate(afterDamage.phaseResolutionResults[0])).toBe(
+      "critical_pending",
+    );
+  });
+
+  it("records and unwinds critical rolls before damage and location", () => {
+    const pending = prepareFailedParryPendingDamage({});
+    const afterLocation = recordTestHitLocation({
+      attackResult: pending.attackResult,
+      command: {
+        createdAt: "2026-01-01T00:04:30.000Z",
+        createdByUserId: "gm-1",
+      },
+      state: pending.state,
+    });
+    const afterDamage = recordCombatRoundDamageResult({
+      attackResult: pending.attackResult,
+      command: {
+        createdAt: "2026-01-01T00:05:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      defenderDm: 0,
+      dmb: 8,
+      state: afterLocation,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:05:00.000Z",
+    });
+    const afterCritical = recordCombatRoundCriticalRoll({
+      attackResult: pending.attackResult,
+      command: {
+        createdAt: "2026-01-01T00:05:30.000Z",
+        createdByUserId: "gm-1",
+      },
+      criticalDice: [4, 5],
+      rolledByParticipantId: "gladiator",
+      state: afterDamage,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:05:30.000Z",
+    });
+    const afterCriticalUndo = clearCombatRoundStep({
+      state: afterCritical,
+      step: "phase_1_damage",
+    });
+    const afterDamageUndo = clearCombatRoundStep({
+      state: afterCriticalUndo,
+      step: "phase_1_damage",
+    });
+    const afterLocationUndo = clearCombatRoundStep({
+      state: afterDamageUndo,
+      step: "phase_1_damage",
+    });
+
+    expect(afterCritical.phaseResolutionResults[0]?.criticalRoll).toMatchObject({
+      armorCriticalModifier: 0,
+      criticalDice: [4, 5],
+      criticalDiceTotal: 9,
+      criticalGrade: "b",
+      criticalTypeModifier: -4,
+      finalCriticalRoll: 5,
+      rolledByParticipantId: "gladiator",
+      rollPrivilege: "attacker",
+      selectedHitLocation: "chest",
+      status: "rolled",
+    });
+    expect(afterCritical.commands.at(-1)).toMatchObject({
+      facts: expect.objectContaining({
+        criticalDice: [4, 5],
+        finalCriticalRoll: 5,
+        rollPrivilege: "attacker",
+      }),
+      type: "roll_critical",
+    });
+    expect(afterCriticalUndo.phaseResolutionResults[0]?.criticalRoll.status).toBe("pending");
+    expect(afterCriticalUndo.phaseResolutionResults[0]?.damageResult).toBeDefined();
+    expect(afterDamageUndo.phaseResolutionResults[0]?.criticalRoll.status).toBe("not_required");
+    expect(afterDamageUndo.phaseResolutionResults[0]?.damageResult).toBeUndefined();
+    expect(afterDamageUndo.phaseResolutionResults[0]?.hitLocationRoll.status).toBe("rolled");
+    expect(afterLocationUndo.phaseResolutionResults[0]?.hitLocationRoll.status).toBe("pending");
+  });
+
+  it("uses a second table lookup for normal hit damage", () => {
+    const result = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackerParticipantId: "gladiator",
+      defenderDb: 15,
+      defenderParticipantId: "guard",
+      ob: 10,
+      phase: "phase1",
+      rollD20: 19,
+      rollTotal: 19,
+      rolledAt: "2026-01-01T00:03:00.000Z",
+      weaponName: "Broad sword",
+    });
+    const highDmbDamage = buildCombatRoundDamageResult({
+      armorModifier: 0,
+      attackResult: result,
+      createdAt: "2026-01-01T00:05:00.000Z",
+      defenderDm: 0,
+      dmb: 8,
+      hitLocationSelection: {
+        ...fixedChestLocationSelection(),
+        hitLocationRolls: [14],
+        selectedHitLocationRoll: 14,
+      },
+      roundNumber: 3,
+    });
+    const armoredDamage = buildCombatRoundDamageResult({
+      armorModifier: -2,
+      armorModifierSource: {
+        armorClass: "C",
+        label: "Leather vs weapon armor class A",
+        status: "applied",
+        weaponArmorClass: "A",
+      },
+      attackResult: result,
+      createdAt: "2026-01-01T00:05:00.000Z",
+      defenderDm: 0,
+      dmb: 8,
+      hitLocationSelection: {
+        hitLocationRolls: [19, 4],
+        hitLocationSelectionReason: "targeted_closest",
+        selectedHitLocation: "head",
+        selectedHitLocationRoll: 19,
+        targetLocation: "head",
+      },
+      roundNumber: 3,
+    });
+    const noDmbDamage = buildCombatRoundDamageResult({
+      armorModifier: 0,
+      attackResult: result,
+      createdAt: "2026-01-01T00:05:00.000Z",
+      defenderDm: 0,
+      dmb: 0,
+      hitLocationSelection: fixedChestLocationSelection(),
+      roundNumber: 3,
+    });
+    const continuedDamage = buildCombatRoundDamageResult({
+      armorModifier: 0,
+      attackResult: result,
+      createdAt: "2026-01-01T00:05:00.000Z",
+      defenderDm: 0,
+      dmb: 21,
+      hitLocationSelection: fixedChestLocationSelection(),
+      roundNumber: 3,
+    });
+
+    expect(result.lookupTotal).toBe(14);
+    expect(highDmbDamage).toMatchObject({
+      armorModifier: 0,
+      criticalGrade: "b",
+      damageLookupTotal: 22,
+      defenderDm: 0,
+      dmb: 8,
+      hitLookupTotal: 14,
+      hitLocationRolls: [14],
+      hitLocationSelectionReason: "single_roll",
+      minDamage: 1,
+      selectedHitLocation: "chest",
+      selectedHitLocationRoll: 14,
+      tableDamage: 9,
+      totalDamage: 9,
+    });
+    expect(highDmbDamage.armorModifierSource.status).toBe("not_applied");
+    expect(armoredDamage).toMatchObject({
+      armorModifier: -2,
+      armorModifierSource: {
+        armorClass: "C",
+        label: "Leather vs weapon armor class A",
+        status: "applied",
+        weaponArmorClass: "A",
+      },
+      criticalGrade: "a",
+      damageLookupTotal: 20,
+      hitLookupTotal: 14,
+      hitLocationRolls: [19, 4],
+      hitLocationSelectionReason: "targeted_closest",
+      selectedHitLocation: "head",
+      selectedHitLocationRoll: 19,
+      tableDamage: 7,
+      targetLocation: "head",
+      totalDamage: 7,
+    });
+    expect(noDmbDamage).toMatchObject({
+      armorModifier: 0,
+      damageLookupTotal: 14,
+      defenderDm: 0,
+      dmb: 0,
+      hitLookupTotal: 14,
+      tableDamage: 2,
+      totalDamage: 2,
+    });
+    expect(noDmbDamage.criticalGrade).toBeUndefined();
+    expect(continuedDamage).toMatchObject({
+      criticalGrade: "f",
+      damageLookupTotal: 35,
+      hitLookupTotal: 14,
+      maxDamageNote: "max damage: 17 + GM STR when relevant",
+      minDamage: 5,
+      tableDamage: 22,
+      totalDamage: 22,
+    });
+  });
+
+  it("derives effective D1 damage values from GM review overrides without replacing computed values", () => {
+    const result = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackerParticipantId: "gladiator",
+      defenderDb: 15,
+      defenderParticipantId: "guard",
+      ob: 10,
+      phase: "phase1",
+      rollD20: 19,
+      rollTotal: 19,
+      rolledAt: "2026-01-01T00:03:00.000Z",
+      weaponName: "Broad sword",
+    });
+    const damageResult = buildCombatRoundDamageResult({
+      armorModifier: 0,
+      attackResult: result,
+      createdAt: "2026-01-01T00:05:00.000Z",
+      defenderDm: 0,
+      dmb: 8,
+      hitLocationSelection: {
+        ...fixedChestLocationSelection(),
+        hitLocationRolls: [14],
+        selectedHitLocationRoll: 14,
+      },
+      roundNumber: 3,
+    });
+    const reviewedDamageResult = {
+      ...damageResult,
+      review: {
+        additionalEffects: [],
+        armorModifierOverride: -2,
+        criticalGradeOverride: "a",
+        notes: "armor adjusted manually",
+        reviewedAt: "2026-01-01T00:06:00.000Z",
+        selectedHitLocationOverride: "rightArm" as const,
+      },
+    };
+
+    expect(getCombatRoundEffectiveDamageResult(reviewedDamageResult)).toMatchObject({
+      computedArmorModifier: 0,
+      computedCriticalGrade: "b",
+      computedDamageLookupTotal: 22,
+      computedSelectedHitLocation: "chest",
+      computedTableDamage: 9,
+      computedTotalDamage: 9,
+      effectiveArmorModifier: -2,
+      effectiveCriticalGrade: "a",
+      effectiveDamageLookupTotal: 20,
+      effectiveSelectedHitLocation: "rightArm",
+      effectiveTableDamage: 7,
+      effectiveTotalDamage: 7,
+      hasReviewOverrides: true,
+      requiresTotalDamageOverride: false,
+    });
+  });
+
+  it("caps max damage before committing a location-specific D1 physical damage row", () => {
+    const { attackResult, state } = prepareFailedParryPendingDamage({
+      defenderDb: 10,
+      ob: 10,
+      rollD20: 18,
+    });
+    const afterLocation = recordTestHitLocation({
+      attackResult,
+      command: {
+        createdAt: "2026-01-01T00:04:30.000Z",
+        createdByUserId: "gm-1",
+      },
+      hitLocationRolls: [8],
+      state,
+    });
+    const afterDamage = recordCombatRoundDamageResult({
+      attackResult,
+      attackerStrengthGm: 4,
+      command: {
+        createdAt: "2026-01-01T00:05:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      defenderDm: 0,
+      dmb: 18,
+      state: afterLocation,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:05:00.000Z",
+    });
+    const afterCritical = recordCombatRoundCriticalRoll({
+      attackResult,
+      command: {
+        createdAt: "2026-01-01T00:05:30.000Z",
+        createdByUserId: "gm-1",
+      },
+      criticalDice: [5, 6],
+      rolledByParticipantId: "gladiator",
+      state: afterDamage,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:05:30.000Z",
+    });
+    const committed = commitCombatRoundPhaseDamage({
+      attackerScenarioParticipantId: "scenario-gladiator",
+      command: {
+        commandId: "commit-capped",
+        createdAt: "2026-01-01T00:06:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      defenderScenarioParticipantId: "scenario-guard",
+      encounterId: "encounter-1",
+      scenarioId: "scenario-1",
+      state: afterCritical,
+    });
+    const cleanedCombatEffects = removeCombatRoundCommittedDamageEffects({
+      combatEffects: committed.combatEffects,
+      command: committed.command,
+    });
+    const damageResult = afterDamage.phaseResolutionResults[0]?.damageResult;
+    const expectedCommitEffectId =
+      "commit-capped:r3:phase1:3-phase1-gladiator-guard:3-phase1-gladiator-guard-damage:combat-effect:physical-damage-abdomenLowerBack";
+
+    expect(damageResult).toMatchObject({
+      attackerStrengthGm: 4,
+      cappedTotalDamage: 21,
+      criticalGrade: "f",
+      damageLookupTotal: 36,
+      maxDamageApplied: true,
+      maxDamageCap: 21,
+      rawTotalDamage: 23,
+      selectedHitLocation: "abdomen",
+      tableDamage: 23,
+      totalDamage: 23,
+    });
+    expect(damageResult ? getCombatRoundEffectiveDamageResult(damageResult) : undefined)
+      .toMatchObject({
+        computedMaxDamageApplied: true,
+        computedMaxDamageCap: 21,
+        computedTotalDamage: 23,
+        effectiveMaxDamageApplied: true,
+        effectiveMaxDamageCap: 21,
+        effectiveRawTotalDamage: 23,
+        effectiveTotalDamage: 21,
+      });
+    expect(committed.command).toMatchObject({
+      facts: expect.objectContaining({
+        createdDamageEffectIds: [expectedCommitEffectId],
+        effectivePhysicalDamageLocation: expect.objectContaining({
+          id: "abdomenLowerBack",
+          label: "Abdomen/lower back",
+        }),
+        maxDamageApplied: true,
+        maxDamageCap: 21,
+        rawTotalDamage: 23,
+        totalDamage: 21,
+      }),
+      type: "commit_phase_damage",
+    });
+    expect(committed.combatEffects.events[0]?.description).toContain(
+      "23 raw damage, capped to 21",
+    );
+    expect(committed.combatEffects.effects).toContainEqual(
+      expect.objectContaining({
+        damage: 21,
+        generalDamage: 0,
+        id: expectedCommitEffectId,
+        location: "abdomenLowerBack",
+        targetParticipantId: "scenario-guard",
+        type: "physical_damage",
+      }),
+    );
+    expect(cleanedCombatEffects).toEqual({ effects: [], events: [] });
+  });
+
+  it("applies the max damage cap to GM total damage overrides", () => {
+    const result = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackerParticipantId: "gladiator",
+      defenderDb: 10,
+      defenderParticipantId: "guard",
+      ob: 10,
+      phase: "phase1",
+      rollD20: 18,
+      rollTotal: 18,
+      rolledAt: "2026-01-01T00:03:00.000Z",
+      weaponName: "Broad sword",
+    });
+    const damageResult = buildCombatRoundDamageResult({
+      armorModifier: 0,
+      attackerStrengthGm: 4,
+      attackResult: result,
+      createdAt: "2026-01-01T00:05:00.000Z",
+      defenderDm: 0,
+      dmb: 18,
+      hitLocationSelection: {
+        ...fixedChestLocationSelection(),
+        hitLocationRolls: [8],
+        selectedHitLocation: "abdomen",
+        selectedHitLocationRoll: 8,
+      },
+      roundNumber: 3,
+    });
+    const reviewedDamageResult = {
+      ...damageResult,
+      review: {
+        additionalEffects: [],
+        reviewedAt: "2026-01-01T00:05:30.000Z",
+        totalDamageOverride: 30,
+      },
+    };
+
+    expect(getCombatRoundEffectiveDamageResult(reviewedDamageResult)).toMatchObject({
+      effectiveMaxDamageApplied: true,
+      effectiveMaxDamageCap: 21,
+      effectiveRawTotalDamage: 30,
+      effectiveTotalDamage: 21,
+    });
+  });
+
+  it.each([
+    { effectLocation: "head", roll: 19 },
+    { effectLocation: "rightArm", roll: 18 },
+    { effectLocation: "leftArm", roll: 16 },
+    { effectLocation: "chestBack", roll: 12 },
+    { effectLocation: "upperRightLeg", roll: 4 },
+    { effectLocation: "upperLeftLeg", roll: 1 },
+  ])("commits hit location roll $roll to physical damage location $effectLocation", (caseInput) => {
+    const { attackResult, state } = prepareFailedParryPendingDamage({});
+    const afterLocation = recordTestHitLocation({
+      attackResult,
+      hitLocationRolls: [caseInput.roll],
+      state,
+    });
+    const afterDamage = recordCombatRoundDamageResult({
+      attackResult,
+      command: {
+        createdAt: "2026-01-01T00:05:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      defenderDm: 0,
+      dmb: 0,
+      state: afterLocation,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:05:00.000Z",
+    });
+    const committed = commitCombatRoundPhaseDamage({
+      attackerScenarioParticipantId: "scenario-gladiator",
+      command: {
+        commandId: `commit-${caseInput.effectLocation}`,
+        createdAt: "2026-01-01T00:06:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      defenderScenarioParticipantId: "scenario-guard",
+      encounterId: "encounter-1",
+      scenarioId: "scenario-1",
+      state: afterDamage,
+    });
+
+    expect(committed.combatEffects.effects).toContainEqual(
+      expect.objectContaining({
+        damage: 2,
+        generalDamage: 0,
+        location: caseInput.effectLocation,
+        targetParticipantId: "scenario-guard",
+        type: "physical_damage",
+      }),
+    );
+  });
+
+  it("records and undoes grazing D1 damage rolls after failed parry", () => {
+    const state = initializeCombatRoundPhaseResolutionCursor({
+      phase: "phase1",
+      state: setCombatRoundParticipantInitiative({
+        initiative: { baseInitiative: 0, modifierAdjustment: 0, rolls: [6], rollTotal: 6, total: 6 },
+        participantId: "gladiator",
+        phase: "phase1",
+        state: declareRoundAction({
+          actionId: "attack_parry",
+          participantId: "gladiator",
+          state: initializeCombatRoundState({ encounter: encounter() }),
+        }),
+      }),
+      updatedAt: "2026-01-01T00:02:00.000Z",
+    });
+    const result = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackerParticipantId: "gladiator",
+      defenderDb: 10,
+      defenderParticipantId: "guard",
+      ob: 10,
+      phase: "phase1",
+      rollD20: 11,
+      rollTotal: 11,
+      rolledAt: "2026-01-01T00:03:00.000Z",
+      weaponName: "Broad sword",
+    });
+    const afterAttack = recordCombatRoundAttackResult({
+      command: {
+        createdAt: result.rolledAt,
+        createdByUserId: "gm-1",
+      },
+      participantId: "gladiator",
+      result,
+      state,
+      submittedBy: "gm",
+    });
+    const afterParry = recordCombatRoundParryResult({
+      attackResult: result,
+      command: {
+        createdAt: "2026-01-01T00:04:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      parryResolution: {
+        combinedParryScore: 9,
+        modifierAdjustment: 0,
+        openEndedD10s: [],
+        resultLabel: "Parry failed",
+        rollD20: 8,
+        rollTotal: 8,
+        status: "resolved",
+        success: false,
+        targetNumber: 21,
+        total: 17,
+      },
+      state: afterAttack,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:04:00.000Z",
+    });
+    const afterLocation = recordTestHitLocation({
+      attackResult: result,
+      command: {
+        createdAt: "2026-01-01T00:04:30.000Z",
+        createdByUserId: "gm-1",
+      },
+      hitLocationRolls: [1],
+      state: afterParry,
+    });
+    const afterDamage = recordCombatRoundDamageResult({
+      attackResult: result,
+      command: {
+        createdAt: "2026-01-01T00:05:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      defenderDm: 0,
+      dmb: 8,
+      rng: () => 0,
+      state: afterLocation,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:05:00.000Z",
+    });
+    const cleared = clearCombatRoundStep({
+      state: afterDamage,
+      step: "phase_1_damage",
+    });
+
+    expect(result.lookupTotal).toBe(11);
+    expect(result.grazing).toBe(true);
+    expect(afterDamage.phaseResolutionResults[0]?.damageResult).toMatchObject({
+      damageLookupTotal: 20,
+      damageRoll: {
+        grazingReferenceDamage: 7,
+        grazingReferenceDamageLookupTotal: 20,
+        grazingReferenceHitLookupTotal: 12,
+        derivedFromLookupTotal: 12,
+        derivedNormalDamageTotal: 7,
+        diceExpression: "1d7",
+        required: true,
+        rolls: [1],
+        total: 1,
+      },
+      dmb: 8,
+      grazing: true,
+      hitLocationRolls: [1],
+      hitLocationSelectionReason: "single_roll",
+      hitLookupTotal: 11,
+      selectedHitLocation: "leftLeg",
+      selectedHitLocationRoll: 1,
+      tableDamage: 7,
+      totalDamage: 1,
+    });
+    expect(afterDamage.commands.at(-1)).toMatchObject({
+      facts: expect.objectContaining({
+        totalDamage: 1,
+      }),
+      type: "resolve_damage",
+    });
+    expect(cleared.currentCursor).toEqual({
+      participantId: "guard",
+      roundNumber: 3,
+      step: "D1",
+    });
+    expect(cleared.phaseResolutionResults[0]?.parryResolution).toMatchObject({
+      status: "resolved",
+      success: false,
+    });
+    expect(cleared.phaseResolutionResults[0]?.damageResult).toBeUndefined();
+    expect(cleared.phaseResolutionResults[0]?.damageRoll.status).toBe("pending");
+    expect(cleared.phaseResolutionResults[0]?.hitLocationRoll.status).toBe("rolled");
+  });
+
+  it("uses armor modifier for grazing damage reference lookup", () => {
+    const result = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackerParticipantId: "gladiator",
+      defenderDb: 10,
+      defenderParticipantId: "guard",
+      ob: 10,
+      phase: "phase1",
+      rollD20: 11,
+      rollTotal: 11,
+      rolledAt: "2026-01-01T00:03:00.000Z",
+      weaponName: "Broad sword",
+    });
+    const damageResult = buildCombatRoundDamageResult({
+      armorModifier: -2,
+      attackResult: result,
+      createdAt: "2026-01-01T00:05:00.000Z",
+      defenderDm: 0,
+      dmb: 8,
+      hitLocationSelection: {
+        ...fixedChestLocationSelection(),
+        hitLocationRolls: [8],
+        selectedHitLocation: "abdomen",
+        selectedHitLocationRoll: 8,
+      },
+      rng: () => 0,
+      roundNumber: 3,
+    });
+
+    expect(damageResult).toMatchObject({
+      armorModifier: -2,
+      damageLookupTotal: 18,
+      damageRoll: {
+        diceExpression: "1d5",
+        grazingReferenceDamage: 5,
+        grazingReferenceDamageLookupTotal: 18,
+        grazingReferenceHitLookupTotal: 12,
+        required: true,
+        rolls: [1],
+        total: 1,
+      },
+      hitLookupTotal: 11,
+      selectedHitLocation: "abdomen",
+      tableDamage: 5,
+      totalDamage: 1,
+    });
+  });
+
+  it("uses at least a 1-sided grazing damage die with no DMB, DM, or armor modifier", () => {
+    const result = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackerParticipantId: "gladiator",
+      defenderDb: 10,
+      defenderParticipantId: "guard",
+      ob: 10,
+      phase: "phase1",
+      rollD20: 11,
+      rollTotal: 11,
+      rolledAt: "2026-01-01T00:03:00.000Z",
+      weaponName: "Broad sword",
+    });
+    const damageResult = buildCombatRoundDamageResult({
+      armorModifier: 0,
+      attackResult: result,
+      createdAt: "2026-01-01T00:05:00.000Z",
+      defenderDm: 0,
+      dmb: 0,
+      hitLocationSelection: fixedChestLocationSelection(),
+      rng: () => 0,
+      roundNumber: 3,
+    });
+
+    expect(damageResult).toMatchObject({
+      damageLookupTotal: 12,
+      damageRoll: {
+        grazingReferenceDamage: 1,
+        grazingReferenceDamageLookupTotal: 12,
+        grazingReferenceHitLookupTotal: 12,
+        derivedFromLookupTotal: 12,
+        derivedNormalDamageTotal: 1,
+        diceExpression: "1d1",
+        required: true,
+        rolls: [1],
+        total: 1,
+      },
+      grazing: true,
+      hitLookupTotal: 11,
+      tableDamage: 1,
+      totalDamage: 1,
+    });
+  });
+
+  it("commits D1 damage rows and clears commit before clearing the proposal", () => {
+    const state = initializeCombatRoundPhaseResolutionCursor({
+      phase: "phase1",
+      state: setCombatRoundParticipantInitiative({
+        initiative: { baseInitiative: 0, modifierAdjustment: 0, rolls: [6], rollTotal: 6, total: 6 },
+        participantId: "gladiator",
+        phase: "phase1",
+        state: declareRoundAction({
+          actionId: "attack_parry",
+          participantId: "gladiator",
+          state: initializeCombatRoundState({ encounter: encounter() }),
+        }),
+      }),
+      updatedAt: "2026-01-01T00:02:00.000Z",
+    });
+    const result = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackerParticipantId: "gladiator",
+      defenderDb: 10,
+      defenderParticipantId: "guard",
+      ob: 10,
+      phase: "phase1",
+      rollD20: 14,
+      rollTotal: 14,
+      rolledAt: "2026-01-01T00:03:00.000Z",
+      weaponName: "Broad sword",
+    });
+    const afterAttack = recordCombatRoundAttackResult({
+      command: {
+        createdAt: result.rolledAt,
+        createdByUserId: "gm-1",
+      },
+      participantId: "gladiator",
+      result,
+      state,
+      submittedBy: "gm",
+    });
+    const afterParry = recordCombatRoundParryResult({
+      attackResult: result,
+      command: {
+        createdAt: "2026-01-01T00:04:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      parryResolution: {
+        combinedParryScore: 9,
+        modifierAdjustment: 0,
+        openEndedD10s: [],
+        resultLabel: "Parry failed",
+        rollD20: 8,
+        rollTotal: 8,
+        status: "resolved",
+        success: false,
+        targetNumber: 21,
+        total: 17,
+      },
+      state: afterAttack,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:04:00.000Z",
+    });
+    const afterLocation = recordTestHitLocation({
+      attackResult: result,
+      command: {
+        createdAt: "2026-01-01T00:04:30.000Z",
+        createdByUserId: "gm-1",
+      },
+      hitLocationRolls: [18, 7],
+      state: afterParry,
+      targetLocation: "chest",
+    });
+    const afterDamage = recordCombatRoundDamageResult({
+      attackResult: result,
+      command: {
+        createdAt: "2026-01-01T00:05:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      defenderDm: 0,
+      dmb: 8,
+      state: afterLocation,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:05:00.000Z",
+    });
+    const afterReview = reviewCombatRoundDamageResult({
+      attackResultId: "3:phase1:gladiator:guard",
+      reviewedAt: "2026-01-01T00:05:30.000Z",
+      reviewedByUserId: "gm-1",
+      review: {
+        additionalEffects: [
+          {
+            durationRounds: 2,
+            id: "guard-stun",
+            kind: "modifier",
+            label: "Stunned",
+            modifierBucket: "general",
+            modifierValue: -4,
+            notes: "critical stun manual",
+            phase: "untilCleared",
+          },
+          {
+            id: "guard-note",
+            kind: "note",
+            label: "Dropped weapon",
+            notes: "manual special note",
+          },
+        ],
+        armorModifierOverride: -2,
+        criticalGradeOverride: "a",
+        notes: "armor adjusted manually",
+        totalDamageOverride: 6,
+      },
+      state: afterDamage,
+    });
+    const afterCritical = recordCombatRoundCriticalRoll({
+      attackResult: result,
+      command: {
+        createdAt: "2026-01-01T00:05:45.000Z",
+        createdByUserId: "gm-1",
+      },
+      criticalDice: [4, 5],
+      rolledByParticipantId: "gladiator",
+      state: afterReview,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:05:45.000Z",
+    });
+    const existingCombatEffects: CombatEffectsState = {
+      effects: [
+        {
+          createdAt: "2026-01-01T00:00:00.000Z",
+          damage: 0,
+          effectGroup: "general",
+          generalDamage: 0,
+          id: "existing-stun",
+          modifierValue: -1,
+          sourceEventId: "existing-event",
+          status: "active",
+          targetParticipantId: "scenario-guard",
+          type: "stun",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        },
+      ],
+      events: [
+        {
+          createdAt: "2026-01-01T00:00:00.000Z",
+          description: "",
+          id: "existing-event",
+          sourceLabel: "Existing effect",
+          sourceType: "manual",
+          targetParticipantId: "scenario-guard",
+        },
+      ],
+    };
+    const committed = commitCombatRoundPhaseDamage({
+      attackerScenarioParticipantId: "scenario-gladiator",
+      command: {
+        commandId: "commit-d1",
+        createdAt: "2026-01-01T00:06:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      combatEffects: existingCombatEffects,
+      defenderScenarioParticipantId: "scenario-guard",
+      encounterId: "encounter-1",
+      scenarioId: "scenario-1",
+      state: afterCritical,
+    });
+    const commitCommand = committed.command;
+    const expectedCommitEventId =
+      "commit-d1:r3:phase1:3-phase1-gladiator-guard:3-phase1-gladiator-guard-damage:combat-effect-event";
+    const expectedCommitEffectId =
+      "commit-d1:r3:phase1:3-phase1-gladiator-guard:3-phase1-gladiator-guard-damage:combat-effect:physical-damage-abdomenLowerBack";
+    const expectedStunEffectId =
+      "commit-d1:r3:phase1:3-phase1-gladiator-guard:3-phase1-gladiator-guard-damage:combat-effect:additional-guard-stun";
+    const expectedNoteEffectId =
+      "commit-d1:r3:phase1:3-phase1-gladiator-guard:3-phase1-gladiator-guard-damage:combat-effect:additional-guard-note";
+    const clearedCommitState = clearCombatRoundStep({
+      state: {
+        ...committed.state,
+        selectedParticipantId: "gladiator",
+        selectedStep: "initiative_phase_1",
+      },
+      step: "initiative_phase_1",
+    });
+    const cleanedCombatEffects = removeCombatRoundCommittedDamageEffects({
+      combatEffects: committed.combatEffects,
+      command: commitCommand,
+    });
+    const clearedCriticalState = clearCombatRoundStep({
+      state: clearedCommitState,
+      step: "phase_1_damage",
+    });
+    const clearedProposalState = clearCombatRoundStep({
+      state: clearedCriticalState,
+      step: "phase_1_damage",
+    });
+
+    expect(afterDamage.phaseResolutionResults[0]?.damageProposal.status).toBe("drafted");
+    expect(afterDamage.phaseResolutionResults[0]?.damageResult).toMatchObject({
+      hitLocationRolls: [18, 7],
+      hitLocationSelectionReason: "targeted_closest",
+      selectedHitLocation: "abdomen",
+      selectedHitLocationRoll: 7,
+      targetLocation: "chest",
+    });
+    const reviewedDamageResult = afterReview.phaseResolutionResults[0]?.damageResult;
+
+    expect(reviewedDamageResult?.review).toMatchObject({
+      additionalEffects: [
+        expect.objectContaining({
+          id: "guard-stun",
+          kind: "modifier",
+          modifierBucket: "general",
+          modifierValue: -4,
+        }),
+        expect.objectContaining({
+          id: "guard-note",
+          kind: "note",
+        }),
+      ],
+      armorModifierOverride: -2,
+      criticalGradeOverride: "a",
+      notes: "armor adjusted manually",
+      reviewedAt: "2026-01-01T00:05:30.000Z",
+      reviewedByUserId: "gm-1",
+      totalDamageOverride: 6,
+    });
+    if (!reviewedDamageResult) {
+      throw new Error("Expected reviewed damage result.");
+    }
+    expect(getCombatRoundEffectiveDamageResult(reviewedDamageResult)).toMatchObject({
+      computedTotalDamage: 9,
+      effectiveArmorModifier: -2,
+      effectiveCriticalGrade: "a",
+      effectiveDamageLookupTotal: 20,
+      effectiveTotalDamage: 6,
+    });
+    expect(afterDamage.commands.at(-1)).toMatchObject({
+      facts: expect.objectContaining({
+        hitLocationRolls: [18, 7],
+        hitLocationSelectionReason: "targeted_closest",
+        selectedHitLocation: "abdomen",
+        selectedHitLocationRoll: 7,
+        targetLocation: "chest",
+      }),
+      type: "resolve_damage",
+    });
+    expect(committed.command).toMatchObject({
+      beforeCursor: {
+        participantId: "guard",
+        roundNumber: 3,
+        step: "D1",
+      },
+      facts: expect.objectContaining({
+        attackResultId: "3:phase1:gladiator:guard",
+        additionalEffects: [
+          expect.objectContaining({
+            id: "guard-stun",
+            modifierValue: -4,
+          }),
+          expect.objectContaining({
+            id: "guard-note",
+          }),
+        ],
+        attackerParticipantId: "gladiator",
+        createdAdditionalCombatEffectIds: [expectedStunEffectId, expectedNoteEffectId],
+        createdCombatEffectEventId: expectedCommitEventId,
+        createdCombatEffectIds: [
+          expectedCommitEffectId,
+          expectedStunEffectId,
+          expectedNoteEffectId,
+        ],
+        createdDamageEffectIds: [expectedCommitEffectId],
+        criticalGrade: "a",
+        criticalRoll: expect.objectContaining({
+          criticalDice: [4, 5],
+          criticalDiceTotal: 9,
+          criticalGrade: "a",
+          criticalTypeModifier: -6,
+          finalCriticalRoll: 3,
+          selectedHitLocation: "abdomen",
+        }),
+        damageResultId: "3:phase1:gladiator:guard:damage",
+        defenderParticipantId: "guard",
+        effectiveArmorModifier: -2,
+        effectiveDamageLookupTotal: 20,
+        review: expect.objectContaining({
+          notes: "armor adjusted manually",
+          totalDamageOverride: 6,
+        }),
+        status: "committed",
+        totalDamage: 6,
+      }),
+      participantId: "guard",
+      phase: "phase1",
+      step: "D1",
+      type: "commit_phase_damage",
+    });
+    expect(committed.combatEffects.events).toContainEqual(
+      expect.objectContaining({
+        description: expect.stringContaining("armor adjusted manually"),
+        id: expectedCommitEventId,
+        sourceActorId: "scenario-gladiator",
+        sourceType: "combat_action",
+        targetParticipantId: "scenario-guard",
+      }),
+    );
+    expect(
+      committed.combatEffects.events.find((event) => event.id === expectedCommitEventId)
+        ?.description,
+    ).toContain("Additional effects: Stunned, Dropped weapon.");
+    expect(committed.combatEffects.effects).toContainEqual(
+      expect.objectContaining({
+        damage: 6,
+        id: expectedCommitEffectId,
+        location: "abdomenLowerBack",
+        sourceEventId: expectedCommitEventId,
+        status: "active",
+        targetParticipantId: "scenario-guard",
+        type: "physical_damage",
+      }),
+    );
+    expect(committed.combatEffects.effects).toContainEqual(
+      expect.objectContaining({
+        description: "Stunned: critical stun manual",
+        duration: "2 rounds · until cleared",
+        effectGroup: "general",
+        id: expectedStunEffectId,
+        modifierValue: -4,
+        sourceEventId: expectedCommitEventId,
+        status: "active",
+        targetParticipantId: "scenario-guard",
+        type: "general_modifier",
+      }),
+    );
+    expect(committed.combatEffects.effects).toContainEqual(
+      expect.objectContaining({
+        description: "Dropped weapon: manual special note",
+        effectGroup: "special",
+        id: expectedNoteEffectId,
+        sourceEventId: expectedCommitEventId,
+        status: "active",
+        targetParticipantId: "scenario-guard",
+        type: "special",
+      }),
+    );
+    expect(committed.state.phaseResolutionResults[0]?.damageProposal).toMatchObject({
+      committedCombatEffectEventId: expectedCommitEventId,
+      committedCombatEffectIds: [
+        expectedCommitEffectId,
+        expectedStunEffectId,
+        expectedNoteEffectId,
+      ],
+      status: "committed",
+    });
+    expect(clearedCommitState.commands.at(-1)).toMatchObject({
+      type: "roll_critical",
+    });
+    expect(clearedCommitState.currentCursor).toEqual({
+      participantId: "guard",
+      roundNumber: 3,
+      step: "D1",
+    });
+    expect(clearedCommitState.phaseResolutionResults[0]?.damageResult).toMatchObject({
+      hitLocationRolls: [18, 7],
+      review: expect.objectContaining({
+        additionalEffects: [
+          expect.objectContaining({
+            id: "guard-stun",
+            modifierValue: -4,
+          }),
+          expect.objectContaining({
+            id: "guard-note",
+          }),
+        ],
+        armorModifierOverride: -2,
+        totalDamageOverride: 6,
+      }),
+      selectedHitLocation: "abdomen",
+      targetLocation: "chest",
+    });
+    expect(clearedCommitState.phaseResolutionResults[0]?.damageProposal.status).toBe("drafted");
+    expect(clearedCommitState.phaseResolutionResults[0]?.criticalRoll.status).toBe("rolled");
+    expect(cleanedCombatEffects.effects).toContainEqual(
+      expect.objectContaining({
+        id: "existing-stun",
+        sourceEventId: "existing-event",
+        status: "active",
+      }),
+    );
+    expect(cleanedCombatEffects.effects).not.toContainEqual(
+      expect.objectContaining({ id: expectedCommitEffectId }),
+    );
+    expect(cleanedCombatEffects.effects).not.toContainEqual(
+      expect.objectContaining({ id: expectedStunEffectId }),
+    );
+    expect(cleanedCombatEffects.effects).not.toContainEqual(
+      expect.objectContaining({ id: expectedNoteEffectId }),
+    );
+    expect(cleanedCombatEffects.events).toContainEqual(
+      expect.objectContaining({
+        id: "existing-event",
+        sourceLabel: "Existing effect",
+      }),
+    );
+    expect(cleanedCombatEffects.events).not.toContainEqual(
+      expect.objectContaining({ id: expectedCommitEventId }),
+    );
+    expect(clearedCriticalState.commands.at(-1)).toMatchObject({
+      type: "resolve_damage",
+    });
+    expect(clearedCriticalState.phaseResolutionResults[0]?.criticalRoll.status).toBe("pending");
+    expect(clearedCriticalState.phaseResolutionResults[0]?.damageResult).toBeDefined();
+    expect(clearedProposalState.commands.at(-1)).toMatchObject({
+      type: "roll_hit_location",
+    });
+    expect(clearedProposalState.phaseResolutionResults[0]?.damageResult).toBeUndefined();
+    expect(clearedProposalState.phaseResolutionResults[0]?.damageRoll.status).toBe("pending");
+    expect(clearedProposalState.phaseResolutionResults[0]?.hitLocationRoll.status).toBe("rolled");
+  });
+
+  it("commits D2 damage rows and clears commit before clearing the proposal", () => {
+    const state = initializeCombatRoundPhaseResolutionCursor({
+      phase: "phase2",
+      state: setCombatRoundParticipantInitiative({
+        initiative: { baseInitiative: 0, modifierAdjustment: 0, rolls: [6], rollTotal: 6, total: 6 },
+        participantId: "guard",
+        phase: "phase2",
+        state: declareRoundAction({
+          actionId: "parry_attack",
+          participantId: "guard",
+          state: initializeCombatRoundState({ encounter: encounter() }),
+        }),
+      }),
+      updatedAt: "2026-01-01T00:02:00.000Z",
+    });
+    const result = buildCombatRoundAttackRollResult({
+      actionId: "parry_attack",
+      attackerParticipantId: "guard",
+      defenderDb: 10,
+      defenderParticipantId: "gladiator",
+      ob: 10,
+      phase: "phase2",
+      rollD20: 14,
+      rollTotal: 14,
+      rolledAt: "2026-01-01T00:03:00.000Z",
+      weaponName: "Long sword",
+    });
+    const afterAttack = recordCombatRoundAttackResult({
+      command: {
+        createdAt: result.rolledAt,
+        createdByUserId: "gm-1",
+      },
+      participantId: "guard",
+      result,
+      state,
+      submittedBy: "gm",
+    });
+    const afterParry = recordCombatRoundParryResult({
+      attackResult: result,
+      command: {
+        createdAt: "2026-01-01T00:04:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      parryResolution: {
+        combinedParryScore: 9,
+        modifierAdjustment: 0,
+        openEndedD10s: [],
+        resultLabel: "Parry failed",
+        rollD20: 8,
+        rollTotal: 8,
+        status: "resolved",
+        success: false,
+        targetNumber: 21,
+        total: 17,
+      },
+      state: afterAttack,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:04:00.000Z",
+    });
+    const afterLocation = recordTestHitLocation({
+      attackResult: result,
+      command: {
+        createdAt: "2026-01-01T00:04:30.000Z",
+        createdByUserId: "gm-1",
+      },
+      state: afterParry,
+    });
+    const afterDamage = recordCombatRoundDamageResult({
+      attackResult: result,
+      command: {
+        createdAt: "2026-01-01T00:05:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      defenderDm: 0,
+      dmb: 8,
+      state: afterLocation,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:05:00.000Z",
+    });
+    const afterCritical = recordCombatRoundCriticalRoll({
+      attackResult: result,
+      command: {
+        createdAt: "2026-01-01T00:05:30.000Z",
+        createdByUserId: "gm-1",
+      },
+      criticalDice: [4, 5],
+      rolledByParticipantId: "guard",
+      state: afterDamage,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:05:30.000Z",
+    });
+    const committed = commitCombatRoundPhaseDamage({
+      attackerScenarioParticipantId: "scenario-guard",
+      command: {
+        commandId: "commit-d2",
+        createdAt: "2026-01-01T00:06:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      defenderScenarioParticipantId: "scenario-gladiator",
+      encounterId: "encounter-1",
+      scenarioId: "scenario-1",
+      state: afterCritical,
+    });
+    const expectedCommitEventId =
+      "commit-d2:r3:phase2:3-phase2-guard-gladiator:3-phase2-guard-gladiator-damage:combat-effect-event";
+    const expectedCommitEffectId =
+      "commit-d2:r3:phase2:3-phase2-guard-gladiator:3-phase2-guard-gladiator-damage:combat-effect:physical-damage-chestBack";
+    const clearedCommitState = clearCombatRoundStep({
+      state: committed.state,
+      step: "phase_2_damage",
+    });
+    const cleanedCombatEffects = removeCombatRoundCommittedDamageEffects({
+      combatEffects: committed.combatEffects,
+      command: committed.command,
+    });
+
+    expect(afterDamage.phaseResolutionResults[0]?.damageProposal.status).toBe("drafted");
+    expect(committed.command).toMatchObject({
+      beforeCursor: {
+        participantId: "gladiator",
+        roundNumber: 3,
+        step: "D2",
+      },
+      facts: expect.objectContaining({
+        attackResultId: "3:phase2:guard:gladiator",
+        attackerParticipantId: "guard",
+        createdCombatEffectEventId: expectedCommitEventId,
+        createdDamageEffectIds: [expectedCommitEffectId],
+        createdCombatEffectIds: [expectedCommitEffectId],
+        criticalRoll: expect.objectContaining({
+          criticalDice: [4, 5],
+          criticalDiceTotal: 9,
+          criticalGrade: "b",
+          criticalTypeModifier: -4,
+          finalCriticalRoll: 5,
+          selectedHitLocation: "chest",
+        }),
+        damageResultId: "3:phase2:guard:gladiator:damage",
+        defenderParticipantId: "gladiator",
+        status: "committed",
+        totalDamage: 9,
+      }),
+      participantId: "gladiator",
+      phase: "phase2",
+      step: "D2",
+      type: "commit_phase_damage",
+    });
+    expect(committed.combatEffects.effects).toContainEqual(
+      expect.objectContaining({
+        damage: 9,
+        id: expectedCommitEffectId,
+        location: "chestBack",
+        sourceEventId: expectedCommitEventId,
+        status: "active",
+        targetParticipantId: "scenario-gladiator",
+        type: "physical_damage",
+      }),
+    );
+    expect(committed.state.phaseResolutionResults[0]?.damageProposal).toMatchObject({
+      committedCombatEffectEventId: expectedCommitEventId,
+      committedCombatEffectIds: [expectedCommitEffectId],
+      status: "committed",
+    });
+    expect(clearedCommitState.commands.at(-1)).toMatchObject({
+      type: "roll_critical",
+    });
+    expect(clearedCommitState.currentCursor).toEqual({
+      participantId: "gladiator",
+      roundNumber: 3,
+      step: "D2",
+    });
+    expect(clearedCommitState.phaseResolutionResults[0]?.damageResult).toBeDefined();
+    expect(clearedCommitState.phaseResolutionResults[0]?.damageProposal.status).toBe("drafted");
+    expect(cleanedCombatEffects).toEqual({ effects: [], events: [] });
+  });
+
+  it("advances from committed D1 damage to the next phase-one actor", () => {
+    const committed = commitFailedParryDamage({
+      actionId: "attack_parry",
+      phase: "phase1",
+      state: preparePhaseResolutionState({
+        guardActionId: "attack_parry",
+        gladiatorActionId: "attack_parry",
+        phase: "phase1",
+      }),
+    });
+    const cleared = clearCombatRoundStep({
+      state: committed.state,
+      step: committed.state.currentStep,
+    });
+
+    expect(committed.command).toMatchObject({
+      afterCursor: {
+        participantId: "guard",
+        roundNumber: 3,
+        step: "A1",
+      },
+      beforeCursor: {
+        participantId: "guard",
+        roundNumber: 3,
+        step: "D1",
+      },
+      type: "commit_phase_damage",
+    });
+    expect(committed.state.currentStep).toBe("phase_1_actions");
+    expect(committed.state.selectedParticipantId).toBe("guard");
+    expect(committed.state.phaseResolutionCursor).toEqual({
+      participantId: "guard",
+      phase: "phase1",
+      substep: "attack",
+    });
+    expect(cleared.currentCursor).toEqual({
+      participantId: "guard",
+      roundNumber: 3,
+      step: "D1",
+    });
+    expect(cleared.phaseResolutionResults[0]?.damageProposal.status).toBe("drafted");
+  });
+
+  it("advances from final phase-one D1 damage to phase-two setup", () => {
+    const committed = commitFailedParryDamage({
+      actionId: "attack_parry",
+      phase: "phase1",
+      state: preparePhaseResolutionState({
+        guardActionId: "attack_parry",
+        gladiatorActionId: "attack_parry",
+        guardAlreadyDone: true,
+        phase: "phase1",
+      }),
+    });
+    const cleared = clearCombatRoundStep({
+      state: {
+        ...committed.state,
+        selectedParticipantId: "gladiator",
+        selectedStep: "initiative_phase_1",
+      },
+      step: "initiative_phase_1",
+    });
+
+    expect(committed.command).toMatchObject({
+      afterCursor: {
+        participantId: "gladiator",
+        roundNumber: 3,
+        step: "M2",
+      },
+      beforeCursor: {
+        participantId: "guard",
+        roundNumber: 3,
+        step: "D1",
+      },
+      type: "commit_phase_damage",
+    });
+    expect(committed.state.currentStep).toBe("review_phase_2_modifiers");
+    expect(committed.state.phaseResolutionCursor).toBeUndefined();
+    expect(committed.state.selectedParticipantId).toBe("gladiator");
+    expect(cleared.currentCursor).toEqual({
+      participantId: "guard",
+      roundNumber: 3,
+      step: "D1",
+    });
+    expect(cleared.phaseResolutionResults[0]?.damageProposal.status).toBe("drafted");
+  });
+
+  it("advances from committed D2 damage to the next phase-two actor", () => {
+    const committed = commitFailedParryDamage({
+      actionId: "parry_attack",
+      phase: "phase2",
+      state: preparePhaseResolutionState({
+        guardActionId: "parry_attack",
+        gladiatorActionId: "parry_attack",
+        phase: "phase2",
+      }),
+    });
+    const cleared = clearCombatRoundStep({
+      state: committed.state,
+      step: committed.state.currentStep,
+    });
+
+    expect(committed.command).toMatchObject({
+      afterCursor: {
+        participantId: "guard",
+        roundNumber: 3,
+        step: "A2",
+      },
+      beforeCursor: {
+        participantId: "guard",
+        roundNumber: 3,
+        step: "D2",
+      },
+      type: "commit_phase_damage",
+    });
+    expect(committed.state.currentStep).toBe("phase_2_actions");
+    expect(committed.state.phaseResolutionCursor).toEqual({
+      participantId: "guard",
+      phase: "phase2",
+      substep: "attack",
+    });
+    expect(cleared.currentCursor).toEqual({
+      participantId: "guard",
+      roundNumber: 3,
+      step: "D2",
+    });
+    expect(cleared.phaseResolutionResults[0]?.damageProposal.status).toBe("drafted");
+  });
+
+  it("advances from final phase-two D2 damage to SU", () => {
+    const committed = commitFailedParryDamage({
+      actionId: "parry_attack",
+      phase: "phase2",
+      state: preparePhaseResolutionState({
+        guardActionId: "parry_attack",
+        gladiatorActionId: "parry_attack",
+        guardAlreadyDone: true,
+        phase: "phase2",
+      }),
+    });
+    const cleared = clearCombatRoundStep({
+      state: committed.state,
+      step: committed.state.currentStep,
+    });
+
+    expect(committed.command).toMatchObject({
+      afterCursor: {
+        participantId: "gladiator",
+        roundNumber: 3,
+        step: "SU",
+      },
+      beforeCursor: {
+        participantId: "guard",
+        roundNumber: 3,
+        step: "D2",
+      },
+      type: "commit_phase_damage",
+    });
+    expect(committed.state.currentStep).toBe("round_summary");
+    expect(committed.state.phaseResolutionCursor).toBeUndefined();
+    expect(committed.state.selectedParticipantId).toBe("gladiator");
+    expect(cleared.currentCursor).toEqual({
+      participantId: "guard",
+      roundNumber: 3,
+      step: "D2",
+    });
+    expect(cleared.phaseResolutionResults[0]?.damageProposal.status).toBe("drafted");
+  });
+
+  it("advances from a final phase-one attack miss to phase-two setup", () => {
+    const result = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackerParticipantId: "gladiator",
+      defenderDb: 18,
+      defenderParticipantId: "guard",
+      ob: 10,
+      phase: "phase1",
+      rollD20: 2,
+      rollTotal: 2,
+      rolledAt: "2026-01-01T00:03:00.000Z",
+      weaponName: "Broad sword",
+    });
+    const afterMiss = recordCombatRoundAttackResult({
+      command: {
+        createdAt: result.rolledAt,
+        createdByUserId: "gm-1",
+      },
+      participantId: "gladiator",
+      result,
+      state: preparePhaseResolutionState({
+        guardActionId: "attack_parry",
+        gladiatorActionId: "attack_parry",
+        guardAlreadyDone: true,
+        phase: "phase1",
+      }),
+      submittedBy: "gm",
+    });
+    const command = afterMiss.commands[afterMiss.commands.length - 1];
+
+    expect(command).toMatchObject({
+      afterCursor: {
+        participantId: "gladiator",
+        roundNumber: 3,
+        step: "M2",
+      },
+      beforeCursor: {
+        participantId: "gladiator",
+        roundNumber: 3,
+        step: "A1",
+      },
+      type: "roll_attack",
+    });
+    expect(afterMiss.currentStep).toBe("review_phase_2_modifiers");
+    expect(afterMiss.phaseResolutionCursor).toBeUndefined();
+  });
+
+  it("advances from a final successful phase-two parry to SU", () => {
+    const result = buildCombatRoundAttackRollResult({
+      actionId: "parry_attack",
+      attackerParticipantId: "gladiator",
+      defenderDb: 10,
+      defenderParticipantId: "guard",
+      ob: 20,
+      phase: "phase2",
+      rollD20: 15,
+      rollTotal: 15,
+      rolledAt: "2026-01-01T00:03:00.000Z",
+      weaponName: "Broad sword",
+    });
+    const afterAttack = recordCombatRoundAttackResult({
+      command: {
+        createdAt: result.rolledAt,
+        createdByUserId: "gm-1",
+      },
+      participantId: "gladiator",
+      result,
+      state: preparePhaseResolutionState({
+        guardActionId: "parry_attack",
+        gladiatorActionId: "parry_attack",
+        guardAlreadyDone: true,
+        phase: "phase2",
+      }),
+      submittedBy: "gm",
+    });
+    const afterParry = recordCombatRoundParryResult({
+      attackResult: result,
+      command: {
+        createdAt: "2026-01-01T00:04:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      parryResolution: {
+        combinedParryScore: 12,
+        modifierAdjustment: 0,
+        openEndedD10s: [],
+        resultLabel: "Parry succeeded",
+        rollD20: 10,
+        rollTotal: 10,
+        status: "resolved",
+        success: true,
+        targetNumber: 21,
+        total: 22,
+      },
+      state: afterAttack,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:04:00.000Z",
+    });
+    const cleared = clearCombatRoundStep({
+      state: afterParry,
+      step: "round_summary",
+    });
+    const command = afterParry.commands[afterParry.commands.length - 1];
+
+    expect(command).toMatchObject({
+      afterCursor: {
+        participantId: "gladiator",
+        roundNumber: 3,
+        step: "SU",
+      },
+      beforeCursor: {
+        participantId: "guard",
+        roundNumber: 3,
+        step: "P2",
+      },
+      type: "roll_parry",
+    });
+    expect(afterParry.currentStep).toBe("round_summary");
+    expect(afterParry.phaseResolutionCursor).toBeUndefined();
+    expect(cleared.currentCursor).toEqual({
+      participantId: "guard",
+      roundNumber: 3,
+      step: "P2",
+    });
+  });
+
+  it("advances from a final phase-one no-attack skip to phase-two setup", () => {
+    const skipped = recordCombatRoundNoAttackPhaseReview({
+      command: {
+        createdAt: "2026-01-01T00:03:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      participantId: "gladiator",
+      phase: "phase1",
+      state: preparePhaseResolutionState({
+        guardActionId: "parry_attack",
+        gladiatorActionId: "parry_attack",
+        guardAlreadyDone: true,
+        phase: "phase1",
+      }),
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:03:00.000Z",
+    });
+    const cleared = clearCombatRoundStep({
+      state: skipped,
+      step: "review_phase_2_modifiers",
+    });
+    const command = skipped.commands[skipped.commands.length - 1];
+
+    expect(command).toMatchObject({
+      afterCursor: {
+        participantId: "gladiator",
+        roundNumber: 3,
+        step: "M2",
+      },
+      beforeCursor: {
+        participantId: "gladiator",
+        roundNumber: 3,
+        step: "A1",
+      },
+      type: "skip_phase_action",
+    });
+    expect(skipped.currentStep).toBe("review_phase_2_modifiers");
+    expect(skipped.phaseResolutionCursor).toBeUndefined();
+    expect(cleared.currentCursor).toEqual({
+      participantId: "gladiator",
+      roundNumber: 3,
+      step: "A1",
+    });
+  });
+
+  it("marks SU complete with commands and clears those markers in reverse order", () => {
+    const roundSummaryState = advanceToStep(
+      initializeCombatRoundState({ encounter: encounter() }),
+      "round_summary",
+    );
+    const completed = advanceCombatRoundStep(roundSummaryState, {
+      command: {
+        createdAt: "2026-01-01T00:10:00.000Z",
+        createdByUserId: "gm-1",
+      },
+    });
+    const clearedLast = clearCombatRoundStep({
+      state: completed,
+      step: "round_summary",
+    });
+    const clearedFirst = clearCombatRoundStep({
+      state: clearedLast,
+      step: "round_summary",
+    });
+
+    expect(completed.currentStep).toBe("round_summary");
+    expect(completed.roundNumber).toBe(3);
+    expect(completed.commands.map((command) => command.type)).toEqual([
+      "complete_round",
+      "complete_round",
+    ]);
+    expect(
+      completed.participants.map((participant) => participant.stepStatuses.round_summary),
+    ).toEqual(["complete", "complete"]);
+    expect(clearedLast.commands).toHaveLength(1);
+    expect(clearedLast.currentCursor).toEqual({
+      participantId: "guard",
+      roundNumber: 3,
+      step: "SU",
+    });
+    expect(
+      clearedLast.participants.map((participant) => participant.stepStatuses.round_summary),
+    ).toEqual(["complete", "pending"]);
+    expect(clearedFirst.commands).toEqual([]);
+    expect(clearedFirst.currentCursor).toEqual({
+      participantId: "gladiator",
+      roundNumber: 3,
+      step: "SU",
+    });
+    expect(
+      clearedFirst.participants.map((participant) => participant.stepStatuses.round_summary),
+    ).toEqual(["pending", "pending"]);
+  });
+
+  it("records and undoes D2 placeholder damage review commands after failed parry", () => {
+    const state = initializeCombatRoundPhaseResolutionCursor({
+      phase: "phase2",
+      state: setCombatRoundParticipantInitiative({
+        initiative: { baseInitiative: 0, modifierAdjustment: 0, rolls: [6], rollTotal: 6, total: 6 },
+        participantId: "guard",
+        phase: "phase2",
+        state: declareRoundAction({
+          actionId: "parry_attack",
+          participantId: "guard",
+          state: initializeCombatRoundState({ encounter: encounter() }),
+        }),
+      }),
+      updatedAt: "2026-01-01T00:02:00.000Z",
+    });
+    const result = buildCombatRoundAttackRollResult({
+      actionId: "parry_attack",
+      attackerParticipantId: "guard",
+      defenderDb: 10,
+      defenderParticipantId: "gladiator",
+      ob: 10,
+      phase: "phase2",
+      rollD20: 12,
+      rollTotal: 12,
+      rolledAt: "2026-01-01T00:03:00.000Z",
+      weaponName: "Long sword",
+    });
+    const afterAttack = recordCombatRoundAttackResult({
+      command: {
+        createdAt: result.rolledAt,
+        createdByUserId: "gm-1",
+      },
+      participantId: "guard",
+      result,
+      state,
+      submittedBy: "gm",
+    });
+    const afterParry = recordCombatRoundParryResult({
+      attackResult: result,
+      command: {
+        createdAt: "2026-01-01T00:04:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      parryResolution: {
+        combinedParryScore: 9,
+        modifierAdjustment: 0,
+        openEndedD10s: [],
+        resultLabel: "Parry failed",
+        rollD20: 8,
+        rollTotal: 8,
+        status: "resolved",
+        success: false,
+        targetNumber: 21,
+        total: 17,
+      },
+      state: afterAttack,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:04:00.000Z",
+    });
+    const afterDamageReview = recordCombatRoundDamageReviewPlaceholder({
+      attackResult: result,
+      command: {
+        createdAt: "2026-01-01T00:05:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      state: afterParry,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:05:00.000Z",
+    });
+    const cleared = clearCombatRoundStep({
+      state: afterDamageReview,
+      step: "phase_2_damage",
+    });
+
+    expect(afterDamageReview.commands.at(-1)).toMatchObject({
+      beforeCursor: {
+        participantId: "gladiator",
+        roundNumber: 3,
+        step: "D2",
+      },
+      facts: expect.objectContaining({
+        attackResultId: "3:phase2:guard:gladiator",
+        status: "deferred",
+      }),
+      participantId: "gladiator",
+      phase: "phase2",
+      step: "D2",
+      type: "complete_damage_review_phase2",
+    });
+    expect(
+      getCombatRoundParticipantPhaseStepStatus({
+        participantId: "gladiator",
+        state: afterDamageReview,
+        step: "phase_2_damage",
+      }),
+    ).toBe("gmEdited");
+    expect(cleared.currentCursor).toEqual({
+      participantId: "gladiator",
+      roundNumber: 3,
+      step: "D2",
+    });
+    expect(cleared.currentStep).toBe("phase_2_damage");
+    expect(cleared.selectedParticipantId).toBe("gladiator");
+    expect(cleared.selectedStep).toBe("phase_2_damage");
+    expect(cleared.participants[1]?.attackResults.phase2).toEqual(result);
+    expect(cleared.phaseResolutionResults[0]?.parryResolution).toMatchObject({
+      status: "resolved",
+      success: false,
+    });
+    expect(cleared.phaseResolutionResults[0]?.damageRoll.status).toBe("pending");
+    expect(
+      getCombatRoundParticipantPhaseStepStatus({
+        participantId: "gladiator",
+        state: cleared,
+        step: "phase_2_damage",
+      }),
+    ).toBe("pending");
   });
 
   it("committed P1 snapshots can include an attack result", () => {
@@ -865,12 +5714,26 @@ describe("combat round manager", () => {
       }).incoming,
     ).toEqual([result]);
     expect(
-      getCombatRoundDisplayAttackResultForParticipantPhase({
+      getCombatRoundOutgoingAttackResultForParticipantPhase({
+        participantId: "gladiator",
+        phase: "phase2",
+        state: nextState,
+      }),
+    ).toEqual(result);
+    expect(
+      getCombatRoundDisplayIncomingAttackResultForParticipantPhase({
         participantId: "guard",
         phase: "phase2",
         state: nextState,
       }),
     ).toEqual(result);
+    expect(
+      getCombatRoundDisplayIncomingAttackResultForParticipantPhase({
+        participantId: "gladiator",
+        phase: "phase2",
+        state: nextState,
+      }),
+    ).toBeUndefined();
   });
 
   it("clears P2 attack result, snapshot, and status without clearing declaration", () => {
@@ -1058,7 +5921,7 @@ describe("combat round manager", () => {
     });
   });
 
-  it("clears D1 resolution without clearing the P1 attack result", () => {
+  it("stores resolved parry rolls with open-ended d20 breakdown", () => {
     const state = initializeCombatRoundState({ encounter: encounter() });
     const result = buildCombatRoundAttackRollResult({
       actionId: "attack_parry",
@@ -1069,6 +5932,396 @@ describe("combat round manager", () => {
       phase: "phase1",
       rollD20: 12,
       rollTotal: 12,
+      rolledAt: "2026-01-01T00:03:00.000Z",
+      weaponName: "Broad sword",
+    });
+    const withResult = recordCombatRoundAttackResult({
+      participantId: "gladiator",
+      result,
+      state,
+      submittedBy: "gm",
+    });
+    const withParry = recordCombatRoundParryResolution({
+      attackResult: result,
+      parryResolution: {
+        combinedParryScore: 9,
+        mainHandParryScore: 4,
+        modifiedParryBeforeRoll: 8,
+        modifierAdjustment: -1,
+        modifierBreakdown: [
+          { label: "DB/Parry", value: -1 },
+          { label: "attack result", value: -3 },
+        ],
+        offHandParryScore: 5,
+        openEndedD10s: [7],
+        parrySourceLabel: "Sword / shield",
+        rawModifierTotal: -4,
+        resultLabel: "Parry successful",
+        rollD20: 20,
+        rollTotal: 27,
+        status: "resolved",
+        success: true,
+        targetNumber: 21,
+        total: 35,
+        usedMainHand: true,
+        usedOffHand: true,
+      },
+      state: withResult,
+      updatedAt: "2026-01-01T00:04:00.000Z",
+    });
+
+    expect(
+      getCombatRoundDisplayPhaseResolutionResultForParticipantPhase({
+        participantId: "gladiator",
+        phase: "phase1",
+        state: withParry,
+      }),
+    ).toMatchObject({
+      damageProposal: { proposedEffects: [], status: "not_ready" },
+      damageRoll: { status: "not_required" },
+      parryResolution: {
+        combinedParryScore: 9,
+        modifiedParryBeforeRoll: 8,
+        modifierAdjustment: -1,
+        modifierBreakdown: [
+          { label: "DB/Parry", value: -1 },
+          { label: "attack result", value: -3 },
+        ],
+        openEndedD10s: [7],
+        parrySourceLabel: "Sword / shield",
+        rawModifierTotal: -4,
+        resultLabel: "Parry successful",
+        rollD20: 20,
+        rollTotal: 27,
+        status: "resolved",
+        success: true,
+        targetNumber: 21,
+        total: 35,
+      },
+    });
+  });
+
+  it("stores defender parry modifiers from the attack hit lookup row", () => {
+    const lowHit = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackerParticipantId: "gladiator",
+      defenderDb: 10,
+      defenderParticipantId: "guard",
+      ob: 10,
+      phase: "phase1",
+      rollD20: 14,
+      rollTotal: 14,
+      rolledAt: "2026-01-01T00:03:00.000Z",
+      weaponName: "Broad sword",
+    });
+    const lookup18 = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackerParticipantId: "gladiator",
+      defenderDb: 10,
+      defenderParticipantId: "guard",
+      ob: 10,
+      phase: "phase1",
+      rollD20: 18,
+      rollTotal: 18,
+      rolledAt: "2026-01-01T00:03:00.000Z",
+      weaponName: "Broad sword",
+    });
+    const highOpenEnded = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackerParticipantId: "gladiator",
+      defenderDb: 0,
+      defenderParticipantId: "guard",
+      ob: 0,
+      openEndedD10s: [10, 5],
+      phase: "phase1",
+      rollD20: 20,
+      rollTotal: 35,
+      rolledAt: "2026-01-01T00:03:00.000Z",
+      weaponName: "Broad sword",
+    });
+    const legacySerialized = JSON.parse(JSON.stringify(lowHit)) as Record<string, unknown>;
+    delete legacySerialized.defenderParryModifier;
+
+    expect(lowHit).toMatchObject({
+      defenderParryModifier: 0,
+      lookupTotal: 14,
+    });
+    expect(lookup18).toMatchObject({
+      defenderParryModifier: -3,
+      lookupTotal: 18,
+    });
+    expect(highOpenEnded).toMatchObject({
+      defenderParryModifier: -10,
+      lookupTotal: 35,
+    });
+    expect(combatRoundAttackRollResultSchema.parse(legacySerialized)).toMatchObject({
+      defenderParryModifier: 0,
+    });
+  });
+
+  it("derives A1/P1/D1 markers from attack, parry, and damage state", () => {
+    const state = initializeCombatRoundState({ encounter: encounter() });
+    const hit = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackerParticipantId: "gladiator",
+      defenderDb: 10,
+      defenderParticipantId: "guard",
+      ob: 10,
+      phase: "phase1",
+      rollD20: 12,
+      rollTotal: 12,
+      rolledAt: "2026-01-01T00:03:00.000Z",
+      weaponName: "Broad sword",
+    });
+    const miss = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackerParticipantId: "gladiator",
+      defenderDb: 10,
+      defenderParticipantId: "guard",
+      ob: 10,
+      phase: "phase1",
+      rollD20: 10,
+      rollTotal: 10,
+      rolledAt: "2026-01-01T00:03:00.000Z",
+      weaponName: "Broad sword",
+    });
+    const afterHit = recordCombatRoundAttackResult({
+      participantId: "gladiator",
+      result: hit,
+      state,
+      submittedBy: "gm",
+    });
+
+    expect(
+      getCombatRoundParticipantPhaseStepStatus({
+        participantId: "gladiator",
+        state: afterHit,
+        step: "phase_1_actions",
+      }),
+    ).toBe("gmEdited");
+    expect(
+      getCombatRoundParticipantPhaseStepStatus({
+        participantId: "guard",
+        state: afterHit,
+        step: "review_phase_2_actions",
+      }),
+    ).toBe("pending");
+    expect(
+      getCombatRoundParticipantPhaseStepStatus({
+        participantId: "guard",
+        state: afterHit,
+        step: "phase_1_damage",
+      }),
+    ).toBe("pending");
+
+    const afterSuccessfulParry = recordCombatRoundParryResolution({
+      attackResult: hit,
+      parryResolution: {
+        combinedParryScore: 9,
+        modifierAdjustment: 0,
+        openEndedD10s: [],
+        resultLabel: "Parry successful",
+        rollD20: 12,
+        rollTotal: 12,
+        status: "resolved",
+        success: true,
+        targetNumber: 21,
+        total: 21,
+      },
+      state: afterHit,
+      updatedAt: "2026-01-01T00:04:00.000Z",
+    });
+
+    expect(
+      getCombatRoundParticipantPhaseStepStatus({
+        participantId: "guard",
+        state: afterSuccessfulParry,
+        step: "review_phase_2_actions",
+      }),
+    ).toBe("complete");
+    expect(
+      getCombatRoundParticipantPhaseStepStatus({
+        participantId: "guard",
+        state: afterSuccessfulParry,
+        step: "phase_1_damage",
+      }),
+    ).toBe("skipped");
+
+    const afterFailedParry = recordCombatRoundParryResolution({
+      attackResult: hit,
+      parryResolution: {
+        combinedParryScore: 9,
+        modifierAdjustment: 0,
+        openEndedD10s: [],
+        resultLabel: "Parry failed",
+        rollD20: 8,
+        rollTotal: 8,
+        status: "resolved",
+        success: false,
+        targetNumber: 21,
+        total: 17,
+      },
+      state: afterHit,
+      updatedAt: "2026-01-01T00:04:00.000Z",
+    });
+
+    expect(
+      getCombatRoundParticipantPhaseStepStatus({
+        participantId: "guard",
+        state: afterFailedParry,
+        step: "review_phase_2_actions",
+      }),
+    ).toBe("complete");
+    expect(
+      getCombatRoundParticipantPhaseStepStatus({
+        participantId: "guard",
+        state: afterFailedParry,
+        step: "phase_1_damage",
+      }),
+    ).toBe("pending");
+
+    const afterMiss = recordCombatRoundAttackResult({
+      participantId: "gladiator",
+      result: miss,
+      state,
+      submittedBy: "gm",
+    });
+
+    expect(
+      getCombatRoundParticipantPhaseStepStatus({
+        participantId: "guard",
+        state: afterMiss,
+        step: "review_phase_2_actions",
+      }),
+    ).toBe("skipped");
+    expect(
+      getCombatRoundParticipantPhaseStepStatus({
+        participantId: "guard",
+        state: afterMiss,
+        step: "phase_1_damage",
+      }),
+    ).toBe("skipped");
+  });
+
+  it("clears P1 parry without clearing the A1 attack result", () => {
+    const state = initializeCombatRoundState({ encounter: encounter() });
+    const result = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackerParticipantId: "gladiator",
+      defenderDb: 10,
+      defenderParticipantId: "guard",
+      ob: 10,
+      phase: "phase1",
+      rollD20: 18,
+      rollTotal: 18,
+      rolledAt: "2026-01-01T00:03:00.000Z",
+      weaponName: "Broad sword",
+    });
+    const withResult = recordCombatRoundAttackResult({
+      participantId: "gladiator",
+      result,
+      state,
+      submittedBy: "gm",
+    });
+    const withResolution = ensureCombatRoundPhaseResolutionResultsForPhase({
+      phase: "phase1",
+      state: withResult,
+      updatedAt: "2026-01-01T00:04:00.000Z",
+    });
+    const withResolvedParry = recordCombatRoundParryResolution({
+      attackResult: result,
+      parryResolution: {
+        combinedParryScore: 9,
+        modifierAdjustment: 0,
+        openEndedD10s: [],
+        resultLabel: "Parry failed",
+        rollD20: 8,
+        rollTotal: 8,
+        status: "resolved",
+        success: false,
+        targetNumber: 21,
+        total: 17,
+      },
+      state: withResolution,
+      updatedAt: "2026-01-01T00:05:00.000Z",
+    });
+    const withSnapshot = advanceCombatRoundStep(withResolution, {
+      stepSnapshots: [
+        stepSnapshot({
+          attackResult: result,
+          participantId: "gladiator",
+          phase: "phase1",
+          step: "phase_1_actions",
+        }),
+        stepSnapshot({
+          attackResult: result,
+          participantId: "guard",
+          phase: "phase1",
+          phaseResolutionResult: withResolution.phaseResolutionResults[0],
+          step: "review_phase_2_actions",
+        }),
+        stepSnapshot({
+          attackResult: result,
+          participantId: "guard",
+          phase: "phase1",
+          phaseResolutionResult: withResolution.phaseResolutionResults[0],
+          step: "phase_1_damage",
+        }),
+      ],
+    });
+    const cleared = clearCombatRoundStep({
+      state: {
+        ...withSnapshot,
+        phaseResolutionResults: withResolvedParry.phaseResolutionResults,
+        selectedParticipantId: "guard",
+        selectedStep: "review_phase_2_actions",
+      },
+      step: "review_phase_2_actions",
+    });
+
+    expect(cleared.participants[0]?.attackResults.phase1).toEqual(result);
+    expect(cleared.participants[0]?.attackResults.phase1?.defenderParryModifier).toBe(-3);
+    expect(cleared.phaseResolutionResults).toHaveLength(1);
+    expect(cleared.phaseResolutionResults[0]?.parryResolution.status).toBe("pending");
+    expect(cleared.phaseResolutionResults[0]?.damageRoll.status).toBe("pending");
+    expect(cleared.participants[1]?.stepStatuses.review_phase_2_actions).toBe("pending");
+    expect(
+      getCombatRoundStepSnapshot({
+        participantId: "gladiator",
+        state: cleared,
+        step: "phase_1_actions",
+      }),
+    ).toMatchObject({
+      attackResult: result,
+      step: "phase_1_actions",
+    });
+    expect(
+      getCombatRoundStepSnapshot({
+        participantId: "guard",
+        state: cleared,
+        step: "review_phase_2_actions",
+      }),
+    ).toBeUndefined();
+    expect(
+      getCombatRoundStepSnapshot({
+        participantId: "guard",
+        state: cleared,
+        step: "phase_1_damage",
+      }),
+    ).toBeUndefined();
+  });
+
+  it("clears A1 attack result and its downstream P1/D1 resolution", () => {
+    const state = initializeCombatRoundState({ encounter: encounter() });
+    const result = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackerParticipantId: "gladiator",
+      defenderDb: 10,
+      defenderParticipantId: "guard",
+      ob: 10,
+      phase: "phase1",
+      rollD20: 18,
+      rollTotal: 18,
       rolledAt: "2026-01-01T00:03:00.000Z",
       weaponName: "Broad sword",
     });
@@ -1089,30 +6342,68 @@ describe("combat round manager", () => {
           attackResult: result,
           participantId: "gladiator",
           phase: "phase1",
+          step: "phase_1_actions",
+        }),
+        stepSnapshot({
+          attackResult: result,
+          participantId: "guard",
+          phase: "phase1",
           phaseResolutionResult: withResolution.phaseResolutionResults[0],
           step: "review_phase_2_actions",
+        }),
+        stepSnapshot({
+          participantId: "guard",
+          phase: "phase1",
+          step: "phase_1_actions",
         }),
       ],
     });
     const cleared = clearCombatRoundStep({
       state: withSnapshot,
-      step: "review_phase_2_actions",
+      step: "phase_1_actions",
     });
 
-    expect(cleared.participants[0]?.attackResults.phase1).toEqual(result);
+    expect(cleared.participants[0]?.attackResults.phase1).toBeUndefined();
     expect(cleared.phaseResolutionResults).toEqual([]);
-    expect(cleared.participants[0]?.stepStatuses.review_phase_2_actions).toBe("pending");
+    expect(cleared.participants[0]?.stepStatuses.phase_1_actions).toBe("pending");
+    expect(cleared.participants[1]?.stepStatuses.review_phase_2_actions).toBe("pending");
+    expect(cleared.participants[1]?.stepStatuses.phase_1_damage).toBe("pending");
     expect(
       getCombatRoundStepSnapshot({
         participantId: "gladiator",
         state: cleared,
+        step: "phase_1_actions",
+      }),
+    ).toBeUndefined();
+    expect(
+      getCombatRoundStepSnapshot({
+        participantId: "guard",
+        state: cleared,
         step: "review_phase_2_actions",
       }),
     ).toBeUndefined();
+    expect(
+      getCombatRoundStepSnapshot({
+        participantId: "guard",
+        state: cleared,
+        step: "phase_1_actions",
+      }),
+    ).toMatchObject({
+      participantId: "guard",
+      step: "phase_1_actions",
+    });
   });
 
-  it("clears P1 attack result and its associated D1 resolution", () => {
-    const state = initializeCombatRoundState({ encounter: encounter() });
+  it("undoes a command-backed A1 hit from the auto-opened defender P1 cell", () => {
+    const state = initializeCombatRoundPhaseResolutionCursor({
+      phase: "phase1",
+      state: declareRoundAction({
+        actionId: "attack_parry",
+        participantId: "gladiator",
+        state: initializeCombatRoundState({ encounter: encounter() }),
+      }),
+      updatedAt: "2026-01-01T00:02:00.000Z",
+    });
     const result = buildCombatRoundAttackRollResult({
       actionId: "attack_parry",
       attackerParticipantId: "gladiator",
@@ -1125,7 +6416,11 @@ describe("combat round manager", () => {
       rolledAt: "2026-01-01T00:03:00.000Z",
       weaponName: "Broad sword",
     });
-    const withResult = recordCombatRoundAttackResult({
+    const afterAttack = recordCombatRoundAttackResult({
+      command: {
+        createdAt: result.rolledAt,
+        createdByUserId: "gm-1",
+      },
       participantId: "gladiator",
       result,
       state,
@@ -1133,16 +6428,260 @@ describe("combat round manager", () => {
     });
     const withResolution = ensureCombatRoundPhaseResolutionResultsForPhase({
       phase: "phase1",
-      state: withResult,
+      state: afterAttack,
       updatedAt: "2026-01-01T00:04:00.000Z",
     });
+    const withSnapshot = advanceCombatRoundStep(withResolution, {
+      stepSnapshots: [
+        stepSnapshot({
+          attackResult: result,
+          participantId: "gladiator",
+          phase: "phase1",
+          step: "phase_1_actions",
+        }),
+        stepSnapshot({
+          attackResult: result,
+          participantId: "guard",
+          phase: "phase1",
+          phaseResolutionResult: withResolution.phaseResolutionResults[0],
+          step: "review_phase_2_actions",
+        }),
+        stepSnapshot({
+          attackResult: result,
+          participantId: "guard",
+          phase: "phase1",
+          phaseResolutionResult: withResolution.phaseResolutionResults[0],
+          step: "phase_1_damage",
+        }),
+      ],
+    });
     const cleared = clearCombatRoundStep({
-      state: withResolution,
+      state: {
+        ...withSnapshot,
+        selectedParticipantId: "guard",
+        selectedStep: "review_phase_2_actions",
+      },
+      step: "review_phase_2_actions",
+    });
+
+    expect(cleared.commands).toEqual([]);
+    expect(cleared.currentCursor).toEqual({
+      participantId: "gladiator",
+      roundNumber: 3,
+      step: "A1",
+    });
+    expect(cleared.currentStep).toBe("phase_1_actions");
+    expect(cleared.selectedParticipantId).toBe("gladiator");
+    expect(cleared.selectedStep).toBe("phase_1_actions");
+    expect(cleared.phaseResolutionCursor).toEqual({
+      participantId: "gladiator",
+      phase: "phase1",
+      substep: "attack",
+    });
+    expect(cleared.participants[0]?.attackResults.phase1).toBeUndefined();
+    expect(cleared.phaseResolutionResults).toEqual([]);
+    expect(cleared.participants[0]?.stepStatuses.phase_1_actions).toBe("pending");
+    expect(cleared.participants[1]?.stepStatuses.review_phase_2_actions).toBe("pending");
+    expect(cleared.participants[1]?.stepStatuses.phase_1_damage).toBe("pending");
+    expect(
+      getCombatRoundStepSnapshot({
+        participantId: "gladiator",
+        state: cleared,
+        step: "phase_1_actions",
+      }),
+    ).toBeUndefined();
+    expect(
+      getCombatRoundStepSnapshot({
+        participantId: "guard",
+        state: cleared,
+        step: "review_phase_2_actions",
+      }),
+    ).toBeUndefined();
+    expect(
+      getCombatRoundStepSnapshot({
+        participantId: "guard",
+        state: cleared,
+        step: "phase_1_damage",
+      }),
+    ).toBeUndefined();
+  });
+
+  it("undoes a command-backed selected A1 miss back to the attacker A1 cell", () => {
+    const state = initializeCombatRoundPhaseResolutionCursor({
+      phase: "phase1",
+      state: declareRoundAction({
+        actionId: "attack_parry",
+        participantId: "gladiator",
+        state: initializeCombatRoundState({ encounter: encounter() }),
+      }),
+      updatedAt: "2026-01-01T00:02:00.000Z",
+    });
+    const result = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackerParticipantId: "gladiator",
+      defenderDb: 10,
+      defenderParticipantId: "guard",
+      ob: 10,
+      phase: "phase1",
+      rollD20: 10,
+      rollTotal: 10,
+      rolledAt: "2026-01-01T00:03:00.000Z",
+      weaponName: "Broad sword",
+    });
+    const afterAttack = recordCombatRoundAttackResult({
+      command: {
+        createdAt: result.rolledAt,
+        createdByUserId: "gm-1",
+      },
+      participantId: "gladiator",
+      result,
+      state,
+      submittedBy: "gm",
+    });
+    const cleared = clearCombatRoundStep({
+      state: {
+        ...afterAttack,
+        selectedParticipantId: "gladiator",
+        selectedStep: "phase_1_actions",
+      },
       step: "phase_1_actions",
     });
 
+    expect(cleared.commands).toEqual([]);
+    expect(cleared.currentCursor).toEqual({
+      participantId: "gladiator",
+      roundNumber: 3,
+      step: "A1",
+    });
+    expect(cleared.selectedParticipantId).toBe("gladiator");
+    expect(cleared.selectedStep).toBe("phase_1_actions");
     expect(cleared.participants[0]?.attackResults.phase1).toBeUndefined();
-    expect(cleared.phaseResolutionResults).toEqual([]);
+    expect(cleared.participants[0]?.stepStatuses.phase_1_actions).toBe("pending");
+  });
+
+  it("manual selection of old i1 after later A1 attacks still undoes the latest roll_attack", () => {
+    const threeParticipantEncounter = encounter({
+      participants: [
+        participant({ id: "gladiator", label: "The Gladiator" }),
+        participant({ id: "guard", label: "City guard" }),
+        participant({ id: "scout", label: "Scout" }),
+      ],
+    });
+    const declared = declareRoundAction({
+      actionId: "attack_parry",
+      participantId: "guard",
+      state: declareRoundAction({
+        actionId: "attack_parry",
+        participantId: "gladiator",
+        state: initializeCombatRoundState({ encounter: threeParticipantEncounter }),
+      }),
+    });
+    const withInitiatives = setCombatRoundParticipantInitiative({
+      initiative: { baseInitiative: 0, modifierAdjustment: 0, rolls: [6], rollTotal: 6, total: 6 },
+      participantId: "gladiator",
+      phase: "phase1",
+      state: setCombatRoundParticipantInitiative({
+        initiative: { baseInitiative: 0, modifierAdjustment: 0, rolls: [4], rollTotal: 4, total: 4 },
+        participantId: "guard",
+        phase: "phase1",
+        state: setCombatRoundParticipantInitiative({
+          initiative: {
+            baseInitiative: 0,
+            modifierAdjustment: 0,
+            rolls: [2],
+            rollTotal: 2,
+            total: 2,
+          },
+          participantId: "scout",
+          phase: "phase1",
+          state: declared,
+        }),
+      }),
+    });
+    const withCursor = initializeCombatRoundPhaseResolutionCursor({
+      phase: "phase1",
+      state: withInitiatives,
+      updatedAt: "2026-01-01T00:02:00.000Z",
+    });
+    const gladiatorMiss = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackerParticipantId: "gladiator",
+      defenderDb: 10,
+      defenderParticipantId: "guard",
+      ob: 10,
+      phase: "phase1",
+      rollD20: 10,
+      rollTotal: 10,
+      rolledAt: "2026-01-01T00:03:00.000Z",
+      weaponName: "Broad sword",
+    });
+    const afterGladiatorMiss = recordCombatRoundAttackResult({
+      command: {
+        createdAt: gladiatorMiss.rolledAt,
+        createdByUserId: "gm-1",
+      },
+      participantId: "gladiator",
+      result: gladiatorMiss,
+      state: withCursor,
+      submittedBy: "gm",
+    });
+    const guardMiss = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackerParticipantId: "guard",
+      defenderDb: 10,
+      defenderParticipantId: "gladiator",
+      ob: 10,
+      phase: "phase1",
+      rollD20: 10,
+      rollTotal: 10,
+      rolledAt: "2026-01-01T00:04:00.000Z",
+      weaponName: "Spear",
+    });
+    const afterGuardMiss = recordCombatRoundAttackResult({
+      command: {
+        createdAt: guardMiss.rolledAt,
+        createdByUserId: "gm-1",
+      },
+      participantId: "guard",
+      result: guardMiss,
+      state: afterGladiatorMiss,
+      submittedBy: "gm",
+    });
+    const cleared = clearCombatRoundStep({
+      state: {
+        ...afterGuardMiss,
+        currentCursor: {
+          participantId: "scout",
+          roundNumber: 3,
+          step: "i1",
+        },
+        currentStep: "phase_1_actions",
+        selectedParticipantId: "gladiator",
+        selectedStep: "initiative_phase_1",
+      },
+      step: "initiative_phase_1",
+    });
+
+    expect(afterGuardMiss.commands.map((command) => command.participantId)).toEqual([
+      "gladiator",
+      "guard",
+    ]);
+    expect(cleared.commands).toHaveLength(1);
+    expect(cleared.commands[0]).toMatchObject({
+      participantId: "gladiator",
+      type: "roll_attack",
+    });
+    expect(cleared.currentCursor).toEqual({
+      participantId: "guard",
+      roundNumber: 3,
+      step: "A1",
+    });
+    expect(cleared.currentStep).toBe("phase_1_actions");
+    expect(cleared.selectedParticipantId).toBe("guard");
+    expect(cleared.selectedStep).toBe("phase_1_actions");
+    expect(cleared.participants[0]?.attackResults.phase1).toEqual(gladiatorMiss);
+    expect(cleared.participants[1]?.attackResults.phase1).toBeUndefined();
+    expect(cleared.participants[0]?.initiatives.phase1).toMatchObject({ total: 6 });
   });
 
   it("committed D1 snapshots preserve resolution scaffold status", () => {
@@ -1208,6 +6747,19 @@ describe("combat round manager", () => {
         ],
       }),
     });
+    const withDeclarations = declareRoundAction({
+      actionId: "attack_parry",
+      participantId: "scout",
+      state: declareRoundAction({
+        actionId: "attack_parry",
+        participantId: "guard",
+        state: declareRoundAction({
+          actionId: "attack_parry",
+          participantId: "gladiator",
+          state: baseState,
+        }),
+      }),
+    });
     const withInitiatives = setCombatRoundParticipantInitiative({
       initiative: { baseInitiative: 0, modifierAdjustment: 0, rolls: [4], rollTotal: 4, total: 4 },
       participantId: "gladiator",
@@ -1222,7 +6774,7 @@ describe("combat round manager", () => {
         },
         participantId: "guard",
         phase: "phase1",
-        state: baseState,
+        state: withDeclarations,
       }),
     });
     const withCursor = initializeCombatRoundPhaseResolutionCursor({
@@ -1246,6 +6798,15 @@ describe("combat round manager", () => {
 
   it("advances cursor through one participant and then to the next initiative participant", () => {
     const baseState = initializeCombatRoundState({ encounter: encounter() });
+    const withDeclarations = declareRoundAction({
+      actionId: "attack_parry",
+      participantId: "guard",
+      state: declareRoundAction({
+        actionId: "attack_parry",
+        participantId: "gladiator",
+        state: baseState,
+      }),
+    });
     const withInitiatives = setCombatRoundParticipantInitiative({
       initiative: { baseInitiative: 0, modifierAdjustment: 0, rolls: [6], rollTotal: 6, total: 6 },
       participantId: "gladiator",
@@ -1260,7 +6821,7 @@ describe("combat round manager", () => {
         },
         participantId: "guard",
         phase: "phase1",
-        state: baseState,
+        state: withDeclarations,
       }),
     });
     const withCursor = initializeCombatRoundPhaseResolutionCursor({
@@ -1288,7 +6849,7 @@ describe("combat round manager", () => {
     });
 
     expect(afterAttack.phaseResolutionCursor).toEqual({
-      participantId: "gladiator",
+      participantId: "guard",
       phase: "phase1",
       substep: "parry",
     });
@@ -1323,8 +6884,12 @@ describe("combat round manager", () => {
     expect(afterDone.selectedParticipantId).toBe("guard");
   });
 
-  it("clear P1 and D1 reset phase1 cursor/status at the right level", () => {
-    const state = initializeCombatRoundState({ encounter: encounter() });
+  it("clear A1/P1/D1 returns to the redo point in the phase1 dependency chain", () => {
+    const state = declareRoundAction({
+      actionId: "attack_parry",
+      participantId: "gladiator",
+      state: initializeCombatRoundState({ encounter: encounter() }),
+    });
     const result = buildCombatRoundAttackRollResult({
       actionId: "attack_parry",
       attackerParticipantId: "gladiator",
@@ -1348,24 +6913,26 @@ describe("combat round manager", () => {
       state: withCursor,
       submittedBy: "gm",
     });
-    const afterD1Clear = clearCombatRoundStep({
+    const afterPendingP1Clear = clearCombatRoundStep({
       state: afterAttack,
       step: "review_phase_2_actions",
     });
 
-    expect(afterD1Clear.participants[0]?.attackResults.phase1).toEqual(result);
-    expect(afterD1Clear.phaseResolutionCursor).toEqual({
+    expect(afterPendingP1Clear.participants[0]?.attackResults.phase1).toBeUndefined();
+    expect(afterPendingP1Clear.phaseResolutionCursor).toEqual({
       participantId: "gladiator",
       phase: "phase1",
-      substep: "parry",
+      substep: "attack",
     });
+    expect(afterPendingP1Clear.selectedParticipantId).toBe("gladiator");
+    expect(afterPendingP1Clear.selectedStep).toBe("phase_1_actions");
     expect(
       getCombatRoundPhaseResolutionStatus({
         participantId: "gladiator",
         phase: "phase1",
-        state: afterD1Clear,
+        state: afterPendingP1Clear,
       }).substep,
-    ).toBe("parry");
+    ).toBe("pending");
 
     const afterP1Clear = clearCombatRoundStep({
       state: afterAttack,
@@ -1373,7 +6940,11 @@ describe("combat round manager", () => {
     });
 
     expect(afterP1Clear.participants[0]?.attackResults.phase1).toBeUndefined();
-    expect(afterP1Clear.phaseResolutionCursor).toBeUndefined();
+    expect(afterP1Clear.phaseResolutionCursor).toEqual({
+      participantId: "gladiator",
+      phase: "phase1",
+      substep: "attack",
+    });
     expect(
       getCombatRoundPhaseResolutionStatus({
         participantId: "gladiator",
@@ -1381,10 +6952,66 @@ describe("combat round manager", () => {
         state: afterP1Clear,
       }).substep,
     ).toBe("pending");
+
+    const withFailedParry = recordCombatRoundParryResolution({
+      attackResult: result,
+      parryResolution: {
+        combinedParryScore: 9,
+        modifierAdjustment: 0,
+        openEndedD10s: [],
+        resultLabel: "Parry failed",
+        rollD20: 8,
+        rollTotal: 8,
+        status: "resolved",
+        success: false,
+        targetNumber: 21,
+        total: 17,
+      },
+      state: afterAttack,
+      updatedAt: "2026-01-01T00:06:00.000Z",
+    });
+    const afterResolvedP1Clear = clearCombatRoundStep({
+      state: withFailedParry,
+      step: "review_phase_2_actions",
+    });
+
+    expect(afterResolvedP1Clear.participants[0]?.attackResults.phase1).toEqual(result);
+    expect(afterResolvedP1Clear.phaseResolutionResults[0]?.parryResolution.status).toBe("pending");
+    expect(afterResolvedP1Clear.phaseResolutionCursor).toEqual({
+      participantId: "guard",
+      phase: "phase1",
+      substep: "parry",
+    });
+    expect(afterResolvedP1Clear.selectedParticipantId).toBe("guard");
+    expect(afterResolvedP1Clear.selectedStep).toBe("review_phase_2_actions");
+
+    const afterD1Clear = clearCombatRoundStep({
+      state: {
+        ...withFailedParry,
+        selectedParticipantId: "guard",
+        selectedStep: "phase_1_damage",
+      },
+      step: "phase_1_damage",
+    });
+
+    expect(afterD1Clear.participants[0]?.attackResults.phase1).toEqual(result);
+    expect(afterD1Clear.phaseResolutionResults[0]?.parryResolution.status).toBe("resolved");
+    expect(afterD1Clear.phaseResolutionResults[0]?.damageRoll.status).toBe("pending");
+    expect(afterD1Clear.phaseResolutionCursor).toEqual({
+      participantId: "guard",
+      phase: "phase1",
+      substep: "damage",
+    });
+    expect(afterD1Clear.selectedParticipantId).toBe("guard");
+    expect(afterD1Clear.selectedStep).toBe("phase_1_damage");
   });
 
   it("phase2 cursor follows phase2 initiative and substeps", () => {
-    const state = initializeCombatRoundState({ encounter: encounter() });
+    const state = declareRoundAction({
+      actionId: "parry_attack",
+      participantId: "guard",
+      state: initializeCombatRoundState({ encounter: encounter() }),
+    });
     const withInitiatives = setCombatRoundParticipantInitiative({
       initiative: { baseInitiative: 0, modifierAdjustment: 0, rolls: [2], rollTotal: 2, total: 2 },
       participantId: "gladiator",
@@ -1432,10 +7059,320 @@ describe("combat round manager", () => {
       substep: "attack",
     });
     expect(afterMiss.phaseResolutionCursor).toEqual({
-      participantId: "guard",
+      participantId: "gladiator",
       phase: "phase2",
-      substep: "effects",
+      substep: "parry",
     });
+    expect(
+      getCombatRoundPhaseResolutionStatus({
+        participantId: "guard",
+        phase: "phase2",
+        state: afterMiss,
+      }).substep,
+    ).toBe("done");
+  });
+
+  it("detects phase attack availability from the declared phase model", () => {
+    const baseState = initializeCombatRoundState({ encounter: encounter() });
+    const withAttackParry = recordCombatRoundDeclaration({
+      declaration: {
+        actionId: "attack_parry",
+        roundNumber: 3,
+      },
+      participantId: "gladiator",
+      state: baseState,
+      submittedBy: "gm",
+    });
+    const withParryAttack = recordCombatRoundDeclaration({
+      declaration: {
+        actionId: "parry_attack",
+        roundNumber: 3,
+      },
+      participantId: "guard",
+      state: withAttackParry,
+      submittedBy: "gm",
+    });
+    const withDoubleAttack = recordCombatRoundDeclaration({
+      declaration: {
+        actionId: "double_attack",
+        roundNumber: 3,
+      },
+      participantId: "scout",
+      state: initializeCombatRoundState({
+        encounter: encounter({
+          participants: [participant({ id: "scout", label: "Scout" })],
+        }),
+      }),
+      submittedBy: "gm",
+    });
+
+    expect(
+      combatRoundParticipantHasPhaseAttack({
+        participantId: "gladiator",
+        phase: "phase1",
+        state: withParryAttack,
+      }),
+    ).toBe(true);
+    expect(
+      combatRoundParticipantHasPhaseAttack({
+        participantId: "gladiator",
+        phase: "phase2",
+        state: withParryAttack,
+      }),
+    ).toBe(false);
+    expect(
+      combatRoundParticipantHasPhaseAttack({
+        participantId: "guard",
+        phase: "phase1",
+        state: withParryAttack,
+      }),
+    ).toBe(false);
+    expect(
+      combatRoundParticipantHasPhaseAttack({
+        participantId: "guard",
+        phase: "phase2",
+        state: withParryAttack,
+      }),
+    ).toBe(true);
+    expect(
+      combatRoundParticipantHasPhaseAttack({
+        participantId: "scout",
+        phase: "phase1",
+        state: withDoubleAttack,
+      }),
+    ).toBe(true);
+    expect(
+      combatRoundParticipantHasPhaseAttack({
+        participantId: "scout",
+        phase: "phase2",
+        state: withDoubleAttack,
+      }),
+    ).toBe(true);
+  });
+
+  it("publishes currentCursor when phase resolution opens an attack task", () => {
+    const withCursor = preparePhaseResolutionState({
+      guardActionId: "attack_parry",
+      gladiatorActionId: "attack_parry",
+      phase: "phase1",
+    });
+
+    expect(withCursor.phaseResolutionCursor).toEqual({
+      participantId: "gladiator",
+      phase: "phase1",
+      substep: "attack",
+    });
+    expect(withCursor.currentCursor).toEqual({
+      participantId: "gladiator",
+      roundNumber: 3,
+      step: "A1",
+    });
+    expect(withCursor.currentStep).toBe("phase_1_actions");
+    expect(withCursor.selectedParticipantId).toBe("gladiator");
+    expect(withCursor.selectedStep).toBe("phase_1_actions");
+    expect(
+      canPlayerRollCombatAttack({
+        participantId: "gladiator",
+        phase: "phase1",
+        state: withCursor,
+      }),
+    ).toBe(true);
+  });
+
+  it("starts a no-attack phase actor at review and lets the GM complete it without rolling", () => {
+    const baseState = initializeCombatRoundState({ encounter: encounter() });
+    const withDeclaration = recordCombatRoundDeclaration({
+      declaration: {
+        actionId: "parry_attack",
+        roundNumber: 3,
+      },
+      participantId: "gladiator",
+      state: baseState,
+      submittedBy: "gm",
+    });
+    const withCursor = initializeCombatRoundPhaseResolutionCursor({
+      phase: "phase1",
+      state: withDeclaration,
+      updatedAt: "2026-01-01T00:04:00.000Z",
+    });
+
+    expect(withCursor.phaseResolutionCursor).toEqual({
+      participantId: "gladiator",
+      phase: "phase1",
+      substep: "parry",
+    });
+    expect(withCursor.currentCursor).toEqual({
+      participantId: "gladiator",
+      roundNumber: 3,
+      step: "A1",
+    });
+    expect(withCursor.currentStep).toBe("phase_1_actions");
+    expect(withCursor.selectedParticipantId).toBe("gladiator");
+    expect(withCursor.selectedStep).toBe("phase_1_actions");
+
+    const completed = completeCombatRoundPhaseResolutionForParticipant({
+      participantId: "gladiator",
+      phase: "phase1",
+      state: withCursor,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:06:00.000Z",
+    });
+
+    expect(completed.participants[0]?.stepStatuses.phase_1_actions).toBe("skipped");
+    expect(completed.participants[0]?.stepStatuses.review_phase_2_actions).toBe("gmEdited");
+    expect(
+      getCombatRoundPhaseResolutionStatus({
+        participantId: "gladiator",
+        phase: "phase1",
+        state: completed,
+      }).substep,
+    ).toBe("done");
+    expect(completed.phaseResolutionCursor).toEqual({
+      participantId: "guard",
+      phase: "phase1",
+      substep: "parry",
+    });
+  });
+
+  it("undoes a command-backed no-attack A1 skip in one visible Clear", () => {
+    const baseState = initializeCombatRoundState({ encounter: encounter() });
+    const withDeclaration = recordCombatRoundDeclaration({
+      declaration: {
+        actionId: "parry_attack",
+        roundNumber: 3,
+      },
+      participantId: "gladiator",
+      state: baseState,
+      submittedBy: "gm",
+    });
+    const withCursor = initializeCombatRoundPhaseResolutionCursor({
+      phase: "phase1",
+      state: withDeclaration,
+      updatedAt: "2026-01-01T00:04:00.000Z",
+    });
+    const completed = recordCombatRoundNoAttackPhaseReview({
+      command: {
+        createdAt: "2026-01-01T00:06:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      participantId: "gladiator",
+      phase: "phase1",
+      state: withCursor,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:06:00.000Z",
+    });
+    const cleared = clearCombatRoundStep({
+      state: {
+        ...completed,
+        selectedParticipantId: "gladiator",
+        selectedStep: "initiative_phase_1",
+      },
+      step: "initiative_phase_1",
+    });
+
+    expect(completed.commands).toHaveLength(1);
+    expect(completed.commands[0]).toMatchObject({
+      afterCursor: { participantId: "guard", step: "A1" },
+      beforeCursor: { participantId: "gladiator", step: "A1" },
+      facts: expect.objectContaining({
+        status: "skipped",
+      }),
+      participantId: "gladiator",
+      phase: "phase1",
+      type: "skip_phase_action",
+    });
+    expect(completed.participants[0]?.stepStatuses.phase_1_actions).toBe("skipped");
+    expect(completed.participants[0]?.stepStatuses.review_phase_2_actions).toBe("gmEdited");
+    expect(cleared.commands).toEqual([]);
+    expect(cleared.currentCursor).toEqual({
+      participantId: "gladiator",
+      roundNumber: 3,
+      step: "A1",
+    });
+    expect(cleared.currentStep).toBe("phase_1_actions");
+    expect(cleared.selectedParticipantId).toBe("gladiator");
+    expect(cleared.selectedStep).toBe("phase_1_actions");
+    expect(cleared.participants[0]?.stepStatuses.phase_1_actions).toBe("pending");
+    expect(cleared.participants[0]?.stepStatuses.review_phase_2_actions).toBe("pending");
+    expect(cleared.phaseResolutionCursor).toEqual({
+      participantId: "gladiator",
+      phase: "phase1",
+      substep: "parry",
+    });
+    expect(
+      getCombatRoundPhaseResolutionStatus({
+        participantId: "guard",
+        phase: "phase1",
+        state: cleared,
+      }).substep,
+    ).toBe("pending");
+  });
+
+  it("advances parry and damage placeholders before completing effects review", () => {
+    const state = declareRoundAction({
+      actionId: "attack_parry",
+      participantId: "gladiator",
+      state: initializeCombatRoundState({ encounter: encounter() }),
+    });
+    const result = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackerParticipantId: "gladiator",
+      defenderDb: 10,
+      defenderParticipantId: "guard",
+      ob: 10,
+      phase: "phase1",
+      rollD20: 12,
+      rollTotal: 12,
+      rolledAt: "2026-01-01T00:05:00.000Z",
+      weaponName: "Broad sword",
+    });
+    const afterAttack = recordCombatRoundAttackResult({
+      participantId: "gladiator",
+      result,
+      state,
+      submittedBy: "gm",
+    });
+    const afterParry = advanceCombatRoundPhaseResolutionSubstepForParticipant({
+      participantId: "gladiator",
+      phase: "phase1",
+      state: afterAttack,
+      updatedAt: "2026-01-01T00:06:00.000Z",
+    });
+    const afterDamage = advanceCombatRoundPhaseResolutionSubstepForParticipant({
+      participantId: "gladiator",
+      phase: "phase1",
+      state: afterParry,
+      updatedAt: "2026-01-01T00:07:00.000Z",
+    });
+    const afterEffects = completeCombatRoundPhaseResolutionForParticipant({
+      participantId: "gladiator",
+      phase: "phase1",
+      state: afterDamage,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:08:00.000Z",
+    });
+
+    expect(
+      getCombatRoundPhaseResolutionStatus({
+        participantId: "gladiator",
+        phase: "phase1",
+        state: afterParry,
+      }).substep,
+    ).toBe("damage");
+    expect(
+      getCombatRoundPhaseResolutionStatus({
+        participantId: "gladiator",
+        phase: "phase1",
+        state: afterDamage,
+      }).substep,
+    ).toBe("effects");
+    expect(
+      getCombatRoundPhaseResolutionStatus({
+        participantId: "gladiator",
+        phase: "phase1",
+        state: afterEffects,
+      }).substep,
+    ).toBe("done");
   });
 
   it("rolls open-ended d6 initiative", () => {
@@ -1528,6 +7465,454 @@ describe("combat round manager", () => {
     expect(
       canPlayerRollCombatInitiative({ participantId: "gladiator", phase: "phase2", state }),
     ).toBe(false);
+  });
+
+  it("marks phase initiative complete only after every participant is rolled or non-pending", () => {
+    const baseState = initializeCombatRoundState({ encounter: encounter() });
+    const withGladiatorInitiative = recordCombatRoundInitiative({
+      initiative: { baseInitiative: 0, modifierAdjustment: 0, rolls: [5], rollTotal: 5, total: 5 },
+      participantId: "gladiator",
+      phase: "phase1",
+      state: baseState,
+      submittedBy: "player",
+    });
+
+    expect(
+      isCombatRoundPhaseInitiativeComplete({
+        phase: "phase1",
+        state: withGladiatorInitiative,
+      }),
+    ).toBe(false);
+
+    const withSkippedGuard = setCombatRoundParticipantStepStatus({
+      participantId: "guard",
+      state: withGladiatorInitiative,
+      status: "skipped",
+      step: "initiative_phase_1",
+    });
+
+    expect(
+      isCombatRoundPhaseInitiativeComplete({
+        phase: "phase1",
+        state: withSkippedGuard,
+      }),
+    ).toBe(true);
+  });
+
+  it("allows player attack only for the current unresolved attack cursor and rejects duplicates", () => {
+    const openState = preparePhaseResolutionState({
+      guardActionId: "attack_parry",
+      gladiatorActionId: "attack_parry",
+      phase: "phase1",
+    });
+
+    expect(openState.currentStep).toBe("phase_1_actions");
+    expect(openState.currentCursor).toMatchObject({
+      participantId: "gladiator",
+      step: "A1",
+    });
+    expect(
+      canPlayerRollCombatAttack({
+        participantId: "gladiator",
+        phase: "phase1",
+        state: openState,
+      }),
+    ).toBe(true);
+
+    const submittedMarkerOpenState = {
+      ...openState,
+      participants: openState.participants.map((participant) =>
+        participant.participantId === "gladiator"
+          ? {
+              ...participant,
+              stepStatuses: {
+                ...participant.stepStatuses,
+                phase_1_actions: "submitted" as const,
+              },
+            }
+          : participant,
+      ),
+    };
+
+    expect(
+      canPlayerRollCombatAttack({
+        participantId: "gladiator",
+        phase: "phase1",
+        state: submittedMarkerOpenState,
+      }),
+    ).toBe(true);
+
+    const phase2PreparedState = preparePhaseResolutionState({
+      guardActionId: "parry_attack",
+      gladiatorActionId: "parry_attack",
+      phase: "phase2",
+    });
+    const phase2OpenState = {
+      ...phase2PreparedState,
+      currentCursor: {
+        participantId: "gladiator",
+        roundNumber: phase2PreparedState.roundNumber,
+        step: "A2" as const,
+      },
+      currentStep: "phase_2_actions" as const,
+      participants: phase2PreparedState.participants.map((participant) =>
+        participant.participantId === "gladiator"
+          ? {
+              ...participant,
+              stepStatuses: {
+                ...participant.stepStatuses,
+                phase_2_actions: "submitted" as const,
+              },
+            }
+          : participant,
+      ),
+      selectedParticipantId: "gladiator",
+      selectedStep: "phase_2_actions" as const,
+    };
+
+    expect(
+      canPlayerRollCombatAttack({
+        participantId: "gladiator",
+        phase: "phase2",
+        state: phase2OpenState,
+      }),
+    ).toBe(true);
+
+    expect(
+      canPlayerRollCombatAttack({
+        participantId: "guard",
+        phase: "phase1",
+        state: openState,
+      }),
+    ).toBe(false);
+
+    const result = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackerParticipantId: "gladiator",
+      defenderDb: 10,
+      defenderParticipantId: "guard",
+      ob: 10,
+      phase: "phase1",
+      rollD20: 12,
+      rollTotal: 12,
+      rolledAt: "2026-01-01T00:05:00.000Z",
+      weaponName: "Broad sword",
+    });
+    const afterAttack = recordCombatRoundAttackResult({
+      command: {
+        createdAt: result.rolledAt,
+      },
+      participantId: "gladiator",
+      result,
+      state: openState,
+      submittedBy: "player",
+    });
+
+    expect(
+      canPlayerRollCombatAttack({
+        participantId: "gladiator",
+        phase: "phase1",
+        state: afterAttack,
+      }),
+    ).toBe(false);
+    expect(() =>
+      recordCombatRoundAttackResult({
+        command: {
+          createdAt: "2026-01-01T00:05:01.000Z",
+        },
+        participantId: "gladiator",
+        result: {
+          ...result,
+          rolledAt: "2026-01-01T00:05:01.000Z",
+        },
+        state: afterAttack,
+        submittedBy: "player",
+      }),
+    ).toThrow("Attack already rolled for this participant and phase.");
+  });
+
+  it("selects player roll privilege from the authoritative current cursor", () => {
+    const openState = preparePhaseResolutionState({
+      guardActionId: "attack_parry",
+      gladiatorActionId: "attack_parry",
+      phase: "phase1",
+    });
+
+    expect(getPlayerCombatCurrentRollAction({ participantId: "gladiator", state: openState }))
+      .toMatchObject({
+        kind: "attack",
+        phase: "phase1",
+        step: "A1",
+      });
+    expect(getPlayerCombatCurrentRollAction({ participantId: "guard", state: openState })).toBe(
+      undefined,
+    );
+
+    const attackResult = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackerParticipantId: "gladiator",
+      defenderDb: 10,
+      defenderParticipantId: "guard",
+      ob: 10,
+      phase: "phase1",
+      rollD20: 14,
+      rollTotal: 14,
+      rolledAt: "2026-01-01T00:05:00.000Z",
+      weaponName: "Broad sword",
+    });
+    const afterAttack = recordCombatRoundAttackResult({
+      command: {
+        createdAt: attackResult.rolledAt,
+      },
+      participantId: "gladiator",
+      result: attackResult,
+      state: openState,
+      submittedBy: "player",
+    });
+
+    expect(getPlayerCombatCurrentRollAction({ participantId: "guard", state: afterAttack }))
+      .toMatchObject({
+        attackResultId: "3:phase1:gladiator:guard",
+        kind: "parry",
+        phase: "phase1",
+        step: "P1",
+      });
+    expect(getPlayerCombatCurrentRollAction({ participantId: "gladiator", state: afterAttack }))
+      .toBe(undefined);
+
+    const afterParry = recordCombatRoundParryResult({
+      attackResult,
+      command: {
+        createdAt: "2026-01-01T00:06:00.000Z",
+      },
+      parryResolution: {
+        combinedParryScore: 9,
+        modifierAdjustment: 0,
+        openEndedD10s: [],
+        resultLabel: "Parry failed",
+        rollD20: 8,
+        rollTotal: 8,
+        status: "resolved",
+        success: false,
+        targetNumber: 21,
+        total: 17,
+      },
+      state: afterAttack,
+      submittedBy: "player",
+      updatedAt: "2026-01-01T00:06:00.000Z",
+    });
+
+    expect(getPlayerCombatCurrentRollAction({ participantId: "gladiator", state: afterParry }))
+      .toMatchObject({
+        attackResultId: "3:phase1:gladiator:guard",
+        kind: "hit_location",
+        phase: "phase1",
+        step: "D1",
+      });
+    expect(getPlayerCombatCurrentRollAction({ participantId: "guard", state: afterParry })).toBe(
+      undefined,
+    );
+
+    const afterLocation = recordTestHitLocation({
+      attackResult,
+      command: {
+        createdAt: "2026-01-01T00:06:30.000Z",
+      },
+      state: afterParry,
+    });
+    const afterDamage = recordCombatRoundDamageResult({
+      attackResult,
+      command: {
+        createdAt: "2026-01-01T00:07:00.000Z",
+      },
+      defenderDm: 0,
+      dmb: 8,
+      state: afterLocation,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:07:00.000Z",
+    });
+
+    expect(getPlayerCombatCurrentRollAction({ participantId: "gladiator", state: afterDamage }))
+      .toMatchObject({
+        attackResultId: "3:phase1:gladiator:guard",
+        kind: "critical",
+        phase: "phase1",
+        step: "D1",
+      });
+  });
+
+  it("unwinds command-backed multiplayer round history back to the first declaration", () => {
+    let state = initializeCombatRoundState({ encounter: encounter() });
+
+    state = recordCombatRoundDeclaration({
+      command: {
+        createdAt: "2026-01-01T00:01:00.000Z",
+        createdByUserId: "player-1",
+      },
+      declaration: {
+        actionId: "attack_parry",
+        phaseContexts: {
+          phase1: testPhaseContext("guard"),
+        },
+        roundNumber: 3,
+        submittedAt: "2026-01-01T00:01:00.000Z",
+        submittedByUserId: "player-1",
+      },
+      participantId: "gladiator",
+      state,
+      submittedBy: "player",
+    });
+    state = recordCombatRoundDeclaration({
+      command: {
+        createdAt: "2026-01-01T00:01:10.000Z",
+        createdByUserId: "gm-1",
+      },
+      declaration: {
+        actionId: "attack_parry",
+        phaseContexts: {
+          phase1: testPhaseContext("gladiator"),
+        },
+        roundNumber: 3,
+        submittedAt: "2026-01-01T00:01:10.000Z",
+        submittedByUserId: "gm-1",
+      },
+      participantId: "guard",
+      state,
+      submittedBy: "gm",
+    });
+    state = advanceCombatRoundStep(state);
+    state = recordCombatRoundParticipantStepReview({
+      command: {
+        createdAt: "2026-01-01T00:02:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      participantId: "gladiator",
+      state,
+      step: "review_action_modifiers",
+      submittedBy: "gm",
+    });
+    state = recordCombatRoundParticipantStepReview({
+      command: {
+        createdAt: "2026-01-01T00:02:10.000Z",
+        createdByUserId: "gm-1",
+      },
+      participantId: "guard",
+      state,
+      step: "review_action_modifiers",
+      submittedBy: "gm",
+    });
+    state = advanceCombatRoundStep(state);
+    state = recordCombatRoundInitiative({
+      command: {
+        createdAt: "2026-01-01T00:03:00.000Z",
+        createdByUserId: "player-1",
+      },
+      initiative: { baseInitiative: 0, modifierAdjustment: 0, rolls: [6], rollTotal: 6, total: 6 },
+      participantId: "gladiator",
+      phase: "phase1",
+      state,
+      submittedBy: "player",
+    });
+    state = recordCombatRoundInitiative({
+      command: {
+        createdAt: "2026-01-01T00:03:10.000Z",
+        createdByUserId: "gm-1",
+      },
+      initiative: { baseInitiative: 0, modifierAdjustment: 0, rolls: [4], rollTotal: 4, total: 4 },
+      participantId: "guard",
+      phase: "phase1",
+      state,
+      submittedBy: "gm",
+    });
+    state = initializeCombatRoundPhaseResolutionCursor({
+      phase: "phase1",
+      state,
+      updatedAt: "2026-01-01T00:04:00.000Z",
+    });
+
+    const attackResult = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackerParticipantId: "gladiator",
+      defenderDb: 10,
+      defenderParticipantId: "guard",
+      ob: 10,
+      phase: "phase1",
+      rollD20: 14,
+      rollTotal: 14,
+      rolledAt: "2026-01-01T00:05:00.000Z",
+      weaponName: "Broad sword",
+    });
+    state = recordCombatRoundAttackResult({
+      command: {
+        createdAt: attackResult.rolledAt,
+        createdByUserId: "player-1",
+      },
+      participantId: "gladiator",
+      result: attackResult,
+      state,
+      submittedBy: "player",
+    });
+    state = recordCombatRoundParryResult({
+      attackResult,
+      command: {
+        createdAt: "2026-01-01T00:06:00.000Z",
+        createdByUserId: "player-2",
+      },
+      parryResolution: {
+        combinedParryScore: 9,
+        modifierAdjustment: 0,
+        openEndedD10s: [],
+        resultLabel: "Parry successful",
+        rollD20: 16,
+        rollTotal: 16,
+        status: "resolved",
+        success: true,
+        targetNumber: 21,
+        total: 25,
+      },
+      state,
+      submittedBy: "player",
+      updatedAt: "2026-01-01T00:06:00.000Z",
+    });
+
+    expect(state.commands.map((command) => command.type)).toEqual([
+      "declare_action",
+      "declare_action",
+      "review_modifiers_phase1",
+      "review_modifiers_phase1",
+      "roll_initiative_phase1",
+      "roll_initiative_phase1",
+      "roll_attack",
+      "roll_parry",
+    ]);
+
+    while (state.commands.length > 0) {
+      const previousCommandCount = state.commands.length;
+
+      state = clearCombatRoundStep({ state, step: state.currentStep });
+
+      expect(state.commands.length).toBe(previousCommandCount - 1);
+      if (state.currentCursor?.participantId) {
+        expect(
+          state.participants.some(
+            (participant) => participant.participantId === state.currentCursor?.participantId,
+          ),
+        ).toBe(true);
+      }
+    }
+
+    expect(state.currentStep).toBe("select_actions");
+    expect(state.currentCursor).toEqual({
+      participantId: "gladiator",
+      roundNumber: 3,
+      step: "DE",
+    });
+    expect(state.participants[0]?.declaration).toBeUndefined();
+    expect(state.participants[1]?.declaration).toBeUndefined();
+    expect(state.participants[0]?.initiatives.phase1).toBeUndefined();
+    expect(state.participants[1]?.initiatives.phase1).toBeUndefined();
+    expect(state.participants[0]?.attackResults.phase1).toBeUndefined();
+    expect(state.phaseResolutionResults).toEqual([]);
   });
 
   it("locks pending declarations when advancing past DE while preserving submitted markers", () => {

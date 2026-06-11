@@ -4,34 +4,50 @@ import { CampaignService, EncounterService, ScenarioService } from "@glantri/dat
 import {
   buildPlayerSafeRoleplayStateForUser,
   applyCombatActionGeneratedModifiers,
+  buildCombatRoundAttackRollResult,
   buildCombatRoundInitiativeResult,
   canPlayerRollCombatInitiative,
   buildRoleplayCalculationPreview,
   canPlayerSubmitCombatDeclaration,
+  clearCombatRoundStep,
   clearCurrentCombatRoundStepAndRewind,
+  combatRoundPhaseSchema,
+  combatRoundStepSchema,
   encounterSessionSchema,
   getCombatRoundInitiativePhaseForStep,
+  getCombatRoundAttackResultById,
+  getPlayerCombatCurrentRollAction,
+  getCombatRoundOutgoingAttackResultForParticipantPhase,
   initializeCombatRoundState,
   isUserAssignedToEncounterMembership,
   normalizeRoleplayState,
+  recordCombatRoundCriticalRoll,
   recordCombatRoundDeclaration,
+  recordCombatRoundHitLocationRoll,
   recordCombatRoundInitiative,
+  recordCombatRoundAttackResult,
+  recordCombatRoundParryResult,
   recordCombatRoundParticipantStepReview,
+  removeCombatRoundCommittedDamageEffects,
   resolveEncounterParticipantByRollParticipantId,
   resolveEncounterParticipantMembership,
+  rollOpenEndedCombatToHitD20,
+  rollOpenEndedD20,
   rollOpenEndedD6,
   combatRoundPhaseContextsSchema,
   scenarioParticipantCombatContextSchema,
+  setCombatRoundSelection,
   validateCombatDeclarationTargets,
 } from "@glantri/domain";
 import type { ScenarioParticipant } from "@glantri/domain";
 import {
   recordRoleplayGmSkillRoll,
+  resolveCombatParry,
   resolveRoleplaySkillRollModifiers,
 } from "@glantri/rules-engine";
 
 import { requireAdminUser, requireAuthenticatedUser } from "../../lib/sessionAuth";
-import { parseBodyObject, parseId } from "./parsing";
+import { parseBodyObject, parseId, parseOptionalString } from "./parsing";
 import { resolveScenarioWorkspaceAccess } from "./access";
 
 const campaignService = new CampaignService();
@@ -194,6 +210,143 @@ function parseCombatInitiativeBody(body: unknown): {
   };
 }
 
+function parseOptionalInteger(value: unknown, label: string): number | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  return parseInteger(value, label);
+}
+
+function parseNonEmptyString(value: unknown, label: string): string {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    throw new Error(`${label} is required.`);
+  }
+
+  return value;
+}
+
+function parseCombatAttackBody(body: unknown): {
+  actionId?: string;
+  defenderDb?: number;
+  defenderScenarioParticipantId: string;
+  ob?: number;
+  phase: "phase1" | "phase2";
+  scenarioParticipantId: string;
+  weaponName?: string;
+} {
+  const value = parseBodyObject(body, "Combat attack payload");
+  const parsed = parseParticipantCommandBody(value, "Combat attack payload");
+  const defenderScenarioParticipantId = parseNonEmptyString(
+    value.defenderScenarioParticipantId,
+    "defenderScenarioParticipantId",
+  );
+  const phase = combatRoundPhaseSchema.parse(value.phase);
+  const actionId =
+    typeof value.actionId === "string" && value.actionId.trim().length > 0
+      ? value.actionId
+      : undefined;
+  const weaponName =
+    typeof value.weaponName === "string" && value.weaponName.trim().length > 0
+      ? value.weaponName
+      : undefined;
+
+  return {
+    ...parsed,
+    actionId,
+    defenderDb: parseOptionalInteger(value.defenderDb, "defenderDb"),
+    defenderScenarioParticipantId,
+    ob: parseOptionalInteger(value.ob, "ob"),
+    phase,
+    weaponName,
+  };
+}
+
+function parseOptionalBoolean(value: unknown, label: string): boolean | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (typeof value !== "boolean") {
+    throw new Error(`${label} must be a boolean.`);
+  }
+
+  return value;
+}
+
+function parseCombatParryModifierBreakdown(value: unknown): Array<{ label: string; value: number }> {
+  if (value === undefined) {
+    return [];
+  }
+
+  if (!Array.isArray(value)) {
+    throw new Error("modifierBreakdown must be an array.");
+  }
+
+  return value.map((entry, index) => {
+    if (!entry || typeof entry !== "object") {
+      throw new Error(`modifierBreakdown[${index}] must be an object.`);
+    }
+
+    const candidate = entry as Record<string, unknown>;
+
+    return {
+      label: parseNonEmptyString(candidate.label, `modifierBreakdown[${index}].label`),
+      value: parseInteger(candidate.value, `modifierBreakdown[${index}].value`),
+    };
+  });
+}
+
+function parseCombatParryBody(body: unknown): {
+  attackResultId: string;
+  mainHandParryScore?: number;
+  modifierBreakdown: Array<{ label: string; value: number }>;
+  offHandParryScore?: number;
+  parryBase: number;
+  parrySourceLabel?: string;
+  scenarioParticipantId: string;
+  usedMainHand?: boolean;
+  usedOffHand?: boolean;
+} {
+  const value = parseBodyObject(body, "Combat parry payload");
+  const parsed = parseParticipantCommandBody(value, "Combat parry payload");
+  const attackResultId = parseNonEmptyString(value.attackResultId, "attackResultId");
+  const parrySourceLabel =
+    typeof value.parrySourceLabel === "string" && value.parrySourceLabel.trim().length > 0
+      ? value.parrySourceLabel
+      : undefined;
+
+  return {
+    ...parsed,
+    attackResultId,
+    mainHandParryScore: parseOptionalInteger(value.mainHandParryScore, "mainHandParryScore"),
+    modifierBreakdown: parseCombatParryModifierBreakdown(value.modifierBreakdown),
+    offHandParryScore: parseOptionalInteger(value.offHandParryScore, "offHandParryScore"),
+    parryBase: parseInteger(value.parryBase, "parryBase"),
+    parrySourceLabel,
+    usedMainHand: parseOptionalBoolean(value.usedMainHand, "usedMainHand"),
+    usedOffHand: parseOptionalBoolean(value.usedOffHand, "usedOffHand"),
+  };
+}
+
+function parseCombatAttackerPrivilegedRollBody(body: unknown): {
+  attackResultId: string;
+  scenarioParticipantId: string;
+} {
+  const value = parseBodyObject(body, "Combat attacker roll payload");
+  const parsed = parseParticipantCommandBody(value, "Combat attacker roll payload");
+  const attackResultId = value.attackResultId;
+
+  if (typeof attackResultId !== "string" || attackResultId.trim().length === 0) {
+    throw new Error("attackResultId is required.");
+  }
+
+  return {
+    ...parsed,
+    attackResultId,
+  };
+}
+
 function clearScenarioParticipantCombatDeclaration(
   participant: ScenarioParticipant,
 ): ScenarioParticipant["state"] {
@@ -205,12 +358,27 @@ function clearScenarioParticipantCombatDeclaration(
       declarationSubmittedAt: undefined,
       declarationSubmittedByUserId: undefined,
       lastDeclaredActionId: undefined,
+      lastDeclaredEncounterId: undefined,
       lastDeclaredMovementId: undefined,
       lastDeclaredRoundNumber: undefined,
       lastDeclaredSecondaryActionId: undefined,
       lastDeclarationNotes: undefined,
     },
   };
+}
+
+function parseCombatSummaryInteger(value: string | undefined, label: string): number | undefined {
+  if (!value || value === "—" || value === "incomplete") {
+    return undefined;
+  }
+
+  const parsed = Number(value);
+
+  if (!Number.isInteger(parsed)) {
+    throw new Error(`${label} must be an integer.`);
+  }
+
+  return parsed;
 }
 
 function preservePlayerCombatModifierBuckets(input: {
@@ -607,6 +775,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             declarationSubmittedAt: submittedAt,
             declarationSubmittedByUserId: user.id,
             lastDeclaredActionId: body.actionId,
+            lastDeclaredEncounterId: encounter.id,
             lastDeclaredMovementId: body.movementId,
             lastDeclaredRoundNumber: roundState.roundNumber,
             lastDeclaredSecondaryActionId: body.secondaryActionId,
@@ -615,6 +784,13 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         },
       });
       const declaredRoundState = recordCombatRoundDeclaration({
+        command:
+          roundState.currentStep === "select_actions"
+            ? {
+                createdAt: submittedAt,
+                createdByUserId: user.id,
+              }
+            : undefined,
         declaration: {
           actionId: body.actionId,
           additionalActionNotes: body.additionalActionNotes,
@@ -635,6 +811,14 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         roundState.currentStep !== "initiative_phase_1" &&
         roundState.currentStep !== "initiative_phase_2"
           ? recordCombatRoundParticipantStepReview({
+              command:
+                roundState.currentStep === "review_action_modifiers" ||
+                roundState.currentStep === "review_phase_2_modifiers"
+                  ? {
+                      createdAt: submittedAt,
+                      createdByUserId: user.id,
+                    }
+                  : undefined,
               participantId: encounterParticipant.id,
               state: declaredRoundState,
               step: roundState.currentStep,
@@ -771,6 +955,10 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       });
       const submittedAt = new Date().toISOString();
       const nextRoundState = recordCombatRoundInitiative({
+        command: {
+          createdAt: submittedAt,
+          createdByUserId: user.id,
+        },
         initiative: rolledInitiative,
         participantId: encounterParticipant.id,
         phase,
@@ -793,6 +981,666 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
     } catch (error) {
       return reply.code(400).send({
         error: error instanceof Error ? error.message : "Unable to roll combat initiative.",
+      });
+    }
+  });
+
+  app.post("/encounters/:encounterId/combat-round/roll-attack", async (request, reply) => {
+    const user = await requireAuthenticatedUser(request, reply);
+
+    if (!user) {
+      return;
+    }
+
+    try {
+      const encounterId = parseId(request.params, "encounterId", "Encounter id");
+      const encounter = await encounterService.getEncounterById(encounterId);
+
+      if (!encounter?.scenarioId) {
+        return reply.code(404).send({
+          error: "Encounter not found.",
+        });
+      }
+
+      const scenarioId = encounter.scenarioId;
+      const access = await resolveScenarioWorkspaceAccess(
+        {
+          campaignService,
+          scenarioService,
+        },
+        {
+          scenarioId,
+          userId: user.id,
+          userRoles: user.roles,
+        },
+      );
+
+      if (!access) {
+        return reply.code(404).send({
+          error: "Encounter not found.",
+        });
+      }
+
+      const body = parseCombatAttackBody(request.body);
+      const scenarioParticipants = await scenarioService.listScenarioParticipants(scenarioId);
+      const scenarioParticipant = scenarioParticipants.find(
+        (participant) => participant.id === body.scenarioParticipantId,
+      );
+      const defenderScenarioParticipant = scenarioParticipants.find(
+        (participant) => participant.id === body.defenderScenarioParticipantId,
+      );
+      const membership = resolveEncounterParticipantMembership({
+        encounter,
+        scenarioParticipants,
+      });
+      const encounterParticipant = scenarioParticipant
+        ? membership.participants.find(
+            (participant) =>
+              participant.scenarioParticipantId === scenarioParticipant.id ||
+              participant.id === scenarioParticipant.id ||
+              (scenarioParticipant.characterId &&
+                participant.characterId === scenarioParticipant.characterId),
+          )
+        : undefined;
+      const defenderEncounterParticipant = defenderScenarioParticipant
+        ? membership.participants.find(
+            (participant) =>
+              participant.scenarioParticipantId === defenderScenarioParticipant.id ||
+              participant.id === defenderScenarioParticipant.id ||
+              (defenderScenarioParticipant.characterId &&
+                participant.characterId === defenderScenarioParticipant.characterId),
+          )
+        : undefined;
+
+      if (
+        !scenarioParticipant ||
+        !scenarioParticipant.isActive ||
+        !encounterParticipant ||
+        !defenderScenarioParticipant ||
+        !defenderScenarioParticipant.isActive ||
+        !defenderEncounterParticipant
+      ) {
+        return reply.code(403).send({
+          error: "Participant is not assigned to this encounter.",
+        });
+      }
+
+      if (
+        access.mode !== "gm" &&
+        (scenarioParticipant.controlledByUserId !== user.id ||
+          !isUserAssignedToEncounterMembership({
+            encounter,
+            scenarioParticipants,
+            userId: user.id,
+          }))
+      ) {
+        return reply.code(403).send({
+          error: "Player is not assigned to this encounter participant.",
+        });
+      }
+
+      const roundState = initializeCombatRoundState({ encounter });
+      const existingAttackResult = getCombatRoundOutgoingAttackResultForParticipantPhase({
+        participantId: encounterParticipant.id,
+        phase: body.phase,
+        state: roundState,
+      });
+
+      if (existingAttackResult) {
+        return reply.code(409).send({
+          error: "Attack already rolled for this participant and phase.",
+        });
+      }
+
+      const currentRollAction = getPlayerCombatCurrentRollAction({
+        participantId: encounterParticipant.id,
+        state: roundState,
+      });
+
+      if (currentRollAction?.kind !== "attack" || currentRollAction.phase !== body.phase) {
+        return reply.code(409).send({
+          error: "Attack is not open for this participant.",
+        });
+      }
+
+      const attackerRoundParticipant = roundState.participants.find(
+        (participant) => participant.participantId === encounterParticipant.id,
+      );
+      const declaredTargetId =
+        attackerRoundParticipant?.declaration?.phaseContexts?.[body.phase]?.targetParticipantId;
+
+      if (
+        declaredTargetId &&
+        declaredTargetId !== defenderScenarioParticipant.id &&
+        declaredTargetId !== defenderEncounterParticipant.id
+      ) {
+        return reply.code(409).send({
+          error: "Selected defender does not match the declared attack target.",
+        });
+      }
+
+      const latestAttackerSnapshot = [...roundState.stepSnapshots]
+        .reverse()
+        .find(
+          (snapshot) =>
+            snapshot.roundNumber === roundState.roundNumber &&
+            snapshot.participantId === encounterParticipant.id &&
+            snapshot.phase === body.phase &&
+            snapshot.attackSummary,
+        );
+      const latestDefenderSnapshot = [...roundState.stepSnapshots]
+        .reverse()
+        .find(
+          (snapshot) =>
+            snapshot.roundNumber === roundState.roundNumber &&
+            snapshot.participantId === defenderEncounterParticipant.id &&
+            snapshot.phase === body.phase &&
+            snapshot.defenseSummary,
+        );
+      const ob =
+        parseCombatSummaryInteger(latestAttackerSnapshot?.attackSummary?.ob, "Attacker OB") ??
+        body.ob;
+      const weaponName = latestAttackerSnapshot?.attackSummary?.weaponName ?? body.weaponName;
+      const defenderDb =
+        parseCombatSummaryInteger(latestDefenderSnapshot?.defenseSummary?.db, "Defender DB") ??
+        body.defenderDb;
+
+      if (ob === undefined || !weaponName || defenderDb === undefined) {
+        return reply.code(409).send({
+          error: "Attack or defender combat summary is not available.",
+        });
+      }
+
+      const submittedAt = new Date().toISOString();
+      const roll = rollOpenEndedCombatToHitD20();
+      const attackResult = buildCombatRoundAttackRollResult({
+        actionId:
+          body.actionId ??
+          attackerRoundParticipant?.declaration?.actionId ??
+          `${body.phase}_attack`,
+        attackerParticipantId: encounterParticipant.id,
+        defenderDb,
+        defenderParticipantId: defenderEncounterParticipant.id,
+        ob,
+        openEndedD10s: roll.openEndedD10s,
+        phase: body.phase,
+        rollD20: roll.rollD20,
+        rollTotal: roll.rollTotal,
+        rolledAt: submittedAt,
+        rolledByUserId: user.id,
+        weaponName,
+      });
+      const nextRoundState = recordCombatRoundAttackResult({
+        command: {
+          createdAt: submittedAt,
+          createdByUserId: user.id,
+        },
+        participantId: encounterParticipant.id,
+        result: attackResult,
+        state: roundState,
+        submittedBy: access.mode === "gm" ? "gm" : "player",
+      });
+      const savedEncounter = await encounterService.updateEncounter({
+        campaignId: access.campaignId,
+        encounterId,
+        scenarioId,
+        session: {
+          ...encounter,
+          combatRoundState: nextRoundState,
+          currentRound: nextRoundState.roundNumber,
+          updatedAt: submittedAt,
+        },
+      });
+
+      return { attackResult, encounter: savedEncounter };
+    } catch (error) {
+      return reply.code(400).send({
+        error: error instanceof Error ? error.message : "Unable to roll combat attack.",
+      });
+    }
+  });
+
+  app.post("/encounters/:encounterId/combat-round/roll-parry", async (request, reply) => {
+    const user = await requireAuthenticatedUser(request, reply);
+
+    if (!user) {
+      return;
+    }
+
+    try {
+      const encounterId = parseId(request.params, "encounterId", "Encounter id");
+      const encounter = await encounterService.getEncounterById(encounterId);
+
+      if (!encounter?.scenarioId) {
+        return reply.code(404).send({
+          error: "Encounter not found.",
+        });
+      }
+
+      const scenarioId = encounter.scenarioId;
+      const access = await resolveScenarioWorkspaceAccess(
+        {
+          campaignService,
+          scenarioService,
+        },
+        {
+          scenarioId,
+          userId: user.id,
+          userRoles: user.roles,
+        },
+      );
+
+      if (!access) {
+        return reply.code(404).send({
+          error: "Encounter not found.",
+        });
+      }
+
+      const body = parseCombatParryBody(request.body);
+      const scenarioParticipants = await scenarioService.listScenarioParticipants(scenarioId);
+      const scenarioParticipant = scenarioParticipants.find(
+        (participant) => participant.id === body.scenarioParticipantId,
+      );
+      const membership = resolveEncounterParticipantMembership({
+        encounter,
+        scenarioParticipants,
+      });
+      const encounterParticipant = scenarioParticipant
+        ? membership.participants.find(
+            (participant) =>
+              participant.scenarioParticipantId === scenarioParticipant.id ||
+              participant.id === scenarioParticipant.id ||
+              (scenarioParticipant.characterId &&
+                participant.characterId === scenarioParticipant.characterId),
+          )
+        : undefined;
+
+      if (!scenarioParticipant || !scenarioParticipant.isActive || !encounterParticipant) {
+        return reply.code(403).send({
+          error: "Participant is not assigned to this encounter.",
+        });
+      }
+
+      if (
+        access.mode !== "gm" &&
+        (scenarioParticipant.controlledByUserId !== user.id ||
+          !isUserAssignedToEncounterMembership({
+            encounter,
+            scenarioParticipants,
+            userId: user.id,
+          }))
+      ) {
+        return reply.code(403).send({
+          error: "Player is not assigned to this encounter participant.",
+        });
+      }
+
+      const roundState = initializeCombatRoundState({ encounter });
+      const currentRollAction = getPlayerCombatCurrentRollAction({
+        participantId: encounterParticipant.id,
+        state: roundState,
+      });
+
+      if (
+        currentRollAction?.kind !== "parry" ||
+        currentRollAction.attackResultId !== body.attackResultId
+      ) {
+        return reply.code(409).send({
+          error: "Parry is not open for this participant.",
+        });
+      }
+
+      const attackResult = getCombatRoundAttackResultById({
+        attackResultId: body.attackResultId,
+        state: roundState,
+      });
+
+      if (!attackResult) {
+        return reply.code(404).send({
+          error: "Attack result not found.",
+        });
+      }
+
+      const submittedAt = new Date().toISOString();
+      const roll = rollOpenEndedD20();
+      const parry = resolveCombatParry({
+        parryBase: body.parryBase,
+        rawModifiers: body.modifierBreakdown,
+        rollTotal: roll.dieResult,
+      });
+      const parryResolution = {
+        combinedParryScore: parry.parryBase,
+        mainHandParryScore: body.mainHandParryScore,
+        modifiedParryBeforeRoll: parry.parryBase + parry.modifierAdjustment,
+        modifierAdjustment: parry.modifierAdjustment,
+        modifierBreakdown: parry.rawModifiers.map((modifier) => ({ ...modifier })),
+        notes:
+          "Direction, location coverage, and multi-opponent source allocation are deferred in this first parry slice.",
+        offHandParryScore: body.offHandParryScore,
+        openEndedD10s: roll.openEndedD10s,
+        parrySourceLabel: body.parrySourceLabel,
+        rawModifierTotal: parry.rawModifierTotal,
+        resultLabel: parry.success ? "Parry successful" : "Parry failed",
+        rollD20: roll.rollD20,
+        rollTotal: roll.dieResult,
+        status: "resolved" as const,
+        success: parry.success,
+        targetNumber: parry.targetNumber,
+        total: parry.total,
+        usedMainHand: body.usedMainHand,
+        usedOffHand: body.usedOffHand,
+      };
+      const nextRoundState = recordCombatRoundParryResult({
+        attackResult,
+        command: {
+          createdAt: submittedAt,
+          createdByUserId: user.id,
+        },
+        parryResolution,
+        state: roundState,
+        submittedBy: access.mode === "gm" ? "gm" : "player",
+        updatedAt: submittedAt,
+      });
+      const savedEncounter = await encounterService.updateEncounter({
+        campaignId: access.campaignId,
+        encounterId,
+        scenarioId,
+        session: {
+          ...encounter,
+          combatRoundState: nextRoundState,
+          currentRound: nextRoundState.roundNumber,
+          updatedAt: submittedAt,
+        },
+      });
+
+      return { encounter: savedEncounter };
+    } catch (error) {
+      return reply.code(400).send({
+        error: error instanceof Error ? error.message : "Unable to roll combat parry.",
+      });
+    }
+  });
+
+  app.post("/encounters/:encounterId/combat-round/roll-hit-location", async (request, reply) => {
+    const user = await requireAuthenticatedUser(request, reply);
+
+    if (!user) {
+      return;
+    }
+
+    try {
+      const encounterId = parseId(request.params, "encounterId", "Encounter id");
+      const encounter = await encounterService.getEncounterById(encounterId);
+
+      if (!encounter?.scenarioId) {
+        return reply.code(404).send({
+          error: "Encounter not found.",
+        });
+      }
+
+      const scenarioId = encounter.scenarioId;
+      const access = await resolveScenarioWorkspaceAccess(
+        {
+          campaignService,
+          scenarioService,
+        },
+        {
+          scenarioId,
+          userId: user.id,
+          userRoles: user.roles,
+        },
+      );
+
+      if (!access) {
+        return reply.code(404).send({
+          error: "Encounter not found.",
+        });
+      }
+
+      const body = parseCombatAttackerPrivilegedRollBody(request.body);
+      const scenarioParticipants = await scenarioService.listScenarioParticipants(scenarioId);
+      const scenarioParticipant = scenarioParticipants.find(
+        (participant) => participant.id === body.scenarioParticipantId,
+      );
+      const membership = resolveEncounterParticipantMembership({
+        encounter,
+        scenarioParticipants,
+      });
+      const encounterParticipant = scenarioParticipant
+        ? membership.participants.find(
+            (participant) =>
+              participant.scenarioParticipantId === scenarioParticipant.id ||
+              participant.id === scenarioParticipant.id ||
+              (scenarioParticipant.characterId &&
+                participant.characterId === scenarioParticipant.characterId),
+          )
+        : undefined;
+
+      if (!scenarioParticipant || !scenarioParticipant.isActive || !encounterParticipant) {
+        return reply.code(403).send({
+          error: "Participant is not assigned to this encounter.",
+        });
+      }
+
+      const roundState = initializeCombatRoundState({ encounter });
+      const attackResult = getCombatRoundAttackResultById({
+        attackResultId: body.attackResultId,
+        state: roundState,
+      });
+
+      if (!attackResult) {
+        return reply.code(404).send({
+          error: "Attack result not found.",
+        });
+      }
+
+      if (attackResult.attackerParticipantId !== encounterParticipant.id) {
+        return reply.code(403).send({
+          error: "Only the attacking participant can roll hit location.",
+        });
+      }
+
+      const currentRollAction = getPlayerCombatCurrentRollAction({
+        participantId: encounterParticipant.id,
+        state: roundState,
+      });
+
+      if (
+        currentRollAction?.kind !== "hit_location" ||
+        currentRollAction.attackResultId !== body.attackResultId
+      ) {
+        return reply.code(409).send({
+          error: "Hit location is not open for this attack.",
+        });
+      }
+
+      if (
+        access.mode !== "gm" &&
+        (scenarioParticipant.controlledByUserId !== user.id ||
+          !isUserAssignedToEncounterMembership({
+            encounter,
+            scenarioParticipants,
+            userId: user.id,
+          }))
+      ) {
+        return reply.code(403).send({
+          error: "Player is not assigned to this encounter participant.",
+        });
+      }
+
+      const submittedAt = new Date().toISOString();
+      const attackerRoundParticipant = roundState.participants.find(
+        (participant) => participant.participantId === attackResult.attackerParticipantId,
+      );
+      const nextRoundState = recordCombatRoundHitLocationRoll({
+        attackResult,
+        command: {
+          createdAt: submittedAt,
+          createdByUserId: user.id,
+        },
+        rolledByParticipantId: encounterParticipant.id,
+        state: roundState,
+        submittedBy: access.mode === "gm" ? "gm" : "player",
+        targetLocation:
+          attackerRoundParticipant?.declaration?.phaseContexts?.[attackResult.phase]
+            ?.targetLocation,
+        updatedAt: submittedAt,
+      });
+      const savedEncounter = await encounterService.updateEncounter({
+        campaignId: access.campaignId,
+        encounterId,
+        scenarioId,
+        session: {
+          ...encounter,
+          combatRoundState: nextRoundState,
+          currentRound: nextRoundState.roundNumber,
+          updatedAt: submittedAt,
+        },
+      });
+
+      return { encounter: savedEncounter };
+    } catch (error) {
+      return reply.code(400).send({
+        error: error instanceof Error ? error.message : "Unable to roll hit location.",
+      });
+    }
+  });
+
+  app.post("/encounters/:encounterId/combat-round/roll-critical", async (request, reply) => {
+    const user = await requireAuthenticatedUser(request, reply);
+
+    if (!user) {
+      return;
+    }
+
+    try {
+      const encounterId = parseId(request.params, "encounterId", "Encounter id");
+      const encounter = await encounterService.getEncounterById(encounterId);
+
+      if (!encounter?.scenarioId) {
+        return reply.code(404).send({
+          error: "Encounter not found.",
+        });
+      }
+
+      const scenarioId = encounter.scenarioId;
+      const access = await resolveScenarioWorkspaceAccess(
+        {
+          campaignService,
+          scenarioService,
+        },
+        {
+          scenarioId,
+          userId: user.id,
+          userRoles: user.roles,
+        },
+      );
+
+      if (!access) {
+        return reply.code(404).send({
+          error: "Encounter not found.",
+        });
+      }
+
+      const body = parseCombatAttackerPrivilegedRollBody(request.body);
+      const scenarioParticipants = await scenarioService.listScenarioParticipants(scenarioId);
+      const scenarioParticipant = scenarioParticipants.find(
+        (participant) => participant.id === body.scenarioParticipantId,
+      );
+      const membership = resolveEncounterParticipantMembership({
+        encounter,
+        scenarioParticipants,
+      });
+      const encounterParticipant = scenarioParticipant
+        ? membership.participants.find(
+            (participant) =>
+              participant.scenarioParticipantId === scenarioParticipant.id ||
+              participant.id === scenarioParticipant.id ||
+              (scenarioParticipant.characterId &&
+                participant.characterId === scenarioParticipant.characterId),
+          )
+        : undefined;
+
+      if (!scenarioParticipant || !scenarioParticipant.isActive || !encounterParticipant) {
+        return reply.code(403).send({
+          error: "Participant is not assigned to this encounter.",
+        });
+      }
+
+      const roundState = initializeCombatRoundState({ encounter });
+      const attackResult = getCombatRoundAttackResultById({
+        attackResultId: body.attackResultId,
+        state: roundState,
+      });
+
+      if (!attackResult) {
+        return reply.code(404).send({
+          error: "Attack result not found.",
+        });
+      }
+
+      if (attackResult.attackerParticipantId !== encounterParticipant.id) {
+        return reply.code(403).send({
+          error: "Only the attacking participant can roll the critical die.",
+        });
+      }
+
+      const currentRollAction = getPlayerCombatCurrentRollAction({
+        participantId: encounterParticipant.id,
+        state: roundState,
+      });
+
+      if (
+        currentRollAction?.kind !== "critical" ||
+        currentRollAction.attackResultId !== body.attackResultId
+      ) {
+        return reply.code(409).send({
+          error: "Critical roll is not open for this attack.",
+        });
+      }
+
+      if (
+        access.mode !== "gm" &&
+        (scenarioParticipant.controlledByUserId !== user.id ||
+          !isUserAssignedToEncounterMembership({
+            encounter,
+            scenarioParticipants,
+            userId: user.id,
+          }))
+      ) {
+        return reply.code(403).send({
+          error: "Player is not assigned to this encounter participant.",
+        });
+      }
+
+      const submittedAt = new Date().toISOString();
+      const nextRoundState = recordCombatRoundCriticalRoll({
+        attackResult,
+        command: {
+          createdAt: submittedAt,
+          createdByUserId: user.id,
+        },
+        rolledByParticipantId: encounterParticipant.id,
+        state: roundState,
+        submittedBy: access.mode === "gm" ? "gm" : "player",
+        updatedAt: submittedAt,
+      });
+      const savedEncounter = await encounterService.updateEncounter({
+        campaignId: access.campaignId,
+        encounterId,
+        scenarioId,
+        session: {
+          ...encounter,
+          combatRoundState: nextRoundState,
+          currentRound: nextRoundState.roundNumber,
+          updatedAt: submittedAt,
+        },
+      });
+
+      return { encounter: savedEncounter };
+    } catch (error) {
+      return reply.code(400).send({
+        error: error instanceof Error ? error.message : "Unable to roll critical.",
       });
     }
   });
@@ -838,14 +1686,67 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         encounter,
         scenarioParticipants,
       });
-      const encounterScenarioParticipantIds = new Set(
-        membership.participants
-          .map((participant) => participant.scenarioParticipantId)
-          .filter((id): id is string => Boolean(id)),
-      );
+      const body =
+        request.body && typeof request.body === "object"
+          ? (request.body as Record<string, unknown>)
+          : {};
+      const selectedParticipantId = parseOptionalString(body, "participantId");
+      const selectedStepValue = parseOptionalString(body, "step");
+      const selectedStep = selectedStepValue
+        ? combatRoundStepSchema.parse(selectedStepValue)
+        : undefined;
       const roundState = initializeCombatRoundState({ encounter });
-      const clearsDeclarationStep = roundState.currentStep === "select_actions";
-      const nextRoundState = clearCurrentCombatRoundStepAndRewind(roundState);
+      const stateForClear =
+        selectedParticipantId && selectedStep
+          ? setCombatRoundSelection({
+              participantId: selectedParticipantId,
+              state: roundState,
+              step: selectedStep,
+            })
+          : roundState;
+      const clearStep = selectedStep ?? stateForClear.currentStep;
+      const clearsDeclarationStep = clearStep === "select_actions";
+      const nextRoundState =
+        selectedParticipantId && selectedStep
+          ? clearCombatRoundStep({
+              state: stateForClear,
+              step: selectedStep,
+            })
+          : clearCurrentCombatRoundStepAndRewind(roundState);
+      const removedDeclareCommandParticipantIds = new Set(
+        roundState.commands
+          .filter(
+            (command) =>
+              command.roundNumber === roundState.roundNumber &&
+              command.type === "declare_action" &&
+              !nextRoundState.commands.some(
+                (remainingCommand) => remainingCommand.id === command.id,
+              ),
+          )
+          .map((command) => command.participantId),
+      );
+      const removedCommittedDamageCommands = roundState.commands.filter(
+        (command) =>
+          command.roundNumber === roundState.roundNumber &&
+          command.type === "commit_phase_damage" &&
+          !nextRoundState.commands.some((remainingCommand) => remainingCommand.id === command.id),
+      );
+      const declarationClearEncounterParticipantIds = new Set<string>();
+
+      if (clearsDeclarationStep) {
+        if (selectedParticipantId) {
+          declarationClearEncounterParticipantIds.add(selectedParticipantId);
+        } else {
+          for (const participant of membership.participants) {
+            declarationClearEncounterParticipantIds.add(participant.id);
+          }
+        }
+      }
+
+      for (const participantId of removedDeclareCommandParticipantIds) {
+        declarationClearEncounterParticipantIds.add(participantId);
+      }
+
       const submittedAt = new Date().toISOString();
       const savedEncounter = await encounterService.updateEncounter({
         campaignId: access.campaignId,
@@ -858,19 +1759,54 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           updatedAt: submittedAt,
         },
       });
-      const updatedParticipants = clearsDeclarationStep
-        ? await Promise.all(
-            scenarioParticipants
-              .filter((participant) => encounterScenarioParticipantIds.has(participant.id))
-              .map((participant) =>
-                encounterService.updateScenarioParticipantState({
-                  participantId: participant.id,
-                  scenarioId,
-                  state: clearScenarioParticipantCombatDeclaration(participant),
-                }),
-              ),
-          )
-        : [];
+      const updatedParticipants =
+        declarationClearEncounterParticipantIds.size > 0 ||
+        removedCommittedDamageCommands.length > 0
+          ? await Promise.all(
+              scenarioParticipants
+                .map((participant) => {
+                  const encounterParticipant = membership.participants.find(
+                    (entry) => entry.scenarioParticipantId === participant.id,
+                  );
+
+                  if (!encounterParticipant) {
+                    return undefined;
+                  }
+
+                  let nextState = participant.state;
+
+                  if (declarationClearEncounterParticipantIds.has(encounterParticipant.id)) {
+                    nextState = clearScenarioParticipantCombatDeclaration({
+                      ...participant,
+                      state: nextState,
+                    });
+                  }
+
+                  for (const command of removedCommittedDamageCommands) {
+                    if (command.participantId !== encounterParticipant.id) {
+                      continue;
+                    }
+
+                    nextState = {
+                      ...nextState,
+                      combatEffects: removeCombatRoundCommittedDamageEffects({
+                        combatEffects: nextState.combatEffects,
+                        command,
+                      }),
+                    };
+                  }
+
+                  return nextState === participant.state
+                    ? undefined
+                    : encounterService.updateScenarioParticipantState({
+                        participantId: participant.id,
+                        scenarioId,
+                        state: nextState,
+                      });
+                })
+                .filter((update): update is Promise<ScenarioParticipant> => Boolean(update)),
+            )
+          : [];
 
       return { encounter: savedEncounter, participants: updatedParticipants };
     } catch (error) {

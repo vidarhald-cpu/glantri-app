@@ -5,6 +5,11 @@ import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react"
 import type {
   CombatRoundDeclaration,
   CombatRoundAttackRollResult,
+  CombatRoundDamageReview,
+  CombatRoundDamageReviewAdditionalEffect,
+  CombatRoundDamageResult,
+  CombatRoundParryResolution,
+  CombatRoundParryModifierBreakdownEntry,
   CombatRoundPhase,
   CombatRoundPhaseResolutionResult,
   CombatRoundStep,
@@ -21,33 +26,60 @@ import {
   COMBAT_ROUND_STEP_ABBREVIATIONS,
   COMBAT_ROUND_STEP_LABELS,
   COMBAT_ROUND_STEPS,
+  advanceCombatRoundPhaseResolutionSubstepForParticipant,
   advanceCombatRoundStep,
-  buildCombatRoundAttackRollResult,
+  buildCombatRoundPhaseResolutionResult,
   buildCombatRoundInspector,
   characterBuildSchema,
+  combatRoundParticipantHasPhaseAttack,
+  commitCombatRoundPhaseDamage,
   completeCombatRoundPhaseResolutionForParticipant,
   ensureCombatRoundPhaseResolutionResultsForPhase,
   formatOpenEndedD20RollBreakdown,
-  getCombatRoundDisplayAttackResultForParticipantPhase,
-  getCombatRoundDisplayPhaseResolutionResultForParticipantPhase,
+  getCombatRoundDamageSubstate,
+  getCombatRoundDisplayIncomingAttackResultForParticipantPhase,
+  getCombatRoundDamageReviewStepForPhase,
+  getCombatRoundEffectiveCriticalRoll,
+  getCombatRoundEffectiveDamageResult,
+  getCombatRoundOutgoingAttackResultForParticipantPhase,
+  getCombatRoundParticipantPhaseStepStatus,
+  getCombatRoundPhaseResolutionResultForAttack,
   getCombatRoundPhaseResolutionStatus,
   getCombatRoundInitiativeRanks,
   getCombatRoundInitiativeTotal,
   getCombatRoundModifierPhaseForStep,
   getCombatRoundResolutionPhaseForStep,
   getCombatRoundStepSnapshot,
+  getHitLocationFullLabel,
+  HIT_LOCATIONS,
+  hasScenarioParticipantCombatDeclarationForEncounterRound,
   initializeCombatRoundState,
-  recordCombatRoundAttackResult,
-  rollOpenEndedCombatToHitD20,
+  recordCombatRoundCriticalRoll,
+  recordCombatRoundDamageResult,
+  recordCombatRoundHitLocationRoll,
+  reviewCombatRoundDamageResult,
+  recordCombatRoundNoAttackPhaseReview,
+  recordCombatRoundParryResult,
+  rollOpenEndedD20,
   setCombatRoundSelection,
   sortCombatRoundParticipantsByInitiative,
   validateCombatDeclarationTargets,
 } from "@glantri/domain";
+import {
+  buildCharacterSheetSummary,
+  buildCombatStateCharacterInputs,
+  resolveCombatParry,
+  type WorkbookRawModifier,
+} from "@glantri/rules-engine";
 
 import { buildEquipmentLoadoutModuleModel } from "@/features/equipment/loadoutModule";
 import type { EquipmentFeatureState } from "@/features/equipment/types";
 import {
+  updateScenarioParticipantStateOnServer,
+} from "@/lib/api/scenarioClient";
+import {
   clearCurrentCombatRoundStepOnServer,
+  rollCombatAttackOnServer,
   rollCombatInitiativeOnServer,
   submitCombatDeclarationOnServer,
   updateEncounterOnServer,
@@ -72,6 +104,7 @@ import {
   PlayerCombatModifierPanel,
   PlayerCombatParryContextPanel,
   PlayerCombatPhasePanel,
+  playerCombatPanelCardStyle,
   playerCombatPanelRowStyle,
   playerCombatTopPanelRowStyle,
   type PlayerCombatModifierBucketView,
@@ -86,11 +119,12 @@ import {
   type PlayerCombatPhaseKey,
 } from "@/features/player-combat/playerCombatPhaseModel";
 import {
+  buildEncounterDbParryModifierCalculation,
   buildEncounterInitiativeModifierCalculation,
   buildEncounterLiveCombatModifierSummary,
+  type EncounterLiveCombatModifierSummary,
 } from "@/lib/campaigns/liveCombatModifiers";
 import {
-  createEmptyPlayerEncounterCombatContext,
   getPlayerEncounterOpponentParticipants,
   isPlayerEncounterActionId,
   mergeCombatContextWithCurrentModifierBuckets,
@@ -98,6 +132,15 @@ import {
   type PlayerEncounterMovementId,
 } from "@/lib/campaigns/playerEncounter";
 import { loadCanonicalContent } from "@/lib/content/loadCanonicalContent";
+import {
+  applyCombatRoundSelectionTarget,
+  getCurrentCombatRoundTaskSelection,
+  getNextCombatRoundParticipantSelection,
+  isGlobalCombatRoundParticipantStep,
+  normalizeCombatRoundManagerSelection,
+  type CombatRoundSelectionTarget,
+} from "./combatRoundSelection";
+import { buildCombatRoundPhasePanelProjection } from "./combatRoundPhasePanelProjection";
 
 interface CombatRoundManagerPanelProps {
   encounter: EncounterSession;
@@ -159,16 +202,70 @@ interface CombatInspectorPhaseContextDrafts {
   phase2: ScenarioParticipantCombatContext;
 }
 
+interface CombatParrySourceOption {
+  label: string;
+  score: number;
+}
+
+interface CombatParrySourceOptions {
+  combinedLabel?: string;
+  combinedScore?: number;
+  mainHand?: CombatParrySourceOption;
+  offHand?: CombatParrySourceOption;
+}
+
+interface CombatParrySourceSelection {
+  usedMainHand: boolean;
+  usedOffHand: boolean;
+}
+
+interface CombatDamageReviewAdditionalEffectDraft {
+  durationRounds: string;
+  id: string;
+  kind: CombatRoundDamageReviewAdditionalEffect["kind"];
+  label: string;
+  modifierBucket: string;
+  modifierValue: string;
+  notes: string;
+  phase: string;
+}
+
+interface CombatDamageReviewDraft {
+  additionalEffects: CombatDamageReviewAdditionalEffectDraft[];
+  armorCriticalModifierOverride: string;
+  armorModifierOverride: string;
+  criticalGradeOverride: string;
+  criticalLocationOverride: string;
+  criticalTypeModifierOverride: string;
+  finalCriticalRollOverride: string;
+  notes: string;
+  selectedHitLocationOverride: string;
+  totalDamageOverride: string;
+}
+
+interface CombatActionResultSection {
+  calculationLines: readonly string[];
+  resultLine?: string;
+  title: string;
+}
+
 function buildInspectorPhaseContexts(
   participant?: ScenarioParticipant,
   declaration?: CombatRoundDeclaration,
+  scope?: { encounterId?: string; roundNumber?: number },
 ): CombatInspectorPhaseContextDrafts {
+  const scopedCombat = hasScenarioParticipantCombatDeclarationForEncounterRound({
+    encounterId: scope?.encounterId,
+    participant,
+    roundNumber: scope?.roundNumber,
+  })
+    ? participant?.state.combat
+    : undefined;
   const fallbackContext = mergeCombatContextWithCurrentModifierBuckets({
-    baseContext:
-      declaration?.combatContext ??
-      participant?.state.combat.combatContext ??
-      createEmptyPlayerEncounterCombatContext(),
-    currentContext: participant?.state.combat.combatContext,
+    baseContext: declaration?.combatContext ?? scopedCombat?.combatContext,
+    currentContext: declaration
+      ? (scopedCombat?.combatContext ?? declaration.combatContext)
+      : scopedCombat?.combatContext,
   });
 
   return {
@@ -188,7 +285,26 @@ function getNextStepLabel(step: CombatRoundStep): string {
   return COMBAT_ROUND_STEP_ABBREVIATIONS[nextStep];
 }
 
+function isSequentialResolutionStep(step: CombatRoundStep): boolean {
+  return (
+    step === "phase_1_actions" ||
+    step === "review_phase_2_actions" ||
+    step === "phase_1_damage" ||
+    step === "phase_2_actions" ||
+    step === "review_phase_2_damage" ||
+    step === "phase_2_damage"
+  );
+}
+
 function getAdvanceButtonLabel(step: CombatRoundStep): string {
+  if (step === "round_summary") {
+    return "Complete round";
+  }
+
+  if (isSequentialResolutionStep(step)) {
+    return "Use inspector for phase resolution";
+  }
+
   return `Commit ${COMBAT_ROUND_STEP_ABBREVIATIONS[step]} and advance to ${getNextStepLabel(step)}`;
 }
 
@@ -204,30 +320,38 @@ function createModifierEntryDraft(): ScenarioCombatModifierEntry {
 function buildDeclarationDraft(
   participant?: ScenarioParticipant,
   declaration?: CombatRoundDeclaration,
+  scope?: { encounterId?: string; roundNumber?: number },
 ): CombatInspectorDeclarationDraft {
+  const scopedCombat = hasScenarioParticipantCombatDeclarationForEncounterRound({
+    encounterId: scope?.encounterId,
+    participant,
+    roundNumber: scope?.roundNumber,
+  })
+    ? participant?.state.combat
+    : undefined;
+
   return {
     actionId: isPlayerEncounterActionId(declaration?.actionId)
       ? declaration.actionId
-      : isPlayerEncounterActionId(participant?.state.combat.lastDeclaredActionId)
-        ? participant.state.combat.lastDeclaredActionId
+      : isPlayerEncounterActionId(scopedCombat?.lastDeclaredActionId)
+        ? scopedCombat.lastDeclaredActionId
         : "",
     additionalActionNotes:
-      declaration?.additionalActionNotes ?? participant?.state.combat.lastDeclarationNotes ?? "",
+      declaration?.additionalActionNotes ?? scopedCombat?.lastDeclarationNotes ?? "",
     combatContext: mergeCombatContextWithCurrentModifierBuckets({
-      baseContext:
-        declaration?.combatContext ??
-        participant?.state.combat.combatContext ??
-        createEmptyPlayerEncounterCombatContext(),
-      currentContext: participant?.state.combat.combatContext,
+      baseContext: declaration?.combatContext ?? scopedCombat?.combatContext,
+      currentContext: declaration
+        ? (scopedCombat?.combatContext ?? declaration.combatContext)
+        : scopedCombat?.combatContext,
     }),
     movementId: (declaration?.movementId ??
-      participant?.state.combat.lastDeclaredMovementId ??
+      scopedCombat?.lastDeclaredMovementId ??
       "hold") as PlayerEncounterMovementId,
-    phaseContexts: buildInspectorPhaseContexts(participant, declaration),
+    phaseContexts: buildInspectorPhaseContexts(participant, declaration, scope),
     secondaryActionId: isPlayerEncounterActionId(declaration?.secondaryActionId)
       ? declaration.secondaryActionId
-      : isPlayerEncounterActionId(participant?.state.combat.lastDeclaredSecondaryActionId)
-        ? participant.state.combat.lastDeclaredSecondaryActionId
+      : isPlayerEncounterActionId(scopedCombat?.lastDeclaredSecondaryActionId)
+        ? scopedCombat.lastDeclaredSecondaryActionId
         : "",
   };
 }
@@ -332,11 +456,294 @@ function formatCombatAttackResultLine(input: {
     : formatCombatAttackResultMainLine(input.result);
 }
 
+function formatCombatToHitCalculationLine(result: CombatRoundAttackRollResult): string {
+  const rollText = formatOpenEndedD20RollBreakdown({
+    dieResult: result.rollTotal,
+    openEndedD10s: result.openEndedD10s,
+    rollD20: result.rollD20,
+  });
+
+  return `OB ${result.ob} - DB ${result.defenderDb} + roll ${rollText} = ${result.lookupTotal}`;
+}
+
+function formatSignedCombatNumber(value: number): string {
+  return `${value >= 0 ? "+" : ""}${value}`;
+}
+
+function formatCombatParryModifierBreakdown(input: {
+  fallbackAdjustment: number;
+  modifiers?: readonly CombatRoundParryModifierBreakdownEntry[];
+}): string {
+  const modifiers = input.modifiers?.filter((modifier) => modifier.value !== 0) ?? [];
+
+  if (modifiers.length === 0) {
+    return `mods ${formatSignedCombatNumber(input.fallbackAdjustment)}`;
+  }
+
+  return modifiers
+    .map((modifier) => `${modifier.label} ${formatSignedCombatNumber(modifier.value)}`)
+    .join(" + ");
+}
+
+function formatCombatParryCalculationLine(
+  resolution: CombatRoundParryResolution,
+): string | undefined {
+  if (
+    resolution.status !== "resolved" ||
+    resolution.combinedParryScore === undefined ||
+    resolution.modifierAdjustment === undefined ||
+    resolution.rollD20 === undefined ||
+    resolution.rollTotal === undefined ||
+    resolution.total === undefined
+  ) {
+    return undefined;
+  }
+
+  const rollText = formatOpenEndedD20RollBreakdown({
+    dieResult: resolution.rollTotal,
+    openEndedD10s: resolution.openEndedD10s,
+    rollD20: resolution.rollD20,
+  });
+  const modifierText = formatCombatParryModifierBreakdown({
+    fallbackAdjustment: resolution.modifierAdjustment,
+    modifiers: resolution.modifierBreakdown,
+  });
+  const sourcePrefix = resolution.parrySourceLabel
+    ? `${resolution.parrySourceLabel} P ${resolution.combinedParryScore}`
+    : `P ${resolution.combinedParryScore}`;
+  const modifiedParryBeforeRoll =
+    resolution.modifiedParryBeforeRoll ??
+    resolution.combinedParryScore + resolution.modifierAdjustment;
+  const adjustmentText =
+    modifiedParryBeforeRoll === resolution.combinedParryScore
+      ? ""
+      : ` -> P ${modifiedParryBeforeRoll}`;
+
+  return `${sourcePrefix} + ${modifierText}${adjustmentText} + roll ${rollText} = ${resolution.total}`;
+}
+
 function formatResolutionStatusLabel(value: string): string {
   return value
     .split("_")
     .map((part, index) => (index === 0 ? part[0]?.toUpperCase() + part.slice(1) : part))
     .join(" ");
+}
+
+function formatCombatAttackTableResultLabel(value: string): string {
+  const trimmed = value.trim();
+
+  return trimmed ? trimmed[0].toUpperCase() + trimmed.slice(1) : "Unknown";
+}
+
+function formatCombatDamageCalculationLine(
+  damage: CombatRoundPhaseResolutionResult["damageResult"],
+): string | undefined {
+  if (!damage) {
+    return undefined;
+  }
+
+  const effectiveDamage = getCombatRoundEffectiveDamageResult(damage);
+  const armorModifier = effectiveDamage.effectiveArmorModifier;
+  const hitLookupTotal = damage.hitLookupTotal ?? damage.lookupTotal;
+  const tableDamage = effectiveDamage.effectiveTableDamage;
+
+  if (damage.grazing && damage.damageRoll.required) {
+    const rollLabel =
+      effectiveDamage.effectiveDamageRoll.diceExpression &&
+      effectiveDamage.effectiveDamageRoll.total !== undefined
+        ? `${effectiveDamage.effectiveDamageRoll.diceExpression} ${effectiveDamage.effectiveDamageRoll.total}`
+        : "required roll";
+    const referenceHitLookupTotal =
+      effectiveDamage.effectiveDamageRoll.grazingReferenceHitLookupTotal ??
+      effectiveDamage.effectiveDamageRoll.derivedFromLookupTotal;
+    const referenceDamageLookupTotal =
+      effectiveDamage.effectiveDamageRoll.grazingReferenceDamageLookupTotal ??
+      effectiveDamage.effectiveDamageLookupTotal;
+    const referenceDamage =
+      effectiveDamage.effectiveDamageRoll.grazingReferenceDamage ??
+      effectiveDamage.effectiveDamageRoll.derivedNormalDamageTotal;
+    const referenceLabel =
+      referenceHitLookupTotal !== undefined &&
+      referenceDamageLookupTotal !== undefined &&
+      referenceDamage !== undefined
+        ? `grazing reference hit ${referenceHitLookupTotal} + DMB ${damage.dmb} + DM ${damage.defenderDm} + armor ${armorModifier} = lookup ${referenceDamageLookupTotal}; table damage ${referenceDamage}`
+        : "grazing reference damage lookup";
+
+    return `${referenceLabel}; roll ${rollLabel} = ${effectiveDamage.effectiveTotalDamage}`;
+  }
+
+  if (hitLookupTotal === undefined || effectiveDamage.effectiveDamageLookupTotal === undefined) {
+    return `table damage ${tableDamage ?? effectiveDamage.effectiveTotalDamage} = ${effectiveDamage.effectiveTotalDamage}`;
+  }
+
+  return `hit ${hitLookupTotal} + DMB ${damage.dmb} + DM ${damage.defenderDm} + armor ${armorModifier} = lookup ${effectiveDamage.effectiveDamageLookupTotal}`;
+}
+
+function formatCombatDamageResultLine(
+  damage: CombatRoundPhaseResolutionResult["damageResult"],
+): string | undefined {
+  if (!damage) {
+    return undefined;
+  }
+
+  const effectiveDamage = getCombatRoundEffectiveDamageResult(damage);
+  const critical = effectiveDamage.effectiveCriticalGrade
+    ? ` · critical ${effectiveDamage.effectiveCriticalGrade.toUpperCase()}`
+    : "";
+  const minDamage =
+    effectiveDamage.effectiveMinDamage !== undefined
+      ? ` · min damage ${effectiveDamage.effectiveMinDamage}`
+      : "";
+  const maxDamage = effectiveDamage.effectiveMaxDamageNote
+    ? effectiveDamage.effectiveMaxDamageCap !== undefined
+      ? ` · max ${effectiveDamage.effectiveMaxDamageCap}`
+      : ` · ${effectiveDamage.effectiveMaxDamageNote}`
+    : "";
+  const tableDamage = effectiveDamage.effectiveTableDamage ?? effectiveDamage.effectiveTotalDamage;
+
+  if (damage.grazing && damage.damageRoll.required) {
+    return `grazing roll ${effectiveDamage.effectiveRawTotalDamage}${critical}${minDamage}${maxDamage}`;
+  }
+
+  return `table damage ${tableDamage}${critical}${minDamage}${maxDamage}`;
+}
+
+function formatCombatDamageResultLocationSuffix(
+  damage: CombatRoundPhaseResolutionResult["damageResult"],
+): string {
+  const location = damage
+    ? getCombatRoundEffectiveDamageResult(damage).effectiveSelectedHitLocation
+    : undefined;
+
+  return location ? ` at ${getHitLocationFullLabel(location).toLowerCase()}` : "";
+}
+
+function formatCombatHitLocationLine(
+  damage: CombatRoundPhaseResolutionResult["damageResult"],
+): string | undefined {
+  if (!damage) {
+    return undefined;
+  }
+
+  const effectiveDamage = getCombatRoundEffectiveDamageResult(damage);
+
+  if (!effectiveDamage.effectiveSelectedHitLocation) {
+    return undefined;
+  }
+
+  const selected = getHitLocationFullLabel(effectiveDamage.effectiveSelectedHitLocation);
+
+  return `Location: ${selected}`;
+}
+
+function formatCombatArmorLine(
+  damage: CombatRoundPhaseResolutionResult["damageResult"],
+): string | undefined {
+  if (!damage) {
+    return undefined;
+  }
+
+  const effectiveDamage = getCombatRoundEffectiveDamageResult(damage);
+
+  if (damage.armorModifierSource.status === "not_applied") {
+    return damage.review?.armorModifierOverride !== undefined
+      ? `Armor: ${effectiveDamage.effectiveArmorModifier}`
+      : "Armor: not applied yet";
+  }
+
+  const source = damage.armorModifierSource.label
+    ? `${damage.armorModifierSource.label} `
+    : "";
+
+  return `Armor: ${source}${effectiveDamage.effectiveArmorModifier}`;
+}
+
+function formatHitLocationTargetLabel(
+  targetLocation: CombatRoundPhaseResolutionResult["hitLocationRoll"]["targetLocation"],
+): string {
+  return targetLocation && targetLocation !== "none"
+    ? getHitLocationFullLabel(targetLocation)
+    : "None";
+}
+
+function formatCombatLocationCalculationLine(
+  resolution: CombatRoundPhaseResolutionResult,
+): string {
+  const locationRoll = resolution.hitLocationRoll;
+
+  if (locationRoll.status !== "rolled") {
+    return "Hit location roll required";
+  }
+
+  const targetLabel = formatHitLocationTargetLabel(locationRoll.targetLocation);
+  const rollsLabel = locationRoll.hitLocationRolls.join(", ");
+  const selectedLabel = locationRoll.selectedHitLocation
+    ? getHitLocationFullLabel(locationRoll.selectedHitLocation)
+    : "Unknown";
+
+  return locationRoll.selectionReason === "targeted_closest"
+    ? `Target: ${targetLabel} · Rolls: ${rollsLabel} -> ${selectedLabel} selected`
+    : `Roll: ${rollsLabel}`;
+}
+
+function formatCombatLocationResultLine(
+  resolution: CombatRoundPhaseResolutionResult,
+): string {
+  const locationRoll = resolution.hitLocationRoll;
+
+  if (locationRoll.status !== "rolled" || !locationRoll.selectedHitLocation) {
+    return "Result: Pending";
+  }
+
+  return `Result: ${getHitLocationFullLabel(locationRoll.selectedHitLocation)}`;
+}
+
+function formatCombatCriticalCalculationLine(
+  resolution: CombatRoundPhaseResolutionResult,
+): string | undefined {
+  const criticalRoll = resolution.criticalRoll;
+  const effectiveCritical = getCombatRoundEffectiveCriticalRoll({
+    criticalRoll,
+    review: resolution.damageResult?.review,
+  });
+
+  if (criticalRoll.status === "not_required") {
+    return resolution.damageResult ? "No critical roll required" : undefined;
+  }
+
+  if (criticalRoll.status !== "rolled" || !criticalRoll.criticalDice) {
+    return "Critical roll required";
+  }
+
+  return `2d8 ${criticalRoll.criticalDice.join(" + ")} + type mod ${
+    effectiveCritical.criticalTypeModifier ?? criticalRoll.criticalTypeModifier ?? 0
+  } + armor crit mod ${
+    effectiveCritical.armorCriticalModifier ?? criticalRoll.armorCriticalModifier ?? 0
+  } = ${effectiveCritical.finalCriticalRoll ?? criticalRoll.finalCriticalRoll}`;
+}
+
+function formatCombatCriticalResultLine(
+  resolution: CombatRoundPhaseResolutionResult,
+): string | undefined {
+  const criticalRoll = resolution.criticalRoll;
+  const effectiveCritical = getCombatRoundEffectiveCriticalRoll({
+    criticalRoll,
+    review: resolution.damageResult?.review,
+  });
+
+  if (criticalRoll.status === "not_required") {
+    return resolution.damageResult ? "Result: No critical" : undefined;
+  }
+
+  if (criticalRoll.status !== "rolled") {
+    return "Result: Pending";
+  }
+
+  const location = effectiveCritical.criticalLocation
+    ? getHitLocationFullLabel(effectiveCritical.criticalLocation)
+    : "unknown location";
+
+  return `Result: critical roll ${effectiveCritical.finalCriticalRoll ?? criticalRoll.finalCriticalRoll} at ${location}`;
 }
 
 function formatCombatPhaseResolutionResultLines(input: {
@@ -345,25 +752,111 @@ function formatCombatPhaseResolutionResultLines(input: {
   resolution: CombatRoundPhaseResolutionResult;
 }): {
   attackLine: string;
+  armorLine?: string;
+  locationLine?: string;
   proposalLine: string;
+  sections: readonly CombatActionResultSection[];
   statusLine: string;
 } {
   const parry = input.resolution.parryResolution;
   const damage = input.resolution.damageRoll;
+  const damageResult = input.resolution.damageResult;
   const proposal = input.resolution.damageProposal;
-  const parryLine = `Parry: ${formatResolutionStatusLabel(parry.status)}${
-    parry.resultLabel ? ` (${parry.resultLabel})` : ""
-  }`;
+  const resolvedParryLine = formatCombatParryCalculationLine(parry);
+  const resolvedDamageLine = formatCombatDamageCalculationLine(damageResult);
+  const resolvedDamageResultLine = formatCombatDamageResultLine(damageResult);
+  const resolvedHitLocationLine = formatCombatHitLocationLine(damageResult);
+  const resolvedArmorLine = formatCombatArmorLine(damageResult);
+  const locationCalculationLine = formatCombatLocationCalculationLine(input.resolution);
+  const locationResultLine = formatCombatLocationResultLine(input.resolution);
+  const criticalCalculationLine = formatCombatCriticalCalculationLine(input.resolution);
+  const criticalResultLine = formatCombatCriticalResultLine(input.resolution);
+  const additionalEffectsLine = damageResult?.review?.additionalEffects?.length
+    ? ` · Effects: ${damageResult.review.additionalEffects
+        .map((effect) => effect.label)
+        .join(", ")}`
+    : "";
+  const parryLine =
+    resolvedParryLine ??
+    `Parry: ${formatResolutionStatusLabel(parry.status)}${
+      parry.resultLabel ? ` (${parry.resultLabel})` : ""
+    }`;
+  const parryResultLine =
+    parry.status === "resolved" && parry.resultLabel
+      ? `Result: ${parry.resultLabel}`
+      : `Result: ${formatResolutionStatusLabel(parry.status)}`;
   const damageLine = `Damage roll: ${formatResolutionStatusLabel(damage.status)}`;
-  const proposalLine = `Proposal: ${formatResolutionStatusLabel(proposal.status)}`;
+  const proposalLine =
+    proposal.status === "committed"
+      ? `Phase damage committed${
+          proposal.committedCombatEffectIds.length > 0
+            ? ` · ${proposal.committedCombatEffectIds.length} active row${
+                proposal.committedCombatEffectIds.length === 1 ? "" : "s"
+              }`
+            : " · no damage row"
+        }${additionalEffectsLine}`
+      : `Proposal: ${formatResolutionStatusLabel(proposal.status)}`;
+  const statusLine = resolvedDamageLine
+    ? `${parryLine} · ${resolvedDamageLine}`
+    : parryResultLine
+      ? parryLine
+      : `${parryLine} · ${damageLine}`;
+  const damageResultLine =
+    damageResult && resolvedDamageLine
+      ? `Result: ${getCombatRoundEffectiveDamageResult(
+          damageResult,
+        ).effectiveTotalDamage} damage${formatCombatDamageResultLocationSuffix(damageResult)}`
+      : proposal.status === "committed"
+        ? `Result: ${proposalLine}`
+        : `Result: ${formatResolutionStatusLabel(proposal.status)}`;
+  const sections: CombatActionResultSection[] = [
+    {
+      calculationLines: [formatCombatToHitCalculationLine(input.attackResult)],
+      resultLine: `Result: ${formatCombatAttackTableResultLabel(input.attackResult.tableResult)}`,
+      title: "To hit",
+    },
+    {
+      calculationLines: [resolvedParryLine ?? `Parry ${formatResolutionStatusLabel(parry.status)}`],
+      resultLine: parryResultLine,
+      title: "Parry",
+    },
+    {
+      calculationLines: [locationCalculationLine],
+      resultLine: locationResultLine,
+      title: "Location",
+    },
+    {
+      calculationLines: [
+        resolvedDamageLine ?? damageLine,
+        resolvedDamageResultLine,
+        resolvedArmorLine,
+      ].filter((line): line is string => Boolean(line)),
+      resultLine: damageResultLine,
+      title: "Damage",
+    },
+  ];
+
+  if (criticalCalculationLine || criticalResultLine) {
+    sections.push({
+      calculationLines: [criticalCalculationLine].filter((line): line is string => Boolean(line)),
+      resultLine: criticalResultLine,
+      title: "Critical",
+    });
+  }
 
   return {
     attackLine: `${formatCombatAttackResultLine({
       participantId: input.participantId,
       result: input.attackResult,
     })} · Result: ${input.attackResult.tableResult}`,
-    proposalLine,
-    statusLine: `${parryLine} · ${damageLine}`,
+    proposalLine:
+      proposal.status === "committed"
+        ? proposalLine
+        : resolvedDamageResultLine ?? parryResultLine ?? proposalLine,
+    armorLine: resolvedArmorLine,
+    locationLine: resolvedHitLocationLine,
+    sections,
+    statusLine,
   };
 }
 
@@ -374,7 +867,10 @@ function formatCombatPhaseResolutionSummary(input: {
 }): string {
   const lines = formatCombatPhaseResolutionResultLines(input);
 
-  return `${lines.attackLine}\n${lines.statusLine}\n${lines.proposalLine}`;
+  return lines.sections
+    .flatMap((section) => [section.title, ...section.calculationLines, section.resultLine])
+    .filter((line): line is string => Boolean(line))
+    .join("\n");
 }
 
 function getCombatAttackPhaseForStep(step: CombatRoundStep): CombatRoundPhase | undefined {
@@ -384,6 +880,18 @@ function getCombatAttackPhaseForStep(step: CombatRoundStep): CombatRoundPhase | 
 
   if (step === "phase_2_actions") {
     return "phase2";
+  }
+
+  return undefined;
+}
+
+function getCombatResolutionStepKind(step: CombatRoundStep): "parry" | "damage" | undefined {
+  if (step === "review_phase_2_actions" || step === "review_phase_2_damage") {
+    return "parry";
+  }
+
+  if (step === "phase_1_damage" || step === "phase_2_damage") {
+    return "damage";
   }
 
   return undefined;
@@ -412,11 +920,20 @@ function formatCombatResolutionSubstepLabel(substep: string): string {
 }
 
 function getCombatResolutionButtonLabel(input: {
+  hasPhaseAttack?: boolean;
   phase?: CombatRoundPhase;
   substep?: string;
   step: CombatRoundStep;
 }): string {
-  if (input.phase && input.substep === "attack") {
+  if (input.phase && input.hasPhaseAttack === false) {
+    return `Complete ${formatCombatPhaseLabel(input.phase)} for participant`;
+  }
+
+  if (
+    input.phase &&
+    input.hasPhaseAttack !== false &&
+    (!input.substep || input.substep === "pending" || input.substep === "attack")
+  ) {
     return `Roll ${formatCombatPhaseLabel(input.phase)} attack`;
   }
 
@@ -425,7 +942,7 @@ function getCombatResolutionButtonLabel(input: {
   }
 
   if (input.phase && input.substep === "damage") {
-    return "Mark damage reviewed";
+    return "Resolve damage";
   }
 
   if (input.phase && input.substep === "effects") {
@@ -433,6 +950,34 @@ function getCombatResolutionButtonLabel(input: {
   }
 
   return getGmCombatStepActionLabel(input.step);
+}
+
+function formatCombatResolutionNextLabel(input: {
+  hasPhaseAttack?: boolean;
+  phase: CombatRoundPhase;
+  substep: string;
+}): string {
+  const phaseLabel = input.phase === "phase1" ? "Phase 1" : "Phase 2";
+
+  if (input.hasPhaseAttack === false) {
+    return `No ${formatCombatPhaseLabel(input.phase)} attack`;
+  }
+
+  switch (input.substep) {
+    case "attack":
+      return `${phaseLabel} attack roll`;
+    case "parry":
+      return `${phaseLabel} parry review`;
+    case "damage":
+      return `${phaseLabel} damage review`;
+    case "effects":
+      return `${phaseLabel} effects review`;
+    case "done":
+      return `${phaseLabel} done`;
+    case "pending":
+    default:
+      return `${phaseLabel} ${formatCombatResolutionSubstepLabel(input.substep).toLowerCase()}`;
+  }
 }
 
 function parseCombatInteger(value: string, label: string): number {
@@ -445,6 +990,501 @@ function parseCombatInteger(value: string, label: string): number {
   return Number(trimmed);
 }
 
+function parseOptionalCombatInteger(value: string | undefined): number | undefined {
+  if (!value || !/^-?\d+$/.test(value.trim())) {
+    return undefined;
+  }
+
+  return Number(value);
+}
+
+function parseOptionalCombatReviewInteger(value: string, label: string): number | undefined {
+  if (!value.trim()) {
+    return undefined;
+  }
+
+  return parseCombatInteger(value, label);
+}
+
+function parseOptionalCombatReviewPositiveInteger(
+  value: string,
+  label: string,
+): number | undefined {
+  const parsed = parseOptionalCombatReviewInteger(value, label);
+
+  if (parsed !== undefined && parsed <= 0) {
+    throw new RangeError(`${label} must be a positive whole number.`);
+  }
+
+  return parsed;
+}
+
+const COMBAT_DAMAGE_REVIEW_MODIFIER_BUCKETS = [
+  { label: "General/Fatigue", value: "general" },
+  { label: "OB/Skill", value: "obSkill" },
+  { label: "DB/Parry", value: "db" },
+] as const;
+
+const COMBAT_DAMAGE_REVIEW_EFFECT_PHASES = [
+  { label: "No phase", value: "" },
+  { label: "Phase 1", value: "phase1" },
+  { label: "Phase 2", value: "phase2" },
+  { label: "This round", value: "round" },
+  { label: "Until cleared", value: "untilCleared" },
+] as const;
+
+function createCombatDamageReviewEffectDraft(
+  kind: "modifier" | "note",
+): CombatDamageReviewAdditionalEffectDraft {
+  const id = `review-effect-${globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`}`;
+
+  if (kind === "modifier") {
+    return {
+      durationRounds: "",
+      id,
+      kind,
+      label: "Manual modifier",
+      modifierBucket: "general",
+      modifierValue: "-1",
+      notes: "",
+      phase: "",
+    };
+  }
+
+  return {
+    durationRounds: "",
+    id,
+    kind,
+    label: "Manual note",
+    modifierBucket: "general",
+    modifierValue: "",
+    notes: "",
+    phase: "",
+  };
+}
+
+function buildCombatDamageReviewDraft(
+  damageResult?: CombatRoundDamageResult,
+  criticalRoll?: CombatRoundPhaseResolutionResult["criticalRoll"],
+): CombatDamageReviewDraft {
+  const effectiveDamage = damageResult
+    ? getCombatRoundEffectiveDamageResult(damageResult)
+    : undefined;
+  const effectiveCritical = getCombatRoundEffectiveCriticalRoll({
+    criticalRoll,
+    review: damageResult?.review,
+  });
+
+  return {
+    additionalEffects: (damageResult?.review?.additionalEffects ?? []).map((effect) => ({
+      durationRounds: effect.durationRounds?.toString() ?? "",
+      id: effect.id,
+      kind: effect.kind,
+      label: effect.label,
+      modifierBucket: effect.modifierBucket ?? "general",
+      modifierValue: effect.modifierValue?.toString() ?? "",
+      notes: effect.notes ?? "",
+      phase: effect.phase ?? "",
+    })),
+    armorCriticalModifierOverride: effectiveCritical.armorCriticalModifier?.toString() ?? "",
+    armorModifierOverride: effectiveDamage?.effectiveArmorModifier.toString() ?? "",
+    criticalGradeOverride: effectiveDamage?.effectiveCriticalGrade ?? "none",
+    criticalLocationOverride: effectiveCritical.criticalLocation ?? "",
+    criticalTypeModifierOverride: effectiveCritical.criticalTypeModifier?.toString() ?? "",
+    finalCriticalRollOverride: effectiveCritical.finalCriticalRoll?.toString() ?? "",
+    notes: damageResult?.review?.notes ?? "",
+    selectedHitLocationOverride: effectiveDamage?.effectiveSelectedHitLocation ?? "",
+    totalDamageOverride: effectiveDamage?.effectiveTotalDamage.toString() ?? "",
+  };
+}
+
+function getCombatDamageReviewEffectLabel(
+  draft: CombatDamageReviewAdditionalEffectDraft,
+): string {
+  if (draft.label.trim()) {
+    return draft.label.trim();
+  }
+
+  if (draft.kind === "modifier") {
+    const bucketLabel =
+      COMBAT_DAMAGE_REVIEW_MODIFIER_BUCKETS.find(
+        (bucket) => bucket.value === draft.modifierBucket,
+      )?.label ?? "Modifier";
+
+    return bucketLabel;
+  }
+
+  if (draft.kind === "fatigue") {
+    return "Fatigue";
+  }
+
+  if (draft.kind === "special") {
+    return "Special effect";
+  }
+
+  return "Manual note";
+}
+
+function buildCombatDamageReviewFromDraft(input: {
+  criticalRoll?: CombatRoundPhaseResolutionResult["criticalRoll"];
+  damageResult: CombatRoundDamageResult;
+  draft: CombatDamageReviewDraft;
+}): Omit<CombatRoundDamageReview, "reviewedAt" | "reviewedByUserId"> {
+  const effectiveDamage = getCombatRoundEffectiveDamageResult(input.damageResult);
+  const effectiveCritical = getCombatRoundEffectiveCriticalRoll({
+    criticalRoll: input.criticalRoll,
+    review: input.damageResult.review,
+  });
+  const selectedHitLocationValue = HIT_LOCATIONS.find(
+    (location) => location === input.draft.selectedHitLocationOverride,
+  );
+  const criticalLocationValue = HIT_LOCATIONS.find(
+    (location) => location === input.draft.criticalLocationOverride,
+  );
+  const selectedHitLocationOverride =
+    selectedHitLocationValue &&
+    selectedHitLocationValue !== effectiveDamage.computedSelectedHitLocation
+      ? selectedHitLocationValue
+      : undefined;
+  const criticalLocationOverride =
+    criticalLocationValue && criticalLocationValue !== effectiveCritical.criticalLocation
+      ? criticalLocationValue
+      : undefined;
+  const selectedCriticalGrade =
+    input.draft.criticalGradeOverride === "none"
+      ? undefined
+      : input.draft.criticalGradeOverride.trim() || undefined;
+  const criticalGradeOverride =
+    selectedCriticalGrade === effectiveDamage.computedCriticalGrade
+      ? undefined
+      : selectedCriticalGrade ?? (effectiveDamage.computedCriticalGrade ? null : undefined);
+  const armorModifier = parseOptionalCombatReviewInteger(
+    input.draft.armorModifierOverride,
+    "Armor modifier override",
+  );
+  const armorModifierOverride =
+    armorModifier !== undefined && armorModifier !== effectiveDamage.computedArmorModifier
+      ? armorModifier
+      : undefined;
+  const armorCriticalModifier = parseOptionalCombatReviewInteger(
+    input.draft.armorCriticalModifierOverride,
+    "Armor critical modifier override",
+  );
+  const armorCriticalModifierOverride =
+    armorCriticalModifier !== undefined &&
+    armorCriticalModifier !== effectiveCritical.armorCriticalModifier
+      ? armorCriticalModifier
+      : undefined;
+  const criticalTypeModifier = parseOptionalCombatReviewInteger(
+    input.draft.criticalTypeModifierOverride,
+    "Critical type modifier override",
+  );
+  const criticalTypeModifierOverride =
+    criticalTypeModifier !== undefined &&
+    criticalTypeModifier !== effectiveCritical.criticalTypeModifier
+      ? criticalTypeModifier
+      : undefined;
+  const finalCriticalRoll = parseOptionalCombatReviewInteger(
+    input.draft.finalCriticalRollOverride,
+    "Final critical roll override",
+  );
+  const finalCriticalRollOverride =
+    finalCriticalRoll !== undefined && finalCriticalRoll !== effectiveCritical.finalCriticalRoll
+      ? finalCriticalRoll
+      : undefined;
+  const notes = input.draft.notes.trim();
+  const additionalEffects = input.draft.additionalEffects.map((effect) => {
+    const kind = effect.kind;
+    const phase = COMBAT_DAMAGE_REVIEW_EFFECT_PHASES.find(
+      (candidate) => candidate.value === effect.phase,
+    )?.value;
+    const durationRounds = parseOptionalCombatReviewPositiveInteger(
+      effect.durationRounds,
+      "Effect duration",
+    );
+    const modifierValue =
+      kind === "modifier" || kind === "fatigue"
+        ? parseCombatInteger(effect.modifierValue, "Effect modifier")
+        : undefined;
+    const modifierBucket =
+      kind === "modifier"
+        ? COMBAT_DAMAGE_REVIEW_MODIFIER_BUCKETS.find(
+            (bucket) => bucket.value === effect.modifierBucket,
+          )?.value ?? "general"
+        : undefined;
+
+    return {
+      durationRounds,
+      id: effect.id,
+      kind,
+      label: getCombatDamageReviewEffectLabel(effect),
+      modifierBucket,
+      modifierValue,
+      notes: effect.notes.trim() || undefined,
+      phase: phase || undefined,
+    };
+  });
+  const reviewWithoutTotalDamageOverride: Omit<
+    CombatRoundDamageReview,
+    "reviewedAt" | "reviewedByUserId"
+  > = {
+    additionalEffects,
+  };
+
+  if (armorModifierOverride !== undefined) {
+    reviewWithoutTotalDamageOverride.armorModifierOverride = armorModifierOverride;
+  }
+
+  if (armorCriticalModifierOverride !== undefined) {
+    reviewWithoutTotalDamageOverride.armorCriticalModifierOverride = armorCriticalModifierOverride;
+  }
+
+  if (criticalGradeOverride !== undefined) {
+    reviewWithoutTotalDamageOverride.criticalGradeOverride = criticalGradeOverride;
+  }
+
+  if (criticalLocationOverride !== undefined) {
+    reviewWithoutTotalDamageOverride.criticalLocationOverride = criticalLocationOverride;
+  }
+
+  if (criticalTypeModifierOverride !== undefined) {
+    reviewWithoutTotalDamageOverride.criticalTypeModifierOverride = criticalTypeModifierOverride;
+  }
+
+  if (finalCriticalRollOverride !== undefined) {
+    reviewWithoutTotalDamageOverride.finalCriticalRollOverride = finalCriticalRollOverride;
+  }
+
+  if (selectedHitLocationOverride !== undefined) {
+    reviewWithoutTotalDamageOverride.selectedHitLocationOverride = selectedHitLocationOverride;
+  }
+
+  const draftEffectiveDamage = getCombatRoundEffectiveDamageResult({
+    ...input.damageResult,
+    review: reviewWithoutTotalDamageOverride,
+  });
+  const totalDamage = parseOptionalCombatReviewInteger(
+    input.draft.totalDamageOverride,
+    "Total damage override",
+  );
+  const totalDamageOverride =
+    totalDamage !== undefined && totalDamage !== draftEffectiveDamage.effectiveTotalDamage
+      ? totalDamage
+      : undefined;
+  const review: Omit<CombatRoundDamageReview, "reviewedAt" | "reviewedByUserId"> = {
+    additionalEffects,
+  };
+
+  if (armorModifierOverride !== undefined) {
+    review.armorModifierOverride = armorModifierOverride;
+  }
+
+  if (armorCriticalModifierOverride !== undefined) {
+    review.armorCriticalModifierOverride = armorCriticalModifierOverride;
+  }
+
+  if (criticalGradeOverride !== undefined) {
+    review.criticalGradeOverride = criticalGradeOverride;
+  }
+
+  if (criticalLocationOverride !== undefined) {
+    review.criticalLocationOverride = criticalLocationOverride;
+  }
+
+  if (criticalTypeModifierOverride !== undefined) {
+    review.criticalTypeModifierOverride = criticalTypeModifierOverride;
+  }
+
+  if (finalCriticalRollOverride !== undefined) {
+    review.finalCriticalRollOverride = finalCriticalRollOverride;
+  }
+
+  if (notes) {
+    review.notes = notes;
+  }
+
+  if (selectedHitLocationOverride !== undefined) {
+    review.selectedHitLocationOverride = selectedHitLocationOverride;
+  }
+
+  if (totalDamageOverride !== undefined) {
+    review.totalDamageOverride = totalDamageOverride;
+  }
+
+  return review;
+}
+
+function getCombatTableCell(input: {
+  columns: string[];
+  label: string;
+  row: Array<string | number>;
+}): string {
+  const index = input.columns.indexOf(input.label);
+
+  if (index < 0) {
+    return "—";
+  }
+
+  const value = input.row[index];
+  return value == null ? "—" : String(value);
+}
+
+function findParryScoreForWeaponLabel(input: {
+  model: ReturnType<typeof buildEquipmentLoadoutModuleModel> | null;
+  weaponLabel: string;
+}): number | undefined {
+  if (input.weaponLabel === "Unarmed") {
+    return undefined;
+  }
+
+  const table = input.model?.combatStatePanelModel?.weaponModeTable;
+  if (!table) {
+    return undefined;
+  }
+
+  const row = table?.rows.find(
+    (candidate) =>
+      getCombatTableCell({
+        columns: table.columns,
+        label: "Weapon",
+        row: candidate,
+      }) === input.weaponLabel,
+  );
+
+  return row
+    ? parseOptionalCombatInteger(
+        getCombatTableCell({ columns: table.columns, label: "Parry", row }),
+      )
+    : undefined;
+}
+
+function getCombinedParrySource(
+  model: ReturnType<typeof buildEquipmentLoadoutModuleModel> | null,
+): CombatParrySourceOption | undefined {
+  const table = model?.combatStatePanelModel?.weaponModeTable;
+  if (!table) {
+    return undefined;
+  }
+
+  const row = table?.rows.find(
+    (candidate) =>
+      getCombatTableCell({
+        columns: table.columns,
+        label: "Mode",
+        row: candidate,
+      }) === "Combined",
+  );
+
+  if (!row) {
+    return undefined;
+  }
+
+  const score = parseOptionalCombatInteger(
+    getCombatTableCell({ columns: table.columns, label: "Parry", row }),
+  );
+
+  return score === undefined
+    ? undefined
+    : {
+        label: getCombatTableCell({ columns: table.columns, label: "Weapon", row }),
+        score,
+      };
+}
+
+function buildCombatParrySourceOptions(input: {
+  loadoutModel: ReturnType<typeof buildEquipmentLoadoutModuleModel> | null;
+  mainHandLabel: string;
+  offHandLabel: string;
+}): CombatParrySourceOptions {
+  const mainHandScore = findParryScoreForWeaponLabel({
+    model: input.loadoutModel,
+    weaponLabel: input.mainHandLabel,
+  });
+  const offHandScore = findParryScoreForWeaponLabel({
+    model: input.loadoutModel,
+    weaponLabel: input.offHandLabel,
+  });
+  const combinedSource = getCombinedParrySource(input.loadoutModel);
+
+  return {
+    combinedLabel: combinedSource?.label,
+    combinedScore: combinedSource?.score,
+    mainHand:
+      mainHandScore !== undefined
+        ? {
+            label: input.mainHandLabel,
+            score: mainHandScore,
+          }
+        : undefined,
+    offHand:
+      offHandScore !== undefined
+        ? {
+            label: input.offHandLabel,
+            score: offHandScore,
+          }
+        : undefined,
+  };
+}
+
+function getCombatParrySourceSelection(input: {
+  selection?: CombatParrySourceSelection;
+  sources?: CombatParrySourceOptions;
+}): CombatParrySourceSelection {
+  return {
+    usedMainHand: input.selection?.usedMainHand ?? Boolean(input.sources?.mainHand),
+    usedOffHand: input.selection?.usedOffHand ?? Boolean(input.sources?.offHand),
+  };
+}
+
+function getSelectedCombatParryBase(input: {
+  selection: CombatParrySourceSelection;
+  sources?: CombatParrySourceOptions;
+}): number | undefined {
+  const mainScore = input.selection.usedMainHand ? input.sources?.mainHand?.score : undefined;
+  const offScore = input.selection.usedOffHand ? input.sources?.offHand?.score : undefined;
+
+  if (mainScore !== undefined && offScore !== undefined) {
+    return input.sources?.combinedScore ?? mainScore + offScore;
+  }
+
+  return mainScore ?? offScore;
+}
+
+function formatSelectedCombatParrySourceName(input: {
+  selection: CombatParrySourceSelection;
+  sources?: CombatParrySourceOptions;
+}): string {
+  if (
+    input.selection.usedMainHand &&
+    input.selection.usedOffHand &&
+    input.sources?.combinedScore !== undefined &&
+    input.sources.combinedLabel
+  ) {
+    return input.sources.combinedLabel;
+  }
+
+  const labels = [
+    input.selection.usedMainHand ? input.sources?.mainHand?.label : undefined,
+    input.selection.usedOffHand ? input.sources?.offHand?.label : undefined,
+  ].filter((label): label is string => Boolean(label));
+
+  return labels.length > 0 ? labels.join(" + ") : "No parry source selected";
+}
+
+function getCombatParrySelectionKey(input: {
+  result?: CombatRoundAttackRollResult;
+  roundNumber: number;
+}): string | undefined {
+  return input.result
+    ? [
+        input.roundNumber,
+        input.result.phase,
+        input.result.attackerParticipantId,
+        input.result.defenderParticipantId,
+      ].join(":")
+    : undefined;
+}
+
 function findScenarioParticipantForEncounterParticipant(input: {
   encounterParticipant: EncounterSession["participants"][number];
   scenarioParticipants: ScenarioParticipant[];
@@ -453,7 +1493,8 @@ function findScenarioParticipantForEncounterParticipant(input: {
     (participant) =>
       participant.id === input.encounterParticipant.scenarioParticipantId ||
       participant.id === input.encounterParticipant.id ||
-      (participant.characterId && participant.characterId === input.encounterParticipant.characterId),
+      (participant.characterId &&
+        participant.characterId === input.encounterParticipant.characterId),
   );
 }
 
@@ -519,6 +1560,527 @@ function getStatusMarker(input: { current: boolean; status: string | undefined }
   }
 }
 
+function buildCombatAttackResultParryModifiers(
+  attackResult?: CombatRoundAttackRollResult,
+): WorkbookRawModifier[] {
+  const attackResultModifier = attackResult?.defenderParryModifier ?? 0;
+
+  return attackResultModifier === 0
+    ? []
+    : [
+        {
+          label: "attack result",
+          value: attackResultModifier,
+        },
+      ];
+}
+
+function buildCombatParryRawModifiers(input: {
+  attackResult?: CombatRoundAttackRollResult;
+  liveModifiers?: EncounterLiveCombatModifierSummary;
+}): WorkbookRawModifier[] {
+  return [
+    {
+      label: "General/Fatigue",
+      value: input.liveModifiers?.generalFatigueRaw ?? 0,
+    },
+    {
+      label: "DB/Parry",
+      value: input.liveModifiers?.dbRaw ?? 0,
+    },
+    ...buildCombatAttackResultParryModifiers(input.attackResult),
+  ];
+}
+
+function CombatParryResolutionPanel(input: {
+  attackResult: CombatRoundAttackRollResult;
+  controlsDisabled?: boolean;
+  modifierAdjustment: number;
+  modifierBreakdown?: readonly CombatRoundParryModifierBreakdownEntry[];
+  onSelectionChange: (selection: CombatParrySourceSelection) => void;
+  parryBase?: number;
+  resolution?: CombatRoundParryResolution;
+  selection: CombatParrySourceSelection;
+  sources?: CombatParrySourceOptions;
+}) {
+  const canUseMainHand = Boolean(input.sources?.mainHand);
+  const canUseOffHand = Boolean(input.sources?.offHand);
+  const selectedSourceLabel = formatSelectedCombatParrySourceName({
+    selection: input.selection,
+    sources: input.sources,
+  });
+  const modifiedParryBeforeRoll =
+    input.parryBase === undefined ? undefined : input.parryBase + input.modifierAdjustment;
+  const sourceSummary =
+    input.parryBase !== undefined
+      ? `${selectedSourceLabel} P ${input.parryBase} + ${formatCombatParryModifierBreakdown({
+          fallbackAdjustment: input.modifierAdjustment,
+          modifiers: input.modifierBreakdown,
+        })}${
+          modifiedParryBeforeRoll !== undefined && modifiedParryBeforeRoll !== input.parryBase
+            ? ` -> P ${modifiedParryBeforeRoll}`
+            : ""
+        }`
+      : "No available parry score.";
+
+  return (
+    <section style={playerCombatPanelCardStyle}>
+      <strong>Parry resolution</strong>
+      <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
+        {input.attackResult.weaponName} attack result: {input.attackResult.tableResult}
+      </div>
+      {input.resolution?.status === "resolved" ? (
+        <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>{input.resolution.resultLabel}</div>
+      ) : null}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
+        <label style={{ alignItems: "center", display: "flex", gap: "0.35rem" }}>
+          <input
+            checked={input.selection.usedMainHand}
+            disabled={input.controlsDisabled || !canUseMainHand}
+            onChange={(event) =>
+              input.onSelectionChange({
+                ...input.selection,
+                usedMainHand: event.target.checked,
+              })
+            }
+            type="checkbox"
+          />
+          Main hand
+        </label>
+        <label style={{ alignItems: "center", display: "flex", gap: "0.35rem" }}>
+          <input
+            checked={input.selection.usedOffHand}
+            disabled={input.controlsDisabled || !canUseOffHand}
+            onChange={(event) =>
+              input.onSelectionChange({
+                ...input.selection,
+                usedOffHand: event.target.checked,
+              })
+            }
+            type="checkbox"
+          />
+          Off hand
+        </label>
+      </div>
+      <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>{sourceSummary}</div>
+    </section>
+  );
+}
+
+function CombatDamageReviewPanel(input: {
+  controlsDisabled?: boolean;
+  damageResult: CombatRoundDamageResult;
+  draft: CombatDamageReviewDraft;
+  onDraftChange: (draft: CombatDamageReviewDraft) => void;
+  onSaveReview: () => void;
+  saving?: boolean;
+}) {
+  const disabled = input.controlsDisabled || input.saving;
+  const updateAdditionalEffect = (
+    effectId: string,
+    patch: Partial<CombatDamageReviewAdditionalEffectDraft>,
+  ) => {
+    input.onDraftChange({
+      ...input.draft,
+      additionalEffects: input.draft.additionalEffects.map((effect) =>
+        effect.id === effectId ? { ...effect, ...patch } : effect,
+      ),
+    });
+  };
+  const removeAdditionalEffect = (effectId: string) => {
+    input.onDraftChange({
+      ...input.draft,
+      additionalEffects: input.draft.additionalEffects.filter((effect) => effect.id !== effectId),
+    });
+  };
+
+  return (
+    <section style={playerCombatPanelCardStyle}>
+      <strong>Damage review</strong>
+      <div
+        style={{
+          display: "grid",
+          gap: "0.5rem",
+          gridTemplateColumns: "repeat(auto-fit, minmax(8rem, 1fr))",
+        }}
+      >
+        <label style={{ display: "grid", gap: "0.2rem" }}>
+          <span style={{ color: "#5e5a50", fontSize: "0.8rem", fontWeight: 700 }}>Location</span>
+          <select
+            disabled={disabled}
+            onChange={(event) =>
+              input.onDraftChange({
+                ...input.draft,
+                selectedHitLocationOverride: event.target.value,
+              })
+            }
+            value={input.draft.selectedHitLocationOverride}
+          >
+            {input.draft.selectedHitLocationOverride ? null : (
+              <option value="">Not recorded</option>
+            )}
+            {HIT_LOCATIONS.map((location) => (
+              <option key={location} value={location}>
+                {getHitLocationFullLabel(location)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label style={{ display: "grid", gap: "0.2rem" }}>
+          <span style={{ color: "#5e5a50", fontSize: "0.8rem", fontWeight: 700 }}>Armor</span>
+          <input
+            disabled={disabled}
+            inputMode="numeric"
+            onChange={(event) =>
+              input.onDraftChange({
+                ...input.draft,
+                armorModifierOverride: event.target.value,
+              })
+            }
+            type="text"
+            value={input.draft.armorModifierOverride}
+          />
+        </label>
+        <label style={{ display: "grid", gap: "0.2rem" }}>
+          <span style={{ color: "#5e5a50", fontSize: "0.8rem", fontWeight: 700 }}>Damage</span>
+          <input
+            disabled={disabled}
+            inputMode="numeric"
+            onChange={(event) =>
+              input.onDraftChange({
+                ...input.draft,
+                totalDamageOverride: event.target.value,
+              })
+            }
+            type="text"
+            value={input.draft.totalDamageOverride}
+          />
+        </label>
+        <label style={{ display: "grid", gap: "0.2rem" }}>
+          <span style={{ color: "#5e5a50", fontSize: "0.8rem", fontWeight: 700 }}>Critical</span>
+          <select
+            disabled={disabled}
+            onChange={(event) =>
+              input.onDraftChange({
+                ...input.draft,
+                criticalGradeOverride: event.target.value,
+              })
+            }
+            value={input.draft.criticalGradeOverride}
+          >
+            <option value="none">None</option>
+            {["a", "b", "c", "d", "e", "f"].map((grade) => (
+              <option key={grade} value={grade}>
+                {grade.toUpperCase()}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label style={{ display: "grid", gap: "0.2rem" }}>
+          <span style={{ color: "#5e5a50", fontSize: "0.8rem", fontWeight: 700 }}>
+            Critical location
+          </span>
+          <select
+            disabled={disabled}
+            onChange={(event) =>
+              input.onDraftChange({
+                ...input.draft,
+                criticalLocationOverride: event.target.value,
+              })
+            }
+            value={input.draft.criticalLocationOverride}
+          >
+            {input.draft.criticalLocationOverride ? null : (
+              <option value="">Not recorded</option>
+            )}
+            {HIT_LOCATIONS.map((location) => (
+              <option key={location} value={location}>
+                {getHitLocationFullLabel(location)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label style={{ display: "grid", gap: "0.2rem" }}>
+          <span style={{ color: "#5e5a50", fontSize: "0.8rem", fontWeight: 700 }}>
+            Critical type mod
+          </span>
+          <input
+            disabled={disabled}
+            inputMode="numeric"
+            onChange={(event) =>
+              input.onDraftChange({
+                ...input.draft,
+                criticalTypeModifierOverride: event.target.value,
+              })
+            }
+            type="text"
+            value={input.draft.criticalTypeModifierOverride}
+          />
+        </label>
+        <label style={{ display: "grid", gap: "0.2rem" }}>
+          <span style={{ color: "#5e5a50", fontSize: "0.8rem", fontWeight: 700 }}>
+            Armor critical
+          </span>
+          <input
+            disabled={disabled}
+            inputMode="numeric"
+            onChange={(event) =>
+              input.onDraftChange({
+                ...input.draft,
+                armorCriticalModifierOverride: event.target.value,
+              })
+            }
+            type="text"
+            value={input.draft.armorCriticalModifierOverride}
+          />
+        </label>
+        <label style={{ display: "grid", gap: "0.2rem" }}>
+          <span style={{ color: "#5e5a50", fontSize: "0.8rem", fontWeight: 700 }}>
+            Critical roll
+          </span>
+          <input
+            disabled={disabled}
+            inputMode="numeric"
+            onChange={(event) =>
+              input.onDraftChange({
+                ...input.draft,
+                finalCriticalRollOverride: event.target.value,
+              })
+            }
+            type="text"
+            value={input.draft.finalCriticalRollOverride}
+          />
+        </label>
+      </div>
+      <label style={{ display: "grid", gap: "0.2rem" }}>
+        <span style={{ color: "#5e5a50", fontSize: "0.8rem", fontWeight: 700 }}>Notes</span>
+        <input
+          disabled={disabled}
+          onChange={(event) =>
+            input.onDraftChange({
+              ...input.draft,
+              notes: event.target.value,
+            })
+          }
+          type="text"
+          value={input.draft.notes}
+        />
+      </label>
+      <section style={{ display: "grid", gap: "0.5rem" }}>
+        <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+          <strong style={{ fontSize: "0.9rem" }}>Additional immediate effects</strong>
+          <button
+            disabled={disabled}
+            onClick={() =>
+              input.onDraftChange({
+                ...input.draft,
+                additionalEffects: [
+                  ...input.draft.additionalEffects,
+                  createCombatDamageReviewEffectDraft("modifier"),
+                ],
+              })
+            }
+            type="button"
+          >
+            Add modifier effect
+          </button>
+          <button
+            disabled={disabled}
+            onClick={() =>
+              input.onDraftChange({
+                ...input.draft,
+                additionalEffects: [
+                  ...input.draft.additionalEffects,
+                  createCombatDamageReviewEffectDraft("note"),
+                ],
+              })
+            }
+            type="button"
+          >
+            Add note effect
+          </button>
+        </div>
+        {input.draft.additionalEffects.length === 0 ? (
+          <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
+            No additional immediate effects.
+          </div>
+        ) : null}
+        {input.draft.additionalEffects.map((effect) => {
+          const isMechanical = effect.kind === "modifier" || effect.kind === "fatigue";
+
+          return (
+            <div
+              key={effect.id}
+              style={{
+                borderTop: "1px solid #ddd3bf",
+                display: "grid",
+                gap: "0.45rem",
+                paddingTop: "0.5rem",
+              }}
+            >
+              <div
+                style={{
+                  display: "grid",
+                  gap: "0.45rem",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(7rem, 1fr))",
+                }}
+              >
+                <label style={{ display: "grid", gap: "0.2rem" }}>
+                  <span style={{ color: "#5e5a50", fontSize: "0.8rem", fontWeight: 700 }}>
+                    Kind
+                  </span>
+                  <select
+                    disabled={disabled}
+                    onChange={(event) => {
+                      const nextKind = event.target
+                        .value as CombatDamageReviewAdditionalEffectDraft["kind"];
+
+                      updateAdditionalEffect(effect.id, {
+                        kind: nextKind,
+                        modifierBucket: nextKind === "modifier" ? effect.modifierBucket : "general",
+                        modifierValue:
+                          nextKind === "modifier" || nextKind === "fatigue"
+                            ? effect.modifierValue || "-1"
+                            : "",
+                      });
+                    }}
+                    value={effect.kind}
+                  >
+                    <option value="modifier">Modifier</option>
+                    <option value="fatigue">Fatigue</option>
+                    <option value="special">Special</option>
+                    <option value="note">Note</option>
+                  </select>
+                </label>
+                <label style={{ display: "grid", gap: "0.2rem" }}>
+                  <span style={{ color: "#5e5a50", fontSize: "0.8rem", fontWeight: 700 }}>
+                    Label
+                  </span>
+                  <input
+                    disabled={disabled}
+                    onChange={(event) =>
+                      updateAdditionalEffect(effect.id, { label: event.target.value })
+                    }
+                    type="text"
+                    value={effect.label}
+                  />
+                </label>
+                {effect.kind === "modifier" ? (
+                  <label style={{ display: "grid", gap: "0.2rem" }}>
+                    <span style={{ color: "#5e5a50", fontSize: "0.8rem", fontWeight: 700 }}>
+                      Bucket
+                    </span>
+                    <select
+                      disabled={disabled}
+                      onChange={(event) =>
+                        updateAdditionalEffect(effect.id, {
+                          modifierBucket: event.target.value,
+                        })
+                      }
+                      value={effect.modifierBucket}
+                    >
+                      {COMBAT_DAMAGE_REVIEW_MODIFIER_BUCKETS.map((bucket) => (
+                        <option key={bucket.value} value={bucket.value}>
+                          {bucket.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
+                {isMechanical ? (
+                  <label style={{ display: "grid", gap: "0.2rem" }}>
+                    <span style={{ color: "#5e5a50", fontSize: "0.8rem", fontWeight: 700 }}>
+                      Value
+                    </span>
+                    <input
+                      disabled={disabled}
+                      inputMode="numeric"
+                      onChange={(event) =>
+                        updateAdditionalEffect(effect.id, {
+                          modifierValue: event.target.value,
+                        })
+                      }
+                      type="text"
+                      value={effect.modifierValue}
+                    />
+                  </label>
+                ) : null}
+                <label style={{ display: "grid", gap: "0.2rem" }}>
+                  <span style={{ color: "#5e5a50", fontSize: "0.8rem", fontWeight: 700 }}>
+                    Duration
+                  </span>
+                  <input
+                    disabled={disabled}
+                    inputMode="numeric"
+                    onChange={(event) =>
+                      updateAdditionalEffect(effect.id, {
+                        durationRounds: event.target.value,
+                      })
+                    }
+                    placeholder="rounds"
+                    type="text"
+                    value={effect.durationRounds}
+                  />
+                </label>
+                <label style={{ display: "grid", gap: "0.2rem" }}>
+                  <span style={{ color: "#5e5a50", fontSize: "0.8rem", fontWeight: 700 }}>
+                    Phase
+                  </span>
+                  <select
+                    disabled={disabled}
+                    onChange={(event) =>
+                      updateAdditionalEffect(effect.id, { phase: event.target.value })
+                    }
+                    value={effect.phase}
+                  >
+                    {COMBAT_DAMAGE_REVIEW_EFFECT_PHASES.map((phase) => (
+                      <option key={phase.value || "none"} value={phase.value}>
+                        {phase.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <div
+                style={{
+                  alignItems: "end",
+                  display: "grid",
+                  gap: "0.45rem",
+                  gridTemplateColumns: "minmax(10rem, 1fr) auto",
+                }}
+              >
+                <label style={{ display: "grid", gap: "0.2rem" }}>
+                  <span style={{ color: "#5e5a50", fontSize: "0.8rem", fontWeight: 700 }}>
+                    Effect notes
+                  </span>
+                  <input
+                    disabled={disabled}
+                    onChange={(event) =>
+                      updateAdditionalEffect(effect.id, { notes: event.target.value })
+                    }
+                    type="text"
+                    value={effect.notes}
+                  />
+                </label>
+                <button
+                  disabled={disabled}
+                  onClick={() => removeAdditionalEffect(effect.id)}
+                  type="button"
+                >
+                  Remove
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </section>
+      <button disabled={disabled} onClick={input.onSaveReview} type="button">
+        {input.saving ? "Saving..." : "Save review"}
+      </button>
+    </section>
+  );
+}
+
 function shouldSortByInitiative(step: CombatRoundStep): "phase1" | "phase2" | undefined {
   if (step === "phase_1_actions" || step === "review_phase_2_actions") {
     return "phase1";
@@ -547,6 +2109,12 @@ export default function CombatRoundManagerPanel({
   const [inspectorDrafts, setInspectorDrafts] = useState<
     Record<string, CombatInspectorDeclarationDraft>
   >({});
+  const [parrySourceSelections, setParrySourceSelections] = useState<
+    Record<string, CombatParrySourceSelection>
+  >({});
+  const [damageReviewDrafts, setDamageReviewDrafts] = useState<
+    Record<string, CombatDamageReviewDraft>
+  >({});
   const [content, setContent] = useState<Awaited<ReturnType<typeof loadCanonicalContent>>>();
   const [resolvedCharacterStateByParticipantId, setResolvedCharacterStateByParticipantId] =
     useState<
@@ -559,6 +2127,8 @@ export default function CombatRoundManagerPanel({
       >
     >({});
   const tableContainerRef = useRef<HTMLDivElement>(null);
+  const manualSelectionRef = useRef<CombatRoundSelectionTarget | undefined>(undefined);
+  const pendingSelectionRef = useRef<CombatRoundSelectionTarget | undefined>(undefined);
   const selectedRoundNumber = roundState.roundNumber;
   const effectiveScenarioParticipants = useMemo(
     () =>
@@ -596,6 +2166,7 @@ export default function CombatRoundManagerPanel({
     { length: timelineRounds },
     (_, index) => roundState.roundNumber + index,
   );
+  const currentTaskSelection = getCurrentCombatRoundTaskSelection(roundState);
   const inspector = buildCombatRoundInspector({
     participantId: roundState.selectedParticipantId,
     state: roundState,
@@ -622,7 +2193,10 @@ export default function CombatRoundManagerPanel({
   const inspectorDraft =
     inspectorDraftKey && inspectorDrafts[inspectorDraftKey]
       ? inspectorDrafts[inspectorDraftKey]
-      : buildDeclarationDraft(selectedScenarioParticipant, selectedRoundDeclaration);
+      : buildDeclarationDraft(selectedScenarioParticipant, selectedRoundDeclaration, {
+          encounterId: encounter.id,
+          roundNumber: roundState.roundNumber,
+        });
   const inspectorSnapshot = getCombatRoundStepSnapshot({
     participantId: inspector.participant?.participantId,
     roundNumber: selectedRoundNumber,
@@ -639,8 +2213,9 @@ export default function CombatRoundManagerPanel({
           inspectorSnapshot.declarationSummary?.additionalActionNotes ??
           inspectorDraft.additionalActionNotes,
         movementId:
-          (inspectorSnapshot.declarationSummary?.movementId as PlayerEncounterMovementId | undefined) ??
-          inspectorDraft.movementId,
+          (inspectorSnapshot.declarationSummary?.movementId as
+            | PlayerEncounterMovementId
+            | undefined) ?? inspectorDraft.movementId,
         phaseContexts:
           inspectorSnapshot.phase && inspectorSnapshot.phaseContext
             ? {
@@ -649,9 +2224,9 @@ export default function CombatRoundManagerPanel({
               }
             : inspectorDraft.phaseContexts,
         secondaryActionId:
-          (inspectorSnapshot.declarationSummary
-            ?.secondaryActionId as PlayerEncounterActionId | undefined) ??
-          inspectorDraft.secondaryActionId,
+          (inspectorSnapshot.declarationSummary?.secondaryActionId as
+            | PlayerEncounterActionId
+            | undefined) ?? inspectorDraft.secondaryActionId,
       }
     : inspectorDraft;
   const inspectorModifierPhase = getCombatRoundModifierPhaseForStep(inspector.step);
@@ -684,13 +2259,16 @@ export default function CombatRoundManagerPanel({
       }),
     [inspectorDraft.actionId, inspectorDraft.phaseContexts, inspectorDraft.secondaryActionId],
   );
+  const inspectorAttackPhase = getCombatAttackPhaseForStep(inspector.step);
+  const inspectorResolutionPhase = getCombatRoundResolutionPhaseForStep(inspector.step);
+  const inspectorResolutionStepKind = getCombatResolutionStepKind(inspector.step);
+  const inspectorSelectedStepIsSequential = isSequentialResolutionStep(inspector.step);
   const inspectorCurrentStepIsInitiative =
-    roundState.currentStep === "initiative_phase_1" ||
-    roundState.currentStep === "initiative_phase_2";
-  const inspectorCurrentAttackPhase = getCombatAttackPhaseForStep(roundState.currentStep);
-  const inspectorCurrentResolutionPhase =
-    inspectorCurrentAttackPhase ?? getCombatRoundResolutionPhaseForStep(roundState.currentStep);
+    inspector.step === "initiative_phase_1" || inspector.step === "initiative_phase_2";
+  const inspectorCurrentAttackPhase = inspectorAttackPhase;
+  const inspectorCurrentResolutionPhase = inspectorAttackPhase ?? inspectorResolutionPhase;
   const inspectorPhaseResolutionCursor =
+    inspectorSelectedStepIsSequential &&
     roundState.phaseResolutionCursor?.phase === inspectorCurrentResolutionPhase
       ? roundState.phaseResolutionCursor
       : undefined;
@@ -702,9 +2280,21 @@ export default function CombatRoundManagerPanel({
           state: roundState,
         })
       : undefined;
+  const inspectorCurrentPhaseHasAttack =
+    inspector.participant && inspectorCurrentResolutionPhase
+      ? combatRoundParticipantHasPhaseAttack({
+          participantId: inspector.participant.participantId,
+          phase: inspectorCurrentResolutionPhase,
+          state: roundState,
+        })
+      : undefined;
   const inspectorTargetValidationMessage =
     !inspectorCurrentStepIsInitiative &&
-    (!inspectorCurrentResolutionPhase || inspectorPhaseResolutionStatus?.substep === "attack") &&
+    (!inspectorCurrentResolutionPhase ||
+      (inspectorCurrentPhaseHasAttack !== false &&
+        (!inspectorPhaseResolutionStatus ||
+          inspectorPhaseResolutionStatus.substep === "pending" ||
+          inspectorPhaseResolutionStatus.substep === "attack"))) &&
     !inspectorTargetValidation.valid
       ? inspectorTargetValidation.message
       : undefined;
@@ -818,9 +2408,9 @@ export default function CombatRoundManagerPanel({
     selectedScenarioParticipant?.state.combatEffects,
   ]);
   const inspectorCurrentInitiativePhase =
-    roundState.currentStep === "initiative_phase_1"
+    inspector.step === "initiative_phase_1"
       ? "phase1"
-      : roundState.currentStep === "initiative_phase_2"
+      : inspector.step === "initiative_phase_2"
         ? "phase2"
         : undefined;
   const inspectorCurrentInitiative = inspectorCurrentInitiativePhase
@@ -828,21 +2418,19 @@ export default function CombatRoundManagerPanel({
     : undefined;
   const inspectorDisplayInitiative =
     inspectorSnapshot?.initiativeResult ?? inspectorCurrentInitiative;
-  const inspectorAttackPhase = getCombatAttackPhaseForStep(inspector.step);
   const inspectorDisplayAttackResult =
     inspectorSnapshot?.attackResult ??
     (inspector.participant && inspectorAttackPhase
-      ? getCombatRoundDisplayAttackResultForParticipantPhase({
+      ? getCombatRoundOutgoingAttackResultForParticipantPhase({
           participantId: inspector.participant.participantId,
           phase: inspectorAttackPhase,
           state: roundState,
         })
       : undefined);
-  const inspectorResolutionPhase = getCombatRoundResolutionPhaseForStep(inspector.step);
   const inspectorResolutionAttackResult =
     inspectorSnapshot?.attackResult ??
     (inspector.participant && inspectorResolutionPhase
-      ? getCombatRoundDisplayAttackResultForParticipantPhase({
+      ? getCombatRoundDisplayIncomingAttackResultForParticipantPhase({
           participantId: inspector.participant.participantId,
           phase: inspectorResolutionPhase,
           state: roundState,
@@ -850,33 +2438,139 @@ export default function CombatRoundManagerPanel({
       : undefined);
   const inspectorDisplayPhaseResolutionResult =
     inspectorSnapshot?.phaseResolutionResult ??
-    (inspector.participant && inspectorResolutionPhase
-      ? getCombatRoundDisplayPhaseResolutionResultForParticipantPhase({
-          participantId: inspector.participant.participantId,
-          phase: inspectorResolutionPhase,
+    (inspectorResolutionAttackResult
+      ? (getCombatRoundPhaseResolutionResultForAttack({
+          attackResult: inspectorResolutionAttackResult,
+          state: roundState,
+        }) ??
+        buildCombatRoundPhaseResolutionResult({
+          attackResult: inspectorResolutionAttackResult,
+          roundNumber: roundState.roundNumber,
+          updatedAt: inspectorResolutionAttackResult.rolledAt,
+        }))
+      : undefined);
+  const inspectorPhaseResolutionOwnerParticipantId =
+    inspectorResolutionAttackResult?.attackerParticipantId ?? inspector.participant?.participantId;
+  const inspectorPhaseResolutionOwnerStatus =
+    inspectorPhaseResolutionOwnerParticipantId && inspectorCurrentResolutionPhase
+      ? getCombatRoundPhaseResolutionStatus({
+          participantId: inspectorPhaseResolutionOwnerParticipantId,
+          phase: inspectorCurrentResolutionPhase,
           state: roundState,
         })
-      : undefined);
-  const inspectorAttackPhaseModel = inspectorAttackPhase
-    ? buildPlayerCombatPhasePanelModel({
-        actionId: inspectorDisplayDraft.actionId,
-        attackStats: inspectorPhaseLoadoutSummaries[inspectorAttackPhase].attackStats,
-        defenseStats: null,
-        phaseCard: {
-          description: "",
-          phaseLabel: inspectorAttackPhase === "phase1" ? "Phase 1" : "Phase 2",
-          stats: [],
-          title: "",
-        },
-        phaseContext: inspectorDisplayDraft.phaseContexts[inspectorAttackPhase],
-        phaseKey: inspectorAttackPhase,
-        secondaryActionId: inspectorDisplayDraft.secondaryActionId,
+      : undefined;
+  const inspectorPhaseResolutionOwnerHasAttack =
+    inspectorPhaseResolutionOwnerParticipantId && inspectorCurrentResolutionPhase
+      ? combatRoundParticipantHasPhaseAttack({
+          participantId: inspectorPhaseResolutionOwnerParticipantId,
+          phase: inspectorCurrentResolutionPhase,
+          state: roundState,
+        })
+      : undefined;
+  const inspectorActionPhaseHasAttack = inspectorCurrentAttackPhase
+    ? inspectorCurrentPhaseHasAttack
+    : inspectorPhaseResolutionOwnerHasAttack;
+  const inspectorActionPhaseResolutionStatus = inspectorCurrentAttackPhase
+    ? inspectorPhaseResolutionStatus
+    : inspectorPhaseResolutionOwnerStatus;
+  const inspectorParrySelectionKey = getCombatParrySelectionKey({
+    result: inspectorResolutionAttackResult,
+    roundNumber: roundState.roundNumber,
+  });
+  const inspectorParryDefenderRoundParticipant = inspectorResolutionAttackResult
+    ? roundState.participants.find(
+        (participant) =>
+          participant.participantId === inspectorResolutionAttackResult.defenderParticipantId,
+      )
+    : undefined;
+  const inspectorParryDefenderEncounterParticipant = inspectorResolutionAttackResult
+    ? encounter.participants.find(
+        (participant) => participant.id === inspectorResolutionAttackResult.defenderParticipantId,
+      )
+    : undefined;
+  const inspectorParryDefenderScenarioParticipant = inspectorParryDefenderEncounterParticipant
+    ? findScenarioParticipantForEncounterParticipant({
+        encounterParticipant: inspectorParryDefenderEncounterParticipant,
+        scenarioParticipants: effectiveScenarioParticipants,
       })
     : undefined;
+  const inspectorParryDefenderPhaseSummary =
+    inspectorResolutionPhase && inspectorParryDefenderScenarioParticipant
+      ? buildScenarioParticipantPhaseSummary({
+          declaration: inspectorParryDefenderRoundParticipant?.declaration,
+          phaseKey: inspectorResolutionPhase,
+          scenarioParticipant: inspectorParryDefenderScenarioParticipant,
+        })
+      : undefined;
+  const inspectorParrySelection = getCombatParrySourceSelection({
+    selection: inspectorParrySelectionKey
+      ? parrySourceSelections[inspectorParrySelectionKey]
+      : undefined,
+    sources: inspectorParryDefenderPhaseSummary?.parrySources,
+  });
+  const inspectorParryBase = getSelectedCombatParryBase({
+    selection: inspectorParrySelection,
+    sources: inspectorParryDefenderPhaseSummary?.parrySources,
+  });
+  const inspectorParryExtraRawModifiers = buildCombatAttackResultParryModifiers(
+    inspectorResolutionAttackResult,
+  );
+  const inspectorParryModifierCalculation =
+    inspectorParryBase !== undefined
+      ? buildEncounterDbParryModifierCalculation({
+          baseValue: inspectorParryBase,
+          extraRawModifiers: inspectorParryExtraRawModifiers,
+          liveModifiers: inspectorParryDefenderPhaseSummary?.liveModifiers,
+        })
+      : null;
+  const inspectorParryModifierAdjustment = inspectorParryModifierCalculation
+    ? inspectorParryModifierCalculation.finalValue - (inspectorParryBase ?? 0)
+    : 0;
+  const inspectorParryModifierBreakdown = inspectorParryModifierCalculation?.rawModifiers ?? [];
   const inspectorNoPhaseAttack =
     Boolean(inspectorAttackPhase) &&
     !inspectorDisplayAttackResult &&
-    !inspectorAttackPhaseModel?.showAttackStats;
+    inspectorCurrentPhaseHasAttack === false;
+  const inspectorSelectedAttackAlreadyRolled = Boolean(
+    inspectorAttackPhase && inspectorDisplayAttackResult,
+  );
+  const inspectorCanRollPhaseAttack =
+    Boolean(inspectorCurrentAttackPhase) &&
+    inspectorCurrentPhaseHasAttack === true &&
+    (!inspectorPhaseResolutionStatus ||
+      inspectorPhaseResolutionStatus.substep === "pending" ||
+      inspectorPhaseResolutionStatus.substep === "attack") &&
+    !inspectorDisplayAttackResult;
+  const inspectorCanRollParry =
+    Boolean(inspectorResolutionPhase) &&
+    inspectorResolutionStepKind === "parry" &&
+    Boolean(inspectorResolutionAttackResult?.hit) &&
+    inspectorDisplayPhaseResolutionResult?.parryResolution.status === "pending" &&
+    inspectorPhaseResolutionOwnerStatus?.substep === "parry" &&
+    inspector.participant?.participantId ===
+      inspectorResolutionAttackResult?.defenderParticipantId &&
+    inspectorParryBase !== undefined &&
+    !inspectorSnapshot;
+  const inspectorDamageSubstate =
+    inspectorResolutionStepKind === "damage"
+      ? getCombatRoundDamageSubstate(inspectorDisplayPhaseResolutionResult)
+      : undefined;
+  const inspectorDamageProposalReady =
+    inspectorResolutionStepKind === "damage" &&
+    Boolean(inspectorDisplayPhaseResolutionResult?.damageResult) &&
+    inspectorDisplayPhaseResolutionResult?.damageProposal.status !== "committed";
+  const inspectorDamageCommitted =
+    inspectorResolutionStepKind === "damage" &&
+    inspectorDisplayPhaseResolutionResult?.damageProposal.status === "committed";
+  const inspectorDamageReviewKey =
+    inspectorDisplayPhaseResolutionResult?.damageResult?.attackResultId;
+  const inspectorDamageReviewDraft =
+    inspectorDamageReviewKey && damageReviewDrafts[inspectorDamageReviewKey]
+      ? damageReviewDrafts[inspectorDamageReviewKey]
+      : buildCombatDamageReviewDraft(
+          inspectorDisplayPhaseResolutionResult?.damageResult,
+          inspectorDisplayPhaseResolutionResult?.criticalRoll,
+        );
   const inspectorIsCursorParticipant =
     Boolean(inspectorPhaseResolutionCursor) &&
     inspectorPhaseResolutionCursor?.participantId === inspector.participant?.participantId;
@@ -885,16 +2579,51 @@ export default function CombatRoundManagerPanel({
         (participant) => participant.participantId === inspectorPhaseResolutionCursor.participantId,
       )?.label
     : undefined;
-  const inspectorActionButtonLabel =
-    inspectorCurrentResolutionPhase &&
-    inspectorPhaseResolutionStatus?.substep === "attack" &&
-    inspectorNoPhaseAttack
-      ? `Complete ${formatCombatPhaseLabel(inspectorCurrentResolutionPhase)} for participant`
-      : getCombatResolutionButtonLabel({
-          phase: inspectorCurrentResolutionPhase,
-          step: roundState.currentStep,
-          substep: inspectorPhaseResolutionStatus?.substep,
-        });
+  const inspectorCursorIncomingAttackResult =
+    inspectorPhaseResolutionCursor &&
+    (inspectorPhaseResolutionCursor.substep === "parry" ||
+      inspectorPhaseResolutionCursor.substep === "damage" ||
+      inspectorPhaseResolutionCursor.substep === "effects")
+      ? getCombatRoundDisplayIncomingAttackResultForParticipantPhase({
+          participantId: inspectorPhaseResolutionCursor.participantId,
+          phase: inspectorPhaseResolutionCursor.phase,
+          state: roundState,
+        })
+      : undefined;
+  const inspectorCursorActorLabel = inspectorCursorIncomingAttackResult
+    ? roundState.participants.find(
+        (participant) =>
+          participant.participantId === inspectorCursorIncomingAttackResult.attackerParticipantId,
+      )?.label
+    : inspectorCursorParticipantLabel;
+  const inspectorCursorDefenderLabel = inspectorCursorIncomingAttackResult
+    ? roundState.participants.find(
+        (participant) =>
+          participant.participantId === inspectorCursorIncomingAttackResult.defenderParticipantId,
+      )?.label
+    : undefined;
+  const inspectorActionButtonLabel = inspectorSelectedAttackAlreadyRolled
+    ? "Attack already rolled"
+    : inspectorDamageCommitted
+      ? "Phase damage committed"
+      : inspectorDamageSubstate === "critical_pending"
+        ? "Roll critical"
+      : inspectorDamageSubstate === "location_pending"
+        ? "Roll hit location"
+      : inspectorDamageSubstate === "location_rolled"
+        ? "Resolve damage"
+      : inspectorDamageProposalReady
+        ? "Commit phase damage"
+      : inspectorCanRollParry
+      ? "Roll parry"
+      : inspectorCurrentResolutionPhase && inspectorActionPhaseHasAttack === false
+        ? `Complete ${formatCombatPhaseLabel(inspectorCurrentResolutionPhase)} for participant`
+        : getCombatResolutionButtonLabel({
+            hasPhaseAttack: inspectorActionPhaseHasAttack,
+            phase: inspectorCurrentResolutionPhase,
+            step: inspector.step,
+            substep: inspectorActionPhaseResolutionStatus?.substep,
+          });
   const inspectorPhaseResolutionLines =
     inspectorResolutionAttackResult && inspectorDisplayPhaseResolutionResult
       ? formatCombatPhaseResolutionResultLines({
@@ -903,63 +2632,79 @@ export default function CombatRoundManagerPanel({
           resolution: inspectorDisplayPhaseResolutionResult,
         })
       : undefined;
-  const inspectorActionResult =
-    inspectorPhaseResolutionLines
+  const inspectorActionResult = inspectorPhaseResolutionLines
+    ? {
+        detailLines: [
+          inspectorPhaseResolutionLines.armorLine,
+        ].filter((line): line is string => Boolean(line)),
+        interpretedResult: inspectorPhaseResolutionLines.statusLine,
+        rankLabel: inspectorPhaseResolutionLines.attackLine,
+        resultLabel: inspectorPhaseResolutionLines.proposalLine,
+        sections: inspectorPhaseResolutionLines.sections,
+      }
+    : inspectorResolutionPhase
       ? {
-          interpretedResult: inspectorPhaseResolutionLines.statusLine,
-          rankLabel: inspectorPhaseResolutionLines.attackLine,
-          resultLabel: inspectorPhaseResolutionLines.proposalLine,
+          interpretedResult: `No ${formatCombatPhaseLabel(inspectorResolutionPhase)} attack result.`,
         }
-      : inspectorResolutionPhase
+      : inspectorDisplayAttackResult
         ? {
-            interpretedResult: `No ${formatCombatPhaseLabel(inspectorResolutionPhase)} attack result.`,
+            interpretedResult: formatCombatAttackResultLine({
+              participantId: inspector.participant?.participantId,
+              result: inspectorDisplayAttackResult,
+            }),
+            resultLabel: `Result: ${inspectorDisplayAttackResult.tableResult}`,
           }
-        : inspectorDisplayAttackResult
+        : inspectorNoPhaseAttack
           ? {
-              interpretedResult: formatCombatAttackResultLine({
-                participantId: inspector.participant?.participantId,
-                result: inspectorDisplayAttackResult,
-              }),
-              resultLabel: `Result: ${inspectorDisplayAttackResult.tableResult}`,
+              interpretedResult: `No ${formatCombatPhaseLabel(inspectorAttackPhase ?? "phase1")} attack.`,
             }
-          : inspectorNoPhaseAttack
+          : inspectorDisplayInitiative
             ? {
-                interpretedResult: `No ${formatCombatPhaseLabel(inspectorAttackPhase ?? "phase1")} attack.`,
+                interpretedResult: formatCombatInitiativeFormula(inspectorDisplayInitiative),
+                rankLabel:
+                  formatSnapshotInitiativeRankLabel(inspectorSnapshot?.initiativeRank) ??
+                  formatInitiativeRankLabel({
+                    participantId: inspector.participant?.participantId,
+                    ranks: inspectorCurrentInitiativePhase === "phase2" ? phase2Ranks : phase1Ranks,
+                    value: getCombatRoundInitiativeTotal(inspectorDisplayInitiative),
+                  }),
               }
-            : inspectorDisplayInitiative
-              ? {
-                  interpretedResult: formatCombatInitiativeFormula(inspectorDisplayInitiative),
-                  rankLabel:
-                    formatSnapshotInitiativeRankLabel(inspectorSnapshot?.initiativeRank) ??
-                    formatInitiativeRankLabel({
-                      participantId: inspector.participant?.participantId,
-                      ranks:
-                        inspectorCurrentInitiativePhase === "phase2" ? phase2Ranks : phase1Ranks,
-                      value: getCombatRoundInitiativeTotal(inspectorDisplayInitiative),
-                    }),
-                }
-              : null;
-  const inspectorCurrentStepStatus = inspector.participant?.stepStatuses[roundState.currentStep];
+            : null;
+  const inspectorCurrentStepStatus = inspector.participant?.stepStatuses[inspector.step];
   const inspectorParticipantHasDeclared = Boolean(selectedRoundDeclaration);
   const inspectorStatusSuffix = inspectorSnapshot
     ? " Committed."
     : inspectorPhaseResolutionCursor
-      ? ` Current actor: ${inspectorCursorParticipantLabel ?? inspectorPhaseResolutionCursor.participantId}. Substep: ${formatCombatResolutionSubstepLabel(inspectorPhaseResolutionCursor.substep)}.${inspectorIsCursorParticipant ? "" : " Selected actor differs from current cursor."}`
-    : inspectorDisplayPhaseResolutionResult
-      ? " Resolution review pending."
-    : inspectorDisplayAttackResult
-      ? " Attack rolled."
-    : inspectorCurrentInitiative
-    ? " Initiative rolled."
-    : roundState.currentStep === "review_action_modifiers" &&
-        (inspectorCurrentStepStatus === "complete" || inspectorCurrentStepStatus === "gmEdited")
-      ? " Modifiers declared."
-      : roundState.currentStep === "review_phase_2_modifiers" &&
-          (inspectorCurrentStepStatus === "complete" || inspectorCurrentStepStatus === "gmEdited")
-        ? " Phase 2 modifiers declared."
-        : inspectorParticipantHasDeclared
-          ? " Declared."
-          : "";
+      ? ` Current actor: ${inspectorCursorActorLabel ?? inspectorPhaseResolutionCursor.participantId}${inspectorCursorDefenderLabel ? ` · Defender: ${inspectorCursorDefenderLabel}` : ""} · Next: ${formatCombatResolutionNextLabel(
+          {
+            hasPhaseAttack: combatRoundParticipantHasPhaseAttack({
+              participantId:
+                inspectorCursorIncomingAttackResult?.attackerParticipantId ??
+                inspectorPhaseResolutionCursor.participantId,
+              phase: inspectorPhaseResolutionCursor.phase,
+              state: roundState,
+            }),
+            phase: inspectorPhaseResolutionCursor.phase,
+            substep: inspectorPhaseResolutionCursor.substep,
+          },
+        )}.${inspectorIsCursorParticipant ? "" : " Selected actor differs from current cursor."}`
+      : inspectorDisplayPhaseResolutionResult
+        ? " Resolution review pending."
+        : inspectorDisplayAttackResult
+          ? " Attack rolled."
+          : inspectorCurrentInitiative
+            ? " Initiative rolled."
+            : inspector.step === "review_action_modifiers" &&
+                (inspectorCurrentStepStatus === "complete" ||
+                  inspectorCurrentStepStatus === "gmEdited")
+              ? " Modifiers declared."
+              : inspector.step === "review_phase_2_modifiers" &&
+                  (inspectorCurrentStepStatus === "complete" ||
+                    inspectorCurrentStepStatus === "gmEdited")
+                ? " Phase 2 modifiers declared."
+                : inspectorParticipantHasDeclared
+                  ? " Declared."
+                  : "";
   const inspectorPhaseCards = useMemo<readonly PlayerCombatPhaseCardView[]>(() => {
     if (!inspector.participant) {
       return [];
@@ -985,7 +2730,29 @@ export default function CombatRoundManagerPanel({
     liveModifiers: inspectorLiveModifiers,
   });
   useEffect(() => {
-    setRoundState(initialRoundState);
+    const pendingSelection = pendingSelectionRef.current;
+    const manualSelection = manualSelectionRef.current;
+    const nextRoundState = normalizeCombatRoundManagerSelection({
+      manualSelection,
+      pendingSelection,
+      state: initialRoundState,
+    });
+
+    if (pendingSelection) {
+      pendingSelectionRef.current = undefined;
+    }
+
+    if (
+      manualSelection &&
+      (manualSelection.step !== nextRoundState.currentStep ||
+        !nextRoundState.participants.some(
+          (participant) => participant.participantId === manualSelection.participantId,
+        ))
+    ) {
+      manualSelectionRef.current = undefined;
+    }
+
+    setRoundState(nextRoundState);
   }, [initialRoundState]);
 
   useEffect(() => {
@@ -1066,28 +2833,13 @@ export default function CombatRoundManagerPanel({
     selectedScenarioParticipant?.id,
   ]);
 
-  function focusRoundTable() {
-    tableContainerRef.current?.scrollIntoView({ block: "start", behavior: "smooth" });
+  function focusRoundTable(input: { scrollIntoView?: boolean } = {}) {
+    if (input.scrollIntoView !== false) {
+      tableContainerRef.current?.scrollIntoView({ block: "start", behavior: "smooth" });
+    }
+
     tableContainerRef.current?.focus({ preventScroll: true });
     tableContainerRef.current?.scrollTo({ left: 0, top: 0 });
-  }
-
-  function moveSelectedParticipantDown() {
-    setRoundState((current) => {
-      const participantIndex = displayParticipants.findIndex(
-        (participant) => participant.participantId === current.selectedParticipantId,
-      );
-
-      if (participantIndex < 0 || participantIndex >= displayParticipants.length - 1) {
-        return current;
-      }
-
-      return setCombatRoundSelection({
-        participantId: displayParticipants[participantIndex + 1]?.participantId,
-        state: current,
-        step: current.selectedStep,
-      });
-    });
   }
 
   function buildScenarioParticipantPhaseSummary(input: {
@@ -1096,12 +2848,18 @@ export default function CombatRoundManagerPanel({
     scenarioParticipant?: ScenarioParticipant;
   }): {
     attackStats: ReturnType<typeof buildPlayerCombatLoadoutSummary>["attackStats"];
+    baseDefenseStats: ReturnType<typeof buildPlayerCombatDefenseStats>;
     defenseStats: ReturnType<typeof buildPlayerCombatDefenseStats>;
+    strengthGm?: number;
     liveModifiers: ReturnType<typeof buildEncounterLiveCombatModifierSummary>;
     modifierRows: ReturnType<typeof buildPlayerCombatModifierRows>;
+    parrySources: CombatParrySourceOptions;
     phaseContext?: ScenarioParticipantCombatContext;
   } {
-    const draft = buildDeclarationDraft(input.scenarioParticipant, input.declaration);
+    const draft = buildDeclarationDraft(input.scenarioParticipant, input.declaration, {
+      encounterId: encounter.id,
+      roundNumber: roundState.roundNumber,
+    });
     const liveModifiers = buildEncounterLiveCombatModifierSummary({
       combatContext: draft.combatContext,
       combatEffects: input.scenarioParticipant?.state.combatEffects,
@@ -1118,6 +2876,15 @@ export default function CombatRoundManagerPanel({
     const buildResult = characterBuildSchema.safeParse(
       resolvedCharacterState?.serverRecord.build ?? input.scenarioParticipant?.snapshot.build,
     );
+    const characterCombatInputs =
+      content && buildResult.success
+        ? buildCombatStateCharacterInputs(
+            buildCharacterSheetSummary({
+              build: buildResult.data,
+              content,
+            }),
+          )
+        : undefined;
     const equipmentStateCandidate =
       resolvedCharacterState?.equipmentState ?? input.scenarioParticipant?.snapshot.equipmentState;
     const equipmentState = isEquipmentFeatureState(equipmentStateCandidate)
@@ -1138,12 +2905,44 @@ export default function CombatRoundManagerPanel({
       state: equipmentState,
       throwingWeaponItemId: null,
     });
+    const baseLoadoutModel = buildEquipmentLoadoutModuleModel({
+      characterContext:
+        content && buildResult.success
+          ? {
+              content,
+              record: {
+                build: buildResult.data,
+              },
+            }
+          : null,
+      characterId: input.scenarioParticipant?.characterId ?? "",
+      state: equipmentState,
+      throwingWeaponItemId: null,
+    });
     const loadoutSummary = buildPlayerCombatLoadoutSummary({
       actionId: draft.actionId,
       loadoutModel,
       secondaryActionId: draft.secondaryActionId,
     });
+    const baseLoadoutSummary = buildPlayerCombatLoadoutSummary({
+      actionId: draft.actionId,
+      loadoutModel: baseLoadoutModel,
+      secondaryActionId: draft.secondaryActionId,
+    });
+    const parrySources = buildCombatParrySourceOptions({
+      loadoutModel: baseLoadoutModel,
+      mainHandLabel: baseLoadoutSummary.mainHandParryItemLabel,
+      offHandLabel: baseLoadoutSummary.offHandParryItemLabel,
+    });
     const phaseContext = input.phaseKey ? draft.phaseContexts[input.phaseKey] : undefined;
+    const baseDefenseStats = phaseContext
+      ? buildPlayerCombatDefenseStats({
+          mainHandParryItemLabel: baseLoadoutSummary.mainHandParryItemLabel,
+          offHandParryItemLabel: baseLoadoutSummary.offHandParryItemLabel,
+          phaseContext,
+          reference: baseLoadoutSummary.reference,
+        })
+      : null;
     const defenseStats = phaseContext
       ? buildPlayerCombatDefenseStats({
           mainHandParryItemLabel: loadoutSummary.mainHandParryItemLabel,
@@ -1155,9 +2954,12 @@ export default function CombatRoundManagerPanel({
 
     return {
       attackStats: loadoutSummary.attackStats,
+      baseDefenseStats,
       defenseStats,
+      strengthGm: characterCombatInputs?.strengthGm ?? undefined,
       liveModifiers,
       modifierRows,
+      parrySources,
       phaseContext,
     };
   }
@@ -1168,9 +2970,9 @@ export default function CombatRoundManagerPanel({
   ): CombatRoundStepSnapshot[] {
     const step = stateForSnapshots.currentStep;
     const phase = getCombatRoundModifierPhaseForStep(step);
-    const ranks = phase
-      ? getCombatRoundInitiativeRanks({ phase, state: stateForSnapshots })
-      : {};
+    const attackPhase = getCombatAttackPhaseForStep(step);
+    const resolutionStepKind = getCombatResolutionStepKind(step);
+    const ranks = phase ? getCombatRoundInitiativeRanks({ phase, state: stateForSnapshots }) : {};
 
     return stateForSnapshots.participants.map((roundParticipant) => {
       const encounterParticipant = encounter.participants.find(
@@ -1185,7 +2987,10 @@ export default function CombatRoundManagerPanel({
       const declaration = hasCombatRoundDeclarationAction(roundParticipant.declaration)
         ? roundParticipant.declaration
         : undefined;
-      const draft = buildDeclarationDraft(scenarioParticipant, declaration);
+      const draft = buildDeclarationDraft(scenarioParticipant, declaration, {
+        encounterId: encounter.id,
+        roundNumber: roundState.roundNumber,
+      });
       const phaseSummary = buildScenarioParticipantPhaseSummary({
         declaration,
         phaseKey: phase,
@@ -1216,21 +3021,30 @@ export default function CombatRoundManagerPanel({
             })
           : undefined;
       const initiativeResult = phase ? roundParticipant.initiatives[phase] : undefined;
-      const attackResult = phase
-        ? getCombatRoundDisplayAttackResultForParticipantPhase({
+      const attackResult = attackPhase
+        ? getCombatRoundOutgoingAttackResultForParticipantPhase({
             participantId: roundParticipant.participantId,
-            phase,
+            phase: attackPhase,
             state: stateForSnapshots,
           })
-        : undefined;
-      const phaseResolutionResult =
-        phase && getCombatRoundResolutionPhaseForStep(step)
-          ? getCombatRoundDisplayPhaseResolutionResultForParticipantPhase({
+        : phase && resolutionStepKind
+          ? getCombatRoundDisplayIncomingAttackResultForParticipantPhase({
               participantId: roundParticipant.participantId,
               phase,
               state: stateForSnapshots,
-              updatedAt: committedAt,
             })
+          : undefined;
+      const phaseResolutionResult =
+        phase && resolutionStepKind && attackResult
+          ? (getCombatRoundPhaseResolutionResultForAttack({
+              attackResult,
+              state: stateForSnapshots,
+            }) ??
+            buildCombatRoundPhaseResolutionResult({
+              attackResult,
+              roundNumber: stateForSnapshots.roundNumber,
+              updatedAt: committedAt,
+            }))
           : undefined;
       const phaseResolutionStatus = phase
         ? getCombatRoundPhaseResolutionStatus({
@@ -1258,7 +3072,9 @@ export default function CombatRoundManagerPanel({
                 : undefined,
         attackResult,
         attackSummary:
-          phaseModel?.showAttackStats && phaseModel.attackStats ? phaseModel.attackStats : undefined,
+          phaseModel?.showAttackStats && phaseModel.attackStats
+            ? phaseModel.attackStats
+            : undefined,
         committedAt,
         declarationSummary: {
           actionId: draft.actionId || undefined,
@@ -1293,6 +3109,10 @@ export default function CombatRoundManagerPanel({
   }
 
   async function commitCurrentStep() {
+    if (isSequentialResolutionStep(roundState.currentStep)) {
+      return;
+    }
+
     const committedAt = new Date().toISOString();
     const resolutionPhase = getCombatRoundResolutionPhaseForStep(roundState.currentStep);
     const stateForCommit = resolutionPhase
@@ -1303,8 +3123,21 @@ export default function CombatRoundManagerPanel({
         })
       : roundState;
     const stepSnapshots = buildCombatRoundStepSnapshots(committedAt, stateForCommit);
+    const commandParticipantId =
+      inspector.participant?.participantId ??
+      stateForCommit.currentCursor?.participantId ??
+      stateForCommit.selectedParticipantId;
+    const advanceInput = commandParticipantId
+      ? {
+          command: {
+            createdAt: committedAt,
+            participantId: commandParticipantId,
+          },
+          stepSnapshots,
+        }
+      : { stepSnapshots };
 
-    await persistRoundState(advanceCombatRoundStep(stateForCommit, { stepSnapshots }));
+    await persistRoundState(advanceCombatRoundStep(stateForCommit, advanceInput));
   }
 
   async function persistRoundState(nextRoundState: typeof roundState) {
@@ -1337,15 +3170,27 @@ export default function CombatRoundManagerPanel({
     setSaving(true);
 
     try {
+      const clearedSelection: CombatRoundSelectionTarget = {
+        participantId: inspector.participant?.participantId,
+        step: inspector.step,
+      };
       const { encounter: nextEncounter, participants } = await clearCurrentCombatRoundStepOnServer({
         encounterId: encounter.id,
+        participantId: clearedSelection.participantId,
+        step: clearedSelection.step,
       });
       const nextRoundState = initializeCombatRoundState({ encounter: nextEncounter });
+      const nextSelection: CombatRoundSelectionTarget = {
+        participantId: nextRoundState.selectedParticipantId ?? clearedSelection.participantId,
+        step: nextRoundState.selectedStep ?? clearedSelection.step,
+      };
 
+      pendingSelectionRef.current = nextSelection;
+      manualSelectionRef.current = nextSelection;
       setRoundState(nextRoundState);
       setSaveError(undefined);
       onEncounterUpdated?.(nextEncounter);
-      focusRoundTable();
+      focusRoundTable({ scrollIntoView: false });
 
       if (participants.length > 0) {
         setScenarioParticipantOverrides((current) => ({
@@ -1376,7 +3221,26 @@ export default function CombatRoundManagerPanel({
     }
   }
 
+  function selectCurrentTask() {
+    manualSelectionRef.current = undefined;
+    pendingSelectionRef.current = undefined;
+    setRoundState((current) => {
+      const selection = getCurrentCombatRoundTaskSelection(current);
+
+      return selection
+        ? applyCombatRoundSelectionTarget({
+            selection,
+            state: current,
+          })
+        : current;
+    });
+  }
+
   function selectInspector(participantId: string, step: CombatRoundStep) {
+    manualSelectionRef.current = {
+      participantId,
+      step,
+    };
     setRoundState((current) =>
       setCombatRoundSelection({
         participantId,
@@ -1409,6 +3273,11 @@ export default function CombatRoundManagerPanel({
             COMBAT_ROUND_STEPS.length - 1,
           )
         ];
+
+      manualSelectionRef.current = {
+        participantId: nextParticipant?.participantId,
+        step: nextStep,
+      };
 
       return setCombatRoundSelection({
         participantId: nextParticipant?.participantId,
@@ -1478,19 +3347,11 @@ export default function CombatRoundManagerPanel({
       getCombatAttackPhaseForStep(input.step) ?? getCombatRoundResolutionPhaseForStep(input.step);
 
     if (phase) {
-      const phaseStatus = getCombatRoundPhaseResolutionStatus({
+      return getCombatRoundParticipantPhaseStepStatus({
         participantId: input.participantId,
-        phase,
         state: roundState,
+        step: input.step,
       });
-
-      if (phaseStatus.substep === "done") {
-        return "complete";
-      }
-
-      if (phaseStatus.substep !== "pending") {
-        return "gmEdited";
-      }
     }
 
     if (input.step !== "select_actions") {
@@ -1509,10 +3370,11 @@ export default function CombatRoundManagerPanel({
               participant.characterId === encounterParticipant.characterId),
         )
       : undefined;
-    const declaredThisRound = Boolean(
-      scenarioParticipant?.state.combat.lastDeclaredActionId &&
-      scenarioParticipant.state.combat.lastDeclaredRoundNumber === roundState.roundNumber,
-    );
+    const declaredThisRound = hasScenarioParticipantCombatDeclarationForEncounterRound({
+      encounterId: encounter.id,
+      participant: scenarioParticipant,
+      roundNumber: roundState.roundNumber,
+    });
 
     return declaredThisRound && input.status === "pending" ? "submitted" : input.status;
   }
@@ -1536,6 +3398,12 @@ export default function CombatRoundManagerPanel({
     setSaving(true);
 
     try {
+      const actedParticipantId = selectedEncounterParticipant.id;
+      const actedStep = roundState.currentStep;
+      const shouldUsePersistedCursor = isGlobalCombatRoundParticipantStep(actedStep);
+      const displayedParticipantIds = displayParticipants.map(
+        (participant) => participant.participantId,
+      );
       const { encounter: nextEncounter, participant } = await submitCombatDeclarationOnServer({
         actionId: inspectorDraft.actionId || undefined,
         additionalActionNotes: inspectorDraft.additionalActionNotes,
@@ -1547,15 +3415,41 @@ export default function CombatRoundManagerPanel({
         secondaryActionId: inspectorDraft.secondaryActionId || undefined,
       });
       const nextRoundState = initializeCombatRoundState({ encounter: nextEncounter });
+      const nextSelection = shouldUsePersistedCursor
+        ? undefined
+        : getNextCombatRoundParticipantSelection({
+            fromParticipantId: actedParticipantId,
+            participantIds: displayedParticipantIds,
+            step: roundState.selectedStep ?? actedStep,
+          });
+      const nextSelectedRoundState = shouldUsePersistedCursor
+        ? normalizeCombatRoundManagerSelection({
+            state: nextRoundState,
+          })
+        : applyCombatRoundSelectionTarget({
+            selection: nextSelection ?? {
+              participantId: actedParticipantId,
+              step: roundState.selectedStep ?? actedStep,
+            },
+            state: nextRoundState,
+          });
 
       setScenarioParticipantOverrides((current) => ({
         ...current,
         [participant.id]: participant,
       }));
-      setRoundState(nextRoundState);
+
+      if (nextSelection) {
+        pendingSelectionRef.current = nextSelection;
+        manualSelectionRef.current = nextSelection;
+      } else {
+        pendingSelectionRef.current = undefined;
+        manualSelectionRef.current = undefined;
+      }
+
+      setRoundState(nextSelectedRoundState);
       onEncounterUpdated?.(nextEncounter);
       onScenarioParticipantsUpdated?.([participant]);
-      moveSelectedParticipantDown();
       setSaveError(undefined);
     } catch (caughtError) {
       setSaveError(
@@ -1574,6 +3468,12 @@ export default function CombatRoundManagerPanel({
     setSaving(true);
 
     try {
+      const actedParticipantId = selectedEncounterParticipant.id;
+      const actedStep = roundState.currentStep;
+      const shouldUsePersistedCursor = isGlobalCombatRoundParticipantStep(actedStep);
+      const displayedParticipantIds = displayParticipants.map(
+        (participant) => participant.participantId,
+      );
       const { encounter: nextEncounter } = await rollCombatInitiativeOnServer({
         encounterId: encounter.id,
         initiativeBase: inspectorInitiativeCalculation.baseInitiative,
@@ -1581,10 +3481,35 @@ export default function CombatRoundManagerPanel({
         scenarioParticipantId: selectedScenarioParticipant.id,
       });
       const nextRoundState = initializeCombatRoundState({ encounter: nextEncounter });
+      const nextSelection = shouldUsePersistedCursor
+        ? undefined
+        : getNextCombatRoundParticipantSelection({
+            fromParticipantId: actedParticipantId,
+            participantIds: displayedParticipantIds,
+            step: roundState.selectedStep ?? actedStep,
+          });
+      const nextSelectedRoundState = shouldUsePersistedCursor
+        ? normalizeCombatRoundManagerSelection({
+            state: nextRoundState,
+          })
+        : applyCombatRoundSelectionTarget({
+            selection: nextSelection ?? {
+              participantId: actedParticipantId,
+              step: roundState.selectedStep ?? actedStep,
+            },
+            state: nextRoundState,
+          });
 
-      setRoundState(nextRoundState);
+      if (nextSelection) {
+        pendingSelectionRef.current = nextSelection;
+        manualSelectionRef.current = nextSelection;
+      } else {
+        pendingSelectionRef.current = undefined;
+        manualSelectionRef.current = undefined;
+      }
+
+      setRoundState(nextSelectedRoundState);
       onEncounterUpdated?.(nextEncounter);
-      moveSelectedParticipantDown();
       setSaveError(undefined);
     } catch (caughtError) {
       setSaveError(
@@ -1597,6 +3522,19 @@ export default function CombatRoundManagerPanel({
 
   async function rollInspectorPhaseAttack(phase: CombatRoundPhase) {
     if (!selectedScenarioParticipant || !selectedEncounterParticipant) {
+      return;
+    }
+
+    const existingAttackResult = getCombatRoundOutgoingAttackResultForParticipantPhase({
+      participantId: selectedEncounterParticipant.id,
+      phase,
+      state: roundState,
+    });
+
+    if (existingAttackResult) {
+      setSaveError(
+        `Attack already rolled. Clear ${phase === "phase1" ? "A1" : "A2"} before rolling again.`,
+      );
       return;
     }
 
@@ -1650,29 +3588,15 @@ export default function CombatRoundManagerPanel({
       return;
     }
 
-    let attackResult: CombatRoundAttackRollResult;
+    let ob: number;
+    let defenderDb: number;
 
     try {
-      const ob = parseCombatInteger(phaseModel.attackStats.ob, `${phaseLabel} OB`);
-      const defenderDb = parseCombatInteger(
+      ob = parseCombatInteger(phaseModel.attackStats.ob, `${phaseLabel} OB`);
+      defenderDb = parseCombatInteger(
         targetPhaseSummary.defenseStats.db,
         `Target ${phaseLabel} DB`,
       );
-      const roll = rollOpenEndedCombatToHitD20();
-
-      attackResult = buildCombatRoundAttackRollResult({
-        actionId: inspectorDraft.actionId || `${phase}_attack`,
-        attackerParticipantId: selectedEncounterParticipant.id,
-        defenderDb,
-        defenderParticipantId: targetEncounterParticipant.id,
-        ob,
-        openEndedD10s: roll.openEndedD10s,
-        phase,
-        rollD20: roll.rollD20,
-        rollTotal: roll.rollTotal,
-        rolledAt: new Date().toISOString(),
-        weaponName: phaseModel.attackStats.weaponName,
-      });
     } catch (caughtError) {
       setSaveError(
         caughtError instanceof Error
@@ -1685,14 +3609,25 @@ export default function CombatRoundManagerPanel({
     setSaving(true);
 
     try {
-      const nextRoundState = recordCombatRoundAttackResult({
-        participantId: selectedEncounterParticipant.id,
-        result: attackResult,
-        state: roundState,
-        submittedBy: "gm",
+      const { encounter: nextEncounter } = await rollCombatAttackOnServer({
+        actionId: inspectorDraft.actionId || `${phase}_attack`,
+        defenderDb,
+        defenderScenarioParticipantId: targetScenarioParticipant.id,
+        encounterId: encounter.id,
+        ob,
+        phase,
+        scenarioParticipantId: selectedScenarioParticipant.id,
+        weaponName: phaseModel.attackStats.weaponName,
+      });
+      const nextRoundState = normalizeCombatRoundManagerSelection({
+        state: initializeCombatRoundState({ encounter: nextEncounter }),
       });
 
-      await persistRoundState(nextRoundState);
+      pendingSelectionRef.current = undefined;
+      manualSelectionRef.current = undefined;
+      setRoundState(nextRoundState);
+      onEncounterUpdated?.(nextEncounter);
+      focusRoundTable();
       setSaveError(undefined);
     } catch (caughtError) {
       setSaveError(
@@ -1705,21 +3640,126 @@ export default function CombatRoundManagerPanel({
     }
   }
 
+  async function rollInspectorParry() {
+    const attackResult = inspectorResolutionAttackResult;
+    const phase = inspectorResolutionPhase;
+
+    if (!attackResult || !phase) {
+      setSaveError("No attack result is available for parry.");
+      return;
+    }
+
+    if (!attackResult.hit) {
+      setSaveError("Attack missed; parry is not applicable.");
+      return;
+    }
+
+    if (inspectorParryBase === undefined) {
+      setSaveError("Select at least one available parry source.");
+      return;
+    }
+
+    const sources = inspectorParryDefenderPhaseSummary?.parrySources;
+    const rawModifiers = buildCombatParryRawModifiers({
+      attackResult,
+      liveModifiers: inspectorParryDefenderPhaseSummary?.liveModifiers,
+    });
+    const roll = rollOpenEndedD20();
+    const parry = resolveCombatParry({
+      parryBase: inspectorParryBase,
+      rawModifiers,
+      rollTotal: roll.dieResult,
+    });
+    const usedMainHand = inspectorParrySelection.usedMainHand && Boolean(sources?.mainHand);
+    const usedOffHand = inspectorParrySelection.usedOffHand && Boolean(sources?.offHand);
+    const parrySourceLabel = formatSelectedCombatParrySourceName({
+      selection: {
+        usedMainHand,
+        usedOffHand,
+      },
+      sources,
+    });
+    const updatedAt = new Date().toISOString();
+    const parryResolution: CombatRoundParryResolution = {
+      combinedParryScore: parry.parryBase,
+      mainHandParryScore: usedMainHand ? sources?.mainHand?.score : undefined,
+      modifiedParryBeforeRoll: parry.parryBase + parry.modifierAdjustment,
+      modifierAdjustment: parry.modifierAdjustment,
+      modifierBreakdown: parry.rawModifiers.map((modifier) => ({ ...modifier })),
+      notes:
+        "Direction, location coverage, and multi-opponent source allocation are deferred in this first parry slice.",
+      offHandParryScore: usedOffHand ? sources?.offHand?.score : undefined,
+      openEndedD10s: roll.openEndedD10s,
+      parrySourceLabel,
+      rawModifierTotal: parry.rawModifierTotal,
+      resultLabel: parry.success ? "Parry successful" : "Parry failed",
+      rollD20: roll.rollD20,
+      rollTotal: roll.dieResult,
+      status: "resolved",
+      success: parry.success,
+      targetNumber: parry.targetNumber,
+      total: parry.total,
+      usedMainHand,
+      usedOffHand,
+    };
+
+    setSaving(true);
+
+    try {
+      const nextRoundState = recordCombatRoundParryResult({
+        attackResult,
+        command: {
+          createdAt: updatedAt,
+        },
+        parryResolution,
+        state: roundState,
+        submittedBy: "gm",
+        updatedAt,
+      });
+
+      await persistRoundState(nextRoundState);
+      setSaveError(undefined);
+    } catch (caughtError) {
+      setSaveError(caughtError instanceof Error ? caughtError.message : "Unable to roll parry.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function completeInspectorPhaseResolution(phase: CombatRoundPhase) {
-    if (!inspector.participant) {
+    const ownerParticipantId = inspectorPhaseResolutionOwnerParticipantId;
+
+    if (!ownerParticipantId) {
       return;
     }
 
     setSaving(true);
 
     try {
-      const nextRoundState = completeCombatRoundPhaseResolutionForParticipant({
-        participantId: inspector.participant.participantId,
+      const updatedAt = new Date().toISOString();
+      const ownerHasPhaseAttack = combatRoundParticipantHasPhaseAttack({
+        participantId: ownerParticipantId,
         phase,
         state: roundState,
-        submittedBy: "gm",
-        updatedAt: new Date().toISOString(),
       });
+      const nextRoundState = ownerHasPhaseAttack
+        ? completeCombatRoundPhaseResolutionForParticipant({
+            participantId: ownerParticipantId,
+            phase,
+            state: roundState,
+            submittedBy: "gm",
+            updatedAt,
+          })
+        : recordCombatRoundNoAttackPhaseReview({
+            command: {
+              createdAt: updatedAt,
+            },
+            participantId: ownerParticipantId,
+            phase,
+            state: roundState,
+            submittedBy: "gm",
+            updatedAt,
+          });
 
       await persistRoundState(nextRoundState);
       setSaveError(undefined);
@@ -1728,6 +3768,278 @@ export default function CombatRoundManagerPanel({
         caughtError instanceof Error
           ? caughtError.message
           : `Unable to complete ${formatCombatPhaseLabel(phase)} resolution.`,
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function buildRoundStateWithInspectorDamageReview(input: {
+    reviewedAt: string;
+    state: typeof roundState;
+  }): typeof roundState {
+    const damageResult = inspectorDisplayPhaseResolutionResult?.damageResult;
+
+    if (!damageResult) {
+      throw new Error("No damage proposal is available for review.");
+    }
+
+    return reviewCombatRoundDamageResult({
+      attackResultId: damageResult.attackResultId,
+      review: buildCombatDamageReviewFromDraft({
+        criticalRoll: inspectorDisplayPhaseResolutionResult?.criticalRoll,
+        damageResult,
+        draft: inspectorDamageReviewDraft,
+      }),
+      reviewedAt: input.reviewedAt,
+      state: input.state,
+    });
+  }
+
+  async function saveInspectorDamageReview() {
+    if (!inspectorDamageReviewKey) {
+      return;
+    }
+
+    try {
+      const reviewedAt = new Date().toISOString();
+      const reviewedState = buildRoundStateWithInspectorDamageReview({
+        reviewedAt,
+        state: roundState,
+      });
+
+      await persistRoundState(reviewedState);
+      setDamageReviewDrafts((current) => {
+        const rest = { ...current };
+        delete rest[inspectorDamageReviewKey];
+
+        return rest;
+      });
+    } catch (caughtError) {
+      setSaveError(
+        caughtError instanceof Error ? caughtError.message : "Unable to save damage review.",
+      );
+    }
+  }
+
+  async function advanceInspectorPhaseResolutionSubstep(phase: CombatRoundPhase) {
+    const ownerParticipantId = inspectorPhaseResolutionOwnerParticipantId;
+
+    if (!ownerParticipantId) {
+      return;
+    }
+
+    setSaving(true);
+
+    try {
+      const updatedAt = new Date().toISOString();
+      const currentOwnerStatus = getCombatRoundPhaseResolutionStatus({
+        participantId: ownerParticipantId,
+        phase,
+        state: roundState,
+      });
+      const damageReviewAttackResult = inspectorResolutionAttackResult;
+      let nextRoundState: typeof roundState;
+
+      if (currentOwnerStatus.substep === "damage") {
+        if (!damageReviewAttackResult) {
+          setSaveError("No attack result is available for damage review.");
+          return;
+        }
+
+        const existingDamageResolution = getCombatRoundPhaseResolutionResultForAttack({
+          attackResult: damageReviewAttackResult,
+          state: roundState,
+        });
+        const damageSubstate = getCombatRoundDamageSubstate(existingDamageResolution);
+        const attackerRoundParticipant = roundState.participants.find(
+          (participant) =>
+            participant.participantId === damageReviewAttackResult.attackerParticipantId,
+        );
+
+        if (damageSubstate === "location_pending") {
+          nextRoundState = recordCombatRoundHitLocationRoll({
+            attackResult: damageReviewAttackResult,
+            command: {
+              createdAt: updatedAt,
+            },
+            rolledByParticipantId: damageReviewAttackResult.attackerParticipantId,
+            state: roundState,
+            submittedBy: "gm",
+            targetLocation:
+              attackerRoundParticipant?.declaration?.phaseContexts?.[phase]?.targetLocation,
+            updatedAt,
+          });
+        } else if (damageSubstate === "location_rolled") {
+          const phaseLabel = formatCombatPhaseLabel(phase);
+          const attackerEncounterParticipant = encounter.participants.find(
+            (participant) => participant.id === damageReviewAttackResult.attackerParticipantId,
+          );
+          const attackerScenarioParticipant = attackerEncounterParticipant
+            ? findScenarioParticipantForEncounterParticipant({
+                encounterParticipant: attackerEncounterParticipant,
+                scenarioParticipants: effectiveScenarioParticipants,
+              })
+            : undefined;
+          const attackerPhaseSummary = buildScenarioParticipantPhaseSummary({
+            declaration: attackerRoundParticipant?.declaration,
+            phaseKey: phase,
+            scenarioParticipant: attackerScenarioParticipant,
+          });
+          const attackStats = attackerPhaseSummary.attackStats;
+          const defenseStats = inspectorParryDefenderPhaseSummary?.defenseStats;
+
+          if (!attackStats) {
+            setSaveError(`${phaseLabel} attack DMB is not available.`);
+            return;
+          }
+
+          if (!defenseStats) {
+            setSaveError(`${phaseLabel} defender DM is not available.`);
+            return;
+          }
+
+          const dmb = parseCombatInteger(attackStats.dmb, `${phaseLabel} DMB`);
+          const defenderDm = parseCombatInteger(defenseStats.dm, `${phaseLabel} defender DM`);
+
+          nextRoundState = recordCombatRoundDamageResult({
+            attackResult: damageReviewAttackResult,
+            command: {
+              createdAt: updatedAt,
+            },
+            armorModifier: 0,
+            attackerStrengthGm: attackerPhaseSummary.strengthGm,
+            defenderDm,
+            dmb,
+            state: roundState,
+            submittedBy: "gm",
+            updatedAt,
+          });
+        } else if (damageSubstate === "critical_pending") {
+          nextRoundState = recordCombatRoundCriticalRoll({
+            attackResult: damageReviewAttackResult,
+            command: {
+              createdAt: updatedAt,
+            },
+            rolledByParticipantId: damageReviewAttackResult.attackerParticipantId,
+            state: roundState,
+            submittedBy: "gm",
+            updatedAt,
+          });
+        } else if (
+          existingDamageResolution?.damageResult &&
+          existingDamageResolution.damageProposal.status !== "committed"
+        ) {
+          if (!encounter.scenarioId) {
+            setSaveError("Scenario id is required to commit phase damage.");
+            return;
+          }
+
+          const defenderEncounterParticipant = encounter.participants.find(
+            (participant) => participant.id === damageReviewAttackResult.defenderParticipantId,
+          );
+          const defenderScenarioParticipant = defenderEncounterParticipant
+            ? findScenarioParticipantForEncounterParticipant({
+                encounterParticipant: defenderEncounterParticipant,
+                scenarioParticipants: effectiveScenarioParticipants,
+              })
+            : undefined;
+          const attackerEncounterParticipant = encounter.participants.find(
+            (participant) => participant.id === damageReviewAttackResult.attackerParticipantId,
+          );
+          const attackerScenarioParticipant = attackerEncounterParticipant
+            ? findScenarioParticipantForEncounterParticipant({
+                encounterParticipant: attackerEncounterParticipant,
+                scenarioParticipants: effectiveScenarioParticipants,
+              })
+            : undefined;
+
+          if (!defenderScenarioParticipant) {
+            setSaveError("Defender scenario participant state is required to commit damage.");
+            return;
+          }
+
+          const reviewedRoundState = buildRoundStateWithInspectorDamageReview({
+            reviewedAt: updatedAt,
+            state: roundState,
+          });
+          const committed = commitCombatRoundPhaseDamage({
+            attackerScenarioParticipantId: attackerScenarioParticipant?.id,
+            command: {
+              createdAt: updatedAt,
+            },
+            combatEffects: defenderScenarioParticipant.state.combatEffects,
+            defenderScenarioParticipantId: defenderScenarioParticipant.id,
+            encounterId: encounter.id,
+            scenarioId: encounter.scenarioId,
+            state: reviewedRoundState,
+          });
+          const updatedParticipant = await updateScenarioParticipantStateOnServer({
+            participantId: defenderScenarioParticipant.id,
+            scenarioId: encounter.scenarioId,
+            state: {
+              ...defenderScenarioParticipant.state,
+              combatEffects: committed.combatEffects,
+            },
+          });
+
+          setScenarioParticipantOverrides((current) => ({
+            ...current,
+            [updatedParticipant.id]: updatedParticipant,
+          }));
+          if (inspectorDamageReviewKey) {
+            setDamageReviewDrafts((current) => {
+              const rest = { ...current };
+              delete rest[inspectorDamageReviewKey];
+
+              return rest;
+            });
+          }
+          onScenarioParticipantsUpdated?.([updatedParticipant]);
+          await persistRoundState(committed.state);
+          setSaveError(undefined);
+          return;
+        } else {
+          setSaveError("Hit location roll required.");
+          return;
+        }
+      } else {
+        nextRoundState = advanceCombatRoundPhaseResolutionSubstepForParticipant({
+          participantId: ownerParticipantId,
+          phase,
+          state: roundState,
+          updatedAt,
+        });
+      }
+
+      const nextOwnerStatus = getCombatRoundPhaseResolutionStatus({
+        participantId: ownerParticipantId,
+        phase,
+        state: nextRoundState,
+      });
+      const defenderParticipantId =
+        inspectorResolutionAttackResult?.defenderParticipantId ?? ownerParticipantId;
+      const defenderOwnedNextRoundState =
+        nextOwnerStatus.substep === "damage" || nextOwnerStatus.substep === "effects"
+          ? {
+              ...nextRoundState,
+              phaseResolutionCursor: {
+                participantId: defenderParticipantId,
+                phase,
+                substep: nextOwnerStatus.substep,
+              },
+              selectedParticipantId: defenderParticipantId,
+              selectedStep: getCombatRoundDamageReviewStepForPhase(phase),
+            }
+          : nextRoundState;
+
+      await persistRoundState(defenderOwnedNextRoundState);
+      setSaveError(undefined);
+    } catch (caughtError) {
+      setSaveError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : `Unable to advance ${formatCombatPhaseLabel(phase)} resolution.`,
       );
     } finally {
       setSaving(false);
@@ -1758,11 +4070,19 @@ export default function CombatRoundManagerPanel({
           }}
         >
           <button
-            disabled={saving}
+            disabled={saving || inspectorSelectedStepIsSequential}
             onClick={() => void commitCurrentStep()}
             type="button"
           >
-            {saving ? "Saving..." : getAdvanceButtonLabel(roundState.currentStep)}
+            {saving ? "Saving..." : getAdvanceButtonLabel(inspector.step)}
+          </button>
+          <button
+            disabled={saving || !currentTaskSelection}
+            onClick={selectCurrentTask}
+            title="Return to the current unresolved combat step"
+            type="button"
+          >
+            Current task
           </button>
           <button disabled={saving} onClick={() => void clearCurrentStep()} type="button">
             Clear current step
@@ -2028,23 +4348,61 @@ export default function CombatRoundManagerPanel({
                     const phaseLoadoutSummary = inspectorPhaseLoadoutSummaries[phaseKey];
                     const snapshotForPhase =
                       inspectorSnapshot?.phase === phaseKey ? inspectorSnapshot : undefined;
-                    const defenseStats =
-                      snapshotForPhase?.defenseSummary ??
-                      buildPlayerCombatDefenseStats({
-                        mainHandParryItemLabel: phaseLoadoutSummary.mainHandParryItemLabel,
-                        offHandParryItemLabel: phaseLoadoutSummary.offHandParryItemLabel,
-                        phaseContext: phaseCombatContext,
-                        reference: phaseLoadoutSummary.reference,
-                      });
-                    const phaseModel = buildPlayerCombatPhasePanelModel({
+                    const phaseDefenseStats = buildPlayerCombatDefenseStats({
+                      mainHandParryItemLabel: phaseLoadoutSummary.mainHandParryItemLabel,
+                      offHandParryItemLabel: phaseLoadoutSummary.offHandParryItemLabel,
+                      phaseContext: phaseCombatContext,
+                      reference: phaseLoadoutSummary.reference,
+                    });
+                    const selectedResolutionContext =
+                      phaseKey === inspectorResolutionPhase &&
+                      inspector.participant?.participantId ===
+                        inspectorResolutionAttackResult?.defenderParticipantId &&
+                      (inspectorResolutionStepKind === "parry" ||
+                        inspectorResolutionStepKind === "damage") &&
+                      inspectorDisplayPhaseResolutionResult
+                        ? {
+                            attackResultId: inspectorDisplayPhaseResolutionResult.attackResultId,
+                            parryBase: inspectorParryBase,
+                            parryModifierCalculation: inspectorParryModifierCalculation,
+                            parryResolution:
+                              inspectorDisplayPhaseResolutionResult.parryResolution,
+                            parrySourceLabel: formatSelectedCombatParrySourceName({
+                              selection: inspectorParrySelection,
+                              sources: inspectorParryDefenderPhaseSummary?.parrySources,
+                            }),
+                          }
+                        : undefined;
+                    const phaseProjection = buildCombatRoundPhasePanelProjection({
                       actionId: inspectorDisplayDraft.actionId,
-                      attackStats: snapshotForPhase?.attackSummary ?? phaseLoadoutSummary.attackStats,
-                      defenseStats,
+                      attackStats: phaseLoadoutSummary.attackStats,
+                      liveModifiers:
+                        phaseKey === inspectorResolutionPhase
+                          ? inspectorParryDefenderPhaseSummary?.liveModifiers
+                          : buildEncounterLiveCombatModifierSummary({
+                              combatContext: inspectorDraft.combatContext,
+                              combatEffects: selectedScenarioParticipant?.state.combatEffects,
+                              phaseKey,
+                            }),
+                      participantId: inspector.participant?.participantId,
                       phaseCard,
                       phaseContext: phaseCombatContext,
+                      phaseDefenseStats,
                       phaseKey,
                       secondaryActionId: inspectorDisplayDraft.secondaryActionId,
+                      selectedResolutionContext,
+                      selectedStep: inspector.step,
+                      snapshotAttackStats: snapshotForPhase?.attackSummary,
+                      snapshotDefenseStats: snapshotForPhase?.defenseSummary,
                     });
+                    const phaseModel = phaseProjection.phaseModel;
+
+                    /*
+                     * The phase projection is intentionally context-aware:
+                     * normal rows use phase-aware stats, while selected P/D
+                     * rows can replay the specific incoming attack's parry
+                     * context without leaking it into later actor views.
+                     */
 
                     return (
                       <PlayerCombatPhasePanel
@@ -2136,33 +4494,94 @@ export default function CombatRoundManagerPanel({
                     readOnly={Boolean(inspectorSnapshot)}
                     rows={inspectorDisplayModifierRows}
                   />
-                  <PlayerCombatActionButtonPanel
-                    buttonLabel={inspectorActionButtonLabel}
-                    disabled={
-                      saving ||
-                      Boolean(inspectorTargetValidationMessage) ||
-                      Boolean(inspectorSnapshot)
-                    }
-                    onDeclareAction={() =>
-                      void (inspectorCurrentStepIsInitiative
-                        ? rollInspectorInitiative()
-                        : inspectorCurrentResolutionPhase &&
-                            (inspectorPhaseResolutionStatus?.substep !== "attack" ||
-                              inspectorNoPhaseAttack)
-                          ? completeInspectorPhaseResolution(inspectorCurrentResolutionPhase)
-                          : inspectorCurrentAttackPhase
-                          ? rollInspectorPhaseAttack(inspectorCurrentAttackPhase)
-                        : saveInspectorDeclaration())
-                    }
-                    saving={saving}
-                    statusText={`Current step: ${getPlayerCombatStepLabel(
-                      inspectorSnapshot ? inspector.step : roundState.currentStep,
-                    )}.${inspectorStatusSuffix}`}
-                    validationMessage={inspectorTargetValidationMessage}
-                  />
-                  <PlayerCombatActionResultPanel
-                    result={inspectorActionResult}
-                  />
+                  <div style={{ display: "grid", gap: "0.75rem" }}>
+                    {inspectorResolutionStepKind === "parry" &&
+                    inspectorResolutionAttackResult?.hit &&
+                    inspectorDisplayPhaseResolutionResult &&
+                    inspectorDisplayPhaseResolutionResult?.parryResolution.status !==
+                      "not_applicable" ? (
+                      <CombatParryResolutionPanel
+                        attackResult={inspectorResolutionAttackResult}
+                        controlsDisabled={
+                          saving ||
+                          Boolean(inspectorSnapshot) ||
+                          inspectorDisplayPhaseResolutionResult.parryResolution.status ===
+                            "resolved"
+                        }
+                        modifierAdjustment={inspectorParryModifierAdjustment}
+                        modifierBreakdown={inspectorParryModifierBreakdown}
+                        onSelectionChange={(selection) => {
+                          if (!inspectorParrySelectionKey) {
+                            return;
+                          }
+
+                          setParrySourceSelections((current) => ({
+                            ...current,
+                            [inspectorParrySelectionKey]: selection,
+                          }));
+                        }}
+                        parryBase={inspectorParryBase}
+                        resolution={inspectorDisplayPhaseResolutionResult.parryResolution}
+                        selection={inspectorParrySelection}
+                        sources={inspectorParryDefenderPhaseSummary?.parrySources}
+                      />
+                    ) : null}
+                    {inspectorDamageProposalReady &&
+                    inspectorDisplayPhaseResolutionResult?.damageResult ? (
+                      <CombatDamageReviewPanel
+                        controlsDisabled={saving || Boolean(inspectorSnapshot)}
+                        damageResult={inspectorDisplayPhaseResolutionResult.damageResult}
+                        draft={inspectorDamageReviewDraft}
+                        onDraftChange={(draft) => {
+                          if (!inspectorDamageReviewKey) {
+                            return;
+                          }
+
+                          setDamageReviewDrafts((current) => ({
+                            ...current,
+                            [inspectorDamageReviewKey]: draft,
+                          }));
+                        }}
+                        onSaveReview={() => void saveInspectorDamageReview()}
+                        saving={saving}
+                      />
+                    ) : null}
+                    <PlayerCombatActionButtonPanel
+                      buttonLabel={inspectorActionButtonLabel}
+                      disabled={
+                        saving ||
+                        Boolean(inspectorTargetValidationMessage) ||
+                        inspectorSelectedAttackAlreadyRolled ||
+                        inspectorDamageCommitted ||
+                        Boolean(inspectorSnapshot)
+                      }
+                      onDeclareAction={() =>
+                        void (inspectorCurrentStepIsInitiative
+                          ? rollInspectorInitiative()
+                          : inspectorCanRollParry
+                            ? rollInspectorParry()
+                            : inspectorCurrentResolutionPhase &&
+                                (inspectorActionPhaseHasAttack === false ||
+                                  inspectorActionPhaseResolutionStatus?.substep === "effects")
+                              ? completeInspectorPhaseResolution(inspectorCurrentResolutionPhase)
+                              : inspectorCurrentResolutionPhase &&
+                                  (inspectorActionPhaseResolutionStatus?.substep === "parry" ||
+                                    inspectorActionPhaseResolutionStatus?.substep === "damage")
+                                ? advanceInspectorPhaseResolutionSubstep(
+                                    inspectorCurrentResolutionPhase,
+                                  )
+                                : inspectorCanRollPhaseAttack && inspectorCurrentAttackPhase
+                                  ? rollInspectorPhaseAttack(inspectorCurrentAttackPhase)
+                                  : saveInspectorDeclaration())
+                      }
+                      saving={saving}
+                      statusText={`Current step: ${getPlayerCombatStepLabel(
+                        inspector.step,
+                      )}.${inspectorStatusSuffix}`}
+                      validationMessage={inspectorTargetValidationMessage}
+                    />
+                  </div>
+                  <PlayerCombatActionResultPanel result={inspectorActionResult} />
                 </div>
               </>
             ) : (

@@ -73,7 +73,11 @@ export {
   createEncounterOnServer,
   loadEncounterById,
   loadScenarioEncounters,
+  rollCombatAttackOnServer,
+  rollCombatCriticalOnServer,
+  rollCombatHitLocationOnServer,
   rollCombatInitiativeOnServer,
+  rollCombatParryOnServer,
   submitCombatDeclarationOnServer,
   submitPlayerRoleplayRollOnServer,
   updateEncounterOnServer

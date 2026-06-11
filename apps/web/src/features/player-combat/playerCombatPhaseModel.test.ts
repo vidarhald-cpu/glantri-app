@@ -32,13 +32,15 @@ const reference: PlayerCombatLoadoutReference = {
   attackMode: "C",
   combinedDb: "18",
   combinedDm: "0",
+  combinedParry: "13",
+  combinedSourceName: "Sword / shield",
   crit: "F",
   db: "14",
   dmb: "8",
   dm: "0",
   initiative: "3",
   ob: "10",
-  parry: "incomplete",
+  parry: "7",
   secondCrit: "S",
   selectedWeapon: "Broad sword",
 };
@@ -228,8 +230,10 @@ describe("player combat phase model", () => {
 
     expect(phase1Context.mainHandParryDirection).toBe("left");
     expect(phase2Context.mainHandParryDirection).toBe("right");
-    expect(phase1Defense?.sourceName).toBe("Medium shield");
-    expect(phase2Defense?.sourceName).toBe("Medium shield");
+    expect(phase1Defense?.sourceName).toBe("Sword / shield");
+    expect(phase1Defense?.parry).toBe("13");
+    expect(phase2Defense?.sourceName).toBe("Sword / shield");
+    expect(phase2Defense?.parry).toBe("13");
   });
 
   it("defaults blank phase parry directions without overwriting saved values", () => {

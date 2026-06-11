@@ -5,6 +5,7 @@ import type {
   ScenarioParticipantCombatContext,
   ScenarioLiveState,
 } from "@glantri/domain";
+import { hasScenarioParticipantCombatDeclarationForEncounterRound } from "@glantri/domain";
 
 import {
   buildPlayerEncounterPhaseSummary,
@@ -45,7 +46,9 @@ function findScenarioParticipantForEncounterParticipant(input: {
   encounterParticipant: EncounterParticipant;
   scenarioParticipants: ScenarioParticipant[];
 }): ScenarioParticipant | undefined {
-  const activeParticipants = input.scenarioParticipants.filter((participant) => participant.isActive);
+  const activeParticipants = input.scenarioParticipants.filter(
+    (participant) => participant.isActive,
+  );
 
   if (input.encounterParticipant.characterId) {
     return activeParticipants.find(
@@ -62,7 +65,9 @@ function findScenarioParticipantForEncounterParticipant(input: {
   });
 }
 
-function formatModifierSummary(combatContext: ScenarioParticipantCombatContext | undefined): string {
+function formatModifierSummary(
+  combatContext: ScenarioParticipantCombatContext | undefined,
+): string {
   const totals = getPlayerEncounterCombatModifierTotals(combatContext);
 
   if (totals.attackTotal === 0 && totals.defenseTotal === 0) {
@@ -79,7 +84,9 @@ function buildTargetNameById(scenarioParticipants: ScenarioParticipant[]): Map<s
 }
 
 export function buildGmEncounterParticipantRows(input: {
+  encounterId?: string;
   encounterParticipants: EncounterParticipant[];
+  roundNumber?: number;
   scenarioParticipants: ScenarioParticipant[];
 }): GmEncounterParticipantRow[] {
   const targetNameById = buildTargetNameById(input.scenarioParticipants);
@@ -89,14 +96,21 @@ export function buildGmEncounterParticipantRows(input: {
       encounterParticipant,
       scenarioParticipants: input.scenarioParticipants,
     });
-    const actionId = isPlayerEncounterActionId(scenarioParticipant?.state.combat.lastDeclaredActionId)
-      ? scenarioParticipant.state.combat.lastDeclaredActionId
+    const scopedCombat = hasScenarioParticipantCombatDeclarationForEncounterRound({
+      encounterId: input.encounterId,
+      participant: scenarioParticipant,
+      roundNumber: input.roundNumber,
+    })
+      ? scenarioParticipant?.state.combat
+      : undefined;
+    const actionId = isPlayerEncounterActionId(scopedCombat?.lastDeclaredActionId)
+      ? scopedCombat.lastDeclaredActionId
       : undefined;
     const phaseSummary = buildPlayerEncounterPhaseSummary({
       actionId: actionId ?? "",
       secondaryActionId: "",
     });
-    const selectedTargetId = scenarioParticipant?.state.combat.combatContext.selectedOpponentId;
+    const selectedTargetId = scopedCombat?.combatContext.selectedOpponentId;
     const fallbackEncounterTargetId = encounterParticipant.declaration.targetParticipantId;
 
     return {
@@ -105,7 +119,7 @@ export function buildGmEncounterParticipantRows(input: {
       hasDeclaredAction: Boolean(actionId),
       hasInitiative: scenarioParticipant?.state.combat.initiativeRoll !== undefined,
       phaseOneAction: actionId ? phaseSummary.phaseOne : "—",
-      phaseOneAdjustments: formatModifierSummary(scenarioParticipant?.state.combat.combatContext),
+      phaseOneAdjustments: formatModifierSummary(scopedCombat?.combatContext),
       phaseOneInitiative:
         scenarioParticipant?.state.combat.initiativeRoll !== undefined
           ? String(scenarioParticipant.state.combat.initiativeRoll)
@@ -119,7 +133,11 @@ export function buildGmEncounterParticipantRows(input: {
       selectedAction: actionId ? getPlayerEncounterActionLabel(actionId) : "Waiting for action",
       target:
         (selectedTargetId ? targetNameById.get(selectedTargetId) : undefined) ??
-        (fallbackEncounterTargetId ? input.encounterParticipants.find((participant) => participant.id === fallbackEncounterTargetId)?.label : undefined) ??
+        (fallbackEncounterTargetId
+          ? input.encounterParticipants.find(
+              (participant) => participant.id === fallbackEncounterTargetId,
+            )?.label
+          : undefined) ??
         "—",
     };
   });

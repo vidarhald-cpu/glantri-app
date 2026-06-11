@@ -18,6 +18,7 @@ export * from "./combat/combatAllocationState";
 export * from "./combat/combatSessionState";
 export * from "./combat/composeDefenseValues";
 export * from "./combat/deriveCombatValues";
+export * from "./combat/resolveCombatParry";
 export * from "./combat/workbookCombatMath";
 export * from "./calculators/ob/calculateBaseOB";
 export * from "./calculators/db/calculateDB";

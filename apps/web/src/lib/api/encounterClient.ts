@@ -1,6 +1,8 @@
 import type {
+  CombatRoundAttackRollResult,
   CombatRoundInitiativeResult,
   CombatRoundPhaseContexts,
+  CombatRoundStep,
   EncounterSession,
   ScenarioParticipant,
   ScenarioParticipantCombatContext,
@@ -111,17 +113,127 @@ export async function rollCombatInitiativeOnServer(input: {
   return payload;
 }
 
-export async function clearCurrentCombatRoundStepOnServer(input: {
+export async function rollCombatAttackOnServer(input: {
+  actionId?: string;
+  defenderDb?: number;
+  defenderScenarioParticipantId: string;
   encounterId: string;
-}): Promise<{ encounter: EncounterSession; participants: ScenarioParticipant[] }> {
+  ob?: number;
+  phase: "phase1" | "phase2";
+  scenarioParticipantId: string;
+  weaponName?: string;
+}): Promise<{ attackResult: CombatRoundAttackRollResult; encounter: EncounterSession }> {
   const payload = await sendJson<{
+    attackResult: CombatRoundAttackRollResult;
     encounter: EncounterSession;
-    participants: ScenarioParticipant[];
-  }>(`/encounters/${input.encounterId}/combat-round/clear-current-step`, {
+  }>(`/encounters/${input.encounterId}/combat-round/roll-attack`, {
+    body: JSON.stringify({
+      actionId: input.actionId,
+      defenderDb: input.defenderDb,
+      defenderScenarioParticipantId: input.defenderScenarioParticipantId,
+      ob: input.ob,
+      phase: input.phase,
+      scenarioParticipantId: input.scenarioParticipantId,
+      weaponName: input.weaponName,
+    }),
     method: "POST",
   });
 
   return payload;
+}
+
+export async function rollCombatParryOnServer(input: {
+  attackResultId: string;
+  encounterId: string;
+  mainHandParryScore?: number;
+  modifierBreakdown: Array<{ label: string; value: number }>;
+  offHandParryScore?: number;
+  parryBase: number;
+  parrySourceLabel?: string;
+  scenarioParticipantId: string;
+  usedMainHand?: boolean;
+  usedOffHand?: boolean;
+}): Promise<EncounterSession> {
+  const payload = await sendJson<{ encounter: EncounterSession }>(
+    `/encounters/${input.encounterId}/combat-round/roll-parry`,
+    {
+      body: JSON.stringify({
+        attackResultId: input.attackResultId,
+        mainHandParryScore: input.mainHandParryScore,
+        modifierBreakdown: input.modifierBreakdown,
+        offHandParryScore: input.offHandParryScore,
+        parryBase: input.parryBase,
+        parrySourceLabel: input.parrySourceLabel,
+        scenarioParticipantId: input.scenarioParticipantId,
+        usedMainHand: input.usedMainHand,
+        usedOffHand: input.usedOffHand,
+      }),
+      method: "POST",
+    },
+  );
+
+  return payload.encounter;
+}
+
+export async function clearCurrentCombatRoundStepOnServer(input: {
+  encounterId: string;
+  participantId?: string;
+  step?: CombatRoundStep;
+}): Promise<{ encounter: EncounterSession; participants: ScenarioParticipant[] }> {
+  const body =
+    input.participantId || input.step
+      ? JSON.stringify({
+          participantId: input.participantId,
+          step: input.step,
+        })
+      : undefined;
+  const payload = await sendJson<{
+    encounter: EncounterSession;
+    participants: ScenarioParticipant[];
+  }>(`/encounters/${input.encounterId}/combat-round/clear-current-step`, {
+    body,
+    method: "POST",
+  });
+
+  return payload;
+}
+
+export async function rollCombatHitLocationOnServer(input: {
+  attackResultId: string;
+  encounterId: string;
+  scenarioParticipantId: string;
+}): Promise<EncounterSession> {
+  const payload = await sendJson<{ encounter: EncounterSession }>(
+    `/encounters/${input.encounterId}/combat-round/roll-hit-location`,
+    {
+      body: JSON.stringify({
+        attackResultId: input.attackResultId,
+        scenarioParticipantId: input.scenarioParticipantId,
+      }),
+      method: "POST",
+    },
+  );
+
+  return payload.encounter;
+}
+
+export async function rollCombatCriticalOnServer(input: {
+  attackResultId: string;
+  encounterId: string;
+  scenarioParticipantId: string;
+}): Promise<EncounterSession> {
+  const payload = await sendJson<{ encounter: EncounterSession }>(
+    `/encounters/${input.encounterId}/combat-round/roll-critical`,
+    {
+      body: JSON.stringify({
+        attackResultId: input.attackResultId,
+        scenarioParticipantId: input.scenarioParticipantId,
+      }),
+      method: "POST",
+    },
+  );
+
+  return payload.encounter;
 }
 
 export async function submitPlayerRoleplayRollOnServer(input: {

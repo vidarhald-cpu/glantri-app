@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import {
   COMBAT_TO_HIT_RULE_TABLE,
   calculateToHitLookupTotal,
+  lookupCombatToHitDamageMetadata,
+  lookupCombatToHitParryModifier,
   lookupCombatToHitResult,
   rollOpenEndedCombatToHitD20,
   resolveCombatToHit,
@@ -17,9 +19,12 @@ describe("combat to-hit table helpers", () => {
         sheet: "to hit (new)",
         workbook: "docs/source/combat/New_Combat_Arena.xlsx",
       },
-      title: "Combat To Hit",
+      title: "Glantri Combat To Hit / Damage",
     });
     expect(COMBAT_TO_HIT_RULE_TABLE.notes.join(" ")).toContain("Legacy workbook sheet `To Hit table` is not canonical");
+    expect(COMBAT_TO_HIT_RULE_TABLE.notes.join(" ")).toContain("Lookup totals 17 and 18 are resolved");
+    expect(COMBAT_TO_HIT_RULE_TABLE.notes.join(" ")).toContain("Lookup totals above 34 continue");
+    expect(COMBAT_TO_HIT_RULE_TABLE.notes.join(" ")).toContain("defender parry modifier");
   });
 
   it("resolves OB = DB and roll total 10 as a miss", () => {
@@ -31,15 +36,25 @@ describe("combat to-hit table helpers", () => {
       resultKey: "miss",
       resultLabel: "Miss",
     });
+    expect(lookupCombatToHitDamageMetadata(10)).toBeUndefined();
   });
 
   it("resolves OB = DB and roll total 11 as a grazing hit", () => {
     expect(resolveCombatToHit({ db: 12, ob: 12, rollTotal: 11 })).toMatchObject({
+      damage: 0,
       grazing: true,
       hit: true,
       lookupTotal: 11,
       resultKey: "grazing-hit",
       resultLabel: "Grazing hit",
+    });
+    expect(lookupCombatToHitDamageMetadata(11)).toEqual({
+      damage: 0,
+      damageRoll: {
+        required: true,
+        sourceLookupTotal: 12,
+      },
+      sourceRows: ["to hit (new)!A5:E5", "to hit (new)!A6:E6", "to hit (new)!C32"],
     });
   });
 
@@ -76,7 +91,58 @@ describe("combat to-hit table helpers", () => {
     });
   });
 
-  it("does not let duplicate 17/18 damage rows affect hit classification", () => {
+  it("returns damage metadata for unambiguous hit rows", () => {
+    expect(lookupCombatToHitDamageMetadata(12)).toEqual({
+      damage: 1,
+      sourceRows: ["to hit (new)!A6:E6"],
+    });
+    expect(lookupCombatToHitDamageMetadata(16)).toEqual({
+      damage: 3,
+      sourceRows: ["to hit (new)!A10:E10"],
+    });
+    expect(lookupCombatToHitDamageMetadata(17)).toEqual({
+      damage: 4,
+      sourceRows: ["to hit (new)!A11:E11"],
+    });
+    expect(lookupCombatToHitDamageMetadata(18)).toEqual({
+      damage: 5,
+      sourceRows: ["to hit (new)!A12:E12"],
+    });
+    expect(lookupCombatToHitDamageMetadata(20)).toEqual({
+      criticalGrade: "a",
+      damage: 7,
+      sourceRows: ["to hit (new)!A14:F14"],
+    });
+    expect(lookupCombatToHitDamageMetadata(22)).toEqual({
+      criticalGrade: "b",
+      damage: 9,
+      minDamage: 1,
+      sourceRows: ["to hit (new)!A16:G16"],
+    });
+    expect(lookupCombatToHitDamageMetadata(35)).toEqual({
+      criticalGrade: "f",
+      damage: 22,
+      maxDamageNote: "max damage: 17 + GM STR when relevant",
+      minDamage: 5,
+      sourceRows: ["to hit (new)!A29:I29"],
+    });
+  });
+
+  it("returns melee defender parry modifiers from the hit lookup row", () => {
+    expect(lookupCombatToHitParryModifier(14)).toBe(0);
+    expect(lookupCombatToHitParryModifier(16)).toBe(-1);
+    expect(lookupCombatToHitParryModifier(18)).toBe(-3);
+    expect(lookupCombatToHitParryModifier(24)).toBe(-9);
+    expect(lookupCombatToHitParryModifier(25)).toBe(-10);
+    expect(lookupCombatToHitParryModifier(35)).toBe(-10);
+
+    expect(resolveCombatToHit({ db: 0, ob: 0, rollTotal: 18 })).toMatchObject({
+      lookupTotal: 18,
+      parryModifier: -3,
+    });
+  });
+
+  it("uses the refreshed resolved 17/18 rows for hit classification and damage metadata", () => {
     expect(lookupCombatToHitResult(17)).toMatchObject({
       grazing: false,
       hit: true,
@@ -87,7 +153,26 @@ describe("combat to-hit table helpers", () => {
       hit: true,
       resultKey: "hit",
     });
-    expect(COMBAT_TO_HIT_RULE_TABLE.notes.join(" ")).toContain("duplicate 17/18 rows");
+    expect(lookupCombatToHitDamageMetadata(17)?.damage).toBe(4);
+    expect(lookupCombatToHitDamageMetadata(18)?.damage).toBe(5);
+  });
+
+  it("continues above the displayed table without clamping high open-ended results", () => {
+    expect(resolveCombatToHit({ db: 0, ob: 0, rollTotal: 50 })).toMatchObject({
+      criticalGrade: "f",
+      damage: 37,
+      hit: true,
+      lookupTotal: 50,
+      minDamage: 5,
+      resultKey: "hit",
+    });
+    expect(lookupCombatToHitDamageMetadata(50)).toEqual({
+      criticalGrade: "f",
+      damage: 37,
+      maxDamageNote: "max damage: 17 + GM STR when relevant",
+      minDamage: 5,
+      sourceRows: ["to hit (new)!A29:I29"],
+    });
   });
 
   it("rejects non-integer lookup totals instead of silently normalizing them", () => {

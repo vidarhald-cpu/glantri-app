@@ -74,7 +74,7 @@ export const rulesDocumentsRegistry: RulesDocumentRegistryEntry[] = [
     id: "combat-to-hit",
     order: 35,
     section: "Combat",
-    title: "Combat To Hit"
+    title: "Glantri Combat To Hit / Damage"
   }
 ];
 

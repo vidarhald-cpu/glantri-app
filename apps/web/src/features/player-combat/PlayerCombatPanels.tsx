@@ -138,11 +138,19 @@ interface PlayerCombatActionButtonPanelProps {
   validationMessage?: string;
 }
 
+interface PlayerCombatActionResultSection {
+  calculationLines: readonly string[];
+  resultLine?: string;
+  title: string;
+}
+
 interface PlayerCombatActionResultPanelProps {
   result?: {
+    detailLines?: readonly string[];
     interpretedResult: string;
     rankLabel?: string;
     resultLabel?: string;
+    sections?: readonly PlayerCombatActionResultSection[];
   } | null;
 }
 
@@ -277,7 +285,9 @@ export function getGmCombatStepActionLabel(step: CombatRoundStep): string {
     case "phase_1_actions":
       return "Roll phase 1 attack";
     case "review_phase_2_actions":
-      return "Review phase 1 effects";
+      return "Resolve phase 1 parry";
+    case "phase_1_damage":
+      return "Review phase 1 damage/effects";
     case "review_phase_2_modifiers":
       return "Declare phase 2 modifiers";
     case "initiative_phase_2":
@@ -285,7 +295,9 @@ export function getGmCombatStepActionLabel(step: CombatRoundStep): string {
     case "phase_2_actions":
       return "Roll phase 2 attack";
     case "review_phase_2_damage":
-      return "Review phase 2 effects";
+      return "Resolve phase 2 parry";
+    case "phase_2_damage":
+      return "Review phase 2 damage/effects";
     case "round_summary":
       return "Review round summary";
   }
@@ -300,17 +312,21 @@ export function getPlayerCombatStepLabel(step: CombatRoundStep): string {
     case "initiative_phase_1":
       return "Phase 1 initiative";
     case "phase_1_actions":
-      return "Phase 1 actions";
+      return "A1 Attack";
     case "review_phase_2_actions":
-      return "Phase 1 effects";
+      return "P1 Parry";
+    case "phase_1_damage":
+      return "D1 Damage/effects";
     case "review_phase_2_modifiers":
       return "Review phase 2";
     case "initiative_phase_2":
       return "Phase 2 initiative";
     case "phase_2_actions":
-      return "Phase 2 actions";
+      return "A2 Attack";
     case "review_phase_2_damage":
-      return "Phase 2 effects";
+      return "P2 Parry";
+    case "phase_2_damage":
+      return "D2 Damage/effects";
     case "round_summary":
       return "Round summary";
   }
@@ -658,10 +674,38 @@ export function PlayerCombatActionResultPanel({ result }: PlayerCombatActionResu
           width: "100%",
         }}
       >
-        {result ? (
+        {result?.sections?.length ? (
+          <div
+            style={{
+              display: "grid",
+              fontWeight: 400,
+              gap: "0.55rem",
+              justifyItems: "stretch",
+              textAlign: "left",
+              width: "100%",
+            }}
+          >
+            {result.sections.map((section) => (
+              <section key={section.title} style={{ display: "grid", gap: "0.16rem" }}>
+                <div>{section.title}</div>
+                {section.calculationLines.map((line) => (
+                  <div key={line} style={{ color: "#5e5a50", fontSize: "0.88rem" }}>
+                    {line}
+                  </div>
+                ))}
+                {section.resultLine ? <strong>{section.resultLine}</strong> : null}
+              </section>
+            ))}
+          </div>
+        ) : result ? (
           <>
             {result.rankLabel ? <div>{result.rankLabel}</div> : null}
             <div>{result.interpretedResult}</div>
+            {result.detailLines?.map((line) => (
+              <div key={line} style={{ color: "#5e5a50", fontSize: "0.88rem", fontWeight: 600 }}>
+                {line}
+              </div>
+            ))}
             {result.resultLabel ? <div>{result.resultLabel}</div> : null}
           </>
         ) : (

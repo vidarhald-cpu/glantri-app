@@ -24,6 +24,8 @@ export interface PlayerCombatLoadoutReference {
   attackMode: string;
   combinedDb: string;
   combinedDm: string;
+  combinedParry: string;
+  combinedSourceName: string;
   crit: string;
   db: string;
   dmb: string;
@@ -199,6 +201,8 @@ export function buildPlayerCombatLoadoutSummary(input: {
       attackMode: "—",
       combinedDb: "—",
       combinedDm: "—",
+      combinedParry: "—",
+      combinedSourceName: "—",
       crit: "—",
       db: "—",
       dmb: "—",
@@ -241,6 +245,20 @@ export function buildPlayerCombatLoadoutSummary(input: {
       ? getCombatTableCell({
           columns: combatPanelModel.weaponModeTable.columns,
           label: "DM",
+          row: combinedRow,
+        })
+      : "—",
+    combinedParry: combinedRow
+      ? getCombatTableCell({
+          columns: combatPanelModel.weaponModeTable.columns,
+          label: "Parry",
+          row: combinedRow,
+        })
+      : "—",
+    combinedSourceName: combinedRow
+      ? getCombatTableCell({
+          columns: combatPanelModel.weaponModeTable.columns,
+          label: "Weapon",
           row: combinedRow,
         })
       : "—",
@@ -342,6 +360,11 @@ export function buildPlayerCombatDefenseStats(input: {
   const hasPhaseParryDirection = Boolean(
     phaseContext.mainHandParryDirection || phaseContext.offHandParryDirection,
   );
+  const hasCombinedParry = hasDisplayValue(input.reference.combinedParry);
+  const fallbackSourceName =
+    input.offHandParryItemLabel !== "Unarmed"
+      ? input.offHandParryItemLabel
+      : input.mainHandParryItemLabel;
 
   return {
     db: hasDisplayValue(input.reference.combinedDb)
@@ -350,11 +373,15 @@ export function buildPlayerCombatDefenseStats(input: {
     dm: hasDisplayValue(input.reference.combinedDm)
       ? input.reference.combinedDm
       : input.reference.dm,
-    parry: hasPhaseParryDirection ? input.reference.parry : "incomplete",
+    parry: hasPhaseParryDirection
+      ? hasCombinedParry
+        ? input.reference.combinedParry
+        : input.reference.parry
+      : "incomplete",
     sourceName:
-      input.offHandParryItemLabel !== "Unarmed"
-        ? input.offHandParryItemLabel
-        : input.mainHandParryItemLabel,
+      hasCombinedParry && hasDisplayValue(input.reference.combinedSourceName)
+        ? input.reference.combinedSourceName
+        : fallbackSourceName,
   };
 }
 

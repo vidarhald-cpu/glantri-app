@@ -4,11 +4,26 @@ import {
   chooseTargetedHitLocationRoll,
   expandHitLocationTable,
   getHitLocationFullLabel,
+  getHitLocationOrderIndex,
   getHitLocationShortLabel,
+  HIT_LOCATION_RULE_TABLE,
   resolveHitLocationRoll,
+  resolveHitLocationSelection,
 } from "./hitLocation";
 
 describe("hit location helpers", () => {
+  it("documents the refreshed hit location source range", () => {
+    expect(HIT_LOCATION_RULE_TABLE).toMatchObject({
+      id: "combat-hit-location",
+      source: {
+        range: "A1:C21",
+        sheet: "Location table",
+        workbook: "docs/source/combat/New_Combat_Arena.xlsx",
+      },
+      title: "Combat Hit Location",
+    });
+  });
+
   it("resolves closed 1d20 rolls to hit locations", () => {
     expect(
       Array.from({ length: 20 }, (_, index) => {
@@ -77,9 +92,19 @@ describe("hit location helpers", () => {
     expect(getHitLocationFullLabel("rightArm")).toBe("Right arm");
   });
 
+  it("exposes stable table order for targeted selection", () => {
+    expect(getHitLocationOrderIndex("head")).toBe(0);
+    expect(getHitLocationOrderIndex("rightArm")).toBe(1);
+    expect(getHitLocationOrderIndex("leftLeg")).toBe(6);
+  });
+
   it("chooses the targeted roll closest to the aimed location", () => {
     expect(chooseTargetedHitLocationRoll("head", 18, 12)).toBe(18);
     expect(chooseTargetedHitLocationRoll("abdomen", 6, 13)).toBe(6);
+  });
+
+  it("uses table order rather than raw die distance for targeted selection", () => {
+    expect(chooseTargetedHitLocationRoll("chest", 18, 7)).toBe(7);
   });
 
   it("keeps the first roll when target distance is tied", () => {
@@ -89,6 +114,36 @@ describe("hit location helpers", () => {
   it("uses one roll when no target is selected", () => {
     expect(chooseTargetedHitLocationRoll("none", 7, 20)).toBe(7);
     expect(chooseTargetedHitLocationRoll(undefined, 4, 20)).toBe(4);
+  });
+
+  it("returns a full single-roll hit location selection", () => {
+    expect(resolveHitLocationSelection({ rollA: 14 })).toEqual({
+      hitLocationRolls: [14],
+      hitLocationSelectionReason: "single_roll",
+      selectedHitLocation: "chest",
+      selectedHitLocationRoll: 14,
+      targetLocation: undefined,
+    });
+  });
+
+  it("returns a full targeted closest hit location selection", () => {
+    expect(resolveHitLocationSelection({ rollA: 7, rollB: 14, targetLocation: "head" })).toEqual({
+      hitLocationRolls: [7, 14],
+      hitLocationSelectionReason: "targeted_closest",
+      selectedHitLocation: "chest",
+      selectedHitLocationRoll: 14,
+      targetLocation: "head",
+    });
+  });
+
+  it("documents targeted tie behavior as first roll wins", () => {
+    expect(resolveHitLocationSelection({ rollA: 10, rollB: 15, targetLocation: "chest" })).toEqual({
+      hitLocationRolls: [10, 15],
+      hitLocationSelectionReason: "targeted_closest",
+      selectedHitLocation: "abdomen",
+      selectedHitLocationRoll: 10,
+      targetLocation: "chest",
+    });
   });
 
   it("rejects rolls outside closed 1d20", () => {
