@@ -39,6 +39,8 @@ const reference: PlayerCombatLoadoutReference = {
   combinedSourceName: "Sword / shield",
   crit: "F",
   crit2: "E",
+  damageClass: "edged",
+  damageClass2: "pointed",
   db: "14",
   dmb: "8",
   dmb2: "6",
@@ -54,9 +56,20 @@ const reference: PlayerCombatLoadoutReference = {
 function buildLoadoutModel(input: {
   rows: Array<Array<string | number>>;
   valueLabel?: string;
+  weaponRows?: Array<{
+    currentItemLabel: string;
+    damageClass1?: string | null;
+    damageClass2?: string | null;
+    modeLabel: string;
+  }>;
 }): Parameters<typeof buildPlayerCombatLoadoutSummary>[0]["loadoutModel"] {
   return {
     combatStatePanelModel: {
+      capabilityRows: [],
+      description: "",
+      statsRows: [],
+      title: "Combat State Panel",
+      weaponRows: input.weaponRows as never,
       weaponModeTable: {
         columns: [
           "Mode",
@@ -87,6 +100,7 @@ function buildLoadoutModel(input: {
       {
         id: "primary",
         label: "Primary weapon",
+        options: [],
         value: "primary-weapon",
         valueLabel: input.valueLabel ?? "Long sword",
       },
@@ -237,6 +251,14 @@ describe("player combat phase model", () => {
           "C",
         ],
       ],
+      weaponRows: [
+        {
+          currentItemLabel: "Long sword",
+          damageClass1: "edged",
+          damageClass2: "pointed",
+          modeLabel: "Primary",
+        },
+      ],
     });
 
     const phase1 = buildPlayerCombatLoadoutSummary({
@@ -257,6 +279,8 @@ describe("player combat phase model", () => {
       dmb: "8",
       maxCrits: "F / S",
       ob: "9",
+      weaponCriticalCode: "FS",
+      weaponDamageClass: "edged",
       weaponName: "Long sword",
     });
     expect(phase2.attackStats).toMatchObject({
@@ -264,6 +288,8 @@ describe("player combat phase model", () => {
       dmb: "6",
       maxCrits: "E",
       ob: "8",
+      weaponCriticalCode: "E",
+      weaponDamageClass: "pointed",
       weaponName: "Long sword",
     });
   });

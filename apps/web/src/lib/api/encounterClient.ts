@@ -121,6 +121,8 @@ export async function rollCombatAttackOnServer(input: {
   ob?: number;
   phase: "phase1" | "phase2";
   scenarioParticipantId: string;
+  weaponCriticalCode?: string;
+  weaponDamageClass?: string;
   weaponName?: string;
 }): Promise<{ attackResult: CombatRoundAttackRollResult; encounter: EncounterSession }> {
   const payload = await sendJson<{
@@ -134,6 +136,8 @@ export async function rollCombatAttackOnServer(input: {
       ob: input.ob,
       phase: input.phase,
       scenarioParticipantId: input.scenarioParticipantId,
+      weaponCriticalCode: input.weaponCriticalCode,
+      weaponDamageClass: input.weaponDamageClass,
       weaponName: input.weaponName,
     }),
     method: "POST",

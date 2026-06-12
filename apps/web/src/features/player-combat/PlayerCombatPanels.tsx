@@ -54,6 +54,8 @@ export interface PlayerCombatAttackStatsView {
   initiative: string;
   maxCrits: string;
   ob: string;
+  weaponCriticalCode?: string;
+  weaponDamageClass?: string;
   weaponName: string;
 }
 

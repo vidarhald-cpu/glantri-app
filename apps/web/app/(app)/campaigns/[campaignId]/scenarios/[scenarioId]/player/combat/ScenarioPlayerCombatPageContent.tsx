@@ -1134,6 +1134,8 @@ export default function ScenarioPlayerCombatPageContent({
         ob,
         phase: currentAttackPhase,
         scenarioParticipantId: selectedParticipant.id,
+        weaponCriticalCode: phaseAttackStats.weaponCriticalCode,
+        weaponDamageClass: phaseAttackStats.weaponDamageClass,
         weaponName: phaseAttackStats.weaponName,
       });
 

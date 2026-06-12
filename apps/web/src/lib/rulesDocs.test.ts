@@ -46,6 +46,12 @@ describe("rules documentation registry", () => {
           id: "combat-to-hit",
           section: "Combat",
           title: "Glantri Combat To Hit / Damage"
+        }),
+        expect.objectContaining({
+          fileName: "combat-critical-effects.md",
+          id: "combat-critical-effects",
+          section: "Combat",
+          title: "Glantri Critical Effects"
         })
       ])
     );
@@ -65,7 +71,8 @@ describe("rules documentation registry", () => {
       "Character Progression Calculations",
       "Equipment & Encumbrance Calculations",
       "Equip Items Calculations",
-      "Glantri Combat To Hit / Damage"
+      "Glantri Combat To Hit / Damage",
+      "Glantri Critical Effects"
     ]);
   });
 
@@ -174,6 +181,24 @@ describe("rules documentation registry", () => {
     expect(model.selectedDocument.markdown).not.toContain("New Combat Arena.xlsx");
     expect(model.selectedDocument.markdown).not.toContain("Sheet: `to hit (new)`");
     expect(model.selectedDocument.markdown).not.toContain("| Lookup total |");
+  });
+
+  it("loads the Glantri Critical Effects document with table-driven integration notes", async () => {
+    const model = await getRulesDocumentationPageModel({
+      selectedDocumentId: "combat-critical-effects"
+    });
+
+    expect(model.selectedDocument.title).toBe("Glantri Critical Effects");
+    expect(model.selectedDocument.markdown).toContain("# Glantri Critical Effects");
+    expect(model.selectedDocument.markdown).toContain("GM-reviewable proposals");
+    expect(model.selectedDocument.markdown).toContain("Critical family");
+    expect(model.selectedDocument.markdown).toContain("Critical index from `1` through `16`");
+    expect(model.selectedDocument.markdown).toContain("app rolls those table-contained dice");
+    expect(model.selectedDocument.markdown).toContain("shown as proposal warnings rather than guessed");
+    expect(model.selectedDocument.markdown).toContain("minimum total damage floor");
+    expect(model.selectedDocument.markdown).toContain("GM review remains required");
+    expect(model.selectedDocument.markdown).not.toContain("Glantri_CriticalEffects_AppFacing");
+    expect(model.selectedDocument.markdown).not.toContain("AppFacing_Crits");
   });
 
   it("expands structured rule-table directives into markdown tables", () => {

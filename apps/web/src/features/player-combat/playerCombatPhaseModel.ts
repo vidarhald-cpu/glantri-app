@@ -30,6 +30,8 @@ export interface PlayerCombatLoadoutReference {
   combinedSourceName: string;
   crit: string;
   crit2: string;
+  damageClass: string;
+  damageClass2: string;
   db: string;
   dmb: string;
   dmb2: string;
@@ -213,6 +215,8 @@ export function buildPlayerCombatLoadoutSummary(input: {
       combinedSourceName: "—",
       crit: "—",
       crit2: "—",
+      damageClass: "—",
+      damageClass2: "—",
       db: "—",
       dmb: "—",
       dmb2: "—",
@@ -237,6 +241,20 @@ export function buildPlayerCombatLoadoutSummary(input: {
     };
   }
 
+  const referenceWeaponLabel = getCombatTableCell({
+    columns: combatPanelModel.weaponModeTable.columns,
+    label: "Weapon",
+    row: referenceRow,
+  });
+  const referenceModeLabel = getCombatTableCell({
+    columns: combatPanelModel.weaponModeTable.columns,
+    label: "Mode",
+    row: referenceRow,
+  });
+  const rawReferenceRow = combatPanelModel.weaponRows?.find(
+    (row) =>
+      row.currentItemLabel === referenceWeaponLabel && row.modeLabel === referenceModeLabel,
+  );
   const reference = {
     am: getCombatTableCell({
       columns: combatPanelModel.weaponModeTable.columns,
@@ -296,6 +314,8 @@ export function buildPlayerCombatLoadoutSummary(input: {
       label: "Crit 2",
       row: referenceRow,
     }),
+    damageClass: rawReferenceRow?.damageClass1 ?? "—",
+    damageClass2: rawReferenceRow?.damageClass2 ?? "—",
     db: getCombatTableCell({
       columns: combatPanelModel.weaponModeTable.columns,
       label: "DB",
@@ -341,11 +361,7 @@ export function buildPlayerCombatLoadoutSummary(input: {
       label: "Sec",
       row: referenceRow,
     }),
-    selectedWeapon: getCombatTableCell({
-      columns: combatPanelModel.weaponModeTable.columns,
-      label: "Weapon",
-      row: referenceRow,
-    }),
+    selectedWeapon: referenceWeaponLabel,
   };
 
   return {
@@ -381,8 +397,13 @@ export function buildPlayerCombatAttackStats(
       hasDisplayValue(reference.crit2));
   const attackMode = useSecondAttack ? reference.am2 : reference.am;
   const crit = useSecondAttack ? reference.crit2 : reference.crit;
+  const damageClass = useSecondAttack ? reference.damageClass2 : reference.damageClass;
   const dmb = useSecondAttack ? reference.dmb2 : reference.dmb;
   const ob = useSecondAttack ? reference.ob2 : reference.ob;
+  const combinedFirstCriticalCode =
+    !useSecondAttack && hasDisplayValue(reference.secondCrit)
+      ? `${crit}${reference.secondCrit}`
+      : crit;
 
   if (!hasDisplayValue(reference.selectedWeapon) || !hasDisplayValue(ob)) {
     return null;
@@ -394,6 +415,10 @@ export function buildPlayerCombatAttackStats(
     initiative: reference.initiative,
     maxCrits: `${crit}${!useSecondAttack && hasDisplayValue(reference.secondCrit) ? ` / ${reference.secondCrit}` : ""}`,
     ob,
+    weaponCriticalCode: hasDisplayValue(combinedFirstCriticalCode)
+      ? combinedFirstCriticalCode
+      : undefined,
+    weaponDamageClass: hasDisplayValue(damageClass) ? damageClass : undefined,
     weaponName: reference.selectedWeapon,
   };
 }

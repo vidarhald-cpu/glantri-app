@@ -233,6 +233,8 @@ function parseCombatAttackBody(body: unknown): {
   ob?: number;
   phase: "phase1" | "phase2";
   scenarioParticipantId: string;
+  weaponCriticalCode?: string;
+  weaponDamageClass?: string;
   weaponName?: string;
 } {
   const value = parseBodyObject(body, "Combat attack payload");
@@ -250,6 +252,14 @@ function parseCombatAttackBody(body: unknown): {
     typeof value.weaponName === "string" && value.weaponName.trim().length > 0
       ? value.weaponName
       : undefined;
+  const weaponCriticalCode =
+    typeof value.weaponCriticalCode === "string" && value.weaponCriticalCode.trim().length > 0
+      ? value.weaponCriticalCode
+      : undefined;
+  const weaponDamageClass =
+    typeof value.weaponDamageClass === "string" && value.weaponDamageClass.trim().length > 0
+      ? value.weaponDamageClass
+      : undefined;
 
   return {
     ...parsed,
@@ -258,6 +268,8 @@ function parseCombatAttackBody(body: unknown): {
     defenderScenarioParticipantId,
     ob: parseOptionalInteger(value.ob, "ob"),
     phase,
+    weaponCriticalCode,
+    weaponDamageClass,
     weaponName,
   };
 }
@@ -1168,6 +1180,8 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         rollTotal: roll.rollTotal,
         rolledAt: submittedAt,
         rolledByUserId: user.id,
+        weaponCriticalCode: body.weaponCriticalCode,
+        weaponDamageClass: body.weaponDamageClass,
         weaponName,
       });
       const nextRoundState = recordCombatRoundAttackResult({

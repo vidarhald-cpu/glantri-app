@@ -3837,8 +3837,13 @@ describe("combat round manager", () => {
 
   it("records and unwinds critical rolls before damage and location", () => {
     const pending = prepareFailedParryPendingDamage({});
+    const attackResult = {
+      ...pending.attackResult,
+      weaponCriticalCode: "FS",
+      weaponDamageClass: "edged",
+    };
     const afterLocation = recordTestHitLocation({
-      attackResult: pending.attackResult,
+      attackResult,
       command: {
         createdAt: "2026-01-01T00:04:30.000Z",
         createdByUserId: "gm-1",
@@ -3846,7 +3851,7 @@ describe("combat round manager", () => {
       state: pending.state,
     });
     const afterDamage = recordCombatRoundDamageResult({
-      attackResult: pending.attackResult,
+      attackResult,
       command: {
         createdAt: "2026-01-01T00:05:00.000Z",
         createdByUserId: "gm-1",
@@ -3858,7 +3863,7 @@ describe("combat round manager", () => {
       updatedAt: "2026-01-01T00:05:00.000Z",
     });
     const afterCritical = recordCombatRoundCriticalRoll({
-      attackResult: pending.attackResult,
+      attackResult,
       command: {
         createdAt: "2026-01-01T00:05:30.000Z",
         createdByUserId: "gm-1",
@@ -3902,8 +3907,28 @@ describe("combat round manager", () => {
       }),
       type: "roll_critical",
     });
+    expect(
+      afterCritical.phaseResolutionResults[0]?.damageResult?.review?.criticalEffectProposal,
+    ).toMatchObject({
+      critKey: "sharp|chest|05",
+      title: expect.any(String),
+      warnings: [],
+    });
+    expect(
+      afterCritical.phaseResolutionResults[0]?.damageResult?.review?.additionalEffects.some(
+        (effect) => effect.sourceKind === "critical_table",
+      ),
+    ).toBe(true);
     expect(afterCriticalUndo.phaseResolutionResults[0]?.criticalRoll.status).toBe("pending");
     expect(afterCriticalUndo.phaseResolutionResults[0]?.damageResult).toBeDefined();
+    expect(
+      afterCriticalUndo.phaseResolutionResults[0]?.damageResult?.review?.criticalEffectProposal,
+    ).toBeUndefined();
+    expect(
+      afterCriticalUndo.phaseResolutionResults[0]?.damageResult?.review?.additionalEffects.some(
+        (effect) => effect.sourceKind === "critical_table",
+      ),
+    ).toBe(false);
     expect(afterDamageUndo.phaseResolutionResults[0]?.criticalRoll.status).toBe("not_required");
     expect(afterDamageUndo.phaseResolutionResults[0]?.damageResult).toBeUndefined();
     expect(afterDamageUndo.phaseResolutionResults[0]?.hitLocationRoll.status).toBe("rolled");

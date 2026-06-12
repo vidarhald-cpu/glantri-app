@@ -221,6 +221,7 @@ interface CombatParrySourceSelection {
 
 interface CombatDamageReviewAdditionalEffectDraft {
   durationRounds: string;
+  effectOrder?: number;
   id: string;
   kind: CombatRoundDamageReviewAdditionalEffect["kind"];
   label: string;
@@ -228,6 +229,10 @@ interface CombatDamageReviewAdditionalEffectDraft {
   modifierValue: string;
   notes: string;
   phase: string;
+  rollReports?: CombatRoundDamageReviewAdditionalEffect["rollReports"];
+  sourceCritKey?: string;
+  sourceEffectKey?: string;
+  sourceKind?: CombatRoundDamageReviewAdditionalEffect["sourceKind"];
 }
 
 interface CombatDamageReviewDraft {
@@ -1078,6 +1083,7 @@ function buildCombatDamageReviewDraft(
   return {
     additionalEffects: (damageResult?.review?.additionalEffects ?? []).map((effect) => ({
       durationRounds: effect.durationRounds?.toString() ?? "",
+      effectOrder: effect.effectOrder,
       id: effect.id,
       kind: effect.kind,
       label: effect.label,
@@ -1085,6 +1091,10 @@ function buildCombatDamageReviewDraft(
       modifierValue: effect.modifierValue?.toString() ?? "",
       notes: effect.notes ?? "",
       phase: effect.phase ?? "",
+      rollReports: effect.rollReports,
+      sourceCritKey: effect.sourceCritKey,
+      sourceEffectKey: effect.sourceEffectKey,
+      sourceKind: effect.sourceKind,
     })),
     armorCriticalModifierOverride: effectiveCritical.armorCriticalModifier?.toString() ?? "",
     armorModifierOverride: effectiveDamage?.effectiveArmorModifier.toString() ?? "",
@@ -1215,6 +1225,7 @@ function buildCombatDamageReviewFromDraft(input: {
 
     return {
       durationRounds,
+      effectOrder: effect.effectOrder,
       id: effect.id,
       kind,
       label: getCombatDamageReviewEffectLabel(effect),
@@ -1222,6 +1233,10 @@ function buildCombatDamageReviewFromDraft(input: {
       modifierValue,
       notes: effect.notes.trim() || undefined,
       phase: phase || undefined,
+      rollReports: effect.rollReports,
+      sourceCritKey: effect.sourceCritKey,
+      sourceEffectKey: effect.sourceEffectKey,
+      sourceKind: effect.sourceKind,
     };
   });
   const reviewWithoutTotalDamageOverride: Omit<
@@ -1229,6 +1244,7 @@ function buildCombatDamageReviewFromDraft(input: {
     "reviewedAt" | "reviewedByUserId"
   > = {
     additionalEffects,
+    criticalEffectProposal: input.damageResult.review?.criticalEffectProposal,
   };
 
   if (armorModifierOverride !== undefined) {
@@ -1273,6 +1289,7 @@ function buildCombatDamageReviewFromDraft(input: {
       : undefined;
   const review: Omit<CombatRoundDamageReview, "reviewedAt" | "reviewedByUserId"> = {
     additionalEffects,
+    criticalEffectProposal: input.damageResult.review?.criticalEffectProposal,
   };
 
   if (armorModifierOverride !== undefined) {
@@ -1676,6 +1693,7 @@ function CombatDamageReviewPanel(input: {
   saving?: boolean;
 }) {
   const disabled = input.controlsDisabled || input.saving;
+  const criticalEffectProposal = input.damageResult.review?.criticalEffectProposal;
   const updateAdditionalEffect = (
     effectId: string,
     patch: Partial<CombatDamageReviewAdditionalEffectDraft>,
@@ -1866,6 +1884,43 @@ function CombatDamageReviewPanel(input: {
           value={input.draft.notes}
         />
       </label>
+      {criticalEffectProposal ? (
+        <section
+          style={{
+            background: "#f7f3ea",
+            border: "1px solid #ddd3bf",
+            borderRadius: "6px",
+            display: "grid",
+            gap: "0.45rem",
+            padding: "0.7rem",
+          }}
+        >
+          <strong style={{ fontSize: "0.95rem" }}>
+            {criticalEffectProposal.title ?? "Critical table mapping unavailable"}
+          </strong>
+          {criticalEffectProposal.bodyText ? (
+            <div style={{ lineHeight: 1.45 }}>{criticalEffectProposal.bodyText}</div>
+          ) : null}
+          {criticalEffectProposal.rollReports.length > 0 ? (
+            <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
+              App rolls:{" "}
+              {criticalEffectProposal.rollReports
+                .map(
+                  (report) =>
+                    `${report.formula} ${report.rolls.join(" + ")} = ${report.total}`,
+                )
+                .join("; ")}
+            </div>
+          ) : null}
+          {criticalEffectProposal.warnings.length > 0 ? (
+            <div style={{ color: "#8a3b1f", display: "grid", gap: "0.2rem", fontSize: "0.85rem" }}>
+              {criticalEffectProposal.warnings.map((warning) => (
+                <div key={warning}>{warning}</div>
+              ))}
+            </div>
+          ) : null}
+        </section>
+      ) : null}
       <section style={{ display: "grid", gap: "0.5rem" }}>
         <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
           <strong style={{ fontSize: "0.9rem" }}>Additional immediate effects</strong>
@@ -3631,6 +3686,8 @@ export default function CombatRoundManagerPanel({
         ob,
         phase,
         scenarioParticipantId: selectedScenarioParticipant.id,
+        weaponCriticalCode: phaseModel.attackStats.weaponCriticalCode,
+        weaponDamageClass: phaseModel.attackStats.weaponDamageClass,
         weaponName: phaseModel.attackStats.weaponName,
       });
       const nextRoundState = normalizeCombatRoundManagerSelection({

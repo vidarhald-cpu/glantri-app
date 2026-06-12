@@ -20,6 +20,10 @@ import {
 } from "./combatEffects";
 import { lookupCombatCriticalModifier } from "./critical";
 import {
+  buildCriticalEffectProposalFromDamageResult,
+  buildCriticalEffectProposalSummary,
+} from "./criticalEffectProposal";
+import {
   hitLocationSchema,
   hitLocationTargetSchema,
   resolveHitLocationSelection,
@@ -218,6 +222,8 @@ export const combatRoundAttackRollResultSchema = z
     rolledAt: z.string().datetime(),
     rolledByUserId: idSchema.optional(),
     tableResult: z.string().min(1),
+    weaponCriticalCode: z.string().min(1).optional(),
+    weaponDamageClass: z.string().min(1).optional(),
     weaponName: z.string().min(1),
   })
   .superRefine((result, context) => {
@@ -325,10 +331,19 @@ export const combatRoundDamageReviewEffectPhaseSchema = z.enum([
   "round",
   "untilCleared",
 ]);
+export const combatRoundCriticalEffectRollReportSchema = z.object({
+  effectKey: z.string().min(1),
+  formula: z.string().min(1),
+  purpose: z.enum(["duration", "rate", "quantity", "other"]),
+  rolls: z.array(z.number().int()),
+  sourceField: z.enum(["durationRoll", "rateRollFormula", "sourceValue"]),
+  total: z.number().int(),
+});
 
 export const combatRoundDamageReviewAdditionalEffectSchema = z
   .object({
     durationRounds: z.number().int().positive().optional(),
+    effectOrder: z.number().int().positive().optional(),
     id: idSchema,
     kind: combatRoundDamageReviewAdditionalEffectKindSchema,
     label: z.string().min(1),
@@ -336,6 +351,10 @@ export const combatRoundDamageReviewAdditionalEffectSchema = z
     modifierValue: z.number().int().optional(),
     notes: z.string().optional(),
     phase: combatRoundDamageReviewEffectPhaseSchema.optional(),
+    rollReports: z.array(combatRoundCriticalEffectRollReportSchema).optional(),
+    sourceCritKey: z.string().min(1).optional(),
+    sourceEffectKey: z.string().min(1).optional(),
+    sourceKind: z.literal("critical_table").optional(),
   })
   .superRefine((effect, context) => {
     if (effect.kind === "modifier" && !effect.modifierBucket) {
@@ -466,6 +485,18 @@ export const combatRoundDamageResultSchema = z.object({
       armorModifierOverride: z.number().int().optional(),
       criticalGradeOverride: z.string().min(1).nullable().optional(),
       armorCriticalModifierOverride: z.number().int().optional(),
+      criticalEffectProposal: z
+        .object({
+          bodyText: z.string().min(1).optional(),
+          critIndex: z.number().int().positive().optional(),
+          critKey: z.string().min(1).optional(),
+          family: z.string().min(1).optional(),
+          location: z.string().min(1).optional(),
+          rollReports: z.array(combatRoundCriticalEffectRollReportSchema).default([]),
+          title: z.string().min(1).optional(),
+          warnings: z.array(z.string().min(1)).default([]),
+        })
+        .optional(),
       criticalLocationOverride: hitLocationSchema.optional(),
       criticalTypeModifierOverride: z.number().int().optional(),
       finalCriticalRollOverride: z.number().int().optional(),
@@ -490,6 +521,63 @@ export type CombatRoundDamageReview = NonNullable<CombatRoundDamageResult["revie
 export type CombatRoundDamageReviewAdditionalEffect = NonNullable<
   CombatRoundDamageReview["additionalEffects"]
 >[number];
+
+function isCombatRoundCriticalTableReviewEffect(
+  effect: CombatRoundDamageReviewAdditionalEffect,
+): boolean {
+  return (
+    effect.sourceKind === "critical_table" ||
+    Boolean(effect.sourceCritKey) ||
+    Boolean(effect.sourceEffectKey)
+  );
+}
+
+function removeCombatRoundCriticalEffectProposalFromReview(
+  review?: CombatRoundDamageReview,
+): CombatRoundDamageReview | undefined {
+  if (!review) {
+    return undefined;
+  }
+
+  const additionalEffects = review.additionalEffects.filter(
+    (effect) => !isCombatRoundCriticalTableReviewEffect(effect),
+  );
+  const nextReview = {
+    ...review,
+    additionalEffects,
+    criticalEffectProposal: undefined,
+  };
+
+  return combatRoundDamageResultSchema.shape.review.unwrap().parse(nextReview);
+}
+
+function mergeCombatRoundCriticalEffectProposalIntoReview(input: {
+  damageResult: CombatRoundDamageResult;
+  finalCriticalRoll?: number;
+  rng?: () => number;
+  selectedHitLocation?: HitLocation;
+  weaponCriticalCode?: string;
+  weaponDamageClass?: string;
+}): CombatRoundDamageReview {
+  const existingReview = removeCombatRoundCriticalEffectProposalFromReview(
+    input.damageResult.review,
+  ) ?? { additionalEffects: [] };
+  const proposal = buildCriticalEffectProposalFromDamageResult({
+    existingCommittedDamageAmount: getCombatRoundEffectiveDamageResult(input.damageResult)
+      .effectiveTotalDamage,
+    finalCriticalRoll: input.finalCriticalRoll,
+    rng: input.rng,
+    selectedHitLocation: input.selectedHitLocation,
+    weaponCriticalCode: input.weaponCriticalCode,
+    weaponDamageClass: input.weaponDamageClass,
+  });
+
+  return combatRoundDamageResultSchema.shape.review.unwrap().parse({
+    ...existingReview,
+    additionalEffects: [...existingReview.additionalEffects, ...proposal.proposedEffects],
+    criticalEffectProposal: buildCriticalEffectProposalSummary(proposal),
+  });
+}
 
 export const combatRoundDamageSubstateSchema = z.enum([
   "location_pending",
@@ -1392,6 +1480,8 @@ export function buildCombatRoundAttackRollResult(input: {
   rollTotal?: number;
   rolledAt: string;
   rolledByUserId?: string;
+  weaponCriticalCode?: string;
+  weaponDamageClass?: string;
   weaponName: string;
 }): CombatRoundAttackRollResult {
   const rollTotal = input.rollTotal ?? input.roll;
@@ -1426,6 +1516,8 @@ export function buildCombatRoundAttackRollResult(input: {
     rolledAt: input.rolledAt,
     rolledByUserId: input.rolledByUserId,
     tableResult: toHit.resultLabel,
+    weaponCriticalCode: input.weaponCriticalCode,
+    weaponDamageClass: input.weaponDamageClass,
     weaponName: input.weaponName,
   });
 }
@@ -3584,11 +3676,23 @@ export function recordCombatRoundCriticalRoll(input: {
     roundNumber: normalized.roundNumber,
     selectedHitLocation: effectiveDamage.effectiveSelectedHitLocation,
   });
+  const damageResultWithCriticalProposal = combatRoundDamageResultSchema.parse({
+    ...damageResult,
+    review: mergeCombatRoundCriticalEffectProposalIntoReview({
+      damageResult,
+      finalCriticalRoll: criticalRoll.finalCriticalRoll,
+      rng: input.rng,
+      selectedHitLocation: criticalRoll.selectedHitLocation,
+      weaponCriticalCode: input.attackResult.weaponCriticalCode,
+      weaponDamageClass: input.attackResult.weaponDamageClass,
+    }),
+  });
   const withCriticalRoll = upsertCombatRoundPhaseResolutionResults({
     results: [
       combatRoundPhaseResolutionResultSchema.parse({
         ...resolution,
         criticalRoll,
+        damageResult: damageResultWithCriticalProposal,
         updatedAt: input.updatedAt,
       }),
     ],
@@ -6062,6 +6166,14 @@ function undoCombatRoundCriticalRollCommandAtIndex(input: {
             criticalRoll: {
               status: "pending",
             },
+            damageResult: result.damageResult
+              ? {
+                  ...result.damageResult,
+                  review: removeCombatRoundCriticalEffectProposalFromReview(
+                    result.damageResult.review,
+                  ),
+                }
+              : undefined,
             updatedAt: command.createdAt,
           })
         : result,

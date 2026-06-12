@@ -3,6 +3,7 @@ import type { CombatAllocationState, CombatStateCharacterInputs } from "@glantri
 
 import {
   deriveCombatStateSnapshot,
+  type DerivedCombatWeaponRow,
   type DerivedCombatValue,
 } from "./combatStateDerivation";
 import { buildCharacterArmorSummary } from "./armorSummary";
@@ -31,6 +32,7 @@ export interface CombatStatePanelModel {
   statsTable?: CombatStateTableModel;
   armorRows?: CombatStateDetailRow[];
   armorTable?: CombatStateTableModel;
+  weaponRows?: DerivedCombatWeaponRow[];
   weaponModeTable: CombatStateTableModel;
   capabilityRows: CombatStateDetailRow[];
 }
@@ -251,6 +253,7 @@ export function buildCombatStatePanelModel(
     statsRows,
     armorRows,
     armorTable,
+    weaponRows: sortedWeaponRows,
     weaponModeTable,
     capabilityRows,
   };

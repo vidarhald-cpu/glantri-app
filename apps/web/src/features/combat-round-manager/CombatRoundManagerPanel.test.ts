@@ -176,6 +176,9 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("Commit phase damage");
     expect(source).toContain("Phase damage committed");
     expect(source).toContain("Damage review");
+    expect(source).toContain("criticalEffectProposal");
+    expect(source).toContain("Critical table mapping unavailable");
+    expect(source).toContain("App rolls:");
     expect(source).toContain("Additional immediate effects");
     expect(source).toContain("Add modifier effect");
     expect(source).toContain("Add note effect");
@@ -227,6 +230,8 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("rollCombatAttackOnServer({");
     expect(source).toContain("defenderScenarioParticipantId: targetScenarioParticipant.id");
     expect(source).toContain("scenarioParticipantId: selectedScenarioParticipant.id");
+    expect(source).toContain("weaponCriticalCode: phaseModel.attackStats.weaponCriticalCode");
+    expect(source).toContain("weaponDamageClass: phaseModel.attackStats.weaponDamageClass");
     expect(source).toContain("completeInspectorPhaseResolution");
     expect(source).toContain("getCombatRoundInitiativeRanks");
     expect(source).toContain("getCombatRoundInitiativeTotal");

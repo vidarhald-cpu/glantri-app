@@ -68,6 +68,8 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).not.toContain("GM can save or revise this participant declaration.");
     expect(source).toContain("Declaration closed.");
     expect(source).toContain("rollCombatAttackOnServer");
+    expect(source).toContain("weaponCriticalCode: phaseAttackStats.weaponCriticalCode");
+    expect(source).toContain("weaponDamageClass: phaseAttackStats.weaponDamageClass");
     expect(source).toContain("rollCombatParryOnServer");
     expect(source).toContain("rollCombatInitiativeOnServer");
     expect(source).toContain("rollInitiative");
