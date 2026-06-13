@@ -138,6 +138,7 @@ import {
   getCurrentCombatRoundTaskSelection,
   getNextCombatRoundParticipantSelection,
   isGlobalCombatRoundParticipantStep,
+  isSelectedCombatRoundStepExecutable,
   normalizeCombatRoundManagerSelection,
   type CombatRoundSelectionTarget,
 } from "./combatRoundSelection";
@@ -2241,6 +2242,11 @@ export default function CombatRoundManagerPanel({
     state: roundState,
     step: roundState.selectedStep,
   });
+  const inspectorSelectionIsCurrentTask = isSelectedCombatRoundStepExecutable({
+    participantId: inspector.participant?.participantId,
+    state: roundState,
+    step: inspector.step,
+  });
   const clearCurrentStepAvailable = canClearCombatRoundStep({
     state: roundState,
     step: inspector.step,
@@ -2338,6 +2344,10 @@ export default function CombatRoundManagerPanel({
   const inspectorSelectedStepIsSequential = isSequentialResolutionStep(inspector.step);
   const inspectorCurrentStepIsInitiative =
     inspector.step === "initiative_phase_1" || inspector.step === "initiative_phase_2";
+  const inspectorCanExecuteSelectedStep =
+    inspectorSelectionIsCurrentTask ||
+    (inspectorCurrentStepIsInitiative && roundState.currentStep === inspector.step);
+  const inspectorIsInspectionOnly = !inspectorCanExecuteSelectedStep;
   const inspectorCurrentAttackPhase = inspectorAttackPhase;
   const inspectorCurrentResolutionPhase = inspectorAttackPhase ?? inspectorResolutionPhase;
   const inspectorPhaseResolutionCursor =
@@ -2609,6 +2619,7 @@ export default function CombatRoundManagerPanel({
     inspectorAttackPhase && inspectorDisplayAttackResult,
   );
   const inspectorCanRollPhaseAttack =
+    inspectorCanExecuteSelectedStep &&
     Boolean(inspectorCurrentAttackPhase) &&
     inspectorCurrentPhaseHasAttack === true &&
     (!inspectorPhaseResolutionStatus ||
@@ -2626,6 +2637,7 @@ export default function CombatRoundManagerPanel({
   const inspectorActionValidationMessage =
     inspectorTargetValidationMessage ?? inspectorAttackSourceValidationMessage;
   const inspectorCanRollParry =
+    inspectorCanExecuteSelectedStep &&
     Boolean(inspectorResolutionPhase) &&
     inspectorResolutionStepKind === "parry" &&
     Boolean(inspectorResolutionAttackResult?.hit) &&
@@ -2688,6 +2700,8 @@ export default function CombatRoundManagerPanel({
     : undefined;
   const inspectorActionButtonLabel = inspectorSelectedAttackAlreadyRolled
     ? "Attack already rolled"
+    : inspectorIsInspectionOnly
+      ? "Inspecting step - use Current task to resume"
     : inspectorDamageCommitted
       ? "Phase damage committed"
       : inspectorDamageSubstate === "critical_pending"
@@ -4611,6 +4625,7 @@ export default function CombatRoundManagerPanel({
                         attackResult={inspectorResolutionAttackResult}
                         controlsDisabled={
                           saving ||
+                          inspectorIsInspectionOnly ||
                           Boolean(inspectorSnapshot) ||
                           inspectorDisplayPhaseResolutionResult.parryResolution.status ===
                             "resolved"
@@ -4636,7 +4651,9 @@ export default function CombatRoundManagerPanel({
                     {inspectorDamageProposalReady &&
                     inspectorDisplayPhaseResolutionResult?.damageResult ? (
                       <CombatDamageReviewPanel
-                        controlsDisabled={saving || Boolean(inspectorSnapshot)}
+                        controlsDisabled={
+                          saving || inspectorIsInspectionOnly || Boolean(inspectorSnapshot)
+                        }
                         damageResult={inspectorDisplayPhaseResolutionResult.damageResult}
                         draft={inspectorDamageReviewDraft}
                         onDraftChange={(draft) => {
@@ -4657,6 +4674,7 @@ export default function CombatRoundManagerPanel({
                       buttonLabel={inspectorActionButtonLabel}
                       disabled={
                         saving ||
+                        inspectorIsInspectionOnly ||
                         Boolean(inspectorActionValidationMessage) ||
                         inspectorSelectedAttackAlreadyRolled ||
                         inspectorDamageCommitted ||

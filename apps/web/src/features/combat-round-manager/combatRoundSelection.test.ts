@@ -6,6 +6,7 @@ import { encounterSessionSchema, initializeCombatRoundState } from "@glantri/dom
 import {
   getCurrentCombatRoundTaskSelection,
   getNextCombatRoundParticipantSelection,
+  isSelectedCombatRoundStepExecutable,
   normalizeCombatRoundManagerSelection,
 } from "./combatRoundSelection";
 
@@ -71,6 +72,36 @@ describe("combat round manager selection", () => {
       participantId: "middle",
       step: "phase_1_actions",
     });
+  });
+
+  it("treats non-current inspected phase cells as inspection-only", () => {
+    const existing = initializeCombatRoundState({ encounter: encounter() });
+    const state = {
+      ...existing,
+      currentCursor: {
+        participantId: "middle",
+        roundNumber: existing.roundNumber,
+        step: "A1" as const,
+      },
+      currentStep: "phase_1_actions" as const,
+      selectedParticipantId: "bottom",
+      selectedStep: "phase_2_actions" as const,
+    };
+
+    expect(
+      isSelectedCombatRoundStepExecutable({
+        participantId: "middle",
+        state,
+        step: "phase_1_actions",
+      }),
+    ).toBe(true);
+    expect(
+      isSelectedCombatRoundStepExecutable({
+        participantId: "bottom",
+        state,
+        step: "phase_2_actions",
+      }),
+    ).toBe(false);
   });
 
   it("keeps current task enabled for parry and damage cursors", () => {

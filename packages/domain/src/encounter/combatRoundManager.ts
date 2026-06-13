@@ -1751,12 +1751,34 @@ export function combatRoundParticipantHasPhaseAttack(input: {
   }).includes(input.phase);
 }
 
+export function combatRoundParticipantHasExecutablePhaseAttack(input: {
+  participantId: string;
+  phase: CombatRoundPhase;
+  state: CombatRoundState;
+}): boolean {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const participant = normalized.participants.find(
+    (entry) => entry.participantId === input.participantId,
+  );
+  const targetParticipantId =
+    participant?.declaration?.phaseContexts?.[input.phase]?.targetParticipantId;
+
+  return Boolean(
+    combatRoundParticipantHasPhaseAttack({
+      participantId: input.participantId,
+      phase: input.phase,
+      state: normalized,
+    }) &&
+      targetParticipantId,
+  );
+}
+
 function getCombatRoundInitialPhaseResolutionSubstep(input: {
   participantId: string;
   phase: CombatRoundPhase;
   state: CombatRoundState;
 }): CombatRoundPhaseResolutionSubstep {
-  return combatRoundParticipantHasPhaseAttack(input) ? "attack" : "parry";
+  return combatRoundParticipantHasExecutablePhaseAttack(input) ? "attack" : "parry";
 }
 
 function getCombatRoundPostAttackResolutionSubstep(
@@ -7284,11 +7306,6 @@ export function canPlayerRollCombatAttack(input: {
   const normalized = combatRoundStateSchema.parse(input.state);
   const requiredStep = input.phase === "phase1" ? "phase_1_actions" : "phase_2_actions";
   const requiredCursorStep = input.phase === "phase1" ? "A1" : "A2";
-  const participant = normalized.participants.find(
-    (entry) => entry.participantId === input.participantId,
-  );
-  const targetParticipantId =
-    participant?.declaration?.phaseContexts?.[input.phase]?.targetParticipantId;
   const existingAttackResult = getCombatRoundOutgoingAttackResultForParticipantPhase({
     participantId: input.participantId,
     phase: input.phase,
@@ -7299,8 +7316,7 @@ export function canPlayerRollCombatAttack(input: {
     normalized.currentStep === requiredStep &&
     normalized.currentCursor?.participantId === input.participantId &&
     normalized.currentCursor.step === requiredCursorStep &&
-    combatRoundParticipantHasPhaseAttack(input) &&
-    Boolean(targetParticipantId) &&
+    combatRoundParticipantHasExecutablePhaseAttack(input) &&
     existingAttackResult === undefined
   );
 }

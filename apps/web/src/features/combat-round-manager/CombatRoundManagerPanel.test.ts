@@ -246,6 +246,8 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("inspectorPhaseResolutionCursor");
     expect(source).toContain("inspectorPhaseResolutionStatus");
     expect(source).toContain("inspectorIsCursorParticipant");
+    expect(source).toContain("inspectorCanExecuteSelectedStep");
+    expect(source).toContain("inspectorIsInspectionOnly");
     expect(source).toContain("inspectorCurrentPhaseHasAttack");
     expect(source).toContain("inspectorCanRollPhaseAttack");
     expect(source).toContain("inspectorSelectedAttackAlreadyRolled");
@@ -256,6 +258,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("Main hand");
     expect(source).toContain("Off hand");
     expect(source).toContain("Roll parry");
+    expect(source).toContain("Inspecting step - use Current task to resume");
     expect(source).toContain('"Attack already rolled"');
     expect(source).toContain("inspectorActionButtonLabel");
     expect(source).toContain("advanceInspectorPhaseResolutionSubstep");

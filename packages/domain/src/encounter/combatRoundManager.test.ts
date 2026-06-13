@@ -19,6 +19,7 @@ import {
   clearCombatRoundStep,
   clearCurrentCombatRoundStepAndRewind,
   combatRoundStateSchema,
+  combatRoundParticipantHasExecutablePhaseAttack,
   combatRoundParticipantHasPhaseAttack,
   commitCombatRoundPhaseDamage,
   completeCombatRoundPhaseResolutionForParticipant,
@@ -7877,6 +7878,48 @@ describe("combat round manager", () => {
       isCombatRoundPhaseInitiativeComplete({
         phase: "phase1",
         state: withSkippedGuard,
+      }),
+    ).toBe(true);
+  });
+
+  it("opens A2 for a valid Parry - Attack participant after phase-two initiative", () => {
+    const state = preparePhaseResolutionState({
+      guardActionId: "parry_attack",
+      gladiatorActionId: "parry_attack",
+      phase: "phase2",
+    });
+
+    expect(state.currentStep).toBe("phase_2_actions");
+    expect(state.currentCursor).toMatchObject({
+      participantId: "gladiator",
+      step: "A2",
+    });
+    expect(
+      combatRoundParticipantHasExecutablePhaseAttack({
+        participantId: "gladiator",
+        phase: "phase2",
+        state,
+      }),
+    ).toBe(true);
+  });
+
+  it("opens A2 for a valid Double Attack participant after phase-two initiative", () => {
+    const state = preparePhaseResolutionState({
+      guardActionId: "double_attack",
+      gladiatorActionId: "double_attack",
+      phase: "phase2",
+    });
+
+    expect(state.currentStep).toBe("phase_2_actions");
+    expect(state.currentCursor).toMatchObject({
+      participantId: "gladiator",
+      step: "A2",
+    });
+    expect(
+      combatRoundParticipantHasExecutablePhaseAttack({
+        participantId: "gladiator",
+        phase: "phase2",
+        state,
       }),
     ).toBe(true);
   });

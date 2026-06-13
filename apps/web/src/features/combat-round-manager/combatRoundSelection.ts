@@ -33,6 +33,20 @@ export function getCurrentCombatRoundTaskSelection(
   };
 }
 
+export function isSelectedCombatRoundStepExecutable(input: {
+  participantId?: string;
+  state: CombatRoundState;
+  step?: CombatRoundStep;
+}): boolean {
+  const currentTask = getCurrentCombatRoundTaskSelection(input.state);
+
+  return Boolean(
+    currentTask &&
+      currentTask.participantId === input.participantId &&
+      currentTask.step === input.step,
+  );
+}
+
 export function isGlobalCombatRoundParticipantStep(step: CombatRoundStep): boolean {
   return (
     step === "select_actions" ||
