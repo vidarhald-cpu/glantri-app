@@ -40,7 +40,7 @@ import {
   setCombatRoundSelection,
   validateCombatDeclarationTargets,
 } from "@glantri/domain";
-import type { ScenarioParticipant } from "@glantri/domain";
+import type { CombatRoundState, ScenarioParticipant } from "@glantri/domain";
 import {
   recordRoleplayGmSkillRoll,
   resolveCombatParry,
@@ -392,6 +392,13 @@ function parseCombatSummaryInteger(value: string | undefined, label: string): nu
   }
 
   return parsed;
+}
+
+function combatRoundStatesDiffer(
+  left: CombatRoundState | undefined,
+  right: CombatRoundState | undefined,
+): boolean {
+  return JSON.stringify(left ?? null) !== JSON.stringify(right ?? null);
 }
 
 function preservePlayerCombatModifierBuckets(input: {
@@ -1727,16 +1734,43 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       const clearsDeclarationStep = clearStep === "select_actions";
 
       if (!canClearCombatRoundStep({ state: stateForClear, step: clearStep })) {
+        if (
+          encounter.combatRoundState &&
+          combatRoundStatesDiffer(roundState, encounter.combatRoundState)
+        ) {
+          const repairedAt = new Date().toISOString();
+          const savedEncounter = await encounterService.updateEncounter({
+            campaignId: access.campaignId,
+            encounterId,
+            scenarioId,
+            session: {
+              ...encounter,
+              combatRoundState: roundState,
+              currentRound: roundState.roundNumber,
+              updatedAt: repairedAt,
+            },
+          });
+
+          return { encounter: savedEncounter, participants: [] };
+        }
+
         return { encounter, participants: [] };
       }
 
-      const nextRoundState =
+      const clearedRoundState =
         selectedParticipantId && selectedStep
           ? clearCombatRoundStep({
               state: stateForClear,
               step: selectedStep,
             })
           : clearCurrentCombatRoundStepAndRewind(roundState);
+      const nextRoundState = initializeCombatRoundState({
+        encounter: {
+          ...encounter,
+          combatRoundState: clearedRoundState,
+          currentRound: clearedRoundState.roundNumber,
+        },
+      });
       const removedDeclareCommandParticipantIds = new Set(
         roundState.commands
           .filter(

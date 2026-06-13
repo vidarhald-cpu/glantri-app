@@ -407,19 +407,24 @@ describe("combat round manager selection", () => {
     expect(normalized.selectedStep).toBe("initiative_phase_1");
   });
 
-  it("keeps command-undo A1 selection after refresh despite stale manual inspection", () => {
+  it("repairs unsupported A1 selection after refresh despite stale manual inspection", () => {
     const existing = initializeCombatRoundState({ encounter: encounter() });
     const refreshedEncounter = encounter({
       combatRoundState: {
         ...existing,
+        commands: [],
         currentCursor: {
           participantId: "middle",
           roundNumber: existing.roundNumber,
           step: "A1" as const,
         },
         currentStep: "phase_1_actions" as const,
+        phaseResolutionCursor: undefined,
+        phaseResolutionResults: [],
+        phaseResolutionStatuses: {},
         selectedParticipantId: "bottom",
         selectedStep: "initiative_phase_1" as const,
+        stepSnapshots: [],
       },
     });
     const refreshedState = initializeCombatRoundState({ encounter: refreshedEncounter });
@@ -435,8 +440,9 @@ describe("combat round manager selection", () => {
       state: refreshedState,
     });
 
-    expect(normalized.selectedParticipantId).toBe("middle");
-    expect(normalized.selectedStep).toBe("phase_1_actions");
+    expect(normalized.currentCursor).toMatchObject({ participantId: "top", step: "DE" });
+    expect(normalized.selectedParticipantId).toBe("top");
+    expect(normalized.selectedStep).toBe("select_actions");
   });
 
   it("keeps command-undo P1 selection after refresh despite stale manual inspection", () => {
@@ -444,6 +450,28 @@ describe("combat round manager selection", () => {
     const refreshedEncounter = encounter({
       combatRoundState: {
         ...existing,
+        commands: [
+          {
+            afterCursor: {
+              participantId: "middle",
+              roundNumber: existing.roundNumber,
+              step: "P1",
+            },
+            beforeCursor: {
+              participantId: "top",
+              roundNumber: existing.roundNumber,
+              step: "A1",
+            },
+            createdAt: "2026-01-01T00:01:00.000Z",
+            facts: {},
+            id: "command-top-attack",
+            participantId: "top",
+            phase: "phase1",
+            roundNumber: existing.roundNumber,
+            step: "A1",
+            type: "roll_attack",
+          },
+        ],
         currentCursor: {
           participantId: "middle",
           roundNumber: existing.roundNumber,

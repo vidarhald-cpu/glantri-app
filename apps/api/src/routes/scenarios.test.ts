@@ -2959,7 +2959,27 @@ describe("scenarios route contract", () => {
     setupCombatDeclarationRoute({
       encounter: {
         combatRoundState: {
-          commands: [],
+          commands: [
+            {
+              afterCursor: {
+                participantId: "encounter-participant-1",
+                roundNumber: 1,
+                step: "i1",
+              },
+              beforeCursor: {
+                participantId: "encounter-participant-1",
+                roundNumber: 1,
+                step: "i1",
+              },
+              createdAt: "2026-01-01T00:01:30.000Z",
+              facts: {},
+              id: "command-i1",
+              participantId: "encounter-participant-1",
+              roundNumber: 1,
+              step: "i1",
+              type: "roll_initiative_phase1",
+            },
+          ],
           currentCursor: {
             participantId: "encounter-participant-1",
             roundNumber: 1,
@@ -3123,7 +3143,27 @@ describe("scenarios route contract", () => {
     setupCombatDeclarationRoute({
       encounter: {
         combatRoundState: {
-          commands: [],
+          commands: [
+            {
+              afterCursor: {
+                participantId: "encounter-participant-1",
+                roundNumber: 1,
+                step: "i2",
+              },
+              beforeCursor: {
+                participantId: "encounter-participant-1",
+                roundNumber: 1,
+                step: "i2",
+              },
+              createdAt: "2026-01-01T00:01:30.000Z",
+              facts: {},
+              id: "command-i2",
+              participantId: "encounter-participant-1",
+              roundNumber: 1,
+              step: "i2",
+              type: "roll_initiative_phase2",
+            },
+          ],
           currentCursor: {
             participantId: "encounter-participant-1",
             roundNumber: 1,
@@ -3838,6 +3878,62 @@ describe("scenarios route contract", () => {
     expect(updatedEncounter.combatRoundState.selectedStep).toBe("select_actions");
     expect(updatedEncounter.combatRoundState.participants[0].declaration).toBeUndefined();
     expect(mocks.encounterService.updateScenarioParticipantState).toHaveBeenCalled();
+  });
+
+  it("repairs unsupported A1 persisted state even when Clear has nothing to undo", async () => {
+    const combatEncounter = makeCombatEncounter() as EncounterSession;
+    const baseState = initializeCombatRoundState({ encounter: combatEncounter });
+    setupCombatDeclarationRoute({
+      encounter: {
+        combatRoundState: {
+          ...baseState,
+          commands: [],
+          currentCursor: {
+            participantId: "encounter-participant-1",
+            roundNumber: baseState.roundNumber,
+            step: "A1",
+          },
+          currentStep: "phase_1_actions",
+          participants: baseState.participants.map((participant) => ({
+            ...participant,
+            stepStatuses: {
+              ...participant.stepStatuses,
+              phase_1_actions: "gmEdited",
+            },
+          })),
+          phaseResolutionCursor: undefined,
+          phaseResolutionResults: [],
+          phaseResolutionStatuses: {},
+          selectedParticipantId: "encounter-participant-1",
+          selectedStep: "phase_1_actions",
+          stepSnapshots: [],
+        },
+      },
+      user: mocks.adminUser,
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/encounters/encounter-1/combat-round/clear-current-step",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
+    expect(updatedEncounter.combatRoundState.commands).toEqual([]);
+    expect(updatedEncounter.combatRoundState.currentStep).toBe("select_actions");
+    expect(updatedEncounter.combatRoundState.currentCursor).toEqual({
+      participantId: "encounter-participant-1",
+      roundNumber: baseState.roundNumber,
+      step: "DE",
+    });
+    expect(updatedEncounter.combatRoundState.participants[0].stepStatuses.phase_1_actions).toBe(
+      "pending",
+    );
+    expect(updatedEncounter.combatRoundState.phaseResolutionCursor).toBeUndefined();
+    expect(updatedEncounter.combatRoundState.phaseResolutionResults).toEqual([]);
   });
 
   it("clears a player-originated command-backed DE declaration", async () => {
@@ -4966,7 +5062,7 @@ describe("scenarios route contract", () => {
     expect(response.statusCode).toBe(200);
     const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
     expect(updatedEncounter.combatRoundState.currentStep).toBe("initiative_phase_1");
-    expect(updatedEncounter.combatRoundState.selectedStep).toBe("phase_1_actions");
+    expect(updatedEncounter.combatRoundState.selectedStep).toBe("initiative_phase_1");
     expect(updatedEncounter.combatRoundState.selectedParticipantId).toBe("encounter-participant-1");
     expect(updatedEncounter.combatRoundState.participants[0].attackResults.phase1).toBeUndefined();
     expect(updatedEncounter.combatRoundState.participants[0].stepStatuses.phase_1_actions).toBe(
@@ -5037,8 +5133,8 @@ describe("scenarios route contract", () => {
     expect(response.statusCode).toBe(200);
     const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
     expect(updatedEncounter.combatRoundState.currentStep).toBe("initiative_phase_1");
-    expect(updatedEncounter.combatRoundState.selectedStep).toBe("phase_1_actions");
-    expect(updatedEncounter.combatRoundState.selectedParticipantId).toBe("encounter-participant-1");
+    expect(updatedEncounter.combatRoundState.selectedStep).toBe("initiative_phase_1");
+    expect(updatedEncounter.combatRoundState.selectedParticipantId).toBe("encounter-participant-2");
     expect(updatedEncounter.combatRoundState.participants[0].attackResults.phase1).toBeUndefined();
     expect(updatedEncounter.combatRoundState.participants[0].stepStatuses.phase_1_actions).toBe(
       "pending",

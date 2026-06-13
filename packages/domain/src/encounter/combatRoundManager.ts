@@ -4435,6 +4435,7 @@ function combatRoundStateHasPhaseResolutionEvidence(input: {
   commands: CombatRoundCommand[];
   currentStep: CombatRoundStep;
   cursor: CombatRoundPhaseResolutionCursor;
+  participants: CombatRoundParticipantState[];
   phaseResolutionResults: CombatRoundPhaseResolutionResult[];
   phaseResolutionStatuses: CombatRoundPhaseResolutionStatuses;
   roundNumber: number;
@@ -4452,12 +4453,12 @@ function combatRoundStateHasPhaseResolutionEvidence(input: {
   }
 
   if (
-    input.commands.some(
-      (command) =>
-        command.roundNumber === input.roundNumber &&
-        (command.phase === input.cursor.phase ||
-          command.beforeCursor.step === getCombatRoundAttackCursorStepForPhase(input.cursor.phase) ||
-          command.afterCursor.step === getCombatRoundAttackCursorStepForPhase(input.cursor.phase)),
+    input.commands.some((command) =>
+      combatRoundCommandSupportsPhaseResolutionCursor({
+        command,
+        cursor: input.cursor,
+        roundNumber: input.roundNumber,
+      }),
     )
   ) {
     return true;
@@ -4475,21 +4476,255 @@ function combatRoundStateHasPhaseResolutionEvidence(input: {
     return true;
   }
 
-  const participantStatus =
-    input.phaseResolutionStatuses[input.cursor.participantId]?.[input.cursor.phase];
+  if (
+    input.participants.some((participant) => {
+      const result = participant.attackResults[input.cursor.phase];
 
-  if (participantStatus && participantStatus.substep !== "pending") {
+      return (
+        result !== undefined &&
+        (result.attackerParticipantId === input.cursor.participantId ||
+          result.defenderParticipantId === input.cursor.participantId)
+      );
+    })
+  ) {
     return true;
   }
 
-  return input.stepSnapshots.some(
-    (snapshot) =>
-      snapshot.roundNumber === input.roundNumber &&
-      snapshot.participantId === input.cursor.participantId &&
-      (snapshot.step === getCombatRoundPhaseActionStepForPhase(input.cursor.phase) ||
-        snapshot.step === getCombatRoundParryReviewStepForPhase(input.cursor.phase) ||
-        snapshot.step === getCombatRoundDamageReviewStepForPhase(input.cursor.phase)),
+  if (input.cursor.substep === "attack") {
+    const setupCommandType =
+      input.cursor.phase === "phase1" ? "roll_initiative_phase1" : "roll_initiative_phase2";
+
+    return input.commands.some(
+      (command) => command.roundNumber === input.roundNumber && command.type === setupCommandType,
+    );
+  }
+
+  return false;
+}
+
+function combatRoundCommandSupportsPhaseResolutionCursor(input: {
+  command: CombatRoundCommand;
+  cursor: CombatRoundPhaseResolutionCursor;
+  roundNumber: number;
+}): boolean {
+  if (input.command.roundNumber !== input.roundNumber) {
+    return false;
+  }
+
+  if (input.command.phase === input.cursor.phase) {
+    return true;
+  }
+
+  const cursorSteps = new Set<CombatRoundCursorStep>([
+    getCombatRoundAttackCursorStepForPhase(input.cursor.phase),
+    getCombatRoundParryCursorStepForPhase(input.cursor.phase),
+    getCombatRoundDamageCursorStepForPhase(input.cursor.phase),
+  ]);
+
+  return (
+    cursorSteps.has(input.command.beforeCursor.step) ||
+    cursorSteps.has(input.command.afterCursor.step)
   );
+}
+
+function combatRoundCursorsMatch(left?: CombatRoundCursor, right?: CombatRoundCursor): boolean {
+  return Boolean(
+    left &&
+      right &&
+      left.roundNumber === right.roundNumber &&
+      left.step === right.step &&
+      left.participantId === right.participantId,
+  );
+}
+
+function getLatestValidCombatRoundCommandCursor(input: {
+  commands: CombatRoundCommand[];
+  participantIds: Set<string>;
+  roundNumber: number;
+}): CombatRoundCursor | undefined {
+  for (let index = input.commands.length - 1; index >= 0; index -= 1) {
+    const command = input.commands[index];
+
+    if (command?.roundNumber !== input.roundNumber) {
+      continue;
+    }
+
+    if (
+      command.afterCursor.participantId &&
+      !input.participantIds.has(command.afterCursor.participantId)
+    ) {
+      continue;
+    }
+
+    return command.afterCursor;
+  }
+
+  return undefined;
+}
+
+function combatRoundCurrentCursorHasSupport(input: {
+  commands: CombatRoundCommand[];
+  currentStep: CombatRoundStep;
+  cursor: CombatRoundCursor;
+  existingPhaseResolutionCursor?: CombatRoundPhaseResolutionCursor;
+  participants: CombatRoundParticipantState[];
+  participantIds: Set<string>;
+  phaseResolutionResults: CombatRoundPhaseResolutionResult[];
+  phaseResolutionStatuses: CombatRoundPhaseResolutionStatuses;
+  roundNumber: number;
+  stepSnapshots: CombatRoundStepSnapshot[];
+}): boolean {
+  const cursorStep = getCombatRoundStepForCursorStep(input.cursor.step);
+
+  if (
+    input.cursor.roundNumber !== input.roundNumber ||
+    cursorStep !== input.currentStep ||
+    (input.cursor.participantId && !input.participantIds.has(input.cursor.participantId))
+  ) {
+    return false;
+  }
+
+  if (isGlobalCombatRoundStep(input.currentStep)) {
+    return true;
+  }
+
+  if (
+    input.commands.some((command) => combatRoundCursorsMatch(command.afterCursor, input.cursor))
+  ) {
+    return true;
+  }
+
+  if (!input.existingPhaseResolutionCursor) {
+    return false;
+  }
+
+  const phaseCursorStep = getCombatRoundStepForCursorStep(
+    getCombatRoundCursorStepForPhaseResolutionSubstep({
+      phase: input.existingPhaseResolutionCursor.phase,
+      substep: input.existingPhaseResolutionCursor.substep,
+    }),
+  );
+
+  if (
+    phaseCursorStep !== input.currentStep ||
+    input.existingPhaseResolutionCursor.participantId !== input.cursor.participantId
+  ) {
+    return false;
+  }
+
+  return combatRoundStateHasPhaseResolutionEvidence({
+    commands: input.commands,
+    currentStep: input.currentStep,
+    cursor: input.existingPhaseResolutionCursor,
+    participants: input.participants,
+    phaseResolutionResults: input.phaseResolutionResults,
+    phaseResolutionStatuses: input.phaseResolutionStatuses,
+    roundNumber: input.roundNumber,
+    stepSnapshots: input.stepSnapshots,
+  });
+}
+
+function resetCombatRoundPhaseProgress(
+  participant: CombatRoundParticipantState,
+): CombatRoundParticipantState {
+  return {
+    ...participant,
+    attackResults: {},
+    stepStatuses: {
+      ...participant.stepStatuses,
+      phase_1_actions: "pending",
+      phase_1_damage: "pending",
+      phase_2_actions: "pending",
+      phase_2_damage: "pending",
+      review_phase_2_actions: "pending",
+      review_phase_2_damage: "pending",
+    },
+  };
+}
+
+function resetCombatRoundParticipantToRoundStart(
+  participant: CombatRoundParticipantState,
+): CombatRoundParticipantState {
+  return {
+    ...participant,
+    attackResults: {},
+    declaration: undefined,
+    initiatives: {},
+    stepStatuses: buildDefaultStepStatuses(),
+  };
+}
+
+function getFallbackCombatRoundCursor(input: {
+  commands: CombatRoundCommand[];
+  participantId?: string;
+  participantIds: Set<string>;
+  roundNumber: number;
+}): CombatRoundCursor {
+  return (
+    getLatestValidCombatRoundCommandCursor({
+      commands: input.commands,
+      participantIds: input.participantIds,
+      roundNumber: input.roundNumber,
+    }) ??
+    getDefaultCombatRoundCursor({
+      participantId: input.participantId,
+      roundNumber: input.roundNumber,
+      step: "select_actions",
+    })
+  );
+}
+
+function combatRoundStateHasUnsupportedPhaseStep(input: {
+  commands: CombatRoundCommand[];
+  currentStep: CombatRoundStep;
+  currentCursor?: CombatRoundCursor;
+  existingPhaseResolutionCursor?: CombatRoundPhaseResolutionCursor;
+  participants: CombatRoundParticipantState[];
+  participantIds: Set<string>;
+  phaseResolutionResults: CombatRoundPhaseResolutionResult[];
+  phaseResolutionStatuses: CombatRoundPhaseResolutionStatuses;
+  roundNumber: number;
+  stepSnapshots: CombatRoundStepSnapshot[];
+}): boolean {
+  if (isGlobalCombatRoundStep(input.currentStep)) {
+    return false;
+  }
+
+  if (
+    input.currentCursor &&
+    combatRoundCurrentCursorHasSupport({
+      commands: input.commands,
+      currentStep: input.currentStep,
+      cursor: input.currentCursor,
+      existingPhaseResolutionCursor: input.existingPhaseResolutionCursor,
+      participants: input.participants,
+      participantIds: input.participantIds,
+      phaseResolutionResults: input.phaseResolutionResults,
+      phaseResolutionStatuses: input.phaseResolutionStatuses,
+      roundNumber: input.roundNumber,
+      stepSnapshots: input.stepSnapshots,
+    })
+  ) {
+    return false;
+  }
+
+  if (
+    input.existingPhaseResolutionCursor &&
+    combatRoundStateHasPhaseResolutionEvidence({
+      commands: input.commands,
+      currentStep: input.currentStep,
+      cursor: input.existingPhaseResolutionCursor,
+      participants: input.participants,
+      phaseResolutionResults: input.phaseResolutionResults,
+      phaseResolutionStatuses: input.phaseResolutionStatuses,
+      roundNumber: input.roundNumber,
+      stepSnapshots: input.stepSnapshots,
+    })
+  ) {
+    return false;
+  }
+
+  return true;
 }
 
 export function initializeCombatRoundState(input: {
@@ -4537,47 +4772,86 @@ export function initializeCombatRoundState(input: {
     (snapshot) =>
       snapshot.roundNumber === roundNumber && participantIds.has(snapshot.participantId),
   );
-  const existingCursorStep = existing?.currentCursor
-    ? getCombatRoundStepForCursorStep(existing.currentCursor.step)
-    : undefined;
-  const existingCursorParticipantId = existing?.currentCursor?.participantId;
-  const persistedCurrentStepHasCurrentCursor =
-    existing?.currentCursor &&
-    existing.currentCursor.roundNumber === roundNumber &&
-    existingCursorStep === persistedCurrentStep &&
-    (!existingCursorParticipantId || participantIds.has(existingCursorParticipantId));
-  const persistedCurrentStepHasPhaseEvidence =
-    isGlobalCombatRoundStep(persistedCurrentStep) ||
-    Boolean(persistedCurrentStepHasCurrentCursor) ||
-    commands.length > 0 ||
-    phaseResolutionResults.length > 0 ||
-    stepSnapshots.length > 0 ||
-    Object.values(phaseResolutionStatuses).some((phaseStatuses) =>
-      Object.values(phaseStatuses).some((status) => status.substep !== "pending"),
-    );
-  const currentStep = persistedCurrentStepHasPhaseEvidence
-    ? persistedCurrentStep
-    : "select_actions";
-  const canUseExistingCurrentCursor =
-    existing?.currentCursor &&
-    existing.currentCursor.roundNumber === roundNumber &&
-    existingCursorStep === currentStep &&
-    (!existingCursorParticipantId || participantIds.has(existingCursorParticipantId));
-  const canUseExistingPhaseResolutionCursor =
-    currentStep !== "select_actions" &&
+  const existingPhaseResolutionCursorCandidate =
     existing?.phaseResolutionCursor &&
-    participantIds.has(existing.phaseResolutionCursor.participantId) &&
+    participantIds.has(existing.phaseResolutionCursor.participantId)
+      ? existing.phaseResolutionCursor
+      : undefined;
+  const repairsUnsupportedPhaseStep = combatRoundStateHasUnsupportedPhaseStep({
+    commands,
+    currentCursor: existing?.currentCursor,
+    currentStep: persistedCurrentStep,
+    existingPhaseResolutionCursor: existingPhaseResolutionCursorCandidate,
+    participants,
+    participantIds,
+    phaseResolutionResults,
+    phaseResolutionStatuses,
+    roundNumber,
+    stepSnapshots,
+  });
+  const fallbackCursor = repairsUnsupportedPhaseStep
+    ? getFallbackCombatRoundCursor({
+        commands,
+        participantId: participants[0]?.participantId,
+        participantIds,
+        roundNumber,
+      })
+    : undefined;
+  const currentStep = fallbackCursor
+    ? getCombatRoundStepForCursorStep(fallbackCursor.step)
+    : persistedCurrentStep;
+  const participantsForState = repairsUnsupportedPhaseStep
+    ? commands.length === 0
+      ? participants.map(resetCombatRoundParticipantToRoundStart)
+      : participants.map(resetCombatRoundPhaseProgress)
+    : participants;
+  const phaseResolutionResultsForState = repairsUnsupportedPhaseStep
+    ? []
+    : phaseResolutionResults;
+  const phaseResolutionStatusesForState = repairsUnsupportedPhaseStep
+    ? {}
+    : phaseResolutionStatuses;
+  const stepSnapshotsForState = repairsUnsupportedPhaseStep
+    ? commands.length === 0
+      ? []
+      : stepSnapshots.filter(
+          (snapshot) =>
+            !getCombatRoundAttackPhaseForStep(snapshot.step) &&
+            !getCombatRoundResolutionPhaseForStep(snapshot.step),
+        )
+    : stepSnapshots;
+  const existingCursorParticipantId = existing?.currentCursor?.participantId;
+  const canUseExistingCurrentCursor =
+    !fallbackCursor &&
+    existing?.currentCursor &&
+    combatRoundCurrentCursorHasSupport({
+      commands,
+      currentStep,
+      cursor: existing.currentCursor,
+      existingPhaseResolutionCursor: existingPhaseResolutionCursorCandidate,
+      participants: participantsForState,
+      participantIds,
+      phaseResolutionResults: phaseResolutionResultsForState,
+      phaseResolutionStatuses: phaseResolutionStatusesForState,
+      roundNumber,
+      stepSnapshots: stepSnapshotsForState,
+    });
+  const canUseExistingPhaseResolutionCursor =
+    !fallbackCursor &&
+    currentStep !== "select_actions" &&
+    existingPhaseResolutionCursorCandidate &&
     combatRoundStateHasPhaseResolutionEvidence({
       commands,
       currentStep,
-      cursor: existing.phaseResolutionCursor,
-      phaseResolutionResults,
-      phaseResolutionStatuses,
+      cursor: existingPhaseResolutionCursorCandidate,
+      participants: participantsForState,
+      phaseResolutionResults: phaseResolutionResultsForState,
+      phaseResolutionStatuses: phaseResolutionStatusesForState,
       roundNumber,
-      stepSnapshots,
+      stepSnapshots: stepSnapshotsForState,
     });
   const existingPhaseResolutionCursor = canUseExistingPhaseResolutionCursor
-    ? existing?.phaseResolutionCursor
+    ? existingPhaseResolutionCursorCandidate
     : undefined;
   const recoveredPhaseResolutionCursor =
     !canUseExistingCurrentCursor &&
@@ -4589,11 +4863,11 @@ export function initializeCombatRoundState(input: {
             ...existing,
             commands,
             currentStep,
-            phaseResolutionResults,
-            phaseResolutionStatuses,
-            participants,
+            phaseResolutionResults: phaseResolutionResultsForState,
+            phaseResolutionStatuses: phaseResolutionStatusesForState,
+            participants: participantsForState,
             roundNumber,
-            stepSnapshots,
+            stepSnapshots: stepSnapshotsForState,
           },
         })
       : undefined;
@@ -4605,7 +4879,9 @@ export function initializeCombatRoundState(input: {
     existing?.selectedStep !== undefined &&
     existing.selectedStep !== "select_actions";
   const selectedParticipantId =
-    canUseExistingCurrentCursor && existingCursorParticipantId
+    fallbackCursor?.participantId
+      ? fallbackCursor.participantId
+      : canUseExistingCurrentCursor && existingCursorParticipantId
       ? existingCursorParticipantId
       : canUseRecoveredPhaseResolutionCursor && recoveredPhaseResolutionCursor.participantId
         ? recoveredPhaseResolutionCursor.participantId
@@ -4613,7 +4889,7 @@ export function initializeCombatRoundState(input: {
           existing?.selectedParticipantId &&
           participantIds.has(existing.selectedParticipantId)
         ? existing.selectedParticipantId
-        : participants[0]?.participantId;
+        : participantsForState[0]?.participantId;
   const activeParticipantId =
     existing?.activeParticipantId && participantIds.has(existing.activeParticipantId)
       ? existing.activeParticipantId
@@ -4622,7 +4898,9 @@ export function initializeCombatRoundState(input: {
   return {
     activeParticipantId,
     commands,
-    currentCursor: canUseExistingCurrentCursor
+    currentCursor: fallbackCursor
+      ? fallbackCursor
+      : canUseExistingCurrentCursor
       ? existing.currentCursor
       : canUseRecoveredPhaseResolutionCursor
         ? recoveredPhaseResolutionCursor
@@ -4639,17 +4917,19 @@ export function initializeCombatRoundState(input: {
       currentStep === "select_actions" || !existingPhaseResolutionCursor
         ? undefined
         : existingPhaseResolutionCursor,
-    phaseResolutionResults,
-    phaseResolutionStatuses,
-    participants,
+    phaseResolutionResults: phaseResolutionResultsForState,
+    phaseResolutionStatuses: phaseResolutionStatusesForState,
+    participants: participantsForState,
     roundNumber,
     selectedParticipantId,
-    selectedStep: canUseExistingCurrentCursor
+    selectedStep: fallbackCursor
+      ? currentStep
+      : canUseExistingCurrentCursor
       ? currentStep
       : resetsStaleDeclarationSelection
         ? "select_actions"
         : (existing?.selectedStep ?? currentStep),
-    stepSnapshots,
+    stepSnapshots: stepSnapshotsForState,
   };
 }
 
