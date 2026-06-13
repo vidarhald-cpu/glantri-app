@@ -46,6 +46,7 @@ import {
   getCombatRoundParticipantPhaseStepStatus,
   getCombatRoundPhaseResolutionResultForAttack,
   getCombatRoundPhaseResolutionStatus,
+  getCombatRoundTimelineRoundStates,
   getCombatRoundInitiativeRanks,
   getCombatRoundInitiativeTotal,
   getCombatRoundModifierPhaseForStep,
@@ -188,8 +189,6 @@ const inspectorNavStyle = {
   gap: "0.5rem",
 } as const;
 
-const timelineRounds = 1;
-
 interface CombatInspectorDeclarationDraft {
   actionId: PlayerEncounterActionId | "";
   additionalActionNotes: string;
@@ -305,7 +304,7 @@ function isSequentialResolutionStep(step: CombatRoundStep): boolean {
 
 function getAdvanceButtonLabel(step: CombatRoundStep): string {
   if (step === "round_summary") {
-    return "Complete round";
+    return "Start next round";
   }
 
   if (isSequentialResolutionStep(step)) {
@@ -2195,7 +2194,7 @@ export default function CombatRoundManagerPanel({
   const encounterScopeRef = useRef(encounter.id);
   const manualSelectionRef = useRef<CombatRoundSelectionTarget | undefined>(undefined);
   const pendingSelectionRef = useRef<CombatRoundSelectionTarget | undefined>(undefined);
-  const selectedRoundNumber = roundState.roundNumber;
+  const [selectedRoundNumber, setSelectedRoundNumber] = useState(initialRoundState.roundNumber);
   const encounterScenarioParticipantIds = useMemo(
     () => getEncounterScenarioParticipantIds(encounter.participants),
     [encounter.participants],
@@ -2216,6 +2215,14 @@ export default function CombatRoundManagerPanel({
     () => getCombatRoundInitiativeRanks({ phase: "phase2", state: roundState }),
     [roundState],
   );
+  const timelineRoundStates = useMemo(
+    () => getCombatRoundTimelineRoundStates(roundState),
+    [roundState],
+  );
+  const selectedTimelineRoundState =
+    timelineRoundStates.find((candidate) => candidate.roundNumber === selectedRoundNumber) ??
+    roundState;
+  const selectedRoundIsActive = selectedTimelineRoundState.roundNumber === roundState.roundNumber;
   const displayParticipants = useMemo(() => {
     if (!initiativeSortPhase) {
       return roundState.participants;
@@ -2232,25 +2239,24 @@ export default function CombatRoundManagerPanel({
         })
       : roundState.participants;
   }, [initiativeSortPhase, roundState]);
-  const timelineRoundNumbers = Array.from(
-    { length: timelineRounds },
-    (_, index) => roundState.roundNumber + index,
-  );
+  const timelineRoundNumbers = timelineRoundStates.map((state) => state.roundNumber);
   const currentTaskSelection = getCurrentCombatRoundTaskSelection(roundState);
   const inspector = buildCombatRoundInspector({
     participantId: roundState.selectedParticipantId,
-    state: roundState,
+    state: selectedTimelineRoundState,
     step: roundState.selectedStep,
   });
-  const inspectorSelectionIsCurrentTask = isSelectedCombatRoundStepExecutable({
-    participantId: inspector.participant?.participantId,
-    state: roundState,
-    step: inspector.step,
-  });
+  const inspectorSelectionIsCurrentTask =
+    selectedRoundIsActive &&
+    isSelectedCombatRoundStepExecutable({
+      participantId: inspector.participant?.participantId,
+      state: roundState,
+      step: inspector.step,
+    });
   const clearCurrentStepAvailable = canClearCombatRoundStep({
     state: roundState,
     step: inspector.step,
-  });
+  }) && selectedRoundIsActive;
   const selectedEncounterParticipant = encounter.participants.find(
     (participant) => participant.id === inspector.participant?.participantId,
   );
@@ -2274,12 +2280,12 @@ export default function CombatRoundManagerPanel({
       ? inspectorDrafts[inspectorDraftKey]
       : buildDeclarationDraft(selectedScenarioParticipant, selectedRoundDeclaration, {
           encounterId: encounter.id,
-          roundNumber: roundState.roundNumber,
+          roundNumber: selectedRoundNumber,
         });
   const inspectorSnapshot = getCombatRoundStepSnapshot({
     participantId: inspector.participant?.participantId,
     roundNumber: selectedRoundNumber,
-    state: roundState,
+    state: selectedTimelineRoundState,
     step: inspector.step,
   });
   const inspectorDisplayDraft = inspectorSnapshot
@@ -2345,22 +2351,23 @@ export default function CombatRoundManagerPanel({
   const inspectorCurrentStepIsInitiative =
     inspector.step === "initiative_phase_1" || inspector.step === "initiative_phase_2";
   const inspectorCanExecuteSelectedStep =
-    inspectorSelectionIsCurrentTask ||
-    (inspectorCurrentStepIsInitiative && roundState.currentStep === inspector.step);
+    selectedRoundIsActive &&
+    (inspectorSelectionIsCurrentTask ||
+      (inspectorCurrentStepIsInitiative && roundState.currentStep === inspector.step));
   const inspectorIsInspectionOnly = !inspectorCanExecuteSelectedStep;
   const inspectorCurrentAttackPhase = inspectorAttackPhase;
   const inspectorCurrentResolutionPhase = inspectorAttackPhase ?? inspectorResolutionPhase;
   const inspectorPhaseResolutionCursor =
     inspectorSelectedStepIsSequential &&
-    roundState.phaseResolutionCursor?.phase === inspectorCurrentResolutionPhase
-      ? roundState.phaseResolutionCursor
+    selectedTimelineRoundState.phaseResolutionCursor?.phase === inspectorCurrentResolutionPhase
+      ? selectedTimelineRoundState.phaseResolutionCursor
       : undefined;
   const inspectorPhaseResolutionStatus =
     inspector.participant && inspectorCurrentResolutionPhase
       ? getCombatRoundPhaseResolutionStatus({
           participantId: inspector.participant.participantId,
           phase: inspectorCurrentResolutionPhase,
-          state: roundState,
+          state: selectedTimelineRoundState,
         })
       : undefined;
   const inspectorCurrentPhaseHasAttack =
@@ -2368,7 +2375,7 @@ export default function CombatRoundManagerPanel({
       ? combatRoundParticipantHasPhaseAttack({
           participantId: inspector.participant.participantId,
           phase: inspectorCurrentResolutionPhase,
-          state: roundState,
+          state: selectedTimelineRoundState,
         })
       : undefined;
   const inspectorTargetValidationMessage =
@@ -2508,7 +2515,7 @@ export default function CombatRoundManagerPanel({
       ? getCombatRoundOutgoingAttackResultForParticipantPhase({
           participantId: inspector.participant.participantId,
           phase: inspectorAttackPhase,
-          state: roundState,
+          state: selectedTimelineRoundState,
         })
       : undefined);
   const inspectorResolutionAttackResult =
@@ -2517,7 +2524,7 @@ export default function CombatRoundManagerPanel({
       ? getCombatRoundDisplayIncomingAttackResultForParticipantPhase({
           participantId: inspector.participant.participantId,
           phase: inspectorResolutionPhase,
-          state: roundState,
+          state: selectedTimelineRoundState,
         })
       : undefined);
   const inspectorDisplayPhaseResolutionResult =
@@ -2525,11 +2532,11 @@ export default function CombatRoundManagerPanel({
     (inspectorResolutionAttackResult
       ? (getCombatRoundPhaseResolutionResultForAttack({
           attackResult: inspectorResolutionAttackResult,
-          state: roundState,
+          state: selectedTimelineRoundState,
         }) ??
         buildCombatRoundPhaseResolutionResult({
           attackResult: inspectorResolutionAttackResult,
-          roundNumber: roundState.roundNumber,
+          roundNumber: selectedTimelineRoundState.roundNumber,
           updatedAt: inspectorResolutionAttackResult.rolledAt,
         }))
       : undefined);
@@ -2540,7 +2547,7 @@ export default function CombatRoundManagerPanel({
       ? getCombatRoundPhaseResolutionStatus({
           participantId: inspectorPhaseResolutionOwnerParticipantId,
           phase: inspectorCurrentResolutionPhase,
-          state: roundState,
+          state: selectedTimelineRoundState,
         })
       : undefined;
   const inspectorPhaseResolutionOwnerHasAttack =
@@ -2548,7 +2555,7 @@ export default function CombatRoundManagerPanel({
       ? combatRoundParticipantHasPhaseAttack({
           participantId: inspectorPhaseResolutionOwnerParticipantId,
           phase: inspectorCurrentResolutionPhase,
-          state: roundState,
+          state: selectedTimelineRoundState,
         })
       : undefined;
   const inspectorActionPhaseHasAttack = inspectorCurrentAttackPhase
@@ -2559,10 +2566,10 @@ export default function CombatRoundManagerPanel({
     : inspectorPhaseResolutionOwnerStatus;
   const inspectorParrySelectionKey = getCombatParrySelectionKey({
     result: inspectorResolutionAttackResult,
-    roundNumber: roundState.roundNumber,
+    roundNumber: selectedTimelineRoundState.roundNumber,
   });
   const inspectorParryDefenderRoundParticipant = inspectorResolutionAttackResult
-    ? roundState.participants.find(
+    ? selectedTimelineRoundState.participants.find(
         (participant) =>
           participant.participantId === inspectorResolutionAttackResult.defenderParticipantId,
       )
@@ -2671,7 +2678,7 @@ export default function CombatRoundManagerPanel({
     Boolean(inspectorPhaseResolutionCursor) &&
     inspectorPhaseResolutionCursor?.participantId === inspector.participant?.participantId;
   const inspectorCursorParticipantLabel = inspectorPhaseResolutionCursor
-    ? roundState.participants.find(
+    ? selectedTimelineRoundState.participants.find(
         (participant) => participant.participantId === inspectorPhaseResolutionCursor.participantId,
       )?.label
     : undefined;
@@ -2683,17 +2690,17 @@ export default function CombatRoundManagerPanel({
       ? getCombatRoundDisplayIncomingAttackResultForParticipantPhase({
           participantId: inspectorPhaseResolutionCursor.participantId,
           phase: inspectorPhaseResolutionCursor.phase,
-          state: roundState,
+          state: selectedTimelineRoundState,
         })
       : undefined;
   const inspectorCursorActorLabel = inspectorCursorIncomingAttackResult
-    ? roundState.participants.find(
+    ? selectedTimelineRoundState.participants.find(
         (participant) =>
           participant.participantId === inspectorCursorIncomingAttackResult.attackerParticipantId,
       )?.label
     : inspectorCursorParticipantLabel;
   const inspectorCursorDefenderLabel = inspectorCursorIncomingAttackResult
-    ? roundState.participants.find(
+    ? selectedTimelineRoundState.participants.find(
         (participant) =>
           participant.participantId === inspectorCursorIncomingAttackResult.defenderParticipantId,
       )?.label
@@ -2782,7 +2789,7 @@ export default function CombatRoundManagerPanel({
                 inspectorCursorIncomingAttackResult?.attackerParticipantId ??
                 inspectorPhaseResolutionCursor.participantId,
               phase: inspectorPhaseResolutionCursor.phase,
-              state: roundState,
+              state: selectedTimelineRoundState,
             }),
             phase: inspectorPhaseResolutionCursor.phase,
             substep: inspectorPhaseResolutionCursor.substep,
@@ -2836,6 +2843,7 @@ export default function CombatRoundManagerPanel({
       encounterScopeRef.current = encounter.id;
       manualSelectionRef.current = undefined;
       pendingSelectionRef.current = undefined;
+      setSelectedRoundNumber(initialRoundState.roundNumber);
       setDamageReviewDrafts({});
       setInspectorDrafts({});
       setParrySourceSelections({});
@@ -2854,6 +2862,14 @@ export default function CombatRoundManagerPanel({
     if (pendingSelection) {
       pendingSelectionRef.current = undefined;
     }
+
+    setSelectedRoundNumber((currentRoundNumber) =>
+      getCombatRoundTimelineRoundStates(nextRoundState).some(
+        (round) => round.roundNumber === currentRoundNumber,
+      )
+        ? currentRoundNumber
+        : nextRoundState.roundNumber,
+    );
 
     if (
       manualSelection &&
@@ -2971,7 +2987,7 @@ export default function CombatRoundManagerPanel({
   } {
     const draft = buildDeclarationDraft(input.scenarioParticipant, input.declaration, {
       encounterId: encounter.id,
-      roundNumber: roundState.roundNumber,
+      roundNumber: selectedRoundNumber,
     });
     const liveModifiers = buildEncounterLiveCombatModifierSummary({
       combatContext: draft.combatContext,
@@ -3104,7 +3120,7 @@ export default function CombatRoundManagerPanel({
         : undefined;
       const draft = buildDeclarationDraft(scenarioParticipant, declaration, {
         encounterId: encounter.id,
-        roundNumber: roundState.roundNumber,
+        roundNumber: stateForSnapshots.roundNumber,
       });
       const phaseSummary = buildScenarioParticipantPhaseSummary({
         declaration,
@@ -3257,6 +3273,7 @@ export default function CombatRoundManagerPanel({
 
   async function persistRoundState(nextRoundState: typeof roundState) {
     setRoundState(nextRoundState);
+    setSelectedRoundNumber(nextRoundState.roundNumber);
     setSaving(true);
 
     try {
@@ -3303,6 +3320,7 @@ export default function CombatRoundManagerPanel({
       pendingSelectionRef.current = nextSelection;
       manualSelectionRef.current = nextSelection;
       setRoundState(nextRoundState);
+      setSelectedRoundNumber(nextRoundState.roundNumber);
       setSaveError(undefined);
       onEncounterUpdated?.(nextEncounter);
       focusRoundTable({ scrollIntoView: false });
@@ -3339,6 +3357,7 @@ export default function CombatRoundManagerPanel({
   function selectCurrentTask() {
     manualSelectionRef.current = undefined;
     pendingSelectionRef.current = undefined;
+    setSelectedRoundNumber(roundState.roundNumber);
     setRoundState((current) => {
       const selection = getCurrentCombatRoundTaskSelection(current);
 
@@ -3351,7 +3370,8 @@ export default function CombatRoundManagerPanel({
     });
   }
 
-  function selectInspector(participantId: string, step: CombatRoundStep) {
+  function selectInspector(participantId: string, step: CombatRoundStep, roundNumber: number) {
+    setSelectedRoundNumber(roundNumber);
     manualSelectionRef.current = {
       participantId,
       step,
@@ -3367,18 +3387,21 @@ export default function CombatRoundManagerPanel({
 
   function moveSelection(input: { participantOffset?: number; stepOffset?: number }) {
     setRoundState((current) => {
-      const participantIndex = displayParticipants.findIndex(
+      const selectedRoundParticipants =
+        timelineRoundStates.find((round) => round.roundNumber === selectedRoundNumber)
+          ?.participants ?? displayParticipants;
+      const participantIndex = selectedRoundParticipants.findIndex(
         (participant) => participant.participantId === current.selectedParticipantId,
       );
       const stepIndex = COMBAT_ROUND_STEPS.indexOf(current.selectedStep ?? current.currentStep);
       const nextParticipant =
-        displayParticipants[
+        selectedRoundParticipants[
           Math.min(
             Math.max(
               (participantIndex === -1 ? 0 : participantIndex) + (input.participantOffset ?? 0),
               0,
             ),
-            Math.max(displayParticipants.length - 1, 0),
+            Math.max(selectedRoundParticipants.length - 1, 0),
           )
         ];
       const nextStep =
@@ -3455,6 +3478,7 @@ export default function CombatRoundManagerPanel({
 
   function getParticipantDeclarationStatus(input: {
     participantId: string;
+    roundState: typeof roundState;
     step: CombatRoundStep;
     status: CombatRoundStepStatus;
   }): CombatRoundStepStatus {
@@ -3464,7 +3488,7 @@ export default function CombatRoundManagerPanel({
     if (phase) {
       return getCombatRoundParticipantPhaseStepStatus({
         participantId: input.participantId,
-        state: roundState,
+        state: input.roundState,
         step: input.step,
       });
     }
@@ -3488,7 +3512,7 @@ export default function CombatRoundManagerPanel({
     const declaredThisRound = hasScenarioParticipantCombatDeclarationForEncounterRound({
       encounterId: encounter.id,
       participant: scenarioParticipant,
-      roundNumber: roundState.roundNumber,
+      roundNumber: input.roundState.roundNumber,
     });
 
     return declaredThisRound && input.status === "pending" ? "submitted" : input.status;
@@ -3563,6 +3587,7 @@ export default function CombatRoundManagerPanel({
       }
 
       setRoundState(nextSelectedRoundState);
+      setSelectedRoundNumber(nextRoundState.roundNumber);
       onEncounterUpdated?.(nextEncounter);
       onScenarioParticipantsUpdated?.([participant]);
       setSaveError(undefined);
@@ -3624,6 +3649,7 @@ export default function CombatRoundManagerPanel({
       }
 
       setRoundState(nextSelectedRoundState);
+      setSelectedRoundNumber(nextRoundState.roundNumber);
       onEncounterUpdated?.(nextEncounter);
       setSaveError(undefined);
     } catch (caughtError) {
@@ -3743,6 +3769,7 @@ export default function CombatRoundManagerPanel({
       pendingSelectionRef.current = undefined;
       manualSelectionRef.current = undefined;
       setRoundState(nextRoundState);
+      setSelectedRoundNumber(nextRoundState.roundNumber);
       onEncounterUpdated?.(nextEncounter);
       focusRoundTable();
       setSaveError(undefined);
@@ -4187,7 +4214,7 @@ export default function CombatRoundManagerPanel({
           }}
         >
           <button
-            disabled={saving || inspectorSelectedStepIsSequential}
+            disabled={saving || !selectedRoundIsActive || inspectorSelectedStepIsSequential}
             onClick={() => void commitCurrentStep()}
             type="button"
           >
@@ -4276,10 +4303,16 @@ export default function CombatRoundManagerPanel({
                     key={`${roundNumber}-${step}`}
                     style={{
                       ...stepCellStyle,
-                      background: step === roundState.currentStep ? "#f6f0dd" : "#fbfaf7",
+                      background:
+                        roundNumber === roundState.roundNumber && step === roundState.currentStep
+                          ? "#f6f0dd"
+                          : "#fbfaf7",
                       borderBottom: "1px solid #e3e1dc",
                       borderLeft: "1px solid #e3e1dc",
-                      fontWeight: step === roundState.currentStep ? 800 : 700,
+                      fontWeight:
+                        roundNumber === roundState.roundNumber && step === roundState.currentStep
+                          ? 800
+                          : 700,
                     }}
                     title={COMBAT_ROUND_STEP_LABELS[step]}
                   >
@@ -4309,8 +4342,14 @@ export default function CombatRoundManagerPanel({
                       <strong>{participant.label}</strong>
                     </div>
                   </td>
-                  {timelineRoundNumbers.flatMap((roundNumber) =>
+                  {timelineRoundStates.flatMap((timelineRoundState) =>
                     COMBAT_ROUND_STEPS.map((step) => {
+                      const roundNumber = timelineRoundState.roundNumber;
+                      const roundParticipant =
+                        timelineRoundState.participants.find(
+                          (candidate) =>
+                            candidate.participantId === participant.participantId,
+                        ) ?? participant;
                       const selected =
                         roundNumber === selectedRoundNumber &&
                         roundState.selectedParticipantId === participant.participantId &&
@@ -4319,7 +4358,8 @@ export default function CombatRoundManagerPanel({
                         roundNumber === roundState.roundNumber && step === roundState.currentStep;
                       const stepStatus = getParticipantDeclarationStatus({
                         participantId: participant.participantId,
-                        status: participant.stepStatuses[step] ?? "pending",
+                        roundState: timelineRoundState,
+                        status: roundParticipant.stepStatuses[step] ?? "pending",
                         step,
                       });
                       const marker = getStatusMarker({
@@ -4328,9 +4368,9 @@ export default function CombatRoundManagerPanel({
                       });
                       const initiative =
                         step === "initiative_phase_1"
-                          ? participant.initiatives.phase1
+                          ? roundParticipant.initiatives.phase1
                           : step === "initiative_phase_2"
-                            ? participant.initiatives.phase2
+                            ? roundParticipant.initiatives.phase2
                             : undefined;
                       const initiativeTotal = getCombatRoundInitiativeTotal(initiative);
                       const title = `${participant.label}, round ${roundNumber}, ${COMBAT_ROUND_STEP_LABELS[step]}, status ${stepStatus}`;
@@ -4353,7 +4393,9 @@ export default function CombatRoundManagerPanel({
                         >
                           <button
                             aria-label={title}
-                            onClick={() => selectInspector(participant.participantId, step)}
+                            onClick={() =>
+                              selectInspector(participant.participantId, step, roundNumber)
+                            }
                             style={{
                               alignItems: "center",
                               background: "transparent",
@@ -4450,7 +4492,7 @@ export default function CombatRoundManagerPanel({
                   <PlayerCombatActionSelectorPanel
                     actionId={inspectorDisplayDraft.actionId}
                     additionalActionNotes={inspectorDisplayDraft.additionalActionNotes}
-                    controlsDisabled={saving || Boolean(inspectorSnapshot)}
+                    controlsDisabled={saving || !selectedRoundIsActive || Boolean(inspectorSnapshot)}
                     movementId={inspectorDisplayDraft.movementId}
                     onActionChange={(actionId) => updateInspectorDraft({ actionId })}
                     onAdditionalActionNotesChange={(additionalActionNotes) =>
@@ -4460,7 +4502,7 @@ export default function CombatRoundManagerPanel({
                     onSecondaryActionChange={(secondaryActionId) =>
                       updateInspectorDraft({ secondaryActionId })
                     }
-                    roundNumber={roundState.roundNumber}
+                    roundNumber={selectedRoundNumber}
                     secondaryActionId={inspectorDisplayDraft.secondaryActionId}
                   />
                   {inspectorPhaseCards.map((phaseCard, index) => {

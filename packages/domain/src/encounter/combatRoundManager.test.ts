@@ -38,6 +38,7 @@ import {
   getCombatRoundParticipantPhaseStepStatus,
   getCombatRoundResolutionPhaseForStep,
   getCombatRoundStepSnapshot,
+  getCombatRoundTimelineRoundStates,
   getCombatRoundEffectiveDamageResult,
   getCombatRoundDamageSubstate,
   getPreviousCombatRoundStep,
@@ -5772,7 +5773,7 @@ describe("combat round manager", () => {
     });
   });
 
-  it("marks SU complete with commands and clears those markers in reverse order", () => {
+  it("archives SU completion commands and starts a clean next round", () => {
     const roundSummaryState = advanceToStep(
       initializeCombatRoundState({ encounter: encounter() }),
       "round_summary",
@@ -5783,42 +5784,63 @@ describe("combat round manager", () => {
         createdByUserId: "gm-1",
       },
     });
-    const clearedLast = clearCombatRoundStep({
+    const clearedAtNewRoundStart = clearCombatRoundStep({
       state: completed,
-      step: "round_summary",
+      step: "select_actions",
     });
-    const clearedFirst = clearCombatRoundStep({
-      state: clearedLast,
-      step: "round_summary",
-    });
+    const archivedRound = completed.rounds.find(
+      (round) => round.roundNumber === roundSummaryState.roundNumber,
+    );
 
-    expect(completed.currentStep).toBe("round_summary");
-    expect(completed.roundNumber).toBe(3);
-    expect(completed.commands.map((command) => command.type)).toEqual([
+    expect(completed.currentStep).toBe("select_actions");
+    expect(completed.roundNumber).toBe(roundSummaryState.roundNumber + 1);
+    expect(completed.commands).toEqual([]);
+    expect(completed.currentCursor).toEqual({
+      participantId: "gladiator",
+      roundNumber: roundSummaryState.roundNumber + 1,
+      step: "DE",
+    });
+    expect(completed.participants.map((participant) => participant.stepStatuses.select_actions)).toEqual([
+      "pending",
+      "pending",
+    ]);
+    expect(archivedRound?.commands.map((command) => command.type)).toEqual([
       "complete_round",
       "complete_round",
     ]);
+    expect(archivedRound?.commands[0]?.facts).toMatchObject({
+      completedRoundNumber: roundSummaryState.roundNumber,
+      nextRoundNumber: roundSummaryState.roundNumber + 1,
+      participantIds: ["gladiator", "guard"],
+    });
     expect(
-      completed.participants.map((participant) => participant.stepStatuses.round_summary),
+      archivedRound?.participants.map((participant) => participant.stepStatuses.round_summary),
     ).toEqual(["complete", "complete"]);
-    expect(clearedLast.commands).toHaveLength(1);
-    expect(clearedLast.currentCursor).toEqual({
-      participantId: "guard",
-      roundNumber: 3,
-      step: "SU",
+    expect(clearedAtNewRoundStart).toEqual(completed);
+  });
+
+  it("returns completed and active rounds as separate timeline states", () => {
+    const roundSummaryState = advanceToStep(
+      initializeCombatRoundState({ encounter: encounter() }),
+      "round_summary",
+    );
+    const nextRoundState = advanceCombatRoundStep(roundSummaryState, {
+      command: {
+        createdAt: "2026-01-01T00:10:00.000Z",
+        createdByUserId: "gm-1",
+      },
     });
-    expect(
-      clearedLast.participants.map((participant) => participant.stepStatuses.round_summary),
-    ).toEqual(["complete", "pending"]);
-    expect(clearedFirst.commands).toEqual([]);
-    expect(clearedFirst.currentCursor).toEqual({
-      participantId: "gladiator",
-      roundNumber: 3,
-      step: "SU",
-    });
-    expect(
-      clearedFirst.participants.map((participant) => participant.stepStatuses.round_summary),
-    ).toEqual(["pending", "pending"]);
+    const timelineRounds = getCombatRoundTimelineRoundStates(nextRoundState);
+
+    expect(timelineRounds.map((round) => round.roundNumber)).toEqual([
+      roundSummaryState.roundNumber,
+      roundSummaryState.roundNumber + 1,
+    ]);
+    expect(timelineRounds[0]?.currentStep).toBe("round_summary");
+    expect(timelineRounds[0]?.participants[0]?.stepStatuses.round_summary).toBe("complete");
+    expect(timelineRounds[1]?.currentStep).toBe("select_actions");
+    expect(timelineRounds[1]?.commands).toEqual([]);
+    expect(timelineRounds[1]?.participants[0]?.declaration).toBeUndefined();
   });
 
   it("records and undoes D2 placeholder damage review commands after failed parry", () => {

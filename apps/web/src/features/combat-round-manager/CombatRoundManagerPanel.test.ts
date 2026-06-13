@@ -18,7 +18,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).not.toContain("Rows are participants. Columns are round timeline cells.");
     expect(source).toContain("Commit");
     expect(source).toContain("and advance to");
-    expect(source).toContain('"Complete round"');
+    expect(source).toContain('"Start next round"');
     expect(source).toContain("Current task");
     expect(source).toContain("Return to the current unresolved combat step");
     expect(source).toContain("Clear current step");
@@ -33,6 +33,8 @@ describe("CombatRoundManagerPanel", () => {
     const source = readSource();
 
     expect(source).toContain("Combat round timeline grid");
+    expect(source).toContain("getCombatRoundTimelineRoundStates");
+    expect(source).toContain("timelineRoundStates");
     expect(source).toContain("timelineRoundNumbers");
     expect(source).toContain("Round {roundNumber}");
     expect(source).toContain("COMBAT_ROUND_STEPS.map");
@@ -42,10 +44,10 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).not.toContain("Set active");
     expect(source).not.toContain("▶ Active");
     expect(source).toContain("getStatusMarker");
-    expect(source).toContain("participant.stepStatuses[step]");
+    expect(source).toContain("roundParticipant.stepStatuses[step]");
     expect(source).toContain("getParticipantDeclarationStatus");
-    expect(source).toContain("participant.initiatives.phase1");
-    expect(source).toContain("participant.initiatives.phase2");
+    expect(source).toContain("roundParticipant.initiatives.phase1");
+    expect(source).toContain("roundParticipant.initiatives.phase2");
     expect(source).toContain('color: initiativeTotal !== undefined ? "#1f7a4d" : undefined');
     expect(source).toContain('case "submitted":');
     expect(source).toContain('case "gmEdited":');
@@ -342,7 +344,9 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("manualSelectionRef.current = undefined");
     expect(source).toContain("Use inspector for phase resolution");
     expect(source).toContain("isSequentialResolutionStep(inspector.step)");
-    expect(source).toContain("disabled={saving || inspectorSelectedStepIsSequential}");
+    expect(source).toContain(
+      "disabled={saving || !selectedRoundIsActive || inspectorSelectedStepIsSequential}",
+    );
     expect(source).toContain("const commandParticipantId =");
     expect(source).toContain("advanceCombatRoundStep(stateForCommit, advanceInput)");
     expect(source).toContain("command: {");
@@ -423,7 +427,7 @@ describe("CombatRoundManagerPanel", () => {
       "const inspectorCurrentResolutionPhase = inspectorAttackPhase ?? inspectorResolutionPhase",
     );
     expect(source).toContain(
-      "roundState.phaseResolutionCursor?.phase === inspectorCurrentResolutionPhase",
+      "selectedTimelineRoundState.phaseResolutionCursor?.phase === inspectorCurrentResolutionPhase",
     );
     expect(source).toContain("inspector.participant?.stepStatuses[inspector.step]");
     expect(source).toContain("step: inspector.step");

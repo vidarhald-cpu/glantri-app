@@ -743,6 +743,24 @@ export const combatRoundStepSnapshotSchema = z.object({
   step: combatRoundStepSchema,
 });
 
+export const completedCombatRoundSchema = z.object({
+  activeParticipantId: idSchema.optional(),
+  commands: z.array(combatRoundCommandSchema).default([]),
+  completedAt: z.string().datetime().optional(),
+  completedByUserId: idSchema.optional(),
+  currentCursor: combatRoundCursorSchema.optional(),
+  currentStep: combatRoundStepSchema.default("round_summary"),
+  encounterId: idSchema.optional(),
+  phaseResolutionCursor: combatRoundPhaseResolutionCursorSchema.optional(),
+  phaseResolutionResults: z.array(combatRoundPhaseResolutionResultSchema).default([]),
+  phaseResolutionStatuses: combatRoundPhaseResolutionStatusesSchema.default({}),
+  participants: z.array(combatRoundParticipantStateSchema).default([]),
+  roundNumber: z.number().int().positive(),
+  selectedParticipantId: idSchema.optional(),
+  selectedStep: combatRoundStepSchema.optional(),
+  stepSnapshots: z.array(combatRoundStepSnapshotSchema).default([]),
+});
+
 export const combatRoundStateSchema = z.object({
   activeParticipantId: idSchema.optional(),
   commands: z.array(combatRoundCommandSchema).default([]),
@@ -754,6 +772,7 @@ export const combatRoundStateSchema = z.object({
   phaseResolutionStatuses: combatRoundPhaseResolutionStatusesSchema.default({}),
   participants: z.array(combatRoundParticipantStateSchema).default([]),
   roundNumber: z.number().int().positive().default(1),
+  rounds: z.array(completedCombatRoundSchema).default([]),
   selectedParticipantId: idSchema.optional(),
   selectedStep: combatRoundStepSchema.optional(),
   stepSnapshots: z.array(combatRoundStepSnapshotSchema).default([]),
@@ -780,6 +799,7 @@ export type CombatRoundPhaseResolutionStatuses = z.infer<
 >;
 export type CombatRoundParticipantState = z.infer<typeof combatRoundParticipantStateSchema>;
 export type CombatRoundStepSnapshot = z.infer<typeof combatRoundStepSnapshotSchema>;
+export type CompletedCombatRound = z.infer<typeof completedCombatRoundSchema>;
 export type CombatRoundState = z.infer<typeof combatRoundStateSchema>;
 export interface CombatRoundInitiativeRank {
   rank: number;
@@ -4846,6 +4866,105 @@ function resetCombatRoundParticipantToRoundStart(
   };
 }
 
+function normalizeCompletedCombatRounds(input: {
+  activeRoundNumber: number;
+  participantIds: Set<string>;
+  rounds?: CompletedCombatRound[];
+}): CompletedCombatRound[] {
+  return (input.rounds ?? [])
+    .filter((round) => round.roundNumber < input.activeRoundNumber)
+    .map((round) => {
+      const participants = round.participants.filter((participant) =>
+        input.participantIds.has(participant.participantId),
+      );
+      const commands = round.commands.filter(
+        (command) =>
+          command.roundNumber === round.roundNumber &&
+          input.participantIds.has(command.participantId) &&
+          (!command.beforeCursor.participantId ||
+            input.participantIds.has(command.beforeCursor.participantId)) &&
+          (!command.afterCursor.participantId ||
+            input.participantIds.has(command.afterCursor.participantId)),
+      );
+      const phaseResolutionResults = round.phaseResolutionResults.filter(
+        (result) =>
+          result.roundNumber === round.roundNumber &&
+          input.participantIds.has(result.attackerParticipantId) &&
+          input.participantIds.has(result.defenderParticipantId),
+      );
+      const phaseResolutionStatuses = Object.fromEntries(
+        Object.entries(round.phaseResolutionStatuses).filter(([participantId]) =>
+          input.participantIds.has(participantId),
+        ),
+      );
+      const stepSnapshots = round.stepSnapshots.filter(
+        (snapshot) =>
+          snapshot.roundNumber === round.roundNumber &&
+          input.participantIds.has(snapshot.participantId),
+      );
+      const currentCursor =
+        round.currentCursor &&
+        round.currentCursor.roundNumber === round.roundNumber &&
+        (!round.currentCursor.participantId ||
+          input.participantIds.has(round.currentCursor.participantId))
+          ? round.currentCursor
+          : undefined;
+      const selectedParticipantId =
+        round.selectedParticipantId && input.participantIds.has(round.selectedParticipantId)
+          ? round.selectedParticipantId
+          : participants[0]?.participantId;
+      const activeParticipantId =
+        round.activeParticipantId && input.participantIds.has(round.activeParticipantId)
+          ? round.activeParticipantId
+          : undefined;
+      const phaseResolutionCursor =
+        round.phaseResolutionCursor &&
+        input.participantIds.has(round.phaseResolutionCursor.participantId)
+          ? round.phaseResolutionCursor
+          : undefined;
+
+      return completedCombatRoundSchema.parse({
+        ...round,
+        activeParticipantId,
+        commands,
+        currentCursor,
+        phaseResolutionCursor,
+        phaseResolutionResults,
+        phaseResolutionStatuses,
+        participants,
+        selectedParticipantId,
+        stepSnapshots,
+      });
+    })
+    .sort((left, right) => left.roundNumber - right.roundNumber);
+}
+
+function buildCompletedCombatRound(input: {
+  completedAt?: string;
+  completedByUserId?: string;
+  state: CombatRoundState;
+}): CompletedCombatRound {
+  const normalized = combatRoundStateSchema.parse(input.state);
+
+  return completedCombatRoundSchema.parse({
+    activeParticipantId: normalized.activeParticipantId,
+    commands: normalized.commands,
+    completedAt: input.completedAt,
+    completedByUserId: input.completedByUserId,
+    currentCursor: normalized.currentCursor,
+    currentStep: normalized.currentStep,
+    encounterId: normalized.encounterId,
+    phaseResolutionCursor: normalized.phaseResolutionCursor,
+    phaseResolutionResults: normalized.phaseResolutionResults,
+    phaseResolutionStatuses: normalized.phaseResolutionStatuses,
+    participants: normalized.participants,
+    roundNumber: normalized.roundNumber,
+    selectedParticipantId: normalized.selectedParticipantId,
+    selectedStep: normalized.selectedStep,
+    stepSnapshots: normalized.stepSnapshots,
+  });
+}
+
 function getFallbackCombatRoundCursor(input: {
   commands: CombatRoundCommand[];
   participantId?: string;
@@ -5005,6 +5124,11 @@ export function initializeCombatRoundState(input: {
   const participantIds = new Set(participants.map((participant) => participant.participantId));
   const persistedCurrentStep = existing?.currentStep ?? "select_actions";
   const roundNumber = existing?.roundNumber ?? input.encounter.currentRound;
+  const completedRounds = normalizeCompletedCombatRounds({
+    activeRoundNumber: roundNumber,
+    participantIds,
+    rounds: existing?.rounds,
+  });
   const commands = (existing?.commands ?? []).filter(
     (command) =>
       command.roundNumber === roundNumber &&
@@ -5158,7 +5282,7 @@ export function initializeCombatRoundState(input: {
       ? getCombatRoundCursorForPhaseResolutionCursor({
           cursor: existingPhaseResolutionCursor,
           roundNumber,
-          state: {
+          state: combatRoundStateSchema.parse({
             ...existing,
             commands,
             currentStep,
@@ -5166,8 +5290,9 @@ export function initializeCombatRoundState(input: {
             phaseResolutionStatuses: phaseResolutionStatusesForState,
             participants: participantsForState,
             roundNumber,
+            rounds: completedRounds,
             stepSnapshots: stepSnapshotsForState,
-          },
+          }),
         })
       : undefined;
   const canUseRecoveredPhaseResolutionCursor =
@@ -5222,6 +5347,7 @@ export function initializeCombatRoundState(input: {
     phaseResolutionStatuses: phaseResolutionStatusesForState,
     participants: participantsForState,
     roundNumber,
+    rounds: completedRounds,
     selectedParticipantId,
     selectedStep: fallbackCursor
       ? currentStep
@@ -5371,6 +5497,15 @@ export function advanceCombatRoundStep(
               facts: {
                 source: "advance_step",
                 status: entry.status,
+                ...(normalized.currentStep === "round_summary"
+                  ? {
+                      completedRoundNumber: normalized.roundNumber,
+                      nextRoundNumber: normalized.roundNumber + 1,
+                      participantIds: normalized.participants.map(
+                        (participant) => participant.participantId,
+                      ),
+                    }
+                  : {}),
                 ...advanceCommand.facts,
               },
               participantId: entry.participantId,
@@ -5387,8 +5522,7 @@ export function advanceCombatRoundStep(
       })
     : withCommand;
   const nextStep = getNextCombatRoundStep(normalized.currentStep);
-  const completesRoundSummary = normalized.currentStep === "round_summary" && Boolean(advanceCommand);
-  const startsNextRound = normalized.currentStep === "round_summary" && !advanceCommand;
+  const startsNextRound = normalized.currentStep === "round_summary";
   const advancesDeclarationStep = normalized.currentStep === "select_actions";
   const startsPhaseResolution =
     nextStep === "phase_1_actions"
@@ -5401,14 +5535,14 @@ export function advanceCombatRoundStep(
     : withSnapshots.roundNumber;
   const nextGlobalParticipantId = withSnapshots.participants[0]?.participantId;
 
-  if (completesRoundSummary) {
-    return combatRoundStateSchema.parse({
+  if (startsNextRound) {
+    const completedRoundState = combatRoundStateSchema.parse({
       ...withSnapshots,
       currentCursor:
         withSnapshots.currentCursor ??
         getDefaultCombatRoundCursor({
           participantId: nextGlobalParticipantId,
-          roundNumber: nextRoundNumber,
+          roundNumber: withSnapshots.roundNumber,
           step: "round_summary",
         }),
       currentStep: "round_summary",
@@ -5418,11 +5552,47 @@ export function advanceCombatRoundStep(
           ...participant.stepStatuses,
           round_summary:
             commandBackedGlobalAdvanceStatusByParticipantId.get(participant.participantId) ??
-            participant.stepStatuses.round_summary,
+            (advanceCommand ? "complete" : participant.stepStatuses.round_summary),
         },
       })),
       selectedParticipantId: withSnapshots.selectedParticipantId ?? nextGlobalParticipantId,
       selectedStep: "round_summary",
+    });
+    const completedRound = buildCompletedCombatRound({
+      completedAt: advanceCommand?.createdAt,
+      completedByUserId: advanceCommand?.createdByUserId,
+      state: completedRoundState,
+    });
+    const nextParticipants = completedRoundState.participants.map(
+      resetCombatRoundParticipantToRoundStart,
+    );
+    const nextParticipantId = nextParticipants[0]?.participantId;
+
+    return combatRoundStateSchema.parse({
+      ...completedRoundState,
+      activeParticipantId: undefined,
+      commands: [],
+      currentCursor:
+        getDefaultCombatRoundCursor({
+          participantId: nextParticipantId,
+          roundNumber: nextRoundNumber,
+          step: "select_actions",
+        }),
+      currentStep: "select_actions",
+      phaseResolutionCursor: undefined,
+      phaseResolutionResults: [],
+      phaseResolutionStatuses: {},
+      participants: nextParticipants,
+      roundNumber: nextRoundNumber,
+      rounds: [
+        ...completedRoundState.rounds.filter(
+          (round) => round.roundNumber !== completedRound.roundNumber,
+        ),
+        completedRound,
+      ].sort((left, right) => left.roundNumber - right.roundNumber),
+      selectedParticipantId: nextParticipantId,
+      selectedStep: "select_actions",
+      stepSnapshots: [],
     });
   }
 
@@ -7873,4 +8043,37 @@ export function buildCombatRoundInspector(input: {
     status: participant?.stepStatuses[step],
     step,
   };
+}
+
+export function getCombatRoundTimelineRoundStates(state: CombatRoundState): CombatRoundState[] {
+  const normalized = combatRoundStateSchema.parse(state);
+  const completedRounds = normalized.rounds
+    .filter((round) => round.roundNumber !== normalized.roundNumber)
+    .sort((left, right) => left.roundNumber - right.roundNumber)
+    .map((round) =>
+      combatRoundStateSchema.parse({
+        activeParticipantId: round.activeParticipantId,
+        commands: round.commands,
+        currentCursor: round.currentCursor,
+        currentStep: round.currentStep,
+        encounterId: round.encounterId ?? normalized.encounterId,
+        phaseResolutionCursor: round.phaseResolutionCursor,
+        phaseResolutionResults: round.phaseResolutionResults,
+        phaseResolutionStatuses: round.phaseResolutionStatuses,
+        participants: round.participants,
+        roundNumber: round.roundNumber,
+        rounds: [],
+        selectedParticipantId: round.selectedParticipantId,
+        selectedStep: round.selectedStep,
+        stepSnapshots: round.stepSnapshots,
+      }),
+    );
+
+  return [
+    ...completedRounds,
+    combatRoundStateSchema.parse({
+      ...normalized,
+      rounds: [],
+    }),
+  ];
 }
