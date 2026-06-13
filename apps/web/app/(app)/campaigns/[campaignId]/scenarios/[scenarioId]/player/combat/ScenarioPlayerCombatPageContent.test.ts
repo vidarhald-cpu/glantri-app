@@ -181,8 +181,12 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("phaseModel.showAttackLocationSelector");
     expect(source).toContain("targetOptions={targetOptions}");
     expect(source).toContain("getPlayerEncounterOpponentParticipants");
+    expect(source).toContain("allowedParticipantIds: encounterScenarioParticipantIds");
+    expect(source).toContain("getEncounterScenarioParticipantIds");
     expect(source).toContain("projectionVisibleParticipants: projection?.visibleParticipants");
     expect(source).toContain("selectedParticipantId: selectedParticipant?.id");
+    expect(source).toContain("hasScenarioParticipantCombatDeclarationForEncounterRound");
+    expect(source).toContain("selectedParticipant.state.combat.lastDeclaredEncounterId === encounterId");
     expect(source).toContain("phaseModel.showDefenseContext");
     expect(source).not.toContain("movementLabel=");
     expect(source).not.toContain('description: selectedSecondaryActionId ? "" : "Open"');

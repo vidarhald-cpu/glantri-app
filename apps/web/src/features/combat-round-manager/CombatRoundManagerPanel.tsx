@@ -1532,6 +1532,14 @@ function findEncounterParticipantForScenarioParticipant(input: {
   );
 }
 
+function getEncounterScenarioParticipantIds(
+  encounterParticipants: EncounterSession["participants"],
+): string[] {
+  return encounterParticipants
+    .map((participant) => participant.scenarioParticipantId ?? participant.id)
+    .filter((participantId): participantId is string => Boolean(participantId));
+}
+
 function isGridArrowTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) {
     return false;
@@ -2187,6 +2195,10 @@ export default function CombatRoundManagerPanel({
   const manualSelectionRef = useRef<CombatRoundSelectionTarget | undefined>(undefined);
   const pendingSelectionRef = useRef<CombatRoundSelectionTarget | undefined>(undefined);
   const selectedRoundNumber = roundState.roundNumber;
+  const encounterScenarioParticipantIds = useMemo(
+    () => getEncounterScenarioParticipantIds(encounter.participants),
+    [encounter.participants],
+  );
   const effectiveScenarioParticipants = useMemo(
     () =>
       scenarioParticipants.map(
@@ -2418,11 +2430,12 @@ export default function CombatRoundManagerPanel({
   const inspectorTargetOptions = useMemo(
     () =>
       getPlayerEncounterOpponentParticipants({
+        allowedParticipantIds: encounterScenarioParticipantIds,
         isGameMaster: true,
         participants: effectiveScenarioParticipants,
         selectedParticipantId: selectedScenarioParticipant?.id,
       }),
-    [effectiveScenarioParticipants, selectedScenarioParticipant?.id],
+    [effectiveScenarioParticipants, encounterScenarioParticipantIds, selectedScenarioParticipant?.id],
   );
   const inspectorPhaseLoadoutSummaries = useMemo(() => {
     const buildPhaseSummary = (phaseKey: PlayerCombatPhaseKey) => {

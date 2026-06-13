@@ -3936,6 +3936,118 @@ describe("scenarios route contract", () => {
     expect(updatedEncounter.combatRoundState.phaseResolutionResults).toEqual([]);
   });
 
+  it("persists repaired state when loading an encounter with stale out-of-encounter target A1", async () => {
+    const combatEncounter = makeCombatEncounter({
+      participants: [
+        {
+          declaration: {
+            actionType: "none",
+            defenseFocus: "none",
+            defensePosture: "none",
+            targetLocation: "any",
+          },
+          facing: "north",
+          id: "encounter-participant-1",
+          initiative: 0,
+          label: "The Gladiator",
+          order: 0,
+          orientation: "neutral",
+          participantType: "scenario",
+          position: { x: 0, y: 0, zone: "center" },
+          scenarioParticipantId: "participant-1",
+        },
+        {
+          declaration: {
+            actionType: "none",
+            defenseFocus: "none",
+            defensePosture: "none",
+            targetLocation: "any",
+          },
+          facing: "north",
+          id: "encounter-participant-2",
+          initiative: 0,
+          label: "Lankhmarian veteran thief",
+          order: 1,
+          orientation: "neutral",
+          participantType: "scenario",
+          position: { x: 0, y: 0, zone: "center" },
+          scenarioParticipantId: "participant-2",
+        },
+      ],
+    }) as EncounterSession;
+    const baseState = initializeCombatRoundState({ encounter: combatEncounter });
+    const staleRoundState = {
+      ...baseState,
+      currentCursor: {
+        participantId: "encounter-participant-2",
+        roundNumber: baseState.roundNumber,
+        step: "A1" as const,
+      },
+      currentStep: "phase_1_actions" as const,
+      participants: baseState.participants.map((participant) =>
+        participant.participantId === "encounter-participant-2"
+          ? {
+              ...participant,
+              declaration: {
+                actionId: "attack_parry",
+                phaseContexts: {
+                  phase1: {
+                    modifierBuckets: {
+                      general: [],
+                      situationDb: [],
+                      situationInitiative: [],
+                      situationObSkill: [],
+                    },
+                    targetParticipantId: "stale-scyrian",
+                  },
+                },
+                roundNumber: baseState.roundNumber,
+                submittedBy: "gm" as const,
+              },
+              stepStatuses: {
+                ...participant.stepStatuses,
+                phase_1_actions: "gmEdited" as const,
+                select_actions: "gmEdited" as const,
+              },
+            }
+          : participant,
+      ),
+      phaseResolutionCursor: {
+        participantId: "encounter-participant-2",
+        phase: "phase1" as const,
+        substep: "attack" as const,
+      },
+      selectedParticipantId: "encounter-participant-2",
+      selectedStep: "phase_1_actions" as const,
+    };
+    setupCombatDeclarationRoute({
+      encounter: {
+        combatRoundState: staleRoundState,
+        participants: combatEncounter.participants,
+      },
+      user: mocks.adminUser,
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/encounters/encounter-1",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
+    expect(updatedEncounter.combatRoundState.currentStep).toBe("select_actions");
+    expect(updatedEncounter.combatRoundState.currentCursor).toEqual({
+      participantId: "encounter-participant-2",
+      roundNumber: baseState.roundNumber,
+      step: "DE",
+    });
+    expect(updatedEncounter.combatRoundState.phaseResolutionCursor).toBeUndefined();
+    expect(updatedEncounter.combatRoundState.participants[1].declaration).toBeUndefined();
+  });
+
   it("clears a player-originated command-backed DE declaration", async () => {
     const combatEncounter = makeCombatEncounter() as EncounterSession;
     const stateWithCommand = recordCombatRoundDeclaration({

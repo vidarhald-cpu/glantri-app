@@ -315,6 +315,8 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("phaseKey: input.phaseKey");
     expect(source).toContain("inspectorTargetOptions");
     expect(source).toContain("getPlayerEncounterOpponentParticipants");
+    expect(source).toContain("allowedParticipantIds: encounterScenarioParticipantIds");
+    expect(source).toContain("getEncounterScenarioParticipantIds");
     expect(source).toContain("targetOptions={inspectorTargetOptions}");
     expect(source).toContain("phaseModel.showDefenseContext");
     expect(source).toContain("actionId: inspectorDisplayDraft.actionId");

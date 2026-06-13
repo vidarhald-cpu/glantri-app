@@ -562,17 +562,31 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         });
       }
 
+      const roundState = initializeCombatRoundState({ encounter });
+      const normalizedEncounter =
+        encounter.combatRoundState && combatRoundStatesDiffer(roundState, encounter.combatRoundState)
+          ? await encounterService.updateEncounter({
+              campaignId: access.campaignId,
+              encounterId,
+              scenarioId,
+              session: {
+                ...encounter,
+                combatRoundState: roundState,
+                currentRound: roundState.roundNumber,
+                updatedAt: new Date().toISOString(),
+              },
+            })
+          : encounter;
+
       if (access.mode === "player") {
-        const scenarioParticipants = await scenarioService.listScenarioParticipants(
-          encounter.scenarioId,
-        );
+        const scenarioParticipants = await scenarioService.listScenarioParticipants(scenarioId);
 
         return {
           encounter: {
-            ...encounter,
-            roleplayState: encounter.roleplayState
+            ...normalizedEncounter,
+            roleplayState: normalizedEncounter.roleplayState
               ? buildPlayerSafeRoleplayStateForUser({
-                  encounter,
+                  encounter: normalizedEncounter,
                   scenarioParticipants,
                   userId: user.id,
                 })
@@ -581,7 +595,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         };
       }
 
-      return { encounter };
+      return { encounter: normalizedEncounter };
     } catch (error) {
       return reply.code(400).send({
         error: error instanceof Error ? error.message : "Unable to load encounter.",

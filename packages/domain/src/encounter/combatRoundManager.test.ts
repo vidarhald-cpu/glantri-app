@@ -799,6 +799,75 @@ describe("combat round manager", () => {
     });
   });
 
+  it("repairs command-supported A1 when the declared target is outside the encounter", () => {
+    const initial = initializeCombatRoundState({ encounter: encounter() });
+    const withDeclaration = recordCombatRoundDeclaration({
+      command: {
+        createdAt: "2026-01-01T00:00:00.000Z",
+      },
+      declaration: {
+        actionId: "attack_parry",
+        phaseContexts: {
+          phase1: testPhaseContext("scyrian-from-another-encounter"),
+        },
+        roundNumber: initial.roundNumber,
+      },
+      participantId: "guard",
+      state: initial,
+      submittedBy: "gm",
+    });
+    const initiativeState = {
+      ...withDeclaration,
+      currentStep: "initiative_phase_1" as const,
+      selectedParticipantId: "guard",
+      selectedStep: "initiative_phase_1" as const,
+    };
+    const withInitiative = recordCombatRoundInitiative({
+      command: {
+        createdAt: "2026-01-01T00:01:00.000Z",
+      },
+      initiative: { baseInitiative: 0, modifierAdjustment: 0, rolls: [5], rollTotal: 5, total: 5 },
+      participantId: "guard",
+      phase: "phase1",
+      state: initiativeState,
+      submittedBy: "gm",
+    });
+    const staleA1 = {
+      ...withInitiative,
+      currentCursor: {
+        participantId: "guard",
+        roundNumber: initial.roundNumber,
+        step: "A1" as const,
+      },
+      currentStep: "phase_1_actions" as const,
+      phaseResolutionCursor: {
+        participantId: "guard",
+        phase: "phase1" as const,
+        substep: "attack" as const,
+      },
+      selectedParticipantId: "guard",
+      selectedStep: "phase_1_actions" as const,
+    };
+    const state = initializeCombatRoundState({
+      encounter: encounter({ combatRoundState: staleA1 }),
+    });
+    const guard = state.participants.find((participant) => participant.participantId === "guard");
+
+    expect(state.currentStep).toBe("select_actions");
+    expect(state.currentCursor).toEqual({
+      participantId: "guard",
+      roundNumber: initial.roundNumber,
+      step: "DE",
+    });
+    expect(state.phaseResolutionCursor).toBeUndefined();
+    expect(state.selectedParticipantId).toBe("guard");
+    expect(state.selectedStep).toBe("select_actions");
+    expect(guard?.declaration?.actionId).toBe("attack_parry");
+    expect(guard?.declaration?.phaseContexts?.phase1?.targetParticipantId).toBeUndefined();
+    expect(guard?.stepStatuses.select_actions).toBe("pending");
+    expect(guard?.stepStatuses.phase_1_actions).toBe("pending");
+  });
+
   it("advances steps in order and resets after round summary", () => {
     const state = initializeCombatRoundState({ encounter: encounter() });
     const reviewState = advanceCombatRoundStep(state);

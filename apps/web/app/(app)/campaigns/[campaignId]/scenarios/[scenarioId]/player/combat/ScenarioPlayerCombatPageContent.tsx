@@ -23,6 +23,7 @@ import {
   getCombatRoundModifierPhaseForStep,
   getCombatRoundResolutionPhaseForStep,
   getPlayerCombatCurrentRollAction,
+  hasScenarioParticipantCombatDeclarationForEncounterRound,
   initializeCombatRoundState,
   isCombatRoundPhaseInitiativeComplete,
   validateCombatDeclarationTargets,
@@ -251,14 +252,23 @@ interface PlayerCombatPhaseContextDrafts {
 
 function buildPlayerCombatPhaseContexts(input: {
   declaration?: CombatRoundDeclaration;
+  encounterId?: string;
   participant?: ScenarioParticipant | null;
+  roundNumber?: number;
 }): PlayerCombatPhaseContextDrafts {
+  const scopedCombat = hasScenarioParticipantCombatDeclarationForEncounterRound({
+    encounterId: input.encounterId,
+    participant: input.participant ?? undefined,
+    roundNumber: input.roundNumber,
+  })
+    ? input.participant?.state.combat
+    : undefined;
   const fallbackContext = mergeCombatContextWithCurrentModifierBuckets({
     baseContext:
       input.declaration?.combatContext ??
-      input.participant?.state.combat.combatContext ??
+      scopedCombat?.combatContext ??
       createEmptyPlayerEncounterCombatContext(),
-    currentContext: input.participant?.state.combat.combatContext,
+    currentContext: scopedCombat?.combatContext,
   });
 
   return {
@@ -286,35 +296,51 @@ function hasCombatRoundDeclarationAction(
 
 function buildPlayerCombatDeclarationDraft(input: {
   declaration?: CombatRoundDeclaration;
+  encounterId?: string;
   participant?: ScenarioParticipant | null;
+  roundNumber?: number;
 }): PlayerCombatDeclarationDraft {
   const { declaration, participant } = input;
+  const scopedCombat = hasScenarioParticipantCombatDeclarationForEncounterRound({
+    encounterId: input.encounterId,
+    participant: participant ?? undefined,
+    roundNumber: input.roundNumber,
+  })
+    ? participant?.state.combat
+    : undefined;
 
   return {
     actionId: isPlayerEncounterActionId(declaration?.actionId)
       ? declaration.actionId
-      : isPlayerEncounterActionId(participant?.state.combat.lastDeclaredActionId)
-        ? participant.state.combat.lastDeclaredActionId
+      : isPlayerEncounterActionId(scopedCombat?.lastDeclaredActionId)
+        ? scopedCombat.lastDeclaredActionId
         : "",
-    additionalActionNotes:
-      declaration?.additionalActionNotes ?? participant?.state.combat.lastDeclarationNotes ?? "",
+    additionalActionNotes: declaration?.additionalActionNotes ?? scopedCombat?.lastDeclarationNotes ?? "",
     combatContext: mergeCombatContextWithCurrentModifierBuckets({
       baseContext:
         declaration?.combatContext ??
-        participant?.state.combat.combatContext ??
+        scopedCombat?.combatContext ??
         createEmptyPlayerEncounterCombatContext(),
-      currentContext: participant?.state.combat.combatContext,
+      currentContext: scopedCombat?.combatContext,
     }),
     movementId: (declaration?.movementId ??
-      participant?.state.combat.lastDeclaredMovementId ??
+      scopedCombat?.lastDeclaredMovementId ??
       "hold") as PlayerEncounterMovementId,
     phaseContexts: buildPlayerCombatPhaseContexts(input),
     secondaryActionId: isPlayerEncounterActionId(declaration?.secondaryActionId)
       ? declaration.secondaryActionId
-      : isPlayerEncounterActionId(participant?.state.combat.lastDeclaredSecondaryActionId)
-        ? participant.state.combat.lastDeclaredSecondaryActionId
+      : isPlayerEncounterActionId(scopedCombat?.lastDeclaredSecondaryActionId)
+        ? scopedCombat.lastDeclaredSecondaryActionId
         : "",
   };
+}
+
+function getEncounterScenarioParticipantIds(
+  encounterParticipants?: EncounterSession["participants"],
+): string[] {
+  return (encounterParticipants ?? [])
+    .map((participant) => participant.scenarioParticipantId ?? participant.id)
+    .filter((participantId): participantId is string => Boolean(participantId));
 }
 
 function buildPlayerCombatDeclarationDraftKey(input: {
@@ -667,6 +693,10 @@ export default function ScenarioPlayerCombatPageContent({
       null,
     [accessibleParticipants, selectedParticipantId],
   );
+  const encounterScenarioParticipantIds = useMemo(
+    () => getEncounterScenarioParticipantIds(encounterSession?.participants),
+    [encounterSession?.participants],
+  );
   const combatRoundState = useMemo(
     () => (encounterSession ? initializeCombatRoundState({ encounter: encounterSession }) : null),
     [encounterSession],
@@ -711,6 +741,7 @@ export default function ScenarioPlayerCombatPageContent({
     selectedRoundDeclaration ??
     (declarationRoundNumber &&
       selectedParticipant?.state.combat.lastDeclaredActionId &&
+      selectedParticipant.state.combat.lastDeclaredEncounterId === encounterId &&
       selectedParticipant.state.combat.lastDeclaredRoundNumber === declarationRoundNumber),
   );
   const selectedStoredDeclarationTargetValidation = selectedRoundDeclaration
@@ -721,6 +752,7 @@ export default function ScenarioPlayerCombatPageContent({
       })
     : declarationRoundNumber &&
         selectedParticipant?.state.combat.lastDeclaredActionId &&
+        selectedParticipant.state.combat.lastDeclaredEncounterId === encounterId &&
         selectedParticipant.state.combat.lastDeclaredRoundNumber === declarationRoundNumber
       ? validateCombatDeclarationTargets({
           actionId: selectedParticipant.state.combat.lastDeclaredActionId,
@@ -759,7 +791,9 @@ export default function ScenarioPlayerCombatPageContent({
 
     const nextDraft = buildPlayerCombatDeclarationDraft({
       declaration: selectedRoundDeclaration,
+      encounterId,
       participant: selectedParticipant,
+      roundNumber: declarationRoundNumber,
     });
 
     setSelectedActionId(nextDraft.actionId);
@@ -1245,6 +1279,7 @@ export default function ScenarioPlayerCombatPageContent({
   const targetOptions = useMemo(
     () =>
       getPlayerEncounterOpponentParticipants({
+        allowedParticipantIds: encounterScenarioParticipantIds,
         currentUserId: currentUser?.id,
         isGameMaster,
         participants: selectableParticipants,
@@ -1253,6 +1288,7 @@ export default function ScenarioPlayerCombatPageContent({
       }),
     [
       currentUser?.id,
+      encounterScenarioParticipantIds,
       isGameMaster,
       projection?.visibleParticipants,
       selectableParticipants,
