@@ -1004,22 +1004,44 @@ function getCombatRoundPhaseCompletionCursor(input: {
   });
 }
 
+function moveCombatRoundToPhaseCompletion(input: {
+  phase: CombatRoundPhase;
+  state: CombatRoundState;
+}): CombatRoundState {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const currentCursor = getCombatRoundPhaseCompletionCursor({
+    phase: input.phase,
+    state: normalized,
+  });
+  const selectedStep = getCombatRoundStepForCursorStep(currentCursor.step);
+
+  return {
+    ...normalized,
+    currentCursor,
+    currentStep: selectedStep,
+    phaseResolutionCursor: undefined,
+    selectedParticipantId: currentCursor.participantId ?? normalized.selectedParticipantId,
+    selectedStep,
+  };
+}
+
 function getCombatRoundPhaseActionOrCompletionCursor(input: {
   phase: CombatRoundPhase;
   state: CombatRoundState;
 }): CombatRoundCursor {
-  const phaseCursor =
-    input.state.phaseResolutionCursor?.phase === input.phase
-      ? input.state.phaseResolutionCursor
-      : undefined;
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const participantId = getNextCombatRoundPhaseActionParticipantId({
+    phase: input.phase,
+    state: normalized,
+  });
 
-  if (!phaseCursor?.participantId) {
+  if (!participantId) {
     return getCombatRoundPhaseCompletionCursor(input);
   }
 
   return combatRoundCursorSchema.parse({
-    participantId: phaseCursor.participantId,
-    roundNumber: input.state.roundNumber,
+    participantId,
+    roundNumber: normalized.roundNumber,
     step: getCombatRoundAttackCursorStepForPhase(input.phase),
   });
 }
@@ -1773,12 +1795,46 @@ export function combatRoundParticipantHasExecutablePhaseAttack(input: {
   );
 }
 
+function getNextCombatRoundPhaseActionParticipantId(input: {
+  phase: CombatRoundPhase;
+  state: CombatRoundState;
+}): string | undefined {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const order = getCombatRoundPhaseResolutionOrder({
+    phase: input.phase,
+    state: normalized,
+  });
+
+  return order.find((participantId) => {
+    const status = getCombatRoundPhaseResolutionStatus({
+      participantId,
+      phase: input.phase,
+      state: normalized,
+    });
+    const existingAttackResult = getCombatRoundOutgoingAttackResultForParticipantPhase({
+      participantId,
+      phase: input.phase,
+      state: normalized,
+    });
+
+    return (
+      status.substep !== "done" &&
+      existingAttackResult === undefined &&
+      combatRoundParticipantHasExecutablePhaseAttack({
+        participantId,
+        phase: input.phase,
+        state: normalized,
+      })
+    );
+  });
+}
+
 function getCombatRoundInitialPhaseResolutionSubstep(input: {
   participantId: string;
   phase: CombatRoundPhase;
   state: CombatRoundState;
 }): CombatRoundPhaseResolutionSubstep {
-  return combatRoundParticipantHasExecutablePhaseAttack(input) ? "attack" : "parry";
+  return combatRoundParticipantHasExecutablePhaseAttack(input) ? "attack" : "done";
 }
 
 function getCombatRoundPostAttackResolutionSubstep(
@@ -1939,24 +1995,16 @@ export function initializeCombatRoundPhaseResolutionCursor(input: {
   updatedAt?: string;
 }): CombatRoundState {
   const normalized = combatRoundStateSchema.parse(input.state);
-  const order = getCombatRoundPhaseResolutionOrder({
+  const participantId = getNextCombatRoundPhaseActionParticipantId({
     phase: input.phase,
     state: normalized,
   });
-  const participantId = order.find(
-    (id) =>
-      getCombatRoundPhaseResolutionStatus({
-        participantId: id,
-        phase: input.phase,
-        state: normalized,
-      }).substep !== "done",
-  );
 
   if (!participantId) {
-    return {
-      ...normalized,
-      phaseResolutionCursor: undefined,
-    };
+    return moveCombatRoundToPhaseCompletion({
+      phase: input.phase,
+      state: normalized,
+    });
   }
 
   const existingStatus = getCombatRoundPhaseResolutionStatus({
@@ -2008,24 +2056,16 @@ function moveCombatRoundPhaseResolutionCursorToNextParticipant(input: {
   updatedAt: string;
 }): CombatRoundState {
   const normalized = combatRoundStateSchema.parse(input.state);
-  const order = getCombatRoundPhaseResolutionOrder({
+  const participantId = getNextCombatRoundPhaseActionParticipantId({
     phase: input.phase,
     state: normalized,
   });
-  const participantId = order.find(
-    (id) =>
-      getCombatRoundPhaseResolutionStatus({
-        participantId: id,
-        phase: input.phase,
-        state: normalized,
-      }).substep !== "done",
-  );
 
   if (!participantId) {
-    return {
-      ...normalized,
-      phaseResolutionCursor: undefined,
-    };
+    return moveCombatRoundToPhaseCompletion({
+      phase: input.phase,
+      state: normalized,
+    });
   }
 
   const nextSubstep = getCombatRoundInitialPhaseResolutionSubstep({
@@ -4826,6 +4866,56 @@ function getFallbackCombatRoundCursor(input: {
   );
 }
 
+function getUnsupportedCombatRoundPhaseStepRecoveryCursor(input: {
+  commands: CombatRoundCommand[];
+  currentCursor?: CombatRoundCursor;
+  currentStep: CombatRoundStep;
+  encounterId?: string;
+  existingPhaseResolutionCursor?: CombatRoundPhaseResolutionCursor;
+  participants: CombatRoundParticipantState[];
+  phaseResolutionResults: CombatRoundPhaseResolutionResult[];
+  phaseResolutionStatuses: CombatRoundPhaseResolutionStatuses;
+  roundNumber: number;
+  selectedParticipantId?: string;
+  selectedStep?: CombatRoundStep;
+  stepSnapshots: CombatRoundStepSnapshot[];
+}): CombatRoundCursor | undefined {
+  const phase = getCombatRoundAttackPhaseForStep(input.currentStep);
+
+  if (!phase || input.commands.length === 0) {
+    return undefined;
+  }
+
+  const recoveryState = combatRoundStateSchema.parse({
+    commands: input.commands,
+    currentCursor: input.currentCursor,
+    currentStep: input.currentStep,
+    encounterId: input.encounterId,
+    phaseResolutionCursor: input.existingPhaseResolutionCursor,
+    phaseResolutionResults: input.phaseResolutionResults,
+    phaseResolutionStatuses: input.phaseResolutionStatuses,
+    participants: input.participants,
+    roundNumber: input.roundNumber,
+    selectedParticipantId: input.selectedParticipantId,
+    selectedStep: input.selectedStep,
+    stepSnapshots: input.stepSnapshots,
+  });
+
+  if (
+    !isCombatRoundPhaseInitiativeComplete({
+      phase,
+      state: recoveryState,
+    })
+  ) {
+    return undefined;
+  }
+
+  return getCombatRoundPhaseActionOrCompletionCursor({
+    phase,
+    state: recoveryState,
+  });
+}
+
 function combatRoundStateHasUnsupportedPhaseStep(input: {
   commands: CombatRoundCommand[];
   currentStep: CombatRoundStep;
@@ -4964,8 +5054,27 @@ export function initializeCombatRoundState(input: {
           step: "select_actions",
         })
       : undefined;
+  const phaseStepRecoveryCursor =
+    repairsUnsupportedPhaseStep && !targetRepairCursor
+      ? getUnsupportedCombatRoundPhaseStepRecoveryCursor({
+          commands,
+          currentCursor: existing?.currentCursor,
+          currentStep: persistedCurrentStep,
+          encounterId: input.encounter.id,
+          existingPhaseResolutionCursor: existingPhaseResolutionCursorCandidate,
+          participants,
+          phaseResolutionResults,
+          phaseResolutionStatuses,
+          roundNumber,
+          selectedParticipantId: existing?.selectedParticipantId,
+          selectedStep: existing?.selectedStep,
+          stepSnapshots,
+        })
+      : undefined;
   const fallbackCursor = targetRepairCursor
     ? targetRepairCursor
+    : phaseStepRecoveryCursor
+    ? phaseStepRecoveryCursor
     : repairsUnsupportedPhaseStep
     ? getFallbackCombatRoundCursor({
         commands,
@@ -4974,6 +5083,17 @@ export function initializeCombatRoundState(input: {
         roundNumber,
       })
     : undefined;
+  const phaseStepRecoveryPhase = phaseStepRecoveryCursor
+    ? getCombatRoundAttackPhaseForStep(getCombatRoundStepForCursorStep(phaseStepRecoveryCursor.step))
+    : undefined;
+  const fallbackPhaseResolutionCursor =
+    phaseStepRecoveryCursor?.participantId && phaseStepRecoveryPhase
+      ? combatRoundPhaseResolutionCursorSchema.parse({
+          participantId: phaseStepRecoveryCursor.participantId,
+          phase: phaseStepRecoveryPhase,
+          substep: "attack",
+        })
+      : undefined;
   const currentStep = fallbackCursor
     ? getCombatRoundStepForCursorStep(fallbackCursor.step)
     : persistedCurrentStep;
@@ -5093,7 +5213,9 @@ export function initializeCombatRoundState(input: {
     encounterId: input.encounter.id,
     currentStep,
     phaseResolutionCursor:
-      currentStep === "select_actions" || !existingPhaseResolutionCursor
+      fallbackPhaseResolutionCursor
+        ? fallbackPhaseResolutionCursor
+        : currentStep === "select_actions" || !existingPhaseResolutionCursor
         ? undefined
         : existingPhaseResolutionCursor,
     phaseResolutionResults: phaseResolutionResultsForState,

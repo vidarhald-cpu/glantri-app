@@ -133,8 +133,12 @@ function advanceToStep(
 ): ReturnType<typeof initializeCombatRoundState> {
   let current = state;
 
-  while (current.currentStep !== step) {
+  for (let guard = 0; guard < 50 && current.currentStep !== step; guard += 1) {
     current = advanceCombatRoundStep(current);
+  }
+
+  if (current.currentStep !== step) {
+    throw new Error(`Could not advance combat round to ${step}; stopped at ${current.currentStep}.`);
   }
 
   return current;
@@ -495,10 +499,14 @@ describe("combat round manager", () => {
   });
 
   it("does not reuse combat round state stamped for another encounter", () => {
-    const encounterAState = advanceToStep(
-      initializeCombatRoundState({ encounter: encounter({ id: "encounter-a" }) }),
-      "phase_1_actions",
-    );
+    const encounterAState = combatRoundStateSchema.parse({
+      ...preparePhaseResolutionState({
+        guardActionId: "attack_parry",
+        gladiatorActionId: "attack_parry",
+        phase: "phase1",
+      }),
+      encounterId: "encounter-a",
+    });
     const encounterBState = initializeCombatRoundState({
       encounter: encounter({
         combatRoundState: encounterAState,
@@ -880,14 +888,8 @@ describe("combat round manager", () => {
     const roundSummaryState = [
       "review_action_modifiers",
       "initiative_phase_1",
-      "phase_1_actions",
-      "review_phase_2_actions",
-      "phase_1_damage",
       "review_phase_2_modifiers",
       "initiative_phase_2",
-      "phase_2_actions",
-      "review_phase_2_damage",
-      "phase_2_damage",
     ].reduce((current) => advanceCombatRoundStep(current), reviewState);
     const nextRoundState = advanceCombatRoundStep(roundSummaryState);
 
@@ -2372,16 +2374,16 @@ describe("combat round manager", () => {
       state: {
         ...advanced,
         selectedParticipantId: "gladiator",
-        selectedStep: "phase_1_actions",
+        selectedStep: "review_phase_2_modifiers",
       },
-      step: "phase_1_actions",
+      step: "review_phase_2_modifiers",
     });
     const clearedAgain = clearCombatRoundStep({
       state: cleared,
       step: "initiative_phase_1",
     });
 
-    expect(advanced.currentStep).toBe("phase_1_actions");
+    expect(advanced.currentStep).toBe("review_phase_2_modifiers");
     expect(advanced.commands.map((command) => command.participantId)).toEqual([
       "gladiator",
       "guard",
@@ -2458,7 +2460,7 @@ describe("combat round manager", () => {
       },
     });
 
-    expect(advanced.currentStep).toBe("phase_1_actions");
+    expect(advanced.currentStep).toBe("review_phase_2_modifiers");
     expect(advanced.commands).toHaveLength(2);
     expect(advanced.commands.map((command) => command.type)).toEqual([
       "roll_initiative_phase1",
@@ -2831,11 +2833,11 @@ describe("combat round manager", () => {
   });
 
   it("records P1 attack results and marks P1 submitted", () => {
-    const state = advanceCombatRoundStep(
-      advanceCombatRoundStep(
-        advanceCombatRoundStep(initializeCombatRoundState({ encounter: encounter() })),
-      ),
-    );
+    const state = preparePhaseResolutionState({
+      guardActionId: "attack_parry",
+      gladiatorActionId: "attack_parry",
+      phase: "phase1",
+    });
     const result = buildCombatRoundAttackRollResult({
       actionId: "attack_parry",
       attackerParticipantId: "gladiator",
@@ -6050,10 +6052,11 @@ describe("combat round manager", () => {
   });
 
   it("builds and records P2 attack results with attacker and defender lookup", () => {
-    const state = advanceToStep(
-      initializeCombatRoundState({ encounter: encounter() }),
-      "phase_2_actions",
-    );
+    const state = preparePhaseResolutionState({
+      guardActionId: "parry_attack",
+      gladiatorActionId: "parry_attack",
+      phase: "phase2",
+    });
     const result = buildCombatRoundAttackRollResult({
       actionId: "parry_attack",
       attackerParticipantId: "gladiator",
@@ -6120,19 +6123,11 @@ describe("combat round manager", () => {
   });
 
   it("clears P2 attack result, snapshot, and status without clearing declaration", () => {
-    const state = advanceToStep(
-      recordCombatRoundDeclaration({
-        declaration: {
-          actionId: "parry_attack",
-          movementId: "hold",
-          roundNumber: 3,
-        },
-        participantId: "gladiator",
-        state: initializeCombatRoundState({ encounter: encounter() }),
-        submittedBy: "player",
-      }),
-      "phase_2_actions",
-    );
+    const state = preparePhaseResolutionState({
+      guardActionId: "parry_attack",
+      gladiatorActionId: "parry_attack",
+      phase: "phase2",
+    });
     const result = buildCombatRoundAttackRollResult({
       actionId: "parry_attack",
       attackerParticipantId: "gladiator",
@@ -7441,11 +7436,13 @@ describe("combat round manager", () => {
       phase: "phase2",
       substep: "attack",
     });
-    expect(afterMiss.phaseResolutionCursor).toEqual({
+    expect(afterMiss.phaseResolutionCursor).toBeUndefined();
+    expect(afterMiss.currentCursor).toEqual({
       participantId: "gladiator",
-      phase: "phase2",
-      substep: "parry",
+      roundNumber: 3,
+      step: "SU",
     });
+    expect(afterMiss.currentStep).toBe("round_summary");
     expect(
       getCombatRoundPhaseResolutionStatus({
         participantId: "guard",
@@ -7562,7 +7559,7 @@ describe("combat round manager", () => {
     ).toBe(true);
   });
 
-  it("starts a no-attack phase actor at review and lets the GM complete it without rolling", () => {
+  it("advances to phase-two setup when phase one has no executable attackers", () => {
     const baseState = initializeCombatRoundState({ encounter: encounter() });
     const withDeclaration = recordCombatRoundDeclaration({
       declaration: {
@@ -7579,116 +7576,15 @@ describe("combat round manager", () => {
       updatedAt: "2026-01-01T00:04:00.000Z",
     });
 
-    expect(withCursor.phaseResolutionCursor).toEqual({
-      participantId: "gladiator",
-      phase: "phase1",
-      substep: "parry",
-    });
+    expect(withCursor.phaseResolutionCursor).toBeUndefined();
     expect(withCursor.currentCursor).toEqual({
       participantId: "gladiator",
       roundNumber: 3,
-      step: "A1",
+      step: "M2",
     });
-    expect(withCursor.currentStep).toBe("phase_1_actions");
+    expect(withCursor.currentStep).toBe("review_phase_2_modifiers");
     expect(withCursor.selectedParticipantId).toBe("gladiator");
-    expect(withCursor.selectedStep).toBe("phase_1_actions");
-
-    const completed = completeCombatRoundPhaseResolutionForParticipant({
-      participantId: "gladiator",
-      phase: "phase1",
-      state: withCursor,
-      submittedBy: "gm",
-      updatedAt: "2026-01-01T00:06:00.000Z",
-    });
-
-    expect(completed.participants[0]?.stepStatuses.phase_1_actions).toBe("skipped");
-    expect(completed.participants[0]?.stepStatuses.review_phase_2_actions).toBe("gmEdited");
-    expect(
-      getCombatRoundPhaseResolutionStatus({
-        participantId: "gladiator",
-        phase: "phase1",
-        state: completed,
-      }).substep,
-    ).toBe("done");
-    expect(completed.phaseResolutionCursor).toEqual({
-      participantId: "guard",
-      phase: "phase1",
-      substep: "parry",
-    });
-  });
-
-  it("undoes a command-backed no-attack A1 skip in one visible Clear", () => {
-    const baseState = initializeCombatRoundState({ encounter: encounter() });
-    const withDeclaration = recordCombatRoundDeclaration({
-      declaration: {
-        actionId: "parry_attack",
-        roundNumber: 3,
-      },
-      participantId: "gladiator",
-      state: baseState,
-      submittedBy: "gm",
-    });
-    const withCursor = initializeCombatRoundPhaseResolutionCursor({
-      phase: "phase1",
-      state: withDeclaration,
-      updatedAt: "2026-01-01T00:04:00.000Z",
-    });
-    const completed = recordCombatRoundNoAttackPhaseReview({
-      command: {
-        createdAt: "2026-01-01T00:06:00.000Z",
-        createdByUserId: "gm-1",
-      },
-      participantId: "gladiator",
-      phase: "phase1",
-      state: withCursor,
-      submittedBy: "gm",
-      updatedAt: "2026-01-01T00:06:00.000Z",
-    });
-    const cleared = clearCombatRoundStep({
-      state: {
-        ...completed,
-        selectedParticipantId: "gladiator",
-        selectedStep: "initiative_phase_1",
-      },
-      step: "initiative_phase_1",
-    });
-
-    expect(completed.commands).toHaveLength(1);
-    expect(completed.commands[0]).toMatchObject({
-      afterCursor: { participantId: "guard", step: "A1" },
-      beforeCursor: { participantId: "gladiator", step: "A1" },
-      facts: expect.objectContaining({
-        status: "skipped",
-      }),
-      participantId: "gladiator",
-      phase: "phase1",
-      type: "skip_phase_action",
-    });
-    expect(completed.participants[0]?.stepStatuses.phase_1_actions).toBe("skipped");
-    expect(completed.participants[0]?.stepStatuses.review_phase_2_actions).toBe("gmEdited");
-    expect(cleared.commands).toEqual([]);
-    expect(cleared.currentCursor).toEqual({
-      participantId: "gladiator",
-      roundNumber: 3,
-      step: "A1",
-    });
-    expect(cleared.currentStep).toBe("phase_1_actions");
-    expect(cleared.selectedParticipantId).toBe("gladiator");
-    expect(cleared.selectedStep).toBe("phase_1_actions");
-    expect(cleared.participants[0]?.stepStatuses.phase_1_actions).toBe("pending");
-    expect(cleared.participants[0]?.stepStatuses.review_phase_2_actions).toBe("pending");
-    expect(cleared.phaseResolutionCursor).toEqual({
-      participantId: "gladiator",
-      phase: "phase1",
-      substep: "parry",
-    });
-    expect(
-      getCombatRoundPhaseResolutionStatus({
-        participantId: "guard",
-        phase: "phase1",
-        state: cleared,
-      }).substep,
-    ).toBe("pending");
+    expect(withCursor.selectedStep).toBe("review_phase_2_modifiers");
   });
 
   it("advances parry and damage placeholders before completing effects review", () => {
@@ -7880,6 +7776,139 @@ describe("combat round manager", () => {
         state: withSkippedGuard,
       }),
     ).toBe(true);
+  });
+
+  it("opens the next executable A1 actor when the phase-one initiative winner has no A1", () => {
+    const state = preparePhaseResolutionState({
+      guardActionId: "attack_parry",
+      gladiatorActionId: "parry_attack",
+      phase: "phase1",
+    });
+
+    expect(state.currentStep).toBe("phase_1_actions");
+    expect(state.currentCursor).toMatchObject({
+      participantId: "guard",
+      step: "A1",
+    });
+    expect(state.phaseResolutionCursor).toEqual({
+      participantId: "guard",
+      phase: "phase1",
+      substep: "attack",
+    });
+    expect(
+      combatRoundParticipantHasExecutablePhaseAttack({
+        participantId: "gladiator",
+        phase: "phase1",
+        state,
+      }),
+    ).toBe(false);
+    expect(
+      combatRoundParticipantHasExecutablePhaseAttack({
+        participantId: "guard",
+        phase: "phase1",
+        state,
+      }),
+    ).toBe(true);
+  });
+
+  it("moves to phase-two setup when phase-one initiative completes with no A1 actors", () => {
+    const state = preparePhaseResolutionState({
+      guardActionId: "parry_attack",
+      gladiatorActionId: "parry_attack",
+      phase: "phase1",
+    });
+
+    expect(state.currentStep).toBe("review_phase_2_modifiers");
+    expect(state.currentCursor).toMatchObject({
+      participantId: "gladiator",
+      step: "M2",
+    });
+    expect(state.phaseResolutionCursor).toBeUndefined();
+  });
+
+  it("opens A1 for a valid Double Attack participant after phase-one initiative", () => {
+    const state = preparePhaseResolutionState({
+      guardActionId: "parry_attack",
+      gladiatorActionId: "double_attack",
+      phase: "phase1",
+    });
+
+    expect(state.currentStep).toBe("phase_1_actions");
+    expect(state.currentCursor).toMatchObject({
+      participantId: "gladiator",
+      step: "A1",
+    });
+    expect(
+      combatRoundParticipantHasExecutablePhaseAttack({
+        participantId: "gladiator",
+        phase: "phase1",
+        state,
+      }),
+    ).toBe(true);
+  });
+
+  it("repairs an unsupported stale A1 after completed i1 to the next A1 instead of i1", () => {
+    const withDeclarations = declareRoundAction({
+      actionId: "attack_parry",
+      participantId: "guard",
+      state: declareRoundAction({
+        actionId: "parry_attack",
+        participantId: "gladiator",
+        state: initializeCombatRoundState({ encounter: encounter() }),
+      }),
+    });
+    const withGladiatorInitiative = recordCombatRoundInitiative({
+      command: {
+        createdAt: "2026-01-01T00:02:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      initiative: { baseInitiative: 0, modifierAdjustment: 0, rolls: [6], rollTotal: 6, total: 6 },
+      participantId: "gladiator",
+      phase: "phase1",
+      state: withDeclarations,
+      submittedBy: "gm",
+    });
+    const withCompleteInitiative = recordCombatRoundInitiative({
+      command: {
+        createdAt: "2026-01-01T00:02:30.000Z",
+        createdByUserId: "gm-1",
+      },
+      initiative: { baseInitiative: 0, modifierAdjustment: 0, rolls: [4], rollTotal: 4, total: 4 },
+      participantId: "guard",
+      phase: "phase1",
+      state: withGladiatorInitiative,
+      submittedBy: "gm",
+    });
+    const staleState = combatRoundStateSchema.parse({
+      ...withCompleteInitiative,
+      currentCursor: {
+        participantId: "gladiator",
+        roundNumber: withCompleteInitiative.roundNumber,
+        step: "A1",
+      },
+      currentStep: "phase_1_actions",
+      phaseResolutionCursor: {
+        participantId: "gladiator",
+        phase: "phase1",
+        substep: "attack",
+      },
+      selectedParticipantId: "gladiator",
+      selectedStep: "phase_1_actions",
+    });
+    const repaired = initializeCombatRoundState({
+      encounter: encounter({ combatRoundState: staleState }),
+    });
+
+    expect(repaired.currentStep).toBe("phase_1_actions");
+    expect(repaired.currentCursor).toMatchObject({
+      participantId: "guard",
+      step: "A1",
+    });
+    expect(repaired.phaseResolutionCursor).toEqual({
+      participantId: "guard",
+      phase: "phase1",
+      substep: "attack",
+    });
   });
 
   it("opens A2 for a valid Parry - Attack participant after phase-two initiative", () => {

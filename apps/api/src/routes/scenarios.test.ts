@@ -200,6 +200,18 @@ async function buildScenarioTestApp() {
   return app;
 }
 
+function testCombatPhaseContext(targetParticipantId: string) {
+  return {
+    modifierBuckets: {
+      general: [],
+      situationDb: [],
+      situationInitiative: [],
+      situationObSkill: [],
+    },
+    targetParticipantId,
+  };
+}
+
 function makeCombatScenarioParticipant(overrides: Record<string, unknown> = {}) {
   return {
     controlledByUserId: "player-1",
@@ -4365,8 +4377,31 @@ describe("scenarios route contract", () => {
     const combatEncounter = makeCombatEncounter({
       participants: encounterParticipants,
     }) as EncounterSession;
+    const declaredState = recordCombatRoundDeclaration({
+      declaration: {
+        actionId: "attack_parry",
+        phaseContexts: {
+          phase1: testCombatPhaseContext("encounter-participant-1"),
+        },
+        roundNumber: 1,
+      },
+      participantId: "encounter-participant-2",
+      state: recordCombatRoundDeclaration({
+        declaration: {
+          actionId: "attack_parry",
+          phaseContexts: {
+            phase1: testCombatPhaseContext("encounter-participant-2"),
+          },
+          roundNumber: 1,
+        },
+        participantId: "encounter-participant-1",
+        state: initializeCombatRoundState({ encounter: combatEncounter }),
+        submittedBy: "gm",
+      }),
+      submittedBy: "gm",
+    });
     const initiativeState = {
-      ...initializeCombatRoundState({ encounter: combatEncounter }),
+      ...declaredState,
       currentStep: "initiative_phase_1" as const,
       selectedParticipantId: "encounter-participant-1",
       selectedStep: "initiative_phase_1" as const,
@@ -4454,8 +4489,31 @@ describe("scenarios route contract", () => {
     const combatEncounter = makeCombatEncounter({
       participants: encounterParticipants,
     }) as EncounterSession;
+    const declaredState = recordCombatRoundDeclaration({
+      declaration: {
+        actionId: "attack_parry",
+        phaseContexts: {
+          phase1: testCombatPhaseContext("encounter-participant-1"),
+        },
+        roundNumber: 1,
+      },
+      participantId: "encounter-participant-2",
+      state: recordCombatRoundDeclaration({
+        declaration: {
+          actionId: "attack_parry",
+          phaseContexts: {
+            phase1: testCombatPhaseContext("encounter-participant-2"),
+          },
+          roundNumber: 1,
+        },
+        participantId: "encounter-participant-1",
+        state: initializeCombatRoundState({ encounter: combatEncounter }),
+        submittedBy: "gm",
+      }),
+      submittedBy: "gm",
+    });
     const initiativeState = {
-      ...initializeCombatRoundState({ encounter: combatEncounter }),
+      ...declaredState,
       currentStep: "initiative_phase_1" as const,
       selectedParticipantId: "encounter-participant-1",
       selectedStep: "initiative_phase_1" as const,
