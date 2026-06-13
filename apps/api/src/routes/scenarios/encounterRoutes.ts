@@ -6,6 +6,7 @@ import {
   applyCombatActionGeneratedModifiers,
   buildCombatRoundAttackRollResult,
   buildCombatRoundInitiativeResult,
+  canClearCombatRoundStep,
   canPlayerRollCombatInitiative,
   buildRoleplayCalculationPreview,
   canPlayerSubmitCombatDeclaration,
@@ -491,7 +492,11 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         campaignId: access.campaignId,
         createdByUserId: user.id,
         scenarioId,
-        session: encounterSession,
+        session: encounterSessionSchema.parse({
+          ...encounterSession,
+          combatRoundState: undefined,
+          currentRound: 1,
+        }),
       });
 
       await scenarioService.recordScenarioEvent({
@@ -1720,6 +1725,11 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           : roundState;
       const clearStep = selectedStep ?? stateForClear.currentStep;
       const clearsDeclarationStep = clearStep === "select_actions";
+
+      if (!canClearCombatRoundStep({ state: stateForClear, step: clearStep })) {
+        return { encounter, participants: [] };
+      }
+
       const nextRoundState =
         selectedParticipantId && selectedStep
           ? clearCombatRoundStep({

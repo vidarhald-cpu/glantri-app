@@ -22,6 +22,9 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("Current task");
     expect(source).toContain("Return to the current unresolved combat step");
     expect(source).toContain("Clear current step");
+    expect(source).toContain("canClearCombatRoundStep");
+    expect(source).toContain("clearCurrentStepAvailable");
+    expect(source).toContain("disabled={saving || !clearCurrentStepAvailable}");
     expect(source).toContain("clearCurrentCombatRoundStepOnServer");
     expect(source).toContain("Step controller");
   });

@@ -12,6 +12,7 @@ import {
   buildCombatRoundAttackRollResult,
   buildCombatRoundInspector,
   buildCombatRoundInitiativeResult,
+  canClearCombatRoundStep,
   canPlayerRollCombatAttack,
   canPlayerSubmitCombatDeclaration,
   canPlayerRollCombatInitiative,
@@ -484,6 +485,61 @@ describe("combat round manager", () => {
         step: "phase_1_damage",
       }),
     ).toBe("pending");
+  });
+
+  it("stamps initialized combat round state with the owning encounter id", () => {
+    const state = initializeCombatRoundState({ encounter: encounter({ id: "encounter-a" }) });
+
+    expect(state.encounterId).toBe("encounter-a");
+  });
+
+  it("does not reuse combat round state stamped for another encounter", () => {
+    const encounterAState = advanceToStep(
+      initializeCombatRoundState({ encounter: encounter({ id: "encounter-a" }) }),
+      "phase_1_actions",
+    );
+    const encounterBState = initializeCombatRoundState({
+      encounter: encounter({
+        combatRoundState: encounterAState,
+        id: "encounter-b",
+      }),
+    });
+
+    expect(encounterBState.encounterId).toBe("encounter-b");
+    expect(encounterBState.commands).toEqual([]);
+    expect(encounterBState.currentStep).toBe("select_actions");
+    expect(encounterBState.currentCursor).toEqual({
+      participantId: "gladiator",
+      roundNumber: 3,
+      step: "DE",
+    });
+    expect(encounterBState.phaseResolutionCursor).toBeUndefined();
+    expect(encounterBState.phaseResolutionResults).toEqual([]);
+    expect(encounterBState.participants[0]?.stepStatuses.phase_1_actions).toBe("pending");
+    expect(encounterBState.selectedParticipantId).toBe("gladiator");
+    expect(encounterBState.selectedStep).toBe("select_actions");
+  });
+
+  it("does not treat a clean initial round as clearable state", () => {
+    const state = initializeCombatRoundState({ encounter: encounter() });
+    const declared = recordCombatRoundDeclaration({
+      command: {
+        createdAt: "2026-01-01T00:01:00.000Z",
+      },
+      declaration: {
+        actionId: "attack_parry",
+        phaseContexts: {
+          phase1: testPhaseContext("guard"),
+        },
+        roundNumber: state.roundNumber,
+      },
+      participantId: "gladiator",
+      state,
+      submittedBy: "gm",
+    });
+
+    expect(canClearCombatRoundStep({ state, step: "select_actions" })).toBe(false);
+    expect(canClearCombatRoundStep({ state: declared, step: "select_actions" })).toBe(true);
   });
 
   it("parses legacy round state without commands or current cursor", () => {

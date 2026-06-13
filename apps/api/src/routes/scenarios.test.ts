@@ -1101,7 +1101,17 @@ describe("scenarios route contract", () => {
     };
     const bodySession = {
       campaignId: "campaign-evil",
+      combatRoundState: {
+        currentCursor: {
+          roundNumber: 2,
+          step: "A1",
+        },
+        currentStep: "phase_1_actions",
+        participants: [],
+        roundNumber: 2,
+      },
       createdAt: "2026-01-01T00:00:00.000Z",
+      currentRound: 2,
       id: "encounter-1",
       scenarioId: "scenario-evil",
       title: "Courtyard",
@@ -1134,6 +1144,8 @@ describe("scenarios route contract", () => {
       scenarioId: "scenario-1",
       session: expect.objectContaining({
         campaignId: "campaign-evil",
+        combatRoundState: undefined,
+        currentRound: 1,
         id: "encounter-1",
         scenarioId: "scenario-evil",
       }),

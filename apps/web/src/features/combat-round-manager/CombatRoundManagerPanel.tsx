@@ -30,6 +30,7 @@ import {
   advanceCombatRoundStep,
   buildCombatRoundPhaseResolutionResult,
   buildCombatRoundInspector,
+  canClearCombatRoundStep,
   characterBuildSchema,
   combatRoundParticipantHasPhaseAttack,
   commitCombatRoundPhaseDamage,
@@ -2182,6 +2183,7 @@ export default function CombatRoundManagerPanel({
       >
     >({});
   const tableContainerRef = useRef<HTMLDivElement>(null);
+  const encounterScopeRef = useRef(encounter.id);
   const manualSelectionRef = useRef<CombatRoundSelectionTarget | undefined>(undefined);
   const pendingSelectionRef = useRef<CombatRoundSelectionTarget | undefined>(undefined);
   const selectedRoundNumber = roundState.roundNumber;
@@ -2226,6 +2228,10 @@ export default function CombatRoundManagerPanel({
     participantId: roundState.selectedParticipantId,
     state: roundState,
     step: roundState.selectedStep,
+  });
+  const clearCurrentStepAvailable = canClearCombatRoundStep({
+    state: roundState,
+    step: inspector.step,
   });
   const selectedEncounterParticipant = encounter.participants.find(
     (participant) => participant.id === inspector.participant?.participantId,
@@ -2797,8 +2803,21 @@ export default function CombatRoundManagerPanel({
     liveModifiers: inspectorLiveModifiers,
   });
   useEffect(() => {
-    const pendingSelection = pendingSelectionRef.current;
-    const manualSelection = manualSelectionRef.current;
+    const encounterChanged = encounterScopeRef.current !== encounter.id;
+
+    if (encounterChanged) {
+      encounterScopeRef.current = encounter.id;
+      manualSelectionRef.current = undefined;
+      pendingSelectionRef.current = undefined;
+      setDamageReviewDrafts({});
+      setInspectorDrafts({});
+      setParrySourceSelections({});
+      setSaveError(undefined);
+      setScenarioParticipantOverrides({});
+    }
+
+    const pendingSelection = encounterChanged ? undefined : pendingSelectionRef.current;
+    const manualSelection = encounterChanged ? undefined : manualSelectionRef.current;
     const nextRoundState = normalizeCombatRoundManagerSelection({
       manualSelection,
       pendingSelection,
@@ -4155,7 +4174,11 @@ export default function CombatRoundManagerPanel({
           >
             Current task
           </button>
-          <button disabled={saving} onClick={() => void clearCurrentStep()} type="button">
+          <button
+            disabled={saving || !clearCurrentStepAvailable}
+            onClick={() => void clearCurrentStep()}
+            type="button"
+          >
             Clear current step
           </button>
         </section>

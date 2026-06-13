@@ -753,6 +753,7 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
               ) : null}
               <CombatRoundManagerPanel
                 encounter={activeEncounter}
+                key={activeEncounter.id}
                 onEncounterUpdated={(nextEncounter) => {
                   setEncounters((current) =>
                     current.map((encounter) =>

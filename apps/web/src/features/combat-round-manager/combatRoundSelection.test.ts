@@ -111,6 +111,28 @@ describe("combat round manager selection", () => {
     const refreshedEncounter = encounter({
       combatRoundState: {
         ...existing,
+        commands: [
+          {
+            afterCursor: {
+              participantId: "middle",
+              roundNumber: existing.roundNumber,
+              step: "A1",
+            },
+            beforeCursor: {
+              participantId: "middle",
+              roundNumber: existing.roundNumber,
+              step: "A1",
+            },
+            createdAt: "2026-01-01T00:01:00.000Z",
+            facts: {},
+            id: "command-middle-a1",
+            participantId: "middle",
+            phase: "phase1",
+            roundNumber: existing.roundNumber,
+            step: "A1",
+            type: "skip_phase_action",
+          },
+        ],
         currentCursor: undefined,
         currentStep: "phase_1_actions",
         phaseResolutionCursor: {
@@ -132,6 +154,41 @@ describe("combat round manager selection", () => {
     expect(getCurrentCombatRoundTaskSelection(state)).toEqual({
       participantId: "middle",
       step: "phase_1_actions",
+    });
+  });
+
+  it("ignores a bare stale phase cursor in a fresh no-command encounter state", () => {
+    const existing = initializeCombatRoundState({ encounter: encounter() });
+    const refreshedEncounter = encounter({
+      combatRoundState: {
+        ...existing,
+        commands: [],
+        currentCursor: undefined,
+        currentStep: "phase_1_actions",
+        phaseResolutionCursor: {
+          participantId: "middle",
+          phase: "phase1",
+          substep: "attack",
+        },
+        phaseResolutionResults: [],
+        phaseResolutionStatuses: {},
+        selectedParticipantId: "middle",
+        selectedStep: "phase_1_actions",
+        stepSnapshots: [],
+      },
+    });
+    const state = initializeCombatRoundState({ encounter: refreshedEncounter });
+
+    expect(state.currentStep).toBe("select_actions");
+    expect(state.currentCursor).toEqual({
+      participantId: "top",
+      roundNumber: existing.roundNumber,
+      step: "DE",
+    });
+    expect(state.phaseResolutionCursor).toBeUndefined();
+    expect(getCurrentCombatRoundTaskSelection(state)).toEqual({
+      participantId: "top",
+      step: "select_actions",
     });
   });
 
