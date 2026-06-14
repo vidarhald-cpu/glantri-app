@@ -8,6 +8,7 @@ import type {
   CombatRoundDamageReview,
   CombatRoundDamageReviewAdditionalEffect,
   CombatRoundDamageResult,
+  CombatRoundState,
   CombatRoundParryResolution,
   CombatRoundParryModifierBreakdownEntry,
   CombatRoundPhase,
@@ -64,7 +65,6 @@ import {
   recordCombatRoundNoAttackPhaseReview,
   recordCombatRoundParryResult,
   rollOpenEndedD20,
-  setCombatRoundSelection,
   sortCombatRoundParticipantsByInitiative,
   validateCombatDeclarationTargets,
 } from "@glantri/domain";
@@ -145,6 +145,17 @@ import {
   type CombatRoundSelectionTarget,
 } from "./combatRoundSelection";
 import { buildCombatRoundPhasePanelProjection } from "./combatRoundPhasePanelProjection";
+import {
+  getAdjacentCombatRoundTimelineParticipantSelection,
+  getAdjacentCombatRoundTimelineStepSelection,
+  getCombatRoundTimelineCellKey,
+  getParticipantIdsForTimelineRound,
+  type CombatRoundTimelineSelection,
+} from "./combatRoundTimelineNavigation";
+import {
+  scrollCombatRoundTimelineCellIntoView,
+  type CombatRoundTimelineScrollMode,
+} from "./combatRoundTimelineScroll";
 
 interface CombatRoundManagerPanelProps {
   encounter: EncounterSession;
@@ -183,6 +194,8 @@ const stepCellStyle = {
   padding: "0.2rem",
   textAlign: "center",
 } as const;
+
+const roundBoundaryStartBorder = "2px solid #c9bea4";
 
 const inspectorNavStyle = {
   display: "flex",
@@ -2208,6 +2221,7 @@ export default function CombatRoundManagerPanel({
       >
     >({});
   const activeCurrentCellRef = useRef<HTMLButtonElement | null>(null);
+  const timelineCellRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const tableContainerRef = useRef<HTMLDivElement>(null);
   const encounterScopeRef = useRef(encounter.id);
   const manualSelectionRef = useRef<CombatRoundSelectionTarget | undefined>(undefined);
@@ -2875,22 +2889,35 @@ export default function CombatRoundManagerPanel({
 
     const pendingSelection = encounterChanged ? undefined : pendingSelectionRef.current;
     const manualSelection = encounterChanged ? undefined : manualSelectionRef.current;
-    const nextRoundState = normalizeCombatRoundManagerSelection({
-      manualSelection,
+    const currentTaskSelection =
+      !pendingSelection && !manualSelection
+        ? getCurrentCombatRoundTaskSelection(initialRoundState)
+        : undefined;
+    const nextRoundStateCandidate = normalizeCombatRoundManagerSelection({
+      manualSelection: manualSelection ?? currentTaskSelection,
       pendingSelection,
       state: initialRoundState,
     });
+    const nextRoundState =
+      currentTaskSelection && !manualSelection && !pendingSelection
+        ? applyCombatRoundSelectionTarget({
+            selection: currentTaskSelection,
+            state: nextRoundStateCandidate,
+          })
+        : nextRoundStateCandidate;
 
     if (pendingSelection) {
       pendingSelectionRef.current = undefined;
     }
 
     setSelectedRoundNumber((currentRoundNumber) =>
-      getCombatRoundTimelineRoundStates(nextRoundState).some(
-        (round) => round.roundNumber === currentRoundNumber,
-      )
-        ? currentRoundNumber
-        : nextRoundState.roundNumber,
+      currentTaskSelection
+        ? initialRoundState.roundNumber
+        : getCombatRoundTimelineRoundStates(nextRoundState).some(
+              (round) => round.roundNumber === currentRoundNumber,
+            )
+          ? currentRoundNumber
+          : nextRoundState.roundNumber,
     );
 
     if (
@@ -2904,6 +2931,17 @@ export default function CombatRoundManagerPanel({
     }
 
     setRoundState(nextRoundState);
+
+    if (currentTaskSelection?.participantId) {
+      scrollTimelineCellIntoView(
+        {
+          participantId: currentTaskSelection.participantId,
+          roundNumber: initialRoundState.roundNumber,
+          step: currentTaskSelection.step,
+        },
+        "center",
+      );
+    }
   }, [initialRoundState]);
 
   useEffect(() => {
@@ -2919,7 +2957,9 @@ export default function CombatRoundManagerPanel({
       } catch (caughtError) {
         if (!cancelled) {
           setSaveError(
-            caughtError instanceof Error ? caughtError.message : "Unable to load combat content.",
+            caughtError instanceof Error
+              ? caughtError.message
+              : "Unable to load combat content.",
           );
         }
       }
@@ -2984,17 +3024,48 @@ export default function CombatRoundManagerPanel({
     selectedScenarioParticipant?.id,
   ]);
 
-  function scrollActiveCurrentCellIntoView() {
+  function scrollTimelineCellIntoView(
+    selection: CombatRoundTimelineSelection,
+    mode: CombatRoundTimelineScrollMode = "nearest",
+  ) {
     window.requestAnimationFrame(() => {
-      activeCurrentCellRef.current?.scrollIntoView({
-        block: "nearest",
-        inline: "nearest",
-        behavior: "smooth",
+      scrollCombatRoundTimelineCellIntoView({
+        cell: timelineCellRefs.current[getCombatRoundTimelineCellKey(selection)],
+        container: tableContainerRef.current,
+        mode,
+        padding: 96,
       });
     });
   }
 
-  function focusRoundTable(input: { scrollIntoView?: boolean; scrollToCurrent?: boolean } = {}) {
+  function scrollActiveCurrentCellIntoView(
+    stateForCurrentTask: CombatRoundState = roundState,
+    mode: CombatRoundTimelineScrollMode = "nearest",
+  ) {
+    const selection = getCurrentCombatRoundTaskSelection(stateForCurrentTask);
+
+    if (!selection?.participantId) {
+      return;
+    }
+
+    scrollTimelineCellIntoView(
+      {
+        participantId: selection.participantId,
+        roundNumber: stateForCurrentTask.roundNumber,
+        step: selection.step,
+      },
+      mode,
+    );
+  }
+
+  function focusRoundTable(
+    input: {
+      scrollIntoView?: boolean;
+      scrollMode?: CombatRoundTimelineScrollMode;
+      scrollToCurrent?: boolean;
+      state?: CombatRoundState;
+    } = {},
+  ) {
     if (input.scrollIntoView !== false && input.scrollToCurrent !== true) {
       tableContainerRef.current?.scrollIntoView({ block: "start", behavior: "smooth" });
     }
@@ -3002,7 +3073,7 @@ export default function CombatRoundManagerPanel({
     tableContainerRef.current?.focus({ preventScroll: true });
 
     if (input.scrollToCurrent) {
-      scrollActiveCurrentCellIntoView();
+      scrollActiveCurrentCellIntoView(input.state ?? roundState, input.scrollMode);
     }
   }
 
@@ -3322,7 +3393,7 @@ export default function CombatRoundManagerPanel({
       });
 
       onEncounterUpdated?.(nextEncounter);
-      focusRoundTable({ scrollToCurrent: true });
+      focusRoundTable({ scrollToCurrent: true, state: nextRoundState });
       setSaveError(undefined);
     } catch (caughtError) {
       setSaveError(
@@ -3358,7 +3429,7 @@ export default function CombatRoundManagerPanel({
       setSelectedRoundNumber(nextRoundState.roundNumber);
       setSaveError(undefined);
       onEncounterUpdated?.(nextEncounter);
-      focusRoundTable({ scrollIntoView: false, scrollToCurrent: true });
+      focusRoundTable({ scrollIntoView: false, scrollToCurrent: true, state: nextRoundState });
 
       if (participants.length > 0) {
         setScenarioParticipantOverrides((current) => ({
@@ -3403,62 +3474,68 @@ export default function CombatRoundManagerPanel({
           })
         : current;
     });
-    scrollActiveCurrentCellIntoView();
+    focusRoundTable({
+      scrollIntoView: false,
+      scrollMode: "center",
+      scrollToCurrent: true,
+      state: roundState,
+    });
+  }
+
+  function selectTimelineSelection(
+    selection: CombatRoundTimelineSelection,
+    mode: CombatRoundTimelineScrollMode = "nearest",
+  ) {
+    setSelectedRoundNumber(selection.roundNumber);
+    manualSelectionRef.current = {
+      participantId: selection.participantId,
+      step: selection.step,
+    };
+    setRoundState((current) =>
+      applyCombatRoundSelectionTarget({
+        selection: {
+          participantId: selection.participantId,
+          step: selection.step,
+        },
+        state: current,
+      }),
+    );
+    scrollTimelineCellIntoView(selection, mode);
   }
 
   function selectInspector(participantId: string, step: CombatRoundStep, roundNumber: number) {
-    setSelectedRoundNumber(roundNumber);
-    manualSelectionRef.current = {
+    selectTimelineSelection({
       participantId,
+      roundNumber,
       step,
-    };
-    setRoundState((current) =>
-      setCombatRoundSelection({
-        participantId,
-        state: current,
-        step,
-      }),
-    );
+    });
   }
 
   function moveSelection(input: { participantOffset?: number; stepOffset?: number }) {
-    setRoundState((current) => {
-      const selectedRoundParticipants =
-        timelineRoundStates.find((round) => round.roundNumber === selectedRoundNumber)
-          ?.participants ?? displayParticipants;
-      const participantIndex = selectedRoundParticipants.findIndex(
-        (participant) => participant.participantId === current.selectedParticipantId,
-      );
-      const stepIndex = COMBAT_ROUND_STEPS.indexOf(current.selectedStep ?? current.currentStep);
-      const nextParticipant =
-        selectedRoundParticipants[
-          Math.min(
-            Math.max(
-              (participantIndex === -1 ? 0 : participantIndex) + (input.participantOffset ?? 0),
-              0,
-            ),
-            Math.max(selectedRoundParticipants.length - 1, 0),
-          )
-        ];
-      const nextStep =
-        COMBAT_ROUND_STEPS[
-          Math.min(
-            Math.max((stepIndex === -1 ? 0 : stepIndex) + (input.stepOffset ?? 0), 0),
-            COMBAT_ROUND_STEPS.length - 1,
-          )
-        ];
-
-      manualSelectionRef.current = {
-        participantId: nextParticipant?.participantId,
-        step: nextStep,
-      };
-
-      return setCombatRoundSelection({
-        participantId: nextParticipant?.participantId,
-        state: current,
-        step: nextStep,
-      });
+    const currentStep = roundState.selectedStep ?? roundState.currentStep;
+    const participantIds = getParticipantIdsForTimelineRound({
+      fallbackParticipantIds: displayParticipants.map((participant) => participant.participantId),
+      roundNumber: selectedRoundNumber,
+      timelineRoundStates,
     });
+    const nextSelection =
+      input.stepOffset !== undefined
+        ? getAdjacentCombatRoundTimelineStepSelection({
+            participantId: roundState.selectedParticipantId,
+            roundNumbers: timelineRoundNumbers,
+            selectedRoundNumber,
+            step: currentStep,
+            stepOffset: input.stepOffset,
+          })
+        : getAdjacentCombatRoundTimelineParticipantSelection({
+            participantId: roundState.selectedParticipantId,
+            participantIds,
+            participantOffset: input.participantOffset ?? 0,
+            roundNumber: selectedRoundNumber,
+            step: currentStep,
+          });
+
+    selectTimelineSelection(nextSelection);
   }
 
   function handleTimelineKeyDown(event: KeyboardEvent<HTMLDivElement>) {
@@ -3807,7 +3884,7 @@ export default function CombatRoundManagerPanel({
       setRoundState(nextRoundState);
       setSelectedRoundNumber(nextRoundState.roundNumber);
       onEncounterUpdated?.(nextEncounter);
-      focusRoundTable({ scrollToCurrent: true });
+      focusRoundTable({ scrollToCurrent: true, state: nextRoundState });
       setSaveError(undefined);
     } catch (caughtError) {
       setSaveError(
@@ -4344,14 +4421,16 @@ export default function CombatRoundManagerPanel({
               >
                 Participant
               </th>
-              {timelineRoundNumbers.map((roundNumber) => (
+              {timelineRoundNumbers.map((roundNumber, roundIndex) => (
                 <th
+                  className={roundIndex > 0 ? "round-boundary-start" : undefined}
                   colSpan={COMBAT_ROUND_STEPS.length}
                   key={roundNumber}
                   style={{
                     background: "#efe7d3",
                     borderBottom: "1px solid #d1c7aa",
-                    borderLeft: "1px solid #e3e1dc",
+                    borderLeft:
+                      roundIndex > 0 ? roundBoundaryStartBorder : "1px solid #e3e1dc",
                     padding: "0.35rem",
                     textAlign: "center",
                   }}
@@ -4361,9 +4440,12 @@ export default function CombatRoundManagerPanel({
               ))}
             </tr>
             <tr>
-              {timelineRoundNumbers.flatMap((roundNumber) =>
-                COMBAT_ROUND_STEPS.map((step) => (
+              {timelineRoundNumbers.flatMap((roundNumber, roundIndex) =>
+                COMBAT_ROUND_STEPS.map((step, stepIndex) => (
                   <th
+                    className={
+                      roundIndex > 0 && stepIndex === 0 ? "round-boundary-start" : undefined
+                    }
                     key={`${roundNumber}-${step}`}
                     style={{
                       ...stepCellStyle,
@@ -4372,7 +4454,10 @@ export default function CombatRoundManagerPanel({
                           ? "#f6f0dd"
                           : "#fbfaf7",
                       borderBottom: "1px solid #e3e1dc",
-                      borderLeft: "1px solid #e3e1dc",
+                      borderLeft:
+                        roundIndex > 0 && stepIndex === 0
+                          ? roundBoundaryStartBorder
+                          : "1px solid #e3e1dc",
                       fontWeight:
                         roundNumber === roundState.roundNumber && step === roundState.currentStep
                           ? 800
@@ -4406,8 +4491,8 @@ export default function CombatRoundManagerPanel({
                       <strong>{participant.label}</strong>
                     </div>
                   </td>
-                  {timelineRoundStates.flatMap((timelineRoundState) =>
-                    COMBAT_ROUND_STEPS.map((step) => {
+                  {timelineRoundStates.flatMap((timelineRoundState, roundIndex) =>
+                    COMBAT_ROUND_STEPS.map((step, stepIndex) => {
                       const roundNumber = timelineRoundState.roundNumber;
                       const roundParticipant =
                         timelineRoundState.participants.find(
@@ -4442,9 +4527,19 @@ export default function CombatRoundManagerPanel({
                             : undefined;
                       const initiativeTotal = getCombatRoundInitiativeTotal(initiative);
                       const title = `${participant.label}, round ${roundNumber}, ${COMBAT_ROUND_STEP_LABELS[step]}, status ${stepStatus}`;
+                      const cellKey = getCombatRoundTimelineCellKey({
+                        participantId: participant.participantId,
+                        roundNumber,
+                        step,
+                      });
 
                       return (
                         <td
+                          className={
+                            roundIndex > 0 && stepIndex === 0
+                              ? "round-boundary-start"
+                              : undefined
+                          }
                           key={`${roundNumber}-${step}`}
                           style={{
                             ...stepCellStyle,
@@ -4453,7 +4548,10 @@ export default function CombatRoundManagerPanel({
                               : currentStepCell
                                 ? "#f6f0dd"
                                 : undefined,
-                            borderLeft: "1px solid #e3e1dc",
+                            borderLeft:
+                              roundIndex > 0 && stepIndex === 0
+                                ? roundBoundaryStartBorder
+                                : "1px solid #e3e1dc",
                             borderTop: "1px solid #e3e1dc",
                             outline: selected ? "2px solid #2f5d62" : undefined,
                             outlineOffset: "-2px",
@@ -4464,13 +4562,13 @@ export default function CombatRoundManagerPanel({
                             onClick={() =>
                               selectInspector(participant.participantId, step, roundNumber)
                             }
-                            ref={
-                              activeCurrentTaskCell
-                                ? (node) => {
-                                    activeCurrentCellRef.current = node;
-                                  }
-                                : undefined
-                            }
+                            ref={(node) => {
+                              timelineCellRefs.current[cellKey] = node;
+
+                              if (activeCurrentTaskCell) {
+                                activeCurrentCellRef.current = node;
+                              }
+                            }}
                             style={{
                               alignItems: "center",
                               background: "transparent",

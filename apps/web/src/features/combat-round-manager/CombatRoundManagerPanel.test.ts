@@ -62,9 +62,14 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain('overflowX: "auto"');
     expect(source).toContain("tableContainerRef");
     expect(source).toContain("activeCurrentCellRef");
+    expect(source).toContain("timelineCellRefs");
+    expect(source).toContain("getCombatRoundTimelineCellKey");
+    expect(source).toContain("scrollCombatRoundTimelineCellIntoView");
     expect(source).toContain("scrollActiveCurrentCellIntoView");
     expect(source).toContain("activeCurrentTaskCell");
-    expect(source).toContain('inline: "nearest"');
+    expect(source).toContain('scrollMode: "center"');
+    expect(source).toContain("roundBoundaryStartBorder");
+    expect(source).toContain('"round-boundary-start"');
     expect(source).toContain("handleTimelineKeyDown");
     expect(source).toContain("ArrowRight");
     expect(source).toContain("ArrowDown");
@@ -368,6 +373,11 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("Next participant");
     expect(source).toContain("Previous step");
     expect(source).toContain("Next step");
+    expect(source).toContain("getAdjacentCombatRoundTimelineStepSelection");
+    expect(source).toContain("getAdjacentCombatRoundTimelineParticipantSelection");
+    expect(source).toContain("getParticipantIdsForTimelineRound");
+    expect(source).toContain("roundNumbers: timelineRoundNumbers");
+    expect(source).toContain("selectedRoundNumber");
   });
 
   it("returns from inspection to the current task without mutating combat state", () => {
@@ -378,9 +388,22 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("manualSelectionRef.current = undefined");
     expect(source).toContain("pendingSelectionRef.current = undefined");
     expect(source).toContain("applyCombatRoundSelectionTarget({");
+    expect(source).toContain("scrollToCurrent: true");
+    expect(source).toContain('scrollMode: "center"');
     expect(source).toContain("disabled={saving || !currentTaskSelection}");
     expect(source).toContain("onClick={selectCurrentTask}");
     expect(source).not.toContain("selectCurrentTaskOnServer");
+  });
+
+  it("initially selects and scrolls to the active current task when present", () => {
+    const source = readSource();
+
+    expect(source).toContain("const currentTaskSelection =");
+    expect(source).toContain("!pendingSelection && !manualSelection");
+    expect(source).toContain("manualSelection: manualSelection ?? currentTaskSelection");
+    expect(source).toContain("selection: currentTaskSelection");
+    expect(source).toContain("scrollTimelineCellIntoView(");
+    expect(source).toContain('"center"');
   });
 
   it("persists combat round updates through narrow encounter commands", () => {
@@ -422,10 +445,13 @@ describe("CombatRoundManagerPanel", () => {
     const source = readSource();
 
     expect(source).toContain(
-      "function focusRoundTable(input: { scrollIntoView?: boolean; scrollToCurrent?: boolean } = {})",
+      "function focusRoundTable(",
     );
+    expect(source).toContain("scrollMode?: CombatRoundTimelineScrollMode");
     expect(source).toContain("input.scrollIntoView !== false");
-    expect(source).toContain("focusRoundTable({ scrollIntoView: false, scrollToCurrent: true })");
+    expect(source).toContain(
+      "focusRoundTable({ scrollIntoView: false, scrollToCurrent: true, state: nextRoundState })",
+    );
     expect(source).toContain("Clear current step");
   });
 
