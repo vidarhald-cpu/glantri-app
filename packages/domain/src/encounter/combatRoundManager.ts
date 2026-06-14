@@ -621,6 +621,13 @@ export interface CombatRoundEffectiveDamageResult {
   review?: CombatRoundDamageReview;
 }
 
+export interface CombatRoundPhaseDamageCommitReadiness {
+  attackResultId?: string;
+  ready: boolean;
+  reason?: string;
+  warnings: string[];
+}
+
 export const combatRoundPhaseResolutionResultSchema = z.object({
   attackResultId: idSchema,
   attackerParticipantId: idSchema,
@@ -4573,7 +4580,268 @@ function recordCombatRoundCommitPhaseDamageCommand(input: {
   };
 }
 
+function getCombatRoundAttackResultForAttackResultId(input: {
+  attackResultId: string;
+  state: CombatRoundState;
+}): CombatRoundAttackRollResult | undefined {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const phases: CombatRoundPhase[] = ["phase1", "phase2"];
+
+  for (const participant of normalized.participants) {
+    for (const phase of phases) {
+      const result = participant.attackResults[phase];
+
+      if (
+        result &&
+        getCombatRoundAttackResultId({ result, roundNumber: normalized.roundNumber }) ===
+          input.attackResultId
+      ) {
+        return result;
+      }
+    }
+  }
+
+  return undefined;
+}
+
+function getCombatRoundPhaseDamageCommitTarget(input: {
+  attackResultId?: string;
+  state: CombatRoundState;
+}): {
+  attackResult?: CombatRoundAttackRollResult;
+  damageResult?: CombatRoundDamageResult;
+  resolution?: CombatRoundPhaseResolutionResult;
+} {
+  const normalized = combatRoundStateSchema.parse(input.state);
+
+  if (input.attackResultId) {
+    const resolution = normalized.phaseResolutionResults.find(
+      (result) => result.attackResultId === input.attackResultId,
+    );
+    const attackResult = getCombatRoundAttackResultForAttackResultId({
+      attackResultId: input.attackResultId,
+      state: normalized,
+    });
+
+    return {
+      attackResult,
+      damageResult: resolution?.damageResult,
+      resolution,
+    };
+  }
+
+  if (normalized.phaseResolutionCursor) {
+    const attackResult = getCombatRoundDisplayIncomingAttackResultForParticipantPhase({
+      participantId: normalized.phaseResolutionCursor.participantId,
+      phase: normalized.phaseResolutionCursor.phase,
+      state: normalized,
+    });
+    const resolution = attackResult
+      ? getCombatRoundPhaseResolutionResultForAttack({
+          attackResult,
+          state: normalized,
+        })
+      : undefined;
+
+    if (resolution?.damageResult) {
+      return {
+        attackResult,
+        damageResult: resolution.damageResult,
+        resolution,
+      };
+    }
+  }
+
+  const selectedResolutionPhase = normalized.selectedStep
+    ? getCombatRoundResolutionPhaseForStep(normalized.selectedStep)
+    : undefined;
+
+  if (normalized.selectedParticipantId && selectedResolutionPhase) {
+    const attackResult = getCombatRoundDisplayIncomingAttackResultForParticipantPhase({
+      participantId: normalized.selectedParticipantId,
+      phase: selectedResolutionPhase,
+      state: normalized,
+    });
+    const resolution = attackResult
+      ? getCombatRoundPhaseResolutionResultForAttack({
+          attackResult,
+          state: normalized,
+        })
+      : undefined;
+
+    if (resolution?.damageResult) {
+      return {
+        attackResult,
+        damageResult: resolution.damageResult,
+        resolution,
+      };
+    }
+  }
+
+  const uncommittedDamageResolutions = normalized.phaseResolutionResults.filter(
+    (result) => result.damageResult && result.damageProposal.status !== "committed",
+  );
+
+  if (uncommittedDamageResolutions.length === 1) {
+    const [resolution] = uncommittedDamageResolutions;
+    const attackResult = getCombatRoundAttackResultForAttackResultId({
+      attackResultId: resolution.attackResultId,
+      state: normalized,
+    });
+
+    return {
+      attackResult,
+      damageResult: resolution.damageResult,
+      resolution,
+    };
+  }
+
+  return {};
+}
+
+function getCombatRoundPhaseDamageCommitReadinessDetail(input: {
+  attackResultId?: string;
+  state: CombatRoundState;
+}): CombatRoundPhaseDamageCommitReadiness & {
+  attackResult?: CombatRoundAttackRollResult;
+  damageResult?: CombatRoundDamageResult;
+  resolution?: CombatRoundPhaseResolutionResult;
+} {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const target = getCombatRoundPhaseDamageCommitTarget({
+    attackResultId: input.attackResultId,
+    state: normalized,
+  });
+  const attackResultId =
+    input.attackResultId ?? target.resolution?.attackResultId ?? target.damageResult?.attackResultId;
+  const damageResult = target.damageResult;
+  const resolution = target.resolution;
+  const effectiveDamage = damageResult
+    ? getCombatRoundEffectiveDamageResult(damageResult)
+    : undefined;
+  const warnings = [
+    ...(damageResult?.review?.criticalEffectProposal?.warnings ?? []).map(
+      (warning) => `Critical effects unavailable: ${warning}`,
+    ),
+  ];
+
+  if (damageResult?.armorModifierSource.status === "not_applied") {
+    warnings.push(damageResult.armorModifierSource.reason ?? "Armor modifier is not applied yet.");
+  }
+
+  if (
+    resolution?.criticalRoll.status === "rolled" &&
+    resolution.criticalRoll.armorCriticalModifierSource.status === "not_applied"
+  ) {
+    warnings.push(
+      resolution.criticalRoll.armorCriticalModifierSource.reason ??
+        "Armor critical modifier is not applied yet.",
+    );
+  }
+
+  if (damageResult && !effectiveDamage?.effectiveSelectedHitLocation) {
+    warnings.push("No effective hit location is available; committing General damage.");
+  }
+
+  if (effectiveDamage?.effectiveCriticalGrade && !damageResult?.review?.criticalEffectProposal) {
+    warnings.push("Critical effects unavailable: no critical effect proposal was generated.");
+  }
+
+  if (!resolution || !damageResult) {
+    return {
+      ...target,
+      attackResultId,
+      ready: false,
+      reason: "Cannot commit: no damage proposal exists.",
+      warnings,
+    };
+  }
+
+  if (!target.attackResult) {
+    return {
+      ...target,
+      attackResultId,
+      ready: false,
+      reason: "Cannot commit: attack result is missing.",
+      warnings,
+    };
+  }
+
+  if (resolution.damageProposal.status === "committed") {
+    return {
+      ...target,
+      attackResultId,
+      ready: false,
+      reason: "Cannot commit: phase damage is already committed.",
+      warnings,
+    };
+  }
+
+  if (resolution.hitLocationRoll.status !== "rolled") {
+    return {
+      ...target,
+      attackResultId,
+      ready: false,
+      reason: "Cannot commit: hit location roll is missing.",
+      warnings,
+    };
+  }
+
+  if (resolution.criticalRoll.status !== "rolled" && effectiveDamage?.effectiveCriticalGrade) {
+    return {
+      ...target,
+      attackResultId,
+      ready: false,
+      reason: "Cannot commit: critical roll is required.",
+      warnings,
+    };
+  }
+
+  if (effectiveDamage?.requiresTotalDamageOverride) {
+    return {
+      ...target,
+      attackResultId,
+      ready: false,
+      reason:
+        "Cannot commit: grazing damage review changed the die size; enter a total damage override.",
+      warnings,
+    };
+  }
+
+  if (!effectiveDamage || !Number.isFinite(effectiveDamage.effectiveTotalDamage)) {
+    return {
+      ...target,
+      attackResultId,
+      ready: false,
+      reason: "Cannot commit: effective damage is missing.",
+      warnings,
+    };
+  }
+
+  return {
+    ...target,
+    attackResultId,
+    ready: true,
+    warnings,
+  };
+}
+
+export function getCombatRoundPhaseDamageCommitReadiness(input: {
+  attackResultId?: string;
+  state: CombatRoundState;
+}): CombatRoundPhaseDamageCommitReadiness {
+  const readiness = getCombatRoundPhaseDamageCommitReadinessDetail(input);
+
+  return {
+    attackResultId: readiness.attackResultId,
+    ready: readiness.ready,
+    reason: readiness.reason,
+    warnings: readiness.warnings,
+  };
+}
+
 export function commitCombatRoundPhaseDamage(input: {
+  attackResultId?: string;
   attackerScenarioParticipantId?: string;
   command: {
     commandId?: string;
@@ -4591,35 +4859,25 @@ export function commitCombatRoundPhaseDamage(input: {
   state: CombatRoundState;
 } {
   const normalized = combatRoundStateSchema.parse(input.state);
-  const attackResult = normalized.phaseResolutionCursor
-    ? getCombatRoundDisplayIncomingAttackResultForParticipantPhase({
-        participantId: normalized.phaseResolutionCursor.participantId,
-        phase: normalized.phaseResolutionCursor.phase,
-        state: normalized,
-      })
-    : undefined;
-  const resolution = attackResult
-    ? getCombatRoundPhaseResolutionResultForAttack({
-        attackResult,
-        state: normalized,
-      })
-    : undefined;
-  const damageResult = resolution?.damageResult;
+  const readiness = getCombatRoundPhaseDamageCommitReadinessDetail({
+    attackResultId: input.attackResultId,
+    state: normalized,
+  });
 
-  if (!attackResult || !damageResult || resolution.damageProposal.status === "committed") {
-    throw new RangeError("Phase damage proposal is not ready to commit.");
+  if (!readiness.ready) {
+    throw new RangeError(readiness.reason ?? "Cannot commit: phase damage is not ready.");
   }
 
-  if (resolution.criticalRoll.status === "pending") {
-    throw new RangeError("Critical roll is required before committing phase damage.");
+  if (!readiness.damageResult || !readiness.resolution) {
+    throw new RangeError("Cannot commit: no damage proposal exists.");
   }
 
   return recordCombatRoundCommitPhaseDamageCommand({
     attackerScenarioParticipantId: input.attackerScenarioParticipantId,
     command: input.command,
     combatEffects: input.combatEffects,
-    criticalRoll: resolution.criticalRoll,
-    damageResult,
+    criticalRoll: readiness.resolution.criticalRoll,
+    damageResult: readiness.damageResult,
     defenderScenarioParticipantId: input.defenderScenarioParticipantId,
     encounterId: input.encounterId,
     scenarioId: input.scenarioId,

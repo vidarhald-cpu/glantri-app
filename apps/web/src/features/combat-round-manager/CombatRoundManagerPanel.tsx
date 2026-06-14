@@ -8,6 +8,7 @@ import type {
   CombatRoundDamageReview,
   CombatRoundDamageReviewAdditionalEffect,
   CombatRoundDamageResult,
+  CombatRoundPhaseDamageCommitReadiness,
   CombatRoundState,
   CombatRoundParryResolution,
   CombatRoundParryModifierBreakdownEntry,
@@ -43,6 +44,7 @@ import {
   getCombatRoundDamageReviewStepForPhase,
   getCombatRoundEffectiveCriticalRoll,
   getCombatRoundEffectiveDamageResult,
+  getCombatRoundPhaseDamageCommitReadiness,
   getCombatRoundOutgoingAttackResultForParticipantPhase,
   getCombatRoundParticipantPhaseStepStatus,
   getCombatRoundPhaseResolutionResultForAttack,
@@ -1708,6 +1710,7 @@ function CombatParryResolutionPanel(input: {
 }
 
 function CombatDamageReviewPanel(input: {
+  commitReadiness?: CombatRoundPhaseDamageCommitReadiness;
   controlsDisabled?: boolean;
   damageResult: CombatRoundDamageResult;
   draft: CombatDamageReviewDraft;
@@ -1718,6 +1721,13 @@ function CombatDamageReviewPanel(input: {
   const disabled = input.controlsDisabled || input.saving;
   const criticalEffectProposal = input.damageResult.review?.criticalEffectProposal;
   const effectiveDamage = getCombatRoundEffectiveDamageResult(input.damageResult);
+  const commitStatus = input.commitReadiness
+    ? input.commitReadiness.ready
+      ? input.commitReadiness.warnings.length > 0
+        ? `Ready to commit with warnings: ${input.commitReadiness.warnings.join(" ")}`
+        : "Ready to commit"
+      : (input.commitReadiness.reason ?? "Cannot commit: phase damage is not ready.")
+    : undefined;
   const criticalDraftEffectCount = input.draft.additionalEffects.filter((effect) =>
     Boolean(effect.sourceKind === "critical_table" || effect.sourceCritKey || effect.sourceEffectKey),
   ).length;
@@ -1959,6 +1969,17 @@ function CombatDamageReviewPanel(input: {
       ) : null}
       {criticalEffectStatus ? (
         <div style={{ color: "#5e5a50", fontSize: "0.88rem" }}>{criticalEffectStatus}</div>
+      ) : null}
+      {commitStatus ? (
+        <div
+          style={{
+            color: input.commitReadiness?.ready ? "#365f2c" : "#8a3b1f",
+            fontSize: "0.88rem",
+            fontWeight: 700,
+          }}
+        >
+          {commitStatus}
+        </div>
       ) : null}
       <section style={{ display: "grid", gap: "0.5rem" }}>
         <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
@@ -2677,8 +2698,6 @@ export default function CombatRoundManagerPanel({
     inspectorCurrentAttackSourceMissing && inspectorCurrentAttackPhase
       ? `No ${formatCombatPhaseLabel(inspectorCurrentAttackPhase)} attack source available.`
       : undefined;
-  const inspectorActionValidationMessage =
-    inspectorTargetValidationMessage ?? inspectorAttackSourceValidationMessage;
   const inspectorCanRollParry =
     inspectorCanExecuteSelectedStep &&
     Boolean(inspectorResolutionPhase) &&
@@ -2710,6 +2729,54 @@ export default function CombatRoundManagerPanel({
           inspectorDisplayPhaseResolutionResult?.damageResult,
           inspectorDisplayPhaseResolutionResult?.criticalRoll,
         );
+  const inspectorDamageCommitReadiness = useMemo(() => {
+    const damageResult = inspectorDisplayPhaseResolutionResult?.damageResult;
+
+    if (!inspectorDamageProposalReady || !damageResult) {
+      return undefined;
+    }
+
+    try {
+      const reviewedState = reviewCombatRoundDamageResult({
+        attackResultId: damageResult.attackResultId,
+        review: buildCombatDamageReviewFromDraft({
+          criticalRoll: inspectorDisplayPhaseResolutionResult?.criticalRoll,
+          damageResult,
+          draft: inspectorDamageReviewDraft,
+        }),
+        reviewedAt: "2026-01-01T00:00:00.000Z",
+        state: selectedTimelineRoundState,
+      });
+
+      return getCombatRoundPhaseDamageCommitReadiness({
+        attackResultId: damageResult.attackResultId,
+        state: reviewedState,
+      });
+    } catch (caughtError) {
+      return {
+        attackResultId: damageResult.attackResultId,
+        ready: false,
+        reason:
+          caughtError instanceof Error
+            ? `Cannot commit: ${caughtError.message}`
+            : "Cannot commit: save review before committing.",
+        warnings: [],
+      } satisfies CombatRoundPhaseDamageCommitReadiness;
+    }
+  }, [
+    inspectorDamageProposalReady,
+    inspectorDamageReviewDraft,
+    inspectorDisplayPhaseResolutionResult,
+    selectedTimelineRoundState,
+  ]);
+  const inspectorDamageCommitValidationMessage =
+    inspectorDamageProposalReady && inspectorDamageCommitReadiness?.ready === false
+      ? inspectorDamageCommitReadiness.reason
+      : undefined;
+  const inspectorActionValidationMessage =
+    inspectorTargetValidationMessage ??
+    inspectorAttackSourceValidationMessage ??
+    inspectorDamageCommitValidationMessage;
   const inspectorIsCursorParticipant =
     Boolean(inspectorPhaseResolutionCursor) &&
     inspectorPhaseResolutionCursor?.participantId === inspector.participant?.participantId;
@@ -4221,6 +4288,7 @@ export default function CombatRoundManagerPanel({
             state: roundState,
           });
           const committed = commitCombatRoundPhaseDamage({
+            attackResultId: existingDamageResolution.damageResult.attackResultId,
             attackerScenarioParticipantId: attackerScenarioParticipant?.id,
             command: {
               createdAt: updatedAt,
@@ -4866,6 +4934,7 @@ export default function CombatRoundManagerPanel({
                     {inspectorDamageProposalReady &&
                     inspectorDisplayPhaseResolutionResult?.damageResult ? (
                       <CombatDamageReviewPanel
+                        commitReadiness={inspectorDamageCommitReadiness}
                         controlsDisabled={
                           saving || inspectorIsInspectionOnly || Boolean(inspectorSnapshot)
                         }

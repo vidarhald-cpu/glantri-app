@@ -198,6 +198,11 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("Critical effects proposed:");
     expect(source).toContain("Critical effects unavailable:");
     expect(source).toContain("Critical effects not accepted/committed yet.");
+    expect(source).toContain("getCombatRoundPhaseDamageCommitReadiness");
+    expect(source).toContain("Ready to commit");
+    expect(source).toContain("Cannot commit:");
+    expect(source).toContain("inspectorDamageCommitValidationMessage");
+    expect(source).toContain("attackResultId: existingDamageResolution.damageResult.attackResultId");
     expect(source).toContain("App rolls:");
     expect(source).toContain("Additional immediate effects");
     expect(source).toContain("Add modifier effect");

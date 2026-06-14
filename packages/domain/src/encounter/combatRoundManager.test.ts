@@ -36,6 +36,7 @@ import {
   getCombatRoundDisplayPhaseResolutionResultForParticipantPhase,
   getCombatRoundOutgoingAttackResultForParticipantPhase,
   getCombatRoundParticipantPhaseStepStatus,
+  getCombatRoundPhaseDamageCommitReadiness,
   getCombatRoundResolutionPhaseForStep,
   getCombatRoundStepSnapshot,
   getCombatRoundTimelineRoundStates,
@@ -4840,6 +4841,216 @@ describe("combat round manager", () => {
       tableDamage: 1,
       totalDamage: 1,
     });
+  });
+
+  it("commits a valid non-critical damage proposal by attack id without a saved review", () => {
+    const pending = prepareFailedParryPendingDamage({});
+    const afterLocation = recordTestHitLocation({
+      attackResult: pending.attackResult,
+      command: {
+        createdAt: "2026-01-01T00:04:30.000Z",
+        createdByUserId: "gm-1",
+      },
+      state: pending.state,
+    });
+    const afterDamage = recordCombatRoundDamageResult({
+      attackResult: pending.attackResult,
+      command: {
+        createdAt: "2026-01-01T00:05:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      defenderDm: 0,
+      dmb: 0,
+      state: afterLocation,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:05:00.000Z",
+    });
+    const damageResult = afterDamage.phaseResolutionResults[0]?.damageResult;
+
+    if (!damageResult) {
+      throw new Error("Expected damage result.");
+    }
+
+    const readiness = getCombatRoundPhaseDamageCommitReadiness({
+      attackResultId: damageResult.attackResultId,
+      state: {
+        ...afterDamage,
+        phaseResolutionCursor: undefined,
+        selectedParticipantId: "gladiator",
+        selectedStep: "initiative_phase_1",
+      },
+    });
+    const committed = commitCombatRoundPhaseDamage({
+      attackResultId: damageResult.attackResultId,
+      command: {
+        commandId: "commit-by-attack-id",
+        createdAt: "2026-01-01T00:06:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      defenderScenarioParticipantId: "scenario-guard",
+      state: {
+        ...afterDamage,
+        phaseResolutionCursor: undefined,
+        selectedParticipantId: "gladiator",
+        selectedStep: "initiative_phase_1",
+      },
+    });
+
+    expect(readiness).toMatchObject({
+      attackResultId: damageResult.attackResultId,
+      ready: true,
+    });
+    expect(readiness.warnings).toContain(
+      "Hit-location armor lookup is not wired to live defender equipment yet.",
+    );
+    expect(committed.command).toMatchObject({
+      facts: expect.objectContaining({
+        attackResultId: damageResult.attackResultId,
+        totalDamage: 2,
+      }),
+      type: "commit_phase_damage",
+    });
+    expect(committed.state.phaseResolutionResults[0]?.damageProposal.status).toBe("committed");
+  });
+
+  it("allows base damage commit when critical effect proposal mapping is unavailable", () => {
+    const pending = prepareFailedParryPendingDamage({});
+    const attackResult = {
+      ...pending.attackResult,
+      weaponCriticalCode: "ZZ",
+      weaponDamageClass: "unknown",
+    };
+    const afterLocation = recordTestHitLocation({
+      attackResult,
+      command: {
+        createdAt: "2026-01-01T00:04:30.000Z",
+        createdByUserId: "gm-1",
+      },
+      state: pending.state,
+    });
+    const afterDamage = recordCombatRoundDamageResult({
+      attackResult,
+      command: {
+        createdAt: "2026-01-01T00:05:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      defenderDm: 0,
+      dmb: 8,
+      state: afterLocation,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:05:00.000Z",
+    });
+    const afterCritical = recordCombatRoundCriticalRoll({
+      attackResult,
+      command: {
+        createdAt: "2026-01-01T00:05:30.000Z",
+        createdByUserId: "gm-1",
+      },
+      criticalDice: [4, 5],
+      rolledByParticipantId: "gladiator",
+      state: afterDamage,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:05:30.000Z",
+    });
+    const damageResult = afterCritical.phaseResolutionResults[0]?.damageResult;
+
+    if (!damageResult) {
+      throw new Error("Expected damage result.");
+    }
+
+    const readiness = getCombatRoundPhaseDamageCommitReadiness({
+      attackResultId: damageResult.attackResultId,
+      state: afterCritical,
+    });
+    const committed = commitCombatRoundPhaseDamage({
+      attackResultId: damageResult.attackResultId,
+      command: {
+        commandId: "commit-critical-warning",
+        createdAt: "2026-01-01T00:06:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      defenderScenarioParticipantId: "scenario-guard",
+      state: afterCritical,
+    });
+
+    expect(damageResult.review?.criticalEffectProposal?.warnings.length).toBeGreaterThan(0);
+    expect(readiness.ready).toBe(true);
+    expect(readiness.warnings.some((warning) => warning.includes("Critical effects unavailable"))).toBe(
+      true,
+    );
+    expect(committed.command).toMatchObject({
+      facts: expect.objectContaining({
+        attackResultId: damageResult.attackResultId,
+        createdDamageEffectIds: expect.arrayContaining([expect.any(String)]),
+        status: "committed",
+      }),
+      type: "commit_phase_damage",
+    });
+    expect(
+      committed.command.facts.review as
+        | {
+            criticalEffectProposal?: {
+              warnings?: string[];
+            };
+          }
+        | undefined,
+    ).toMatchObject({
+      criticalEffectProposal: {
+        warnings: expect.any(Array),
+      },
+    });
+  });
+
+  it("blocks critical damage commit with a specific reason until the critical roll exists", () => {
+    const pending = prepareFailedParryPendingDamage({});
+    const afterLocation = recordTestHitLocation({
+      attackResult: pending.attackResult,
+      command: {
+        createdAt: "2026-01-01T00:04:30.000Z",
+        createdByUserId: "gm-1",
+      },
+      state: pending.state,
+    });
+    const afterDamage = recordCombatRoundDamageResult({
+      attackResult: pending.attackResult,
+      command: {
+        createdAt: "2026-01-01T00:05:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      defenderDm: 0,
+      dmb: 8,
+      state: afterLocation,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:05:00.000Z",
+    });
+    const damageResult = afterDamage.phaseResolutionResults[0]?.damageResult;
+
+    if (!damageResult) {
+      throw new Error("Expected damage result.");
+    }
+
+    expect(
+      getCombatRoundPhaseDamageCommitReadiness({
+        attackResultId: damageResult.attackResultId,
+        state: afterDamage,
+      }),
+    ).toMatchObject({
+      ready: false,
+      reason: "Cannot commit: critical roll is required.",
+    });
+    expect(() =>
+      commitCombatRoundPhaseDamage({
+        attackResultId: damageResult.attackResultId,
+        command: {
+          commandId: "commit-before-critical",
+          createdAt: "2026-01-01T00:06:00.000Z",
+          createdByUserId: "gm-1",
+        },
+        defenderScenarioParticipantId: "scenario-guard",
+        state: afterDamage,
+      }),
+    ).toThrow("Cannot commit: critical roll is required.");
+    expect(afterDamage.commands.at(-1)?.type).toBe("resolve_damage");
   });
 
   it("commits D1 damage rows and clears commit before clearing the proposal", () => {
