@@ -53,6 +53,7 @@ import {
   getCombatRoundResolutionPhaseForStep,
   getCombatRoundStepSnapshot,
   getHitLocationFullLabel,
+  getLatestCombatEventSummary,
   HIT_LOCATIONS,
   hasScenarioParticipantCombatDeclarationForEncounterRound,
   initializeCombatRoundState,
@@ -1703,6 +1704,19 @@ function CombatDamageReviewPanel(input: {
 }) {
   const disabled = input.controlsDisabled || input.saving;
   const criticalEffectProposal = input.damageResult.review?.criticalEffectProposal;
+  const effectiveDamage = getCombatRoundEffectiveDamageResult(input.damageResult);
+  const criticalDraftEffectCount = input.draft.additionalEffects.filter((effect) =>
+    Boolean(effect.sourceKind === "critical_table" || effect.sourceCritKey || effect.sourceEffectKey),
+  ).length;
+  const criticalEffectStatus = criticalEffectProposal
+    ? criticalEffectProposal.warnings.length > 0
+      ? `Critical effects unavailable: ${criticalEffectProposal.warnings.join(" ")}`
+      : `Critical effects proposed: ${criticalDraftEffectCount} row${
+          criticalDraftEffectCount === 1 ? "" : "s"
+        }.`
+    : effectiveDamage.effectiveCriticalGrade
+      ? "Critical effects not accepted/committed yet."
+      : undefined;
   const updateAdditionalEffect = (
     effectId: string,
     patch: Partial<CombatDamageReviewAdditionalEffectDraft>,
@@ -1929,6 +1943,9 @@ function CombatDamageReviewPanel(input: {
             </div>
           ) : null}
         </section>
+      ) : null}
+      {criticalEffectStatus ? (
+        <div style={{ color: "#5e5a50", fontSize: "0.88rem" }}>{criticalEffectStatus}</div>
       ) : null}
       <section style={{ display: "grid", gap: "0.5rem" }}>
         <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
@@ -2190,6 +2207,7 @@ export default function CombatRoundManagerPanel({
         }
       >
     >({});
+  const activeCurrentCellRef = useRef<HTMLButtonElement | null>(null);
   const tableContainerRef = useRef<HTMLDivElement>(null);
   const encounterScopeRef = useRef(encounter.id);
   const manualSelectionRef = useRef<CombatRoundSelectionTarget | undefined>(undefined);
@@ -2217,6 +2235,10 @@ export default function CombatRoundManagerPanel({
   );
   const timelineRoundStates = useMemo(
     () => getCombatRoundTimelineRoundStates(roundState),
+    [roundState],
+  );
+  const latestCombatEventSummary = useMemo(
+    () => getLatestCombatEventSummary(roundState),
     [roundState],
   );
   const selectedTimelineRoundState =
@@ -2962,13 +2984,26 @@ export default function CombatRoundManagerPanel({
     selectedScenarioParticipant?.id,
   ]);
 
-  function focusRoundTable(input: { scrollIntoView?: boolean } = {}) {
-    if (input.scrollIntoView !== false) {
+  function scrollActiveCurrentCellIntoView() {
+    window.requestAnimationFrame(() => {
+      activeCurrentCellRef.current?.scrollIntoView({
+        block: "nearest",
+        inline: "nearest",
+        behavior: "smooth",
+      });
+    });
+  }
+
+  function focusRoundTable(input: { scrollIntoView?: boolean; scrollToCurrent?: boolean } = {}) {
+    if (input.scrollIntoView !== false && input.scrollToCurrent !== true) {
       tableContainerRef.current?.scrollIntoView({ block: "start", behavior: "smooth" });
     }
 
     tableContainerRef.current?.focus({ preventScroll: true });
-    tableContainerRef.current?.scrollTo({ left: 0, top: 0 });
+
+    if (input.scrollToCurrent) {
+      scrollActiveCurrentCellIntoView();
+    }
   }
 
   function buildScenarioParticipantPhaseSummary(input: {
@@ -3287,7 +3322,7 @@ export default function CombatRoundManagerPanel({
       });
 
       onEncounterUpdated?.(nextEncounter);
-      focusRoundTable();
+      focusRoundTable({ scrollToCurrent: true });
       setSaveError(undefined);
     } catch (caughtError) {
       setSaveError(
@@ -3323,7 +3358,7 @@ export default function CombatRoundManagerPanel({
       setSelectedRoundNumber(nextRoundState.roundNumber);
       setSaveError(undefined);
       onEncounterUpdated?.(nextEncounter);
-      focusRoundTable({ scrollIntoView: false });
+      focusRoundTable({ scrollIntoView: false, scrollToCurrent: true });
 
       if (participants.length > 0) {
         setScenarioParticipantOverrides((current) => ({
@@ -3368,6 +3403,7 @@ export default function CombatRoundManagerPanel({
           })
         : current;
     });
+    scrollActiveCurrentCellIntoView();
   }
 
   function selectInspector(participantId: string, step: CombatRoundStep, roundNumber: number) {
@@ -3771,7 +3807,7 @@ export default function CombatRoundManagerPanel({
       setRoundState(nextRoundState);
       setSelectedRoundNumber(nextRoundState.roundNumber);
       onEncounterUpdated?.(nextEncounter);
-      focusRoundTable();
+      focusRoundTable({ scrollToCurrent: true });
       setSaveError(undefined);
     } catch (caughtError) {
       setSaveError(
@@ -4252,6 +4288,34 @@ export default function CombatRoundManagerPanel({
         </div>
       ) : null}
 
+      <section
+        aria-label="Latest combat event"
+        style={{
+          background: "#fbfaf7",
+          border: "1px solid #e3e1dc",
+          borderRadius: 8,
+          display: "grid",
+          gap: "0.25rem",
+          padding: "0.65rem 0.75rem",
+        }}
+      >
+        <strong>Latest combat event</strong>
+        {latestCombatEventSummary ? (
+          <>
+            <div>{latestCombatEventSummary.summaryText}</div>
+            {latestCombatEventSummary.details ? (
+              <div style={{ color: "#5e5a50", fontSize: "0.88rem" }}>
+                {latestCombatEventSummary.details}
+              </div>
+            ) : null}
+          </>
+        ) : (
+          <div style={{ color: "#5e5a50", fontSize: "0.88rem" }}>
+            No resolved combat event yet.
+          </div>
+        )}
+      </section>
+
       <div
         aria-label="Combat round timeline grid"
         onKeyDown={handleTimelineKeyDown}
@@ -4356,6 +4420,10 @@ export default function CombatRoundManagerPanel({
                         roundState.selectedStep === step;
                       const currentStepCell =
                         roundNumber === roundState.roundNumber && step === roundState.currentStep;
+                      const activeCurrentTaskCell =
+                        roundNumber === roundState.roundNumber &&
+                        currentTaskSelection?.participantId === participant.participantId &&
+                        currentTaskSelection.step === step;
                       const stepStatus = getParticipantDeclarationStatus({
                         participantId: participant.participantId,
                         roundState: timelineRoundState,
@@ -4395,6 +4463,13 @@ export default function CombatRoundManagerPanel({
                             aria-label={title}
                             onClick={() =>
                               selectInspector(participant.participantId, step, roundNumber)
+                            }
+                            ref={
+                              activeCurrentTaskCell
+                                ? (node) => {
+                                    activeCurrentCellRef.current = node;
+                                  }
+                                : undefined
                             }
                             style={{
                               alignItems: "center",

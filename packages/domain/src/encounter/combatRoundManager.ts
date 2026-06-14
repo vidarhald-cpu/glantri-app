@@ -24,6 +24,7 @@ import {
   buildCriticalEffectProposalSummary,
 } from "./criticalEffectProposal";
 import {
+  getHitLocationFullLabel,
   hitLocationSchema,
   hitLocationTargetSchema,
   resolveHitLocationSelection,
@@ -8043,6 +8044,454 @@ export function buildCombatRoundInspector(input: {
     status: participant?.stepStatuses[step],
     step,
   };
+}
+
+export interface CombatRoundLatestEventSummary {
+  commandId?: string;
+  details?: string;
+  phase?: CombatRoundPhase;
+  resultId?: string;
+  roundNumber: number;
+  shortTitle: string;
+  step?: CombatRoundCursorStep;
+  summaryText: string;
+}
+
+type CombatRoundLatestEventParticipantLabel = {
+  label: string;
+  participantId: string;
+};
+
+function getCombatRoundLatestEventFactRecord(
+  value: unknown,
+): Record<string, unknown> | undefined {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+function getCombatRoundLatestEventFactString(
+  facts: Record<string, unknown>,
+  key: string,
+): string | undefined {
+  const value = facts[key];
+
+  return typeof value === "string" ? value : undefined;
+}
+
+function getCombatRoundLatestEventFactNumber(
+  facts: Record<string, unknown>,
+  key: string,
+): number | undefined {
+  const value = facts[key];
+
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function getCombatRoundLatestEventFactBoolean(
+  facts: Record<string, unknown>,
+  key: string,
+): boolean | undefined {
+  const value = facts[key];
+
+  return typeof value === "boolean" ? value : undefined;
+}
+
+function getCombatRoundLatestEventFactArray(
+  facts: Record<string, unknown>,
+  key: string,
+): unknown[] {
+  const value = facts[key];
+
+  return Array.isArray(value) ? value : [];
+}
+
+function getCombatRoundLatestEventPhaseLabel(phase?: CombatRoundPhase): string {
+  return phase === "phase1" ? "Phase 1" : phase === "phase2" ? "Phase 2" : "Round";
+}
+
+function getCombatRoundLatestEventHitLocationLabel(location?: string): string | undefined {
+  const parsed = hitLocationSchema.safeParse(location);
+
+  return parsed.success ? getHitLocationFullLabel(parsed.data).toLowerCase() : undefined;
+}
+
+function getCombatRoundLatestEventDamageLocationSuffix(location?: string): string {
+  const label = getCombatRoundLatestEventHitLocationLabel(location);
+
+  return label ? ` to ${label}` : "";
+}
+
+function getCombatRoundLatestEventCriticalEffectCount(effects: readonly unknown[]): number {
+  return effects.filter((effect) => {
+    const record = getCombatRoundLatestEventFactRecord(effect);
+
+    return Boolean(
+      record &&
+        (record.sourceKind === "critical_table" ||
+          typeof record.sourceCritKey === "string" ||
+          typeof record.sourceEffectKey === "string"),
+    );
+  }).length;
+}
+
+function getCombatRoundLatestEventCriticalProposalDetails(
+  damageResult?: CombatRoundDamageResult,
+): {
+  proposedCriticalEffects: number;
+  proposalStatus?: string;
+  warnings: string[];
+} {
+  const proposal = damageResult?.review?.criticalEffectProposal;
+  const proposedCriticalEffects = getCombatRoundLatestEventCriticalEffectCount(
+    damageResult?.review?.additionalEffects ?? [],
+  );
+
+  if (!proposal) {
+    return {
+      proposedCriticalEffects,
+      warnings: [],
+    };
+  }
+
+  if (proposal.warnings.length > 0) {
+    return {
+      proposedCriticalEffects,
+      proposalStatus: `Critical effects unavailable: ${proposal.warnings.join(" ")}`,
+      warnings: proposal.warnings,
+    };
+  }
+
+  return {
+    proposedCriticalEffects,
+    proposalStatus: `Critical effects proposed: ${proposedCriticalEffects} row${
+      proposedCriticalEffects === 1 ? "" : "s"
+    }.`,
+    warnings: [],
+  };
+}
+
+function getCombatRoundLatestEventLabel(input: {
+  labelByParticipantId: Map<string, string>;
+  participantId?: string;
+}): string {
+  return input.participantId
+    ? input.labelByParticipantId.get(input.participantId) ?? input.participantId
+    : "Unknown participant";
+}
+
+function findCombatRoundLatestEventResolution(input: {
+  command: CombatRoundCommand;
+  state: CombatRoundState;
+}): CombatRoundPhaseResolutionResult | undefined {
+  const attackResultId = getCombatRoundLatestEventFactString(input.command.facts, "attackResultId");
+
+  if (attackResultId) {
+    return input.state.phaseResolutionResults.find(
+      (result) => result.attackResultId === attackResultId,
+    );
+  }
+
+  return input.state.phaseResolutionResults.find(
+    (result) =>
+      result.roundNumber === input.command.roundNumber &&
+      result.phase === input.command.phase &&
+      (result.attackerParticipantId === input.command.participantId ||
+        result.defenderParticipantId === input.command.participantId),
+  );
+}
+
+function findCombatRoundLatestEventAttackResult(input: {
+  command: CombatRoundCommand;
+  state: CombatRoundState;
+}): CombatRoundAttackRollResult | undefined {
+  if (!input.command.phase) {
+    return undefined;
+  }
+
+  const participant = input.state.participants.find(
+    (entry) => entry.participantId === input.command.participantId,
+  );
+
+  return participant?.attackResults[input.command.phase];
+}
+
+function getCombatRoundLatestEventForCommand(input: {
+  command: CombatRoundCommand;
+  labelByParticipantId: Map<string, string>;
+  state: CombatRoundState;
+}): CombatRoundLatestEventSummary | undefined {
+  const { command, labelByParticipantId, state } = input;
+  const facts = command.facts;
+  const actorLabel = getCombatRoundLatestEventLabel({
+    labelByParticipantId,
+    participantId: command.participantId,
+  });
+  const phaseLabel = getCombatRoundLatestEventPhaseLabel(command.phase);
+
+  if (command.type === "complete_round") {
+    const nextRoundNumber =
+      getCombatRoundLatestEventFactNumber(facts, "nextRoundNumber") ??
+      command.afterCursor.roundNumber;
+
+    return {
+      commandId: command.id,
+      roundNumber: nextRoundNumber,
+      shortTitle: "New round started",
+      step: command.afterCursor.step,
+      summaryText: `Round ${nextRoundNumber}: New round started.`,
+    };
+  }
+
+  if (command.type === "commit_phase_damage") {
+    const attackerLabel = getCombatRoundLatestEventLabel({
+      labelByParticipantId,
+      participantId: getCombatRoundLatestEventFactString(facts, "attackerParticipantId"),
+    });
+    const defenderLabel = getCombatRoundLatestEventLabel({
+      labelByParticipantId,
+      participantId: getCombatRoundLatestEventFactString(facts, "defenderParticipantId"),
+    });
+    const totalDamage = getCombatRoundLatestEventFactNumber(facts, "totalDamage") ?? 0;
+    const location = getCombatRoundLatestEventFactString(facts, "effectiveHitLocation");
+    const criticalGrade = getCombatRoundLatestEventFactString(facts, "criticalGrade");
+    const criticalRollRecord = getCombatRoundLatestEventFactRecord(facts.criticalRoll);
+    const finalCriticalRoll =
+      criticalRollRecord && typeof criticalRollRecord.finalCriticalRoll === "number"
+        ? criticalRollRecord.finalCriticalRoll
+        : undefined;
+    const criticalLocation =
+      criticalRollRecord && typeof criticalRollRecord.selectedHitLocation === "string"
+        ? criticalRollRecord.selectedHitLocation
+        : location;
+    const additionalEffects = getCombatRoundLatestEventFactArray(facts, "additionalEffects");
+    const criticalEffectsCommitted =
+      getCombatRoundLatestEventCriticalEffectCount(additionalEffects);
+    const critical =
+      criticalGrade || finalCriticalRoll !== undefined
+        ? ` Critical${criticalGrade ? ` ${criticalGrade.toUpperCase()} pending` : ""}${
+            finalCriticalRoll !== undefined
+              ? `${criticalGrade ? "," : ""} critical roll ${finalCriticalRoll}${
+                  getCombatRoundLatestEventDamageLocationSuffix(criticalLocation)
+                }`
+              : ""
+          }.`
+        : "";
+    const cap =
+      getCombatRoundLatestEventFactBoolean(facts, "maxDamageApplied") === true
+        ? ` Raw damage ${
+            getCombatRoundLatestEventFactNumber(facts, "rawTotalDamage") ?? totalDamage
+          } was capped to ${totalDamage}.`
+        : "";
+
+    return {
+      commandId: command.id,
+      details: `${cap} Critical effects committed: ${criticalEffectsCommitted} row${
+        criticalEffectsCommitted === 1 ? "" : "s"
+      }.`.trim(),
+      phase: command.phase,
+      resultId: getCombatRoundLatestEventFactString(facts, "damageResultId"),
+      roundNumber: command.roundNumber,
+      shortTitle: "Phase damage committed",
+      step: command.step,
+      summaryText: `Round ${command.roundNumber}, ${phaseLabel}: ${attackerLabel} hit ${defenderLabel} for ${totalDamage} damage${getCombatRoundLatestEventDamageLocationSuffix(
+        location,
+      )}.${critical}`,
+    };
+  }
+
+  if (command.type === "roll_critical") {
+    const resolution = findCombatRoundLatestEventResolution({ command, state });
+    const criticalRoll = resolution?.criticalRoll;
+    const proposalDetails = getCombatRoundLatestEventCriticalProposalDetails(
+      resolution?.damageResult,
+    );
+    const finalCriticalRoll =
+      criticalRoll?.finalCriticalRoll ??
+      getCombatRoundLatestEventFactNumber(facts, "finalCriticalRoll");
+    const location =
+      criticalRoll?.selectedHitLocation ??
+      getCombatRoundLatestEventFactString(facts, "selectedHitLocation");
+
+    return {
+      commandId: command.id,
+      details: proposalDetails.proposalStatus,
+      phase: command.phase,
+      resultId: getCombatRoundLatestEventFactString(facts, "attackResultId"),
+      roundNumber: command.roundNumber,
+      shortTitle: "Critical rolled",
+      step: command.step,
+      summaryText: `Round ${command.roundNumber}, ${phaseLabel}: ${actorLabel} rolled critical ${
+        finalCriticalRoll ?? "?"
+      }${getCombatRoundLatestEventDamageLocationSuffix(location)}.`,
+    };
+  }
+
+  if (command.type === "resolve_damage") {
+    const totalDamage = getCombatRoundLatestEventFactNumber(facts, "totalDamage") ?? 0;
+    const defenderLabel = getCombatRoundLatestEventLabel({
+      labelByParticipantId,
+      participantId:
+        getCombatRoundLatestEventFactString(facts, "defenderParticipantId") ??
+        command.participantId,
+    });
+    const location = getCombatRoundLatestEventFactString(facts, "selectedHitLocation");
+    const criticalGrade = getCombatRoundLatestEventFactString(facts, "criticalGrade");
+
+    return {
+      commandId: command.id,
+      phase: command.phase,
+      resultId: getCombatRoundLatestEventFactString(facts, "damageResultId"),
+      roundNumber: command.roundNumber,
+      shortTitle: "Damage proposal ready",
+      step: command.step,
+      summaryText: `Round ${command.roundNumber}, ${phaseLabel}: Damage proposal for ${defenderLabel}: ${totalDamage} damage${getCombatRoundLatestEventDamageLocationSuffix(
+        location,
+      )}${criticalGrade ? `, Critical ${criticalGrade.toUpperCase()} pending` : ""}.`,
+    };
+  }
+
+  if (command.type === "roll_hit_location") {
+    const location = getCombatRoundLatestEventFactString(facts, "selectedHitLocation");
+    const rolls = getCombatRoundLatestEventFactArray(facts, "hitLocationRolls").filter(
+      (roll): roll is number => typeof roll === "number",
+    );
+
+    return {
+      commandId: command.id,
+      phase: command.phase,
+      resultId: getCombatRoundLatestEventFactString(facts, "attackResultId"),
+      roundNumber: command.roundNumber,
+      shortTitle: "Hit location rolled",
+      step: command.step,
+      summaryText: `Round ${command.roundNumber}, ${phaseLabel}: ${actorLabel} hit location ${
+        rolls.length > 0 ? `roll ${rolls.join(", ")} ` : ""
+      }selected ${getCombatRoundLatestEventHitLocationLabel(location) ?? "unknown location"}.`,
+    };
+  }
+
+  if (command.type === "roll_parry") {
+    const defenderLabel = getCombatRoundLatestEventLabel({
+      labelByParticipantId,
+      participantId:
+        getCombatRoundLatestEventFactString(facts, "defenderParticipantId") ??
+        command.participantId,
+    });
+    const attackerLabel = getCombatRoundLatestEventLabel({
+      labelByParticipantId,
+      participantId: getCombatRoundLatestEventFactString(facts, "attackerParticipantId"),
+    });
+    const success = getCombatRoundLatestEventFactBoolean(facts, "success");
+
+    return {
+      commandId: command.id,
+      phase: command.phase,
+      resultId: getCombatRoundLatestEventFactString(facts, "attackResultId"),
+      roundNumber: command.roundNumber,
+      shortTitle: success ? "Parry succeeded" : "Parry failed",
+      step: command.step,
+      summaryText: `Round ${command.roundNumber}, ${phaseLabel}: ${defenderLabel} ${
+        success ? "parried" : "failed to parry"
+      } ${attackerLabel}'s attack.`,
+    };
+  }
+
+  if (command.type === "roll_attack") {
+    const attackResult = findCombatRoundLatestEventAttackResult({ command, state });
+    const defenderLabel = getCombatRoundLatestEventLabel({
+      labelByParticipantId,
+      participantId:
+        attackResult?.defenderParticipantId ??
+        getCombatRoundLatestEventFactString(facts, "defenderParticipantId"),
+    });
+    const hit = attackResult?.hit ?? getCombatRoundLatestEventFactBoolean(facts, "hit");
+    const grazing =
+      attackResult?.grazing ?? getCombatRoundLatestEventFactBoolean(facts, "grazing");
+    const resultLabel = grazing ? "grazed" : hit ? "hit" : "missed";
+
+    return {
+      commandId: command.id,
+      phase: command.phase,
+      resultId:
+        getCombatRoundLatestEventFactString(facts, "attackResultId") ??
+        (attackResult
+          ? getCombatRoundAttackResultId({
+              result: attackResult,
+              roundNumber: command.roundNumber,
+            })
+          : undefined),
+      roundNumber: command.roundNumber,
+      shortTitle: "Attack rolled",
+      step: command.step,
+      summaryText: `Round ${command.roundNumber}, ${phaseLabel}: ${actorLabel} ${resultLabel} ${defenderLabel}.`,
+    };
+  }
+
+  if (
+    command.type === "roll_initiative_phase1" ||
+    command.type === "roll_initiative_phase2"
+  ) {
+    const phase = command.type === "roll_initiative_phase1" ? "phase1" : "phase2";
+    const participant = state.participants.find(
+      (entry) => entry.participantId === command.participantId,
+    );
+    const total = getCombatRoundInitiativeTotal(participant?.initiatives[phase]);
+
+    return {
+      commandId: command.id,
+      phase,
+      roundNumber: command.roundNumber,
+      shortTitle: "Initiative recorded",
+      step: command.step,
+      summaryText: `Round ${command.roundNumber}, ${getCombatRoundLatestEventPhaseLabel(
+        phase,
+      )}: Initiative recorded for ${actorLabel}${total !== undefined ? ` (${total})` : ""}.`,
+    };
+  }
+
+  return undefined;
+}
+
+export function getLatestCombatEventSummary(
+  state: CombatRoundState,
+  participants: readonly CombatRoundLatestEventParticipantLabel[] = [],
+): CombatRoundLatestEventSummary | undefined {
+  const normalized = combatRoundStateSchema.parse(state);
+  const timelineStates = getCombatRoundTimelineRoundStates(normalized);
+  const labelByParticipantId = new Map<string, string>();
+
+  for (const participant of participants) {
+    labelByParticipantId.set(participant.participantId, participant.label);
+  }
+
+  for (const timelineState of timelineStates) {
+    for (const participant of timelineState.participants) {
+      labelByParticipantId.set(participant.participantId, participant.label);
+    }
+  }
+
+  for (let stateIndex = timelineStates.length - 1; stateIndex >= 0; stateIndex -= 1) {
+    const timelineState = timelineStates[stateIndex];
+
+    for (
+      let commandIndex = timelineState.commands.length - 1;
+      commandIndex >= 0;
+      commandIndex -= 1
+    ) {
+      const command = timelineState.commands[commandIndex];
+      const summary = getCombatRoundLatestEventForCommand({
+        command,
+        labelByParticipantId,
+        state: timelineState,
+      });
+
+      if (summary) {
+        return summary;
+      }
+    }
+  }
+
+  return undefined;
 }
 
 export function getCombatRoundTimelineRoundStates(state: CombatRoundState): CombatRoundState[] {

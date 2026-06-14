@@ -39,6 +39,7 @@ import {
   getCombatRoundResolutionPhaseForStep,
   getCombatRoundStepSnapshot,
   getCombatRoundTimelineRoundStates,
+  getLatestCombatEventSummary,
   getCombatRoundEffectiveDamageResult,
   getCombatRoundDamageSubstate,
   getPreviousCombatRoundStep,
@@ -5841,6 +5842,81 @@ describe("combat round manager", () => {
     expect(timelineRounds[1]?.currentStep).toBe("select_actions");
     expect(timelineRounds[1]?.commands).toEqual([]);
     expect(timelineRounds[1]?.participants[0]?.declaration).toBeUndefined();
+  });
+
+  it("summarizes the latest archived round-start event", () => {
+    const roundSummaryState = advanceToStep(
+      initializeCombatRoundState({ encounter: encounter() }),
+      "round_summary",
+    );
+    const nextRoundState = advanceCombatRoundStep(roundSummaryState, {
+      command: {
+        createdAt: "2026-01-01T00:10:00.000Z",
+        createdByUserId: "gm-1",
+      },
+    });
+    const latestEvent = getLatestCombatEventSummary(nextRoundState);
+
+    expect(latestEvent).toMatchObject({
+      roundNumber: roundSummaryState.roundNumber + 1,
+      shortTitle: "New round started",
+      summaryText: `Round ${roundSummaryState.roundNumber + 1}: New round started.`,
+    });
+  });
+
+  it("summarizes committed damage with critical effect counts", () => {
+    const base = initializeCombatRoundState({ encounter: encounter() });
+    const state = combatRoundStateSchema.parse({
+      ...base,
+      commands: [
+        {
+          afterCursor: {
+            participantId: "gladiator",
+            roundNumber: base.roundNumber,
+            step: "A1",
+          },
+          beforeCursor: {
+            participantId: "guard",
+            roundNumber: base.roundNumber,
+            step: "D1",
+          },
+          createdAt: "2026-01-01T00:10:00.000Z",
+          facts: {
+            additionalEffects: [
+              {
+                id: "critical-note",
+                kind: "note",
+                label: "Critical note",
+                sourceKind: "critical_table",
+              },
+            ],
+            attackerParticipantId: "gladiator",
+            criticalGrade: "a",
+            criticalRoll: {
+              finalCriticalRoll: 1,
+              selectedHitLocation: "rightArm",
+            },
+            damageResultId: "damage-1",
+            defenderParticipantId: "guard",
+            effectiveHitLocation: "rightArm",
+            status: "committed",
+            totalDamage: 8,
+          },
+          id: "commit-damage-1",
+          participantId: "guard",
+          phase: "phase1",
+          roundNumber: base.roundNumber,
+          step: "D1",
+          type: "commit_phase_damage",
+        },
+      ],
+    });
+    const latestEvent = getLatestCombatEventSummary(state);
+
+    expect(latestEvent?.summaryText).toBe(
+      "Round 3, Phase 1: The Gladiator hit City guard for 8 damage to right arm. Critical A pending, critical roll 1 to right arm.",
+    );
+    expect(latestEvent?.details).toBe("Critical effects committed: 1 row.");
   });
 
   it("records and undoes D2 placeholder damage review commands after failed parry", () => {

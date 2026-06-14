@@ -27,6 +27,9 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("disabled={saving || !clearCurrentStepAvailable}");
     expect(source).toContain("clearCurrentCombatRoundStepOnServer");
     expect(source).toContain("Step controller");
+    expect(source).toContain("Latest combat event");
+    expect(source).toContain("getLatestCombatEventSummary");
+    expect(source).toContain("latestCombatEventSummary.summaryText");
   });
 
   it("renders participants as rows and round steps as timeline columns", () => {
@@ -58,6 +61,10 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("step === roundState.currentStep");
     expect(source).toContain('overflowX: "auto"');
     expect(source).toContain("tableContainerRef");
+    expect(source).toContain("activeCurrentCellRef");
+    expect(source).toContain("scrollActiveCurrentCellIntoView");
+    expect(source).toContain("activeCurrentTaskCell");
+    expect(source).toContain('inline: "nearest"');
     expect(source).toContain("handleTimelineKeyDown");
     expect(source).toContain("ArrowRight");
     expect(source).toContain("ArrowDown");
@@ -183,6 +190,9 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("Damage review");
     expect(source).toContain("criticalEffectProposal");
     expect(source).toContain("Critical table mapping unavailable");
+    expect(source).toContain("Critical effects proposed:");
+    expect(source).toContain("Critical effects unavailable:");
+    expect(source).toContain("Critical effects not accepted/committed yet.");
     expect(source).toContain("App rolls:");
     expect(source).toContain("Additional immediate effects");
     expect(source).toContain("Add modifier effect");
@@ -411,9 +421,11 @@ describe("CombatRoundManagerPanel", () => {
   it("keeps Clear current step visible by avoiding explicit scroll after clear", () => {
     const source = readSource();
 
-    expect(source).toContain("function focusRoundTable(input: { scrollIntoView?: boolean } = {})");
+    expect(source).toContain(
+      "function focusRoundTable(input: { scrollIntoView?: boolean; scrollToCurrent?: boolean } = {})",
+    );
     expect(source).toContain("input.scrollIntoView !== false");
-    expect(source).toContain("focusRoundTable({ scrollIntoView: false })");
+    expect(source).toContain("focusRoundTable({ scrollIntoView: false, scrollToCurrent: true })");
     expect(source).toContain("Clear current step");
   });
 
