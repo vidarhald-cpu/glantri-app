@@ -1050,7 +1050,10 @@ function getCombatRoundPhaseActionOrCompletionCursor(input: {
   phase: CombatRoundPhase;
   state: CombatRoundState;
 }): CombatRoundCursor {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = clearUnsupportedCombatRoundPhaseActionProgress({
+    phase: input.phase,
+    state: input.state,
+  });
   const participantId = getNextCombatRoundPhaseActionParticipantId({
     phase: input.phase,
     state: normalized,
@@ -1827,7 +1830,7 @@ function getNextCombatRoundPhaseActionParticipantId(input: {
   });
 
   return order.find((participantId) => {
-    const status = getCombatRoundPhaseResolutionStatus({
+    const status = getEffectiveCombatRoundPhaseResolutionStatus({
       participantId,
       phase: input.phase,
       state: normalized,
@@ -1848,6 +1851,127 @@ function getNextCombatRoundPhaseActionParticipantId(input: {
       })
     );
   });
+}
+
+function combatRoundParticipantPhaseActionHasCompletionEvidence(input: {
+  participantId: string;
+  phase: CombatRoundPhase;
+  state: CombatRoundState;
+}): boolean {
+  const normalized = combatRoundStateSchema.parse(input.state);
+
+  if (
+    getCombatRoundOutgoingAttackResultForParticipantPhase({
+      participantId: input.participantId,
+      phase: input.phase,
+      state: normalized,
+    })
+  ) {
+    return true;
+  }
+
+  return normalized.commands.some(
+    (command) =>
+      command.roundNumber === normalized.roundNumber &&
+      command.participantId === input.participantId &&
+      command.phase === input.phase &&
+      (command.type === "roll_attack" || command.type === "skip_phase_action"),
+  );
+}
+
+function getEffectiveCombatRoundPhaseResolutionStatus(input: {
+  participantId: string;
+  phase: CombatRoundPhase;
+  state: CombatRoundState;
+}): CombatRoundPhaseResolutionParticipantStatus {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const participant = normalized.participants.find(
+    (entry) => entry.participantId === input.participantId,
+  );
+  const actionStep = getCombatRoundPhaseActionStepForPhase(input.phase);
+  const status = getCombatRoundPhaseResolutionStatus({
+    participantId: input.participantId,
+    phase: input.phase,
+    state: normalized,
+  });
+
+  if (
+    status.substep !== "done" ||
+    !combatRoundParticipantHasExecutablePhaseAttack({
+      participantId: input.participantId,
+      phase: input.phase,
+      state: normalized,
+    }) ||
+    (participant?.stepStatuses[actionStep] ?? "pending") === "pending" ||
+    combatRoundParticipantPhaseActionHasCompletionEvidence({
+      participantId: input.participantId,
+      phase: input.phase,
+      state: normalized,
+    })
+  ) {
+    return status;
+  }
+
+  return {
+    substep: "pending",
+    updatedAt: status.updatedAt,
+  };
+}
+
+function clearUnsupportedCombatRoundPhaseActionProgress(input: {
+  phase: CombatRoundPhase;
+  state: CombatRoundState;
+}): CombatRoundState {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const actionStep = getCombatRoundPhaseActionStepForPhase(input.phase);
+  let changed = false;
+  const phaseResolutionStatuses: CombatRoundPhaseResolutionStatuses = {
+    ...normalized.phaseResolutionStatuses,
+  };
+  const participants = normalized.participants.map((participant) => {
+    const executable = combatRoundParticipantHasExecutablePhaseAttack({
+      participantId: participant.participantId,
+      phase: input.phase,
+      state: normalized,
+    });
+    const hasCompletionEvidence = combatRoundParticipantPhaseActionHasCompletionEvidence({
+      participantId: participant.participantId,
+      phase: input.phase,
+      state: normalized,
+    });
+    const phaseStatus = phaseResolutionStatuses[participant.participantId]?.[input.phase];
+
+    if (
+      !executable ||
+      hasCompletionEvidence ||
+      phaseStatus?.substep !== "done" ||
+      participant.stepStatuses[actionStep] === "pending"
+    ) {
+      return participant;
+    }
+
+    changed = true;
+    phaseResolutionStatuses[participant.participantId] = {
+      ...phaseResolutionStatuses[participant.participantId],
+      [input.phase]: undefined,
+    };
+
+    return {
+      ...participant,
+      stepStatuses: {
+        ...participant.stepStatuses,
+        [actionStep]: "pending",
+      },
+    };
+  });
+
+  return changed
+    ? combatRoundStateSchema.parse({
+        ...normalized,
+        participants,
+        phaseResolutionStatuses,
+      })
+    : normalized;
 }
 
 function getCombatRoundInitialPhaseResolutionSubstep(input: {
@@ -1921,6 +2045,23 @@ export function getCombatRoundParticipantPhaseStepStatus(input: {
       phase,
       state: normalized,
     });
+
+    if (
+      !outgoingAttackResult &&
+      storedStatus !== "pending" &&
+      combatRoundParticipantHasExecutablePhaseAttack({
+        participantId: input.participantId,
+        phase,
+        state: normalized,
+      }) &&
+      !combatRoundParticipantPhaseActionHasCompletionEvidence({
+        participantId: input.participantId,
+        phase,
+        state: normalized,
+      })
+    ) {
+      return "pending";
+    }
 
     return outgoingAttackResult ? "gmEdited" : storedStatus;
   }
@@ -2015,7 +2156,10 @@ export function initializeCombatRoundPhaseResolutionCursor(input: {
   state: CombatRoundState;
   updatedAt?: string;
 }): CombatRoundState {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = clearUnsupportedCombatRoundPhaseActionProgress({
+    phase: input.phase,
+    state: input.state,
+  });
   const participantId = getNextCombatRoundPhaseActionParticipantId({
     phase: input.phase,
     state: normalized,
@@ -2028,7 +2172,7 @@ export function initializeCombatRoundPhaseResolutionCursor(input: {
     });
   }
 
-  const existingStatus = getCombatRoundPhaseResolutionStatus({
+  const existingStatus = getEffectiveCombatRoundPhaseResolutionStatus({
     participantId,
     phase: input.phase,
     state: normalized,
@@ -2076,7 +2220,10 @@ function moveCombatRoundPhaseResolutionCursorToNextParticipant(input: {
   state: CombatRoundState;
   updatedAt: string;
 }): CombatRoundState {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = clearUnsupportedCombatRoundPhaseActionProgress({
+    phase: input.phase,
+    state: input.state,
+  });
   const participantId = getNextCombatRoundPhaseActionParticipantId({
     phase: input.phase,
     state: normalized,
