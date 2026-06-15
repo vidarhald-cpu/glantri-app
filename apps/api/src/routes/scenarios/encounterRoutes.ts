@@ -30,6 +30,7 @@ import {
   recordCombatRoundParryResult,
   recordCombatRoundParticipantStepReview,
   removeCombatRoundCommittedDamageEffects,
+  removeCombatRoundEndParticipantReviewEffects,
   resolveEncounterParticipantByRollParticipantId,
   resolveEncounterParticipantMembership,
   rollOpenEndedCombatToHitD20,
@@ -1834,6 +1835,12 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           command.type === "commit_phase_damage" &&
           !nextRoundState.commands.some((remainingCommand) => remainingCommand.id === command.id),
       );
+      const removedRoundEndParticipantReviewCommands = roundState.commands.filter(
+        (command) =>
+          command.roundNumber === roundState.roundNumber &&
+          command.type === "commit_round_end_participant_review" &&
+          !nextRoundState.commands.some((remainingCommand) => remainingCommand.id === command.id),
+      );
       const declarationClearEncounterParticipantIds = new Set<string>();
 
       if (clearsDeclarationStep) {
@@ -1864,7 +1871,8 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       });
       const updatedParticipants =
         declarationClearEncounterParticipantIds.size > 0 ||
-        removedCommittedDamageCommands.length > 0
+        removedCommittedDamageCommands.length > 0 ||
+        removedRoundEndParticipantReviewCommands.length > 0
           ? await Promise.all(
               scenarioParticipants
                 .map((participant) => {
@@ -1893,6 +1901,20 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
                     nextState = {
                       ...nextState,
                       combatEffects: removeCombatRoundCommittedDamageEffects({
+                        combatEffects: nextState.combatEffects,
+                        command,
+                      }),
+                    };
+                  }
+
+                  for (const command of removedRoundEndParticipantReviewCommands) {
+                    if (command.participantId !== encounterParticipant.id) {
+                      continue;
+                    }
+
+                    nextState = {
+                      ...nextState,
+                      combatEffects: removeCombatRoundEndParticipantReviewEffects({
                         combatEffects: nextState.combatEffects,
                         command,
                       }),

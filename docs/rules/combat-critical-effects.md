@@ -110,6 +110,23 @@ For example, if armor-adjusted damage is `2` and the critical table requires min
 `5`, the committed physical damage row is `5` and the event details note that `2` damage after armor
 was raised to the critical minimum `5`.
 
+## Round-end review
+
+Critical-derived bleed, internal bleed, and round-duration rows are not silently advanced when a
+round ends. SU builds GM-reviewable round-end proposals before the next round can start.
+
+At SU:
+
+- Active round-duration effects propose a one-round duration decrease; effects that reach zero
+  propose removal or deactivation.
+- External bleed that is due proposes general damage and a Health check at difficulty `21`.
+- Internal bleed that is due proposes general damage and a Health check at difficulty `26`.
+- Health checks use open-ended `1d20 + Health`; the GM can edit the difficulty before rolling.
+
+Start next round remains blocked until participant SU reviews and accepted health checks are
+complete. Undoing SU review commands restores previous durations/statuses and removes only the
+round-end damage rows created by those commands.
+
 ## Combat integration
 
 D1/D2 records the pieces needed for critical-effect lookup:

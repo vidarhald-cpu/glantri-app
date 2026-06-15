@@ -20,7 +20,9 @@ import type {
   CombatRoundStepStatus,
   CombatRoundInitiativeRank,
   CombatRoundStepSnapshot,
+  CombatEffectsState,
   EncounterSession,
+  RoundEndParticipantReview,
   ScenarioCombatModifierBucket,
   ScenarioCombatModifierEntry,
   ScenarioParticipant,
@@ -37,6 +39,7 @@ import {
   canClearCombatRoundStep,
   characterBuildSchema,
   combatRoundParticipantHasPhaseAttack,
+  commitCombatRoundEndParticipantReview,
   commitCombatRoundPhaseDamage,
   completeCombatRoundPhaseResolutionForParticipant,
   ensureCombatRoundPhaseResolutionResultsForPhase,
@@ -47,6 +50,7 @@ import {
   getCombatRoundEffectiveCriticalRoll,
   getCombatRoundEffectiveDamageResult,
   getCombatRoundPhaseDamageCommitReadiness,
+  getCombatRoundStartNextRoundBlocker,
   getCombatRoundOutgoingAttackResultForParticipantPhase,
   getCombatRoundParticipantPhaseStepStatus,
   getCombatRoundPhaseResolutionResultForAttack,
@@ -62,13 +66,16 @@ import {
   HIT_LOCATIONS,
   hasScenarioParticipantCombatDeclarationForEncounterRound,
   initializeCombatRoundState,
+  isCombatRoundEndReviewComplete,
   normalizeCombatArmorModifierClass,
+  prepareCombatRoundEndReview,
   recordCombatRoundCriticalRoll,
   recordCombatRoundDamageResult,
   recordCombatRoundHitLocationRoll,
   reviewCombatRoundDamageResult,
   recordCombatRoundNoAttackPhaseReview,
   recordCombatRoundParryResult,
+  rollCombatRoundEndHealthCheck,
   rollOpenEndedD20,
   sortCombatRoundParticipantsByInitiative,
   skipCombatRoundCurrentPhaseAction,
@@ -1675,6 +1682,12 @@ function findEncounterParticipantForScenarioParticipant(input: {
   );
 }
 
+function getScenarioParticipantHealthStat(participant?: ScenarioParticipant): number | undefined {
+  const buildResult = characterBuildSchema.safeParse(participant?.snapshot.build);
+
+  return buildResult.success ? buildResult.data.profile.rolledStats.health : undefined;
+}
+
 function getEncounterScenarioParticipantIds(
   encounterParticipants: EncounterSession["participants"],
 ): string[] {
@@ -2416,6 +2429,133 @@ function CombatDamageReviewPanel(input: {
   );
 }
 
+function CombatRoundEndReviewPanel(input: {
+  controlsDisabled?: boolean;
+  difficultyDrafts: Record<string, string>;
+  onDifficultyDraftChange: (healthRollId: string, value: string) => void;
+  participantLabel?: string;
+  review?: RoundEndParticipantReview;
+}) {
+  const review = input.review;
+
+  return (
+    <section style={playerCombatPanelCardStyle}>
+      <strong>Round-end review</strong>
+      {!review ? (
+        <div style={{ color: "#5e5a50", fontSize: "0.88rem" }}>
+          No SU proposals built yet.
+        </div>
+      ) : (
+        <>
+          <div style={{ color: "#5e5a50", fontSize: "0.88rem" }}>
+            {input.participantLabel ? `${input.participantLabel}: ` : ""}
+            {review.status.replaceAll("_", " ")}
+          </div>
+          {review.proposedEffects.length > 0 ? (
+            <section style={{ display: "grid", gap: "0.25rem" }}>
+              <strong style={{ fontSize: "0.9rem" }}>Duration updates</strong>
+              {review.proposedEffects.map((proposal) => (
+                <div key={proposal.id} style={{ fontSize: "0.88rem" }}>
+                  {proposal.label}
+                  {proposal.nextDuration ? ` -> ${proposal.nextDuration}` : ""}
+                </div>
+              ))}
+            </section>
+          ) : null}
+          {review.proposedRemovals.length > 0 ? (
+            <section style={{ display: "grid", gap: "0.25rem" }}>
+              <strong style={{ fontSize: "0.9rem" }}>Expired effects</strong>
+              {review.proposedRemovals.map((proposal) => (
+                <div key={proposal.id} style={{ fontSize: "0.88rem" }}>
+                  {proposal.label}
+                </div>
+              ))}
+            </section>
+          ) : null}
+          {review.proposedDamage.length > 0 ? (
+            <section style={{ display: "grid", gap: "0.25rem" }}>
+              <strong style={{ fontSize: "0.9rem" }}>Bleed damage</strong>
+              {review.proposedDamage.map((proposal) => (
+                <div key={proposal.id} style={{ fontSize: "0.88rem" }}>
+                  {proposal.label} · general damage {proposal.amount}
+                </div>
+              ))}
+            </section>
+          ) : null}
+          {review.proposedHealthRolls.length > 0 ? (
+            <section style={{ display: "grid", gap: "0.4rem" }}>
+              <strong style={{ fontSize: "0.9rem" }}>Health rolls</strong>
+              {review.proposedHealthRolls.map((proposal) => {
+                const result = proposal.result;
+                const difficultyValue =
+                  input.difficultyDrafts[proposal.id] ?? String(proposal.difficulty);
+
+                return (
+                  <div
+                    key={proposal.id}
+                    style={{
+                      borderTop: "1px solid #ddd3bf",
+                      display: "grid",
+                      gap: "0.3rem",
+                      paddingTop: "0.4rem",
+                    }}
+                  >
+                    <label style={{ display: "grid", gap: "0.2rem" }}>
+                      <span style={{ color: "#5e5a50", fontSize: "0.8rem", fontWeight: 700 }}>
+                        {proposal.label}
+                      </span>
+                      <input
+                        disabled={input.controlsDisabled || proposal.status !== "pending"}
+                        inputMode="numeric"
+                        onChange={(event) =>
+                          input.onDifficultyDraftChange(proposal.id, event.target.value)
+                        }
+                        type="text"
+                        value={difficultyValue}
+                      />
+                    </label>
+                    <div style={{ color: "#5e5a50", fontSize: "0.82rem" }}>
+                      Health +{proposal.healthStat}
+                      {result
+                        ? ` · rolled ${formatOpenEndedD20RollBreakdown({
+                            dieResult: result.rollTotal,
+                            openEndedD10s: result.openEndedD10s,
+                            rollD20: result.rollD20,
+                          })} = ${result.rollTotal}; final ${result.finalTotal} (${result.success ? "success" : "failure"})`
+                        : " · pending"}
+                    </div>
+                    {proposal.warnings.map((warning) => (
+                      <div
+                        key={warning}
+                        style={{ color: "#8a3b1f", fontSize: "0.82rem" }}
+                      >
+                        {warning}
+                      </div>
+                    ))}
+                  </div>
+                );
+              })}
+            </section>
+          ) : null}
+          {review.warnings.map((warning) => (
+            <div key={warning} style={{ color: "#8a3b1f", fontSize: "0.85rem" }}>
+              {warning}
+            </div>
+          ))}
+          {review.proposedEffects.length === 0 &&
+          review.proposedRemovals.length === 0 &&
+          review.proposedDamage.length === 0 &&
+          review.proposedHealthRolls.length === 0 ? (
+            <div style={{ color: "#5e5a50", fontSize: "0.88rem" }}>
+              No round-end changes proposed.
+            </div>
+          ) : null}
+        </>
+      )}
+    </section>
+  );
+}
+
 function shouldSortByInitiative(step: CombatRoundStep): "phase1" | "phase2" | undefined {
   if (step === "phase_1_actions" || step === "review_phase_2_actions") {
     return "phase1";
@@ -2449,6 +2589,9 @@ export default function CombatRoundManagerPanel({
   >({});
   const [damageReviewDrafts, setDamageReviewDrafts] = useState<
     Record<string, CombatDamageReviewDraft>
+  >({});
+  const [roundEndHealthDifficultyDrafts, setRoundEndHealthDifficultyDrafts] = useState<
+    Record<string, string>
   >({});
   const [content, setContent] = useState<Awaited<ReturnType<typeof loadCanonicalContent>>>();
   const [resolvedCharacterStateByParticipantId, setResolvedCharacterStateByParticipantId] =
@@ -2543,6 +2686,51 @@ export default function CombatRoundManagerPanel({
         scenarioParticipants: effectiveScenarioParticipants,
       })
     : undefined;
+  const roundEndReviewComplete =
+    roundState.currentStep === "round_summary" && isCombatRoundEndReviewComplete(roundState);
+  const roundEndStartNextRoundBlocker =
+    roundState.currentStep === "round_summary" && !roundEndReviewComplete
+      ? getCombatRoundStartNextRoundBlocker(roundState)
+      : undefined;
+  const inspectorRoundEndReview =
+    inspector.step === "round_summary" && inspector.participant?.participantId
+      ? selectedTimelineRoundState.roundEndReview?.participantReviews[
+          inspector.participant.participantId
+        ]
+      : undefined;
+  const buildRoundEndParticipantInputs = (): Record<
+    string,
+    { combatEffects?: CombatEffectsState; healthStat?: number }
+  > =>
+    Object.fromEntries(
+      roundState.participants.map((participant) => {
+        const encounterParticipant = encounter.participants.find(
+          (entry) => entry.id === participant.participantId,
+        );
+        const scenarioParticipant = encounterParticipant
+          ? findScenarioParticipantForEncounterParticipant({
+              encounterParticipant,
+              scenarioParticipants: effectiveScenarioParticipants,
+            })
+          : undefined;
+        const resolvedCharacterState = scenarioParticipant
+          ? resolvedCharacterStateByParticipantId[scenarioParticipant.id]
+          : undefined;
+        const buildResult = characterBuildSchema.safeParse(
+          resolvedCharacterState?.serverRecord.build ?? scenarioParticipant?.snapshot.build,
+        );
+
+        return [
+          participant.participantId,
+          {
+            combatEffects: scenarioParticipant?.state.combatEffects,
+            healthStat: buildResult.success
+              ? buildResult.data.profile.rolledStats.health
+              : getScenarioParticipantHealthStat(scenarioParticipant),
+          },
+        ];
+      }),
+    );
   const selectedRoundDeclaration = hasCombatRoundDeclarationAction(
     inspector.participant?.declaration,
   )
@@ -3005,10 +3193,18 @@ export default function CombatRoundManagerPanel({
       : undefined;
   const inspectorDamageReviewCommitReadiness =
     inspectorDamageSubstate === "critical_pending" ? undefined : inspectorDamageCommitReadiness;
+  const inspectorRoundEndActionValidationMessage =
+    inspector.step === "round_summary" &&
+    selectedRoundIsActive &&
+    selectedTimelineRoundState.roundEndReview &&
+    inspectorRoundEndReview?.status === "complete"
+      ? "Round-end review complete for this participant."
+      : undefined;
   const inspectorActionValidationMessage =
     inspectorTargetValidationMessage ??
     inspectorAttackSourceValidationMessage ??
-    inspectorDamageCommitValidationMessage;
+    inspectorDamageCommitValidationMessage ??
+    inspectorRoundEndActionValidationMessage;
   const inspectorIsCursorParticipant =
     Boolean(inspectorPhaseResolutionCursor) &&
     inspectorPhaseResolutionCursor?.participantId === inspector.participant?.participantId;
@@ -3044,6 +3240,15 @@ export default function CombatRoundManagerPanel({
     ? "Attack already rolled"
     : inspectorIsInspectionOnly
       ? "Inspecting step - use Current task to resume"
+    : inspector.step === "round_summary" && !selectedTimelineRoundState.roundEndReview
+      ? "Build/Review round-end effects"
+    : inspector.step === "round_summary" && inspectorRoundEndReview?.status === "review_ready"
+      ? "Commit participant SU review"
+    : inspector.step === "round_summary" &&
+        inspectorRoundEndReview?.status === "health_roll_pending"
+      ? "Roll health check"
+    : inspector.step === "round_summary" && inspectorRoundEndReview?.status === "complete"
+      ? "Round-end review complete"
     : inspectorDamageCommitted
       ? "Phase damage committed"
       : inspectorDamageSubstate === "critical_pending"
@@ -3182,6 +3387,7 @@ export default function CombatRoundManagerPanel({
       setDamageReviewDrafts({});
       setInspectorDrafts({});
       setParrySourceSelections({});
+      setRoundEndHealthDifficultyDrafts({});
       setSaveError(undefined);
       setScenarioParticipantOverrides({});
     }
@@ -3675,7 +3881,14 @@ export default function CombatRoundManagerPanel({
         }
       : { stepSnapshots };
 
-    await persistRoundState(advanceCombatRoundStep(stateForCommit, advanceInput));
+    try {
+      await persistRoundState(advanceCombatRoundStep(stateForCommit, advanceInput));
+      setSaveError(undefined);
+    } catch (caughtError) {
+      setSaveError(
+        caughtError instanceof Error ? caughtError.message : "Unable to advance combat round.",
+      );
+    }
   }
 
   async function persistRoundState(nextRoundState: typeof roundState) {
@@ -4412,6 +4625,120 @@ export default function CombatRoundManagerPanel({
     }
   }
 
+  async function advanceInspectorRoundEndReview() {
+    if (!selectedRoundIsActive || inspector.step !== "round_summary") {
+      return;
+    }
+
+    setSaving(true);
+
+    try {
+      const updatedAt = new Date().toISOString();
+
+      if (!roundState.roundEndReview) {
+        await persistRoundState(
+          prepareCombatRoundEndReview({
+            command: {
+              createdAt: updatedAt,
+            },
+            participantInputs: buildRoundEndParticipantInputs(),
+            state: roundState,
+          }),
+        );
+        setSaveError(undefined);
+        return;
+      }
+
+      if (!inspector.participant?.participantId) {
+        setSaveError("Select a participant for SU review.");
+        return;
+      }
+
+      const participantReview =
+        roundState.roundEndReview.participantReviews[inspector.participant.participantId];
+
+      if (!participantReview) {
+        setSaveError("Round-end review is missing for this participant.");
+        return;
+      }
+
+      if (participantReview.status === "review_ready") {
+        if (!encounter.scenarioId || !selectedScenarioParticipant) {
+          setSaveError("Scenario participant state is required to commit SU review.");
+          return;
+        }
+
+        const committed = commitCombatRoundEndParticipantReview({
+          command: {
+            createdAt: updatedAt,
+          },
+          combatEffects: selectedScenarioParticipant.state.combatEffects,
+          encounterId: encounter.id,
+          participantId: inspector.participant.participantId,
+          scenarioId: encounter.scenarioId,
+          scenarioParticipantId: selectedScenarioParticipant.id,
+          state: roundState,
+        });
+        const updatedParticipant = await updateScenarioParticipantStateOnServer({
+          participantId: selectedScenarioParticipant.id,
+          scenarioId: encounter.scenarioId,
+          state: {
+            ...selectedScenarioParticipant.state,
+            combatEffects: committed.combatEffects,
+          },
+        });
+
+        setScenarioParticipantOverrides((current) => ({
+          ...current,
+          [updatedParticipant.id]: updatedParticipant,
+        }));
+        onScenarioParticipantsUpdated?.([updatedParticipant]);
+        await persistRoundState(committed.state);
+        setSaveError(undefined);
+        return;
+      }
+
+      if (participantReview.status === "health_roll_pending") {
+        const pendingHealthRoll = participantReview.proposedHealthRolls.find(
+          (proposal) => proposal.accepted && proposal.status === "pending",
+        );
+
+        if (!pendingHealthRoll) {
+          setSaveError("No pending health roll is available for this participant.");
+          return;
+        }
+
+        const difficultyDraft = roundEndHealthDifficultyDrafts[pendingHealthRoll.id];
+        const difficulty =
+          difficultyDraft && difficultyDraft.trim().length > 0
+            ? parseCombatInteger(difficultyDraft, "Health difficulty")
+            : pendingHealthRoll.difficulty;
+
+        await persistRoundState(
+          rollCombatRoundEndHealthCheck({
+            command: {
+              createdAt: updatedAt,
+            },
+            difficulty,
+            healthRollId: pendingHealthRoll.id,
+            participantId: inspector.participant.participantId,
+            state: roundState,
+          }),
+        );
+        setSaveError(undefined);
+        return;
+      }
+
+      setSaveError("Round-end review complete for this participant.");
+    } catch (caughtError) {
+      setSaveError(
+        caughtError instanceof Error ? caughtError.message : "Unable to advance SU review.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function advanceInspectorPhaseResolutionSubstep(phase: CombatRoundPhase) {
     const ownerParticipantId = inspectorPhaseResolutionOwnerParticipantId;
 
@@ -4677,9 +5004,15 @@ export default function CombatRoundManagerPanel({
           }}
         >
           <button
-            disabled={saving || !selectedRoundIsActive || inspectorSelectedStepIsSequential}
+            disabled={
+              saving ||
+              !selectedRoundIsActive ||
+              inspectorSelectedStepIsSequential ||
+              Boolean(roundEndStartNextRoundBlocker)
+            }
             onClick={() => void commitCurrentStep()}
             type="button"
+            title={roundEndStartNextRoundBlocker}
           >
             {saving ? "Saving..." : getAdvanceButtonLabel(inspector.step)}
           </button>
@@ -5236,6 +5569,20 @@ export default function CombatRoundManagerPanel({
                         saving={saving}
                       />
                     ) : null}
+                    {inspector.step === "round_summary" ? (
+                      <CombatRoundEndReviewPanel
+                        controlsDisabled={saving || inspectorIsInspectionOnly}
+                        difficultyDrafts={roundEndHealthDifficultyDrafts}
+                        onDifficultyDraftChange={(healthRollId, value) =>
+                          setRoundEndHealthDifficultyDrafts((current) => ({
+                            ...current,
+                            [healthRollId]: value,
+                          }))
+                        }
+                        participantLabel={inspector.participant?.label}
+                        review={inspectorRoundEndReview}
+                      />
+                    ) : null}
                     <PlayerCombatActionButtonPanel
                       buttonLabel={inspectorActionButtonLabel}
                       disabled={
@@ -5247,7 +5594,9 @@ export default function CombatRoundManagerPanel({
                         Boolean(inspectorSnapshot)
                       }
                       onDeclareAction={() =>
-                        void (inspectorCurrentStepIsInitiative
+                        void (inspector.step === "round_summary"
+                          ? advanceInspectorRoundEndReview()
+                          : inspectorCurrentStepIsInitiative
                           ? rollInspectorInitiative()
                           : inspectorCanRollParry
                             ? rollInspectorParry()

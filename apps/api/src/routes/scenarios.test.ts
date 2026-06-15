@@ -3,8 +3,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   advanceCombatRoundStep,
   buildCombatRoundAttackRollResult,
+  commitCombatRoundEndParticipantReview,
   commitCombatRoundPhaseDamage,
   initializeCombatRoundState,
+  prepareCombatRoundEndReview,
   recordCombatRoundAttackResult,
   recordCombatRoundCriticalRoll,
   recordCombatRoundDeclaration,
@@ -5203,6 +5205,131 @@ describe("scenarios route contract", () => {
     expect(updatedParticipantState.combatEffects.events).not.toContainEqual(
       expect.objectContaining({ id: expectedCommitEventId }),
     );
+  });
+
+  it("clears an SU participant review commit and restores effect duration state", async () => {
+    const encounterParticipants = makeCombatEncounter().participants;
+    const base = initializeCombatRoundState({
+      encounter: makeCombatEncounter({ participants: encounterParticipants }) as EncounterSession,
+    });
+    const roundSummaryState = {
+      ...base,
+      currentCursor: {
+        participantId: "encounter-participant-1",
+        roundNumber: base.roundNumber,
+        step: "SU" as const,
+      },
+      currentStep: "round_summary" as const,
+      selectedParticipantId: "encounter-participant-1",
+      selectedStep: "round_summary" as const,
+    };
+    const existingCombatEffects: CombatEffectsState = {
+      effects: [
+        {
+          createdAt: "2026-01-01T00:00:00.000Z",
+          damage: 0,
+          description: "Bleeding wound",
+          duration: "2 rounds",
+          effectGroup: "bleed",
+          generalDamage: 0,
+          id: "bleed-1",
+          modifierValue: 2,
+          roundNumber: 1,
+          sourceEventId: "existing-event",
+          status: "active",
+          targetParticipantId: "participant-1",
+          type: "bleed",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        },
+      ],
+      events: [
+        {
+          createdAt: "2026-01-01T00:00:00.000Z",
+          description: "",
+          id: "existing-event",
+          sourceLabel: "Existing bleed",
+          sourceType: "manual",
+          targetParticipantId: "participant-1",
+        },
+      ],
+    };
+    const reviewed = prepareCombatRoundEndReview({
+      command: {
+        commandId: "prepare-su-api",
+        createdAt: "2026-01-01T00:09:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      participantInputs: {
+        "encounter-participant-1": {
+          combatEffects: existingCombatEffects,
+          healthStat: 9,
+        },
+      },
+      state: roundSummaryState,
+    });
+    const committed = commitCombatRoundEndParticipantReview({
+      command: {
+        commandId: "commit-su-api",
+        createdAt: "2026-01-01T00:10:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      combatEffects: existingCombatEffects,
+      participantId: "encounter-participant-1",
+      scenarioParticipantId: "participant-1",
+      state: reviewed,
+    });
+    const scenarioParticipants = [
+      makeCombatScenarioParticipant({
+        id: "participant-1",
+        state: {
+          ...makeCombatScenarioParticipant().state,
+          combatEffects: committed.combatEffects,
+        },
+      }),
+      makeCombatScenarioParticipant({ id: "participant-2" }),
+    ];
+
+    setupCombatDeclarationRoute({
+      encounter: {
+        combatRoundState: committed.state,
+        participants: encounterParticipants,
+      },
+      user: mocks.adminUser,
+    });
+    mocks.scenarioService.listScenarioParticipants.mockResolvedValue(scenarioParticipants);
+    mocks.encounterService.updateScenarioParticipantState.mockImplementation(
+      async (update: { participantId: string; state: unknown }) => ({
+        ...scenarioParticipants.find((participant) => participant.id === update.participantId),
+        state: update.state,
+      }),
+    );
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/encounters/encounter-1/combat-round/clear-current-step",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(mocks.encounterService.updateScenarioParticipantState).toHaveBeenCalledTimes(1);
+    const updatedParticipantState =
+      mocks.encounterService.updateScenarioParticipantState.mock.calls[0]?.[0]?.state;
+
+    expect(updatedParticipantState.combatEffects.effects).toContainEqual(
+      expect.objectContaining({
+        duration: "2 rounds",
+        id: "bleed-1",
+        status: "active",
+      }),
+    );
+    expect(
+      updatedParticipantState.combatEffects.effects.some(
+        (effect: { generalDamage?: number; type?: string }) =>
+          effect.type === "general_damage" && effect.generalDamage === 2,
+      ),
+    ).toBe(false);
   });
 
   it("fallback DE undo from an empty selected A1 cell clears mirrored declaration state", async () => {

@@ -5,6 +5,7 @@ import {
   scenarioCombatModifierEntrySchema,
   scenarioParticipantCombatContextSchema,
 } from "../campaign/scenario";
+import { rollOpenEndedD20, type OpenEndedD20Roll } from "../dice/openEndedD20";
 import {
   combatArmorModifierClassSchema,
   lookupCombatArmorModifier,
@@ -192,6 +193,9 @@ export const combatRoundCommandTypeSchema = z.enum([
   "complete_damage_review_phase2",
   "resolve_damage",
   "commit_phase_damage",
+  "prepare_round_end_review",
+  "commit_round_end_participant_review",
+  "roll_round_end_health_check",
   "complete_round",
 ]);
 export type CombatRoundCommandType = z.infer<typeof combatRoundCommandTypeSchema>;
@@ -220,6 +224,123 @@ export const combatRoundStepStatusSchema = z.enum([
   "complete",
   "skipped",
 ]);
+
+const combatRoundEndBleedTypeSchema = z.enum(["external", "internal"]);
+export type CombatRoundEndBleedType = z.infer<typeof combatRoundEndBleedTypeSchema>;
+
+const combatRoundEndParticipantReviewStatusSchema = z.enum([
+  "pending",
+  "review_ready",
+  "committed",
+  "health_roll_pending",
+  "complete",
+]);
+export type CombatRoundEndParticipantReviewStatus = z.infer<
+  typeof combatRoundEndParticipantReviewStatusSchema
+>;
+
+export const combatRoundEndEffectProposalSchema = z.object({
+  accepted: z.boolean().default(true),
+  effectId: idSchema,
+  id: idSchema,
+  kind: z.literal("duration_update"),
+  label: z.string().min(1),
+  nextDuration: z.string().min(1).optional(),
+  nextExpiresAtRound: z.number().int().positive().optional(),
+  notes: z.string().min(1).optional(),
+  participantId: idSchema,
+  previousDuration: z.string().min(1).optional(),
+  previousExpiresAtRound: z.number().int().positive().optional(),
+});
+export type CombatRoundEndEffectProposal = z.infer<
+  typeof combatRoundEndEffectProposalSchema
+>;
+
+export const combatRoundEndDamageProposalSchema = z.object({
+  accepted: z.boolean().default(true),
+  amount: z.number().int().nonnegative(),
+  bleedType: combatRoundEndBleedTypeSchema,
+  id: idSchema,
+  label: z.string().min(1),
+  notes: z.string().min(1).optional(),
+  participantId: idSchema,
+  sourceEffectId: idSchema,
+});
+export type CombatRoundEndDamageProposal = z.infer<
+  typeof combatRoundEndDamageProposalSchema
+>;
+
+export const combatRoundEndRemovalProposalSchema = z.object({
+  accepted: z.boolean().default(true),
+  effectId: idSchema,
+  id: idSchema,
+  kind: z.literal("duration_expire"),
+  label: z.string().min(1),
+  notes: z.string().min(1).optional(),
+  participantId: idSchema,
+  previousDuration: z.string().min(1).optional(),
+  previousExpiresAtRound: z.number().int().positive().optional(),
+  previousStatus: z.enum(["active", "resolved", "expired", "superseded"]).default("active"),
+});
+export type CombatRoundEndRemovalProposal = z.infer<
+  typeof combatRoundEndRemovalProposalSchema
+>;
+
+export const combatRoundEndHealthRollResultSchema = z.object({
+  difficulty: z.number().int().positive(),
+  finalTotal: z.number().int(),
+  healthStat: z.number().int(),
+  openEndedD10s: z.array(z.number().int().min(1).max(10)).default([]),
+  rolledAt: z.string().datetime(),
+  rolledByUserId: idSchema.optional(),
+  rollD20: z.number().int().min(1).max(20),
+  rollTotal: z.number().int(),
+  success: z.boolean(),
+});
+export type CombatRoundEndHealthRollResult = z.infer<
+  typeof combatRoundEndHealthRollResultSchema
+>;
+
+export const combatRoundEndHealthRollProposalSchema = z.object({
+  accepted: z.boolean().default(true),
+  bleedType: combatRoundEndBleedTypeSchema,
+  damageProposalId: idSchema.optional(),
+  difficulty: z.number().int().positive(),
+  healthStat: z.number().int().default(0),
+  id: idSchema,
+  label: z.string().min(1),
+  participantId: idSchema,
+  result: combatRoundEndHealthRollResultSchema.optional(),
+  sourceEffectId: idSchema,
+  status: z.enum(["pending", "rolled", "not_required"]).default("pending"),
+  warnings: z.array(z.string().min(1)).default([]),
+});
+export type CombatRoundEndHealthRollProposal = z.infer<
+  typeof combatRoundEndHealthRollProposalSchema
+>;
+
+export const combatRoundEndParticipantReviewSchema = z.object({
+  committedAt: z.string().datetime().optional(),
+  committedByUserId: idSchema.optional(),
+  participantId: idSchema,
+  proposedDamage: z.array(combatRoundEndDamageProposalSchema).default([]),
+  proposedEffects: z.array(combatRoundEndEffectProposalSchema).default([]),
+  proposedHealthRolls: z.array(combatRoundEndHealthRollProposalSchema).default([]),
+  proposedRemovals: z.array(combatRoundEndRemovalProposalSchema).default([]),
+  status: combatRoundEndParticipantReviewStatusSchema.default("pending"),
+  warnings: z.array(z.string().min(1)).default([]),
+});
+export type RoundEndParticipantReview = z.infer<
+  typeof combatRoundEndParticipantReviewSchema
+>;
+
+export const combatRoundEndReviewSchema = z.object({
+  participantReviews: z.record(idSchema, combatRoundEndParticipantReviewSchema).default({}),
+  preparedAt: z.string().datetime().optional(),
+  preparedByUserId: idSchema.optional(),
+  roundNumber: z.number().int().positive(),
+});
+export type CombatRoundEndReview = z.infer<typeof combatRoundEndReviewSchema>;
 
 export const combatRoundInitiativeResultSchema = z.object({
   baseInitiative: z.number().int().default(0),
@@ -1282,6 +1403,7 @@ export const completedCombatRoundSchema = z.object({
   phaseResolutionResults: z.array(combatRoundPhaseResolutionResultSchema).default([]),
   phaseResolutionStatuses: combatRoundPhaseResolutionStatusesSchema.default({}),
   participants: z.array(combatRoundParticipantStateSchema).default([]),
+  roundEndReview: combatRoundEndReviewSchema.optional(),
   roundNumber: z.number().int().positive(),
   selectedParticipantId: idSchema.optional(),
   selectedStep: combatRoundStepSchema.optional(),
@@ -1298,6 +1420,7 @@ export const combatRoundStateSchema = z.object({
   phaseResolutionResults: z.array(combatRoundPhaseResolutionResultSchema).default([]),
   phaseResolutionStatuses: combatRoundPhaseResolutionStatusesSchema.default({}),
   participants: z.array(combatRoundParticipantStateSchema).default([]),
+  roundEndReview: combatRoundEndReviewSchema.optional(),
   roundNumber: z.number().int().positive().default(1),
   rounds: z.array(completedCombatRoundSchema).default([]),
   selectedParticipantId: idSchema.optional(),
@@ -1751,7 +1874,10 @@ function isUndoableCombatRoundCommandType(type: CombatRoundCommandType): boolean
     type === "complete_damage_review_phase1" ||
     type === "complete_damage_review_phase2" ||
     type === "resolve_damage" ||
-    type === "commit_phase_damage"
+    type === "commit_phase_damage" ||
+    type === "prepare_round_end_review" ||
+    type === "commit_round_end_participant_review" ||
+    type === "roll_round_end_health_check"
   );
 }
 
@@ -5560,6 +5686,877 @@ export function removeCombatRoundCommittedDamageEffects(input: {
   });
 }
 
+function getCombatRoundEndReviewCursor(input: {
+  participantId?: string;
+  state: CombatRoundState;
+}): CombatRoundCursor {
+  return combatRoundCursorSchema.parse({
+    participantId: input.participantId ?? input.state.participants[0]?.participantId,
+    roundNumber: input.state.roundNumber,
+    step: "SU",
+  });
+}
+
+function parseCombatRoundEffectRoundDuration(duration?: string): number | undefined {
+  if (!duration) {
+    return undefined;
+  }
+
+  const match = duration.match(/\b(\d+)\s*(?:r|rnd|round|rounds)\b/i);
+  const value = match?.[1] ? Number.parseInt(match[1], 10) : Number.NaN;
+
+  return Number.isFinite(value) && value > 0 ? value : undefined;
+}
+
+function formatCombatRoundEffectRoundDuration(input: {
+  nextRounds: number;
+  previousDuration?: string;
+}): string {
+  const replacement = `${input.nextRounds} ${input.nextRounds === 1 ? "round" : "rounds"}`;
+
+  if (input.previousDuration?.match(/\b\d+\s*(?:r|rnd|round|rounds)\b/i)) {
+    return input.previousDuration.replace(/\b\d+\s*(?:r|rnd|round|rounds)\b/i, replacement);
+  }
+
+  return replacement;
+}
+
+function getCombatRoundEffectBleedType(effect: CombatEffect): CombatRoundEndBleedType | undefined {
+  if (effect.type === "internal_bleed") {
+    return "internal";
+  }
+
+  if (effect.type === "bleed" || effect.effectGroup === "bleed") {
+    return "external";
+  }
+
+  return undefined;
+}
+
+function getCombatRoundEffectBleedAmount(effect: CombatEffect): number {
+  return Math.max(
+    0,
+    Math.trunc(effect.modifierValue ?? effect.generalDamage ?? effect.damage ?? 0),
+  );
+}
+
+function getCombatRoundEndReviewParticipantStatus(
+  review: Omit<RoundEndParticipantReview, "status">,
+): CombatRoundEndParticipantReviewStatus {
+  const hasAcceptedProposal =
+    review.proposedEffects.some((proposal) => proposal.accepted) ||
+    review.proposedRemovals.some((proposal) => proposal.accepted) ||
+    review.proposedDamage.some((proposal) => proposal.accepted) ||
+    review.proposedHealthRolls.some((proposal) => proposal.accepted);
+
+  return hasAcceptedProposal ? "review_ready" : "complete";
+}
+
+function buildCombatRoundEndParticipantReview(input: {
+  combatEffects?: CombatEffectsState;
+  healthStat?: number;
+  participantId: string;
+  roundNumber: number;
+}): RoundEndParticipantReview {
+  const combatEffects = combatEffectsStateSchema.parse(input.combatEffects);
+  const proposedEffects: CombatRoundEndEffectProposal[] = [];
+  const proposedDamage: CombatRoundEndDamageProposal[] = [];
+  const proposedHealthRolls: CombatRoundEndHealthRollProposal[] = [];
+  const proposedRemovals: CombatRoundEndRemovalProposal[] = [];
+  const warnings: string[] = [];
+
+  for (const effect of combatEffects.effects) {
+    if (effect.status !== "active") {
+      continue;
+    }
+
+    const durationRounds = parseCombatRoundEffectRoundDuration(effect.duration);
+
+    if (durationRounds !== undefined) {
+      if (durationRounds <= 1) {
+        proposedRemovals.push(
+          combatRoundEndRemovalProposalSchema.parse({
+            effectId: effect.id,
+            id: `round-end:${input.roundNumber}:${input.participantId}:expire:${effect.id}`,
+            kind: "duration_expire",
+            label: effect.description
+              ? `Expire ${effect.description}`
+              : `Expire ${effect.type.replaceAll("_", " ")}`,
+            notes: "Round-based duration reaches 0 at SU.",
+            participantId: input.participantId,
+            previousDuration: effect.duration,
+            previousExpiresAtRound: effect.expiresAtRound,
+            previousStatus: effect.status,
+          }),
+        );
+      } else {
+        const nextRounds = durationRounds - 1;
+
+        proposedEffects.push(
+          combatRoundEndEffectProposalSchema.parse({
+            effectId: effect.id,
+            id: `round-end:${input.roundNumber}:${input.participantId}:duration:${effect.id}`,
+            kind: "duration_update",
+            label: effect.description
+              ? `Reduce duration: ${effect.description}`
+              : `Reduce duration: ${effect.type.replaceAll("_", " ")}`,
+            nextDuration: formatCombatRoundEffectRoundDuration({
+              nextRounds,
+              previousDuration: effect.duration,
+            }),
+            notes: "Round-based duration ticks down at SU.",
+            participantId: input.participantId,
+            previousDuration: effect.duration,
+            previousExpiresAtRound: effect.expiresAtRound,
+          }),
+        );
+      }
+    } else if (effect.expiresAtRound !== undefined && effect.expiresAtRound <= input.roundNumber) {
+      proposedRemovals.push(
+        combatRoundEndRemovalProposalSchema.parse({
+          effectId: effect.id,
+          id: `round-end:${input.roundNumber}:${input.participantId}:expire:${effect.id}`,
+          kind: "duration_expire",
+          label: effect.description
+            ? `Expire ${effect.description}`
+            : `Expire ${effect.type.replaceAll("_", " ")}`,
+          notes: `Effect expires at round ${effect.expiresAtRound}.`,
+          participantId: input.participantId,
+          previousDuration: effect.duration,
+          previousExpiresAtRound: effect.expiresAtRound,
+          previousStatus: effect.status,
+        }),
+      );
+    }
+
+    const bleedType = getCombatRoundEffectBleedType(effect);
+    const bleedAmount = bleedType ? getCombatRoundEffectBleedAmount(effect) : 0;
+
+    if (bleedType && bleedAmount > 0) {
+      const difficulty = bleedType === "internal" ? 26 : 21;
+      const damageProposalId = `round-end:${input.roundNumber}:${input.participantId}:${bleedType}-bleed:${effect.id}`;
+      const healthRollWarnings =
+        input.healthStat === undefined
+          ? ["Health stat not available; using +0 until a character health stat is supplied."]
+          : [];
+
+      proposedDamage.push(
+        combatRoundEndDamageProposalSchema.parse({
+          amount: bleedAmount,
+          bleedType,
+          id: damageProposalId,
+          label:
+            bleedType === "internal"
+              ? `Internal bleed damage ${bleedAmount}`
+              : `Bleed damage ${bleedAmount}`,
+          notes: "Per-round bleed damage due at SU.",
+          participantId: input.participantId,
+          sourceEffectId: effect.id,
+        }),
+      );
+      proposedHealthRolls.push(
+        combatRoundEndHealthRollProposalSchema.parse({
+          bleedType,
+          damageProposalId,
+          difficulty,
+          healthStat: input.healthStat ?? 0,
+          id: `${damageProposalId}:health`,
+          label:
+            bleedType === "internal"
+              ? `Health check vs internal bleed ${difficulty}`
+              : `Health check vs bleed ${difficulty}`,
+          participantId: input.participantId,
+          sourceEffectId: effect.id,
+          warnings: healthRollWarnings,
+        }),
+      );
+      warnings.push(...healthRollWarnings);
+    }
+  }
+
+  const reviewWithoutStatus = {
+    participantId: input.participantId,
+    proposedDamage,
+    proposedEffects,
+    proposedHealthRolls,
+    proposedRemovals,
+    warnings: [...new Set(warnings)],
+  };
+
+  return combatRoundEndParticipantReviewSchema.parse({
+    ...reviewWithoutStatus,
+    status: getCombatRoundEndReviewParticipantStatus(reviewWithoutStatus),
+  });
+}
+
+export function isCombatRoundEndReviewComplete(state: CombatRoundState): boolean {
+  const normalized = combatRoundStateSchema.parse(state);
+  const review = normalized.roundEndReview;
+
+  if (!review || review.roundNumber !== normalized.roundNumber) {
+    return false;
+  }
+
+  return normalized.participants.every((participant) => {
+    const participantReview = review.participantReviews[participant.participantId];
+
+    return participantReview?.status === "complete";
+  });
+}
+
+export function getCombatRoundStartNextRoundBlocker(
+  state: CombatRoundState,
+): string | undefined {
+  const normalized = combatRoundStateSchema.parse(state);
+  const review = normalized.roundEndReview;
+
+  if (!review || review.roundNumber !== normalized.roundNumber) {
+    return "Round-end review incomplete.";
+  }
+
+  for (const participant of normalized.participants) {
+    const participantReview = review.participantReviews[participant.participantId];
+
+    if (!participantReview) {
+      return `Round-end review missing for ${participant.label}.`;
+    }
+
+    const pendingHealthRoll = participantReview.proposedHealthRolls.find(
+      (proposal) => proposal.accepted && proposal.status === "pending",
+    );
+
+    if (pendingHealthRoll) {
+      return `Health roll pending for ${participant.label}.`;
+    }
+
+    if (participantReview.status !== "complete") {
+      return `Round-end review incomplete for ${participant.label}.`;
+    }
+  }
+
+  return undefined;
+}
+
+export function prepareCombatRoundEndReview(input: {
+  command?: {
+    commandId?: string;
+    createdAt: string;
+    createdByUserId?: string;
+  };
+  participantInputs?: Record<string, { combatEffects?: CombatEffectsState; healthStat?: number }>;
+  state: CombatRoundState;
+}): CombatRoundState {
+  const normalized = combatRoundStateSchema.parse(input.state);
+
+  if (normalized.currentStep !== "round_summary") {
+    throw new RangeError("Round-end review can only be prepared at SU.");
+  }
+
+  const participantReviews = Object.fromEntries(
+    normalized.participants.map((participant) => [
+      participant.participantId,
+      buildCombatRoundEndParticipantReview({
+        combatEffects: input.participantInputs?.[participant.participantId]?.combatEffects,
+        healthStat: input.participantInputs?.[participant.participantId]?.healthStat,
+        participantId: participant.participantId,
+        roundNumber: normalized.roundNumber,
+      }),
+    ]),
+  );
+  const preparedAt = input.command?.createdAt ?? new Date().toISOString();
+  const roundEndReview = combatRoundEndReviewSchema.parse({
+    participantReviews,
+    preparedAt,
+    preparedByUserId: input.command?.createdByUserId,
+    roundNumber: normalized.roundNumber,
+  });
+  const firstReviewParticipant =
+    normalized.participants.find(
+      (participant) =>
+        roundEndReview.participantReviews[participant.participantId]?.status !== "complete",
+    ) ?? normalized.participants[0];
+  const beforeCursor = getCombatRoundEndReviewCursor({
+    participantId: normalized.currentCursor?.participantId ?? firstReviewParticipant?.participantId,
+    state: normalized,
+  });
+  const afterCursor = getCombatRoundEndReviewCursor({
+    participantId: firstReviewParticipant?.participantId,
+    state: normalized,
+  });
+  const command = input.command
+    ? combatRoundCommandSchema.parse({
+        afterCursor,
+        beforeCursor,
+        createdAt: input.command.createdAt,
+        createdByUserId: input.command.createdByUserId,
+        facts: {
+          participantIds: normalized.participants.map((participant) => participant.participantId),
+          reviewStatus: "prepared",
+        },
+        id:
+          input.command.commandId ??
+          buildCombatRoundCommandId({
+            createdAt: input.command.createdAt,
+            participantId: afterCursor.participantId ?? "round-end",
+            state: normalized,
+            type: "prepare_round_end_review",
+          }),
+        participantId: afterCursor.participantId ?? "round-end",
+        roundNumber: normalized.roundNumber,
+        step: "SU",
+        type: "prepare_round_end_review",
+      })
+    : undefined;
+
+  return combatRoundStateSchema.parse({
+    ...normalized,
+    commands: command ? [...normalized.commands, command] : normalized.commands,
+    currentCursor: afterCursor,
+    currentStep: "round_summary",
+    roundEndReview,
+    selectedParticipantId: afterCursor.participantId,
+    selectedStep: "round_summary",
+  });
+}
+
+type CombatRoundEndUpdatedEffectFact = {
+  effectId: string;
+  nextEffect?: unknown;
+  previousEffect?: unknown;
+};
+
+function isCombatRoundEndUpdatedEffectFact(value: unknown): value is CombatRoundEndUpdatedEffectFact {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "effectId" in value &&
+    typeof value.effectId === "string"
+  );
+}
+
+function buildCombatRoundEndParticipantReviewEffectIds(input: {
+  commandId: string;
+  participantId: string;
+  proposalIds: readonly string[];
+  roundNumber: number;
+}): string[] {
+  return input.proposalIds.map((proposalId) =>
+    [
+      "combat-effect",
+      "round-end",
+      input.roundNumber,
+      input.participantId,
+      input.commandId,
+      proposalId,
+    ].join(":"),
+  );
+}
+
+function buildCombatRoundEndParticipantReviewEventId(input: {
+  commandId: string;
+  participantId: string;
+  roundNumber: number;
+}): string {
+  return [
+    "combat-effect-event",
+    "round-end",
+    input.roundNumber,
+    input.participantId,
+    input.commandId,
+  ].join(":");
+}
+
+function applyCombatRoundEndReviewEffects(input: {
+  combatEffects?: CombatEffectsState;
+  command: CombatRoundCommand;
+  encounterId?: string;
+  participantReview: RoundEndParticipantReview;
+  scenarioId?: string;
+  scenarioParticipantId: string;
+}): {
+  combatEffects: CombatEffectsState;
+  createdCombatEffectEventId?: string;
+  createdCombatEffectIds: string[];
+  updatedEffects: CombatRoundEndUpdatedEffectFact[];
+} {
+  const currentCombatEffects = combatEffectsStateSchema.parse(input.combatEffects);
+  const acceptedDamage = input.participantReview.proposedDamage.filter(
+    (proposal) => proposal.accepted && proposal.amount > 0,
+  );
+  const updatedEffects: CombatRoundEndUpdatedEffectFact[] = [];
+  const updatedEffectIds = new Set<string>();
+  const nextEffects = currentCombatEffects.effects.map((effect) => {
+    const durationUpdate = input.participantReview.proposedEffects.find(
+      (proposal) => proposal.accepted && proposal.effectId === effect.id,
+    );
+    const removal = input.participantReview.proposedRemovals.find(
+      (proposal) => proposal.accepted && proposal.effectId === effect.id,
+    );
+
+    if (durationUpdate) {
+      const nextEffect = combatEffectSchema.parse({
+        ...effect,
+        duration: durationUpdate.nextDuration ?? effect.duration,
+        expiresAtRound: durationUpdate.nextExpiresAtRound,
+        updatedAt: input.command.createdAt,
+      });
+
+      updatedEffectIds.add(effect.id);
+      updatedEffects.push({
+        effectId: effect.id,
+        nextEffect,
+        previousEffect: effect,
+      });
+
+      return nextEffect;
+    }
+
+    if (removal) {
+      const nextEffect = combatEffectSchema.parse({
+        ...effect,
+        status: "expired",
+        updatedAt: input.command.createdAt,
+      });
+
+      updatedEffectIds.add(effect.id);
+      updatedEffects.push({
+        effectId: effect.id,
+        nextEffect,
+        previousEffect: effect,
+      });
+
+      return nextEffect;
+    }
+
+    return effect;
+  });
+
+  const createdCombatEffectIds = buildCombatRoundEndParticipantReviewEffectIds({
+    commandId: input.command.id,
+    participantId: input.command.participantId,
+    proposalIds: acceptedDamage.map((proposal) => proposal.id),
+    roundNumber: input.command.roundNumber,
+  });
+  const createdCombatEffectEventId =
+    acceptedDamage.length > 0
+      ? buildCombatRoundEndParticipantReviewEventId({
+          commandId: input.command.id,
+          participantId: input.command.participantId,
+          roundNumber: input.command.roundNumber,
+        })
+      : undefined;
+  const createdEvent = createdCombatEffectEventId
+    ? combatEffectEventSchema.parse({
+        createdAt: input.command.createdAt,
+        createdByUserId: input.command.createdByUserId,
+        description: `Round ${input.command.roundNumber} end review applied bleed damage.`,
+        encounterId: input.encounterId,
+        id: createdCombatEffectEventId,
+        phase: "round_end",
+        roundNumber: input.command.roundNumber,
+        scenarioId: input.scenarioId,
+        sourceLabel: "Round-end bleed damage",
+        sourceType: "bleed_tick",
+        targetParticipantId: input.scenarioParticipantId,
+      })
+    : undefined;
+  const createdEffects = createdCombatEffectEventId
+    ? acceptedDamage.map((proposal, index) =>
+        combatEffectSchema.parse({
+          createdAt: input.command.createdAt,
+          damage: 0,
+          description:
+            proposal.bleedType === "internal"
+              ? `Round ${input.command.roundNumber} end: internal bleed causes ${proposal.amount} general damage.`
+              : `Round ${input.command.roundNumber} end: bleed causes ${proposal.amount} general damage.`,
+          effectGroup: "none",
+          generalDamage: proposal.amount,
+          id: createdCombatEffectIds[index],
+          roundNumber: input.command.roundNumber,
+          sourceEventId: createdCombatEffectEventId,
+          status: "active",
+          targetParticipantId: input.scenarioParticipantId,
+          type: "general_damage",
+          updatedAt: input.command.createdAt,
+        }),
+      )
+    : [];
+
+  return {
+    combatEffects: combatEffectsStateSchema.parse({
+      effects: [
+        ...nextEffects.filter(
+          (effect) =>
+            !createdCombatEffectIds.includes(effect.id) || updatedEffectIds.has(effect.id),
+        ),
+        ...createdEffects,
+      ],
+      events: [
+        ...currentCombatEffects.events.filter((event) => event.id !== createdCombatEffectEventId),
+        ...(createdEvent ? [createdEvent] : []),
+      ],
+    }),
+    createdCombatEffectEventId,
+    createdCombatEffectIds,
+    updatedEffects,
+  };
+}
+
+function getNextRoundEndReviewParticipantId(input: {
+  participantId: string;
+  roundEndReview: CombatRoundEndReview;
+  state: CombatRoundState;
+}): string | undefined {
+  const currentIndex = input.state.participants.findIndex(
+    (participant) => participant.participantId === input.participantId,
+  );
+  const orderedParticipants = [
+    ...input.state.participants.slice(Math.max(0, currentIndex + 1)),
+    ...input.state.participants.slice(0, Math.max(0, currentIndex + 1)),
+  ];
+
+  return orderedParticipants.find(
+    (participant) =>
+      input.roundEndReview.participantReviews[participant.participantId]?.status !== "complete",
+  )?.participantId;
+}
+
+export function commitCombatRoundEndParticipantReview(input: {
+  command: {
+    commandId?: string;
+    createdAt: string;
+    createdByUserId?: string;
+  };
+  combatEffects?: CombatEffectsState;
+  encounterId?: string;
+  participantId: string;
+  scenarioId?: string;
+  scenarioParticipantId: string;
+  state: CombatRoundState;
+}): {
+  combatEffects: CombatEffectsState;
+  command: CombatRoundCommand;
+  state: CombatRoundState;
+} {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const roundEndReview = normalized.roundEndReview;
+  const participantReview = roundEndReview?.participantReviews[input.participantId];
+
+  if (!roundEndReview || roundEndReview.roundNumber !== normalized.roundNumber) {
+    throw new RangeError("Round-end review has not been prepared.");
+  }
+
+  if (!participantReview) {
+    throw new RangeError("Round-end review is missing for this participant.");
+  }
+
+  if (participantReview.status !== "review_ready") {
+    throw new RangeError("Round-end participant review is not ready to commit.");
+  }
+
+  const acceptedHealthRolls = participantReview.proposedHealthRolls.filter(
+    (proposal) => proposal.accepted,
+  );
+  const nextStatus: CombatRoundEndParticipantReviewStatus =
+    acceptedHealthRolls.length > 0 ? "health_roll_pending" : "complete";
+  const beforeCursor = getCombatRoundEndReviewCursor({
+    participantId: input.participantId,
+    state: normalized,
+  });
+  const commandId =
+    input.command.commandId ??
+    buildCombatRoundCommandId({
+      createdAt: input.command.createdAt,
+      participantId: input.participantId,
+      state: normalized,
+      type: "commit_round_end_participant_review",
+    });
+  const provisionalCommand = combatRoundCommandSchema.parse({
+    afterCursor: beforeCursor,
+    beforeCursor,
+    createdAt: input.command.createdAt,
+    createdByUserId: input.command.createdByUserId,
+    facts: {},
+    id: commandId,
+    participantId: input.participantId,
+    roundNumber: normalized.roundNumber,
+    step: "SU",
+    type: "commit_round_end_participant_review",
+  });
+  const effectApplication = applyCombatRoundEndReviewEffects({
+    combatEffects: input.combatEffects,
+    command: provisionalCommand,
+    encounterId: input.encounterId,
+    participantReview,
+    scenarioId: input.scenarioId,
+    scenarioParticipantId: input.scenarioParticipantId,
+  });
+  const committedReview = combatRoundEndParticipantReviewSchema.parse({
+    ...participantReview,
+    committedAt: input.command.createdAt,
+    committedByUserId: input.command.createdByUserId,
+    proposedHealthRolls: participantReview.proposedHealthRolls.map((proposal) =>
+      proposal.accepted
+        ? {
+            ...proposal,
+            status: "pending" as const,
+          }
+        : proposal,
+    ),
+    status: nextStatus,
+  });
+  const nextRoundEndReview = combatRoundEndReviewSchema.parse({
+    ...roundEndReview,
+    participantReviews: {
+      ...roundEndReview.participantReviews,
+      [input.participantId]: committedReview,
+    },
+  });
+  const nextParticipantId =
+    getNextRoundEndReviewParticipantId({
+      participantId: input.participantId,
+      roundEndReview: nextRoundEndReview,
+      state: normalized,
+    }) ?? input.participantId;
+  const afterCursor = getCombatRoundEndReviewCursor({
+    participantId: nextParticipantId,
+    state: normalized,
+  });
+  const command = combatRoundCommandSchema.parse({
+    ...provisionalCommand,
+    afterCursor,
+    facts: {
+      acceptedDamageProposalIds: participantReview.proposedDamage
+        .filter((proposal) => proposal.accepted)
+        .map((proposal) => proposal.id),
+      acceptedDurationProposalIds: participantReview.proposedEffects
+        .filter((proposal) => proposal.accepted)
+        .map((proposal) => proposal.id),
+      acceptedHealthRollIds: acceptedHealthRolls.map((proposal) => proposal.id),
+      acceptedRemovalProposalIds: participantReview.proposedRemovals
+        .filter((proposal) => proposal.accepted)
+        .map((proposal) => proposal.id),
+      createdCombatEffectEventId: effectApplication.createdCombatEffectEventId,
+      createdCombatEffectIds: effectApplication.createdCombatEffectIds,
+      nextStatus,
+      scenarioParticipantId: input.scenarioParticipantId,
+      updatedEffects: effectApplication.updatedEffects,
+    },
+  });
+
+  return {
+    combatEffects: effectApplication.combatEffects,
+    command,
+    state: combatRoundStateSchema.parse({
+      ...normalized,
+      commands: [...normalized.commands, command],
+      currentCursor: afterCursor,
+      currentStep: "round_summary",
+      participants: normalized.participants.map((participant) =>
+        participant.participantId === input.participantId
+          ? {
+              ...participant,
+              stepStatuses: {
+                ...participant.stepStatuses,
+                round_summary: nextStatus === "complete" ? "complete" : "ready",
+              },
+            }
+          : participant,
+      ),
+      roundEndReview: nextRoundEndReview,
+      selectedParticipantId: afterCursor.participantId,
+      selectedStep: "round_summary",
+    }),
+  };
+}
+
+export function removeCombatRoundEndParticipantReviewEffects(input: {
+  combatEffects?: CombatEffectsState;
+  command: CombatRoundCommand;
+}): CombatEffectsState {
+  const currentCombatEffects = combatEffectsStateSchema.parse(input.combatEffects);
+  const eventId =
+    typeof input.command.facts.createdCombatEffectEventId === "string"
+      ? input.command.facts.createdCombatEffectEventId
+      : undefined;
+  const effectIds = Array.isArray(input.command.facts.createdCombatEffectIds)
+    ? input.command.facts.createdCombatEffectIds.filter(
+        (effectId): effectId is string => typeof effectId === "string",
+      )
+    : [];
+  const effectIdSet = new Set(effectIds);
+  const updatedEffects = Array.isArray(input.command.facts.updatedEffects)
+    ? input.command.facts.updatedEffects.filter(isCombatRoundEndUpdatedEffectFact)
+    : [];
+  const restoredById = new Map(
+    updatedEffects
+      .map((entry) => {
+        const parsed = combatEffectSchema.safeParse(entry.previousEffect);
+        return parsed.success ? ([entry.effectId, parsed.data] as const) : undefined;
+      })
+      .filter((entry): entry is readonly [string, CombatEffect] => entry !== undefined),
+  );
+  const existingWithoutCreated = currentCombatEffects.effects.filter(
+    (effect) => !effectIdSet.has(effect.id),
+  );
+  const restoredExisting = existingWithoutCreated.map((effect) =>
+    restoredById.get(effect.id) ?? effect,
+  );
+  const missingRestored = [...restoredById.values()].filter(
+    (effect) => !restoredExisting.some((existingEffect) => existingEffect.id === effect.id),
+  );
+
+  return combatEffectsStateSchema.parse({
+    effects: [...restoredExisting, ...missingRestored],
+    events: currentCombatEffects.events.filter((event) => event.id !== eventId),
+  });
+}
+
+export function rollCombatRoundEndHealthCheck(input: {
+  command: {
+    commandId?: string;
+    createdAt: string;
+    createdByUserId?: string;
+  };
+  difficulty?: number;
+  healthRollId?: string;
+  participantId: string;
+  roll?: OpenEndedD20Roll;
+  rng?: () => number;
+  state: CombatRoundState;
+}): CombatRoundState {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const roundEndReview = normalized.roundEndReview;
+  const participantReview = roundEndReview?.participantReviews[input.participantId];
+
+  if (!roundEndReview || roundEndReview.roundNumber !== normalized.roundNumber) {
+    throw new RangeError("Round-end review has not been prepared.");
+  }
+
+  if (!participantReview || participantReview.status !== "health_roll_pending") {
+    throw new RangeError("No round-end health roll is pending for this participant.");
+  }
+
+  const healthRoll = participantReview.proposedHealthRolls.find(
+    (proposal) =>
+      proposal.accepted &&
+      proposal.status === "pending" &&
+      (!input.healthRollId || proposal.id === input.healthRollId),
+  );
+
+  if (!healthRoll) {
+    throw new RangeError("No pending round-end health roll matches this participant.");
+  }
+
+  const difficulty = input.difficulty ?? healthRoll.difficulty;
+  const roll = input.roll ?? rollOpenEndedD20(input.rng);
+  const finalTotal = roll.dieResult + healthRoll.healthStat;
+  const result = combatRoundEndHealthRollResultSchema.parse({
+    difficulty,
+    finalTotal,
+    healthStat: healthRoll.healthStat,
+    openEndedD10s: roll.openEndedD10s,
+    rolledAt: input.command.createdAt,
+    rolledByUserId: input.command.createdByUserId,
+    rollD20: roll.rollD20,
+    rollTotal: roll.dieResult,
+    success: finalTotal >= difficulty,
+  });
+  const updatedHealthRolls = participantReview.proposedHealthRolls.map((proposal) =>
+    proposal.id === healthRoll.id
+      ? combatRoundEndHealthRollProposalSchema.parse({
+          ...proposal,
+          difficulty,
+          result,
+          status: "rolled",
+        })
+      : proposal,
+  );
+  const hasPendingAcceptedHealthRoll = updatedHealthRolls.some(
+    (proposal) => proposal.accepted && proposal.status === "pending",
+  );
+  const nextStatus: CombatRoundEndParticipantReviewStatus = hasPendingAcceptedHealthRoll
+    ? "health_roll_pending"
+    : "complete";
+  const updatedParticipantReview = combatRoundEndParticipantReviewSchema.parse({
+    ...participantReview,
+    proposedHealthRolls: updatedHealthRolls,
+    status: nextStatus,
+  });
+  const nextRoundEndReview = combatRoundEndReviewSchema.parse({
+    ...roundEndReview,
+    participantReviews: {
+      ...roundEndReview.participantReviews,
+      [input.participantId]: updatedParticipantReview,
+    },
+  });
+  const nextParticipantId =
+    getNextRoundEndReviewParticipantId({
+      participantId: input.participantId,
+      roundEndReview: nextRoundEndReview,
+      state: normalized,
+    }) ?? input.participantId;
+  const beforeCursor = getCombatRoundEndReviewCursor({
+    participantId: input.participantId,
+    state: normalized,
+  });
+  const afterCursor = getCombatRoundEndReviewCursor({
+    participantId: nextParticipantId,
+    state: normalized,
+  });
+  const commandType = "roll_round_end_health_check" satisfies CombatRoundCommandType;
+  const command = combatRoundCommandSchema.parse({
+    afterCursor,
+    beforeCursor,
+    createdAt: input.command.createdAt,
+    createdByUserId: input.command.createdByUserId,
+    facts: {
+      bleedType: healthRoll.bleedType,
+      difficulty,
+      finalTotal,
+      healthRollId: healthRoll.id,
+      healthStat: healthRoll.healthStat,
+      openEndedD10s: roll.openEndedD10s,
+      rollD20: roll.rollD20,
+      rollTotal: roll.dieResult,
+      success: result.success,
+    },
+    id:
+      input.command.commandId ??
+      buildCombatRoundCommandId({
+        createdAt: input.command.createdAt,
+        participantId: input.participantId,
+        state: normalized,
+        type: commandType,
+      }),
+    participantId: input.participantId,
+    roundNumber: normalized.roundNumber,
+    step: "SU",
+    type: commandType,
+  });
+
+  return combatRoundStateSchema.parse({
+    ...normalized,
+    commands: [...normalized.commands, command],
+    currentCursor: afterCursor,
+    currentStep: "round_summary",
+    participants: normalized.participants.map((participant) =>
+      participant.participantId === input.participantId
+        ? {
+            ...participant,
+            stepStatuses: {
+              ...participant.stepStatuses,
+              round_summary: nextStatus === "complete" ? "complete" : "ready",
+            },
+          }
+        : participant,
+    ),
+    roundEndReview: nextRoundEndReview,
+    selectedParticipantId: afterCursor.participantId,
+    selectedStep: "round_summary",
+  });
+}
+
 type CombatRoundOperationalCancelledAction = {
   participantId: string;
   phase: CombatRoundPhase;
@@ -6735,6 +7732,16 @@ function normalizeCompletedCombatRounds(input: {
         input.participantIds.has(round.phaseResolutionCursor.participantId)
           ? round.phaseResolutionCursor
           : undefined;
+      const roundEndReview = round.roundEndReview
+        ? combatRoundEndReviewSchema.parse({
+            ...round.roundEndReview,
+            participantReviews: Object.fromEntries(
+              Object.entries(round.roundEndReview.participantReviews).filter(([participantId]) =>
+                input.participantIds.has(participantId),
+              ),
+            ),
+          })
+        : undefined;
 
       return completedCombatRoundSchema.parse({
         ...round,
@@ -6745,6 +7752,7 @@ function normalizeCompletedCombatRounds(input: {
         phaseResolutionResults,
         phaseResolutionStatuses,
         participants,
+        roundEndReview,
         selectedParticipantId,
         stepSnapshots,
       });
@@ -6771,6 +7779,7 @@ function buildCompletedCombatRound(input: {
     phaseResolutionResults: normalized.phaseResolutionResults,
     phaseResolutionStatuses: normalized.phaseResolutionStatuses,
     participants: normalized.participants,
+    roundEndReview: normalized.roundEndReview,
     roundNumber: normalized.roundNumber,
     selectedParticipantId: normalized.selectedParticipantId,
     selectedStep: normalized.selectedStep,
@@ -6965,6 +7974,17 @@ export function initializeCombatRoundState(input: {
     (snapshot) =>
       snapshot.roundNumber === roundNumber && participantIds.has(snapshot.participantId),
   );
+  const roundEndReview =
+    existing?.roundEndReview?.roundNumber === roundNumber
+      ? combatRoundEndReviewSchema.parse({
+          ...existing.roundEndReview,
+          participantReviews: Object.fromEntries(
+            Object.entries(existing.roundEndReview.participantReviews).filter(([participantId]) =>
+              participantIds.has(participantId),
+            ),
+          ),
+        })
+      : undefined;
   const existingPhaseResolutionCursorCandidate =
     existing?.phaseResolutionCursor &&
     participantIds.has(existing.phaseResolutionCursor.participantId)
@@ -7102,6 +8122,7 @@ export function initializeCombatRoundState(input: {
             phaseResolutionResults: phaseResolutionResultsForState,
             phaseResolutionStatuses: phaseResolutionStatusesForState,
             participants: participantsForState,
+            roundEndReview,
             roundNumber,
             rounds: completedRounds,
             stepSnapshots: stepSnapshotsForState,
@@ -7159,6 +8180,7 @@ export function initializeCombatRoundState(input: {
     phaseResolutionResults: phaseResolutionResultsForState,
     phaseResolutionStatuses: phaseResolutionStatusesForState,
     participants: participantsForState,
+    roundEndReview: repairsUnsupportedPhaseStep ? undefined : roundEndReview,
     roundNumber,
     rounds: completedRounds,
     selectedParticipantId,
@@ -7282,6 +8304,16 @@ export function advanceCombatRoundStep(
 ): CombatRoundState {
   const normalized = combatRoundStateSchema.parse(state);
   const advanceCommand = input.command;
+  const startsNextRound = normalized.currentStep === "round_summary";
+
+  if (startsNextRound) {
+    const blocker = getCombatRoundStartNextRoundBlocker(normalized);
+
+    if (blocker) {
+      throw new RangeError(blocker);
+    }
+  }
+
   const commandBackedGlobalAdvanceStatuses =
     advanceCommand && isGlobalCombatRoundStep(normalized.currentStep)
       ? normalized.participants
@@ -7335,7 +8367,6 @@ export function advanceCombatRoundStep(
       })
     : withCommand;
   const nextStep = getNextCombatRoundStep(normalized.currentStep);
-  const startsNextRound = normalized.currentStep === "round_summary";
   const advancesDeclarationStep = normalized.currentStep === "select_actions";
   const startsPhaseResolution =
     nextStep === "phase_1_actions"
@@ -7396,6 +8427,7 @@ export function advanceCombatRoundStep(
       phaseResolutionResults: [],
       phaseResolutionStatuses: {},
       participants: nextParticipants,
+      roundEndReview: undefined,
       roundNumber: nextRoundNumber,
       rounds: [
         ...completedRoundState.rounds.filter(
@@ -9129,6 +10161,168 @@ function undoCombatRoundResolvedDamageCommandAtIndex(input: {
   };
 }
 
+function undoCombatRoundEndReviewPrepareCommandAtIndex(input: {
+  commandIndex: number;
+  state: CombatRoundState;
+}): CombatRoundState | undefined {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const command = normalized.commands[input.commandIndex];
+
+  if (
+    !command ||
+    command.roundNumber !== normalized.roundNumber ||
+    command.type !== "prepare_round_end_review"
+  ) {
+    return undefined;
+  }
+
+  return combatRoundStateSchema.parse({
+    ...normalized,
+    commands: normalized.commands.filter((_, index) => index !== input.commandIndex),
+    currentCursor: command.beforeCursor,
+    currentStep: "round_summary",
+    participants: normalized.participants.map((participant) => ({
+      ...participant,
+      stepStatuses: {
+        ...participant.stepStatuses,
+        round_summary: "pending",
+      },
+    })),
+    roundEndReview: undefined,
+    selectedParticipantId: command.beforeCursor.participantId,
+    selectedStep: "round_summary",
+  });
+}
+
+function undoCombatRoundEndParticipantReviewCommitCommandAtIndex(input: {
+  commandIndex: number;
+  state: CombatRoundState;
+}): CombatRoundState | undefined {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const command = normalized.commands[input.commandIndex];
+
+  if (
+    !command ||
+    command.roundNumber !== normalized.roundNumber ||
+    command.type !== "commit_round_end_participant_review"
+  ) {
+    return undefined;
+  }
+
+  const roundEndReview = normalized.roundEndReview;
+  const participantReview = roundEndReview?.participantReviews[command.participantId];
+
+  if (!roundEndReview || !participantReview) {
+    return undefined;
+  }
+
+  const restoredReview = combatRoundEndParticipantReviewSchema.parse({
+    ...participantReview,
+    committedAt: undefined,
+    committedByUserId: undefined,
+    proposedHealthRolls: participantReview.proposedHealthRolls.map((proposal) => ({
+      ...proposal,
+      result: undefined,
+      status: "pending" as const,
+    })),
+    status: "review_ready",
+  });
+
+  return combatRoundStateSchema.parse({
+    ...normalized,
+    commands: normalized.commands.filter((_, index) => index !== input.commandIndex),
+    currentCursor: command.beforeCursor,
+    currentStep: "round_summary",
+    participants: normalized.participants.map((participant) =>
+      participant.participantId === command.participantId
+        ? {
+            ...participant,
+            stepStatuses: {
+              ...participant.stepStatuses,
+              round_summary: "ready",
+            },
+          }
+        : participant,
+    ),
+    roundEndReview: {
+      ...roundEndReview,
+      participantReviews: {
+        ...roundEndReview.participantReviews,
+        [command.participantId]: restoredReview,
+      },
+    },
+    selectedParticipantId: command.beforeCursor.participantId,
+    selectedStep: "round_summary",
+  });
+}
+
+function undoCombatRoundEndHealthCheckCommandAtIndex(input: {
+  commandIndex: number;
+  state: CombatRoundState;
+}): CombatRoundState | undefined {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const command = normalized.commands[input.commandIndex];
+
+  if (
+    !command ||
+    command.roundNumber !== normalized.roundNumber ||
+    command.type !== "roll_round_end_health_check"
+  ) {
+    return undefined;
+  }
+
+  const healthRollId =
+    typeof command.facts.healthRollId === "string" ? command.facts.healthRollId : undefined;
+  const roundEndReview = normalized.roundEndReview;
+  const participantReview = roundEndReview?.participantReviews[command.participantId];
+
+  if (!roundEndReview || !participantReview || !healthRollId) {
+    return undefined;
+  }
+
+  const restoredHealthRolls = participantReview.proposedHealthRolls.map((proposal) =>
+    proposal.id === healthRollId
+      ? combatRoundEndHealthRollProposalSchema.parse({
+          ...proposal,
+          result: undefined,
+          status: "pending",
+        })
+      : proposal,
+  );
+  const restoredReview = combatRoundEndParticipantReviewSchema.parse({
+    ...participantReview,
+    proposedHealthRolls: restoredHealthRolls,
+    status: "health_roll_pending",
+  });
+
+  return combatRoundStateSchema.parse({
+    ...normalized,
+    commands: normalized.commands.filter((_, index) => index !== input.commandIndex),
+    currentCursor: command.beforeCursor,
+    currentStep: "round_summary",
+    participants: normalized.participants.map((participant) =>
+      participant.participantId === command.participantId
+        ? {
+            ...participant,
+            stepStatuses: {
+              ...participant.stepStatuses,
+              round_summary: "ready",
+            },
+          }
+        : participant,
+    ),
+    roundEndReview: {
+      ...roundEndReview,
+      participantReviews: {
+        ...roundEndReview.participantReviews,
+        [command.participantId]: restoredReview,
+      },
+    },
+    selectedParticipantId: command.beforeCursor.participantId,
+    selectedStep: "round_summary",
+  });
+}
+
 export function undoLatestCombatRoundGlobalCommand(input: {
   state: CombatRoundState;
 }): CombatRoundState | undefined {
@@ -9202,6 +10396,27 @@ function undoCombatRoundCommandAtIndex(input: {
 
   if (command.type === "commit_phase_damage") {
     return undoCombatRoundCommittedDamageCommandAtIndex({
+      commandIndex: input.commandIndex,
+      state: normalized,
+    });
+  }
+
+  if (command.type === "roll_round_end_health_check") {
+    return undoCombatRoundEndHealthCheckCommandAtIndex({
+      commandIndex: input.commandIndex,
+      state: normalized,
+    });
+  }
+
+  if (command.type === "commit_round_end_participant_review") {
+    return undoCombatRoundEndParticipantReviewCommitCommandAtIndex({
+      commandIndex: input.commandIndex,
+      state: normalized,
+    });
+  }
+
+  if (command.type === "prepare_round_end_review") {
+    return undoCombatRoundEndReviewPrepareCommandAtIndex({
       commandIndex: input.commandIndex,
       state: normalized,
     });
@@ -10088,6 +11303,60 @@ function getCombatRoundLatestEventForCommand(input: {
     };
   }
 
+  if (command.type === "roll_round_end_health_check") {
+    const finalTotal = getCombatRoundLatestEventFactNumber(facts, "finalTotal");
+    const difficulty = getCombatRoundLatestEventFactNumber(facts, "difficulty");
+    const success = getCombatRoundLatestEventFactBoolean(facts, "success");
+
+    return {
+      commandId: command.id,
+      roundNumber: command.roundNumber,
+      shortTitle: success ? "Health roll succeeded" : "Health roll failed",
+      step: command.step,
+      summaryText: `Round ${command.roundNumber}, SU: ${actorLabel} rolled health ${
+        finalTotal ?? "?"
+      }${difficulty !== undefined ? ` vs ${difficulty}` : ""}${
+        success === undefined ? "" : success ? " and succeeded." : " and failed."
+      }`,
+    };
+  }
+
+  if (command.type === "commit_round_end_participant_review") {
+    const damageIds = getCombatRoundLatestEventFactArray(
+      facts,
+      "acceptedDamageProposalIds",
+    );
+    const healthIds = getCombatRoundLatestEventFactArray(facts, "acceptedHealthRollIds");
+
+    return {
+      commandId: command.id,
+      details:
+        healthIds.length > 0
+          ? `${healthIds.length} health roll${healthIds.length === 1 ? "" : "s"} pending.`
+          : undefined,
+      roundNumber: command.roundNumber,
+      shortTitle: "Round-end review committed",
+      step: command.step,
+      summaryText: `Round ${command.roundNumber}, SU: ${actorLabel} round-end review committed${
+        damageIds.length > 0
+          ? ` with ${damageIds.length} bleed damage proposal${
+              damageIds.length === 1 ? "" : "s"
+            } applied`
+          : ""
+      }.`,
+    };
+  }
+
+  if (command.type === "prepare_round_end_review") {
+    return {
+      commandId: command.id,
+      roundNumber: command.roundNumber,
+      shortTitle: "Round-end review ready",
+      step: command.step,
+      summaryText: `Round ${command.roundNumber}, SU: Round-end review proposals prepared.`,
+    };
+  }
+
   if (command.type === "commit_phase_damage") {
     const attackerLabel = getCombatRoundLatestEventLabel({
       labelByParticipantId,
@@ -10355,6 +11624,7 @@ export function getCombatRoundTimelineRoundStates(state: CombatRoundState): Comb
         phaseResolutionResults: round.phaseResolutionResults,
         phaseResolutionStatuses: round.phaseResolutionStatuses,
         participants: round.participants,
+        roundEndReview: round.roundEndReview,
         roundNumber: round.roundNumber,
         rounds: [],
         selectedParticipantId: round.selectedParticipantId,

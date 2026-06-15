@@ -381,9 +381,16 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("manualSelectionRef.current = undefined");
     expect(source).toContain("Use inspector for phase resolution");
     expect(source).toContain("isSequentialResolutionStep(inspector.step)");
-    expect(source).toContain(
-      "disabled={saving || !selectedRoundIsActive || inspectorSelectedStepIsSequential}",
-    );
+    expect(source).toContain("roundEndStartNextRoundBlocker");
+    expect(source).toContain("getCombatRoundStartNextRoundBlocker");
+    expect(source).toContain("isCombatRoundEndReviewComplete");
+    expect(source).toContain("Build/Review round-end effects");
+    expect(source).toContain("Commit participant SU review");
+    expect(source).toContain("Roll health check");
+    expect(source).toContain("CombatRoundEndReviewPanel");
+    expect(source).toContain("prepareCombatRoundEndReview");
+    expect(source).toContain("commitCombatRoundEndParticipantReview");
+    expect(source).toContain("rollCombatRoundEndHealthCheck");
     expect(source).toContain("const commandParticipantId =");
     expect(source).toContain("advanceCombatRoundStep(stateForCommit, advanceInput)");
     expect(source).toContain("command: {");
