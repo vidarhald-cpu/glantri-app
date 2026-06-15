@@ -5315,12 +5315,15 @@ describe("combat round manager", () => {
     expect(afterDamage.phaseResolutionResults[0]?.damageResult).toMatchObject({
       damageLookupTotal: 20,
       damageRoll: {
+        grazingDieSides: 7,
         grazingReferenceDamage: 7,
         grazingReferenceDamageLookupTotal: 20,
         grazingReferenceHitLookupTotal: 12,
+        grazingReferenceTableDamage: 7,
         derivedFromLookupTotal: 12,
         derivedNormalDamageTotal: 7,
         diceExpression: "1d7",
+        rawGrazingDamage: 1,
         required: true,
         rolls: [1],
         total: 1,
@@ -5355,7 +5358,7 @@ describe("combat round manager", () => {
     expect(cleared.phaseResolutionResults[0]?.hitLocationRoll.status).toBe("rolled");
   });
 
-  it("uses armor modifier for grazing damage reference lookup", () => {
+  it("uses raw reference table damage for the grazing die before armor modifier", () => {
     const result = buildCombatRoundAttackRollResult({
       actionId: "attack_parry",
       attackerParticipantId: "gladiator",
@@ -5388,10 +5391,13 @@ describe("combat round manager", () => {
       armorModifier: -2,
       damageLookupTotal: 20,
       damageRoll: {
-        diceExpression: "1d5",
-        grazingReferenceDamage: 5,
+        diceExpression: "1d7",
+        grazingDieSides: 7,
+        grazingReferenceDamage: 7,
         grazingReferenceDamageLookupTotal: 20,
         grazingReferenceHitLookupTotal: 12,
+        grazingReferenceTableDamage: 7,
+        rawGrazingDamage: 1,
         required: true,
         rolls: [1],
         total: 1,
@@ -5399,7 +5405,184 @@ describe("combat round manager", () => {
       hitLookupTotal: 11,
       selectedHitLocation: "abdomen",
       tableDamage: 7,
+      totalDamage: 0,
+    });
+    expect(
+      getCombatRoundEffectiveDamageResult({
+        ...damageResult,
+        review: {
+          additionalEffects: [],
+          armorModifierOverride: -2,
+          operationalConsequences: [],
+          reviewedAt: "2026-01-01T00:06:00.000Z",
+        },
+      }),
+    ).toMatchObject({
+      effectiveDamageRoll: expect.objectContaining({
+        diceExpression: "1d7",
+        rawGrazingDamage: 1,
+      }),
+      effectiveProvisionalDamageAfterArmor: -1,
+      effectiveRawTotalDamage: 0,
+      effectiveTotalDamage: 0,
+      requiresTotalDamageOverride: false,
+    });
+  });
+
+  it("applies armor value after the raw grazing roll", () => {
+    const result = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackerParticipantId: "gladiator",
+      defenderDb: 10,
+      defenderParticipantId: "guard",
+      ob: 10,
+      phase: "phase1",
+      rollD20: 11,
+      rollTotal: 11,
+      rolledAt: "2026-01-01T00:03:00.000Z",
+      weaponName: "Broad sword",
+    });
+    const damageResult = buildCombatRoundDamageResult({
+      armorCoverage: {
+        chest: {
+          armorClass: "B",
+          coverageLabel: "3B",
+          label: "Chest",
+          value: 3,
+        },
+      },
+      attackResult: result,
+      createdAt: "2026-01-01T00:05:00.000Z",
+      defenderDm: 0,
+      dmb: 7,
+      hitLocationSelection: fixedChestLocationSelection(),
+      rng: () => 0.2,
+      roundNumber: 3,
+    });
+
+    expect(damageResult).toMatchObject({
+      armorValue: 3,
+      damageLookupTotal: 19,
+      damageRoll: {
+        diceExpression: "1d6",
+        grazingDieSides: 6,
+        grazingReferenceDamage: 6,
+        grazingReferenceTableDamage: 6,
+        rawGrazingDamage: 2,
+        rolls: [2],
+        total: 2,
+      },
+      minDamage: undefined,
+      provisionalDamageAfterArmor: -1,
+      tableDamage: 6,
+      totalDamage: 0,
+    });
+  });
+
+  it("applies minimum damage after armor reduces a grazing roll", () => {
+    const result = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackerParticipantId: "gladiator",
+      defenderDb: 10,
+      defenderParticipantId: "guard",
+      ob: 10,
+      phase: "phase1",
+      rollD20: 11,
+      rollTotal: 11,
+      rolledAt: "2026-01-01T00:03:00.000Z",
+      weaponName: "Broad sword",
+    });
+    const damageResult = buildCombatRoundDamageResult({
+      armorCoverage: {
+        chest: {
+          armorClass: "B",
+          coverageLabel: "3B",
+          label: "Chest",
+          value: 3,
+        },
+      },
+      attackResult: result,
+      createdAt: "2026-01-01T00:05:00.000Z",
+      defenderDm: 0,
+      dmb: 10,
+      hitLocationSelection: fixedChestLocationSelection(),
+      rng: () => 0,
+      roundNumber: 3,
+    });
+
+    expect(damageResult).toMatchObject({
+      armorValue: 3,
+      damageLookupTotal: 22,
+      damageRoll: {
+        diceExpression: "1d9",
+        grazingDieSides: 9,
+        grazingReferenceDamage: 9,
+        grazingReferenceTableDamage: 9,
+        rawGrazingDamage: 1,
+        rolls: [1],
+        total: 1,
+      },
+      minDamage: 1,
+      minimumDamageAfterArmor: 1,
+      provisionalDamageAfterArmor: -2,
       totalDamage: 1,
+    });
+  });
+
+  it("applies critical minimum after armor-adjusted grazing damage", () => {
+    const result = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackerParticipantId: "gladiator",
+      defenderDb: 10,
+      defenderParticipantId: "guard",
+      ob: 10,
+      phase: "phase1",
+      rollD20: 11,
+      rollTotal: 11,
+      rolledAt: "2026-01-01T00:03:00.000Z",
+      weaponName: "Broad sword",
+    });
+    const damageResult = buildCombatRoundDamageResult({
+      armorCoverage: {
+        chest: {
+          armorClass: "B",
+          coverageLabel: "3B",
+          label: "Chest",
+          value: 3,
+        },
+      },
+      attackResult: result,
+      createdAt: "2026-01-01T00:05:00.000Z",
+      defenderDm: 0,
+      dmb: 7,
+      hitLocationSelection: fixedChestLocationSelection(),
+      rng: () => 0.2,
+      roundNumber: 3,
+    });
+    const reviewedDamageResult = {
+      ...damageResult,
+      review: {
+        additionalEffects: [
+          {
+            id: "critical-min-floor",
+            kind: "note" as const,
+            label: "Minimum damage floor 5",
+            minTotalDamage: 5,
+            notes: "Critical minimum damage floor.",
+          },
+        ],
+        operationalConsequences: [],
+        reviewedAt: "2026-01-01T00:06:00.000Z",
+      },
+    };
+
+    expect(getCombatRoundEffectiveDamageResult(reviewedDamageResult)).toMatchObject({
+      criticalMinApplied: true,
+      criticalMinExtra: 5,
+      criticalMinTotalDamage: 5,
+      effectiveRawTotalDamage: 0,
+      effectiveTotalDamage: 5,
+      preCriticalEffectiveDamage: 0,
     });
   });
 
@@ -5430,12 +5613,15 @@ describe("combat round manager", () => {
     expect(damageResult).toMatchObject({
       damageLookupTotal: 12,
       damageRoll: {
+        grazingDieSides: 1,
         grazingReferenceDamage: 1,
         grazingReferenceDamageLookupTotal: 12,
         grazingReferenceHitLookupTotal: 12,
+        grazingReferenceTableDamage: 1,
         derivedFromLookupTotal: 12,
         derivedNormalDamageTotal: 1,
         diceExpression: "1d1",
+        rawGrazingDamage: 1,
         required: true,
         rolls: [1],
         total: 1,

@@ -596,10 +596,13 @@ function formatCombatDamageCalculationLine(
   const tableDamage = effectiveDamage.effectiveTableDamage;
 
   if (damage.grazing && damage.damageRoll.required) {
+    const rawGrazingDamage =
+      effectiveDamage.effectiveDamageRoll.rawGrazingDamage ??
+      effectiveDamage.effectiveDamageRoll.total;
     const rollLabel =
       effectiveDamage.effectiveDamageRoll.diceExpression &&
-      effectiveDamage.effectiveDamageRoll.total !== undefined
-        ? `${effectiveDamage.effectiveDamageRoll.diceExpression} ${effectiveDamage.effectiveDamageRoll.total}`
+      rawGrazingDamage !== undefined
+        ? `${effectiveDamage.effectiveDamageRoll.diceExpression} = ${rawGrazingDamage}`
         : "required roll";
     const referenceHitLookupTotal =
       effectiveDamage.effectiveDamageRoll.grazingReferenceHitLookupTotal ??
@@ -608,16 +611,17 @@ function formatCombatDamageCalculationLine(
       effectiveDamage.effectiveDamageRoll.grazingReferenceDamageLookupTotal ??
       effectiveDamage.effectiveDamageLookupTotal;
     const referenceDamage =
+      effectiveDamage.effectiveDamageRoll.grazingReferenceTableDamage ??
       effectiveDamage.effectiveDamageRoll.grazingReferenceDamage ??
       effectiveDamage.effectiveDamageRoll.derivedNormalDamageTotal;
     const referenceLabel =
       referenceHitLookupTotal !== undefined &&
       referenceDamageLookupTotal !== undefined &&
       referenceDamage !== undefined
-        ? `grazing reference hit ${referenceHitLookupTotal} + DMB ${damage.dmb} + DM ${damage.defenderDm} = lookup ${referenceDamageLookupTotal}; armor-adjusted reference damage ${referenceDamage}`
+        ? `grazing reference: hit ${referenceHitLookupTotal} + DMB ${damage.dmb} + DM ${damage.defenderDm} = lookup ${referenceDamageLookupTotal}; raw reference damage ${referenceDamage}`
         : "grazing reference damage lookup";
 
-    return `${referenceLabel}; roll ${rollLabel} = ${effectiveDamage.effectiveTotalDamage}`;
+    return `${referenceLabel}; raw grazing die: ${rollLabel}`;
   }
 
   if (hitLookupTotal === undefined || effectiveDamage.effectiveDamageLookupTotal === undefined) {
@@ -654,7 +658,12 @@ function formatCombatDamageResultLine(
   const tableDamage = effectiveDamage.effectiveTableDamage ?? effectiveDamage.effectiveTotalDamage;
 
   if (damage.grazing && damage.damageRoll.required) {
-    return `grazing roll ${effectiveDamage.effectiveRawTotalDamage}${critical}${minDamage}${maxDamage}${criticalMinimum}`;
+    const rawGrazingDamage =
+      effectiveDamage.effectiveDamageRoll.rawGrazingDamage ??
+      effectiveDamage.effectiveDamageRoll.total ??
+      effectiveDamage.effectiveRawTotalDamage;
+
+    return `raw grazing damage ${rawGrazingDamage}${critical}${minDamage}${maxDamage}${criticalMinimum}`;
   }
 
   return `table damage ${tableDamage}${critical}${minDamage}${maxDamage}${criticalMinimum}`;

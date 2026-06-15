@@ -552,9 +552,12 @@ export const combatRoundDamageResultSchema = z.object({
       derivedFromLookupTotal: z.number().int().optional(),
       derivedNormalDamageTotal: z.number().int().optional(),
       diceExpression: z.string().min(1).optional(),
+      grazingDieSides: z.number().int().min(1).optional(),
       grazingReferenceDamage: z.number().int().optional(),
       grazingReferenceDamageLookupTotal: z.number().int().optional(),
       grazingReferenceHitLookupTotal: z.number().int().optional(),
+      grazingReferenceTableDamage: z.number().int().optional(),
+      rawGrazingDamage: z.number().int().optional(),
       required: z.boolean(),
       rolls: z.array(z.number().int()).optional(),
       total: z.number().int().optional(),
@@ -4122,40 +4125,49 @@ export function getCombatRoundEffectiveDamageResult(
       effectiveTableDamage = metadata.damage;
       effectiveMaxDamageNote = metadata.maxDamageNote;
       effectiveMinDamage = metadata.minDamage;
-      const adjustedReferenceDamage = calculateCombatRoundArmorAdjustedDamage({
-        armorDamageModifier: effectiveArmorModifier,
-        armorValue: armorContext.armorValue,
-        tableDamage: metadata.damage,
-        tableMinDamage: metadata.minDamage,
-      });
-      effectiveMinimumDamageAfterArmor = adjustedReferenceDamage.minimumDamageAfterArmor;
-      effectiveProvisionalDamageAfterArmor =
-        adjustedReferenceDamage.provisionalDamageAfterArmor;
       effectiveCriticalGrade = getCombatRoundReviewedCriticalGrade({
         computedCriticalGrade: damageResult.criticalGrade,
         review: damageResult.review,
         tableCriticalGrade: undefined,
       });
 
-      const dieSides = Math.max(1, adjustedReferenceDamage.rawTotalDamage);
+      const referenceTableDamage = metadata.damage;
+      const dieSides = Math.max(1, referenceTableDamage);
       const existingRoll =
         computedDamageRoll.rolls?.[0] ?? computedDamageRoll.total ?? damageResult.totalDamage;
       const canKeepExistingRoll =
         Number.isInteger(existingRoll) && existingRoll >= 1 && existingRoll <= dieSides;
       requiresTotalDamageOverride = !hasTotalDamageOverride && !canKeepExistingRoll;
+      const rawGrazingDamage =
+        canKeepExistingRoll && !hasTotalDamageOverride ? existingRoll : computedDamageRoll.total;
+      const adjustedGrazingDamage =
+        rawGrazingDamage !== undefined
+          ? calculateCombatRoundArmorAdjustedDamage({
+              armorDamageModifier: effectiveArmorModifier,
+              armorValue: armorContext.armorValue,
+              tableDamage: rawGrazingDamage,
+              tableMinDamage: metadata.minDamage,
+            })
+          : undefined;
+      effectiveMinimumDamageAfterArmor = adjustedGrazingDamage?.minimumDamageAfterArmor;
+      effectiveProvisionalDamageAfterArmor =
+        adjustedGrazingDamage?.provisionalDamageAfterArmor;
       effectiveRawTotalDamage = hasTotalDamageOverride
         ? damageResult.review?.totalDamageOverride ?? 0
-        : existingRoll;
+        : adjustedGrazingDamage?.rawTotalDamage ?? damageResult.totalDamage;
       effectiveDamageRoll = {
         derivedFromLookupTotal: grazingReferenceHitLookupTotal,
-        derivedNormalDamageTotal: adjustedReferenceDamage.rawTotalDamage,
+        derivedNormalDamageTotal: referenceTableDamage,
         diceExpression: `1d${dieSides}`,
-        grazingReferenceDamage: adjustedReferenceDamage.rawTotalDamage,
+        grazingDieSides: dieSides,
+        grazingReferenceDamage: referenceTableDamage,
         grazingReferenceDamageLookupTotal: effectiveDamageLookupTotal,
         grazingReferenceHitLookupTotal,
+        grazingReferenceTableDamage: referenceTableDamage,
+        rawGrazingDamage,
         required: true,
         rolls: canKeepExistingRoll && !hasTotalDamageOverride ? [existingRoll] : undefined,
-        total: effectiveRawTotalDamage,
+        total: hasTotalDamageOverride ? rawGrazingDamage : existingRoll,
       };
     } else {
       effectiveDamageLookupTotal = calculateCombatRoundDamageLookupTotal({
@@ -4393,13 +4405,7 @@ export function buildCombatRoundDamageResult(input: {
     const grazingReferenceDamageMetadata = getCombatRoundDamageMetadataForLookup(
       grazingReferenceDamageLookupTotal,
     );
-    const adjustedReferenceDamage = calculateCombatRoundArmorAdjustedDamage({
-      armorDamageModifier: armorModifier,
-      armorValue: armorContext.armorValue,
-      tableDamage: grazingReferenceDamageMetadata.damage,
-      tableMinDamage: grazingReferenceDamageMetadata.minDamage,
-    });
-    const grazingReferenceDamage = adjustedReferenceDamage.rawTotalDamage;
+    const grazingReferenceDamage = grazingReferenceDamageMetadata.damage;
     const dieSides = Math.max(1, grazingReferenceDamage);
 
     damageRollTotal = rollCombatDamageDie({
@@ -4413,9 +4419,12 @@ export function buildCombatRoundDamageResult(input: {
       derivedFromLookupTotal: grazingReferenceHitLookupTotal,
       derivedNormalDamageTotal: grazingReferenceDamage,
       diceExpression: `1d${dieSides}`,
+      grazingDieSides: dieSides,
       grazingReferenceDamage,
       grazingReferenceDamageLookupTotal,
       grazingReferenceHitLookupTotal,
+      grazingReferenceTableDamage: grazingReferenceDamage,
+      rawGrazingDamage: damageRollTotal,
       required: true,
       rolls: [damageRollTotal],
       total: damageRollTotal,
@@ -4429,13 +4438,12 @@ export function buildCombatRoundDamageResult(input: {
   }
 
   const adjustedDamage = input.attackResult.grazing
-    ? {
-        minimumDamageAfterArmor:
-          minDamage === undefined ? undefined : Math.max(0, minDamage + armorModifier),
-        minimumDamageBeforeArmor: minDamage,
-        provisionalDamageAfterArmor: tableDamage - armorContext.armorValue + armorModifier,
-        rawTotalDamage: damageRollTotal,
-      }
+    ? calculateCombatRoundArmorAdjustedDamage({
+        armorDamageModifier: armorModifier,
+        armorValue: armorContext.armorValue,
+        tableDamage: damageRollTotal,
+        tableMinDamage: minDamage,
+      })
     : calculateCombatRoundArmorAdjustedDamage({
         armorDamageModifier: armorModifier,
         armorValue: armorContext.armorValue,

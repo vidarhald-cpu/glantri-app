@@ -244,7 +244,9 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).not.toContain('<option value="">Computed</option>');
     expect(source).not.toContain("Computed: {computedLocation}");
     expect(source).not.toContain("Effective: {effectiveLocation}");
-    expect(source).toContain("`${referenceLabel}; roll ${rollLabel}");
+    expect(source).toContain("raw grazing die");
+    expect(source).toContain("raw reference damage");
+    expect(source).not.toContain("armor-adjusted reference damage");
     expect(source).toContain("hit ${hitLookupTotal} + DMB ${damage.dmb}");
     expect(source).toContain("table damage ${tableDamage}");
     expect(source).toContain("Location: ${selected}");

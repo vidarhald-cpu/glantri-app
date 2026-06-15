@@ -85,8 +85,9 @@ visible for audit.
 
 Grazing-hit damage does not use a fixed row modifier. A grazing hit at hit lookup `11`
 uses hit lookup `12` as its reference, then applies the same DMB and defender DM to find the
-reference damage lookup row. Armor is then applied to that reference damage. The grazing hit rolls
-`1dX`, where `X` is the armor-adjusted reference damage. For example, weapon DMB `8`, defender DM
+reference damage lookup row. The grazing hit rolls `1dX`, where `X` is the raw table damage on that
+reference row before armor. Armor, minimum damage, max damage, and critical minimum floors are then
+applied to the rolled grazing damage. For example, weapon DMB `8`, defender DM
 `0`, and no armor make the reference damage lookup `12 + 8 + 0 = 20`; row `20` gives table damage
 `7`, so the grazing hit rolls `1d7`.
 
@@ -121,8 +122,9 @@ selected location, and why that selection was made; the damage proposal consumes
 and will not create a proposal while location is missing.
 
 For grazing hits, the required roll is the final damage result. Weapon DMB and defender DM are used
-with reference hit lookup `12` to derive the reference table row, armor is applied to that reference
-damage, and only the grazing roll total is stored as damage.
+with reference hit lookup `12` to derive the raw reference table row, then the grazing die is rolled
+before armor is applied. The proposal stores both the raw grazing roll and the final armor-adjusted
+damage for audit.
 
 The armor modifier table is available as structured rule data. Current D1/D2 proposals read equipped
 armor coverage by reviewed hit location and front/back direction, subtract armor value from table
@@ -144,9 +146,8 @@ also carry notes and manual additional effect rows. Additional effect rows can b
 fatigue, special, or note rows. Modifier rows use the existing General/Fatigue, OB/Skill, and
 DB/Parry live modifier groups; special and note rows are descriptive until the GM adds explicit
 modifier values. The effective damage preview is recalculated from the reviewed armor modifier and
-selected location where applicable. For grazing hits, changing armor can change the reviewed die size;
-if the original grazing roll no longer fits that die, the GM must enter a total damage override before
-commit.
+selected location where applicable. For grazing hits, changing armor changes the final
+armor-adjusted damage but does not change the already rolled grazing die size.
 
 The proposal is not applied until the GM uses Commit phase damage. That command writes one
 combat-effect event and, when total damage is positive, one active physical damage effect row for the
