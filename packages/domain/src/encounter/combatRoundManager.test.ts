@@ -4088,6 +4088,44 @@ describe("combat round manager", () => {
     });
   });
 
+  it("can draft the damage proposal immediately after hit-location roll", () => {
+    const pending = prepareFailedParryPendingDamage({});
+    const afterLocationAndDamage = recordCombatRoundHitLocationRoll({
+      attackResult: pending.attackResult,
+      command: {
+        createdAt: "2026-01-01T00:04:30.000Z",
+        createdByUserId: "gm-1",
+      },
+      damageProposal: {
+        defenderDm: 0,
+        dmb: 8,
+      },
+      hitLocationRolls: [12],
+      rolledByParticipantId: "gladiator",
+      state: pending.state,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:04:30.000Z",
+    });
+    const resolution = afterLocationAndDamage.phaseResolutionResults[0];
+
+    expect(resolution?.hitLocationRoll.status).toBe("rolled");
+    expect(resolution?.damageProposal.status).toBe("drafted");
+    expect(resolution?.damageResult).toMatchObject({
+      defenderDm: 0,
+      dmb: 8,
+      selectedHitLocation: "chest",
+    });
+    expect(getCombatRoundDamageSubstate(resolution)).toBe("critical_pending");
+    expect(afterLocationAndDamage.commands.slice(-2).map((command) => command.type)).toEqual([
+      "roll_hit_location",
+      "resolve_damage",
+    ]);
+    expect(afterLocationAndDamage.currentCursor).toMatchObject({
+      participantId: "guard",
+      step: "D1",
+    });
+  });
+
   it("requires location before damage and tracks critical substates", () => {
     const pending = prepareFailedParryPendingDamage({});
 

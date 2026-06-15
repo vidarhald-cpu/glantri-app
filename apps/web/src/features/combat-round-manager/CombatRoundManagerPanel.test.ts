@@ -191,7 +191,8 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("Parry failed");
     expect(source).toContain("Roll hit location");
     expect(source).toContain("Roll critical");
-    expect(source).toContain("Resolve damage");
+    expect(source).not.toContain("Resolve damage");
+    expect(source).toContain("Prepare damage review");
     expect(source).toContain("Commit phase damage");
     expect(source).toContain("Phase damage committed");
     expect(source).toContain("Damage review");
@@ -253,6 +254,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("damage${formatCombatDamageResultLocationSuffix(damageResult)}");
     expect(source).toContain("targetLocation:");
     expect(source).toContain("attackerRoundParticipant?.declaration?.phaseContexts?.[phase]?.targetLocation");
+    expect(source).toContain("damageProposal,");
     expect(source).toContain("Damage roll: ${formatResolutionStatusLabel");
     expect(source).toContain("Proposal: ${formatResolutionStatusLabel");
     expect(source).toContain("Effects: ${damageResult.review.additionalEffects");

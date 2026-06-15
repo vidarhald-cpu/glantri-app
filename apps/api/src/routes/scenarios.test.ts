@@ -3598,6 +3598,146 @@ describe("scenarios route contract", () => {
     );
   });
 
+  it("drafts damage from player hit-location roll when combat snapshots are available", async () => {
+    const encounterParticipants = [
+      makeCombatEncounter().participants[0],
+      {
+        ...makeCombatEncounter().participants[0],
+        id: "encounter-participant-2",
+        label: "City guard",
+        scenarioParticipantId: "participant-2",
+      },
+    ];
+    const combatEncounter = makeCombatEncounter({
+      participants: encounterParticipants,
+    }) as EncounterSession;
+    const attackHit = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackerParticipantId: "encounter-participant-1",
+      defenderDb: 10,
+      defenderParticipantId: "encounter-participant-2",
+      ob: 10,
+      phase: "phase1",
+      rollD20: 14,
+      rollTotal: 14,
+      rolledAt: "2026-01-01T00:03:00.000Z",
+      weaponName: "Broad sword",
+    });
+    const afterAttack = recordCombatRoundAttackResult({
+      command: {
+        createdAt: attackHit.rolledAt,
+        createdByUserId: "gm-1",
+      },
+      participantId: "encounter-participant-1",
+      result: attackHit,
+      state: initializeCombatRoundState({ encounter: combatEncounter }),
+      submittedBy: "gm",
+    });
+    const afterParry = recordCombatRoundParryResult({
+      attackResult: attackHit,
+      command: {
+        createdAt: "2026-01-01T00:04:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      parryResolution: {
+        combinedParryScore: 9,
+        modifierAdjustment: 0,
+        openEndedD10s: [],
+        resultLabel: "Parry failed",
+        rollD20: 8,
+        rollTotal: 8,
+        status: "resolved",
+        success: false,
+        targetNumber: 21,
+        total: 17,
+      },
+      state: afterAttack,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:04:00.000Z",
+    });
+    const scenarioParticipants = [
+      makeCombatScenarioParticipant({ id: "participant-1" }),
+      makeCombatScenarioParticipant({
+        controlledByUserId: "other-player",
+        id: "participant-2",
+      }),
+    ];
+
+    setupCombatDeclarationRoute({
+      encounter: {
+        combatRoundState: {
+          ...afterParry,
+          stepSnapshots: [
+            {
+              attackSummary: {
+                attackMode: "C",
+                dmb: "8",
+                initiative: "3",
+                maxCrits: "FS",
+                ob: "10",
+                weaponName: "Broad sword",
+              },
+              committedAt: "2026-01-01T00:02:00.000Z",
+              id: "snapshot-attack-damage",
+              participantId: "encounter-participant-1",
+              participantLabel: "The Gladiator",
+              phase: "phase1",
+              roundNumber: afterParry.roundNumber,
+              step: "phase_1_actions",
+            },
+            {
+              committedAt: "2026-01-01T00:02:00.000Z",
+              defenseSummary: {
+                db: "11",
+                dm: "0",
+                parry: "9",
+                sourceName: "Sword / shield",
+              },
+              id: "snapshot-defense-damage",
+              participantId: "encounter-participant-2",
+              participantLabel: "City guard",
+              phase: "phase1",
+              roundNumber: afterParry.roundNumber,
+              step: "phase_1_actions",
+            },
+          ],
+        },
+        participants: encounterParticipants,
+      },
+    });
+    mocks.scenarioService.listScenarioParticipants.mockResolvedValue(scenarioParticipants);
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        attackResultId: "1:phase1:encounter-participant-1:encounter-participant-2",
+        scenarioParticipantId: "participant-1",
+      },
+      url: "/encounters/encounter-1/combat-round/roll-hit-location",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
+    expect(
+      updatedEncounter.combatRoundState.commands
+        .slice(-2)
+        .map((command: { type: string }) => command.type),
+    ).toEqual(["roll_hit_location", "resolve_damage"]);
+    expect(updatedEncounter.combatRoundState.phaseResolutionResults[0]?.damageProposal.status).toBe(
+      "drafted",
+    );
+    expect(updatedEncounter.combatRoundState.phaseResolutionResults[0]?.damageResult).toMatchObject({
+      defenderDm: 0,
+      dmb: 8,
+    });
+    expect(updatedEncounter.combatRoundState.phaseResolutionResults[0]?.criticalRoll.status).toBe(
+      "pending",
+    );
+  });
+
   it("allows the attacking player to roll critical for their critical damage proposal", async () => {
     const encounterParticipants = [
       makeCombatEncounter().participants[0],

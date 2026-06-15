@@ -1512,12 +1512,43 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       const attackerRoundParticipant = roundState.participants.find(
         (participant) => participant.participantId === attackResult.attackerParticipantId,
       );
+      const latestAttackerSnapshot = [...roundState.stepSnapshots]
+        .reverse()
+        .find(
+          (snapshot) =>
+            snapshot.roundNumber === roundState.roundNumber &&
+            snapshot.participantId === attackResult.attackerParticipantId &&
+            snapshot.phase === attackResult.phase &&
+            snapshot.attackSummary,
+        );
+      const latestDefenderSnapshot = [...roundState.stepSnapshots]
+        .reverse()
+        .find(
+          (snapshot) =>
+            snapshot.roundNumber === roundState.roundNumber &&
+            snapshot.participantId === attackResult.defenderParticipantId &&
+            snapshot.phase === attackResult.phase &&
+            snapshot.defenseSummary,
+        );
+      const dmb = parseCombatSummaryInteger(latestAttackerSnapshot?.attackSummary?.dmb, "DMB");
+      const defenderDm = parseCombatSummaryInteger(
+        latestDefenderSnapshot?.defenseSummary?.dm,
+        "Defender DM",
+      );
+      const damageProposal =
+        dmb !== undefined && defenderDm !== undefined
+          ? {
+              defenderDm,
+              dmb,
+            }
+          : undefined;
       const nextRoundState = recordCombatRoundHitLocationRoll({
         attackResult,
         command: {
           createdAt: submittedAt,
           createdByUserId: user.id,
         },
+        damageProposal,
         rolledByParticipantId: encounterParticipant.id,
         state: roundState,
         submittedBy: access.mode === "gm" ? "gm" : "player",

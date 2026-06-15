@@ -4080,6 +4080,16 @@ export function recordCombatRoundHitLocationRoll(input: {
     createdAt: string;
     createdByUserId?: string;
   };
+  damageProposal?: {
+    armorCoverage?: CombatRoundDamageArmorCoverage;
+    armorModifier?: number;
+    armorModifierSource?: CombatRoundDamageResult["armorModifierSource"];
+    attackDirection?: CombatRoundAttackDirection;
+    attackerStrengthGm?: number;
+    defenderDm: number;
+    dmb: number;
+    weaponArmorClass?: CombatArmorModifierClass;
+  };
   hitLocationRolls?: number[];
   rng?: () => number;
   rolledByParticipantId: string;
@@ -4159,7 +4169,7 @@ export function recordCombatRoundHitLocationRoll(input: {
     step: damageStep,
   });
 
-  return input.command
+  const withLocationCommand = input.command
     ? recordCombatRoundHitLocationRollCommand({
         attackResult: input.attackResult,
         command: input.command,
@@ -4167,6 +4177,27 @@ export function recordCombatRoundHitLocationRoll(input: {
         state: withReadyDamage,
       })
     : withReadyDamage;
+
+  if (!input.damageProposal) {
+    return withLocationCommand;
+  }
+
+  return recordCombatRoundDamageResult({
+    armorCoverage: input.damageProposal.armorCoverage,
+    armorModifier: input.damageProposal.armorModifier,
+    armorModifierSource: input.damageProposal.armorModifierSource,
+    attackDirection: input.damageProposal.attackDirection,
+    attackerStrengthGm: input.damageProposal.attackerStrengthGm,
+    attackResult: input.attackResult,
+    command: input.command,
+    defenderDm: input.damageProposal.defenderDm,
+    dmb: input.damageProposal.dmb,
+    rng: input.rng,
+    state: withLocationCommand,
+    submittedBy: input.submittedBy,
+    updatedAt: input.updatedAt,
+    weaponArmorClass: input.damageProposal.weaponArmorClass,
+  });
 }
 
 export function recordCombatRoundDamageResult(input: {

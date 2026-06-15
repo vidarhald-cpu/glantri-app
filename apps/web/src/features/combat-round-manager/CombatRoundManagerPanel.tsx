@@ -968,7 +968,7 @@ function getCombatResolutionButtonLabel(input: {
   }
 
   if (input.phase && input.substep === "damage") {
-    return "Resolve damage";
+    return "Prepare damage review";
   }
 
   if (input.phase && input.substep === "effects") {
@@ -2822,9 +2822,13 @@ export default function CombatRoundManagerPanel({
     selectedTimelineRoundState,
   ]);
   const inspectorDamageCommitValidationMessage =
-    inspectorDamageProposalReady && inspectorDamageCommitReadiness?.ready === false
+    inspectorDamageProposalReady &&
+    inspectorDamageSubstate !== "critical_pending" &&
+    inspectorDamageCommitReadiness?.ready === false
       ? inspectorDamageCommitReadiness.reason
       : undefined;
+  const inspectorDamageReviewCommitReadiness =
+    inspectorDamageSubstate === "critical_pending" ? undefined : inspectorDamageCommitReadiness;
   const inspectorActionValidationMessage =
     inspectorTargetValidationMessage ??
     inspectorAttackSourceValidationMessage ??
@@ -2871,7 +2875,7 @@ export default function CombatRoundManagerPanel({
       : inspectorDamageSubstate === "location_pending"
         ? "Roll hit location"
       : inspectorDamageSubstate === "location_rolled"
-        ? "Resolve damage"
+        ? "Prepare damage review"
       : inspectorDamageProposalReady
         ? "Commit phase damage"
       : inspectorCanRollParry
@@ -4234,21 +4238,7 @@ export default function CombatRoundManagerPanel({
           (participant) =>
             participant.participantId === damageReviewAttackResult.attackerParticipantId,
         );
-
-        if (damageSubstate === "location_pending") {
-          nextRoundState = recordCombatRoundHitLocationRoll({
-            attackResult: damageReviewAttackResult,
-            command: {
-              createdAt: updatedAt,
-            },
-            rolledByParticipantId: damageReviewAttackResult.attackerParticipantId,
-            state: roundState,
-            submittedBy: "gm",
-            targetLocation:
-              attackerRoundParticipant?.declaration?.phaseContexts?.[phase]?.targetLocation,
-            updatedAt,
-          });
-        } else if (damageSubstate === "location_rolled") {
+        const buildDamageProposalInput = () => {
           const phaseLabel = formatCombatPhaseLabel(phase);
           const attackerEncounterParticipant = encounter.participants.find(
             (participant) => participant.id === damageReviewAttackResult.attackerParticipantId,
@@ -4269,30 +4259,59 @@ export default function CombatRoundManagerPanel({
 
           if (!attackStats) {
             setSaveError(`${phaseLabel} attack DMB is not available.`);
-            return;
+            return undefined;
           }
 
           if (!defenseStats) {
             setSaveError(`${phaseLabel} defender DM is not available.`);
+            return undefined;
+          }
+
+          return {
+            armorCoverage: inspectorParryDefenderPhaseSummary?.armorCoverage,
+            attackerStrengthGm: attackerPhaseSummary.strengthGm,
+            defenderDm: parseCombatInteger(defenseStats.dm, `${phaseLabel} defender DM`),
+            dmb: parseCombatInteger(attackStats.dmb, `${phaseLabel} DMB`),
+            weaponArmorClass: normalizeCombatArmorModifierClass(attackStats.weaponArmorClass),
+          };
+        };
+
+        if (damageSubstate === "location_pending") {
+          const damageProposal = buildDamageProposalInput();
+
+          if (!damageProposal) {
             return;
           }
 
-          const dmb = parseCombatInteger(attackStats.dmb, `${phaseLabel} DMB`);
-          const defenderDm = parseCombatInteger(defenseStats.dm, `${phaseLabel} defender DM`);
-
-          nextRoundState = recordCombatRoundDamageResult({
+          nextRoundState = recordCombatRoundHitLocationRoll({
             attackResult: damageReviewAttackResult,
             command: {
               createdAt: updatedAt,
             },
-            armorCoverage: inspectorParryDefenderPhaseSummary?.armorCoverage,
-            attackerStrengthGm: attackerPhaseSummary.strengthGm,
-            defenderDm,
-            dmb,
+            damageProposal,
+            rolledByParticipantId: damageReviewAttackResult.attackerParticipantId,
+            state: roundState,
+            submittedBy: "gm",
+            targetLocation:
+              attackerRoundParticipant?.declaration?.phaseContexts?.[phase]?.targetLocation,
+            updatedAt,
+          });
+        } else if (damageSubstate === "location_rolled") {
+          const damageProposal = buildDamageProposalInput();
+
+          if (!damageProposal) {
+            return;
+          }
+
+          nextRoundState = recordCombatRoundDamageResult({
+            ...damageProposal,
+            attackResult: damageReviewAttackResult,
+            command: {
+              createdAt: updatedAt,
+            },
             state: roundState,
             submittedBy: "gm",
             updatedAt,
-            weaponArmorClass: normalizeCombatArmorModifierClass(attackStats.weaponArmorClass),
           });
         } else if (damageSubstate === "critical_pending") {
           nextRoundState = recordCombatRoundCriticalRoll({
@@ -4989,7 +5008,7 @@ export default function CombatRoundManagerPanel({
                     {inspectorDamageProposalReady &&
                     inspectorDisplayPhaseResolutionResult?.damageResult ? (
                       <CombatDamageReviewPanel
-                        commitReadiness={inspectorDamageCommitReadiness}
+                        commitReadiness={inspectorDamageReviewCommitReadiness}
                         controlsDisabled={
                           saving || inspectorIsInspectionOnly || Boolean(inspectorSnapshot)
                         }
