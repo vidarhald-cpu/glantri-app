@@ -67,6 +67,7 @@ import {
   setCombatRoundActiveParticipant,
   setCombatRoundParticipantInitiative,
   setCombatRoundParticipantStepStatus,
+  skipCombatRoundCurrentPhaseAction,
   sortCombatRoundParticipantsByInitiative,
 } from "./combatRoundManager";
 import { encounterSessionSchema } from "./session";
@@ -4514,6 +4515,243 @@ describe("combat round manager", () => {
     ).toEqual(operationalConsequences);
   });
 
+  it("raises committed damage to critical minimum and cancels pending no-action attacks", () => {
+    const declared = declareRoundAction({
+      actionId: "attack_parry",
+      participantId: "gladiator",
+      state: declareRoundAction({
+        actionId: "parry_attack",
+        participantId: "guard",
+        state: initializeCombatRoundState({ encounter: encounter() }),
+      }),
+    });
+    const withSnapshot = combatRoundStateSchema.parse({
+      ...declared,
+      stepSnapshots: [
+        stepSnapshot({
+          attackSummary: {
+            attackMode: "Slash",
+            dmb: "8",
+            initiative: "2",
+            maxCrits: "FS",
+            ob: "12",
+            weaponName: "Broad sword",
+          },
+          participantId: "guard",
+          phase: "phase2",
+          step: "phase_2_actions",
+        }),
+      ],
+    });
+    const state = initializeCombatRoundPhaseResolutionCursor({
+      phase: "phase1",
+      state: setCombatRoundParticipantInitiative({
+        initiative: { baseInitiative: 0, modifierAdjustment: 0, rolls: [6], rollTotal: 6, total: 6 },
+        participantId: "gladiator",
+        phase: "phase1",
+        state: withSnapshot,
+      }),
+      updatedAt: "2026-01-01T00:02:00.000Z",
+    });
+    const attackResult = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackerParticipantId: "gladiator",
+      defenderDb: 10,
+      defenderParticipantId: "guard",
+      ob: 10,
+      phase: "phase1",
+      rollD20: 14,
+      rollTotal: 14,
+      rolledAt: "2026-01-01T00:03:00.000Z",
+      weaponCriticalCode: "FS",
+      weaponDamageClass: "edged",
+      weaponName: "Long sword",
+    });
+    const afterAttack = recordCombatRoundAttackResult({
+      command: {
+        createdAt: attackResult.rolledAt,
+        createdByUserId: "gm-1",
+      },
+      participantId: "gladiator",
+      result: attackResult,
+      state,
+      submittedBy: "gm",
+    });
+    const afterParry = recordCombatRoundParryResult({
+      attackResult,
+      command: {
+        createdAt: "2026-01-01T00:04:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      parryResolution: {
+        combinedParryScore: 9,
+        modifierAdjustment: 0,
+        openEndedD10s: [],
+        resultLabel: "Parry failed",
+        rollD20: 8,
+        rollTotal: 8,
+        status: "resolved",
+        success: false,
+        targetNumber: 21,
+        total: 17,
+      },
+      state: afterAttack,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:04:00.000Z",
+    });
+    const afterLocation = recordTestHitLocation({
+      attackResult,
+      command: {
+        createdAt: "2026-01-01T00:04:30.000Z",
+        createdByUserId: "gm-1",
+      },
+      hitLocationRolls: [17],
+      state: afterParry,
+    });
+    const afterDamage = recordCombatRoundDamageResult({
+      armorModifier: -7,
+      armorModifierSource: {
+        label: "Test armor adjustment",
+        status: "applied",
+      },
+      attackResult,
+      command: {
+        createdAt: "2026-01-01T00:05:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      defenderDm: 0,
+      dmb: 8,
+      state: afterLocation,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:05:00.000Z",
+    });
+    const afterReview = reviewCombatRoundDamageResult({
+      attackResultId: "3:phase1:gladiator:guard",
+      reviewedAt: "2026-01-01T00:05:15.000Z",
+      reviewedByUserId: "gm-1",
+      review: {
+        additionalEffects: [],
+        armorModifierOverride: -7,
+        criticalGradeOverride: "f",
+        operationalConsequences: [],
+      },
+      state: afterDamage,
+    });
+    const afterCritical = recordCombatRoundCriticalRoll({
+      attackResult,
+      command: {
+        createdAt: "2026-01-01T00:05:30.000Z",
+        createdByUserId: "gm-1",
+      },
+      criticalDice: [5, 5],
+      rolledByParticipantId: "gladiator",
+      state: afterReview,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:05:30.000Z",
+    });
+    const damageResult = afterCritical.phaseResolutionResults[0]?.damageResult;
+    const effectiveDamage = damageResult
+      ? getCombatRoundEffectiveDamageResult(damageResult)
+      : undefined;
+
+    expect(damageResult?.review?.criticalEffectProposal).toMatchObject({
+      critKey: "sharp|arm|13",
+    });
+    expect(effectiveDamage).toMatchObject({
+      preCriticalEffectiveDamage: 2,
+      criticalMinTotalDamage: 5,
+      criticalMinApplied: true,
+      criticalMinExtra: 3,
+      effectiveTotalDamage: 5,
+      finalCommittedDamage: 5,
+    });
+    expect(damageResult?.review?.operationalConsequences).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          accepted: true,
+          kind: "cancel_pending_action",
+          phase: "phase2",
+          step: "A2",
+        }),
+        expect.objectContaining({
+          accepted: true,
+          kind: "note",
+          label: "No combat action possible",
+        }),
+      ]),
+    );
+
+    const committed = commitCombatRoundPhaseDamage({
+      attackerScenarioParticipantId: "scenario-gladiator",
+      command: {
+        commandId: "commit-critical-min-no-action",
+        createdAt: "2026-01-01T00:06:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      combatEffects: { effects: [], events: [] },
+      defenderScenarioParticipantId: "scenario-guard",
+      encounterId: "encounter-1",
+      scenarioId: "scenario-1",
+      state: afterCritical,
+    });
+    const clearedCommitState = clearCombatRoundStep({
+      state: committed.state,
+      step: "phase_1_damage",
+    });
+
+    expect(committed.command.facts).toMatchObject({
+      cancelledActions: [
+        expect.objectContaining({
+          participantId: "guard",
+          phase: "phase2",
+          previousStepStatus: "pending",
+          step: "A2",
+        }),
+      ],
+      criticalMinApplied: true,
+      criticalMinExtra: 3,
+      criticalMinTotalDamage: 5,
+      finalCommittedDamage: 5,
+      preCriticalEffectiveDamage: 2,
+      totalDamage: 5,
+    });
+    expect(committed.combatEffects.effects).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          damage: 5,
+          location: "rightArm",
+          targetParticipantId: "scenario-guard",
+          type: "physical_damage",
+        }),
+        expect.objectContaining({
+          description: expect.stringContaining("No combat action possible"),
+          effectGroup: "special",
+          targetParticipantId: "scenario-guard",
+          type: "special",
+        }),
+      ]),
+    );
+    expect(committed.combatEffects.events[0]?.description).toContain(
+      "2 damage after armor, raised to critical minimum 5",
+    );
+    expect(getCombatRoundParticipantPhaseStepStatus({
+      participantId: "guard",
+      state: committed.state,
+      step: "phase_2_actions",
+    })).toBe("skipped");
+    expect(
+      committed.state.participants.find((participant) => participant.participantId === "guard")
+        ?.declaration,
+    ).toMatchObject({
+      actionId: "parry_attack",
+    });
+    expect(getCombatRoundParticipantPhaseStepStatus({
+      participantId: "guard",
+      state: clearedCommitState,
+      step: "phase_2_actions",
+    })).toBe("pending");
+  });
+
   it("uses a second table lookup for normal hit damage", () => {
     const result = buildCombatRoundAttackRollResult({
       actionId: "attack_parry",
@@ -6351,6 +6589,68 @@ describe("combat round manager", () => {
       roundNumber: 3,
       step: "A1",
     });
+  });
+
+  it("lets the GM skip the current executable action and undo the skip", () => {
+    const skipped = skipCombatRoundCurrentPhaseAction({
+      command: {
+        createdAt: "2026-01-01T00:03:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      participantId: "gladiator",
+      phase: "phase2",
+      reason: "GM skipped action",
+      state: preparePhaseResolutionState({
+        guardActionId: "parry_attack",
+        gladiatorActionId: "parry_attack",
+        phase: "phase2",
+      }),
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:03:00.000Z",
+    });
+    const cleared = clearCombatRoundStep({
+      state: skipped,
+      step: "phase_2_actions",
+    });
+
+    expect(skipped.commands[skipped.commands.length - 1]).toMatchObject({
+      beforeCursor: {
+        participantId: "gladiator",
+        roundNumber: 3,
+        step: "A2",
+      },
+      facts: {
+        reason: "GM skipped action",
+        status: "skipped",
+      },
+      type: "skip_phase_action",
+    });
+    expect(getCombatRoundParticipantPhaseStepStatus({
+      participantId: "gladiator",
+      state: skipped,
+      step: "phase_2_actions",
+    })).toBe("skipped");
+    expect(skipped.currentCursor).toEqual({
+      participantId: "guard",
+      roundNumber: 3,
+      step: "A2",
+    });
+    expect(
+      skipped.participants.find((participant) => participant.participantId === "gladiator")
+        ?.declaration,
+    ).toMatchObject({
+      actionId: "parry_attack",
+    });
+    expect(cleared.currentCursor).toEqual({
+      participantId: "gladiator",
+      roundNumber: 3,
+      step: "A2",
+    });
+    expect(getCombatRoundParticipantPhaseStepStatus({
+      participantId: "gladiator",
+      state: cleared,
+      step: "phase_2_actions",
+    })).toBe("pending");
   });
 
   it("archives SU completion commands and starts a clean next round", () => {

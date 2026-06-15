@@ -414,6 +414,8 @@ export const combatRoundDamageReviewAdditionalEffectSchema = z
     id: idSchema,
     kind: combatRoundDamageReviewAdditionalEffectKindSchema,
     label: z.string().min(1),
+    minDamageReason: z.string().min(1).optional(),
+    minTotalDamage: z.number().int().min(0).optional(),
     modifierBucket: combatRoundDamageReviewModifierBucketSchema.optional(),
     modifierValue: z.number().int().optional(),
     notes: z.string().optional(),
@@ -674,10 +676,6 @@ function sanitizeCombatRoundReviewIdPart(value: string): string {
   return value.replace(/[^A-Za-z0-9_-]+/g, "-");
 }
 
-function isCombatRoundArmOrHandHitLocation(location?: HitLocation): boolean {
-  return location === "leftArm" || location === "rightArm";
-}
-
 function getCombatRoundHandForHitLocation(
   location?: HitLocation,
 ): CombatRoundDamageReviewOperationalConsequence["hand"] {
@@ -752,6 +750,47 @@ function criticalEffectImpliesLossOfArmUse(
     text.includes("hand unusable") ||
     text.includes("arm unusable") ||
     text.includes("cannot use")
+  );
+}
+
+function criticalEffectBlocksCombatAction(
+  effect: CriticalEffectTemplate,
+  result?: CriticalResult,
+): boolean {
+  const text = [
+    result?.title,
+    result?.bodyText,
+    ...(result?.sourceSpecialTags ?? []),
+    effect.actionState,
+    effect.durationRaw,
+    effect.specialFlag,
+    effect.sourceField,
+    effect.sourceValue,
+  ]
+    .filter((entry): entry is string => Boolean(entry))
+    .join(" ")
+    .toLowerCase();
+  const actionState = effect.actionState?.toLowerCase();
+  const sourceValue = effect.sourceValue?.toUpperCase();
+  const specialFlag = effect.specialFlag?.toLowerCase();
+  const resultTags = result?.sourceSpecialTags ?? [];
+
+  return Boolean(
+    actionState === "no_action" ||
+      actionState === "no_meaningful_action" ||
+      actionState === "unconscious" ||
+      sourceValue === "NO ACTION" ||
+      specialFlag === "unconscious" ||
+      specialFlag === "collapse" ||
+      resultTags.includes("unconscious") ||
+      resultTags.includes("collapse") ||
+      resultTags.includes("collapse_from_shock") ||
+      text.includes("unconscious") ||
+      text.includes("no action") ||
+      text.includes("no actions") ||
+      text.includes("may do nothing") ||
+      text.includes("collapses") ||
+      text.includes("collapse"),
   );
 }
 
@@ -834,7 +873,7 @@ function buildCombatRoundCriticalOperationalConsequences(input: {
 }): CombatRoundDamageReviewOperationalConsequence[] {
   const criticalResult = input.proposal.criticalResult;
 
-  if (!criticalResult || !isCombatRoundArmOrHandHitLocation(input.damageResult.selectedHitLocation)) {
+  if (!criticalResult) {
     return [];
   }
 
@@ -851,7 +890,8 @@ function buildCombatRoundCriticalOperationalConsequences(input: {
   const relevantEffects = resultWithEffects.effects.filter(
     (effect) =>
       criticalEffectImpliesDropItem(effect, resultWithEffects.result) ||
-      criticalEffectImpliesLossOfArmUse(effect, resultWithEffects.result),
+      criticalEffectImpliesLossOfArmUse(effect, resultWithEffects.result) ||
+      criticalEffectBlocksCombatAction(effect, resultWithEffects.result),
   );
 
   if (relevantEffects.length === 0) {
@@ -859,9 +899,16 @@ function buildCombatRoundCriticalOperationalConsequences(input: {
   }
 
   const primaryEffect =
+    relevantEffects.find((effect) => criticalEffectBlocksCombatAction(effect, resultWithEffects.result)) ??
     relevantEffects.find(criticalEffectHasStructuredDropItem) ??
     relevantEffects.find((effect) => criticalEffectImpliesDropItem(effect, resultWithEffects.result)) ??
     relevantEffects[0];
+  const actionBlockingEffect = relevantEffects.find((effect) =>
+    criticalEffectBlocksCombatAction(effect, resultWithEffects.result),
+  );
+  const dropEffect =
+    relevantEffects.find(criticalEffectHasStructuredDropItem) ??
+    relevantEffects.find((effect) => criticalEffectImpliesDropItem(effect, resultWithEffects.result));
   const sourceText = resultWithEffects.result.bodyText;
   const participantId = input.damageResult.defenderParticipantId;
   const hand = getCombatRoundHandForHitLocation(input.damageResult.selectedHitLocation);
@@ -908,16 +955,12 @@ function buildCombatRoundCriticalOperationalConsequences(input: {
   };
 
   for (const candidate of candidates) {
-    if (!candidate.itemLabel) {
-      continue;
-    }
-
-    if (primaryEffect && criticalEffectImpliesDropItem(primaryEffect, resultWithEffects.result)) {
+    if (candidate.itemLabel && dropEffect) {
       addConsequence({
         accepted: true,
         hand,
         id: `critical-operational-${sanitizeCombatRoundReviewIdPart(
-          primaryEffect.effectKey,
+          dropEffect.effectKey,
         )}-drop-${sanitizeCombatRoundReviewIdPart(candidate.itemLabel)}`,
         itemLabel: candidate.itemLabel,
         kind: "drop_item",
@@ -925,7 +968,7 @@ function buildCombatRoundCriticalOperationalConsequences(input: {
         participantId,
         reason: "Critical effect indicates the held item is dropped.",
         sourceCritKey: criticalResult.critKey,
-        sourceEffectKey: primaryEffect.effectKey,
+        sourceEffectKey: dropEffect.effectKey,
         sourceText,
       });
     }
@@ -934,21 +977,41 @@ function buildCombatRoundCriticalOperationalConsequences(input: {
       accepted: true,
       hand,
       id: `critical-operational-${sanitizeCombatRoundReviewIdPart(
-        primaryEffect?.effectKey ?? criticalResult.critKey,
+        actionBlockingEffect?.effectKey ?? primaryEffect?.effectKey ?? criticalResult.critKey,
       )}-cancel-${candidate.phase}-${candidate.step}`,
       itemLabel: candidate.itemLabel,
       kind: "cancel_pending_action",
-      label: `Cancel pending ${candidate.phase === "phase1" ? "phase 1" : "phase 2"} attack: ${
-        candidate.itemLabel
-      } attack`,
+      label: `Cancel pending ${candidate.phase === "phase1" ? "phase 1" : "phase 2"} attack${
+        candidate.itemLabel ? `: ${candidate.itemLabel} attack` : ""
+      }`,
       participantId,
       phase: candidate.phase,
-      reason: "Critical effect prevents using the item/limb for this pending same-round attack.",
+      reason: actionBlockingEffect
+        ? "Critical effect prevents combat action for this pending same-round attack."
+        : "Critical effect prevents using the item/limb for this pending same-round attack.",
       sourceCritKey: criticalResult.critKey,
-      sourceEffectKey: primaryEffect?.effectKey,
+      sourceEffectKey: actionBlockingEffect?.effectKey ?? primaryEffect?.effectKey,
       sourceText,
       step: candidate.step,
       targetActionId: candidate.actionId,
+    });
+  }
+
+  if (actionBlockingEffect) {
+    addConsequence({
+      accepted: true,
+      hand,
+      id: `critical-operational-${sanitizeCombatRoundReviewIdPart(
+        actionBlockingEffect.effectKey,
+      )}-no-action`,
+      kind: "note",
+      label: "No combat action possible",
+      notes: "Committed as a visible special combat/session row. Full next-round action gating remains GM-managed for now.",
+      participantId,
+      reason: "Critical effect clearly prevents combat action.",
+      sourceCritKey: criticalResult.critKey,
+      sourceEffectKey: actionBlockingEffect.effectKey,
+      sourceText,
     });
   }
 
@@ -1059,6 +1122,11 @@ export interface CombatRoundEffectiveDamageResult {
   effectiveMinDamage?: number;
   effectiveMinimumDamageAfterArmor?: number;
   effectiveProvisionalDamageAfterArmor?: number;
+  preCriticalEffectiveDamage: number;
+  criticalMinTotalDamage?: number;
+  criticalMinApplied: boolean;
+  criticalMinExtra?: number;
+  finalCommittedDamage: number;
   effectiveRawTotalDamage: number;
   effectiveSelectedHitLocation?: HitLocation;
   effectiveTableDamage?: number;
@@ -2994,6 +3062,137 @@ function recordCombatRoundPhaseActionSkipCommand(input: {
   };
 }
 
+export function skipCombatRoundCurrentPhaseAction(input: {
+  command: {
+    commandId?: string;
+    createdAt: string;
+    createdByUserId?: string;
+  };
+  participantId: string;
+  phase: CombatRoundPhase;
+  reason?: string;
+  state: CombatRoundState;
+  submittedBy: "gm" | "player";
+  updatedAt: string;
+}): CombatRoundState {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const actionStep = getCombatRoundPhaseActionStepForPhase(input.phase);
+  const beforeCursor = combatRoundCursorSchema.parse({
+    participantId: input.participantId,
+    roundNumber: normalized.roundNumber,
+    step: getCombatRoundAttackCursorStepForPhase(input.phase),
+  });
+
+  if (
+    !combatRoundParticipantHasExecutablePhaseAttack({
+      participantId: input.participantId,
+      phase: input.phase,
+      state: normalized,
+    })
+  ) {
+    throw new RangeError("Current phase action cannot be skipped because it is not attack-capable.");
+  }
+
+  if (
+    getCombatRoundOutgoingAttackResultForParticipantPhase({
+      participantId: input.participantId,
+      phase: input.phase,
+      state: normalized,
+    })
+  ) {
+    throw new RangeError("Current phase action cannot be skipped after the attack is rolled.");
+  }
+
+  const withDoneStatus = setCombatRoundPhaseResolutionStatus({
+    participantId: input.participantId,
+    phase: input.phase,
+    state: normalized,
+    status: {
+      substep: "done",
+      updatedAt: input.updatedAt,
+    },
+  });
+  const withSkippedAction = setCombatRoundParticipantStepStatus({
+    participantId: input.participantId,
+    state: withDoneStatus,
+    status: "skipped",
+    step: actionStep,
+  });
+  const commandType = "skip_phase_action" satisfies CombatRoundCommandType;
+  const commandId =
+    input.command.commandId ??
+    buildCombatRoundCommandId({
+      createdAt: input.command.createdAt,
+      participantId: input.participantId,
+      state: normalized,
+      type: commandType,
+    });
+  const commandShell = combatRoundCommandSchema.parse({
+    afterCursor: beforeCursor,
+    beforeCursor,
+    createdAt: input.command.createdAt,
+    createdByUserId: input.command.createdByUserId,
+    facts: {
+      phase: input.phase,
+      reason: input.reason?.trim() || "GM skipped action",
+      status: "skipped",
+    },
+    id: commandId,
+    participantId: input.participantId,
+    phase: input.phase,
+    roundNumber: normalized.roundNumber,
+    step: beforeCursor.step,
+    type: commandType,
+  });
+  const stateForAfterCursor = combatRoundStateSchema.parse({
+    ...withSkippedAction,
+    commands: [
+      ...withSkippedAction.commands.filter((command) => command.id !== commandId),
+      commandShell,
+    ],
+  });
+  const afterCursor = getCombatRoundPhaseActionSkipCommandAfterCursor({
+    phase: input.phase,
+    state: stateForAfterCursor,
+  });
+  const command = combatRoundCommandSchema.parse({
+    ...commandShell,
+    afterCursor,
+    facts: {
+      ...commandShell.facts,
+      ...(afterCursor.participantId
+        ? {
+            nextStepOpened: {
+              participantId: afterCursor.participantId,
+              step: afterCursor.step,
+            },
+          }
+        : {}),
+    },
+  });
+  const selectedStep = getCombatRoundStepForCursorStep(command.afterCursor.step);
+
+  return combatRoundStateSchema.parse({
+    ...withSkippedAction,
+    commands: [
+      ...withSkippedAction.commands.filter((existingCommand) => existingCommand.id !== commandId),
+      command,
+    ],
+    currentCursor: command.afterCursor,
+    currentStep: selectedStep,
+    phaseResolutionCursor:
+      afterCursor.participantId && afterCursor.step === beforeCursor.step
+        ? {
+            participantId: afterCursor.participantId,
+            phase: input.phase,
+            substep: "attack",
+          }
+        : undefined,
+    selectedParticipantId: command.afterCursor.participantId ?? input.participantId,
+    selectedStep,
+  });
+}
+
 export function recordCombatRoundNoAttackPhaseReview(input: {
   command?: {
     commandId?: string;
@@ -3598,6 +3797,29 @@ function getCombatRoundReviewedCriticalGrade(input: {
   return input.tableCriticalGrade ?? input.computedCriticalGrade;
 }
 
+function getCombatRoundCriticalMinimumTotalDamage(
+  review?: CombatRoundDamageReview,
+): { minDamageReason?: string; minTotalDamage?: number } {
+  let minTotalDamage: number | undefined;
+  let minDamageReason: string | undefined;
+
+  for (const effect of review?.additionalEffects ?? []) {
+    if (effect.minTotalDamage === undefined) {
+      continue;
+    }
+
+    if (minTotalDamage === undefined || effect.minTotalDamage > minTotalDamage) {
+      minTotalDamage = effect.minTotalDamage;
+      minDamageReason = effect.minDamageReason;
+    }
+  }
+
+  return {
+    minDamageReason,
+    minTotalDamage,
+  };
+}
+
 function getCombatRoundMaxDamageCap(input: {
   attackerStrengthGm?: number;
   maxDamageNote?: string;
@@ -3974,9 +4196,21 @@ export function getCombatRoundEffectiveDamageResult(
     maxDamageCap: effectiveMaxDamageCap,
     rawTotalDamage: effectiveRawTotalDamage,
   });
-  const effectiveTotalDamage = hasTotalDamageOverride
+  const preCriticalEffectiveDamage = hasTotalDamageOverride
     ? effectiveRawTotalDamage
     : effectiveCappedDamage.totalDamage;
+  const criticalMinimum = getCombatRoundCriticalMinimumTotalDamage(damageResult.review);
+  const criticalMinTotalDamage = criticalMinimum.minTotalDamage;
+  const criticalMinApplied =
+    !hasTotalDamageOverride &&
+    criticalMinTotalDamage !== undefined &&
+    criticalMinTotalDamage > preCriticalEffectiveDamage;
+  const criticalMinExtra = criticalMinApplied
+    ? criticalMinTotalDamage - preCriticalEffectiveDamage
+    : undefined;
+  const effectiveTotalDamage = criticalMinApplied
+    ? criticalMinTotalDamage
+    : preCriticalEffectiveDamage;
   const effectiveCappedTotalDamage = hasTotalDamageOverride
     ? undefined
     : effectiveCappedDamage.cappedTotalDamage;
@@ -3999,6 +4233,11 @@ export function getCombatRoundEffectiveDamageResult(
     computedSelectedHitLocation,
     computedTableDamage: damageResult.tableDamage ?? damageResult.tableDamageModifier,
     computedTotalDamage: damageResult.totalDamage,
+    preCriticalEffectiveDamage,
+    criticalMinTotalDamage,
+    criticalMinApplied,
+    criticalMinExtra,
+    finalCommittedDamage: effectiveTotalDamage,
     effectiveArmorClass: armorContext.armorClass,
     effectiveArmorCoverageLabel: armorContext.armorCoverageLabel,
     effectiveArmorModifier,
@@ -5076,8 +5315,11 @@ function formatCombatRoundDamageCommitDescription(input: {
         }.`
       : "";
   const damage =
-    effectiveDamage.effectiveMaxDamageApplied &&
-    effectiveDamage.effectiveMaxDamageCap !== undefined
+    effectiveDamage.criticalMinApplied &&
+    effectiveDamage.criticalMinTotalDamage !== undefined
+      ? `${effectiveDamage.preCriticalEffectiveDamage} damage after armor, raised to critical minimum ${effectiveDamage.criticalMinTotalDamage}`
+      : effectiveDamage.effectiveMaxDamageApplied &&
+          effectiveDamage.effectiveMaxDamageCap !== undefined
       ? `${effectiveDamage.effectiveRawTotalDamage} raw damage, capped to ${effectiveDamage.effectiveTotalDamage}`
       : `${effectiveDamage.effectiveTotalDamage} damage`;
   const tableDamage =
@@ -5617,6 +5859,11 @@ function recordCombatRoundCommitPhaseDamageCommand(input: {
       createdOperationalCombatEffectIds,
       computedCriticalGrade: input.damageResult.criticalGrade,
       computedTotalDamage: input.damageResult.totalDamage,
+      preCriticalEffectiveDamage: effectiveDamage.preCriticalEffectiveDamage,
+      criticalMinTotalDamage: effectiveDamage.criticalMinTotalDamage,
+      criticalMinApplied: effectiveDamage.criticalMinApplied,
+      criticalMinExtra: effectiveDamage.criticalMinExtra,
+      finalCommittedDamage: effectiveDamage.finalCommittedDamage,
       criticalRoll:
         input.criticalRoll?.status === "rolled"
           ? {
@@ -5883,6 +6130,16 @@ function getCombatRoundPhaseDamageCommitReadinessDetail(input: {
 
   if (damageResult && !effectiveDamage?.effectiveSelectedHitLocation) {
     warnings.push("No effective hit location is available; committing General damage.");
+  }
+
+  if (
+    damageResult?.review?.totalDamageOverride !== undefined &&
+    effectiveDamage?.criticalMinTotalDamage !== undefined &&
+    damageResult.review.totalDamageOverride < effectiveDamage.criticalMinTotalDamage
+  ) {
+    warnings.push(
+      `GM damage override ${damageResult.review.totalDamageOverride} is below critical minimum ${effectiveDamage.criticalMinTotalDamage}; the override will commit as final.`,
+    );
   }
 
   if (effectiveDamage?.effectiveCriticalGrade && !damageResult?.review?.criticalEffectProposal) {

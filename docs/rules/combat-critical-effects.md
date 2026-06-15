@@ -55,9 +55,10 @@ fraction, roll once for per-round rate, and death timer.
 ## Operational consequences
 
 Some critical results clearly imply immediate combat consequences, such as dropping an item held in
-the struck hand or losing use of an arm. When the table provides structured drop-item or loss-of-use
-signals and the app can identify a matching pending same-round attack, D1/D2 review proposes
-operational consequence rows for GM approval.
+the struck hand, losing use of an arm, collapsing, becoming unconscious, or otherwise becoming unable
+to act. When the table provides clear drop-item, loss-of-use, or no-action signals and the app can
+identify a matching pending same-round attack, D1/D2 review proposes operational consequence rows for
+GM approval.
 
 Current supported proposals are:
 
@@ -66,6 +67,9 @@ Current supported proposals are:
 - Cancel pending action: marks an unrolled pending A1/A2 attack in the same round as cancelled or
   skipped by the committed damage command. The original declaration and generated phase modifiers
   remain, because the combatant already committed to the risky action.
+- No combat action possible: creates a visible special combat effect row for clear incapacitating or
+  no-action results. The row is active immediately, but broad next-round incapacitation gating remains
+  future work.
 - Note: used when the critical is clear but the app cannot safely identify the held item or pending
   attack.
 
@@ -91,15 +95,20 @@ Examples:
 
 Physical critical rows do not create a second normal damage stream. They use the minimum total damage floor rule.
 
-The proposal rule is:
+The commit rule is:
 
 ```text
-critical minimum extra = max(0, minimum total damage - already recorded damage)
+final committed physical damage = max(reviewed physical damage, critical minimum total damage)
 ```
 
 This keeps normal damage, max-damage caps, hit location, and GM review as the main damage path.
-Physical floor rows do not create a second normal damage row by default; if the floor exceeds the
-already recorded damage, the proposal records a note for GM review.
+Physical floor rows do not create a second normal damage row. If the floor exceeds the reviewed
+physical damage, the committed physical row is raised to that minimum and the event details record the
+pre-critical damage, the floor, and the extra amount applied.
+
+For example, if armor-adjusted damage is `2` and the critical table requires minimum total damage
+`5`, the committed physical damage row is `5` and the event details note that `2` damage after armor
+was raised to the critical minimum `5`.
 
 ## Combat integration
 

@@ -40,6 +40,8 @@ export interface CriticalEffectProposalAdditionalEffect {
   id: string;
   kind: "modifier" | "fatigue" | "special" | "note";
   label: string;
+  minDamageReason?: string;
+  minTotalDamage?: number;
   modifierBucket?: "general" | "obSkill" | "db";
   modifierValue?: number;
   notes?: string;
@@ -266,6 +268,8 @@ function mapCriticalEffectTemplateToReviewEffect(input: {
     effectOrder: input.effect.effectOrder,
     id: `critical-effect-${input.effect.effectKey.replace(/[^A-Za-z0-9_-]+/g, "-")}`,
     label: getCriticalEffectLabel(input.effect),
+    minDamageReason: input.effect.minDamageReason,
+    minTotalDamage: input.effect.minTotalDamage,
     notes: buildEffectNotes({
       effect: input.effect,
       existingCommittedDamageAmount: input.existingCommittedDamageAmount,

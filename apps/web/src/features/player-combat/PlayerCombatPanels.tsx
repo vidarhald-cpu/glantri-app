@@ -136,6 +136,9 @@ interface PlayerCombatActionButtonPanelProps {
   buttonLabel?: string;
   disabled?: boolean;
   onDeclareAction?: () => void;
+  onSecondaryAction?: () => void;
+  secondaryButtonDisabled?: boolean;
+  secondaryButtonLabel?: string;
   saving?: boolean;
   statusText: string;
   validationMessage?: string;
@@ -613,6 +616,9 @@ export function PlayerCombatActionButtonPanel({
   buttonLabel = "Declare action",
   disabled = false,
   onDeclareAction,
+  onSecondaryAction,
+  secondaryButtonDisabled = false,
+  secondaryButtonLabel,
   saving = false,
   statusText,
   validationMessage,
@@ -639,6 +645,16 @@ export function PlayerCombatActionButtonPanel({
       >
         <strong>{saving ? "Saving..." : buttonLabel}</strong>
       </button>
+      {secondaryButtonLabel ? (
+        <button
+          disabled={secondaryButtonDisabled || saving}
+          onClick={onSecondaryAction}
+          style={{ justifySelf: "center", width: "80%" }}
+          type="button"
+        >
+          {secondaryButtonLabel}
+        </button>
+      ) : null}
       <div style={{ color: "#5e5a50", fontSize: "0.92rem" }}>{statusText}</div>
       {validationMessage ? (
         <div style={{ color: "#8b3a1a", fontSize: "0.9rem", fontWeight: 600 }}>

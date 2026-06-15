@@ -71,6 +71,7 @@ import {
   recordCombatRoundParryResult,
   rollOpenEndedD20,
   sortCombatRoundParticipantsByInitiative,
+  skipCombatRoundCurrentPhaseAction,
   validateCombatDeclarationTargets,
 } from "@glantri/domain";
 import {
@@ -245,6 +246,8 @@ interface CombatDamageReviewAdditionalEffectDraft {
   id: string;
   kind: CombatRoundDamageReviewAdditionalEffect["kind"];
   label: string;
+  minDamageReason?: string;
+  minTotalDamage?: number;
   modifierBucket: string;
   modifierValue: string;
   notes: string;
@@ -644,13 +647,17 @@ function formatCombatDamageResultLine(
       ? ` · max ${effectiveDamage.effectiveMaxDamageCap}`
       : ` · ${effectiveDamage.effectiveMaxDamageNote}`
     : "";
+  const criticalMinimum =
+    effectiveDamage.criticalMinTotalDamage !== undefined
+      ? ` · critical min ${effectiveDamage.criticalMinTotalDamage}`
+      : "";
   const tableDamage = effectiveDamage.effectiveTableDamage ?? effectiveDamage.effectiveTotalDamage;
 
   if (damage.grazing && damage.damageRoll.required) {
-    return `grazing roll ${effectiveDamage.effectiveRawTotalDamage}${critical}${minDamage}${maxDamage}`;
+    return `grazing roll ${effectiveDamage.effectiveRawTotalDamage}${critical}${minDamage}${maxDamage}${criticalMinimum}`;
   }
 
-  return `table damage ${tableDamage}${critical}${minDamage}${maxDamage}`;
+  return `table damage ${tableDamage}${critical}${minDamage}${maxDamage}${criticalMinimum}`;
 }
 
 function formatCombatDamageResultLocationSuffix(
@@ -1128,6 +1135,8 @@ function buildCombatDamageReviewDraft(
       id: effect.id,
       kind: effect.kind,
       label: effect.label,
+      minDamageReason: effect.minDamageReason,
+      minTotalDamage: effect.minTotalDamage,
       modifierBucket: effect.modifierBucket ?? "general",
       modifierValue: effect.modifierValue?.toString() ?? "",
       notes: effect.notes ?? "",
@@ -1295,6 +1304,8 @@ function buildCombatDamageReviewFromDraft(input: {
       id: effect.id,
       kind,
       label: getCombatDamageReviewEffectLabel(effect),
+      minDamageReason: effect.minDamageReason,
+      minTotalDamage: effect.minTotalDamage,
       modifierBucket,
       modifierValue,
       notes: effect.notes.trim() || undefined,
@@ -1847,6 +1858,12 @@ function CombatDamageReviewPanel(input: {
     : effectiveDamage.effectiveCriticalGrade
       ? "Critical effects not accepted/committed yet."
       : undefined;
+  const criticalMinimumStatus =
+    effectiveDamage.criticalMinApplied && effectiveDamage.criticalMinTotalDamage !== undefined
+      ? `Critical minimum raises damage from ${effectiveDamage.preCriticalEffectiveDamage} to ${effectiveDamage.criticalMinTotalDamage}.`
+      : effectiveDamage.criticalMinTotalDamage !== undefined
+        ? `Critical minimum damage floor ${effectiveDamage.criticalMinTotalDamage} is covered.`
+        : undefined;
   const updateAdditionalEffect = (
     effectId: string,
     patch: Partial<CombatDamageReviewAdditionalEffectDraft>,
@@ -2105,6 +2122,11 @@ function CombatDamageReviewPanel(input: {
       ) : null}
       {criticalEffectStatus ? (
         <div style={{ color: "#5e5a50", fontSize: "0.88rem" }}>{criticalEffectStatus}</div>
+      ) : null}
+      {criticalMinimumStatus ? (
+        <div style={{ color: "#5e5a50", fontSize: "0.88rem" }}>
+          {criticalMinimumStatus}
+        </div>
       ) : null}
       {input.draft.operationalConsequences.length > 0 ? (
         <section style={{ display: "grid", gap: "0.5rem" }}>
@@ -2872,6 +2894,14 @@ export default function CombatRoundManagerPanel({
     inspectorAttackPhase && inspectorDisplayAttackResult,
   );
   const inspectorCanRollPhaseAttack =
+    inspectorCanExecuteSelectedStep &&
+    Boolean(inspectorCurrentAttackPhase) &&
+    inspectorCurrentPhaseHasAttack === true &&
+    (!inspectorPhaseResolutionStatus ||
+      inspectorPhaseResolutionStatus.substep === "pending" ||
+      inspectorPhaseResolutionStatus.substep === "attack") &&
+    !inspectorDisplayAttackResult;
+  const inspectorCanSkipCurrentPhaseAction =
     inspectorCanExecuteSelectedStep &&
     Boolean(inspectorCurrentAttackPhase) &&
     inspectorCurrentPhaseHasAttack === true &&
@@ -4293,6 +4323,38 @@ export default function CombatRoundManagerPanel({
     }
   }
 
+  async function skipInspectorCurrentPhaseAction() {
+    if (!inspector.participant?.participantId || !inspectorCurrentAttackPhase) {
+      return;
+    }
+
+    setSaving(true);
+
+    try {
+      const updatedAt = new Date().toISOString();
+      const nextRoundState = skipCombatRoundCurrentPhaseAction({
+        command: {
+          createdAt: updatedAt,
+        },
+        participantId: inspector.participant.participantId,
+        phase: inspectorCurrentAttackPhase,
+        reason: "GM skipped action",
+        state: roundState,
+        submittedBy: "gm",
+        updatedAt,
+      });
+
+      await persistRoundState(nextRoundState);
+      setSaveError(undefined);
+    } catch (caughtError) {
+      setSaveError(
+        caughtError instanceof Error ? caughtError.message : "Unable to skip current action.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
   function buildRoundStateWithInspectorDamageReview(input: {
     reviewedAt: string;
     state: typeof roundState;
@@ -5192,9 +5254,19 @@ export default function CombatRoundManagerPanel({
                                   )
                                 : inspectorCanRollPhaseAttack && inspectorCurrentAttackPhase
                                   ? rollInspectorPhaseAttack(inspectorCurrentAttackPhase)
-                                  : saveInspectorDeclaration())
+                                : saveInspectorDeclaration())
                       }
+                      onSecondaryAction={() => void skipInspectorCurrentPhaseAction()}
                       saving={saving}
+                      secondaryButtonDisabled={
+                        saving ||
+                        inspectorIsInspectionOnly ||
+                        Boolean(inspectorSnapshot) ||
+                        !inspectorCanSkipCurrentPhaseAction
+                      }
+                      secondaryButtonLabel={
+                        inspectorCanSkipCurrentPhaseAction ? "Skip current action" : undefined
+                      }
                       statusText={`Current step: ${getPlayerCombatStepLabel(
                         inspector.step,
                       )}.${inspectorStatusSuffix}`}

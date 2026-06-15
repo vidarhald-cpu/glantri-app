@@ -210,6 +210,10 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("Operational consequences");
     expect(source).toContain("operationalConsequences");
     expect(source).toContain("Consequence notes");
+    expect(source).toContain("Critical minimum raises damage from");
+    expect(source).toContain("Skip current action");
+    expect(source).toContain("skipCombatRoundCurrentPhaseAction");
+    expect(source).toContain("inspectorCanSkipCurrentPhaseAction");
     expect(source).toContain("Additional immediate effects");
     expect(source).toContain("Add modifier effect");
     expect(source).toContain("Add note effect");
