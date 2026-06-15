@@ -6,6 +6,12 @@ import {
   scenarioParticipantCombatContextSchema,
 } from "../campaign/scenario";
 import {
+  combatArmorModifierClassSchema,
+  lookupCombatArmorModifier,
+  normalizeCombatArmorModifierClass,
+  type CombatArmorModifierClass,
+} from "./armorModifier";
+import {
   getCombatDeclarationAttackPhases,
   validateCombatDeclarationTargets,
 } from "./combatDeclarationValidation";
@@ -110,6 +116,61 @@ export type CombatRoundCursor = z.infer<typeof combatRoundCursorSchema>;
 
 export const combatRoundPhaseSchema = z.enum(["phase1", "phase2"]);
 export type CombatRoundPhase = z.infer<typeof combatRoundPhaseSchema>;
+
+export const combatRoundAttackDirectionSchema = z.enum(["front", "back"]);
+export type CombatRoundAttackDirection = z.infer<typeof combatRoundAttackDirectionSchema>;
+
+export const combatRoundArmorRegionSchema = z.enum([
+  "head",
+  "frontArm",
+  "chest",
+  "backArm",
+  "abdomen",
+  "frontThigh",
+  "frontFoot",
+  "backThigh",
+  "backFoot",
+]);
+export type CombatRoundArmorRegion = z.infer<typeof combatRoundArmorRegionSchema>;
+
+export const COMBAT_ROUND_ARMOR_REGION_LABELS = {
+  abdomen: "Abdomen",
+  backArm: "Back Arm",
+  backFoot: "Back Foot",
+  backThigh: "Back Thigh",
+  chest: "Chest",
+  frontArm: "Front Arm",
+  frontFoot: "Front Foot",
+  frontThigh: "Front Thigh",
+  head: "Head",
+} satisfies Record<CombatRoundArmorRegion, string>;
+
+const combatRoundDamageArmorCoverageEntrySchema = z.object({
+  armorClass: combatArmorModifierClassSchema.optional(),
+  coverageLabel: z.string().min(1).optional(),
+  label: z.string().min(1).optional(),
+  value: z.number().int().min(0).optional(),
+});
+export type CombatRoundDamageArmorCoverageEntry = z.infer<
+  typeof combatRoundDamageArmorCoverageEntrySchema
+>;
+
+export const combatRoundDamageArmorCoverageSchema = z
+  .object({
+    abdomen: combatRoundDamageArmorCoverageEntrySchema.optional(),
+    backArm: combatRoundDamageArmorCoverageEntrySchema.optional(),
+    backFoot: combatRoundDamageArmorCoverageEntrySchema.optional(),
+    backThigh: combatRoundDamageArmorCoverageEntrySchema.optional(),
+    chest: combatRoundDamageArmorCoverageEntrySchema.optional(),
+    frontArm: combatRoundDamageArmorCoverageEntrySchema.optional(),
+    frontFoot: combatRoundDamageArmorCoverageEntrySchema.optional(),
+    frontThigh: combatRoundDamageArmorCoverageEntrySchema.optional(),
+    head: combatRoundDamageArmorCoverageEntrySchema.optional(),
+  })
+  .default({});
+export type CombatRoundDamageArmorCoverage = z.infer<
+  typeof combatRoundDamageArmorCoverageSchema
+>;
 
 export const combatRoundCommandTypeSchema = z.enum([
   "declare_action",
@@ -430,20 +491,31 @@ export const combatRoundCriticalRollResultSchema = z
 export type CombatRoundCriticalRollResult = z.infer<typeof combatRoundCriticalRollResultSchema>;
 
 export const combatRoundDamageResultSchema = z.object({
+  armorAppliesToDamage: z.boolean().default(true),
+  armorAppliesToMinimumDamage: z.boolean().default(true),
+  armorClass: combatArmorModifierClassSchema.optional(),
+  armorCoverage: combatRoundDamageArmorCoverageSchema,
+  armorCoverageLabel: z.string().min(1).optional(),
+  armorDamageModifier: z.number().int().optional(),
   armorModifier: z.number().int().optional(),
   armorModifierSource: z
     .object({
-      armorClass: z.string().min(1).optional(),
+      armorClass: combatArmorModifierClassSchema.optional(),
       label: z.string().min(1).optional(),
       reason: z.string().min(1).optional(),
       status: z.enum(["applied", "not_applied"]),
-      weaponArmorClass: z.string().min(1).optional(),
+      weaponArmorClass: combatArmorModifierClassSchema.optional(),
     })
     .default({
-      label: "Armor not applied yet",
-      reason: "Hit-location armor lookup is not wired to live defender equipment yet.",
+      label: "No armor coverage",
+      reason: "No defender armor coverage was available for this damage proposal.",
       status: "not_applied",
     }),
+  armorRegion: combatRoundArmorRegionSchema.optional(),
+  armorRegionLabel: z.string().min(1).optional(),
+  armorValue: z.number().int().min(0).optional(),
+  armorWarnings: z.array(z.string().min(1)).default([]),
+  attackDirection: combatRoundAttackDirectionSchema.default("front"),
   attackResultId: idSchema,
   attackerParticipantId: idSchema,
   createdAt: z.string().datetime(),
@@ -483,6 +555,7 @@ export const combatRoundDamageResultSchema = z.object({
   review: z
     .object({
       additionalEffects: z.array(combatRoundDamageReviewAdditionalEffectSchema).default([]),
+      attackDirectionOverride: combatRoundAttackDirectionSchema.optional(),
       armorModifierOverride: z.number().int().optional(),
       criticalGradeOverride: z.string().min(1).nullable().optional(),
       armorCriticalModifierOverride: z.number().int().optional(),
@@ -510,11 +583,16 @@ export const combatRoundDamageResultSchema = z.object({
     .optional(),
   selectedHitLocation: hitLocationSchema.optional(),
   selectedHitLocationRoll: z.number().int().min(1).max(20).optional(),
+  minimumDamageAfterArmor: z.number().int().min(0).optional(),
+  minimumDamageBeforeArmor: z.number().int().min(0).optional(),
+  provisionalDamageAfterArmor: z.number().int().optional(),
+  rawTableDamage: z.number().int().optional(),
   tableDamage: z.number().int().optional(),
   tableDamageModifier: z.number().int().optional(),
   targetLocation: hitLocationTargetSchema.optional(),
   rawTotalDamage: z.number().int().min(0).optional(),
   totalDamage: z.number().int(),
+  weaponArmorClass: combatArmorModifierClassSchema.optional(),
   weaponName: z.string().min(1).optional(),
 });
 export type CombatRoundDamageResult = z.infer<typeof combatRoundDamageResultSchema>;
@@ -593,6 +671,7 @@ export type CombatRoundDamageSubstate = z.infer<typeof combatRoundDamageSubstate
 
 export interface CombatRoundEffectiveDamageResult {
   computedArmorModifier: number;
+  computedAttackDirection: CombatRoundAttackDirection;
   computedCriticalGrade?: string;
   computedDamageLookupTotal?: number;
   computedCappedTotalDamage?: number;
@@ -600,10 +679,19 @@ export interface CombatRoundEffectiveDamageResult {
   computedMaxDamageCap?: number;
   computedMaxDamageNote?: string;
   computedMinDamage?: number;
+  computedMinimumDamageAfterArmor?: number;
+  computedProvisionalDamageAfterArmor?: number;
   computedSelectedHitLocation?: HitLocation;
   computedTableDamage?: number;
   computedTotalDamage: number;
+  effectiveArmorClass?: CombatArmorModifierClass;
+  effectiveArmorCoverageLabel?: string;
   effectiveArmorModifier: number;
+  effectiveArmorRegion?: CombatRoundArmorRegion;
+  effectiveArmorRegionLabel?: string;
+  effectiveArmorValue: number;
+  effectiveArmorWarnings: string[];
+  effectiveAttackDirection: CombatRoundAttackDirection;
   effectiveCriticalGrade?: string;
   effectiveDamageLookupTotal?: number;
   effectiveDamageRoll: CombatRoundDamageResult["damageRoll"];
@@ -612,10 +700,13 @@ export interface CombatRoundEffectiveDamageResult {
   effectiveMaxDamageCap?: number;
   effectiveMaxDamageNote?: string;
   effectiveMinDamage?: number;
+  effectiveMinimumDamageAfterArmor?: number;
+  effectiveProvisionalDamageAfterArmor?: number;
   effectiveRawTotalDamage: number;
   effectiveSelectedHitLocation?: HitLocation;
   effectiveTableDamage?: number;
   effectiveTotalDamage: number;
+  effectiveWeaponArmorClass?: CombatArmorModifierClass;
   hasReviewOverrides: boolean;
   requiresTotalDamageOverride: boolean;
   review?: CombatRoundDamageReview;
@@ -3064,12 +3155,11 @@ function buildCombatRoundCriticalRollResult(input: {
 }
 
 function calculateCombatRoundDamageLookupTotal(input: {
-  armorModifier: number;
   defenderDm: number;
   dmb: number;
   hitLookupTotal: number;
 }): number {
-  return input.hitLookupTotal + input.dmb + input.defenderDm + input.armorModifier;
+  return input.hitLookupTotal + input.dmb + input.defenderDm;
 }
 
 function getCombatRoundDamageMetadataForLookup(damageLookupTotal: number) {
@@ -3096,6 +3186,7 @@ function hasCombatRoundDamageReviewOverrides(
   return Boolean(
     review &&
       (review.armorModifierOverride !== undefined ||
+        review.attackDirectionOverride !== undefined ||
         review.armorCriticalModifierOverride !== undefined ||
         (review.additionalEffects?.length ?? 0) > 0 ||
         review.criticalLocationOverride !== undefined ||
@@ -3158,18 +3249,231 @@ function applyCombatRoundMaxDamageCap(input: {
   };
 }
 
+export function mapHitLocationAndDirectionToArmorRegion(input: {
+  direction: CombatRoundAttackDirection;
+  hitLocation: HitLocation;
+}): {
+  armorRegion: CombatRoundArmorRegion;
+  armorRegionLabel: string;
+  note?: string;
+} {
+  const { direction, hitLocation } = input;
+
+  switch (hitLocation) {
+    case "head":
+      return { armorRegion: "head", armorRegionLabel: COMBAT_ROUND_ARMOR_REGION_LABELS.head };
+    case "chest":
+      return { armorRegion: "chest", armorRegionLabel: COMBAT_ROUND_ARMOR_REGION_LABELS.chest };
+    case "abdomen":
+      return {
+        armorRegion: "abdomen",
+        armorRegionLabel: COMBAT_ROUND_ARMOR_REGION_LABELS.abdomen,
+      };
+    case "leftArm":
+    case "rightArm":
+      return direction === "front"
+        ? {
+            armorRegion: "frontArm",
+            armorRegionLabel: COMBAT_ROUND_ARMOR_REGION_LABELS.frontArm,
+          }
+        : {
+            armorRegion: "backArm",
+            armorRegionLabel: COMBAT_ROUND_ARMOR_REGION_LABELS.backArm,
+          };
+    case "leftLeg":
+    case "rightLeg":
+      return direction === "front"
+        ? {
+            armorRegion: "frontThigh",
+            armorRegionLabel: COMBAT_ROUND_ARMOR_REGION_LABELS.frontThigh,
+            note: "Whole-leg hit mapped to front thigh until lower-leg/foot hit locations are available.",
+          }
+        : {
+            armorRegion: "backThigh",
+            armorRegionLabel: COMBAT_ROUND_ARMOR_REGION_LABELS.backThigh,
+            note: "Whole-leg hit mapped to back thigh until lower-leg/foot hit locations are available.",
+          };
+  }
+}
+
+export function parseCombatRoundArmorCoverageLabel(
+  value: string | undefined | null,
+): { armorClass?: CombatArmorModifierClass; armorValue?: number } {
+  if (!value) {
+    return {};
+  }
+
+  const match = value.trim().match(/^(\d+)\s*([A-E])?$/i);
+  if (!match) {
+    return {};
+  }
+
+  const armorValue = Number(match[1]);
+  const armorClass = normalizeCombatArmorModifierClass(match[2]);
+
+  return {
+    armorClass,
+    armorValue: Number.isFinite(armorValue) ? armorValue : undefined,
+  };
+}
+
+function formatCombatRoundArmorCoverageLabel(input: {
+  armorClass?: CombatArmorModifierClass;
+  armorValue?: number;
+}): string | undefined {
+  if (input.armorValue === undefined) {
+    return undefined;
+  }
+
+  return `${input.armorValue}${input.armorClass ?? ""}`;
+}
+
+function resolveCombatRoundArmorContext(input: {
+  armorCoverage?: CombatRoundDamageArmorCoverage;
+  attackDirection: CombatRoundAttackDirection;
+  selectedHitLocation?: HitLocation;
+  weaponArmorClass?: CombatArmorModifierClass;
+}): {
+  armorClass?: CombatArmorModifierClass;
+  armorCoverageLabel?: string;
+  armorDamageModifier: number;
+  armorModifierSource: CombatRoundDamageResult["armorModifierSource"];
+  armorRegion?: CombatRoundArmorRegion;
+  armorRegionLabel?: string;
+  armorValue: number;
+  armorWarnings: string[];
+  weaponArmorClass?: CombatArmorModifierClass;
+} {
+  const armorCoverage = combatRoundDamageArmorCoverageSchema.parse(input.armorCoverage);
+  const warnings: string[] = [];
+
+  if (!input.selectedHitLocation) {
+    warnings.push("Hit location is missing; armor was not applied.");
+    return {
+      armorDamageModifier: 0,
+      armorModifierSource: {
+        label: "Armor not applied",
+        reason: "Hit location is missing.",
+        status: "not_applied",
+      },
+      armorValue: 0,
+      armorWarnings: warnings,
+      weaponArmorClass: input.weaponArmorClass,
+    };
+  }
+
+  const mapping = mapHitLocationAndDirectionToArmorRegion({
+    direction: input.attackDirection,
+    hitLocation: input.selectedHitLocation,
+  });
+  if (mapping.note) {
+    warnings.push(mapping.note);
+  }
+
+  const coverage = armorCoverage[mapping.armorRegion];
+  const parsedCoverage = parseCombatRoundArmorCoverageLabel(coverage?.coverageLabel);
+  const armorValue = coverage?.value ?? parsedCoverage.armorValue ?? 0;
+  const armorClass = coverage?.armorClass ?? parsedCoverage.armorClass ?? "A";
+  const armorCoverageLabel =
+    coverage?.coverageLabel ??
+    formatCombatRoundArmorCoverageLabel({ armorClass, armorValue }) ??
+    `${armorValue}${armorClass}`;
+
+  if (!coverage) {
+    warnings.push(`${mapping.armorRegionLabel} armor coverage was not available; using 0A.`);
+  }
+
+  if (!input.weaponArmorClass) {
+    warnings.push("Weapon armor class was not available; armor table modifier is 0.");
+  }
+
+  const armorDamageModifier = input.weaponArmorClass
+    ? lookupCombatArmorModifier({
+        armorClass,
+        weaponArmorClass: input.weaponArmorClass,
+      })
+    : 0;
+  const label = `${mapping.armorRegionLabel.toLowerCase()}/${input.attackDirection} ${armorCoverageLabel}`;
+
+  return {
+    armorClass,
+    armorCoverageLabel,
+    armorDamageModifier,
+    armorModifierSource: {
+      armorClass,
+      label,
+      reason: coverage
+        ? undefined
+        : `${mapping.armorRegionLabel} armor coverage was not available; using 0A.`,
+      status: coverage ? "applied" : "not_applied",
+      weaponArmorClass: input.weaponArmorClass,
+    },
+    armorRegion: mapping.armorRegion,
+    armorRegionLabel: mapping.armorRegionLabel,
+    armorValue,
+    armorWarnings: warnings,
+    weaponArmorClass: input.weaponArmorClass,
+  };
+}
+
+function calculateCombatRoundArmorAdjustedDamage(input: {
+  armorDamageModifier: number;
+  armorValue: number;
+  tableDamage: number;
+  tableMinDamage?: number;
+}): {
+  minimumDamageAfterArmor?: number;
+  minimumDamageBeforeArmor?: number;
+  provisionalDamageAfterArmor: number;
+  rawTotalDamage: number;
+} {
+  const provisionalDamageAfterArmor =
+    input.tableDamage - input.armorValue + input.armorDamageModifier;
+  const minimumDamageAfterArmor =
+    input.tableMinDamage === undefined
+      ? undefined
+      : Math.max(0, input.tableMinDamage + input.armorDamageModifier);
+  const rawTotalDamage = Math.max(
+    provisionalDamageAfterArmor,
+    minimumDamageAfterArmor ?? 0,
+    0,
+  );
+
+  return {
+    minimumDamageAfterArmor,
+    minimumDamageBeforeArmor: input.tableMinDamage,
+    provisionalDamageAfterArmor,
+    rawTotalDamage,
+  };
+}
+
 export function getCombatRoundEffectiveDamageResult(
   damageResult: CombatRoundDamageResult,
 ): CombatRoundEffectiveDamageResult {
   const computedArmorModifier = damageResult.armorModifier ?? 0;
-  const effectiveArmorModifier =
-    damageResult.review?.armorModifierOverride ?? computedArmorModifier;
+  const computedAttackDirection = damageResult.attackDirection;
+  const effectiveAttackDirection =
+    damageResult.review?.attackDirectionOverride ?? computedAttackDirection;
   const computedSelectedHitLocation = damageResult.selectedHitLocation;
   const effectiveSelectedHitLocation =
     damageResult.review?.selectedHitLocationOverride ?? computedSelectedHitLocation;
   const hitLookupTotal = damageResult.hitLookupTotal ?? damageResult.lookupTotal;
   const hasTotalDamageOverride = damageResult.review?.totalDamageOverride !== undefined;
   const computedDamageRoll = damageResult.damageRoll;
+  const armorContext = resolveCombatRoundArmorContext({
+    armorCoverage: damageResult.armorCoverage,
+    attackDirection: effectiveAttackDirection,
+    selectedHitLocation: effectiveSelectedHitLocation,
+    weaponArmorClass: damageResult.weaponArmorClass,
+  });
+  const computedArmorContext = {
+    armorDamageModifier: damageResult.armorDamageModifier ?? computedArmorModifier,
+    armorValue: damageResult.armorValue ?? 0,
+    minimumDamageAfterArmor: damageResult.minimumDamageAfterArmor,
+    provisionalDamageAfterArmor: damageResult.provisionalDamageAfterArmor,
+  };
+  const effectiveArmorModifier =
+    damageResult.review?.armorModifierOverride ?? armorContext.armorDamageModifier;
   let effectiveDamageLookupTotal = damageResult.damageLookupTotal;
   let effectiveTableDamage = damageResult.tableDamage ?? damageResult.tableDamageModifier;
   let effectiveCriticalGrade = getCombatRoundReviewedCriticalGrade({
@@ -3178,6 +3482,8 @@ export function getCombatRoundEffectiveDamageResult(
   });
   let effectiveMaxDamageNote = damageResult.maxDamageNote;
   let effectiveMinDamage = damageResult.minDamage;
+  let effectiveMinimumDamageAfterArmor = damageResult.minimumDamageAfterArmor;
+  let effectiveProvisionalDamageAfterArmor = damageResult.provisionalDamageAfterArmor;
   let effectiveDamageRoll: CombatRoundDamageResult["damageRoll"] = computedDamageRoll;
   let effectiveRawTotalDamage =
     damageResult.review?.totalDamageOverride ??
@@ -3199,7 +3505,6 @@ export function getCombatRoundEffectiveDamageResult(
     if (damageResult.grazing) {
       const grazingReferenceHitLookupTotal = 12;
       effectiveDamageLookupTotal = calculateCombatRoundDamageLookupTotal({
-        armorModifier: effectiveArmorModifier,
         defenderDm: damageResult.defenderDm,
         dmb: damageResult.dmb,
         hitLookupTotal: grazingReferenceHitLookupTotal,
@@ -3208,13 +3513,22 @@ export function getCombatRoundEffectiveDamageResult(
       effectiveTableDamage = metadata.damage;
       effectiveMaxDamageNote = metadata.maxDamageNote;
       effectiveMinDamage = metadata.minDamage;
+      const adjustedReferenceDamage = calculateCombatRoundArmorAdjustedDamage({
+        armorDamageModifier: effectiveArmorModifier,
+        armorValue: armorContext.armorValue,
+        tableDamage: metadata.damage,
+        tableMinDamage: metadata.minDamage,
+      });
+      effectiveMinimumDamageAfterArmor = adjustedReferenceDamage.minimumDamageAfterArmor;
+      effectiveProvisionalDamageAfterArmor =
+        adjustedReferenceDamage.provisionalDamageAfterArmor;
       effectiveCriticalGrade = getCombatRoundReviewedCriticalGrade({
         computedCriticalGrade: damageResult.criticalGrade,
         review: damageResult.review,
         tableCriticalGrade: undefined,
       });
 
-      const dieSides = Math.max(1, metadata.damage);
+      const dieSides = Math.max(1, adjustedReferenceDamage.rawTotalDamage);
       const existingRoll =
         computedDamageRoll.rolls?.[0] ?? computedDamageRoll.total ?? damageResult.totalDamage;
       const canKeepExistingRoll =
@@ -3225,9 +3539,9 @@ export function getCombatRoundEffectiveDamageResult(
         : existingRoll;
       effectiveDamageRoll = {
         derivedFromLookupTotal: grazingReferenceHitLookupTotal,
-        derivedNormalDamageTotal: metadata.damage,
+        derivedNormalDamageTotal: adjustedReferenceDamage.rawTotalDamage,
         diceExpression: `1d${dieSides}`,
-        grazingReferenceDamage: metadata.damage,
+        grazingReferenceDamage: adjustedReferenceDamage.rawTotalDamage,
         grazingReferenceDamageLookupTotal: effectiveDamageLookupTotal,
         grazingReferenceHitLookupTotal,
         required: true,
@@ -3236,7 +3550,6 @@ export function getCombatRoundEffectiveDamageResult(
       };
     } else {
       effectiveDamageLookupTotal = calculateCombatRoundDamageLookupTotal({
-        armorModifier: effectiveArmorModifier,
         defenderDm: damageResult.defenderDm,
         dmb: damageResult.dmb,
         hitLookupTotal,
@@ -3250,7 +3563,16 @@ export function getCombatRoundEffectiveDamageResult(
         review: damageResult.review,
         tableCriticalGrade: metadata.criticalGrade,
       });
-      effectiveRawTotalDamage = damageResult.review?.totalDamageOverride ?? metadata.damage;
+      const adjustedDamage = calculateCombatRoundArmorAdjustedDamage({
+        armorDamageModifier: effectiveArmorModifier,
+        armorValue: armorContext.armorValue,
+        tableDamage: metadata.damage,
+        tableMinDamage: metadata.minDamage,
+      });
+      effectiveMinimumDamageAfterArmor = adjustedDamage.minimumDamageAfterArmor;
+      effectiveProvisionalDamageAfterArmor = adjustedDamage.provisionalDamageAfterArmor;
+      effectiveRawTotalDamage =
+        damageResult.review?.totalDamageOverride ?? adjustedDamage.rawTotalDamage;
       effectiveDamageRoll = {
         required: false,
       };
@@ -3265,9 +3587,19 @@ export function getCombatRoundEffectiveDamageResult(
     maxDamageCap: effectiveMaxDamageCap,
     rawTotalDamage: effectiveRawTotalDamage,
   });
+  const effectiveTotalDamage = hasTotalDamageOverride
+    ? effectiveRawTotalDamage
+    : effectiveCappedDamage.totalDamage;
+  const effectiveCappedTotalDamage = hasTotalDamageOverride
+    ? undefined
+    : effectiveCappedDamage.cappedTotalDamage;
+  const effectiveMaxDamageApplied = hasTotalDamageOverride
+    ? false
+    : effectiveCappedDamage.maxDamageApplied;
 
   return {
     computedArmorModifier,
+    computedAttackDirection,
     computedCriticalGrade: damageResult.criticalGrade,
     computedDamageLookupTotal: damageResult.damageLookupTotal,
     computedCappedTotalDamage: computedCappedDamage.cappedTotalDamage,
@@ -3275,22 +3607,34 @@ export function getCombatRoundEffectiveDamageResult(
     computedMaxDamageCap,
     computedMaxDamageNote: damageResult.maxDamageNote,
     computedMinDamage: damageResult.minDamage,
+    computedMinimumDamageAfterArmor: computedArmorContext.minimumDamageAfterArmor,
+    computedProvisionalDamageAfterArmor: computedArmorContext.provisionalDamageAfterArmor,
     computedSelectedHitLocation,
     computedTableDamage: damageResult.tableDamage ?? damageResult.tableDamageModifier,
     computedTotalDamage: damageResult.totalDamage,
+    effectiveArmorClass: armorContext.armorClass,
+    effectiveArmorCoverageLabel: armorContext.armorCoverageLabel,
     effectiveArmorModifier,
+    effectiveArmorRegion: armorContext.armorRegion,
+    effectiveArmorRegionLabel: armorContext.armorRegionLabel,
+    effectiveArmorValue: armorContext.armorValue,
+    effectiveArmorWarnings: armorContext.armorWarnings,
+    effectiveAttackDirection,
     effectiveCriticalGrade,
     effectiveDamageLookupTotal,
     effectiveDamageRoll,
-    effectiveCappedTotalDamage: effectiveCappedDamage.cappedTotalDamage,
-    effectiveMaxDamageApplied: effectiveCappedDamage.maxDamageApplied,
+    effectiveCappedTotalDamage,
+    effectiveMaxDamageApplied,
     effectiveMaxDamageCap,
     effectiveMaxDamageNote,
     effectiveMinDamage,
+    effectiveMinimumDamageAfterArmor,
+    effectiveProvisionalDamageAfterArmor,
     effectiveRawTotalDamage,
     effectiveSelectedHitLocation,
     effectiveTableDamage,
-    effectiveTotalDamage: effectiveCappedDamage.totalDamage,
+    effectiveTotalDamage,
+    effectiveWeaponArmorClass: armorContext.weaponArmorClass,
     hasReviewOverrides: hasCombatRoundDamageReviewOverrides(damageResult.review),
     requiresTotalDamageOverride,
     review: damageResult.review,
@@ -3360,8 +3704,10 @@ export function getCombatRoundDamageSubstate(
 }
 
 export function buildCombatRoundDamageResult(input: {
+  armorCoverage?: CombatRoundDamageArmorCoverage;
   armorModifier?: number;
   armorModifierSource?: CombatRoundDamageResult["armorModifierSource"];
+  attackDirection?: CombatRoundAttackDirection;
   attackerStrengthGm?: number;
   attackResult: CombatRoundAttackRollResult;
   createdAt: string;
@@ -3371,17 +3717,32 @@ export function buildCombatRoundDamageResult(input: {
   hitLocationSelection: HitLocationSelection;
   rng?: () => number;
   roundNumber: number;
+  weaponArmorClass?: CombatArmorModifierClass;
 }): CombatRoundDamageResult {
   if (!input.attackResult.hit) {
     throw new RangeError("Damage cannot be resolved for a missed attack.");
   }
 
-  const armorModifier = input.armorModifier ?? 0;
   const hitLookupTotal = input.attackResult.lookupTotal;
   const rng = input.rng ?? Math.random;
   const hitLocationSelection = input.hitLocationSelection;
+  const attackDirection = input.attackDirection ?? "front";
+  const armorContext = resolveCombatRoundArmorContext({
+    armorCoverage: input.armorCoverage,
+    attackDirection,
+    selectedHitLocation: hitLocationSelection.selectedHitLocation,
+    weaponArmorClass: input.weaponArmorClass,
+  });
+  const armorModifier = input.armorModifier ?? armorContext.armorDamageModifier;
+  const armorModifierSource =
+    input.armorModifierSource ??
+    (input.armorModifier !== undefined
+      ? {
+          ...armorContext.armorModifierSource,
+          label: armorContext.armorModifierSource.label ?? "Manual armor modifier",
+        }
+      : armorContext.armorModifierSource);
   const normalDamageLookupTotal = calculateCombatRoundDamageLookupTotal({
-    armorModifier,
     defenderDm: input.defenderDm,
     dmb: input.dmb,
     hitLookupTotal,
@@ -3399,7 +3760,6 @@ export function buildCombatRoundDamageResult(input: {
   if (input.attackResult.grazing) {
     const grazingReferenceHitLookupTotal = 12;
     const grazingReferenceDamageLookupTotal = calculateCombatRoundDamageLookupTotal({
-      armorModifier,
       defenderDm: input.defenderDm,
       dmb: input.dmb,
       hitLookupTotal: grazingReferenceHitLookupTotal,
@@ -3407,7 +3767,13 @@ export function buildCombatRoundDamageResult(input: {
     const grazingReferenceDamageMetadata = getCombatRoundDamageMetadataForLookup(
       grazingReferenceDamageLookupTotal,
     );
-    const grazingReferenceDamage = grazingReferenceDamageMetadata.damage;
+    const adjustedReferenceDamage = calculateCombatRoundArmorAdjustedDamage({
+      armorDamageModifier: armorModifier,
+      armorValue: armorContext.armorValue,
+      tableDamage: grazingReferenceDamageMetadata.damage,
+      tableMinDamage: grazingReferenceDamageMetadata.minDamage,
+    });
+    const grazingReferenceDamage = adjustedReferenceDamage.rawTotalDamage;
     const dieSides = Math.max(1, grazingReferenceDamage);
 
     damageRollTotal = rollCombatDamageDie({
@@ -3415,7 +3781,8 @@ export function buildCombatRoundDamageResult(input: {
       sides: dieSides,
     });
     damageLookupTotal = grazingReferenceDamageLookupTotal;
-    tableDamage = grazingReferenceDamage;
+    tableDamage = grazingReferenceDamageMetadata.damage;
+    minDamage = grazingReferenceDamageMetadata.minDamage;
     damageRoll = {
       derivedFromLookupTotal: grazingReferenceHitLookupTotal,
       derivedNormalDamageTotal: grazingReferenceDamage,
@@ -3435,7 +3802,21 @@ export function buildCombatRoundDamageResult(input: {
     minDamage = damageMetadata.minDamage;
   }
 
-  const totalDamage = input.attackResult.grazing ? damageRollTotal : tableDamage;
+  const adjustedDamage = input.attackResult.grazing
+    ? {
+        minimumDamageAfterArmor:
+          minDamage === undefined ? undefined : Math.max(0, minDamage + armorModifier),
+        minimumDamageBeforeArmor: minDamage,
+        provisionalDamageAfterArmor: tableDamage - armorContext.armorValue + armorModifier,
+        rawTotalDamage: damageRollTotal,
+      }
+    : calculateCombatRoundArmorAdjustedDamage({
+        armorDamageModifier: armorModifier,
+        armorValue: armorContext.armorValue,
+        tableDamage,
+        tableMinDamage: minDamage,
+      });
+  const totalDamage = adjustedDamage.rawTotalDamage;
   const maxDamageCap = getCombatRoundMaxDamageCap({
     attackerStrengthGm: input.attackerStrengthGm,
     maxDamageNote,
@@ -3450,7 +3831,19 @@ export function buildCombatRoundDamageResult(input: {
   });
 
   return combatRoundDamageResultSchema.parse({
+    armorAppliesToDamage: true,
+    armorAppliesToMinimumDamage: true,
+    armorClass: armorContext.armorClass,
+    armorCoverage: input.armorCoverage,
+    armorCoverageLabel: armorContext.armorCoverageLabel,
+    armorDamageModifier: armorModifier,
     armorModifier,
+    armorModifierSource,
+    armorRegion: armorContext.armorRegion,
+    armorRegionLabel: armorContext.armorRegionLabel,
+    armorValue: armorContext.armorValue,
+    armorWarnings: armorContext.armorWarnings,
+    attackDirection,
     attackResultId,
     attackerParticipantId: input.attackResult.attackerParticipantId,
     attackerStrengthGm: input.attackerStrengthGm,
@@ -3476,12 +3869,16 @@ export function buildCombatRoundDamageResult(input: {
     phase: input.attackResult.phase,
     selectedHitLocation: hitLocationSelection.selectedHitLocation,
     selectedHitLocationRoll: hitLocationSelection.selectedHitLocationRoll,
+    minimumDamageAfterArmor: adjustedDamage.minimumDamageAfterArmor,
+    minimumDamageBeforeArmor: adjustedDamage.minimumDamageBeforeArmor,
+    provisionalDamageAfterArmor: adjustedDamage.provisionalDamageAfterArmor,
+    rawTableDamage: tableDamage,
     tableDamage,
     targetLocation: hitLocationSelection.targetLocation,
     rawTotalDamage: totalDamage,
     totalDamage,
+    weaponArmorClass: input.weaponArmorClass,
     weaponName: input.attackResult.weaponName,
-    armorModifierSource: input.armorModifierSource,
   });
 }
 
@@ -3567,10 +3964,20 @@ function recordCombatRoundResolveDamageCommand(input: {
       selectedHitLocation: input.damageResult.selectedHitLocation,
       selectedHitLocationRoll: input.damageResult.selectedHitLocationRoll,
       targetLocation: input.damageResult.targetLocation,
+      armorClass: input.damageResult.armorClass,
+      armorCoverageLabel: input.damageResult.armorCoverageLabel,
+      armorDamageModifier: input.damageResult.armorDamageModifier,
       armorModifier: input.damageResult.armorModifier,
       armorModifierSource: input.damageResult.armorModifierSource,
+      armorRegion: input.damageResult.armorRegion,
+      armorRegionLabel: input.damageResult.armorRegionLabel,
+      armorValue: input.damageResult.armorValue,
+      attackDirection: input.damageResult.attackDirection,
+      minimumDamageAfterArmor: input.damageResult.minimumDamageAfterArmor,
+      provisionalDamageAfterArmor: input.damageResult.provisionalDamageAfterArmor,
       status: "resolved",
       totalDamage: input.damageResult.totalDamage,
+      weaponArmorClass: input.damageResult.weaponArmorClass,
       ...(afterCursor.participantId
         ? {
             nextStepOpened: {
@@ -3763,8 +4170,10 @@ export function recordCombatRoundHitLocationRoll(input: {
 }
 
 export function recordCombatRoundDamageResult(input: {
+  armorCoverage?: CombatRoundDamageArmorCoverage;
   armorModifier?: number;
   armorModifierSource?: CombatRoundDamageResult["armorModifierSource"];
+  attackDirection?: CombatRoundAttackDirection;
   attackerStrengthGm?: number;
   attackResult: CombatRoundAttackRollResult;
   command?: {
@@ -3778,6 +4187,7 @@ export function recordCombatRoundDamageResult(input: {
   state: CombatRoundState;
   submittedBy: "gm" | "player";
   updatedAt: string;
+  weaponArmorClass?: CombatArmorModifierClass;
 }): CombatRoundState {
   const normalized = combatRoundStateSchema.parse(input.state);
   const resolution = getCombatRoundPhaseResolutionResultForAttack({
@@ -3803,8 +4213,10 @@ export function recordCombatRoundDamageResult(input: {
   }
 
   const damageResult = buildCombatRoundDamageResult({
+    armorCoverage: input.armorCoverage,
     armorModifier: input.armorModifier,
     armorModifierSource: input.armorModifierSource,
+    attackDirection: input.attackDirection,
     attackerStrengthGm: input.attackerStrengthGm,
     attackResult: input.attackResult,
     createdAt: input.updatedAt,
@@ -3814,6 +4226,7 @@ export function recordCombatRoundDamageResult(input: {
     hitLocationSelection: getHitLocationSelectionFromRoll(resolution.hitLocationRoll),
     rng: input.rng,
     roundNumber: normalized.roundNumber,
+    weaponArmorClass: input.weaponArmorClass,
   });
   const withDamageResult = recordCombatRoundDamageResolution({
     attackResult: input.attackResult,
@@ -4209,6 +4622,18 @@ function formatCombatRoundDamageCommitDescription(input: {
     effectiveDamage.effectiveMaxDamageCap !== undefined
       ? `${effectiveDamage.effectiveRawTotalDamage} raw damage, capped to ${effectiveDamage.effectiveTotalDamage}`
       : `${effectiveDamage.effectiveTotalDamage} damage`;
+  const tableDamage =
+    effectiveDamage.effectiveTableDamage !== undefined
+      ? `table damage ${effectiveDamage.effectiveTableDamage}`
+      : "";
+  const armor =
+    effectiveDamage.effectiveArmorRegionLabel && effectiveDamage.effectiveArmorCoverageLabel
+      ? `armor ${effectiveDamage.effectiveArmorCoverageLabel} at ${effectiveDamage.effectiveArmorRegionLabel.toLowerCase()}/${effectiveDamage.effectiveAttackDirection} adjusts to ${effectiveDamage.effectiveRawTotalDamage}`
+      : "";
+  const calculation = [tableDamage, armor].filter(Boolean).join(", ");
+  const armorWarnings = effectiveDamage.effectiveArmorWarnings.length
+    ? ` ${effectiveDamage.effectiveArmorWarnings.join(" ")}`
+    : "";
   const notes = input.damageResult.review?.notes?.trim()
     ? ` GM review: ${input.damageResult.review.notes.trim()}`
     : "";
@@ -4220,7 +4645,7 @@ function formatCombatRoundDamageCommitDescription(input: {
 
   return `${formatCombatRoundDamageCommitPhaseLabel(
     input.damageResult.phase,
-  )} damage result: ${damage}.${critical}${criticalRoll}${notes}${additionalEffects}`;
+  )} damage result: ${calculation ? `${calculation}; ` : ""}${damage}.${critical}${criticalRoll}${armorWarnings}${notes}${additionalEffects}`;
 }
 
 function buildCombatRoundDamageCommitRows(input: {
@@ -4513,10 +4938,21 @@ function recordCombatRoundCommitPhaseDamageCommand(input: {
       damageResultId,
       defenderParticipantId: input.damageResult.defenderParticipantId,
       effectiveArmorModifier: effectiveDamage.effectiveArmorModifier,
+      effectiveArmorClass: effectiveDamage.effectiveArmorClass,
+      effectiveArmorCoverageLabel: effectiveDamage.effectiveArmorCoverageLabel,
+      effectiveArmorRegion: effectiveDamage.effectiveArmorRegion,
+      effectiveArmorRegionLabel: effectiveDamage.effectiveArmorRegionLabel,
+      effectiveArmorValue: effectiveDamage.effectiveArmorValue,
+      effectiveArmorWarnings: effectiveDamage.effectiveArmorWarnings,
+      effectiveAttackDirection: effectiveDamage.effectiveAttackDirection,
       effectiveCappedTotalDamage: effectiveDamage.effectiveCappedTotalDamage,
       effectiveDamageLookupTotal: effectiveDamage.effectiveDamageLookupTotal,
       effectiveHitLocation: effectiveDamage.effectiveSelectedHitLocation,
+      effectiveMinimumDamageAfterArmor: effectiveDamage.effectiveMinimumDamageAfterArmor,
       effectivePhysicalDamageLocation: damageLocation,
+      effectiveProvisionalDamageAfterArmor: effectiveDamage.effectiveProvisionalDamageAfterArmor,
+      effectiveTableDamage: effectiveDamage.effectiveTableDamage,
+      effectiveWeaponArmorClass: effectiveDamage.effectiveWeaponArmorClass,
       maxDamageApplied: effectiveDamage.effectiveMaxDamageApplied,
       maxDamageCap: effectiveDamage.effectiveMaxDamageCap,
       rawTotalDamage: effectiveDamage.effectiveRawTotalDamage,
@@ -4723,6 +5159,7 @@ function getCombatRoundPhaseDamageCommitReadinessDetail(input: {
     ...(damageResult?.review?.criticalEffectProposal?.warnings ?? []).map(
       (warning) => `Critical effects unavailable: ${warning}`,
     ),
+    ...(effectiveDamage?.effectiveArmorWarnings ?? []),
   ];
 
   if (damageResult?.armorModifierSource.status === "not_applied") {

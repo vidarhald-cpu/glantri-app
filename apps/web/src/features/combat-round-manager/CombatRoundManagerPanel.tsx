@@ -4,7 +4,9 @@ import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react"
 
 import type {
   CombatRoundDeclaration,
+  CombatRoundAttackDirection,
   CombatRoundAttackRollResult,
+  CombatRoundDamageArmorCoverage,
   CombatRoundDamageReview,
   CombatRoundDamageReviewAdditionalEffect,
   CombatRoundDamageResult,
@@ -60,6 +62,7 @@ import {
   HIT_LOCATIONS,
   hasScenarioParticipantCombatDeclarationForEncounterRound,
   initializeCombatRoundState,
+  normalizeCombatArmorModifierClass,
   recordCombatRoundCriticalRoll,
   recordCombatRoundDamageResult,
   recordCombatRoundHitLocationRoll,
@@ -254,6 +257,7 @@ interface CombatDamageReviewAdditionalEffectDraft {
 
 interface CombatDamageReviewDraft {
   additionalEffects: CombatDamageReviewAdditionalEffectDraft[];
+  attackDirectionOverride: CombatRoundAttackDirection;
   armorCriticalModifierOverride: string;
   armorModifierOverride: string;
   criticalGradeOverride: string;
@@ -565,7 +569,6 @@ function formatCombatDamageCalculationLine(
   }
 
   const effectiveDamage = getCombatRoundEffectiveDamageResult(damage);
-  const armorModifier = effectiveDamage.effectiveArmorModifier;
   const hitLookupTotal = damage.hitLookupTotal ?? damage.lookupTotal;
   const tableDamage = effectiveDamage.effectiveTableDamage;
 
@@ -588,7 +591,7 @@ function formatCombatDamageCalculationLine(
       referenceHitLookupTotal !== undefined &&
       referenceDamageLookupTotal !== undefined &&
       referenceDamage !== undefined
-        ? `grazing reference hit ${referenceHitLookupTotal} + DMB ${damage.dmb} + DM ${damage.defenderDm} + armor ${armorModifier} = lookup ${referenceDamageLookupTotal}; table damage ${referenceDamage}`
+        ? `grazing reference hit ${referenceHitLookupTotal} + DMB ${damage.dmb} + DM ${damage.defenderDm} = lookup ${referenceDamageLookupTotal}; armor-adjusted reference damage ${referenceDamage}`
         : "grazing reference damage lookup";
 
     return `${referenceLabel}; roll ${rollLabel} = ${effectiveDamage.effectiveTotalDamage}`;
@@ -598,7 +601,7 @@ function formatCombatDamageCalculationLine(
     return `table damage ${tableDamage ?? effectiveDamage.effectiveTotalDamage} = ${effectiveDamage.effectiveTotalDamage}`;
   }
 
-  return `hit ${hitLookupTotal} + DMB ${damage.dmb} + DM ${damage.defenderDm} + armor ${armorModifier} = lookup ${effectiveDamage.effectiveDamageLookupTotal}`;
+  return `hit ${hitLookupTotal} + DMB ${damage.dmb} + DM ${damage.defenderDm} = lookup ${effectiveDamage.effectiveDamageLookupTotal}`;
 }
 
 function formatCombatDamageResultLine(
@@ -667,17 +670,18 @@ function formatCombatArmorLine(
 
   const effectiveDamage = getCombatRoundEffectiveDamageResult(damage);
 
-  if (damage.armorModifierSource.status === "not_applied") {
+  if (!effectiveDamage.effectiveArmorRegionLabel || !effectiveDamage.effectiveArmorCoverageLabel) {
     return damage.review?.armorModifierOverride !== undefined
-      ? `Armor: ${effectiveDamage.effectiveArmorModifier}`
+      ? `Armor: modifier ${effectiveDamage.effectiveArmorModifier}`
       : "Armor: not applied yet";
   }
 
-  const source = damage.armorModifierSource.label
-    ? `${damage.armorModifierSource.label} `
-    : "";
+  const modifier =
+    effectiveDamage.effectiveArmorModifier !== 0
+      ? `, armor mod ${effectiveDamage.effectiveArmorModifier}`
+      : "";
 
-  return `Armor: ${source}${effectiveDamage.effectiveArmorModifier}`;
+  return `Armor: ${effectiveDamage.effectiveArmorRegionLabel.toLowerCase()}/${effectiveDamage.effectiveAttackDirection} ${effectiveDamage.effectiveArmorCoverageLabel}, damage -${effectiveDamage.effectiveArmorValue}${modifier}`;
 }
 
 function formatHitLocationTargetLabel(
@@ -1113,6 +1117,7 @@ function buildCombatDamageReviewDraft(
       sourceEffectKey: effect.sourceEffectKey,
       sourceKind: effect.sourceKind,
     })),
+    attackDirectionOverride: effectiveDamage?.effectiveAttackDirection ?? "front",
     armorCriticalModifierOverride: effectiveCritical.armorCriticalModifier?.toString() ?? "",
     armorModifierOverride: effectiveDamage?.effectiveArmorModifier.toString() ?? "",
     criticalGradeOverride: effectiveDamage?.effectiveCriticalGrade ?? "none",
@@ -1176,6 +1181,10 @@ function buildCombatDamageReviewFromDraft(input: {
   const criticalLocationOverride =
     criticalLocationValue && criticalLocationValue !== effectiveCritical.criticalLocation
       ? criticalLocationValue
+      : undefined;
+  const attackDirectionOverride =
+    input.draft.attackDirectionOverride !== effectiveDamage.computedAttackDirection
+      ? input.draft.attackDirectionOverride
       : undefined;
   const selectedCriticalGrade =
     input.draft.criticalGradeOverride === "none"
@@ -1268,6 +1277,10 @@ function buildCombatDamageReviewFromDraft(input: {
     reviewWithoutTotalDamageOverride.armorModifierOverride = armorModifierOverride;
   }
 
+  if (attackDirectionOverride !== undefined) {
+    reviewWithoutTotalDamageOverride.attackDirectionOverride = attackDirectionOverride;
+  }
+
   if (armorCriticalModifierOverride !== undefined) {
     reviewWithoutTotalDamageOverride.armorCriticalModifierOverride = armorCriticalModifierOverride;
   }
@@ -1311,6 +1324,10 @@ function buildCombatDamageReviewFromDraft(input: {
 
   if (armorModifierOverride !== undefined) {
     review.armorModifierOverride = armorModifierOverride;
+  }
+
+  if (attackDirectionOverride !== undefined) {
+    review.attackDirectionOverride = attackDirectionOverride;
   }
 
   if (armorCriticalModifierOverride !== undefined) {
@@ -1423,6 +1440,23 @@ function getCombinedParrySource(
         label: getCombatTableCell({ columns: table.columns, label: "Weapon", row }),
         score,
       };
+}
+
+function buildCombatRoundDamageArmorCoverageFromLoadoutModel(
+  model: ReturnType<typeof buildEquipmentLoadoutModuleModel> | null,
+): CombatRoundDamageArmorCoverage {
+  const coverage: CombatRoundDamageArmorCoverage = {};
+
+  for (const location of model?.armorSummary?.locations ?? []) {
+    coverage[location.key] = {
+      armorClass: normalizeCombatArmorModifierClass(location.type),
+      coverageLabel: location.valueWithType !== "—" ? location.valueWithType : undefined,
+      label: location.label,
+      value: location.value ?? undefined,
+    };
+  }
+
+  return coverage;
 }
 
 function buildCombatParrySourceOptions(input: {
@@ -1788,6 +1822,24 @@ function CombatDamageReviewPanel(input: {
                 {getHitLocationFullLabel(location)}
               </option>
             ))}
+          </select>
+        </label>
+        <label style={{ display: "grid", gap: "0.2rem" }}>
+          <span style={{ color: "#5e5a50", fontSize: "0.8rem", fontWeight: 700 }}>
+            Direction
+          </span>
+          <select
+            disabled={disabled}
+            onChange={(event) =>
+              input.onDraftChange({
+                ...input.draft,
+                attackDirectionOverride: event.target.value as CombatRoundAttackDirection,
+              })
+            }
+            value={input.draft.attackDirectionOverride}
+          >
+            <option value="front">Front</option>
+            <option value="back">Back</option>
           </select>
         </label>
         <label style={{ display: "grid", gap: "0.2rem" }}>
@@ -3149,6 +3201,7 @@ export default function CombatRoundManagerPanel({
     phaseKey?: PlayerCombatPhaseKey;
     scenarioParticipant?: ScenarioParticipant;
   }): {
+    armorCoverage: CombatRoundDamageArmorCoverage;
     attackStats: ReturnType<typeof buildPlayerCombatLoadoutSummary>["attackStats"];
     baseDefenseStats: ReturnType<typeof buildPlayerCombatDefenseStats>;
     defenseStats: ReturnType<typeof buildPlayerCombatDefenseStats>;
@@ -3257,6 +3310,7 @@ export default function CombatRoundManagerPanel({
       : null;
 
     return {
+      armorCoverage: buildCombatRoundDamageArmorCoverageFromLoadoutModel(baseLoadoutModel),
       attackStats: loadoutSummary.attackStats,
       baseDefenseStats,
       defenseStats,
@@ -4231,13 +4285,14 @@ export default function CombatRoundManagerPanel({
             command: {
               createdAt: updatedAt,
             },
-            armorModifier: 0,
+            armorCoverage: inspectorParryDefenderPhaseSummary?.armorCoverage,
             attackerStrengthGm: attackerPhaseSummary.strengthGm,
             defenderDm,
             dmb,
             state: roundState,
             submittedBy: "gm",
             updatedAt,
+            weaponArmorClass: normalizeCombatArmorModifierClass(attackStats.weaponArmorClass),
           });
         } else if (damageSubstate === "critical_pending") {
           nextRoundState = recordCombatRoundCriticalRoll({

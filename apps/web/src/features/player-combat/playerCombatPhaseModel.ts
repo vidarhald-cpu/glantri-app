@@ -415,6 +415,7 @@ export function buildPlayerCombatAttackStats(
     initiative: reference.initiative,
     maxCrits: `${crit}${!useSecondAttack && hasDisplayValue(reference.secondCrit) ? ` / ${reference.secondCrit}` : ""}`,
     ob,
+    weaponArmorClass: hasDisplayValue(attackMode) ? attackMode : undefined,
     weaponCriticalCode: hasDisplayValue(combinedFirstCriticalCode)
       ? combinedFirstCriticalCode
       : undefined,

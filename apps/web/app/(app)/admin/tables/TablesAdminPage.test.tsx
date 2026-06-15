@@ -22,12 +22,12 @@ describe("TablesAdminPage", () => {
     ).not.toBeNull();
     expect(
       within(panel as HTMLElement).queryByText(
-        "Normal hit damage uses a second lookup: hit lookup total + weapon DMB + defender DM + armor modifier.",
+        "Normal hit damage uses a second lookup: hit lookup total + weapon DMB + defender DM.",
       ),
     ).not.toBeNull();
     expect(
       within(panel as HTMLElement).queryByText(
-        "Grazing damage rolls 1d of the table damage from lookup 12 plus the same DMB, DM, and armor modifier.",
+        "Grazing damage rolls 1d of the armor-adjusted table damage from lookup 12 plus the same DMB and DM.",
       ),
     ).not.toBeNull();
     expect(
@@ -37,7 +37,7 @@ describe("TablesAdminPage", () => {
     ).not.toBeNull();
     expect(
       within(panel as HTMLElement).queryByText(
-        "Armor modifier participates in the damage lookup when a safe armor source is available.",
+        "Armor coverage is applied after table damage using reviewed hit location and front/back direction.",
       ),
     ).not.toBeNull();
     expect(within(panel as HTMLElement).queryByText("Sheet: to hit (new)")).toBeNull();

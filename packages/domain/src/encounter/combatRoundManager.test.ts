@@ -45,6 +45,8 @@ import {
   getCombatRoundDamageSubstate,
   getPreviousCombatRoundStep,
   initializeCombatRoundState,
+  mapHitLocationAndDirectionToArmorRegion,
+  parseCombatRoundArmorCoverageLabel,
   ensureCombatRoundPhaseResolutionResultsForPhase,
   initializeCombatRoundPhaseResolutionCursor,
   isCombatRoundPhaseInitiativeComplete,
@@ -4321,18 +4323,17 @@ describe("combat round manager", () => {
       armorModifier: -2,
       armorModifierSource: {
         armorClass: "C",
-        label: "Leather vs weapon armor class A",
         status: "applied",
         weaponArmorClass: "A",
       },
-      criticalGrade: "a",
-      damageLookupTotal: 20,
+      criticalGrade: "b",
+      damageLookupTotal: 22,
       hitLookupTotal: 14,
       hitLocationRolls: [19, 4],
       hitLocationSelectionReason: "targeted_closest",
       selectedHitLocation: "head",
       selectedHitLocationRoll: 19,
-      tableDamage: 7,
+      tableDamage: 9,
       targetLocation: "head",
       totalDamage: 7,
     });
@@ -4354,6 +4355,91 @@ describe("combat round manager", () => {
       minDamage: 5,
       tableDamage: 22,
       totalDamage: 22,
+    });
+  });
+
+  it("maps hit location and direction to armor coverage regions", () => {
+    expect(mapHitLocationAndDirectionToArmorRegion({ direction: "front", hitLocation: "head" }))
+      .toMatchObject({ armorRegion: "head", armorRegionLabel: "Head" });
+    expect(mapHitLocationAndDirectionToArmorRegion({ direction: "front", hitLocation: "chest" }))
+      .toMatchObject({ armorRegion: "chest" });
+    expect(
+      mapHitLocationAndDirectionToArmorRegion({ direction: "back", hitLocation: "abdomen" }),
+    ).toMatchObject({ armorRegion: "abdomen" });
+    expect(
+      mapHitLocationAndDirectionToArmorRegion({ direction: "front", hitLocation: "leftArm" }),
+    ).toMatchObject({ armorRegion: "frontArm" });
+    expect(
+      mapHitLocationAndDirectionToArmorRegion({ direction: "back", hitLocation: "rightArm" }),
+    ).toMatchObject({ armorRegion: "backArm" });
+    expect(
+      mapHitLocationAndDirectionToArmorRegion({ direction: "front", hitLocation: "leftLeg" }),
+    ).toMatchObject({
+      armorRegion: "frontThigh",
+      note: "Whole-leg hit mapped to front thigh until lower-leg/foot hit locations are available.",
+    });
+    expect(
+      mapHitLocationAndDirectionToArmorRegion({ direction: "back", hitLocation: "rightLeg" }),
+    ).toMatchObject({
+      armorRegion: "backThigh",
+      note: "Whole-leg hit mapped to back thigh until lower-leg/foot hit locations are available.",
+    });
+  });
+
+  it("parses armor coverage labels and applies armor after table damage", () => {
+    expect(parseCombatRoundArmorCoverageLabel("5C")).toEqual({
+      armorClass: "C",
+      armorValue: 5,
+    });
+    expect(parseCombatRoundArmorCoverageLabel("0A")).toEqual({
+      armorClass: "A",
+      armorValue: 0,
+    });
+
+    const result = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackerParticipantId: "gladiator",
+      defenderDb: 10,
+      defenderParticipantId: "guard",
+      ob: 10,
+      phase: "phase1",
+      rollD20: 18,
+      rollTotal: 18,
+      rolledAt: "2026-01-01T00:03:00.000Z",
+      weaponName: "Broad sword",
+    });
+    const damageResult = buildCombatRoundDamageResult({
+      armorCoverage: {
+        chest: {
+          armorClass: "C",
+          coverageLabel: "5C",
+          label: "Chest",
+          value: 5,
+        },
+      },
+      attackResult: result,
+      createdAt: "2026-01-01T00:05:00.000Z",
+      defenderDm: 0,
+      dmb: 8,
+      hitLocationSelection: fixedChestLocationSelection(),
+      roundNumber: 3,
+      weaponArmorClass: "C",
+    });
+
+    expect(damageResult).toMatchObject({
+      armorClass: "C",
+      armorCoverageLabel: "5C",
+      armorDamageModifier: 0,
+      armorRegion: "chest",
+      armorRegionLabel: "Chest",
+      armorValue: 5,
+      damageLookupTotal: 26,
+      minimumDamageAfterArmor: 3,
+      minDamage: 3,
+      provisionalDamageAfterArmor: 8,
+      tableDamage: 13,
+      totalDamage: 8,
+      weaponArmorClass: "C",
     });
   });
 
@@ -4404,9 +4490,9 @@ describe("combat round manager", () => {
       computedTotalDamage: 9,
       effectiveArmorModifier: -2,
       effectiveCriticalGrade: "a",
-      effectiveDamageLookupTotal: 20,
+      effectiveDamageLookupTotal: 22,
       effectiveSelectedHitLocation: "rightArm",
-      effectiveTableDamage: 7,
+      effectiveTableDamage: 9,
       effectiveTotalDamage: 7,
       hasReviewOverrides: true,
       requiresTotalDamageOverride: false,
@@ -4563,10 +4649,10 @@ describe("combat round manager", () => {
     };
 
     expect(getCombatRoundEffectiveDamageResult(reviewedDamageResult)).toMatchObject({
-      effectiveMaxDamageApplied: true,
+      effectiveMaxDamageApplied: false,
       effectiveMaxDamageCap: 21,
       effectiveRawTotalDamage: 30,
-      effectiveTotalDamage: 21,
+      effectiveTotalDamage: 30,
     });
   });
 
@@ -4782,11 +4868,11 @@ describe("combat round manager", () => {
 
     expect(damageResult).toMatchObject({
       armorModifier: -2,
-      damageLookupTotal: 18,
+      damageLookupTotal: 20,
       damageRoll: {
         diceExpression: "1d5",
         grazingReferenceDamage: 5,
-        grazingReferenceDamageLookupTotal: 18,
+        grazingReferenceDamageLookupTotal: 20,
         grazingReferenceHitLookupTotal: 12,
         required: true,
         rolls: [1],
@@ -4794,7 +4880,7 @@ describe("combat round manager", () => {
       },
       hitLookupTotal: 11,
       selectedHitLocation: "abdomen",
-      tableDamage: 5,
+      tableDamage: 7,
       totalDamage: 1,
     });
   });
@@ -4901,7 +4987,7 @@ describe("combat round manager", () => {
       ready: true,
     });
     expect(readiness.warnings).toContain(
-      "Hit-location armor lookup is not wired to live defender equipment yet.",
+      "Chest armor coverage was not available; using 0A.",
     );
     expect(committed.command).toMatchObject({
       facts: expect.objectContaining({
@@ -5283,7 +5369,7 @@ describe("combat round manager", () => {
       computedTotalDamage: 9,
       effectiveArmorModifier: -2,
       effectiveCriticalGrade: "a",
-      effectiveDamageLookupTotal: 20,
+      effectiveDamageLookupTotal: 22,
       effectiveTotalDamage: 6,
     });
     expect(afterDamage.commands.at(-1)).toMatchObject({
@@ -5334,7 +5420,8 @@ describe("combat round manager", () => {
         damageResultId: "3:phase1:gladiator:guard:damage",
         defenderParticipantId: "guard",
         effectiveArmorModifier: -2,
-        effectiveDamageLookupTotal: 20,
+        effectiveDamageLookupTotal: 22,
+        effectiveProvisionalDamageAfterArmor: 7,
         review: expect.objectContaining({
           notes: "armor adjusted manually",
           totalDamageOverride: 6,

@@ -64,6 +64,7 @@ function buildLoadoutModel(input: {
   }>;
 }): Parameters<typeof buildPlayerCombatLoadoutSummary>[0]["loadoutModel"] {
   return {
+    armorSummary: null,
     combatStatePanelModel: {
       capabilityRows: [],
       description: "",

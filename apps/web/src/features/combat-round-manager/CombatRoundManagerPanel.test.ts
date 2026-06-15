@@ -108,6 +108,8 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("buildPlayerCombatDefenseStats");
     expect(source).toContain("loadCanonicalContent");
     expect(source).toContain("buildEquipmentLoadoutModuleModel");
+    expect(source).toContain("armorSummary");
+    expect(source).toContain("buildCombatRoundDamageArmorCoverageFromLoadoutModel");
     expect(source).toContain("loadServerCharacterById");
     expect(source).toContain("loadCharacterEquipmentState");
     expect(source).toContain("resolvedCharacterStateByParticipantId");
@@ -215,6 +217,8 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("selectedHitLocationOverride: effectiveDamage?.effectiveSelectedHitLocation");
     expect(source).toContain("criticalGradeOverride: effectiveDamage?.effectiveCriticalGrade ?? \"none\"");
     expect(source).toContain("armorModifierOverride: effectiveDamage?.effectiveArmorModifier.toString()");
+    expect(source).toContain("attackDirectionOverride: effectiveDamage?.effectiveAttackDirection ?? \"front\"");
+    expect(source).toContain("Direction");
     expect(source).toContain(
       "armorCriticalModifierOverride: effectiveCritical.armorCriticalModifier?.toString()",
     );
@@ -257,6 +261,8 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("scenarioParticipantId: selectedScenarioParticipant.id");
     expect(source).toContain("weaponCriticalCode: phaseModel.attackStats.weaponCriticalCode");
     expect(source).toContain("weaponDamageClass: phaseModel.attackStats.weaponDamageClass");
+    expect(source).toContain("weaponArmorClass: normalizeCombatArmorModifierClass(attackStats.weaponArmorClass)");
+    expect(source).toContain("armorCoverage: inspectorParryDefenderPhaseSummary?.armorCoverage");
     expect(source).toContain("completeInspectorPhaseResolution");
     expect(source).toContain("getCombatRoundInitiativeRanks");
     expect(source).toContain("getCombatRoundInitiativeTotal");

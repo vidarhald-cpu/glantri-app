@@ -63,24 +63,32 @@ modifier source.
 For a normal hit, calculate a second lookup before reading final damage:
 
 ```text
-damage lookup total = hit lookup total + weapon DMB + defender DM + armor modifier
+damage lookup total = hit lookup total + weapon DMB + defender DM
 ```
 
 The damage lookup row gives final table damage, critical grade, minimum damage, and any max-damage
 note. For example, `OB 10 - DB 15 + roll 19 = hit lookup 14`; with weapon DMB `8`, defender DM `0`,
-and armor modifier `0`, damage lookup is `14 + 8 + 0 + 0 = 22`, so the table gives damage `9`,
-critical `B`, and minimum damage `1`.
+damage lookup is `14 + 8 + 0 = 22`, so the table gives damage `9`, critical `B`, and minimum
+damage `1`.
+
+Armor is applied after the table row is read. The reviewed hit location plus front/back direction
+selects the defender's armor coverage region. Armor value reduces table damage, and the armor
+modifier table can further adjust damage and minimum damage. The current direction model defaults to
+front; the GM may review it as back before commit. For now, whole-leg hit locations map to thigh
+armor for the chosen direction until lower-leg/foot hit locations exist.
 
 When a damage lookup row has a max-damage cap, the proposal preserves the uncapped table damage for
 audit, but the capped value is the effective damage used for commit. Current capped rows use
-`17 + attacker STR GM` as the cap. If the GM reviews and edits the proposed damage number, that
-reviewed value is still capped unless a later UI adds an explicit max-damage bypass.
+`17 + attacker STR GM` as the cap. If the GM reviews and edits the proposed total damage number,
+that total-damage override is treated as final for commit while the computed armor/cap result remains
+visible for audit.
 
 Grazing-hit damage does not use a fixed row modifier. A grazing hit at hit lookup `11`
-uses hit lookup `12` as its reference, then applies the same DMB, defender DM, and armor modifier to
-find the reference damage lookup row. The grazing hit rolls `1dX`, where `X` is that reference row's
-table damage. For example, weapon DMB `8`, defender DM `0`, and armor modifier `0` make the reference
-damage lookup `12 + 8 + 0 + 0 = 20`; row `20` gives table damage `7`, so the grazing hit rolls `1d7`.
+uses hit lookup `12` as its reference, then applies the same DMB and defender DM to find the
+reference damage lookup row. Armor is then applied to that reference damage. The grazing hit rolls
+`1dX`, where `X` is the armor-adjusted reference damage. For example, weapon DMB `8`, defender DM
+`0`, and no armor make the reference damage lookup `12 + 8 + 0 = 20`; row `20` gives table damage
+`7`, so the grazing hit rolls `1d7`.
 
 ## Current attack and damage result
 
@@ -101,8 +109,8 @@ store a damage proposal:
 ```text
 hit lookup total = OB - DB + open-ended roll total
 hit location = closed 1d20, or two closed 1d20 rolls when an aimed location was declared
-damage lookup total = hit lookup total + weapon DMB + defender DM + armor modifier
-damage = table damage at the damage lookup total
+damage lookup total = hit lookup total + weapon DMB + defender DM
+damage = table damage at the damage lookup total, then armor-adjusted
 ```
 
 The attacker rolls hit location. If no aimed location was declared for that attack phase, roll one
@@ -112,15 +120,14 @@ the first roll. The `roll_hit_location` command stores the aimed location, all h
 selected location, and why that selection was made; the damage proposal consumes that stored result
 and will not create a proposal while location is missing.
 
-For grazing hits, the required roll is the final damage result. Weapon DMB, defender DM, and armor are
-used with reference hit lookup `12` to derive the grazing die size, then only the grazing roll total is
-stored as damage.
+For grazing hits, the required roll is the final damage result. Weapon DMB and defender DM are used
+with reference hit lookup `12` to derive the reference table row, armor is applied to that reference
+damage, and only the grazing roll total is stored as damage.
 
-The armor modifier table is available as structured rule data and participates in damage lookup when a
-safe armor source is provided. Current D1/D2 proposals keep live armor modifier at `0` and display
-armor as not applied until exact hit-location-to-equipped-armor wiring is safe. Critical grade and
-minimum damage are stored as table metadata when present, but critical effects remain a GM review note
-for now.
+The armor modifier table is available as structured rule data. Current D1/D2 proposals read equipped
+armor coverage by reviewed hit location and front/back direction, subtract armor value from table
+damage, and apply the armor modifier table after damage lookup. Critical grade and minimum damage are
+stored as table metadata when present, but critical effects remain a GM review note for now.
 
 If the damage lookup produces a critical grade, D1/D2 enters critical pending after the damage
 proposal is created. The attacker rolls `2d8`; the final critical roll is `2d8 + critical type
@@ -160,7 +167,7 @@ The intended final-damage sequencing remains:
 2. Parry.
 3. Hit location with closed `1d20`; if the attacker selected a target location, roll twice and choose
    the result closest to the target.
-4. Armor modifier from hit location plus the armor modifier table when a safe equipped-armor source is
-   available.
+4. Armor coverage from hit location plus reviewed front/back direction; subtract armor value and apply
+   the armor modifier table after damage lookup.
 5. Critical roll when a critical grade is present.
 6. Final damage/effect proposal, manual immediate effect review, and GM commit.

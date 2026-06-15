@@ -61,6 +61,7 @@ export interface EquipmentLoadoutFieldModel {
 }
 
 export interface EquipmentLoadoutModuleModel {
+  armorSummary: ReturnType<typeof buildCharacterArmorSummary> | null;
   combatStatePanelModel: ReturnType<typeof buildCombatStatePanelModel> | null;
   encumbranceSkillsTable: CombatStateTableModel | null;
   fields: EquipmentLoadoutFieldModel[];
@@ -412,6 +413,7 @@ export function buildEquipmentLoadoutModuleModel(input: {
 }): EquipmentLoadoutModuleModel {
   if (!input.state || !input.characterContext?.content || !input.characterContext.record) {
     return {
+      armorSummary: null,
       combatStatePanelModel: null,
       encumbranceSkillsTable: null,
       fields: []
@@ -744,6 +746,7 @@ export function buildEquipmentLoadoutModuleModel(input: {
   ];
 
   return {
+    armorSummary: wornArmorSummary,
     combatStatePanelModel,
     encumbranceSkillsTable,
     fields
