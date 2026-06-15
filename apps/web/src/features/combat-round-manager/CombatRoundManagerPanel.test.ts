@@ -207,6 +207,9 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("inspectorDamageCommitValidationMessage");
     expect(source).toContain("attackResultId: existingDamageResolution.damageResult.attackResultId");
     expect(source).toContain("App rolls:");
+    expect(source).toContain("Operational consequences");
+    expect(source).toContain("operationalConsequences");
+    expect(source).toContain("Consequence notes");
     expect(source).toContain("Additional immediate effects");
     expect(source).toContain("Add modifier effect");
     expect(source).toContain("Add note effect");

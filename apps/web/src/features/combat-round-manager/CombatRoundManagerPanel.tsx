@@ -255,6 +255,25 @@ interface CombatDamageReviewAdditionalEffectDraft {
   sourceKind?: CombatRoundDamageReviewAdditionalEffect["sourceKind"];
 }
 
+interface CombatDamageReviewOperationalConsequenceDraft {
+  accepted: boolean;
+  hand: "" | "mainHand" | "offHand" | "unknown";
+  id: string;
+  itemId: string;
+  itemLabel: string;
+  kind: "drop_item" | "cancel_pending_action" | "note";
+  label: string;
+  notes: string;
+  participantId: string;
+  phase: "" | "phase1" | "phase2";
+  reason: string;
+  sourceCritKey?: string;
+  sourceEffectKey?: string;
+  sourceText?: string;
+  step: "" | "A1" | "A2";
+  targetActionId: string;
+}
+
 interface CombatDamageReviewDraft {
   additionalEffects: CombatDamageReviewAdditionalEffectDraft[];
   attackDirectionOverride: CombatRoundAttackDirection;
@@ -265,6 +284,7 @@ interface CombatDamageReviewDraft {
   criticalTypeModifierOverride: string;
   finalCriticalRollOverride: string;
   notes: string;
+  operationalConsequences: CombatDamageReviewOperationalConsequenceDraft[];
   selectedHitLocationOverride: string;
   totalDamageOverride: string;
 }
@@ -1125,6 +1145,26 @@ function buildCombatDamageReviewDraft(
     criticalTypeModifierOverride: effectiveCritical.criticalTypeModifier?.toString() ?? "",
     finalCriticalRollOverride: effectiveCritical.finalCriticalRoll?.toString() ?? "",
     notes: damageResult?.review?.notes ?? "",
+    operationalConsequences: (damageResult?.review?.operationalConsequences ?? []).map(
+      (consequence) => ({
+        accepted: consequence.accepted,
+        hand: consequence.hand ?? "",
+        id: consequence.id,
+        itemId: consequence.itemId ?? "",
+        itemLabel: consequence.itemLabel ?? "",
+        kind: consequence.kind,
+        label: consequence.label,
+        notes: consequence.notes ?? "",
+        participantId: consequence.participantId,
+        phase: consequence.phase ?? "",
+        reason: consequence.reason,
+        sourceCritKey: consequence.sourceCritKey,
+        sourceEffectKey: consequence.sourceEffectKey,
+        sourceText: consequence.sourceText,
+        step: consequence.step ?? "",
+        targetActionId: consequence.targetActionId ?? "",
+      }),
+    ),
     selectedHitLocationOverride: effectiveDamage?.effectiveSelectedHitLocation ?? "",
     totalDamageOverride: effectiveDamage?.effectiveTotalDamage.toString() ?? "",
   };
@@ -1265,12 +1305,44 @@ function buildCombatDamageReviewFromDraft(input: {
       sourceKind: effect.sourceKind,
     };
   });
+  const operationalConsequences = input.draft.operationalConsequences.map((consequence) => ({
+    accepted: consequence.accepted,
+    hand:
+      consequence.hand === "mainHand" ||
+      consequence.hand === "offHand" ||
+      consequence.hand === "unknown"
+        ? consequence.hand
+        : undefined,
+    id: consequence.id,
+    itemId: consequence.itemId.trim() || undefined,
+    itemLabel: consequence.itemLabel.trim() || undefined,
+    kind:
+      consequence.kind === "drop_item" ||
+      consequence.kind === "cancel_pending_action" ||
+      consequence.kind === "note"
+        ? consequence.kind
+        : "note",
+    label: consequence.label.trim() || "Operational consequence",
+    notes: consequence.notes.trim() || undefined,
+    participantId: consequence.participantId,
+    phase:
+      consequence.phase === "phase1" || consequence.phase === "phase2"
+        ? consequence.phase
+        : undefined,
+    reason: consequence.reason.trim() || "Critical consequence proposed for GM review.",
+    sourceCritKey: consequence.sourceCritKey,
+    sourceEffectKey: consequence.sourceEffectKey,
+    sourceText: consequence.sourceText,
+    step: consequence.step === "A1" || consequence.step === "A2" ? consequence.step : undefined,
+    targetActionId: consequence.targetActionId.trim() || undefined,
+  }));
   const reviewWithoutTotalDamageOverride: Omit<
     CombatRoundDamageReview,
     "reviewedAt" | "reviewedByUserId"
   > = {
     additionalEffects,
     criticalEffectProposal: input.damageResult.review?.criticalEffectProposal,
+    operationalConsequences,
   };
 
   if (armorModifierOverride !== undefined) {
@@ -1320,6 +1392,7 @@ function buildCombatDamageReviewFromDraft(input: {
   const review: Omit<CombatRoundDamageReview, "reviewedAt" | "reviewedByUserId"> = {
     additionalEffects,
     criticalEffectProposal: input.damageResult.review?.criticalEffectProposal,
+    operationalConsequences,
   };
 
   if (armorModifierOverride !== undefined) {
@@ -1791,6 +1864,17 @@ function CombatDamageReviewPanel(input: {
       additionalEffects: input.draft.additionalEffects.filter((effect) => effect.id !== effectId),
     });
   };
+  const updateOperationalConsequence = (
+    consequenceId: string,
+    patch: Partial<CombatDamageReviewOperationalConsequenceDraft>,
+  ) => {
+    input.onDraftChange({
+      ...input.draft,
+      operationalConsequences: input.draft.operationalConsequences.map((consequence) =>
+        consequence.id === consequenceId ? { ...consequence, ...patch } : consequence,
+      ),
+    });
+  };
 
   return (
     <section style={playerCombatPanelCardStyle}>
@@ -2021,6 +2105,59 @@ function CombatDamageReviewPanel(input: {
       ) : null}
       {criticalEffectStatus ? (
         <div style={{ color: "#5e5a50", fontSize: "0.88rem" }}>{criticalEffectStatus}</div>
+      ) : null}
+      {input.draft.operationalConsequences.length > 0 ? (
+        <section style={{ display: "grid", gap: "0.5rem" }}>
+          <strong style={{ fontSize: "0.9rem" }}>Operational consequences</strong>
+          {input.draft.operationalConsequences.map((consequence) => (
+            <div
+              key={consequence.id}
+              style={{
+                borderTop: "1px solid #ddd3bf",
+                display: "grid",
+                gap: "0.35rem",
+                paddingTop: "0.5rem",
+              }}
+            >
+              <label
+                style={{
+                  alignItems: "center",
+                  display: "flex",
+                  gap: "0.45rem",
+                  fontSize: "0.9rem",
+                }}
+              >
+                <input
+                  checked={consequence.accepted}
+                  disabled={disabled}
+                  onChange={(event) =>
+                    updateOperationalConsequence(consequence.id, {
+                      accepted: event.target.checked,
+                    })
+                  }
+                  type="checkbox"
+                />
+                <span>{consequence.label}</span>
+              </label>
+              <div style={{ color: "#5e5a50", fontSize: "0.82rem" }}>{consequence.reason}</div>
+              <label style={{ display: "grid", gap: "0.2rem" }}>
+                <span style={{ color: "#5e5a50", fontSize: "0.8rem", fontWeight: 700 }}>
+                  Consequence notes
+                </span>
+                <input
+                  disabled={disabled}
+                  onChange={(event) =>
+                    updateOperationalConsequence(consequence.id, {
+                      notes: event.target.value,
+                    })
+                  }
+                  type="text"
+                  value={consequence.notes}
+                />
+              </label>
+            </div>
+          ))}
+        </section>
       ) : null}
       {commitStatus ? (
         <div

@@ -52,6 +52,28 @@ Duration modes include instant, fixed, roll, ongoing, until treated, until staun
 until-treated-then-permanent, and special/stateful modes. Bleed rate modes include none, fixed
 fraction, roll once for per-round rate, and death timer.
 
+## Operational consequences
+
+Some critical results clearly imply immediate combat consequences, such as dropping an item held in
+the struck hand or losing use of an arm. When the table provides structured drop-item or loss-of-use
+signals and the app can identify a matching pending same-round attack, D1/D2 review proposes
+operational consequence rows for GM approval.
+
+Current supported proposals are:
+
+- Drop item: creates a special combat/session effect row on commit. It does not remove the item from
+  permanent inventory.
+- Cancel pending action: marks an unrolled pending A1/A2 attack in the same round as cancelled or
+  skipped by the committed damage command. The original declaration and generated phase modifiers
+  remain, because the combatant already committed to the risky action.
+- Note: used when the critical is clear but the app cannot safely identify the held item or pending
+  attack.
+
+These consequences are review drafts. The GM may uncheck or edit them before committing phase
+damage. Undoing the commit removes the created special rows and cancellation marker, restoring the
+pending attack; undoing the critical roll removes the generated consequence drafts with the rest of
+the critical proposal.
+
 ## Rolls inside critical effects
 
 The player's critical roll remains the attacker-privileged `2d8` roll recorded in D1/D2. After that,
