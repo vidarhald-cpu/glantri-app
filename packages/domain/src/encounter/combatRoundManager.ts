@@ -5772,15 +5772,9 @@ function getCombatRoundEffectBleedAmount(effect: CombatEffect): number {
 }
 
 function getCombatRoundEndReviewParticipantStatus(
-  review: Omit<RoundEndParticipantReview, "status">,
+  _review: Omit<RoundEndParticipantReview, "status">,
 ): CombatRoundEndParticipantReviewStatus {
-  const hasAcceptedProposal =
-    review.proposedEffects.some((proposal) => proposal.accepted) ||
-    review.proposedRemovals.some((proposal) => proposal.accepted) ||
-    review.proposedDamage.some((proposal) => proposal.accepted) ||
-    review.proposedHealthRolls.some((proposal) => proposal.accepted);
-
-  return hasAcceptedProposal ? "review_ready" : "complete";
+  return "review_ready";
 }
 
 function buildCombatRoundEndParticipantReview(input: {
@@ -6347,11 +6341,13 @@ export function commitCombatRoundEndParticipantReview(input: {
     },
   });
   const nextParticipantId =
-    getNextRoundEndReviewParticipantId({
-      participantId: input.participantId,
-      roundEndReview: nextRoundEndReview,
-      state: normalized,
-    });
+    nextStatus === "health_roll_pending"
+      ? input.participantId
+      : getNextRoundEndReviewParticipantId({
+          participantId: input.participantId,
+          roundEndReview: nextRoundEndReview,
+          state: normalized,
+        });
   const afterCursor = getCombatRoundEndReviewCursor({
     boundary: !nextParticipantId,
     participantId: nextParticipantId,
@@ -6373,7 +6369,9 @@ export function commitCombatRoundEndParticipantReview(input: {
         .map((proposal) => proposal.id),
       createdCombatEffectEventId: effectApplication.createdCombatEffectEventId,
       createdCombatEffectIds: effectApplication.createdCombatEffectIds,
+      nextReviewStatus: nextStatus,
       nextStatus,
+      previousReviewStatus: participantReview.status,
       scenarioParticipantId: input.scenarioParticipantId,
       updatedEffects: effectApplication.updatedEffects,
     },
@@ -6526,11 +6524,13 @@ export function rollCombatRoundEndHealthCheck(input: {
     },
   });
   const nextParticipantId =
-    getNextRoundEndReviewParticipantId({
-      participantId: input.participantId,
-      roundEndReview: nextRoundEndReview,
-      state: normalized,
-    });
+    nextStatus === "health_roll_pending"
+      ? input.participantId
+      : getNextRoundEndReviewParticipantId({
+          participantId: input.participantId,
+          roundEndReview: nextRoundEndReview,
+          state: normalized,
+        });
   const beforeCursor = getCombatRoundEndReviewCursor({
     participantId: input.participantId,
     state: normalized,
@@ -8302,6 +8302,10 @@ function getCombatRoundTopAdvanceParticipantStatus(input: {
   participant: CombatRoundParticipantState;
   step: CombatRoundStep;
 }): CombatRoundStepStatus | undefined {
+  if (input.step === "round_summary") {
+    return "complete";
+  }
+
   const currentStatus = input.participant.stepStatuses[input.step] ?? "pending";
 
   if (!isCombatRoundStepStatusOpenForTopAdvance(currentStatus)) {
@@ -8318,8 +8322,6 @@ function getCombatRoundTopAdvanceParticipantStatus(input: {
       return input.participant.initiatives.phase1 ? undefined : "complete";
     case "initiative_phase_2":
       return input.participant.initiatives.phase2 ? undefined : "complete";
-    case "round_summary":
-      return "complete";
     default:
       return undefined;
   }

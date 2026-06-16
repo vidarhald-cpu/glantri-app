@@ -168,6 +168,30 @@ function prepareCleanRoundEndReview(
   });
 }
 
+function completeCleanRoundEndReview(
+  state: ReturnType<typeof initializeCombatRoundState>,
+): ReturnType<typeof initializeCombatRoundState> {
+  const reviewed = prepareCleanRoundEndReview(state);
+
+  return reviewed.participants.reduce((current, participant, index) => {
+    const review = current.roundEndReview?.participantReviews[participant.participantId];
+
+    if (review?.status === "complete") {
+      return current;
+    }
+
+    return commitCombatRoundEndParticipantReview({
+      command: {
+        createdAt: `2026-01-01T00:09:${String(index + 1).padStart(2, "0")}.000Z`,
+        createdByUserId: "gm-1",
+      },
+      participantId: participant.participantId,
+      scenarioParticipantId: `scenario-${participant.participantId}`,
+      state: current,
+    }).state;
+  }, reviewed);
+}
+
 function declareRoundAction(input: {
   actionId: string;
   participantId: string;
@@ -949,7 +973,7 @@ describe("combat round manager", () => {
       "review_phase_2_modifiers",
       "initiative_phase_2",
     ].reduce((current) => advanceCombatRoundStep(current), reviewState);
-    const nextRoundState = advanceCombatRoundStep(prepareCleanRoundEndReview(roundSummaryState));
+    const nextRoundState = advanceCombatRoundStep(completeCleanRoundEndReview(roundSummaryState));
 
     expect(roundSummaryState.currentStep).toBe("round_summary");
     expect(nextRoundState.currentStep).toBe("select_actions");
@@ -999,7 +1023,7 @@ describe("combat round manager", () => {
       selectedParticipantId: "guard",
       selectedStep: "phase_1_damage",
     };
-    const nextRoundState = advanceCombatRoundStep(prepareCleanRoundEndReview(roundSummaryState));
+    const nextRoundState = advanceCombatRoundStep(completeCleanRoundEndReview(roundSummaryState));
 
     expect(nextRoundState.currentStep).toBe("select_actions");
     expect(nextRoundState.roundNumber).toBe(4);
@@ -7064,8 +7088,160 @@ describe("combat round manager", () => {
 
     const reviewed = prepareCleanRoundEndReview(roundSummaryState);
 
-    expect(isCombatRoundEndReviewComplete(reviewed)).toBe(true);
-    expect(getCombatRoundStartNextRoundBlocker(reviewed)).toBeUndefined();
+    expect(isCombatRoundEndReviewComplete(reviewed)).toBe(false);
+    expect(getCombatRoundStartNextRoundBlocker(reviewed)).toBe(
+      "Round-end review incomplete for The Gladiator.",
+    );
+
+    const completedReview = completeCleanRoundEndReview(roundSummaryState);
+
+    expect(isCombatRoundEndReviewComplete(completedReview)).toBe(true);
+    expect(getCombatRoundStartNextRoundBlocker(completedReview)).toBeUndefined();
+  });
+
+  it("requires explicit SU acknowledgement for participants with no proposals", () => {
+    const roundSummaryState = advanceToStep(
+      initializeCombatRoundState({ encounter: encounter() }),
+      "round_summary",
+    );
+    const reviewed = prepareCleanRoundEndReview(roundSummaryState);
+
+    expect(reviewed.roundEndReview?.participantReviews.gladiator?.status).toBe("review_ready");
+    expect(reviewed.roundEndReview?.participantReviews.guard?.status).toBe("review_ready");
+    expect(reviewed.currentCursor).toEqual({
+      participantId: "gladiator",
+      roundNumber: 3,
+      step: "SU",
+    });
+
+    const committedGladiator = commitCombatRoundEndParticipantReview({
+      command: {
+        createdAt: "2026-01-01T00:10:00.000Z",
+      },
+      participantId: "gladiator",
+      scenarioParticipantId: "scenario-gladiator",
+      state: reviewed,
+    });
+
+    expect(committedGladiator.state.roundEndReview?.participantReviews.gladiator?.status).toBe(
+      "complete",
+    );
+    expect(committedGladiator.state.roundEndReview?.participantReviews.guard?.status).toBe(
+      "review_ready",
+    );
+    expect(committedGladiator.state.currentCursor).toEqual({
+      participantId: "guard",
+      roundNumber: 3,
+      step: "SU",
+    });
+    expect(committedGladiator.state.selectedParticipantId).toBe("guard");
+    expect(committedGladiator.command.afterCursor).toEqual({
+      participantId: "guard",
+      roundNumber: 3,
+      step: "SU",
+    });
+    expect(committedGladiator.command.facts).toMatchObject({
+      nextReviewStatus: "complete",
+      previousReviewStatus: "review_ready",
+    });
+    expect(getCombatRoundStartNextRoundBlocker(committedGladiator.state)).toBe(
+      "Round-end review incomplete for City guard.",
+    );
+
+    const restored = clearCombatRoundStep({
+      state: committedGladiator.state,
+      step: "round_summary",
+    });
+
+    expect(restored.currentCursor).toEqual({
+      participantId: "gladiator",
+      roundNumber: 3,
+      step: "SU",
+    });
+    expect(restored.roundEndReview?.participantReviews.gladiator?.status).toBe("review_ready");
+    expect(restored.roundEndReview?.participantReviews.guard?.status).toBe("review_ready");
+  });
+
+  it("keeps SU current on a participant until required health rolls are complete", () => {
+    const roundSummaryState = advanceToStep(
+      initializeCombatRoundState({ encounter: encounter() }),
+      "round_summary",
+    );
+    const guardEffects = combatEffectsWith([
+      {
+        description: "Guard bleeding",
+        effectGroup: "bleed",
+        id: "guard-bleed",
+        modifierValue: 2,
+        targetParticipantId: "scenario-guard",
+        type: "bleed",
+      },
+    ]);
+    const reviewed = prepareCombatRoundEndReview({
+      participantInputs: {
+        guard: {
+          combatEffects: guardEffects,
+          healthStat: 6,
+        },
+      },
+      state: roundSummaryState,
+    });
+    const committedGladiator = commitCombatRoundEndParticipantReview({
+      command: {
+        createdAt: "2026-01-01T00:10:00.000Z",
+      },
+      participantId: "gladiator",
+      scenarioParticipantId: "scenario-gladiator",
+      state: reviewed,
+    });
+
+    expect(committedGladiator.state.currentCursor).toEqual({
+      participantId: "guard",
+      roundNumber: 3,
+      step: "SU",
+    });
+
+    const committedGuard = commitCombatRoundEndParticipantReview({
+      command: {
+        createdAt: "2026-01-01T00:11:00.000Z",
+      },
+      combatEffects: guardEffects,
+      participantId: "guard",
+      scenarioParticipantId: "scenario-guard",
+      state: committedGladiator.state,
+    });
+
+    expect(committedGuard.state.roundEndReview?.participantReviews.guard?.status).toBe(
+      "health_roll_pending",
+    );
+    expect(committedGuard.state.currentCursor).toEqual({
+      participantId: "guard",
+      roundNumber: 3,
+      step: "SU",
+    });
+    expect(getCombatRoundStartNextRoundBlocker(committedGuard.state)).toBe(
+      "Health roll pending for City guard.",
+    );
+
+    const rolled = rollCombatRoundEndHealthCheck({
+      command: {
+        createdAt: "2026-01-01T00:12:00.000Z",
+      },
+      participantId: "guard",
+      roll: {
+        dieResult: 10,
+        openEndedD10s: [],
+        rollD20: 10,
+      },
+      state: committedGuard.state,
+    });
+
+    expect(rolled.roundEndReview?.participantReviews.guard?.status).toBe("complete");
+    expect(rolled.currentCursor).toEqual({
+      roundNumber: 3,
+      step: "SU",
+    });
+    expect(getCombatRoundStartNextRoundBlocker(rolled)).toBeUndefined();
   });
 
   it("builds SU duration proposals for active round-based effects", () => {
@@ -7341,7 +7517,7 @@ describe("combat round manager", () => {
       initializeCombatRoundState({ encounter: encounter() }),
       "round_summary",
     );
-    const reviewedRoundSummaryState = prepareCleanRoundEndReview(roundSummaryState);
+    const reviewedRoundSummaryState = completeCleanRoundEndReview(roundSummaryState);
     const completed = advanceCombatRoundStep(reviewedRoundSummaryState, {
       command: {
         createdAt: "2026-01-01T00:10:00.000Z",
@@ -7370,10 +7546,14 @@ describe("combat round manager", () => {
     ]);
     expect(archivedRound?.commands.map((command) => command.type)).toEqual([
       "prepare_round_end_review",
+      "commit_round_end_participant_review",
+      "commit_round_end_participant_review",
       "complete_round",
       "complete_round",
     ]);
-    expect(archivedRound?.commands[1]?.facts).toMatchObject({
+    expect(
+      archivedRound?.commands.find((command) => command.type === "complete_round")?.facts,
+    ).toMatchObject({
       completedRoundNumber: roundSummaryState.roundNumber,
       nextRoundNumber: roundSummaryState.roundNumber + 1,
       participantIds: ["gladiator", "guard"],
@@ -7389,7 +7569,7 @@ describe("combat round manager", () => {
       initializeCombatRoundState({ encounter: encounter() }),
       "round_summary",
     );
-    const reviewedRoundSummaryState = prepareCleanRoundEndReview(roundSummaryState);
+    const reviewedRoundSummaryState = completeCleanRoundEndReview(roundSummaryState);
     const nextRoundState = advanceCombatRoundStep(reviewedRoundSummaryState, {
       command: {
         createdAt: "2026-01-01T00:10:00.000Z",
@@ -7414,7 +7594,7 @@ describe("combat round manager", () => {
       initializeCombatRoundState({ encounter: encounter() }),
       "round_summary",
     );
-    const nextRoundState = advanceCombatRoundStep(prepareCleanRoundEndReview(roundSummaryState), {
+    const nextRoundState = advanceCombatRoundStep(completeCleanRoundEndReview(roundSummaryState), {
       command: {
         createdAt: "2026-01-01T00:10:00.000Z",
         createdByUserId: "gm-1",

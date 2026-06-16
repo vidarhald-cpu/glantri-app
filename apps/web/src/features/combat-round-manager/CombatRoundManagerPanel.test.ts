@@ -390,6 +390,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("isCombatRoundEndReviewComplete");
     expect(source).toContain("Build/Review round-end effects");
     expect(source).toContain("Commit participant SU review");
+    expect(source).toContain("Mark SU review complete");
     expect(source).toContain("Roll health check");
     expect(source).toContain("CombatRoundEndReviewPanel");
     expect(source).toContain("prepareCombatRoundEndReview");

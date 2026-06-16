@@ -3214,6 +3214,13 @@ export default function CombatRoundManagerPanel({
     inspectorRoundEndReview?.status === "complete"
       ? "Round-end review complete for this participant."
       : undefined;
+  const inspectorRoundEndReviewHasProposals = Boolean(
+    inspectorRoundEndReview &&
+      (inspectorRoundEndReview.proposedEffects.length > 0 ||
+        inspectorRoundEndReview.proposedRemovals.length > 0 ||
+        inspectorRoundEndReview.proposedDamage.length > 0 ||
+        inspectorRoundEndReview.proposedHealthRolls.length > 0),
+  );
   const inspectorActionValidationMessage =
     inspectorTargetValidationMessage ??
     inspectorAttackSourceValidationMessage ??
@@ -3257,7 +3264,9 @@ export default function CombatRoundManagerPanel({
     : inspector.step === "round_summary" && !selectedTimelineRoundState.roundEndReview
       ? "Build/Review round-end effects"
     : inspector.step === "round_summary" && inspectorRoundEndReview?.status === "review_ready"
-      ? "Commit participant SU review"
+      ? inspectorRoundEndReviewHasProposals
+        ? "Commit participant SU review"
+        : "Mark SU review complete"
     : inspector.step === "round_summary" &&
         inspectorRoundEndReview?.status === "health_roll_pending"
       ? "Roll health check"
