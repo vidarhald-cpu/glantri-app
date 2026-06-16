@@ -5314,7 +5314,33 @@ function formatCombatRoundDamageCommitPhaseLabel(phase: CombatRoundPhase): strin
   return phase === "phase1" ? "Phase 1" : "Phase 2";
 }
 
-function formatCombatRoundDamageReviewEffectDescription(
+function ensureSentence(value: string): string {
+  const trimmed = value.trim();
+
+  if (!trimmed) {
+    return "";
+  }
+
+  return /[.!?]$/.test(trimmed) ? trimmed : `${trimmed}.`;
+}
+
+function normalizeCombatRoundSentence(value: string | undefined): string | undefined {
+  const sentence = ensureSentence(value ?? "");
+
+  return sentence || undefined;
+}
+
+function combatRoundTextIncludesAny(value: string, patterns: readonly string[]): boolean {
+  const normalized = value.toLowerCase();
+
+  return patterns.some((pattern) => normalized.includes(pattern));
+}
+
+function buildCombatRoundReviewEffectText(effect: CombatRoundDamageReviewAdditionalEffect): string {
+  return [effect.label, effect.notes, effect.sourceText].filter(Boolean).join(" ");
+}
+
+function formatCombatRoundDamageReviewEffectPreviewDescription(
   effect: CombatRoundDamageReviewAdditionalEffect,
 ): string {
   const notes = effect.notes?.trim();
@@ -5339,6 +5365,117 @@ function formatCombatRoundDamageReviewEffectDescription(
   return notes.toLowerCase().startsWith(`${effect.label.toLowerCase()}:`)
     ? notes
     : `${effect.label}: ${notes}`;
+}
+
+function formatCombatRoundDamageReviewRateSentence(value: number | undefined): string | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (value > 0 && value < 1) {
+    const rounds = 1 / value;
+
+    if (Number.isInteger(rounds)) {
+      return `1 HP per ${rounds} round${rounds === 1 ? "" : "s"}`;
+    }
+  }
+
+  return `${value} HP per round`;
+}
+
+function formatCombatRoundDamageReviewEffectStatusDetail(
+  effect: CombatRoundDamageReviewAdditionalEffect,
+): string | undefined {
+  if (effect.phase === "untilCleared") {
+    return "Until cleared.";
+  }
+
+  if (effect.phase === "phase1") {
+    return "Phase 1.";
+  }
+
+  if (effect.phase === "phase2") {
+    return "Phase 2.";
+  }
+
+  if (effect.phase === "round") {
+    return "This round.";
+  }
+
+  return undefined;
+}
+
+function formatCombatRoundLossOfUseDescription(
+  effect: CombatRoundDamageReviewAdditionalEffect,
+): string {
+  const notes = effect.notes?.trim();
+  const match = notes?.match(/no actions? with ([^.]+)\.?/i);
+  const actionText = match?.[1]
+    ? `No actions with ${match[1].trim()}.`
+    : "No actions with affected body part.";
+  const details = [actionText];
+
+  if (notes && /until treated/i.test(notes)) {
+    details.push("Until treated.");
+  }
+
+  for (const report of effect.rollReports ?? []) {
+    if (report.purpose === "duration") {
+      details.push(`Duration roll ${report.formula} = ${report.total}.`);
+      break;
+    }
+  }
+
+  return details.join(" ");
+}
+
+function formatCombatRoundDamageReviewEffectCommittedDescription(
+  effect: CombatRoundDamageReviewAdditionalEffect,
+): string {
+  const text = buildCombatRoundReviewEffectText(effect);
+
+  if (
+    effect.rowCategory === "no_combat_action" &&
+    combatRoundTextIncludesAny(text, ["parry only", "limited to parry"])
+  ) {
+    return "Action limited to parry.";
+  }
+
+  if (effect.rowCategory === "no_combat_action") {
+    return "No combat action possible.";
+  }
+
+  if (effect.rowCategory === "loss_of_use") {
+    return formatCombatRoundLossOfUseDescription(effect);
+  }
+
+  if (effect.rowCategory === "bleed" || effect.rowCategory === "internal_bleed") {
+    const label = effect.rowCategory === "internal_bleed" ? "Internal bleed" : "Bleed";
+    const rate = formatCombatRoundDamageReviewRateSentence(effect.rateValuePerRound);
+    const treatment = /until treated/i.test(effect.notes ?? "") ? " until treated" : "";
+
+    return rate ? `${label}: ${rate}${treatment}.` : `${label}.`;
+  }
+
+  if (effect.rowCategory === "dropped_item") {
+    return /^dropped/i.test(effect.label)
+      ? (normalizeCombatRoundSentence(effect.label) ?? effect.label)
+      : "Dropped item.";
+  }
+
+  const preview = formatCombatRoundDamageReviewEffectPreviewDescription(effect);
+  const status = formatCombatRoundDamageReviewEffectStatusDetail(effect);
+  const parts = [normalizeCombatRoundSentence(preview), status].filter((entry): entry is string =>
+    Boolean(entry),
+  );
+
+  return parts.join(" ") || effect.label;
+}
+
+function formatCombatRoundCommittedEffectDuration(
+  effect: CombatRoundDamageReviewAdditionalEffect,
+): string | undefined {
+  return effect.durationRounds !== undefined ? String(effect.durationRounds) : undefined;
 }
 
 function formatCombatRoundDamageReviewEffectDuration(
@@ -5436,7 +5573,7 @@ export function getCombatRoundDamageReviewEffectRowPreview(
 
   return {
     accepted: effect.accepted !== false,
-    details: formatCombatRoundDamageReviewEffectDescription(effect),
+    details: formatCombatRoundDamageReviewEffectPreviewDescription(effect),
     duration,
     rowType,
     target,
@@ -5462,15 +5599,19 @@ function formatCombatRoundOperationalConsequenceDescription(
   consequence: CombatRoundDamageReviewOperationalConsequence,
 ): string {
   const notes = consequence.notes?.trim();
-  const source = consequence.sourceText?.trim();
-  const parts = [
-    consequence.label,
-    consequence.reason,
-    notes,
-    source ? `Source: ${source}` : undefined,
-  ].filter((entry): entry is string => Boolean(entry));
 
-  return parts.join(" ");
+  if (consequence.kind === "drop_item") {
+    return consequence.itemLabel ? `Dropped ${consequence.itemLabel}.` : "Dropped item.";
+  }
+
+  if (consequence.kind === "note" && /no combat action/i.test(consequence.label)) {
+    return "No combat action possible.";
+  }
+
+  return (
+    normalizeCombatRoundSentence(notes || consequence.label || consequence.reason) ??
+    consequence.label
+  );
 }
 
 function formatCombatRoundOperationalConsequenceSummary(
@@ -5485,11 +5626,12 @@ function formatCombatRoundOperationalConsequenceSummary(
 
 function formatCombatRoundCriticalReference(input: {
   criticalGrade?: string;
+  includeFullText?: boolean;
   proposal?: CombatRoundDamageReview["criticalEffectProposal"];
 }): string {
   const grade = input.criticalGrade?.trim().toUpperCase();
   const title = input.proposal?.title?.trim();
-  const bodyText = input.proposal?.bodyText?.trim();
+  const bodyText = input.includeFullText ? input.proposal?.bodyText?.trim() : undefined;
 
   if (!grade && !title && !bodyText) {
     return "";
@@ -5677,6 +5819,7 @@ function formatCombatRoundDamageCommitDescription(input: {
     : `${effectiveDamage.effectiveTotalDamage} damage`;
   const criticalReference = formatCombatRoundCriticalReference({
     criticalGrade: effectiveDamage.effectiveCriticalGrade,
+    includeFullText: true,
     proposal: input.damageResult.review?.criticalEffectProposal,
   });
   const damageAdjustment =
@@ -5886,8 +6029,8 @@ function buildCombatRoundDamageCommitRows(input: {
     return combatEffectSchema.parse({
       createdAt: input.command.createdAt,
       damage: 0,
-      description: formatCombatRoundDamageReviewEffectDescription(effect),
-      duration: formatCombatRoundDamageReviewEffectDuration(effect),
+      description: formatCombatRoundDamageReviewEffectCommittedDescription(effect),
+      duration: formatCombatRoundCommittedEffectDuration(effect),
       effectGroup: rowShape.effectGroup,
       generalDamage: 0,
       id:

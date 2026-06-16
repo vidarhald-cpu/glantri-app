@@ -4599,7 +4599,7 @@ describe("combat round manager", () => {
     });
     expect(committed.combatEffects.effects).toContainEqual(
       expect.objectContaining({
-        description: expect.stringContaining("Drop item: Broad sword"),
+        description: "Dropped Broad sword.",
         effectGroup: "special",
         id: dropEffectId,
         status: "active",
@@ -4797,6 +4797,12 @@ describe("combat round manager", () => {
     expect(damageResult?.review?.criticalEffectProposal).toMatchObject({
       critKey: "sharp|arm|13",
     });
+    const criticalBodyText = damageResult?.review?.criticalEffectProposal?.bodyText;
+
+    if (!criticalBodyText) {
+      throw new Error("Expected critical body text.");
+    }
+    expect(criticalBodyText).toContain("Your blow severs your opponent's arm");
     expect(effectiveDamage).toMatchObject({
       preCriticalEffectiveDamage: 2,
       criticalMinTotalDamage: 5,
@@ -4871,6 +4877,10 @@ describe("combat round manager", () => {
         }),
       ]),
     );
+    expect(committed.combatEffects.events[0]?.description).toContain(criticalBodyText);
+    for (const effect of committed.combatEffects.effects) {
+      expect(effect.description).not.toContain(criticalBodyText);
+    }
     expect(committed.combatEffects.events[0]?.description).toContain(
       "Critical minimum raised damage from 2 to 5",
     );
@@ -6277,6 +6287,33 @@ describe("combat round manager", () => {
             rowCategory: "bleed",
           },
           {
+            durationRounds: 3,
+            id: "guard-loss-of-use",
+            kind: "special",
+            label: "Loss of use",
+            notes:
+              "Loss of use: no actions with affected right arm. Until treated. Duration roll d6 = 3.",
+            rollReports: [
+              {
+                effectKey: "sharp|arm|05|02",
+                formula: "d6",
+                purpose: "duration",
+                rolls: [3],
+                sourceField: "durationRoll",
+                total: 3,
+              },
+            ],
+            rowCategory: "loss_of_use",
+          },
+          {
+            durationRounds: 1,
+            id: "guard-parry-only",
+            kind: "special",
+            label: "Action limited to parry",
+            notes: "Action limited to parry. Duration: next round.",
+            rowCategory: "no_combat_action",
+          },
+          {
             accepted: false,
             id: "guard-declined-db",
             kind: "modifier",
@@ -6360,6 +6397,10 @@ describe("combat round manager", () => {
       "commit-d1:r3:phase1:3-phase1-gladiator-guard:3-phase1-gladiator-guard-damage:combat-effect:additional-guard-no-action";
     const expectedBleedEffectId =
       "commit-d1:r3:phase1:3-phase1-gladiator-guard:3-phase1-gladiator-guard-damage:combat-effect:additional-guard-bleed";
+    const expectedLossOfUseEffectId =
+      "commit-d1:r3:phase1:3-phase1-gladiator-guard:3-phase1-gladiator-guard-damage:combat-effect:additional-guard-loss-of-use";
+    const expectedParryOnlyEffectId =
+      "commit-d1:r3:phase1:3-phase1-gladiator-guard:3-phase1-gladiator-guard-damage:combat-effect:additional-guard-parry-only";
     const clearedCommitState = clearCombatRoundStep({
       state: {
         ...committed.state,
@@ -6411,6 +6452,16 @@ describe("combat round manager", () => {
           id: "guard-bleed",
           rateValuePerRound: 2,
           rowCategory: "bleed",
+        }),
+        expect.objectContaining({
+          durationRounds: 3,
+          id: "guard-loss-of-use",
+          rowCategory: "loss_of_use",
+        }),
+        expect.objectContaining({
+          durationRounds: 1,
+          id: "guard-parry-only",
+          rowCategory: "no_combat_action",
         }),
         expect.objectContaining({
           accepted: false,
@@ -6468,6 +6519,16 @@ describe("combat round manager", () => {
             id: "guard-bleed",
             rowCategory: "bleed",
           }),
+          expect.objectContaining({
+            durationRounds: 3,
+            id: "guard-loss-of-use",
+            rowCategory: "loss_of_use",
+          }),
+          expect.objectContaining({
+            durationRounds: 1,
+            id: "guard-parry-only",
+            rowCategory: "no_combat_action",
+          }),
         ],
         attackerParticipantId: "gladiator",
         createdAdditionalCombatEffectIds: [
@@ -6475,6 +6536,8 @@ describe("combat round manager", () => {
           expectedNoteEffectId,
           expectedNoActionEffectId,
           expectedBleedEffectId,
+          expectedLossOfUseEffectId,
+          expectedParryOnlyEffectId,
         ],
         createdCombatEffectEventId: expectedCommitEventId,
         createdCombatEffectIds: [
@@ -6483,6 +6546,8 @@ describe("combat round manager", () => {
           expectedNoteEffectId,
           expectedNoActionEffectId,
           expectedBleedEffectId,
+          expectedLossOfUseEffectId,
+          expectedParryOnlyEffectId,
         ],
         createdDamageEffectIds: [expectedCommitEffectId],
         criticalGrade: "a",
@@ -6523,7 +6588,9 @@ describe("combat round manager", () => {
     expect(
       committed.combatEffects.events.find((event) => event.id === expectedCommitEventId)
         ?.description,
-    ).toContain("Accepted rows: Stunned, Dropped weapon, No combat action possible, Bleed.");
+    ).toContain(
+      "Accepted rows: Stunned, Dropped weapon, No combat action possible, Bleed, Loss of use, Action limited to parry.",
+    );
     expect(committed.combatEffects.effects).toContainEqual(
       expect.objectContaining({
         damage: 6,
@@ -6537,8 +6604,8 @@ describe("combat round manager", () => {
     );
     expect(committed.combatEffects.effects).toContainEqual(
       expect.objectContaining({
-        description: "Stunned: critical stun manual",
-        duration: "2 rounds · until cleared",
+        description: "Stunned: critical stun manual. Until cleared.",
+        duration: "2",
         effectGroup: "general",
         id: expectedStunEffectId,
         modifierValue: -4,
@@ -6550,7 +6617,7 @@ describe("combat round manager", () => {
     );
     expect(committed.combatEffects.effects).toContainEqual(
       expect.objectContaining({
-        description: "Dropped weapon: manual special note",
+        description: "Dropped weapon: manual special note.",
         effectGroup: "special",
         id: expectedNoteEffectId,
         sourceEventId: expectedCommitEventId,
@@ -6561,7 +6628,7 @@ describe("combat round manager", () => {
     );
     expect(committed.combatEffects.effects).toContainEqual(
       expect.objectContaining({
-        description: "No combat action possible: Unconscious.",
+        description: "No combat action possible.",
         effectGroup: "special",
         id: expectedNoActionEffectId,
         sourceEventId: expectedCommitEventId,
@@ -6582,6 +6649,30 @@ describe("combat round manager", () => {
         type: "bleed",
       }),
     );
+    expect(committed.combatEffects.effects).toContainEqual(
+      expect.objectContaining({
+        description: "No actions with affected right arm. Until treated. Duration roll d6 = 3.",
+        duration: "3",
+        effectGroup: "special",
+        id: expectedLossOfUseEffectId,
+        sourceEventId: expectedCommitEventId,
+        status: "active",
+        targetParticipantId: "scenario-guard",
+        type: "special",
+      }),
+    );
+    expect(committed.combatEffects.effects).toContainEqual(
+      expect.objectContaining({
+        description: "Action limited to parry.",
+        duration: "1",
+        effectGroup: "special",
+        id: expectedParryOnlyEffectId,
+        sourceEventId: expectedCommitEventId,
+        status: "active",
+        targetParticipantId: "scenario-guard",
+        type: "special",
+      }),
+    );
     expect(committed.combatEffects.effects).not.toContainEqual(
       expect.objectContaining({
         id: expect.stringContaining("guard-declined-db"),
@@ -6595,6 +6686,8 @@ describe("combat round manager", () => {
         expectedNoteEffectId,
         expectedNoActionEffectId,
         expectedBleedEffectId,
+        expectedLossOfUseEffectId,
+        expectedParryOnlyEffectId,
       ],
       status: "committed",
     });
@@ -6624,6 +6717,16 @@ describe("combat round manager", () => {
           expect.objectContaining({
             id: "guard-bleed",
             rowCategory: "bleed",
+          }),
+          expect.objectContaining({
+            durationRounds: 3,
+            id: "guard-loss-of-use",
+            rowCategory: "loss_of_use",
+          }),
+          expect.objectContaining({
+            durationRounds: 1,
+            id: "guard-parry-only",
+            rowCategory: "no_combat_action",
           }),
           expect.objectContaining({
             accepted: false,

@@ -172,5 +172,10 @@ typed combatEffect rows when a safe rate is available. Clear no-action, collapse
 results become special rows such as "No combat action possible" rather than arbitrary DB modifiers.
 Ambiguous numeric or prose-heavy rows become special notes and keep their source text for GM review
 instead of being guessed as a mechanical modifier. The full critical text is kept as reference for the
-review and physical damage row, not copied into every effect row. Automatic permanent injury and
-long-term incapacitation automation remain future table-driven work.
+review event/reference, not copied into every effect row. The physical damage row keeps a compact
+damage/armor/critical reference, while each effect row keeps one short actionable detail such as
+"No combat action possible.", "Action limited to parry.", or "Internal bleed: 1 HP per 2 rounds until
+treated." Duration and modifier fields are mechanical fields: round durations are stored as numeric
+round counts when known, modifier rows store numeric modifiers only, and non-round conditions such as
+"until treated" remain in the details/status text. Automatic permanent injury and long-term
+incapacitation automation remain future table-driven work.

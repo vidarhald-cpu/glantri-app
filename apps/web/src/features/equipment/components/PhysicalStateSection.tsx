@@ -1,15 +1,8 @@
 import { useState, type FormEvent } from "react";
 
-import type {
-  CombatEffectGroup,
-  CombatEffectStatus,
-  CombatEffectType,
-} from "@glantri/domain";
+import type { CombatEffectGroup, CombatEffectStatus, CombatEffectType } from "@glantri/domain";
 
-import type {
-  CharacterPhysicalStateView,
-  HitLogEntryView,
-} from "@/lib/characters/physicalState";
+import type { CharacterPhysicalStateView, HitLogEntryView } from "@/lib/characters/physicalState";
 
 export interface CombatEffectEditorDraft {
   damage: number;
@@ -185,6 +178,12 @@ function parseInteger(value: string): number {
   return parseOptionalInteger(value) ?? 0;
 }
 
+function parseRoundDurationValue(value: string | undefined): string | undefined {
+  const parsed = parseOptionalInteger(value ?? "");
+
+  return parsed && parsed > 0 ? String(parsed) : undefined;
+}
+
 function getDefaultRoundNumber(roundNumber?: number): number | undefined {
   return roundNumber && roundNumber > 0 ? roundNumber : undefined;
 }
@@ -225,7 +224,7 @@ function draftFromEntry(entry: HitLogEntryView): CombatEffectEditorDraft {
   return createBlankDraft({
     damage: entry.location ? entry.damage : entry.generalDamage,
     description: entry.specialEffects || undefined,
-    duration: entry.duration || undefined,
+    duration: parseRoundDurationValue(entry.duration),
     effectGroup: entry.effectGroup,
     effectId: entry.id,
     eventDescription: entry.eventDescription || undefined,
@@ -669,9 +668,14 @@ function CombatEffectsPanel({
               <span>Dur</span>
               <input
                 onChange={(event) =>
-                  setDraft((current) => ({ ...current, duration: event.target.value }))
+                  setDraft((current) => ({
+                    ...current,
+                    duration: parseRoundDurationValue(event.target.value),
+                  }))
                 }
-                style={compactInputStyle}
+                min={1}
+                style={numericInputStyle}
+                type="number"
                 value={draft.duration ?? ""}
               />
             </label>
