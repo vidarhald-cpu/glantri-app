@@ -322,6 +322,8 @@ function prepareFailedParryPendingDamage(input: {
   ob?: number;
   phase?: "phase1" | "phase2";
   rollD20?: number;
+  weaponCriticalCode?: string;
+  weaponDamageClass?: string;
 }): {
   attackResult: ReturnType<typeof buildCombatRoundAttackRollResult>;
   state: ReturnType<typeof initializeCombatRoundState>;
@@ -352,6 +354,8 @@ function prepareFailedParryPendingDamage(input: {
     rollD20: input.rollD20 ?? 14,
     rollTotal: input.rollD20 ?? 14,
     rolledAt: "2026-01-01T00:03:00.000Z",
+    weaponCriticalCode: input.weaponCriticalCode,
+    weaponDamageClass: input.weaponDamageClass,
     weaponName: "Broad sword",
   });
   const afterAttack = recordCombatRoundAttackResult({
@@ -5891,6 +5895,164 @@ describe("combat round manager", () => {
     expect(afterDamage.commands.at(-1)?.type).toBe("resolve_damage");
   });
 
+  it("treats final critical rolls below 1 as no effect and still commits base damage", () => {
+    const pending = prepareFailedParryPendingDamage({});
+    const afterLocation = recordTestHitLocation({
+      attackResult: pending.attackResult,
+      command: {
+        createdAt: "2026-01-01T00:04:30.000Z",
+        createdByUserId: "gm-1",
+      },
+      state: pending.state,
+    });
+    const afterDamage = recordCombatRoundDamageResult({
+      attackResult: pending.attackResult,
+      command: {
+        createdAt: "2026-01-01T00:05:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      defenderDm: 0,
+      dmb: 8,
+      state: afterLocation,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:05:00.000Z",
+    });
+    const afterCritical = recordCombatRoundCriticalRoll({
+      attackResult: pending.attackResult,
+      command: {
+        createdAt: "2026-01-01T00:05:30.000Z",
+        createdByUserId: "gm-1",
+      },
+      criticalDice: [1, 1],
+      rolledByParticipantId: "gladiator",
+      state: afterDamage,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:05:30.000Z",
+    });
+    const damageResult = afterCritical.phaseResolutionResults[0]?.damageResult;
+
+    if (!damageResult) {
+      throw new Error("Expected damage result.");
+    }
+
+    expect(afterCritical.phaseResolutionResults[0]?.criticalRoll.finalCriticalRoll).toBe(-2);
+    expect(damageResult.review?.criticalEffectProposal).toMatchObject({
+      criticalIndexStatus: "no_effect",
+      warnings: [],
+    });
+    expect(damageResult.review?.criticalEffectProposal?.critKey).toBeUndefined();
+    expect(damageResult.review?.additionalEffects).toEqual([]);
+    expect(
+      getCombatRoundPhaseDamageCommitReadiness({
+        attackResultId: damageResult.attackResultId,
+        state: afterCritical,
+      }),
+    ).toMatchObject({
+      ready: true,
+    });
+
+    const committed = commitCombatRoundPhaseDamage({
+      attackResultId: damageResult.attackResultId,
+      command: {
+        commandId: "commit-no-critical-effect",
+        createdAt: "2026-01-01T00:06:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      defenderScenarioParticipantId: "scenario-guard",
+      state: afterCritical,
+    });
+
+    expect(committed.command.type).toBe("commit_phase_damage");
+  });
+
+  it("regenerates critical proposals when the GM overrides the effective critical index", () => {
+    const pending = prepareFailedParryPendingDamage({ weaponDamageClass: "edged" });
+    const afterLocation = recordTestHitLocation({
+      attackResult: pending.attackResult,
+      command: {
+        createdAt: "2026-01-01T00:04:30.000Z",
+        createdByUserId: "gm-1",
+      },
+      hitLocationRolls: [17],
+      state: pending.state,
+    });
+    const afterDamage = recordCombatRoundDamageResult({
+      attackResult: pending.attackResult,
+      command: {
+        createdAt: "2026-01-01T00:05:00.000Z",
+        createdByUserId: "gm-1",
+      },
+      defenderDm: 0,
+      dmb: 8,
+      state: afterLocation,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:05:00.000Z",
+    });
+    const afterCritical = recordCombatRoundCriticalRoll({
+      attackResult: pending.attackResult,
+      command: {
+        createdAt: "2026-01-01T00:05:30.000Z",
+        createdByUserId: "gm-1",
+      },
+      criticalDice: [1, 1],
+      rolledByParticipantId: "gladiator",
+      state: afterDamage,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:05:30.000Z",
+    });
+    const noEffectDamage = afterCritical.phaseResolutionResults[0]?.damageResult;
+
+    if (!noEffectDamage) {
+      throw new Error("Expected damage result.");
+    }
+
+    expect(noEffectDamage.review?.criticalEffectProposal).toMatchObject({
+      criticalIndexStatus: "no_effect",
+    });
+
+    const overrideToIndex = reviewCombatRoundDamageResult({
+      attackResultId: noEffectDamage.attackResultId,
+      reviewedAt: "2026-01-01T00:05:45.000Z",
+      reviewedByUserId: "gm-1",
+      review: {
+        additionalEffects: [],
+        finalCriticalRollOverride: 3,
+        operationalConsequences: [],
+      },
+      state: afterCritical,
+    });
+    const overriddenDamage = overrideToIndex.phaseResolutionResults[0]?.damageResult;
+
+    expect(overriddenDamage?.review?.criticalEffectProposal).toMatchObject({
+      criticalIndexStatus: "table_lookup",
+      critIndex: 3,
+      critKey: "sharp|arm|03",
+    });
+    expect(overriddenDamage?.review?.additionalEffects.length).toBeGreaterThan(0);
+    expect(overrideToIndex.phaseResolutionResults[0]?.criticalRoll.finalCriticalRoll).toBe(-2);
+
+    const overrideToNoEffect = reviewCombatRoundDamageResult({
+      attackResultId: noEffectDamage.attackResultId,
+      reviewedAt: "2026-01-01T00:05:50.000Z",
+      reviewedByUserId: "gm-1",
+      review: {
+        additionalEffects: overriddenDamage?.review?.additionalEffects ?? [],
+        finalCriticalRollOverride: 0,
+        operationalConsequences: overriddenDamage?.review?.operationalConsequences ?? [],
+      },
+      state: overrideToIndex,
+    });
+    const removedDamage = overrideToNoEffect.phaseResolutionResults[0]?.damageResult;
+
+    expect(removedDamage?.review?.criticalEffectProposal).toMatchObject({
+      criticalIndexStatus: "no_effect",
+      warnings: [],
+    });
+    expect(removedDamage?.review?.criticalEffectProposal?.critKey).toBeUndefined();
+    expect(removedDamage?.review?.additionalEffects).toEqual([]);
+    expect(overrideToNoEffect.phaseResolutionResults[0]?.criticalRoll.finalCriticalRoll).toBe(-2);
+  });
+
   it("commits D1 damage rows and clears commit before clearing the proposal", () => {
     const state = initializeCombatRoundPhaseResolutionCursor({
       phase: "phase1",
@@ -7011,6 +7173,13 @@ describe("combat round manager", () => {
     expect(
       committed.state.roundEndReview?.participantReviews.gladiator?.status,
     ).toBe("health_roll_pending");
+    expect(committed.state.currentCursor).toMatchObject({
+      participantId: "gladiator",
+      step: "SU",
+    });
+    expect(getCombatRoundStartNextRoundBlocker(committed.state)).toBe(
+      "Health roll pending for The Gladiator.",
+    );
 
     const restoredEffects = removeCombatRoundEndParticipantReviewEffects({
       combatEffects: committed.combatEffects,
@@ -7082,6 +7251,89 @@ describe("combat round manager", () => {
       success: true,
     });
     expect(rolled.roundEndReview?.participantReviews.gladiator?.status).toBe("complete");
+  });
+
+  it("advances SU review participant-by-participant and enables next round after completion", () => {
+    const roundSummaryState = advanceToStep(
+      initializeCombatRoundState({ encounter: encounter() }),
+      "round_summary",
+    );
+    const gladiatorEffects = combatEffectsWith([
+      {
+        description: "Gladiator effect",
+        duration: "1 round",
+        id: "gladiator-effect",
+        type: "special",
+      },
+    ]);
+    const guardEffects = combatEffectsWith([
+      {
+        description: "Guard effect",
+        duration: "1 round",
+        id: "guard-effect",
+        targetParticipantId: "scenario-guard",
+        type: "special",
+      },
+    ]);
+    const reviewed = prepareCombatRoundEndReview({
+      participantInputs: {
+        gladiator: {
+          combatEffects: gladiatorEffects,
+        },
+        guard: {
+          combatEffects: guardEffects,
+        },
+      },
+      state: roundSummaryState,
+    });
+
+    expect(reviewed.currentCursor).toMatchObject({
+      participantId: "gladiator",
+      step: "SU",
+    });
+
+    const committedGladiator = commitCombatRoundEndParticipantReview({
+      command: {
+        createdAt: "2026-01-01T00:10:00.000Z",
+      },
+      combatEffects: gladiatorEffects,
+      participantId: "gladiator",
+      scenarioParticipantId: "scenario-gladiator",
+      state: reviewed,
+    });
+
+    expect(committedGladiator.state.roundEndReview?.participantReviews.gladiator?.status).toBe(
+      "complete",
+    );
+    expect(committedGladiator.state.roundEndReview?.participantReviews.guard?.status).toBe(
+      "review_ready",
+    );
+    expect(committedGladiator.state.currentCursor).toMatchObject({
+      participantId: "guard",
+      step: "SU",
+    });
+    expect(committedGladiator.state.selectedParticipantId).toBe("guard");
+    expect(getCombatRoundStartNextRoundBlocker(committedGladiator.state)).toBe(
+      "Round-end review incomplete for City guard.",
+    );
+
+    const committedGuard = commitCombatRoundEndParticipantReview({
+      command: {
+        createdAt: "2026-01-01T00:11:00.000Z",
+      },
+      combatEffects: guardEffects,
+      participantId: "guard",
+      scenarioParticipantId: "scenario-guard",
+      state: committedGladiator.state,
+    });
+
+    expect(isCombatRoundEndReviewComplete(committedGuard.state)).toBe(true);
+    expect(committedGuard.state.currentCursor).toEqual({
+      roundNumber: 3,
+      step: "SU",
+    });
+    expect(committedGuard.state.selectedParticipantId).toBeUndefined();
+    expect(getCombatRoundStartNextRoundBlocker(committedGuard.state)).toBeUndefined();
   });
 
   it("archives SU completion commands and starts a clean next round", () => {

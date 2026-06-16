@@ -62,6 +62,7 @@ import {
   getCombatRoundResolutionPhaseForStep,
   getCombatRoundStepSnapshot,
   getHitLocationFullLabel,
+  getFinalCriticalRollIndexStatus,
   getLatestCombatEventSummary,
   HIT_LOCATIONS,
   hasScenarioParticipantCombatDeclarationForEncounterRound,
@@ -806,6 +807,14 @@ function formatCombatCriticalResultLine(
 
   if (criticalRoll.status !== "rolled") {
     return "Result: Pending";
+  }
+
+  const criticalIndexStatus = getFinalCriticalRollIndexStatus(
+    effectiveCritical.finalCriticalRoll ?? criticalRoll.finalCriticalRoll,
+  );
+
+  if (criticalIndexStatus.status === "no_effect") {
+    return "Result: No critical effect";
   }
 
   const location = effectiveCritical.criticalLocation
@@ -1872,7 +1881,9 @@ function CombatDamageReviewPanel(input: {
     Boolean(effect.sourceKind === "critical_table" || effect.sourceCritKey || effect.sourceEffectKey),
   ).length;
   const criticalEffectStatus = criticalEffectProposal
-    ? criticalEffectProposal.warnings.length > 0
+    ? criticalEffectProposal.criticalIndexStatus === "no_effect"
+      ? "No critical effect."
+      : criticalEffectProposal.warnings.length > 0
       ? `Critical effects unavailable: ${criticalEffectProposal.warnings.join(" ")}`
       : `Critical effects proposed: ${criticalDraftEffectCount} row${
           criticalDraftEffectCount === 1 ? "" : "s"
@@ -2075,7 +2086,7 @@ function CombatDamageReviewPanel(input: {
         </label>
         <label style={{ display: "grid", gap: "0.2rem" }}>
           <span style={{ color: "#5e5a50", fontSize: "0.8rem", fontWeight: 700 }}>
-            Critical roll
+            Critical roll / effect index
           </span>
           <input
             disabled={disabled}
@@ -2086,6 +2097,7 @@ function CombatDamageReviewPanel(input: {
                 finalCriticalRollOverride: event.target.value,
               })
             }
+            placeholder="No effect or 1-16"
             type="text"
             value={input.draft.finalCriticalRollOverride}
           />
@@ -2117,7 +2129,9 @@ function CombatDamageReviewPanel(input: {
           }}
         >
           <strong style={{ fontSize: "0.95rem" }}>
-            {criticalEffectProposal.title ?? "Critical table mapping unavailable"}
+            {criticalEffectProposal.criticalIndexStatus === "no_effect"
+              ? "No critical effect"
+              : (criticalEffectProposal.title ?? "Critical table mapping unavailable")}
           </strong>
           {criticalEffectProposal.bodyText ? (
             <div style={{ lineHeight: 1.45 }}>{criticalEffectProposal.bodyText}</div>

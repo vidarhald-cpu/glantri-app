@@ -6,13 +6,37 @@ import type {
   CriticalLocationScope,
 } from "./criticalEffectsTable";
 
-export type CriticalMappingStatus = "mapped" | "ambiguous" | "unsupported";
+export type CriticalMappingStatus = "mapped" | "ambiguous" | "unsupported" | "no_effect";
+
+export type FinalCriticalRollIndexStatus =
+  | {
+      finalCriticalRoll: number;
+      status: "no_effect";
+    }
+  | {
+      critIndex: CriticalIndex;
+      finalCriticalRoll: number;
+      status: "table_lookup";
+    }
+  | {
+      finalCriticalRoll: number;
+      reason: string;
+      status: "unsupported_high";
+    }
+  | {
+      reason: string;
+      status: "unsupported";
+    };
 
 export type CriticalMappingResult<T> =
   | {
       reason?: string;
       status: "mapped";
       value: T;
+    }
+  | {
+      reason: string;
+      status: "no_effect";
     }
   | {
       reason: string;
@@ -152,6 +176,31 @@ export function mapCombatHitLocationToCriticalLocation(
 export function mapFinalCriticalRollToCritIndex(
   finalCriticalRoll: number | undefined,
 ): CriticalMappingResult<CriticalIndex> {
+  const status = getFinalCriticalRollIndexStatus(finalCriticalRoll);
+
+  if (status.status === "table_lookup") {
+    return {
+      status: "mapped",
+      value: status.critIndex,
+    };
+  }
+
+  if (status.status === "no_effect") {
+    return {
+      reason: `Final critical roll ${status.finalCriticalRoll} is 0 or lower; no critical effect.`,
+      status: "no_effect",
+    };
+  }
+
+  return {
+    reason: status.reason,
+    status: "unsupported",
+  };
+}
+
+export function getFinalCriticalRollIndexStatus(
+  finalCriticalRoll: number | undefined,
+): FinalCriticalRollIndexStatus {
   if (finalCriticalRoll === undefined || !Number.isInteger(finalCriticalRoll)) {
     return {
       reason: "Final critical roll is not an integer.",
@@ -159,15 +208,24 @@ export function mapFinalCriticalRollToCritIndex(
     };
   }
 
-  if (finalCriticalRoll < 1 || finalCriticalRoll > 16) {
+  if (finalCriticalRoll <= 0) {
+    return {
+      finalCriticalRoll,
+      status: "no_effect",
+    };
+  }
+
+  if (finalCriticalRoll > 16) {
     return {
       reason: `Final critical roll ${finalCriticalRoll} is outside the supported critical table index range 1-16; no clamping rule is approved.`,
-      status: "unsupported",
+      finalCriticalRoll,
+      status: "unsupported_high",
     };
   }
 
   return {
-    status: "mapped",
-    value: finalCriticalRoll as CriticalIndex,
+    critIndex: finalCriticalRoll as CriticalIndex,
+    finalCriticalRoll,
+    status: "table_lookup",
   };
 }

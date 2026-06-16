@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  getFinalCriticalRollIndexStatus,
   mapCombatHitLocationToCriticalLocation,
   mapFinalCriticalRollToCritIndex,
   mapWeaponCriticalCodeToFamily,
@@ -75,7 +76,20 @@ describe("critical effect combat mapping", () => {
   it("maps final critical roll directly to supported critIndex range without clamping", () => {
     expect(mapFinalCriticalRollToCritIndex(1)).toEqual({ status: "mapped", value: 1 });
     expect(mapFinalCriticalRollToCritIndex(16)).toEqual({ status: "mapped", value: 16 });
-    expect(mapFinalCriticalRollToCritIndex(0)).toMatchObject({ status: "unsupported" });
+    expect(mapFinalCriticalRollToCritIndex(0)).toMatchObject({ status: "no_effect" });
     expect(mapFinalCriticalRollToCritIndex(17)).toMatchObject({ status: "unsupported" });
+    expect(getFinalCriticalRollIndexStatus(-4)).toEqual({
+      finalCriticalRoll: -4,
+      status: "no_effect",
+    });
+    expect(getFinalCriticalRollIndexStatus(3)).toEqual({
+      critIndex: 3,
+      finalCriticalRoll: 3,
+      status: "table_lookup",
+    });
+    expect(getFinalCriticalRollIndexStatus(17)).toMatchObject({
+      finalCriticalRoll: 17,
+      status: "unsupported_high",
+    });
   });
 });

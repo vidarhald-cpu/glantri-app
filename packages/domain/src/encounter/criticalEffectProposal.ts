@@ -8,10 +8,12 @@ import {
   type CriticalLocationScope,
 } from "./criticalEffectsTable";
 import {
+  getFinalCriticalRollIndexStatus,
   mapCombatHitLocationToCriticalLocation,
   mapFinalCriticalRollToCritIndex,
   mapWeaponCriticalInputToFamily,
   type CriticalMappingResult,
+  type FinalCriticalRollIndexStatus,
 } from "./criticalEffectMapping";
 
 export interface CriticalEffectProposalRollReport {
@@ -25,6 +27,7 @@ export interface CriticalEffectProposalRollReport {
 
 export interface CriticalEffectProposalSummary {
   bodyText?: string;
+  criticalIndexStatus?: FinalCriticalRollIndexStatus["status"];
   critIndex?: number;
   critKey?: string;
   family?: CriticalFamily;
@@ -53,6 +56,7 @@ export interface CriticalEffectProposalAdditionalEffect {
 }
 
 export interface CriticalEffectProposalResult {
+  criticalIndexStatus: FinalCriticalRollIndexStatus["status"];
   criticalResult?: {
     bodyText: string;
     critIndex: number;
@@ -82,7 +86,7 @@ function addMappingWarning(
   result: CriticalMappingResult<unknown>,
   warnings: string[],
 ) {
-  if (result.status !== "mapped") {
+  if (result.status === "ambiguous" || result.status === "unsupported") {
     warnings.push(`${label}: ${result.reason}`);
   }
 }
@@ -347,6 +351,17 @@ export function buildCriticalEffectProposalFromDamageResult(
   input: CriticalEffectProposalInput,
 ): CriticalEffectProposalResult {
   const warnings: string[] = [];
+  const criticalIndexStatus = getFinalCriticalRollIndexStatus(input.finalCriticalRoll);
+
+  if (criticalIndexStatus.status === "no_effect") {
+    return {
+      criticalIndexStatus: criticalIndexStatus.status,
+      proposedEffects: [],
+      rollReports: [],
+      warnings,
+    };
+  }
+
   const family = mapWeaponCriticalInputToFamily({
     weaponCriticalCode: input.weaponCriticalCode,
     weaponDamageClass: input.weaponDamageClass,
@@ -360,6 +375,7 @@ export function buildCriticalEffectProposalFromDamageResult(
 
   if (family.status !== "mapped" || location.status !== "mapped" || critIndex.status !== "mapped") {
     return {
+      criticalIndexStatus: criticalIndexStatus.status,
       proposedEffects: [],
       rollReports: [],
       warnings,
@@ -374,6 +390,7 @@ export function buildCriticalEffectProposalFromDamageResult(
 
   if (!resultWithEffects) {
     return {
+      criticalIndexStatus: criticalIndexStatus.status,
       proposedEffects: [],
       rollReports: [],
       warnings: [
@@ -399,6 +416,7 @@ export function buildCriticalEffectProposalFromDamageResult(
   });
 
   return {
+    criticalIndexStatus: criticalIndexStatus.status,
     criticalResult: {
       bodyText: resultWithEffects.result.bodyText,
       critIndex: resultWithEffects.result.critIndex,
@@ -418,6 +436,7 @@ export function buildCriticalEffectProposalSummary(
 ): CriticalEffectProposalSummary {
   return {
     bodyText: proposal.criticalResult?.bodyText,
+    criticalIndexStatus: proposal.criticalIndexStatus,
     critIndex: proposal.criticalResult?.critIndex,
     critKey: proposal.criticalResult?.critKey,
     family: proposal.criticalResult?.family,

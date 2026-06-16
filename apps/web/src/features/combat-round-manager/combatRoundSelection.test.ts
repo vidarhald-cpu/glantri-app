@@ -409,6 +409,45 @@ describe("combat round manager selection", () => {
     expect(normalized.selectedStep).toBe("initiative_phase_1");
   });
 
+  it("uses the SU current cursor after refresh instead of stale manual inspection", () => {
+    const existing = initializeCombatRoundState({ encounter: encounter() });
+    const refreshedState = {
+      ...existing,
+      currentCursor: {
+        participantId: "middle",
+        roundNumber: existing.roundNumber,
+        step: "SU" as const,
+      },
+      currentStep: "round_summary" as const,
+      selectedParticipantId: "top",
+      selectedStep: "round_summary" as const,
+    };
+    const normalized = normalizeCombatRoundManagerSelection({
+      manualSelection: {
+        participantId: "top",
+        step: "round_summary",
+      },
+      state: refreshedState,
+    });
+
+    expect(normalized.selectedParticipantId).toBe("middle");
+    expect(normalized.selectedStep).toBe("round_summary");
+    expect(
+      isSelectedCombatRoundStepExecutable({
+        participantId: "middle",
+        state: normalized,
+        step: "round_summary",
+      }),
+    ).toBe(true);
+    expect(
+      isSelectedCombatRoundStepExecutable({
+        participantId: "top",
+        state: normalized,
+        step: "round_summary",
+      }),
+    ).toBe(false);
+  });
+
   it("uses fallback-undo currentCursor after clearing an empty A1 cell", () => {
     const existing = initializeCombatRoundState({ encounter: encounter() });
     const refreshedState = {

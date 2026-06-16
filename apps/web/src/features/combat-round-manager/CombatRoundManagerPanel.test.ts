@@ -200,6 +200,8 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("Critical table mapping unavailable");
     expect(source).toContain("Critical effects proposed:");
     expect(source).toContain("Critical effects unavailable:");
+    expect(source).toContain("No critical effect.");
+    expect(source).toContain("criticalIndexStatus === \"no_effect\"");
     expect(source).toContain("Critical effects not accepted/committed yet.");
     expect(source).toContain("getCombatRoundPhaseDamageCommitReadiness");
     expect(source).toContain("Ready to commit");
@@ -236,6 +238,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain(
       "finalCriticalRollOverride: effectiveCritical.finalCriticalRoll?.toString()",
     );
+    expect(source).toContain("Critical roll / effect index");
     expect(source).toContain("totalDamageOverride: effectiveDamage?.effectiveTotalDamage.toString()");
     expect(source).toContain("selectedHitLocationValue !== effectiveDamage.computedSelectedHitLocation");
     expect(source).toContain("armorModifier !== effectiveDamage.computedArmorModifier");
@@ -257,6 +260,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain('title: "Damage"');
     expect(source).toContain('title: "Critical"');
     expect(source).toContain("Critical roll required");
+    expect(source).toContain("Result: No critical effect");
     expect(source).toContain("Result: critical roll");
     expect(source).toContain("sections: inspectorPhaseResolutionLines.sections");
     expect(source).toContain("resultLine: `Result: ${formatCombatAttackTableResultLabel");

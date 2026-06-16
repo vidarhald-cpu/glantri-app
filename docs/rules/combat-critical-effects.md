@@ -14,8 +14,9 @@ Each critical result is addressed by three values:
 - Location scope, such as head, arm, chest, abdomen, upper leg, lower leg, or whole body.
 - Critical index from `1` through `16`.
 
-The lookup key is `family|location|NN`, for example `sharp|arm|13`. Indexes above `16` are not
-clamped; until a continuation rule is approved, they are treated as unsupported.
+The lookup key is `family|location|NN`, for example `sharp|arm|13`. A final critical roll of `0` or
+lower means no critical effect and does not generate table rows. Indexes above `16` are not clamped;
+until a continuation rule is approved, they are treated as unsupported.
 
 The result row keeps the full readable body text, title, mortality state, urgency, treatment
 difficulty, treatment gate text, source tags, and flags for balance, stun, external bleed, internal
@@ -151,8 +152,12 @@ Mapping policy:
   available.
 - Current combat hit locations map directly for head, chest, abdomen, and arm. Whole-leg hits remain
   ambiguous because the critical table distinguishes upper leg and lower leg.
-- The final numeric critical roll maps directly to critical index `1` through `16`. Values outside
-  that range are unsupported and are not clamped.
+- The final numeric critical roll maps directly to critical index `1` through `16`. Values of `0` or
+  lower mean no critical effect. Values above `16` are unsupported and are not clamped.
+
+The GM may override the reviewed critical index without rerolling the stored critical dice. Choosing
+`1` through `16` rebuilds the table proposal for that index; choosing no effect removes generated
+critical proposal rows while leaving the original dice and computed final roll available for audit.
 
 GM review remains required before any critical-derived effect rows are committed. Structured General,
 OB/Skill, and DB modifier templates become editable modifier drafts. Prose-heavy special results,

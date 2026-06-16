@@ -53,7 +53,8 @@ export function isGlobalCombatRoundParticipantStep(step: CombatRoundStep): boole
     step === "review_action_modifiers" ||
     step === "initiative_phase_1" ||
     step === "review_phase_2_modifiers" ||
-    step === "initiative_phase_2"
+    step === "initiative_phase_2" ||
+    step === "round_summary"
   );
 }
 

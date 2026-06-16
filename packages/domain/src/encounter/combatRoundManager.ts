@@ -712,6 +712,9 @@ export const combatRoundDamageResultSchema = z.object({
       criticalEffectProposal: z
         .object({
           bodyText: z.string().min(1).optional(),
+          criticalIndexStatus: z
+            .enum(["no_effect", "table_lookup", "unsupported_high", "unsupported"])
+            .optional(),
           critIndex: z.number().int().positive().optional(),
           critKey: z.string().min(1).optional(),
           family: z.string().min(1).optional(),
@@ -5076,6 +5079,31 @@ export function reviewCombatRoundDamageResult(input: {
       return result;
     }
 
+    const attackResult = getCombatRoundAttackResultById({
+      attackResultId: result.attackResultId,
+      state: normalized,
+    });
+    const review =
+      result.criticalRoll.status === "rolled"
+        ? mergeCombatRoundCriticalEffectProposalIntoReview({
+            damageResult: {
+              ...result.damageResult,
+              review: nextReview,
+            },
+            finalCriticalRoll: getCombatRoundEffectiveCriticalRoll({
+              criticalRoll: result.criticalRoll,
+              review: nextReview,
+            }).finalCriticalRoll,
+            selectedHitLocation: getCombatRoundEffectiveCriticalRoll({
+              criticalRoll: result.criticalRoll,
+              review: nextReview,
+            }).criticalLocation,
+            state: normalized,
+            weaponCriticalCode: attackResult?.weaponCriticalCode,
+            weaponDamageClass: attackResult?.weaponDamageClass,
+          })
+        : nextReview;
+
     return combatRoundPhaseResolutionResultSchema.parse({
       ...result,
       damageProposal: {
@@ -5085,7 +5113,7 @@ export function reviewCombatRoundDamageResult(input: {
       },
       damageResult: {
         ...result.damageResult,
-        review: nextReview,
+        review,
       },
       updatedAt: input.reviewedAt,
     });
@@ -5687,11 +5715,14 @@ export function removeCombatRoundCommittedDamageEffects(input: {
 }
 
 function getCombatRoundEndReviewCursor(input: {
+  boundary?: boolean;
   participantId?: string;
   state: CombatRoundState;
 }): CombatRoundCursor {
   return combatRoundCursorSchema.parse({
-    participantId: input.participantId ?? input.state.participants[0]?.participantId,
+    participantId: input.boundary
+      ? undefined
+      : (input.participantId ?? input.state.participants[0]?.participantId),
     roundNumber: input.state.roundNumber,
     step: "SU",
   });
@@ -5970,16 +6001,19 @@ export function prepareCombatRoundEndReview(input: {
     preparedByUserId: input.command?.createdByUserId,
     roundNumber: normalized.roundNumber,
   });
-  const firstReviewParticipant =
-    normalized.participants.find(
-      (participant) =>
-        roundEndReview.participantReviews[participant.participantId]?.status !== "complete",
-    ) ?? normalized.participants[0];
+  const firstReviewParticipant = normalized.participants.find(
+    (participant) =>
+      roundEndReview.participantReviews[participant.participantId]?.status !== "complete",
+  );
   const beforeCursor = getCombatRoundEndReviewCursor({
-    participantId: normalized.currentCursor?.participantId ?? firstReviewParticipant?.participantId,
+    participantId:
+      normalized.currentCursor?.participantId ??
+      firstReviewParticipant?.participantId ??
+      normalized.participants[0]?.participantId,
     state: normalized,
   });
   const afterCursor = getCombatRoundEndReviewCursor({
+    boundary: !firstReviewParticipant,
     participantId: firstReviewParticipant?.participantId,
     state: normalized,
   });
@@ -6317,8 +6351,9 @@ export function commitCombatRoundEndParticipantReview(input: {
       participantId: input.participantId,
       roundEndReview: nextRoundEndReview,
       state: normalized,
-    }) ?? input.participantId;
+    });
   const afterCursor = getCombatRoundEndReviewCursor({
+    boundary: !nextParticipantId,
     participantId: nextParticipantId,
     state: normalized,
   });
@@ -6495,12 +6530,13 @@ export function rollCombatRoundEndHealthCheck(input: {
       participantId: input.participantId,
       roundEndReview: nextRoundEndReview,
       state: normalized,
-    }) ?? input.participantId;
+    });
   const beforeCursor = getCombatRoundEndReviewCursor({
     participantId: input.participantId,
     state: normalized,
   });
   const afterCursor = getCombatRoundEndReviewCursor({
+    boundary: !nextParticipantId,
     participantId: nextParticipantId,
     state: normalized,
   });

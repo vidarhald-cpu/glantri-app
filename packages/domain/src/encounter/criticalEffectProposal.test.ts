@@ -58,7 +58,22 @@ describe("critical effect proposal generation", () => {
     });
 
     expect(proposal.criticalResult).toBeUndefined();
+    expect(proposal.criticalIndexStatus).toBe("unsupported_high");
     expect(proposal.warnings.join(" ")).toContain("outside the supported critical table index range");
+  });
+
+  it("treats final critical rolls below 1 as no critical effect", () => {
+    const proposal = buildCriticalEffectProposalFromDamageResult({
+      existingCommittedDamageAmount: 5,
+      finalCriticalRoll: -4,
+      selectedHitLocation: "leftArm",
+      weaponDamageClass: "edged",
+    });
+
+    expect(proposal.criticalIndexStatus).toBe("no_effect");
+    expect(proposal.criticalResult).toBeUndefined();
+    expect(proposal.proposedEffects).toEqual([]);
+    expect(proposal.warnings).toEqual([]);
   });
 
   it("rolls app-handled table dice and stores roll reports", () => {
